@@ -100,15 +100,22 @@ mp.deps.Logger.Error("Rejected non-Graphable payload",
     "hint", "Implement EntityID() string and Triples() []Triple methods")
 ```
 
-### 3. json_to_entity Processor
+### 3. Domain-Specific Processors (Recommended Pattern)
 
-The `json_to_entity` processor remains useful as an **adapter** that converts external JSON into `EntityPayload` (which implements Graphable). This is the proper pattern:
+Instead of generic processors, create domain-specific processors that understand your data semantics. See the IoT sensor example in `examples/processors/iot_sensor/` for the recommended pattern:
 
 ```
-External JSON → json_to_entity → EntityPayload (Graphable) → Graph Processor
+External JSON → Domain Processor → Domain Payload (Graphable) → Graph Processor
 ```
 
-No changes needed to json_to_entity - it already produces Graphable payloads.
+The domain processor:
+
+1. Transforms JSON with semantic understanding
+2. Applies organizational context (OrgID, Platform)
+3. Produces payloads with proper 6-part entity IDs
+4. Generates semantic triples using registered predicates
+
+This approach produces high-quality graph data because it encodes domain knowledge into the transformation.
 
 ---
 
@@ -185,11 +192,11 @@ The semdocs documentation has been updated to reflect this spec:
 
 1. **Breaking change** for users sending non-Graphable payloads
    - Mitigated by Phase 1 warnings
-   - json_to_entity adapter available for external JSON
+   - Domain-specific processors (see `examples/processors/iot_sensor/`) provide the correct pattern
 
 2. **Backwards compatibility**
-   - json_to_entity processor converts legacy JSON to Graphable
-   - Users can implement Graphable on existing payloads
+   - Users should create domain processors that implement Graphable
+   - See migration guide in `examples/processors/iot_sensor/README.md`
 
 ---
 

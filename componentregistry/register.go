@@ -19,7 +19,6 @@ import (
 	jsonfilter "github.com/c360/semstreams/processor/json_filter"
 	jsongeneric "github.com/c360/semstreams/processor/json_generic"
 	jsonmap "github.com/c360/semstreams/processor/json_map"
-	jsontoentity "github.com/c360/semstreams/processor/json_to_entity"
 	"github.com/c360/semstreams/storage/objectstore"
 )
 
@@ -32,7 +31,6 @@ import (
 //   - JSONGeneric processor (Plain JSON wrapper)
 //   - JSONFilter processor (field-based filtering)
 //   - JSONMap processor (field transformation)
-//   - JSONToEntity processor (GenericJSON to Entity conversion)
 //   - ObjectStore storage (NATS JetStream)
 //   - File output (file system)
 //   - HTTP POST output (webhooks)
@@ -84,10 +82,6 @@ func Register(registry *component.Registry) error {
 
 	if err := jsonmap.Register(registry); err != nil {
 		return pkgerrors.WrapInvalid(err, "ComponentRegistry", "Register", "JSONMap processor component registration")
-	}
-
-	if err := jsontoentity.Register(registry); err != nil {
-		return pkgerrors.WrapInvalid(err, "ComponentRegistry", "Register", "JSONToEntity processor component registration")
 	}
 
 	// Protocol Layer - Storage

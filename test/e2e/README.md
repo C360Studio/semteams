@@ -54,6 +54,37 @@ task e2e:dataflow
 task e2e:federation
 ```
 
+### IoT Example Tests
+
+#### `iot-sensor-pipeline` 🆕 **NEW**
+**Purpose**: Validate complete IoT sensor data pipeline with domain-specific processing
+**Duration**: ~5-7 seconds
+**Dependencies**: NATS + Graph Processor (auto-started)
+**Coverage**:
+- JSON sensor readings via UDP input
+- IoT processor transformation (JSON → SensorReading Graphable)
+- Graph processor storage with semantic triples
+- Entity relationship creation (sensor → zone references)
+- 6-part federated entity ID generation
+- Domain-specific vocabulary predicates
+
+**Why this test exists**: Demonstrates the full pipeline for domain-specific processors that implement the Graphable interface, serving as a reference for building custom processors.
+
+**Usage**:
+```bash
+task e2e:iot-sensor
+# or
+cd cmd/e2e && ./e2e --scenario iot-sensor-pipeline
+```
+
+**Test Flow**:
+1. Sends JSON sensor readings (temperature, humidity, pressure)
+2. IoT processor transforms to SensorReading with organizational context
+3. Graph processor creates entities with semantic relationships
+4. Validates pipeline health and component availability
+
+**Related Integration Tests**: `examples/processors/iot_sensor/integration_test.go`
+
 ### Semantic Layer Tests
 
 #### `semantic-basic`

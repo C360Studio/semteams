@@ -42,8 +42,8 @@ services:
   # SemStreams Application (semantic processing)
   semstreams:
     build:
-      context: ..
-      dockerfile: semstreams/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       target: production
     container_name: semstreams-semantic-app
     command: ["--config", "/app/configs/semantic-basic.json"]

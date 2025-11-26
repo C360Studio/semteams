@@ -122,6 +122,8 @@ Full details: constitution + `docs/agent/*.md`
 ## Active Technologies
 - Go 1.25+ + vocabulary package, message package (001-predicate-notation)
 - N/A (code refactoring only - no persistent data migration needed) (001-predicate-notation)
+- Go 1.25+ + message package (Graphable interface), vocabulary package (predicate registration) (002-graphable-examples)
+- N/A (example code, no persistence) (002-graphable-examples)
 
 ## Recent Changes
 - 001-predicate-notation: Added Go 1.25+ + vocabulary package, message package

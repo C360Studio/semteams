@@ -46,8 +46,7 @@ Predicate: "rdf:class",
 
 ### Tests
 
-- `processor/json_to_entity/json_to_entity_test.go` - checks for `rdf:type`
-- `processor/json_to_entity/json_to_entity_integration_test.go` - checks for `rdf:type`
+*Note: The `processor/json_to_entity/` tests were removed as part of the json_to_entity processor removal (see `examples/processors/iot_sensor/README.md` for migration guidance).*
 
 ---
 

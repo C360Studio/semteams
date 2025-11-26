@@ -153,7 +153,7 @@ func (s *SemanticKitchenSinkScenario) executeVerifyComponents(ctx context.Contex
 	}
 
 	// Protocol components
-	protocolComponents := []string{"udp", "json_generic", "json_filter", "json_to_entity"}
+	protocolComponents := []string{"udp", "json_generic", "json_filter"}
 	// Semantic components
 	semanticComponents := []string{"graph"}
 	// Output components

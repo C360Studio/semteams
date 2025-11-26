@@ -43,14 +43,16 @@ services:
   # SemStreams Application (core components only)
   semstreams:
     build:
-      context: ..
-      dockerfile: semstreams/Dockerfile
+      context: .
+      dockerfile: Dockerfile
       target: production
     container_name: semstreams-e2e-app
+    command: ["--config", "/app/configs/protocol-flow.json"]
     depends_on:
       nats:
         condition: service_healthy
     environment:
+      - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_CONFIG=/app/configs/protocol-flow.json
       - SEMSTREAMS_LOG_LEVEL=debug
     volumes:

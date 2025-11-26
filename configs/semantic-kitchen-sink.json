@@ -125,36 +125,6 @@
         }
       }
     },
-    "json_to_entity": {
-      "type": "processor",
-      "name": "json_to_entity",
-      "enabled": true,
-      "config": {
-        "ports": {
-          "inputs": [
-            {
-              "name": "entity_in",
-              "subject": "generic.entities",
-              "type": "nats",
-              "interface": "core.json.v1"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "entity_out",
-              "subject": "events.graph.entity.telemetry",
-              "type": "nats",
-              "interface": "graph.Entity.v1"
-            }
-          ]
-        },
-        "entity_id_field": "entity_id",
-        "entity_type_field": "entity_type",
-        "entity_class": "Object",
-        "entity_role": "primary",
-        "source_field": "json_to_entity"
-      }
-    },
     "rule": {
       "type": "processor",
       "name": "rule",
