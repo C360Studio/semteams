@@ -107,7 +107,7 @@ func (e *EntityPayload) EntityID() string {
 
 // Triples implements the Graphable interface, converting properties to semantic triples
 func (e *EntityPayload) Triples() []Triple {
-	triples := make([]Triple, 0, len(e.Properties)+2)
+	triples := make([]Triple, 0, len(e.Properties))
 
 	// Use current time if not specified
 	ts := e.Timestamp
@@ -119,28 +119,6 @@ func (e *EntityPayload) Triples() []Triple {
 	confidence := e.Confidence
 	if confidence == 0.0 {
 		confidence = 1.0
-	}
-
-	// Add rdf:type triple for entity classification
-	triples = append(triples, Triple{
-		Subject:    e.ID,
-		Predicate:  "rdf:type",
-		Object:     e.Type,
-		Source:     e.Source,
-		Timestamp:  ts,
-		Confidence: confidence,
-	})
-
-	// Add entity class if specified
-	if e.Class != "" && e.Class.IsValid() {
-		triples = append(triples, Triple{
-			Subject:    e.ID,
-			Predicate:  "rdf:class",
-			Object:     e.Class.String(),
-			Source:     e.Source,
-			Timestamp:  ts,
-			Confidence: confidence,
-		})
 	}
 
 	// Convert all properties to triples

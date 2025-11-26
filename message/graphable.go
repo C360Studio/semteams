@@ -42,10 +42,9 @@ package message
 //	func (p *PositionPayload) Triples() []Triple {
 //	    entityID := p.EntityID()
 //	    return []Triple{
-//	        {Subject: entityID, Predicate: "rdf:type", Object: "robotics:Drone"},
-//	        {Subject: entityID, Predicate: "geo:latitude", Object: p.Latitude},
-//	        {Subject: entityID, Predicate: "geo:longitude", Object: p.Longitude},
-//	        {Subject: entityID, Predicate: "geo:altitude", Object: p.Altitude},
+//	        {Subject: entityID, Predicate: "geo.location.latitude", Object: p.Latitude},
+//	        {Subject: entityID, Predicate: "geo.location.longitude", Object: p.Longitude},
+//	        {Subject: entityID, Predicate: "geo.location.altitude", Object: p.Altitude},
 //	    }
 //	}
 //

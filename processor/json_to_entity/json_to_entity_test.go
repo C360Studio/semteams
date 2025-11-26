@@ -126,22 +126,17 @@ func TestConvertToEntity(t *testing.T) {
 				t.Errorf("entity.EntityID() = %v, want %v", entity.EntityID(), tt.wantID)
 			}
 
-			// Verify triples are generated
+			// Verify triples are generated (property triples only, no rdf:type/rdf:class)
 			triples := entity.Triples()
 			if len(triples) == 0 {
 				t.Error("entity.Triples() returned empty slice")
 			}
 
-			// Check for rdf:type triple
-			foundTypeTriple := false
+			// Verify no rdf:type or rdf:class triples exist
 			for _, triple := range triples {
-				if triple.Predicate == "rdf:type" && triple.Object == tt.wantType {
-					foundTypeTriple = true
-					break
+				if triple.Predicate == "rdf:type" || triple.Predicate == "rdf:class" {
+					t.Errorf("entity.Triples() should not contain %s triple", triple.Predicate)
 				}
-			}
-			if !foundTypeTriple {
-				t.Error("entity.Triples() missing rdf:type triple")
 			}
 		})
 	}
@@ -166,10 +161,10 @@ func TestEntityPayloadGraphableInterface(t *testing.T) {
 		t.Errorf("EntityID() = %v, want test.entity.001", id)
 	}
 
-	// Test Triples method
+	// Test Triples method (property triples only, no rdf:type/rdf:class)
 	triples := entity.Triples()
-	if len(triples) < 3 { // At least rdf:type + 2 properties
-		t.Errorf("Triples() returned %d triples, want at least 3", len(triples))
+	if len(triples) < 2 { // At least 2 property triples
+		t.Errorf("Triples() returned %d triples, want at least 2", len(triples))
 	}
 
 	// Verify all triples have the correct subject

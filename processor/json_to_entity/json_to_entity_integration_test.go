@@ -173,20 +173,17 @@ func TestJSONToEntityIntegration(t *testing.T) {
 		// Verify Graphable interface
 		assert.Equal(t, "test.sensor.001", receivedEntity.EntityID(), "Wrong EntityID() result")
 
-		// Verify triples
+		// Verify triples (property triples only, no rdf:type/rdf:class)
 		triples := receivedEntity.Triples()
 		assert.NotEmpty(t, triples, "Triples() returned empty slice")
 
-		// Verify rdf:type triple
-		foundTypeTriple := false
+		// Verify no rdf:type or rdf:class triples exist
 		for _, triple := range triples {
-			if triple.Predicate == "rdf:type" && triple.Object == "sensors.temperature" {
-				foundTypeTriple = true
-			}
+			assert.NotEqual(t, "rdf:type", triple.Predicate, "Should not contain rdf:type triple")
+			assert.NotEqual(t, "rdf:class", triple.Predicate, "Should not contain rdf:class triple")
 			// All triples should have correct subject
 			assert.Equal(t, "test.sensor.001", triple.Subject, "Wrong triple subject")
 		}
-		assert.True(t, foundTypeTriple, "Missing rdf:type triple")
 
 		// Verify properties were extracted (temperature, location, status)
 		assert.Equal(t, 3, len(receivedEntity.Properties), "Wrong property count")
