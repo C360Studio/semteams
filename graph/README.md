@@ -8,6 +8,7 @@
 **What this component does**: Provides federation utilities for creating globally unique entity identifiers and managing entity metadata across distributed SemStreams deployments.
 
 **Key responsibilities**:
+
 - Generate structured global IDs for entities with platform scoping
 - Parse global IDs to extract platform, region, and local components
 - Create and manage FederatedEntity metadata
@@ -19,6 +20,7 @@
 ## Design Decisions
 
 ### Architectural Choices
+
 - **Colon-delimited global IDs**: Uses "platform:region:local" format
   - **Rationale**: Human-readable structure with clear component separation
   - **Trade-offs**: Parsing complexity vs readability and debuggability
@@ -35,6 +37,7 @@
   - **Alternatives considered**: Separate federation wrapper (rejected for storage efficiency)
 
 ### API Contracts
+
 - **BuildGlobalID format**: Returns structured global identifier or empty string
   - **Example**: platform "us-west", region "gulf", local "drone_1" → "us-west:gulf:drone_1"
   - **Enforcement**: Requires non-empty platform.ID and localID
@@ -46,6 +49,7 @@
   - **Exceptions**: Returns (_, _, localID, false) for non-global IDs
 
 ### Anti-Patterns to Avoid
+
 - **Manual global ID construction**: Always use BuildGlobalID() function
 - **Assuming region presence**: Check ParseGlobalID return value for region handling
 - **Ignoring empty returns**: Validate BuildGlobalID() returns before use
@@ -53,18 +57,22 @@
 ## Architecture Context
 
 ### Integration Points
+
 - **Consumes from**: Platform configuration, entity local IDs, message metadata
 - **Provides to**: GraphProcessor for federated entity storage, vocabulary for IRIs
 - **External dependencies**: Platform configuration system, message federation metadata
 
 ### Data Flow
+
 ```
 LocalID + Platform → BuildGlobalID() → Global ID
 Message → BuildFederatedEntity() → FederatedEntity → EnrichEntityState() → Enhanced EntityState
 ```
 
 ### Configuration
+
 Depends on platform configuration structure:
+
 ```go
 type PlatformConfig struct {
     ID     string  // Required for federation
@@ -166,6 +174,7 @@ iri := federatedEntity.GetEntityIRI("robotics.drone")
 ```
 
 ### Common Integration Patterns
+
 - **Entity storage**: Enrich EntityState with federation data before NATS KV storage
 - **Cross-platform queries**: Use global IDs for entity correlation across deployments
 - **RDF export**: Generate IRIs for entities with federation metadata

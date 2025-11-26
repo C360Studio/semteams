@@ -5,6 +5,7 @@ A clean, read-only interface for querying graph data from NATS KV buckets. This 
 ## Overview
 
 The query library separates read operations from write operations in the graph system:
+
 - **GraphProcessor**: Writes entities and relationships to NATS KV
 - **QueryClient**: Reads and traverses the graph from NATS KV
 
