@@ -614,18 +614,26 @@ func convertEntityStateToGraphQL(state *graph.EntityState) *Entity {
 		return nil
 	}
 
-	// Extract created_at from properties if available
+	// Extract created_at from triples if available
 	var createdAt time.Time
-	if state.Node.Properties != nil {
-		if ct, ok := state.Node.Properties["created_at"].(time.Time); ok {
-			createdAt = ct
+	if ct, ok := state.GetPropertyValue("created_at"); ok {
+		if ctTime, ok := ct.(time.Time); ok {
+			createdAt = ctTime
+		}
+	}
+
+	// Build properties map from all non-relationship triples
+	properties := make(map[string]interface{})
+	for _, triple := range state.Triples {
+		if !triple.IsRelationship() {
+			properties[triple.Predicate] = triple.Object
 		}
 	}
 
 	return &Entity{
 		ID:         state.Node.ID,
 		Type:       state.Node.Type,
-		Properties: state.Node.Properties,
+		Properties: properties,
 		CreatedAt:  createdAt,
 		UpdatedAt:  state.UpdatedAt,
 	}

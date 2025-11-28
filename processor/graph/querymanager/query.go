@@ -388,35 +388,37 @@ func (qe *Manager) queryOutgoingRelationships(ctx context.Context, entityID stri
 			fmt.Sprintf("failed to get entity: %s", entityID))
 	}
 
-	// If entity not found or has no edges, return empty slice
-	if entity == nil || len(entity.Edges) == 0 {
+	// If entity not found, return empty slice
+	if entity == nil {
 		return []*Relationship{}, nil
 	}
 
-	// Convert entity edges to relationships
-	relationships := make([]*Relationship, 0, len(entity.Edges))
+	// Convert relationship triples to Relationship objects
+	relationships := make([]*Relationship, 0)
 	now := time.Now()
 
-	for _, edge := range entity.Edges {
-		// Create relationship from edge
-		rel := &Relationship{
-			FromEntityID: entityID,
-			ToEntityID:   edge.ToEntityID,
-			EdgeType:     edge.EdgeType,
-			Properties:   edge.Properties,
-			Weight:       1.0, // Default weight
-			CreatedAt:    now, // We don't track creation time on edges yet
-			UpdatedAt:    now,
-		}
+	for _, triple := range entity.Triples {
+		// Only process relationship triples (where object is an entity ID)
+		if triple.IsRelationship() {
+			// Extract target entity ID from triple object
+			targetID, ok := triple.Object.(string)
+			if !ok {
+				continue
+			}
 
-		// Extract weight from properties if available
-		if weight, ok := edge.Properties["weight"].(float64); ok {
-			rel.Weight = weight
-		} else if weight, ok := edge.Properties["weight"].(int); ok {
-			rel.Weight = float64(weight)
-		}
+			// Create relationship from triple
+			rel := &Relationship{
+				FromEntityID: entityID,
+				ToEntityID:   targetID,
+				EdgeType:     triple.Predicate, // Predicate is the relationship type
+				Properties:   make(map[string]interface{}),
+				Weight:       1.0, // Default weight
+				CreatedAt:    now,
+				UpdatedAt:    now,
+			}
 
-		relationships = append(relationships, rel)
+			relationships = append(relationships, rel)
+		}
 	}
 
 	return relationships, nil

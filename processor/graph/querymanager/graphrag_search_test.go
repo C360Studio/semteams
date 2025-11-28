@@ -192,27 +192,18 @@ func Test_filterEntitiesByQuery(t *testing.T) {
 			Node: gtypes.NodeProperties{
 				ID:   "e1",
 				Type: "robotics.drone",
-				Properties: map[string]any{
-					"name": "Autonomous Drone",
-				},
 			},
 		},
 		{
 			Node: gtypes.NodeProperties{
 				ID:   "e2",
 				Type: "network.router",
-				Properties: map[string]any{
-					"name": "Core Router",
-				},
 			},
 		},
 		{
 			Node: gtypes.NodeProperties{
 				ID:   "e3",
 				Type: "robotics.sensor",
-				Properties: map[string]any{
-					"name": "LiDAR Sensor",
-				},
 			},
 		},
 	}
@@ -257,11 +248,6 @@ func Test_entityMatchesQuery(t *testing.T) {
 		Node: gtypes.NodeProperties{
 			ID:   "test-entity",
 			Type: "robotics.drone",
-			Properties: map[string]any{
-				"name":        "Test Drone",
-				"description": "Autonomous navigation system",
-				"version":     "2.0",
-			},
 		},
 	}
 
@@ -278,16 +264,6 @@ func Test_entityMatchesQuery(t *testing.T) {
 		{
 			name:       "Match type",
 			queryTerms: []string{"robotics"},
-			want:       true,
-		},
-		{
-			name:       "Match property key",
-			queryTerms: []string{"description"},
-			want:       true,
-		},
-		{
-			name:       "Match property value",
-			queryTerms: []string{"autonomous"},
 			want:       true,
 		},
 		{
@@ -334,27 +310,18 @@ func TestLocalSearch_Success(t *testing.T) {
 				Node: gtypes.NodeProperties{
 					ID:   "e1",
 					Type: "robotics.drone",
-					Properties: map[string]any{
-						"name": "Test Drone",
-					},
 				},
 			},
 			"e2": {
 				Node: gtypes.NodeProperties{
 					ID:   "e2",
 					Type: "robotics.sensor",
-					Properties: map[string]any{
-						"name": "Sensor",
-					},
 				},
 			},
 			"e3": {
 				Node: gtypes.NodeProperties{
 					ID:   "e3",
 					Type: "network.router",
-					Properties: map[string]any{
-						"name": "Router",
-					},
 				},
 			},
 		},
@@ -440,27 +407,18 @@ func TestGlobalSearch_Success(t *testing.T) {
 				Node: gtypes.NodeProperties{
 					ID:   "e1",
 					Type: "robotics.drone",
-					Properties: map[string]any{
-						"name": "Autonomous Drone",
-					},
 				},
 			},
 			"e2": {
 				Node: gtypes.NodeProperties{
 					ID:   "e2",
 					Type: "robotics.sensor",
-					Properties: map[string]any{
-						"name": "Sensor",
-					},
 				},
 			},
 			"e3": {
 				Node: gtypes.NodeProperties{
 					ID:   "e3",
 					Type: "network.router",
-					Properties: map[string]any{
-						"name": "Router",
-					},
 				},
 			},
 		},
@@ -530,9 +488,6 @@ func TestGlobalSearch_MaxCommunitiesLimit(t *testing.T) {
 			Node: gtypes.NodeProperties{
 				ID:   id,
 				Type: "test.entity",
-				Properties: map[string]any{
-					"name": fmt.Sprintf("Entity %d", i),
-				},
 			},
 		}
 	}
@@ -588,11 +543,6 @@ func BenchmarkLocalSearch(b *testing.B) {
 			Node: gtypes.NodeProperties{
 				ID:   id,
 				Type: "robotics.sensor",
-				Properties: map[string]any{
-					"name":        fmt.Sprintf("Sensor %d", i),
-					"description": "Temperature and humidity monitoring",
-					"location":    fmt.Sprintf("Building-%d", i%10),
-				},
 			},
 		}
 	}
@@ -640,10 +590,6 @@ func BenchmarkGlobalSearch(b *testing.B) {
 				Node: gtypes.NodeProperties{
 					ID:   id,
 					Type: "test.entity",
-					Properties: map[string]any{
-						"name": fmt.Sprintf("Entity %d-%d", commIdx, i),
-						"tag":  fmt.Sprintf("comm-%d", commIdx),
-					},
 				},
 			}
 		}
@@ -708,11 +654,6 @@ func BenchmarkFilterEntitiesByQuery(b *testing.B) {
 			Node: gtypes.NodeProperties{
 				ID:   fmt.Sprintf("entity-%d", i),
 				Type: fmt.Sprintf("type-%d", i%10),
-				Properties: map[string]any{
-					"name":        fmt.Sprintf("Test Entity %d", i),
-					"description": "Description with various keywords",
-					"category":    fmt.Sprintf("cat-%d", i%5),
-				},
 			},
 		}
 	}

@@ -3,7 +3,6 @@ package rule
 import (
 	"context"
 	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 
@@ -91,22 +90,11 @@ func CreateBatteryEntity(id string, level float64, voltage float64) *gtypes.Enti
 		},
 	}
 
-	// Create node properties (simpler version for queries)
-	properties := map[string]any{
-		"level":       level,
-		"voltage":     voltage,
-		"systemId":    1,
-		"batteryId":   0,
-		"remaining":   int(level),
-		"temperature": 25.0,
-	}
-
 	return &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
-			ID:         id,
-			Type:       "robotics.battery",
-			Properties: properties,
-			Status:     gtypes.StatusActive,
+			ID:     id,
+			Type:   "robotics.battery",
+			Status: gtypes.StatusActive,
 		},
 		Triples:   triples,
 		Version:   1,
@@ -158,22 +146,11 @@ func CreateDroneEntity(id string, armed bool, mode string, altitude float64) *gt
 		},
 	}
 
-	// Create node properties (simpler version for queries)
-	properties := map[string]any{
-		"armed":    armed,
-		"mode":     mode,
-		"altitude": altitude,
-		"systemId": 1,
-		"lat":      37.7749,
-		"lon":      -122.4194,
-	}
-
 	return &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
-			ID:         id,
-			Type:       "robotics.drone",
-			Properties: properties,
-			Status:     gtypes.StatusActive,
+			ID:     id,
+			Type:   "robotics.drone",
+			Status: gtypes.StatusActive,
 		},
 		Triples:   triples,
 		Version:   1,
@@ -211,14 +188,6 @@ func (h *KVTestHelper) UpdateEntityProperty(entityID string, predicateFull strin
 			Object:    value,
 			Timestamp: now,
 		})
-	}
-
-	// Update node properties if it's a simple property name
-	// Extract property name from predicate (domain.category.property -> property)
-	parts := strings.Split(predicateFull, ".")
-	if len(parts) >= 3 && entity.Node.Properties != nil {
-		propertyName := parts[len(parts)-1]
-		entity.Node.Properties[propertyName] = value
 	}
 
 	entity.UpdatedAt = now

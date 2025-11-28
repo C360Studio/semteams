@@ -1,6 +1,8 @@
 package message
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -206,5 +208,100 @@ func TestIsValidEntityID(t *testing.T) {
 				t.Errorf("IsValidEntityID(%q) = %v, want %v", tt.entityID, got, tt.expected)
 			}
 		})
+	}
+}
+
+// ptrTime returns a pointer to a time.Time value for testing ExpiresAt.
+func ptrTime(t time.Time) *time.Time {
+	return &t
+}
+
+func TestTriple_ExpiresAt(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		expiresAt *time.Time
+		isExpired bool
+	}{
+		{
+			name:      "nil ExpiresAt never expires",
+			expiresAt: nil,
+			isExpired: false,
+		},
+		{
+			name:      "future ExpiresAt not expired",
+			expiresAt: ptrTime(time.Now().Add(1 * time.Hour)),
+			isExpired: false,
+		},
+		{
+			name:      "past ExpiresAt is expired",
+			expiresAt: ptrTime(time.Now().Add(-1 * time.Hour)),
+			isExpired: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			triple := Triple{
+				Subject:   "c360.platform1.robotics.mav1.drone.0",
+				Predicate: "robotics.battery.level",
+				Object:    85.5,
+				ExpiresAt: tt.expiresAt,
+			}
+
+			if got := triple.IsExpired(); got != tt.isExpired {
+				t.Errorf("Triple.IsExpired() = %v, want %v", got, tt.isExpired)
+			}
+		})
+	}
+}
+
+func TestTriple_ExpiresAt_JSON(t *testing.T) {
+	t.Parallel()
+
+	expiresAt := time.Date(2025, 12, 31, 23, 59, 59, 0, time.UTC)
+	triple := Triple{
+		Subject:   "c360.platform1.robotics.mav1.drone.0",
+		Predicate: "robotics.battery.level",
+		Object:    85.5,
+		ExpiresAt: &expiresAt,
+	}
+
+	data, err := json.Marshal(triple)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var decoded Triple
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	if decoded.ExpiresAt == nil {
+		t.Fatal("ExpiresAt should not be nil after unmarshal")
+	}
+	if !decoded.ExpiresAt.Equal(expiresAt) {
+		t.Errorf("ExpiresAt = %v, want %v", decoded.ExpiresAt, expiresAt)
+	}
+}
+
+func TestTriple_ExpiresAt_JSON_OmitEmpty(t *testing.T) {
+	t.Parallel()
+
+	triple := Triple{
+		Subject:   "c360.platform1.robotics.mav1.drone.0",
+		Predicate: "robotics.battery.level",
+		Object:    85.5,
+		ExpiresAt: nil, // Should be omitted
+	}
+
+	data, err := json.Marshal(triple)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	if strings.Contains(string(data), "expires_at") {
+		t.Error("expires_at should be omitted when nil")
 	}
 }

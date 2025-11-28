@@ -435,7 +435,9 @@ func (ii *IncomingIndex) HandleCreate(ctx context.Context, entityID string, enti
 		return errors.WrapInvalid(errors.ErrInvalidData, "IncomingIndex", "HandleCreate", "invalid entity state type")
 	}
 
-	return ii.updateIncomingIndex(ctx, entityID, state.Edges)
+	// Extract relationships from triples (single source of truth)
+	relationships := ii.extractRelationshipsFromTriples(entityID, state.Triples)
+	return ii.updateIncomingIndex(ctx, entityID, relationships)
 }
 
 // HandleUpdate processes entity updates for incoming index
@@ -445,7 +447,9 @@ func (ii *IncomingIndex) HandleUpdate(ctx context.Context, entityID string, enti
 		return errors.WrapInvalid(errors.ErrInvalidData, "IncomingIndex", "HandleUpdate", "invalid entity state type")
 	}
 
-	return ii.updateIncomingIndex(ctx, entityID, state.Edges)
+	// Extract relationships from triples (single source of truth)
+	relationships := ii.extractRelationshipsFromTriples(entityID, state.Triples)
+	return ii.updateIncomingIndex(ctx, entityID, relationships)
 }
 
 // HandleDelete processes entity deletion for incoming index
@@ -454,18 +458,32 @@ func (ii *IncomingIndex) HandleDelete(ctx context.Context, entityID string) erro
 	return ii.bucket.Delete(ctx, entityID)
 }
 
+// extractRelationshipsFromTriples extracts target entity IDs from relationship triples
+func (ii *IncomingIndex) extractRelationshipsFromTriples(_ string, triples []message.Triple) []string {
+	var targetEntities []string
+	for _, triple := range triples {
+		if triple.IsRelationship() {
+			// Extract target entity ID from relationship triple object
+			if targetID, ok := triple.Object.(string); ok {
+				targetEntities = append(targetEntities, targetID)
+			}
+		}
+	}
+	return targetEntities
+}
+
 // updateIncomingIndex updates incoming relationships for all target entities
 func (ii *IncomingIndex) updateIncomingIndex(
 	ctx context.Context,
 	fromEntityID string,
-	edges []gtypes.Edge,
+	targetEntityIDs []string,
 ) error {
-	for _, edge := range edges {
-		if err := ii.AddIncomingReference(ctx, edge.ToEntityID, fromEntityID); err != nil {
+	for _, toEntityID := range targetEntityIDs {
+		if err := ii.AddIncomingReference(ctx, toEntityID, fromEntityID); err != nil {
 			ii.logger.Error(
 				"Failed to update incoming reference",
 				"from", fromEntityID,
-				"to", edge.ToEntityID,
+				"to", toEntityID,
 				"error", err,
 			)
 		}
@@ -500,6 +518,50 @@ func (ii *IncomingIndex) AddIncomingReference(ctx context.Context, toEntityID, f
 	data, err := json.Marshal(incomingRefs)
 	if err != nil {
 		return errors.WrapInvalid(err, "IncomingIndex", "AddIncomingReference", "marshal incoming index data")
+	}
+
+	_, err = ii.bucket.Put(ctx, toEntityID, data)
+	return err
+}
+
+// RemoveIncomingReference removes an incoming reference from a target entity
+func (ii *IncomingIndex) RemoveIncomingReference(ctx context.Context, toEntityID, fromEntityID string) error {
+	// Get existing incoming references
+	var incomingRefs []string
+	entry, err := ii.bucket.Get(ctx, toEntityID)
+	if err != nil {
+		// If the target entity's index doesn't exist, nothing to remove
+		return nil
+	}
+
+	if err := json.Unmarshal(entry.Value(), &incomingRefs); err != nil {
+		return errors.WrapInvalid(err, "IncomingIndex", "RemoveIncomingReference", "unmarshal incoming index data")
+	}
+
+	// Find and remove the reference
+	found := false
+	newRefs := make([]string, 0, len(incomingRefs))
+	for _, ref := range incomingRefs {
+		if ref == fromEntityID {
+			found = true
+			continue
+		}
+		newRefs = append(newRefs, ref)
+	}
+
+	if !found {
+		return nil // Reference didn't exist, nothing to do
+	}
+
+	// If no more references, delete the entry entirely
+	if len(newRefs) == 0 {
+		return ii.bucket.Delete(ctx, toEntityID)
+	}
+
+	// Store updated index
+	data, err := json.Marshal(newRefs)
+	if err != nil {
+		return errors.WrapInvalid(err, "IncomingIndex", "RemoveIncomingReference", "marshal incoming index data")
 	}
 
 	_, err = ii.bucket.Put(ctx, toEntityID, data)
@@ -1041,6 +1103,200 @@ func (si *SpatialIndex) calculateGeohash(lat, lon float64, precision int) string
 	latInt := int(math.Floor((lat + 90.0) * multiplier))
 	lonInt := int(math.Floor((lon + 180.0) * multiplier))
 	return fmt.Sprintf("geo_%d_%d_%d", precision, latInt, lonInt)
+}
+
+// OutgoingEntry represents a forward relationship from an entity.
+// It stores the predicate and target entity ID for relationship traversal.
+type OutgoingEntry struct {
+	Predicate  string `json:"predicate"`
+	ToEntityID string `json:"to_entity_id"`
+}
+
+// OutgoingIndex maintains forward relationship mappings for graph traversal.
+// Key format: entity ID
+// Value format: JSON array of OutgoingEntry
+type OutgoingIndex struct {
+	bucket      jetstream.KeyValue
+	metrics     *InternalMetrics
+	promMetrics *PrometheusMetrics
+	logger      *slog.Logger
+}
+
+// NewOutgoingIndex creates a new OutgoingIndex with the given KV bucket.
+// The kvStore parameter is accepted for API consistency with other indexes but not used
+// since OutgoingIndex uses simple Put operations without CAS retry logic.
+func NewOutgoingIndex(
+	bucket jetstream.KeyValue,
+	_ *natsclient.KVStore, // unused - simple Put operations don't need CAS retry
+	metrics *InternalMetrics,
+	promMetrics *PrometheusMetrics,
+	logger *slog.Logger,
+) *OutgoingIndex {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &OutgoingIndex{
+		bucket:      bucket,
+		metrics:     metrics,
+		promMetrics: promMetrics,
+		logger:      logger,
+	}
+}
+
+// HandleCreate processes entity creation for outgoing index
+func (idx *OutgoingIndex) HandleCreate(ctx context.Context, entityID string, entityState interface{}) error {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	state, ok := entityState.(*gtypes.EntityState)
+	if !ok {
+		return errors.WrapInvalid(errors.ErrInvalidData, "OutgoingIndex", "HandleCreate", "invalid entity state type")
+	}
+
+	entries := idx.extractRelationships(state.Triples)
+	if len(entries) == 0 {
+		return nil // No relationships to index
+	}
+
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return errors.WrapInvalid(err, "OutgoingIndex", "HandleCreate", "marshal outgoing entries")
+	}
+
+	_, err = idx.bucket.Put(ctx, entityID, data)
+	if err != nil {
+		errMsg := fmt.Sprintf("put outgoing index for entity %s", entityID)
+		return errors.WrapTransient(err, "OutgoingIndex", "HandleCreate", errMsg)
+	}
+
+	return nil
+}
+
+// HandleUpdate processes entity updates for outgoing index with diff logic (FR-005 atomic updates)
+func (idx *OutgoingIndex) HandleUpdate(ctx context.Context, entityID string, entityState interface{}) error {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	state, ok := entityState.(*gtypes.EntityState)
+	if !ok {
+		return errors.WrapInvalid(errors.ErrInvalidData, "OutgoingIndex", "HandleUpdate", "invalid entity state type")
+	}
+
+	newEntries := idx.extractRelationships(state.Triples)
+
+	if len(newEntries) == 0 {
+		// No relationships - delete if exists
+		return idx.HandleDelete(ctx, entityID)
+	}
+
+	data, err := json.Marshal(newEntries)
+	if err != nil {
+		return errors.WrapInvalid(err, "OutgoingIndex", "HandleUpdate", "marshal outgoing entries")
+	}
+
+	_, err = idx.bucket.Put(ctx, entityID, data)
+	if err != nil {
+		errMsg := fmt.Sprintf("put outgoing index for entity %s", entityID)
+		return errors.WrapTransient(err, "OutgoingIndex", "HandleUpdate", errMsg)
+	}
+
+	return nil
+}
+
+// HandleDelete processes entity deletion for outgoing index
+func (idx *OutgoingIndex) HandleDelete(ctx context.Context, entityID string) error {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	err := idx.bucket.Delete(ctx, entityID)
+	if err != nil && !stderrors.Is(err, jetstream.ErrKeyNotFound) {
+		errMsg := fmt.Sprintf("delete outgoing index for entity %s", entityID)
+		return errors.WrapTransient(err, "OutgoingIndex", "HandleDelete", errMsg)
+	}
+	return nil
+}
+
+// GetOutgoing retrieves all outgoing relationships for an entity
+func (idx *OutgoingIndex) GetOutgoing(ctx context.Context, entityID string) ([]OutgoingEntry, error) {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	entry, err := idx.bucket.Get(ctx, entityID)
+	if err != nil {
+		if stderrors.Is(err, jetstream.ErrKeyNotFound) {
+			return nil, errors.WrapInvalid(jetstream.ErrKeyNotFound, "OutgoingIndex", "GetOutgoing",
+				fmt.Sprintf("entity %s not found", entityID))
+		}
+		errMsg := fmt.Sprintf("get outgoing index for entity %s", entityID)
+		return nil, errors.WrapTransient(err, "OutgoingIndex", "GetOutgoing", errMsg)
+	}
+
+	var entries []OutgoingEntry
+	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+		return nil, errors.WrapInvalid(err, "OutgoingIndex", "GetOutgoing", "unmarshal outgoing entries")
+	}
+
+	return entries, nil
+}
+
+// GetOutgoingByPredicate retrieves outgoing relationships filtered by predicate
+func (idx *OutgoingIndex) GetOutgoingByPredicate(ctx context.Context, entityID, predicate string) ([]OutgoingEntry, error) {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	entries, err := idx.GetOutgoing(ctx, entityID)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []OutgoingEntry
+	for _, e := range entries {
+		if e.Predicate == predicate {
+			filtered = append(filtered, e)
+		}
+	}
+
+	return filtered, nil
+}
+
+// extractRelationships extracts OutgoingEntry from triples that represent relationships.
+// A relationship triple has an Object that is a string representing an entity ID.
+func (idx *OutgoingIndex) extractRelationships(triples []message.Triple) []OutgoingEntry {
+	var entries []OutgoingEntry
+
+	for _, t := range triples {
+		if t.IsRelationship() {
+			objectStr, ok := t.Object.(string)
+			if ok {
+				entries = append(entries, OutgoingEntry{
+					Predicate:  t.Predicate,
+					ToEntityID: objectStr,
+				})
+			}
+		}
+	}
+
+	return entries
 }
 
 // TemporalIndex handles time-based indexing

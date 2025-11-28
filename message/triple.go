@@ -1,3 +1,5 @@
+// Package message provides core message infrastructure for SemStreams.
+// See doc.go for complete package documentation.
 package message
 
 import (
@@ -75,6 +77,12 @@ type Triple struct {
 	// Examples: "xsd:float", "xsd:dateTime", "geo:point", "xsd:boolean"
 	// If omitted, the type is inferred from the Go type of Object.
 	Datatype string `json:"datatype,omitempty"`
+
+	// ExpiresAt indicates when this triple should be considered expired.
+	// When nil, the triple never expires and remains valid indefinitely.
+	// When set, the triple is considered expired after this timestamp.
+	// This enables TTL-based triple expiration for temporal data management.
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // TripleGenerator enables messages to produce semantic triples for graph storage.
@@ -144,4 +152,15 @@ func IsValidEntityID(s string) bool {
 	}
 
 	return true
+}
+
+// IsExpired returns true if the triple has an expiration time that has passed.
+// Returns false if ExpiresAt is nil (never expires) or if the expiration time
+// has not yet been reached (including exact equality with current time).
+// A triple is only considered expired when time.Now() is strictly after ExpiresAt.
+func (t Triple) IsExpired() bool {
+	if t.ExpiresAt == nil {
+		return false
+	}
+	return time.Now().After(*t.ExpiresAt)
 }

@@ -413,13 +413,13 @@ func (p *Processor) computeContextFlags(ctx context.Context, entityID string) (m
 
 	// Create path query with resource limits
 	pathQuery := query.PathQuery{
-		StartEntity: entityID,
-		MaxDepth:    p.config.MaxQueryDepth,
-		MaxNodes:    p.config.MaxQueryNodes,
-		MaxTime:     p.config.MaxQueryTime,
-		EdgeFilter:  p.config.EdgeFilter,
-		DecayFactor: 0.8, // Default decay factor for context queries
-		MaxPaths:    100, // Limit paths for performance
+		StartEntity:     entityID,
+		MaxDepth:        p.config.MaxQueryDepth,
+		MaxNodes:        p.config.MaxQueryNodes,
+		MaxTime:         p.config.MaxQueryTime,
+		PredicateFilter: p.config.EdgeFilter,
+		DecayFactor:     0.8, // Default decay factor for context queries
+		MaxPaths:        100, // Limit paths for performance
 	}
 
 	// Execute path query using QueryClient
@@ -453,37 +453,42 @@ func (p *Processor) computeContextFlags(ctx context.Context, entityID string) (m
 	return flags, nil
 }
 
-// evaluateEdgeRule checks for edges matching the rule criteria
+// evaluateEdgeRule checks for relationships matching the rule criteria
 func (p *Processor) evaluateEdgeRule(result *query.PathResult, rule Rule) bool {
 	for _, entity := range result.Entities {
-		for _, edge := range entity.Edges {
-			if p.edgeMatchesRule(result.Entities, edge, rule) {
-				return true
+		for _, triple := range entity.Triples {
+			// Only consider relationship triples (object is entity ID)
+			if triple.IsRelationship() {
+				if p.tripleMatchesRule(result.Entities, triple, rule) {
+					return true
+				}
 			}
 		}
 	}
 	return false
 }
 
-// edgeMatchesRule checks if a single edge matches the rule criteria
-func (p *Processor) edgeMatchesRule(entities []*gtypes.EntityState, edge gtypes.Edge, rule Rule) bool {
-	// Check if edge type matches
-	if !p.edgeTypeMatches(edge.EdgeType, rule.EdgeTypes) {
+// tripleMatchesRule checks if a relationship triple matches the rule criteria
+func (p *Processor) tripleMatchesRule(entities []*gtypes.EntityState, triple message.Triple, rule Rule) bool {
+	// Check if predicate (relationship type) matches
+	if !p.predicateTypeMatches(triple.Predicate, rule.EdgeTypes) {
 		return false
 	}
 
 	// Check target type if specified
 	if len(rule.TargetTypes) > 0 {
-		return p.targetTypeMatches(entities, edge.ToEntityID, rule.TargetTypes)
+		// Extract target entity ID from Object (guaranteed to be string by IsRelationship())
+		targetID, _ := triple.Object.(string)
+		return p.targetTypeMatches(entities, targetID, rule.TargetTypes)
 	}
 
 	return true
 }
 
-// edgeTypeMatches checks if an edge type is in the allowed list
-func (p *Processor) edgeTypeMatches(edgeType string, allowedTypes []string) bool {
+// predicateTypeMatches checks if a predicate (relationship type) is in the allowed list
+func (p *Processor) predicateTypeMatches(predicate string, allowedTypes []string) bool {
 	for _, allowedType := range allowedTypes {
-		if edgeType == allowedType {
+		if predicate == allowedType {
 			return true
 		}
 	}
@@ -513,7 +518,7 @@ func (p *Processor) evaluatePropertyRule(result *query.PathResult, entityID stri
 	}
 
 	// Check if entity has the specified property with the expected value
-	if value, exists := entity.Node.Properties[rule.Property]; exists {
+	if value, exists := entity.GetPropertyValue(rule.Property); exists {
 		return p.compareValues(value, rule.Value)
 	}
 
@@ -537,11 +542,12 @@ func (p *Processor) evaluateStatusRule(result *query.PathResult, entityID string
 	return false
 }
 
-// hasEdgeType checks if any entity in the result has the specified edge type (backward compatibility)
+// hasEdgeType checks if any entity in the result has the specified relationship type (backward compatibility)
 func (p *Processor) hasEdgeType(result *query.PathResult, edgeType string) bool {
 	for _, entity := range result.Entities {
-		for _, edge := range entity.Edges {
-			if edge.EdgeType == edgeType {
+		for _, triple := range entity.Triples {
+			// Only consider relationship triples
+			if triple.IsRelationship() && triple.Predicate == edgeType {
 				return true
 			}
 		}
@@ -549,13 +555,16 @@ func (p *Processor) hasEdgeType(result *query.PathResult, edgeType string) bool 
 	return false
 }
 
-// hasNearChargingStation checks for NEAR edges to charging station entities
+// hasNearChargingStation checks for NEAR relationships to charging station entities
 func (p *Processor) hasNearChargingStation(result *query.PathResult) bool {
 	for _, entity := range result.Entities {
-		for _, edge := range entity.Edges {
-			if edge.EdgeType == "NEAR" {
+		for _, triple := range entity.Triples {
+			// Only consider NEAR relationship triples
+			if triple.IsRelationship() && triple.Predicate == "NEAR" {
+				// Extract target entity ID from Object
+				targetID, _ := triple.Object.(string)
 				// Check if the target entity is a charging station
-				targetEntity := p.findEntityByID(result.Entities, edge.ToEntityID)
+				targetEntity := p.findEntityByID(result.Entities, targetID)
 				if targetEntity != nil && targetEntity.Node.Type == "robotics.charging_station" {
 					return true
 				}
@@ -573,7 +582,7 @@ func (p *Processor) isMissionCritical(result *query.PathResult, entityID string)
 	}
 
 	// Check if entity has mission_critical property set to true
-	if critical, exists := entity.Node.Properties["mission_critical"]; exists {
+	if critical, exists := entity.GetPropertyValue("mission_critical"); exists {
 		if criticalBool, ok := critical.(bool); ok {
 			return criticalBool
 		}

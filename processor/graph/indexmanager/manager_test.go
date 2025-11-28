@@ -28,6 +28,19 @@ func NewMockKeyValue() *MockKeyValue {
 }
 
 func (m *MockKeyValue) Get(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
+	// If no expectations set, use default behavior
+	if len(m.ExpectedCalls) == 0 {
+		if data, ok := m.data[key]; ok {
+			return &MockKeyValueEntry{
+				key:       key,
+				value:     data,
+				revision:  1,
+				operation: jetstream.KeyValuePut,
+			}, nil
+		}
+		return nil, jetstream.ErrKeyNotFound
+	}
+
 	args := m.Called(ctx, key)
 	if entry := args.Get(0); entry != nil {
 		return entry.(jetstream.KeyValueEntry), args.Error(1)
@@ -36,6 +49,12 @@ func (m *MockKeyValue) Get(ctx context.Context, key string) (jetstream.KeyValueE
 }
 
 func (m *MockKeyValue) Put(ctx context.Context, key string, value []byte) (uint64, error) {
+	// If no expectations set, use default behavior
+	if len(m.ExpectedCalls) == 0 || !m.HasExpectedCalls() {
+		m.data[key] = value
+		return 1, nil
+	}
+
 	args := m.Called(ctx, key, value)
 	m.data[key] = value
 	if rev := args.Get(0); rev != nil {
@@ -44,7 +63,23 @@ func (m *MockKeyValue) Put(ctx context.Context, key string, value []byte) (uint6
 	return 1, args.Error(1)
 }
 
+// HasExpectedCalls checks if there are any matching expected calls
+func (m *MockKeyValue) HasExpectedCalls() bool {
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "Put" {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *MockKeyValue) Delete(ctx context.Context, key string, _ ...jetstream.KVDeleteOpt) error {
+	// If no expectations set, use default behavior
+	if len(m.ExpectedCalls) == 0 {
+		delete(m.data, key)
+		return nil
+	}
+
 	args := m.Called(ctx, key)
 	delete(m.data, key)
 	return args.Error(0)

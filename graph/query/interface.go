@@ -24,12 +24,12 @@ type Client interface {
 	// Graph traversal and path queries
 	ExecutePathQuery(ctx context.Context, query PathQuery) (*PathResult, error)
 
-	// Relationship queries
-	GetIncomingEdges(ctx context.Context, entityID string) ([]string, error)
-	GetOutgoingEdges(ctx context.Context, entityID string) ([]gtypes.Edge, error)
+	// Relationship queries (using triples)
+	GetIncomingRelationships(ctx context.Context, entityID string) ([]string, error)
+	GetOutgoingRelationships(ctx context.Context, entityID string, predicate string) ([]string, error)
 	GetEntityConnections(ctx context.Context, entityID string) ([]*gtypes.EntityState, error)
-	VerifyRelationship(ctx context.Context, fromID, toID, edgeType string) (bool, error)
-	CountIncomingEdges(ctx context.Context, entityID string) (int, error)
+	VerifyRelationship(ctx context.Context, fromID, toID, predicate string) (bool, error)
+	CountIncomingRelationships(ctx context.Context, entityID string) (int, error)
 
 	// Search and filtering
 	QueryEntities(ctx context.Context, criteria map[string]any) ([]*gtypes.EntityState, error)
@@ -57,8 +57,8 @@ type PathQuery struct {
 	// MaxTime is the timeout for query execution
 	MaxTime time.Duration `json:"max_time"`
 
-	// EdgeFilter specifies which edge types to follow (empty means all)
-	EdgeFilter []string `json:"edge_filter,omitempty"`
+	// PredicateFilter specifies which predicates to follow (empty means all relationship predicates)
+	PredicateFilter []string `json:"predicate_filter,omitempty"`
 
 	// DecayFactor is the relevance decay with distance (0.0-1.0)
 	// Score = initial_score * (DecayFactor ^ depth)

@@ -199,21 +199,11 @@ func (mp *Manager) processSimpleGraphable(
 		mp.deps.Logger.Debug("Resolved alias to entity ID", "alias", entityID, "entity_id", actualEntityID)
 	}
 
-	// Get triples and separate properties from relationships
+	// Get triples - triples are the single source of truth
 	triples := graphable.Triples()
 	mp.deps.Logger.Debug("Extracted triples from Graphable",
 		"entity_id", actualEntityID,
 		"triple_count", len(triples))
-
-	properties, relationships := mp.extractPropertiesAndRelationships(triples)
-	mp.deps.Logger.Debug("Separated triples",
-		"property_count", len(properties),
-		"relationship_count", len(relationships))
-
-	// Convert relationship triples to edges
-	edges := mp.buildEdgesFromRelationships(relationships)
-	mp.deps.Logger.Debug("Built edges from relationships",
-		"edge_count", len(edges))
 
 	// Extract message type if available (for semantic search filtering)
 	var messageType string
@@ -221,61 +211,36 @@ func (mp *Manager) processSimpleGraphable(
 		messageType = msg.Type().String() // e.g., "alerts.critical.v1"
 	}
 
-	// Create entity state
+	// Create entity state - triples are single source of truth for both properties and relationships
 	state := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
-			ID:         actualEntityID,
-			Type:       mp.extractTypeFromEntityID(actualEntityID),
-			Properties: properties,
-			Status:     gtypes.StatusActive,
+			ID:     actualEntityID,
+			Type:   mp.extractTypeFromEntityID(actualEntityID),
+			Status: gtypes.StatusActive,
 		},
-		Edges:       edges,
-		Triples:     triples, // CRITICAL: Preserve original triples for spatial index and other semantic operations
+		Triples:     triples, // Triples contain all properties and relationships
 		ObjectRef:   objectRef,
 		MessageType: messageType, // Original message type for filtering (domain.category.version)
 		Version:     1,
 		UpdatedAt:   time.Now(),
 	}
 
-	// Check for existing entity to merge edges and increment version
+	// Check for existing entity to merge triples and increment version
 	existing, err := mp.deps.EntityManager.GetEntity(ctx, actualEntityID)
 	var entityExists = (err == nil && existing != nil)
 	if entityExists {
-		// Entity exists, merge edges, triples, and increment version
-		mp.deps.Logger.Debug("Entity exists, merging edges and triples",
+		// Entity exists, merge triples and increment version
+		mp.deps.Logger.Debug("Entity exists, merging triples",
 			"entity_id", actualEntityID,
-			"existing_edges", len(existing.Edges),
-			"new_edges", len(edges),
 			"existing_triples", len(existing.Triples),
 			"new_triples", len(state.Triples))
 
-		// Merge existing edges with new edges (avoid duplicates)
-		existingEdgeMap := make(map[string]gtypes.Edge)
-		for _, edge := range existing.Edges {
-			key := fmt.Sprintf("%s:%s", edge.ToEntityID, edge.EdgeType)
-			existingEdgeMap[key] = edge
-		}
-		// Add new edges (overwriting if they already exist)
-		for _, edge := range edges {
-			key := fmt.Sprintf("%s:%s", edge.ToEntityID, edge.EdgeType)
-			existingEdgeMap[key] = edge
-		}
-		// Convert map back to slice
-		mergedEdges := []gtypes.Edge{}
-		for _, edge := range existingEdgeMap {
-			mergedEdges = append(mergedEdges, edge)
-		}
-		state.Edges = mergedEdges
-
-		// CRITICAL FIX: Merge triples from existing and new entity
-		// This preserves all semantic data across entity updates
+		// Merge triples - triples are single source of truth for properties and relationships
 		state.Triples = gtypes.MergeTriples(existing.Triples, state.Triples)
-
 		state.Version = existing.Version + 1
 
-		mp.deps.Logger.Debug("Merged edges and triples complete",
+		mp.deps.Logger.Debug("Merged triples complete",
 			"entity_id", actualEntityID,
-			"final_edge_count", len(state.Edges),
 			"final_triple_count", len(state.Triples))
 
 		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
@@ -283,10 +248,10 @@ func (mp *Manager) processSimpleGraphable(
 				"processSimpleGraphable", "entity update failed")
 		}
 	} else {
-		// Entity doesn't exist, create it with new edges
-		mp.deps.Logger.Debug("Creating new entity with edges",
+		// Entity doesn't exist, create it
+		mp.deps.Logger.Debug("Creating new entity",
 			"entity_id", actualEntityID,
-			"edge_count", len(edges))
+			"triple_count", len(state.Triples))
 
 		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
 			return nil, errors.WrapFatal(createErr, "MessageManager",
@@ -322,34 +287,34 @@ func (mp *Manager) processNonGraphableMessage(
 		entityType = "unknown"
 	}
 
-	// Basic properties
-	properties := map[string]any{
-		"entity_class": message.ClassThing, // Default for non-Graphable
-		"entity_role":  message.RolePrimary,
-		"confidence":   0.5, // Medium confidence for non-Graphable
-		"source":       "legacy_interface",
+	// Create basic metadata triples for non-Graphable messages
+	now := time.Now()
+	triples := []message.Triple{
+		{Subject: entityID, Predicate: "entity_class", Object: message.ClassThing, Timestamp: now},
+		{Subject: entityID, Predicate: "entity_role", Object: message.RolePrimary, Timestamp: now},
+		{Subject: entityID, Predicate: "confidence", Object: 0.5, Timestamp: now},
+		{Subject: entityID, Predicate: "source", Object: "legacy_interface", Timestamp: now},
 	}
 
-	// Create entity state
+	// Create entity state - triples are single source of truth
 	state := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
-			ID:         entityID,
-			Type:       entityType,
-			Properties: properties,
-			Status:     gtypes.StatusActive,
+			ID:     entityID,
+			Type:   entityType,
+			Status: gtypes.StatusActive,
 		},
-		Edges:     []gtypes.Edge{},
+		Triples:   triples,
 		ObjectRef: objectRef,
 		Version:   1,
-		UpdatedAt: time.Now(),
+		UpdatedAt: now,
 	}
 
-	// Check for existing entity to preserve edges and increment version
+	// Check for existing entity to preserve triples and increment version
 	existing, err := mp.deps.EntityManager.GetEntity(ctx, entityID)
 	var entityExists = (err == nil && existing != nil)
 	if entityExists {
-		// Entity exists, preserve edges and increment version
-		state.Edges = existing.Edges
+		// Entity exists, merge triples and increment version
+		state.Triples = gtypes.MergeTriples(existing.Triples, state.Triples)
 		state.Version = existing.Version + 1
 		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
 			return nil, errors.WrapTransient(updateErr, "MessageManager", "processNonGraphableMessage", "entity update failed")
@@ -389,41 +354,49 @@ func (mp *Manager) processMapMessage(
 		entityType = "map_message"
 	}
 
-	// Use remaining map entries as properties (excluding standard fields)
-	properties := make(map[string]any)
+	// Convert map entries to triples (excluding standard fields)
+	now := time.Now()
+	triples := []message.Triple{}
 	for key, value := range msgMap {
 		if key != "id" && key != "type" {
-			properties[key] = value
+			triples = append(triples, message.Triple{
+				Subject:   entityID,
+				Predicate: key,
+				Object:    value,
+				Timestamp: now,
+			})
 		}
 	}
 
-	// Add processing metadata
-	properties["processed_at"] = time.Now().Format(time.RFC3339)
-	properties["source_type"] = "map_message"
+	// Add processing metadata triples
+	triples = append(triples,
+		message.Triple{Subject: entityID, Predicate: "processed_at", Object: now.Format(time.RFC3339), Timestamp: now},
+		message.Triple{Subject: entityID, Predicate: "source_type", Object: "map_message", Timestamp: now},
+	)
 
 	if objectRef == "" {
-		objectRef = fmt.Sprintf("map_%s_%d", entityID, time.Now().UnixNano())
+		objectRef = fmt.Sprintf("map_%s_%d", entityID, now.UnixNano())
 	}
 
+	// Create entity state with triples as single source of truth
 	state := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
-			ID:         entityID,
-			Type:       entityType,
-			Properties: properties,
-			Status:     gtypes.StatusActive,
+			ID:     entityID,
+			Type:   entityType,
+			Status: gtypes.StatusActive,
 		},
-		Edges:     []gtypes.Edge{},
+		Triples:   triples,
 		ObjectRef: objectRef,
 		Version:   1,
-		UpdatedAt: time.Now(),
+		UpdatedAt: now,
 	}
 
-	// Check for existing entity to preserve edges and increment version
+	// Check for existing entity to merge triples and increment version
 	existing, err := mp.deps.EntityManager.GetEntity(ctx, entityID)
 	var entityExists = (err == nil && existing != nil)
 	if entityExists {
-		// Entity exists, preserve edges and increment version
-		state.Edges = existing.Edges
+		// Entity exists, merge triples and increment version
+		state.Triples = gtypes.MergeTriples(existing.Triples, state.Triples)
 		state.Version = existing.Version + 1
 		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
 			return nil, errors.WrapTransient(updateErr, "MessageManager", "processMapMessage", "entity update failed")
@@ -438,81 +411,9 @@ func (mp *Manager) processMapMessage(
 	return []*gtypes.EntityState{state}, nil
 }
 
-// extractPropertiesAndRelationships separates triples into properties and relationships
-func (mp *Manager) extractPropertiesAndRelationships(triples []message.Triple) (map[string]any, []message.Triple) {
-	properties := make(map[string]any)
-	relationships := []message.Triple{}
-
-	// Separate property triples from relationship triples
-	for _, triple := range triples {
-		if triple.IsRelationship() {
-			// This triple represents a relationship to another entity
-			relationships = append(relationships, triple)
-		} else {
-			// This triple represents a property value
-			properties[triple.Predicate] = triple.Object
-		}
-	}
-
-	// Add default metadata properties
-	properties["entity_class"] = message.ClassThing
-	properties["entity_role"] = message.RolePrimary
-	properties["confidence"] = 1.0 // High confidence for Graphable messages
-	properties["source"] = "graphable_interface"
-
-	return properties, relationships
-}
-
-// buildEdgesFromRelationships converts relationship triples to graph edges
-func (mp *Manager) buildEdgesFromRelationships(relationships []message.Triple) []gtypes.Edge {
-	edges := []gtypes.Edge{}
-
-	for _, rel := range relationships {
-		// rel.Object is the target entity ID (validated by IsRelationship)
-		targetID, ok := rel.Object.(string)
-		if !ok {
-			mp.deps.Logger.Warn("Relationship triple has non-string object",
-				"predicate", rel.Predicate,
-				"object", rel.Object)
-			continue
-		}
-
-		// Extract edge type from predicate (e.g., "robotics.component.has" -> "has_component")
-		edgeType := mp.predicateToEdgeType(rel.Predicate)
-
-		edge := gtypes.Edge{
-			ToEntityID: targetID,
-			EdgeType:   edgeType,
-			Weight:     rel.Confidence,
-			Properties: map[string]any{
-				"source":    rel.Source,
-				"predicate": rel.Predicate,
-				"context":   rel.Context,
-			},
-			CreatedAt: rel.Timestamp,
-		}
-
-		edges = append(edges, edge)
-	}
-
-	return edges
-}
-
-// predicateToEdgeType converts a semantic predicate to an edge type
-func (mp *Manager) predicateToEdgeType(predicate string) string {
-	// Convert dotted predicate notation to edge type
-	// Examples:
-	//   "robotics.component.has" -> "has_component"
-	//   "system.parent" -> "parent_of"
-	//   "location.near" -> "near_to"
-
-	parts := strings.Split(predicate, ".")
-	if len(parts) >= 2 {
-		// Take the last two parts for edge type
-		return fmt.Sprintf("%s_%s", parts[len(parts)-1], parts[len(parts)-2])
-	}
-	return predicate // Fallback to full predicate if not dotted
-}
+// NOTE: extractPropertiesAndRelationships and buildEdgesFromRelationships have been removed
+// as part of the greenfield migration to triples as single source of truth.
+// All properties and relationships are now stored directly as triples in EntityState.Triples
 
 // extractTypeFromEntityID extracts entity type from fully qualified entity ID
 func (mp *Manager) extractTypeFromEntityID(entityID string) string {

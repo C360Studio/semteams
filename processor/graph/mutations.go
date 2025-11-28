@@ -15,15 +15,15 @@ import (
 // Mutation subject patterns
 const (
 	// Entity mutations
-	SubjectEntityCreate          = "graph.mutation.entity.create"
-	SubjectEntityUpdate          = "graph.mutation.entity.update"
-	SubjectEntityDelete          = "graph.mutation.entity.delete"
-	SubjectEntityCreateWithEdges = "graph.mutation.entity.create-with-edges"
-	SubjectEntityUpdateWithEdges = "graph.mutation.entity.update-with-edges"
+	SubjectEntityCreate            = "graph.mutation.entity.create"
+	SubjectEntityUpdate            = "graph.mutation.entity.update"
+	SubjectEntityDelete            = "graph.mutation.entity.delete"
+	SubjectEntityCreateWithTriples = "graph.mutation.entity.create-with-triples"
+	SubjectEntityUpdateWithTriples = "graph.mutation.entity.update-with-triples"
 
-	// Edge mutations
-	SubjectEdgeAdd    = "graph.mutation.edge.add"
-	SubjectEdgeRemove = "graph.mutation.edge.remove"
+	// Triple mutations
+	SubjectTripleAdd    = "graph.mutation.triple.add"
+	SubjectTripleRemove = "graph.mutation.triple.remove"
 
 	// Default timeout for mutation operations
 	DefaultMutationTimeout = 5 * time.Second
@@ -50,13 +50,13 @@ func (p *Processor) setupMutationHandlers(ctx context.Context) error {
 
 	// Entity mutations
 	handlers := map[string]nats.MsgHandler{
-		SubjectEntityCreate:          p.handleEntityCreate,
-		SubjectEntityUpdate:          p.handleEntityUpdate,
-		SubjectEntityDelete:          p.handleEntityDelete,
-		SubjectEntityCreateWithEdges: p.handleEntityCreateWithEdges,
-		SubjectEntityUpdateWithEdges: p.handleEntityUpdateWithEdges,
-		SubjectEdgeAdd:               p.handleEdgeAdd,
-		SubjectEdgeRemove:            p.handleEdgeRemove,
+		SubjectEntityCreate:            p.handleEntityCreate,
+		SubjectEntityUpdate:            p.handleEntityUpdate,
+		SubjectEntityDelete:            p.handleEntityDelete,
+		SubjectEntityCreateWithTriples: p.handleEntityCreateWithTriples,
+		SubjectEntityUpdateWithTriples: p.handleEntityUpdateWithTriples,
+		SubjectTripleAdd:               p.handleTripleAdd,
+		SubjectTripleRemove:            p.handleTripleRemove,
 	}
 
 	// Subscribe to each mutation subject using raw NATS for request/reply
@@ -206,12 +206,12 @@ func (p *Processor) handleEntityDelete(msg *nats.Msg) {
 	p.respond(msg, resp)
 }
 
-// handleEntityCreateWithEdges handles atomic entity+edges creation
-func (p *Processor) handleEntityCreateWithEdges(msg *nats.Msg) {
+// handleEntityCreateWithTriples handles atomic entity+triples creation
+func (p *Processor) handleEntityCreateWithTriples(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleEntityCreateWithEdges", "processor not ready"),
+			errors.WrapTransient(nil, "GraphProcessor", "handleEntityCreateWithTriples", "processor not ready"),
 			"", "")
 		return
 	}
@@ -220,7 +220,7 @@ func (p *Processor) handleEntityCreateWithEdges(msg *nats.Msg) {
 	defer cancel()
 
 	// Parse request
-	var req gtypes.CreateEntityWithEdgesRequest
+	var req gtypes.CreateEntityWithTriplesRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
 		p.respondWithError(msg, err, req.TraceID, req.RequestID)
 		return
@@ -229,31 +229,31 @@ func (p *Processor) handleEntityCreateWithEdges(msg *nats.Msg) {
 	// Validate request
 	if req.Entity == nil {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleEntityCreateWithEdges", "entity is required"),
+			errors.WrapInvalid(nil, "GraphProcessor", "handleEntityCreateWithTriples", "entity is required"),
 			req.TraceID, req.RequestID)
 		return
 	}
 
-	// Create entity with edges atomically
-	entity, err := p.entityManager.CreateEntityWithEdges(ctx, req.Entity, req.Edges)
+	// Create entity with triples atomically
+	entity, err := p.entityManager.CreateEntityWithTriples(ctx, req.Entity, req.Triples)
 
 	// Build response
-	resp := gtypes.CreateEntityWithEdgesResponse{
+	resp := gtypes.CreateEntityWithTriplesResponse{
 		MutationResponse: gtypes.NewMutationResponse(err == nil, err, req.TraceID, req.RequestID),
 		Entity:           entity,
-		EdgesAdded:       len(req.Edges),
+		TriplesAdded:     len(req.Triples),
 	}
 
 	// Send response
 	p.respond(msg, resp)
 }
 
-// handleEntityUpdateWithEdges handles atomic entity+edges update
-func (p *Processor) handleEntityUpdateWithEdges(msg *nats.Msg) {
+// handleEntityUpdateWithTriples handles atomic entity+triples update
+func (p *Processor) handleEntityUpdateWithTriples(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleEntityUpdateWithEdges", "processor not ready"),
+			errors.WrapTransient(nil, "GraphProcessor", "handleEntityUpdateWithTriples", "processor not ready"),
 			"", "")
 		return
 	}
@@ -262,7 +262,7 @@ func (p *Processor) handleEntityUpdateWithEdges(msg *nats.Msg) {
 	defer cancel()
 
 	// Parse request
-	var req gtypes.UpdateEntityWithEdgesRequest
+	var req gtypes.UpdateEntityWithTriplesRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
 		p.respondWithError(msg, err, req.TraceID, req.RequestID)
 		return
@@ -271,20 +271,20 @@ func (p *Processor) handleEntityUpdateWithEdges(msg *nats.Msg) {
 	// Validate request
 	if req.Entity == nil {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleEntityUpdateWithEdges", "entity is required"),
+			errors.WrapInvalid(nil, "GraphProcessor", "handleEntityUpdateWithTriples", "entity is required"),
 			req.TraceID, req.RequestID)
 		return
 	}
 
-	// Update entity with edges atomically
-	entity, err := p.entityManager.UpdateEntityWithEdges(ctx, req.Entity, req.AddEdges, req.RemoveEdges)
+	// Update entity with triples atomically
+	entity, err := p.entityManager.UpdateEntityWithTriples(ctx, req.Entity, req.AddTriples, req.RemoveTriples)
 
 	// Build response
-	resp := gtypes.UpdateEntityWithEdgesResponse{
+	resp := gtypes.UpdateEntityWithTriplesResponse{
 		MutationResponse: gtypes.NewMutationResponse(err == nil, err, req.TraceID, req.RequestID),
 		Entity:           entity,
-		EdgesAdded:       len(req.AddEdges),
-		EdgesRemoved:     len(req.RemoveEdges),
+		TriplesAdded:     len(req.AddTriples),
+		TriplesRemoved:   len(req.RemoveTriples),
 	}
 	if entity != nil {
 		resp.Version = int64(entity.Version)
@@ -294,12 +294,12 @@ func (p *Processor) handleEntityUpdateWithEdges(msg *nats.Msg) {
 	p.respond(msg, resp)
 }
 
-// handleEdgeAdd handles edge addition requests
-func (p *Processor) handleEdgeAdd(msg *nats.Msg) {
+// handleTripleAdd handles triple addition requests
+func (p *Processor) handleTripleAdd(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleEdgeAdd", "processor not ready"),
+			errors.WrapTransient(nil, "GraphProcessor", "handleTripleAdd", "processor not ready"),
 			"", "")
 		return
 	}
@@ -308,54 +308,42 @@ func (p *Processor) handleEdgeAdd(msg *nats.Msg) {
 	defer cancel()
 
 	// Parse request
-	var req gtypes.AddEdgeRequest
+	var req gtypes.AddTripleRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
 		p.respondWithError(msg, err, req.TraceID, req.RequestID)
 		return
 	}
 
 	// Validate request
-	if req.FromEntityID == "" || req.ToEntityID == "" || req.EdgeType == "" {
+	if req.Triple.Subject == "" || req.Triple.Predicate == "" {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleEdgeAdd",
-				"from_entity_id, to_entity_id, and edge_type are required"),
+			errors.WrapInvalid(nil, "GraphProcessor", "handleTripleAdd",
+				"subject and predicate are required"),
 			req.TraceID, req.RequestID)
 		return
 	}
 
-	// Create edge
-	edge := gtypes.Edge{
-		ToEntityID: req.ToEntityID,
-		EdgeType:   req.EdgeType,
-		Properties: req.Properties,
-		Weight:     req.Weight,
-		CreatedAt:  time.Now(),
-	}
-	if edge.Weight == 0 {
-		edge.Weight = 1.0
-	}
-
-	// Add edge using EdgeManager
-	err := p.edgeManager.AddEdge(ctx, req.FromEntityID, edge)
+	// Add triple using TripleManager
+	err := p.tripleManager.AddTriple(ctx, req.Triple)
 
 	// Build response
-	resp := gtypes.AddEdgeResponse{
+	resp := gtypes.AddTripleResponse{
 		MutationResponse: gtypes.NewMutationResponse(err == nil, err, req.TraceID, req.RequestID),
 	}
 	if err == nil {
-		resp.Edge = &edge
+		resp.Triple = &req.Triple
 	}
 
 	// Send response
 	p.respond(msg, resp)
 }
 
-// handleEdgeRemove handles edge removal requests
-func (p *Processor) handleEdgeRemove(msg *nats.Msg) {
+// handleTripleRemove handles triple removal requests
+func (p *Processor) handleTripleRemove(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleEdgeRemove", "processor not ready"),
+			errors.WrapTransient(nil, "GraphProcessor", "handleTripleRemove", "processor not ready"),
 			"", "")
 		return
 	}
@@ -364,26 +352,26 @@ func (p *Processor) handleEdgeRemove(msg *nats.Msg) {
 	defer cancel()
 
 	// Parse request
-	var req gtypes.RemoveEdgeRequest
+	var req gtypes.RemoveTripleRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
 		p.respondWithError(msg, err, req.TraceID, req.RequestID)
 		return
 	}
 
 	// Validate request
-	if req.FromEntityID == "" || req.ToEntityID == "" || req.EdgeType == "" {
+	if req.Subject == "" || req.Predicate == "" {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleEdgeRemove",
-				"from_entity_id, to_entity_id, and edge_type are required"),
+			errors.WrapInvalid(nil, "GraphProcessor", "handleTripleRemove",
+				"subject and predicate are required"),
 			req.TraceID, req.RequestID)
 		return
 	}
 
-	// Remove edge using EdgeManager
-	err := p.edgeManager.RemoveEdge(ctx, req.FromEntityID, req.ToEntityID, req.EdgeType)
+	// Remove triple using TripleManager
+	err := p.tripleManager.RemoveTriple(ctx, req.Subject, req.Predicate)
 
 	// Build response
-	resp := gtypes.RemoveEdgeResponse{
+	resp := gtypes.RemoveTripleResponse{
 		MutationResponse: gtypes.NewMutationResponse(err == nil, err, req.TraceID, req.RequestID),
 		Removed:          err == nil,
 	}

@@ -1,11 +1,13 @@
 package graph
 
 import (
+	"encoding/json"
 	"log"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 )
 
@@ -55,17 +57,6 @@ func TestMain(m *testing.M) {
 	os.Exit(exitCode)
 }
 
-// getSharedTestClient returns the shared test client for integration tests
-func getSharedTestClient(t *testing.T) *natsclient.TestClient {
-	if os.Getenv("INTEGRATION_TESTS") == "" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
-	if sharedTestClient == nil {
-		t.Fatal("Shared test client not initialized - TestMain should have created it")
-	}
-	return sharedTestClient
-}
-
 // getSharedNATSClient returns the shared NATS client for integration tests
 func getSharedNATSClient(t *testing.T) *natsclient.Client {
 	if os.Getenv("INTEGRATION_TESTS") == "" {
@@ -75,4 +66,68 @@ func getSharedNATSClient(t *testing.T) *natsclient.Client {
 		t.Fatal("Shared NATS client not initialized - TestMain should have created it")
 	}
 	return sharedNATSClient
+}
+
+// TestGraphablePayload implements the Graphable interface for testing
+type TestGraphablePayload struct {
+	ID         string                   `json:"entity_id"`
+	Properties map[string]interface{}   `json:"properties"`
+	TripleData []map[string]interface{} `json:"triples"`
+}
+
+func (t *TestGraphablePayload) EntityID() string {
+	return t.ID
+}
+
+func (t *TestGraphablePayload) Triples() []message.Triple {
+	var triples []message.Triple
+	for _, triple := range t.TripleData {
+		triples = append(triples, message.Triple{
+			Subject:   triple["subject"].(string),
+			Predicate: triple["predicate"].(string),
+			Object:    triple["object"],
+		})
+	}
+	return triples
+}
+
+func (t *TestGraphablePayload) Schema() message.Type {
+	return message.Type{
+		Domain:   "test",
+		Category: "graphable",
+		Version:  "v1",
+	}
+}
+
+func (t *TestGraphablePayload) Validate() error {
+	return nil
+}
+
+func (t *TestGraphablePayload) MarshalJSON() ([]byte, error) {
+	return json.Marshal(struct {
+		EntityID   string                   `json:"entity_id"`
+		Properties map[string]interface{}   `json:"properties"`
+		TripleData []map[string]interface{} `json:"triples"`
+	}{
+		EntityID:   t.ID,
+		Properties: t.Properties,
+		TripleData: t.TripleData,
+	})
+}
+
+func (t *TestGraphablePayload) UnmarshalJSON(data []byte) error {
+	var tmp struct {
+		EntityID   string                   `json:"entity_id"`
+		Properties map[string]interface{}   `json:"properties"`
+		TripleData []map[string]interface{} `json:"triples"`
+	}
+
+	if err := json.Unmarshal(data, &tmp); err != nil {
+		return err
+	}
+
+	t.ID = tmp.EntityID
+	t.Properties = tmp.Properties
+	t.TripleData = tmp.TripleData
+	return nil
 }

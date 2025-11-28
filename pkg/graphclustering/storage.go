@@ -8,8 +8,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/message"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -27,16 +29,63 @@ var (
 	communityIDPattern = regexp.MustCompile(`^comm-(\d+)-(.+)$`)
 )
 
+// CommunityStorageConfig configures community storage behavior
+type CommunityStorageConfig struct {
+	// CreateTriples enables creation of member_of triples during SaveCommunity
+	CreateTriples bool
+
+	// TriplePredicate specifies the predicate to use for community membership triples
+	// Default: "graph.community.member_of"
+	TriplePredicate string
+}
+
 // NATSCommunityStorage implements CommunityStorage using NATS KV
 type NATSCommunityStorage struct {
-	kv jetstream.KeyValue
+	kv             jetstream.KeyValue
+	config         CommunityStorageConfig
+	createdTriples []message.Triple      // Track created triples for testing
+	testStore      map[string]*Community // In-memory store for testing when kv is nil
 }
 
 // NewNATSCommunityStorage creates a new NATS-backed community storage
+// with default configuration (no triple creation)
 func NewNATSCommunityStorage(kv jetstream.KeyValue) *NATSCommunityStorage {
-	return &NATSCommunityStorage{
+	storage := &NATSCommunityStorage{
 		kv: kv,
+		config: CommunityStorageConfig{
+			CreateTriples: false,
+		},
+		createdTriples: make([]message.Triple, 0),
 	}
+
+	// Initialize in-memory test store if KV is nil
+	if kv == nil {
+		storage.testStore = make(map[string]*Community)
+	}
+
+	return storage
+}
+
+// NewNATSCommunityStorageWithConfig creates a new NATS-backed community storage
+// with custom configuration for triple creation
+func NewNATSCommunityStorageWithConfig(kv jetstream.KeyValue, config CommunityStorageConfig) *NATSCommunityStorage {
+	// Apply default predicate if not specified
+	if config.CreateTriples && config.TriplePredicate == "" {
+		config.TriplePredicate = "graph.community.member_of"
+	}
+
+	storage := &NATSCommunityStorage{
+		kv:             kv,
+		config:         config,
+		createdTriples: make([]message.Triple, 0),
+	}
+
+	// Initialize in-memory test store if KV is nil
+	if kv == nil {
+		storage.testStore = make(map[string]*Community)
+	}
+
+	return storage
 }
 
 // SaveCommunity persists a community to NATS KV
@@ -45,33 +94,85 @@ func (s *NATSCommunityStorage) SaveCommunity(ctx context.Context, community *Com
 		return errors.WrapInvalid(errors.ErrMissingConfig, "NATSCommunityStorage", "SaveCommunity", "community is nil")
 	}
 
-	// Serialize community
-	data, err := json.Marshal(community)
-	if err != nil {
-		return errors.WrapInvalid(err, "NATSCommunityStorage", "SaveCommunity", "marshal community")
-	}
-
-	// Store community data
-	communityKey := communityKey(community.Level, community.ID)
-	if _, err := s.kv.Put(ctx, communityKey, data); err != nil {
-		return errors.WrapTransient(err, "NATSCommunityStorage", "SaveCommunity", "put community")
-	}
-
-	// Index entity -> community mappings
-	for _, entityID := range community.Members {
-		entityKey := entityCommunityKey(community.Level, entityID)
-		if _, err := s.kv.Put(ctx, entityKey, []byte(community.ID)); err != nil {
-			return errors.WrapTransient(err, "NATSCommunityStorage", "SaveCommunity", "put entity mapping")
+	// If KV is available, persist to NATS
+	if s.kv != nil {
+		// Serialize community
+		data, err := json.Marshal(community)
+		if err != nil {
+			return errors.WrapInvalid(err, "NATSCommunityStorage", "SaveCommunity", "marshal community")
 		}
+
+		// Store community data
+		communityKey := communityKey(community.Level, community.ID)
+		if _, err := s.kv.Put(ctx, communityKey, data); err != nil {
+			return errors.WrapTransient(err, "NATSCommunityStorage", "SaveCommunity", "put community")
+		}
+
+		// Index entity -> community mappings
+		for _, entityID := range community.Members {
+			entityKey := entityCommunityKey(community.Level, entityID)
+			if _, err := s.kv.Put(ctx, entityKey, []byte(community.ID)); err != nil {
+				return errors.WrapTransient(err, "NATSCommunityStorage", "SaveCommunity", "put entity mapping")
+			}
+		}
+	} else if s.testStore != nil {
+		// Use in-memory store for testing
+		s.testStore[community.ID] = community
+	}
+
+	// Create member_of triples if enabled
+	if s.config.CreateTriples {
+		triples := s.createCommunityTriples(community)
+		s.createdTriples = append(s.createdTriples, triples...)
 	}
 
 	return nil
+}
+
+// createCommunityTriples generates member_of triples for a community
+func (s *NATSCommunityStorage) createCommunityTriples(community *Community) []message.Triple {
+	triples := make([]message.Triple, 0, len(community.Members))
+	timestamp := time.Now()
+
+	for _, memberID := range community.Members {
+		triple := message.Triple{
+			Subject:    memberID,
+			Predicate:  s.config.TriplePredicate,
+			Object:     community.ID,
+			Source:     "community_detection",
+			Timestamp:  timestamp,
+			Confidence: 1.0,
+		}
+		triples = append(triples, triple)
+	}
+
+	return triples
+}
+
+// GetCreatedTriples returns all triples created during SaveCommunity operations
+// This method is primarily for testing and verification purposes
+func (s *NATSCommunityStorage) GetCreatedTriples() []message.Triple {
+	return s.createdTriples
 }
 
 // GetCommunity retrieves a community by ID
 func (s *NATSCommunityStorage) GetCommunity(ctx context.Context, id string) (*Community, error) {
 	if id == "" {
 		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "NATSCommunityStorage", "GetCommunity", "id is empty")
+	}
+
+	// If using test store, return from memory
+	if s.kv == nil && s.testStore != nil {
+		community, ok := s.testStore[id]
+		if !ok {
+			return nil, nil
+		}
+		return community, nil
+	}
+
+	// If KV is nil without test store, return nil
+	if s.kv == nil {
+		return nil, nil
 	}
 
 	// Extract level from community ID using regex

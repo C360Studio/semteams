@@ -1,15 +1,15 @@
-// Package datamanager consolidates entity and edge operations into a unified data management service.
-// This package is the result of Phase 1 consolidation, merging EntityStore and EdgeManager
-// to provide atomic entity+edge operations and simplified transaction management.
+// Package datamanager consolidates entity and triple operations into a unified data management service.
+// This package is the result of Phase 1 consolidation, providing atomic entity+triple operations
+// and simplified transaction management.
 //
 // The DataManager is the single writer to ENTITY_STATES KV bucket and handles all
-// entity persistence, edge management, and maintains L1/L2 cache hierarchies.
+// entity persistence, triple management, and maintains L1/L2 cache hierarchies.
 //
-// The package now follows Interface Segregation Principle with 6 focused interfaces:
+// The package follows Interface Segregation Principle with 5 focused interfaces:
 // - EntityReader: Read-only entity access with caching
 // - EntityWriter: Basic entity mutation operations
 // - EntityManager: Complete entity lifecycle management
-// - EdgeManager: Graph relationship operations
+// - TripleManager: Semantic triple operations (replaces EdgeManager)
 // - DataConsistency: Graph integrity checking and maintenance
 // - DataLifecycle: Component lifecycle and observability
 package datamanager
@@ -18,6 +18,7 @@ import (
 	"context"
 
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 )
 
 // EntityReader provides read-only entity access with caching.
@@ -37,32 +38,32 @@ type EntityWriter interface {
 }
 
 // EntityManager provides complete entity lifecycle management.
-// Combines reader, writer, and advanced operations like atomic entity+edge writes.
+// Combines reader, writer, and advanced operations like atomic entity+triple writes.
 type EntityManager interface {
 	EntityReader
 	EntityWriter
 
-	CreateEntityWithEdges(ctx context.Context, entity *gtypes.EntityState, edges []gtypes.Edge) (*gtypes.EntityState, error)
-	UpdateEntityWithEdges(ctx context.Context, entity *gtypes.EntityState, addEdges []gtypes.Edge, removeEdges []string) (*gtypes.EntityState, error)
+	CreateEntityWithTriples(ctx context.Context, entity *gtypes.EntityState, triples []message.Triple) (*gtypes.EntityState, error)
+	UpdateEntityWithTriples(ctx context.Context, entity *gtypes.EntityState, addTriples []message.Triple, removePredicates []string) (*gtypes.EntityState, error)
 	BatchWrite(ctx context.Context, writes []EntityWrite) error
 	List(ctx context.Context, pattern string) ([]string, error)
 }
 
-// EdgeManager provides graph relationship operations.
-// Used by components that manage entity relationships and graph structure.
-type EdgeManager interface {
-	AddEdge(ctx context.Context, fromEntityID string, edge gtypes.Edge) error
-	RemoveEdge(ctx context.Context, fromEntityID, toEntityID, edgeType string) error
-	CreateRelationship(ctx context.Context, fromEntityID, toEntityID string, edgeType string, properties map[string]any) error
-	DeleteRelationship(ctx context.Context, fromEntityID, toEntityID string) error
+// TripleManager provides semantic triple operations.
+// Used by components that manage entity relationships and properties as triples.
+type TripleManager interface {
+	AddTriple(ctx context.Context, triple message.Triple) error
+	RemoveTriple(ctx context.Context, subject, predicate string) error
+	CreateRelationship(ctx context.Context, fromEntityID, toEntityID string, predicate string, metadata map[string]any) error
+	DeleteRelationship(ctx context.Context, fromEntityID, toEntityID string, predicate string) error
 }
 
 // DataConsistency provides graph integrity checking and maintenance.
 // Used by components that need to verify or repair graph consistency.
 type DataConsistency interface {
-	CleanupIncomingReferences(ctx context.Context, deletedEntityID string, outgoingEdges []gtypes.Edge) error
-	CheckOutgoingEdgesConsistency(ctx context.Context, entityID string, entity *gtypes.EntityState, status *EntityIndexStatus)
-	HasEdgeToEntity(entity *gtypes.EntityState, targetEntityID string) bool
+	CleanupIncomingReferences(ctx context.Context, deletedEntityID string, outgoingTriples []message.Triple) error
+	CheckOutgoingTriplesConsistency(ctx context.Context, entityID string, entity *gtypes.EntityState, status *EntityIndexStatus)
+	HasRelationshipToEntity(entity *gtypes.EntityState, targetEntityID string, predicate string) bool
 }
 
 // DataLifecycle manages component lifecycle and observability.
@@ -79,7 +80,7 @@ var (
 	_ EntityReader    = (*Manager)(nil)
 	_ EntityWriter    = (*Manager)(nil)
 	_ EntityManager   = (*Manager)(nil)
-	_ EdgeManager     = (*Manager)(nil)
+	_ TripleManager   = (*Manager)(nil)
 	_ DataConsistency = (*Manager)(nil)
 	_ DataLifecycle   = (*Manager)(nil)
 )

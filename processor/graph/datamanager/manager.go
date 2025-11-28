@@ -17,6 +17,7 @@ import (
 
 	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/pkg/buffer"
 	"github.com/c360/semstreams/pkg/cache"
@@ -516,14 +517,13 @@ func (m *Manager) mergeEntityStates(existing, newer *gtypes.EntityState) *gtypes
 		return existing
 	}
 
-	// Create merged entity with triples-based approach
+	// Create merged entity with triples-based approach (triples as single source of truth)
 	merged := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
 			ID:   existing.Node.ID,
 			Type: newer.Node.Type, // Use newer type
 		},
-		Edges:       newer.Edges,                                          // Use newer edges
-		Triples:     gtypes.MergeTriples(existing.Triples, newer.Triples), // CRITICAL: Proper triples merging
+		Triples:     gtypes.MergeTriples(existing.Triples, newer.Triples), // Triples as single source of truth
 		ObjectRef:   newer.ObjectRef,                                      // Use newer ObjectRef
 		MessageType: newer.MessageType,                                    // Use newer message type
 		UpdatedAt:   newer.UpdatedAt,                                      // Use newer timestamp
@@ -777,9 +777,9 @@ func (m *Manager) deleteEntityDirect(ctx context.Context, id string) error {
 		return err
 	}
 
-	// Cleanup incoming references if needed
-	if len(entity.Edges) > 0 {
-		if err := m.CleanupIncomingReferences(ctx, id, entity.Edges); err != nil {
+	// Cleanup incoming references if entity has relationship triples
+	if len(entity.Triples) > 0 {
+		if err := m.CleanupIncomingReferences(ctx, id, entity.Triples); err != nil {
 			m.logger.Warn("Failed to cleanup incoming references", "entity", id, "error", err)
 			// Don't fail the delete operation for cleanup errors
 		}
@@ -860,36 +860,36 @@ func (m *Manager) ExistsEntity(ctx context.Context, id string) (bool, error) {
 	return true, nil
 }
 
-// Atomic Entity+Edge Operations
+// Atomic Entity+Triple Operations
 
-// CreateEntityWithEdges creates an entity with edges atomically
-func (m *Manager) CreateEntityWithEdges(
+// CreateEntityWithTriples creates an entity with triples atomically
+func (m *Manager) CreateEntityWithTriples(
 	ctx context.Context,
 	entity *gtypes.EntityState,
-	edges []gtypes.Edge,
+	triples []message.Triple,
 ) (*gtypes.EntityState, error) {
 	if entity == nil {
 		return nil, errors.WrapInvalid(nil, "DataManager",
-			"CreateEntityWithEdges", "entity cannot be nil")
+			"CreateEntityWithTriples", "entity cannot be nil")
 	}
 
-	// Add edges to entity before creating
-	for _, edge := range edges {
-		entity.AddEdge(edge)
-	}
+	// Add triples to entity before creating
+	entity.Triples = append(entity.Triples, triples...)
 
-	// Create entity with edges
+	// Create entity with triples
 	return m.CreateEntity(ctx, entity)
 }
 
-// UpdateEntityWithEdges updates an entity and modifies edges atomically
-func (m *Manager) UpdateEntityWithEdges(
-	ctx context.Context, entity *gtypes.EntityState,
-	addEdges []gtypes.Edge, removeEdges []string,
+// UpdateEntityWithTriples updates an entity and modifies triples atomically
+func (m *Manager) UpdateEntityWithTriples(
+	ctx context.Context,
+	entity *gtypes.EntityState,
+	addTriples []message.Triple,
+	removePredicates []string,
 ) (*gtypes.EntityState, error) {
 	if entity == nil {
 		return nil, errors.WrapInvalid(nil, "DataManager",
-			"UpdateEntityWithEdges", "entity cannot be nil")
+			"UpdateEntityWithTriples", "entity cannot be nil")
 	}
 
 	// Get current entity state
@@ -898,31 +898,29 @@ func (m *Manager) UpdateEntityWithEdges(
 		return nil, err
 	}
 
-	// Start with current edges
-	entity.Edges = current.Edges
+	// Start with current triples
+	entity.Triples = current.Triples
 
-	// Remove edges
-	newEdges := []gtypes.Edge{}
-	for _, edge := range entity.Edges {
+	// Remove triples by predicate
+	newTriples := []message.Triple{}
+	for _, triple := range entity.Triples {
 		shouldRemove := false
-		for _, removeID := range removeEdges {
-			if edge.ToEntityID == removeID {
+		for _, predicate := range removePredicates {
+			if triple.Predicate == predicate {
 				shouldRemove = true
 				break
 			}
 		}
 		if !shouldRemove {
-			newEdges = append(newEdges, edge)
+			newTriples = append(newTriples, triple)
 		}
 	}
-	entity.Edges = newEdges
+	entity.Triples = newTriples
 
-	// Add new edges
-	for _, edge := range addEdges {
-		entity.AddEdge(edge)
-	}
+	// Add new triples (using MergeTriples to handle duplicates)
+	entity.Triples = gtypes.MergeTriples(entity.Triples, addTriples)
 
-	// Update entity with modified edges
+	// Update entity with modified triples
 	return m.UpdateEntity(ctx, entity)
 }
 

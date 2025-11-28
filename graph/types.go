@@ -87,7 +87,6 @@ func (es EntityStatus) IsOperational() bool {
 // EntityState represents complete local graph state for an entity
 type EntityState struct {
 	Node        NodeProperties   `json:"node"`         // Entity properties
-	Edges       []Edge           `json:"edges"`        // Outgoing edges ONLY
 	Triples     []message.Triple `json:"triples"`      // Semantic triples (properties + relationships)
 	ObjectRef   string           `json:"object_ref"`   // Reference to full message in ObjectStore
 	MessageType string           `json:"message_type"` // Original message type (domain.category.version)
@@ -97,22 +96,10 @@ type EntityState struct {
 
 // NodeProperties contains entity identification and query-essential properties
 type NodeProperties struct {
-	ID         string         `json:"id"`         // e.g., "drone_001"
-	Type       string         `json:"type"`       // e.g., "robotics.drone"
-	Properties map[string]any `json:"properties"` // Query-essential only
-	Position   *Position      `json:"position,omitempty"`
-	Status     EntityStatus   `json:"status"` // Entity operational status
-}
-
-// Edge represents a directed relationship (outgoing only)
-type Edge struct {
-	ToEntityID string         `json:"to_entity_id"`
-	EdgeType   string         `json:"edge_type"`            // "POWERED_BY", "NEAR", etc.
-	Weight     float64        `json:"weight,omitempty"`     // Distance, strength, etc.
-	Confidence float64        `json:"confidence,omitempty"` // 0.0-1.0
-	Properties map[string]any `json:"properties,omitempty"`
-	CreatedAt  time.Time      `json:"created_at"`
-	ExpiresAt  *time.Time     `json:"expires_at,omitempty"` // For temporary relationships
+	ID       string       `json:"id"`   // e.g., "drone_001"
+	Type     string       `json:"type"` // e.g., "robotics.drone"
+	Position *Position    `json:"position,omitempty"`
+	Status   EntityStatus `json:"status"` // Entity operational status
 }
 
 // Position represents geographic location
@@ -122,49 +109,33 @@ type Position struct {
 	Altitude  float64 `json:"alt,omitempty"`
 }
 
-// AddEdge adds or updates an edge
-func (es *EntityState) AddEdge(edge Edge) {
-	// Replace existing edge of same type to same entity
-	for i, e := range es.Edges {
-		if e.EdgeType == edge.EdgeType && e.ToEntityID == edge.ToEntityID {
-			es.Edges[i] = edge
-			return
+// GetTriple returns the first triple matching the given predicate.
+// Returns nil if no matching triple is found.
+// This helper method simplifies accessing triple-based properties.
+func (es *EntityState) GetTriple(predicate string) *message.Triple {
+	if es == nil {
+		return nil
+	}
+	for i := range es.Triples {
+		if es.Triples[i].Predicate == predicate {
+			return &es.Triples[i]
 		}
 	}
-	es.Edges = append(es.Edges, edge)
+	return nil
 }
 
-// RemoveEdge removes an edge to the specified entity, optionally matching edge type
-// Returns true if an edge was removed, false if not found
-func (es *EntityState) RemoveEdge(toEntityID string, edgeType string) bool {
-	for i, edge := range es.Edges {
-		if edge.ToEntityID == toEntityID && (edgeType == "" || edge.EdgeType == edgeType) {
-			// Remove edge by slicing
-			es.Edges = append(es.Edges[:i], es.Edges[i+1:]...)
-			return true
-		}
+// GetPropertyValue returns the value for a property by predicate.
+// It checks Triples for a matching predicate and returns the Object value.
+// Returns (value, true) if found, (nil, false) if not found.
+func (es *EntityState) GetPropertyValue(predicate string) (any, bool) {
+	if es == nil {
+		return nil, false
 	}
-	return false
-}
 
-// RemoveExpiredEdges removes edges past expiration
-func (es *EntityState) RemoveExpiredEdges() {
-	now := time.Now()
-	filtered := es.Edges[:0]
-	for _, edge := range es.Edges {
-		if edge.ExpiresAt == nil || edge.ExpiresAt.After(now) {
-			filtered = append(filtered, edge)
-		}
+	triple := es.GetTriple(predicate)
+	if triple != nil {
+		return triple.Object, true
 	}
-	es.Edges = filtered
-}
 
-// UpdateProperties merges new properties with existing
-func (np *NodeProperties) UpdateProperties(updates map[string]any) {
-	if np.Properties == nil {
-		np.Properties = make(map[string]any)
-	}
-	for k, v := range updates {
-		np.Properties[k] = v
-	}
+	return nil, false
 }

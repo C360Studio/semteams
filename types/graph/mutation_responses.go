@@ -1,7 +1,11 @@
 // Package graph provides types for NATS mutation API
 package graph
 
-import "time"
+import (
+	"time"
+
+	"github.com/c360/semstreams/message"
+)
 
 // Mutation Response Types
 
@@ -33,30 +37,30 @@ type DeleteEntityResponse struct {
 	Deleted bool `json:"deleted"`
 }
 
-// CreateEntityWithEdgesResponse response for atomic entity+edges creation
-type CreateEntityWithEdgesResponse struct {
-	MutationResponse
-	Entity     *EntityState `json:"entity,omitempty"`
-	EdgesAdded int          `json:"edges_added"`
-}
-
-// UpdateEntityWithEdgesResponse response for atomic entity+edges update
-type UpdateEntityWithEdgesResponse struct {
+// CreateEntityWithTriplesResponse response for atomic entity+triples creation
+type CreateEntityWithTriplesResponse struct {
 	MutationResponse
 	Entity       *EntityState `json:"entity,omitempty"`
-	EdgesAdded   int          `json:"edges_added"`
-	EdgesRemoved int          `json:"edges_removed"`
-	Version      int64        `json:"version,omitempty"`
+	TriplesAdded int          `json:"triples_added"`
 }
 
-// AddEdgeResponse response for edge addition
-type AddEdgeResponse struct {
+// UpdateEntityWithTriplesResponse response for atomic entity+triples update
+type UpdateEntityWithTriplesResponse struct {
 	MutationResponse
-	Edge *Edge `json:"edge,omitempty"`
+	Entity         *EntityState `json:"entity,omitempty"`
+	TriplesAdded   int          `json:"triples_added"`
+	TriplesRemoved int          `json:"triples_removed"`
+	Version        int64        `json:"version,omitempty"`
 }
 
-// RemoveEdgeResponse response for edge removal
-type RemoveEdgeResponse struct {
+// AddTripleResponse response for triple addition
+type AddTripleResponse struct {
+	MutationResponse
+	Triple *message.Triple `json:"triple,omitempty"`
+}
+
+// RemoveTripleResponse response for triple removal
+type RemoveTripleResponse struct {
 	MutationResponse
 	Removed bool `json:"removed"`
 }

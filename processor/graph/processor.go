@@ -55,7 +55,7 @@ type Processor struct {
 	dataManager   *datamanager.Manager      // Concrete manager instance (for tests needing full access)
 	dataLifecycle datamanager.DataLifecycle // Lifecycle management (Run, FlushPendingWrites, etc.)
 	entityManager datamanager.EntityManager // Complete entity operations (passed to sub-components)
-	edgeManager   datamanager.EdgeManager   // Graph relationship operations
+	tripleManager datamanager.TripleManager // Semantic triple operations (replaces EdgeManager)
 	indexManager  indexmanager.Indexer      // KV watching, secondary indexes
 	queryManager  querymanager.Querier      // Query operations with caching
 
@@ -795,7 +795,7 @@ func (p *Processor) assignManagers(
 	p.dataManager = dataManager
 	p.dataLifecycle = dataManager
 	p.entityManager = dataManager
-	p.edgeManager = dataManager
+	p.tripleManager = dataManager
 	p.indexManager = indexer
 	p.queryManager = querier
 	p.mu.Unlock()

@@ -725,8 +725,14 @@ func (m *Manager) queueEmbeddingGeneration(ctx context.Context, entityID string,
 		}
 	}
 
-	// Extract text from properties (use helper from semantic.go)
-	properties := state.Node.Properties
+	// Extract text from triples (single source of truth)
+	// Build properties map from triples for text extraction
+	properties := make(map[string]interface{})
+	for _, triple := range state.Triples {
+		if !triple.IsRelationship() {
+			properties[triple.Predicate] = triple.Object
+		}
+	}
 	text := m.extractText(properties)
 	if text == "" {
 		m.logger.Debug("No text content found, skipping embedding", "entity_id", entityID)
@@ -777,6 +783,17 @@ func (m *Manager) updateIndex(
 	case OperationUpdate:
 		return index.HandleUpdate(timeoutCtx, event.Key, entityState)
 	case OperationDelete:
+		// For delete operations, first cleanup orphaned INCOMING_INDEX references
+		// This must happen BEFORE deleting from OUTGOING_INDEX (which has the relationship data)
+		if indexType == "outgoing" {
+			// Cleanup incoming references using the outgoing data before it's deleted
+			if err := m.CleanupOrphanedIncomingReferences(timeoutCtx, event.Key); err != nil {
+				m.logger.Warn("Failed to cleanup orphaned incoming references",
+					"entity_id", event.Key,
+					"error", err)
+				// Continue with delete anyway
+			}
+		}
 		return index.HandleDelete(timeoutCtx, event.Key)
 	default:
 		return errors.WrapTransient(
@@ -820,15 +837,19 @@ func (m *Manager) updateIndexes(ctx context.Context, entityState *gtypes.EntityS
 		return errors.WrapTransient(err, "IndexManager", "updateIndexes", "temporal index update failed")
 	}
 
-	// Update incoming index for all edges
-	for _, edge := range entityState.Edges {
-		if err := m.UpdateIncomingIndex(ctx, edge.ToEntityID, entityID); err != nil {
-			return errors.WrapTransient(
-				err,
-				"IndexManager",
-				"updateIndexes",
-				fmt.Sprintf("incoming index update failed for edge to %s", edge.ToEntityID),
-			)
+	// Update incoming index for all relationships (extracted from triples)
+	for _, triple := range entityState.Triples {
+		if triple.IsRelationship() {
+			if toEntityID, ok := triple.Object.(string); ok {
+				if err := m.UpdateIncomingIndex(ctx, toEntityID, entityID); err != nil {
+					return errors.WrapTransient(
+						err,
+						"IndexManager",
+						"updateIndexes",
+						fmt.Sprintf("incoming index update failed for relationship to %s", toEntityID),
+					)
+				}
+			}
 		}
 	}
 
@@ -1091,7 +1112,7 @@ func (m *Manager) DeleteFromIncomingIndex(ctx context.Context, entityID string) 
 	return index.HandleDelete(ctx, entityID)
 }
 
-// RemoveFromIncomingIndex removes a specific incoming relationship
+// RemoveFromIncomingIndex removes a specific incoming relationship reference
 func (m *Manager) RemoveFromIncomingIndex(ctx context.Context, targetEntityID, sourceEntityID string) error {
 	if !m.config.Indexes.Incoming {
 		return ErrIndexDisabled
@@ -1102,10 +1123,64 @@ func (m *Manager) RemoveFromIncomingIndex(ctx context.Context, targetEntityID, s
 		return gtypes.ErrIndexNotFound
 	}
 
-	// Remove the specific relationship from target to source
-	// This is more granular than DeleteFromIncomingIndex which removes all relationships for an entity
-	relationshipKey := fmt.Sprintf("%s:%s", targetEntityID, sourceEntityID)
-	return index.HandleDelete(ctx, relationshipKey)
+	// Cast to IncomingIndex to access RemoveIncomingReference method
+	incomingIndex, ok := index.(*IncomingIndex)
+	if !ok {
+		return errors.WrapInvalid(nil, "IndexManager", "RemoveFromIncomingIndex", "invalid index type")
+	}
+
+	return incomingIndex.RemoveIncomingReference(ctx, targetEntityID, sourceEntityID)
+}
+
+// CleanupOrphanedIncomingReferences removes all INCOMING_INDEX references to a deleted entity
+// This should be called when an entity is deleted to prevent orphaned references
+func (m *Manager) CleanupOrphanedIncomingReferences(ctx context.Context, deletedEntityID string) error {
+	// Get the outgoing relationships of the deleted entity
+	outgoingIndex, exists := m.indexes["outgoing"]
+	if !exists {
+		return nil // No outgoing index, nothing to clean
+	}
+
+	outIdx, ok := outgoingIndex.(*OutgoingIndex)
+	if !ok {
+		return nil
+	}
+
+	// Get what entities the deleted entity was pointing to
+	outgoing, err := outIdx.GetOutgoing(ctx, deletedEntityID)
+	if err != nil {
+		// If not found, nothing to clean up
+		m.logger.Debug("No outgoing relationships to clean up", "entity_id", deletedEntityID)
+		return nil
+	}
+
+	// Get incoming index for cleanup
+	incomingIndex, exists := m.indexes["incoming"]
+	if !exists {
+		return nil
+	}
+
+	incIdx, ok := incomingIndex.(*IncomingIndex)
+	if !ok {
+		return nil
+	}
+
+	// Remove the deleted entity from each target's INCOMING_INDEX
+	for _, entry := range outgoing {
+		if err := incIdx.RemoveIncomingReference(ctx, entry.ToEntityID, deletedEntityID); err != nil {
+			m.logger.Warn("Failed to remove incoming reference",
+				"deleted_entity", deletedEntityID,
+				"target_entity", entry.ToEntityID,
+				"error", err)
+			// Continue with other cleanups
+		}
+	}
+
+	m.logger.Debug("Cleaned up incoming references for deleted entity",
+		"entity_id", deletedEntityID,
+		"targets_cleaned", len(outgoing))
+
+	return nil
 }
 
 // DeleteFromAliasIndex deletes an alias from the alias index

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/cache"
@@ -300,14 +301,35 @@ func (qc *natsClient) GetIncomingEdges(ctx context.Context, entityID string) ([]
 	return []string{}, nil
 }
 
-// GetOutgoingEdges returns the outgoing edges for an entity
-func (qc *natsClient) GetOutgoingEdges(ctx context.Context, entityID string) ([]gtypes.Edge, error) {
+// GetIncomingRelationships retrieves entity IDs that reference the given entity
+func (qc *natsClient) GetIncomingRelationships(ctx context.Context, entityID string) ([]string, error) {
+	return qc.GetIncomingEdges(ctx, entityID)
+}
+
+// GetOutgoingRelationships returns the entity IDs that this entity points to via relationship triples
+func (qc *natsClient) GetOutgoingRelationships(ctx context.Context, entityID string, predicate string) ([]string, error) {
 	entity, err := qc.GetEntity(ctx, entityID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get entity: %w", err)
 	}
 
-	return entity.Edges, nil
+	var result []string
+	for _, triple := range entity.Triples {
+		// Filter by predicate if specified
+		if predicate != "" && triple.Predicate != predicate {
+			continue
+		}
+		// Check if this is a relationship triple (object is a string entity ID)
+		if targetID, ok := triple.Object.(string); ok && isRelationshipPredicate(triple.Predicate) {
+			result = append(result, targetID)
+		}
+	}
+	return result, nil
+}
+
+// CountIncomingRelationships returns the number of entities pointing to this entity
+func (qc *natsClient) CountIncomingRelationships(ctx context.Context, entityID string) (int, error) {
+	return qc.CountIncomingEdges(ctx, entityID)
 }
 
 // GetEntityConnections returns all entities connected to the specified entity
@@ -319,11 +341,17 @@ func (qc *natsClient) GetEntityConnections(ctx context.Context, entityID string)
 	}
 
 	var connectedEntities []*gtypes.EntityState
+	seenIDs := make(map[string]bool)
 
-	// Get outgoing connections
-	for _, edge := range sourceEntity.Edges {
-		if targetEntity, err := qc.GetEntity(ctx, edge.ToEntityID); err == nil {
-			connectedEntities = append(connectedEntities, targetEntity)
+	// Get outgoing connections via relationship triples
+	for _, triple := range sourceEntity.Triples {
+		if isRelationshipPredicate(triple.Predicate) {
+			if targetID, ok := triple.Object.(string); ok && !seenIDs[targetID] {
+				if targetEntity, err := qc.GetEntity(ctx, targetID); err == nil {
+					connectedEntities = append(connectedEntities, targetEntity)
+					seenIDs[targetID] = true
+				}
+			}
 		}
 	}
 
@@ -331,8 +359,11 @@ func (qc *natsClient) GetEntityConnections(ctx context.Context, entityID string)
 	incomingEntityIDs, err := qc.GetIncomingEdges(ctx, entityID)
 	if err == nil {
 		for _, incomingID := range incomingEntityIDs {
-			if incomingEntity, err := qc.GetEntity(ctx, incomingID); err == nil {
-				connectedEntities = append(connectedEntities, incomingEntity)
+			if !seenIDs[incomingID] {
+				if incomingEntity, err := qc.GetEntity(ctx, incomingID); err == nil {
+					connectedEntities = append(connectedEntities, incomingEntity)
+					seenIDs[incomingID] = true
+				}
 			}
 		}
 	}
@@ -341,16 +372,18 @@ func (qc *natsClient) GetEntityConnections(ctx context.Context, entityID string)
 }
 
 // VerifyRelationship checks if a relationship exists between two entities
-func (qc *natsClient) VerifyRelationship(ctx context.Context, fromID, toID, edgeType string) (bool, error) {
+func (qc *natsClient) VerifyRelationship(ctx context.Context, fromID, toID, predicate string) (bool, error) {
 	sourceEntity, err := qc.GetEntity(ctx, fromID)
 	if err != nil {
 		return false, err
 	}
 
-	// Check outgoing edges
-	for _, edge := range sourceEntity.Edges {
-		if edge.ToEntityID == toID && (edgeType == "" || edge.EdgeType == edgeType) {
-			return true, nil
+	// Check relationship triples
+	for _, triple := range sourceEntity.Triples {
+		if targetID, ok := triple.Object.(string); ok && targetID == toID {
+			if predicate == "" || triple.Predicate == predicate {
+				return true, nil
+			}
 		}
 	}
 
@@ -566,14 +599,14 @@ func (qc *natsClient) traverseGraph(
 		return fmt.Errorf("entity %s not found in state", entityID)
 	}
 
-	// Check if this entity has any valid outgoing edges
-	if !qc.hasValidOutgoingEdges(entity, query.EdgeFilter) {
+	// Check if this entity has any valid outgoing relationship triples
+	if !qc.hasValidOutgoingRelationships(entity, query.PredicateFilter) {
 		qc.addCompletePath(query, state, currentPath)
 		return nil
 	}
 
-	// Traverse valid outgoing edges
-	return qc.traverseEdges(ctx, query, state, entity, depth, currentPath)
+	// Traverse valid outgoing relationship triples
+	return qc.traverseRelationships(ctx, query, state, entity, depth, currentPath)
 }
 
 // checkTraversalContext checks for context cancellation
@@ -599,18 +632,18 @@ func (qc *natsClient) addCompletePath(query PathQuery, state *pathTraversalState
 	state.paths = append(state.paths, pathCopy)
 }
 
-// hasValidOutgoingEdges checks if entity has edges matching the filter
-func (qc *natsClient) hasValidOutgoingEdges(entity *gtypes.EntityState, edgeFilter []string) bool {
-	for _, edge := range entity.Edges {
-		if qc.shouldFollowEdge(edge, edgeFilter) {
+// hasValidOutgoingRelationships checks if entity has relationship triples matching the filter
+func (qc *natsClient) hasValidOutgoingRelationships(entity *gtypes.EntityState, predicateFilter []string) bool {
+	for _, triple := range entity.Triples {
+		if qc.shouldFollowTriple(triple, predicateFilter) {
 			return true
 		}
 	}
 	return false
 }
 
-// traverseEdges processes all valid outgoing edges from an entity
-func (qc *natsClient) traverseEdges(
+// traverseRelationships processes all valid outgoing relationship triples from an entity
+func (qc *natsClient) traverseRelationships(
 	ctx context.Context,
 	query PathQuery,
 	state *pathTraversalState,
@@ -618,12 +651,16 @@ func (qc *natsClient) traverseEdges(
 	depth int,
 	currentPath []string,
 ) error {
-	for _, edge := range entity.Edges {
-		if !qc.shouldFollowEdge(edge, query.EdgeFilter) {
+	for _, triple := range entity.Triples {
+		if !qc.shouldFollowTriple(triple, query.PredicateFilter) {
 			continue
 		}
 
-		targetID := edge.ToEntityID
+		// Get target ID from triple object (must be a string entity ID)
+		targetID, ok := triple.Object.(string)
+		if !ok {
+			continue // Not a relationship triple
+		}
 
 		// Process new target entity if not visited
 		if !state.visited[targetID] {
@@ -698,16 +735,21 @@ func (qc *natsClient) continueTraversalIfValid(
 	return nil
 }
 
-// shouldFollowEdge determines if an edge should be followed based on edge filter
-func (qc *natsClient) shouldFollowEdge(edge gtypes.Edge, edgeFilter []string) bool {
-	// If no filter specified, follow all edges
-	if len(edgeFilter) == 0 {
+// shouldFollowTriple determines if a triple should be followed based on predicate filter
+func (qc *natsClient) shouldFollowTriple(triple message.Triple, predicateFilter []string) bool {
+	// Only follow relationship triples
+	if !isRelationshipPredicate(triple.Predicate) {
+		return false
+	}
+
+	// If no filter specified, follow all relationship predicates
+	if len(predicateFilter) == 0 {
 		return true
 	}
 
-	// Check if edge type is in filter
-	for _, allowedType := range edgeFilter {
-		if edge.EdgeType == allowedType {
+	// Check if predicate is in filter
+	for _, allowedPredicate := range predicateFilter {
+		if triple.Predicate == allowedPredicate {
 			return true
 		}
 	}
@@ -745,21 +787,36 @@ func (qc *natsClient) entityMatchesCriteria(entity *gtypes.EntityState, criteria
 		}
 	}
 
-	// Check property criteria
+	// Check property criteria using triples
 	for key, expectedValue := range criteria {
 		if key == "type" || key == "status" {
 			continue // Already checked above
 		}
 
-		if entity.Node.Properties == nil {
-			return false
-		}
-
-		actualValue, exists := entity.Node.Properties[key]
-		if !exists || actualValue != expectedValue {
+		// Look up property value from triples
+		actualValue, found := entity.GetPropertyValue(key)
+		if !found || actualValue != expectedValue {
 			return false
 		}
 	}
 
 	return true
+}
+
+// isRelationshipPredicate checks if a predicate typically represents a relationship
+// Common relationship predicates are those that reference other entities
+func isRelationshipPredicate(predicate string) bool {
+	relationshipPredicates := map[string]bool{
+		"POWERED_BY":   true,
+		"NEAR":         true,
+		"LOCATED_AT":   true,
+		"CONNECTED_TO": true,
+		"PART_OF":      true,
+		"CONTROLS":     true,
+		"MONITORS":     true,
+		"COMMUNICATES": true,
+		"DEPENDS_ON":   true,
+		"RELATED_TO":   true,
+	}
+	return relationshipPredicates[predicate]
 }

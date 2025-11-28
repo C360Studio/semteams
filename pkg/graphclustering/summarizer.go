@@ -96,17 +96,19 @@ func (s *StatisticalSummarizer) extractKeywords(entities []*gtypes.EntityState) 
 			}
 		}
 
-		// Extract terms from property keys and string values
-		for key, value := range entity.Node.Properties {
-			// Add property key as a term
-			termFreq[key]++
+		// Extract terms from property triples (string values only)
+		for _, triple := range entity.Triples {
+			if !triple.IsRelationship() {
+				// Add predicate as a term
+				termFreq[triple.Predicate]++
 
-			// If value is string, extract terms
-			if strVal, ok := value.(string); ok {
-				// Split on common delimiters and extract terms
-				terms := extractTerms(strVal)
-				for _, term := range terms {
-					termFreq[term]++
+				// If value is string, extract terms
+				if strVal, ok := triple.Object.(string); ok {
+					// Split on common delimiters and extract terms
+					terms := extractTerms(strVal)
+					for _, term := range terms {
+						termFreq[term]++
+					}
 				}
 			}
 		}
@@ -193,8 +195,14 @@ func (s *StatisticalSummarizer) findRepresentativeEntitiesFallback(entities []*g
 	// Calculate scores
 	scores := make([]entityScore, 0, len(entities))
 	for _, entity := range entities {
-		// Connectivity score (normalized)
-		connectivityScore := float64(len(entity.Edges))
+		// Connectivity score (count relationship triples)
+		relationshipCount := 0
+		for _, triple := range entity.Triples {
+			if triple.IsRelationship() {
+				relationshipCount++
+			}
+		}
+		connectivityScore := float64(relationshipCount)
 
 		// Type representativeness score (normalized)
 		typeScore := float64(typeFreq[entity.Node.Type]) / float64(len(entities))
@@ -257,19 +265,25 @@ func (p *entityGraphProvider) GetNeighbors(_ context.Context, entityID string, d
 
 	neighborSet := make(map[string]bool) // Deduplicate
 
-	// Handle outgoing edges (stored in this entity)
+	// Handle outgoing relationships (stored in this entity's triples)
 	if direction == "outgoing" || direction == "both" {
-		for _, edge := range entity.Edges {
-			neighborSet[edge.ToEntityID] = true
+		for _, triple := range entity.Triples {
+			if triple.IsRelationship() {
+				if targetID, ok := triple.Object.(string); ok {
+					neighborSet[targetID] = true
+				}
+			}
 		}
 	}
 
-	// Handle incoming edges (stored in other entities pointing to this one)
+	// Handle incoming relationships (stored in other entities' triples pointing to this one)
 	if direction == "incoming" || direction == "both" {
 		for _, otherEntity := range p.entities {
-			for _, edge := range otherEntity.Edges {
-				if edge.ToEntityID == entityID {
-					neighborSet[otherEntity.Node.ID] = true
+			for _, triple := range otherEntity.Triples {
+				if triple.IsRelationship() {
+					if targetID, ok := triple.Object.(string); ok && targetID == entityID {
+						neighborSet[otherEntity.Node.ID] = true
+					}
 				}
 			}
 		}
@@ -289,14 +303,17 @@ func (p *entityGraphProvider) GetEdgeWeight(_ context.Context, fromID, toID stri
 		return 0.0, nil
 	}
 
-	// Check if edge exists from fromID to toID
-	for _, edge := range entity.Edges {
-		if edge.ToEntityID == toID {
-			// Use edge weight if available, otherwise default to 1.0
-			if edge.Weight > 0 {
-				return edge.Weight, nil
+	// Check if relationship triple exists from fromID to toID
+	for _, triple := range entity.Triples {
+		if triple.IsRelationship() {
+			if targetID, ok := triple.Object.(string); ok && targetID == toID {
+				// Use triple confidence as weight (0.0 to 1.0)
+				// Confidence indicates reliability of the relationship
+				if triple.Confidence > 0 {
+					return triple.Confidence, nil
+				}
+				return 1.0, nil
 			}
-			return 1.0, nil
 		}
 	}
 
@@ -548,8 +565,10 @@ func (s *HTTPLLMSummarizer) buildLLMInputText(
 	for i := 0; i < maxSamples; i++ {
 		entity := entities[i]
 		builder.WriteString(fmt.Sprintf("- %s (%s)", entity.Node.ID, entity.Node.Type))
-		if name, ok := entity.Node.Properties["name"].(string); ok {
-			builder.WriteString(fmt.Sprintf(": %s", name))
+		if nameValue, found := entity.GetPropertyValue("name"); found {
+			if name, ok := nameValue.(string); ok {
+				builder.WriteString(fmt.Sprintf(": %s", name))
+			}
 		}
 		builder.WriteString("\n")
 	}

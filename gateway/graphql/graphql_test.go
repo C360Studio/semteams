@@ -406,10 +406,6 @@ func BenchmarkResolverOperations(b *testing.B) {
 		Node: graph.NodeProperties{
 			ID:   "bench-entity-1",
 			Type: "benchmark",
-			Properties: map[string]interface{}{
-				"name":  "Benchmark Entity",
-				"count": 100,
-			},
 		},
 	}
 

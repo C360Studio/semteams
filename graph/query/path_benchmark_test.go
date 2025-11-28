@@ -59,7 +59,6 @@ func benchmarkPathQuery(b *testing.B, entityCount, maxDepth, maxNodes int) {
 		MaxDepth:    maxDepth,
 		MaxNodes:    maxNodes,
 		MaxTime:     1 * time.Second,
-		EdgeFilter:  []string{"related_to", "near"},
 		DecayFactor: 0.8,
 		MaxPaths:    20,
 	}
@@ -110,7 +109,6 @@ func benchmarkWithEdgeFilter(b *testing.B, edgeFilter []string) {
 		MaxDepth:    3,
 		MaxNodes:    200,
 		MaxTime:     500 * time.Millisecond,
-		EdgeFilter:  edgeFilter,
 		DecayFactor: 0.8,
 		MaxPaths:    20,
 	}
@@ -147,7 +145,6 @@ func benchmarkWithDecayFactor(b *testing.B, decayFactor float64) {
 		MaxDepth:    3,
 		MaxNodes:    200,
 		MaxTime:     500 * time.Millisecond,
-		EdgeFilter:  []string{"related_to"},
 		DecayFactor: decayFactor,
 		MaxPaths:    20,
 	}
@@ -168,27 +165,10 @@ func generateSyntheticGraph(entityCount int) map[string]*gtypes.EntityState {
 		id := fmt.Sprintf("entity-%03d", i)
 		entity := &gtypes.EntityState{
 			Node: gtypes.NodeProperties{
-				ID:   id,
-				Type: "test.entity",
-				Properties: map[string]any{
-					"index": i,
-					"name":  fmt.Sprintf("Test Entity %d", i),
-				},
+				ID:     id,
+				Type:   "test.entity",
 				Status: gtypes.StatusActive,
 			},
-			Edges: []gtypes.Edge{},
-		}
-
-		// Create relationships to next 3 entities (mesh-like structure)
-		for j := 1; j <= 3 && i+j < entityCount; j++ {
-			targetID := fmt.Sprintf("entity-%03d", i+j)
-			edge := gtypes.Edge{
-				EdgeType:   "related_to",
-				ToEntityID: targetID,
-				Weight:     1.0,
-				Properties: map[string]any{},
-			}
-			entity.Edges = append(entity.Edges, edge)
 		}
 
 		entities[id] = entity

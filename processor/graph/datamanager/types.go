@@ -1,4 +1,4 @@
-// Package datamanager consolidates entity and edge operations into a unified data management service.
+// Package datamanager consolidates entity and triple operations into a unified data management service.
 package datamanager
 
 import (
@@ -8,6 +8,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 )
 
@@ -23,7 +24,7 @@ type Dependencies struct {
 type EntityWrite struct {
 	Operation Operation           // create|update|delete
 	Entity    *gtypes.EntityState // Entity data (nil for delete)
-	Edges     []gtypes.Edge       // Edges to add (for create/update)
+	Triples   []message.Triple    // Triples to add (for create/update)
 	Callback  func(error)         // Optional completion callback
 	RequestID string              // Optional request ID for tracing
 	Timestamp time.Time           // When request was created

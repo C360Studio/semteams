@@ -14,16 +14,20 @@ import (
 
 // Definition represents a JSON rule configuration
 type Definition struct {
-	ID          string                           `json:"id"`
-	Type        string                           `json:"type"`
-	Name        string                           `json:"name"`
-	Description string                           `json:"description"`
-	Enabled     bool                             `json:"enabled"`
-	Conditions  []expression.ConditionExpression `json:"conditions"`
-	Logic       string                           `json:"logic"`
-	Cooldown    string                           `json:"cooldown,omitempty"`
-	Entity      EntityConfig                     `json:"entity,omitempty"`
-	Metadata    map[string]interface{}           `json:"metadata,omitempty"`
+	ID              string                           `json:"id"`
+	Type            string                           `json:"type"`
+	Name            string                           `json:"name"`
+	Description     string                           `json:"description"`
+	Enabled         bool                             `json:"enabled"`
+	Conditions      []expression.ConditionExpression `json:"conditions"`
+	Logic           string                           `json:"logic"`
+	Cooldown        string                           `json:"cooldown,omitempty"`
+	Entity          EntityConfig                     `json:"entity,omitempty"`
+	Metadata        map[string]interface{}           `json:"metadata,omitempty"`
+	OnEnter         []Action                         `json:"on_enter,omitempty"`         // Fires on false→true transition
+	OnExit          []Action                         `json:"on_exit,omitempty"`          // Fires on true→false transition
+	WhileTrue       []Action                         `json:"while_true,omitempty"`       // Fires on every update while true
+	RelatedPatterns []string                         `json:"related_patterns,omitempty"` // For pair rules
 }
 
 // EntityConfig defines entity-specific configuration

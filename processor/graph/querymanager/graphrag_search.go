@@ -272,14 +272,18 @@ func (m *Manager) entityMatchesQuery(entity *gtypes.EntityState, queryTerms []st
 	searchText.WriteString(strings.ToLower(entity.Node.Type))
 	searchText.WriteString(" ")
 
-	// Add properties
-	for key, value := range entity.Node.Properties {
-		searchText.WriteString(strings.ToLower(key))
-		searchText.WriteString(" ")
-
-		if strVal, ok := value.(string); ok {
-			searchText.WriteString(strings.ToLower(strVal))
+	// Add properties from triples
+	for _, triple := range entity.Triples {
+		if !triple.IsRelationship() {
+			// Add predicate (property name)
+			searchText.WriteString(strings.ToLower(triple.Predicate))
 			searchText.WriteString(" ")
+
+			// Add object value if it's a string
+			if strVal, ok := triple.Object.(string); ok {
+				searchText.WriteString(strings.ToLower(strVal))
+				searchText.WriteString(" ")
+			}
 		}
 	}
 

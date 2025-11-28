@@ -133,34 +133,49 @@ func BuildFederatedEntity(localID string, msg message.Message) *FederatedEntity 
 	return fe
 }
 
-// EnrichEntityState adds federation metadata to an EntityState.
+// EnrichEntityState adds federation metadata to an EntityState using triples.
 // This should be called when storing entities from federated messages.
 func EnrichEntityState(state *EntityState, fed *FederatedEntity) {
-	if state.Node.Properties == nil {
-		state.Node.Properties = make(map[string]any)
-	}
-
-	// Add federation properties
-	state.Node.Properties["local_id"] = fed.LocalID
-	state.Node.Properties["global_id"] = fed.GlobalID
-	state.Node.Properties["platform_id"] = fed.PlatformID
+	// Add federation properties as triples
+	state.Triples = append(state.Triples,
+		message.Triple{
+			Subject:   state.Node.ID,
+			Predicate: "local_id",
+			Object:    fed.LocalID,
+		},
+		message.Triple{
+			Subject:   state.Node.ID,
+			Predicate: "global_id",
+			Object:    fed.GlobalID,
+		},
+		message.Triple{
+			Subject:   state.Node.ID,
+			Predicate: "platform_id",
+			Object:    fed.PlatformID,
+		},
+	)
 
 	if fed.Region != "" {
-		state.Node.Properties["region"] = fed.Region
+		state.Triples = append(state.Triples, message.Triple{
+			Subject:   state.Node.ID,
+			Predicate: "region",
+			Object:    fed.Region,
+		})
 	}
 
 	if fed.MessageUID != (uuid.UUID{}) {
-		state.Node.Properties["message_uid"] = fed.MessageUID.String()
+		state.Triples = append(state.Triples, message.Triple{
+			Subject:   state.Node.ID,
+			Predicate: "message_uid",
+			Object:    fed.MessageUID.String(),
+		})
 	}
 }
 
 // IsFederatedEntity checks if an EntityState has federation metadata.
 func IsFederatedEntity(state *EntityState) bool {
-	if state.Node.Properties == nil {
-		return false
-	}
-	_, hasGlobalID := state.Node.Properties["global_id"]
-	_, hasPlatformID := state.Node.Properties["platform_id"]
+	_, hasGlobalID := state.GetPropertyValue("global_id")
+	_, hasPlatformID := state.GetPropertyValue("platform_id")
 	return hasGlobalID && hasPlatformID
 }
 
@@ -173,21 +188,31 @@ func GetFederationInfo(state *EntityState) *FederatedEntity {
 
 	fed := &FederatedEntity{}
 
-	if v, ok := state.Node.Properties["local_id"].(string); ok {
-		fed.LocalID = v
+	if v, ok := state.GetPropertyValue("local_id"); ok {
+		if s, ok := v.(string); ok {
+			fed.LocalID = s
+		}
 	}
-	if v, ok := state.Node.Properties["global_id"].(string); ok {
-		fed.GlobalID = v
+	if v, ok := state.GetPropertyValue("global_id"); ok {
+		if s, ok := v.(string); ok {
+			fed.GlobalID = s
+		}
 	}
-	if v, ok := state.Node.Properties["platform_id"].(string); ok {
-		fed.PlatformID = v
+	if v, ok := state.GetPropertyValue("platform_id"); ok {
+		if s, ok := v.(string); ok {
+			fed.PlatformID = s
+		}
 	}
-	if v, ok := state.Node.Properties["region"].(string); ok {
-		fed.Region = v
+	if v, ok := state.GetPropertyValue("region"); ok {
+		if s, ok := v.(string); ok {
+			fed.Region = s
+		}
 	}
-	if v, ok := state.Node.Properties["message_uid"].(string); ok {
-		if uid, err := uuid.Parse(v); err == nil {
-			fed.MessageUID = uid
+	if v, ok := state.GetPropertyValue("message_uid"); ok {
+		if s, ok := v.(string); ok {
+			if uid, err := uuid.Parse(s); err == nil {
+				fed.MessageUID = uid
+			}
 		}
 	}
 

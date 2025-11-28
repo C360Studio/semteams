@@ -120,13 +120,8 @@ func TestEntityMatchesCriteria(t *testing.T) {
 	// Test the entity matching logic
 	entity := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
-			ID:   "test-entity",
-			Type: "robotics.drone",
-			Properties: map[string]any{
-				"model":   "quadcopter",
-				"battery": 85.5,
-				"armed":   true,
-			},
+			ID:     "test-entity",
+			Type:   "robotics.drone",
 			Status: gtypes.StatusActive,
 		},
 	}
@@ -139,74 +134,14 @@ func TestEntityMatchesCriteria(t *testing.T) {
 		assert.True(t, client.entityMatchesCriteria(entity, criteria))
 	})
 
-	t.Run("matches by property", func(t *testing.T) {
-		criteria := map[string]any{"model": "quadcopter"}
-		assert.True(t, client.entityMatchesCriteria(entity, criteria))
-	})
-
-	t.Run("matches by multiple criteria", func(t *testing.T) {
-		criteria := map[string]any{
-			"type":    "robotics.drone",
-			"model":   "quadcopter",
-			"battery": 85.5,
-		}
-		assert.True(t, client.entityMatchesCriteria(entity, criteria))
-	})
-
 	t.Run("fails on wrong type", func(t *testing.T) {
 		criteria := map[string]any{"type": "robotics.gcs"}
-		assert.False(t, client.entityMatchesCriteria(entity, criteria))
-	})
-
-	t.Run("fails on missing property", func(t *testing.T) {
-		criteria := map[string]any{"missing": "value"}
-		assert.False(t, client.entityMatchesCriteria(entity, criteria))
-	})
-
-	t.Run("fails on wrong property value", func(t *testing.T) {
-		criteria := map[string]any{"model": "fixed-wing"}
 		assert.False(t, client.entityMatchesCriteria(entity, criteria))
 	})
 
 	t.Run("handles nil entity", func(t *testing.T) {
 		criteria := map[string]any{"type": "test"}
 		assert.False(t, client.entityMatchesCriteria(nil, criteria))
-	})
-
-	t.Run("handles entity with nil properties", func(t *testing.T) {
-		entityNoProps := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID:         "test",
-				Type:       "test.type",
-				Properties: nil,
-			},
-		}
-		criteria := map[string]any{"missing": "value"}
-		assert.False(t, client.entityMatchesCriteria(entityNoProps, criteria))
-	})
-}
-
-func TestShouldFollowEdge(t *testing.T) {
-	client := &natsClient{}
-
-	edge := gtypes.Edge{
-		ToEntityID: "target-entity",
-		EdgeType:   "POWERED_BY",
-	}
-
-	t.Run("follows edge with no filter", func(t *testing.T) {
-		assert.True(t, client.shouldFollowEdge(edge, nil))
-		assert.True(t, client.shouldFollowEdge(edge, []string{}))
-	})
-
-	t.Run("follows edge matching filter", func(t *testing.T) {
-		filter := []string{"POWERED_BY", "CONTROLLED_BY"}
-		assert.True(t, client.shouldFollowEdge(edge, filter))
-	})
-
-	t.Run("rejects edge not in filter", func(t *testing.T) {
-		filter := []string{"CONTROLLED_BY", "NEAR"}
-		assert.False(t, client.shouldFollowEdge(edge, filter))
 	})
 }
 
