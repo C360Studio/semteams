@@ -666,7 +666,7 @@ func (qc *natsClient) traverseRelationships(
 
 		// Process new target entity if not visited
 		if !state.visited[targetID] {
-			if err := qc.processNewTargetEntity(ctx, query, state, targetID, entity.Node.ID, currentPath); err != nil {
+			if err := qc.processNewTargetEntity(ctx, query, state, targetID, entity.ID, currentPath); err != nil {
 				if err == errNodeLimitReached {
 					return nil // Truncated, but not an error
 				}
@@ -775,16 +775,22 @@ func (qc *natsClient) entityMatchesCriteria(entity *gtypes.EntityState, criteria
 		return false
 	}
 
-	// Check type criteria
+	// Check type criteria - type is now extracted from ID
 	if entityType, hasType := criteria["type"].(string); hasType {
-		if entity.Node.Type != entityType {
+		eid, err := message.ParseEntityID(entity.ID)
+		if err != nil || eid.Type != entityType {
 			return false
 		}
 	}
 
-	// Check status criteria
+	// Check status criteria - status is now domain-specific via triples
 	if status, hasStatus := criteria["status"].(string); hasStatus {
-		if entity.Node.Status.String() != status {
+		// Look for status in triples
+		statusVal, found := entity.GetPropertyValue("status")
+		if !found {
+			return false
+		}
+		if statusStr, ok := statusVal.(string); !ok || statusStr != status {
 			return false
 		}
 	}

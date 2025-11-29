@@ -60,9 +60,11 @@ func main() {
 FlowEngine enforces a strict state machine with four lifecycle operations:
 
 ### 1. Deploy
+
 **Transition:** `not_deployed → deployed_stopped`
 
 Deploys a flow by:
+
 - Loading flow definition from flow store
 - Validating flow structure and connections
 - Translating flow nodes to component configurations
@@ -74,9 +76,11 @@ err := flowEngine.Deploy(ctx, "flow-123")
 ```
 
 ### 2. Start
+
 **Transition:** `deployed_stopped → running`
 
 Starts all components in the flow:
+
 - Enables components in topological order (inputs first, outputs last)
 - Components begin processing data
 - Metrics recorded for runtime monitoring
@@ -86,9 +90,11 @@ err := flowEngine.Start(ctx, "flow-123")
 ```
 
 ### 3. Stop
+
 **Transition:** `running → deployed_stopped`
 
 Stops all running components:
+
 - Disables components in reverse topological order (outputs first, inputs last)
 - Graceful shutdown with context timeout
 - Flow definition remains in configuration
@@ -98,9 +104,11 @@ err := flowEngine.Stop(ctx, "flow-123")
 ```
 
 ### 4. Undeploy
+
 **Transition:** `deployed_stopped → not_deployed`
 
 Removes flow from configuration:
+
 - Removes all component configurations
 - Cleans up resources
 - Flow must be stopped before undeploying
@@ -111,7 +119,7 @@ err := flowEngine.Undeploy(ctx, "flow-123")
 
 ## State Machine
 
-```
+```text
 ┌─────────────┐
 │             │
 │ not_deployed│
@@ -138,17 +146,20 @@ err := flowEngine.Undeploy(ctx, "flow-123")
 The engine includes comprehensive flow validation before deployment:
 
 ### Structural Validation
+
 - All nodes reference registered component types
 - All connections specify valid ports
 - No dangling connections (source/target must exist)
 - No self-loops (component connected to itself)
 
 ### Type Validation
+
 - Port types are compatible across connections
 - Source output ports match target input ports
 - Data type conversions are possible
 
 ### Semantic Validation
+
 - Flows have at least one input component
 - Flows have at least one output component
 - No isolated components (must be connected)
@@ -181,21 +192,27 @@ if len(result.Warnings) > 0 {
 The engine package consists of three main components:
 
 ### Engine
+
 Core orchestration logic for lifecycle operations. Coordinates between:
+
 - **Manager:** Runtime component configuration
 - **FlowStore:** Persistent flow definitions
 - **ComponentRegistry:** Available component types
 - **NATS Client:** Message bus connectivity
 
 ### Validator
+
 Flow validation logic using `component/flowgraph` for:
+
 - Graph analysis and cycle detection
 - Port compatibility checking
 - Type validation
 - Semantic correctness
 
 ### Translator
+
 Converts flow definitions to component configurations:
+
 - Maps flow nodes to component configs
 - Resolves port connections to NATS subjects
 - Generates unique component names
@@ -270,6 +287,7 @@ INTEGRATION_TESTS=1 go test ./engine/... -v
 - **Memory:** Flow definition size + component configs cached in Manager
 
 For large flows (100+ components):
+
 - Consider batching component configuration updates
 - Monitor NATS KV operation latency
 - Use context timeouts for bounded operations
@@ -285,6 +303,7 @@ For large flows (100+ components):
 ## Examples
 
 See [engine_integration_test.go](engine_integration_test.go) for complete examples including:
+
 - Full lifecycle testing (Deploy → Start → Stop → Undeploy)
 - Error handling for invalid states
 - Validation with real NATS connections

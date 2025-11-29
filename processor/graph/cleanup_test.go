@@ -107,11 +107,7 @@ func TestExpiredTripleCleanup(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create entity state with triples
 			entity := &gtypes.EntityState{
-				Node: gtypes.NodeProperties{
-					ID:     "c360.platform1.robotics.mav1.drone.001",
-					Type:   "robotics.drone",
-					Status: gtypes.StatusActive,
-				},
+				ID:      "c360.platform1.robotics.mav1.drone.001",
 				Triples: tt.triples,
 				Version: 1,
 			}
@@ -189,11 +185,7 @@ func TestTripleCleanupWorker_BackgroundExecution(t *testing.T) {
 
 	// Create entity with expired triple (unused in this test - just verifying start/stop)
 	_ = &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     "c360.platform1.robotics.mav1.drone.001",
-			Type:   "robotics.drone",
-			Status: gtypes.StatusActive,
-		},
+		ID: "c360.platform1.robotics.mav1.drone.001",
 		Triples: []message.Triple{
 			{
 				Subject:   "c360.platform1.robotics.mav1.drone.001",
@@ -294,11 +286,7 @@ func TestTripleCleanupWorker_Metrics(t *testing.T) {
 	now := time.Now()
 
 	entity := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     "c360.platform1.robotics.mav1.drone.001",
-			Type:   "robotics.drone",
-			Status: gtypes.StatusActive,
-		},
+		ID: "c360.platform1.robotics.mav1.drone.001",
 		Triples: []message.Triple{
 			{
 				Subject:   "c360.platform1.robotics.mav1.drone.001",
@@ -341,9 +329,7 @@ func TestTripleCleanupWorker_BatchCleanup(t *testing.T) {
 
 	entities := []*gtypes.EntityState{
 		{
-			Node: gtypes.NodeProperties{
-				ID: "c360.platform1.robotics.mav1.drone.001",
-			},
+			ID: "c360.platform1.robotics.mav1.drone.001",
 			Triples: []message.Triple{
 				{
 					Subject:   "c360.platform1.robotics.mav1.drone.001",
@@ -354,9 +340,7 @@ func TestTripleCleanupWorker_BatchCleanup(t *testing.T) {
 			},
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID: "c360.platform1.robotics.mav1.drone.003",
-			},
+			ID: "c360.platform1.robotics.mav1.drone.003",
 			Triples: []message.Triple{
 				{
 					Subject:   "c360.platform1.robotics.mav1.drone.003",

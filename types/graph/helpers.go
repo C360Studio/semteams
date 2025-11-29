@@ -132,3 +132,21 @@ func MergeTriples(existing, newer []message.Triple) []message.Triple {
 
 	return merged
 }
+
+// GetEntityType extracts the type component from an EntityState's 6-part ID.
+// Returns empty string if entity is nil or ID is invalid.
+//
+// Example:
+//
+//	state := &EntityState{ID: "c360.platform1.robotics.gcs1.drone.1"}
+//	entityType := GetEntityType(state) // Returns "drone"
+func GetEntityType(state *EntityState) string {
+	if state == nil {
+		return ""
+	}
+	eid, err := message.ParseEntityID(state.ID)
+	if err != nil {
+		return ""
+	}
+	return eid.Type
+}

@@ -1,10 +1,11 @@
 # ADR: Semantic Type and Status Ontology Clarification
 
-- **Status**: Approved
+- **Status**: Implemented
 - **Created**: 2025-01-29
 - **Updated**: 2025-01-29
+- **Implemented**: 2025-01-29 (via 004-semantic-refactor)
 - **Context**: 003-triples-architecture migration revealed ontology confusion
-- **Related**: ADR-PACKAGE-RESPONSIBILITIES-CONSOLIDATION.md
+- **Related**: ADR-PACKAGE-RESPONSIBILITIES-CONSOLIDATION.md, specs/004-semantic-refactor/
 
 ## Problem Statement
 
@@ -217,23 +218,31 @@ Domains that want Schema.org-style classification can emit those triples themsel
 
 ## Implementation Steps
 
-1. [ ] Delete `message/entity_types.go` and `message/entity_types_test.go`
-2. [ ] Delete `message/entity_payload.go`
-3. [ ] Update `graph/types.go`:
+**All steps completed via 004-semantic-refactor:**
+
+1. [x] Delete `message/entity_types.go` and `message/entity_types_test.go`
+2. [x] Delete `message/entity_payload.go`
+3. [x] Update `graph/types.go`:
    - Delete `NodeProperties` struct
    - Delete `Position` struct
    - Delete `EntityStatus` enum and methods
    - Add `ID string` field to EntityState
    - Replace `ObjectRef string` with `StorageRef *message.StorageReference`
-4. [ ] Update `types/graph/types.go` (duplicate) with same changes
-5. [ ] Update `processor/graph/messagemanager/processor.go`:
+4. [x] Update `types/graph/types.go` (duplicate) with same changes
+5. [x] Update `processor/graph/messagemanager/processor.go`:
    - Remove hardcoded `StatusActive`
    - Remove `entity_class` and `entity_role` triple generation
    - Populate `StorageRef` instead of `ObjectRef`
    - Use `state.ID` instead of `state.Node.ID`
-6. [ ] Update all consumers of `state.Node.*` to use `state.*` or `message.ParseEntityID()`
-7. [ ] Update GraphQL resolvers to use new EntityState structure
-8. [ ] Update tests
+6. [x] Update all consumers of `state.Node.*` to use `state.*` or `message.ParseEntityID()`
+7. [x] Update GraphQL resolvers to use new EntityState structure
+8. [x] Update tests
+
+**Documentation updated:**
+
+- [x] Updated `types/graph/README.md` with new EntityState structure
+- [x] Updated `specs/004-semantic-refactor/` spec and tasks
+- [x] Migration guide available in `specs/004-semantic-refactor/quickstart.md`
 
 ## References
 

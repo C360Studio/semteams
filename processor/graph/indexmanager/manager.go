@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"strings"
 	"sync"
 	"time"
 
@@ -703,24 +702,11 @@ func (m *Manager) queueEmbeddingGeneration(ctx context.Context, entityID string,
 	}
 
 	// Check if this message type should be embedded using shouldEmbed filter
-	if state.MessageType != "" {
-		// Parse message type string (format: "domain.category.version")
-		parts := strings.Split(state.MessageType, ".")
-		if len(parts) != 3 {
-			m.logger.Debug("Invalid message type format, skipping embedding",
-				"entity_id", entityID, "message_type", state.MessageType)
-			return nil // Skip if format is invalid
-		}
-
-		msgType := message.Type{
-			Domain:   parts[0],
-			Category: parts[1],
-			Version:  parts[2],
-		}
-
-		if !shouldEmbed(msgType, &m.config.Embedding) {
+	// MessageType is now a message.Type struct, check if it has content
+	if state.MessageType.Domain != "" {
+		if !shouldEmbed(state.MessageType, &m.config.Embedding) {
 			m.logger.Debug("Message type filtered out, skipping embedding",
-				"entity_id", entityID, "message_type", state.MessageType)
+				"entity_id", entityID, "message_type", state.MessageType.Key())
 			return nil // Filtered out by type
 		}
 	}
@@ -818,7 +804,7 @@ func (m *Manager) updateIndexes(ctx context.Context, entityState *gtypes.EntityS
 		return errors.WrapInvalid(errors.ErrInvalidData, "IndexManager", "updateIndexes", "entity state cannot be nil")
 	}
 
-	entityID := entityState.Node.ID
+	entityID := entityState.ID
 
 	// Update predicate index with full entity state
 	if err := m.UpdatePredicateIndex(ctx, entityID, entityState); err != nil {
@@ -892,7 +878,7 @@ func (m *Manager) updateIndexesAsync(ctx context.Context, entityState *gtypes.En
 		}
 		// Queue full - log but don't fail the entire operation
 		if stderrors.Is(err, worker.ErrQueueFull) {
-			m.logger.Debug("Worker queue full, update deferred", "entity_id", entityState.Node.ID)
+			m.logger.Debug("Worker queue full, update deferred", "entity_id", entityState.ID)
 			if errorCallback != nil {
 				errorCallback(errors.WrapTransient(err, "IndexManager", "UpdateEntityAsync", "queue full"))
 			}

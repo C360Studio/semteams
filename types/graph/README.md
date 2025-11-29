@@ -5,16 +5,15 @@
 
 ## Purpose & Scope
 
-**What this component does**: Provides core type definitions for entity state storage in the graph system, including entity properties, relationships, and operational status.
+**What this component does**: Provides core type definitions for entity state storage in the graph system, including triples-based entity state and relationship edges.
 
 **Key responsibilities**:
-- Define EntityState structure for complete entity graph representation
-- Define NodeProperties for entity identification and properties
+- Define EntityState structure for triple-based entity graph representation
 - Define Edge structure for directed relationships between entities
-- Provide EntityStatus enumeration for operational monitoring
 - Support graph storage operations and relationship management
+- Provide entity identity via 6-part EntityID format
 
-**NOT responsible for**: Graph storage implementation, NATS operations, entity processing logic
+**NOT responsible for**: Graph storage implementation, NATS operations, entity processing logic, semantic classification or status (domain responsibility)
 
 ## Design Decisions
 
@@ -29,8 +28,8 @@
   - **Trade-offs**: Additional storage overhead vs data consistency guarantees
   - **Alternatives considered**: Timestamp-based versioning (rejected for precision issues)
 
-- **ObjectRef pattern**: Links to complete message data in ObjectStore
-  - **Rationale**: Separates frequently-queried properties from complete message context
+- **StorageRef pattern**: Optional storage reference with full metadata
+  - **Rationale**: Supports "store once, reference anywhere" with complete storage metadata
   - **Trade-offs**: Additional lookup for full context vs optimized query performance
   - **Alternatives considered**: Embedding full message data (rejected for storage efficiency)
 
@@ -48,7 +47,8 @@
 ### Anti-Patterns to Avoid
 - **Storing incoming edges**: Only store outgoing edges, use reverse index for incoming
 - **Manual version management**: Always increment version on EntityState updates
-- **Property map pollution**: Keep Properties focused on query-essential data only
+- **Hardcoding status**: Status is a domain concern, emit as domain-specific triples
+- **Framework classification**: Semantic classification belongs in domain logic, not framework
 
 ## Architecture Context
 
@@ -79,21 +79,21 @@ No direct configuration - types are used by GraphProcessor with NATS KV configur
    - **Expected**: RemoveExpiredEdges() removes expired, keeps current edges
    - **Verification**: Only non-expired edges remain in Edges slice
 
-3. **Property updates**: Merge new properties with existing
-   - **Input**: NodeProperties with existing data, UpdateProperties() with new data
-   - **Expected**: New properties added, existing properties updated, others preserved
-   - **Verification**: Properties map contains merged data
+3. **Entity ID access**: Direct access to 6-part entity identifier
+   - **Input**: EntityState with valid ID
+   - **Expected**: state.ID returns complete identifier
+   - **Verification**: ID format: org.platform.domain.system.type.instance
 
 ### Error Conditions - What Should Fail Gracefully
-1. **Invalid EntityStatus**: Non-standard status values
-   - **Trigger**: EntityStatus("invalid_status")
-   - **Expected**: IsValid() returns false, methods handle gracefully
-   - **Recovery**: Default to StatusUnknown for invalid values
+1. **Invalid EntityID format**: Malformed entity identifiers
+   - **Trigger**: Entity ID without 6-part format (org.platform.domain.system.type.instance)
+   - **Expected**: message.ParseEntityID() returns error
+   - **Recovery**: Validate entity IDs before storage, reject malformed identifiers
 
-2. **Nil property maps**: Operations on uninitialized Properties
-   - **Trigger**: UpdateProperties() on NodeProperties with nil Properties map
-   - **Expected**: Map initialized automatically, properties added successfully
-   - **Recovery**: Lazy initialization in UpdateProperties()
+2. **Nil StorageRef access**: Accessing storage reference when not set
+   - **Trigger**: Accessing state.StorageRef fields when StorageRef is nil
+   - **Expected**: Nil pointer dereference if not checked
+   - **Recovery**: Always check `if state.StorageRef != nil` before access
 
 ### Edge Cases - Boundary Conditions
 - **Empty edges slice**: Edge operations on EntityState with no existing edges
@@ -105,18 +105,23 @@ No direct configuration - types are used by GraphProcessor with NATS KV configur
 ### Standard Implementation Patterns
 - **Entity state creation**: Initialize with version 1 and current timestamp
   - **When to use**: Creating new EntityState from message extraction
-  - **Implementation**: `EntityState{Version: 1, UpdatedAt: time.Now(), ...}`
-  - **Pitfalls**: Forgetting to set Version or UpdatedAt fields
+  - **Implementation**: `EntityState{ID: entityID, Version: 1, UpdatedAt: time.Now(), ...}`
+  - **Pitfalls**: Forgetting to set Version, UpdatedAt, or using invalid EntityID format
 
 - **Edge lifecycle management**: Use expiration for temporary relationships
   - **When to use**: Proximity relationships, temporary operational states
   - **Implementation**: `Edge{ExpiresAt: &time.Time{}, ...}` for temporary edges
   - **Pitfalls**: Not calling RemoveExpiredEdges() regularly
 
+- **Domain status as triples**: Emit status as domain-specific semantic facts
+  - **When to use**: Any time domain logic determines entity status
+  - **Implementation**: `Triple{Predicate: "domain.type.status", Object: "value"}`
+  - **Pitfalls**: Trying to use non-existent EntityStatus enum (removed)
+
 ### Optional Feature Patterns
-- **Position tracking**: Use NodeProperties.Position for spatial relationships
-- **Status monitoring**: Leverage EntityStatus for operational awareness
-- **Property optimization**: Keep Properties map focused on frequently-queried data
+- **Spatial data**: Use geo.location.* triples for position/spatial relationships
+- **Storage references**: Set StorageRef when original message is in ObjectStore
+- **Triple optimization**: Focus triples on queryable semantic facts
 
 ### Integration Patterns
 - **Graph storage**: GraphProcessor uses these types for NATS KV operations
@@ -127,30 +132,43 @@ No direct configuration - types are used by GraphProcessor with NATS KV configur
 
 ### Typical Usage (How Other Code Uses This)
 ```go
-// Create entity state from extraction
+// Create entity state with new structure (as of 004-semantic-refactor)
 state := &gtypes.EntityState{
-    Node: gtypes.NodeProperties{
-        ID:         "drone_001",
-        Type:       "robotics:Drone",  // Will be refactored to structured type
-        Properties: map[string]any{
-            "battery_level": 85.0,
-            "armed": true,
+    ID: "c360.semstreams.robotics.drone.mavlink.drone_001",
+    Triples: []message.Triple{
+        {
+            Subject:   "c360.semstreams.robotics.drone.mavlink.drone_001",
+            Predicate: "robotics.drone.battery_level",
+            Object:    85.0,
+            Source:    "battery_monitor",
+            Timestamp: time.Now(),
         },
-        Status:   gtypes.StatusActive,
-        Position: &gtypes.Position{
-            Latitude:  37.7749,
-            Longitude: -122.4194,
-            Altitude:  100.0,
+        {
+            Subject:   "c360.semstreams.robotics.drone.mavlink.drone_001",
+            Predicate: "robotics.drone.status",
+            Object:    "armed",
+            Source:    "flight_controller",
+            Timestamp: time.Now(),
         },
     },
-    ObjectRef: "robotics.battery.v1:20240315-103045:drone_001",
+    StorageRef: &message.StorageReference{
+        StorageInstance: "semstreams-objects",
+        Key:             "robotics.battery.v1:20240315-103045:drone_001",
+        ContentType:     "application/json",
+        Size:            1024,
+    },
+    MessageType: message.Type{
+        Domain:   "robotics",
+        Category: "mavlink",
+        Version:  "v1",
+    },
     Version:   1,
     UpdatedAt: time.Now(),
 }
 
 // Add relationship
 powerEdge := gtypes.Edge{
-    ToEntityID: "battery_001",
+    ToEntityID: "c360.semstreams.robotics.battery.lithium.battery_001",
     EdgeType:   "POWERED_BY",
     Weight:     1.0,
     Confidence: 0.95,
@@ -158,13 +176,12 @@ powerEdge := gtypes.Edge{
 }
 state.AddEdge(powerEdge)
 
-// Update properties
-state.Node.UpdateProperties(map[string]any{
-    "last_heartbeat": time.Now(),
-})
-
 // Clean up expired edges
 state.RemoveExpiredEdges()
+
+// Parse entity type from ID when needed
+eid, _ := message.ParseEntityID(state.ID)
+entityType := eid.Type  // "mavlink"
 ```
 
 ### Common Integration Patterns
@@ -269,23 +286,35 @@ Expected relationships not found
 - **Config validation**: Properties map size and content patterns
 - **Integration verification**: ObjectRef validity and accessibility
 
-## Alpha Week 1 Refactor Impact
+## 004-semantic-refactor: EntityState Simplification (COMPLETED)
 
-### **CRITICAL: Type field uses colon notation - will be refactored**
-- **NodeProperties.Type**: Currently string with "robotics:Drone" format
-- **Breaking change**: Will be replaced with structured EntityType using dotted keys
-- **Migration required**: All code referencing Type field will need updates
+### **Breaking Changes Applied**
+- **NodeProperties deleted**: ID promoted to top-level field on EntityState
+- **EntityStatus removed**: Status is now domain responsibility via triples
+- **Position removed**: Spatial data now stored as geo.location.* triples
+- **ObjectRef replaced**: Now StorageRef with full *message.StorageReference metadata
+- **MessageType typed**: Changed from string to message.Type struct
 
-### Refactor Scope
-- Replace `Type string` field with structured type implementing `Key()` method
-- Update JSON serialization to use dotted notation output
-- Maintain all other fields unchanged (ID, Properties, Status, Position)
-- Update documentation examples to show new structured type usage
+### New EntityState Structure
+```go
+type EntityState struct {
+    ID          string                   `json:"id"`
+    Triples     []message.Triple         `json:"triples"`
+    StorageRef  *message.StorageReference `json:"storage_ref,omitempty"`
+    MessageType message.Type             `json:"message_type"`
+    Version     uint64                   `json:"version"`
+    UpdatedAt   time.Time                `json:"updated_at"`
+}
+```
 
-### Migration Impact
-- **High**: All graph storage and retrieval operations will need type field updates
-- **Medium**: JSON serialization format will change for Type field
-- **Low**: Edge and Position types unchanged, no migration needed
+### Migration Patterns
+- `state.Node.ID` → `state.ID`
+- `state.Node.Type` → `message.ParseEntityID(state.ID).Type`
+- `state.ObjectRef` → `state.StorageRef.Key` (check nil first)
+- Status → Domain-specific triples with domain predicates
+- Position → geo.location.latitude/longitude/altitude triples
+
+See [004-semantic-refactor quickstart](../../../specs/004-semantic-refactor/quickstart.md) for complete migration guide.
 
 ## Related Documentation
 - [SEMSTREAMS_NATS_ARCHITECTURE.md](../../../docs/architecture/SEMSTREAMS_NATS_ARCHITECTURE.md) - Graph storage patterns

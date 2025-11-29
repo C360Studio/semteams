@@ -139,17 +139,17 @@ func EnrichEntityState(state *EntityState, fed *FederatedEntity) {
 	// Add federation properties as triples
 	state.Triples = append(state.Triples,
 		message.Triple{
-			Subject:   state.Node.ID,
+			Subject:   state.ID,
 			Predicate: "local_id",
 			Object:    fed.LocalID,
 		},
 		message.Triple{
-			Subject:   state.Node.ID,
+			Subject:   state.ID,
 			Predicate: "global_id",
 			Object:    fed.GlobalID,
 		},
 		message.Triple{
-			Subject:   state.Node.ID,
+			Subject:   state.ID,
 			Predicate: "platform_id",
 			Object:    fed.PlatformID,
 		},
@@ -157,7 +157,7 @@ func EnrichEntityState(state *EntityState, fed *FederatedEntity) {
 
 	if fed.Region != "" {
 		state.Triples = append(state.Triples, message.Triple{
-			Subject:   state.Node.ID,
+			Subject:   state.ID,
 			Predicate: "region",
 			Object:    fed.Region,
 		})
@@ -165,7 +165,7 @@ func EnrichEntityState(state *EntityState, fed *FederatedEntity) {
 
 	if fed.MessageUID != (uuid.UUID{}) {
 		state.Triples = append(state.Triples, message.Triple{
-			Subject:   state.Node.ID,
+			Subject:   state.ID,
 			Predicate: "message_uid",
 			Object:    fed.MessageUID.String(),
 		})

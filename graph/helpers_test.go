@@ -11,10 +11,7 @@ import (
 func TestGetPropertyValue(t *testing.T) {
 	// Create test entity with property and relationship triples
 	entity := &EntityState{
-		Node: NodeProperties{
-			ID:   "test.entity",
-			Type: "test.type",
-		},
+		ID: "c360.platform.domain.system.test.entity",
 		Triples: []message.Triple{
 			{
 				Subject:   "test.entity",

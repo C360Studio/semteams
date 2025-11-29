@@ -187,42 +187,35 @@ func Test_scoreCommunitySummaries(t *testing.T) {
 func Test_filterEntitiesByQuery(t *testing.T) {
 	m := &Manager{}
 
+	// Use proper 6-part entity IDs: org.platform.domain.system.type.instance
+	// Type is extracted from ID (5th component) for filtering
 	entities := []*gtypes.EntityState{
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "e1",
-				Type: "robotics.drone",
-			},
+			ID: "c360.platform.robotics.system.drone.e1",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "e2",
-				Type: "network.router",
-			},
+			ID: "c360.platform.robotics.system.router.e2",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "e3",
-				Type: "robotics.sensor",
-			},
+			ID: "c360.platform.networking.system.switch.e3",
 		},
 	}
 
-	t.Run("Match by type", func(t *testing.T) {
+	t.Run("Match by domain in ID", func(t *testing.T) {
 		result := m.filterEntitiesByQuery(entities, "robotics")
 		assert.Len(t, result, 2, "Should match 2 robotics entities")
 	})
 
-	t.Run("Match by property", func(t *testing.T) {
+	t.Run("Match by type", func(t *testing.T) {
 		result := m.filterEntitiesByQuery(entities, "drone")
 		assert.Len(t, result, 1)
-		assert.Equal(t, "e1", result[0].Node.ID)
+		assert.Equal(t, "c360.platform.robotics.system.drone.e1", result[0].ID)
 	})
 
-	t.Run("Match by ID", func(t *testing.T) {
+	t.Run("Match by instance ID", func(t *testing.T) {
 		result := m.filterEntitiesByQuery(entities, "e2")
 		assert.Len(t, result, 1)
-		assert.Equal(t, "e2", result[0].Node.ID)
+		assert.Equal(t, "c360.platform.robotics.system.router.e2", result[0].ID)
 	})
 
 	t.Run("No match", func(t *testing.T) {
@@ -244,11 +237,9 @@ func Test_filterEntitiesByQuery(t *testing.T) {
 func Test_entityMatchesQuery(t *testing.T) {
 	m := &Manager{}
 
+	// Entity ID format: org.platform.domain.system.type.instance
 	entity := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   "test-entity",
-			Type: "robotics.drone",
-		},
+		ID: "c360.platform.robotics.system.drone.test-entity",
 	}
 
 	tests := []struct {
@@ -257,12 +248,12 @@ func Test_entityMatchesQuery(t *testing.T) {
 		want       bool
 	}{
 		{
-			name:       "Match ID",
+			name:       "Match instance in ID",
 			queryTerms: []string{"test-entity"},
 			want:       true,
 		},
 		{
-			name:       "Match type",
+			name:       "Match domain in ID",
 			queryTerms: []string{"robotics"},
 			want:       true,
 		},
@@ -272,7 +263,7 @@ func Test_entityMatchesQuery(t *testing.T) {
 			want:       false,
 		},
 		{
-			name:       "Case insensitive",
+			name:       "Case insensitive type match",
 			queryTerms: []string{"DRONE"},
 			want:       true,
 		},
@@ -289,40 +280,36 @@ func Test_entityMatchesQuery(t *testing.T) {
 func TestLocalSearch_Success(t *testing.T) {
 	ctx := context.Background()
 
+	// Entity IDs using 6-part format: org.platform.domain.system.type.instance
+	e1ID := "c360.platform.robotics.system.drone.e1"
+	e2ID := "c360.platform.robotics.system.drone.e2"
+	e3ID := "c360.platform.networking.system.switch.e3"
+
 	// Setup mock community detector
 	comm := &mockCommunity{
 		id:                 "comm-0-robotics",
 		level:              0,
-		members:            []string{"e1", "e2", "e3"},
+		members:            []string{e1ID, e2ID, e3ID},
 		statisticalSummary: "Robotics community",
 	}
 
 	detector := &mockCommunityDetector{
 		entityComm: map[string]map[int]graphinterfaces.Community{
-			"e1": {0: comm},
+			e1ID: {0: comm},
 		},
 	}
 
 	// Setup mock data handler
 	dataHandler := &mockEntityReader{
 		entities: map[string]*gtypes.EntityState{
-			"e1": {
-				Node: gtypes.NodeProperties{
-					ID:   "e1",
-					Type: "robotics.drone",
-				},
+			e1ID: {
+				ID: e1ID,
 			},
-			"e2": {
-				Node: gtypes.NodeProperties{
-					ID:   "e2",
-					Type: "robotics.sensor",
-				},
+			e2ID: {
+				ID: e2ID,
 			},
-			"e3": {
-				Node: gtypes.NodeProperties{
-					ID:   "e3",
-					Type: "network.router",
-				},
+			e3ID: {
+				ID: e3ID,
 			},
 		},
 	}
@@ -332,7 +319,7 @@ func TestLocalSearch_Success(t *testing.T) {
 		entityReader:      dataHandler,
 	}
 
-	result, err := m.LocalSearch(ctx, "e1", "robotics", 0)
+	result, err := m.LocalSearch(ctx, e1ID, "robotics", 0)
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -378,18 +365,23 @@ func TestLocalSearch_CommunityDetectorUnavailable(t *testing.T) {
 func TestGlobalSearch_Success(t *testing.T) {
 	ctx := context.Background()
 
+	// Entity IDs using 6-part format: org.platform.domain.system.type.instance
+	e1ID := "c360.platform.robotics.system.drone.e1"
+	e2ID := "c360.platform.robotics.system.drone.e2"
+	e3ID := "c360.platform.networking.system.router.e3"
+
 	// Setup communities
 	comm1 := &mockCommunity{
 		id:                 "comm-0-robotics",
 		level:              0,
-		members:            []string{"e1", "e2"},
+		members:            []string{e1ID, e2ID},
 		statisticalSummary: "Robotics and autonomous systems",
 		keywords:           []string{"robotics", "autonomous", "drone"},
 	}
 	comm2 := &mockCommunity{
 		id:                 "comm-0-network",
 		level:              0,
-		members:            []string{"e3"},
+		members:            []string{e3ID},
 		statisticalSummary: "Network infrastructure",
 		keywords:           []string{"network", "router", "switch"},
 	}
@@ -403,23 +395,14 @@ func TestGlobalSearch_Success(t *testing.T) {
 
 	dataHandler := &mockEntityReader{
 		entities: map[string]*gtypes.EntityState{
-			"e1": {
-				Node: gtypes.NodeProperties{
-					ID:   "e1",
-					Type: "robotics.drone",
-				},
+			e1ID: {
+				ID: e1ID,
 			},
-			"e2": {
-				Node: gtypes.NodeProperties{
-					ID:   "e2",
-					Type: "robotics.sensor",
-				},
+			e2ID: {
+				ID: e2ID,
 			},
-			"e3": {
-				Node: gtypes.NodeProperties{
-					ID:   "e3",
-					Type: "network.router",
-				},
+			e3ID: {
+				ID: e3ID,
 			},
 		},
 	}
@@ -463,14 +446,15 @@ func TestGlobalSearch_EmptyCommunities(t *testing.T) {
 func TestGlobalSearch_MaxCommunitiesLimit(t *testing.T) {
 	ctx := context.Background()
 
-	// Create 10 communities
+	// Create 10 communities with 6-part entity IDs
 	communities := make(map[string]graphinterfaces.Community)
 	for i := 0; i < 10; i++ {
-		id := fmt.Sprintf("comm-0-%d", i)
-		communities[id] = &mockCommunity{
-			id:                 id,
+		commID := fmt.Sprintf("comm-0-%d", i)
+		entityID := fmt.Sprintf("c360.platform.test.system.entity.e%d", i)
+		communities[commID] = &mockCommunity{
+			id:                 commID,
 			level:              0,
-			members:            []string{fmt.Sprintf("e%d", i)},
+			members:            []string{entityID},
 			statisticalSummary: fmt.Sprintf("Community %d about testing", i),
 			keywords:           []string{"test", "community"},
 		}
@@ -483,12 +467,9 @@ func TestGlobalSearch_MaxCommunitiesLimit(t *testing.T) {
 	// Create corresponding entities
 	entities := make(map[string]*gtypes.EntityState)
 	for i := 0; i < 10; i++ {
-		id := fmt.Sprintf("e%d", i)
+		id := fmt.Sprintf("c360.platform.test.system.entity.e%d", i)
 		entities[id] = &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID:   id,
-				Type: "test.entity",
-			},
+			ID: id,
 		}
 	}
 
@@ -540,10 +521,7 @@ func BenchmarkLocalSearch(b *testing.B) {
 		id := fmt.Sprintf("entity-%d", i)
 		memberIDs[i] = id
 		entities[id] = &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID:   id,
-				Type: "robotics.sensor",
-			},
+			ID: id,
 		}
 	}
 
@@ -587,10 +565,7 @@ func BenchmarkGlobalSearch(b *testing.B) {
 			id := fmt.Sprintf("e-%d-%d", commIdx, i)
 			memberIDs[i] = id
 			allEntities[id] = &gtypes.EntityState{
-				Node: gtypes.NodeProperties{
-					ID:   id,
-					Type: "test.entity",
-				},
+				ID: id,
 			}
 		}
 
@@ -651,10 +626,7 @@ func BenchmarkFilterEntitiesByQuery(b *testing.B) {
 	entities := make([]*gtypes.EntityState, 1000)
 	for i := 0; i < 1000; i++ {
 		entities[i] = &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID:   fmt.Sprintf("entity-%d", i),
-				Type: fmt.Sprintf("type-%d", i%10),
-			},
+			ID: fmt.Sprintf("entity-%d", i),
 		}
 	}
 

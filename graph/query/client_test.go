@@ -118,24 +118,23 @@ func TestPathQuery_Validation(t *testing.T) {
 
 func TestEntityMatchesCriteria(t *testing.T) {
 	// Test the entity matching logic
+	// ID format: org.platform.domain.system.type.instance
 	entity := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     "test-entity",
-			Type:   "robotics.drone",
-			Status: gtypes.StatusActive,
-		},
+		ID: "c360.platform.robotics.system.drone.test-entity",
 	}
 
 	// Create a mock client to test the helper method
 	client := &natsClient{}
 
 	t.Run("matches by type", func(t *testing.T) {
-		criteria := map[string]any{"type": "robotics.drone"}
+		// Type is now extracted from ID (5th component) - "drone"
+		criteria := map[string]any{"type": "drone"}
 		assert.True(t, client.entityMatchesCriteria(entity, criteria))
 	})
 
 	t.Run("fails on wrong type", func(t *testing.T) {
-		criteria := map[string]any{"type": "robotics.gcs"}
+		// Type is now extracted from ID (5th component)
+		criteria := map[string]any{"type": "gcs"}
 		assert.False(t, client.entityMatchesCriteria(entity, criteria))
 	})
 

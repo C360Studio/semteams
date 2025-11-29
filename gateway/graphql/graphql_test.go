@@ -403,10 +403,7 @@ func BenchmarkPropertyExtraction(b *testing.B) {
 func BenchmarkResolverOperations(b *testing.B) {
 	// Setup mock query manager with test data
 	testEntity := &graph.EntityState{
-		Node: graph.NodeProperties{
-			ID:   "bench-entity-1",
-			Type: "benchmark",
-		},
+		ID: "bench-entity-1",
 	}
 
 	mockQM := &mockQueryManager{

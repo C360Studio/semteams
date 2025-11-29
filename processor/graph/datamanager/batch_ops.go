@@ -40,7 +40,7 @@ func (m *Manager) BatchWrite(ctx context.Context, writes []EntityWrite) error {
 			}
 		case OperationDelete:
 			if write.Entity != nil {
-				err = m.deleteEntityDirect(ctx, write.Entity.Node.ID)
+				err = m.deleteEntityDirect(ctx, write.Entity.ID)
 			}
 		default:
 			err = errors.WrapInvalid(nil, "DataManager", "BatchWrite", "invalid operation")

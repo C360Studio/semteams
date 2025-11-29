@@ -568,18 +568,26 @@ func TestGetOutgoing(t *testing.T) {
 func TestDistance(t *testing.T) {
 	evaluator := NewExpressionEvaluator()
 
-	// Create entities with position data
+	// Create entities with position data (now stored as triples)
 	entityWithPosition := func(id string, lat, lon float64) *gtypes.EntityState {
 		return &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID:   id,
-				Type: "robotics.drone",
-				Position: &gtypes.Position{
-					Latitude:  lat,
-					Longitude: lon,
+			ID: id,
+			Triples: []message.Triple{
+				{
+					Subject:   id,
+					Predicate: "geo.location.latitude",
+					Object:    lat,
+					Source:    "test",
+					Timestamp: time.Now(),
+				},
+				{
+					Subject:   id,
+					Predicate: "geo.location.longitude",
+					Object:    lon,
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 			},
-			Triples:   []message.Triple{},
 			Version:   1,
 			UpdatedAt: time.Now(),
 		}
@@ -659,10 +667,7 @@ func TestDistance(t *testing.T) {
 // Helper function to create test entity states
 func createTestEntity(entityID string, triples []message.Triple) *gtypes.EntityState {
 	return &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   entityID,
-			Type: "robotics.drone",
-		},
+		ID:        entityID,
 		Triples:   triples,
 		Version:   1,
 		UpdatedAt: time.Now(),

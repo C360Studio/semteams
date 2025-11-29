@@ -127,7 +127,9 @@ func (rp *Processor) entityStateToMessage(action, entityKey string, entityState 
 
 	// Add entity state data if not deleted
 	if entityState != nil {
-		payloadData["entity_type"] = entityState.Node.Type
+		// Extract type from entity ID
+		eid, _ := message.ParseEntityID(entityState.ID)
+		payloadData["entity_type"] = eid.Type
 		payloadData["triples"] = entityState.Triples
 		payloadData["version"] = entityState.Version
 		payloadData["updated_at"] = entityState.UpdatedAt

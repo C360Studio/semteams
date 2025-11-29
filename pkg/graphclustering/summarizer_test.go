@@ -15,37 +15,26 @@ func TestStatisticalSummarizer_SummarizeCommunity(t *testing.T) {
 	ctx := context.Background()
 
 	// Create test entities with robotics theme
+	// Using proper 6-part entity ID format: org.platform.domain.system.type.instance
 	entities := []*gtypes.EntityState{
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "drone1",
-				Type: "robotics.drone",
-			},
+			ID: "c360.platform.robotics.system.drone.1",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "drone2",
-				Type: "robotics.drone",
-			},
+			ID: "c360.platform.robotics.system.drone.2",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "sensor1",
-				Type: "robotics.sensor",
-			},
+			ID: "c360.platform.robotics.system.sensor.1",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "battery1",
-				Type: "robotics.battery",
-			},
+			ID: "c360.platform.robotics.system.battery.1",
 		},
 	}
 
 	community := &Community{
 		ID:      "comm-0-test",
 		Level:   0,
-		Members: []string{"drone1", "drone2", "sensor1", "battery1"},
+		Members: []string{"c360.platform.robotics.system.drone.1", "c360.platform.robotics.system.drone.2", "c360.platform.robotics.system.sensor.1", "c360.platform.robotics.system.battery.1"},
 	}
 
 	// Summarize community
@@ -64,8 +53,8 @@ func TestStatisticalSummarizer_SummarizeCommunity(t *testing.T) {
 	for _, kw := range result.Keywords {
 		keywordSet[kw] = true
 	}
-	// Should contain terms from types
-	assert.True(t, keywordSet["robotics"] || keywordSet["drone"] || keywordSet["sensor"],
+	// Should contain terms from types (drone, sensor, battery)
+	assert.True(t, keywordSet["drone"] || keywordSet["sensor"] || keywordSet["battery"],
 		"Keywords should contain type-related terms")
 
 	// Verify representative entities
@@ -84,24 +73,16 @@ func TestStatisticalSummarizer_KeywordExtraction(t *testing.T) {
 	summarizer := NewStatisticalSummarizer()
 	summarizer.MaxKeywords = 5
 
+	// Using proper 6-part entity ID format with navigation types
 	entities := []*gtypes.EntityState{
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "e1",
-				Type: "navigation.autonomous",
-			},
+			ID: "c360.platform.robotics.system.navigation.1",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "e2",
-				Type: "navigation.autonomous",
-			},
+			ID: "c360.platform.robotics.system.navigation.2",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "e3",
-				Type: "navigation.mapping",
-			},
+			ID: "c360.platform.robotics.system.navigation.3",
 		},
 	}
 
@@ -129,30 +110,19 @@ func TestStatisticalSummarizer_RepresentativeEntities(t *testing.T) {
 
 	// Create a graph where "hub" is central (pointed to by others via triples)
 	// This tests PageRank behavior: entities with many incoming links are important
+	// Using proper 6-part entity ID format
 	entities := []*gtypes.EntityState{
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "hub",
-				Type: "node",
-			},
+			ID: "c360.platform.robotics.system.hub.1",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "e1",
-				Type: "common_type",
-			},
+			ID: "c360.platform.robotics.system.sensor.1",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "e2",
-				Type: "common_type",
-			},
+			ID: "c360.platform.robotics.system.sensor.2",
 		},
 		{
-			Node: gtypes.NodeProperties{
-				ID:   "e3",
-				Type: "rare_type",
-			},
+			ID: "c360.platform.robotics.system.actuator.1",
 		},
 	}
 
@@ -162,19 +132,20 @@ func TestStatisticalSummarizer_RepresentativeEntities(t *testing.T) {
 	assert.NotEmpty(t, repEntities)
 
 	// With no edges/triples, entities are ranked by type frequency
-	// "common_type" appears twice, so e1 or e2 should rank high
+	// "sensor" type appears twice, so sensor entities should rank high
 	t.Logf("Representative entities: %v", repEntities)
 }
 
 func TestStatisticalSummarizer_SummaryGeneration(t *testing.T) {
 	summarizer := NewStatisticalSummarizer()
 
+	// Using proper 6-part entity ID format
 	entities := []*gtypes.EntityState{
-		{Node: gtypes.NodeProperties{ID: "d1", Type: "robotics.drone"}},
-		{Node: gtypes.NodeProperties{ID: "d2", Type: "robotics.drone"}},
-		{Node: gtypes.NodeProperties{ID: "d3", Type: "robotics.drone"}},
-		{Node: gtypes.NodeProperties{ID: "s1", Type: "robotics.sensor"}},
-		{Node: gtypes.NodeProperties{ID: "s2", Type: "robotics.sensor"}},
+		{ID: "c360.platform.robotics.system.drone.1"},
+		{ID: "c360.platform.robotics.system.drone.2"},
+		{ID: "c360.platform.robotics.system.drone.3"},
+		{ID: "c360.platform.robotics.system.sensor.1"},
+		{ID: "c360.platform.robotics.system.sensor.2"},
 	}
 
 	keywords := []string{"robotics", "autonomous", "navigation"}
@@ -209,7 +180,7 @@ func TestStatisticalSummarizer_NilCommunity(t *testing.T) {
 	ctx := context.Background()
 
 	entities := []*gtypes.EntityState{
-		{Node: gtypes.NodeProperties{ID: "e1", Type: "test"}},
+		{ID: "c360.platform.robotics.system.test.1"},
 	}
 
 	// Nil community should return error
@@ -224,14 +195,15 @@ func TestStatisticalSummarizer_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
+	entityID := "c360.platform.robotics.system.test.1"
 	entities := []*gtypes.EntityState{
-		{Node: gtypes.NodeProperties{ID: "e1", Type: "test"}},
+		{ID: entityID},
 	}
 
 	community := &Community{
 		ID:      "comm-0-test",
 		Level:   0,
-		Members: []string{"e1"},
+		Members: []string{entityID},
 	}
 
 	// Should return context error

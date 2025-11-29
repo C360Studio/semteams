@@ -369,19 +369,42 @@ func (e *Evaluator) GetOutgoing(entity *gtypes.EntityState, predicate string) []
 
 // Distance calculates the great-circle distance between two entities in meters
 // using the Haversine formula. Returns error if either entity lacks position data.
+// Position is now extracted from geo.location.* triples (single source of truth).
 func (e *Evaluator) Distance(entity1, entity2 *gtypes.EntityState) (float64, error) {
 	if entity1 == nil || entity2 == nil {
 		return 0, fmt.Errorf("both entities must be non-nil")
 	}
 
-	pos1 := entity1.Node.Position
-	pos2 := entity2.Node.Position
+	// Extract position from triples
+	lat1, lon1 := extractLatLonFromTriples(entity1)
+	lat2, lon2 := extractLatLonFromTriples(entity2)
 
-	if pos1 == nil || pos2 == nil {
-		return 0, fmt.Errorf("both entities must have position data")
+	if lat1 == 0 && lon1 == 0 {
+		return 0, fmt.Errorf("entity1 must have position data in triples")
+	}
+	if lat2 == 0 && lon2 == 0 {
+		return 0, fmt.Errorf("entity2 must have position data in triples")
 	}
 
-	return haversineDistance(pos1.Latitude, pos1.Longitude, pos2.Latitude, pos2.Longitude), nil
+	return haversineDistance(lat1, lon1, lat2, lon2), nil
+}
+
+// extractLatLonFromTriples extracts latitude and longitude from entity triples
+func extractLatLonFromTriples(entity *gtypes.EntityState) (float64, float64) {
+	var lat, lon float64
+	for _, triple := range entity.Triples {
+		switch triple.Predicate {
+		case "geo.location.latitude", "latitude":
+			if v, ok := triple.Object.(float64); ok {
+				lat = v
+			}
+		case "geo.location.longitude", "longitude":
+			if v, ok := triple.Object.(float64); ok {
+				lon = v
+			}
+		}
+	}
+	return lat, lon
 }
 
 // haversineDistance calculates the great-circle distance between two points

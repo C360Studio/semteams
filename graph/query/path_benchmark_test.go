@@ -162,13 +162,10 @@ func generateSyntheticGraph(entityCount int) map[string]*gtypes.EntityState {
 	entities := make(map[string]*gtypes.EntityState, entityCount)
 
 	for i := 0; i < entityCount; i++ {
-		id := fmt.Sprintf("entity-%03d", i)
+		// Use proper 6-part ID format: org.platform.domain.system.type.instance
+		id := fmt.Sprintf("c360.platform.test.system.entity.%03d", i)
 		entity := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID:     id,
-				Type:   "test.entity",
-				Status: gtypes.StatusActive,
-			},
+			ID: id,
 		}
 
 		entities[id] = entity

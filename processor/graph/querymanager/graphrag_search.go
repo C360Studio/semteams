@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/pkg/graphinterfaces"
 )
 
@@ -265,12 +266,14 @@ func (m *Manager) entityMatchesQuery(entity *gtypes.EntityState, queryTerms []st
 	var searchText strings.Builder
 
 	// Add entity ID
-	searchText.WriteString(strings.ToLower(entity.Node.ID))
+	searchText.WriteString(strings.ToLower(entity.ID))
 	searchText.WriteString(" ")
 
-	// Add entity type
-	searchText.WriteString(strings.ToLower(entity.Node.Type))
-	searchText.WriteString(" ")
+	// Extract type from ID and add it
+	if eid, err := message.ParseEntityID(entity.ID); err == nil {
+		searchText.WriteString(strings.ToLower(eid.Type))
+		searchText.WriteString(" ")
+	}
 
 	// Add properties from triples
 	for _, triple := range entity.Triples {

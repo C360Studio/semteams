@@ -412,7 +412,7 @@ func (w *KVWatcher) ValidateEntityState(data []byte) (*gtypes.EntityState, error
 	}
 
 	// Basic validation
-	if state.Node.ID == "" {
+	if state.ID == "" {
 		return nil, errors.WrapInvalid(
 			errors.ErrInvalidData,
 			"IndexManager",
@@ -421,14 +421,7 @@ func (w *KVWatcher) ValidateEntityState(data []byte) (*gtypes.EntityState, error
 		)
 	}
 
-	if state.Node.Type == "" {
-		return nil, errors.WrapInvalid(
-			errors.ErrInvalidData,
-			"IndexManager",
-			"parseEntityState",
-			"entity state missing type",
-		)
-	}
+	// Type is now derived from ID via message.ParseEntityID(), no validation needed
 
 	return &state, nil
 }

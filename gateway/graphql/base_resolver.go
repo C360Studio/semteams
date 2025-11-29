@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/pkg/graphinterfaces"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 )
@@ -630,9 +631,12 @@ func convertEntityStateToGraphQL(state *graph.EntityState) *Entity {
 		}
 	}
 
+	// Extract type from entity ID
+	eid, _ := message.ParseEntityID(state.ID)
+
 	return &Entity{
-		ID:         state.Node.ID,
-		Type:       state.Node.Type,
+		ID:         state.ID,
+		Type:       eid.Type,
 		Properties: properties,
 		CreatedAt:  createdAt,
 		UpdatedAt:  state.UpdatedAt,

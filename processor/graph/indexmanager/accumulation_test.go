@@ -91,9 +91,7 @@ func TestTemporalIndexAccumulation(t *testing.T) {
 	// Send 5 updates for the same entity in the same time bucket
 	for i := 0; i < 5; i++ {
 		entityState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID:        entityID,
 			UpdatedAt: baseTime.Add(time.Duration(i) * time.Minute),
 		}
 
@@ -148,9 +146,7 @@ func TestIntegration_SpatialIndexMerging(t *testing.T) {
 
 	for _, entityID := range entities {
 		entityState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -234,9 +230,7 @@ func TestIntegration_ConcurrentSpatialUpdates(t *testing.T) {
 		entityID := fmt.Sprintf("concurrent.entity.%d", i)
 		go func(id string, altitude int) {
 			entityState := &gtypes.EntityState{
-				Node: gtypes.NodeProperties{
-					ID: id,
-				},
+				ID: id,
 				Triples: []message.Triple{
 					{
 						Subject:   id,

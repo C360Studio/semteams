@@ -14,7 +14,17 @@ import (
 
 	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 )
+
+// extractEntityType extracts the type from an entity ID using message.ParseEntityID
+func extractEntityType(entityID string) string {
+	eid, err := message.ParseEntityID(entityID)
+	if err != nil {
+		return ""
+	}
+	return eid.Type
+}
 
 // CommunitySummarizer generates summaries for communities
 type CommunitySummarizer interface {
@@ -89,7 +99,7 @@ func (s *StatisticalSummarizer) extractKeywords(entities []*gtypes.EntityState) 
 	for _, entity := range entities {
 		// Extract terms from entity type
 		// e.g., "robotics.drone" -> ["robotics", "drone"]
-		typeParts := strings.Split(entity.Node.Type, ".")
+		typeParts := strings.Split(extractEntityType(entity.ID), ".")
 		for _, part := range typeParts {
 			if part != "" {
 				termFreq[part]++
@@ -164,7 +174,7 @@ func (s *StatisticalSummarizer) findRepresentativeEntities(ctx context.Context, 
 	// Extract community member IDs
 	memberIDs := make([]string, len(entities))
 	for i, entity := range entities {
-		memberIDs[i] = entity.Node.ID
+		memberIDs[i] = entity.ID
 	}
 
 	// Use PageRank to compute representative entities
@@ -189,7 +199,7 @@ func (s *StatisticalSummarizer) findRepresentativeEntitiesFallback(entities []*g
 	// Count type frequencies
 	typeFreq := make(map[string]int)
 	for _, entity := range entities {
-		typeFreq[entity.Node.Type]++
+		typeFreq[extractEntityType(entity.ID)]++
 	}
 
 	// Calculate scores
@@ -205,13 +215,13 @@ func (s *StatisticalSummarizer) findRepresentativeEntitiesFallback(entities []*g
 		connectivityScore := float64(relationshipCount)
 
 		// Type representativeness score (normalized)
-		typeScore := float64(typeFreq[entity.Node.Type]) / float64(len(entities))
+		typeScore := float64(typeFreq[extractEntityType(entity.ID)]) / float64(len(entities))
 
 		// Combined score (weighted)
 		score := (0.6 * connectivityScore) + (0.4 * typeScore)
 
 		scores = append(scores, entityScore{
-			id:    entity.Node.ID,
+			id:    entity.ID,
 			score: score,
 		})
 	}
@@ -244,7 +254,7 @@ type entityGraphProvider struct {
 func newEntityGraphProvider(entities []*gtypes.EntityState) *entityGraphProvider {
 	entitiesMap := make(map[string]*gtypes.EntityState, len(entities))
 	for _, entity := range entities {
-		entitiesMap[entity.Node.ID] = entity
+		entitiesMap[entity.ID] = entity
 	}
 	return &entityGraphProvider{entities: entitiesMap}
 }
@@ -282,7 +292,7 @@ func (p *entityGraphProvider) GetNeighbors(_ context.Context, entityID string, d
 			for _, triple := range otherEntity.Triples {
 				if triple.IsRelationship() {
 					if targetID, ok := triple.Object.(string); ok && targetID == entityID {
-						neighborSet[otherEntity.Node.ID] = true
+						neighborSet[otherEntity.ID] = true
 					}
 				}
 			}
@@ -328,7 +338,7 @@ func (s *StatisticalSummarizer) generateSummary(
 	// Count entity types
 	typeCount := make(map[string]int)
 	for _, entity := range entities {
-		typeCount[entity.Node.Type]++
+		typeCount[extractEntityType(entity.ID)]++
 	}
 
 	// Find most common types
@@ -539,7 +549,7 @@ func (s *HTTPLLMSummarizer) buildLLMInputText(
 	// Count entity types
 	typeCount := make(map[string]int)
 	for _, entity := range entities {
-		typeCount[entity.Node.Type]++
+		typeCount[extractEntityType(entity.ID)]++
 	}
 
 	// Build prompt for LLM
@@ -564,7 +574,7 @@ func (s *HTTPLLMSummarizer) buildLLMInputText(
 	maxSamples := min(5, len(entities))
 	for i := 0; i < maxSamples; i++ {
 		entity := entities[i]
-		builder.WriteString(fmt.Sprintf("- %s (%s)", entity.Node.ID, entity.Node.Type))
+		builder.WriteString(fmt.Sprintf("- %s (%s)", entity.ID, extractEntityType(entity.ID)))
 		if nameValue, found := entity.GetPropertyValue("name"); found {
 			if name, ok := nameValue.(string); ok {
 				builder.WriteString(fmt.Sprintf(": %s", name))

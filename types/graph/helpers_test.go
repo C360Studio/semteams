@@ -11,10 +11,7 @@ import (
 func TestGetPropertyValue(t *testing.T) {
 	// Create test entity with property and relationship triples
 	entity := &EntityState{
-		Node: NodeProperties{
-			ID:   "test.entity",
-			Type: "test.type",
-		},
+		ID: "c360.platform.domain.system.test.entity",
 		Triples: []message.Triple{
 			{
 				Subject:   "test.entity",
@@ -346,6 +343,93 @@ func TestMergeTriples(t *testing.T) {
 		assert.True(t, found1)
 		assert.True(t, found2)
 	})
+}
+
+func TestGetEntityType(t *testing.T) {
+	tests := []struct {
+		name       string
+		state      *EntityState
+		wantType   string
+		wantReason string
+	}{
+		{
+			name: "valid entity ID",
+			state: &EntityState{
+				ID: "c360.platform1.robotics.gcs1.drone.1",
+			},
+			wantType:   "drone",
+			wantReason: "should extract type from valid 6-part ID",
+		},
+		{
+			name: "different valid ID",
+			state: &EntityState{
+				ID: "noaa.pacific.sensors.buoy7.temperature.1",
+			},
+			wantType:   "temperature",
+			wantReason: "should extract type from different valid ID",
+		},
+		{
+			name:       "nil state",
+			state:      nil,
+			wantType:   "",
+			wantReason: "should return empty string for nil state",
+		},
+		{
+			name: "invalid ID: single part",
+			state: &EntityState{
+				ID: "invalid",
+			},
+			wantType:   "",
+			wantReason: "should return empty string for single-part ID",
+		},
+		{
+			name: "invalid ID: two parts",
+			state: &EntityState{
+				ID: "a.b",
+			},
+			wantType:   "",
+			wantReason: "should return empty string for two-part ID",
+		},
+		{
+			name: "invalid ID: five parts",
+			state: &EntityState{
+				ID: "a.b.c.d.e",
+			},
+			wantType:   "",
+			wantReason: "should return empty string for five-part ID",
+		},
+		{
+			name: "invalid ID: seven parts",
+			state: &EntityState{
+				ID: "a.b.c.d.e.f.g",
+			},
+			wantType:   "",
+			wantReason: "should return empty string for seven-part ID",
+		},
+		{
+			name: "invalid ID: empty string",
+			state: &EntityState{
+				ID: "",
+			},
+			wantType:   "",
+			wantReason: "should return empty string for empty ID",
+		},
+		{
+			name: "invalid ID: empty parts",
+			state: &EntityState{
+				ID: "c360..robotics.gcs1.drone.1",
+			},
+			wantType:   "",
+			wantReason: "should return empty string for ID with empty parts",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetEntityType(tt.state)
+			assert.Equal(t, tt.wantType, got, tt.wantReason)
+		})
+	}
 }
 
 // Helper function for tests

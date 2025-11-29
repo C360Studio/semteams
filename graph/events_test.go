@@ -357,8 +357,8 @@ func TestNewAlertEvent(t *testing.T) {
 	if event.Properties["source_entity"] != entityID {
 		t.Errorf("Expected source_entity %v, got %v", entityID, event.Properties["source_entity"])
 	}
-	if event.Properties["status"] != StatusWarning {
-		t.Errorf("Expected status %v, got %v", StatusWarning, event.Properties["status"])
+	if event.Properties["status"] != "warning" {
+		t.Errorf("Expected status %v, got %v", "warning", event.Properties["status"])
 	}
 	if event.Confidence != 0.8 {
 		t.Errorf("Expected confidence 0.8, got %v", event.Confidence)

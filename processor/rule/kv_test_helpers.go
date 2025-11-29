@@ -40,10 +40,10 @@ func (h *KVTestHelper) WriteEntityState(entity *gtypes.EntityState) {
 	require.NoError(h.t, err, "Failed to marshal entity state")
 
 	// Write to KV bucket
-	_, err = h.bucket.Put(h.ctx, entity.Node.ID, data)
+	_, err = h.bucket.Put(h.ctx, entity.ID, data)
 	require.NoError(h.t, err, "Failed to write entity to KV bucket")
 
-	h.t.Logf("Wrote entity state to KV: %s", entity.Node.ID)
+	h.t.Logf("Wrote entity state to KV: %s", entity.ID)
 }
 
 // CreateBatteryEntity creates a battery entity for testing
@@ -91,11 +91,7 @@ func CreateBatteryEntity(id string, level float64, voltage float64) *gtypes.Enti
 	}
 
 	return &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     id,
-			Type:   "robotics.battery",
-			Status: gtypes.StatusActive,
-		},
+		ID:        id,
 		Triples:   triples,
 		Version:   1,
 		UpdatedAt: now,
@@ -147,11 +143,7 @@ func CreateDroneEntity(id string, armed bool, mode string, altitude float64) *gt
 	}
 
 	return &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     id,
-			Type:   "robotics.drone",
-			Status: gtypes.StatusActive,
-		},
+		ID:        id,
 		Triples:   triples,
 		Version:   1,
 		UpdatedAt: now,

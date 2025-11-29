@@ -119,7 +119,7 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 		// Store each entity state
 		for _, state := range entityStates {
 			if _, err := mp.deps.EntityManager.UpdateEntity(msgCtx, state); err != nil {
-				mp.recordError(fmt.Sprintf("failed to store entity %s: %v", state.Node.ID, err))
+				mp.recordError(fmt.Sprintf("failed to store entity %s: %v", state.ID, err))
 				continue
 			}
 			// Indexes are now updated via KV watch pattern
@@ -142,7 +142,7 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 	// Store each entity state
 	for _, state := range entityStates {
 		if _, err := mp.deps.EntityManager.UpdateEntity(msgCtx, state); err != nil {
-			mp.recordError(fmt.Sprintf("failed to store entity %s: %v", state.Node.ID, err))
+			mp.recordError(fmt.Sprintf("failed to store entity %s: %v", state.ID, err))
 			continue
 		}
 		// Indexes are now updated via KV watch pattern
@@ -153,35 +153,37 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 
 // ProcessMessage processes any message type into entity states
 func (mp *Manager) ProcessMessage(ctx context.Context, msg any) ([]*gtypes.EntityState, error) {
-	// Default empty ObjectRef (for backward compatibility)
-	objectRef := ""
+	// Default nil storage reference
+	var storageRef *message.StorageReference
 
 	// Check if message implements Storable interface (has storage reference)
 	if storable, ok := msg.(message.Storable); ok {
-		// Extract ObjectRef from StorageReference
-		if ref := storable.StorageRef(); ref != nil {
-			objectRef = ref.Key // Use storage key as ObjectRef
-			mp.deps.Logger.Debug("Extracted ObjectRef from Storable",
-				"object_ref", objectRef,
-				"storage_instance", ref.StorageInstance)
+		// Extract storage reference from Storable
+		storageRef = storable.StorageRef()
+		mp.deps.Logger.Debug("Extracted StorageReference from Storable",
+			"has_storage_ref", storageRef != nil)
+		if storageRef != nil {
+			mp.deps.Logger.Debug("StorageReference details",
+				"storage_key", storageRef.Key,
+				"storage_instance", storageRef.StorageInstance)
 		}
 		// Process as Graphable (Storable embeds Graphable)
-		return mp.processSimpleGraphable(ctx, storable, objectRef)
+		return mp.processSimpleGraphable(ctx, storable, storageRef)
 	}
 
 	// Check if message implements Graphable interface (no storage reference)
 	if graphable, ok := msg.(message.Graphable); ok {
 		mp.deps.Logger.Debug("Processing Graphable without storage reference")
-		return mp.processSimpleGraphable(ctx, graphable, objectRef)
+		return mp.processSimpleGraphable(ctx, graphable, storageRef)
 	}
 
 	// Fall back to basic entity extraction for backward compatibility
-	return mp.processNonGraphableMessage(ctx, msg, objectRef)
+	return mp.processNonGraphableMessage(ctx, msg, storageRef)
 }
 
 // processSimpleGraphable processes a message using the Graphable interface
 func (mp *Manager) processSimpleGraphable(
-	ctx context.Context, graphable message.Graphable, objectRef string,
+	ctx context.Context, graphable message.Graphable, storageRef *message.StorageReference,
 ) ([]*gtypes.EntityState, error) {
 	entityID := graphable.EntityID()
 	if entityID == "" {
@@ -206,21 +208,17 @@ func (mp *Manager) processSimpleGraphable(
 		"triple_count", len(triples))
 
 	// Extract message type if available (for semantic search filtering)
-	var messageType string
+	var msgType message.Type
 	if msg, ok := graphable.(message.Message); ok {
-		messageType = msg.Type().String() // e.g., "alerts.critical.v1"
+		msgType = msg.Type() // message.Type struct (domain.category.version)
 	}
 
 	// Create entity state - triples are single source of truth for both properties and relationships
 	state := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     actualEntityID,
-			Type:   mp.extractTypeFromEntityID(actualEntityID),
-			Status: gtypes.StatusActive,
-		},
-		Triples:     triples, // Triples contain all properties and relationships
-		ObjectRef:   objectRef,
-		MessageType: messageType, // Original message type for filtering (domain.category.version)
+		ID:          actualEntityID,
+		Triples:     triples,    // Triples contain all properties and relationships
+		StorageRef:  storageRef, // Optional storage reference
+		MessageType: msgType,    // Original message type for filtering
 		Version:     1,
 		UpdatedAt:   time.Now(),
 	}
@@ -264,14 +262,14 @@ func (mp *Manager) processSimpleGraphable(
 
 // processNonGraphableMessage handles messages that don't implement Graphable
 func (mp *Manager) processNonGraphableMessage(
-	ctx context.Context, msg any, objectRef string,
+	ctx context.Context, msg any, storageRef *message.StorageReference,
 ) ([]*gtypes.EntityState, error) {
 	// Check for basic EntityID interface for backward compatibility
 	identifiable, ok := msg.(interface{ EntityID() string })
 	if !ok {
 		// Try to handle map[string]any from JSON unmarshaling (common case)
 		if msgMap, isMap := msg.(map[string]any); isMap {
-			return mp.processMapMessage(ctx, msgMap, objectRef)
+			return mp.processMapMessage(ctx, msgMap, storageRef)
 		}
 		return nil, errors.WrapInvalid(errors.ErrInvalidData, "message manager",
 			"processNonGraphableMessage", "message missing required interfaces")
@@ -279,34 +277,28 @@ func (mp *Manager) processNonGraphableMessage(
 
 	entityID := identifiable.EntityID()
 
-	// Check for Type interface
-	var entityType string
-	if typed, ok := msg.(interface{ Type() string }); ok {
-		entityType = typed.Type()
-	} else {
-		entityType = "unknown"
-	}
-
 	// Create basic metadata triples for non-Graphable messages
+	// Note: entity_class and entity_role removed per ADR - domains own classification
 	now := time.Now()
 	triples := []message.Triple{
-		{Subject: entityID, Predicate: "entity_class", Object: message.ClassThing, Timestamp: now},
-		{Subject: entityID, Predicate: "entity_role", Object: message.RolePrimary, Timestamp: now},
 		{Subject: entityID, Predicate: "confidence", Object: 0.5, Timestamp: now},
 		{Subject: entityID, Predicate: "source", Object: "legacy_interface", Timestamp: now},
 	}
 
+	// Extract message type if available
+	var msgType message.Type
+	if typedMsg, ok := msg.(message.Message); ok {
+		msgType = typedMsg.Type()
+	}
+
 	// Create entity state - triples are single source of truth
 	state := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     entityID,
-			Type:   entityType,
-			Status: gtypes.StatusActive,
-		},
-		Triples:   triples,
-		ObjectRef: objectRef,
-		Version:   1,
-		UpdatedAt: now,
+		ID:          entityID,
+		Triples:     triples,
+		StorageRef:  storageRef,
+		MessageType: msgType,
+		Version:     1,
+		UpdatedAt:   now,
 	}
 
 	// Check for existing entity to preserve triples and increment version
@@ -331,27 +323,20 @@ func (mp *Manager) processNonGraphableMessage(
 
 // processMapMessage processes a map[string]any message
 func (mp *Manager) processMapMessage(
-	ctx context.Context, msgMap map[string]any, objectRef string,
+	ctx context.Context, msgMap map[string]any, storageRef *message.StorageReference,
 ) ([]*gtypes.EntityState, error) {
 	// Extract entity information from map structure
 	var entityID string
-	var entityType string
 
 	// Try to extract standard fields
 	if id, exists := msgMap["id"]; exists {
 		entityID = fmt.Sprintf("%v", id)
-	}
-	if eType, exists := msgMap["type"]; exists {
-		entityType = fmt.Sprintf("%v", eType)
 	}
 
 	// Use defaults if not provided
 	if entityID == "" {
 		entityID = fmt.Sprintf("%s.%s.map.%d",
 			mp.config.DefaultNamespace, mp.config.DefaultPlatform, time.Now().UnixNano())
-	}
-	if entityType == "" {
-		entityType = "map_message"
 	}
 
 	// Convert map entries to triples (excluding standard fields)
@@ -374,21 +359,14 @@ func (mp *Manager) processMapMessage(
 		message.Triple{Subject: entityID, Predicate: "source_type", Object: "map_message", Timestamp: now},
 	)
 
-	if objectRef == "" {
-		objectRef = fmt.Sprintf("map_%s_%d", entityID, now.UnixNano())
-	}
-
 	// Create entity state with triples as single source of truth
 	state := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     entityID,
-			Type:   entityType,
-			Status: gtypes.StatusActive,
-		},
-		Triples:   triples,
-		ObjectRef: objectRef,
-		Version:   1,
-		UpdatedAt: now,
+		ID:          entityID,
+		Triples:     triples,
+		StorageRef:  storageRef,
+		MessageType: message.Type{}, // Empty type for map messages
+		Version:     1,
+		UpdatedAt:   now,
 	}
 
 	// Check for existing entity to merge triples and increment version

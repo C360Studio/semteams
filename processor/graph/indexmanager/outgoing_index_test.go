@@ -173,11 +173,7 @@ func TestOutgoingIndex_HandleCreate(t *testing.T) {
 
 			// Create entity state
 			entityState := &gtypes.EntityState{
-				Node: gtypes.NodeProperties{
-					ID:     tt.entityID,
-					Type:   "robotics.drone",
-					Status: gtypes.StatusActive,
-				},
+				ID:        tt.entityID,
 				Triples:   tt.triples,
 				Version:   1,
 				UpdatedAt: time.Now(),
@@ -373,11 +369,7 @@ func TestOutgoingIndex_HandleUpdate(t *testing.T) {
 
 			// Setup initial state
 			initialState := &gtypes.EntityState{
-				Node: gtypes.NodeProperties{
-					ID:     tt.entityID,
-					Type:   "robotics.drone",
-					Status: gtypes.StatusActive,
-				},
+				ID:        tt.entityID,
 				Triples:   tt.initialTriples,
 				Version:   1,
 				UpdatedAt: time.Now(),
@@ -390,11 +382,7 @@ func TestOutgoingIndex_HandleUpdate(t *testing.T) {
 
 			// Perform update
 			updatedState := &gtypes.EntityState{
-				Node: gtypes.NodeProperties{
-					ID:     tt.entityID,
-					Type:   "robotics.drone",
-					Status: gtypes.StatusActive,
-				},
+				ID:        tt.entityID,
 				Triples:   tt.updatedTriples,
 				Version:   2,
 				UpdatedAt: time.Now(),
@@ -478,11 +466,7 @@ func TestOutgoingIndex_HandleDelete(t *testing.T) {
 			// Setup initial state if provided
 			if tt.initialTriples != nil {
 				initialState := &gtypes.EntityState{
-					Node: gtypes.NodeProperties{
-						ID:     tt.entityID,
-						Type:   "robotics.drone",
-						Status: gtypes.StatusActive,
-					},
+					ID:        tt.entityID,
 					Triples:   tt.initialTriples,
 					Version:   1,
 					UpdatedAt: time.Now(),
@@ -628,11 +612,7 @@ func TestOutgoingIndex_GetOutgoing(t *testing.T) {
 			// Setup test data if provided
 			if tt.setupTriples != nil {
 				entityState := &gtypes.EntityState{
-					Node: gtypes.NodeProperties{
-						ID:     tt.entityID,
-						Type:   "robotics.drone",
-						Status: gtypes.StatusActive,
-					},
+					ID:        tt.entityID,
 					Triples:   tt.setupTriples,
 					Version:   1,
 					UpdatedAt: time.Now(),
@@ -782,11 +762,7 @@ func TestOutgoingIndex_GetOutgoingByPredicate(t *testing.T) {
 			// Setup test data if provided
 			if tt.setupTriples != nil {
 				entityState := &gtypes.EntityState{
-					Node: gtypes.NodeProperties{
-						ID:     tt.entityID,
-						Type:   "robotics.drone",
-						Status: gtypes.StatusActive,
-					},
+					ID:        tt.entityID,
 					Triples:   tt.setupTriples,
 					Version:   1,
 					UpdatedAt: time.Now(),
@@ -893,11 +869,7 @@ func TestOutgoingIndex_ExtractsRelationshipsFromTriples(t *testing.T) {
 
 			// Create entity with triples (single source of truth)
 			entityState := &gtypes.EntityState{
-				Node: gtypes.NodeProperties{
-					ID:     tt.entityID,
-					Type:   "robotics.drone",
-					Status: gtypes.StatusActive,
-				},
+				ID:        tt.entityID,
 				Triples:   tt.triples,
 				Version:   1,
 				UpdatedAt: time.Now(),

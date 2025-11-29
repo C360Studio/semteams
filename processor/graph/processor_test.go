@@ -229,7 +229,7 @@ func TestIntegration_HandleMessage(t *testing.T) {
 	entity, err := processor.GetEntity(ctx, "test-entity-msg")
 	assert.NoError(t, err)
 	if entity != nil {
-		assert.Equal(t, "test-entity-msg", entity.Node.ID)
+		assert.Equal(t, "test-entity-msg", entity.ID)
 	}
 
 	// Cancel context to trigger shutdown

@@ -38,6 +38,24 @@ func TestParseEntityID(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "invalid: single part",
+			input:   "invalid",
+			want:    EntityID{},
+			wantErr: true,
+		},
+		{
+			name:    "invalid: two parts",
+			input:   "a.b",
+			want:    EntityID{},
+			wantErr: true,
+		},
+		{
+			name:    "invalid: five parts (missing instance)",
+			input:   "a.b.c.d.e",
+			want:    EntityID{},
+			wantErr: true,
+		},
+		{
 			name:    "too few parts",
 			input:   "c360.platform1.robotics.drone.1",
 			want:    EntityID{},

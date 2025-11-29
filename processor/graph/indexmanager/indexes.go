@@ -1021,7 +1021,7 @@ func (si *SpatialIndex) updateWithManualRetry(ctx context.Context, geohash, enti
 		if errors.IsTransient(err) {
 			si.logger.Debug("Spatial index update conflict, retrying", "geohash", geohash)
 			return si.updateSpatialIndex(ctx, entityID, &gtypes.EntityState{
-				Node: gtypes.NodeProperties{ID: entityID},
+				ID: entityID,
 				Triples: []message.Triple{
 					{Predicate: "geo.location.latitude", Object: latitude},
 					{Predicate: "geo.location.longitude", Object: longitude},
@@ -1034,7 +1034,7 @@ func (si *SpatialIndex) updateWithManualRetry(ctx context.Context, geohash, enti
 		if errors.IsTransient(err) {
 			si.logger.Debug("Spatial index create conflict, retrying", "geohash", geohash)
 			return si.updateSpatialIndex(ctx, entityID, &gtypes.EntityState{
-				Node: gtypes.NodeProperties{ID: entityID},
+				ID: entityID,
 				Triples: []message.Triple{
 					{Predicate: "geo.location.latitude", Object: latitude},
 					{Predicate: "geo.location.longitude", Object: longitude},

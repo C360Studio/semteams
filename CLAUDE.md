@@ -120,6 +120,11 @@ Full details: constitution + `docs/agent/*.md`
 **Program Manager**: Coordinate, enforce gates, delegate. NEVER write code yourself.
 
 ## Active Technologies
+- Go 1.25+ + NATS JetStream (KV buckets), GraphQL (gqlgen) (004-semantic-refactor)
+- NATS KV (ENTITY_STATES bucket) (004-semantic-refactor)
 
 - Go 1.25+ + NATS JetStream (KV buckets), existing IndexManager, RuleProcessor (003-triples-architecture)
 - NATS KV (ENTITY_STATES, PREDICATE_INDEX, INCOMING_INDEX, OUTGOING_INDEX, RULE_STATE) (003-triples-architecture)
+
+## Recent Changes
+- 004-semantic-refactor: Added Go 1.25+ + NATS JetStream (KV buckets), GraphQL (gqlgen)

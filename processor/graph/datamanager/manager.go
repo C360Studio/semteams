@@ -59,7 +59,7 @@ func validateEntity(entity *gtypes.EntityState) error {
 		return errors.WrapInvalid(nil, "DataManager", "validateEntity", "entity cannot be nil")
 	}
 
-	return validateEntityID(entity.Node.ID)
+	return validateEntityID(entity.ID)
 }
 
 // Manager is the consolidated data management service using framework components
@@ -441,7 +441,7 @@ func (m *Manager) coalesceWrites(writes []*EntityWrite) []*EntityWrite {
 			continue
 		}
 
-		entityID := write.Entity.Node.ID
+		entityID := write.Entity.ID
 
 		// Check if we already have a write for this entity
 		if existing, exists := entityWrites[entityID]; exists {
@@ -519,12 +519,9 @@ func (m *Manager) mergeEntityStates(existing, newer *gtypes.EntityState) *gtypes
 
 	// Create merged entity with triples-based approach (triples as single source of truth)
 	merged := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   existing.Node.ID,
-			Type: newer.Node.Type, // Use newer type
-		},
+		ID:          existing.ID,
 		Triples:     gtypes.MergeTriples(existing.Triples, newer.Triples), // Triples as single source of truth
-		ObjectRef:   newer.ObjectRef,                                      // Use newer ObjectRef
+		StorageRef:  newer.StorageRef,                                     // Use newer StorageRef
 		MessageType: newer.MessageType,                                    // Use newer message type
 		UpdatedAt:   newer.UpdatedAt,                                      // Use newer timestamp
 		Version:     newer.Version,                                        // Will be set during actual write
@@ -575,7 +572,7 @@ func (m *Manager) processWrite(ctx context.Context, write *EntityWrite) error {
 	case OperationDelete:
 		var err error
 		if write.Entity != nil {
-			err = m.deleteEntityDirect(ctx, write.Entity.Node.ID)
+			err = m.deleteEntityDirect(ctx, write.Entity.ID)
 		}
 		if write.Callback != nil {
 			write.Callback(err)
@@ -629,7 +626,7 @@ func (m *Manager) createEntityDirect(ctx context.Context, entity *gtypes.EntityS
 		return nil, err
 	}
 
-	if entity.Node.ID == "" {
+	if entity.ID == "" {
 		err := errors.WrapInvalid(nil, "DataManager", "createEntityDirect", "entity ID cannot be empty")
 		return nil, err
 	}
@@ -646,7 +643,7 @@ func (m *Manager) createEntityDirect(ctx context.Context, entity *gtypes.EntityS
 	}
 
 	// Create in KV bucket
-	if _, err := m.kvBucket.Create(ctx, entity.Node.ID, data); err != nil {
+	if _, err := m.kvBucket.Create(ctx, entity.ID, data); err != nil {
 		if err == jetstream.ErrKeyExists {
 			err = errors.WrapInvalid(err, "DataManager", "createEntityDirect", "entity already exists")
 		} else {
@@ -703,7 +700,7 @@ func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityS
 	var updatedEntity *gtypes.EntityState
 	err := retry.Do(ctx, retryConfig, func() error {
 		// Get current version
-		current, err := m.GetEntity(ctx, entity.Node.ID)
+		current, err := m.GetEntity(ctx, entity.ID)
 		if err != nil {
 			return errors.Wrap(err, "DataManager", "updateEntityDirect", "get current version")
 		}
@@ -719,7 +716,7 @@ func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityS
 		}
 
 		// CAS update
-		if _, err := m.kvBucket.Update(ctx, entity.Node.ID, data, uint64(current.Version)); err != nil {
+		if _, err := m.kvBucket.Update(ctx, entity.ID, data, uint64(current.Version)); err != nil {
 			if err == jetstream.ErrKeyNotFound {
 				return errors.WrapInvalid(err, "DataManager", "updateEntityDirect", "entity not found")
 			}
@@ -753,7 +750,7 @@ func (m *Manager) DeleteEntity(ctx context.Context, id string) error {
 	if m.writeBuffer != nil && m.config.BufferConfig.BatchingEnabled {
 		write := &EntityWrite{
 			Operation: OperationDelete,
-			Entity:    &gtypes.EntityState{Node: gtypes.NodeProperties{ID: id}},
+			Entity:    &gtypes.EntityState{ID: id},
 			Timestamp: time.Now(),
 		}
 
@@ -893,7 +890,7 @@ func (m *Manager) UpdateEntityWithTriples(
 	}
 
 	// Get current entity state
-	current, err := m.GetEntity(ctx, entity.Node.ID)
+	current, err := m.GetEntity(ctx, entity.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -931,10 +928,10 @@ func (m *Manager) UpdateEntityWithTriples(
 // updateCaches updates both L1 and L2 caches
 func (m *Manager) updateCaches(entity *gtypes.EntityState) {
 	if m.l1Cache != nil {
-		m.l1Cache.Set(entity.Node.ID, entity)
+		m.l1Cache.Set(entity.ID, entity)
 	}
 	if m.l2Cache != nil {
-		m.l2Cache.Set(entity.Node.ID, entity)
+		m.l2Cache.Set(entity.ID, entity)
 	}
 }
 
