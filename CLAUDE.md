@@ -122,6 +122,8 @@ Full details: constitution + `docs/agent/*.md`
 ## Active Technologies
 - Go 1.25+ + NATS JetStream (KV buckets), GraphQL (gqlgen) (004-semantic-refactor)
 - NATS KV (ENTITY_STATES bucket) (004-semantic-refactor)
+- Go 1.25+ + NATS JetStream, GraphQL (gqlgen) (005-graph-package-consolidation)
+- NATS KV buckets (ENTITY_STATES, indexes) (005-graph-package-consolidation)
 
 - Go 1.25+ + NATS JetStream (KV buckets), existing IndexManager, RuleProcessor (003-triples-architecture)
 - NATS KV (ENTITY_STATES, PREDICATE_INDEX, INCOMING_INDEX, OUTGOING_INDEX, RULE_STATE) (003-triples-architecture)
