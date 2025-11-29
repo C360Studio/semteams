@@ -120,14 +120,6 @@ Full details: constitution + `docs/agent/*.md`
 **Program Manager**: Coordinate, enforce gates, delegate. NEVER write code yourself.
 
 ## Active Technologies
-- Go 1.25+ + vocabulary package, message package (001-predicate-notation)
-- N/A (code refactoring only - no persistent data migration needed) (001-predicate-notation)
-- Go 1.25+ + message package (Graphable interface), vocabulary package (predicate registration) (002-graphable-examples)
-- N/A (example code, no persistence) (002-graphable-examples)
-- Go 1.25+ + NATS JetStream (KV buckets), existing graph processor, rule processor (003-triples-architecture)
-- NATS KV (ENTITY_STATES, PREDICATE_INDEX, INCOMING_INDEX, new OUTGOING_INDEX, new RULE_STATE) (003-triples-architecture)
+
 - Go 1.25+ + NATS JetStream (KV buckets), existing IndexManager, RuleProcessor (003-triples-architecture)
 - NATS KV (ENTITY_STATES, PREDICATE_INDEX, INCOMING_INDEX, OUTGOING_INDEX, RULE_STATE) (003-triples-architecture)
-
-## Recent Changes
-- 001-predicate-notation: Added Go 1.25+ + vocabulary package, message package

@@ -14,7 +14,6 @@ import (
 	"github.com/c360/semstreams/output/file"
 	"github.com/c360/semstreams/output/httppost"
 	"github.com/c360/semstreams/output/websocket"
-	"github.com/c360/semstreams/processor/context"
 	"github.com/c360/semstreams/processor/graph"
 	jsonfilter "github.com/c360/semstreams/processor/json_filter"
 	jsongeneric "github.com/c360/semstreams/processor/json_generic"
@@ -114,10 +113,6 @@ func Register(registry *component.Registry) error {
 	// Semantic Layer - Processors
 	if err := graph.Register(registry); err != nil {
 		return pkgerrors.WrapInvalid(err, "ComponentRegistry", "Register", "Graph processor component registration")
-	}
-
-	if err := context.Register(registry); err != nil {
-		return pkgerrors.WrapInvalid(err, "ComponentRegistry", "Register", "Context processor component registration")
 	}
 
 	return nil
