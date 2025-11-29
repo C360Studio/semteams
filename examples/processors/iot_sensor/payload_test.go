@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 )
 
@@ -221,6 +222,6 @@ func TestZone_Triples(t *testing.T) {
 // TestGraphableInterface verifies that SensorReading and Zone implement Graphable.
 func TestGraphableInterface(_ *testing.T) {
 	// Compile-time check that types implement Graphable
-	var _ message.Graphable = (*SensorReading)(nil)
-	var _ message.Graphable = (*Zone)(nil)
+	var _ graph.Graphable = (*SensorReading)(nil)
+	var _ graph.Graphable = (*Zone)(nil)
 }

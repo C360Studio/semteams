@@ -20,8 +20,8 @@ import (
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/buffer"
 	"github.com/c360/semstreams/pkg/cache"
-	"github.com/c360/semstreams/pkg/embedding"
 	"github.com/c360/semstreams/pkg/worker"
+	"github.com/c360/semstreams/processor/graph/embedding"
 )
 
 // Manager implements the Indexer interface

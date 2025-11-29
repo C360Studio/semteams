@@ -8,6 +8,25 @@
 // subjects carrying plain JSON, wraps the data in GenericJSONPayload structure,
 // and publishes to output subjects for downstream processing.
 //
+// # Design Context: Protocol-Layer Processor
+//
+// This processor is a **protocol-layer utility** - it handles data plumbing without
+// making semantic decisions. It does NOT:
+//
+//   - Determine entity identities (no EntityID generation)
+//   - Create semantic triples (no Graphable implementation)
+//   - Interpret domain meaning (no field classification)
+//
+// These responsibilities belong to **domain processors** that understand your data.
+// See docs/PROCESSOR-DESIGN-PHILOSOPHY.md for the full rationale.
+//
+// **Pipeline Position:**
+//
+//	External JSON → [json_generic] → GenericJSON → [json_filter/map] → [Domain Processor] → Graph
+//	                 ^^^^^^^^^^^^                                       ^^^^^^^^^^^^^^^^
+//	                 Protocol layer                                     Semantic layer
+//	                 (this package)                                     (your code)
+//
 // # Purpose
 //
 // Use the JSON generic processor when:

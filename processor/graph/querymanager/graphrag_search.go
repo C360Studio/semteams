@@ -10,7 +10,7 @@ import (
 	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/pkg/graphinterfaces"
+	"github.com/c360/semstreams/processor/graph/clustering"
 )
 
 const (
@@ -29,11 +29,11 @@ const (
 )
 
 // communityDetectorInterface defines the minimal interface needed for GraphRAG search
-// Uses graphinterfaces.Community to avoid import cycles
+// Uses *clustering.Community to avoid import cycles
 type communityDetectorInterface interface {
-	GetCommunity(ctx context.Context, communityID string) (graphinterfaces.Community, error)
-	GetEntityCommunity(ctx context.Context, entityID string, level int) (graphinterfaces.Community, error)
-	GetCommunitiesByLevel(ctx context.Context, level int) ([]graphinterfaces.Community, error)
+	GetCommunity(ctx context.Context, communityID string) (*clustering.Community, error)
+	GetEntityCommunity(ctx context.Context, entityID string, level int) (*clustering.Community, error)
+	GetCommunitiesByLevel(ctx context.Context, level int) ([]*clustering.Community, error)
 }
 
 // LocalSearch performs a search within an entity's community
@@ -89,7 +89,7 @@ func (m *Manager) LocalSearch(
 	}
 
 	// Get all entities in the community
-	entities, err := m.GetEntities(ctx, community.GetMembers())
+	entities, err := m.GetEntities(ctx, community.Members)
 	if err != nil {
 		return nil, errors.WrapTransient(err, "QueryManager", "LocalSearch",
 			"failed to load community members")
@@ -100,7 +100,7 @@ func (m *Manager) LocalSearch(
 
 	return &LocalSearchResult{
 		Entities:    matchedEntities,
-		CommunityID: community.GetID(),
+		CommunityID: community.ID,
 		Count:       len(matchedEntities),
 		Duration:    time.Since(startTime),
 	}, nil
@@ -176,7 +176,7 @@ func (m *Manager) GlobalSearch(
 	// Collect all entity IDs from selected communities
 	entityIDSet := make(map[string]bool)
 	for _, comm := range topCommunities {
-		for _, memberID := range comm.GetMembers() {
+		for _, memberID := range comm.Members {
 			entityIDSet[memberID] = true
 		}
 	}
@@ -208,7 +208,7 @@ func (m *Manager) GlobalSearch(
 		// Find relevance score from scored list
 		var relevance float64
 		for _, scored := range scoredCommunities {
-			if scored.GetID() == comm.GetID() {
+			if scored.ID == comm.ID {
 				// Calculate relevance from position (simple approach)
 				relevance = 1.0 - (float64(i) / float64(len(scoredCommunities)))
 				break
@@ -216,16 +216,16 @@ func (m *Manager) GlobalSearch(
 		}
 
 		// Prefer LLM summary if available, fallback to statistical
-		summary := comm.GetLLMSummary()
+		summary := comm.LLMSummary
 		if summary == "" {
-			summary = comm.GetStatisticalSummary()
+			summary = comm.StatisticalSummary
 		}
 
 		summaries[i] = CommunitySummary{
-			CommunityID: comm.GetID(),
+			CommunityID: comm.ID,
 			Summary:     summary,
-			Keywords:    comm.GetKeywords(),
-			Level:       comm.GetLevel(),
+			Keywords:    comm.Keywords,
+			Level:       comm.Level,
 			Relevance:   relevance,
 		}
 	}
@@ -308,11 +308,11 @@ func (m *Manager) entityMatchesQuery(entity *gtypes.EntityState, queryTerms []st
 // scoreCommunitySummaries scores communities based on query relevance
 // Returns communities sorted by relevance (highest first)
 func (m *Manager) scoreCommunitySummaries(
-	communities []graphinterfaces.Community,
+	communities []*clustering.Community,
 	query string,
-) []graphinterfaces.Community {
+) []*clustering.Community {
 	type scoredCommunity struct {
-		community graphinterfaces.Community
+		community *clustering.Community
 		score     float64
 	}
 
@@ -325,9 +325,9 @@ func (m *Manager) scoreCommunitySummaries(
 		score := 0.0
 
 		// Score based on summary text (prefer LLM if available)
-		summary := comm.GetLLMSummary()
+		summary := comm.LLMSummary
 		if summary == "" {
-			summary = comm.GetStatisticalSummary()
+			summary = comm.StatisticalSummary
 		}
 		if summary != "" {
 			summaryLower := strings.ToLower(summary)
@@ -339,7 +339,7 @@ func (m *Manager) scoreCommunitySummaries(
 		}
 
 		// Score based on keywords
-		for _, keyword := range comm.GetKeywords() {
+		for _, keyword := range comm.Keywords {
 			keywordLower := strings.ToLower(keyword)
 			for _, term := range queryTerms {
 				if strings.Contains(keywordLower, term) || strings.Contains(term, keywordLower) {
@@ -360,7 +360,7 @@ func (m *Manager) scoreCommunitySummaries(
 	})
 
 	// Extract sorted communities
-	result := make([]graphinterfaces.Community, len(scored))
+	result := make([]*clustering.Community, len(scored))
 	for i, sc := range scored {
 		result[i] = sc.community
 	}
@@ -369,7 +369,7 @@ func (m *Manager) scoreCommunitySummaries(
 }
 
 // GetCommunity retrieves a community by ID
-func (m *Manager) GetCommunity(ctx context.Context, communityID string) (graphinterfaces.Community, error) {
+func (m *Manager) GetCommunity(ctx context.Context, communityID string) (*clustering.Community, error) {
 	defer func() {
 		m.lastActivity = time.Now()
 	}()
@@ -398,7 +398,7 @@ func (m *Manager) GetCommunity(ctx context.Context, communityID string) (graphin
 }
 
 // GetEntityCommunity retrieves the community containing a specific entity at a given level
-func (m *Manager) GetEntityCommunity(ctx context.Context, entityID string, level int) (graphinterfaces.Community, error) {
+func (m *Manager) GetEntityCommunity(ctx context.Context, entityID string, level int) (*clustering.Community, error) {
 	defer func() {
 		m.lastActivity = time.Now()
 	}()
@@ -427,7 +427,7 @@ func (m *Manager) GetEntityCommunity(ctx context.Context, entityID string, level
 }
 
 // GetCommunitiesByLevel retrieves all communities at a specific hierarchical level
-func (m *Manager) GetCommunitiesByLevel(ctx context.Context, level int) ([]graphinterfaces.Community, error) {
+func (m *Manager) GetCommunitiesByLevel(ctx context.Context, level int) ([]*clustering.Community, error) {
 	defer func() {
 		m.lastActivity = time.Now()
 	}()

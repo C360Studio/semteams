@@ -80,10 +80,20 @@ pkg/graphclustering/             # WILL BE MOVED to processor/graph/clustering/
 pkg/graphinterfaces/             # WILL BE DELETED (cycle-breaking hack)
 └── community.go                 # Interface with 10 getter methods
 
+pkg/embedding/                   # WILL BE MOVED to processor/graph/embedding/
+├── embedder.go                  # Embedder interface
+├── bm25_embedder.go             # BM25 implementation
+├── http_embedder.go             # HTTP-based embedding service
+├── cache.go                     # Embedding cache
+├── storage.go                   # Embedding storage
+├── vector.go                    # Vector operations
+└── worker.go                    # Async worker pool
+
 processor/graph/
 ├── clustering/                  # NEW LOCATION for graphclustering
+├── embedding/                   # NEW LOCATION for embedding
 ├── querymanager/
-├── indexmanager/
+├── indexmanager/                # Consumer of embedding (2 files)
 ├── datamanager/
 └── messagemanager/
 ```
@@ -97,6 +107,7 @@ processor/graph/
 | Item | Complexity | Rationale |
 |------|------------|-----------|
 | Move graphclustering | Medium | ~5000 LOC, but mechanical move with import path updates |
+| Move embedding | Low | ~7 files, only 2 consumers in indexmanager |
 | Move Graphable | Low | Single interface, ~15 implementers to update |
 | Delete federation.go | Low | No active consumers found in current usage |
 | Delete types/graph | Low | 9 files with simple import path change |
@@ -112,7 +123,9 @@ Phase 4: Move graphclustering      ─┐
                                     ├─→ Must be sequential
 Phase 5: Delete graphinterfaces    ─┘   (Phase 4 before Phase 5)
 
-Phase 6: Documentation             ─→ After all code changes
+Phase 6: Move embedding            ─→ Independent (can run anytime)
+
+Phase 7: Documentation             ─→ After all code changes
 ```
 
 ## Migration Phases
@@ -138,7 +151,7 @@ Phase 6: Documentation             ─→ After all code changes
 
 **Verification**: `go build ./...` succeeds
 
-### Phase 2: Move Graphable to graph/ (~9 usages)
+### Phase 2: Move Graphable to graph/ (9 usages)
 
 **Files to Update**:
 1. `message/graphable.go` → `graph/graphable.go`
@@ -184,12 +197,33 @@ Phase 6: Documentation             ─→ After all code changes
 2. Update callers to use direct field access
 3. Delete `pkg/graphinterfaces/` directory
 
-### Phase 6: Documentation
+### Phase 6: Move embedding to processor/graph/embedding/
+
+**Files to Move** (7 files):
+- `pkg/embedding/embedder.go` - Embedder interface
+- `pkg/embedding/bm25_embedder.go` - BM25 implementation
+- `pkg/embedding/http_embedder.go` - HTTP-based embedding service
+- `pkg/embedding/cache.go` - Embedding cache
+- `pkg/embedding/storage.go` - Embedding storage
+- `pkg/embedding/vector.go` - Vector operations
+- `pkg/embedding/worker.go` - Async worker pool
+
+**Files to Update** (2 consumers):
+- `processor/graph/indexmanager/semantic.go`
+- `processor/graph/indexmanager/manager.go`
+
+**Steps**:
+1. `mv pkg/embedding processor/graph/embedding`
+2. Update package name in all files: `package embedding` (no change needed)
+3. Update import paths in consumer files
+4. Verify `go build ./...` succeeds
+
+### Phase 7: Documentation
 
 **Files to Update**:
 - `graph/README.md` - Document ownership scope
 - `message/README.md` - Clarify transport-only scope
-- `processor/graph/README.md` - Document clustering location
+- `processor/graph/README.md` - Document clustering and embedding locations
 
 ---
 

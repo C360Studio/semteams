@@ -8,6 +8,28 @@
 // interface), applies mapping rules to transform the data, and publishes the transformed
 // messages to output subjects.
 //
+// # Design Context: Protocol-Layer Processor
+//
+// This processor is a **protocol-layer utility** - it handles data transformation without
+// making semantic decisions. It does NOT:
+//
+//   - Determine entity identities (no EntityID generation)
+//   - Create semantic triples (no Graphable implementation)
+//   - Interpret domain meaning (transformations are mechanical field operations)
+//
+// Use this for pre-semantic normalization: rename fields to match expected schemas,
+// remove debug data, or add routing metadata. Semantic transformation (e.g., "classify
+// this sensor reading as critical") belongs in domain processors.
+//
+// See docs/PROCESSOR-DESIGN-PHILOSOPHY.md for the full rationale.
+//
+// **Pipeline Position:**
+//
+//	GenericJSON → [json_map] → Transformed GenericJSON → [Domain Processor] → Graph
+//	               ^^^^^^^^                               ^^^^^^^^^^^^^^^^
+//	               Protocol layer                         Semantic layer
+//	               (this package)                         (your code)
+//
 // # Transformation Operations
 //
 // The processor supports four types of transformations:

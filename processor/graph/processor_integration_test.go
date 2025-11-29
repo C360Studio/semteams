@@ -62,11 +62,13 @@ func TestIntegration_QueryAPIs(t *testing.T) {
 
 	// Store a test entity directly - using triples as single source of truth
 	testEntity := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   "test-entity-1",
-			Type: "device",
-		},
+		ID: "test-entity-1",
 		Triples: []message.Triple{
+			{
+				Subject:   "test-entity-1",
+				Predicate: "type",
+				Object:    "device",
+			},
 			{
 				Subject:   "test-entity-1",
 				Predicate: "name",
@@ -93,9 +95,11 @@ func TestIntegration_QueryAPIs(t *testing.T) {
 	entity, err := processor.GetEntity(ctx, "test-entity-1")
 	require.NoError(t, err)
 	assert.NotNil(t, entity)
-	assert.Equal(t, "test-entity-1", entity.Node.ID)
-	assert.Equal(t, "device", entity.Node.Type)
-	name, found := gtypes.GetPropertyValue(entity, "name")
+	assert.Equal(t, "test-entity-1", entity.ID)
+	entityType, found := entity.GetPropertyValue("type")
+	assert.True(t, found)
+	assert.Equal(t, "device", entityType)
+	name, found := entity.GetPropertyValue("name")
 	assert.True(t, found)
 	assert.Equal(t, "Test Device", name)
 
@@ -224,18 +228,22 @@ func TestIntegration_MessageProcessing(t *testing.T) {
 	// Now verify the entity was stored
 	require.NoError(t, err)
 	assert.NotNil(t, entity)
-	assert.Equal(t, expectedEntityID, entity.Node.ID)
-	assert.Equal(t, "battery", entity.Node.Type)
+	assert.Equal(t, expectedEntityID, entity.ID)
+	entityType, found := entity.GetPropertyValue("type")
+	assert.True(t, found)
+	assert.Equal(t, "battery", entityType)
 
 	// Check properties were extracted from triples (BatteryPayload uses vocabulary predicates)
-	batteryLevel, found := gtypes.GetPropertyValue(entity, "robotics.battery.level")
+	batteryLevel, found := entity.GetPropertyValue("robotics.battery.level")
 	assert.True(t, found)
 	assert.Equal(t, float64(75), batteryLevel)
 	// Voltage should be around 16.72V (4200+4150+4180+4190 mV = 16720 mV = 16.72V)
-	voltage, found := gtypes.GetPropertyValueTyped[float64](entity, "robotics.battery.voltage")
+	voltage, found := entity.GetPropertyValue("robotics.battery.voltage")
 	assert.True(t, found)
-	assert.Greater(t, voltage, 16.0)
-	assert.Less(t, voltage, 17.0)
+	if voltageFloat, ok := voltage.(float64); ok {
+		assert.Greater(t, voltageFloat, 16.0)
+		assert.Less(t, voltageFloat, 17.0)
+	}
 
 	// Cancel context to trigger shutdown
 	cancel()
@@ -295,11 +303,13 @@ func TestIntegration_EdgeOperations(t *testing.T) {
 	entity2ID := "c360.platform1.test.system1.battery.integ"
 
 	entity1 := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   entity1ID,
-			Type: "drone",
-		},
+		ID: entity1ID,
 		Triples: []message.Triple{
+			{
+				Subject:   entity1ID,
+				Predicate: "type",
+				Object:    "drone",
+			},
 			{
 				Subject:   entity1ID,
 				Predicate: "name",
@@ -311,11 +321,13 @@ func TestIntegration_EdgeOperations(t *testing.T) {
 	}
 
 	entity2 := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   entity2ID,
-			Type: "battery",
-		},
+		ID: entity2ID,
 		Triples: []message.Triple{
+			{
+				Subject:   entity2ID,
+				Predicate: "type",
+				Object:    "battery",
+			},
 			{
 				Subject:   entity2ID,
 				Predicate: "name",

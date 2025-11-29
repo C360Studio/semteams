@@ -1,4 +1,4 @@
-package graphclustering
+package clustering
 
 import (
 	"context"

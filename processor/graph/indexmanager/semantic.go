@@ -11,7 +11,7 @@ import (
 
 	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/pkg/cache"
-	"github.com/c360/semstreams/pkg/embedding"
+	"github.com/c360/semstreams/processor/graph/embedding"
 )
 
 // scoredHit represents a search result with its similarity score

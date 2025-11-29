@@ -201,12 +201,13 @@ func TestQueryManager_IntegrationWithNATS(t *testing.T) {
 	t.Run("Basic Entity Query", func(t *testing.T) {
 		// Create a test entity with triples (single source of truth)
 		entity := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID:     "test.platform.domain.system.type.instance1",
-				Type:   "domain.type",
-				Status: gtypes.StatusActive,
-			},
+			ID: "test.platform.domain.system.type.instance1",
 			Triples: []message.Triple{
+				{
+					Subject:   "test.platform.domain.system.type.instance1",
+					Predicate: "type",
+					Object:    "domain.type",
+				},
 				{
 					Subject:   "test.platform.domain.system.type.instance1",
 					Predicate: "domain.entity.name",
@@ -225,16 +226,16 @@ func TestQueryManager_IntegrationWithNATS(t *testing.T) {
 		// Store the entity
 		created, err := dataManager.CreateEntity(ctx, entity)
 		require.NoError(t, err, "Failed to create entity")
-		assert.Equal(t, entity.Node.ID, created.Node.ID)
+		assert.Equal(t, entity.ID, created.ID)
 
 		// Wait for entity to be persisted (DataManager may buffer writes)
 		time.Sleep(100 * time.Millisecond)
 
 		// Query the entity
-		result, err := queryManager.GetEntity(ctx, entity.Node.ID)
+		result, err := queryManager.GetEntity(ctx, entity.ID)
 		require.NoError(t, err, "Failed to get entity")
 		assert.NotNil(t, result, "Query result should not be nil")
-		assert.Equal(t, entity.Node.ID, result.Node.ID, "Entity ID should match")
+		assert.Equal(t, entity.ID, result.ID, "Entity ID should match")
 		assert.GreaterOrEqual(t, len(result.Triples), 2, "Triples should be present")
 	})
 
@@ -247,12 +248,13 @@ func TestQueryManager_IntegrationWithNATS(t *testing.T) {
 	t.Run("Entity with Relationships", func(t *testing.T) {
 		// Create source entity - using triples as single source of truth
 		sourceEntity := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID:     "test.platform.domain.system.type.source2",
-				Type:   "source.type",
-				Status: gtypes.StatusActive,
-			},
+			ID: "test.platform.domain.system.type.source2",
 			Triples: []message.Triple{
+				{
+					Subject:   "test.platform.domain.system.type.source2",
+					Predicate: "type",
+					Object:    "source.type",
+				},
 				{
 					Subject:   "test.platform.domain.system.type.source2",
 					Predicate: "domain.entity.name",
@@ -265,12 +267,13 @@ func TestQueryManager_IntegrationWithNATS(t *testing.T) {
 
 		// Create target entity - using triples as single source of truth
 		targetEntity := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID:     "test.platform.domain.system.type.target2",
-				Type:   "target.type",
-				Status: gtypes.StatusActive,
-			},
+			ID: "test.platform.domain.system.type.target2",
 			Triples: []message.Triple{
+				{
+					Subject:   "test.platform.domain.system.type.target2",
+					Predicate: "type",
+					Object:    "target.type",
+				},
 				{
 					Subject:   "test.platform.domain.system.type.target2",
 					Predicate: "domain.entity.name",
@@ -292,13 +295,13 @@ func TestQueryManager_IntegrationWithNATS(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Query both entities to verify they exist
-		sourceResult, err := queryManager.GetEntity(ctx, sourceEntity.Node.ID)
+		sourceResult, err := queryManager.GetEntity(ctx, sourceEntity.ID)
 		require.NoError(t, err, "Failed to get source entity")
-		assert.Equal(t, sourceEntity.Node.ID, sourceResult.Node.ID)
+		assert.Equal(t, sourceEntity.ID, sourceResult.ID)
 
-		targetResult, err := queryManager.GetEntity(ctx, targetEntity.Node.ID)
+		targetResult, err := queryManager.GetEntity(ctx, targetEntity.ID)
 		require.NoError(t, err, "Failed to get target entity")
-		assert.Equal(t, targetEntity.Node.ID, targetResult.Node.ID)
+		assert.Equal(t, targetEntity.ID, targetResult.ID)
 	})
 
 	// Shutdown and cleanup

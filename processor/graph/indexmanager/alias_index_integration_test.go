@@ -44,9 +44,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 		// Create entity with multiple alias types
 		entityID := "test.entity.001"
 		state := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				// Identity alias (resolvable)
 				{

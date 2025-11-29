@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 )
 
@@ -95,7 +96,7 @@ func TestProcessor_Process_JSONTransformation(t *testing.T) {
 			}
 
 			// Verify result implements Graphable (compile-time check)
-			var _ message.Graphable = result
+			var _ graph.Graphable = result
 
 			// Verify EntityID is valid 6-part format
 			entityID := result.EntityID()

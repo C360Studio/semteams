@@ -6,6 +6,7 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 )
 
@@ -44,7 +45,7 @@ type StoredMessage struct {
 }
 
 // NewStoredMessage creates a StoredMessage from a Graphable and storage metadata
-func NewStoredMessage(graphable message.Graphable, storageRef *message.StorageReference, messageType string) *StoredMessage {
+func NewStoredMessage(graphable graph.Graphable, storageRef *message.StorageReference, messageType string) *StoredMessage {
 	return &StoredMessage{
 		entityID:    graphable.EntityID(),
 		triples:     graphable.Triples(),
@@ -54,12 +55,12 @@ func NewStoredMessage(graphable message.Graphable, storageRef *message.StorageRe
 	}
 }
 
-// EntityID implements message.Graphable interface
+// EntityID implements graph.Graphable interface
 func (s *StoredMessage) EntityID() string {
 	return s.entityID
 }
 
-// Triples implements message.Graphable interface
+// Triples implements graph.Graphable interface
 func (s *StoredMessage) Triples() []message.Triple {
 	return s.triples
 }

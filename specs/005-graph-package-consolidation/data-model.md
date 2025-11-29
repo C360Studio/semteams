@@ -56,6 +56,26 @@ type Community struct {
 - `pkg/` is for reusable library code; graphclustering has exactly 1 external consumer
 - Moving inside `processor/graph/` eliminates the import cycle that necessitated `pkg/graphinterfaces`
 
+### Embedder Interface (pkg/embedding/ → processor/graph/embedding/)
+
+```go
+// Current location: pkg/embedding/embedder.go
+// New location: processor/graph/embedding/embedder.go
+
+// Embedder defines the contract for text-to-vector embedding
+type Embedder interface {
+    // Embed converts text to a vector representation
+    Embed(ctx context.Context, text string) ([]float32, error)
+
+    // EmbedBatch converts multiple texts to vectors
+    EmbedBatch(ctx context.Context, texts []string) ([][]float32, error)
+}
+```
+
+**Rationale**:
+- `pkg/` is for reusable library code; embedding has exactly 2 consumers in indexmanager
+- Moving inside `processor/graph/` co-locates the code with its only consumers
+
 ## Deleted Types
 
 ### FederatedEntity (graph/federation.go)
@@ -109,6 +129,9 @@ message/
 
 processor/graph/clustering/
 └── Community           # Graph community (MOVED HERE, getters removed)
+
+processor/graph/embedding/
+└── Embedder            # Embedding interface (MOVED HERE)
 ```
 
 ## Migration Notes
@@ -117,4 +140,6 @@ processor/graph/clustering/
 2. **Community consumers** must update:
    - Import path: `pkg/graphclustering` → `processor/graph/clustering`
    - Method calls: `comm.GetID()` → `comm.ID`
-3. **No schema changes** - underlying data structures unchanged
+3. **Embedding consumers** must update:
+   - Import path: `pkg/embedding` → `processor/graph/embedding`
+4. **No schema changes** - underlying data structures unchanged

@@ -1,5 +1,5 @@
 // Package graphclustering provides graph clustering algorithms and community detection.
-package graphclustering
+package clustering
 
 import (
 	"context"
@@ -10,9 +10,14 @@ import (
 
 	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/processor/graph/querymanager"
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+// EntityQuerier provides minimal interface for querying entities.
+// This interface exists to avoid import cycle with querymanager package.
+type EntityQuerier interface {
+	GetEntities(ctx context.Context, ids []string) ([]*gtypes.EntityState, error)
+}
 
 // EnhancementWorker handles asynchronous LLM enhancement of community summaries via KV watch
 type EnhancementWorker struct {
@@ -22,7 +27,7 @@ type EnhancementWorker struct {
 	storage         CommunityStorage
 	llm             *HTTPLLMSummarizer
 	provider        GraphProvider
-	querier         querymanager.Querier
+	querier         EntityQuerier
 	communityBucket jetstream.KeyValue
 
 	// KV watching
@@ -47,7 +52,7 @@ type EnhancementWorkerConfig struct {
 	LLMSummarizer   *HTTPLLMSummarizer
 	Storage         CommunityStorage
 	GraphProvider   GraphProvider
-	Querier         querymanager.Querier
+	Querier         EntityQuerier
 	CommunityBucket jetstream.KeyValue
 	Logger          *slog.Logger
 }

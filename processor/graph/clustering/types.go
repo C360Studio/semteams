@@ -1,13 +1,8 @@
-package graphclustering
+package clustering
 
 import (
 	"context"
-
-	"github.com/c360/semstreams/pkg/graphinterfaces"
 )
-
-// Ensure Community implements the graphinterfaces.Community interface
-var _ graphinterfaces.Community = (*Community)(nil)
 
 // Community represents a detected community/cluster in the graph
 type Community struct {
@@ -103,54 +98,5 @@ type CommunityStorage interface {
 	Clear(ctx context.Context) error
 }
 
-// Getter methods to implement graphinterfaces.Community interface
-
-// GetID returns the unique identifier for this community
-func (c *Community) GetID() string {
-	return c.ID
-}
-
-// GetLevel returns the hierarchy level (0=bottom, 1=mid, 2=top)
-func (c *Community) GetLevel() int {
-	return c.Level
-}
-
-// GetMembers returns the entity IDs belonging to this community
-func (c *Community) GetMembers() []string {
-	return c.Members
-}
-
-// GetParentID returns the parent community ID at the next level up (nil for top level)
-func (c *Community) GetParentID() *string {
-	return c.ParentID
-}
-
-// GetKeywords returns the extracted key terms representing this community's themes
-func (c *Community) GetKeywords() []string {
-	return c.Keywords
-}
-
-// GetRepEntities returns IDs of representative entities within this community
-func (c *Community) GetRepEntities() []string {
-	return c.RepEntities
-}
-
-// GetMetadata returns additional community properties
-func (c *Community) GetMetadata() map[string]interface{} {
-	return c.Metadata
-}
-
-// GetStatisticalSummary returns the fast statistical baseline summary
-func (c *Community) GetStatisticalSummary() string {
-	return c.StatisticalSummary
-}
-
-// GetLLMSummary returns the enhanced LLM-generated summary (may be empty)
-func (c *Community) GetLLMSummary() string {
-	return c.LLMSummary
-}
-
-// GetSummaryStatus returns the summarization state
-func (c *Community) GetSummaryStatus() string {
-	return c.SummaryStatus
-}
+// Note: Getter methods removed per ADR-PACKAGE-RESPONSIBILITIES-CONSOLIDATION.
+// Use direct field access instead (e.g., community.ID instead of community.GetID())

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	gtypes "github.com/c360/semstreams/types/graph"
+	gtypes "github.com/c360/semstreams/graph"
 )
 
 var (

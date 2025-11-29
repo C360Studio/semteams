@@ -9,43 +9,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/pkg/graphinterfaces"
+	"github.com/c360/semstreams/processor/graph/clustering"
 )
-
-// mockCommunity implements graphinterfaces.Community for testing
-type mockCommunity struct {
-	id                 string
-	level              int
-	members            []string
-	parentID           *string
-	statisticalSummary string
-	llmSummary         string
-	keywords           []string
-	repEntities        []string
-	summaryStatus      string
-	metadata           map[string]interface{}
-}
-
-func (m *mockCommunity) GetID() string                       { return m.id }
-func (m *mockCommunity) GetLevel() int                       { return m.level }
-func (m *mockCommunity) GetMembers() []string                { return m.members }
-func (m *mockCommunity) GetParentID() *string                { return m.parentID }
-func (m *mockCommunity) GetStatisticalSummary() string       { return m.statisticalSummary }
-func (m *mockCommunity) GetLLMSummary() string               { return m.llmSummary }
-func (m *mockCommunity) GetKeywords() []string               { return m.keywords }
-func (m *mockCommunity) GetRepEntities() []string            { return m.repEntities }
-func (m *mockCommunity) GetSummaryStatus() string            { return m.summaryStatus }
-func (m *mockCommunity) GetMetadata() map[string]interface{} { return m.metadata }
 
 // mockCommunityDetector implements communityDetectorInterface for testing
 type mockCommunityDetector struct {
-	communities map[string]graphinterfaces.Community         // by ID
-	entityComm  map[string]map[int]graphinterfaces.Community // by entityID -> level -> community
+	communities map[string]*clustering.Community         // by ID
+	entityComm  map[string]map[int]*clustering.Community // by entityID -> level -> community
 	getErr      error
 	listErr     error
 }
 
-func (m *mockCommunityDetector) GetCommunity(_ context.Context, communityID string) (graphinterfaces.Community, error) {
+func (m *mockCommunityDetector) GetCommunity(_ context.Context, communityID string) (*clustering.Community, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
@@ -55,7 +30,7 @@ func (m *mockCommunityDetector) GetCommunity(_ context.Context, communityID stri
 	return m.communities[communityID], nil
 }
 
-func (m *mockCommunityDetector) GetEntityCommunity(_ context.Context, entityID string, level int) (graphinterfaces.Community, error) {
+func (m *mockCommunityDetector) GetEntityCommunity(_ context.Context, entityID string, level int) (*clustering.Community, error) {
 	if m.getErr != nil {
 		return nil, m.getErr
 	}
@@ -68,13 +43,13 @@ func (m *mockCommunityDetector) GetEntityCommunity(_ context.Context, entityID s
 	return nil, nil
 }
 
-func (m *mockCommunityDetector) GetCommunitiesByLevel(_ context.Context, level int) ([]graphinterfaces.Community, error) {
+func (m *mockCommunityDetector) GetCommunitiesByLevel(_ context.Context, level int) ([]*clustering.Community, error) {
 	if m.listErr != nil {
 		return nil, m.listErr
 	}
-	var result []graphinterfaces.Community
+	var result []*clustering.Community
 	for _, comm := range m.communities {
-		if comm.GetLevel() == level {
+		if comm.Level == level {
 			result = append(result, comm)
 		}
 	}
@@ -112,63 +87,63 @@ func Test_scoreCommunitySummaries(t *testing.T) {
 	m := &Manager{}
 
 	t.Run("Empty communities", func(t *testing.T) {
-		result := m.scoreCommunitySummaries([]graphinterfaces.Community{}, "test query")
+		result := m.scoreCommunitySummaries([]*clustering.Community{}, "test query")
 		assert.Empty(t, result)
 	})
 
 	t.Run("Score by summary match", func(t *testing.T) {
-		communities := []graphinterfaces.Community{
-			&mockCommunity{
-				id:                 "comm-1",
-				statisticalSummary: "This is about robotics and automation",
+		communities := []*clustering.Community{
+			&clustering.Community{
+				ID:                 "comm-1",
+				StatisticalSummary: "This is about robotics and automation",
 			},
-			&mockCommunity{
-				id:                 "comm-2",
-				statisticalSummary: "This is about web development",
+			&clustering.Community{
+				ID:                 "comm-2",
+				StatisticalSummary: "This is about web development",
 			},
 		}
 
 		result := m.scoreCommunitySummaries(communities, "robotics")
 
 		require.Len(t, result, 2)
-		assert.Equal(t, "comm-1", result[0].GetID(), "robotics community should be first")
-		assert.Equal(t, "comm-2", result[1].GetID())
+		assert.Equal(t, "comm-1", result[0].ID, "robotics community should be first")
+		assert.Equal(t, "comm-2", result[1].ID)
 	})
 
 	t.Run("Score by keyword match", func(t *testing.T) {
-		communities := []graphinterfaces.Community{
-			&mockCommunity{
-				id:       "comm-1",
-				keywords: []string{"python", "django", "flask"},
+		communities := []*clustering.Community{
+			&clustering.Community{
+				ID:       "comm-1",
+				Keywords: []string{"python", "django", "flask"},
 			},
-			&mockCommunity{
-				id:       "comm-2",
-				keywords: []string{"go", "concurrent", "microservices"},
+			&clustering.Community{
+				ID:       "comm-2",
+				Keywords: []string{"go", "concurrent", "microservices"},
 			},
 		}
 
 		result := m.scoreCommunitySummaries(communities, "go microservices")
 
 		require.Len(t, result, 2)
-		assert.Equal(t, "comm-2", result[0].GetID(), "go community should be first")
+		assert.Equal(t, "comm-2", result[0].ID, "go community should be first")
 	})
 
 	t.Run("Combined scoring", func(t *testing.T) {
-		communities := []graphinterfaces.Community{
-			&mockCommunity{
-				id:                 "comm-1",
-				statisticalSummary: "Machine learning models",
-				keywords:           []string{"ml", "ai"},
+		communities := []*clustering.Community{
+			&clustering.Community{
+				ID:                 "comm-1",
+				StatisticalSummary: "Machine learning models",
+				Keywords:           []string{"ml", "ai"},
 			},
-			&mockCommunity{
-				id:                 "comm-2",
-				statisticalSummary: "AI and machine learning techniques",
-				keywords:           []string{"machine-learning", "deep-learning"},
+			&clustering.Community{
+				ID:                 "comm-2",
+				StatisticalSummary: "AI and machine learning techniques",
+				Keywords:           []string{"machine-learning", "deep-learning"},
 			},
-			&mockCommunity{
-				id:                 "comm-3",
-				statisticalSummary: "Web development frameworks",
-				keywords:           []string{"web", "http"},
+			&clustering.Community{
+				ID:                 "comm-3",
+				StatisticalSummary: "Web development frameworks",
+				Keywords:           []string{"web", "http"},
 			},
 		}
 
@@ -176,11 +151,11 @@ func Test_scoreCommunitySummaries(t *testing.T) {
 
 		require.Len(t, result, 3)
 		// comm-2 should score highest (matches in both summary and keywords)
-		assert.Equal(t, "comm-2", result[0].GetID())
+		assert.Equal(t, "comm-2", result[0].ID)
 		// comm-1 should be second (matches in summary)
-		assert.Equal(t, "comm-1", result[1].GetID())
+		assert.Equal(t, "comm-1", result[1].ID)
 		// comm-3 should be last (no matches)
-		assert.Equal(t, "comm-3", result[2].GetID())
+		assert.Equal(t, "comm-3", result[2].ID)
 	})
 }
 
@@ -286,15 +261,15 @@ func TestLocalSearch_Success(t *testing.T) {
 	e3ID := "c360.platform.networking.system.switch.e3"
 
 	// Setup mock community detector
-	comm := &mockCommunity{
-		id:                 "comm-0-robotics",
-		level:              0,
-		members:            []string{e1ID, e2ID, e3ID},
-		statisticalSummary: "Robotics community",
+	comm := &clustering.Community{
+		ID:                 "comm-0-robotics",
+		Level:              0,
+		Members:            []string{e1ID, e2ID, e3ID},
+		StatisticalSummary: "Robotics community",
 	}
 
 	detector := &mockCommunityDetector{
-		entityComm: map[string]map[int]graphinterfaces.Community{
+		entityComm: map[string]map[int]*clustering.Community{
 			e1ID: {0: comm},
 		},
 	}
@@ -332,7 +307,7 @@ func TestLocalSearch_EntityNotInCommunity(t *testing.T) {
 	ctx := context.Background()
 
 	detector := &mockCommunityDetector{
-		entityComm: map[string]map[int]graphinterfaces.Community{},
+		entityComm: map[string]map[int]*clustering.Community{},
 	}
 
 	m := &Manager{
@@ -371,23 +346,23 @@ func TestGlobalSearch_Success(t *testing.T) {
 	e3ID := "c360.platform.networking.system.router.e3"
 
 	// Setup communities
-	comm1 := &mockCommunity{
-		id:                 "comm-0-robotics",
-		level:              0,
-		members:            []string{e1ID, e2ID},
-		statisticalSummary: "Robotics and autonomous systems",
-		keywords:           []string{"robotics", "autonomous", "drone"},
+	comm1 := &clustering.Community{
+		ID:                 "comm-0-robotics",
+		Level:              0,
+		Members:            []string{e1ID, e2ID},
+		StatisticalSummary: "Robotics and autonomous systems",
+		Keywords:           []string{"robotics", "autonomous", "drone"},
 	}
-	comm2 := &mockCommunity{
-		id:                 "comm-0-network",
-		level:              0,
-		members:            []string{e3ID},
-		statisticalSummary: "Network infrastructure",
-		keywords:           []string{"network", "router", "switch"},
+	comm2 := &clustering.Community{
+		ID:                 "comm-0-network",
+		Level:              0,
+		Members:            []string{e3ID},
+		StatisticalSummary: "Network infrastructure",
+		Keywords:           []string{"network", "router", "switch"},
 	}
 
 	detector := &mockCommunityDetector{
-		communities: map[string]graphinterfaces.Community{
+		communities: map[string]*clustering.Community{
 			"comm-0-robotics": comm1,
 			"comm-0-network":  comm2,
 		},
@@ -426,7 +401,7 @@ func TestGlobalSearch_EmptyCommunities(t *testing.T) {
 	ctx := context.Background()
 
 	detector := &mockCommunityDetector{
-		communities: map[string]graphinterfaces.Community{},
+		communities: map[string]*clustering.Community{},
 	}
 
 	m := &Manager{
@@ -447,16 +422,16 @@ func TestGlobalSearch_MaxCommunitiesLimit(t *testing.T) {
 	ctx := context.Background()
 
 	// Create 10 communities with 6-part entity IDs
-	communities := make(map[string]graphinterfaces.Community)
+	communities := make(map[string]*clustering.Community)
 	for i := 0; i < 10; i++ {
 		commID := fmt.Sprintf("comm-0-%d", i)
 		entityID := fmt.Sprintf("c360.platform.test.system.entity.e%d", i)
-		communities[commID] = &mockCommunity{
-			id:                 commID,
-			level:              0,
-			members:            []string{entityID},
-			statisticalSummary: fmt.Sprintf("Community %d about testing", i),
-			keywords:           []string{"test", "community"},
+		communities[commID] = &clustering.Community{
+			ID:                 commID,
+			Level:              0,
+			Members:            []string{entityID},
+			StatisticalSummary: fmt.Sprintf("Community %d about testing", i),
+			Keywords:           []string{"test", "community"},
 		}
 	}
 
@@ -493,7 +468,7 @@ func TestGlobalSearch_DefaultMaxCommunities(t *testing.T) {
 	ctx := context.Background()
 
 	detector := &mockCommunityDetector{
-		communities: map[string]graphinterfaces.Community{},
+		communities: map[string]*clustering.Community{},
 	}
 
 	m := &Manager{
@@ -525,15 +500,15 @@ func BenchmarkLocalSearch(b *testing.B) {
 		}
 	}
 
-	comm := &mockCommunity{
-		id:                 "bench-comm",
-		level:              0,
-		members:            memberIDs,
-		statisticalSummary: "IoT sensor network for environmental monitoring",
+	comm := &clustering.Community{
+		ID:                 "bench-comm",
+		Level:              0,
+		Members:            memberIDs,
+		StatisticalSummary: "IoT sensor network for environmental monitoring",
 	}
 
 	detector := &mockCommunityDetector{
-		entityComm: map[string]map[int]graphinterfaces.Community{
+		entityComm: map[string]map[int]*clustering.Community{
 			"entity-0": {0: comm},
 		},
 	}
@@ -556,7 +531,7 @@ func BenchmarkGlobalSearch(b *testing.B) {
 	ctx := context.Background()
 
 	// Setup: Create 10 communities with 50 entities each
-	communities := make(map[string]graphinterfaces.Community)
+	communities := make(map[string]*clustering.Community)
 	allEntities := make(map[string]*gtypes.EntityState)
 
 	for commIdx := 0; commIdx < 10; commIdx++ {
@@ -570,12 +545,12 @@ func BenchmarkGlobalSearch(b *testing.B) {
 		}
 
 		commID := fmt.Sprintf("comm-%d", commIdx)
-		communities[commID] = &mockCommunity{
-			id:                 commID,
-			level:              0,
-			members:            memberIDs,
-			statisticalSummary: fmt.Sprintf("Community %d with test entities", commIdx),
-			keywords:           []string{fmt.Sprintf("test-%d", commIdx), "benchmark"},
+		communities[commID] = &clustering.Community{
+			ID:                 commID,
+			Level:              0,
+			Members:            memberIDs,
+			StatisticalSummary: fmt.Sprintf("Community %d with test entities", commIdx),
+			Keywords:           []string{fmt.Sprintf("test-%d", commIdx), "benchmark"},
 		}
 	}
 
@@ -601,13 +576,13 @@ func BenchmarkScoreCommunitySummaries(b *testing.B) {
 	m := &Manager{}
 
 	// Create 100 communities with varying summaries and keywords
-	communities := make([]graphinterfaces.Community, 100)
+	communities := make([]*clustering.Community, 100)
 	for i := 0; i < 100; i++ {
-		communities[i] = &mockCommunity{
-			id:                 fmt.Sprintf("comm-%d", i),
-			level:              0,
-			statisticalSummary: fmt.Sprintf("Community about robotics automation and sensor networks topic-%d", i),
-			keywords:           []string{"robotics", "automation", "sensors", fmt.Sprintf("topic-%d", i)},
+		communities[i] = &clustering.Community{
+			ID:                 fmt.Sprintf("comm-%d", i),
+			Level:              0,
+			StatisticalSummary: fmt.Sprintf("Community about robotics automation and sensor networks topic-%d", i),
+			Keywords:           []string{"robotics", "automation", "sensors", fmt.Sprintf("topic-%d", i)},
 		}
 	}
 

@@ -173,11 +173,13 @@ func createTestEntities(ctx context.Context, t *testing.T, processor *Processor,
 
 	// Create entity 1 (drone) - using triples as single source of truth
 	entity1 := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   entity1ID,
-			Type: "drone",
-		},
+		ID: entity1ID,
 		Triples: []message.Triple{
+			{
+				Subject:   entity1ID,
+				Predicate: "type",
+				Object:    "drone",
+			},
 			{
 				Subject:   entity1ID,
 				Predicate: "robotics.drone.name",
@@ -195,11 +197,13 @@ func createTestEntities(ctx context.Context, t *testing.T, processor *Processor,
 
 	// Create entity 2 (battery) - using triples as single source of truth
 	entity2 := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   entity2ID,
-			Type: "battery",
-		},
+		ID: entity2ID,
 		Triples: []message.Triple{
+			{
+				Subject:   entity2ID,
+				Predicate: "type",
+				Object:    "battery",
+			},
 			{
 				Subject:   entity2ID,
 				Predicate: "robotics.battery.name",

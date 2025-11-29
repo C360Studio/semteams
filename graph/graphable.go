@@ -1,4 +1,6 @@
-package message
+package graph
+
+import "github.com/c360/semstreams/message"
 
 // Graphable enables messages to self-declare their domain entities and relationships.
 // This interface eliminates the need for brittle string matching in entity extraction
@@ -39,9 +41,9 @@ package message
 //	    return fmt.Sprintf("acme.telemetry.robotics.mavlink.drone.%d", p.SystemID)
 //	}
 //
-//	func (p *PositionPayload) Triples() []Triple {
+//	func (p *PositionPayload) Triples() []message.Triple {
 //	    entityID := p.EntityID()
-//	    return []Triple{
+//	    return []message.Triple{
 //	        {Subject: entityID, Predicate: "geo.location.latitude", Object: p.Latitude},
 //	        {Subject: entityID, Predicate: "geo.location.longitude", Object: p.Longitude},
 //	        {Subject: entityID, Predicate: "geo.location.altitude", Object: p.Altitude},
@@ -54,5 +56,5 @@ type Graphable interface {
 	EntityID() string
 
 	// Triples returns all facts about this entity
-	Triples() []Triple
+	Triples() []message.Triple
 }

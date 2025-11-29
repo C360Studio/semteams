@@ -4,7 +4,7 @@ package expression
 import (
 	"fmt"
 
-	gtypes "github.com/c360/semstreams/types/graph"
+	gtypes "github.com/c360/semstreams/graph"
 )
 
 // ConditionExpression represents a single field/operator/value condition

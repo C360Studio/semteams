@@ -172,7 +172,7 @@ func (mp *Manager) ProcessMessage(ctx context.Context, msg any) ([]*gtypes.Entit
 	}
 
 	// Check if message implements Graphable interface (no storage reference)
-	if graphable, ok := msg.(message.Graphable); ok {
+	if graphable, ok := msg.(gtypes.Graphable); ok {
 		mp.deps.Logger.Debug("Processing Graphable without storage reference")
 		return mp.processSimpleGraphable(ctx, graphable, storageRef)
 	}
@@ -183,7 +183,7 @@ func (mp *Manager) ProcessMessage(ctx context.Context, msg any) ([]*gtypes.Entit
 
 // processSimpleGraphable processes a message using the Graphable interface
 func (mp *Manager) processSimpleGraphable(
-	ctx context.Context, graphable message.Graphable, storageRef *message.StorageReference,
+	ctx context.Context, graphable gtypes.Graphable, storageRef *message.StorageReference,
 ) ([]*gtypes.EntityState, error) {
 	entityID := graphable.EntityID()
 	if entityID == "" {

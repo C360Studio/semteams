@@ -11,7 +11,7 @@ import (
 	"time"
 
 	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/pkg/graphinterfaces"
+	"github.com/c360/semstreams/processor/graph/clustering"
 )
 
 // Querier handles all read operations with multi-tier caching.
@@ -34,9 +34,9 @@ type Querier interface {
 	GlobalSearch(ctx context.Context, query string, level int, maxCommunities int) (*GlobalSearchResult, error)
 
 	// Community operations
-	GetCommunity(ctx context.Context, communityID string) (graphinterfaces.Community, error)
-	GetEntityCommunity(ctx context.Context, entityID string, level int) (graphinterfaces.Community, error)
-	GetCommunitiesByLevel(ctx context.Context, level int) ([]graphinterfaces.Community, error)
+	GetCommunity(ctx context.Context, communityID string) (*clustering.Community, error)
+	GetEntityCommunity(ctx context.Context, entityID string, level int) (*clustering.Community, error)
+	GetCommunitiesByLevel(ctx context.Context, level int) ([]*clustering.Community, error)
 
 	// Query operations delegated to index manager
 	QueryByPredicate(ctx context.Context, predicate string) ([]string, error)

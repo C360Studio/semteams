@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/processor/rule/expression"
-	gtypes "github.com/c360/semstreams/types/graph"
 	rtypes "github.com/c360/semstreams/types/rule"
 )
 

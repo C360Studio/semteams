@@ -9,7 +9,7 @@ import (
 
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/pkg/graphinterfaces"
+	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 )
 
@@ -812,25 +812,25 @@ func (r *BaseResolver) GetEntityCommunity(ctx context.Context, entityID string, 
 	return community, nil
 }
 
-// convertCommunityToGraphQL converts a graphinterfaces.Community to GraphQL Community type
-func convertCommunityToGraphQL(comm graphinterfaces.Community) *Community {
+// convertCommunityToGraphQL converts a *clustering.Community to GraphQL Community type
+func convertCommunityToGraphQL(comm *clustering.Community) *Community {
 	if comm == nil {
 		return nil
 	}
 
 	// Prefer LLM summary if available, fallback to statistical
-	summary := comm.GetLLMSummary()
+	summary := comm.LLMSummary
 	if summary == "" {
-		summary = comm.GetStatisticalSummary()
+		summary = comm.StatisticalSummary
 	}
 
 	return &Community{
-		ID:            comm.GetID(),
-		Level:         comm.GetLevel(),
-		Members:       comm.GetMembers(),
+		ID:            comm.ID,
+		Level:         comm.Level,
+		Members:       comm.Members,
 		Summary:       summary,
-		Keywords:      comm.GetKeywords(),
-		RepEntities:   comm.GetRepEntities(),
-		SummaryStatus: comm.GetSummaryStatus(),
+		Keywords:      comm.Keywords,
+		RepEntities:   comm.RepEntities,
+		SummaryStatus: comm.SummaryStatus,
 	}
 }

@@ -8,6 +8,28 @@
 // GenericJSON messages (core .json.v1 interface), evaluates filter rules against
 // the message data, and publishes matching messages to output subjects.
 //
+// # Design Context: Protocol-Layer Processor
+//
+// This processor is a **protocol-layer utility** - it handles data routing without
+// making semantic decisions. It does NOT:
+//
+//   - Determine entity identities (no EntityID generation)
+//   - Create semantic triples (no Graphable implementation)
+//   - Interpret domain meaning (filtering is field-value comparison only)
+//
+// Use this for pre-semantic filtering: drop invalid data, route by type, or reduce
+// volume before expensive domain processing. Semantic filtering (e.g., "find all
+// drones in fleet Alpha") belongs in domain processors or graph queries.
+//
+// See docs/PROCESSOR-DESIGN-PHILOSOPHY.md for the full rationale.
+//
+// **Pipeline Position:**
+//
+//	GenericJSON → [json_filter] → Filtered GenericJSON → [Domain Processor] → Graph
+//	               ^^^^^^^^^^^^                          ^^^^^^^^^^^^^^^^
+//	               Protocol layer                        Semantic layer
+//	               (this package)                        (your code)
+//
 // # Supported Operators
 //
 // The processor supports six comparison operators:

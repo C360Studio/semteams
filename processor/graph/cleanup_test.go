@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
-	gtypes "github.com/c360/semstreams/types/graph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

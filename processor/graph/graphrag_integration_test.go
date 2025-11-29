@@ -17,14 +17,13 @@ import (
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/pkg/graphclustering"
-	"github.com/c360/semstreams/pkg/graphinterfaces"
+	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 )
 
-// testGraphProvider adapts datamanager.EntityReader to graphclustering.GraphProvider
+// testGraphProvider adapts datamanager.EntityReader to clustering.GraphProvider
 type testGraphProvider struct {
 	entityReader datamanager.EntityReader
 	kvBucket     jetstream.KeyValue
@@ -99,41 +98,13 @@ func (p *testGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID stri
 	return 0.0, nil
 }
 
-// communityDetectorAdapter adapts LPADetector to return interface types
-// This bridges the gap between concrete *Community types and graphinterfaces.Community
-type communityDetectorAdapter struct {
-	detector *graphclustering.LPADetector
-}
-
-func (a *communityDetectorAdapter) GetCommunity(ctx context.Context, communityID string) (graphinterfaces.Community, error) {
-	return a.detector.GetCommunity(ctx, communityID)
-}
-
-func (a *communityDetectorAdapter) GetEntityCommunity(ctx context.Context, entityID string, level int) (graphinterfaces.Community, error) {
-	return a.detector.GetEntityCommunity(ctx, entityID, level)
-}
-
-func (a *communityDetectorAdapter) GetCommunitiesByLevel(ctx context.Context, level int) ([]graphinterfaces.Community, error) {
-	communities, err := a.detector.GetCommunitiesByLevel(ctx, level)
-	if err != nil {
-		return nil, err
-	}
-
-	// Convert []*Community to []graphinterfaces.Community
-	result := make([]graphinterfaces.Community, len(communities))
-	for i, c := range communities {
-		result[i] = c
-	}
-	return result, nil
-}
-
 // graphRAGTestSetup holds components for GraphRAG E2E testing
 type graphRAGTestSetup struct {
 	processor        *Processor
 	queryManager     querymanager.Querier
-	communityStorage graphclustering.CommunityStorage
+	communityStorage clustering.CommunityStorage
 	communityBucket  jetstream.KeyValue
-	detector         *graphclustering.LPADetector
+	detector         *clustering.LPADetector
 	ctx              context.Context
 	cancel           context.CancelFunc
 }
@@ -177,11 +148,11 @@ func setupGraphRAGTest(t *testing.T) *graphRAGTestSetup {
 
 	// Create community storage bucket
 	communityBucket, err := natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket: graphclustering.CommunityBucket,
+		Bucket: clustering.CommunityBucket,
 	})
 	require.NoError(t, err, "Failed to create COMMUNITIES bucket")
 
-	communityStorage := graphclustering.NewNATSCommunityStorage(communityBucket)
+	communityStorage := clustering.NewNATSCommunityStorage(communityBucket)
 
 	// Get the ENTITY_STATES bucket for graph provider
 	entityBucket, err := natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
@@ -196,21 +167,16 @@ func setupGraphRAGTest(t *testing.T) *graphRAGTestSetup {
 	}
 
 	// Create LPA community detector
-	detector := graphclustering.NewLPADetector(graphProvider, communityStorage)
+	detector := clustering.NewLPADetector(graphProvider, communityStorage)
 
-	// Create adapter to bridge type differences
-	detectorAdapter := &communityDetectorAdapter{
-		detector: detector,
-	}
-
-	// Create QueryManager with community detector adapter
+	// Create QueryManager with community detector
 	// Use empty config and rely on SetDefaults
 	queryConfig := querymanager.Config{}
 	queryDeps := querymanager.Deps{
 		Config:            queryConfig,
 		EntityReader:      processor.entityManager,
 		IndexManager:      processor.indexManager,
-		CommunityDetector: detectorAdapter,
+		CommunityDetector: detector,
 		Registry:          metric.NewMetricsRegistry(),
 		Logger:            slog.Default(),
 	}
@@ -236,7 +202,17 @@ func setupGraphRAGTest(t *testing.T) *graphRAGTestSetup {
 // createTestEntity helper to create entities with properties (via triples)
 func createTestEntity(ctx context.Context, processor *Processor, id string, entityType string, properties map[string]any) (*gtypes.EntityState, error) {
 	// Convert properties to triples (triples are single source of truth)
-	triples := make([]message.Triple, 0, len(properties))
+	// Include type as a triple
+	triples := make([]message.Triple, 0, len(properties)+1)
+
+	// Add type triple
+	triples = append(triples, message.Triple{
+		Subject:   id,
+		Predicate: "type",
+		Object:    entityType,
+	})
+
+	// Add property triples
 	for key, value := range properties {
 		triples = append(triples, message.Triple{
 			Subject:   id,
@@ -246,10 +222,7 @@ func createTestEntity(ctx context.Context, processor *Processor, id string, enti
 	}
 
 	entity := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   id,
-			Type: entityType,
-		},
+		ID:        id,
 		Triples:   triples,
 		UpdatedAt: time.Now(),
 		Version:   1,
@@ -290,7 +263,7 @@ func TestE2E_LocalSearch(t *testing.T) {
 	}
 
 	// Create robotics community
-	roboticsCommunity := &graphclustering.Community{
+	roboticsCommunity := &clustering.Community{
 		ID:                 "comm-0-robotics",
 		Level:              0,
 		Members:            memberIDs,
@@ -306,7 +279,7 @@ func TestE2E_LocalSearch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	networkCommunity := &graphclustering.Community{
+	networkCommunity := &clustering.Community{
 		ID:                 "comm-0-network",
 		Level:              0,
 		Members:            []string{"net-1"},
@@ -333,7 +306,7 @@ func TestE2E_LocalSearch(t *testing.T) {
 
 		// Verify no network entities included
 		for _, entity := range result.Entities {
-			assert.NotEqual(t, "net-1", entity.Node.ID, "Network entity should not be in local search results")
+			assert.NotEqual(t, "net-1", entity.ID, "Network entity should not be in local search results")
 		}
 	})
 
@@ -347,7 +320,7 @@ func TestE2E_LocalSearch(t *testing.T) {
 		// Should only match the drone entity
 		assert.Equal(t, 1, result.Count, "Should find only drone entity")
 		if len(result.Entities) > 0 {
-			assert.Contains(t, result.Entities[0].Node.ID, "robot-1")
+			assert.Contains(t, result.Entities[0].ID, "robot-1")
 		}
 	})
 
@@ -427,7 +400,7 @@ func TestE2E_GlobalSearch(t *testing.T) {
 			memberIDs[i] = entity.id
 		}
 
-		community := &graphclustering.Community{
+		community := &clustering.Community{
 			ID:                 comm.id,
 			Level:              0,
 			Members:            memberIDs,
@@ -517,7 +490,7 @@ func TestE2E_CommunitySummaries(t *testing.T) {
 	}
 
 	// Create community with statistical summary
-	community := &graphclustering.Community{
+	community := &clustering.Community{
 		ID:                 "comm-0-ml",
 		Level:              0,
 		Members:            memberIDs,
@@ -584,7 +557,7 @@ func TestE2E_PerformanceComparison(t *testing.T) {
 			memberIDs[e] = id
 		}
 
-		community := &graphclustering.Community{
+		community := &clustering.Community{
 			ID:                 fmt.Sprintf("comm-0-perf%d", c),
 			Level:              0,
 			Members:            memberIDs,
@@ -664,7 +637,7 @@ func TestE2E_ResourceLimits(t *testing.T) {
 			memberIDs[e] = id // Still add all IDs to community members
 		}
 
-		community := &graphclustering.Community{
+		community := &clustering.Community{
 			ID:                 fmt.Sprintf("comm-0-large%d", c),
 			Level:              0,
 			Members:            memberIDs, // 5500 members (simulated)
@@ -704,7 +677,7 @@ func TestE2E_LLMSummarization(t *testing.T) {
 
 	// Check if semsummarize is available (optional service)
 	semsummarizeURL := "http://localhost:8084" // Port from docker-compose.semantic-kitchen.yml
-	llmSummarizer := graphclustering.NewHTTPLLMSummarizer(semsummarizeURL)
+	llmSummarizer := clustering.NewHTTPLLMSummarizer(semsummarizeURL)
 
 	// Create test entities with rich content for summarization
 	entities := []struct {
@@ -749,7 +722,7 @@ func TestE2E_LLMSummarization(t *testing.T) {
 	}
 
 	// Create community (without summary initially)
-	community := &graphclustering.Community{
+	community := &clustering.Community{
 		ID:      "comm-llm-test",
 		Level:   0,
 		Members: memberIDs,
@@ -824,11 +797,11 @@ func TestE2E_ProgressiveEnhancement(t *testing.T) {
 	t.Log("Testing progressive community summarization with async LLM enhancement")
 
 	// Configure progressive summarization
-	progressiveSummarizer := graphclustering.NewProgressiveSummarizer()
-	llmSummarizer := graphclustering.NewHTTPLLMSummarizer("http://localhost:8084")
+	progressiveSummarizer := clustering.NewProgressiveSummarizer()
+	llmSummarizer := clustering.NewHTTPLLMSummarizer("http://localhost:8084")
 
 	// Start enhancement worker with KV watch
-	enhancementWorker, err := graphclustering.NewEnhancementWorker(&graphclustering.EnhancementWorkerConfig{
+	enhancementWorker, err := clustering.NewEnhancementWorker(&clustering.EnhancementWorkerConfig{
 		LLMSummarizer: llmSummarizer,
 		Storage:       communityStorage,
 		GraphProvider: &testGraphProvider{
@@ -901,7 +874,7 @@ func TestE2E_ProgressiveEnhancement(t *testing.T) {
 		require.NotEmpty(t, level0Communities)
 
 		// Find our test community (contains drone-prog-1)
-		var testComm *graphclustering.Community
+		var testComm *clustering.Community
 		for _, comm := range level0Communities {
 			for _, memberID := range comm.Members {
 				if memberID == "drone-prog-1" {
@@ -928,7 +901,7 @@ func TestE2E_ProgressiveEnhancement(t *testing.T) {
 
 	t.Run("LLM_enhancement_happens_asynchronously", func(t *testing.T) {
 		// Wait for async LLM enhancement to complete
-		waitForLLMEnhancement := func(communityID string, maxWait time.Duration) (*graphclustering.Community, error) {
+		waitForLLMEnhancement := func(communityID string, maxWait time.Duration) (*clustering.Community, error) {
 			deadline := time.Now().Add(maxWait)
 			for time.Now().Before(deadline) {
 				comm, err := communityStorage.GetCommunity(ctx, communityID)

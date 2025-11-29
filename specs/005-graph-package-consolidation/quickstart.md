@@ -14,6 +14,7 @@ This guide covers the import path and API changes required by the graph package 
 | `import gtypes "github.com/c360/semstreams/types/graph"` | `import gtypes "github.com/c360/semstreams/graph"` |
 | `message.Graphable` | `graph.Graphable` |
 | `pkg/graphclustering` | `processor/graph/clustering` |
+| `pkg/embedding` | `processor/graph/embedding` |
 | `comm.GetID()` | `comm.ID` |
 | `graph.FederatedEntity` | Use `message.EntityID` fields |
 
@@ -143,7 +144,21 @@ The `graphinterfaces.Community` interface is deleted. Use the concrete `clusteri
 +}
 ```
 
-### 6. Replace FederatedEntity with EntityID
+### 6. Update embedding Imports
+
+**Files affected**: Any file importing `pkg/embedding` (2 files in indexmanager)
+
+```diff
+// Before
+-import "github.com/c360/semstreams/pkg/embedding"
+
+// After
++import "github.com/c360/semstreams/processor/graph/embedding"
+```
+
+**Note**: Package name remains `embedding`, so no code changes needed beyond the import path.
+
+### 7. Replace FederatedEntity with EntityID
 
 **Files affected**: Any file using `graph.FederatedEntity`
 
@@ -179,6 +194,7 @@ grep -r "types/graph" --include="*.go" .
 grep -r "message.Graphable" --include="*.go" .
 grep -r "pkg/graphclustering" --include="*.go" .
 grep -r "pkg/graphinterfaces" --include="*.go" .
+grep -r "pkg/embedding" --include="*.go" .
 grep -r "\.Get[A-Z][a-zA-Z]*\(\)" --include="*.go" . | grep -i community
 ```
 
@@ -211,3 +227,4 @@ After consolidation:
 | `message/` | Transport primitives: EntityID, Triple, FederationMeta |
 | `graph/` | Graph contracts and storage: Graphable, EntityState, helpers |
 | `processor/graph/clustering/` | Community detection algorithms and types |
+| `processor/graph/embedding/` | Vector embedding interfaces and implementations |

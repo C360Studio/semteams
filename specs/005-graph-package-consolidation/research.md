@@ -112,7 +112,30 @@ This research validates the ADR-PACKAGE-RESPONSIBILITIES-CONSOLIDATION.md claims
 |------|------|
 | `processor/graph/graphrag_integration_test.go` | Test only |
 
-### 7. Import Cycle Analysis
+### 7. pkg/embedding External Consumer Analysis
+
+**Decision**: Move to `processor/graph/embedding/`
+**Rationale**: Only 2 consumers, both in `processor/graph/indexmanager/`
+**Alternatives Considered**: Keep in pkg/ - rejected per same principle as graphclustering
+
+**Package Contents** (7 files):
+| File | Purpose |
+|------|---------|
+| `embedder.go` | Embedder interface and factory |
+| `bm25_embedder.go` | BM25 sparse embedding implementation |
+| `http_embedder.go` | HTTP-based external embedding service |
+| `cache.go` | Embedding result cache |
+| `storage.go` | Embedding persistence |
+| `vector.go` | Vector math operations |
+| `worker.go` | Async worker pool for batch embeddings |
+
+**External Consumers** (2 files):
+| File | Usage |
+|------|-------|
+| `processor/graph/indexmanager/semantic.go` | Embedding interface usage |
+| `processor/graph/indexmanager/manager.go` | Embedding initialization |
+
+### 8. Import Cycle Analysis
 
 **Decision**: Move graphclustering BEFORE deleting graphinterfaces
 **Rationale**: Import cycle exists between graphclustering and querymanager; moving graphclustering inside processor/graph/ eliminates the cycle
@@ -129,6 +152,8 @@ pkg/graphclustering → pkg/graphinterfaces (implements interface)
 processor/graph/clustering → processor/graph/querymanager (same parent, no cycle)
 processor/graph/querymanager → processor/graph/clustering (same parent, no cycle)
 ```
+
+**Note**: The embedding package move (Phase 6) is independent and introduces no import cycles since its only consumers are already in `processor/graph/indexmanager/`.
 
 ## Risk Assessment
 
@@ -148,6 +173,8 @@ processor/graph/querymanager → processor/graph/clustering (same parent, no cyc
 | Federation.go consumers? | Test files only - safe to delete |
 | Import cycle resolution order? | Phase 4 (move graphclustering) before Phase 5 (delete graphinterfaces) |
 | Getter method call sites? | ~30 call sites across 3 production files + tests |
+| Embedding package consumers? | 2 files in processor/graph/indexmanager/ |
+| Embedding package files? | 7 files (embedder, bm25, http, cache, storage, vector, worker) |
 
 ## Recommendations
 

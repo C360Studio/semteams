@@ -15,12 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/c360/semstreams/component"
+	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/processor/rule"
 	"github.com/c360/semstreams/processor/rule/expression"
-	gtypes "github.com/c360/semstreams/types/graph"
 )
 
 // getTestNATSClient creates a NATS client for integration tests

@@ -21,6 +21,7 @@ This feature implements the package consolidation defined in ADR-PACKAGE-RESPONS
 | graph/federation.go deleted | Required | Pending (file still exists) |
 | pkg/graphclustering moved | Required | Pending (still in pkg/) |
 | pkg/graphinterfaces deleted | Required | Pending (still exists) |
+| pkg/embedding moved | Required | Pending (still in pkg/, 2 consumers in indexmanager) |
 
 ## User Scenarios & Testing
 
@@ -51,7 +52,7 @@ As a developer implementing a domain payload, I want to find the Graphable inter
 **Acceptance Scenarios**:
 
 1. **Given** `message/graphable.go` exists, **When** migration is complete, **Then** file is moved to `graph/graphable.go`
-2. **Given** ~15 files implement `message.Graphable`, **When** migration is complete, **Then** all implement `graph.Graphable`
+2. **Given** 9 files reference `message.Graphable`, **When** migration is complete, **Then** all reference `graph.Graphable`
 3. **Given** a developer implements a new Graphable payload, **When** they look for the interface, **Then** they find it in the `graph/` package
 
 ---
@@ -104,7 +105,23 @@ As a developer, I want idiomatic Go code without Java-style getter interfaces th
 
 ---
 
-### User Story 6 - Document Package Ownership (Priority: P3)
+### User Story 6 - Relocate embedding to processor/graph/ (Priority: P2)
+
+As a developer maintaining the graph system, I want the embedding package inside `processor/graph/` where its only consumers (indexmanager) live, following the same pattern as graphclustering.
+
+**Why this priority**: The `pkg/` convention means "reusable library code for external consumers," but embedding has exactly 2 consumers, both in `processor/graph/indexmanager/`. Moving it co-locates the code with its consumers.
+
+**Independent Test**: Can be fully tested by verifying `processor/graph/embedding/` exists and `pkg/embedding/` is deleted.
+
+**Acceptance Scenarios**:
+
+1. **Given** `pkg/embedding/` exists, **When** migration is complete, **Then** code is moved to `processor/graph/embedding/`
+2. **Given** import paths reference `pkg/embedding`, **When** migration is complete, **Then** all imports use `processor/graph/embedding`
+3. **Given** the move is complete, **When** building, **Then** `go build ./...` succeeds
+
+---
+
+### User Story 7 - Document Package Ownership (Priority: P3)
 
 As a new developer joining the project, I want clear documentation about which package owns which concerns so that I can make correct architectural decisions.
 
@@ -135,21 +152,24 @@ As a new developer joining the project, I want clear documentation about which p
 - **FR-001**: System MUST migrate all 9 files importing `types/graph` to use `graph` package
 - **FR-002**: System MUST delete the `types/graph/` directory after migration
 - **FR-003**: System MUST move `message/graphable.go` to `graph/graphable.go`
-- **FR-004**: System MUST update all Graphable implementers (~15 files) to use `graph.Graphable`
+- **FR-004**: System MUST update all Graphable references (9 files) to use `graph.Graphable`
 - **FR-005**: System MUST delete `graph/federation.go` entirely
 - **FR-006**: System MUST move `pkg/graphclustering/` to `processor/graph/clustering/`
 - **FR-007**: System MUST update all clustering import paths
 - **FR-008**: System MUST delete `pkg/graphinterfaces/` directory
 - **FR-009**: System MUST remove all getter methods from Community struct (10 methods)
 - **FR-010**: System MUST update all callers to use direct field access (e.g., `comm.ID` not `comm.GetID()`)
-- **FR-011**: System MUST update package READMEs with clear ownership documentation
-- **FR-012**: System MUST ensure `go build ./...` succeeds with no import cycles after each phase
+- **FR-011**: System MUST move `pkg/embedding/` to `processor/graph/embedding/`
+- **FR-012**: System MUST update all embedding import paths (2 files in indexmanager)
+- **FR-013**: System MUST update package READMEs with clear ownership documentation
+- **FR-014**: System MUST ensure `go build ./...` succeeds with no import cycles after each phase
 
 ### Key Entities
 
 - **EntityState**: Complete persisted entity representation (lives in `graph/`)
 - **Graphable**: Interface for graph-compatible payloads (moving from `message/` to `graph/`)
 - **Community**: Clustering community structure (moving from `pkg/graphclustering/` to `processor/graph/clustering/`)
+- **Embedder**: Vector embedding interface and implementations (moving from `pkg/embedding/` to `processor/graph/embedding/`)
 - **EntityID**: 6-part federated identifier (remains in `message/` - single source of truth for identity)
 
 ## Success Criteria
@@ -164,9 +184,10 @@ As a new developer joining the project, I want clear documentation about which p
 - **SC-006**: `pkg/graphclustering/` directory does not exist; `processor/graph/clustering/` exists
 - **SC-007**: `pkg/graphinterfaces/` directory does not exist
 - **SC-008**: Community struct has zero getter methods (was 10)
-- **SC-009**: `go build ./...` completes with exit code 0
-- **SC-010**: `go test -race ./...` passes for all affected packages
-- **SC-011**: All package READMEs document their ownership scope
+- **SC-009**: `pkg/embedding/` directory does not exist; `processor/graph/embedding/` exists
+- **SC-010**: `go build ./...` completes with exit code 0
+- **SC-011**: `go test -race ./...` passes for all affected packages
+- **SC-012**: All package READMEs document their ownership scope
 
 ## Assumptions
 

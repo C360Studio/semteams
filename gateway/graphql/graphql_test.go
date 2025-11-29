@@ -10,7 +10,7 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/graphinterfaces"
+	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
@@ -407,25 +407,25 @@ func BenchmarkResolverOperations(b *testing.B) {
 	}
 
 	mockQM := &mockQueryManager{
-		communities: map[string]*mockCommunityImpl{
+		communities: map[string]*clustering.Community{
 			"comm-1": {
-				id:                 "comm-1",
-				level:              1,
-				members:            []string{"entity-1", "entity-2"},
-				statisticalSummary: "Test community",
-				llmSummary:         "Enhanced test community",
-				keywords:           []string{"test", "benchmark"},
-				summaryStatus:      "llm-enhanced",
+				ID:                 "comm-1",
+				Level:              1,
+				Members:            []string{"entity-1", "entity-2"},
+				StatisticalSummary: "Test community",
+				LLMSummary:         "Enhanced test community",
+				Keywords:           []string{"test", "benchmark"},
+				SummaryStatus:      "llm-enhanced",
 			},
 		},
-		entityCommunity: map[string]map[int]*mockCommunityImpl{
+		entityCommunity: map[string]map[int]*clustering.Community{
 			"entity-1": {
 				1: {
-					id:                 "comm-1",
-					level:              1,
-					members:            []string{"entity-1", "entity-2"},
-					statisticalSummary: "Test community",
-					summaryStatus:      "statistical",
+					ID:                 "comm-1",
+					Level:              1,
+					Members:            []string{"entity-1", "entity-2"},
+					StatisticalSummary: "Test community",
+					SummaryStatus:      "statistical",
 				},
 			},
 		},
@@ -491,35 +491,12 @@ func BenchmarkErrorMapping(b *testing.B) {
 
 // mockQueryManager implements querymanager.Querier for testing
 type mockQueryManager struct {
-	communities      map[string]*mockCommunityImpl
-	entityCommunity  map[string]map[int]*mockCommunityImpl
+	communities      map[string]*clustering.Community
+	entityCommunity  map[string]map[int]*clustering.Community
 	getCommunityErr  error
 	getEntityCommErr error
 }
 
-type mockCommunityImpl struct {
-	id                 string
-	level              int
-	members            []string
-	statisticalSummary string
-	llmSummary         string
-	keywords           []string
-	repEntities        []string
-	summaryStatus      string
-}
-
-func (m *mockCommunityImpl) GetID() string                       { return m.id }
-func (m *mockCommunityImpl) GetLevel() int                       { return m.level }
-func (m *mockCommunityImpl) GetMembers() []string                { return m.members }
-func (m *mockCommunityImpl) GetStatisticalSummary() string       { return m.statisticalSummary }
-func (m *mockCommunityImpl) GetLLMSummary() string               { return m.llmSummary }
-func (m *mockCommunityImpl) GetKeywords() []string               { return m.keywords }
-func (m *mockCommunityImpl) GetRepEntities() []string            { return m.repEntities }
-func (m *mockCommunityImpl) GetSummaryStatus() string            { return m.summaryStatus }
-func (m *mockCommunityImpl) GetParentID() *string                { return nil }
-func (m *mockCommunityImpl) GetMetadata() map[string]interface{} { return nil }
-
-// Implement required Querier interface methods (stubs)
 func (m *mockQueryManager) GetEntity(_ context.Context, _ string) (*graph.EntityState, error) {
 	return nil, nil
 }
@@ -544,7 +521,7 @@ func (m *mockQueryManager) LocalSearch(_ context.Context, _ string, _ string, _ 
 func (m *mockQueryManager) GlobalSearch(_ context.Context, _ string, _ int, _ int) (*querymanager.GlobalSearchResult, error) {
 	return nil, nil
 }
-func (m *mockQueryManager) GetCommunity(_ context.Context, communityID string) (graphinterfaces.Community, error) {
+func (m *mockQueryManager) GetCommunity(_ context.Context, communityID string) (*clustering.Community, error) {
 	if m.getCommunityErr != nil {
 		return nil, m.getCommunityErr
 	}
@@ -557,7 +534,7 @@ func (m *mockQueryManager) GetCommunity(_ context.Context, communityID string) (
 	}
 	return comm, nil
 }
-func (m *mockQueryManager) GetEntityCommunity(_ context.Context, entityID string, level int) (graphinterfaces.Community, error) {
+func (m *mockQueryManager) GetEntityCommunity(_ context.Context, entityID string, level int) (*clustering.Community, error) {
 	if m.getEntityCommErr != nil {
 		return nil, m.getEntityCommErr
 	}
@@ -571,7 +548,7 @@ func (m *mockQueryManager) GetEntityCommunity(_ context.Context, entityID string
 	}
 	return nil, fmt.Errorf("entity community not found")
 }
-func (m *mockQueryManager) GetCommunitiesByLevel(_ context.Context, _ int) ([]graphinterfaces.Community, error) {
+func (m *mockQueryManager) GetCommunitiesByLevel(_ context.Context, _ int) ([]*clustering.Community, error) {
 	return nil, nil
 }
 func (m *mockQueryManager) QueryByPredicate(_ context.Context, _ string) ([]string, error) {
@@ -597,16 +574,16 @@ func (m *mockQueryManager) GetCacheStats() querymanager.CacheStats {
 func TestGetCommunity(t *testing.T) {
 	t.Run("Success - with LLM summary", func(t *testing.T) {
 		mockQM := &mockQueryManager{
-			communities: map[string]*mockCommunityImpl{
+			communities: map[string]*clustering.Community{
 				"comm-1": {
-					id:                 "comm-1",
-					level:              1,
-					members:            []string{"entity-1", "entity-2"},
-					statisticalSummary: "Statistical summary",
-					llmSummary:         "LLM enhanced summary",
-					keywords:           []string{"robotics", "ai"},
-					repEntities:        []string{"entity-1"},
-					summaryStatus:      "llm-enhanced",
+					ID:                 "comm-1",
+					Level:              1,
+					Members:            []string{"entity-1", "entity-2"},
+					StatisticalSummary: "Statistical summary",
+					LLMSummary:         "LLM enhanced summary",
+					Keywords:           []string{"robotics", "ai"},
+					RepEntities:        []string{"entity-1"},
+					SummaryStatus:      "llm-enhanced",
 				},
 			},
 		}
@@ -627,15 +604,15 @@ func TestGetCommunity(t *testing.T) {
 
 	t.Run("Success - fallback to statistical summary", func(t *testing.T) {
 		mockQM := &mockQueryManager{
-			communities: map[string]*mockCommunityImpl{
+			communities: map[string]*clustering.Community{
 				"comm-2": {
-					id:                 "comm-2",
-					level:              2,
-					members:            []string{"entity-3"},
-					statisticalSummary: "Statistical summary only",
-					llmSummary:         "", // No LLM summary
-					keywords:           []string{"network"},
-					summaryStatus:      "statistical",
+					ID:                 "comm-2",
+					Level:              2,
+					Members:            []string{"entity-3"},
+					StatisticalSummary: "Statistical summary only",
+					LLMSummary:         "", // No LLM summary
+					Keywords:           []string{"network"},
+					SummaryStatus:      "statistical",
 				},
 			},
 		}
@@ -664,7 +641,7 @@ func TestGetCommunity(t *testing.T) {
 
 	t.Run("Error - community not found", func(t *testing.T) {
 		mockQM := &mockQueryManager{
-			communities: map[string]*mockCommunityImpl{},
+			communities: map[string]*clustering.Community{},
 		}
 
 		resolver := &BaseResolver{
@@ -681,16 +658,16 @@ func TestGetCommunity(t *testing.T) {
 func TestGetEntityCommunity(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		mockQM := &mockQueryManager{
-			entityCommunity: map[string]map[int]*mockCommunityImpl{
+			entityCommunity: map[string]map[int]*clustering.Community{
 				"entity-1": {
 					1: {
-						id:                 "comm-1",
-						level:              1,
-						members:            []string{"entity-1", "entity-2"},
-						statisticalSummary: "Entity community",
-						llmSummary:         "Enhanced entity community",
-						keywords:           []string{"cluster"},
-						summaryStatus:      "llm-enhanced",
+						ID:                 "comm-1",
+						Level:              1,
+						Members:            []string{"entity-1", "entity-2"},
+						StatisticalSummary: "Entity community",
+						LLMSummary:         "Enhanced entity community",
+						Keywords:           []string{"cluster"},
+						SummaryStatus:      "llm-enhanced",
 					},
 				},
 			},
@@ -721,7 +698,7 @@ func TestGetEntityCommunity(t *testing.T) {
 
 	t.Run("Error - entity community not found", func(t *testing.T) {
 		mockQM := &mockQueryManager{
-			entityCommunity: map[string]map[int]*mockCommunityImpl{},
+			entityCommunity: map[string]map[int]*clustering.Community{},
 		}
 
 		resolver := &BaseResolver{

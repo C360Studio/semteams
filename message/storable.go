@@ -35,7 +35,7 @@ type StorageReference struct {
 	Size int64 `json:"size,omitempty"`
 }
 
-// Storable extends Graphable with storage reference capability.
+// Storable extends graph.Graphable with storage reference capability.
 // Components that implement Storable can provide both semantic
 // information (via Graphable) and a reference to their full data.
 //
@@ -44,6 +44,11 @@ type StorageReference struct {
 //  2. ObjectStore stores full message and adds StorageReference
 //  3. GraphProcessor receives Storable with both semantics and reference
 //  4. Consumers can access full data via StorageReference when needed
+//
+// NOTE: This interface duplicates graph.Graphable methods inline to avoid
+// an import cycle (graph imports message for Triple, so message cannot
+// import graph). Any type implementing this interface also implements
+// graph.Graphable automatically due to identical method signatures.
 //
 // Example implementation:
 //
@@ -57,8 +62,13 @@ type StorageReference struct {
 //	func (s *StoredEntity) Triples() []Triple { return s.triples }
 //	func (s *StoredEntity) StorageRef() *StorageReference { return s.storage }
 type Storable interface {
-	// Embeds Graphable for semantic capabilities
-	Graphable
+	// EntityID returns deterministic 6-part ID: org.platform.domain.system.type.instance
+	// (duplicated from graph.Graphable to avoid import cycle)
+	EntityID() string
+
+	// Triples returns all facts about this entity
+	// (duplicated from graph.Graphable to avoid import cycle)
+	Triples() []Triple
 
 	// StorageRef returns reference to where full data is stored.
 	// May return nil if data is not stored externally.

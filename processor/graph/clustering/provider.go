@@ -1,19 +1,47 @@
-package graphclustering
+package clustering
 
 import (
 	"context"
 
 	"github.com/c360/semstreams/errors"
-	"github.com/c360/semstreams/processor/graph/querymanager"
 )
+
+// Direction represents the direction of relationship traversal.
+// Local copy to avoid import cycle with querymanager.
+type Direction string
+
+const (
+	DirectionOutgoing Direction = "outgoing"
+	DirectionIncoming Direction = "incoming"
+	DirectionBoth     Direction = "both"
+)
+
+// Relationship represents an edge between entities.
+// Local copy to avoid import cycle with querymanager.
+type Relationship struct {
+	Subject      string
+	Predicate    string
+	Object       interface{}
+	FromEntityID string  // Source entity
+	ToEntityID   string  // Target entity
+	Weight       float64 // For weighted edges
+}
+
+// RelationshipQuerier provides minimal interface for querying relationships.
+// This interface exists to avoid import cycle with querymanager package.
+type RelationshipQuerier interface {
+	EntityQuerier
+	QueryRelationships(ctx context.Context, entityID string, direction Direction) ([]*Relationship, error)
+	QueryByPredicate(ctx context.Context, predicate string) ([]string, error)
+}
 
 // QueryManagerGraphProvider implements GraphProvider using QueryManager
 type QueryManagerGraphProvider struct {
-	queryManager querymanager.Querier
+	queryManager RelationshipQuerier
 }
 
 // NewQueryManagerGraphProvider creates a GraphProvider backed by QueryManager
-func NewQueryManagerGraphProvider(qm querymanager.Querier) *QueryManagerGraphProvider {
+func NewQueryManagerGraphProvider(qm RelationshipQuerier) *QueryManagerGraphProvider {
 	return &QueryManagerGraphProvider{
 		queryManager: qm,
 	}
@@ -43,14 +71,14 @@ func (p *QueryManagerGraphProvider) GetNeighbors(ctx context.Context, entityID s
 	}
 
 	// Map direction string to QueryManager direction
-	var qmDirection querymanager.Direction
+	var qmDirection Direction
 	switch direction {
 	case "outgoing":
-		qmDirection = querymanager.DirectionOutgoing
+		qmDirection = DirectionOutgoing
 	case "incoming":
-		qmDirection = querymanager.DirectionIncoming
+		qmDirection = DirectionIncoming
 	case "both":
-		qmDirection = querymanager.DirectionBoth
+		qmDirection = DirectionBoth
 	default:
 		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "QueryManagerGraphProvider", "GetNeighbors", "invalid direction")
 	}
@@ -89,7 +117,7 @@ func (p *QueryManagerGraphProvider) GetEdgeWeight(ctx context.Context, fromID, t
 	}
 
 	// Query outgoing relationships from fromID
-	rels, err := p.queryManager.QueryRelationships(ctx, fromID, querymanager.DirectionOutgoing)
+	rels, err := p.queryManager.QueryRelationships(ctx, fromID, DirectionOutgoing)
 	if err != nil {
 		return 0.0, errors.WrapTransient(err, "QueryManagerGraphProvider", "GetEdgeWeight", "query relationships")
 	}
@@ -111,14 +139,14 @@ func (p *QueryManagerGraphProvider) GetEdgeWeight(ctx context.Context, fromID, t
 // PredicateGraphProvider implements GraphProvider for entities matching a predicate
 // This is more practical for real-world use: cluster entities of specific types
 type PredicateGraphProvider struct {
-	queryManager  querymanager.Querier
+	queryManager  RelationshipQuerier
 	predicate     string          // Entity type/predicate to cluster
 	validEntities map[string]bool // Cached set of valid entity IDs
 }
 
 // NewPredicateGraphProvider creates a GraphProvider for entities matching a predicate
 // It caches the valid entity set at construction time for performance
-func NewPredicateGraphProvider(qm querymanager.Querier, predicate string) *PredicateGraphProvider {
+func NewPredicateGraphProvider(qm RelationshipQuerier, predicate string) *PredicateGraphProvider {
 	return &PredicateGraphProvider{
 		queryManager:  qm,
 		predicate:     predicate,
@@ -175,14 +203,14 @@ func (p *PredicateGraphProvider) GetNeighbors(ctx context.Context, entityID stri
 	}
 
 	// Map direction
-	var qmDirection querymanager.Direction
+	var qmDirection Direction
 	switch direction {
 	case "outgoing":
-		qmDirection = querymanager.DirectionOutgoing
+		qmDirection = DirectionOutgoing
 	case "incoming":
-		qmDirection = querymanager.DirectionIncoming
+		qmDirection = DirectionIncoming
 	case "both":
-		qmDirection = querymanager.DirectionBoth
+		qmDirection = DirectionBoth
 	default:
 		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "PredicateGraphProvider", "GetNeighbors", "invalid direction")
 	}
@@ -221,7 +249,7 @@ func (p *PredicateGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID
 	}
 
 	// Query outgoing relationships
-	rels, err := p.queryManager.QueryRelationships(ctx, fromID, querymanager.DirectionOutgoing)
+	rels, err := p.queryManager.QueryRelationships(ctx, fromID, DirectionOutgoing)
 	if err != nil {
 		return 0.0, errors.WrapTransient(err, "PredicateGraphProvider", "GetEdgeWeight", "query relationships")
 	}
