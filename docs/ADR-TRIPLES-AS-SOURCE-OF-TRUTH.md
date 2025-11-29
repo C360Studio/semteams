@@ -1,6 +1,6 @@
 # ADR: Triples as Single Source of Truth
 
-**Status:** Proposed
+**Status:** Implemented
 **Author:** Documentation Audit Team
 **Date:** 2024-11-25
 **Supersedes:** None

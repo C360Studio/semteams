@@ -69,7 +69,8 @@ type Processor struct {
 	metricsRegistry *metric.MetricsRegistry
 
 	// Runtime state
-	shutdown          chan struct{}
+	running           bool          // Tracks if processor is running (protected by mu)
+	shutdown          chan struct{} // Closed to signal shutdown, never set to nil while running
 	done              chan struct{}
 	startTime         time.Time
 	messagesEvaluated int64
@@ -91,6 +92,10 @@ type Processor struct {
 
 	// Prometheus metrics
 	metrics *Metrics
+
+	// Stateful rule support
+	stateTracker      *StateTracker
+	statefulEvaluator *StatefulEvaluator
 
 	// Logger
 	logger *slog.Logger
@@ -268,12 +273,58 @@ func (rp *Processor) run(ctx context.Context) {
 	}
 }
 
+// initializeStateTracker creates the RULE_STATE KV bucket and initializes state tracking components.
+// This enables stateful ECA rules with OnEnter/OnExit/WhileTrue actions.
+func (rp *Processor) initializeStateTracker(ctx context.Context) error {
+	// Get or create the RULE_STATE KV bucket
+	const bucketName = "RULE_STATE"
+
+	js, err := rp.natsClient.JetStream()
+	if err != nil {
+		return fmt.Errorf("get JetStream context: %w", err)
+	}
+
+	// Try to get existing bucket first
+	bucket, err := js.KeyValue(ctx, bucketName)
+	if err != nil {
+		// Bucket doesn't exist - create it
+		kvConfig := jetstream.KeyValueConfig{
+			Bucket:      bucketName,
+			Description: "Rule match state tracking for stateful ECA rules",
+			TTL:         0,  // No expiration by default
+			MaxBytes:    -1, // No size limit
+			History:     1,  // Keep only current state
+		}
+
+		bucket, err = js.CreateKeyValue(ctx, kvConfig)
+		if err != nil {
+			return fmt.Errorf("create RULE_STATE bucket: %w", err)
+		}
+
+		rp.logger.Info("Created RULE_STATE KV bucket for stateful rules")
+	} else {
+		rp.logger.Info("Using existing RULE_STATE KV bucket")
+	}
+
+	// Create StateTracker
+	rp.stateTracker = NewStateTracker(bucket, rp.logger)
+
+	// Create ActionExecutor
+	actionExecutor := NewActionExecutor(rp.logger)
+
+	// Create StatefulEvaluator
+	rp.statefulEvaluator = NewStatefulEvaluator(rp.stateTracker, actionExecutor, rp.logger)
+
+	rp.logger.Info("State tracker initialized for stateful ECA rules")
+	return nil
+}
+
 // Start begins processing messages through rules
 func (rp *Processor) Start(ctx context.Context) error {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
 
-	if rp.shutdown != nil {
+	if rp.running {
 		return errors.WrapInvalid(errors.ErrAlreadyStarted, "RuleProcessor", "Start", "check processor state")
 	}
 
@@ -287,9 +338,16 @@ func (rp *Processor) Start(ctx context.Context) error {
 	}
 	rp.messageCache = msgCache
 
+	// Initialize StateTracker for stateful ECA rules
+	if err := rp.initializeStateTracker(ctx); err != nil {
+		rp.logger.Warn("Failed to initialize state tracker, stateful rules will be disabled", "error", err)
+		// Don't fail - processor can still work with stateless rules
+	}
+
 	// Create shutdown and done channels for coordination
 	rp.shutdown = make(chan struct{})
 	rp.done = make(chan struct{})
+	rp.running = true
 	rp.startTime = time.Now()
 	rp.health.Healthy = true
 
@@ -350,7 +408,7 @@ func (rp *Processor) setupSubscriptions(ctx context.Context) error {
 // Stop stops the processor and cleans up resources
 func (rp *Processor) Stop(_ time.Duration) error {
 	rp.mu.Lock()
-	if rp.shutdown == nil {
+	if !rp.running {
 		rp.mu.Unlock()
 		return nil // Already stopped
 	}
@@ -395,8 +453,9 @@ func (rp *Processor) Stop(_ time.Duration) error {
 		}
 	}
 
-	rp.shutdown = nil
-	rp.done = nil
+	// Mark as stopped - don't nil the channels, goroutines may still reference them
+	// A closed channel is sufficient for signaling; setting to nil causes races
+	rp.running = false
 	rp.health.Healthy = false
 
 	rp.logger.Info("Rule processor stopped")

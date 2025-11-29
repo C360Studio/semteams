@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/pkg/graphclustering"
 	"github.com/c360/semstreams/pkg/graphinterfaces"
@@ -44,7 +45,7 @@ func (p *testGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string, erro
 }
 
 func (p *testGraphProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
-	// Get the entity to access its edges
+	// Get the entity to access its triples (relationships are now stored as triples)
 	entity, err := p.entityReader.GetEntity(ctx, entityID)
 	if err != nil {
 		return []string{}, err
@@ -52,18 +53,21 @@ func (p *testGraphProvider) GetNeighbors(ctx context.Context, entityID string, d
 
 	neighborSet := make(map[string]bool)
 
-	// Collect neighbors based on direction
-	// Note: EntityState.Edges is []Edge (slice), not a map
+	// Collect neighbors from relationship triples
+	// Triples where Object is an entity ID indicate relationships
 	if direction == "outgoing" || direction == "both" {
-		for _, edge := range entity.Edges {
-			neighborSet[edge.ToEntityID] = true
+		for _, triple := range entity.Triples {
+			// Check if this is a relationship triple (Object is an entity ID)
+			if triple.IsRelationship() {
+				neighborSet[triple.Object.(string)] = true
+			}
 		}
 	}
 
 	// TODO: For incoming edges, we would need to query an incoming edge index
 	// For now, incoming direction is not supported in this test helper
 	if direction == "incoming" {
-		// Not implemented - would require querying all entities or using an index
+		// Not implemented - would require querying INCOMING_INDEX
 		return []string{}, nil
 	}
 
@@ -81,12 +85,12 @@ func (p *testGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID stri
 		return 0.0, err
 	}
 
-	// Check if there's an edge to the target
-	for _, edge := range entity.Edges {
-		if edge.ToEntityID == toID {
-			// Return weight if available, otherwise 1.0
-			if edge.Weight > 0 {
-				return edge.Weight, nil
+	// Check for relationship triples to target entity
+	for _, triple := range entity.Triples {
+		if triple.IsRelationship() && triple.Object.(string) == toID {
+			// Weight is stored in triple's Confidence or defaults to 1.0
+			if triple.Confidence > 0 {
+				return triple.Confidence, nil
 			}
 			return 1.0, nil
 		}
@@ -229,14 +233,24 @@ func setupGraphRAGTest(t *testing.T) *graphRAGTestSetup {
 	}
 }
 
-// createTestEntity helper to create entities with properties
+// createTestEntity helper to create entities with properties (via triples)
 func createTestEntity(ctx context.Context, processor *Processor, id string, entityType string, properties map[string]any) (*gtypes.EntityState, error) {
+	// Convert properties to triples (triples are single source of truth)
+	triples := make([]message.Triple, 0, len(properties))
+	for key, value := range properties {
+		triples = append(triples, message.Triple{
+			Subject:   id,
+			Predicate: key,
+			Object:    value,
+		})
+	}
+
 	entity := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
-			ID:         id,
-			Type:       entityType,
-			Properties: properties,
+			ID:   id,
+			Type: entityType,
 		},
+		Triples:   triples,
 		UpdatedAt: time.Now(),
 		Version:   1,
 	}

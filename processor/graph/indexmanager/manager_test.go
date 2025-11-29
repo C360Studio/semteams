@@ -2,6 +2,7 @@ package indexmanager
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -242,6 +243,7 @@ func setupTestManager(t *testing.T) (*Manager, map[string]*MockKeyValue) {
 		"ENTITY_STATES":   NewMockKeyValue(),
 		"PREDICATE_INDEX": NewMockKeyValue(),
 		"INCOMING_INDEX":  NewMockKeyValue(),
+		"OUTGOING_INDEX":  NewMockKeyValue(),
 		"ALIAS_INDEX":     NewMockKeyValue(),
 		"SPATIAL_INDEX":   NewMockKeyValue(),
 		"TEMPORAL_INDEX":  NewMockKeyValue(),
@@ -267,6 +269,11 @@ func setupTestManager(t *testing.T) (*Manager, map[string]*MockKeyValue) {
 	// Type assert since NewManager returns interface
 	engineImpl, ok := engine.(*Manager)
 	require.True(t, ok, "Failed to cast to *Manager")
+
+	// Manually register OutgoingIndex for tests (not yet in production config)
+	outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], nil, engineImpl.metrics, engineImpl.promMetrics, engineImpl.logger)
+	engineImpl.indexes["outgoing"] = outgoingIndex
+
 	return engineImpl, mockBuckets
 }
 
@@ -274,7 +281,7 @@ func TestNewManager(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		engine, _ := setupTestManager(t)
 		assert.NotNil(t, engine)
-		assert.Equal(t, 5, len(engine.indexes)) // All indexes enabled by default
+		assert.Equal(t, 6, len(engine.indexes)) // All indexes enabled by default (including outgoing)
 	})
 
 	t.Run("invalid config", func(t *testing.T) {
@@ -625,5 +632,160 @@ func BenchmarkIndexManager_ResolveAliases_Batch(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
+	}
+}
+
+// T113: Test orphan cleanup on entity delete
+// FR-005a/b/c: When entity deleted, system reads OUTGOING_INDEX to identify targets
+// and removes deleted entity from each target's INCOMING_INDEX entry
+func TestIndexManager_CleanupOrphanedIncomingReferences(t *testing.T) {
+	tests := []struct {
+		name               string
+		deletedEntityID    string
+		outgoingRels       []OutgoingEntry
+		setupIncomingIndex func(*MockKeyValue)
+		setupOutgoingIndex func(*MockKeyValue)
+		verifyCleanupCalls func(*testing.T, *MockKeyValue)
+		wantErr            bool
+	}{
+		{
+			name:            "successful cleanup of multiple targets",
+			deletedEntityID: "c360.platform1.robotics.mav1.drone.001",
+			outgoingRels: []OutgoingEntry{
+				{Predicate: "spatial.proximity.near", ToEntityID: "c360.platform1.robotics.mav1.drone.002"},
+				{Predicate: "ops.fleet.member_of", ToEntityID: "c360.platform1.ops.fleet1.fleet.alpha"},
+			},
+			setupOutgoingIndex: func(mockKV *MockKeyValue) {
+				// Return the outgoing relationships when queried
+				outgoingData := []OutgoingEntry{
+					{Predicate: "spatial.proximity.near", ToEntityID: "c360.platform1.robotics.mav1.drone.002"},
+					{Predicate: "ops.fleet.member_of", ToEntityID: "c360.platform1.ops.fleet1.fleet.alpha"},
+				}
+				jsonData, _ := json.Marshal(outgoingData)
+				entry := &MockKeyValueEntry{
+					key:   "c360.platform1.robotics.mav1.drone.001",
+					value: jsonData,
+				}
+				mockKV.On("Get", mock.Anything, "c360.platform1.robotics.mav1.drone.001").Return(entry, nil)
+			},
+			setupIncomingIndex: func(mockKV *MockKeyValue) {
+				// Setup incoming index for drone.002 - has references from both 001 and 003
+				drone002Incoming := []string{
+					"c360.platform1.robotics.mav1.drone.001", // This should be removed
+					"c360.platform1.robotics.mav1.drone.003", // This should remain
+				}
+				jsonData002, _ := json.Marshal(drone002Incoming)
+				entry002 := &MockKeyValueEntry{
+					key:   "c360.platform1.robotics.mav1.drone.002",
+					value: jsonData002,
+				}
+				mockKV.On("Get", mock.Anything, "c360.platform1.robotics.mav1.drone.002").Return(entry002, nil)
+
+				// Setup incoming index for fleet alpha - only has reference from 001
+				fleetIncoming := []string{"c360.platform1.robotics.mav1.drone.001"}
+				jsonDataFleet, _ := json.Marshal(fleetIncoming)
+				entryFleet := &MockKeyValueEntry{
+					key:   "c360.platform1.ops.fleet1.fleet.alpha",
+					value: jsonDataFleet,
+				}
+				mockKV.On("Get", mock.Anything, "c360.platform1.ops.fleet1.fleet.alpha").Return(entryFleet, nil)
+
+				// Expect Put for drone.002 with updated list (only drone.003)
+				mockKV.On("Put", mock.Anything, "c360.platform1.robotics.mav1.drone.002", mock.MatchedBy(func(data []byte) bool {
+					var refs []string
+					json.Unmarshal(data, &refs)
+					return len(refs) == 1 && refs[0] == "c360.platform1.robotics.mav1.drone.003"
+				})).Return(uint64(1), nil)
+
+				// Expect Delete for fleet alpha (no more references)
+				mockKV.On("Delete", mock.Anything, "c360.platform1.ops.fleet1.fleet.alpha").Return(nil)
+			},
+			verifyCleanupCalls: func(t *testing.T, incomingMock *MockKeyValue) {
+				// Verify Get was called for both targets
+				incomingMock.AssertCalled(t, "Get", mock.Anything, "c360.platform1.robotics.mav1.drone.002")
+				incomingMock.AssertCalled(t, "Get", mock.Anything, "c360.platform1.ops.fleet1.fleet.alpha")
+
+				// Verify Put was called for drone.002 (still has refs)
+				incomingMock.AssertCalled(t, "Put", mock.Anything, "c360.platform1.robotics.mav1.drone.002", mock.Anything)
+
+				// Verify Delete was called for fleet alpha (no more refs)
+				incomingMock.AssertCalled(t, "Delete", mock.Anything, "c360.platform1.ops.fleet1.fleet.alpha")
+			},
+			wantErr: false,
+		},
+		{
+			name:            "cleanup when outgoing index not found",
+			deletedEntityID: "c360.platform1.robotics.mav1.drone.999",
+			setupOutgoingIndex: func(mockKV *MockKeyValue) {
+				// Return error for missing entity
+				mockKV.On("Get", mock.Anything, "c360.platform1.robotics.mav1.drone.999").Return(nil, jetstream.ErrKeyNotFound)
+			},
+			setupIncomingIndex: func(_ *MockKeyValue) {
+				// Should not be called
+			},
+			verifyCleanupCalls: func(t *testing.T, incomingMock *MockKeyValue) {
+				// Verify no incoming index operations occurred
+				incomingMock.AssertNotCalled(t, "Get")
+				incomingMock.AssertNotCalled(t, "Put")
+				incomingMock.AssertNotCalled(t, "Delete")
+			},
+			wantErr: false, // Not an error - just nothing to clean
+		},
+		{
+			name:            "cleanup with no outgoing relationships",
+			deletedEntityID: "c360.platform1.robotics.mav1.sensor.001",
+			setupOutgoingIndex: func(mockKV *MockKeyValue) {
+				// Return empty array
+				jsonData, _ := json.Marshal([]OutgoingEntry{})
+				entry := &MockKeyValueEntry{
+					key:   "c360.platform1.robotics.mav1.sensor.001",
+					value: jsonData,
+				}
+				mockKV.On("Get", mock.Anything, "c360.platform1.robotics.mav1.sensor.001").Return(entry, nil)
+			},
+			setupIncomingIndex: func(_ *MockKeyValue) {
+				// Should not be called
+			},
+			verifyCleanupCalls: func(t *testing.T, incomingMock *MockKeyValue) {
+				// Verify no incoming index operations occurred
+				incomingMock.AssertNotCalled(t, "Get")
+				incomingMock.AssertNotCalled(t, "Put")
+				incomingMock.AssertNotCalled(t, "Delete")
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, mockBuckets := setupTestManager(t)
+			ctx := context.Background()
+
+			// Setup mocks
+			outgoingMock := mockBuckets["OUTGOING_INDEX"]
+			incomingMock := mockBuckets["INCOMING_INDEX"]
+
+			if tt.setupOutgoingIndex != nil {
+				tt.setupOutgoingIndex(outgoingMock)
+			}
+			if tt.setupIncomingIndex != nil {
+				tt.setupIncomingIndex(incomingMock)
+			}
+
+			// Execute cleanup
+			err := engine.CleanupOrphanedIncomingReferences(ctx, tt.deletedEntityID)
+
+			// Verify error expectation
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Verify cleanup calls
+			if tt.verifyCleanupCalls != nil {
+				tt.verifyCleanupCalls(t, incomingMock)
+			}
+		})
 	}
 }

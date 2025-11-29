@@ -27,7 +27,7 @@ func (m *Manager) AddTriple(ctx context.Context, triple message.Triple) error {
 		if objStr, ok := triple.Object.(string); ok {
 			// Only validate if it looks like it could be a relationship
 			// (e.g., predicates that typically indicate relationships)
-			if isRelationshipPredicate(triple.Predicate) {
+			if triple.IsRelationship() {
 				exists, err := m.ExistsEntity(ctx, objStr)
 				if err != nil {
 					err = errors.Wrap(err, "DataManager", "AddTriple", "validate target entity")
@@ -218,7 +218,7 @@ func (m *Manager) CheckOutgoingTriplesConsistency(
 
 	// Check each relationship triple's target exists
 	for _, triple := range entity.Triples {
-		if isRelationshipPredicate(triple.Predicate) {
+		if triple.IsRelationship() {
 			if targetID, ok := triple.Object.(string); ok {
 				exists, err := m.ExistsEntity(ctx, targetID)
 				if err != nil || !exists {
@@ -244,23 +244,4 @@ func (m *Manager) HasRelationshipToEntity(entity *gtypes.EntityState, targetEnti
 		}
 	}
 	return false
-}
-
-// isRelationshipPredicate checks if a predicate typically represents a relationship
-// This is a simple heuristic - in production you might have a more sophisticated check
-func isRelationshipPredicate(predicate string) bool {
-	// Common relationship predicates
-	relationshipPredicates := map[string]bool{
-		"POWERED_BY":   true,
-		"NEAR":         true,
-		"LOCATED_AT":   true,
-		"CONNECTED_TO": true,
-		"PART_OF":      true,
-		"CONTROLS":     true,
-		"MONITORS":     true,
-		"COMMUNICATES": true,
-		"DEPENDS_ON":   true,
-		"RELATED_TO":   true,
-	}
-	return relationshipPredicates[predicate]
 }

@@ -60,7 +60,7 @@ func TestIntegration_QueryAPIs(t *testing.T) {
 	err = processor.WaitForReady(5 * time.Second)
 	require.NoError(t, err, "Processor should be ready within 5 seconds")
 
-	// Store a test entity directly
+	// Store a test entity directly - using triples as single source of truth
 	testEntity := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
 			ID:   "test-entity-1",
@@ -78,7 +78,6 @@ func TestIntegration_QueryAPIs(t *testing.T) {
 				Object:    "active",
 			},
 		},
-		Edges:     []gtypes.Edge{},
 		UpdatedAt: time.Now(),
 		Version:   1,
 	}
@@ -307,7 +306,6 @@ func TestIntegration_EdgeOperations(t *testing.T) {
 				Object:    "Test Drone",
 			},
 		},
-		Edges:     []gtypes.Edge{},
 		UpdatedAt: time.Now(),
 		Version:   1,
 	}
@@ -324,7 +322,6 @@ func TestIntegration_EdgeOperations(t *testing.T) {
 				Object:    "Test Battery",
 			},
 		},
-		Edges:     []gtypes.Edge{},
 		UpdatedAt: time.Now(),
 		Version:   1,
 	}
@@ -338,26 +335,36 @@ func TestIntegration_EdgeOperations(t *testing.T) {
 	// Give time for entities to be fully created and indexed
 	time.Sleep(100 * time.Millisecond)
 
-	// Add an edge from entity1 to entity2
-	edge := gtypes.Edge{
-		ToEntityID: entity2ID,
-		EdgeType:   "connects_to",
-		Properties: map[string]any{"weight": 1.0},
+	// Add a relationship via triple (triples are single source of truth for relationships)
+	relationshipTriple := message.Triple{
+		Subject:   entity1ID,
+		Predicate: "robotics.component.connects_to",
+		Object:    entity2ID, // Object is entity ID for relationships
 	}
 
-	// Use the edge manager to add the edge
-	err = processor.edgeManager.AddEdge(ctx, entity1ID, edge)
+	// Use the triple manager to add the relationship triple
+	err = processor.tripleManager.AddTriple(ctx, relationshipTriple)
 	require.NoError(t, err)
 
 	// Give time for asynchronous processing
 	time.Sleep(100 * time.Millisecond)
 
-	// Retrieve entity1 and verify the edge was added
+	// Retrieve entity1 and verify the relationship triple was added
 	updatedEntity1, err := processor.GetEntity(ctx, entity1ID)
 	require.NoError(t, err)
-	assert.Len(t, updatedEntity1.Edges, 1)
-	assert.Equal(t, entity2ID, updatedEntity1.Edges[0].ToEntityID)
-	assert.Equal(t, "connects_to", updatedEntity1.Edges[0].EdgeType)
+
+	// Find relationship triples
+	var relationshipTriples []message.Triple
+	for _, triple := range updatedEntity1.Triples {
+		if triple.IsRelationship() {
+			relationshipTriples = append(relationshipTriples, triple)
+		}
+	}
+	assert.Len(t, relationshipTriples, 1, "Should have one relationship triple")
+	if len(relationshipTriples) > 0 {
+		assert.Equal(t, entity2ID, relationshipTriples[0].Object)
+		assert.Equal(t, "robotics.component.connects_to", relationshipTriples[0].Predicate)
+	}
 
 	// Test incoming index was updated - now expects direct array format
 	incomingBucket, err := natsClient.GetKeyValueBucket(ctx, "INCOMING_INDEX")

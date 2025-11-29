@@ -184,27 +184,24 @@ func (st *StateTracker) DeleteAllForEntity(ctx context.Context, entityID string)
 }
 
 // buildStateKey creates a key for storing rule state in KV.
-// Format: ruleID:entityKey
+// Format: ruleID.entityKey (using dots as separators since NATS KV doesn't allow colons)
 func buildStateKey(ruleID, entityKey string) string {
-	return ruleID + ":" + entityKey
+	return ruleID + "." + entityKey
 }
 
 // containsEntityID checks if a state key contains the given entity ID.
-// Key format: ruleID:entityKey where entityKey is either "entityID" or "entityID1:entityID2"
+// Key format: ruleID.entityKey where entityKey is either "entityID" or "entityID1_entityID2"
+// Since both ruleID and entityKey may contain dots, we just check if the key contains the entityID.
 func containsEntityID(key, entityID string) bool {
-	parts := strings.SplitN(key, ":", 2)
-	if len(parts) < 2 {
-		return false
-	}
-	entityKey := parts[1]
-	return strings.Contains(entityKey, entityID)
+	return strings.Contains(key, entityID)
 }
 
 // buildPairKey creates a canonical entity pair key with IDs sorted alphabetically.
 // This ensures the same key is generated regardless of which entity is "entity" vs "related".
+// Uses underscore as separator to avoid conflicting with dots in entity IDs.
 func buildPairKey(entityID1, entityID2 string) string {
 	if entityID1 < entityID2 {
-		return entityID1 + ":" + entityID2
+		return entityID1 + "_" + entityID2
 	}
-	return entityID2 + ":" + entityID1
+	return entityID2 + "_" + entityID1
 }

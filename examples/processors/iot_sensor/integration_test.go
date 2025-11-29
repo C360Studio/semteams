@@ -225,11 +225,11 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 	}()
 
 	tests := []struct {
-		name            string
-		reading         SensorReading
-		wantEntityParts int
-		wantTriples     int
-		wantEdges       int
+		name                    string
+		reading                 SensorReading
+		wantEntityParts         int
+		wantTriples             int
+		wantRelationshipTriples int // relationship triples (triples where Object is an entity ID)
 	}{
 		{
 			name: "temperature sensor with zone reference",
@@ -243,9 +243,9 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 				OrgID:        "acme",
 				Platform:     "logistics",
 			},
-			wantEntityParts: 6,
-			wantTriples:     4, // measurement, type, zone reference, timestamp
-			wantEdges:       1, // zone relationship edge
+			wantEntityParts:         6,
+			wantTriples:             4, // measurement, type, zone reference, timestamp
+			wantRelationshipTriples: 1, // zone relationship triple
 		},
 		{
 			name: "humidity sensor with zone reference",
@@ -259,9 +259,9 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 				OrgID:        "acme",
 				Platform:     "facilities",
 			},
-			wantEntityParts: 6,
-			wantTriples:     4, // measurement, type, zone reference, timestamp
-			wantEdges:       1, // zone relationship edge
+			wantEntityParts:         6,
+			wantTriples:             4, // measurement, type, zone reference, timestamp
+			wantRelationshipTriples: 1, // zone relationship triple
 		},
 	}
 
@@ -332,9 +332,15 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 				}
 			}
 
-			// Verify edges were created from relationship triples
-			if len(state.Edges) != tt.wantEdges {
-				t.Errorf("EntityState has %d edges, want %d", len(state.Edges), tt.wantEdges)
+			// Count relationship triples (triples where Object is a valid entity ID)
+			var relationshipTripleCount int
+			for _, triple := range state.Triples {
+				if triple.IsRelationship() {
+					relationshipTripleCount++
+				}
+			}
+			if relationshipTripleCount != tt.wantRelationshipTriples {
+				t.Errorf("EntityState has %d relationship triples, want %d", relationshipTripleCount, tt.wantRelationshipTriples)
 			}
 
 			// T043: Write test: Zone entity reference in triples is valid 6-part entity ID
@@ -363,30 +369,16 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 					if zoneID != tt.reading.ZoneEntityID {
 						t.Errorf("Zone entity ID = %q, want %q", zoneID, tt.reading.ZoneEntityID)
 					}
+
+					// Verify that the zone triple is a relationship triple
+					if !triple.IsRelationship() {
+						t.Error("geo.location.zone triple should be identified as a relationship")
+					}
 				}
 			}
 
 			if !foundZoneTriple {
 				t.Error("EntityState missing geo.location.zone triple")
-			}
-
-			// Verify that zone relationship was converted to an edge
-			var foundZoneEdge bool
-			for _, edge := range state.Edges {
-				if edge.ToEntityID == tt.reading.ZoneEntityID {
-					foundZoneEdge = true
-
-					// Verify edge has proper metadata from triple
-					if props, ok := edge.Properties["predicate"].(string); ok {
-						if props != "geo.location.zone" {
-							t.Errorf("Zone edge predicate = %q, want %q", props, "geo.location.zone")
-						}
-					}
-				}
-			}
-
-			if !foundZoneEdge {
-				t.Error("EntityState missing edge to zone entity")
 			}
 		})
 	}

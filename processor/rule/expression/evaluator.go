@@ -3,6 +3,7 @@ package expression
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	gtypes "github.com/c360/semstreams/types/graph"
@@ -320,4 +321,108 @@ func toFloat64(v interface{}) (float64, bool) {
 	default:
 		return 0, false
 	}
+}
+
+// Expression helper functions for rule conditions
+
+// HasTriple checks if an entity has a triple with the given predicate.
+// Returns false if entity is nil or predicate not found.
+func (e *Evaluator) HasTriple(entity *gtypes.EntityState, predicate string) bool {
+	if entity == nil {
+		return false
+	}
+
+	for _, triple := range entity.Triples {
+		if triple.Predicate == predicate {
+			return true
+		}
+	}
+
+	return false
+}
+
+// GetOutgoing returns a list of entity IDs for outgoing relationships with the given predicate.
+// Only returns valid entity IDs (4-part dotted notation), not literal values.
+// Returns empty slice if entity is nil or no relationships found.
+func (e *Evaluator) GetOutgoing(entity *gtypes.EntityState, predicate string) []string {
+	// Always return non-nil slice for consistency
+	outgoing := []string{}
+
+	if entity == nil {
+		return outgoing
+	}
+
+	for _, triple := range entity.Triples {
+		if triple.Predicate == predicate {
+			// Check if Object is a valid entity ID (relationship)
+			if objStr, ok := triple.Object.(string); ok {
+				// Use message.IsValidEntityID to check for valid entity reference
+				if isValidEntityID(objStr) {
+					outgoing = append(outgoing, objStr)
+				}
+			}
+		}
+	}
+
+	return outgoing
+}
+
+// Distance calculates the great-circle distance between two entities in meters
+// using the Haversine formula. Returns error if either entity lacks position data.
+func (e *Evaluator) Distance(entity1, entity2 *gtypes.EntityState) (float64, error) {
+	if entity1 == nil || entity2 == nil {
+		return 0, fmt.Errorf("both entities must be non-nil")
+	}
+
+	pos1 := entity1.Node.Position
+	pos2 := entity2.Node.Position
+
+	if pos1 == nil || pos2 == nil {
+		return 0, fmt.Errorf("both entities must have position data")
+	}
+
+	return haversineDistance(pos1.Latitude, pos1.Longitude, pos2.Latitude, pos2.Longitude), nil
+}
+
+// haversineDistance calculates the great-circle distance between two points
+// on Earth given their latitude and longitude in degrees.
+// Returns distance in meters.
+func haversineDistance(lat1, lon1, lat2, lon2 float64) float64 {
+	const earthRadiusMeters = 6371000 // Earth's radius in meters
+
+	// Convert degrees to radians
+	lat1Rad := lat1 * 3.14159265359 / 180
+	lat2Rad := lat2 * 3.14159265359 / 180
+	deltaLatRad := (lat2 - lat1) * 3.14159265359 / 180
+	deltaLonRad := (lon2 - lon1) * 3.14159265359 / 180
+
+	// Haversine formula
+	a := math.Sin(deltaLatRad/2)*math.Sin(deltaLatRad/2) +
+		math.Cos(lat1Rad)*math.Cos(lat2Rad)*
+			math.Sin(deltaLonRad/2)*math.Sin(deltaLonRad/2)
+
+	c := 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+
+	return earthRadiusMeters * c
+}
+
+// isValidEntityID checks if a string is a valid 6-part entity ID
+// This is a local copy to avoid circular dependency with message package
+func isValidEntityID(s string) bool {
+	if s == "" {
+		return false
+	}
+
+	parts := strings.Split(s, ".")
+	if len(parts) != 6 {
+		return false
+	}
+
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+	}
+
+	return true
 }

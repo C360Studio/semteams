@@ -167,11 +167,8 @@ func TestIntegration_KVEntityStateWatch(t *testing.T) {
 	entityID := "c360.platform1.test.drone.drone1"
 	entityState := gtypes.EntityState{
 		Node: gtypes.NodeProperties{
-			ID:   entityID,
-			Type: "drone",
-			Properties: map[string]any{
-				"name": "Test Drone",
-			},
+			ID:     entityID,
+			Type:   "drone",
 			Status: gtypes.StatusActive,
 		},
 		Triples: []message.Triple{

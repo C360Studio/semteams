@@ -30,12 +30,12 @@ func TestRuntimeConfigurable_ValidateConfigUpdate(t *testing.T) {
 		errorMsg  string
 	}{
 		{
-			name: "valid_battery_monitor_rule",
+			name: "valid_test_rule",
 			changes: map[string]any{
 				"rules": map[string]any{
-					"battery_001": map[string]any{
-						"type": "battery_monitor",
-						"name": "Test Battery Monitor",
+					"test_001": map[string]any{
+						"type": "test_rule",
+						"name": "Test Rule",
 						"conditions": []any{
 							map[string]any{
 								"field":    "robotics.battery.level",
@@ -73,8 +73,8 @@ func TestRuntimeConfigurable_ValidateConfigUpdate(t *testing.T) {
 			name: "invalid_operator",
 			changes: map[string]any{
 				"rules": map[string]any{
-					"battery_003": map[string]any{
-						"type": "battery_monitor",
+					"test_003": map[string]any{
+						"type": "test_rule",
 						"conditions": []any{
 							map[string]any{
 								"field":    "robotics.battery.level",
@@ -92,8 +92,8 @@ func TestRuntimeConfigurable_ValidateConfigUpdate(t *testing.T) {
 			name: "invalid_logic_operator",
 			changes: map[string]any{
 				"rules": map[string]any{
-					"battery_004": map[string]any{
-						"type": "battery_monitor",
+					"test_004": map[string]any{
+						"type": "test_rule",
 						"conditions": []any{
 							map[string]any{
 								"field":    "robotics.battery.level",
@@ -112,8 +112,8 @@ func TestRuntimeConfigurable_ValidateConfigUpdate(t *testing.T) {
 			name: "empty_conditions",
 			changes: map[string]any{
 				"rules": map[string]any{
-					"battery_005": map[string]any{
-						"type":       "battery_monitor",
+					"test_005": map[string]any{
+						"type":       "test_rule",
 						"conditions": []any{},
 					},
 				},
@@ -124,7 +124,7 @@ func TestRuntimeConfigurable_ValidateConfigUpdate(t *testing.T) {
 		{
 			name: "valid_enabled_rules_update",
 			changes: map[string]any{
-				"enabled_rules": []string{"battery_monitor"},
+				"enabled_rules": []string{"test_rule"},
 			},
 			wantError: false,
 		},
@@ -164,10 +164,11 @@ func TestRuntimeConfigurable_ValidateConfigUpdate(t *testing.T) {
 func TestRuntimeConfigurable_ApplyConfigUpdate(t *testing.T) {
 	// Create processor with test dependencies
 	processor := &Processor{
-		natsClient: &natsclient.Client{},
-		logger:     slog.Default(),
-		rules:      make(map[string]rtypes.Rule),
-		config:     &Config{},
+		natsClient:  &natsclient.Client{},
+		logger:      slog.Default(),
+		rules:       make(map[string]rtypes.Rule),
+		ruleConfigs: make(map[string]map[string]any),
+		config:      &Config{},
 	}
 
 	// Test adding a new rule
@@ -175,7 +176,7 @@ func TestRuntimeConfigurable_ApplyConfigUpdate(t *testing.T) {
 		changes := map[string]any{
 			"rules": map[string]any{
 				"battery_test": map[string]any{
-					"type": "battery_monitor",
+					"type": "test_rule",
 					"name": "Test Battery Rule",
 					"conditions": []any{
 						map[string]any{
@@ -204,7 +205,7 @@ func TestRuntimeConfigurable_ApplyConfigUpdate(t *testing.T) {
 	// Test updating enabled_rules
 	t.Run("update_enabled_rules", func(t *testing.T) {
 		changes := map[string]any{
-			"enabled_rules": []string{"battery_monitor"},
+			"enabled_rules": []string{"test_rule"},
 		}
 
 		err := processor.ApplyConfigUpdate(changes)
@@ -212,7 +213,7 @@ func TestRuntimeConfigurable_ApplyConfigUpdate(t *testing.T) {
 
 		config := processor.GetRuntimeConfig()
 		enabledRules := config["enabled_rules"].([]string)
-		assert.Equal(t, []string{"battery_monitor"}, enabledRules)
+		assert.Equal(t, []string{"test_rule"}, enabledRules)
 	})
 
 	// Test toggling graph integration
@@ -237,7 +238,7 @@ func TestRuntimeConfigurable_GetRuntimeConfig(t *testing.T) {
 		logger:     slog.Default(),
 		rules:      make(map[string]rtypes.Rule),
 		config: &Config{
-			EnabledRules:           []string{"battery_monitor"},
+			EnabledRules:           []string{"test_rule"},
 			BufferWindowSize:       "10m",
 			AlertCooldownPeriod:    "2m",
 			EnableGraphIntegration: true,
@@ -259,7 +260,7 @@ func TestRuntimeConfigurable_GetRuntimeConfig(t *testing.T) {
 	assert.NotNil(t, config["is_running"])
 
 	// Check specific values
-	assert.Equal(t, []string{"battery_monitor"}, config["enabled_rules"])
+	assert.Equal(t, []string{"test_rule"}, config["enabled_rules"])
 	assert.Equal(t, true, config["enable_graph_integration"])
 	assert.Equal(t, true, config["is_running"])
 }
@@ -267,17 +268,17 @@ func TestRuntimeConfigurable_GetRuntimeConfig(t *testing.T) {
 // TestRuleFactory_CreateAndValidate tests rule factory creation and validation
 func TestRuleFactoryRegistry(t *testing.T) {
 	// Battery monitor factory should be registered via init()
-	factory, exists := GetRuleFactory("battery_monitor")
+	factory, exists := GetRuleFactory("test_rule")
 	assert.True(t, exists)
 	assert.NotNil(t, factory)
 
 	// Test getting all registered types
 	types := GetRegisteredRuleTypes()
-	assert.Contains(t, types, "battery_monitor")
+	assert.Contains(t, types, "test_rule")
 
 	// Test getting all schemas
 	schemas := GetRuleSchemas()
-	assert.Contains(t, schemas, "battery_monitor")
+	assert.Contains(t, schemas, "test_rule")
 
 	// Test unknown factory type
 	_, exists = GetRuleFactory("unknown_type")
@@ -288,7 +289,7 @@ func TestRuleFactoryRegistry(t *testing.T) {
 func TestCreateRuleFromDefinition(t *testing.T) {
 	def := Definition{
 		ID:   "test_battery_001",
-		Type: "battery_monitor",
+		Type: "test_rule",
 		Name: "Test Battery Monitor",
 		Conditions: []expression.ConditionExpression{
 			{
@@ -347,17 +348,18 @@ func TestDynamicRuleCRUD(t *testing.T) {
 
 	// Create processor
 	processor := &Processor{
-		natsClient: &natsclient.Client{},
-		logger:     slog.Default(),
-		rules:      make(map[string]rtypes.Rule),
-		config:     &Config{},
+		natsClient:  &natsclient.Client{},
+		logger:      slog.Default(),
+		rules:       make(map[string]rtypes.Rule),
+		ruleConfigs: make(map[string]map[string]any),
+		config:      &Config{},
 	}
 
 	// CREATE - Add a new rule
 	createChanges := map[string]any{
 		"rules": map[string]any{
 			"battery_crud_test": map[string]any{
-				"type": "battery_monitor",
+				"type": "test_rule",
 				"name": "CRUD Test Battery",
 				"conditions": []any{
 					map[string]any{
@@ -388,7 +390,7 @@ func TestDynamicRuleCRUD(t *testing.T) {
 	updateChanges := map[string]any{
 		"rules": map[string]any{
 			"battery_crud_test": map[string]any{
-				"type": "battery_monitor",
+				"type": "test_rule",
 				"name": "Updated Battery Rule",
 				"conditions": []any{
 					map[string]any{
@@ -431,7 +433,7 @@ func TestDynamicRuleCRUD(t *testing.T) {
 func createTestRuleDefinition(id string, threshold float64) Definition {
 	return Definition{
 		ID:   id,
-		Type: "battery_monitor",
+		Type: "test_rule",
 		Name: "Test Rule " + id,
 		Conditions: []expression.ConditionExpression{
 			{

@@ -34,12 +34,11 @@ func TestIntegration_SpatialIndex_ProcessesTriples(t *testing.T) {
 	metrics := &InternalMetrics{}
 	spatialIndex := NewSpatialIndex(spatialBucket, natsClient, metrics, nil, nil)
 
-	// Test entity with PROPER triples (not properties)
+	// Test entity with PROPER triples (not properties) - triples are single source of truth
 	entity := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
-			ID:         "c360.platform1.robotics.test.drone.0",
-			Type:       "drone",
-			Properties: map[string]any{}, // Empty - data should be in triples
+			ID:   "c360.platform1.robotics.test.drone.0",
+			Type: "drone",
 		},
 		Triples: []message.Triple{
 			{
@@ -118,19 +117,13 @@ func TestIntegration_SpatialIndex_SkipsWithoutTriples(t *testing.T) {
 	metrics := &InternalMetrics{}
 	spatialIndex := NewSpatialIndex(spatialBucket, natsClient, metrics, nil, nil)
 
-	// Test entity with NO triples (current E2E failure case)
+	// Test entity with NO triples - spatial index should gracefully handle this
 	entity := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
 			ID:   "c360.platform1.robotics.test.drone.1",
 			Type: "drone",
-			Properties: map[string]any{
-				// Location data in properties (anti-pattern)
-				"geo.location.latitude":  37.7749,
-				"geo.location.longitude": -122.4194,
-				"geo.location.altitude":  100.0,
-			},
 		},
-		Triples: nil, // This is what E2E currently has - broken!
+		Triples: nil, // Entity with no triples should not be indexed
 	}
 
 	// Process through spatial index

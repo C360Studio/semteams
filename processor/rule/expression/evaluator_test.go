@@ -415,6 +415,247 @@ func TestExpressionEvaluator_UnsupportedOperator(t *testing.T) {
 	assert.Contains(t, evalErr.Message, "unsupported operator")
 }
 
+// T054: Test hasTriple() function
+func TestHasTriple(t *testing.T) {
+	evaluator := NewExpressionEvaluator()
+
+	tests := []struct {
+		name      string
+		entity    *gtypes.EntityState
+		predicate string
+		expected  bool
+	}{
+		{
+			name: "triple exists",
+			entity: createTestEntity("drone.001", []message.Triple{
+				{
+					Subject:   "drone.001",
+					Predicate: "proximity.near",
+					Object:    "drone.002",
+					Source:    "test",
+					Timestamp: time.Now(),
+				},
+			}),
+			predicate: "proximity.near",
+			expected:  true,
+		},
+		{
+			name: "triple does not exist",
+			entity: createTestEntity("drone.001", []message.Triple{
+				{
+					Subject:   "drone.001",
+					Predicate: "robotics.battery.level",
+					Object:    85.5,
+					Source:    "test",
+					Timestamp: time.Now(),
+				},
+			}),
+			predicate: "proximity.near",
+			expected:  false,
+		},
+		{
+			name:      "nil entity",
+			entity:    nil,
+			predicate: "proximity.near",
+			expected:  false,
+		},
+		{
+			name:      "empty triples",
+			entity:    createTestEntity("drone.001", []message.Triple{}),
+			predicate: "proximity.near",
+			expected:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := evaluator.HasTriple(tt.entity, tt.predicate)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// T055: Test getOutgoing() function
+func TestGetOutgoing(t *testing.T) {
+	evaluator := NewExpressionEvaluator()
+
+	tests := []struct {
+		name      string
+		entity    *gtypes.EntityState
+		predicate string
+		expected  []string
+	}{
+		{
+			name: "single outgoing relationship",
+			entity: createTestEntity("drone.001", []message.Triple{
+				{
+					Subject:   "drone.001",
+					Predicate: "proximity.near",
+					Object:    "c360.platform1.robotics.mav1.drone.002",
+					Source:    "test",
+					Timestamp: time.Now(),
+				},
+			}),
+			predicate: "proximity.near",
+			expected:  []string{"c360.platform1.robotics.mav1.drone.002"},
+		},
+		{
+			name: "multiple outgoing relationships",
+			entity: createTestEntity("drone.001", []message.Triple{
+				{
+					Subject:   "drone.001",
+					Predicate: "proximity.near",
+					Object:    "c360.platform1.robotics.mav1.drone.002",
+					Source:    "test",
+					Timestamp: time.Now(),
+				},
+				{
+					Subject:   "drone.001",
+					Predicate: "proximity.near",
+					Object:    "c360.platform1.robotics.mav1.drone.003",
+					Source:    "test",
+					Timestamp: time.Now(),
+				},
+			}),
+			predicate: "proximity.near",
+			expected:  []string{"c360.platform1.robotics.mav1.drone.002", "c360.platform1.robotics.mav1.drone.003"},
+		},
+		{
+			name: "no matching predicate",
+			entity: createTestEntity("drone.001", []message.Triple{
+				{
+					Subject:   "drone.001",
+					Predicate: "fleet.member_of",
+					Object:    "c360.platform1.robotics.mav1.fleet.alpha",
+					Source:    "test",
+					Timestamp: time.Now(),
+				},
+			}),
+			predicate: "proximity.near",
+			expected:  []string{},
+		},
+		{
+			name: "non-relationship triple (literal value)",
+			entity: createTestEntity("drone.001", []message.Triple{
+				{
+					Subject:   "drone.001",
+					Predicate: "robotics.battery.level",
+					Object:    85.5,
+					Source:    "test",
+					Timestamp: time.Now(),
+				},
+			}),
+			predicate: "robotics.battery.level",
+			expected:  []string{},
+		},
+		{
+			name:      "nil entity",
+			entity:    nil,
+			predicate: "proximity.near",
+			expected:  []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := evaluator.GetOutgoing(tt.entity, tt.predicate)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// T056: Test distance() function
+func TestDistance(t *testing.T) {
+	evaluator := NewExpressionEvaluator()
+
+	// Create entities with position data
+	entityWithPosition := func(id string, lat, lon float64) *gtypes.EntityState {
+		return &gtypes.EntityState{
+			Node: gtypes.NodeProperties{
+				ID:   id,
+				Type: "robotics.drone",
+				Position: &gtypes.Position{
+					Latitude:  lat,
+					Longitude: lon,
+				},
+			},
+			Triples:   []message.Triple{},
+			Version:   1,
+			UpdatedAt: time.Now(),
+		}
+	}
+
+	entity1 := entityWithPosition("drone.001", 40.7128, -74.0060)  // New York
+	entity2 := entityWithPosition("drone.002", 34.0522, -118.2437) // Los Angeles
+	entity3 := entityWithPosition("drone.003", 40.7128, -74.0060)  // Same as entity1
+	entityNoPos := createTestEntity("drone.004", []message.Triple{})
+
+	// Store entities in a map for lookup
+	entities := map[string]*gtypes.EntityState{
+		"drone.001": entity1,
+		"drone.002": entity2,
+		"drone.003": entity3,
+		"drone.004": entityNoPos,
+	}
+
+	tests := []struct {
+		name        string
+		entity1ID   string
+		entity2ID   string
+		expectError bool
+		minDistance float64 // Minimum expected distance (for range checks)
+		maxDistance float64 // Maximum expected distance
+	}{
+		{
+			name:        "different locations (NY to LA)",
+			entity1ID:   "drone.001",
+			entity2ID:   "drone.002",
+			expectError: false,
+			minDistance: 3900000, // ~3900 km
+			maxDistance: 4000000, // ~4000 km
+		},
+		{
+			name:        "same location",
+			entity1ID:   "drone.001",
+			entity2ID:   "drone.003",
+			expectError: false,
+			minDistance: 0,
+			maxDistance: 1, // Allow tiny floating point error
+		},
+		{
+			name:        "missing position data",
+			entity1ID:   "drone.001",
+			entity2ID:   "drone.004",
+			expectError: true,
+			minDistance: 0,
+			maxDistance: 0,
+		},
+		{
+			name:        "both missing position",
+			entity1ID:   "drone.004",
+			entity2ID:   "drone.004",
+			expectError: true,
+			minDistance: 0,
+			maxDistance: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			distance, err := evaluator.Distance(entities[tt.entity1ID], entities[tt.entity2ID])
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Equal(t, 0.0, distance)
+			} else {
+				assert.NoError(t, err)
+				assert.GreaterOrEqual(t, distance, tt.minDistance)
+				assert.LessOrEqual(t, distance, tt.maxDistance)
+			}
+		})
+	}
+}
+
 // Helper function to create test entity states
 func createTestEntity(entityID string, triples []message.Triple) *gtypes.EntityState {
 	return &gtypes.EntityState{

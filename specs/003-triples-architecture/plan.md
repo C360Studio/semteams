@@ -103,34 +103,16 @@ pkg/graphclustering/
 - Triple.ExpiresAt field added
 - Unit and integration tests passing
 
-### Phase 6b: Index Synchronization Fixes (NEW)
-
-**Status**: 🔄 IN PROGRESS
-
-**Gap Identified**: Entity deletion leaves orphaned INCOMING_INDEX entries. The `isRelationshipPredicate()` function uses hardcoded predicate list instead of vocabulary system.
-
-**Requirements**:
-- FR-005a: Read OUTGOING_INDEX on delete to identify targets
-- FR-005b: Remove deleted entity from each target's INCOMING_INDEX
-- FR-005c: Cleanup sequence (INCOMING first, then OUTGOING)
-- FR-006a: Use Triple.IsRelationship() for relationship detection
-- FR-006b: No hardcoded predicate lists
-
-**Implementation**:
-1. IncomingIndex.RemoveIncomingReference() - already exists
-2. Manager.CleanupOrphanedIncomingReferences() - orchestrates cleanup
-3. OutgoingIndex.HandleDelete() - calls cleanup before delete
-4. Replace isRelationshipPredicate() with Triple.IsRelationship()
-
 ### Phase 2: Stateful Rules (US2 - Auto Retraction)
 
-**Status**: ⏳ PENDING
+**Status**: ✅ COMPLETE (2025-11-28)
 
-- RULE_STATE KV bucket
-- StateTracker with transition detection
-- OnEnter/OnExit/WhileTrue rule actions
-- add_triple/remove_triple action types
-- Expired triple cleanup worker
+- RULE_STATE KV bucket - StateTracker persists match state
+- StateTracker with transition detection - DetectTransition() function
+- OnEnter/OnExit/WhileTrue rule actions - StatefulEvaluator fires actions on transitions
+- add_triple/remove_triple action types - ActionExecutor supports both
+- Expression functions: hasTriple(), getOutgoing(), distance()
+- Expired triple cleanup worker - exists in processor/graph/cleanup.go
 
 ### Phase 3: Community Alignment (US3 - Unified Queries)
 
@@ -148,6 +130,25 @@ pkg/graphclustering/
 - Properties field removed from NodeProperties
 - Triples as single source of truth
 - Helper methods GetTriple(), GetPropertyValue() available
+
+### Phase 6b: Index Synchronization Fixes (Post-US4)
+
+**Status**: 🔄 IN PROGRESS
+
+**Gap Identified**: Entity deletion leaves orphaned INCOMING_INDEX entries. The `isRelationshipPredicate()` function uses hardcoded predicate list instead of vocabulary system.
+
+**Requirements**:
+- FR-005a: Read OUTGOING_INDEX on delete to identify targets
+- FR-005b: Remove deleted entity from each target's INCOMING_INDEX
+- FR-005c: Cleanup sequence (INCOMING first, then OUTGOING)
+- FR-006a: Use Triple.IsRelationship() for relationship detection
+- FR-006b: No hardcoded predicate lists
+
+**Implementation**:
+1. IncomingIndex.RemoveIncomingReference() - already exists
+2. Manager.CleanupOrphanedIncomingReferences() - orchestrates cleanup
+3. Manager.updateIndex() - calls cleanup before outgoing delete
+4. Replace isRelationshipPredicate() with Triple.IsRelationship()
 
 ### Phase 5: Polish
 

@@ -121,8 +121,8 @@ As a developer working with SemStreams, I want entity data to have a single repr
 
 **Phase 4: Deprecations**
 
-- **FR-019**: System MUST log deprecation warnings when EntityState.Edges is accessed.
-- **FR-020**: System MUST log deprecation warnings when Node.Properties is accessed.
+- **FR-019**: ~~System MUST log deprecation warnings when EntityState.Edges is accessed.~~ *N/A - Greenfield: fields removed directly without deprecation period.*
+- **FR-020**: ~~System MUST log deprecation warnings when Node.Properties is accessed.~~ *N/A - Greenfield: fields removed directly without deprecation period.*
 - **FR-021**: System MUST provide GetTriple(predicate) helper method on EntityState.
 - **FR-022**: System MUST provide GetPropertyValue(predicate) helper method on EntityState.
 
@@ -131,7 +131,7 @@ As a developer working with SemStreams, I want entity data to have a single repr
 - **FR-023**: System MUST remove Edges field from EntityState.
 - **FR-024**: System MUST remove Properties field from NodeProperties.
 - **FR-025**: System MUST remove extractPropertiesAndRelationships() processing.
-- **FR-026**: System MUST provide migration tooling for existing data.
+- **FR-026**: ~~System MUST provide migration tooling for existing data.~~ *N/A - Greenfield: no legacy data to migrate.*
 
 ### Key Entities
 

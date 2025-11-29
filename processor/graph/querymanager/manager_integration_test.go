@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/processor/graph/datamanager"
@@ -198,16 +199,24 @@ func TestQueryManager_IntegrationWithNATS(t *testing.T) {
 	checkStartupErrors(t, dataErrors, indexErrors)
 
 	t.Run("Basic Entity Query", func(t *testing.T) {
-		// Create a test entity
+		// Create a test entity with triples (single source of truth)
 		entity := &gtypes.EntityState{
 			Node: gtypes.NodeProperties{
-				ID:   "test.platform.domain.system.type.instance1",
-				Type: "domain.type",
-				Properties: map[string]any{
-					"name":   "TestEntity",
-					"status": "active",
-				},
+				ID:     "test.platform.domain.system.type.instance1",
+				Type:   "domain.type",
 				Status: gtypes.StatusActive,
+			},
+			Triples: []message.Triple{
+				{
+					Subject:   "test.platform.domain.system.type.instance1",
+					Predicate: "domain.entity.name",
+					Object:    "TestEntity",
+				},
+				{
+					Subject:   "test.platform.domain.system.type.instance1",
+					Predicate: "domain.entity.status",
+					Object:    "active",
+				},
 			},
 			Version:   1,
 			UpdatedAt: time.Now(),
@@ -226,7 +235,7 @@ func TestQueryManager_IntegrationWithNATS(t *testing.T) {
 		require.NoError(t, err, "Failed to get entity")
 		assert.NotNil(t, result, "Query result should not be nil")
 		assert.Equal(t, entity.Node.ID, result.Node.ID, "Entity ID should match")
-		assert.Equal(t, entity.Node.Properties, result.Node.Properties, "Properties should match")
+		assert.GreaterOrEqual(t, len(result.Triples), 2, "Triples should be present")
 	})
 
 	t.Run("Query Non-existent Entity", func(t *testing.T) {
@@ -236,29 +245,37 @@ func TestQueryManager_IntegrationWithNATS(t *testing.T) {
 	})
 
 	t.Run("Entity with Relationships", func(t *testing.T) {
-		// Create source entity
+		// Create source entity - using triples as single source of truth
 		sourceEntity := &gtypes.EntityState{
 			Node: gtypes.NodeProperties{
-				ID:   "test.platform.domain.system.type.source2",
-				Type: "source.type",
-				Properties: map[string]any{
-					"name": "SourceEntity",
-				},
+				ID:     "test.platform.domain.system.type.source2",
+				Type:   "source.type",
 				Status: gtypes.StatusActive,
+			},
+			Triples: []message.Triple{
+				{
+					Subject:   "test.platform.domain.system.type.source2",
+					Predicate: "domain.entity.name",
+					Object:    "SourceEntity",
+				},
 			},
 			Version:   1,
 			UpdatedAt: time.Now(),
 		}
 
-		// Create target entity
+		// Create target entity - using triples as single source of truth
 		targetEntity := &gtypes.EntityState{
 			Node: gtypes.NodeProperties{
-				ID:   "test.platform.domain.system.type.target2",
-				Type: "target.type",
-				Properties: map[string]any{
-					"name": "TargetEntity",
-				},
+				ID:     "test.platform.domain.system.type.target2",
+				Type:   "target.type",
 				Status: gtypes.StatusActive,
+			},
+			Triples: []message.Triple{
+				{
+					Subject:   "test.platform.domain.system.type.target2",
+					Predicate: "domain.entity.name",
+					Object:    "TargetEntity",
+				},
 			},
 			Version:   1,
 			UpdatedAt: time.Now(),

@@ -1,6 +1,6 @@
 # ADR: Temporal Graph Modeling and Stateful Rules
 
-**Status:** Proposed
+**Status:** Implemented
 **Priority:** High
 **Related:** ADR-TRIPLES-AS-SOURCE-OF-TRUTH.md, TODO-GRAPH-INDEXING-ARCHITECTURE.md
 

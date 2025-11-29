@@ -1,6 +1,6 @@
 # TODO: Graph Indexing Architectural Issues
 
-**Status:** Open
+**Status:** Resolved
 **Priority:** Medium
 **Related:** ADR-TRIPLES-AS-SOURCE-OF-TRUTH.md, ADR-TEMPORAL-GRAPH-MODELING.md, TODO-PREDICATE-NOTATION-CONSISTENCY.md
 

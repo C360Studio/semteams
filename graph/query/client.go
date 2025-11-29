@@ -319,9 +319,11 @@ func (qc *natsClient) GetOutgoingRelationships(ctx context.Context, entityID str
 		if predicate != "" && triple.Predicate != predicate {
 			continue
 		}
-		// Check if this is a relationship triple (object is a string entity ID)
-		if targetID, ok := triple.Object.(string); ok && isRelationshipPredicate(triple.Predicate) {
-			result = append(result, targetID)
+		// Check if this is a relationship triple (object is a valid 6-part EntityID)
+		if triple.IsRelationship() {
+			if targetID, ok := triple.Object.(string); ok {
+				result = append(result, targetID)
+			}
 		}
 	}
 	return result, nil
@@ -343,9 +345,9 @@ func (qc *natsClient) GetEntityConnections(ctx context.Context, entityID string)
 	var connectedEntities []*gtypes.EntityState
 	seenIDs := make(map[string]bool)
 
-	// Get outgoing connections via relationship triples
+	// Get outgoing connections via relationship triples (object is a valid 6-part EntityID)
 	for _, triple := range sourceEntity.Triples {
-		if isRelationshipPredicate(triple.Predicate) {
+		if triple.IsRelationship() {
 			if targetID, ok := triple.Object.(string); ok && !seenIDs[targetID] {
 				if targetEntity, err := qc.GetEntity(ctx, targetID); err == nil {
 					connectedEntities = append(connectedEntities, targetEntity)
@@ -737,8 +739,8 @@ func (qc *natsClient) continueTraversalIfValid(
 
 // shouldFollowTriple determines if a triple should be followed based on predicate filter
 func (qc *natsClient) shouldFollowTriple(triple message.Triple, predicateFilter []string) bool {
-	// Only follow relationship triples
-	if !isRelationshipPredicate(triple.Predicate) {
+	// Only follow relationship triples (object is a valid 6-part EntityID)
+	if !triple.IsRelationship() {
 		return false
 	}
 
@@ -801,22 +803,4 @@ func (qc *natsClient) entityMatchesCriteria(entity *gtypes.EntityState, criteria
 	}
 
 	return true
-}
-
-// isRelationshipPredicate checks if a predicate typically represents a relationship
-// Common relationship predicates are those that reference other entities
-func isRelationshipPredicate(predicate string) bool {
-	relationshipPredicates := map[string]bool{
-		"POWERED_BY":   true,
-		"NEAR":         true,
-		"LOCATED_AT":   true,
-		"CONNECTED_TO": true,
-		"PART_OF":      true,
-		"CONTROLS":     true,
-		"MONITORS":     true,
-		"COMMUNICATES": true,
-		"DEPENDS_ON":   true,
-		"RELATED_TO":   true,
-	}
-	return relationshipPredicates[predicate]
 }

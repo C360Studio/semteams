@@ -8,6 +8,7 @@
 **What this component does**: Provides base implementation and interface definition for all stream processors in the SemStreams system.
 
 **Key responsibilities**:
+
 - Define the core Processor interface for raw data processing
 - Provide BaseProcessor with default implementations for common functionality
 - Handle processor lifecycle management (initialize, shutdown)
@@ -19,17 +20,20 @@
 ## Architecture Context
 
 ### Integration Points
+
 - **Consumes from**: Raw data streams via NATS subjects (raw.*.*)
 - **Provides to**: Component health monitoring system, processor registration catalog
 - **External dependencies**: NATS connection, component package health system
 
 ### Data Flow
+
 ```
 Raw NATS Subjects → Processor.ProcessRawData() → Implementation-specific processing
 Health System ← Processor.Health() ← BaseProcessor timing/status tracking
 ```
 
 ### Configuration
+
 ```yaml
 # Processors inherit base configuration
 name: "processor-name"      # Processor identifier
@@ -40,6 +44,7 @@ enabled: true              # Runtime enable/disable
 ## Critical Behaviors (Testing Focus)
 
 ### Happy Path - What Should Work
+
 1. **Processor Lifecycle**: Initialize → Process Data → Shutdown cycle
    - **Input**: Context, NATS connection, raw data subjects
    - **Expected**: Clean startup, data processing, graceful shutdown

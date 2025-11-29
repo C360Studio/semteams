@@ -171,56 +171,46 @@ func TestIntegration_GraphQLWithQueryManager(t *testing.T) {
 func createTestEntities(ctx context.Context, t *testing.T, processor *Processor, entity1ID, entity2ID string) {
 	t.Helper()
 
-	// Create entity 1 (drone)
+	// Create entity 1 (drone) - using triples as single source of truth
 	entity1 := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
 			ID:   entity1ID,
 			Type: "drone",
-			Properties: map[string]interface{}{
-				"name":   "Test Drone GraphQL",
-				"status": "active",
-			},
 		},
 		Triples: []message.Triple{
 			{
 				Subject:   entity1ID,
-				Predicate: "name",
+				Predicate: "robotics.drone.name",
 				Object:    "Test Drone GraphQL",
 			},
 			{
 				Subject:   entity1ID,
-				Predicate: "status",
+				Predicate: "robotics.drone.status",
 				Object:    "active",
 			},
 		},
-		Edges:     []gtypes.Edge{},
 		UpdatedAt: time.Now(),
 		Version:   1,
 	}
 
-	// Create entity 2 (battery)
+	// Create entity 2 (battery) - using triples as single source of truth
 	entity2 := &gtypes.EntityState{
 		Node: gtypes.NodeProperties{
 			ID:   entity2ID,
 			Type: "battery",
-			Properties: map[string]interface{}{
-				"name":  "Test Battery GraphQL",
-				"level": 85,
-			},
 		},
 		Triples: []message.Triple{
 			{
 				Subject:   entity2ID,
-				Predicate: "name",
+				Predicate: "robotics.battery.name",
 				Object:    "Test Battery GraphQL",
 			},
 			{
 				Subject:   entity2ID,
-				Predicate: "level",
+				Predicate: "robotics.battery.level",
 				Object:    85,
 			},
 		},
-		Edges:     []gtypes.Edge{},
 		UpdatedAt: time.Now(),
 		Version:   1,
 	}
@@ -234,23 +224,24 @@ func createTestEntities(ctx context.Context, t *testing.T, processor *Processor,
 	// Wait for entities to be indexed
 	time.Sleep(100 * time.Millisecond)
 
-	// Add relationship: entity1 → entity2
-	edge := gtypes.Edge{
-		ToEntityID: entity2ID,
-		EdgeType:   "connects_to",
-		Properties: map[string]any{"strength": 1.0},
+	// Add relationship via triple (triples are now single source of truth for relationships)
+	relationshipTriple := message.Triple{
+		Subject:   entity1ID,
+		Predicate: "robotics.component.connects_to",
+		Object:    entity2ID, // Object is entity ID for relationships
 	}
 
-	err = processor.edgeManager.AddEdge(ctx, entity1ID, edge)
+	err = processor.tripleManager.AddTriple(ctx, relationshipTriple)
 	require.NoError(t, err)
 
-	// Wait longer for edge to be indexed (relationship indexing is async)
+	// Wait longer for triple to be indexed (relationship indexing is async)
 	time.Sleep(500 * time.Millisecond)
 
-	// Verify the edge was added by checking the entity directly
+	// Verify the relationship was added by checking triples
 	updatedEntity, err := processor.GetEntity(ctx, entity1ID)
 	require.NoError(t, err)
-	require.Len(t, updatedEntity.Edges, 1, "Entity should have one edge after AddEdge")
+	// Verify we have relationship triple (original 2 property triples + 1 relationship triple)
+	require.GreaterOrEqual(t, len(updatedEntity.Triples), 3, "Entity should have triples including relationship")
 }
 
 // setupGraphQLGateway creates a GraphQL gateway with QueryManager backend
