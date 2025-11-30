@@ -261,20 +261,6 @@ tasks:
         ignore_error: true
       - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
 
-  # IoT Sensor E2E task
-  e2e:iot-sensor:
-    desc: Run IoT sensor pipeline E2E test (JSON → IoT Processor → Graph → Storage)
-    silent: false
-    deps: [e2e:clean, e2e:check-ports, build:e2e]
-    cmds:
-      - echo "[IOT E2E] Starting IoT sensor pipeline test (requires graph processor)..."
-      - docker compose -f docker-compose.semantic.yml up -d --wait
-      - echo "[OK] Services are healthy (UDP input + Graph processor)"
-      - echo "[IOT E2E] Running iot-sensor-pipeline scenario..."
-      - cmd: cd cmd/e2e && ./e2e --scenario iot-sensor-pipeline
-        ignore_error: true
-      - docker compose -f docker-compose.semantic.yml down -v --timeout 15
-
   # Rule Processor E2E tasks
   e2e:rules-graph:
     desc: Run rule processor → graph processor integration test

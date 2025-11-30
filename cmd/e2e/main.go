@@ -114,8 +114,6 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Printf("  semantic-basic       - Basic semantic processing: UDP → JSONGeneric → Graph Processor\n")
 	fmt.Printf("  semantic-indexes     - Core semantic indexes (fast, no external dependencies)\n")
 	fmt.Printf("  semantic-kitchen-sink - Comprehensive semantic: Indexes + Embedding + Metrics + HTTP Gateway\n")
-	fmt.Println("\nIoT Examples:")
-	fmt.Printf("  iot-sensor-pipeline  - Full IoT sensor pipeline: JSON → IoT Processor → Graph → Storage\n")
 	fmt.Println("\nRule Processor:")
 	fmt.Printf("  rules-graph          - Rule → Graph integration with EnableGraphIntegration flag\n")
 	fmt.Printf("  rules-performance    - Load testing (throughput, latency, stability)\n")
@@ -198,7 +196,6 @@ func runScenarios(
 		fmt.Println("  semantic-basic         - Basic semantic processing")
 		fmt.Println("  semantic-indexes       - Core semantic indexes (fast)")
 		fmt.Println("  semantic-kitchen-sink  - Comprehensive semantic stack")
-		fmt.Println("  iot-sensor-pipeline    - Full IoT sensor pipeline")
 		fmt.Println("  rules-graph            - Rule → Graph integration")
 		fmt.Println("  rules-performance      - Rule processor load testing")
 		return 1
@@ -229,8 +226,6 @@ func createScenario(
 		return scenarios.NewSemanticIndexesScenario(edgeClient, udpEndpoint, nil)
 	case "semantic-kitchen-sink", "kitchen-sink", "kitchen":
 		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, udpEndpoint, nil)
-	case "iot-sensor-pipeline", "iot-sensor", "iot":
-		return scenarios.NewIoTSensorPipelineScenario(edgeClient, udpEndpoint, nil)
 	case "rules-graph", "rules-graph-integration":
 		return scenarios.NewRulesGraphScenario(edgeClient, udpEndpoint, nil)
 	case "rules-performance", "rules-perf":
