@@ -352,7 +352,13 @@ func extractSchemaFromRegistration(name string, reg *component.Registration) map
 		prop["description"] = propSchema.Description
 
 		if propSchema.Default != nil {
-			prop["default"] = propSchema.Default
+			// Normalize int to float64 since JSON unmarshal produces float64 for numbers
+			switch v := propSchema.Default.(type) {
+			case int:
+				prop["default"] = float64(v)
+			default:
+				prop["default"] = propSchema.Default
+			}
 		}
 		if propSchema.Minimum != nil {
 			prop["minimum"] = *propSchema.Minimum
@@ -361,10 +367,21 @@ func extractSchemaFromRegistration(name string, reg *component.Registration) map
 			prop["maximum"] = *propSchema.Maximum
 		}
 		if len(propSchema.Enum) > 0 {
-			prop["enum"] = propSchema.Enum
+			// Convert []string to []any for JSON comparison compatibility
+			enumAny := make([]any, len(propSchema.Enum))
+			for i, e := range propSchema.Enum {
+				enumAny[i] = e
+			}
+			prop["enum"] = enumAny
 		}
 		if propSchema.Category != "" {
 			prop["category"] = propSchema.Category
+		}
+		// Handle array types - add items schema
+		if propSchema.Type == "array" {
+			prop["items"] = map[string]interface{}{
+				"type": "string", // Default to string items
+			}
 		}
 
 		properties[propName] = prop

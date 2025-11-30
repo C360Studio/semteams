@@ -317,11 +317,13 @@ func (r *Registry) ListFactories() map[string]*Registration {
 		// Create a copy of the registration without the factory function
 		// to avoid potential issues with function pointers
 		result[name] = &Registration{
+			Name:         registration.Name,
 			Type:         registration.Type,
 			Protocol:     registration.Protocol,
 			Domain:       registration.Domain,
 			Description:  registration.Description,
 			Version:      registration.Version,
+			Schema:       registration.Schema,
 			Dependencies: registration.Dependencies,
 			// Factory is intentionally not copied for safety
 		}

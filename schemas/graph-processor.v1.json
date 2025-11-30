@@ -4,7 +4,46 @@
   "type": "object",
   "title": "graph-processor Configuration",
   "description": "Graph processor for entity extraction and storage",
-  "properties": {},
+  "properties": {
+    "data_manager": {
+      "type": "object",
+      "description": "Data manager configuration",
+      "category": "advanced"
+    },
+    "indexer": {
+      "type": "object",
+      "description": "Index manager configuration",
+      "category": "advanced"
+    },
+    "input_subject": {
+      "type": "string",
+      "description": "NATS subject to subscribe for input messages",
+      "default": "storage.*.events",
+      "category": "basic"
+    },
+    "message_handler": {
+      "type": "object",
+      "description": "Message handler configuration",
+      "category": "advanced"
+    },
+    "querier": {
+      "type": "object",
+      "description": "Query manager configuration",
+      "category": "advanced"
+    },
+    "queue_size": {
+      "type": "number",
+      "description": "Worker queue size",
+      "default": 10000,
+      "category": "basic"
+    },
+    "workers": {
+      "type": "number",
+      "description": "Number of worker goroutines",
+      "default": 10,
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "graph-processor",

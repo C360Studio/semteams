@@ -4,7 +4,13 @@
   "type": "object",
   "title": "udp Configuration",
   "description": "UDP input component for receiving MAVLink and other UDP data",
-  "properties": {},
+  "properties": {
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "udp",

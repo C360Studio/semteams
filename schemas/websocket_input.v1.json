@@ -4,7 +4,28 @@
   "type": "object",
   "title": "websocket_input Configuration",
   "description": "WebSocket input for receiving federated data from remote StreamKit instances",
-  "properties": {},
+  "properties": {
+    "backpressure": {
+      "type": "object",
+      "description": "Backpressure handling configuration",
+      "category": "advanced"
+    },
+    "bidirectional": {
+      "type": "object",
+      "description": "Bidirectional request/reply configuration",
+      "category": "advanced"
+    },
+    "mode": {
+      "type": "string",
+      "description": "Operation mode (server or client)",
+      "category": "basic"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "websocket_input",

@@ -4,7 +4,21 @@
   "type": "object",
   "title": "json_filter Configuration",
   "description": "GenericJSON (core .json.v1) filter for field-based filtering",
-  "properties": {},
+  "properties": {
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    },
+    "rules": {
+      "type": "array",
+      "description": "Filter rules",
+      "items": {
+        "type": "string"
+      },
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "json_filter",

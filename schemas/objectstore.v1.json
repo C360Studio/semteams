@@ -4,7 +4,19 @@
   "type": "object",
   "title": "objectstore Configuration",
   "description": "NATS ObjectStore component for immutable message storage",
-  "properties": {},
+  "properties": {
+    "bucket_name": {
+      "type": "string",
+      "description": "NATS ObjectStore bucket name",
+      "default": "MESSAGES",
+      "category": "basic"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration for inputs and outputs",
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "objectstore",

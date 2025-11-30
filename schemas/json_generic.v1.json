@@ -4,7 +4,13 @@
   "type": "object",
   "title": "json_generic Configuration",
   "description": "Wraps plain JSON into GenericJSON (core .json.v1) format",
-  "properties": {},
+  "properties": {
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "json_generic",

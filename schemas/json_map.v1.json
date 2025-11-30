@@ -4,7 +4,32 @@
   "type": "object",
   "title": "json_map Configuration",
   "description": "GenericJSON (core .json.v1) field transformer for renaming, adding, and removing fields",
-  "properties": {},
+  "properties": {
+    "add_fields": {
+      "type": "object",
+      "description": "Static fields"
+    },
+    "mappings": {
+      "type": "array",
+      "description": "Field mappings",
+      "items": {
+        "type": "string"
+      },
+      "category": "basic"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    },
+    "remove_fields": {
+      "type": "array",
+      "description": "Field removal",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "json_map",

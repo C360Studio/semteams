@@ -4,7 +4,43 @@
   "type": "object",
   "title": "file Configuration",
   "description": "File output for writing messages to disk in JSON, JSONL, or raw format",
-  "properties": {},
+  "properties": {
+    "append": {
+      "type": "boolean",
+      "description": "Append mode",
+      "category": "advanced"
+    },
+    "buffer_size": {
+      "type": "number",
+      "description": "Buffer size",
+      "category": "advanced"
+    },
+    "directory": {
+      "type": "string",
+      "description": "Output directory",
+      "category": "basic"
+    },
+    "file_prefix": {
+      "type": "string",
+      "description": "Prefix",
+      "category": "basic"
+    },
+    "format": {
+      "type": "string",
+      "description": "format",
+      "enum": [
+        "json",
+        "jsonl",
+        "raw"
+      ],
+      "category": "basic"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "file",

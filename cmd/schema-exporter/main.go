@@ -127,7 +127,8 @@ type PropertySchema struct {
 	Enum        []string        `json:"enum,omitempty"`
 	Minimum     *int            `json:"minimum,omitempty"`
 	Maximum     *int            `json:"maximum,omitempty"`
-	Items       *PropertySchema `json:"items,omitempty"` // For array types
+	Items       *PropertySchema `json:"items,omitempty"`    // For array types
+	Category    string          `json:"category,omitempty"` // UI organization: "basic" or "advanced"
 }
 
 // extractSchema converts a component registration to a JSON Schema
@@ -142,6 +143,7 @@ func extractSchema(name string, registration *component.Registration) ComponentS
 			Enum:        propSchema.Enum,
 			Minimum:     propSchema.Minimum,
 			Maximum:     propSchema.Maximum,
+			Category:    propSchema.Category,
 		}
 
 		// Handle array types

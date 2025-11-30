@@ -4,7 +4,23 @@
   "type": "object",
   "title": "websocket Configuration",
   "description": "WebSocket output component for real-time visualization and data streaming",
-  "properties": {},
+  "properties": {
+    "ack_timeout": {
+      "type": "string",
+      "description": "Acknowledgment timeout (e.g. 5s)",
+      "category": "advanced"
+    },
+    "delivery_mode": {
+      "type": "string",
+      "description": "Delivery reliability mode",
+      "category": "advanced"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "websocket",

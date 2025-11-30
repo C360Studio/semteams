@@ -4,7 +4,34 @@
   "type": "object",
   "title": "http Configuration",
   "description": "HTTP gateway for bidirectional NATS request/reply",
-  "properties": {},
+  "properties": {
+    "cors_origins": {
+      "type": "array",
+      "description": "Allowed origins (required for CORS)",
+      "items": {
+        "type": "string"
+      },
+      "category": "advanced"
+    },
+    "enable_cors": {
+      "type": "boolean",
+      "description": "Enable CORS",
+      "category": "advanced"
+    },
+    "max_request_size": {
+      "type": "number",
+      "description": "Max request size (bytes)",
+      "category": "advanced"
+    },
+    "routes": {
+      "type": "array",
+      "description": "Route mappings",
+      "items": {
+        "type": "string"
+      },
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "http",

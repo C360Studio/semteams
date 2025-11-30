@@ -4,7 +4,62 @@
   "type": "object",
   "title": "graphql Configuration",
   "description": "GraphQL gateway for schema-driven NATS queries",
-  "properties": {},
+  "properties": {
+    "bind_address": {
+      "type": "string",
+      "description": "HTTP bind address",
+      "default": ":8080",
+      "category": "basic"
+    },
+    "cors_origins": {
+      "type": "array",
+      "description": "Allowed CORS origins",
+      "items": {
+        "type": "string"
+      },
+      "category": "advanced"
+    },
+    "enable_cors": {
+      "type": "boolean",
+      "description": "Enable CORS",
+      "default": true,
+      "category": "advanced"
+    },
+    "enable_playground": {
+      "type": "boolean",
+      "description": "Enable GraphQL Playground",
+      "default": true,
+      "category": "basic"
+    },
+    "max_query_depth": {
+      "type": "number",
+      "description": "Maximum query depth",
+      "default": 10,
+      "category": "advanced"
+    },
+    "nats_subjects": {
+      "type": "object",
+      "description": "NATS subject configuration",
+      "category": "basic"
+    },
+    "path": {
+      "type": "string",
+      "description": "GraphQL endpoint path",
+      "default": "/graphql",
+      "category": "basic"
+    },
+    "schema_file": {
+      "type": "string",
+      "description": "GraphQL schema file path",
+      "category": "basic"
+    },
+    "timeout": {
+      "type": "string",
+      "description": "Query timeout",
+      "default": "30s",
+      "category": "advanced"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "graphql",

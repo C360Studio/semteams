@@ -4,7 +4,38 @@
   "type": "object",
   "title": "httppost Configuration",
   "description": "HTTP POST output for sending messages to HTTP endpoints with retries",
-  "properties": {},
+  "properties": {
+    "content_type": {
+      "type": "string",
+      "description": "Content-Type",
+      "category": "basic"
+    },
+    "headers": {
+      "type": "object",
+      "description": "HTTP headers",
+      "category": "advanced"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    },
+    "retry_count": {
+      "type": "number",
+      "description": "Retry count",
+      "category": "advanced"
+    },
+    "timeout": {
+      "type": "number",
+      "description": "Timeout (sec)",
+      "category": "advanced"
+    },
+    "url": {
+      "type": "string",
+      "description": "HTTP endpoint URL",
+      "category": "basic"
+    }
+  },
   "required": [],
   "x-component-metadata": {
     "name": "httppost",
