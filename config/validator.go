@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // ComponentRegistry defines the interface needed for schema validation
@@ -102,7 +102,7 @@ func (cm *Manager) ValidateAndPersistComponentConfig(
 	// First validate the configuration
 	var config map[string]any
 	if err := json.Unmarshal(configJSON, &config); err != nil {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("invalid JSON configuration: %w", err),
 			"Manager", "ValidateAndPersistComponentConfig", "parse config JSON")
 	}
@@ -110,7 +110,7 @@ func (cm *Manager) ValidateAndPersistComponentConfig(
 	validationErrors := cm.ValidateWithSchema(ctx, registry, componentType, config)
 	if len(validationErrors) > 0 {
 		// Return first validation error wrapped appropriately
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("configuration validation failed: %s", validationErrors[0].Message),
 			"Manager", "ValidateAndPersistComponentConfig", "validate config")
 	}
@@ -122,14 +122,14 @@ func (cm *Manager) ValidateAndPersistComponentConfig(
 	// Re-marshal the config as it may have been modified
 	configData, err := json.Marshal(config)
 	if err != nil {
-		return errors.WrapFatal(
+		return errs.WrapFatal(
 			fmt.Errorf("failed to marshal config: %w", err),
 			"Manager", "ValidateAndPersistComponentConfig", "marshal config")
 	}
 
 	_, err = cm.kvStore.Put(ctx, key, configData)
 	if err != nil {
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			fmt.Errorf("failed to persist config to KV: %w", err),
 			"Manager", "ValidateAndPersistComponentConfig", "persist to KV")
 	}

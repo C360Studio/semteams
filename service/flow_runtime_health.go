@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // RuntimeHealthResponse represents the JSON response for runtime health
@@ -119,7 +119,7 @@ func (fs *FlowService) getComponentsHealth(
 	// Get ComponentManager from service manager
 	componentManager, err := fs.getComponentManager()
 	if err != nil {
-		return nil, errors.WrapTransient(err, "FlowService", "getComponentsHealth", "get component manager")
+		return nil, errs.WrapTransient(err, "FlowService", "getComponentsHealth", "get component manager")
 	}
 
 	// Get all managed components with their state
@@ -305,7 +305,7 @@ func (fs *FlowService) calculateOverallStatus(errorCount, degradedCount int) str
 func (fs *FlowService) getComponentManager() (*ComponentManager, error) {
 	// Get service manager from dependencies
 	if fs.serviceMgr == nil {
-		return nil, errors.WrapFatal(
+		return nil, errs.WrapFatal(
 			fmt.Errorf("service manager not available"),
 			"FlowService",
 			"getComponentManager",
@@ -316,7 +316,7 @@ func (fs *FlowService) getComponentManager() (*ComponentManager, error) {
 	// Get ComponentManager from service manager
 	svc, exists := fs.serviceMgr.GetService("component-manager")
 	if !exists {
-		return nil, errors.WrapFatal(
+		return nil, errs.WrapFatal(
 			fmt.Errorf("component-manager service not found"),
 			"FlowService",
 			"getComponentManager",
@@ -327,7 +327,7 @@ func (fs *FlowService) getComponentManager() (*ComponentManager, error) {
 	// Type assert to ComponentManager
 	cm, ok := svc.(*ComponentManager)
 	if !ok {
-		return nil, errors.WrapFatal(
+		return nil, errs.WrapFatal(
 			fmt.Errorf("service is not a ComponentManager: %T", svc),
 			"FlowService",
 			"getComponentManager",

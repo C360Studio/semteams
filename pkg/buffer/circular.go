@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // circularBuffer is a thread-safe circular buffer with configurable overflow policies.
@@ -43,7 +43,7 @@ func newCircularBuffer[T any](capacity int, opts *bufferOptions[T]) (*circularBu
 		metrics, err = newBufferMetrics(opts.metricsReg, opts.metricsPrefix)
 		if err != nil {
 			// Return classified error instead of silently ignoring
-			return nil, errors.WrapTransient(err, "buffer", "newCircularBuffer", "metrics registration")
+			return nil, errs.WrapTransient(err, "buffer", "newCircularBuffer", "metrics registration")
 		}
 	}
 
@@ -68,7 +68,7 @@ func (cb *circularBuffer[T]) Write(item T) error {
 	defer cb.mu.Unlock()
 
 	if cb.closed {
-		return errors.WrapInvalid(errors.ErrAlreadyStopped, "Buffer", "Write", "buffer closed")
+		return errs.WrapInvalid(errs.ErrAlreadyStopped, "Buffer", "Write", "buffer closed")
 	}
 
 	// Handle different overflow policies when buffer is full
@@ -119,7 +119,7 @@ func (cb *circularBuffer[T]) Write(item T) error {
 			}
 
 			if cb.closed {
-				return errors.WrapInvalid(errors.ErrAlreadyStopped, "Buffer", "Write",
+				return errs.WrapInvalid(errs.ErrAlreadyStopped, "Buffer", "Write",
 					"buffer closed during blocking wait")
 			}
 		}
@@ -366,7 +366,7 @@ func (cb *circularBuffer[T]) WriteWithContext(ctx context.Context, item T) error
 	defer cb.mu.Unlock()
 
 	if cb.closed {
-		return errors.WrapInvalid(errors.ErrAlreadyStopped, "Buffer", "WriteWithContext", "buffer closed")
+		return errs.WrapInvalid(errs.ErrAlreadyStopped, "Buffer", "WriteWithContext", "buffer closed")
 	}
 
 	// Check if context is already cancelled
@@ -418,7 +418,7 @@ func (cb *circularBuffer[T]) WriteWithContext(ctx context.Context, item T) error
 	}
 
 	if cb.closed {
-		return errors.WrapInvalid(errors.ErrAlreadyStopped, "Buffer", "WriteWithContext", "buffer closed during wait")
+		return errs.WrapInvalid(errs.ErrAlreadyStopped, "Buffer", "WriteWithContext", "buffer closed during wait")
 	}
 
 	// Add the item

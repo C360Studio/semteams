@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Config configures the IndexManager
@@ -279,7 +279,7 @@ func (c *Config) Validate() error {
 func (c *Config) validateEventBuffer() error {
 	if c.EventBuffer.Capacity <= 0 {
 		msg := fmt.Sprintf("event_buffer.capacity must be positive, got %d", c.EventBuffer.Capacity)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 
 	validOverflowPolicies := []string{"drop_oldest", "drop_newest", "block"}
@@ -296,7 +296,7 @@ func (c *Config) validateEventBuffer() error {
 			validOverflowPolicies,
 			c.EventBuffer.OverflowPolicy,
 		)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 
 	return nil
@@ -310,21 +310,21 @@ func (c *Config) validateDeduplication() error {
 				"deduplication.window must be positive when enabled, got %v",
 				c.Deduplication.Window,
 			)
-			return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 		}
 		if c.Deduplication.CacheSize <= 0 {
 			msg := fmt.Sprintf(
 				"deduplication.cache_size must be positive when enabled, got %d",
 				c.Deduplication.CacheSize,
 			)
-			return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 		}
 		if c.Deduplication.TTL <= 0 {
 			msg := fmt.Sprintf(
 				"deduplication.ttl must be positive when enabled, got %v",
 				c.Deduplication.TTL,
 			)
-			return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 		}
 	}
 	return nil
@@ -334,14 +334,14 @@ func (c *Config) validateDeduplication() error {
 func (c *Config) validateBatchProcessing() error {
 	if c.BatchProcessing.Size <= 0 {
 		msg := fmt.Sprintf("batch_processing.size must be positive, got %d", c.BatchProcessing.Size)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	if c.BatchProcessing.Interval <= 0 {
 		msg := fmt.Sprintf(
 			"batch_processing.interval must be positive, got %v",
 			c.BatchProcessing.Interval,
 		)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	return nil
 }
@@ -350,14 +350,14 @@ func (c *Config) validateBatchProcessing() error {
 func (c *Config) validateWorkers() error {
 	if c.Workers <= 0 {
 		msg := fmt.Sprintf("workers must be positive, got %d", c.Workers)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	if c.Workers > 100 {
 		msg := fmt.Sprintf(
 			"workers should not exceed 100 for performance reasons, got %d",
 			c.Workers,
 		)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	return nil
 }
@@ -366,11 +366,11 @@ func (c *Config) validateWorkers() error {
 func (c *Config) validateTimeouts() error {
 	if c.ProcessTimeout <= 0 {
 		msg := fmt.Sprintf("process_timeout must be positive, got %v", c.ProcessTimeout)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	if c.QueryTimeout <= 0 {
 		msg := fmt.Sprintf("query_timeout must be positive, got %v", c.QueryTimeout)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	return nil
 }
@@ -380,7 +380,7 @@ func (c *Config) validateIndexes() error {
 	if !c.Indexes.Predicate && !c.Indexes.Incoming && !c.Indexes.Alias &&
 		!c.Indexes.Spatial && !c.Indexes.Temporal {
 		msg := "at least one index type must be enabled"
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	return nil
 }
@@ -389,22 +389,22 @@ func (c *Config) validateIndexes() error {
 func (c *Config) validateHealthCheck() error {
 	if c.HealthCheck.Interval <= 0 {
 		msg := fmt.Sprintf("health_check.interval must be positive, got %v", c.HealthCheck.Interval)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	if c.HealthCheck.MaxLag <= 0 {
 		msg := fmt.Sprintf("health_check.max_lag must be positive, got %v", c.HealthCheck.MaxLag)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	if c.HealthCheck.MaxBacklog <= 0 {
 		msg := fmt.Sprintf(
 			"health_check.max_backlog must be positive, got %d",
 			c.HealthCheck.MaxBacklog,
 		)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	if c.HealthCheck.MaxErrors <= 0 {
 		msg := fmt.Sprintf("health_check.max_errors must be positive, got %d", c.HealthCheck.MaxErrors)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "Validate", msg)
 	}
 	return nil
 }
@@ -423,7 +423,7 @@ func (c *Config) validateBuckets() error {
 	for name, bucket := range buckets {
 		if bucket == "" {
 			msg := fmt.Sprintf("bucket name for %s cannot be empty", name)
-			return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "validateBucketConfig", msg)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "validateBucketConfig", msg)
 		}
 		if len(bucket) > 64 {
 			msg := fmt.Sprintf(
@@ -431,7 +431,7 @@ func (c *Config) validateBuckets() error {
 				name,
 				bucket,
 			)
-			return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "validateBucketConfig", msg)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "validateBucketConfig", msg)
 		}
 	}
 
@@ -445,7 +445,7 @@ func (c *Config) validateBuckets() error {
 				name,
 				existing,
 			)
-			return errors.WrapInvalid(errors.ErrInvalidConfig, "IndexEngine", "validateBucketConfig", msg)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "IndexEngine", "validateBucketConfig", msg)
 		}
 		seen[bucket] = name
 	}

@@ -135,9 +135,9 @@
 //
 // The component uses streamkit/errors for consistent error classification:
 //
-//   - Invalid config: errors.WrapInvalid (bad port, invalid path)
-//   - Network errors: errors.WrapTransient (connection failures)
-//   - Write timeouts: errors.WrapTransient (slow client)
+//   - Invalid config: errs.WrapInvalid (bad port, invalid path)
+//   - Network errors: errs.WrapTransient (connection failures)
+//   - Write timeouts: errs.WrapTransient (slow client)
 //   - Client errors: Logged but don't stop server
 //
 // Per-client errors don't affect other clients or server health.

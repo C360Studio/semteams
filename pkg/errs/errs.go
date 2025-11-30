@@ -1,7 +1,7 @@
-// Package errors provides standardized error handling patterns for SemStreams components.
+// Package errs provides standardized error handling patterns for SemStreams components.
 // It includes error classification, standard error variables, and helper functions
 // for consistent error wrapping and classification across the system.
-package errors
+package errs
 
 import (
 	"context"

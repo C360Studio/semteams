@@ -3,7 +3,7 @@ package rule
 import (
 	"fmt"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/rule/expression"
 	rtypes "github.com/c360/semstreams/types/rule"
 )
@@ -14,7 +14,7 @@ func (rp *Processor) ValidateConfigUpdate(changes map[string]any) error {
 	if rulesConfig, ok := changes["rules"]; ok {
 		rulesMap, ok := rulesConfig.(map[string]any)
 		if !ok {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("rules configuration must be an object, got %T", rulesConfig),
 				"RuleProcessor", "ValidateConfigUpdate", "validate rules type")
 		}
@@ -22,7 +22,7 @@ func (rp *Processor) ValidateConfigUpdate(changes map[string]any) error {
 		// Validate each rule definition
 		for ruleID, ruleConfig := range rulesMap {
 			if err := rp.validateSingleRuleConfig(ruleID, ruleConfig); err != nil {
-				return errors.Wrap(err, "RuleProcessor", "ValidateConfigUpdate",
+				return errs.Wrap(err, "RuleProcessor", "ValidateConfigUpdate",
 					fmt.Sprintf("validate rule %s", ruleID))
 			}
 		}
@@ -39,13 +39,13 @@ func (rp *Processor) ValidateConfigUpdate(changes map[string]any) error {
 					if s, ok := v.(string); ok {
 						enabledRules[i] = s
 					} else {
-						return errors.WrapInvalid(
+						return errs.WrapInvalid(
 							fmt.Errorf("enabled_rules[%d] must be string, got %T", i, v),
 							"RuleProcessor", "ValidateConfigUpdate", "validate enabled_rules type")
 					}
 				}
 			} else {
-				return errors.WrapInvalid(
+				return errs.WrapInvalid(
 					fmt.Errorf("enabled_rules must be array of strings, got %T", enabledRulesVal),
 					"RuleProcessor", "ValidateConfigUpdate", "validate enabled_rules type")
 			}
@@ -54,7 +54,7 @@ func (rp *Processor) ValidateConfigUpdate(changes map[string]any) error {
 		// Validate rule names are known types
 		for _, ruleName := range enabledRules {
 			if !rp.isKnownRuleType(ruleName) {
-				return errors.WrapInvalid(
+				return errs.WrapInvalid(
 					fmt.Errorf("unknown rule type: %s", ruleName),
 					"RuleProcessor", "ValidateConfigUpdate", "validate rule type")
 			}
@@ -68,13 +68,13 @@ func (rp *Processor) ValidateConfigUpdate(changes map[string]any) error {
 			if anySlice, ok := patternsVal.([]any); ok {
 				for i, v := range anySlice {
 					if _, ok := v.(string); !ok {
-						return errors.WrapInvalid(
+						return errs.WrapInvalid(
 							fmt.Errorf("entity_watch_patterns[%d] must be string, got %T", i, v),
 							"RuleProcessor", "ValidateConfigUpdate", "validate patterns type")
 					}
 				}
 			} else {
-				return errors.WrapInvalid(
+				return errs.WrapInvalid(
 					fmt.Errorf("entity_watch_patterns must be array of strings, got %T", patternsVal),
 					"RuleProcessor", "ValidateConfigUpdate", "validate patterns type")
 			}
@@ -84,7 +84,7 @@ func (rp *Processor) ValidateConfigUpdate(changes map[string]any) error {
 	// Validate enable_graph_integration if present
 	if integrationVal, ok := changes["enable_graph_integration"]; ok {
 		if _, ok := integrationVal.(bool); !ok {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("enable_graph_integration must be boolean, got %T", integrationVal),
 				"RuleProcessor", "ValidateConfigUpdate", "validate integration type")
 		}

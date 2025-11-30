@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/acme"
 	"github.com/c360/semstreams/pkg/buffer"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/security"
 	"github.com/c360/semstreams/pkg/tlsutil"
 	"github.com/gorilla/websocket"
@@ -267,7 +267,7 @@ func NewInput(
 ) (*Input, error) {
 	// Validate configuration
 	if config.Mode != ModeServer && config.Mode != ModeClient {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("invalid mode: %s", config.Mode),
 			"websocket_input",
 			"NewInput",
@@ -276,7 +276,7 @@ func NewInput(
 	}
 
 	if config.Mode == ModeServer && config.ServerConfig == nil {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("server config required for server mode"),
 			"websocket_input",
 			"NewInput",
@@ -285,7 +285,7 @@ func NewInput(
 	}
 
 	if config.Mode == ModeClient && config.ClientConfig == nil {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("client config required for client mode"),
 			"websocket_input",
 			"NewInput",
@@ -331,7 +331,7 @@ func NewInput(
 
 	messageBuffer, err := buffer.NewCircularBuffer(queueSize, bufferOpts...)
 	if err != nil {
-		return nil, errors.WrapFatal(err, "websocket_input", "NewInput", "create message buffer")
+		return nil, errs.WrapFatal(err, "websocket_input", "NewInput", "create message buffer")
 	}
 
 	input := &Input{
@@ -487,7 +487,7 @@ func (i *Input) Start(ctx context.Context) error {
 	defer i.lifecycleMu.Unlock()
 
 	if i.started.Load() {
-		return errors.WrapFatal(
+		return errs.WrapFatal(
 			fmt.Errorf("component already started"),
 			"websocket_input",
 			"Start",
@@ -557,7 +557,7 @@ func (i *Input) Stop(timeout time.Duration) error {
 	case <-doneCh:
 		// Clean shutdown
 	case <-time.After(timeout):
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			fmt.Errorf("shutdown timeout after %v", timeout),
 			"websocket_input",
 			"Stop",
@@ -583,7 +583,7 @@ func (i *Input) Stop(timeout time.Duration) error {
 
 // Process implements component.LifecycleComponent (not used for input components)
 func (i *Input) Process(_ any) error {
-	return errors.WrapFatal(
+	return errs.WrapFatal(
 		fmt.Errorf("Process() not supported for input components"),
 		"websocket_input",
 		"Process",
@@ -619,7 +619,7 @@ func (i *Input) startServer(ctx context.Context) error {
 				i.security.TLS.Server,
 			)
 			if err != nil {
-				return errors.WrapFatal(err, "websocket_input", "startServer",
+				return errs.WrapFatal(err, "websocket_input", "startServer",
 					"load TLS config with ACME")
 			}
 
@@ -634,7 +634,7 @@ func (i *Input) startServer(ctx context.Context) error {
 				i.security.TLS.Server.MTLS,
 			)
 			if err != nil {
-				return errors.WrapFatal(err, "websocket_input", "startServer",
+				return errs.WrapFatal(err, "websocket_input", "startServer",
 					"load TLS config with mTLS")
 			}
 		}
@@ -1046,12 +1046,12 @@ func (i *Input) calculateReconnectDelay() time.Duration {
 func (i *Input) parseEnvelope(data []byte) (*MessageEnvelope, error) {
 	var envelope MessageEnvelope
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		return nil, errors.WrapInvalid(err, "websocket_input", "parseEnvelope", "unmarshal message")
+		return nil, errs.WrapInvalid(err, "websocket_input", "parseEnvelope", "unmarshal message")
 	}
 
 	// Validate envelope
 	if envelope.Type == "" {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("missing message type"),
 			"websocket_input",
 			"parseEnvelope",

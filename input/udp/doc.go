@@ -115,9 +115,9 @@
 //
 // The component uses semstreams/errors for consistent error classification:
 //
-//   - Invalid config: errors.WrapInvalid (bad configuration)
-//   - Network errors: errors.WrapTransient (retryable)
-//   - NATS errors: errors.WrapTransient (connection issues)
+//   - Invalid config: errs.WrapInvalid (bad configuration)
+//   - Network errors: errs.WrapTransient (retryable)
+//   - NATS errors: errs.WrapTransient (connection issues)
 //
 // Errors are logged and counted but don't stop the component unless fatal.
 //

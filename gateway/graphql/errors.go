@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/99designs/gqlgen/graphql"
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go"
 	"github.com/vektah/gqlparser/v2/gqlerror"
 )
@@ -66,7 +66,7 @@ func mapNATSError(err error, operation string) error {
 	}
 
 	// Map SemStreams error classifications
-	if errors.IsTransient(err) {
+	if errs.IsTransient(err) {
 		return &gqlerror.Error{
 			Message: fmt.Sprintf("Temporary error: %s", err.Error()),
 			Extensions: map[string]interface{}{
@@ -77,7 +77,7 @@ func mapNATSError(err error, operation string) error {
 		}
 	}
 
-	if errors.IsInvalid(err) {
+	if errs.IsInvalid(err) {
 		return &gqlerror.Error{
 			Message: fmt.Sprintf("Invalid input: %s", err.Error()),
 			Extensions: map[string]interface{}{
@@ -87,7 +87,7 @@ func mapNATSError(err error, operation string) error {
 		}
 	}
 
-	if errors.IsFatal(err) {
+	if errs.IsFatal(err) {
 		return &gqlerror.Error{
 			Message: "Internal server error",
 			Extensions: map[string]interface{}{

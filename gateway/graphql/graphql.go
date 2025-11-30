@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/gateway"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 )
 
@@ -55,17 +55,17 @@ type Gateway struct {
 func NewGraphQLGateway(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	var config Config
 	if err := component.SafeUnmarshal(rawConfig, &config); err != nil {
-		return nil, errors.WrapInvalid(err, "GraphQLGateway", "NewGraphQLGateway", "config unmarshal")
+		return nil, errs.WrapInvalid(err, "GraphQLGateway", "NewGraphQLGateway", "config unmarshal")
 	}
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
-		return nil, errors.WrapInvalid(err, "GraphQLGateway", "NewGraphQLGateway", "config validation")
+		return nil, errs.WrapInvalid(err, "GraphQLGateway", "NewGraphQLGateway", "config validation")
 	}
 
 	// Validate dependencies
 	if deps.NATSClient == nil {
-		return nil, errors.WrapFatal(errors.ErrMissingConfig, "GraphQLGateway", "NewGraphQLGateway",
+		return nil, errs.WrapFatal(errs.ErrMissingConfig, "GraphQLGateway", "NewGraphQLGateway",
 			"NATS client is required")
 	}
 
@@ -107,7 +107,7 @@ func NewGraphQLGateway(rawConfig json.RawMessage, deps component.Dependencies) (
 	// Create HTTP server
 	server, err := NewServer(config, resolver, logger)
 	if err != nil {
-		return nil, errors.WrapFatal(err, "GraphQLGateway", "NewGraphQLGateway", "create server")
+		return nil, errs.WrapFatal(err, "GraphQLGateway", "NewGraphQLGateway", "create server")
 	}
 
 	gateway.resolver = resolver
@@ -122,7 +122,7 @@ func (g *Gateway) Initialize() error {
 
 	// Setup HTTP server
 	if err := g.server.Setup(); err != nil {
-		return errors.WrapFatal(err, "GraphQLGateway", "Initialize", "server setup")
+		return errs.WrapFatal(err, "GraphQLGateway", "Initialize", "server setup")
 	}
 
 	g.logger.Info("GraphQL gateway initialized",
@@ -137,7 +137,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 	// ComponentManager already serializes Start/Stop calls
 	// Check if already running (atomic read, no lock needed)
 	if g.running.Load() {
-		return errors.WrapFatal(errors.ErrAlreadyStarted, "GraphQLGateway", "Start",
+		return errs.WrapFatal(errs.ErrAlreadyStarted, "GraphQLGateway", "Start",
 			"gateway already running")
 	}
 
@@ -173,7 +173,7 @@ func (g *Gateway) Start(ctx context.Context) error {
 	case err := <-errChan:
 		return err
 	case <-time.After(5 * time.Second):
-		return errors.WrapFatal(errors.ErrConnectionTimeout, "GraphQLGateway", "Start",
+		return errs.WrapFatal(errs.ErrConnectionTimeout, "GraphQLGateway", "Start",
 			"server failed to start within timeout")
 	}
 

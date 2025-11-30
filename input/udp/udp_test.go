@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
 	gonats "github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
@@ -147,7 +147,7 @@ func TestUDPInput_Initialize(t *testing.T) {
 		subject       string
 		natsClient    *natsclient.Client
 		expectedError bool
-		errorClass    errors.ErrorClass
+		errorClass    errs.ErrorClass
 	}{
 		{
 			name:          "valid configuration",
@@ -162,7 +162,7 @@ func TestUDPInput_Initialize(t *testing.T) {
 			subject:       "test.subject",
 			natsClient:    &natsclient.Client{},
 			expectedError: true,
-			errorClass:    errors.ErrorInvalid,
+			errorClass:    errs.ErrorInvalid,
 		},
 		{
 			name:          "invalid port - too high",
@@ -170,7 +170,7 @@ func TestUDPInput_Initialize(t *testing.T) {
 			subject:       "test.subject",
 			natsClient:    &natsclient.Client{},
 			expectedError: true,
-			errorClass:    errors.ErrorInvalid,
+			errorClass:    errs.ErrorInvalid,
 		},
 		{
 			name:          "empty subject",
@@ -178,7 +178,7 @@ func TestUDPInput_Initialize(t *testing.T) {
 			subject:       "",
 			natsClient:    &natsclient.Client{},
 			expectedError: true,
-			errorClass:    errors.ErrorInvalid,
+			errorClass:    errs.ErrorInvalid,
 		},
 		{
 			name:          "nil NATS client",
@@ -186,7 +186,7 @@ func TestUDPInput_Initialize(t *testing.T) {
 			subject:       "test.subject",
 			natsClient:    nil,
 			expectedError: true,
-			errorClass:    errors.ErrorInvalid,
+			errorClass:    errs.ErrorInvalid,
 		},
 	}
 
@@ -203,7 +203,7 @@ func TestUDPInput_Initialize(t *testing.T) {
 
 			if tt.expectedError {
 				require.Error(t, err)
-				assert.Equal(t, tt.errorClass, errors.Classify(err), "error should have correct classification")
+				assert.Equal(t, tt.errorClass, errs.Classify(err), "error should have correct classification")
 			} else {
 				assert.NoError(t, err)
 			}
@@ -523,7 +523,7 @@ func TestUDPInput_Creation_MissingNATS(t *testing.T) {
 
 	_, err = CreateInput(configJSON, deps)
 	require.Error(t, err)
-	require.True(t, errors.IsInvalid(err), "Missing NATS client should be classified as invalid")
+	require.True(t, errs.IsInvalid(err), "Missing NATS client should be classified as invalid")
 	require.Contains(t, err.Error(), "NATS client")
 }
 
@@ -1074,7 +1074,7 @@ func TestUDPInput_StopTimeout(t *testing.T) {
 	}
 	assert.Error(t, err, "Stop should return timeout error")
 	// Error should be properly classified
-	assert.True(t, errors.IsTransient(err), "timeout errors should be transient")
+	assert.True(t, errs.IsTransient(err), "timeout errors should be transient")
 	assert.GreaterOrEqual(t, duration, 4500*time.Millisecond, "should wait at least ~5 seconds")
 	assert.Less(t, duration, 6*time.Second, "should not wait much longer than 5 seconds")
 }
@@ -1156,7 +1156,7 @@ func TestUDPInput_ErrorHandling(t *testing.T) {
 	input := NewInput(deps)
 	err := input.Initialize()
 	require.Error(t, err, "should error on invalid port")
-	assert.True(t, errors.IsInvalid(err), "invalid port should be classified as invalid")
+	assert.True(t, errs.IsInvalid(err), "invalid port should be classified as invalid")
 
 	// Test empty subject - should return properly classified error
 	deps = InputDeps{
@@ -1168,7 +1168,7 @@ func TestUDPInput_ErrorHandling(t *testing.T) {
 	input = NewInput(deps)
 	err = input.Initialize()
 	require.Error(t, err, "should error on empty subject")
-	assert.True(t, errors.IsInvalid(err), "empty subject should be classified as invalid")
+	assert.True(t, errs.IsInvalid(err), "empty subject should be classified as invalid")
 
 	// Test nil NATS client - should return properly classified error
 	deps = InputDeps{
@@ -1180,7 +1180,7 @@ func TestUDPInput_ErrorHandling(t *testing.T) {
 	input = NewInput(deps)
 	err = input.Initialize()
 	require.Error(t, err, "should error on nil NATS client")
-	assert.True(t, errors.IsInvalid(err), "nil NATS client should be classified as invalid")
+	assert.True(t, errs.IsInvalid(err), "nil NATS client should be classified as invalid")
 
 	// Test already running
 	port := findAvailablePort(t)
@@ -1267,11 +1267,11 @@ func TestUDPInput_RetryIntegration(t *testing.T) {
 
 	testOperation := func() error {
 		// Simulate a transient error
-		return errors.WrapTransient(fmt.Errorf("network timeout"), "udp-input", "test", "simulated timeout")
+		return errs.WrapTransient(fmt.Errorf("network timeout"), "udp-input", "test", "simulated timeout")
 	}
 
 	err := retry.Do(ctx, input.retryConfig, testOperation)
 	assert.Error(t, err, "should fail after retries")
-	assert.True(t, errors.IsTransient(err) || strings.Contains(err.Error(), "failed after"),
+	assert.True(t, errs.IsTransient(err) || strings.Contains(err.Error(), "failed after"),
 		"should be transient error or retry exhausted message")
 }

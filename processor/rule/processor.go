@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	message "github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360/semstreams/pkg/errs"
 	rtypes "github.com/c360/semstreams/types/rule"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -238,7 +238,7 @@ func (rp *Processor) Initialize() error {
 
 	// Load rules based on configuration
 	if err := rp.loadRules(); err != nil {
-		return errors.Wrap(err, "RuleProcessor", "initialize", "load rules")
+		return errs.Wrap(err, "RuleProcessor", "initialize", "load rules")
 	}
 
 	rp.logger.Info("Rule processor initialized", "rule_count", len(rp.rules))
@@ -325,7 +325,7 @@ func (rp *Processor) Start(ctx context.Context) error {
 	defer rp.mu.Unlock()
 
 	if rp.running {
-		return errors.WrapInvalid(errors.ErrAlreadyStarted, "RuleProcessor", "Start", "check processor state")
+		return errs.WrapInvalid(errs.ErrAlreadyStarted, "RuleProcessor", "Start", "check processor state")
 	}
 
 	// Initialize message cache with context and metrics
@@ -371,7 +371,7 @@ func (rp *Processor) Start(ctx context.Context) error {
 // setupSubscriptions creates NATS subscriptions for input subjects
 func (rp *Processor) setupSubscriptions(ctx context.Context) error {
 	if !rp.natsClient.IsHealthy() {
-		return errors.WrapFatal(errors.ErrNoConnection, "RuleProcessor", "Start", "check NATS health")
+		return errs.WrapFatal(errs.ErrNoConnection, "RuleProcessor", "Start", "check NATS health")
 	}
 
 	// Get subjects from ports
@@ -393,7 +393,7 @@ func (rp *Processor) setupSubscriptions(ctx context.Context) error {
 			rp.handleMessage(msgCtx, subject, data)
 		})
 		if err != nil {
-			return errors.Wrap(err, "RuleProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
+			return errs.Wrap(err, "RuleProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
 		}
 
 		rp.logger.Info("Rule processor subscribed", "subject", subject)

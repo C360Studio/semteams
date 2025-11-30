@@ -7,7 +7,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 const (
@@ -67,7 +67,7 @@ func NewStorage(indexBucket, dedupBucket jetstream.KeyValue) *Storage {
 // SavePending saves a pending embedding request
 func (s *Storage) SavePending(ctx context.Context, entityID, contentHash, sourceText string) error {
 	if entityID == "" {
-		return errors.WrapInvalid(errors.ErrMissingConfig, "Storage", "SavePending", "entity_id is empty")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "SavePending", "entity_id is empty")
 	}
 
 	record := &Record{
@@ -79,11 +79,11 @@ func (s *Storage) SavePending(ctx context.Context, entityID, contentHash, source
 
 	data, err := json.Marshal(record)
 	if err != nil {
-		return errors.WrapInvalid(err, "Storage", "SavePending", "marshal embedding record")
+		return errs.WrapInvalid(err, "Storage", "SavePending", "marshal embedding record")
 	}
 
 	if _, err := s.indexBucket.Put(ctx, entityID, data); err != nil {
-		return errors.WrapTransient(err, "Storage", "SavePending", "put pending embedding")
+		return errs.WrapTransient(err, "Storage", "SavePending", "put pending embedding")
 	}
 
 	return nil
@@ -92,13 +92,13 @@ func (s *Storage) SavePending(ctx context.Context, entityID, contentHash, source
 // SaveGenerated saves a generated embedding with metadata
 func (s *Storage) SaveGenerated(ctx context.Context, entityID string, vector []float32, model string, dimensions int) error {
 	if entityID == "" {
-		return errors.WrapInvalid(errors.ErrMissingConfig, "Storage", "SaveGenerated", "entity_id is empty")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "SaveGenerated", "entity_id is empty")
 	}
 
 	// Get existing record to preserve content_hash
 	existing, err := s.GetEmbedding(ctx, entityID)
 	if err != nil {
-		return errors.WrapTransient(err, "Storage", "SaveGenerated", "get existing record")
+		return errs.WrapTransient(err, "Storage", "SaveGenerated", "get existing record")
 	}
 
 	record := &Record{
@@ -113,11 +113,11 @@ func (s *Storage) SaveGenerated(ctx context.Context, entityID string, vector []f
 
 	data, err := json.Marshal(record)
 	if err != nil {
-		return errors.WrapInvalid(err, "Storage", "SaveGenerated", "marshal embedding record")
+		return errs.WrapInvalid(err, "Storage", "SaveGenerated", "marshal embedding record")
 	}
 
 	if _, err := s.indexBucket.Put(ctx, entityID, data); err != nil {
-		return errors.WrapTransient(err, "Storage", "SaveGenerated", "put generated embedding")
+		return errs.WrapTransient(err, "Storage", "SaveGenerated", "put generated embedding")
 	}
 
 	return nil
@@ -126,13 +126,13 @@ func (s *Storage) SaveGenerated(ctx context.Context, entityID string, vector []f
 // SaveFailed marks an embedding as failed with error message
 func (s *Storage) SaveFailed(ctx context.Context, entityID, errorMsg string) error {
 	if entityID == "" {
-		return errors.WrapInvalid(errors.ErrMissingConfig, "Storage", "SaveFailed", "entity_id is empty")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "SaveFailed", "entity_id is empty")
 	}
 
 	// Get existing record to preserve metadata
 	existing, err := s.GetEmbedding(ctx, entityID)
 	if err != nil {
-		return errors.WrapTransient(err, "Storage", "SaveFailed", "get existing record")
+		return errs.WrapTransient(err, "Storage", "SaveFailed", "get existing record")
 	}
 
 	existing.Status = StatusFailed
@@ -140,11 +140,11 @@ func (s *Storage) SaveFailed(ctx context.Context, entityID, errorMsg string) err
 
 	data, err := json.Marshal(existing)
 	if err != nil {
-		return errors.WrapInvalid(err, "Storage", "SaveFailed", "marshal embedding record")
+		return errs.WrapInvalid(err, "Storage", "SaveFailed", "marshal embedding record")
 	}
 
 	if _, err := s.indexBucket.Put(ctx, entityID, data); err != nil {
-		return errors.WrapTransient(err, "Storage", "SaveFailed", "put failed embedding")
+		return errs.WrapTransient(err, "Storage", "SaveFailed", "put failed embedding")
 	}
 
 	return nil
@@ -153,7 +153,7 @@ func (s *Storage) SaveFailed(ctx context.Context, entityID, errorMsg string) err
 // GetEmbedding retrieves an embedding by entity ID
 func (s *Storage) GetEmbedding(ctx context.Context, entityID string) (*Record, error) {
 	if entityID == "" {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "Storage", "GetEmbedding", "entity_id is empty")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "GetEmbedding", "entity_id is empty")
 	}
 
 	entry, err := s.indexBucket.Get(ctx, entityID)
@@ -161,12 +161,12 @@ func (s *Storage) GetEmbedding(ctx context.Context, entityID string) (*Record, e
 		if err == jetstream.ErrKeyNotFound {
 			return nil, nil // Not found is not an error
 		}
-		return nil, errors.WrapTransient(err, "Storage", "GetEmbedding", "get embedding")
+		return nil, errs.WrapTransient(err, "Storage", "GetEmbedding", "get embedding")
 	}
 
 	var record Record
 	if err := json.Unmarshal(entry.Value(), &record); err != nil {
-		return nil, errors.WrapInvalid(err, "Storage", "GetEmbedding", "unmarshal embedding record")
+		return nil, errs.WrapInvalid(err, "Storage", "GetEmbedding", "unmarshal embedding record")
 	}
 
 	return &record, nil
@@ -175,7 +175,7 @@ func (s *Storage) GetEmbedding(ctx context.Context, entityID string) (*Record, e
 // GetByContentHash retrieves an embedding by content hash (for deduplication)
 func (s *Storage) GetByContentHash(ctx context.Context, contentHash string) (*DedupRecord, error) {
 	if contentHash == "" {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "Storage", "GetByContentHash", "content_hash is empty")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "GetByContentHash", "content_hash is empty")
 	}
 
 	entry, err := s.dedupBucket.Get(ctx, contentHash)
@@ -183,12 +183,12 @@ func (s *Storage) GetByContentHash(ctx context.Context, contentHash string) (*De
 		if err == jetstream.ErrKeyNotFound {
 			return nil, nil // Not found is not an error
 		}
-		return nil, errors.WrapTransient(err, "Storage", "GetByContentHash", "get dedup record")
+		return nil, errs.WrapTransient(err, "Storage", "GetByContentHash", "get dedup record")
 	}
 
 	var record DedupRecord
 	if err := json.Unmarshal(entry.Value(), &record); err != nil {
-		return nil, errors.WrapInvalid(err, "Storage", "GetByContentHash", "unmarshal dedup record")
+		return nil, errs.WrapInvalid(err, "Storage", "GetByContentHash", "unmarshal dedup record")
 	}
 
 	return &record, nil
@@ -197,7 +197,7 @@ func (s *Storage) GetByContentHash(ctx context.Context, contentHash string) (*De
 // SaveDedup saves a content-addressed embedding for deduplication
 func (s *Storage) SaveDedup(ctx context.Context, contentHash string, vector []float32, entityID string) error {
 	if contentHash == "" {
-		return errors.WrapInvalid(errors.ErrMissingConfig, "Storage", "SaveDedup", "content_hash is empty")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "SaveDedup", "content_hash is empty")
 	}
 
 	// Check if dedup record exists
@@ -222,11 +222,11 @@ func (s *Storage) SaveDedup(ctx context.Context, contentHash string, vector []fl
 
 	data, err := json.Marshal(record)
 	if err != nil {
-		return errors.WrapInvalid(err, "Storage", "SaveDedup", "marshal dedup record")
+		return errs.WrapInvalid(err, "Storage", "SaveDedup", "marshal dedup record")
 	}
 
 	if _, err := s.dedupBucket.Put(ctx, contentHash, data); err != nil {
-		return errors.WrapTransient(err, "Storage", "SaveDedup", "put dedup record")
+		return errs.WrapTransient(err, "Storage", "SaveDedup", "put dedup record")
 	}
 
 	return nil
@@ -235,14 +235,14 @@ func (s *Storage) SaveDedup(ctx context.Context, contentHash string, vector []fl
 // DeleteEmbedding removes an embedding record
 func (s *Storage) DeleteEmbedding(ctx context.Context, entityID string) error {
 	if entityID == "" {
-		return errors.WrapInvalid(errors.ErrMissingConfig, "Storage", "DeleteEmbedding", "entity_id is empty")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "DeleteEmbedding", "entity_id is empty")
 	}
 
 	if err := s.indexBucket.Delete(ctx, entityID); err != nil {
 		if err == jetstream.ErrKeyNotFound {
 			return nil // Already deleted
 		}
-		return errors.WrapTransient(err, "Storage", "DeleteEmbedding", "delete embedding")
+		return errs.WrapTransient(err, "Storage", "DeleteEmbedding", "delete embedding")
 	}
 
 	return nil

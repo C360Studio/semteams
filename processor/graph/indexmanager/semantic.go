@@ -9,8 +9,8 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/graph/embedding"
 )
 
@@ -84,7 +84,7 @@ func (m *Manager) createEmbedder(provider string, embeddingCache embedding.Cache
 		m.createBM25Embedder()
 		return nil
 	default:
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("unknown embedding provider: %s", provider),
 			"IndexManager", "initializeSemanticSearch",
 			"supported providers: http, bm25, disabled")
@@ -102,7 +102,7 @@ func (m *Manager) createHTTPEmbedder(embeddingCache embedding.Cache) error {
 
 	embedder, err := embedding.NewHTTPEmbedder(httpConfig)
 	if err != nil {
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			err,
 			"IndexManager",
 			"initializeSemanticSearch",
@@ -182,7 +182,7 @@ func (m *Manager) initializeCachesAndStorage(buckets map[string]jetstream.KeyVal
 		}),
 	)
 	if err != nil {
-		return errors.WrapTransient(err, "IndexManager", "initializeSemanticSearch", "failed to create vector cache")
+		return errs.WrapTransient(err, "IndexManager", "initializeSemanticSearch", "failed to create vector cache")
 	}
 	m.vectorCache = vectorCache
 
@@ -198,7 +198,7 @@ func (m *Manager) initializeCachesAndStorage(buckets map[string]jetstream.KeyVal
 	if err != nil {
 		// Clean up vector cache if metadata cache fails
 		vectorCache.Close()
-		return errors.WrapTransient(err, "IndexManager", "initializeSemanticSearch", "failed to create metadata cache")
+		return errs.WrapTransient(err, "IndexManager", "initializeSemanticSearch", "failed to create metadata cache")
 	}
 	m.metadataCache = metadataCache
 
@@ -278,14 +278,14 @@ func (m *Manager) SearchSemantic(
 // validateSemanticSearch checks if semantic search is enabled and query is valid
 func (m *Manager) validateSemanticSearch(query string) error {
 	if m.embedder == nil {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("semantic search not enabled"),
 			"IndexManager", "SearchSemantic",
 			"configure Embedding.Enabled=true and Embedding.Provider to enable semantic search")
 	}
 
 	if query == "" {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("query is empty"),
 			"IndexManager", "SearchSemantic",
 			"query string cannot be empty")
@@ -298,10 +298,10 @@ func (m *Manager) validateSemanticSearch(query string) error {
 func (m *Manager) generateQueryEmbedding(ctx context.Context, query string) ([]float32, error) {
 	embeddings, err := m.embedder.Generate(ctx, []string{query})
 	if err != nil {
-		return nil, errors.WrapTransient(err, "IndexManager", "SearchSemantic", "failed to generate query embedding")
+		return nil, errs.WrapTransient(err, "IndexManager", "SearchSemantic", "failed to generate query embedding")
 	}
 	if len(embeddings) == 0 {
-		return nil, errors.WrapTransient(
+		return nil, errs.WrapTransient(
 			fmt.Errorf("no embedding generated for query"),
 			"IndexManager", "SearchSemantic", "empty embedding response")
 	}
@@ -463,11 +463,11 @@ func (m *Manager) SearchHybrid(ctx context.Context, query *HybridQuery) (*Search
 // validateHybridQuery validates the hybrid query parameters
 func (m *Manager) validateHybridQuery(query *HybridQuery) error {
 	if query == nil {
-		return errors.WrapInvalid(fmt.Errorf("query is nil"), "IndexManager", "SearchHybrid", "query cannot be nil")
+		return errs.WrapInvalid(fmt.Errorf("query is nil"), "IndexManager", "SearchHybrid", "query cannot be nil")
 	}
 
 	if query.SemanticQuery != "" && m.embedder == nil {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("semantic search not enabled"),
 			"IndexManager", "SearchHybrid",
 			"configure Embedding.Enabled=true to use semantic queries")
@@ -591,10 +591,10 @@ func (m *Manager) executeSemanticSearch(
 func (m *Manager) generateHybridQueryEmbedding(ctx context.Context, queryText string) ([]float32, error) {
 	embeddings, err := m.embedder.Generate(ctx, []string{queryText})
 	if err != nil {
-		return nil, errors.WrapTransient(err, "IndexManager", "SearchHybrid", "failed to generate query embedding")
+		return nil, errs.WrapTransient(err, "IndexManager", "SearchHybrid", "failed to generate query embedding")
 	}
 	if len(embeddings) == 0 {
-		return nil, errors.WrapTransient(
+		return nil, errs.WrapTransient(
 			fmt.Errorf("no embedding generated for query"),
 			"IndexManager", "SearchHybrid", "empty embedding response")
 	}

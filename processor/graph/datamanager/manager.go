@@ -15,12 +15,12 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/pkg/buffer"
 	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
 	"github.com/c360/semstreams/pkg/worker"
 )
@@ -35,11 +35,11 @@ var (
 // validateEntityID validates that an entity ID follows the expected format
 func validateEntityID(id string) error {
 	if id == "" {
-		return errors.WrapInvalid(nil, "DataManager", "validateEntityID", "entity ID cannot be empty")
+		return errs.WrapInvalid(nil, "DataManager", "validateEntityID", "entity ID cannot be empty")
 	}
 
 	if len(id) > 255 {
-		return errors.WrapInvalid(nil, "DataManager", "validateEntityID", "entity ID too long (max 255 chars)")
+		return errs.WrapInvalid(nil, "DataManager", "validateEntityID", "entity ID too long (max 255 chars)")
 	}
 
 	if !entityIDRegex.MatchString(id) {
@@ -47,7 +47,7 @@ func validateEntityID(id string) error {
 		msg := fmt.Sprintf(
 			"invalid entity ID format: expected 6 parts (platform.namespace.type.subtype.instance.name), got %d parts",
 			len(parts))
-		return errors.WrapInvalid(nil, "DataManager", "validateEntityID", msg)
+		return errs.WrapInvalid(nil, "DataManager", "validateEntityID", msg)
 	}
 
 	return nil
@@ -56,7 +56,7 @@ func validateEntityID(id string) error {
 // validateEntity validates an entity state before operations
 func validateEntity(entity *gtypes.EntityState) error {
 	if entity == nil {
-		return errors.WrapInvalid(nil, "DataManager", "validateEntity", "entity cannot be nil")
+		return errs.WrapInvalid(nil, "DataManager", "validateEntity", "entity cannot be nil")
 	}
 
 	return validateEntityID(entity.ID)
@@ -88,10 +88,10 @@ type Manager struct {
 // NewDataManager creates a new data manager using framework components
 func NewDataManager(deps Dependencies) (*Manager, error) {
 	if deps.KVBucket == nil {
-		return nil, errors.WrapInvalid(nil, "DataManager", "NewDataManager", "kvBucket is required")
+		return nil, errs.WrapInvalid(nil, "DataManager", "NewDataManager", "kvBucket is required")
 	}
 	if deps.Logger == nil {
-		return nil, errors.WrapInvalid(nil, "DataManager", "NewDataManager", "logger is required")
+		return nil, errs.WrapInvalid(nil, "DataManager", "NewDataManager", "logger is required")
 	}
 
 	// Apply defaults to config
@@ -117,7 +117,7 @@ func NewDataManager(deps Dependencies) (*Manager, error) {
 		m.l1Cache, err = cache.NewLRU[*gtypes.EntityState](
 			m.config.Cache.L1Hot.Size, opts...)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "DataManager", "NewManager", "L1 cache creation")
+			return nil, errs.WrapTransient(err, "DataManager", "NewManager", "L1 cache creation")
 		}
 	}
 
@@ -147,7 +147,7 @@ func NewDataManager(deps Dependencies) (*Manager, error) {
 		m.writeBuffer, err = buffer.NewCircularBuffer[*EntityWrite](
 			m.config.BufferConfig.Capacity, bufOpts...)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "DataManager", "NewManager", "write buffer creation")
+			return nil, errs.WrapTransient(err, "DataManager", "NewManager", "write buffer creation")
 		}
 
 		// Initialize worker pool using framework
@@ -224,7 +224,7 @@ func (m *Manager) initializeL2Cache(ctx context.Context) error {
 			m.config.Cache.L2Warm.CleanupInterval,
 			opts...)
 		if err != nil {
-			return errors.WrapTransient(err, "DataManager", "Run", "L2 cache creation")
+			return errs.WrapTransient(err, "DataManager", "Run", "L2 cache creation")
 		}
 	}
 	return nil
@@ -252,7 +252,7 @@ func (m *Manager) startWorkerPoolAndBufferProcessing(ctx context.Context) chan e
 				if r := recover(); r != nil {
 					m.logger.Error("Panic in buffer processing goroutine", "panic", r)
 					panicErr := fmt.Errorf("panic: %v", r)
-					bufferErr <- errors.WrapFatal(panicErr, "DataManager",
+					bufferErr <- errs.WrapFatal(panicErr, "DataManager",
 						"processBufferedWrites", "goroutine panicked")
 				}
 				close(bufferErr)
@@ -342,7 +342,7 @@ func (m *Manager) processBufferedWrites(ctx context.Context) error {
 			// Flush buffer periodically
 			if err := m.flushBufferWithContext(ctx); err != nil {
 				// Check if error is fatal
-				if errors.IsFatal(err) {
+				if errs.IsFatal(err) {
 					return err // Return fatal errors to stop the system
 				}
 				// Transient error - log and continue
@@ -390,7 +390,7 @@ func (m *Manager) flushBufferWithContext(ctx context.Context) error {
 		case <-ctx.Done():
 			// Context cancelled, stop submitting
 			if write.Callback != nil {
-				write.Callback(errors.Wrap(ctx.Err(), "DataManager", "flushBufferWithContext", "context cancelled"))
+				write.Callback(errs.Wrap(ctx.Err(), "DataManager", "flushBufferWithContext", "context cancelled"))
 			}
 			return nil // Clean shutdown
 		default:
@@ -400,12 +400,12 @@ func (m *Manager) flushBufferWithContext(ctx context.Context) error {
 			// Check error type to determine if it's fatal or transient
 			if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
 				// Pool stopped unexpectedly - this is fatal
-				return errors.WrapFatal(err, "DataManager", "flushBufferWithContext", "worker pool no longer running")
+				return errs.WrapFatal(err, "DataManager", "flushBufferWithContext", "worker pool no longer running")
 			}
 			if stderrors.Is(err, worker.ErrQueueFull) {
 				// Queue full is transient - notify callback and continue
 				if write.Callback != nil {
-					queueErr := errors.WrapTransient(err, "DataManager",
+					queueErr := errs.WrapTransient(err, "DataManager",
 						"flushBufferWithContext", "worker queue full")
 					write.Callback(queueErr)
 				}
@@ -413,7 +413,7 @@ func (m *Manager) flushBufferWithContext(ctx context.Context) error {
 				continue
 			}
 			// Unknown error - treat as fatal
-			return errors.WrapFatal(err, "DataManager", "flushBufferWithContext", "unexpected worker pool error")
+			return errs.WrapFatal(err, "DataManager", "flushBufferWithContext", "unexpected worker pool error")
 		}
 	}
 
@@ -581,7 +581,7 @@ func (m *Manager) processWrite(ctx context.Context, write *EntityWrite) error {
 
 	default:
 		msg := fmt.Sprintf("invalid operation: %s", write.Operation)
-		err := errors.WrapInvalid(nil, "DataManager", "processWrite", msg)
+		err := errs.WrapInvalid(nil, "DataManager", "processWrite", msg)
 		if write.Callback != nil {
 			write.Callback(err)
 		}
@@ -607,7 +607,7 @@ func (m *Manager) CreateEntity(ctx context.Context, entity *gtypes.EntityState) 
 		}
 
 		if err := m.writeBuffer.Write(write); err != nil {
-			return nil, errors.Wrap(err, "DataManager", "CreateEntity", "buffer write")
+			return nil, errs.Wrap(err, "DataManager", "CreateEntity", "buffer write")
 		}
 
 		// For creates, we need to wait synchronously
@@ -622,12 +622,12 @@ func (m *Manager) CreateEntity(ctx context.Context, entity *gtypes.EntityState) 
 // createEntityDirect performs immediate entity creation
 func (m *Manager) createEntityDirect(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error) {
 	if entity == nil {
-		err := errors.WrapInvalid(nil, "DataManager", "createEntityDirect", "entity cannot be nil")
+		err := errs.WrapInvalid(nil, "DataManager", "createEntityDirect", "entity cannot be nil")
 		return nil, err
 	}
 
 	if entity.ID == "" {
-		err := errors.WrapInvalid(nil, "DataManager", "createEntityDirect", "entity ID cannot be empty")
+		err := errs.WrapInvalid(nil, "DataManager", "createEntityDirect", "entity ID cannot be empty")
 		return nil, err
 	}
 
@@ -638,16 +638,16 @@ func (m *Manager) createEntityDirect(ctx context.Context, entity *gtypes.EntityS
 	// Serialize entity
 	data, err := json.Marshal(entity)
 	if err != nil {
-		err = errors.Wrap(err, "DataManager", "createEntityDirect", "marshal entity")
+		err = errs.Wrap(err, "DataManager", "createEntityDirect", "marshal entity")
 		return nil, err
 	}
 
 	// Create in KV bucket
 	if _, err := m.kvBucket.Create(ctx, entity.ID, data); err != nil {
 		if err == jetstream.ErrKeyExists {
-			err = errors.WrapInvalid(err, "DataManager", "createEntityDirect", "entity already exists")
+			err = errs.WrapInvalid(err, "DataManager", "createEntityDirect", "entity already exists")
 		} else {
-			err = errors.Wrap(err, "DataManager", "createEntityDirect", "KV create")
+			err = errs.Wrap(err, "DataManager", "createEntityDirect", "KV create")
 		}
 		return nil, err
 	}
@@ -674,7 +674,7 @@ func (m *Manager) UpdateEntity(ctx context.Context, entity *gtypes.EntityState) 
 		}
 
 		if err := m.writeBuffer.Write(write); err != nil {
-			return nil, errors.Wrap(err, "DataManager", "UpdateEntity", "buffer write")
+			return nil, errs.Wrap(err, "DataManager", "UpdateEntity", "buffer write")
 		}
 
 		// For updates, we need to wait synchronously
@@ -689,7 +689,7 @@ func (m *Manager) UpdateEntity(ctx context.Context, entity *gtypes.EntityState) 
 // updateEntityDirect performs immediate entity update with CAS
 func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error) {
 	if entity == nil {
-		err := errors.WrapInvalid(nil, "DataManager", "updateEntityDirect", "entity cannot be nil")
+		err := errs.WrapInvalid(nil, "DataManager", "updateEntityDirect", "entity cannot be nil")
 		return nil, err
 	}
 
@@ -702,7 +702,7 @@ func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityS
 		// Get current version
 		current, err := m.GetEntity(ctx, entity.ID)
 		if err != nil {
-			return errors.Wrap(err, "DataManager", "updateEntityDirect", "get current version")
+			return errs.Wrap(err, "DataManager", "updateEntityDirect", "get current version")
 		}
 
 		// Update version and timestamp
@@ -712,16 +712,16 @@ func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityS
 		// Serialize entity
 		data, err := json.Marshal(entity)
 		if err != nil {
-			return errors.Wrap(err, "DataManager", "updateEntityDirect", "marshal entity")
+			return errs.Wrap(err, "DataManager", "updateEntityDirect", "marshal entity")
 		}
 
 		// CAS update
 		if _, err := m.kvBucket.Update(ctx, entity.ID, data, uint64(current.Version)); err != nil {
 			if err == jetstream.ErrKeyNotFound {
-				return errors.WrapInvalid(err, "DataManager", "updateEntityDirect", "entity not found")
+				return errs.WrapInvalid(err, "DataManager", "updateEntityDirect", "entity not found")
 			}
 			// CAS conflict is transient, will retry
-			return errors.WrapTransient(err, "DataManager", "updateEntityDirect", "CAS conflict")
+			return errs.WrapTransient(err, "DataManager", "updateEntityDirect", "CAS conflict")
 		}
 
 		updatedEntity = entity
@@ -755,7 +755,7 @@ func (m *Manager) DeleteEntity(ctx context.Context, id string) error {
 		}
 
 		if err := m.writeBuffer.Write(write); err != nil {
-			return errors.Wrap(err, "DataManager", "DeleteEntity", "buffer write")
+			return errs.Wrap(err, "DataManager", "DeleteEntity", "buffer write")
 		}
 
 		return nil
@@ -770,7 +770,7 @@ func (m *Manager) deleteEntityDirect(ctx context.Context, id string) error {
 	// Get entity for cleanup
 	entity, err := m.GetEntity(ctx, id)
 	if err != nil {
-		err = errors.Wrap(err, "DataManager", "deleteEntityDirect", "get entity for cleanup")
+		err = errs.Wrap(err, "DataManager", "deleteEntityDirect", "get entity for cleanup")
 		return err
 	}
 
@@ -785,9 +785,9 @@ func (m *Manager) deleteEntityDirect(ctx context.Context, id string) error {
 	// Delete from KV
 	if err := m.kvBucket.Delete(ctx, id); err != nil {
 		if err == jetstream.ErrKeyNotFound {
-			err = errors.WrapInvalid(err, "DataManager", "deleteEntityDirect", "entity not found")
+			err = errs.WrapInvalid(err, "DataManager", "deleteEntityDirect", "entity not found")
 		} else {
-			err = errors.Wrap(err, "DataManager", "deleteEntityDirect", "KV delete")
+			err = errs.Wrap(err, "DataManager", "deleteEntityDirect", "KV delete")
 		}
 		return err
 	}
@@ -824,17 +824,17 @@ func (m *Manager) GetEntity(ctx context.Context, id string) (*gtypes.EntityState
 	if err != nil {
 		if err == jetstream.ErrKeyNotFound {
 			// Not found is often expected, don't record as error
-			return nil, errors.WrapInvalid(err, "DataManager", "GetEntity", "entity not found")
+			return nil, errs.WrapInvalid(err, "DataManager", "GetEntity", "entity not found")
 		}
 		// Record actual KV errors
-		err = errors.Wrap(err, "DataManager", "GetEntity", "KV get")
+		err = errs.Wrap(err, "DataManager", "GetEntity", "KV get")
 		return nil, err
 	}
 
 	// Deserialize entity
 	var entity gtypes.EntityState
 	if err := json.Unmarshal(entry.Value(), &entity); err != nil {
-		err = errors.Wrap(err, "DataManager", "GetEntity", "unmarshal entity")
+		err = errs.Wrap(err, "DataManager", "GetEntity", "unmarshal entity")
 		return nil, err
 	}
 
@@ -852,7 +852,7 @@ func (m *Manager) ExistsEntity(ctx context.Context, id string) (bool, error) {
 		if err == jetstream.ErrKeyNotFound {
 			return false, nil
 		}
-		return false, errors.Wrap(err, "DataManager", "ExistsEntity", "KV get")
+		return false, errs.Wrap(err, "DataManager", "ExistsEntity", "KV get")
 	}
 	return true, nil
 }
@@ -866,7 +866,7 @@ func (m *Manager) CreateEntityWithTriples(
 	triples []message.Triple,
 ) (*gtypes.EntityState, error) {
 	if entity == nil {
-		return nil, errors.WrapInvalid(nil, "DataManager",
+		return nil, errs.WrapInvalid(nil, "DataManager",
 			"CreateEntityWithTriples", "entity cannot be nil")
 	}
 
@@ -885,7 +885,7 @@ func (m *Manager) UpdateEntityWithTriples(
 	removePredicates []string,
 ) (*gtypes.EntityState, error) {
 	if entity == nil {
-		return nil, errors.WrapInvalid(nil, "DataManager",
+		return nil, errs.WrapInvalid(nil, "DataManager",
 			"UpdateEntityWithTriples", "entity cannot be nil")
 	}
 

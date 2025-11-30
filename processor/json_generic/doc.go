@@ -129,9 +129,9 @@
 //
 // The processor uses streamkit/errors for consistent error classification:
 //
-//   - Invalid config: errors.WrapInvalid (bad configuration)
-//   - NATS errors: errors.WrapTransient (network issues, retryable)
-//   - Unmarshal errors: errors.WrapInvalid (malformed JSON input)
+//   - Invalid config: errs.WrapInvalid (bad configuration)
+//   - NATS errors: errs.WrapTransient (network issues, retryable)
+//   - Unmarshal errors: errs.WrapInvalid (malformed JSON input)
 //
 // **Invalid JSON Handling:**
 //

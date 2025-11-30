@@ -175,10 +175,10 @@
 //
 // Use project error wrapping for context:
 //
-//	import "github.com/c360/semstreams/errors"
+//	import "github.com/c360/semstreams/pkg/errs"
 //
 //	if err := validateConfig(cfg); err != nil {
-//	    return errors.WrapInvalid(err, "my-service", "NewMyService", "validate config")
+//	    return errs.WrapInvalid(err, "my-service", "NewMyService", "validate config")
 //	}
 //
 // # Graceful Shutdown

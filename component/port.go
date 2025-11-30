@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Direction for data flow
@@ -65,7 +65,7 @@ func (p Port) MarshalJSON() ([]byte, error) {
 
 		configBytes, err := json.Marshal(configWithType)
 		if err != nil {
-			return nil, errors.Wrap(err, "Port", "MarshalJSON", "config marshaling")
+			return nil, errs.Wrap(err, "Port", "MarshalJSON", "config marshaling")
 		}
 		wrapper.Config = configBytes
 	}
@@ -99,7 +99,7 @@ func (p *Port) UnmarshalJSON(data []byte) error {
 		}
 
 		if err := json.Unmarshal(temp.Config, &configWrapper); err != nil {
-			return errors.Wrap(err, "Port", "UnmarshalJSON", "config wrapper unmarshaling")
+			return errs.Wrap(err, "Port", "UnmarshalJSON", "config wrapper unmarshaling")
 		}
 
 		// Create the appropriate config type based on the type field
@@ -107,47 +107,47 @@ func (p *Port) UnmarshalJSON(data []byte) error {
 		case "network":
 			var netConfig NetworkPort
 			if err := json.Unmarshal(configWrapper.Data, &netConfig); err != nil {
-				return errors.Wrap(err, "Port", "UnmarshalJSON", "network config unmarshaling")
+				return errs.Wrap(err, "Port", "UnmarshalJSON", "network config unmarshaling")
 			}
 			p.Config = netConfig
 		case "nats":
 			var natsConfig NATSPort
 			if err := json.Unmarshal(configWrapper.Data, &natsConfig); err != nil {
-				return errors.Wrap(err, "Port", "UnmarshalJSON", "nats config unmarshaling")
+				return errs.Wrap(err, "Port", "UnmarshalJSON", "nats config unmarshaling")
 			}
 			p.Config = natsConfig
 		case "nats-request":
 			var requestConfig NATSRequestPort
 			if err := json.Unmarshal(configWrapper.Data, &requestConfig); err != nil {
-				return errors.Wrap(err, "Port", "UnmarshalJSON", "nats-request config unmarshaling")
+				return errs.Wrap(err, "Port", "UnmarshalJSON", "nats-request config unmarshaling")
 			}
 			p.Config = requestConfig
 		case "file":
 			var fileConfig FilePort
 			if err := json.Unmarshal(configWrapper.Data, &fileConfig); err != nil {
-				return errors.Wrap(err, "Port", "UnmarshalJSON", "file config unmarshaling")
+				return errs.Wrap(err, "Port", "UnmarshalJSON", "file config unmarshaling")
 			}
 			p.Config = fileConfig
 		case "jetstream":
 			var jsConfig JetStreamPort
 			if err := json.Unmarshal(configWrapper.Data, &jsConfig); err != nil {
-				return errors.Wrap(err, "Port", "UnmarshalJSON", "jetstream config unmarshaling")
+				return errs.Wrap(err, "Port", "UnmarshalJSON", "jetstream config unmarshaling")
 			}
 			p.Config = jsConfig
 		case "kvwatch":
 			var kvConfig KVWatchPort
 			if err := json.Unmarshal(configWrapper.Data, &kvConfig); err != nil {
-				return errors.Wrap(err, "Port", "UnmarshalJSON", "kvwatch config unmarshaling")
+				return errs.Wrap(err, "Port", "UnmarshalJSON", "kvwatch config unmarshaling")
 			}
 			p.Config = kvConfig
 		case "kvwrite":
 			var kvConfig KVWritePort
 			if err := json.Unmarshal(configWrapper.Data, &kvConfig); err != nil {
-				return errors.Wrap(err, "Port", "UnmarshalJSON", "kvwrite config unmarshaling")
+				return errs.Wrap(err, "Port", "UnmarshalJSON", "kvwrite config unmarshaling")
 			}
 			p.Config = kvConfig
 		default:
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("unknown config type: %s", configWrapper.Type),
 				"Port",
 				"UnmarshalJSON",

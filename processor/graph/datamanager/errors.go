@@ -4,8 +4,8 @@ import (
 	stderrors "errors"
 	"fmt"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Local error types specific to data manager
@@ -17,7 +17,7 @@ var (
 	ErrBatchChannelFull = fmt.Errorf("batch channel full")
 )
 
-// All wrapper functions removed - use direct errors.Wrap* calls instead
+// All wrapper functions removed - use direct errs.Wrap* calls instead
 // This ensures consistency across all managers and reduces code bloat
 
 // IsEntityError checks if an error is related to entity operations
@@ -48,7 +48,7 @@ func IsLifecycleError(err error) bool {
 // Using proper error type checking instead of string matching
 func IsRetryableError(err error) bool {
 	// Check if it's marked as transient
-	if errors.IsTransient(err) {
+	if errs.IsTransient(err) {
 		return true
 	}
 

@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // extractEntityType extracts the type from an entity ID using message.ParseEntityID
@@ -58,12 +58,12 @@ func (s *StatisticalSummarizer) SummarizeCommunity(
 	entities []*gtypes.EntityState,
 ) (*Community, error) {
 	if community == nil {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "StatisticalSummarizer",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "StatisticalSummarizer",
 			"SummarizeCommunity", "community is nil")
 	}
 
 	if len(entities) == 0 {
-		return nil, errors.WrapInvalid(errors.ErrInvalidData, "StatisticalSummarizer",
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "StatisticalSummarizer",
 			"SummarizeCommunity", "entities list is empty")
 	}
 
@@ -487,12 +487,12 @@ func (s *HTTPLLMSummarizer) SummarizeCommunity(
 	entities []*gtypes.EntityState,
 ) (*Community, error) {
 	if community == nil {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "HTTPLLMSummarizer",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "HTTPLLMSummarizer",
 			"SummarizeCommunity", "community is nil")
 	}
 
 	if len(entities) == 0 {
-		return nil, errors.WrapInvalid(errors.ErrInvalidData, "HTTPLLMSummarizer",
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "HTTPLLMSummarizer",
 			"SummarizeCommunity", "entities list is empty")
 	}
 
@@ -517,7 +517,7 @@ func (s *HTTPLLMSummarizer) SummarizeCommunity(
 		// If community already has a statistical summary (progressive enhancement path),
 		// return error so enhancement worker can mark as "llm-failed"
 		if community.StatisticalSummary != "" {
-			return nil, errors.WrapTransient(err, "HTTPLLMSummarizer",
+			return nil, errs.WrapTransient(err, "HTTPLLMSummarizer",
 				"SummarizeCommunity", "LLM service unavailable")
 		}
 
@@ -599,14 +599,14 @@ func (s *HTTPLLMSummarizer) callLLMService(ctx context.Context, text string) (st
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", errors.WrapInvalid(err, "HTTPLLMSummarizer", "callLLMService", "marshal request")
+		return "", errs.WrapInvalid(err, "HTTPLLMSummarizer", "callLLMService", "marshal request")
 	}
 
 	// Make HTTP request with context
 	url := fmt.Sprintf("%s/summarize", s.BaseURL)
 	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
-		return "", errors.WrapInvalid(err, "HTTPLLMSummarizer", "callLLMService", "create request")
+		return "", errs.WrapInvalid(err, "HTTPLLMSummarizer", "callLLMService", "create request")
 	}
 
 	req.Header.Set("Content-Type", "application/json")
@@ -614,7 +614,7 @@ func (s *HTTPLLMSummarizer) callLLMService(ctx context.Context, text string) (st
 	// Execute request
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", errors.WrapTransient(err, "HTTPLLMSummarizer", "callLLMService",
+		return "", errs.WrapTransient(err, "HTTPLLMSummarizer", "callLLMService",
 			"HTTP request failed (service may be unavailable)")
 	}
 	defer resp.Body.Close()
@@ -622,7 +622,7 @@ func (s *HTTPLLMSummarizer) callLLMService(ctx context.Context, text string) (st
 	// Check status code
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", errors.WrapTransient(
+		return "", errs.WrapTransient(
 			fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body)),
 			"HTTPLLMSummarizer", "callLLMService", "non-OK status code")
 	}
@@ -630,11 +630,11 @@ func (s *HTTPLLMSummarizer) callLLMService(ctx context.Context, text string) (st
 	// Parse response
 	var result summarizeResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", errors.WrapInvalid(err, "HTTPLLMSummarizer", "callLLMService", "decode response")
+		return "", errs.WrapInvalid(err, "HTTPLLMSummarizer", "callLLMService", "decode response")
 	}
 
 	if result.Summary == "" {
-		return "", errors.WrapInvalid(errors.ErrInvalidData, "HTTPLLMSummarizer",
+		return "", errs.WrapInvalid(errs.ErrInvalidData, "HTTPLLMSummarizer",
 			"callLLMService", "empty summary returned")
 	}
 
@@ -662,19 +662,19 @@ func (s *ProgressiveSummarizer) SummarizeCommunity(
 	entities []*gtypes.EntityState,
 ) (*Community, error) {
 	if community == nil {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "ProgressiveSummarizer",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "ProgressiveSummarizer",
 			"SummarizeCommunity", "community is nil")
 	}
 
 	if len(entities) == 0 {
-		return nil, errors.WrapInvalid(errors.ErrInvalidData, "ProgressiveSummarizer",
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "ProgressiveSummarizer",
 			"SummarizeCommunity", "entities list is empty")
 	}
 
 	// Generate statistical summary using existing summarizer
 	statCommunity, err := s.statistical.SummarizeCommunity(ctx, community, entities)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "ProgressiveSummarizer",
+		return nil, errs.WrapTransient(err, "ProgressiveSummarizer",
 			"SummarizeCommunity", "statistical summarization failed")
 	}
 

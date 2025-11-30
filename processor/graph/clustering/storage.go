@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -91,7 +91,7 @@ func NewNATSCommunityStorageWithConfig(kv jetstream.KeyValue, config CommunitySt
 // SaveCommunity persists a community to NATS KV
 func (s *NATSCommunityStorage) SaveCommunity(ctx context.Context, community *Community) error {
 	if community == nil {
-		return errors.WrapInvalid(errors.ErrMissingConfig, "NATSCommunityStorage", "SaveCommunity", "community is nil")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "NATSCommunityStorage", "SaveCommunity", "community is nil")
 	}
 
 	// If KV is available, persist to NATS
@@ -99,20 +99,20 @@ func (s *NATSCommunityStorage) SaveCommunity(ctx context.Context, community *Com
 		// Serialize community
 		data, err := json.Marshal(community)
 		if err != nil {
-			return errors.WrapInvalid(err, "NATSCommunityStorage", "SaveCommunity", "marshal community")
+			return errs.WrapInvalid(err, "NATSCommunityStorage", "SaveCommunity", "marshal community")
 		}
 
 		// Store community data
 		communityKey := communityKey(community.Level, community.ID)
 		if _, err := s.kv.Put(ctx, communityKey, data); err != nil {
-			return errors.WrapTransient(err, "NATSCommunityStorage", "SaveCommunity", "put community")
+			return errs.WrapTransient(err, "NATSCommunityStorage", "SaveCommunity", "put community")
 		}
 
 		// Index entity -> community mappings
 		for _, entityID := range community.Members {
 			entityKey := entityCommunityKey(community.Level, entityID)
 			if _, err := s.kv.Put(ctx, entityKey, []byte(community.ID)); err != nil {
-				return errors.WrapTransient(err, "NATSCommunityStorage", "SaveCommunity", "put entity mapping")
+				return errs.WrapTransient(err, "NATSCommunityStorage", "SaveCommunity", "put entity mapping")
 			}
 		}
 	} else if s.testStore != nil {
@@ -158,7 +158,7 @@ func (s *NATSCommunityStorage) GetCreatedTriples() []message.Triple {
 // GetCommunity retrieves a community by ID
 func (s *NATSCommunityStorage) GetCommunity(ctx context.Context, id string) (*Community, error) {
 	if id == "" {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "NATSCommunityStorage", "GetCommunity", "id is empty")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "NATSCommunityStorage", "GetCommunity", "id is empty")
 	}
 
 	// If using test store, return from memory
@@ -178,7 +178,7 @@ func (s *NATSCommunityStorage) GetCommunity(ctx context.Context, id string) (*Co
 	// Extract level from community ID using regex
 	level, err := extractLevelFromID(id)
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "NATSCommunityStorage", "GetCommunity", "parse community ID")
+		return nil, errs.WrapInvalid(err, "NATSCommunityStorage", "GetCommunity", "parse community ID")
 	}
 
 	// Fetch community data
@@ -189,13 +189,13 @@ func (s *NATSCommunityStorage) GetCommunity(ctx context.Context, id string) (*Co
 			// Not found is not an error - return nil
 			return nil, nil
 		}
-		return nil, errors.WrapTransient(err, "NATSCommunityStorage", "GetCommunity", "get community")
+		return nil, errs.WrapTransient(err, "NATSCommunityStorage", "GetCommunity", "get community")
 	}
 
 	// Deserialize
 	var community Community
 	if err := json.Unmarshal(entry.Value(), &community); err != nil {
-		return nil, errors.WrapInvalid(err, "NATSCommunityStorage", "GetCommunity", "unmarshal community")
+		return nil, errs.WrapInvalid(err, "NATSCommunityStorage", "GetCommunity", "unmarshal community")
 	}
 
 	return &community, nil
@@ -216,7 +216,7 @@ func (s *NATSCommunityStorage) GetCommunitiesByLevel(ctx context.Context, level 
 		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
 			return communities, nil
 		}
-		return nil, errors.WrapTransient(err, "NATSCommunityStorage", "GetCommunitiesByLevel", "list keys")
+		return nil, errs.WrapTransient(err, "NATSCommunityStorage", "GetCommunitiesByLevel", "list keys")
 	}
 
 	for _, key := range keys {
@@ -248,7 +248,7 @@ func (s *NATSCommunityStorage) GetCommunitiesByLevel(ctx context.Context, level 
 // GetEntityCommunity retrieves the community for an entity at a level
 func (s *NATSCommunityStorage) GetEntityCommunity(ctx context.Context, entityID string, level int) (*Community, error) {
 	if entityID == "" {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "NATSCommunityStorage", "GetEntityCommunity", "entityID is empty")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "NATSCommunityStorage", "GetEntityCommunity", "entityID is empty")
 	}
 
 	// Lookup entity -> community mapping
@@ -259,7 +259,7 @@ func (s *NATSCommunityStorage) GetEntityCommunity(ctx context.Context, entityID 
 			// Entity not in any community is not an error - return nil
 			return nil, nil
 		}
-		return nil, errors.WrapTransient(err, "NATSCommunityStorage", "GetEntityCommunity", "get entity mapping")
+		return nil, errs.WrapTransient(err, "NATSCommunityStorage", "GetEntityCommunity", "get entity mapping")
 	}
 
 	communityID := string(entry.Value())
@@ -271,7 +271,7 @@ func (s *NATSCommunityStorage) GetEntityCommunity(ctx context.Context, entityID 
 // DeleteCommunity removes a community
 func (s *NATSCommunityStorage) DeleteCommunity(ctx context.Context, id string) error {
 	if id == "" {
-		return errors.WrapInvalid(errors.ErrMissingConfig, "NATSCommunityStorage", "DeleteCommunity", "id is empty")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "NATSCommunityStorage", "DeleteCommunity", "id is empty")
 	}
 
 	// Get community to find members
@@ -302,7 +302,7 @@ func (s *NATSCommunityStorage) DeleteCommunity(ctx context.Context, id string) e
 
 	// Return combined error if any occurred
 	if len(deleteErrs) > 0 {
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			fmt.Errorf("%d deletion errors: %v", len(deleteErrs), deleteErrs),
 			"NATSCommunityStorage",
 			"DeleteCommunity",
@@ -322,7 +322,7 @@ func (s *NATSCommunityStorage) Clear(ctx context.Context) error {
 		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
 			return nil
 		}
-		return errors.WrapTransient(err, "NATSCommunityStorage", "Clear", "list keys")
+		return errs.WrapTransient(err, "NATSCommunityStorage", "Clear", "list keys")
 	}
 
 	// Delete all community keys - accumulate errors
@@ -337,7 +337,7 @@ func (s *NATSCommunityStorage) Clear(ctx context.Context) error {
 
 	// Return combined error if any occurred
 	if len(deleteErrs) > 0 {
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			fmt.Errorf("%d deletion errors: %v", len(deleteErrs), deleteErrs),
 			"NATSCommunityStorage",
 			"Clear",

@@ -3,7 +3,7 @@ package rule
 import (
 	"fmt"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/rule/expression"
 )
 
@@ -16,7 +16,7 @@ func (rp *Processor) ApplyConfigUpdate(changes map[string]any) error {
 	if rulesConfig, ok := changes["rules"]; ok {
 		rulesMap := rulesConfig.(map[string]any) // Validated in ValidateConfigUpdate
 		if err := rp.applyRuleChanges(rulesMap); err != nil {
-			return errors.Wrap(err, "RuleProcessor", "ApplyConfigUpdate", "apply rule changes")
+			return errs.Wrap(err, "RuleProcessor", "ApplyConfigUpdate", "apply rule changes")
 		}
 	}
 
@@ -27,7 +27,7 @@ func (rp *Processor) ApplyConfigUpdate(changes map[string]any) error {
 
 		// Reload rules with new enabled list
 		if err := rp.loadRules(); err != nil {
-			return errors.Wrap(err, "RuleProcessor", "ApplyConfigUpdate", "reload enabled rules")
+			return errs.Wrap(err, "RuleProcessor", "ApplyConfigUpdate", "reload enabled rules")
 		}
 
 		rp.logger.Info("Updated enabled rules", "rules", enabledRules)

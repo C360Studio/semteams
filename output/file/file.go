@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Config holds configuration for file output component
@@ -31,17 +31,17 @@ type Config struct {
 // Validate checks the configuration for errors
 func (c *Config) Validate() error {
 	if c.Directory == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate", "directory is required")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "directory is required")
 	}
 
 	validFormats := map[string]bool{"json": true, "jsonl": true, "raw": true}
 	if !validFormats[c.Format] {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"format must be one of: json, jsonl, raw")
 	}
 
 	if c.BufferSize < 0 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"buffer_size cannot be negative")
 	}
 
@@ -127,7 +127,7 @@ type Output struct {
 func NewOutput(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	var config Config
 	if err := component.SafeUnmarshal(rawConfig, &config); err != nil {
-		return nil, errors.WrapInvalid(err, "Output", "NewOutput", "config unmarshal")
+		return nil, errs.WrapInvalid(err, "Output", "NewOutput", "config unmarshal")
 	}
 
 	if config.Ports == nil {
@@ -143,7 +143,7 @@ func NewOutput(rawConfig json.RawMessage, deps component.Dependencies) (componen
 	}
 
 	if len(inputSubjects) == 0 {
-		return nil, errors.WrapInvalid(errors.ErrInvalidConfig, "Output", "NewOutput", "no input subjects configured")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "NewOutput", "no input subjects configured")
 	}
 
 	// Validate directory
@@ -172,7 +172,7 @@ func NewOutput(rawConfig json.RawMessage, deps component.Dependencies) (componen
 func (f *Output) Initialize() error {
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(f.directory, 0755); err != nil {
-		return errors.WrapFatal(err, "Output", "Initialize", "create output directory")
+		return errs.WrapFatal(err, "Output", "Initialize", "create output directory")
 	}
 
 	return nil
@@ -191,11 +191,11 @@ func (f *Output) Start(ctx context.Context) error {
 	defer f.lifecycleMu.Unlock()
 
 	if f.running {
-		return errors.WrapFatal(errors.ErrAlreadyStarted, "Output", "Start", "check running state")
+		return errs.WrapFatal(errs.ErrAlreadyStarted, "Output", "Start", "check running state")
 	}
 
 	if f.natsClient == nil {
-		return errors.WrapFatal(errors.ErrMissingConfig, "Output", "Start", "NATS client required")
+		return errs.WrapFatal(errs.ErrMissingConfig, "Output", "Start", "NATS client required")
 	}
 
 	// Open output file
@@ -210,7 +210,7 @@ func (f *Output) Start(ctx context.Context) error {
 
 	f.file, err = os.OpenFile(filename, flags, 0644)
 	if err != nil {
-		return errors.WrapFatal(err, "Output", "Start", "open output file")
+		return errs.WrapFatal(err, "Output", "Start", "open output file")
 	}
 
 	// Subscribe to input subjects
@@ -224,7 +224,7 @@ func (f *Output) Start(ctx context.Context) error {
 				"component", f.name,
 				"subject", subject,
 				"error", err)
-			return errors.WrapTransient(err, "Output", "Start", fmt.Sprintf("subscribe to %s", subject))
+			return errs.WrapTransient(err, "Output", "Start", fmt.Sprintf("subscribe to %s", subject))
 		}
 
 		f.logger.Debug("Subscribed to NATS subject successfully",
@@ -278,7 +278,7 @@ func (f *Output) Stop(timeout time.Duration) error {
 	case <-waitCh:
 		// Clean shutdown
 	case <-time.After(timeout):
-		return errors.WrapTransient(fmt.Errorf("shutdown timeout after %v", timeout), "Output", "Stop", "shutdown")
+		return errs.WrapTransient(fmt.Errorf("shutdown timeout after %v", timeout), "Output", "Stop", "shutdown")
 	}
 
 	// Flush remaining buffer

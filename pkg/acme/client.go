@@ -16,7 +16,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/go-acme/lego/v4/certcrypto"
 	"github.com/go-acme/lego/v4/certificate"
 	"github.com/go-acme/lego/v4/challenge/http01"
@@ -68,27 +68,27 @@ func (a *Account) GetPrivateKey() crypto.PrivateKey {
 // Validate checks if the ACME configuration is valid
 func (c *Config) Validate() error {
 	if c.DirectoryURL == "" {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("directory_url is required"),
 			"acme.Config", "Validate", "check directory URL")
 	}
 	if c.Email == "" {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("email is required"),
 			"acme.Config", "Validate", "check email")
 	}
 	if len(c.Domains) == 0 {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("at least one domain is required"),
 			"acme.Config", "Validate", "check domains")
 	}
 	if c.ChallengeType != "http-01" && c.ChallengeType != "tls-alpn-01" && c.ChallengeType != "" {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("challenge_type must be 'http-01' or 'tls-alpn-01'"),
 			"acme.Config", "Validate", "check challenge type")
 	}
 	if c.StoragePath == "" {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("storage_path is required"),
 			"acme.Config", "Validate", "check storage path")
 	}
@@ -106,7 +106,7 @@ func NewClient(cfg Config) (*Client, error) {
 
 	// Ensure storage directory exists
 	if err := os.MkdirAll(cfg.StoragePath, 0700); err != nil {
-		return nil, errors.WrapFatal(err, "acme.Client", "NewClient", "create storage directory")
+		return nil, errs.WrapFatal(err, "acme.Client", "NewClient", "create storage directory")
 	}
 
 	client := &Client{
@@ -136,23 +136,23 @@ func (c *Client) loadOrCreateAccount() error {
 		// Load existing account
 		accountData, err := os.ReadFile(accountPath)
 		if err != nil {
-			return errors.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "read account file")
+			return errs.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "read account file")
 		}
 
 		var account Account
 		if err := json.Unmarshal(accountData, &account); err != nil {
-			return errors.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "unmarshal account")
+			return errs.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "unmarshal account")
 		}
 
 		// Load private key
 		keyData, err := os.ReadFile(keyPath)
 		if err != nil {
-			return errors.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "read key file")
+			return errs.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "read key file")
 		}
 
 		privateKey, err := certcrypto.ParsePEMPrivateKey(keyData)
 		if err != nil {
-			return errors.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "parse private key")
+			return errs.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "parse private key")
 		}
 
 		account.key = privateKey
@@ -164,7 +164,7 @@ func (c *Client) loadOrCreateAccount() error {
 	// Create new account
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return errors.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "generate private key")
+		return errs.WrapFatal(err, "acme.Client", "loadOrCreateAccount", "generate private key")
 	}
 
 	c.account = &Account{
@@ -184,18 +184,18 @@ func (c *Client) saveAccount() error {
 	// Marshal account
 	accountData, err := json.MarshalIndent(c.account, "", "  ")
 	if err != nil {
-		return errors.WrapFatal(err, "acme.Client", "saveAccount", "marshal account")
+		return errs.WrapFatal(err, "acme.Client", "saveAccount", "marshal account")
 	}
 
 	if err := os.WriteFile(accountPath, accountData, 0600); err != nil {
-		return errors.WrapFatal(err, "acme.Client", "saveAccount", "write account file")
+		return errs.WrapFatal(err, "acme.Client", "saveAccount", "write account file")
 	}
 
 	// Save private key
 	keyData := certcrypto.PEMEncode(c.account.key)
 
 	if err := os.WriteFile(keyPath, keyData, 0600); err != nil {
-		return errors.WrapFatal(err, "acme.Client", "saveAccount", "write key file")
+		return errs.WrapFatal(err, "acme.Client", "saveAccount", "write key file")
 	}
 
 	return nil
@@ -211,12 +211,12 @@ func (c *Client) initializeLegoClient() error {
 	if c.config.CABundle != "" {
 		caCert, err := os.ReadFile(c.config.CABundle)
 		if err != nil {
-			return errors.WrapFatal(err, "acme.Client", "initializeLegoClient", "read CA bundle")
+			return errs.WrapFatal(err, "acme.Client", "initializeLegoClient", "read CA bundle")
 		}
 
 		caCertPool := x509.NewCertPool()
 		if !caCertPool.AppendCertsFromPEM(caCert) {
-			return errors.WrapFatal(
+			return errs.WrapFatal(
 				fmt.Errorf("failed to parse CA certificate"),
 				"acme.Client", "initializeLegoClient", "parse CA bundle")
 		}
@@ -232,7 +232,7 @@ func (c *Client) initializeLegoClient() error {
 
 	client, err := lego.NewClient(config)
 	if err != nil {
-		return errors.WrapFatal(err, "acme.Client", "initializeLegoClient", "create lego client")
+		return errs.WrapFatal(err, "acme.Client", "initializeLegoClient", "create lego client")
 	}
 
 	// Set up challenge provider
@@ -244,14 +244,14 @@ func (c *Client) initializeLegoClient() error {
 	switch challengeType {
 	case "http-01":
 		if err := client.Challenge.SetHTTP01Provider(http01.NewProviderServer("", "80")); err != nil {
-			return errors.WrapFatal(err, "acme.Client", "initializeLegoClient", "setup HTTP-01 challenge")
+			return errs.WrapFatal(err, "acme.Client", "initializeLegoClient", "setup HTTP-01 challenge")
 		}
 	case "tls-alpn-01":
 		if err := client.Challenge.SetTLSALPN01Provider(tlsalpn01.NewProviderServer("", "443")); err != nil {
-			return errors.WrapFatal(err, "acme.Client", "initializeLegoClient", "setup TLS-ALPN-01 challenge")
+			return errs.WrapFatal(err, "acme.Client", "initializeLegoClient", "setup TLS-ALPN-01 challenge")
 		}
 	default:
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("unsupported challenge type: %s", challengeType),
 			"acme.Client", "initializeLegoClient", "setup challenge provider")
 	}
@@ -260,7 +260,7 @@ func (c *Client) initializeLegoClient() error {
 	if c.account.Registration == nil {
 		reg, err := client.Registration.Register(registration.RegisterOptions{TermsOfServiceAgreed: true})
 		if err != nil {
-			return errors.WrapTransient(err, "acme.Client", "initializeLegoClient", "register account")
+			return errs.WrapTransient(err, "acme.Client", "initializeLegoClient", "register account")
 		}
 		c.account.Registration = reg
 
@@ -283,7 +283,7 @@ func (c *Client) ObtainCertificate(_ context.Context) (*tls.Certificate, error) 
 
 	certificates, err := c.legoClient.Certificate.Obtain(request)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "acme.Client", "ObtainCertificate", "obtain certificate")
+		return nil, errs.WrapTransient(err, "acme.Client", "ObtainCertificate", "obtain certificate")
 	}
 
 	// Save certificate to storage
@@ -291,17 +291,17 @@ func (c *Client) ObtainCertificate(_ context.Context) (*tls.Certificate, error) 
 	keyPath := filepath.Join(c.config.StoragePath, "certificate.key")
 
 	if err := os.WriteFile(certPath, certificates.Certificate, 0644); err != nil {
-		return nil, errors.WrapFatal(err, "acme.Client", "ObtainCertificate", "write certificate")
+		return nil, errs.WrapFatal(err, "acme.Client", "ObtainCertificate", "write certificate")
 	}
 
 	if err := os.WriteFile(keyPath, certificates.PrivateKey, 0600); err != nil {
-		return nil, errors.WrapFatal(err, "acme.Client", "ObtainCertificate", "write private key")
+		return nil, errs.WrapFatal(err, "acme.Client", "ObtainCertificate", "write private key")
 	}
 
 	// Load as tls.Certificate
 	tlsCert, err := tls.X509KeyPair(certificates.Certificate, certificates.PrivateKey)
 	if err != nil {
-		return nil, errors.WrapFatal(err, "acme.Client", "ObtainCertificate", "load certificate")
+		return nil, errs.WrapFatal(err, "acme.Client", "ObtainCertificate", "load certificate")
 	}
 
 	return &tlsCert, nil
@@ -320,14 +320,14 @@ func (c *Client) RenewCertificateIfNeeded(_ context.Context) (*tls.Certificate, 
 	// Load existing certificate
 	tlsCert, err := tls.LoadX509KeyPair(certPath, keyPath)
 	if err != nil {
-		return nil, false, errors.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
+		return nil, false, errs.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
 			"load existing certificate")
 	}
 
 	// Parse to check expiry
 	cert, err := x509.ParseCertificate(tlsCert.Certificate[0])
 	if err != nil {
-		return nil, false, errors.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
+		return nil, false, errs.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
 			"parse certificate")
 	}
 
@@ -340,7 +340,7 @@ func (c *Client) RenewCertificateIfNeeded(_ context.Context) (*tls.Certificate, 
 	// Renew certificate
 	certData, err := os.ReadFile(certPath)
 	if err != nil {
-		return nil, false, errors.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
+		return nil, false, errs.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
 			"read certificate for renewal")
 	}
 
@@ -351,25 +351,25 @@ func (c *Client) RenewCertificateIfNeeded(_ context.Context) (*tls.Certificate, 
 
 	renewed, err := c.legoClient.Certificate.Renew(certResource, true, false, "")
 	if err != nil {
-		return nil, false, errors.WrapTransient(err, "acme.Client", "RenewCertificateIfNeeded",
+		return nil, false, errs.WrapTransient(err, "acme.Client", "RenewCertificateIfNeeded",
 			"renew certificate")
 	}
 
 	// Save renewed certificate
 	if err := os.WriteFile(certPath, renewed.Certificate, 0644); err != nil {
-		return nil, false, errors.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
+		return nil, false, errs.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
 			"write renewed certificate")
 	}
 
 	if err := os.WriteFile(keyPath, renewed.PrivateKey, 0600); err != nil {
-		return nil, false, errors.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
+		return nil, false, errs.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
 			"write renewed private key")
 	}
 
 	// Load renewed certificate
 	renewedTLS, err := tls.X509KeyPair(renewed.Certificate, renewed.PrivateKey)
 	if err != nil {
-		return nil, false, errors.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
+		return nil, false, errs.WrapFatal(err, "acme.Client", "RenewCertificateIfNeeded",
 			"load renewed certificate")
 	}
 

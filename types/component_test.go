@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	pkgerrors "github.com/c360/semstreams/errors"
+	pkgerrs "github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/types"
 )
 
@@ -117,7 +117,7 @@ func TestComponentConfigValidate(t *testing.T) {
 
 				// Verify error classification
 				if tt.errorType == "invalid" {
-					if !pkgerrors.IsInvalid(err) {
+					if !pkgerrs.IsInvalid(err) {
 						t.Errorf("expected Invalid error classification, got: %v", err)
 					}
 				}

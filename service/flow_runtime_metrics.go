@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	dto "github.com/prometheus/client_model/go"
@@ -164,7 +164,7 @@ func (fs *FlowService) queryPrometheusMetrics(ctx context.Context, components []
 		Address: fs.config.PrometheusURL,
 	})
 	if err != nil {
-		return nil, errors.WrapTransient(err, "FlowService", "queryPrometheusMetrics", "create prometheus client")
+		return nil, errs.WrapTransient(err, "FlowService", "queryPrometheusMetrics", "create prometheus client")
 	}
 
 	v1api := v1.NewAPI(client)
@@ -231,7 +231,7 @@ func (fs *FlowService) queryPrometheusMetrics(ctx context.Context, components []
 func (fs *FlowService) queryPrometheusSingle(ctx context.Context, api v1.API, query string) (float64, error) {
 	result, warnings, err := api.Query(ctx, query, time.Now())
 	if err != nil {
-		return 0, errors.WrapTransient(err, "FlowService", "queryPrometheusSingle", "execute prometheus query")
+		return 0, errs.WrapTransient(err, "FlowService", "queryPrometheusSingle", "execute prometheus query")
 	}
 
 	if len(warnings) > 0 {
@@ -245,14 +245,14 @@ func (fs *FlowService) queryPrometheusSingle(ctx context.Context, api v1.API, qu
 		if len(vector) > 0 {
 			return float64(vector[0].Value), nil
 		}
-		return 0, errors.WrapTransient(fmt.Errorf("no data returned for query"), "FlowService", "queryPrometheusSingle", "parse query result")
+		return 0, errs.WrapTransient(fmt.Errorf("no data returned for query"), "FlowService", "queryPrometheusSingle", "parse query result")
 
 	case model.ValScalar:
 		scalar := result.(*model.Scalar)
 		return float64(scalar.Value), nil
 
 	default:
-		return 0, errors.WrapInvalid(fmt.Errorf("unexpected result type: %s", result.Type()), "FlowService", "queryPrometheusSingle", "parse query result")
+		return 0, errs.WrapInvalid(fmt.Errorf("unexpected result type: %s", result.Type()), "FlowService", "queryPrometheusSingle", "parse query result")
 	}
 }
 
@@ -267,17 +267,17 @@ func (fs *FlowService) parseRawMetrics(ctx context.Context, components []compone
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metricsURL, nil)
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "FlowService", "parseRawMetrics", "create http request")
+		return nil, errs.WrapInvalid(err, "FlowService", "parseRawMetrics", "create http request")
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "FlowService", "parseRawMetrics", "fetch raw metrics")
+		return nil, errs.WrapTransient(err, "FlowService", "parseRawMetrics", "fetch raw metrics")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.WrapTransient(
+		return nil, errs.WrapTransient(
 			fmt.Errorf("unexpected status code: %d", resp.StatusCode),
 			"FlowService", "parseRawMetrics", "check http status")
 	}
@@ -286,7 +286,7 @@ func (fs *FlowService) parseRawMetrics(ctx context.Context, components []compone
 	parser := expfmt.TextParser{}
 	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "FlowService", "parseRawMetrics", "parse prometheus text format")
+		return nil, errs.WrapTransient(err, "FlowService", "parseRawMetrics", "parse prometheus text format")
 	}
 
 	// Extract counters for each component

@@ -119,7 +119,7 @@
 //	                                                            │
 //	                       deployed_stopped <──Stop()──────────┘
 //
-// Invalid transitions return errors.WrapInvalid.
+// Invalid transitions return errs.WrapInvalid.
 //
 // # Integration with Existing Systems
 //

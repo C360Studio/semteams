@@ -10,10 +10,10 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/types"
 )
 
@@ -67,7 +67,7 @@ func (e *Engine) ValidateFlowDefinition(flow *flowstore.Flow) (*ValidationResult
 	// Layer 1: Basic structural validation
 	if err := flow.Validate(); err != nil {
 		validationErr = err
-		return nil, errors.WrapInvalid(err, "flowengine", "ValidateFlowDefinition", "basic validation failed")
+		return nil, errs.WrapInvalid(err, "flowengine", "ValidateFlowDefinition", "basic validation failed")
 	}
 
 	// Layer 2: FlowGraph validation with port discovery
@@ -75,7 +75,7 @@ func (e *Engine) ValidateFlowDefinition(flow *flowstore.Flow) (*ValidationResult
 	result, err := validator.ValidateFlow(flow)
 	if err != nil {
 		validationErr = err
-		return nil, errors.WrapInvalid(err, "flowengine", "ValidateFlowDefinition", "graph validation failed")
+		return nil, errs.WrapInvalid(err, "flowengine", "ValidateFlowDefinition", "graph validation failed")
 	}
 
 	// Record errors from result if validation succeeded but found issues
@@ -100,30 +100,30 @@ func (e *Engine) Deploy(ctx context.Context, flowID string) error {
 	// Get the flow
 	flow, err := e.flowStore.Get(ctx, flowID)
 	if err != nil {
-		return errors.WrapTransient(err, "flowengine", "Deploy", "get flow")
+		return errs.WrapTransient(err, "flowengine", "Deploy", "get flow")
 	}
 
 	// Validate flow structure
 	if err := e.validateFlow(flow); err != nil {
-		return errors.WrapInvalid(err, "flowengine", "Deploy", "flow validation failed")
+		return errs.WrapInvalid(err, "flowengine", "Deploy", "flow validation failed")
 	}
 
 	// Translate nodes to component configs
 	componentConfigs, err := e.translateToComponentConfigs(flow)
 	if err != nil {
-		return errors.WrapInvalid(err, "flowengine", "Deploy", "translation failed")
+		return errs.WrapInvalid(err, "flowengine", "Deploy", "translation failed")
 	}
 
 	// Write component configs to semstreams_config KV
 	// Manager is already watching this bucket and will trigger ComponentManager
 	if err := e.writeComponentConfigs(ctx, componentConfigs); err != nil {
-		return errors.WrapTransient(err, "flowengine", "Deploy", "write configs to KV")
+		return errs.WrapTransient(err, "flowengine", "Deploy", "write configs to KV")
 	}
 
 	// Update flow state
 	flow.RuntimeState = flowstore.StateDeployedStopped
 	if err := e.flowStore.Update(ctx, flow); err != nil {
-		return errors.WrapTransient(err, "flowengine", "Deploy", "update flow state")
+		return errs.WrapTransient(err, "flowengine", "Deploy", "update flow state")
 	}
 
 	success = true
@@ -143,11 +143,11 @@ func (e *Engine) Start(ctx context.Context, flowID string) error {
 
 	flow, err := e.flowStore.Get(ctx, flowID)
 	if err != nil {
-		return errors.WrapTransient(err, "flowengine", "Start", "get flow")
+		return errs.WrapTransient(err, "flowengine", "Start", "get flow")
 	}
 
 	if flow.RuntimeState != flowstore.StateDeployedStopped {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("flow state is %s", flow.RuntimeState),
 			"flowengine", "Start", "flow must be deployed and stopped")
 	}
@@ -155,14 +155,14 @@ func (e *Engine) Start(ctx context.Context, flowID string) error {
 	// Enable all components in the flow
 	for _, node := range flow.Nodes {
 		if err := e.enableComponent(ctx, node.Name); err != nil {
-			return errors.WrapTransient(err, "flowengine", "Start", fmt.Sprintf("enable component %s", node.Name))
+			return errs.WrapTransient(err, "flowengine", "Start", fmt.Sprintf("enable component %s", node.Name))
 		}
 	}
 
 	// Update flow state
 	flow.RuntimeState = flowstore.StateRunning
 	if err := e.flowStore.Update(ctx, flow); err != nil {
-		return errors.WrapTransient(err, "flowengine", "Start", "update flow state")
+		return errs.WrapTransient(err, "flowengine", "Start", "update flow state")
 	}
 
 	success = true
@@ -181,11 +181,11 @@ func (e *Engine) Stop(ctx context.Context, flowID string) error {
 
 	flow, err := e.flowStore.Get(ctx, flowID)
 	if err != nil {
-		return errors.WrapTransient(err, "flowengine", "Stop", "get flow")
+		return errs.WrapTransient(err, "flowengine", "Stop", "get flow")
 	}
 
 	if flow.RuntimeState != flowstore.StateRunning {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("flow state is %s", flow.RuntimeState),
 			"flowengine", "Stop", "flow must be running")
 	}
@@ -193,14 +193,14 @@ func (e *Engine) Stop(ctx context.Context, flowID string) error {
 	// Disable all components in the flow
 	for _, node := range flow.Nodes {
 		if err := e.disableComponent(ctx, node.Name); err != nil {
-			return errors.WrapTransient(err, "flowengine", "Stop", fmt.Sprintf("disable component %s", node.Name))
+			return errs.WrapTransient(err, "flowengine", "Stop", fmt.Sprintf("disable component %s", node.Name))
 		}
 	}
 
 	// Update flow state
 	flow.RuntimeState = flowstore.StateDeployedStopped
 	if err := e.flowStore.Update(ctx, flow); err != nil {
-		return errors.WrapTransient(err, "flowengine", "Stop", "update flow state")
+		return errs.WrapTransient(err, "flowengine", "Stop", "update flow state")
 	}
 
 	success = true
@@ -211,11 +211,11 @@ func (e *Engine) Stop(ctx context.Context, flowID string) error {
 func (e *Engine) Undeploy(ctx context.Context, flowID string) error {
 	flow, err := e.flowStore.Get(ctx, flowID)
 	if err != nil {
-		return errors.WrapTransient(err, "flowengine", "Undeploy", "get flow")
+		return errs.WrapTransient(err, "flowengine", "Undeploy", "get flow")
 	}
 
 	if flow.RuntimeState == flowstore.StateRunning {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("cannot undeploy running flow"),
 			"flowengine", "Undeploy", "flow must be stopped before undeploying")
 	}
@@ -223,14 +223,14 @@ func (e *Engine) Undeploy(ctx context.Context, flowID string) error {
 	// Delete all component configs
 	for _, node := range flow.Nodes {
 		if err := e.deleteComponentConfig(ctx, node.Name); err != nil {
-			return errors.WrapTransient(err, "flowengine", "Undeploy", fmt.Sprintf("delete component %s", node.Name))
+			return errs.WrapTransient(err, "flowengine", "Undeploy", fmt.Sprintf("delete component %s", node.Name))
 		}
 	}
 
 	// Update flow state
 	flow.RuntimeState = flowstore.StateNotDeployed
 	if err := e.flowStore.Update(ctx, flow); err != nil {
-		return errors.WrapTransient(err, "flowengine", "Undeploy", "update flow state")
+		return errs.WrapTransient(err, "flowengine", "Undeploy", "update flow state")
 	}
 
 	return nil
@@ -260,7 +260,7 @@ func (e *Engine) validateFlow(flow *flowstore.Flow) error {
 	validator := NewValidator(e.componentRegistry, e.natsClient, e.logger)
 	result, err := validator.ValidateFlow(flow)
 	if err != nil {
-		return errors.WrapInvalid(err, "flowengine", "validateFlow", "graph validation failed")
+		return errs.WrapInvalid(err, "flowengine", "validateFlow", "graph validation failed")
 	}
 
 	// Fail deployment if there are errors

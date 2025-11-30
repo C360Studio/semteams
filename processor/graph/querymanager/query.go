@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // This file contains the complex query operations for query manager.
@@ -29,7 +29,7 @@ func (qe *Manager) ExecutePath(ctx context.Context, start string, pattern PathPa
 
 	// Validate pattern
 	if err := qe.validatePathPattern(pattern); err != nil {
-		return nil, errors.WrapInvalid(err, "QueryManager", "ExecutePath",
+		return nil, errs.WrapInvalid(err, "QueryManager", "ExecutePath",
 			"pattern validation failed")
 	}
 
@@ -82,7 +82,7 @@ func (qe *Manager) GetGraphSnapshot(ctx context.Context, bounds QueryBounds) (*G
 
 	// Validate bounds
 	if err := qe.validateQueryBounds(bounds); err != nil {
-		return nil, errors.WrapInvalid(err, "QueryManager", "GetGraphSnapshot",
+		return nil, errs.WrapInvalid(err, "QueryManager", "GetGraphSnapshot",
 			"bounds validation failed")
 	}
 
@@ -119,13 +119,13 @@ func (qe *Manager) QueryRelationships(
 
 	// Validate direction
 	if !qe.isValidDirection(direction) {
-		return nil, errors.WrapInvalid(gtypes.ErrInvalidQueryParams, "QueryManager", "QueryRelationships",
+		return nil, errs.WrapInvalid(gtypes.ErrInvalidQueryParams, "QueryManager", "QueryRelationships",
 			fmt.Sprintf("invalid direction: %s", direction))
 	}
 
 	// Check if index manager is available for relationship queries
 	if qe.indexManager == nil {
-		return nil, errors.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QueryRelationships",
+		return nil, errs.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QueryRelationships",
 			"index manager dependency unavailable")
 	}
 
@@ -149,7 +149,7 @@ func (qe *Manager) QueryRelationships(
 		}
 		relationships = append(incoming, outgoing...)
 	default:
-		return nil, errors.WrapInvalid(gtypes.ErrInvalidQueryParams, "QueryManager", "QueryRelationships",
+		return nil, errs.WrapInvalid(gtypes.ErrInvalidQueryParams, "QueryManager", "QueryRelationships",
 			fmt.Sprintf("unsupported direction: %s", direction))
 	}
 
@@ -175,13 +175,13 @@ func (qe *Manager) QueryRelationships(
 func (qe *Manager) validatePathPattern(pattern PathPattern) error {
 	if pattern.MaxDepth <= 0 {
 		msg := fmt.Sprintf("max depth must be positive, got %d", pattern.MaxDepth)
-		return errors.WrapInvalid(errors.ErrInvalidData, "query manager",
+		return errs.WrapInvalid(errs.ErrInvalidData, "query manager",
 			"validatePathPattern", msg)
 	}
 	if pattern.MaxDepth > qe.config.Query.MaxPathLength {
 		msg := fmt.Sprintf("max depth %d exceeds limit %d",
 			pattern.MaxDepth, qe.config.Query.MaxPathLength)
-		return errors.WrapInvalid(errors.ErrInvalidData, "query manager",
+		return errs.WrapInvalid(errs.ErrInvalidData, "query manager",
 			"validatePathPattern", msg)
 	}
 	return nil
@@ -192,22 +192,22 @@ func (qe *Manager) validateQueryBounds(bounds QueryBounds) error {
 	if bounds.MaxEntities > qe.config.Query.MaxSnapshotSize {
 		msg := fmt.Sprintf("max entities %d exceeds limit %d",
 			bounds.MaxEntities, qe.config.Query.MaxSnapshotSize)
-		return errors.WrapInvalid(errors.ErrInvalidData, "query manager",
+		return errs.WrapInvalid(errs.ErrInvalidData, "query manager",
 			"validateQueryBounds", msg)
 	}
 	if bounds.Spatial != nil {
 		if bounds.Spatial.North < bounds.Spatial.South {
-			return errors.WrapInvalid(errors.ErrInvalidData, "query manager",
+			return errs.WrapInvalid(errs.ErrInvalidData, "query manager",
 				"validateQueryBounds", "north latitude must be >= south latitude")
 		}
 		if bounds.Spatial.East < bounds.Spatial.West {
-			return errors.WrapInvalid(errors.ErrInvalidData, "query manager",
+			return errs.WrapInvalid(errs.ErrInvalidData, "query manager",
 				"validateQueryBounds", "east longitude must be >= west longitude")
 		}
 	}
 	if bounds.Temporal != nil {
 		if bounds.Temporal.End.Before(bounds.Temporal.Start) {
-			return errors.WrapInvalid(errors.ErrInvalidData, "query manager",
+			return errs.WrapInvalid(errs.ErrInvalidData, "query manager",
 				"validateQueryBounds", "end time must be after start time")
 		}
 	}
@@ -241,7 +241,7 @@ func (qe *Manager) executePathTraversal(ctx context.Context, start string, patte
 	// Get starting entity
 	startEntity, err := qe.GetEntity(ctx, start)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "ExecutePath",
+		return nil, errs.WrapTransient(err, "QueryManager", "ExecutePath",
 			fmt.Sprintf("failed to get start entity: %s", start))
 	}
 
@@ -289,7 +289,7 @@ func (qe *Manager) executeSnapshotQuery(ctx context.Context, bounds QueryBounds)
 		// Query by spatial bounds
 		spatialIDs, err := qe.QuerySpatial(ctx, *bounds.Spatial)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "QueryManager", "GetGraphSnapshot",
+			return nil, errs.WrapTransient(err, "QueryManager", "GetGraphSnapshot",
 				"spatial query failed")
 		}
 		entityIDs = append(entityIDs, spatialIDs...)
@@ -299,7 +299,7 @@ func (qe *Manager) executeSnapshotQuery(ctx context.Context, bounds QueryBounds)
 		// Query by temporal bounds
 		temporalIDs, err := qe.QueryTemporal(ctx, bounds.Temporal.Start, bounds.Temporal.End)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "QueryManager", "GetGraphSnapshot",
+			return nil, errs.WrapTransient(err, "QueryManager", "GetGraphSnapshot",
 				"temporal query failed")
 		}
 		entityIDs = append(entityIDs, temporalIDs...)
@@ -310,7 +310,7 @@ func (qe *Manager) executeSnapshotQuery(ctx context.Context, bounds QueryBounds)
 		for _, entityType := range bounds.EntityTypes {
 			typeIDs, err := qe.QueryByPredicate(ctx, "type:"+entityType)
 			if err != nil {
-				return nil, errors.WrapTransient(err, "QueryManager", "GetGraphSnapshot",
+				return nil, errs.WrapTransient(err, "QueryManager", "GetGraphSnapshot",
 					"type query failed")
 			}
 			entityIDs = append(entityIDs, typeIDs...)
@@ -330,7 +330,7 @@ func (qe *Manager) executeSnapshotQuery(ctx context.Context, bounds QueryBounds)
 	if len(entityIDs) > 0 {
 		entities, err := qe.GetEntities(ctx, entityIDs)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "QueryManager", "GetGraphSnapshot",
+			return nil, errs.WrapTransient(err, "QueryManager", "GetGraphSnapshot",
 				"failed to load entities")
 		}
 		snapshot.Entities = entities
@@ -350,7 +350,7 @@ func (qe *Manager) queryIncomingRelationships(ctx context.Context, entityID stri
 	// Use index manager to get incoming relationships
 	indexRelationships, err := qe.indexManager.GetIncomingRelationships(ctx, entityID)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "GetIncomingRelationships",
+		return nil, errs.WrapTransient(err, "QueryManager", "GetIncomingRelationships",
 			fmt.Sprintf("index manager failed for entity: %s", entityID))
 	}
 
@@ -384,7 +384,7 @@ func (qe *Manager) queryOutgoingRelationships(ctx context.Context, entityID stri
 	// Get the entity to access its edges
 	entity, err := qe.GetEntity(ctx, entityID)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "queryOutgoingRelationships",
+		return nil, errs.WrapTransient(err, "QueryManager", "queryOutgoingRelationships",
 			fmt.Sprintf("failed to get entity: %s", entityID))
 	}
 

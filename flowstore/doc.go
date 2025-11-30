@@ -46,14 +46,14 @@
 //   - No duplicate node IDs
 //   - Connection validity (IDs, ports, node references)
 //
-// All validation errors use errors.WrapInvalid for consistent error handling.
+// All validation errors use errs.WrapInvalid for consistent error handling.
 //
 // # Optimistic Concurrency
 //
 // The Store uses version-based conflict detection:
 //   - Create: Sets version to 1
 //   - Update: Checks current version matches, increments on success
-//   - Conflict: Returns errors.WrapInvalid with "conflict" message
+//   - Conflict: Returns errs.WrapInvalid with "conflict" message
 //
 // Example workflow:
 //

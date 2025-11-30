@@ -14,10 +14,10 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/buffer"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -171,15 +171,15 @@ func (c *InputConfig) Validate() error {
 					if host, portStr, err := net.SplitHostPort(hostPort); err == nil {
 						if port, err := strconv.Atoi(portStr); err == nil {
 							if err := component.ValidateNetworkConfig(port, host); err != nil {
-								return errors.Wrap(err, "InputConfig", "Validate", "network port validation")
+								return errs.Wrap(err, "InputConfig", "Validate", "network port validation")
 							}
 						} else {
-							return errors.WrapInvalid(
+							return errs.WrapInvalid(
 								fmt.Errorf("invalid port number: %s", portStr),
 								"InputConfig", "Validate", "port parsing")
 						}
 					} else {
-						return errors.WrapInvalid(
+						return errs.WrapInvalid(
 							fmt.Errorf("invalid UDP address format: %s", input.Subject),
 							"InputConfig", "Validate", "address parsing")
 					}
@@ -190,8 +190,8 @@ func (c *InputConfig) Validate() error {
 		// Check output ports
 		for _, output := range c.Ports.Outputs {
 			if output.Type == "nats" && output.Subject == "" {
-				return errors.WrapInvalid(
-					errors.ErrInvalidConfig,
+				return errs.WrapInvalid(
+					errs.ErrInvalidConfig,
 					"InputConfig", "Validate", "NATS output subject validation")
 			}
 		}
@@ -451,17 +451,17 @@ func (u *Input) Initialize() error {
 
 	// Validate configuration (0 is allowed for OS auto-assignment)
 	if u.port < 0 || u.port > 65535 {
-		return errors.WrapInvalid(fmt.Errorf("invalid port %d", u.port),
+		return errs.WrapInvalid(fmt.Errorf("invalid port %d", u.port),
 			"udp-input", "Initialize", "port validation")
 	}
 
 	if u.subject == "" {
-		return errors.WrapInvalid(fmt.Errorf("empty subject"),
+		return errs.WrapInvalid(fmt.Errorf("empty subject"),
 			"udp-input", "Initialize", "subject validation")
 	}
 
 	if u.natsClient == nil {
-		return errors.WrapInvalid(fmt.Errorf("nil NATS client"),
+		return errs.WrapInvalid(fmt.Errorf("nil NATS client"),
 			"udp-input", "Initialize", "NATS client validation")
 	}
 
@@ -488,7 +488,7 @@ func (u *Input) Start(ctx context.Context) error {
 
 	if err := retry.Do(ctx, u.retryConfig, bindOperation); err != nil {
 		u.cleanupUnlocked()
-		return errors.WrapTransient(err, "udp-input", "Start", "socket binding")
+		return errs.WrapTransient(err, "udp-input", "Start", "socket binding")
 	}
 
 	u.running.Store(true)
@@ -576,7 +576,7 @@ func (u *Input) StopWithTimeout(timeout time.Duration) error {
 	case <-u.done:
 		// Goroutine finished cleanly
 	case <-time.After(timeout):
-		return errors.WrapTransient(fmt.Errorf("stop timeout after %v", timeout),
+		return errs.WrapTransient(fmt.Errorf("stop timeout after %v", timeout),
 			"udp-input", "Stop", "graceful shutdown")
 	}
 
@@ -664,7 +664,7 @@ func (u *Input) readLoop(ctx context.Context) {
 				}
 
 				// For non-recoverable errors, exit gracefully
-				if !errors.IsTransient(err) {
+				if !errs.IsTransient(err) {
 					return
 				}
 				continue
@@ -742,14 +742,14 @@ func (u *Input) processBufferedMessages(ctx context.Context) {
 // publishToNATS publishes the received data to the configured NATS subject
 func (u *Input) publishToNATS(_ context.Context, data []byte) error {
 	if u.natsClient == nil {
-		return errors.WrapInvalid(fmt.Errorf("NATS client not available"),
+		return errs.WrapInvalid(fmt.Errorf("NATS client not available"),
 			"udp-input", "publishToNATS", "NATS client check")
 	}
 
 	// Get the underlying NATS connection
 	nc := u.natsClient.GetConnection()
 	if nc == nil {
-		return errors.WrapTransient(fmt.Errorf("NATS connection not available"),
+		return errs.WrapTransient(fmt.Errorf("NATS connection not available"),
 			"udp-input", "publishToNATS", "NATS connection check")
 	}
 
@@ -762,7 +762,7 @@ func (u *Input) publishToNATS(_ context.Context, data []byte) error {
 	// Publish raw data directly to NATS
 	// The robotics processor will parse the MAVLink messages
 	if err := nc.Publish(u.subject, data); err != nil {
-		return errors.WrapTransient(err, "udp-input", "publishToNATS", "NATS publish")
+		return errs.WrapTransient(err, "udp-input", "publishToNATS", "NATS publish")
 	}
 
 	// Record publish latency metric
@@ -789,7 +789,7 @@ func CreateInput(rawConfig json.RawMessage, deps component.Dependencies) (compon
 	if len(rawConfig) > 0 {
 		var userConfig InputConfig
 		if err := component.SafeUnmarshal(rawConfig, &userConfig); err != nil {
-			return nil, errors.Wrap(err, "udp-input-factory", "create", "secure config parsing")
+			return nil, errs.Wrap(err, "udp-input-factory", "create", "secure config parsing")
 		}
 
 		// Apply user overrides (already validated by SafeUnmarshal)
@@ -800,7 +800,7 @@ func CreateInput(rawConfig json.RawMessage, deps component.Dependencies) (compon
 
 	// Validate required dependencies
 	if deps.NATSClient == nil {
-		return nil, errors.WrapInvalid(fmt.Errorf("NATS client is required"),
+		return nil, errs.WrapInvalid(fmt.Errorf("NATS client is required"),
 			"udp-input-factory", "create", "NATS client validation")
 	}
 

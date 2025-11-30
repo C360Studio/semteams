@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // NATSClient provides NATS integration for GraphQL gateway
@@ -104,7 +104,7 @@ func (nc *NATSClient) QueryEntityByID(ctx context.Context, id string) (*Entity, 
 
 	reqData, err := json.Marshal(req)
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "QueryEntityByID", "marshal request")
+		return nil, errs.WrapInvalid(err, "NATSClient", "QueryEntityByID", "marshal request")
 	}
 
 	// Determine timeout from context or use default
@@ -113,13 +113,13 @@ func (nc *NATSClient) QueryEntityByID(ctx context.Context, id string) (*Entity, 
 	// Send NATS request
 	conn := nc.client.GetConnection()
 	if conn == nil {
-		return nil, errors.WrapTransient(errors.ErrNoConnection, "NATSClient", "QueryEntityByID",
+		return nil, errs.WrapTransient(errs.ErrNoConnection, "NATSClient", "QueryEntityByID",
 			"NATS connection not available")
 	}
 
 	msg, err := conn.Request(nc.subjects.EntityQuery, reqData, timeout)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "NATSClient", "QueryEntityByID",
+		return nil, errs.WrapTransient(err, "NATSClient", "QueryEntityByID",
 			fmt.Sprintf("NATS request to %s failed", nc.subjects.EntityQuery))
 	}
 
@@ -130,11 +130,11 @@ func (nc *NATSClient) QueryEntityByID(ctx context.Context, id string) (*Entity, 
 	}
 
 	if err := json.Unmarshal(msg.Data, &response); err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "QueryEntityByID", "unmarshal response")
+		return nil, errs.WrapInvalid(err, "NATSClient", "QueryEntityByID", "unmarshal response")
 	}
 
 	if response.Error != "" {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("%s", response.Error),
 			"NATSClient",
 			"QueryEntityByID",
@@ -157,7 +157,7 @@ func (nc *NATSClient) QueryEntitiesByIDs(ctx context.Context, ids []string) ([]*
 
 	reqData, err := json.Marshal(req)
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "QueryEntitiesByIDs", "marshal request")
+		return nil, errs.WrapInvalid(err, "NATSClient", "QueryEntitiesByIDs", "marshal request")
 	}
 
 	// Determine timeout from context or use default
@@ -166,13 +166,13 @@ func (nc *NATSClient) QueryEntitiesByIDs(ctx context.Context, ids []string) ([]*
 	// Send NATS request
 	conn := nc.client.GetConnection()
 	if conn == nil {
-		return nil, errors.WrapTransient(errors.ErrNoConnection, "NATSClient", "QueryEntitiesByIDs",
+		return nil, errs.WrapTransient(errs.ErrNoConnection, "NATSClient", "QueryEntitiesByIDs",
 			"NATS connection not available")
 	}
 
 	msg, err := conn.Request(nc.subjects.EntitiesQuery, reqData, timeout)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "NATSClient", "QueryEntitiesByIDs",
+		return nil, errs.WrapTransient(err, "NATSClient", "QueryEntitiesByIDs",
 			fmt.Sprintf("NATS request to %s failed", nc.subjects.EntitiesQuery))
 	}
 
@@ -183,11 +183,11 @@ func (nc *NATSClient) QueryEntitiesByIDs(ctx context.Context, ids []string) ([]*
 	}
 
 	if err := json.Unmarshal(msg.Data, &response); err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "QueryEntitiesByIDs", "unmarshal response")
+		return nil, errs.WrapInvalid(err, "NATSClient", "QueryEntitiesByIDs", "unmarshal response")
 	}
 
 	if response.Error != "" {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("%s", response.Error),
 			"NATSClient",
 			"QueryEntitiesByIDs",
@@ -208,7 +208,7 @@ func (nc *NATSClient) QueryEntitiesByType(ctx context.Context, entityType string
 
 	reqData, err := json.Marshal(req)
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "QueryEntitiesByType", "marshal request")
+		return nil, errs.WrapInvalid(err, "NATSClient", "QueryEntitiesByType", "marshal request")
 	}
 
 	// Determine timeout from context or use default
@@ -217,13 +217,13 @@ func (nc *NATSClient) QueryEntitiesByType(ctx context.Context, entityType string
 	// Send NATS request for type query
 	conn := nc.client.GetConnection()
 	if conn == nil {
-		return nil, errors.WrapTransient(errors.ErrNoConnection, "NATSClient", "QueryEntitiesByType",
+		return nil, errs.WrapTransient(errs.ErrNoConnection, "NATSClient", "QueryEntitiesByType",
 			"NATS connection not available")
 	}
 
 	msg, err := conn.Request(nc.subjects.TypeQuery, reqData, timeout)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "NATSClient", "QueryEntitiesByType",
+		return nil, errs.WrapTransient(err, "NATSClient", "QueryEntitiesByType",
 			fmt.Sprintf("NATS request to %s failed", nc.subjects.TypeQuery))
 	}
 
@@ -234,11 +234,11 @@ func (nc *NATSClient) QueryEntitiesByType(ctx context.Context, entityType string
 	}
 
 	if err := json.Unmarshal(msg.Data, &typeResponse); err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "QueryEntitiesByType", "unmarshal type response")
+		return nil, errs.WrapInvalid(err, "NATSClient", "QueryEntitiesByType", "unmarshal type response")
 	}
 
 	if typeResponse.Error != "" {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("%s", typeResponse.Error),
 			"NATSClient",
 			"QueryEntitiesByType",
@@ -259,7 +259,7 @@ func (nc *NATSClient) QueryRelationships(ctx context.Context, filters Relationsh
 	// Create request
 	reqData, err := json.Marshal(filters)
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "QueryRelationships", "marshal request")
+		return nil, errs.WrapInvalid(err, "NATSClient", "QueryRelationships", "marshal request")
 	}
 
 	// Determine timeout from context or use default
@@ -268,13 +268,13 @@ func (nc *NATSClient) QueryRelationships(ctx context.Context, filters Relationsh
 	// Send NATS request
 	conn := nc.client.GetConnection()
 	if conn == nil {
-		return nil, errors.WrapTransient(errors.ErrNoConnection, "NATSClient", "QueryRelationships",
+		return nil, errs.WrapTransient(errs.ErrNoConnection, "NATSClient", "QueryRelationships",
 			"NATS connection not available")
 	}
 
 	msg, err := conn.Request(nc.subjects.RelationshipQuery, reqData, timeout)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "NATSClient", "QueryRelationships",
+		return nil, errs.WrapTransient(err, "NATSClient", "QueryRelationships",
 			fmt.Sprintf("NATS request to %s failed", nc.subjects.RelationshipQuery))
 	}
 
@@ -285,11 +285,11 @@ func (nc *NATSClient) QueryRelationships(ctx context.Context, filters Relationsh
 	}
 
 	if err := json.Unmarshal(msg.Data, &response); err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "QueryRelationships", "unmarshal response")
+		return nil, errs.WrapInvalid(err, "NATSClient", "QueryRelationships", "unmarshal response")
 	}
 
 	if response.Error != "" {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("%s", response.Error),
 			"NATSClient",
 			"QueryRelationships",
@@ -309,7 +309,7 @@ func (nc *NATSClient) SemanticSearch(ctx context.Context, query string, limit in
 
 	reqData, err := json.Marshal(req)
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "SemanticSearch", "marshal request")
+		return nil, errs.WrapInvalid(err, "NATSClient", "SemanticSearch", "marshal request")
 	}
 
 	// Determine timeout from context or use default
@@ -318,13 +318,13 @@ func (nc *NATSClient) SemanticSearch(ctx context.Context, query string, limit in
 	// Send NATS request
 	conn := nc.client.GetConnection()
 	if conn == nil {
-		return nil, errors.WrapTransient(errors.ErrNoConnection, "NATSClient", "SemanticSearch",
+		return nil, errs.WrapTransient(errs.ErrNoConnection, "NATSClient", "SemanticSearch",
 			"NATS connection not available")
 	}
 
 	msg, err := conn.Request(nc.subjects.SemanticSearch, reqData, timeout)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "NATSClient", "SemanticSearch",
+		return nil, errs.WrapTransient(err, "NATSClient", "SemanticSearch",
 			fmt.Sprintf("NATS request to %s failed", nc.subjects.SemanticSearch))
 	}
 
@@ -335,11 +335,11 @@ func (nc *NATSClient) SemanticSearch(ctx context.Context, query string, limit in
 	}
 
 	if err := json.Unmarshal(msg.Data, &response); err != nil {
-		return nil, errors.WrapInvalid(err, "NATSClient", "SemanticSearch", "unmarshal response")
+		return nil, errs.WrapInvalid(err, "NATSClient", "SemanticSearch", "unmarshal response")
 	}
 
 	if response.Error != "" {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("%s", response.Error),
 			"NATSClient",
 			"SemanticSearch",

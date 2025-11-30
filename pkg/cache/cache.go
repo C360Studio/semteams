@@ -14,7 +14,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Cache represents a generic cache interface that all cache implementations must satisfy.
@@ -97,7 +97,7 @@ func StatsFromContext(ctx context.Context) (*Statistics, bool) {
 // Returns a classified error if the key is invalid.
 func validateKey(key string) error {
 	if key == "" {
-		return errors.WrapInvalid(errors.ErrInvalidData, "cache", "validateKey", "key cannot be empty")
+		return errs.WrapInvalid(errs.ErrInvalidData, "cache", "validateKey", "key cannot be empty")
 	}
 	// Additional validations can be added here as needed
 	return nil

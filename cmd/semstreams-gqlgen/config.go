@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Config represents the code generation configuration
@@ -48,14 +48,14 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Read config file
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "LoadConfig", "os.ReadFile",
+		return nil, errs.WrapInvalid(err, "LoadConfig", "os.ReadFile",
 			fmt.Sprintf("read config file: %s", configPath))
 	}
 
 	// Parse JSON
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
-		return nil, errors.WrapInvalid(err, "LoadConfig", "json.Unmarshal",
+		return nil, errs.WrapInvalid(err, "LoadConfig", "json.Unmarshal",
 			"parse config JSON")
 	}
 
@@ -70,19 +70,19 @@ func LoadConfig(configPath string) (*Config, error) {
 // Validate validates the configuration
 func (c *Config) Validate() error {
 	if c.Package == "" {
-		return errors.WrapInvalid(fmt.Errorf("package name is required"),
+		return errs.WrapInvalid(fmt.Errorf("package name is required"),
 			"Config", "Validate", "package name missing")
 	}
 
 	if c.SchemaPath == "" {
-		return errors.WrapInvalid(fmt.Errorf("schema_path is required"),
+		return errs.WrapInvalid(fmt.Errorf("schema_path is required"),
 			"Config", "Validate", "schema_path missing")
 	}
 
 	// Validate query configs
 	for queryName, queryConfig := range c.Queries {
 		if queryConfig.Resolver == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("resolver required for query %s", queryName),
 				"Config", "Validate", "query resolver missing")
 		}
@@ -102,7 +102,7 @@ func (c *Config) Validate() error {
 			"Custom":              true, // Custom resolvers handled manually
 		}
 		if !validResolvers[queryConfig.Resolver] {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("invalid resolver %s for query %s", queryConfig.Resolver, queryName),
 				"Config", "Validate", "invalid resolver method")
 		}
@@ -112,7 +112,7 @@ func (c *Config) Validate() error {
 	for fieldName, fieldConfig := range c.Fields {
 		// Field must have either property or resolver
 		if fieldConfig.Property == "" && fieldConfig.Resolver == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("field %s must have either property or resolver", fieldName),
 				"Config", "Validate", "field config missing property/resolver")
 		}
@@ -133,7 +133,7 @@ func (c *Config) Validate() error {
 				"Custom":              true, // Custom field resolvers handled manually
 			}
 			if !validResolvers[fieldConfig.Resolver] {
-				return errors.WrapInvalid(
+				return errs.WrapInvalid(
 					fmt.Errorf("invalid resolver %s for field %s", fieldConfig.Resolver, fieldName),
 					"Config", "Validate", "invalid resolver method")
 			}
@@ -141,12 +141,12 @@ func (c *Config) Validate() error {
 			// If resolver is QueryRelationships, validate relationship metadata
 			if fieldConfig.Resolver == "QueryRelationships" {
 				if fieldConfig.EdgeType == "" {
-					return errors.WrapInvalid(
+					return errs.WrapInvalid(
 						fmt.Errorf("field %s with QueryRelationships must specify edge_type", fieldName),
 						"Config", "Validate", "relationship edge_type missing")
 				}
 				if fieldConfig.Direction == "" {
-					return errors.WrapInvalid(
+					return errs.WrapInvalid(
 						fmt.Errorf("field %s with QueryRelationships must specify direction", fieldName),
 						"Config", "Validate", "relationship direction missing")
 				}
@@ -156,13 +156,13 @@ func (c *Config) Validate() error {
 					"both":     true,
 				}
 				if !validDirections[fieldConfig.Direction] {
-					return errors.WrapInvalid(
+					return errs.WrapInvalid(
 						fmt.Errorf("field %s has invalid direction %s (must be outgoing, incoming, or both)",
 							fieldName, fieldConfig.Direction),
 						"Config", "Validate", "invalid relationship direction")
 				}
 				if fieldConfig.TargetType == "" {
-					return errors.WrapInvalid(
+					return errs.WrapInvalid(
 						fmt.Errorf("field %s with QueryRelationships must specify target_type", fieldName),
 						"Config", "Validate", "relationship target_type missing")
 				}
@@ -171,7 +171,7 @@ func (c *Config) Validate() error {
 
 		// If property is specified, validate type
 		if fieldConfig.Property != "" && fieldConfig.Type == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("field %s with property must specify type", fieldName),
 				"Config", "Validate", "field type missing")
 		}
@@ -187,7 +187,7 @@ func (c *Config) Validate() error {
 				"map[string]interface{}": true,
 			}
 			if !validTypes[fieldConfig.Type] {
-				return errors.WrapInvalid(
+				return errs.WrapInvalid(
 					fmt.Errorf("invalid type %s for field %s", fieldConfig.Type, fieldName),
 					"Config", "Validate", "invalid field type")
 			}
@@ -197,7 +197,7 @@ func (c *Config) Validate() error {
 	// Validate type configs
 	for typeName, typeConfig := range c.Types {
 		if typeConfig.EntityType == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("entity_type required for type %s", typeName),
 				"Config", "Validate", "entity_type missing")
 		}

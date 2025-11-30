@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	rtypes "github.com/c360/semstreams/types/rule"
 )
 
@@ -25,7 +25,7 @@ func (rp *Processor) publishGraphEvents(ctx context.Context, events []rtypes.Eve
 	for _, event := range events {
 		// Validate event
 		if err := event.Validate(); err != nil {
-			return errors.WrapInvalid(err, "RuleProcessor", "publishEvent", "validate event")
+			return errs.WrapInvalid(err, "RuleProcessor", "publishEvent", "validate event")
 		}
 
 		// Get appropriate subject (e.g., "graph.events.entity.create")
@@ -34,12 +34,12 @@ func (rp *Processor) publishGraphEvents(ctx context.Context, events []rtypes.Eve
 		// Marshal event
 		data, err := json.Marshal(event)
 		if err != nil {
-			return errors.Wrap(err, "RuleProcessor", "publishEvent", "marshal event")
+			return errs.Wrap(err, "RuleProcessor", "publishEvent", "marshal event")
 		}
 
 		// Publish to NATS
 		if err := rp.natsClient.Publish(ctx, subject, data); err != nil {
-			return errors.WrapTransient(err, "RuleProcessor", "publishEvent", fmt.Sprintf("publish to %s", subject))
+			return errs.WrapTransient(err, "RuleProcessor", "publishEvent", fmt.Sprintf("publish to %s", subject))
 		}
 
 		// Update metrics
@@ -68,7 +68,7 @@ func (rp *Processor) publishRuleEvent(ctx context.Context, ruleName, eventType s
 	// Marshal event
 	data, err := json.Marshal(ruleEvent)
 	if err != nil {
-		return errors.Wrap(err, "RuleProcessor", "publishRuleEvent", "marshal rule event")
+		return errs.Wrap(err, "RuleProcessor", "publishRuleEvent", "marshal rule event")
 	}
 
 	// Use configured output port subject, fallback to rule-specific subject
@@ -83,7 +83,7 @@ func (rp *Processor) publishRuleEvent(ctx context.Context, ruleName, eventType s
 	}
 
 	if err := rp.natsClient.Publish(ctx, subject, data); err != nil {
-		return errors.WrapTransient(err, "RuleProcessor", "publishRuleEvent", fmt.Sprintf("publish to %s", subject))
+		return errs.WrapTransient(err, "RuleProcessor", "publishRuleEvent", fmt.Sprintf("publish to %s", subject))
 	}
 
 	// Update metrics

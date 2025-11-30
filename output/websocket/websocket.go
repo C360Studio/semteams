@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/buffer"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/security"
 	"github.com/c360/semstreams/pkg/tlsutil"
 	"github.com/gorilla/websocket"
@@ -471,16 +471,16 @@ func (w *Output) Initialize() error {
 
 	// Validate configuration
 	if w.port < 1024 || w.port > 65535 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Output", "validateConfig",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "validateConfig",
 			fmt.Sprintf("invalid port %d (out of range 1024-65535)", w.port))
 	}
 
 	if w.path == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Output", "validateConfig", "WebSocket path cannot be empty")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "validateConfig", "WebSocket path cannot be empty")
 	}
 
 	if len(w.subjects) == 0 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Output", "validateConfig", "NATS subjects cannot be empty")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "validateConfig", "NATS subjects cannot be empty")
 	}
 
 	// NATS client is optional for testing - will skip NATS subscription if nil
@@ -529,7 +529,7 @@ func (w *Output) Start(ctx context.Context) error {
 	// Subscribe to NATS subjects for graph updates
 	if err := w.subscribeToNATS(ctx); err != nil {
 		cleanupErr = err
-		return errors.Wrap(err, "Output", "Start", fmt.Sprintf("subscribe to NATS subjects %v", w.subjects))
+		return errs.Wrap(err, "Output", "Start", fmt.Sprintf("subscribe to NATS subjects %v", w.subjects))
 	}
 
 	// Mark as running and start background goroutines
@@ -543,12 +543,12 @@ func (w *Output) Start(ctx context.Context) error {
 // validateContext checks if the provided context is valid
 func (w *Output) validateContext(ctx context.Context) error {
 	if ctx == nil {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Output", "Start", "context cannot be nil")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "Start", "context cannot be nil")
 	}
 
 	// Check if context is already cancelled or timed out
 	if err := ctx.Err(); err != nil {
-		return errors.Wrap(err, "Output", "Start", "context already cancelled or timed out")
+		return errs.Wrap(err, "Output", "Start", "context already cancelled or timed out")
 	}
 
 	return nil
@@ -604,7 +604,7 @@ func (w *Output) setupHTTPServer() error {
 				w.security.TLS.Server,
 			)
 			if err != nil {
-				return errors.WrapFatal(err, "websocket_output", "setupHTTPServer",
+				return errs.WrapFatal(err, "websocket_output", "setupHTTPServer",
 					"load TLS config with ACME")
 			}
 			w.server.TLSConfig = tlsConfig
@@ -620,7 +620,7 @@ func (w *Output) setupHTTPServer() error {
 				w.security.TLS.Server.MTLS,
 			)
 			if err != nil {
-				return errors.WrapFatal(err, "websocket_output", "setupHTTPServer",
+				return errs.WrapFatal(err, "websocket_output", "setupHTTPServer",
 					"load TLS config with mTLS")
 			}
 			w.server.TLSConfig = tlsConfig
@@ -770,7 +770,7 @@ func (w *Output) subscribeToNATS(ctx context.Context) error {
 			w.handleNATSMessageData(msgCtx, data, subject)
 		})
 		if err != nil {
-			return errors.Wrap(err, "Output", "subscribeToNATS", fmt.Sprintf("subscribe to NATS subject %s", subject))
+			return errs.Wrap(err, "Output", "subscribeToNATS", fmt.Sprintf("subscribe to NATS subject %s", subject))
 		}
 	}
 
@@ -1456,7 +1456,7 @@ func CreateOutput(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// Parse user config if provided
 	if len(rawConfig) > 0 {
 		if err := component.SafeUnmarshal(rawConfig, &cfg); err != nil {
-			return nil, errors.WrapInvalid(err, "websocket-output-factory", "create", "parse config")
+			return nil, errs.WrapInvalid(err, "websocket-output-factory", "create", "parse config")
 		}
 	}
 
@@ -1510,7 +1510,7 @@ func CreateOutput(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if cfg.AckTimeout != "" {
 		parsed, err := time.ParseDuration(cfg.AckTimeout)
 		if err != nil {
-			return nil, errors.WrapInvalid(err, "websocket-output-factory", "create", "parse ack_timeout")
+			return nil, errs.WrapInvalid(err, "websocket-output-factory", "create", "parse ack_timeout")
 		}
 		ackTimeout = parsed
 	}
@@ -1518,13 +1518,13 @@ func CreateOutput(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// Validate port range (allow 0 for random port in tests)
 	// Ports below 1024 are reserved system ports
 	if port != 0 && (port < 1024 || port > 65535) {
-		return nil, errors.WrapInvalid(fmt.Errorf("port %d out of range", port),
+		return nil, errs.WrapInvalid(fmt.Errorf("port %d out of range", port),
 			"websocket-output-factory", "create", "port range validation")
 	}
 
 	// Validate required dependencies
 	if deps.NATSClient == nil {
-		return nil, errors.WrapInvalid(fmt.Errorf("NATS client is required"),
+		return nil, errs.WrapInvalid(fmt.Errorf("NATS client is required"),
 			"websocket-output-factory", "create", "NATS client validation")
 	}
 

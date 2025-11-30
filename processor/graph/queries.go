@@ -8,7 +8,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 )
@@ -105,13 +105,13 @@ func (p *Processor) setupQueryHandlers(ctx context.Context) error {
 	}
 
 	if p.natsClient == nil {
-		return errors.WrapFatal(nil, "GraphProcessor", "setupQueryHandlers", "NATS client not initialized")
+		return errs.WrapFatal(nil, "GraphProcessor", "setupQueryHandlers", "NATS client not initialized")
 	}
 
 	// Get raw NATS connection for request/reply pattern
 	nc := p.natsClient.GetConnection()
 	if nc == nil {
-		return errors.WrapFatal(nil, "GraphProcessor", "setupQueryHandlers", "NATS connection not available")
+		return errs.WrapFatal(nil, "GraphProcessor", "setupQueryHandlers", "NATS connection not available")
 	}
 
 	// Entity queries
@@ -150,7 +150,7 @@ func (p *Processor) setupQueryHandlers(ctx context.Context) error {
 	for subject, handler := range allHandlers {
 		_, err := nc.Subscribe(subject, handler)
 		if err != nil {
-			return errors.WrapFatal(err, "GraphProcessor", "setupQueryHandlers",
+			return errs.WrapFatal(err, "GraphProcessor", "setupQueryHandlers",
 				fmt.Sprintf("failed to subscribe to %s", subject))
 		}
 		p.logger.Debug("Subscribed to query subject", "subject", subject)
@@ -165,7 +165,7 @@ func (p *Processor) setupQueryHandlers(ctx context.Context) error {
 func (p *Processor) handleQueryEntity(msg *nats.Msg) {
 	// Rate limiting check
 	if !p.queryLimiter.Allow() {
-		err := errors.WrapTransient(nil, "GraphProcessor", "handleQueryEntity",
+		err := errs.WrapTransient(nil, "GraphProcessor", "handleQueryEntity",
 			"rate limit exceeded")
 		p.respondQueryWithError(msg, err)
 		return
@@ -173,7 +173,7 @@ func (p *Processor) handleQueryEntity(msg *nats.Msg) {
 
 	var req EntityQueryRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		p.respondQueryWithError(msg, errors.WrapInvalid(err, "GraphProcessor", "handleQueryEntity", "invalid request"))
+		p.respondQueryWithError(msg, errs.WrapInvalid(err, "GraphProcessor", "handleQueryEntity", "invalid request"))
 		return
 	}
 
@@ -189,7 +189,7 @@ func (p *Processor) handleQueryEntity(msg *nats.Msg) {
 func (p *Processor) handleQueryEntities(msg *nats.Msg) {
 	// Rate limiting check
 	if !p.queryLimiter.Allow() {
-		err := errors.WrapTransient(nil, "GraphProcessor", "handleQueryEntities",
+		err := errs.WrapTransient(nil, "GraphProcessor", "handleQueryEntities",
 			"rate limit exceeded")
 		p.respondQueryWithError(msg, err)
 		return
@@ -197,7 +197,7 @@ func (p *Processor) handleQueryEntities(msg *nats.Msg) {
 
 	var req EntitiesQueryRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		err = errors.WrapInvalid(err, "GraphProcessor", "handleQueryEntities",
+		err = errs.WrapInvalid(err, "GraphProcessor", "handleQueryEntities",
 			"invalid request")
 		p.respondQueryWithError(msg, err)
 		return
@@ -215,7 +215,7 @@ func (p *Processor) handleQueryEntities(msg *nats.Msg) {
 func (p *Processor) handleQueryByAlias(msg *nats.Msg) {
 	var req AliasQueryRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		p.respondQueryWithError(msg, errors.WrapInvalid(err, "GraphProcessor", "handleQueryByAlias", "invalid request"))
+		p.respondQueryWithError(msg, errs.WrapInvalid(err, "GraphProcessor", "handleQueryByAlias", "invalid request"))
 		return
 	}
 
@@ -233,7 +233,7 @@ func (p *Processor) handleQueryByAlias(msg *nats.Msg) {
 func (p *Processor) handleQueryPath(msg *nats.Msg) {
 	// Rate limiting check (more strict for expensive operations)
 	if !p.queryLimiter.Allow() {
-		err := errors.WrapTransient(nil, "GraphProcessor", "handleQueryPath",
+		err := errs.WrapTransient(nil, "GraphProcessor", "handleQueryPath",
 			"rate limit exceeded")
 		p.respondQueryWithError(msg, err)
 		return
@@ -241,7 +241,7 @@ func (p *Processor) handleQueryPath(msg *nats.Msg) {
 
 	var req PathQueryRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		p.respondQueryWithError(msg, errors.WrapInvalid(err, "GraphProcessor", "handleQueryPath", "invalid request"))
+		p.respondQueryWithError(msg, errs.WrapInvalid(err, "GraphProcessor", "handleQueryPath", "invalid request"))
 		return
 	}
 
@@ -265,7 +265,7 @@ func (p *Processor) handleQueryPath(msg *nats.Msg) {
 func (p *Processor) handleQueryRelationships(msg *nats.Msg) {
 	var req RelationshipsQueryRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		err = errors.WrapInvalid(err, "GraphProcessor", "handleQueryRelationships",
+		err = errs.WrapInvalid(err, "GraphProcessor", "handleQueryRelationships",
 			"invalid request")
 		p.respondQueryWithError(msg, err)
 		return
@@ -285,7 +285,7 @@ func (p *Processor) handleQueryRelationships(msg *nats.Msg) {
 func (p *Processor) handleQuerySpatial(msg *nats.Msg) {
 	var req SpatialQueryRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		p.respondQueryWithError(msg, errors.WrapInvalid(err, "GraphProcessor", "handleQuerySpatial", "invalid request"))
+		p.respondQueryWithError(msg, errs.WrapInvalid(err, "GraphProcessor", "handleQuerySpatial", "invalid request"))
 		return
 	}
 
@@ -301,7 +301,7 @@ func (p *Processor) handleQuerySpatial(msg *nats.Msg) {
 func (p *Processor) handleQueryTemporal(msg *nats.Msg) {
 	var req TemporalQueryRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		err = errors.WrapInvalid(err, "GraphProcessor", "handleQueryTemporal",
+		err = errs.WrapInvalid(err, "GraphProcessor", "handleQueryTemporal",
 			"invalid request")
 		p.respondQueryWithError(msg, err)
 		return
@@ -319,7 +319,7 @@ func (p *Processor) handleQueryTemporal(msg *nats.Msg) {
 func (p *Processor) handleQueryByPredicate(msg *nats.Msg) {
 	var req PredicateQueryRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		err = errors.WrapInvalid(err, "GraphProcessor", "handleQueryByPredicate",
+		err = errs.WrapInvalid(err, "GraphProcessor", "handleQueryByPredicate",
 			"invalid request")
 		p.respondQueryWithError(msg, err)
 		return
@@ -337,7 +337,7 @@ func (p *Processor) handleQueryByPredicate(msg *nats.Msg) {
 func (p *Processor) handleQuerySemantic(msg *nats.Msg) {
 	// Rate limiting check (semantic search can be expensive)
 	if !p.queryLimiter.Allow() {
-		err := errors.WrapTransient(nil, "GraphProcessor", "handleQuerySemantic",
+		err := errs.WrapTransient(nil, "GraphProcessor", "handleQuerySemantic",
 			"rate limit exceeded")
 		p.respondQueryWithError(msg, err)
 		return
@@ -345,7 +345,7 @@ func (p *Processor) handleQuerySemantic(msg *nats.Msg) {
 
 	var req SemanticQueryRequest
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		err = errors.WrapInvalid(err, "GraphProcessor", "handleQuerySemantic",
+		err = errs.WrapInvalid(err, "GraphProcessor", "handleQuerySemantic",
 			"invalid request")
 		p.respondQueryWithError(msg, err)
 		return
@@ -385,7 +385,7 @@ func (p *Processor) respondQueryWithData(msg *nats.Msg, data interface{}) {
 	respData, err := json.Marshal(resp)
 	if err != nil {
 		p.logger.Error("Failed to marshal query response", "error", err)
-		p.respondQueryWithError(msg, errors.WrapFatal(err, "GraphProcessor", "respondQueryWithData", "marshal failed"))
+		p.respondQueryWithError(msg, errs.WrapFatal(err, "GraphProcessor", "respondQueryWithData", "marshal failed"))
 		return
 	}
 	if err := msg.Respond(respData); err != nil {

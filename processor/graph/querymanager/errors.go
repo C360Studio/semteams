@@ -4,8 +4,8 @@ import (
 	stderrors "errors"
 	"fmt"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Local error types specific to query manager
@@ -37,12 +37,12 @@ var (
 	ErrIndexManagerTimeout     = fmt.Errorf("index manager timeout")
 )
 
-// All wrapper functions removed - use direct errors.Wrap* calls instead
+// All wrapper functions removed - use direct errs.Wrap* calls instead
 // This ensures consistency across all managers and reduces code bloat
 
 // IsEntityNotFound checks if an error is an entity not found error
 func IsEntityNotFound(err error) bool {
-	return errors.IsInvalid(err) && (stderrors.Is(err, gtypes.ErrEntityNotFound) ||
+	return errs.IsInvalid(err) && (stderrors.Is(err, gtypes.ErrEntityNotFound) ||
 		stderrors.Is(err, gtypes.ErrAliasNotFound))
 }
 
@@ -69,7 +69,7 @@ func IsQueryError(err error) bool {
 
 // IsRetryable checks if an error should be retried
 func IsRetryable(err error) bool {
-	return errors.IsTransient(err) && !IsQueryError(err)
+	return errs.IsTransient(err) && !IsQueryError(err)
 }
 
 // IsTimeout checks if an error is a timeout error

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // SamplePayload is a simple test implementation of the Payload interface
@@ -36,14 +36,14 @@ func (p *SamplePayload) Schema() Type {
 // Validate implements Payload.Validate
 func (p *SamplePayload) Validate() error {
 	if p.ID == "" {
-		return errors.WrapInvalid(errors.ErrInvalidData, "SamplePayload", "Validate", "ID is required")
+		return errs.WrapInvalid(errs.ErrInvalidData, "SamplePayload", "Validate", "ID is required")
 	}
 	if p.Loc != nil {
 		if p.Loc.Lat < -90 || p.Loc.Lat > 90 {
-			return errors.WrapInvalid(errors.ErrInvalidData, "SamplePayload", "Validate", "latitude must be between -90 and 90")
+			return errs.WrapInvalid(errs.ErrInvalidData, "SamplePayload", "Validate", "latitude must be between -90 and 90")
 		}
 		if p.Loc.Lon < -180 || p.Loc.Lon > 180 {
-			return errors.WrapInvalid(errors.ErrInvalidData, "SamplePayload", "Validate", "longitude must be between -180 and 180")
+			return errs.WrapInvalid(errs.ErrInvalidData, "SamplePayload", "Validate", "longitude must be between -180 and 180")
 		}
 	}
 	return nil

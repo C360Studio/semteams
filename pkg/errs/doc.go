@@ -1,8 +1,8 @@
-// Package errors provides standardized error handling patterns for StreamKit components.
+// Package errs provides standardized error handling patterns for SemStreams components.
 //
 // # Overview
 //
-// The errors package implements a three-class error classification system designed for
+// The errs package implements a three-class error classification system designed for
 // distributed stream processing systems: Transient (temporary, retryable), Invalid
 // (bad input, non-retryable), and Fatal (unrecoverable, stop processing).
 //
@@ -27,28 +27,28 @@
 //
 //	// Return standard error for known conditions
 //	if !serviceAvailable {
-//	    return errors.ErrConnectionTimeout
+//	    return errs.ErrConnectionTimeout
 //	}
 //
 // Wrap errors with context for debugging:
 //
 //	// Wrap third-party errors with component context
 //	if err := component.Process(data); err != nil {
-//	    return errors.Wrap(err, "DataProcessor", "Process", "data validation")
+//	    return errs.Wrap(err, "DataProcessor", "Process", "data validation")
 //	}
 //
 // Check classification for retry logic:
 //
 //	// Make retry decisions based on error class
 //	if err := operation(); err != nil {
-//	    if errors.IsTransient(err) {
+//	    if errs.IsTransient(err) {
 //	        // Retry with exponential backoff
-//	        config := errors.DefaultRetryConfig()
+//	        config := errs.DefaultRetryConfig()
 //	        if config.ShouldRetry(err, attempt) {
 //	            time.Sleep(config.BackoffDelay(attempt))
 //	            // retry operation
 //	        }
-//	    } else if errors.IsFatal(err) {
+//	    } else if errs.IsFatal(err) {
 //	        // Stop processing, escalate to operator
 //	        log.Fatalf("Unrecoverable error: %v", err)
 //	    }
@@ -66,13 +66,13 @@
 //
 // Three wrapper functions provide classification-aware wrapping:
 //
-//	errors.WrapTransient(err, "Component", "Method", "action")  // For retryable errors
-//	errors.WrapInvalid(err, "Component", "Method", "action")    // For validation errors
-//	errors.WrapFatal(err, "Component", "Method", "action")      // For unrecoverable errors
+//	errs.WrapTransient(err, "Component", "Method", "action")  // For retryable errors
+//	errs.WrapInvalid(err, "Component", "Method", "action")    // For validation errors
+//	errs.WrapFatal(err, "Component", "Method", "action")      // For unrecoverable errors
 //
 // The generic Wrap() function preserves the original error's classification:
 //
-//	errors.Wrap(err, "Component", "Method", "action")  // Preserves original class
+//	errs.Wrap(err, "Component", "Method", "action")  // Preserves original class
 //
 // # Standard Error Variables
 //
@@ -88,19 +88,19 @@
 //
 //	// Good - uses standard variable
 //	if diskFull {
-//	    return errors.ErrStorageFull
+//	    return errs.ErrStorageFull
 //	}
 //
 //	// Avoid - custom error message
 //	if diskFull {
-//	    return errors.New("storage full")
+//	    return errors.New("storage full")  // stdlib errors.New
 //	}
 //
 // # Retry Configuration
 //
 // The package includes built-in retry support with exponential backoff:
 //
-//	config := errors.DefaultRetryConfig()
+//	config := errs.DefaultRetryConfig()
 //
 //	for attempt := 0; attempt < config.MaxRetries; attempt++ {
 //	    if err := operation(); err != nil {
@@ -127,10 +127,10 @@
 //	return fmt.Errorf("component: operation failed: %w", err)
 //
 //	// After - preserves classification
-//	return errors.Wrap(err, "Component", "method", "operation")
+//	return errs.Wrap(err, "Component", "method", "operation")
 //
 //	// After - sets classification
-//	return errors.WrapTransient(err, "Component", "method", "operation")
+//	return errs.WrapTransient(err, "Component", "method", "operation")
 //
 // Replace string-based error inspection with classification checks:
 //
@@ -140,7 +140,7 @@
 //	}
 //
 //	// After
-//	if errors.IsTransient(err) {
+//	if errs.IsTransient(err) {
 //	    // retry logic with proper backoff
 //	}
 //
@@ -149,19 +149,19 @@
 // All error types support standard library error inspection:
 //
 //	// Check error classification
-//	var ce *errors.ClassifiedError
+//	var ce *errs.ClassifiedError
 //	if errors.As(err, &ce) {
 //	    log.Printf("Component: %s, Class: %s", ce.Component, ce.Class)
 //	}
 //
 //	// Check for specific standard errors
-//	if errors.Is(err, errors.ErrConnectionTimeout) {
+//	if errors.Is(err, errs.ErrConnectionTimeout) {
 //	    // Handle timeout specifically
 //	}
 //
 //	// Classification is preserved through error chains
-//	wrapped := errors.Wrap(errors.ErrConnectionTimeout, "Service", "Connect", "dial")
-//	if errors.IsTransient(wrapped) {  // true - classification preserved
+//	wrapped := errs.Wrap(errs.ErrConnectionTimeout, "Service", "Connect", "dial")
+//	if errs.IsTransient(wrapped) {  // true - classification preserved
 //	    // Retry logic
 //	}
 //
@@ -174,7 +174,7 @@
 //	defer cancel()
 //
 //	if err := operation(ctx); err != nil {
-//	    if errors.IsTransient(err) {
+//	    if errs.IsTransient(err) {
 //	        // Handles both network timeouts AND context timeouts
 //	        log.Printf("Transient error (retry recommended): %v", err)
 //	    }
@@ -228,7 +228,7 @@
 //	    "log"
 //	    "time"
 //
-//	    "github.com/c360/semstreams/errors"
+//	    "github.com/c360/semstreams/pkg/errs"
 //	)
 //
 //	type Service struct {
@@ -237,11 +237,11 @@
 //
 //	func (s *Service) Connect() error {
 //	    if s.connected {
-//	        return errors.ErrAlreadyStarted
+//	        return errs.ErrAlreadyStarted
 //	    }
 //
 //	    if err := s.dial(); err != nil {
-//	        return errors.WrapTransient(err, "Service", "Connect", "dial")
+//	        return errs.WrapTransient(err, "Service", "Connect", "dial")
 //	    }
 //
 //	    s.connected = true
@@ -250,17 +250,17 @@
 //
 //	func (s *Service) dial() error {
 //	    // Simulate connection attempt
-//	    return errors.ErrConnectionTimeout
+//	    return errs.ErrConnectionTimeout
 //	}
 //
 //	func (s *Service) Process(ctx context.Context, data []byte) error {
 //	    if !s.connected {
-//	        return errors.ErrNotStarted
+//	        return errs.ErrNotStarted
 //	    }
 //
 //	    if len(data) == 0 {
-//	        return errors.WrapInvalid(
-//	            errors.ErrInvalidData,
+//	        return errs.WrapInvalid(
+//	            errs.ErrInvalidData,
 //	            "Service", "Process", "empty data")
 //	    }
 //
@@ -270,7 +270,7 @@
 //
 //	    select {
 //	    case <-ctx.Done():
-//	        return errors.WrapTransient(ctx.Err(), "Service", "Process", "processing")
+//	        return errs.WrapTransient(ctx.Err(), "Service", "Process", "processing")
 //	    case <-time.After(100 * time.Millisecond):
 //	        return nil
 //	    }
@@ -280,10 +280,10 @@
 //	    service := &Service{}
 //
 //	    // Retry connection with backoff
-//	    config := errors.DefaultRetryConfig()
+//	    config := errs.DefaultRetryConfig()
 //	    for attempt := 0; attempt < config.MaxRetries; attempt++ {
 //	        if err := service.Connect(); err != nil {
-//	            if errors.IsTransient(err) && config.ShouldRetry(err, attempt) {
+//	            if errs.IsTransient(err) && config.ShouldRetry(err, attempt) {
 //	                log.Printf("Connection attempt %d failed, retrying...", attempt+1)
 //	                time.Sleep(config.BackoffDelay(attempt))
 //	                continue
@@ -296,15 +296,15 @@
 //	    // Process data with error handling
 //	    ctx := context.Background()
 //	    if err := service.Process(ctx, []byte("test data")); err != nil {
-//	        if errors.IsInvalid(err) {
+//	        if errs.IsInvalid(err) {
 //	            log.Printf("Invalid input (do not retry): %v", err)
-//	        } else if errors.IsTransient(err) {
+//	        } else if errs.IsTransient(err) {
 //	            log.Printf("Transient error (retry recommended): %v", err)
-//	        } else if errors.IsFatal(err) {
+//	        } else if errs.IsFatal(err) {
 //	            log.Fatalf("Fatal error (stop processing): %v", err)
 //	        }
 //	    }
 //	}
 //
 // For more examples and detailed API documentation, see README.md in this directory.
-package errors
+package errs

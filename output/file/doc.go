@@ -120,9 +120,9 @@
 //
 // The component uses streamkit/errors for consistent error classification:
 //
-//   - Invalid config: errors.WrapInvalid (bad configuration)
-//   - File errors: errors.WrapTransient (disk full, permissions)
-//   - NATS errors: errors.WrapTransient (connection issues)
+//   - Invalid config: errs.WrapInvalid (bad configuration)
+//   - File errors: errs.WrapTransient (disk full, permissions)
+//   - NATS errors: errs.WrapTransient (connection issues)
 //
 // Write errors are logged and counted but don't stop the component.
 //

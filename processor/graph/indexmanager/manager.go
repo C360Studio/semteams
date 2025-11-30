@@ -13,13 +13,13 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/buffer"
 	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/worker"
 	"github.com/c360/semstreams/processor/graph/embedding"
 )
@@ -110,7 +110,7 @@ func NewManager(
 	// Apply defaults and validate config
 	config.ApplyDefaults()
 	if err := config.Validate(); err != nil {
-		return nil, errors.WrapInvalid(err, "IndexManager", "NewManager", "configuration validation failed")
+		return nil, errs.WrapInvalid(err, "IndexManager", "NewManager", "configuration validation failed")
 	}
 
 	// Create metrics
@@ -140,7 +140,7 @@ func NewManager(
 		)
 	}
 	if err != nil {
-		return nil, errors.WrapTransient(err, "IndexManager", "NewManager", "event buffer creation")
+		return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "event buffer creation")
 	}
 
 	// Create event channels
@@ -151,7 +151,7 @@ func NewManager(
 	entityBucket, ok := buckets[config.Buckets.EntityStates]
 	if !ok {
 		msg := fmt.Sprintf("bucket not found: %s", config.Buckets.EntityStates)
-		return nil, errors.WrapInvalid(ErrBucketMissing, "IndexManager", "NewManager", msg)
+		return nil, errs.WrapInvalid(ErrBucketMissing, "IndexManager", "NewManager", msg)
 	}
 	watcher := NewKVWatcher(
 		entityBucket, config.Buckets.EntityStates, eventChan, metrics, promMetrics, logger)
@@ -174,23 +174,23 @@ func NewManager(
 	if config.Caches.Enabled {
 		predicateCache, err = cache.NewLRU[[]string](config.Caches.PredicateSize)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "IndexManager", "NewManager", "predicate cache creation")
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "predicate cache creation")
 		}
 		spatialCache, err = cache.NewLRU[[]string](config.Caches.SpatialSize)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "IndexManager", "NewManager", "spatial cache creation")
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "spatial cache creation")
 		}
 		temporalCache, err = cache.NewLRU[[]string](config.Caches.TemporalSize)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "IndexManager", "NewManager", "temporal cache creation")
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "temporal cache creation")
 		}
 		incomingCache, err = cache.NewLRU[[]Relationship](config.Caches.IncomingSize)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "IndexManager", "NewManager", "incoming cache creation")
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "incoming cache creation")
 		}
 		aliasCache, err = cache.NewLRU[string](config.Caches.AliasSize)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "IndexManager", "NewManager", "alias cache creation")
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "alias cache creation")
 		}
 	}
 
@@ -222,12 +222,12 @@ func NewManager(
 
 	// Initialize enabled indexes
 	if err := engine.initializeIndexes(); err != nil {
-		return nil, errors.WrapInvalid(err, "IndexManager", "NewManager", "failed to initialize indexes")
+		return nil, errs.WrapInvalid(err, "IndexManager", "NewManager", "failed to initialize indexes")
 	}
 
 	// Initialize semantic search if enabled
 	if err := engine.initializeSemanticSearch(buckets); err != nil {
-		return nil, errors.WrapInvalid(err, "IndexManager", "NewManager", "failed to initialize semantic search")
+		return nil, errs.WrapInvalid(err, "IndexManager", "NewManager", "failed to initialize semantic search")
 	}
 
 	return engine, nil
@@ -242,7 +242,7 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	// Start worker pool - startup failure is fatal
 	if err := m.workers.Start(ctx); err != nil {
-		return errors.WrapFatal(err, "IndexManager", "Run", "worker_pool_start")
+		return errs.WrapFatal(err, "IndexManager", "Run", "worker_pool_start")
 	}
 	defer func() {
 		if err := m.workers.Stop(5 * time.Second); err != nil {
@@ -252,7 +252,7 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	// Start KV watcher - startup failure is fatal
 	if err := m.watcher.Start(ctx); err != nil {
-		return errors.WrapFatal(err, "IndexManager", "Run", "watcher_start")
+		return errs.WrapFatal(err, "IndexManager", "Run", "watcher_start")
 	}
 	defer func() {
 		if err := m.watcher.Stop(); err != nil {
@@ -302,7 +302,7 @@ func (m *Manager) createDedupCache(ctx context.Context) error {
 			m.config.Deduplication.TTL/10,
 		)
 		if err != nil {
-			return errors.WrapTransient(err, "IndexManager", "Run", "dedup cache creation")
+			return errs.WrapTransient(err, "IndexManager", "Run", "dedup cache creation")
 		}
 	}
 	return nil
@@ -321,7 +321,7 @@ func (m *Manager) startProcessingGoroutines(ctx context.Context) (chan error, ch
 		defer func() {
 			if r := recover(); r != nil {
 				// Panic in event processor is fatal
-				eventErr <- errors.WrapFatal(fmt.Errorf("panic: %v", r), "IndexManager", "Run", "event_processor_panic")
+				eventErr <- errs.WrapFatal(fmt.Errorf("panic: %v", r), "IndexManager", "Run", "event_processor_panic")
 			}
 			close(eventErr)
 		}()
@@ -335,7 +335,7 @@ func (m *Manager) startProcessingGoroutines(ctx context.Context) (chan error, ch
 		defer func() {
 			if r := recover(); r != nil {
 				// Panic in batch processor is fatal
-				batchErr <- errors.WrapFatal(fmt.Errorf("panic: %v", r), "IndexManager", "Run", "batch_processor_panic")
+				batchErr <- errs.WrapFatal(fmt.Errorf("panic: %v", r), "IndexManager", "Run", "batch_processor_panic")
 			}
 			close(batchErr)
 		}()
@@ -466,7 +466,7 @@ func (m *Manager) processEvents(ctx context.Context) error {
 			// Process batch if full
 			if len(batch) >= m.config.BatchProcessing.Size {
 				if err := m.submitBatch(ctx, batch); err != nil {
-					if errors.IsFatal(err) {
+					if errs.IsFatal(err) {
 						return err
 					}
 					// Batch was dropped due to backpressure
@@ -477,7 +477,7 @@ func (m *Manager) processEvents(ctx context.Context) error {
 
 					// Too many consecutive drops indicates systemic problem
 					if consecutiveDrops >= maxConsecutiveDrops {
-						return errors.WrapFatal(
+						return errs.WrapFatal(
 							fmt.Errorf("batch channel persistently full: %d consecutive drops", consecutiveDrops),
 							"IndexManager", "processEvents", "backpressure_failure")
 					}
@@ -492,7 +492,7 @@ func (m *Manager) processEvents(ctx context.Context) error {
 			// Process batch on timer
 			if len(batch) > 0 {
 				if err := m.submitBatch(ctx, batch); err != nil {
-					if errors.IsFatal(err) {
+					if errs.IsFatal(err) {
 						return err
 					}
 					// Batch was dropped due to backpressure
@@ -503,7 +503,7 @@ func (m *Manager) processEvents(ctx context.Context) error {
 
 					// Too many consecutive drops indicates systemic problem
 					if consecutiveDrops >= maxConsecutiveDrops {
-						return errors.WrapFatal(
+						return errs.WrapFatal(
 							fmt.Errorf("batch channel persistently full: %d consecutive drops", consecutiveDrops),
 							"IndexManager", "processEvents", "backpressure_failure")
 					}
@@ -537,7 +537,7 @@ func (m *Manager) submitBatch(ctx context.Context, batch []EntityChange) error {
 		m.metrics.UpdateBacklogSize(m.metrics.backlogSize + len(batch))
 
 		// Return transient error so caller knows the batch was dropped
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			fmt.Errorf("batch channel full, dropped %d events", len(batch)),
 			"IndexManager", "submitBatch", "channel_full")
 	}
@@ -570,7 +570,7 @@ func (m *Manager) processBatches(ctx context.Context) error {
 				// Check error type to determine severity
 				if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
 					// Worker pool stopped unexpectedly - this is fatal
-					return errors.WrapFatal(err, "IndexManager", "processBatches", "worker pool no longer running")
+					return errs.WrapFatal(err, "IndexManager", "processBatches", "worker pool no longer running")
 				}
 				if stderrors.Is(err, worker.ErrQueueFull) {
 					// Queue full is transient - log and continue
@@ -582,7 +582,7 @@ func (m *Manager) processBatches(ctx context.Context) error {
 				}
 				// Too many consecutive failures might indicate a problem
 				if submitFailures >= maxConsecutiveFailures {
-					return errors.WrapFatal(
+					return errs.WrapFatal(
 						fmt.Errorf("worker pool unresponsive: %d consecutive submit failures", submitFailures),
 						"IndexManager",
 						"processBatches",
@@ -653,7 +653,7 @@ func (m *Manager) processEntityChange(ctx context.Context, event EntityChange) e
 		state, err := m.watcher.ValidateEntityState(event.Value)
 		if err != nil {
 			msg := fmt.Sprintf("failed to process entity: %s", event.Key)
-			return errors.WrapTransient(err, "IndexManager", "processEvent", msg)
+			return errs.WrapTransient(err, "IndexManager", "processEvent", msg)
 		}
 		entityState = state
 	}
@@ -696,7 +696,7 @@ func (m *Manager) queueEmbeddingGeneration(ctx context.Context, entityID string,
 	// Cast to EntityState
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			fmt.Errorf("invalid entity state type: %T", entityState),
 			"IndexManager", "generateEmbedding", "entity state must be *gtypes.EntityState")
 	}
@@ -735,7 +735,7 @@ func (m *Manager) queueEmbeddingGeneration(ctx context.Context, entityID string,
 
 	// Write pending record to KV - worker will pick it up asynchronously
 	if err := m.embeddingStorage.SavePending(ctx, entityID, contentHash, text); err != nil {
-		return errors.WrapTransient(err, "IndexManager", "queueEmbeddingGeneration", "failed to queue embedding")
+		return errs.WrapTransient(err, "IndexManager", "queueEmbeddingGeneration", "failed to queue embedding")
 	}
 
 	m.logger.Debug("Queued embedding for async generation",
@@ -782,7 +782,7 @@ func (m *Manager) updateIndex(
 		}
 		return index.HandleDelete(timeoutCtx, event.Key)
 	default:
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			ErrInvalidEvent,
 			"IndexManager",
 			"processEvent",
@@ -801,26 +801,26 @@ func (m *Manager) createDedupKey(event EntityChange) string {
 // updateIndexes updates all relevant indexes for an entity using triples (internal use only)
 func (m *Manager) updateIndexes(ctx context.Context, entityState *gtypes.EntityState) error {
 	if entityState == nil {
-		return errors.WrapInvalid(errors.ErrInvalidData, "IndexManager", "updateIndexes", "entity state cannot be nil")
+		return errs.WrapInvalid(errs.ErrInvalidData, "IndexManager", "updateIndexes", "entity state cannot be nil")
 	}
 
 	entityID := entityState.ID
 
 	// Update predicate index with full entity state
 	if err := m.UpdatePredicateIndex(ctx, entityID, entityState); err != nil {
-		return errors.WrapTransient(err, "IndexManager", "updateIndexes", "predicate index update failed")
+		return errs.WrapTransient(err, "IndexManager", "updateIndexes", "predicate index update failed")
 	}
 
 	// Update spatial index if position data is available
 	if position := extractPositionFromTriples(entityState.Triples); position != nil {
 		if err := m.UpdateSpatialIndex(ctx, entityID, position); err != nil {
-			return errors.WrapTransient(err, "IndexManager", "updateIndexes", "spatial index update failed")
+			return errs.WrapTransient(err, "IndexManager", "updateIndexes", "spatial index update failed")
 		}
 	}
 
 	// Update temporal index with full entity state
 	if err := m.UpdateTemporalIndex(ctx, entityID, entityState); err != nil {
-		return errors.WrapTransient(err, "IndexManager", "updateIndexes", "temporal index update failed")
+		return errs.WrapTransient(err, "IndexManager", "updateIndexes", "temporal index update failed")
 	}
 
 	// Update incoming index for all relationships (extracted from triples)
@@ -828,7 +828,7 @@ func (m *Manager) updateIndexes(ctx context.Context, entityState *gtypes.EntityS
 		if triple.IsRelationship() {
 			if toEntityID, ok := triple.Object.(string); ok {
 				if err := m.UpdateIncomingIndex(ctx, toEntityID, entityID); err != nil {
-					return errors.WrapTransient(
+					return errs.WrapTransient(
 						err,
 						"IndexManager",
 						"updateIndexes",
@@ -872,7 +872,7 @@ func (m *Manager) updateIndexesAsync(ctx context.Context, entityState *gtypes.En
 		if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
 			// Pool stopped - this is critical, notify via callback
 			if errorCallback != nil {
-				errorCallback(errors.WrapFatal(err, "IndexManager", "UpdateEntityAsync", "worker pool not running"))
+				errorCallback(errs.WrapFatal(err, "IndexManager", "UpdateEntityAsync", "worker pool not running"))
 			}
 			return
 		}
@@ -880,7 +880,7 @@ func (m *Manager) updateIndexesAsync(ctx context.Context, entityState *gtypes.En
 		if stderrors.Is(err, worker.ErrQueueFull) {
 			m.logger.Debug("Worker queue full, update deferred", "entity_id", entityState.ID)
 			if errorCallback != nil {
-				errorCallback(errors.WrapTransient(err, "IndexManager", "UpdateEntityAsync", "queue full"))
+				errorCallback(errs.WrapTransient(err, "IndexManager", "UpdateEntityAsync", "queue full"))
 			}
 		}
 	}
@@ -1022,7 +1022,7 @@ func (m *Manager) UpdateAliasIndex(ctx context.Context, alias, entityID string) 
 
 	_, err := m.aliasBucket.PutString(ctx, key, entityID)
 	if err != nil {
-		return errors.WrapTransient(err, "IndexManager", "updateAliases", "alias index update failed")
+		return errs.WrapTransient(err, "IndexManager", "updateAliases", "alias index update failed")
 	}
 
 	return nil
@@ -1112,7 +1112,7 @@ func (m *Manager) RemoveFromIncomingIndex(ctx context.Context, targetEntityID, s
 	// Cast to IncomingIndex to access RemoveIncomingReference method
 	incomingIndex, ok := index.(*IncomingIndex)
 	if !ok {
-		return errors.WrapInvalid(nil, "IndexManager", "RemoveFromIncomingIndex", "invalid index type")
+		return errs.WrapInvalid(nil, "IndexManager", "RemoveFromIncomingIndex", "invalid index type")
 	}
 
 	return incomingIndex.RemoveIncomingReference(ctx, targetEntityID, sourceEntityID)
@@ -1182,7 +1182,7 @@ func (m *Manager) DeleteFromAliasIndex(ctx context.Context, alias string) error 
 
 	err := m.aliasBucket.Delete(ctx, key)
 	if err != nil && err != jetstream.ErrKeyNotFound {
-		return errors.WrapTransient(err, "IndexManager", "removeAliases", "alias index deletion failed")
+		return errs.WrapTransient(err, "IndexManager", "removeAliases", "alias index deletion failed")
 	}
 
 	return nil
@@ -1248,7 +1248,7 @@ func (m *Manager) GetPredicateIndex(ctx context.Context, predicate string) ([]st
 		if m.promMetrics != nil {
 			m.promMetrics.queriesFailed.WithLabelValues("predicate").Inc()
 		}
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			err,
 			"IndexManager",
 			"GetPredicateIndex",
@@ -1456,7 +1456,7 @@ func (m *Manager) GetIncomingRelationships(ctx context.Context, targetEntityID s
 		if m.promMetrics != nil {
 			m.promMetrics.queriesFailed.WithLabelValues("incoming").Inc()
 		}
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			err,
 			"IndexManager",
 			"GetIncomingRelationships",

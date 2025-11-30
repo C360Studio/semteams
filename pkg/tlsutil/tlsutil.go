@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/pkg/acme"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/security"
 )
 
@@ -22,7 +22,7 @@ func LoadServerTLSConfig(cfg security.ServerTLSConfig) (*tls.Config, error) {
 
 	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
-		return nil, errors.WrapFatal(err, "tlsutil", "LoadServerTLSConfig", "load certificate")
+		return nil, errs.WrapFatal(err, "tlsutil", "LoadServerTLSConfig", "load certificate")
 	}
 
 	tlsConfig := &tls.Config{
@@ -51,10 +51,10 @@ func LoadClientTLSConfig(cfg security.ClientTLSConfig) (*tls.Config, error) {
 	for _, caFile := range cfg.CAFiles {
 		caPEM, err := os.ReadFile(caFile)
 		if err != nil {
-			return nil, errors.WrapFatal(err, "tlsutil", "LoadClientTLSConfig", fmt.Sprintf("read CA file %s", caFile))
+			return nil, errs.WrapFatal(err, "tlsutil", "LoadClientTLSConfig", fmt.Sprintf("read CA file %s", caFile))
 		}
 		if !rootCAs.AppendCertsFromPEM(caPEM) {
-			return nil, errors.WrapFatal(
+			return nil, errs.WrapFatal(
 				fmt.Errorf("invalid PEM data"),
 				"tlsutil",
 				"LoadClientTLSConfig",
@@ -101,11 +101,11 @@ func applyMTLSConfig(tlsConfig *tls.Config, mtlsCfg security.ServerMTLSConfig) e
 	for _, caFile := range mtlsCfg.ClientCAFiles {
 		caPEM, err := os.ReadFile(caFile)
 		if err != nil {
-			return errors.WrapFatal(err, "tlsutil", "applyMTLSConfig",
+			return errs.WrapFatal(err, "tlsutil", "applyMTLSConfig",
 				fmt.Sprintf("read client CA file %s", caFile))
 		}
 		if !clientCAs.AppendCertsFromPEM(caPEM) {
-			return errors.WrapFatal(
+			return errs.WrapFatal(
 				fmt.Errorf("invalid PEM data"),
 				"tlsutil", "applyMTLSConfig",
 				fmt.Sprintf("parse client CA certificate from %s", caFile))
@@ -161,7 +161,7 @@ func LoadClientTLSConfigWithMTLS(cfg security.ClientTLSConfig, mtlsCfg security.
 	// Load client certificate
 	clientCert, err := tls.LoadX509KeyPair(mtlsCfg.CertFile, mtlsCfg.KeyFile)
 	if err != nil {
-		return nil, errors.WrapFatal(err, "tlsutil", "LoadClientTLSConfigWithMTLS",
+		return nil, errs.WrapFatal(err, "tlsutil", "LoadClientTLSConfigWithMTLS",
 			"load client certificate")
 	}
 
@@ -206,7 +206,7 @@ func LoadServerTLSConfigWithACME(ctx context.Context, cfg security.ServerTLSConf
 		if cfg.CertFile != "" && cfg.KeyFile != "" {
 			tlsConfig, fallbackErr := LoadServerTLSConfigWithMTLS(cfg, cfg.MTLS)
 			if fallbackErr != nil {
-				return nil, nil, errors.WrapFatal(fallbackErr, "tlsutil", "LoadServerTLSConfigWithACME",
+				return nil, nil, errs.WrapFatal(fallbackErr, "tlsutil", "LoadServerTLSConfigWithACME",
 					"fallback to manual TLS failed")
 			}
 			return tlsConfig, func() {}, nil
@@ -224,12 +224,12 @@ func LoadServerTLSConfigWithACME(ctx context.Context, cfg security.ServerTLSConf
 			if cfg.CertFile != "" && cfg.KeyFile != "" {
 				tlsConfig, fallbackErr := LoadServerTLSConfigWithMTLS(cfg, cfg.MTLS)
 				if fallbackErr != nil {
-					return nil, nil, errors.WrapFatal(fallbackErr, "tlsutil", "LoadServerTLSConfigWithACME",
+					return nil, nil, errs.WrapFatal(fallbackErr, "tlsutil", "LoadServerTLSConfigWithACME",
 						"fallback to manual TLS after ACME failure")
 				}
 				return tlsConfig, func() {}, nil
 			}
-			return nil, nil, errors.WrapTransient(err, "tlsutil", "LoadServerTLSConfigWithACME",
+			return nil, nil, errs.WrapTransient(err, "tlsutil", "LoadServerTLSConfigWithACME",
 				"obtain ACME certificate")
 		}
 	}
@@ -295,7 +295,7 @@ func LoadClientTLSConfigWithACME(ctx context.Context, cfg security.ClientTLSConf
 		if cfg.MTLS.Enabled && cfg.MTLS.CertFile != "" && cfg.MTLS.KeyFile != "" {
 			tlsConfig, fallbackErr := LoadClientTLSConfigWithMTLS(cfg, cfg.MTLS)
 			if fallbackErr != nil {
-				return nil, nil, errors.WrapFatal(fallbackErr, "tlsutil", "LoadClientTLSConfigWithACME",
+				return nil, nil, errs.WrapFatal(fallbackErr, "tlsutil", "LoadClientTLSConfigWithACME",
 					"fallback to manual client TLS failed")
 			}
 			return tlsConfig, func() {}, nil
@@ -312,12 +312,12 @@ func LoadClientTLSConfigWithACME(ctx context.Context, cfg security.ClientTLSConf
 			if cfg.MTLS.Enabled && cfg.MTLS.CertFile != "" && cfg.MTLS.KeyFile != "" {
 				tlsConfig, fallbackErr := LoadClientTLSConfigWithMTLS(cfg, cfg.MTLS)
 				if fallbackErr != nil {
-					return nil, nil, errors.WrapFatal(fallbackErr, "tlsutil", "LoadClientTLSConfigWithACME",
+					return nil, nil, errs.WrapFatal(fallbackErr, "tlsutil", "LoadClientTLSConfigWithACME",
 						"fallback to manual client TLS after ACME failure")
 				}
 				return tlsConfig, func() {}, nil
 			}
-			return nil, nil, errors.WrapTransient(err, "tlsutil", "LoadClientTLSConfigWithACME",
+			return nil, nil, errs.WrapTransient(err, "tlsutil", "LoadClientTLSConfigWithACME",
 				"obtain ACME client certificate")
 		}
 	}

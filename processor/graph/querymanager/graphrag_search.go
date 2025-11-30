@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/graph/clustering"
 )
 
@@ -54,44 +54,44 @@ func (m *Manager) LocalSearch(
 
 	// Validate inputs
 	if entityID == "" {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "QueryManager",
 			"LocalSearch", "entityID is empty")
 	}
 
 	if query == "" {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "QueryManager",
 			"LocalSearch", "query is empty")
 	}
 
 	// Check if community detector is available
 	if m.communityDetector == nil {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"LocalSearch", "community detector not available")
 	}
 
 	// Type assert to community detector interface
 	detector, ok := m.communityDetector.(communityDetectorInterface)
 	if !ok {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"LocalSearch", "community detector does not implement required interface")
 	}
 
 	// Find the entity's community
 	community, err := detector.GetEntityCommunity(ctx, entityID, level)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "LocalSearch",
+		return nil, errs.WrapTransient(err, "QueryManager", "LocalSearch",
 			fmt.Sprintf("failed to get community for entity %s at level %d", entityID, level))
 	}
 
 	if community == nil {
-		return nil, errors.WrapTransient(errors.ErrInvalidData, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrInvalidData, "QueryManager",
 			"LocalSearch", fmt.Sprintf("entity %s not in any community at level %d", entityID, level))
 	}
 
 	// Get all entities in the community
 	entities, err := m.GetEntities(ctx, community.Members)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "LocalSearch",
+		return nil, errs.WrapTransient(err, "QueryManager", "LocalSearch",
 			"failed to load community members")
 	}
 
@@ -126,7 +126,7 @@ func (m *Manager) GlobalSearch(
 
 	// Validate inputs
 	if query == "" {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "QueryManager",
 			"GlobalSearch", "query is empty")
 	}
 
@@ -136,21 +136,21 @@ func (m *Manager) GlobalSearch(
 
 	// Check if community detector is available
 	if m.communityDetector == nil {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GlobalSearch", "community detector not available")
 	}
 
 	// Type assert to community detector interface
 	detector, ok := m.communityDetector.(communityDetectorInterface)
 	if !ok {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GlobalSearch", "community detector does not implement required interface")
 	}
 
 	// Get all communities at the specified level
 	communities, err := detector.GetCommunitiesByLevel(ctx, level)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "GlobalSearch",
+		return nil, errs.WrapTransient(err, "QueryManager", "GlobalSearch",
 			fmt.Sprintf("failed to get communities at level %d", level))
 	}
 
@@ -195,7 +195,7 @@ func (m *Manager) GlobalSearch(
 	// Load entities
 	entities, err := m.GetEntities(ctx, entityIDs)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "GlobalSearch",
+		return nil, errs.WrapTransient(err, "QueryManager", "GlobalSearch",
 			"failed to load entities from communities")
 	}
 
@@ -376,21 +376,21 @@ func (m *Manager) GetCommunity(ctx context.Context, communityID string) (*cluste
 
 	// Check if community detector is available
 	if m.communityDetector == nil {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GetCommunity", "community detector not available")
 	}
 
 	// Type assert to community detector interface
 	detector, ok := m.communityDetector.(communityDetectorInterface)
 	if !ok {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GetCommunity", "community detector does not implement required interface")
 	}
 
 	// Get community
 	community, err := detector.GetCommunity(ctx, communityID)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "GetCommunity",
+		return nil, errs.WrapTransient(err, "QueryManager", "GetCommunity",
 			fmt.Sprintf("failed to get community %s", communityID))
 	}
 
@@ -405,21 +405,21 @@ func (m *Manager) GetEntityCommunity(ctx context.Context, entityID string, level
 
 	// Check if community detector is available
 	if m.communityDetector == nil {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GetEntityCommunity", "community detector not available")
 	}
 
 	// Type assert to community detector interface
 	detector, ok := m.communityDetector.(communityDetectorInterface)
 	if !ok {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GetEntityCommunity", "community detector does not implement required interface")
 	}
 
 	// Get entity's community
 	community, err := detector.GetEntityCommunity(ctx, entityID, level)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "GetEntityCommunity",
+		return nil, errs.WrapTransient(err, "QueryManager", "GetEntityCommunity",
 			fmt.Sprintf("failed to get community for entity %s at level %d", entityID, level))
 	}
 
@@ -434,21 +434,21 @@ func (m *Manager) GetCommunitiesByLevel(ctx context.Context, level int) ([]*clus
 
 	// Check if community detector is available
 	if m.communityDetector == nil {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GetCommunitiesByLevel", "community detector not available")
 	}
 
 	// Type assert to community detector interface
 	detector, ok := m.communityDetector.(communityDetectorInterface)
 	if !ok {
-		return nil, errors.WrapTransient(errors.ErrMissingConfig, "QueryManager",
+		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GetCommunitiesByLevel", "community detector does not implement required interface")
 	}
 
 	// Get communities by level
 	communities, err := detector.GetCommunitiesByLevel(ctx, level)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "QueryManager", "GetCommunitiesByLevel",
+		return nil, errs.WrapTransient(err, "QueryManager", "GetCommunitiesByLevel",
 			fmt.Sprintf("failed to get communities at level %d", level))
 	}
 

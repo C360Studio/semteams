@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 func TestParseSchemaTag(t *testing.T) {
@@ -235,10 +235,10 @@ func TestParseSchemaTag(t *testing.T) {
 					t.Errorf("ParseSchemaTag() expected error, got nil")
 				}
 				// Verify error is properly wrapped as ClassifiedError with Invalid class
-				var classifiedErr *errors.ClassifiedError
+				var classifiedErr *errs.ClassifiedError
 				if !stderrors.As(err, &classifiedErr) {
 					t.Errorf("ParseSchemaTag() error should be ClassifiedError, got %T", err)
-				} else if classifiedErr.Class != errors.ErrorInvalid {
+				} else if classifiedErr.Class != errs.ErrorInvalid {
 					t.Errorf("ParseSchemaTag() error class = %v, want ErrorInvalid", classifiedErr.Class)
 				}
 				return

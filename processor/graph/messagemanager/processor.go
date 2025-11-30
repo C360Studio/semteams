@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/storage/objectstore"
 )
 
@@ -47,7 +47,7 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 	defer func() {
 		if r := recover(); r != nil {
 			msg := fmt.Errorf("panic: %v", r)
-			err := errors.WrapFatal(msg, "MessageManager", "ProcessMessage",
+			err := errs.WrapFatal(msg, "MessageManager", "ProcessMessage",
 				"message processing panic")
 			mp.deps.Logger.Error("Message processing panic", "panic", r, "data_len", len(data))
 			mp.recordError(err.Error())
@@ -242,7 +242,7 @@ func (mp *Manager) processSimpleGraphable(
 			"final_triple_count", len(state.Triples))
 
 		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
-			return nil, errors.WrapTransient(updateErr, "MessageManager",
+			return nil, errs.WrapTransient(updateErr, "MessageManager",
 				"processSimpleGraphable", "entity update failed")
 		}
 	} else {
@@ -252,7 +252,7 @@ func (mp *Manager) processSimpleGraphable(
 			"triple_count", len(state.Triples))
 
 		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
-			return nil, errors.WrapFatal(createErr, "MessageManager",
+			return nil, errs.WrapFatal(createErr, "MessageManager",
 				"processSimpleGraphable", "entity creation failed")
 		}
 	}
@@ -271,7 +271,7 @@ func (mp *Manager) processNonGraphableMessage(
 		if msgMap, isMap := msg.(map[string]any); isMap {
 			return mp.processMapMessage(ctx, msgMap, storageRef)
 		}
-		return nil, errors.WrapInvalid(errors.ErrInvalidData, "message manager",
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "message manager",
 			"processNonGraphableMessage", "message missing required interfaces")
 	}
 
@@ -309,12 +309,12 @@ func (mp *Manager) processNonGraphableMessage(
 		state.Triples = gtypes.MergeTriples(existing.Triples, state.Triples)
 		state.Version = existing.Version + 1
 		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
-			return nil, errors.WrapTransient(updateErr, "MessageManager", "processNonGraphableMessage", "entity update failed")
+			return nil, errs.WrapTransient(updateErr, "MessageManager", "processNonGraphableMessage", "entity update failed")
 		}
 	} else {
 		// Entity doesn't exist, create it
 		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
-			return nil, errors.WrapFatal(createErr, "MessageManager", "processNonGraphableMessage", "entity creation failed")
+			return nil, errs.WrapFatal(createErr, "MessageManager", "processNonGraphableMessage", "entity creation failed")
 		}
 	}
 
@@ -377,12 +377,12 @@ func (mp *Manager) processMapMessage(
 		state.Triples = gtypes.MergeTriples(existing.Triples, state.Triples)
 		state.Version = existing.Version + 1
 		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
-			return nil, errors.WrapTransient(updateErr, "MessageManager", "processMapMessage", "entity update failed")
+			return nil, errs.WrapTransient(updateErr, "MessageManager", "processMapMessage", "entity update failed")
 		}
 	} else {
 		// Entity doesn't exist, create it
 		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
-			return nil, errors.WrapFatal(createErr, "MessageManager", "processMapMessage", "entity creation failed")
+			return nil, errs.WrapFatal(createErr, "MessageManager", "processMapMessage", "entity creation failed")
 		}
 	}
 

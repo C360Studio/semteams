@@ -137,10 +137,10 @@
 //
 // The component uses streamkit/errors for consistent error classification:
 //
-//   - Invalid config: errors.WrapInvalid (bad URL, invalid headers)
-//   - Network errors: errors.WrapTransient (retryable)
-//   - HTTP 4xx: errors.WrapInvalid (client error, not retried)
-//   - HTTP 5xx: errors.WrapTransient (server error, retried)
+//   - Invalid config: errs.WrapInvalid (bad URL, invalid headers)
+//   - Network errors: errs.WrapTransient (retryable)
+//   - HTTP 4xx: errs.WrapInvalid (client error, not retried)
+//   - HTTP 5xx: errs.WrapTransient (server error, retried)
 //
 // All errors are logged with structured context (URL, status code, retry attempt).
 //

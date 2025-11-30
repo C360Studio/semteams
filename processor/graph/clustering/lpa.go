@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"sync"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 const (
@@ -99,10 +99,10 @@ func (d *LPADetector) WithProgressiveSummarization(
 func (d *LPADetector) DetectCommunities(ctx context.Context) (map[int][]*Community, error) {
 	// Validate dependencies
 	if d.graphProvider == nil {
-		return nil, errors.WrapFatal(errors.ErrMissingConfig, "LPADetector", "DetectCommunities", "graphProvider is nil")
+		return nil, errs.WrapFatal(errs.ErrMissingConfig, "LPADetector", "DetectCommunities", "graphProvider is nil")
 	}
 	if d.storage == nil {
-		return nil, errors.WrapFatal(errors.ErrMissingConfig, "LPADetector", "DetectCommunities", "storage is nil")
+		return nil, errs.WrapFatal(errs.ErrMissingConfig, "LPADetector", "DetectCommunities", "storage is nil")
 	}
 
 	d.mu.Lock()
@@ -110,13 +110,13 @@ func (d *LPADetector) DetectCommunities(ctx context.Context) (map[int][]*Communi
 
 	// Clear existing communities
 	if err := d.storage.Clear(ctx); err != nil {
-		return nil, errors.WrapTransient(err, "LPADetector", "DetectCommunities", "clear storage")
+		return nil, errs.WrapTransient(err, "LPADetector", "DetectCommunities", "clear storage")
 	}
 
 	// Get all entities
 	entityIDs, err := d.graphProvider.GetAllEntityIDs(ctx)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "LPADetector", "DetectCommunities", "get entities")
+		return nil, errs.WrapTransient(err, "LPADetector", "DetectCommunities", "get entities")
 	}
 
 	if len(entityIDs) == 0 {
@@ -164,7 +164,7 @@ func (d *LPADetector) detectCommunitiesAtLevel(
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
-			return nil, errors.WrapTransient(ctx.Err(), "LPADetector", "detectCommunitiesAtLevel", "context cancelled")
+			return nil, errs.WrapTransient(ctx.Err(), "LPADetector", "detectCommunitiesAtLevel", "context cancelled")
 		default:
 		}
 
@@ -221,7 +221,7 @@ func (d *LPADetector) detectCommunitiesAtLevel(
 
 		// Save community
 		if err := d.storage.SaveCommunity(ctx, community); err != nil {
-			return nil, errors.WrapTransient(err, "LPADetector", "detectCommunitiesAtLevel", "save community")
+			return nil, errs.WrapTransient(err, "LPADetector", "detectCommunitiesAtLevel", "save community")
 		}
 
 		// Note: Communities saved with summary_status="statistical" will be picked up
@@ -240,7 +240,7 @@ func (d *LPADetector) computeNewLabel(
 	// Get neighbors
 	neighbors, err := d.graphProvider.GetNeighbors(ctx, entityID, "both")
 	if err != nil {
-		return "", errors.WrapTransient(err, "LPADetector", "computeNewLabel", "get neighbors")
+		return "", errs.WrapTransient(err, "LPADetector", "computeNewLabel", "get neighbors")
 	}
 
 	if len(neighbors) == 0 {

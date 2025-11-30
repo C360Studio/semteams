@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Config configures the query manager service
@@ -158,23 +158,23 @@ func (c *Config) Validate() error {
 func (c *Config) validateCache() error {
 	if c.Cache.L1Hot.Size <= 0 {
 		msg := fmt.Sprintf("L1 cache size must be positive, got %d", c.Cache.L1Hot.Size)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.Cache.L2Warm.Size <= 0 {
 		msg := fmt.Sprintf("L2 cache size must be positive, got %d", c.Cache.L2Warm.Size)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.Cache.L3Results.Size <= 0 {
 		msg := fmt.Sprintf("L3 cache size must be positive, got %d", c.Cache.L3Results.Size)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.Cache.L2Warm.TTL <= 0 {
 		msg := fmt.Sprintf("L2 TTL must be positive, got %v", c.Cache.L2Warm.TTL)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.Cache.L3Results.TTL <= 0 {
 		msg := fmt.Sprintf("L3 TTL must be positive, got %v", c.Cache.L3Results.TTL)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	return nil
 }
@@ -183,11 +183,11 @@ func (c *Config) validateCache() error {
 func (c *Config) validateInvalidation() error {
 	if len(c.Invalidation.Patterns) == 0 {
 		msg := "at least one invalidation pattern must be configured"
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.Invalidation.BatchSize <= 0 {
 		msg := fmt.Sprintf("invalidation batch size must be positive, got %d", c.Invalidation.BatchSize)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	return nil
 }
@@ -196,15 +196,15 @@ func (c *Config) validateInvalidation() error {
 func (c *Config) validateQuery() error {
 	if c.Query.MaxQueryDepth <= 0 {
 		msg := fmt.Sprintf("max query depth must be positive, got %d", c.Query.MaxQueryDepth)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.Query.MaxQueryResults <= 0 {
 		msg := fmt.Sprintf("max query results must be positive, got %d", c.Query.MaxQueryResults)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.Query.MaxConcurrency <= 0 {
 		msg := fmt.Sprintf("max concurrency must be positive, got %d", c.Query.MaxConcurrency)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	return nil
 }
@@ -213,15 +213,15 @@ func (c *Config) validateQuery() error {
 func (c *Config) validateTimeouts() error {
 	if c.Timeouts.EntityGet <= 0 {
 		msg := fmt.Sprintf("entity get timeout must be positive, got %v", c.Timeouts.EntityGet)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.Timeouts.KVGet <= 0 {
 		msg := fmt.Sprintf("KV get timeout must be positive, got %v", c.Timeouts.KVGet)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.Timeouts.Shutdown <= 0 {
 		msg := fmt.Sprintf("shutdown timeout must be positive, got %v", c.Timeouts.Shutdown)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	return nil
 }
@@ -230,15 +230,15 @@ func (c *Config) validateTimeouts() error {
 func (c *Config) validateHealthCheck() error {
 	if c.HealthCheck.Interval <= 0 {
 		msg := fmt.Sprintf("health check interval must be positive, got %v", c.HealthCheck.Interval)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.HealthCheck.MinHitRatio < 0 || c.HealthCheck.MinHitRatio > 1 {
 		msg := fmt.Sprintf("min hit ratio must be between 0 and 1, got %f", c.HealthCheck.MinHitRatio)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.HealthCheck.MaxErrorRate < 0 || c.HealthCheck.MaxErrorRate > 1 {
 		msg := fmt.Sprintf("max error rate must be between 0 and 1, got %f", c.HealthCheck.MaxErrorRate)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	return nil
 }
@@ -247,7 +247,7 @@ func (c *Config) validateHealthCheck() error {
 func (c *Config) validateBuckets() error {
 	if c.Buckets.EntityStates == "" {
 		msg := "entity states bucket name cannot be empty"
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	return nil
 }
@@ -259,14 +259,14 @@ func (c *Config) validateIndexManager() error {
 			"index manager connection timeout must be positive, got %v",
 			c.IndexManager.ConnectionTimeout,
 		)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	if c.IndexManager.MaxRetries < 0 {
 		msg := fmt.Sprintf(
 			"index manager max retries must be non-negative, got %d",
 			c.IndexManager.MaxRetries,
 		)
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "query manager", "Validate", msg)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "query manager", "Validate", msg)
 	}
 	return nil
 }

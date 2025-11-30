@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/types"
 )
 
@@ -80,16 +80,16 @@ func NewRegistry() *Registry {
 // Returns an error if a factory with the same name is already registered.
 func (r *Registry) RegisterFactory(name string, registration *Registration) error {
 	if name == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Registry", "RegisterFactory", "factory name validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Registry", "RegisterFactory", "factory name validation")
 	}
 	if registration == nil {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Registry", "RegisterFactory", "registration validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Registry", "RegisterFactory", "registration validation")
 	}
 	if registration.Factory == nil {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Registry", "RegisterFactory", "factory function validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Registry", "RegisterFactory", "factory function validation")
 	}
 	if registration.Type == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Registry", "RegisterFactory", "component type validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Registry", "RegisterFactory", "component type validation")
 	}
 
 	r.mu.Lock()
@@ -97,7 +97,7 @@ func (r *Registry) RegisterFactory(name string, registration *Registration) erro
 
 	if _, exists := r.factories[name]; exists {
 		msg := fmt.Errorf("factory '%s' is already registered", name)
-		return errors.WrapInvalid(msg, "Registry", "RegisterFactory", "duplicate factory check")
+		return errs.WrapInvalid(msg, "Registry", "RegisterFactory", "duplicate factory check")
 	}
 
 	r.factories[name] = registration
@@ -118,24 +118,24 @@ func (r *Registry) CreateComponent(
 ) (Discoverable, error) {
 	// Security: Validate instance name
 	if err := ValidateComponentName(instanceName); err != nil {
-		return nil, errors.Wrap(err, "Registry", "CreateComponent", "instance name validation")
+		return nil, errs.Wrap(err, "Registry", "CreateComponent", "instance name validation")
 	}
 	if config.Type == "" {
-		return nil, errors.WrapInvalid(
-			errors.ErrInvalidConfig, "Registry", "CreateComponent", "component type validation")
+		return nil, errs.WrapInvalid(
+			errs.ErrInvalidConfig, "Registry", "CreateComponent", "component type validation")
 	}
 	// Security: Validate factory name
 	if err := ValidateComponentName(config.Name); err != nil {
-		return nil, errors.Wrap(err, "Registry", "CreateComponent", "factory name validation")
+		return nil, errs.Wrap(err, "Registry", "CreateComponent", "factory name validation")
 	}
 	if deps.NATSClient == nil {
-		return nil, errors.WrapInvalid(errors.ErrInvalidConfig, "Registry", "CreateComponent", "NATS client validation")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "Registry", "CreateComponent", "NATS client validation")
 	}
 
 	// CRITICAL SECURITY: Comprehensive validation before factory execution
 	// This prevents injection attacks, resource exhaustion, and malformed input
 	if err := ValidateFactoryConfig(config.Config); err != nil {
-		return nil, errors.Wrap(err, "Registry", "CreateComponent", "config security validation")
+		return nil, errs.Wrap(err, "Registry", "CreateComponent", "config security validation")
 	}
 
 	// Look up factory by the component/factory name (e.g., "udp", "websocket")
@@ -145,26 +145,26 @@ func (r *Registry) CreateComponent(
 
 	if !exists {
 		msg := fmt.Errorf("unknown component factory '%s'", config.Name)
-		return nil, errors.WrapInvalid(msg, "Registry", "CreateComponent", "factory lookup")
+		return nil, errs.WrapInvalid(msg, "Registry", "CreateComponent", "factory lookup")
 	}
 
 	// Validate that the factory type matches the requested type
 	if registration.Type != string(config.Type) {
 		msg := fmt.Errorf("component '%s' is type '%s', not '%s'",
 			config.Name, registration.Type, config.Type)
-		return nil, errors.WrapInvalid(msg, "Registry", "CreateComponent", "type validation")
+		return nil, errs.WrapInvalid(msg, "Registry", "CreateComponent", "type validation")
 	}
 
 	// Create the component using the factory with service pattern
 	// Pass the component-specific config (config.Config) to the factory
 	component, err := registration.Factory(config.Config, deps)
 	if err != nil {
-		return nil, errors.Wrap(err, "Registry", "CreateComponent", "factory execution")
+		return nil, errs.Wrap(err, "Registry", "CreateComponent", "factory execution")
 	}
 
 	// Register the instance with the unique instance name
 	if err := r.RegisterInstance(instanceName, component); err != nil {
-		return nil, errors.Wrap(err, "Registry", "CreateComponent", "instance registration")
+		return nil, errs.Wrap(err, "Registry", "CreateComponent", "instance registration")
 	}
 
 	return component, nil
@@ -175,10 +175,10 @@ func (r *Registry) CreateComponent(
 // Returns an error if an instance with the same name is already registered.
 func (r *Registry) RegisterInstance(name string, component Discoverable) error {
 	if name == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Registry", "RegisterInstance", "instance name validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Registry", "RegisterInstance", "instance name validation")
 	}
 	if component == nil {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Registry", "RegisterInstance", "component validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Registry", "RegisterInstance", "component validation")
 	}
 
 	r.mu.Lock()
@@ -186,12 +186,12 @@ func (r *Registry) RegisterInstance(name string, component Discoverable) error {
 
 	if _, exists := r.instances[name]; exists {
 		msg := fmt.Errorf("instance '%s' is already registered", name)
-		return errors.WrapInvalid(msg, "Registry", "RegisterInstance", "duplicate instance check")
+		return errs.WrapInvalid(msg, "Registry", "RegisterInstance", "duplicate instance check")
 	}
 
 	// Check for resource conflicts before registering
 	if err := r.checkResourceConflicts(name, component); err != nil {
-		return errors.Wrap(err, "Registry", "RegisterInstance", "resource conflict check")
+		return errs.Wrap(err, "Registry", "RegisterInstance", "resource conflict check")
 	}
 
 	// Register the instance
@@ -246,7 +246,7 @@ func (r *Registry) GetComponentSchema(name string) (ConfigSchema, error) {
 	// Look up by factory name (same as component type)
 	registration, exists := r.factories[name]
 	if !exists {
-		return ConfigSchema{}, errors.WrapInvalid(
+		return ConfigSchema{}, errs.WrapInvalid(
 			fmt.Errorf("component type %q not found", name),
 			"Registry", "GetComponentSchema", "type lookup")
 	}
@@ -265,7 +265,7 @@ func (r *Registry) GetComponent(name string) (Discoverable, error) {
 	// Look up by factory name (same as component type)
 	registration, exists := r.factories[name]
 	if !exists {
-		return nil, errors.WrapInvalid(
+		return nil, errs.WrapInvalid(
 			fmt.Errorf("component type %q not found", name),
 			"Registry", "GetComponent", "type lookup")
 	}
@@ -276,7 +276,7 @@ func (r *Registry) GetComponent(name string) (Discoverable, error) {
 	deps := Dependencies{} // Empty deps for schema retrieval
 	component, err := registration.Factory(json.RawMessage("{}"), deps)
 	if err != nil {
-		return nil, errors.Wrap(err, "Registry", "GetComponent", "factory execution")
+		return nil, errs.Wrap(err, "Registry", "GetComponent", "factory execution")
 	}
 
 	return component, nil
@@ -422,15 +422,15 @@ const (
 // ValidateConfigKey checks if a configuration key is valid
 func ValidateConfigKey(key string) error {
 	if key == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "ConfigValidator", "ValidateConfigKey", "empty key")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigValidator", "ValidateConfigKey", "empty key")
 	}
 	if len(key) > MaxStringLength {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "ConfigValidator", "ValidateConfigKey", "key too long")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigValidator", "ValidateConfigKey", "key too long")
 	}
 	// Check for potentially dangerous characters
 	if strings.ContainsAny(key, "\x00\n\r\t") {
-		return errors.WrapInvalid(
-			errors.ErrInvalidConfig,
+		return errs.WrapInvalid(
+			errs.ErrInvalidConfig,
 			"ConfigValidator",
 			"ValidateConfigKey",
 			"invalid key characters",
@@ -442,8 +442,8 @@ func ValidateConfigKey(key string) error {
 // ValidateJSONSize checks if JSON input is within safe limits
 func ValidateJSONSize(data json.RawMessage) error {
 	if len(data) > MaxJSONSize {
-		return errors.WrapInvalid(
-			errors.ErrInvalidConfig, "ConfigValidator", "ValidateJSONSize", "JSON too large")
+		return errs.WrapInvalid(
+			errs.ErrInvalidConfig, "ConfigValidator", "ValidateJSONSize", "JSON too large")
 	}
 	return nil
 }
@@ -451,17 +451,17 @@ func ValidateJSONSize(data json.RawMessage) error {
 // ValidateComponentName validates component/instance names for security
 func ValidateComponentName(name string) error {
 	if name == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "ConfigValidator", "ValidateComponentName", "empty name")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigValidator", "ValidateComponentName", "empty name")
 	}
 	if len(name) > MaxStringLength {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "ConfigValidator", "ValidateComponentName", "name too long")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigValidator", "ValidateComponentName", "name too long")
 	}
 	// Check for potentially dangerous characters - allow alphanumeric, dash, underscore , dot
 	for _, r := range name {
 		if !((r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
 			(r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.') {
-			return errors.WrapInvalid(
-				errors.ErrInvalidConfig, "ConfigValidator", "ValidateComponentName",
+			return errs.WrapInvalid(
+				errs.ErrInvalidConfig, "ConfigValidator", "ValidateComponentName",
 				"invalid name characters")
 		}
 	}
@@ -472,7 +472,7 @@ func ValidateComponentName(name string) error {
 func ValidatePortNumber(port int) error {
 	if port < MinPort || port > MaxPort {
 		msg := fmt.Errorf("port %d outside valid range %d-%d", port, MinPort, MaxPort)
-		return errors.WrapInvalid(msg, "ConfigValidator", "ValidatePortNumber",
+		return errs.WrapInvalid(msg, "ConfigValidator", "ValidatePortNumber",
 			"port range validation")
 	}
 	return nil
@@ -490,7 +490,7 @@ func (r *Registry) checkResourceConflicts(_ string, component Discoverable) erro
 			// Special validation for network ports
 			if networkPort, ok := port.Config.(NetworkPort); ok {
 				if err := ValidatePortNumber(networkPort.Port); err != nil {
-					return errors.Wrap(err, "Registry", "checkResourceConflicts", "network port validation")
+					return errs.Wrap(err, "Registry", "checkResourceConflicts", "network port validation")
 				}
 			}
 
@@ -498,7 +498,7 @@ func (r *Registry) checkResourceConflicts(_ string, component Discoverable) erro
 			if existingInstance, exists := r.resourceTracker[resourceID]; exists {
 				msg := fmt.Errorf("resource conflict: %s already used by component '%s'",
 					resourceID, existingInstance)
-				return errors.WrapInvalid(msg, "Registry", "checkResourceConflicts",
+				return errs.WrapInvalid(msg, "Registry", "checkResourceConflicts",
 					"exclusive resource check")
 			}
 		}

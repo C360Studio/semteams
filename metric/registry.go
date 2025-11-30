@@ -8,7 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // MetricsRegistrar defines the interface for registering service-specific metrics
@@ -70,7 +70,7 @@ func (r *MetricsRegistry) RegisterCounter(serviceName, metricName string, counte
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
 			"MetricsRegistry", "RegisterCounter", "duplicate metric registration")
 	}
@@ -79,10 +79,10 @@ func (r *MetricsRegistry) RegisterCounter(serviceName, metricName string, counte
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errors.WrapInvalid(err, "MetricsRegistry", "RegisterCounter",
+			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterCounter",
 				fmt.Sprintf("prometheus conflict for metric %s", metricName))
 		}
-		return errors.WrapFatal(err, "MetricsRegistry", "RegisterCounter",
+		return errs.WrapFatal(err, "MetricsRegistry", "RegisterCounter",
 			"failed to register counter with prometheus")
 	}
 
@@ -98,7 +98,7 @@ func (r *MetricsRegistry) RegisterGauge(serviceName, metricName string, gauge pr
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
 			"MetricsRegistry", "RegisterGauge", "duplicate metric registration")
 	}
@@ -107,10 +107,10 @@ func (r *MetricsRegistry) RegisterGauge(serviceName, metricName string, gauge pr
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errors.WrapInvalid(err, "MetricsRegistry", "RegisterGauge",
+			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterGauge",
 				fmt.Sprintf("prometheus conflict for metric %s", metricName))
 		}
-		return errors.WrapFatal(err, "MetricsRegistry", "RegisterGauge",
+		return errs.WrapFatal(err, "MetricsRegistry", "RegisterGauge",
 			"failed to register gauge with prometheus")
 	}
 
@@ -126,7 +126,7 @@ func (r *MetricsRegistry) RegisterHistogram(serviceName, metricName string, hist
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
 			"MetricsRegistry", "RegisterHistogram", "duplicate metric registration")
 	}
@@ -135,10 +135,10 @@ func (r *MetricsRegistry) RegisterHistogram(serviceName, metricName string, hist
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errors.WrapInvalid(err, "MetricsRegistry", "RegisterHistogram",
+			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterHistogram",
 				fmt.Sprintf("prometheus conflict for metric %s", metricName))
 		}
-		return errors.WrapFatal(err, "MetricsRegistry", "RegisterHistogram",
+		return errs.WrapFatal(err, "MetricsRegistry", "RegisterHistogram",
 			"failed to register histogram with prometheus")
 	}
 
@@ -154,7 +154,7 @@ func (r *MetricsRegistry) RegisterCounterVec(serviceName, metricName string, cou
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
 			"MetricsRegistry", "RegisterCounterVec", "duplicate metric registration")
 	}
@@ -163,10 +163,10 @@ func (r *MetricsRegistry) RegisterCounterVec(serviceName, metricName string, cou
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errors.WrapInvalid(err, "MetricsRegistry", "RegisterCounterVec",
+			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterCounterVec",
 				fmt.Sprintf("prometheus conflict for metric %s", metricName))
 		}
-		return errors.WrapFatal(err, "MetricsRegistry", "RegisterCounterVec",
+		return errs.WrapFatal(err, "MetricsRegistry", "RegisterCounterVec",
 			"failed to register counter vector with prometheus")
 	}
 
@@ -182,7 +182,7 @@ func (r *MetricsRegistry) RegisterGaugeVec(serviceName, metricName string, gauge
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
 			"MetricsRegistry", "RegisterGaugeVec", "duplicate metric registration")
 	}
@@ -191,10 +191,10 @@ func (r *MetricsRegistry) RegisterGaugeVec(serviceName, metricName string, gauge
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errors.WrapInvalid(err, "MetricsRegistry", "RegisterGaugeVec",
+			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterGaugeVec",
 				fmt.Sprintf("prometheus conflict for metric %s", metricName))
 		}
-		return errors.WrapFatal(err, "MetricsRegistry", "RegisterGaugeVec",
+		return errs.WrapFatal(err, "MetricsRegistry", "RegisterGaugeVec",
 			"failed to register gauge vector with prometheus")
 	}
 
@@ -211,7 +211,7 @@ func (r *MetricsRegistry) RegisterHistogramVec(
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
 			"MetricsRegistry", "RegisterHistogramVec", "duplicate metric registration")
 	}
@@ -220,10 +220,10 @@ func (r *MetricsRegistry) RegisterHistogramVec(
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errors.WrapInvalid(err, "MetricsRegistry", "RegisterHistogramVec",
+			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterHistogramVec",
 				fmt.Sprintf("prometheus conflict for metric %s", metricName))
 		}
-		return errors.WrapFatal(err, "MetricsRegistry", "RegisterHistogramVec",
+		return errs.WrapFatal(err, "MetricsRegistry", "RegisterHistogramVec",
 			"failed to register histogram vector with prometheus")
 	}
 

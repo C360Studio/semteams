@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // RouteMapping defines how an external endpoint maps to a NATS subject
@@ -32,12 +32,12 @@ type RouteMapping struct {
 // Validate ensures the route mapping is valid
 func (r *RouteMapping) Validate() error {
 	if r.Path == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "RouteMapping", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "RouteMapping", "Validate",
 			"path cannot be empty")
 	}
 
 	if r.Method == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "RouteMapping", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "RouteMapping", "Validate",
 			"method cannot be empty")
 	}
 
@@ -50,12 +50,12 @@ func (r *RouteMapping) Validate() error {
 		"PATCH":  true,
 	}
 	if !validMethods[r.Method] {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "RouteMapping", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "RouteMapping", "Validate",
 			fmt.Sprintf("invalid HTTP method: %s", r.Method))
 	}
 
 	if r.NATSSubject == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "RouteMapping", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "RouteMapping", "Validate",
 			"nats_subject cannot be empty")
 	}
 
@@ -65,7 +65,7 @@ func (r *RouteMapping) Validate() error {
 	} else {
 		parsedTimeout, err := time.ParseDuration(r.TimeoutStr)
 		if err != nil {
-			return errors.WrapInvalid(err, "RouteMapping", "Validate",
+			return errs.WrapInvalid(err, "RouteMapping", "Validate",
 				fmt.Sprintf("invalid timeout format: %s", r.TimeoutStr))
 		}
 		r.timeout = parsedTimeout
@@ -73,7 +73,7 @@ func (r *RouteMapping) Validate() error {
 
 	// Validate timeout range (100ms to 30s)
 	if r.timeout < 100*time.Millisecond || r.timeout > 30*time.Second {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "RouteMapping", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "RouteMapping", "Validate",
 			"timeout must be between 100ms and 30s")
 	}
 
@@ -105,21 +105,21 @@ type Config struct {
 // Validate ensures the gateway configuration is valid
 func (c *Config) Validate() error {
 	if len(c.Routes) == 0 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"at least one route mapping is required")
 	}
 
 	// Validate each route
 	for i, route := range c.Routes {
 		if err := route.Validate(); err != nil {
-			return errors.WrapInvalid(err, "Config", "Validate",
+			return errs.WrapInvalid(err, "Config", "Validate",
 				fmt.Sprintf("invalid route at index %d", i))
 		}
 	}
 
 	// Validate max request size
 	if c.MaxRequestSize < 0 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"max_request_size cannot be negative")
 	}
 
@@ -128,13 +128,13 @@ func (c *Config) Validate() error {
 	}
 
 	if c.MaxRequestSize > 100*1024*1024 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"max_request_size cannot exceed 100MB")
 	}
 
 	// CORS requires explicit origin configuration for security
 	if c.EnableCORS && len(c.CORSOrigins) == 0 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"enable_cors requires explicit cors_origins configuration (use [\"*\"] for development only)")
 	}
 

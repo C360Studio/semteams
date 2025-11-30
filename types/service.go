@@ -4,7 +4,7 @@ package types
 import (
 	"encoding/json"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // ServiceConfig provides configuration for creating a service instance.
@@ -19,7 +19,7 @@ type ServiceConfig struct {
 // Validate ensures the service configuration is valid
 func (s ServiceConfig) Validate() error {
 	if s.Name == "" {
-		return errors.WrapInvalid(errors.ErrMissingConfig, "ServiceConfig", "Validate", "service name cannot be empty")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "ServiceConfig", "Validate", "service name cannot be empty")
 	}
 	// Config can be empty (service uses defaults)
 	// Enabled can be false (service disabled)

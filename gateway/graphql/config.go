@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Config holds configuration for the GraphQL gateway component
@@ -71,7 +71,7 @@ func (c *Config) Validate() error {
 		c.Path = "/graphql"
 	}
 	if len(c.Path) == 0 || c.Path[0] != '/' {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"path must start with /")
 	}
 
@@ -81,11 +81,11 @@ func (c *Config) Validate() error {
 	} else {
 		timeout, err := time.ParseDuration(c.TimeoutStr)
 		if err != nil {
-			return errors.WrapInvalid(err, "Config", "Validate",
+			return errs.WrapInvalid(err, "Config", "Validate",
 				fmt.Sprintf("invalid timeout format: %s", c.TimeoutStr))
 		}
 		if timeout < 100*time.Millisecond || timeout > 5*time.Minute {
-			return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 				"timeout must be between 100ms and 5m")
 		}
 		c.timeout = timeout
@@ -96,7 +96,7 @@ func (c *Config) Validate() error {
 		c.MaxQueryDepth = 10
 	}
 	if c.MaxQueryDepth < 1 || c.MaxQueryDepth > 50 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"max_query_depth must be between 1 and 50")
 	}
 
@@ -107,7 +107,7 @@ func (c *Config) Validate() error {
 
 	// Validate NATS subjects
 	if err := c.NATSSubjects.Validate(); err != nil {
-		return errors.WrapInvalid(err, "Config", "Validate", "NATS subjects validation")
+		return errs.WrapInvalid(err, "Config", "Validate", "NATS subjects validation")
 	}
 
 	return nil
@@ -140,7 +140,7 @@ func (n *NATSSubjectsConfig) Validate() error {
 	// Validate subject format (basic check - not empty)
 	if n.EntityQuery == "" || n.EntitiesQuery == "" || n.TypeQuery == "" ||
 		n.RelationshipQuery == "" || n.SemanticSearch == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "NATSSubjectsConfig", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "NATSSubjectsConfig", "Validate",
 			"all NATS subjects must be configured")
 	}
 

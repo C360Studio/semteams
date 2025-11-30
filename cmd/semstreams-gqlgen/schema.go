@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
@@ -21,7 +21,7 @@ func ParseSchema(schemaPath string) (*SchemaInfo, error) {
 	// Read schema file
 	schemaContent, err := os.ReadFile(schemaPath)
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "ParseSchema", "os.ReadFile",
+		return nil, errs.WrapInvalid(err, "ParseSchema", "os.ReadFile",
 			fmt.Sprintf("read schema file: %s", schemaPath))
 	}
 
@@ -34,7 +34,7 @@ func ParseSchema(schemaPath string) (*SchemaInfo, error) {
 	// Parse schema using gqlparser
 	schema, gqlErr := gqlparser.LoadSchema(source)
 	if gqlErr != nil {
-		return nil, errors.WrapInvalid(gqlErr, "ParseSchema", "gqlparser.LoadSchema",
+		return nil, errs.WrapInvalid(gqlErr, "ParseSchema", "gqlparser.LoadSchema",
 			"parse GraphQL schema")
 	}
 
@@ -66,7 +66,7 @@ func ValidateConfigAgainstSchema(config *Config, schema *SchemaInfo) error {
 	// Validate queries exist in schema
 	for queryName := range config.Queries {
 		if _, exists := schema.Queries[queryName]; !exists {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("query %s not found in schema", queryName),
 				"ValidateConfigAgainstSchema", "query validation",
 				"query not in schema")
@@ -76,7 +76,7 @@ func ValidateConfigAgainstSchema(config *Config, schema *SchemaInfo) error {
 	// Validate types exist in schema
 	for typeName := range config.Types {
 		if _, exists := schema.Types[typeName]; !exists {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("type %s not found in schema", typeName),
 				"ValidateConfigAgainstSchema", "type validation",
 				"type not in schema")
@@ -88,14 +88,14 @@ func ValidateConfigAgainstSchema(config *Config, schema *SchemaInfo) error {
 		// Parse field path (e.g., "Robot.name")
 		typeName, _, err := parseFieldPath(fieldPath)
 		if err != nil {
-			return errors.WrapInvalid(err, "ValidateConfigAgainstSchema",
+			return errs.WrapInvalid(err, "ValidateConfigAgainstSchema",
 				"parseFieldPath", "invalid field path")
 		}
 
 		// Check type exists
 		typeDef, exists := schema.Types[typeName]
 		if !exists {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("type %s for field %s not found in schema", typeName, fieldPath),
 				"ValidateConfigAgainstSchema", "field validation",
 				"field type not in schema")
@@ -112,7 +112,7 @@ func ValidateConfigAgainstSchema(config *Config, schema *SchemaInfo) error {
 				}
 			}
 			if !fieldExists {
-				return errors.WrapInvalid(
+				return errs.WrapInvalid(
 					fmt.Errorf("field %s not found in type %s", fieldName, typeName),
 					"ValidateConfigAgainstSchema", "field validation",
 					"field not in type")

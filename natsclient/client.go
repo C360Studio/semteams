@@ -13,7 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // ConnectionStatus represents the state of the NATS connection
@@ -149,7 +149,7 @@ func NewClient(url string, opts ...ClientOption) (*Client, error) {
 	// Apply options
 	for _, opt := range opts {
 		if err := opt(c); err != nil {
-			return nil, errors.WrapInvalid(err, "Client", "NewClient", "apply option")
+			return nil, errs.WrapInvalid(err, "Client", "NewClient", "apply option")
 		}
 	}
 
@@ -457,14 +457,14 @@ func (m *Client) Connect(ctx context.Context) error {
 				return ErrCircuitOpen
 			}
 
-			return errors.WrapTransient(err, "Client", "Connect", "establish connection")
+			return errs.WrapTransient(err, "Client", "Connect", "establish connection")
 		}
 	case <-ctx.Done():
 		m.recordFailure()
 		if m.Status() != StatusCircuitOpen {
 			m.setStatus(StatusDisconnected)
 		}
-		return errors.WrapTransient(ctx.Err(), "Client", "Connect", "connection cancelled")
+		return errs.WrapTransient(ctx.Err(), "Client", "Connect", "connection cancelled")
 	}
 
 	m.setStatus(StatusConnected)
@@ -515,7 +515,7 @@ func (m *Client) Close(ctx context.Context) error {
 	defer m.mu.Unlock()
 
 	// Collect all errors during cleanup
-	var errs []error
+	var closeErrs []error
 
 	// Stop all consumers with proper error tracking
 	m.consumersMu.Lock()
@@ -530,7 +530,7 @@ func (m *Client) Close(ctx context.Context) error {
 	// Unsubscribe all with error tracking
 	for _, sub := range m.subs {
 		if err := sub.Unsubscribe(); err != nil {
-			errs = append(errs, errors.Wrap(err, "Client", "Close", "unsubscribe"))
+			closeErrs = append(closeErrs, errs.Wrap(err, "Client", "Close", "unsubscribe"))
 			m.logger.Errorf("Failed to unsubscribe: %v", err)
 		}
 	}
@@ -556,12 +556,12 @@ func (m *Client) Close(ctx context.Context) error {
 		select {
 		case err := <-drainDone:
 			if err != nil {
-				drainErr = errors.Wrap(err, "Client", "Close", "drain connection")
+				drainErr = errs.Wrap(err, "Client", "Close", "drain connection")
 				m.logger.Errorf("Drain error: %v", err)
 			}
 		case <-time.After(drainTimeout):
 			// Drain timeout, force close
-			drainErr = errors.WrapTransient(
+			drainErr = errs.WrapTransient(
 				fmt.Errorf("drain timeout after %v", drainTimeout),
 				"Client",
 				"Close",
@@ -570,12 +570,12 @@ func (m *Client) Close(ctx context.Context) error {
 			m.logger.Errorf("Drain timeout after %v, force closing", drainTimeout)
 		case <-ctx.Done():
 			// Context cancelled, force close
-			drainErr = errors.Wrap(ctx.Err(), "Client", "Close", "context cancelled during drain")
+			drainErr = errs.Wrap(ctx.Err(), "Client", "Close", "context cancelled during drain")
 			m.logger.Errorf("Context cancelled during drain, force closing")
 		}
 
 		if drainErr != nil {
-			errs = append(errs, drainErr)
+			closeErrs = append(closeErrs, drainErr)
 		}
 
 		m.conn.Close()
@@ -590,10 +590,10 @@ func (m *Client) Close(ctx context.Context) error {
 	m.setStatus(StatusDisconnected)
 
 	// Combine all errors
-	if len(errs) > 0 {
+	if len(closeErrs) > 0 {
 		// Return a combined error message
 		errMsg := "cleanup errors:"
-		for i, err := range errs {
+		for i, err := range closeErrs {
 			errMsg += fmt.Sprintf("\n  [%d] %v", i+1, err)
 		}
 		return fmt.Errorf("%s", errMsg)
@@ -660,7 +660,7 @@ func (m *Client) JetStream() (jetstream.JetStream, error) {
 	defer m.mu.RUnlock()
 
 	if m.js == nil {
-		return nil, errors.WrapTransient(
+		return nil, errs.WrapTransient(
 			fmt.Errorf("JetStream not initialized"),
 			"Client", "JetStream", "get JetStream context")
 	}
@@ -746,7 +746,7 @@ func (m *Client) ConsumeStream(ctx context.Context, streamName, subject string, 
 
 	// Check if client is closing to prevent new consumers during shutdown
 	if m.closed.Load() {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("client is closed"),
 			"Client", "ConsumeStream", "check client state")
 	}
@@ -788,7 +788,7 @@ func (m *Client) ConsumeStream(ctx context.Context, streamName, subject string, 
 	if m.closed.Load() {
 		// Client is closing, stop the consumer we just created
 		consumeContext.Stop()
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("client is closing"),
 			"Client", "ConsumeStream", "check client state during consumer registration")
 	}
@@ -881,7 +881,7 @@ func (m *Client) CreateKeyValueBucket(ctx context.Context, cfg jetstream.KeyValu
 			bucket, err = js.KeyValue(ctx, cfg.Bucket)
 			if err != nil {
 				m.recordFailure()
-				return nil, errors.Wrap(err, "Client", "CreateKeyValueBucket",
+				return nil, errs.Wrap(err, "Client", "CreateKeyValueBucket",
 					fmt.Sprintf("access existing bucket %s", cfg.Bucket))
 			}
 			m.logger.Printf("Successfully accessed existing KV bucket: %s", cfg.Bucket)

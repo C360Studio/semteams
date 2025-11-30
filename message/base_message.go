@@ -9,7 +9,7 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/timestamp"
 	"github.com/google/uuid"
 )
@@ -174,22 +174,22 @@ func (m *BaseMessage) Hash() string {
 func (m *BaseMessage) Validate() error {
 	// Validate message type
 	if !m.msgType.IsValid() {
-		return errors.WrapInvalid(errors.ErrInvalidData, "BaseMessage", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidData, "BaseMessage", "Validate",
 			fmt.Sprintf("invalid message type: %s", m.msgType.String()))
 	}
 
 	// Validate payload
 	if m.payload == nil {
-		return errors.WrapInvalid(errors.ErrInvalidData, "BaseMessage", "Validate", "payload cannot be nil")
+		return errs.WrapInvalid(errs.ErrInvalidData, "BaseMessage", "Validate", "payload cannot be nil")
 	}
 
 	if err := m.payload.Validate(); err != nil {
-		return errors.WrapInvalid(err, "BaseMessage", "Validate", "invalid payload")
+		return errs.WrapInvalid(err, "BaseMessage", "Validate", "invalid payload")
 	}
 
 	// Validate metadata
 	if m.meta == nil {
-		return errors.WrapInvalid(errors.ErrInvalidData, "BaseMessage", "Validate", "meta cannot be nil")
+		return errs.WrapInvalid(errs.ErrInvalidData, "BaseMessage", "Validate", "meta cannot be nil")
 	}
 
 	return nil
@@ -211,7 +211,7 @@ func (m *BaseMessage) MarshalJSON() ([]byte, error) {
 	// Marshal the payload using its MarshalJSON method
 	payloadData, err := m.payload.MarshalJSON()
 	if err != nil {
-		return nil, errors.WrapInvalid(err, "BaseMessage", "MarshalJSON", "failed to marshal payload")
+		return nil, errs.WrapInvalid(err, "BaseMessage", "MarshalJSON", "failed to marshal payload")
 	}
 
 	// Create metadata map with int64 timestamps for consistency
@@ -238,7 +238,7 @@ func (m *BaseMessage) MarshalJSON() ([]byte, error) {
 func (m *BaseMessage) UnmarshalJSON(data []byte) error {
 	var wire wireFormat
 	if err := json.Unmarshal(data, &wire); err != nil {
-		return errors.WrapInvalid(err, "BaseMessage", "UnmarshalJSON", "failed to unmarshal wire format")
+		return errs.WrapInvalid(err, "BaseMessage", "UnmarshalJSON", "failed to unmarshal wire format")
 	}
 
 	// Set basic fields
@@ -270,7 +270,7 @@ func (m *BaseMessage) UnmarshalJSON(data []byte) error {
 	payload := component.CreatePayload(m.msgType.Domain, m.msgType.Category, m.msgType.Version)
 	if payload == nil {
 		// Unknown type - payload must be registered or use core.json.v1
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("unregistered payload type: %s", m.msgType.String()),
 			"BaseMessage", "UnmarshalJSON", "payload type lookup")
 	}
@@ -278,11 +278,11 @@ func (m *BaseMessage) UnmarshalJSON(data []byte) error {
 	// Unmarshal JSON into the typed payload
 	if msgPayload, ok := payload.(Payload); ok {
 		if err := json.Unmarshal(wire.Payload, msgPayload); err != nil {
-			return errors.WrapInvalid(err, "BaseMessage", "UnmarshalJSON", "failed to unmarshal payload")
+			return errs.WrapInvalid(err, "BaseMessage", "UnmarshalJSON", "failed to unmarshal payload")
 		}
 		m.payload = msgPayload
 	} else {
-		return errors.WrapInvalid(errors.ErrInvalidData, "BaseMessage", "UnmarshalJSON", "payload does not implement message.Payload interface")
+		return errs.WrapInvalid(errs.ErrInvalidData, "BaseMessage", "UnmarshalJSON", "payload does not implement message.Payload interface")
 	}
 
 	return nil

@@ -185,9 +185,9 @@
 //
 // Store implementations should return errors classified by the framework's
 // error package:
-//   - errors.WrapInvalid: Invalid keys, malformed input
-//   - errors.WrapTransient: Network timeouts, temporary failures
-//   - errors.WrapFatal: Programming errors, nil pointers
+//   - errs.WrapInvalid: Invalid keys, malformed input
+//   - errs.WrapTransient: Network timeouts, temporary failures
+//   - errs.WrapFatal: Programming errors, nil pointers
 //
 // Callers can distinguish error types for appropriate retry/recovery strategies.
 //

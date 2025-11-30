@@ -7,9 +7,9 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/component/flowgraph"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Validator provides flow validation using FlowGraph analysis
@@ -133,7 +133,7 @@ func (v *Validator) ValidateFlow(flow *flowstore.Flow) (*ValidationResult, error
 	if err := graph.ConnectComponentsByPatterns(); err != nil {
 		// Connection pattern errors (network conflicts, etc.)
 		v.logger.Debug("Pattern-based connection failed", "error", err)
-		return nil, errors.WrapInvalid(err, "validator", "ValidateFlow", "connect components failed")
+		return nil, errs.WrapInvalid(err, "validator", "ValidateFlow", "connect components failed")
 	}
 
 	// Log all edges created by pattern matching

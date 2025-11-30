@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	pkgerrors "github.com/c360/semstreams/errors"
+	pkgerrs "github.com/c360/semstreams/pkg/errs"
 )
 
 func TestGetOrGenerateRequestID(t *testing.T) {
@@ -83,22 +83,22 @@ func TestMapErrorToHTTPStatus(t *testing.T) {
 	}{
 		{
 			name:           "invalid error maps to 400",
-			err:            pkgerrors.WrapInvalid(pkgerrors.ErrInvalidConfig, "test", "test", "invalid input"),
+			err:            pkgerrs.WrapInvalid(pkgerrs.ErrInvalidConfig, "test", "test", "invalid input"),
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "timeout error maps to 504",
-			err:            pkgerrors.WrapTransient(pkgerrors.ErrConnectionTimeout, "test", "test", "timeout occurred"),
+			err:            pkgerrs.WrapTransient(pkgerrs.ErrConnectionTimeout, "test", "test", "timeout occurred"),
 			expectedStatus: http.StatusGatewayTimeout,
 		},
 		{
 			name:           "transient error maps to 503",
-			err:            pkgerrors.WrapTransient(pkgerrors.ErrNoConnection, "test", "test", "service unavailable"),
+			err:            pkgerrs.WrapTransient(pkgerrs.ErrNoConnection, "test", "test", "service unavailable"),
 			expectedStatus: http.StatusServiceUnavailable,
 		},
 		{
 			name:           "fatal error maps to 500",
-			err:            pkgerrors.WrapFatal(pkgerrors.ErrDataCorrupted, "test", "test", "fatal error"),
+			err:            pkgerrs.WrapFatal(pkgerrs.ErrDataCorrupted, "test", "test", "fatal error"),
 			expectedStatus: http.StatusInternalServerError,
 		},
 		{
@@ -139,25 +139,25 @@ func TestSanitizeError(t *testing.T) {
 	}{
 		{
 			name:             "invalid error sanitized",
-			err:              pkgerrors.WrapInvalid(pkgerrors.ErrInvalidConfig, "Gateway", "sendNATSRequest", "invalid request to graph.query.semantic"),
+			err:              pkgerrs.WrapInvalid(pkgerrs.ErrInvalidConfig, "Gateway", "sendNATSRequest", "invalid request to graph.query.semantic"),
 			expectedMsg:      "invalid request",
 			shouldNotContain: []string{"graph.query", "NATS", "semantic"},
 		},
 		{
 			name:             "timeout error sanitized",
-			err:              pkgerrors.WrapTransient(pkgerrors.ErrConnectionTimeout, "Gateway", "sendNATSRequest", "timeout waiting for NATS subject graph.query"),
+			err:              pkgerrs.WrapTransient(pkgerrs.ErrConnectionTimeout, "Gateway", "sendNATSRequest", "timeout waiting for NATS subject graph.query"),
 			expectedMsg:      "request timeout",
 			shouldNotContain: []string{"NATS", "graph.query", "subject"},
 		},
 		{
 			name:             "transient error sanitized",
-			err:              pkgerrors.WrapTransient(pkgerrors.ErrNoConnection, "Gateway", "sendNATSRequest", "NATS connection failed"),
+			err:              pkgerrs.WrapTransient(pkgerrs.ErrNoConnection, "Gateway", "sendNATSRequest", "NATS connection failed"),
 			expectedMsg:      "service temporarily unavailable",
 			shouldNotContain: []string{"NATS", "connection"},
 		},
 		{
 			name:             "fatal error sanitized",
-			err:              pkgerrors.WrapFatal(pkgerrors.ErrDataCorrupted, "Gateway", "method", "internal panic in processor component"),
+			err:              pkgerrs.WrapFatal(pkgerrs.ErrDataCorrupted, "Gateway", "method", "internal panic in processor component"),
 			expectedMsg:      "internal server error",
 			shouldNotContain: []string{"panic", "processor", "component"},
 		},

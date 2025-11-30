@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // ttlEntry represents an entry in the TTL cache.
@@ -53,7 +53,7 @@ func newTTLCache[V any](
 		metrics, err = newCacheMetrics(opts.metricsReg, opts.metricsPrefix)
 		if err != nil {
 			// Return classified error instead of silently ignoring
-			return nil, errors.WrapTransient(err, "cache", "newTTLCache", "metrics registration")
+			return nil, errs.WrapTransient(err, "cache", "newTTLCache", "metrics registration")
 		}
 	}
 

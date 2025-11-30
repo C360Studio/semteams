@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // ConfigValidator provides secure validation for component configurations
@@ -32,7 +32,7 @@ func NewConfigValidator() *ConfigValidator {
 func (v *ConfigValidator) ValidateConfig(rawConfig json.RawMessage) error {
 	// Check JSON size first
 	if len(rawConfig) > v.maxJSONSize {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("config size %d exceeds maximum %d", len(rawConfig), v.maxJSONSize),
 			"ConfigValidator", "ValidateConfig", "size check")
 	}
@@ -48,12 +48,12 @@ func (v *ConfigValidator) ValidateConfig(rawConfig json.RawMessage) error {
 	decoder.UseNumber() // Prevent float overflow attacks
 
 	if err := decoder.Decode(&config); err != nil {
-		return errors.WrapInvalid(err, "ConfigValidator", "ValidateConfig", "JSON parsing")
+		return errs.WrapInvalid(err, "ConfigValidator", "ValidateConfig", "JSON parsing")
 	}
 
 	// Perform deep validation on the parsed structure
 	if err := v.validateValue(config, 0); err != nil {
-		return errors.Wrap(err, "ConfigValidator", "ValidateConfig", "deep validation")
+		return errs.Wrap(err, "ConfigValidator", "ValidateConfig", "deep validation")
 	}
 
 	return nil
@@ -63,7 +63,7 @@ func (v *ConfigValidator) ValidateConfig(rawConfig json.RawMessage) error {
 func (v *ConfigValidator) validateValue(value any, depth int) error {
 	// Check depth to prevent stack overflow
 	if depth > v.maxDepth {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("JSON depth %d exceeds maximum %d", depth, v.maxDepth),
 			"ConfigValidator", "validateValue", "depth check")
 	}
@@ -71,7 +71,7 @@ func (v *ConfigValidator) validateValue(value any, depth int) error {
 	switch val := value.(type) {
 	case string:
 		if len(val) > v.maxStringLen {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("string length %d exceeds maximum %d", len(val), v.maxStringLen),
 				"ConfigValidator", "validateValue", "string length check")
 		}
@@ -84,20 +84,20 @@ func (v *ConfigValidator) validateValue(value any, depth int) error {
 		// Validate number is within safe bounds
 		if _, err := val.Int64(); err != nil {
 			if _, err := val.Float64(); err != nil {
-				return errors.WrapInvalid(err, "ConfigValidator", "validateValue", "number validation")
+				return errs.WrapInvalid(err, "ConfigValidator", "validateValue", "number validation")
 			}
 		}
 
 	case []any:
 		if len(val) > v.maxArraySize {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("array size %d exceeds maximum %d", len(val), v.maxArraySize),
 				"ConfigValidator", "validateValue", "array size check")
 		}
 		// Recursively validate array elements
 		for i, elem := range val {
 			if err := v.validateValue(elem, depth+1); err != nil {
-				return errors.Wrap(err, "ConfigValidator", "validateValue",
+				return errs.Wrap(err, "ConfigValidator", "validateValue",
 					fmt.Sprintf("array element %d", i))
 			}
 		}
@@ -107,16 +107,16 @@ func (v *ConfigValidator) validateValue(value any, depth int) error {
 		for key, val := range val {
 			// Validate key
 			if len(key) > v.maxStringLen {
-				return errors.WrapInvalid(
+				return errs.WrapInvalid(
 					fmt.Errorf("key '%s' length exceeds maximum", key),
 					"ConfigValidator", "validateValue", "key length check")
 			}
 			if err := v.validateStringContent(key); err != nil {
-				return errors.Wrap(err, "ConfigValidator", "validateValue", "key validation")
+				return errs.Wrap(err, "ConfigValidator", "validateValue", "key validation")
 			}
 			// Recursively validate value
 			if err := v.validateValue(val, depth+1); err != nil {
-				return errors.Wrap(err, "ConfigValidator", "validateValue",
+				return errs.Wrap(err, "ConfigValidator", "validateValue",
 					fmt.Sprintf("object field '%s'", key))
 			}
 		}
@@ -126,7 +126,7 @@ func (v *ConfigValidator) validateValue(value any, depth int) error {
 
 	default:
 		// Reject unexpected types
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("unexpected type %T in config", value),
 			"ConfigValidator", "validateValue", "type check")
 	}
@@ -138,7 +138,7 @@ func (v *ConfigValidator) validateValue(value any, depth int) error {
 func (v *ConfigValidator) validateStringContent(s string) error {
 	// Check for null bytes (can cause issues in C bindings)
 	if strings.Contains(s, "\x00") {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("string contains null byte"),
 			"ConfigValidator", "validateStringContent", "null byte check")
 	}
@@ -146,7 +146,7 @@ func (v *ConfigValidator) validateStringContent(s string) error {
 	// Check for control characters (except common ones like \n, \r, \t)
 	for _, r := range s {
 		if r < 0x20 && r != '\n' && r != '\r' && r != '\t' {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("string contains control character: 0x%02x", r),
 				"ConfigValidator", "validateStringContent", "control character check")
 		}
@@ -167,7 +167,7 @@ func ValidateFactoryConfig(rawConfig json.RawMessage) error {
 func SafeUnmarshal(rawConfig json.RawMessage, target any) error {
 	// First validate the raw JSON
 	if err := ValidateFactoryConfig(rawConfig); err != nil {
-		return errors.Wrap(err, "ConfigValidator", "SafeUnmarshal", "config validation")
+		return errs.Wrap(err, "ConfigValidator", "SafeUnmarshal", "config validation")
 	}
 
 	// Empty config is valid - target will have defaults
@@ -178,20 +178,20 @@ func SafeUnmarshal(rawConfig json.RawMessage, target any) error {
 	// Ensure target is a pointer to a struct
 	targetType := reflect.TypeOf(target)
 	if targetType.Kind() != reflect.Ptr {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("target must be a pointer, got %T", target),
 			"ConfigValidator", "SafeUnmarshal", "target type check")
 	}
 
 	// Unmarshal config - ignores unknown fields (Go's default behavior)
 	if err := json.Unmarshal(rawConfig, target); err != nil {
-		return errors.WrapInvalid(err, "ConfigValidator", "SafeUnmarshal", "JSON unmarshaling")
+		return errs.WrapInvalid(err, "ConfigValidator", "SafeUnmarshal", "JSON unmarshaling")
 	}
 
 	// Perform struct validation if target implements Validatable
 	if validatable, ok := target.(Validatable); ok {
 		if err := validatable.Validate(); err != nil {
-			return errors.Wrap(err, "ConfigValidator", "SafeUnmarshal", "struct validation")
+			return errs.Wrap(err, "ConfigValidator", "SafeUnmarshal", "struct validation")
 		}
 	}
 
@@ -215,14 +215,14 @@ func ValidateNetworkConfig(port int, bindAddr string) error {
 		// Check for valid IP address format
 		parts := strings.Split(bindAddr, ".")
 		if len(parts) != 4 {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("invalid bind address format: %s", bindAddr),
 				"ConfigValidator", "ValidateNetworkConfig", "address format check")
 		}
 		for _, part := range parts {
 			// Simple validation - could be enhanced
 			if len(part) == 0 || len(part) > 3 {
-				return errors.WrapInvalid(
+				return errs.WrapInvalid(
 					fmt.Errorf("invalid bind address segment: %s", part),
 					"ConfigValidator", "ValidateNetworkConfig", "address segment check")
 			}

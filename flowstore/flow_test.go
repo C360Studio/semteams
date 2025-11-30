@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // TestFlowValidation tests the Flow.Validate() method
@@ -326,7 +326,7 @@ func TestFlowValidation(t *testing.T) {
 
 				// Check error type classification
 				if tt.errorType == "invalid" {
-					if !errors.IsInvalid(err) {
+					if !errs.IsInvalid(err) {
 						t.Errorf("Flow.Validate() error should be Invalid, got: %v", err)
 					}
 				}
@@ -419,7 +419,7 @@ func TestFlowNodeValidation(t *testing.T) {
 			if err == nil {
 				t.Errorf("Flow.Validate() should fail for node with %s", tt.name)
 			}
-			if err != nil && !errors.IsInvalid(err) {
+			if err != nil && !errs.IsInvalid(err) {
 				t.Errorf("Flow.Validate() should return Invalid error, got: %v", err)
 			}
 		})
@@ -534,7 +534,7 @@ func TestFlowConnectionValidation(t *testing.T) {
 				if err == nil {
 					t.Errorf("Flow.Validate() expected error for %s", tt.name)
 				}
-				if err != nil && !errors.IsInvalid(err) {
+				if err != nil && !errs.IsInvalid(err) {
 					t.Errorf("Flow.Validate() should return Invalid error, got: %v", err)
 				}
 			} else {

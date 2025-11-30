@@ -9,7 +9,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Worker processes pending embedding requests asynchronously
@@ -80,7 +80,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	watcher, err := w.indexBucket.WatchAll(w.ctx)
 	if err != nil {
 		w.cancel()
-		return errors.WrapTransient(err, "Worker", "Start", "failed to create KV watcher")
+		return errs.WrapTransient(err, "Worker", "Start", "failed to create KV watcher")
 	}
 	w.watcher = watcher
 

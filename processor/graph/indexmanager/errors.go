@@ -4,8 +4,8 @@ import (
 	stderrors "errors"
 	"fmt"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Local error types specific to index manager
@@ -29,12 +29,12 @@ var (
 	ErrInvalidTimeRange = fmt.Errorf("invalid time range")
 )
 
-// All wrapper functions removed - use direct errors.Wrap* calls instead
+// All wrapper functions removed - use direct errs.Wrap* calls instead
 // This ensures consistency across all managers and reduces code bloat
 
 // IsRetryable checks if an error is retryable
 func IsRetryable(err error) bool {
-	return errors.IsTransient(err) ||
+	return errs.IsTransient(err) ||
 		IsWatchError(err) ||
 		IsProcessingError(err)
 }
@@ -66,7 +66,7 @@ func IsQueryError(err error) bool {
 // IsConfigError checks if an error is related to configuration
 func IsConfigError(err error) bool {
 	return stderrors.Is(err, ErrIndexDisabled) ||
-		errors.IsInvalid(err)
+		errs.IsInvalid(err)
 }
 
 // IsLifecycleError checks if an error is related to service lifecycle
@@ -83,7 +83,7 @@ func GetErrorSeverity(err error) string {
 	}
 
 	// Fatal errors that require service restart
-	if errors.IsFatal(err) {
+	if errs.IsFatal(err) {
 		return "fatal"
 	}
 

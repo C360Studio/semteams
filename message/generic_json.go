@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // init registers the GenericJSON payload type with the global PayloadRegistry.
@@ -85,7 +85,7 @@ func (g *GenericJSONPayload) Schema() Type {
 // Ensures the data map is not nil.
 func (g *GenericJSONPayload) Validate() error {
 	if g.Data == nil {
-		return errors.WrapInvalid(errors.ErrInvalidData, "GenericJSONPayload", "Validate", "data cannot be nil")
+		return errs.WrapInvalid(errs.ErrInvalidData, "GenericJSONPayload", "Validate", "data cannot be nil")
 	}
 	return nil
 }

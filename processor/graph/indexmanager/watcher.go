@@ -10,8 +10,8 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // KVWatcher manages KV watching for ENTITY_STATES changes
@@ -88,7 +88,7 @@ func (w *KVWatcher) Start(ctx context.Context) error {
 	// Start the watcher
 	if err := w.startWatcher(); err != nil {
 		w.cancel()
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			err,
 			"IndexManager",
 			"Start",
@@ -178,7 +178,7 @@ func (w *KVWatcher) startWatcher() error {
 	// Watch all changes in the ENTITY_STATES bucket
 	watcher, err := w.bucket.WatchAll(w.ctx)
 	if err != nil {
-		return errors.WrapFatal(err, "IndexManager", "startWatcher", "KV watcher creation failed")
+		return errs.WrapFatal(err, "IndexManager", "startWatcher", "KV watcher creation failed")
 	}
 
 	w.watcher = watcher
@@ -199,7 +199,7 @@ func (w *KVWatcher) consumeWatchUpdates() {
 		if r := recover(); r != nil {
 			w.logger.Error("KV watcher panic recovered", "panic", r)
 			w.metrics.RecordEventFailed(
-				errors.WrapFatal(fmt.Errorf("panic: %v", r), "IndexManager", "runWatcher", "KV watcher panic"),
+				errs.WrapFatal(fmt.Errorf("panic: %v", r), "IndexManager", "runWatcher", "KV watcher panic"),
 			)
 			if w.promMetrics != nil {
 				w.promMetrics.watchEventsFailed.Inc()
@@ -398,8 +398,8 @@ func (w *KVWatcher) GetStatus() map[string]interface{} {
 // ValidateEntityState validates that the entity state is properly formatted
 func (w *KVWatcher) ValidateEntityState(data []byte) (*gtypes.EntityState, error) {
 	if len(data) == 0 {
-		return nil, errors.WrapInvalid(
-			errors.ErrInvalidData,
+		return nil, errs.WrapInvalid(
+			errs.ErrInvalidData,
 			"IndexManager",
 			"parseEntityState",
 			"empty entity state data",
@@ -408,13 +408,13 @@ func (w *KVWatcher) ValidateEntityState(data []byte) (*gtypes.EntityState, error
 
 	var state gtypes.EntityState
 	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, errors.WrapInvalid(err, "IndexManager", "parseEntityState", "entity state JSON unmarshal failed")
+		return nil, errs.WrapInvalid(err, "IndexManager", "parseEntityState", "entity state JSON unmarshal failed")
 	}
 
 	// Basic validation
 	if state.ID == "" {
-		return nil, errors.WrapInvalid(
-			errors.ErrInvalidData,
+		return nil, errs.WrapInvalid(
+			errs.ErrInvalidData,
 			"IndexManager",
 			"parseEntityState",
 			"entity state missing ID",

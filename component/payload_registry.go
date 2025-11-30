@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // PayloadFactory creates a payload instance for a specific message type.
@@ -53,8 +53,8 @@ func NewPayloadRegistry() *PayloadRegistry {
 // Returns an error if validation fails or the type is already registered.
 func (pr *PayloadRegistry) RegisterPayload(registration *PayloadRegistration) error {
 	if registration == nil {
-		return errors.WrapInvalid(
-			errors.ErrInvalidConfig,
+		return errs.WrapInvalid(
+			errs.ErrInvalidConfig,
 			"PayloadRegistry",
 			"RegisterPayload",
 			"registration validation",
@@ -62,8 +62,8 @@ func (pr *PayloadRegistry) RegisterPayload(registration *PayloadRegistration) er
 	}
 
 	if registration.Factory == nil {
-		return errors.WrapInvalid(
-			errors.ErrInvalidConfig,
+		return errs.WrapInvalid(
+			errs.ErrInvalidConfig,
 			"PayloadRegistry",
 			"RegisterPayload",
 			"factory function validation",
@@ -71,15 +71,15 @@ func (pr *PayloadRegistry) RegisterPayload(registration *PayloadRegistration) er
 	}
 
 	if registration.Domain == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "PayloadRegistry", "RegisterPayload", "domain validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "PayloadRegistry", "RegisterPayload", "domain validation")
 	}
 
 	if registration.Category == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "PayloadRegistry", "RegisterPayload", "category validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "PayloadRegistry", "RegisterPayload", "category validation")
 	}
 
 	if registration.Version == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "PayloadRegistry", "RegisterPayload", "version validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "PayloadRegistry", "RegisterPayload", "version validation")
 	}
 
 	msgType := registration.MessageType()
@@ -88,7 +88,7 @@ func (pr *PayloadRegistry) RegisterPayload(registration *PayloadRegistration) er
 	defer pr.mu.Unlock()
 
 	if _, exists := pr.registrations[msgType]; exists {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("payload type '%s' is already registered", msgType),
 			"PayloadRegistry",
 			"RegisterPayload",

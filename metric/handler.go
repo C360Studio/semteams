@@ -7,7 +7,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/security"
 	"github.com/c360/semstreams/pkg/tlsutil"
 )
@@ -46,14 +46,14 @@ func (s *Server) Start() error {
 
 	// Check if server is already running
 	if s.server != nil {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("server already running"),
 			"Server", "Start", "cannot start server that is already running")
 	}
 
 	// Validate that we have a registry
 	if s.registry == nil {
-		return errors.WrapFatal(
+		return errs.WrapFatal(
 			fmt.Errorf("nil registry"),
 			"Server", "Start", "metrics registry not provided")
 	}
@@ -100,7 +100,7 @@ func (s *Server) Start() error {
 	if s.security.TLS.Server.Enabled {
 		tlsConfig, err := tlsutil.LoadServerTLSConfig(s.security.TLS.Server)
 		if err != nil {
-			return errors.WrapFatal(err, "Server", "Start", "load TLS config")
+			return errs.WrapFatal(err, "Server", "Start", "load TLS config")
 		}
 		s.server.TLSConfig = tlsConfig
 	}
@@ -114,7 +114,7 @@ func (s *Server) Start() error {
 	}
 
 	if err != nil {
-		return errors.WrapFatal(err, "Server", "Start",
+		return errs.WrapFatal(err, "Server", "Start",
 			fmt.Sprintf("failed to start server on port %d", s.port))
 	}
 
@@ -130,7 +130,7 @@ func (s *Server) Stop() error {
 		err := s.server.Close()
 		s.server = nil // reset server field to allow restart
 		if err != nil {
-			return errors.WrapTransient(err, "Server", "Stop",
+			return errs.WrapTransient(err, "Server", "Stop",
 				"failed to stop HTTP server")
 		}
 	}

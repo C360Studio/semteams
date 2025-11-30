@@ -8,8 +8,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -60,23 +60,23 @@ type EnhancementWorkerConfig struct {
 // NewEnhancementWorker creates a new enhancement worker
 func NewEnhancementWorker(config *EnhancementWorkerConfig) (*EnhancementWorker, error) {
 	if config.LLMSummarizer == nil {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "EnhancementWorker",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "EnhancementWorker",
 			"New", "LLM summarizer is required")
 	}
 	if config.Storage == nil {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "EnhancementWorker",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "EnhancementWorker",
 			"New", "storage is required")
 	}
 	if config.GraphProvider == nil {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "EnhancementWorker",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "EnhancementWorker",
 			"New", "graph provider is required")
 	}
 	if config.Querier == nil {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "EnhancementWorker",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "EnhancementWorker",
 			"New", "querier is required")
 	}
 	if config.CommunityBucket == nil {
-		return nil, errors.WrapInvalid(errors.ErrMissingConfig, "EnhancementWorker",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "EnhancementWorker",
 			"New", "community bucket is required")
 	}
 
@@ -118,7 +118,7 @@ func (w *EnhancementWorker) Start(ctx context.Context) error {
 	watcher, err := w.communityBucket.WatchAll(w.ctx)
 	if err != nil {
 		w.cancel()
-		return errors.WrapTransient(err, "EnhancementWorker", "Start", "failed to create KV watcher")
+		return errs.WrapTransient(err, "EnhancementWorker", "Start", "failed to create KV watcher")
 	}
 	w.watcher = watcher
 
@@ -248,7 +248,7 @@ func (w *EnhancementWorker) markFailed(communityID, _ string) {
 func (w *EnhancementWorker) fetchEntities(ctx context.Context, entityIDs []string) ([]*gtypes.EntityState, error) {
 	entities, err := w.querier.GetEntities(ctx, entityIDs)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "EnhancementWorker",
+		return nil, errs.WrapTransient(err, "EnhancementWorker",
 			"fetchEntities", "failed to fetch entities from QueryManager")
 	}
 	return entities, nil

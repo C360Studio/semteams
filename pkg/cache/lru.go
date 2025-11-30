@@ -4,7 +4,7 @@ import (
 	"container/list"
 	"sync"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // lruEntry represents an entry in the LRU cache.
@@ -38,7 +38,7 @@ func newLRUCache[V any](maxSize int, opts *cacheOptions[V]) (*lruCache[V], error
 		metrics, err = newCacheMetrics(opts.metricsReg, opts.metricsPrefix)
 		if err != nil {
 			// Return classified error instead of silently ignoring
-			return nil, errors.WrapTransient(err, "cache", "newLRUCache", "metrics registration")
+			return nil, errs.WrapTransient(err, "cache", "newLRUCache", "metrics registration")
 		}
 	}
 

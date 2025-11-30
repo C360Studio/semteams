@@ -3,8 +3,8 @@ package datamanager
 import (
 	"context"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Batch Operations
@@ -19,7 +19,7 @@ func (m *Manager) BatchWrite(ctx context.Context, writes []EntityWrite) error {
 				if write.Callback != nil {
 					write.Callback(err)
 				}
-				return errors.Wrap(err, "DataManager", "BatchWrite", "buffer write")
+				return errs.Wrap(err, "DataManager", "BatchWrite", "buffer write")
 			}
 		}
 		return nil
@@ -43,7 +43,7 @@ func (m *Manager) BatchWrite(ctx context.Context, writes []EntityWrite) error {
 				err = m.deleteEntityDirect(ctx, write.Entity.ID)
 			}
 		default:
-			err = errors.WrapInvalid(nil, "DataManager", "BatchWrite", "invalid operation")
+			err = errs.WrapInvalid(nil, "DataManager", "BatchWrite", "invalid operation")
 		}
 
 		if write.Callback != nil {
@@ -65,10 +65,10 @@ func (m *Manager) BatchGet(ctx context.Context, ids []string) ([]*gtypes.EntityS
 		entity, err := m.GetEntity(ctx, id)
 		if err != nil {
 			// Skip not found entities
-			if errors.IsInvalid(err) {
+			if errs.IsInvalid(err) {
 				continue
 			}
-			return nil, errors.Wrap(err, "DataManager", "BatchGet", "get entity")
+			return nil, errs.Wrap(err, "DataManager", "BatchGet", "get entity")
 		}
 		entities = append(entities, entity)
 	}
@@ -80,7 +80,7 @@ func (m *Manager) List(ctx context.Context, _ string) ([]string, error) {
 
 	keys, err := m.kvBucket.Keys(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "DataManager", "List", "list keys")
+		return nil, errs.Wrap(err, "DataManager", "List", "list keys")
 	}
 
 	// TODO: Add pattern matching if needed

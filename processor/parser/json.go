@@ -3,7 +3,7 @@ package parser
 import (
 	"encoding/json"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // JSONParser handles JSON format data
@@ -22,7 +22,7 @@ func (p *JSONParser) Parse(data []byte) (map[string]any, error) {
 
 	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, errors.WrapInvalid(err, "JSONParser", "Parse", "json parsing failed")
+		return nil, errs.WrapInvalid(err, "JSONParser", "Parse", "json parsing failed")
 	}
 
 	return result, nil
@@ -41,7 +41,7 @@ func (p *JSONParser) Validate(data []byte) error {
 
 	var temp any
 	if err := json.Unmarshal(data, &temp); err != nil {
-		return errors.WrapInvalid(err, "JSONParser", "Validate", "invalid json format")
+		return errs.WrapInvalid(err, "JSONParser", "Validate", "invalid json format")
 	}
 
 	return nil

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // TestPredicateIndexRealWorld tests the predicate indexing with real scenarios
@@ -110,7 +110,7 @@ func TestPredicateIndexRealWorld(t *testing.T) {
 
 		// Should return context cancellation error (transient)
 		assert.Error(t, err)
-		assert.True(t, errors.IsTransient(err), "Context cancellation errors should be transient")
+		assert.True(t, errs.IsTransient(err), "Context cancellation errors should be transient")
 
 		mockBucket.AssertExpectations(t)
 	})
@@ -138,7 +138,7 @@ func TestPredicateIndexRealWorld(t *testing.T) {
 
 		// Should return NATS invalid key error (invalid data)
 		assert.Error(t, err)
-		assert.True(t, errors.IsInvalid(err), "Invalid key errors should be classified as invalid data")
+		assert.True(t, errs.IsInvalid(err), "Invalid key errors should be classified as invalid data")
 
 		mockBucket.AssertExpectations(t)
 	})
@@ -200,7 +200,7 @@ func TestPredicateIndexEdgeCases(t *testing.T) {
 			if tc.expectError {
 				assert.Error(t, err)
 				// Edge case errors (like key too long) should be invalid data
-				assert.True(t, errors.IsInvalid(err), "Edge case errors should be invalid data errors")
+				assert.True(t, errs.IsInvalid(err), "Edge case errors should be invalid data errors")
 			} else {
 				assert.NoError(t, err)
 			}

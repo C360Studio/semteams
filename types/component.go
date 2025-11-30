@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // ComponentType represents the category of a component
@@ -33,16 +33,16 @@ type ComponentConfig struct {
 // Validate ensures the component configuration is valid
 func (c ComponentConfig) Validate() error {
 	if c.Type == "" {
-		return errors.WrapInvalid(
-			errors.ErrMissingConfig,
+		return errs.WrapInvalid(
+			errs.ErrMissingConfig,
 			"ComponentConfig",
 			"Validate",
 			"component type cannot be empty",
 		)
 	}
 	if c.Name == "" {
-		return errors.WrapInvalid(
-			errors.ErrMissingConfig,
+		return errs.WrapInvalid(
+			errs.ErrMissingConfig,
 			"ComponentConfig",
 			"Validate",
 			"component factory name cannot be empty",
@@ -53,7 +53,7 @@ func (c ComponentConfig) Validate() error {
 	case ComponentTypeInput, ComponentTypeProcessor, ComponentTypeOutput, ComponentTypeStorage, ComponentTypeGateway:
 		return nil
 	default:
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "ComponentConfig", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "ComponentConfig", "Validate",
 			fmt.Sprintf("invalid component type: %s", c.Type))
 	}
 }

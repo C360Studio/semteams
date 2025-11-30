@@ -6,7 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Register registers the rule processor component with the given registry
@@ -58,7 +58,7 @@ func convertDefinitionToPort(portDef component.PortDefinition, direction compone
 func CreateRuleProcessor(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	// Validate required dependencies
 	if deps.NATSClient == nil {
-		return nil, errors.WrapInvalid(fmt.Errorf("NATS client is required"),
+		return nil, errs.WrapInvalid(fmt.Errorf("NATS client is required"),
 			"rule-processor-factory", "create", "NATS client validation")
 	}
 
@@ -68,7 +68,7 @@ func CreateRuleProcessor(rawConfig json.RawMessage, deps component.Dependencies)
 		// Parse user config
 		var userConfig Config
 		if err := json.Unmarshal(rawConfig, &userConfig); err != nil {
-			return nil, errors.WrapInvalid(err, "rule-processor-factory", "create", "parse config")
+			return nil, errs.WrapInvalid(err, "rule-processor-factory", "create", "parse config")
 		}
 
 		// Apply user overrides

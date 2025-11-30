@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // hybridEntry represents an entry in the Hybrid cache.
@@ -57,7 +57,7 @@ func newHybridCache[V any](
 		metrics, err = newCacheMetrics(opts.metricsReg, opts.metricsPrefix)
 		if err != nil {
 			// Return classified error instead of silently ignoring
-			return nil, errors.WrapTransient(err, "cache", "newHybridCache", "metrics registration")
+			return nil, errs.WrapTransient(err, "cache", "newHybridCache", "metrics registration")
 		}
 	}
 

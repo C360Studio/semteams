@@ -15,9 +15,9 @@ import (
 	"github.com/c360/semstreams/componentregistry"
 	"github.com/c360/semstreams/config"
 	flowengine "github.com/c360/semstreams/engine"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 type EngineIntegrationSuite struct {
@@ -132,7 +132,7 @@ func (s *EngineIntegrationSuite) TestDeployFlow() {
 func (s *EngineIntegrationSuite) TestDeployNonExistentFlow() {
 	err := s.engine.Deploy(s.ctx, "non-existent-flow")
 	s.Error(err, "Deploying non-existent flow should error")
-	s.True(errors.IsTransient(err), "Error should be transient (flow not found)")
+	s.True(errs.IsTransient(err), "Error should be transient (flow not found)")
 }
 
 // TestStartFlow tests starting a deployed flow
@@ -193,7 +193,7 @@ func (s *EngineIntegrationSuite) TestStartNotDeployedFlow() {
 	// Try to start it
 	err = s.engine.Start(s.ctx, "not-deployed-flow")
 	s.Error(err, "Starting non-deployed flow should fail")
-	s.True(errors.IsInvalid(err), "Error should be invalid (wrong state)")
+	s.True(errs.IsInvalid(err), "Error should be invalid (wrong state)")
 }
 
 // TestStopFlow tests stopping a running flow
@@ -268,7 +268,7 @@ func (s *EngineIntegrationSuite) TestStopNotRunningFlow() {
 	// Try to stop it
 	err = s.engine.Stop(s.ctx, "deployed-not-running")
 	s.Error(err, "Stopping non-running flow should fail")
-	s.True(errors.IsInvalid(err), "Error should be invalid (wrong state)")
+	s.True(errs.IsInvalid(err), "Error should be invalid (wrong state)")
 }
 
 // TestUndeployFlow tests undeploying a stopped flow
@@ -342,7 +342,7 @@ func (s *EngineIntegrationSuite) TestUndeployRunningFlow() {
 	// Try to undeploy while running
 	err = s.engine.Undeploy(s.ctx, "running-undeploy")
 	s.Error(err, "Undeploying running flow should fail")
-	s.True(errors.IsInvalid(err), "Error should be invalid (must stop first)")
+	s.True(errs.IsInvalid(err), "Error should be invalid (must stop first)")
 }
 
 // TestFullLifecycle tests the complete Deploy → Start → Stop → Undeploy workflow with core components

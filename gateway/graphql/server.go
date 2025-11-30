@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/99designs/gqlgen/graphql/playground"
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Server manages the HTTP server for GraphQL endpoint
@@ -32,11 +32,11 @@ type Server struct {
 // NewServer creates a new GraphQL HTTP server
 func NewServer(config Config, resolver *BaseResolver, logger *slog.Logger) (*Server, error) {
 	if err := config.Validate(); err != nil {
-		return nil, errors.WrapInvalid(err, "Server", "NewServer", "config validation")
+		return nil, errs.WrapInvalid(err, "Server", "NewServer", "config validation")
 	}
 
 	if resolver == nil {
-		return nil, errors.WrapFatal(fmt.Errorf("resolver is nil"), "Server", "NewServer",
+		return nil, errs.WrapFatal(fmt.Errorf("resolver is nil"), "Server", "NewServer",
 			"resolver is required")
 	}
 
@@ -100,7 +100,7 @@ func (s *Server) Start(ctx context.Context, ready chan<- struct{}) error {
 	s.mu.Lock()
 	if s.running {
 		s.mu.Unlock()
-		return errors.WrapFatal(errors.ErrAlreadyStarted, "Server", "Start", "server already running")
+		return errs.WrapFatal(errs.ErrAlreadyStarted, "Server", "Start", "server already running")
 	}
 	s.running = true
 	server := s.httpServer
@@ -146,7 +146,7 @@ func (s *Server) Start(ctx context.Context, ready chan<- struct{}) error {
 		s.mu.Lock()
 		s.running = false
 		s.mu.Unlock()
-		return errors.WrapFatal(err, "Server", "Start", "HTTP server failed")
+		return errs.WrapFatal(err, "Server", "Start", "HTTP server failed")
 	}
 }
 
@@ -174,7 +174,7 @@ func (s *Server) Stop(timeout time.Duration) error {
 	// Shutdown HTTP server gracefully
 	if err := server.Shutdown(ctx); err != nil {
 		s.logger.Error("Failed to shutdown server gracefully", "error", err)
-		return errors.WrapTransient(err, "Server", "Stop", "graceful shutdown failed")
+		return errs.WrapTransient(err, "Server", "Stop", "graceful shutdown failed")
 	}
 
 	s.mu.Lock()

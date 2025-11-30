@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // CreateInput is the factory function for creating WebSocket input components
@@ -18,7 +18,7 @@ func CreateInput(rawConfig json.RawMessage, deps component.Dependencies) (compon
 	if len(rawConfig) > 0 {
 		var userConfig Config
 		if err := component.SafeUnmarshal(rawConfig, &userConfig); err != nil {
-			return nil, errors.Wrap(err, "websocket-input-factory", "create", "secure config parsing")
+			return nil, errs.Wrap(err, "websocket-input-factory", "create", "secure config parsing")
 		}
 
 		// Apply user overrides (already validated by SafeUnmarshal)
@@ -27,7 +27,7 @@ func CreateInput(rawConfig json.RawMessage, deps component.Dependencies) (compon
 
 	// Validate required dependencies
 	if deps.NATSClient == nil {
-		return nil, errors.WrapInvalid(fmt.Errorf("NATS client is required"),
+		return nil, errs.WrapInvalid(fmt.Errorf("NATS client is required"),
 			"websocket-input-factory", "create", "dependency validation")
 	}
 

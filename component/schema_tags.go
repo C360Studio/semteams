@@ -52,8 +52,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // SchemaDirectives represents parsed schema tag directives
@@ -141,7 +141,7 @@ func ParseSchemaTag(tag string) (SchemaDirectives, error) {
 	directives := SchemaDirectives{}
 
 	if tag == "" {
-		return directives, errors.WrapInvalid(
+		return directives, errs.WrapInvalid(
 			fmt.Errorf("empty schema tag"),
 			"SchemaTag", "ParseSchemaTag", "tag validation",
 		)
@@ -172,7 +172,7 @@ func ParseSchemaTag(tag string) (SchemaDirectives, error) {
 
 	// Validate required fields
 	if directives.Type == "" {
-		return directives, errors.WrapInvalid(
+		return directives, errs.WrapInvalid(
 			fmt.Errorf("type directive is required"),
 			"SchemaTag", "ParseSchemaTag", "required field validation",
 		)
@@ -196,7 +196,7 @@ func parseBooleanFlag(flag string, directives *SchemaDirectives) error {
 	case "required":
 		directives.Required = true
 	default:
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("unknown boolean flag: %s", flag),
 			"SchemaTag", "parseBooleanFlag", "flag parsing",
 		)
@@ -208,7 +208,7 @@ func parseBooleanFlag(flag string, directives *SchemaDirectives) error {
 func parseKeyValueDirective(part string, directives *SchemaDirectives) error {
 	kv := strings.SplitN(part, ":", 2)
 	if len(kv) != 2 {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("invalid directive format: %s", part),
 			"SchemaTag", "parseKeyValueDirective", "directive parsing",
 		)
@@ -218,7 +218,7 @@ func parseKeyValueDirective(part string, directives *SchemaDirectives) error {
 	value := strings.TrimSpace(kv[1])
 
 	if value == "" {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("empty value for directive: %s", key),
 			"SchemaTag", "parseKeyValueDirective", "value validation",
 		)
@@ -227,7 +227,7 @@ func parseKeyValueDirective(part string, directives *SchemaDirectives) error {
 	switch key {
 	case "type":
 		if !isValidType(value) {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("invalid type: %s", value),
 				"SchemaTag", "parseKeyValueDirective", "type validation",
 			)
@@ -239,7 +239,7 @@ func parseKeyValueDirective(part string, directives *SchemaDirectives) error {
 
 	case "category":
 		if value != "basic" && value != "advanced" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("invalid category: %s (must be 'basic' or 'advanced')", value),
 				"SchemaTag", "parseKeyValueDirective", "category validation",
 			)
@@ -253,7 +253,7 @@ func parseKeyValueDirective(part string, directives *SchemaDirectives) error {
 	case "min":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("invalid min value: %s", value),
 				"SchemaTag", "parseKeyValueDirective", "min parsing",
 			)
@@ -263,7 +263,7 @@ func parseKeyValueDirective(part string, directives *SchemaDirectives) error {
 	case "max":
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("invalid max value: %s", value),
 				"SchemaTag", "parseKeyValueDirective", "max parsing",
 			)
@@ -288,7 +288,7 @@ func parseKeyValueDirective(part string, directives *SchemaDirectives) error {
 		directives.Format = value
 
 	default:
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("unknown directive: %s", key),
 			"SchemaTag", "parseKeyValueDirective", "directive validation",
 		)

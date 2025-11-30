@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/acme"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/security"
 	"github.com/c360/semstreams/pkg/tlsutil"
 )
@@ -36,21 +36,21 @@ type Config struct {
 // Validate checks the configuration for errors
 func (c *Config) Validate() error {
 	if c.URL == "" {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate", "url is required")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "url is required")
 	}
 
 	// Validate URL format
 	if _, err := url.Parse(c.URL); err != nil {
-		return errors.WrapInvalid(err, "Config", "Validate", "invalid URL format")
+		return errs.WrapInvalid(err, "Config", "Validate", "invalid URL format")
 	}
 
 	if c.Timeout < 0 || c.Timeout > 300 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"timeout must be between 0 and 300 seconds")
 	}
 
 	if c.RetryCount < 0 || c.RetryCount > 10 {
-		return errors.WrapInvalid(errors.ErrInvalidConfig, "Config", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate",
 			"retry_count must be between 0 and 10")
 	}
 
@@ -118,7 +118,7 @@ type Output struct {
 func NewOutput(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	var config Config
 	if err := component.SafeUnmarshal(rawConfig, &config); err != nil {
-		return nil, errors.WrapInvalid(err, "Output", "NewOutput", "config unmarshal")
+		return nil, errs.WrapInvalid(err, "Output", "NewOutput", "config unmarshal")
 	}
 
 	if config.Ports == nil {
@@ -134,12 +134,12 @@ func NewOutput(rawConfig json.RawMessage, deps component.Dependencies) (componen
 	}
 
 	if len(inputSubjects) == 0 {
-		return nil, errors.WrapInvalid(errors.ErrInvalidConfig, "Output", "NewOutput", "no input subjects configured")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "NewOutput", "no input subjects configured")
 	}
 
 	// Validate URL
 	if config.URL == "" {
-		return nil, errors.WrapInvalid(errors.ErrInvalidConfig, "Output", "NewOutput", "URL is required")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "NewOutput", "URL is required")
 	}
 
 	timeout := time.Duration(config.Timeout) * time.Second
@@ -175,7 +175,7 @@ func NewOutput(rawConfig json.RawMessage, deps component.Dependencies) (componen
 				deps.Security.TLS.Client,
 			)
 			if err != nil {
-				return nil, errors.WrapFatal(err, "httppost-output", "NewOutput",
+				return nil, errs.WrapFatal(err, "httppost-output", "NewOutput",
 					"load TLS config with ACME")
 			}
 		} else {
@@ -185,7 +185,7 @@ func NewOutput(rawConfig json.RawMessage, deps component.Dependencies) (componen
 				deps.Security.TLS.Client.MTLS,
 			)
 			if err != nil {
-				return nil, errors.WrapFatal(err, "httppost-output", "NewOutput",
+				return nil, errs.WrapFatal(err, "httppost-output", "NewOutput",
 					"load TLS config with mTLS")
 			}
 		}
@@ -224,17 +224,17 @@ func (h *Output) Start(ctx context.Context) error {
 	defer h.lifecycleMu.Unlock()
 
 	if h.running {
-		return errors.WrapFatal(errors.ErrAlreadyStarted, "Output", "Start", "check running state")
+		return errs.WrapFatal(errs.ErrAlreadyStarted, "Output", "Start", "check running state")
 	}
 
 	if h.natsClient == nil {
-		return errors.WrapFatal(errors.ErrMissingConfig, "Output", "Start", "NATS client required")
+		return errs.WrapFatal(errs.ErrMissingConfig, "Output", "Start", "NATS client required")
 	}
 
 	// Subscribe to input subjects
 	for _, subject := range h.subjects {
 		if err := h.natsClient.Subscribe(ctx, subject, h.handleMessage); err != nil {
-			return errors.WrapTransient(err, "Output", "Start", fmt.Sprintf("subscribe to %s", subject))
+			return errs.WrapTransient(err, "Output", "Start", fmt.Sprintf("subscribe to %s", subject))
 		}
 	}
 
@@ -269,7 +269,7 @@ func (h *Output) Stop(timeout time.Duration) error {
 	case <-waitCh:
 		// Clean shutdown
 	case <-time.After(timeout):
-		return errors.WrapTransient(fmt.Errorf("shutdown timeout after %v", timeout), "Output", "Stop", "shutdown")
+		return errs.WrapTransient(fmt.Errorf("shutdown timeout after %v", timeout), "Output", "Stop", "shutdown")
 	}
 
 	// Stop ACME renewal loop if active

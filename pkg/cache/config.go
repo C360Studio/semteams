@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Strategy defines the eviction strategy for the cache.
@@ -70,38 +70,38 @@ func (c Config) Validate() error {
 		// No additional validation needed
 	case StrategyLRU:
 		if c.MaxSize <= 0 {
-			return errors.WrapInvalid(errors.ErrInvalidData, "cache", "Validate",
+			return errs.WrapInvalid(errs.ErrInvalidData, "cache", "Validate",
 				fmt.Sprintf("max_size must be positive for LRU cache, got %d", c.MaxSize))
 		}
 	case StrategyTTL:
 		if c.TTL <= 0 {
-			return errors.WrapInvalid(errors.ErrInvalidData, "cache", "Validate",
+			return errs.WrapInvalid(errs.ErrInvalidData, "cache", "Validate",
 				fmt.Sprintf("ttl must be positive for TTL cache, got %v", c.TTL))
 		}
 		if c.CleanupInterval <= 0 {
-			return errors.WrapInvalid(errors.ErrInvalidData, "cache", "Validate",
+			return errs.WrapInvalid(errs.ErrInvalidData, "cache", "Validate",
 				fmt.Sprintf("cleanup_interval must be positive for TTL cache, got %v", c.CleanupInterval))
 		}
 	case StrategyHybrid:
 		if c.MaxSize <= 0 {
-			return errors.WrapInvalid(errors.ErrInvalidData, "cache", "Validate",
+			return errs.WrapInvalid(errs.ErrInvalidData, "cache", "Validate",
 				fmt.Sprintf("max_size must be positive for Hybrid cache, got %d", c.MaxSize))
 		}
 		if c.TTL <= 0 {
-			return errors.WrapInvalid(errors.ErrInvalidData, "cache", "Validate",
+			return errs.WrapInvalid(errs.ErrInvalidData, "cache", "Validate",
 				fmt.Sprintf("ttl must be positive for Hybrid cache, got %v", c.TTL))
 		}
 		if c.CleanupInterval <= 0 {
-			return errors.WrapInvalid(errors.ErrInvalidData, "cache", "Validate",
+			return errs.WrapInvalid(errs.ErrInvalidData, "cache", "Validate",
 				fmt.Sprintf("cleanup_interval must be positive for Hybrid cache, got %v", c.CleanupInterval))
 		}
 	default:
-		return errors.WrapInvalid(errors.ErrInvalidData, "cache", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidData, "cache", "Validate",
 			fmt.Sprintf("unknown cache strategy: %s", c.Strategy))
 	}
 
 	if c.StatsInterval <= 0 && c.StatsInterval != 0 {
-		return errors.WrapInvalid(errors.ErrInvalidData, "cache", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidData, "cache", "Validate",
 			fmt.Sprintf("stats_interval must be positive when specified, got %v", c.StatsInterval))
 	}
 
@@ -113,7 +113,7 @@ func (c Config) Validate() error {
 // Additional functional options can be passed to configure metrics, callbacks, etc.
 func NewFromConfig[V any](ctx context.Context, config Config, options ...Option[V]) (Cache[V], error) {
 	if err := config.Validate(); err != nil {
-		return nil, errors.WrapInvalid(err, "cache", "NewFromConfig", "config validation failed")
+		return nil, errs.WrapInvalid(err, "cache", "NewFromConfig", "config validation failed")
 	}
 
 	if !config.Enabled {
@@ -140,7 +140,7 @@ func NewFromConfig[V any](ctx context.Context, config Config, options ...Option[
 
 	default:
 		msg := fmt.Sprintf("unsupported cache strategy: %s", config.Strategy)
-		return nil, errors.WrapInvalid(errors.ErrInvalidData, "cache",
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "cache",
 			"NewFromConfig", msg)
 	}
 }

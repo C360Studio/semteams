@@ -16,11 +16,11 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/worker"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
@@ -110,7 +110,7 @@ type ProcessorDeps struct {
 // NewProcessor creates a new graph processor instance
 func NewProcessor(deps ProcessorDeps) (*Processor, error) {
 	if deps.NATSClient == nil {
-		return nil, errors.WrapFatal(errors.ErrNoConnection, "graph processor", "NewProcessor", "NATS client required")
+		return nil, errs.WrapFatal(errs.ErrNoConnection, "graph processor", "NewProcessor", "NATS client required")
 	}
 
 	if deps.Config == nil {
@@ -301,7 +301,7 @@ func (p *Processor) WaitForReady(timeout time.Duration) error {
 		case <-timer.C:
 			status := p.GetReadinessDetails()
 			msg := fmt.Errorf("processor not ready after %v: %s", timeout, status)
-			return errors.WrapFatal(msg, "Processor", "waitReady", "ready timeout exceeded")
+			return errs.WrapFatal(msg, "Processor", "waitReady", "ready timeout exceeded")
 		case <-checkTimer.C:
 			checkTimer.Reset(100 * time.Millisecond)
 		}
@@ -370,7 +370,7 @@ func (p *Processor) DataFlow() component.FlowMetrics {
 func (p *Processor) Initialize() error {
 	// Initialize only in-memory caches
 	if err := p.initializeCaches(); err != nil {
-		return errors.WrapFatal(err, "Processor", "Initialize", "cache initialization failed")
+		return errs.WrapFatal(err, "Processor", "Initialize", "cache initialization failed")
 	}
 
 	// Do NOT initialize engines here - they need KV buckets which require context
@@ -393,7 +393,7 @@ func (p *Processor) Start(ctx context.Context) error {
 	p.logger.Info("Initializing core modules (DataManager, IndexManager, QueryManager)")
 	if err := p.initializeModules(ctx); err != nil {
 		p.logger.Error("Failed to initialize modules", "error", err)
-		return errors.WrapFatal(err, "Processor", "Start", "module initialization failed")
+		return errs.WrapFatal(err, "Processor", "Start", "module initialization failed")
 	}
 	p.logger.Debug("Core modules initialized successfully")
 
@@ -401,7 +401,7 @@ func (p *Processor) Start(ctx context.Context) error {
 	p.logger.Debug("Initializing business services (MessageManager)")
 	if err := p.initializeBusinessServices(); err != nil {
 		p.logger.Error("Failed to initialize business services", "error", err)
-		return errors.WrapFatal(err, "Processor", "Start", "business services initialization failed")
+		return errs.WrapFatal(err, "Processor", "Start", "business services initialization failed")
 	}
 	p.logger.Debug("Business services initialized successfully")
 
@@ -448,7 +448,7 @@ func (p *Processor) setupWorkerPoolAndHandlers(ctx context.Context) error {
 	p.logger.Debug("Setting up NATS mutation handlers")
 	if err := p.setupMutationHandlers(ctx); err != nil {
 		p.logger.Error("Failed to setup mutation handlers", "error", err)
-		return errors.WrapFatal(err, "Processor", "Start", "NATS mutation handlers setup failed")
+		return errs.WrapFatal(err, "Processor", "Start", "NATS mutation handlers setup failed")
 	}
 	p.logger.Debug("NATS mutation handlers setup complete")
 
@@ -456,7 +456,7 @@ func (p *Processor) setupWorkerPoolAndHandlers(ctx context.Context) error {
 	p.logger.Debug("Setting up NATS query handlers")
 	if err := p.setupQueryHandlers(ctx); err != nil {
 		p.logger.Error("Failed to setup query handlers", "error", err)
-		return errors.WrapFatal(err, "Processor", "Start", "NATS query handlers setup failed")
+		return errs.WrapFatal(err, "Processor", "Start", "NATS query handlers setup failed")
 	}
 	p.logger.Debug("NATS query handlers setup complete")
 
@@ -464,7 +464,7 @@ func (p *Processor) setupWorkerPoolAndHandlers(ctx context.Context) error {
 	p.logger.Debug("Starting worker pool")
 	if err := p.workerPool.Start(ctx); err != nil {
 		p.logger.Error("Failed to start worker pool", "error", err)
-		return errors.WrapFatal(err, "Processor", "Start", "worker pool startup failed")
+		return errs.WrapFatal(err, "Processor", "Start", "worker pool startup failed")
 	}
 	p.logger.Debug("Worker pool started successfully")
 
@@ -478,7 +478,7 @@ func (p *Processor) setupNATSSubscriptions(ctx context.Context) error {
 		p.logger.Error("Failed to setup subscriptions", "error", err)
 		// Stop worker pool before returning
 		p.workerPool.Stop(5 * time.Second)
-		return errors.WrapFatal(err, "Processor", "Start", "NATS subscriptions setup failed")
+		return errs.WrapFatal(err, "Processor", "Start", "NATS subscriptions setup failed")
 	}
 	p.logger.Debug("NATS subscriptions setup complete")
 	return nil
@@ -601,13 +601,13 @@ func (p *Processor) initializeCaches() error {
 	var err error
 	p.entityCache, err = cache.NewLRU[*gtypes.EntityState](10000)
 	if err != nil {
-		return errors.WrapTransient(err, "GraphProcessor", "initializeCaches", "entity cache creation")
+		return errs.WrapTransient(err, "GraphProcessor", "initializeCaches", "entity cache creation")
 	}
 
 	// Create alias cache with LRU eviction
 	p.aliasCache, err = cache.NewLRU[string](1000)
 	if err != nil {
-		return errors.WrapTransient(err, "GraphProcessor", "initializeCaches", "alias cache creation")
+		return errs.WrapTransient(err, "GraphProcessor", "initializeCaches", "alias cache creation")
 	}
 
 	return nil
@@ -664,7 +664,7 @@ func (p *Processor) createKVBucket(ctx context.Context, name, description string
 	if err != nil {
 		p.logger.Error("Failed to get KV bucket", "bucket", name, "error", err)
 		errMsg := fmt.Sprintf("%s KV bucket unavailable", name)
-		return nil, errors.WrapFatal(err, "Processor", "createKVBucket", errMsg)
+		return nil, errs.WrapFatal(err, "Processor", "createKVBucket", errMsg)
 	}
 
 	p.logger.Debug("KV bucket retrieved successfully", "bucket", name)
@@ -692,7 +692,7 @@ func (p *Processor) initializeDataManager(kvBucket jetstream.KeyValue) (*dataman
 	dataManager, err := datamanager.NewDataManager(dataDeps)
 	if err != nil {
 		p.logger.Error("Failed to create DataManager", "error", err)
-		return nil, errors.WrapFatal(err, "Processor", "initializeDataManager", "DataManager creation failed")
+		return nil, errs.WrapFatal(err, "Processor", "initializeDataManager", "DataManager creation failed")
 	}
 
 	p.logger.Debug("DataManager created successfully")
@@ -745,7 +745,7 @@ func (p *Processor) initializeIndexManager(buckets map[string]jetstream.KeyValue
 	indexManager, err := indexmanager.NewManager(indexConfig, buckets, p.natsClient, p.metricsRegistry, p.logger)
 	if err != nil {
 		p.logger.Error("Failed to create IndexManager", "error", err)
-		return nil, errors.WrapFatal(err, "Processor", "initializeIndexManager", "IndexManager creation failed")
+		return nil, errs.WrapFatal(err, "Processor", "initializeIndexManager", "IndexManager creation failed")
 	}
 
 	p.logger.Debug("IndexManager created successfully")
@@ -777,7 +777,7 @@ func (p *Processor) initializeQueryManager(
 	queryManager, err := querymanager.NewManager(queryDeps)
 	if err != nil {
 		p.logger.Error("Failed to create QueryManager", "error", err)
-		return nil, errors.WrapFatal(err, "Processor", "initializeQueryManager", "QueryManager creation failed")
+		return nil, errs.WrapFatal(err, "Processor", "initializeQueryManager", "QueryManager creation failed")
 	}
 
 	p.logger.Debug("QueryManager created successfully")
@@ -837,7 +837,7 @@ func (p *Processor) setupSubscriptions(ctx context.Context) error {
 		p.handleMessage(msgCtx, data)
 	})
 	if err != nil {
-		return errors.WrapFatal(err, "Processor", "setupSubscriptions", "NATS subscription failed for "+subject)
+		return errs.WrapFatal(err, "Processor", "setupSubscriptions", "NATS subscription failed for "+subject)
 	}
 
 	return nil
@@ -896,7 +896,7 @@ func (p *Processor) GetEntity(ctx context.Context, id string) (*gtypes.EntitySta
 func (p *Processor) GetEntityByAlias(ctx context.Context, aliasOrID string) (*gtypes.EntityState, error) {
 	// Check if processor is initialized
 	if p.aliasCache == nil || p.entityManager == nil || p.indexManager == nil {
-		return nil, errors.WrapTransient(nil, "Processor", "GetEntityByAlias", "processor not initialized")
+		return nil, errs.WrapTransient(nil, "Processor", "GetEntityByAlias", "processor not initialized")
 	}
 
 	// Try alias cache first
@@ -952,7 +952,7 @@ func Register(registry *component.Registry) error {
 func CreateGraphProcessor(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	var config Config
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, errors.WrapInvalid(err, "Processor", "ConfigFromJSON", "invalid JSON configuration")
+		return nil, errs.WrapInvalid(err, "Processor", "ConfigFromJSON", "invalid JSON configuration")
 	}
 
 	processorDeps := ProcessorDeps{

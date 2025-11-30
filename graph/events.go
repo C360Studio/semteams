@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Event represents a graph mutation request from rules.
@@ -57,23 +57,23 @@ type EventMetadata struct {
 // Returns an error describing any validation failures.
 func (e *Event) Validate() error {
 	if e.Type == "" {
-		return errors.WrapInvalid(errors.ErrInvalidData, "Event", "Validate", "event type is required")
+		return errs.WrapInvalid(errs.ErrInvalidData, "Event", "Validate", "event type is required")
 	}
 
 	if e.EntityID == "" {
-		return errors.WrapInvalid(errors.ErrInvalidData, "Event", "Validate", "entity ID is required")
+		return errs.WrapInvalid(errs.ErrInvalidData, "Event", "Validate", "entity ID is required")
 	}
 
 	// Validate confidence range
 	if e.Confidence < 0.0 || e.Confidence > 1.0 {
-		return errors.WrapInvalid(errors.ErrInvalidData, "Event", "Validate",
+		return errs.WrapInvalid(errs.ErrInvalidData, "Event", "Validate",
 			fmt.Sprintf("confidence must be between 0.0 and 1.0, got %f", e.Confidence))
 	}
 
 	// Validate relationship events have target ID
 	if (e.Type == EventRelationshipCreate || e.Type == EventRelationshipDelete) && e.TargetID == "" {
-		return errors.WrapInvalid(
-			errors.ErrInvalidData,
+		return errs.WrapInvalid(
+			errs.ErrInvalidData,
 			"Event",
 			"Validate",
 			"target ID is required for relationship events",
@@ -82,15 +82,15 @@ func (e *Event) Validate() error {
 
 	// Validate metadata
 	if e.Metadata.RuleName == "" {
-		return errors.WrapInvalid(errors.ErrInvalidData, "Event", "Validate", "rule name is required in metadata")
+		return errs.WrapInvalid(errs.ErrInvalidData, "Event", "Validate", "rule name is required in metadata")
 	}
 
 	if e.Metadata.Timestamp.IsZero() {
-		return errors.WrapInvalid(errors.ErrInvalidData, "Event", "Validate", "timestamp is required in metadata")
+		return errs.WrapInvalid(errs.ErrInvalidData, "Event", "Validate", "timestamp is required in metadata")
 	}
 
 	if e.Metadata.Source == "" {
-		return errors.WrapInvalid(errors.ErrInvalidData, "Event", "Validate", "source is required in metadata")
+		return errs.WrapInvalid(errs.ErrInvalidData, "Event", "Validate", "source is required in metadata")
 	}
 
 	// Set default version if not specified

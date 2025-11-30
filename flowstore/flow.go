@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Flow represents a visual flow definition with metadata and canvas layout
@@ -77,10 +77,10 @@ const (
 func (f *Flow) Validate() error {
 	// Validate flow-level fields
 	if f.ID == "" {
-		return errors.WrapInvalid(fmt.Errorf("flow ID cannot be empty"), "flowstore", "Validate", "validation failed")
+		return errs.WrapInvalid(fmt.Errorf("flow ID cannot be empty"), "flowstore", "Validate", "validation failed")
 	}
 	if f.Name == "" {
-		return errors.WrapInvalid(fmt.Errorf("flow name cannot be empty"), "flowstore", "Validate", "validation failed")
+		return errs.WrapInvalid(fmt.Errorf("flow name cannot be empty"), "flowstore", "Validate", "validation failed")
 	}
 
 	// Validate runtime state
@@ -91,7 +91,7 @@ func (f *Flow) Validate() error {
 		StateError:           true,
 	}
 	if !validStates[f.RuntimeState] {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("invalid runtime state: %s", string(f.RuntimeState)),
 			"flowstore", "Validate", "runtime state validation failed")
 	}
@@ -100,24 +100,24 @@ func (f *Flow) Validate() error {
 	nodeIDs := make(map[string]bool)
 	for i, node := range f.Nodes {
 		if node.ID == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("node at index %d has empty ID", i),
 				"flowstore", "Validate", "node ID validation failed")
 		}
 		if node.Type == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("node '%s' has empty type", node.ID),
 				"flowstore", "Validate", "node type validation failed")
 		}
 		if node.Name == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("node '%s' has empty name", node.ID),
 				"flowstore", "Validate", "node name validation failed")
 		}
 
 		// Check for duplicate node IDs
 		if nodeIDs[node.ID] {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("duplicate node ID: %s", node.ID),
 				"flowstore", "Validate", "duplicate node ID detected")
 		}
@@ -127,29 +127,29 @@ func (f *Flow) Validate() error {
 	// Validate connections
 	for i, conn := range f.Connections {
 		if conn.ID == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("connection at index %d has empty ID", i),
 				"flowstore", "Validate", "connection ID validation failed")
 		}
 		if conn.SourcePort == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("connection '%s' has empty source port", conn.ID),
 				"flowstore", "Validate", "connection source port validation failed")
 		}
 		if conn.TargetPort == "" {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("connection '%s' has empty target port", conn.ID),
 				"flowstore", "Validate", "connection target port validation failed")
 		}
 
 		// Validate node references
 		if !nodeIDs[conn.SourceNodeID] {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("connection '%s' references non-existent source node: %s", conn.ID, conn.SourceNodeID),
 				"flowstore", "Validate", "connection source node validation failed")
 		}
 		if !nodeIDs[conn.TargetNodeID] {
-			return errors.WrapInvalid(
+			return errs.WrapInvalid(
 				fmt.Errorf("connection '%s' references non-existent target node: %s", conn.ID, conn.TargetNodeID),
 				"flowstore", "Validate", "connection target node validation failed")
 		}

@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Config holds configuration for JSON generic processor
@@ -86,7 +86,7 @@ func NewProcessor(
 ) (component.Discoverable, error) {
 	var config Config
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, errors.WrapInvalid(err, "JSONGenericProcessor", "NewJSONGenericProcessor", "config unmarshal")
+		return nil, errs.WrapInvalid(err, "JSONGenericProcessor", "NewJSONGenericProcessor", "config unmarshal")
 	}
 
 	if config.Ports == nil {
@@ -108,8 +108,8 @@ func NewProcessor(
 	}
 
 	if len(inputSubjects) == 0 {
-		return nil, errors.WrapInvalid(
-			errors.ErrInvalidConfig, "JSONGenericProcessor", "NewJSONGenericProcessor",
+		return nil, errs.WrapInvalid(
+			errs.ErrInvalidConfig, "JSONGenericProcessor", "NewJSONGenericProcessor",
 			"no input subjects configured")
 	}
 
@@ -136,11 +136,11 @@ func (p *Processor) Start(ctx context.Context) error {
 	defer p.lifecycleMu.Unlock()
 
 	if p.running {
-		return errors.WrapFatal(errors.ErrAlreadyStarted, "JSONGenericProcessor", "Start", "check running state")
+		return errs.WrapFatal(errs.ErrAlreadyStarted, "JSONGenericProcessor", "Start", "check running state")
 	}
 
 	if p.natsClient == nil {
-		return errors.WrapFatal(errors.ErrMissingConfig, "JSONGenericProcessor", "Start", "NATS client required")
+		return errs.WrapFatal(errs.ErrMissingConfig, "JSONGenericProcessor", "Start", "NATS client required")
 	}
 
 	// Subscribe to input subjects
@@ -154,7 +154,7 @@ func (p *Processor) Start(ctx context.Context) error {
 				"component", p.name,
 				"subject", subject,
 				"error", err)
-			return errors.WrapTransient(err, "JSONGenericProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
+			return errs.WrapTransient(err, "JSONGenericProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
 		}
 
 		p.logger.Debug("Subscribed to NATS subject successfully",
@@ -199,7 +199,7 @@ func (p *Processor) Stop(timeout time.Duration) error {
 	case <-waitCh:
 		// Clean shutdown
 	case <-time.After(timeout):
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			fmt.Errorf("shutdown timeout after %v", timeout),
 			"JSONGenericProcessor", "Stop", "graceful shutdown")
 	}

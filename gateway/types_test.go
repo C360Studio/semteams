@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	pkgerrors "github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/gateway"
+	pkgerrs "github.com/c360/semstreams/pkg/errs"
 )
 
 func TestRouteMapping_Validate(t *testing.T) {
@@ -99,7 +99,7 @@ func TestRouteMapping_Validate(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error but got nil")
 				}
-				if !pkgerrors.IsInvalid(err) {
+				if !pkgerrs.IsInvalid(err) {
 					t.Errorf("expected Invalid error classification, got: %v", err)
 				}
 			} else {
@@ -212,7 +212,7 @@ func TestConfig_Validate(t *testing.T) {
 				if err == nil {
 					t.Fatalf("expected error but got nil")
 				}
-				if !pkgerrors.IsInvalid(err) {
+				if !pkgerrs.IsInvalid(err) {
 					t.Errorf("expected Invalid error classification, got: %v", err)
 				}
 			} else {

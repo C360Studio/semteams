@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/flowstore"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // RuntimeMessage represents a formatted message entry for UI consumption
@@ -63,7 +63,7 @@ func (fs *FlowService) handleRuntimeMessages(w http.ResponseWriter, r *http.Requ
 	// Get flow definition to determine component subjects
 	flow, err := fs.flowStore.Get(ctx, flowID)
 	if err != nil {
-		wrappedErr := errors.WrapTransient(err, "FlowService", "handleRuntimeMessages", "get flow")
+		wrappedErr := errs.WrapTransient(err, "FlowService", "handleRuntimeMessages", "get flow")
 		fs.logger.Error("Failed to get flow for runtime messages",
 			"flow_id", flowID,
 			"error", wrappedErr)
@@ -93,7 +93,7 @@ func (fs *FlowService) handleRuntimeMessages(w http.ResponseWriter, r *http.Requ
 	if !ok {
 		// This is a programming error - service registry has wrong type
 		err := fmt.Errorf("message logger has unexpected type %T", msgLoggerSvc)
-		wrappedErr := errors.WrapFatal(err, "FlowService", "handleRuntimeMessages", "type assertion")
+		wrappedErr := errs.WrapFatal(err, "FlowService", "handleRuntimeMessages", "type assertion")
 		fs.logger.Error("Message logger service has unexpected type",
 			"flow_id", flowID,
 			"error", wrappedErr)

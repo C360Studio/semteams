@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Config holds configuration for JSON map processor
@@ -106,7 +106,7 @@ func NewProcessor(
 ) (component.Discoverable, error) {
 	var config Config
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, errors.WrapInvalid(err, "JSONMapProcessor", "NewProcessor", "config unmarshal")
+		return nil, errs.WrapInvalid(err, "JSONMapProcessor", "NewProcessor", "config unmarshal")
 	}
 
 	if config.Ports == nil {
@@ -128,8 +128,8 @@ func NewProcessor(
 	}
 
 	if len(inputSubjects) == 0 {
-		return nil, errors.WrapInvalid(
-			errors.ErrInvalidConfig, "JSONMapProcessor", "NewProcessor",
+		return nil, errs.WrapInvalid(
+			errs.ErrInvalidConfig, "JSONMapProcessor", "NewProcessor",
 			"no input subjects configured")
 	}
 
@@ -173,11 +173,11 @@ func (m *Processor) Start(ctx context.Context) error {
 	defer m.lifecycleMu.Unlock()
 
 	if m.running {
-		return errors.WrapFatal(errors.ErrAlreadyStarted, "JSONMapProcessor", "Start", "check running state")
+		return errs.WrapFatal(errs.ErrAlreadyStarted, "JSONMapProcessor", "Start", "check running state")
 	}
 
 	if m.natsClient == nil {
-		return errors.WrapFatal(errors.ErrMissingConfig, "JSONMapProcessor", "Start", "NATS client required")
+		return errs.WrapFatal(errs.ErrMissingConfig, "JSONMapProcessor", "Start", "NATS client required")
 	}
 
 	// Subscribe to input subjects
@@ -191,7 +191,7 @@ func (m *Processor) Start(ctx context.Context) error {
 				"component", m.name,
 				"subject", subject,
 				"error", err)
-			return errors.WrapTransient(err, "JSONMapProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
+			return errs.WrapTransient(err, "JSONMapProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
 		}
 
 		m.logger.Debug("Subscribed to NATS subject successfully",
@@ -242,7 +242,7 @@ func (m *Processor) Stop(timeout time.Duration) error {
 	case <-waitCh:
 		// Clean shutdown
 	case <-time.After(timeout):
-		return errors.WrapTransient(
+		return errs.WrapTransient(
 			fmt.Errorf("shutdown timeout after %v", timeout),
 			"JSONMapProcessor", "Stop", "graceful shutdown")
 	}

@@ -13,10 +13,10 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/vocabulary"
 )
 
@@ -108,7 +108,7 @@ func NewPredicateIndex(
 func (pi *PredicateIndex) HandleCreate(ctx context.Context, entityID string, entityState interface{}) error {
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "IndexManager", "HandleCreate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "IndexManager", "HandleCreate", "invalid entity state type")
 	}
 
 	// Use existing triples directly from entity state (semantic triples as single source of truth)
@@ -119,7 +119,7 @@ func (pi *PredicateIndex) HandleCreate(ctx context.Context, entityID string, ent
 func (pi *PredicateIndex) HandleUpdate(ctx context.Context, entityID string, entityState interface{}) error {
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "IndexManager", "HandleUpdate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "IndexManager", "HandleUpdate", "invalid entity state type")
 	}
 
 	// Use existing triples directly from entity state (semantic triples as single source of truth)
@@ -153,7 +153,7 @@ func (pi *PredicateIndex) updatePredicateIndex(
 	for _, triple := range triples {
 		if err := pi.addEntityToPredicateIndex(ctx, triple.Predicate, entityID); err != nil {
 			errMsg := fmt.Sprintf("update index for predicate %s", triple.Predicate)
-			return errors.WrapTransient(err, "IndexManager", "UpdatePredicateIndex", errMsg)
+			return errs.WrapTransient(err, "IndexManager", "UpdatePredicateIndex", errMsg)
 		}
 	}
 	return nil
@@ -182,20 +182,20 @@ func (pi *PredicateIndex) validatePredicateKey(sanitizedKey, predicate string) e
 	if len(sanitizedKey) == 0 {
 		pi.logger.Error("Empty key after sanitization", "original_predicate", predicate)
 		errMsg := fmt.Sprintf("empty key after sanitization of predicate %q", predicate)
-		return errors.WrapInvalid(errors.ErrInvalidData, "IndexManager", "updatePredicateIndexInternal", errMsg)
+		return errs.WrapInvalid(errs.ErrInvalidData, "IndexManager", "updatePredicateIndexInternal", errMsg)
 	}
 
 	if len(sanitizedKey) > 255 {
 		pi.logger.Error("Key too long", "length", len(sanitizedKey), "max", 255, "key", sanitizedKey)
 		errMsg := fmt.Sprintf("key too long after sanitization: %d chars", len(sanitizedKey))
-		return errors.WrapInvalid(errors.ErrInvalidData, "IndexManager", "updatePredicateIndexInternal", errMsg)
+		return errs.WrapInvalid(errs.ErrInvalidData, "IndexManager", "updatePredicateIndexInternal", errMsg)
 	}
 
 	validKeyRe := regexp.MustCompile(`^[-/_=\.a-zA-Z0-9]+$`)
 	if !validKeyRe.MatchString(sanitizedKey) {
 		pi.logger.Error("Key fails NATS validation", "key", sanitizedKey)
 		errMsg := fmt.Sprintf("invalid NATS key after sanitization: %q", sanitizedKey)
-		return errors.WrapInvalid(errors.ErrInvalidData, "IndexManager", "updatePredicateIndexInternal", errMsg)
+		return errs.WrapInvalid(errs.ErrInvalidData, "IndexManager", "updatePredicateIndexInternal", errMsg)
 	}
 
 	return nil
@@ -218,7 +218,7 @@ func parseEntityList(data []byte) ([]string, error) {
 	// Fallback to legacy format for migration compatibility
 	var predicateData map[string]interface{}
 	if err := json.Unmarshal(data, &predicateData); err != nil {
-		return nil, errors.WrapInvalid(err, "IndexManager", "parseEntityList", "predicate data unmarshal failed")
+		return nil, errs.WrapInvalid(err, "IndexManager", "parseEntityList", "predicate data unmarshal failed")
 	}
 
 	if existingEntities, exists := predicateData["entities"]; exists {
@@ -283,24 +283,24 @@ func (pi *PredicateIndex) handleKVStoreError(
 		_, createErr := pi.kvStore.Create(ctx, sanitizedKey, data)
 		if createErr != nil && !stderrors.Is(createErr, natsclient.ErrKVKeyExists) {
 			errMsg := fmt.Sprintf("create predicate index for %s", predicate)
-			return errors.WrapTransient(createErr, "IndexManager", "addEntityToPredicateIndex", errMsg)
+			return errs.WrapTransient(createErr, "IndexManager", "addEntityToPredicateIndex", errMsg)
 		}
 		return nil
 	}
 
 	if stderrors.Is(err, natsclient.ErrKVMaxRetriesExceeded) {
 		errMsg := fmt.Sprintf("predicate index update after max retries: %s", predicate)
-		return errors.WrapTransient(err, "IndexManager", "addEntityToPredicateIndex", errMsg)
+		return errs.WrapTransient(err, "IndexManager", "addEntityToPredicateIndex", errMsg)
 	}
 
 	if strings.Contains(err.Error(), "invalid key") {
 		pi.logger.Error("Invalid key error", "predicate", predicate, "entity", entityID, "sanitized_key", sanitizedKey)
 		errMsg := fmt.Sprintf("invalid key for predicate index: %s", predicate)
-		return errors.WrapInvalid(err, "IndexManager", "addEntityToPredicateIndex", errMsg)
+		return errs.WrapInvalid(err, "IndexManager", "addEntityToPredicateIndex", errMsg)
 	}
 
 	errMsg := fmt.Sprintf("store predicate index for %s", predicate)
-	return errors.WrapTransient(err, "IndexManager", "addEntityToPredicateIndex", errMsg)
+	return errs.WrapTransient(err, "IndexManager", "addEntityToPredicateIndex", errMsg)
 }
 
 // addEntityWithManualCAS adds entity using manual CAS retry loop
@@ -323,7 +323,7 @@ func (pi *PredicateIndex) addEntityWithManualCAS(
 		entities = append(entities, entityID)
 		data, err := json.Marshal(entities)
 		if err != nil {
-			return errors.WrapInvalid(err, "IndexManager", "updatePredicateIndexInternal", "marshal predicate data")
+			return errs.WrapInvalid(err, "IndexManager", "updatePredicateIndexInternal", "marshal predicate data")
 		}
 
 		pi.logger.Debug("Attempting CAS update", "key", sanitizedKey, "revision", currentRevision,
@@ -341,7 +341,7 @@ func (pi *PredicateIndex) addEntityWithManualCAS(
 	}
 
 	errMsg := fmt.Sprintf("predicate index update after %d retries: %s", maxRetries, predicate)
-	return errors.WrapTransient(errors.ErrMaxRetriesExceeded, "IndexManager", "updatePredicateIndexInternal", errMsg)
+	return errs.WrapTransient(errs.ErrMaxRetriesExceeded, "IndexManager", "updatePredicateIndexInternal", errMsg)
 }
 
 // fetchCurrentEntities retrieves current entities from bucket
@@ -394,12 +394,12 @@ func (pi *PredicateIndex) handleCASError(err error, sanitizedKey, predicate, ent
 	if strings.Contains(err.Error(), "invalid key") {
 		pi.logger.Error("Invalid key error", "predicate", predicate, "entity", entityID, "sanitized_key", sanitizedKey)
 		errMsg := fmt.Sprintf("invalid key for predicate index: %s", predicate)
-		return errors.WrapInvalid(err, "IndexManager", "updatePredicateIndexInternal", errMsg)
+		return errs.WrapInvalid(err, "IndexManager", "updatePredicateIndexInternal", errMsg)
 	}
 
 	pi.logger.Error("Non-retryable error", "predicate", predicate, "entity", entityID, "sanitized_key", sanitizedKey)
 	errMsg := fmt.Sprintf("store predicate index for %s", predicate)
-	return errors.WrapTransient(err, "IndexManager", "updatePredicateIndexInternal", errMsg)
+	return errs.WrapTransient(err, "IndexManager", "updatePredicateIndexInternal", errMsg)
 }
 
 // IncomingIndex handles incoming relationship indexing
@@ -432,7 +432,7 @@ func NewIncomingIndex(
 func (ii *IncomingIndex) HandleCreate(ctx context.Context, entityID string, entityState interface{}) error {
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "IncomingIndex", "HandleCreate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "IncomingIndex", "HandleCreate", "invalid entity state type")
 	}
 
 	// Extract relationships from triples (single source of truth)
@@ -444,7 +444,7 @@ func (ii *IncomingIndex) HandleCreate(ctx context.Context, entityID string, enti
 func (ii *IncomingIndex) HandleUpdate(ctx context.Context, entityID string, entityState interface{}) error {
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "IncomingIndex", "HandleUpdate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "IncomingIndex", "HandleUpdate", "invalid entity state type")
 	}
 
 	// Extract relationships from triples (single source of truth)
@@ -498,7 +498,7 @@ func (ii *IncomingIndex) AddIncomingReference(ctx context.Context, toEntityID, f
 	entry, err := ii.bucket.Get(ctx, toEntityID)
 	if err == nil {
 		if err := json.Unmarshal(entry.Value(), &incomingRefs); err != nil {
-			return errors.WrapInvalid(err, "IncomingIndex", "AddIncomingReference", "unmarshal incoming index data")
+			return errs.WrapInvalid(err, "IncomingIndex", "AddIncomingReference", "unmarshal incoming index data")
 		}
 	} else {
 		incomingRefs = []string{}
@@ -517,7 +517,7 @@ func (ii *IncomingIndex) AddIncomingReference(ctx context.Context, toEntityID, f
 	// Store updated index - direct array, no wrapper
 	data, err := json.Marshal(incomingRefs)
 	if err != nil {
-		return errors.WrapInvalid(err, "IncomingIndex", "AddIncomingReference", "marshal incoming index data")
+		return errs.WrapInvalid(err, "IncomingIndex", "AddIncomingReference", "marshal incoming index data")
 	}
 
 	_, err = ii.bucket.Put(ctx, toEntityID, data)
@@ -535,7 +535,7 @@ func (ii *IncomingIndex) RemoveIncomingReference(ctx context.Context, toEntityID
 	}
 
 	if err := json.Unmarshal(entry.Value(), &incomingRefs); err != nil {
-		return errors.WrapInvalid(err, "IncomingIndex", "RemoveIncomingReference", "unmarshal incoming index data")
+		return errs.WrapInvalid(err, "IncomingIndex", "RemoveIncomingReference", "unmarshal incoming index data")
 	}
 
 	// Find and remove the reference
@@ -561,7 +561,7 @@ func (ii *IncomingIndex) RemoveIncomingReference(ctx context.Context, toEntityID
 	// Store updated index
 	data, err := json.Marshal(newRefs)
 	if err != nil {
-		return errors.WrapInvalid(err, "IncomingIndex", "RemoveIncomingReference", "marshal incoming index data")
+		return errs.WrapInvalid(err, "IncomingIndex", "RemoveIncomingReference", "marshal incoming index data")
 	}
 
 	_, err = ii.bucket.Put(ctx, toEntityID, data)
@@ -610,7 +610,7 @@ func NewAliasIndex(
 func (ai *AliasIndex) HandleCreate(ctx context.Context, entityID string, entityState interface{}) error {
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "AliasIndex", "HandleCreate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "AliasIndex", "HandleCreate", "invalid entity state type")
 	}
 
 	// Extract aliases from triples using vocabulary registry
@@ -627,7 +627,7 @@ func (ai *AliasIndex) HandleCreate(ctx context.Context, entityID string, entityS
 func (ai *AliasIndex) HandleUpdate(ctx context.Context, entityID string, entityState interface{}) error {
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "AliasIndex", "HandleUpdate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "AliasIndex", "HandleUpdate", "invalid entity state type")
 	}
 
 	// For updates, we need to:
@@ -642,7 +642,7 @@ func (ai *AliasIndex) HandleUpdate(ctx context.Context, entityID string, entityS
 	// Get existing aliases from reverse index
 	existingAliases, err := ai.getEntityAliases(ctx, entityID)
 	if err != nil && !stderrors.Is(err, jetstream.ErrKeyNotFound) {
-		return errors.WrapTransient(err, "AliasIndex", "HandleUpdate", "get existing aliases")
+		return errs.WrapTransient(err, "AliasIndex", "HandleUpdate", "get existing aliases")
 	}
 
 	// Determine which aliases to remove and which to add
@@ -681,7 +681,7 @@ func (ai *AliasIndex) HandleDelete(ctx context.Context, entityID string) error {
 		if stderrors.Is(err, jetstream.ErrKeyNotFound) {
 			return nil // No aliases to clean up
 		}
-		return errors.WrapTransient(err, "AliasIndex", "HandleDelete", "get entity aliases")
+		return errs.WrapTransient(err, "AliasIndex", "HandleDelete", "get entity aliases")
 	}
 
 	// Remove all forward index entries (alias -> entityID)
@@ -778,7 +778,7 @@ func (ai *AliasIndex) addAliasForward(ctx context.Context, alias, entityID strin
 	_, err := ai.bucket.Put(ctx, key, data)
 	if err != nil {
 		errMsg := fmt.Sprintf("store alias forward index for %s", alias)
-		return errors.WrapTransient(err, "AliasIndex", "addAliasForward", errMsg)
+		return errs.WrapTransient(err, "AliasIndex", "addAliasForward", errMsg)
 	}
 
 	return nil
@@ -791,7 +791,7 @@ func (ai *AliasIndex) removeAliasForward(ctx context.Context, alias string) erro
 
 	if err := ai.bucket.Delete(ctx, key); err != nil {
 		if !stderrors.Is(err, jetstream.ErrKeyNotFound) {
-			return errors.WrapTransient(err, "AliasIndex", "removeAliasForward", "delete alias")
+			return errs.WrapTransient(err, "AliasIndex", "removeAliasForward", "delete alias")
 		}
 	}
 
@@ -805,14 +805,14 @@ func (ai *AliasIndex) updateReverseIndex(ctx context.Context, entityID string, a
 	// Marshal aliases list
 	data, err := json.Marshal(aliases)
 	if err != nil {
-		return errors.WrapInvalid(err, "AliasIndex", "updateReverseIndex", "marshal aliases")
+		return errs.WrapInvalid(err, "AliasIndex", "updateReverseIndex", "marshal aliases")
 	}
 
 	// Store entity -> aliases mapping
 	_, err = ai.bucket.Put(ctx, key, data)
 	if err != nil {
 		errMsg := fmt.Sprintf("store reverse index for entity %s", entityID)
-		return errors.WrapTransient(err, "AliasIndex", "updateReverseIndex", errMsg)
+		return errs.WrapTransient(err, "AliasIndex", "updateReverseIndex", errMsg)
 	}
 
 	return nil
@@ -829,7 +829,7 @@ func (ai *AliasIndex) getEntityAliases(ctx context.Context, entityID string) ([]
 
 	var aliases []string
 	if err := json.Unmarshal(entry.Value(), &aliases); err != nil {
-		return nil, errors.WrapInvalid(err, "AliasIndex", "getEntityAliases", "unmarshal aliases")
+		return nil, errs.WrapInvalid(err, "AliasIndex", "getEntityAliases", "unmarshal aliases")
 	}
 
 	return aliases, nil
@@ -968,7 +968,7 @@ func mergeSpatialData(currentBytes []byte, entityID string, latitude, longitude,
 
 	if len(currentBytes) > 0 {
 		if err := json.Unmarshal(currentBytes, &spatialData); err != nil {
-			return nil, errors.WrapInvalid(err, "IndexManager", "updateSpatialIndex", "spatial data unmarshal failed")
+			return nil, errs.WrapInvalid(err, "IndexManager", "updateSpatialIndex", "spatial data unmarshal failed")
 		}
 	} else {
 		spatialData = map[string]interface{}{
@@ -997,7 +997,7 @@ func (si *SpatialIndex) updateWithKVStore(ctx context.Context, geohash, entityID
 
 	if err != nil {
 		errMsg := fmt.Sprintf("update spatial index for geohash %s", geohash)
-		return errors.WrapTransient(err, "SpatialIndex", "updateSpatialIndex", errMsg)
+		return errs.WrapTransient(err, "SpatialIndex", "updateSpatialIndex", errMsg)
 	}
 	return nil
 }
@@ -1018,7 +1018,7 @@ func (si *SpatialIndex) updateWithManualRetry(ctx context.Context, geohash, enti
 
 	if entry != nil {
 		_, err = si.bucket.Update(ctx, geohash, data, entry.Revision())
-		if errors.IsTransient(err) {
+		if errs.IsTransient(err) {
 			si.logger.Debug("Spatial index update conflict, retrying", "geohash", geohash)
 			return si.updateSpatialIndex(ctx, entityID, &gtypes.EntityState{
 				ID: entityID,
@@ -1031,7 +1031,7 @@ func (si *SpatialIndex) updateWithManualRetry(ctx context.Context, geohash, enti
 		}
 	} else {
 		_, err = si.bucket.Create(ctx, geohash, data)
-		if errors.IsTransient(err) {
+		if errs.IsTransient(err) {
 			si.logger.Debug("Spatial index create conflict, retrying", "geohash", geohash)
 			return si.updateSpatialIndex(ctx, entityID, &gtypes.EntityState{
 				ID: entityID,
@@ -1051,7 +1051,7 @@ func (si *SpatialIndex) updateWithManualRetry(ctx context.Context, geohash, enti
 func (si *SpatialIndex) updateSpatialIndex(ctx context.Context, entityID string, entityState interface{}) error {
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "SpatialIndex", "HandleCreate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "SpatialIndex", "HandleCreate", "invalid entity state type")
 	}
 
 	latitude, longitude, altitude := extractGeoCoordinates(state)
@@ -1154,7 +1154,7 @@ func (idx *OutgoingIndex) HandleCreate(ctx context.Context, entityID string, ent
 
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "OutgoingIndex", "HandleCreate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "OutgoingIndex", "HandleCreate", "invalid entity state type")
 	}
 
 	entries := idx.extractRelationships(state.Triples)
@@ -1164,13 +1164,13 @@ func (idx *OutgoingIndex) HandleCreate(ctx context.Context, entityID string, ent
 
 	data, err := json.Marshal(entries)
 	if err != nil {
-		return errors.WrapInvalid(err, "OutgoingIndex", "HandleCreate", "marshal outgoing entries")
+		return errs.WrapInvalid(err, "OutgoingIndex", "HandleCreate", "marshal outgoing entries")
 	}
 
 	_, err = idx.bucket.Put(ctx, entityID, data)
 	if err != nil {
 		errMsg := fmt.Sprintf("put outgoing index for entity %s", entityID)
-		return errors.WrapTransient(err, "OutgoingIndex", "HandleCreate", errMsg)
+		return errs.WrapTransient(err, "OutgoingIndex", "HandleCreate", errMsg)
 	}
 
 	return nil
@@ -1187,7 +1187,7 @@ func (idx *OutgoingIndex) HandleUpdate(ctx context.Context, entityID string, ent
 
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "OutgoingIndex", "HandleUpdate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "OutgoingIndex", "HandleUpdate", "invalid entity state type")
 	}
 
 	newEntries := idx.extractRelationships(state.Triples)
@@ -1199,13 +1199,13 @@ func (idx *OutgoingIndex) HandleUpdate(ctx context.Context, entityID string, ent
 
 	data, err := json.Marshal(newEntries)
 	if err != nil {
-		return errors.WrapInvalid(err, "OutgoingIndex", "HandleUpdate", "marshal outgoing entries")
+		return errs.WrapInvalid(err, "OutgoingIndex", "HandleUpdate", "marshal outgoing entries")
 	}
 
 	_, err = idx.bucket.Put(ctx, entityID, data)
 	if err != nil {
 		errMsg := fmt.Sprintf("put outgoing index for entity %s", entityID)
-		return errors.WrapTransient(err, "OutgoingIndex", "HandleUpdate", errMsg)
+		return errs.WrapTransient(err, "OutgoingIndex", "HandleUpdate", errMsg)
 	}
 
 	return nil
@@ -1223,7 +1223,7 @@ func (idx *OutgoingIndex) HandleDelete(ctx context.Context, entityID string) err
 	err := idx.bucket.Delete(ctx, entityID)
 	if err != nil && !stderrors.Is(err, jetstream.ErrKeyNotFound) {
 		errMsg := fmt.Sprintf("delete outgoing index for entity %s", entityID)
-		return errors.WrapTransient(err, "OutgoingIndex", "HandleDelete", errMsg)
+		return errs.WrapTransient(err, "OutgoingIndex", "HandleDelete", errMsg)
 	}
 	return nil
 }
@@ -1240,16 +1240,16 @@ func (idx *OutgoingIndex) GetOutgoing(ctx context.Context, entityID string) ([]O
 	entry, err := idx.bucket.Get(ctx, entityID)
 	if err != nil {
 		if stderrors.Is(err, jetstream.ErrKeyNotFound) {
-			return nil, errors.WrapInvalid(jetstream.ErrKeyNotFound, "OutgoingIndex", "GetOutgoing",
+			return nil, errs.WrapInvalid(jetstream.ErrKeyNotFound, "OutgoingIndex", "GetOutgoing",
 				fmt.Sprintf("entity %s not found", entityID))
 		}
 		errMsg := fmt.Sprintf("get outgoing index for entity %s", entityID)
-		return nil, errors.WrapTransient(err, "OutgoingIndex", "GetOutgoing", errMsg)
+		return nil, errs.WrapTransient(err, "OutgoingIndex", "GetOutgoing", errMsg)
 	}
 
 	var entries []OutgoingEntry
 	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
-		return nil, errors.WrapInvalid(err, "OutgoingIndex", "GetOutgoing", "unmarshal outgoing entries")
+		return nil, errs.WrapInvalid(err, "OutgoingIndex", "GetOutgoing", "unmarshal outgoing entries")
 	}
 
 	return entries, nil
@@ -1362,7 +1362,7 @@ func (ti *TemporalIndex) HandleDelete(ctx context.Context, entityID string) erro
 func (ti *TemporalIndex) updateTemporalIndex(ctx context.Context, entityID string, entityState interface{}) error {
 	state, ok := entityState.(*gtypes.EntityState)
 	if !ok {
-		return errors.WrapInvalid(errors.ErrInvalidData, "TemporalIndex", "HandleCreate", "invalid entity state type")
+		return errs.WrapInvalid(errs.ErrInvalidData, "TemporalIndex", "HandleCreate", "invalid entity state type")
 	}
 
 	// Use entity's UpdatedAt timestamp
@@ -1385,7 +1385,7 @@ func (ti *TemporalIndex) updateTemporalIndex(ctx context.Context, entityID strin
 			if len(currentBytes) > 0 {
 				// Unmarshal existing data
 				if err := json.Unmarshal(currentBytes, &temporalData); err != nil {
-					return nil, errors.WrapInvalid(
+					return nil, errs.WrapInvalid(
 						err,
 						"IndexManager",
 						"updateTemporalIndex",
@@ -1431,7 +1431,7 @@ func (ti *TemporalIndex) updateTemporalIndex(ctx context.Context, entityID strin
 
 		if err != nil {
 			errMsg := fmt.Sprintf("update temporal index for time bucket %s", timeKey)
-			return errors.WrapTransient(err, "TemporalIndex", "updateTemporalIndex", errMsg)
+			return errs.WrapTransient(err, "TemporalIndex", "updateTemporalIndex", errMsg)
 		}
 		return nil
 	}
@@ -1442,7 +1442,7 @@ func (ti *TemporalIndex) updateTemporalIndex(ctx context.Context, entityID strin
 	if err == nil {
 		// Unmarshal existing data
 		if err := json.Unmarshal(entry.Value(), &temporalData); err != nil {
-			return errors.WrapInvalid(err, "TemporalIndex", "updateTemporalIndex", "unmarshal existing temporal data")
+			return errs.WrapInvalid(err, "TemporalIndex", "updateTemporalIndex", "unmarshal existing temporal data")
 		}
 	} else {
 		// Initialize new temporal data structure
@@ -1478,7 +1478,7 @@ func (ti *TemporalIndex) updateTemporalIndex(ctx context.Context, entityID strin
 	// Store updated temporal index
 	data, err := json.Marshal(temporalData)
 	if err != nil {
-		return errors.WrapInvalid(err, "TemporalIndex", "updateTemporalIndex", "marshal temporal data")
+		return errs.WrapInvalid(err, "TemporalIndex", "updateTemporalIndex", "marshal temporal data")
 	}
 
 	_, err = ti.bucket.Put(ctx, timeKey, data)

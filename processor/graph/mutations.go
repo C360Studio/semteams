@@ -8,8 +8,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Mutation subject patterns
@@ -39,13 +39,13 @@ func (p *Processor) setupMutationHandlers(ctx context.Context) error {
 	}
 
 	if p.natsClient == nil {
-		return errors.WrapFatal(nil, "GraphProcessor", "setupMutationHandlers", "NATS client not initialized")
+		return errs.WrapFatal(nil, "GraphProcessor", "setupMutationHandlers", "NATS client not initialized")
 	}
 
 	// Get raw NATS connection for request/reply pattern
 	nc := p.natsClient.GetConnection()
 	if nc == nil {
-		return errors.WrapFatal(nil, "GraphProcessor", "setupMutationHandlers", "NATS connection not available")
+		return errs.WrapFatal(nil, "GraphProcessor", "setupMutationHandlers", "NATS connection not available")
 	}
 
 	// Entity mutations
@@ -63,7 +63,7 @@ func (p *Processor) setupMutationHandlers(ctx context.Context) error {
 	for subject, handler := range handlers {
 		sub, err := nc.Subscribe(subject, handler)
 		if err != nil {
-			return errors.Wrap(err, "GraphProcessor", "setupMutationHandlers",
+			return errs.Wrap(err, "GraphProcessor", "setupMutationHandlers",
 				fmt.Sprintf("failed to subscribe to %s", subject))
 		}
 
@@ -85,7 +85,7 @@ func (p *Processor) handleEntityCreate(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleEntityCreate", "processor not ready"),
+			errs.WrapTransient(nil, "GraphProcessor", "handleEntityCreate", "processor not ready"),
 			"", "")
 		return
 	}
@@ -103,7 +103,7 @@ func (p *Processor) handleEntityCreate(msg *nats.Msg) {
 	// Validate request
 	if req.Entity == nil {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleEntityCreate", "entity is required"),
+			errs.WrapInvalid(nil, "GraphProcessor", "handleEntityCreate", "entity is required"),
 			req.TraceID, req.RequestID)
 		return
 	}
@@ -126,7 +126,7 @@ func (p *Processor) handleEntityUpdate(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleEntityUpdate", "processor not ready"),
+			errs.WrapTransient(nil, "GraphProcessor", "handleEntityUpdate", "processor not ready"),
 			"", "")
 		return
 	}
@@ -144,7 +144,7 @@ func (p *Processor) handleEntityUpdate(msg *nats.Msg) {
 	// Validate request
 	if req.Entity == nil {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleEntityUpdate", "entity is required"),
+			errs.WrapInvalid(nil, "GraphProcessor", "handleEntityUpdate", "entity is required"),
 			req.TraceID, req.RequestID)
 		return
 	}
@@ -170,7 +170,7 @@ func (p *Processor) handleEntityDelete(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleEntityDelete", "processor not ready"),
+			errs.WrapTransient(nil, "GraphProcessor", "handleEntityDelete", "processor not ready"),
 			"", "")
 		return
 	}
@@ -188,7 +188,7 @@ func (p *Processor) handleEntityDelete(msg *nats.Msg) {
 	// Validate request
 	if req.EntityID == "" {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleEntityDelete", "entity ID is required"),
+			errs.WrapInvalid(nil, "GraphProcessor", "handleEntityDelete", "entity ID is required"),
 			req.TraceID, req.RequestID)
 		return
 	}
@@ -211,7 +211,7 @@ func (p *Processor) handleEntityCreateWithTriples(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleEntityCreateWithTriples", "processor not ready"),
+			errs.WrapTransient(nil, "GraphProcessor", "handleEntityCreateWithTriples", "processor not ready"),
 			"", "")
 		return
 	}
@@ -229,7 +229,7 @@ func (p *Processor) handleEntityCreateWithTriples(msg *nats.Msg) {
 	// Validate request
 	if req.Entity == nil {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleEntityCreateWithTriples", "entity is required"),
+			errs.WrapInvalid(nil, "GraphProcessor", "handleEntityCreateWithTriples", "entity is required"),
 			req.TraceID, req.RequestID)
 		return
 	}
@@ -253,7 +253,7 @@ func (p *Processor) handleEntityUpdateWithTriples(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleEntityUpdateWithTriples", "processor not ready"),
+			errs.WrapTransient(nil, "GraphProcessor", "handleEntityUpdateWithTriples", "processor not ready"),
 			"", "")
 		return
 	}
@@ -271,7 +271,7 @@ func (p *Processor) handleEntityUpdateWithTriples(msg *nats.Msg) {
 	// Validate request
 	if req.Entity == nil {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleEntityUpdateWithTriples", "entity is required"),
+			errs.WrapInvalid(nil, "GraphProcessor", "handleEntityUpdateWithTriples", "entity is required"),
 			req.TraceID, req.RequestID)
 		return
 	}
@@ -299,7 +299,7 @@ func (p *Processor) handleTripleAdd(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleTripleAdd", "processor not ready"),
+			errs.WrapTransient(nil, "GraphProcessor", "handleTripleAdd", "processor not ready"),
 			"", "")
 		return
 	}
@@ -317,7 +317,7 @@ func (p *Processor) handleTripleAdd(msg *nats.Msg) {
 	// Validate request
 	if req.Triple.Subject == "" || req.Triple.Predicate == "" {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleTripleAdd",
+			errs.WrapInvalid(nil, "GraphProcessor", "handleTripleAdd",
 				"subject and predicate are required"),
 			req.TraceID, req.RequestID)
 		return
@@ -343,7 +343,7 @@ func (p *Processor) handleTripleRemove(msg *nats.Msg) {
 	// Check if processor is ready to handle requests
 	if !p.IsReady() {
 		p.respondWithError(msg,
-			errors.WrapTransient(nil, "GraphProcessor", "handleTripleRemove", "processor not ready"),
+			errs.WrapTransient(nil, "GraphProcessor", "handleTripleRemove", "processor not ready"),
 			"", "")
 		return
 	}
@@ -361,7 +361,7 @@ func (p *Processor) handleTripleRemove(msg *nats.Msg) {
 	// Validate request
 	if req.Subject == "" || req.Predicate == "" {
 		p.respondWithError(msg,
-			errors.WrapInvalid(nil, "GraphProcessor", "handleTripleRemove",
+			errs.WrapInvalid(nil, "GraphProcessor", "handleTripleRemove",
 				"subject and predicate are required"),
 			req.TraceID, req.RequestID)
 		return

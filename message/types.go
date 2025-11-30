@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Keyable interface represents types that can be converted to semantic keys
@@ -156,14 +156,14 @@ func (eid EntityID) IsValid() bool {
 func ParseEntityID(s string) (EntityID, error) {
 	parts := strings.Split(s, ".")
 	if len(parts) != 6 {
-		return EntityID{}, errors.WrapInvalid(errors.ErrInvalidData, "EntityID", "ParseEntityID",
+		return EntityID{}, errs.WrapInvalid(errs.ErrInvalidData, "EntityID", "ParseEntityID",
 			fmt.Sprintf("expected 6 parts, got %d", len(parts)))
 	}
 
 	// Check that no part is empty
 	for i, part := range parts {
 		if part == "" {
-			return EntityID{}, errors.WrapInvalid(errors.ErrInvalidData, "EntityID", "ParseEntityID",
+			return EntityID{}, errs.WrapInvalid(errs.ErrInvalidData, "EntityID", "ParseEntityID",
 				fmt.Sprintf("part %d is empty", i+1))
 		}
 	}

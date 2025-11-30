@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -41,7 +41,7 @@ func (rp *Processor) watchEntityStates(ctx context.Context) error {
 	for _, pattern := range patterns {
 		watcher, err := entityBucket.Watch(ctx, pattern)
 		if err != nil {
-			return errors.Wrap(err, "RuleProcessor", "watchEntityStates", "create watcher")
+			return errs.Wrap(err, "RuleProcessor", "watchEntityStates", "create watcher")
 		}
 
 		// Store watcher for cleanup

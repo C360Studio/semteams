@@ -16,9 +16,9 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/gateway"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // httpGatewaySchema defines the configuration schema for HTTP gateway component
@@ -69,16 +69,16 @@ type Gateway struct {
 func NewGateway(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	var config gateway.Config
 	if err := component.SafeUnmarshal(rawConfig, &config); err != nil {
-		return nil, errors.WrapInvalid(err, "Gateway", "NewGateway", "config unmarshal")
+		return nil, errs.WrapInvalid(err, "Gateway", "NewGateway", "config unmarshal")
 	}
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
-		return nil, errors.WrapInvalid(err, "Gateway", "NewGateway", "config validation")
+		return nil, errs.WrapInvalid(err, "Gateway", "NewGateway", "config validation")
 	}
 
 	if deps.NATSClient == nil {
-		return nil, errors.WrapFatal(errors.ErrMissingConfig, "Gateway", "NewGateway",
+		return nil, errs.WrapFatal(errs.ErrMissingConfig, "Gateway", "NewGateway",
 			"NATS client is required")
 	}
 
@@ -98,7 +98,7 @@ func (g *Gateway) Initialize() error {
 // Start begins the HTTP gateway operation
 func (g *Gateway) Start(_ context.Context) error {
 	if g.running.Load() {
-		return errors.WrapFatal(errors.ErrAlreadyStarted, "Gateway", "Start",
+		return errs.WrapFatal(errs.ErrAlreadyStarted, "Gateway", "Start",
 			"gateway already running")
 	}
 
@@ -228,7 +228,7 @@ func (g *Gateway) createRouteHandler(route gateway.RouteMapping) http.HandlerFun
 func (g *Gateway) sendNATSRequest(ctx context.Context, subject string, data []byte) ([]byte, error) {
 	nc := g.natsClient.GetConnection()
 	if nc == nil {
-		return nil, errors.WrapTransient(nil, "Gateway", "sendNATSRequest",
+		return nil, errs.WrapTransient(nil, "Gateway", "sendNATSRequest",
 			"NATS connection not available")
 	}
 
@@ -242,7 +242,7 @@ func (g *Gateway) sendNATSRequest(ctx context.Context, subject string, data []by
 	// Send request and wait for reply
 	msg, err := nc.Request(subject, data, timeout)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "Gateway", "sendNATSRequest",
+		return nil, errs.WrapTransient(err, "Gateway", "sendNATSRequest",
 			fmt.Sprintf("NATS request to %s failed", subject))
 	}
 
@@ -280,17 +280,17 @@ func (g *Gateway) mapErrorToHTTPStatus(err error) int {
 		return http.StatusInternalServerError
 	}
 
-	if errors.IsInvalid(err) {
+	if errs.IsInvalid(err) {
 		return http.StatusBadRequest
 	}
-	if errors.IsTransient(err) {
+	if errs.IsTransient(err) {
 		// Could be timeout, service unavailable, etc.
 		if strings.Contains(err.Error(), "timeout") {
 			return http.StatusGatewayTimeout
 		}
 		return http.StatusServiceUnavailable
 	}
-	if errors.IsFatal(err) {
+	if errs.IsFatal(err) {
 		return http.StatusInternalServerError
 	}
 
@@ -314,16 +314,16 @@ func (g *Gateway) sanitizeError(err error) string {
 	}
 
 	// Never expose NATS subjects, internal service names, or detailed errors
-	if errors.IsInvalid(err) {
+	if errs.IsInvalid(err) {
 		return "invalid request"
 	}
-	if errors.IsTransient(err) {
+	if errs.IsTransient(err) {
 		if strings.Contains(err.Error(), "timeout") {
 			return "request timeout"
 		}
 		return "service temporarily unavailable"
 	}
-	if errors.IsFatal(err) {
+	if errs.IsFatal(err) {
 		return "internal server error"
 	}
 

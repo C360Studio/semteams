@@ -7,7 +7,7 @@ import (
 	"text/template"
 	"unicode"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
@@ -423,13 +423,13 @@ func ExecuteTemplate(tmpl string, data interface{}) (string, error) {
 
 	t, err := template.New("template").Funcs(funcMap).Parse(tmpl)
 	if err != nil {
-		return "", errors.WrapFatal(err, "ExecuteTemplate", "template.Parse",
+		return "", errs.WrapFatal(err, "ExecuteTemplate", "template.Parse",
 			"parse template")
 	}
 
 	var buf bytes.Buffer
 	if err := t.Execute(&buf, data); err != nil {
-		return "", errors.WrapFatal(err, "ExecuteTemplate", "template.Execute",
+		return "", errs.WrapFatal(err, "ExecuteTemplate", "template.Execute",
 			"execute template")
 	}
 

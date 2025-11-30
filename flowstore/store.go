@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -20,7 +20,7 @@ type Store struct {
 // NewStore creates a new flow store
 func NewStore(natsClient *natsclient.Client) (*Store, error) {
 	if natsClient == nil {
-		return nil, errors.WrapInvalid(nil, "flowstore", "NewStore", "nats client cannot be nil")
+		return nil, errs.WrapInvalid(nil, "flowstore", "NewStore", "nats client cannot be nil")
 	}
 
 	ctx := context.Background()
@@ -30,7 +30,7 @@ func NewStore(natsClient *natsclient.Client) (*Store, error) {
 		History:     10, // Keep last 10 versions for history/recovery
 	})
 	if err != nil {
-		return nil, errors.WrapTransient(err, "flowstore", "NewStore", "create KV bucket")
+		return nil, errs.WrapTransient(err, "flowstore", "NewStore", "create KV bucket")
 	}
 
 	return &Store{
@@ -42,10 +42,10 @@ func NewStore(natsClient *natsclient.Client) (*Store, error) {
 // Create creates a new flow
 func (s *Store) Create(ctx context.Context, flow *Flow) error {
 	if flow == nil {
-		return errors.WrapInvalid(nil, "flowstore", "Create", "flow cannot be nil")
+		return errs.WrapInvalid(nil, "flowstore", "Create", "flow cannot be nil")
 	}
 	if flow.ID == "" {
-		return errors.WrapInvalid(nil, "flowstore", "Create", "flow ID cannot be empty")
+		return errs.WrapInvalid(nil, "flowstore", "Create", "flow ID cannot be empty")
 	}
 
 	// Initialize version and timestamps
@@ -63,15 +63,15 @@ func (s *Store) Create(ctx context.Context, flow *Flow) error {
 	// Marshal and store
 	data, err := json.Marshal(flow)
 	if err != nil {
-		return errors.WrapFatal(err, "flowstore", "Create", "marshal flow")
+		return errs.WrapFatal(err, "flowstore", "Create", "marshal flow")
 	}
 
 	// Use Create() to ensure it only creates if key doesn't exist
 	if _, err := s.kvStore.Create(ctx, flow.ID, data); err != nil {
 		if natsclient.IsKVConflictError(err) {
-			return errors.WrapInvalid(err, "flowstore", "Create", "flow already exists")
+			return errs.WrapInvalid(err, "flowstore", "Create", "flow already exists")
 		}
-		return errors.WrapTransient(err, "flowstore", "Create", "create in KV")
+		return errs.WrapTransient(err, "flowstore", "Create", "create in KV")
 	}
 
 	return nil
@@ -80,17 +80,17 @@ func (s *Store) Create(ctx context.Context, flow *Flow) error {
 // Get retrieves a flow by ID
 func (s *Store) Get(ctx context.Context, id string) (*Flow, error) {
 	if id == "" {
-		return nil, errors.WrapInvalid(nil, "flowstore", "Get", "flow ID cannot be empty")
+		return nil, errs.WrapInvalid(nil, "flowstore", "Get", "flow ID cannot be empty")
 	}
 
 	entry, err := s.kvStore.Get(ctx, id)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "flowstore", "Get", "get from KV")
+		return nil, errs.WrapTransient(err, "flowstore", "Get", "get from KV")
 	}
 
 	var flow Flow
 	if err := json.Unmarshal(entry.Value, &flow); err != nil {
-		return nil, errors.WrapFatal(err, "flowstore", "Get", "unmarshal flow")
+		return nil, errs.WrapFatal(err, "flowstore", "Get", "unmarshal flow")
 	}
 
 	return &flow, nil
@@ -99,21 +99,21 @@ func (s *Store) Get(ctx context.Context, id string) (*Flow, error) {
 // Update updates an existing flow with optimistic concurrency control
 func (s *Store) Update(ctx context.Context, flow *Flow) error {
 	if flow == nil {
-		return errors.WrapInvalid(nil, "flowstore", "Update", "flow cannot be nil")
+		return errs.WrapInvalid(nil, "flowstore", "Update", "flow cannot be nil")
 	}
 	if flow.ID == "" {
-		return errors.WrapInvalid(nil, "flowstore", "Update", "flow ID cannot be empty")
+		return errs.WrapInvalid(nil, "flowstore", "Update", "flow ID cannot be empty")
 	}
 
 	// Get current version from KV
 	current, err := s.Get(ctx, flow.ID)
 	if err != nil {
-		return errors.WrapTransient(err, "flowstore", "Update", "get current version")
+		return errs.WrapTransient(err, "flowstore", "Update", "get current version")
 	}
 
 	// Check version for optimistic concurrency
 	if current.Version != flow.Version {
-		return errors.WrapInvalid(
+		return errs.WrapInvalid(
 			fmt.Errorf("version mismatch: expected %d, got %d", current.Version, flow.Version),
 			"flowstore", "Update", "conflict: flow was modified by another user")
 	}
@@ -126,11 +126,11 @@ func (s *Store) Update(ctx context.Context, flow *Flow) error {
 	// Marshal and store
 	data, err := json.Marshal(flow)
 	if err != nil {
-		return errors.WrapFatal(err, "flowstore", "Update", "marshal flow")
+		return errs.WrapFatal(err, "flowstore", "Update", "marshal flow")
 	}
 
 	if _, err := s.kvStore.Put(ctx, flow.ID, data); err != nil {
-		return errors.WrapTransient(err, "flowstore", "Update", "put to KV")
+		return errs.WrapTransient(err, "flowstore", "Update", "put to KV")
 	}
 
 	return nil
@@ -139,11 +139,11 @@ func (s *Store) Update(ctx context.Context, flow *Flow) error {
 // Delete removes a flow by ID
 func (s *Store) Delete(ctx context.Context, id string) error {
 	if id == "" {
-		return errors.WrapInvalid(nil, "flowstore", "Delete", "flow ID cannot be empty")
+		return errs.WrapInvalid(nil, "flowstore", "Delete", "flow ID cannot be empty")
 	}
 
 	if err := s.kvStore.Delete(ctx, id); err != nil {
-		return errors.WrapTransient(err, "flowstore", "Delete", "delete from KV")
+		return errs.WrapTransient(err, "flowstore", "Delete", "delete from KV")
 	}
 
 	return nil
@@ -153,14 +153,14 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 func (s *Store) List(ctx context.Context) ([]*Flow, error) {
 	keys, err := s.bucket.Keys(ctx)
 	if err != nil {
-		return nil, errors.WrapTransient(err, "flowstore", "List", "list KV keys")
+		return nil, errs.WrapTransient(err, "flowstore", "List", "list KV keys")
 	}
 
 	flows := make([]*Flow, 0, len(keys))
 	for _, key := range keys {
 		flow, err := s.Get(ctx, key)
 		if err != nil {
-			return nil, errors.WrapTransient(err, "flowstore", "List",
+			return nil, errs.WrapTransient(err, "flowstore", "List",
 				fmt.Sprintf("get flow %s", key))
 		}
 		flows = append(flows, flow)

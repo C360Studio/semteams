@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
@@ -14,7 +14,7 @@ import (
 func Generate(config *Config, schema *SchemaInfo, outputDir string) error {
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return errors.WrapFatal(err, "Generate", "os.MkdirAll",
+		return errs.WrapFatal(err, "Generate", "os.MkdirAll",
 			fmt.Sprintf("create output directory: %s", outputDir))
 	}
 
@@ -27,7 +27,7 @@ func Generate(config *Config, schema *SchemaInfo, outputDir string) error {
 	// Generate generated_resolver.go
 	resolverCode, err := GenerateResolverCode(templateData)
 	if err != nil {
-		return errors.WrapFatal(err, "Generate", "GenerateResolverCode",
+		return errs.WrapFatal(err, "Generate", "GenerateResolverCode",
 			"generate resolver code")
 	}
 	if err := writeFile(filepath.Join(outputDir, "generated_resolver.go"), resolverCode); err != nil {
@@ -37,7 +37,7 @@ func Generate(config *Config, schema *SchemaInfo, outputDir string) error {
 	// Generate generated_models.go
 	modelsCode, err := GenerateModelsCode(templateData)
 	if err != nil {
-		return errors.WrapFatal(err, "Generate", "GenerateModelsCode",
+		return errs.WrapFatal(err, "Generate", "GenerateModelsCode",
 			"generate models code")
 	}
 	if err := writeFile(filepath.Join(outputDir, "generated_models.go"), modelsCode); err != nil {
@@ -47,7 +47,7 @@ func Generate(config *Config, schema *SchemaInfo, outputDir string) error {
 	// Generate generated_converters.go
 	convertersCode, err := GenerateConvertersCode(templateData)
 	if err != nil {
-		return errors.WrapFatal(err, "Generate", "GenerateConvertersCode",
+		return errs.WrapFatal(err, "Generate", "GenerateConvertersCode",
 			"generate converters code")
 	}
 	return writeFile(filepath.Join(outputDir, "generated_converters.go"), convertersCode)
@@ -134,7 +134,7 @@ func buildTypeConverters(config *Config, schema *SchemaInfo) ([]TypeTemplateData
 				// Validate total length doesn't exceed maximum
 				proposedName := converterName + enumType
 				if len(proposedName) > 120 {
-					return nil, nil, errors.WrapInvalid(
+					return nil, nil, errs.WrapInvalid(
 						fmt.Errorf("converter name too long (%d chars): %s", len(proposedName), proposedName),
 						"buildTemplateData", "buildConverterFuncName",
 						fmt.Sprintf("name exceeds maximum length of 120 characters for field %s", fieldPath))
@@ -402,7 +402,7 @@ func writeFile(path, content string) error {
 	content = cleanupCode(content)
 
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
-		return errors.WrapFatal(err, "writeFile", "os.WriteFile",
+		return errs.WrapFatal(err, "writeFile", "os.WriteFile",
 			fmt.Sprintf("write file: %s", path))
 	}
 

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // Triple Operations
@@ -30,11 +30,11 @@ func (m *Manager) AddTriple(ctx context.Context, triple message.Triple) error {
 			if triple.IsRelationship() {
 				exists, err := m.ExistsEntity(ctx, objStr)
 				if err != nil {
-					err = errors.Wrap(err, "DataManager", "AddTriple", "validate target entity")
+					err = errs.Wrap(err, "DataManager", "AddTriple", "validate target entity")
 					return err
 				}
 				if !exists {
-					err = errors.WrapInvalid(nil, "DataManager", "AddTriple",
+					err = errs.WrapInvalid(nil, "DataManager", "AddTriple",
 						fmt.Sprintf("target entity %s does not exist", objStr))
 					return err
 				}
@@ -82,7 +82,7 @@ func (m *Manager) RemoveTriple(ctx context.Context, subject, predicate string) e
 	}
 
 	if !removed {
-		err = errors.WrapInvalid(nil, "DataManager", "RemoveTriple",
+		err = errs.WrapInvalid(nil, "DataManager", "RemoveTriple",
 			fmt.Sprintf("triple with predicate %s not found for subject %s", predicate, subject))
 		return err
 	}
@@ -165,7 +165,7 @@ func (m *Manager) DeleteRelationship(ctx context.Context, fromEntityID, toEntity
 	}
 
 	if !found {
-		return errors.WrapInvalid(nil, "DataManager", "DeleteRelationship",
+		return errs.WrapInvalid(nil, "DataManager", "DeleteRelationship",
 			fmt.Sprintf("relationship %s from %s to %s not found", predicate, fromEntityID, toEntityID))
 	}
 

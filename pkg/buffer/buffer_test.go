@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	cerrors "github.com/c360/semstreams/errors"
+	cerrs "github.com/c360/semstreams/pkg/errs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -543,11 +543,11 @@ func TestErrorFrameworkIntegration(t *testing.T) {
 	}
 
 	// Verify it's a classified error
-	var classifiedErr *cerrors.ClassifiedError
+	var classifiedErr *cerrs.ClassifiedError
 	if !errors.As(err, &classifiedErr) {
 		t.Error("Expected error to be classified")
 	} else {
-		if classifiedErr.Class != cerrors.ErrorInvalid {
+		if classifiedErr.Class != cerrs.ErrorInvalid {
 			t.Errorf("Expected ErrorInvalid class, got %v", classifiedErr.Class)
 		}
 		if classifiedErr.Component != "Buffer" {
@@ -559,7 +559,7 @@ func TestErrorFrameworkIntegration(t *testing.T) {
 	}
 
 	// Verify it wraps ErrAlreadyStopped
-	if !errors.Is(err, cerrors.ErrAlreadyStopped) {
+	if !errors.Is(err, cerrs.ErrAlreadyStopped) {
 		t.Error("Expected error to wrap ErrAlreadyStopped")
 	}
 }
@@ -583,7 +583,7 @@ func TestWriteWithContextClosedBuffer(t *testing.T) {
 	}
 
 	// Verify it's the correct framework error
-	if !errors.Is(err, cerrors.ErrAlreadyStopped) {
+	if !errors.Is(err, cerrs.ErrAlreadyStopped) {
 		t.Error("Expected error to wrap ErrAlreadyStopped")
 	}
 }

@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/errors"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/metric"
+	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
 )
@@ -59,7 +59,7 @@ func NewManager(deps Deps) (Querier, error) {
 
 	// Then validate configuration
 	if err := deps.Config.Validate(); err != nil {
-		return nil, errors.WrapInvalid(err, "QueryManager", "NewManager",
+		return nil, errs.WrapInvalid(err, "QueryManager", "NewManager",
 			"configuration validation failed")
 	}
 
@@ -112,10 +112,10 @@ func (m *Manager) GetEntity(ctx context.Context, id string) (*gtypes.EntityState
 
 		// Wrap error appropriately
 		if IsEntityNotFound(err) {
-			return nil, errors.WrapInvalid(gtypes.ErrEntityNotFound, "QueryManager", "GetEntity",
+			return nil, errs.WrapInvalid(gtypes.ErrEntityNotFound, "QueryManager", "GetEntity",
 				fmt.Sprintf("entity ID: %s", id))
 		}
-		return nil, errors.WrapTransient(err, "QueryManager", "GetEntity",
+		return nil, errs.WrapTransient(err, "QueryManager", "GetEntity",
 			fmt.Sprintf("KV operation failed for ID: %s", id))
 	}
 
@@ -184,7 +184,7 @@ func (m *Manager) GetEntityByAlias(ctx context.Context, aliasOrID string) (*gtyp
 	if err != nil {
 		// If entity not found and we tried alias resolution, return alias not found error
 		if IsEntityNotFound(err) && entityID != aliasOrID {
-			return nil, errors.WrapInvalid(gtypes.ErrAliasNotFound, "QueryManager", "GetEntityByAlias",
+			return nil, errs.WrapInvalid(gtypes.ErrAliasNotFound, "QueryManager", "GetEntityByAlias",
 				fmt.Sprintf("alias: %s", aliasOrID))
 		}
 		return nil, err
@@ -208,7 +208,7 @@ func (m *Manager) QueryByPredicate(ctx context.Context, predicate string) ([]str
 	}()
 
 	if m.indexManager == nil {
-		return nil, errors.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QueryByPredicate",
+		return nil, errs.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QueryByPredicate",
 			"index manager dependency unavailable")
 	}
 
@@ -219,7 +219,7 @@ func (m *Manager) QueryByPredicate(ctx context.Context, predicate string) ([]str
 		if m.metrics != nil {
 			m.metrics.RecordQuery("query_engine", "predicate", time.Since(start), 0, false)
 		}
-		return nil, errors.WrapTransient(err, "QueryManager", "QueryByPredicate",
+		return nil, errs.WrapTransient(err, "QueryManager", "QueryByPredicate",
 			fmt.Sprintf("index manager operation failed for predicate: %s", predicate))
 	}
 
@@ -239,7 +239,7 @@ func (m *Manager) QuerySpatial(ctx context.Context, bounds SpatialBounds) ([]str
 	}()
 
 	if m.indexManager == nil {
-		return nil, errors.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QuerySpatial",
+		return nil, errs.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QuerySpatial",
 			"index manager dependency unavailable")
 	}
 
@@ -258,7 +258,7 @@ func (m *Manager) QuerySpatial(ctx context.Context, bounds SpatialBounds) ([]str
 		if m.metrics != nil {
 			m.metrics.RecordQuery("query_engine", "spatial", time.Since(start), 0, false)
 		}
-		return nil, errors.WrapTransient(err, "QueryManager", "QuerySpatial",
+		return nil, errs.WrapTransient(err, "QueryManager", "QuerySpatial",
 			"index manager spatial query failed")
 	}
 
@@ -278,7 +278,7 @@ func (m *Manager) QueryTemporal(ctx context.Context, start, end time.Time) ([]st
 	}()
 
 	if m.indexManager == nil {
-		return nil, errors.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QueryTemporal",
+		return nil, errs.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QueryTemporal",
 			"index manager dependency unavailable")
 	}
 
@@ -289,7 +289,7 @@ func (m *Manager) QueryTemporal(ctx context.Context, start, end time.Time) ([]st
 		if m.metrics != nil {
 			m.metrics.RecordQuery("query_engine", "temporal", time.Since(startTime), 0, false)
 		}
-		return nil, errors.WrapTransient(err, "QueryManager", "QueryTemporal",
+		return nil, errs.WrapTransient(err, "QueryManager", "QueryTemporal",
 			fmt.Sprintf("index manager temporal query failed: %v to %v", start, end))
 	}
 
@@ -316,7 +316,7 @@ func (m *Manager) WarmCache(ctx context.Context, entityIDs []string) error {
 	// Simply fetch entities, which will warm EntityReader's cache
 	_, err := m.GetEntities(ctx, entityIDs)
 	if err != nil {
-		return errors.WrapTransient(err, "QueryManager", "WarmCache",
+		return errs.WrapTransient(err, "QueryManager", "WarmCache",
 			"batch cache warming failed")
 	}
 

@@ -3,7 +3,7 @@ package cache
 import (
 	"sync"
 
-	"github.com/c360/semstreams/errors"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 // simpleCache is a thread-safe cache with no eviction policy.
@@ -29,7 +29,7 @@ func newSimpleCache[V any](opts *cacheOptions[V]) (*simpleCache[V], error) {
 		metrics, err = newCacheMetrics(opts.metricsReg, opts.metricsPrefix)
 		if err != nil {
 			// Return classified error instead of silently ignoring
-			return nil, errors.WrapTransient(err, "cache", "newSimpleCache", "metrics registration")
+			return nil, errs.WrapTransient(err, "cache", "newSimpleCache", "metrics registration")
 		}
 	}
 

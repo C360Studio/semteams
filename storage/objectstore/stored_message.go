@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/errors"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/pkg/errs"
 )
 
 func init() {
@@ -130,10 +130,10 @@ func (s *StoredMessage) Schema() message.Type {
 // Validate implements message.Payload interface
 func (s *StoredMessage) Validate() error {
 	if s.entityID == "" {
-		return errors.WrapInvalid(errors.ErrInvalidData, "StoredMessage", "Validate", "entity_id is required")
+		return errs.WrapInvalid(errs.ErrInvalidData, "StoredMessage", "Validate", "entity_id is required")
 	}
 	if s.storageRef == nil {
-		return errors.WrapInvalid(errors.ErrInvalidData, "StoredMessage", "Validate", "storage_ref is required")
+		return errs.WrapInvalid(errs.ErrInvalidData, "StoredMessage", "Validate", "storage_ref is required")
 	}
 	return nil
 }
