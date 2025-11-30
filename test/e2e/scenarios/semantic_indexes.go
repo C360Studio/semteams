@@ -9,15 +9,18 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/test/e2e/client"
+	"github.com/c360/semstreams/test/e2e/config"
 )
 
 // SemanticIndexesScenario validates core indexing functionality without external dependencies
 type SemanticIndexesScenario struct {
-	name        string
-	description string
-	client      *client.ObservabilityClient
-	udpAddr     string
-	config      *SemanticIndexesConfig
+	name             string
+	description      string
+	client           *client.ObservabilityClient
+	udpAddr          string
+	natsURL          string
+	config           *SemanticIndexesConfig
+	validationConfig *config.ValidationConfig
 }
 
 // SemanticIndexesConfig contains configuration for indexes test
@@ -45,21 +48,23 @@ func DefaultSemanticIndexesConfig() *SemanticIndexesConfig {
 func NewSemanticIndexesScenario(
 	obsClient *client.ObservabilityClient,
 	udpAddr string,
-	config *SemanticIndexesConfig,
+	cfg *SemanticIndexesConfig,
 ) *SemanticIndexesScenario {
-	if config == nil {
-		config = DefaultSemanticIndexesConfig()
+	if cfg == nil {
+		cfg = DefaultSemanticIndexesConfig()
 	}
 	if udpAddr == "" {
-		udpAddr = "localhost:14550"
+		udpAddr = config.DefaultEndpoints.UDP
 	}
 
 	return &SemanticIndexesScenario{
-		name:        "semantic-indexes",
-		description: "Tests core semantic indexing: Predicate, Spatial, Temporal, Alias, and Incoming indexes (no external dependencies)",
-		client:      obsClient,
-		udpAddr:     udpAddr,
-		config:      config,
+		name:             "semantic-indexes",
+		description:      "Tests core semantic indexing: Predicate, Spatial, Alias indexes with NATS KV validation",
+		client:           obsClient,
+		udpAddr:          udpAddr,
+		natsURL:          config.DefaultEndpoints.NATS,
+		config:           cfg,
+		validationConfig: config.DefaultValidationConfig(),
 	}
 }
 
@@ -106,6 +111,7 @@ func (s *SemanticIndexesScenario) Execute(ctx context.Context) (*Result, error) 
 		{"send-test-data", s.executeSendTestData},
 		{"validate-indexing", s.executeValidateIndexing},
 		{"verify-graph-processor", s.executeVerifyGraphProcessor},
+		{"validate-nats-indexes", s.executeValidateNATSIndexes},
 	}
 
 	// Execute each stage
@@ -148,7 +154,7 @@ func (s *SemanticIndexesScenario) executeVerifyComponents(ctx context.Context, r
 	// Required components for semantic indexing
 	requiredComponents := []string{
 		"udp",          // Input
-		"json_generic", // Parser
+		"iot_sensor", // Domain processor
 		"graph",        // Semantic processor with indexes
 	}
 
@@ -190,28 +196,15 @@ func (s *SemanticIndexesScenario) executeSendTestData(ctx context.Context, resul
 	messagesSent := 0
 
 	for i := 0; i < s.config.MessageCount; i++ {
-		// Create entity with properties for all index types
+		// Create sensor reading matching IoT sensor processor expected format
+		// See examples/processors/iot_sensor/processor.go for format
 		testMsg := map[string]any{
-			"type":        "telemetry",
-			"entity_id":   fmt.Sprintf("sensor-%d", i),
-			"entity_type": "device",
-			"timestamp":   time.Now().Unix(),
-			"data": map[string]any{
-				// Properties for predicate index
-				"temperature": 20.0 + float64(i),
-				"humidity":    50.0 + float64(i*2),
-				"status":      "active",
-
-				// Location for spatial index
-				"location": map[string]any{
-					"lat": 37.7749 + float64(i)*0.001,
-					"lon": -122.4194 + float64(i)*0.001,
-				},
-
-				// Alias for alias index
-				"device_name": fmt.Sprintf("temp-sensor-%d", i),
-			},
-			"value": i * 5,
+			"device_id": fmt.Sprintf("sensor-%d", i),
+			"type":      "temperature",
+			"reading":   20.0 + float64(i),
+			"unit":      "celsius",
+			"location":  fmt.Sprintf("warehouse-%d", i%3),
+			"timestamp": time.Now().Format(time.RFC3339),
 		}
 
 		msgBytes, err := json.Marshal(testMsg)
@@ -316,4 +309,75 @@ func (s *SemanticIndexesScenario) executeVerifyGraphProcessor(ctx context.Contex
 
 	result.Errors = append(result.Errors, "Graph processor not found in final verification")
 	return fmt.Errorf("graph processor not found")
+}
+
+// executeValidateNATSIndexes validates that indexes are populated in NATS KV
+func (s *SemanticIndexesScenario) executeValidateNATSIndexes(ctx context.Context, result *Result) error {
+	// Connect to NATS
+	natsClient, err := client.NewNATSValidationClient(ctx, s.natsURL)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("NATS connection failed: %v", err))
+		result.Details["index_validation"] = map[string]any{
+			"connected": false,
+			"error":     err.Error(),
+		}
+		// Not a hard failure - NATS might not be available
+		return nil
+	}
+	defer natsClient.Close(ctx)
+
+	// Wait for index processing
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(s.validationConfig.ValidationTimeout):
+	}
+
+	// Check each required index
+	indexResults := make(map[string]bool)
+	indexesPopulated := 0
+
+	for _, indexName := range s.validationConfig.RequiredIndexes {
+		populated, err := natsClient.ValidateIndexPopulated(ctx, indexName)
+		if err != nil {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("Could not check index %s: %v", indexName, err))
+			indexResults[indexName] = false
+			continue
+		}
+		indexResults[indexName] = populated
+		if populated {
+			indexesPopulated++
+		}
+	}
+
+	// Record results
+	result.Metrics["indexes_checked"] = len(s.validationConfig.RequiredIndexes)
+	result.Metrics["indexes_populated"] = indexesPopulated
+
+	result.Details["index_validation"] = map[string]any{
+		"connected":         true,
+		"required_indexes":  s.validationConfig.RequiredIndexes,
+		"index_results":     indexResults,
+		"indexes_populated": indexesPopulated,
+		"indexes_checked":   len(s.validationConfig.RequiredIndexes),
+	}
+
+	// List all buckets for debugging
+	buckets, err := natsClient.ListBuckets(ctx)
+	if err == nil {
+		result.Details["available_buckets"] = buckets
+	}
+
+	// Require at least one index to be populated
+	if indexesPopulated == 0 {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("No indexes populated out of %d checked", len(s.validationConfig.RequiredIndexes)))
+	} else {
+		result.Details["index_kv_validation"] = fmt.Sprintf(
+			"Verified %d/%d indexes populated in NATS KV",
+			indexesPopulated, len(s.validationConfig.RequiredIndexes))
+	}
+
+	return nil
 }

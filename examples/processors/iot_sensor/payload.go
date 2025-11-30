@@ -17,11 +17,42 @@
 package iotsensor
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/message"
 )
+
+// init registers the SensorReading payload type with the global PayloadRegistry.
+// This enables BaseMessage.UnmarshalJSON to recreate SensorReading payloads
+// from JSON when the message type is "iot.sensor.v1".
+func init() {
+	// Register SensorReading payload factory
+	// Type format: domain.category.version (3 parts)
+	// Result: iot.sensor.v1
+	err := component.RegisterPayload(&component.PayloadRegistration{
+		Domain:      "iot",
+		Category:    "sensor",
+		Version:     "v1",
+		Description: "IoT sensor reading payload with Graphable implementation",
+		Factory: func() any {
+			return &SensorReading{}
+		},
+		Example: map[string]any{
+			"DeviceID":   "sensor-042",
+			"SensorType": "temperature",
+			"Value":      23.5,
+			"Unit":       "celsius",
+			"OrgID":      "acme",
+			"Platform":   "logistics",
+		},
+	})
+	if err != nil {
+		panic("failed to register SensorReading payload: " + err.Error())
+	}
+}
 
 // SensorReading represents an IoT sensor measurement. It implements the Graphable
 // interface with federated entity IDs and semantic predicates.
@@ -122,6 +153,53 @@ func (s *SensorReading) Triples() []message.Triple {
 	}
 
 	return triples
+}
+
+// Payload interface implementation
+
+// Schema returns the message type for sensor readings.
+// This identifies the payload type for routing and processing.
+// Type format: domain.category.version → iot.sensor.v1
+func (s *SensorReading) Schema() message.Type {
+	return message.Type{
+		Domain:   "iot",
+		Category: "sensor",
+		Version:  "v1",
+	}
+}
+
+// Validate checks that the sensor reading has all required fields.
+func (s *SensorReading) Validate() error {
+	if s.DeviceID == "" {
+		return fmt.Errorf("device_id is required")
+	}
+	if s.SensorType == "" {
+		return fmt.Errorf("sensor type is required")
+	}
+	if s.Unit == "" {
+		return fmt.Errorf("unit is required")
+	}
+	if s.OrgID == "" {
+		return fmt.Errorf("org_id is required")
+	}
+	if s.Platform == "" {
+		return fmt.Errorf("platform is required")
+	}
+	return nil
+}
+
+// MarshalJSON implements json.Marshaler for SensorReading.
+// Uses alias pattern to avoid infinite recursion.
+func (s *SensorReading) MarshalJSON() ([]byte, error) {
+	type Alias SensorReading
+	return json.Marshal((*Alias)(s))
+}
+
+// UnmarshalJSON implements json.Unmarshaler for SensorReading.
+// Uses alias pattern to avoid infinite recursion.
+func (s *SensorReading) UnmarshalJSON(data []byte) error {
+	type Alias SensorReading
+	return json.Unmarshal(data, (*Alias)(s))
 }
 
 // ZoneEntityID generates a federated 6-part entity ID for a zone.

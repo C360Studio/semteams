@@ -1,4 +1,4 @@
-// Package scenarios provides E2E test scenarios for StreamKit core components
+// Package scenarios provides E2E test scenarios for SemStreams
 package scenarios
 
 import (
@@ -231,7 +231,7 @@ func (s *CoreDataflowScenario) executeValidateProcessing(ctx context.Context, re
 		return fmt.Errorf("component query failed: %w", err)
 	}
 
-	// NOTE: StreamKit's /components/list endpoint doesn't include detailed metrics
+	// NOTE: SemStreams /components/list endpoint doesn't include detailed metrics
 	// For now, we skip metric validation and rely on file output verification
 	// TODO: Add metrics endpoint check if needed
 

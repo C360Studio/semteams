@@ -1,4 +1,4 @@
-// Package scenarios defines E2E test scenarios for StreamKit core components
+// Package scenarios defines E2E test scenarios for SemStreams
 package scenarios
 
 import (

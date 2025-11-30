@@ -1,15 +1,17 @@
-// Package config provides configuration for StreamKit core component E2E tests
+// Package config provides configuration for SemStreams E2E tests
 package config
 
 import "time"
 
-// DefaultEndpoints provides default StreamKit service endpoints
+// DefaultEndpoints provides default SemStreams service endpoints
 var DefaultEndpoints = struct {
 	HTTP string
 	UDP  string
+	NATS string
 }{
 	HTTP: "http://localhost:8080",
 	UDP:  "localhost:14550",
+	NATS: "nats://localhost:4222",
 }
 
 // ComponentPaths defines API paths for component endpoints

@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/c360/semstreams/component"
+	iotsensor "github.com/c360/semstreams/examples/processors/iot_sensor"
 	gatewaygraphql "github.com/c360/semstreams/gateway/graphql"
 	gatewayhttp "github.com/c360/semstreams/gateway/http"
 	"github.com/c360/semstreams/input/udp"
@@ -22,7 +23,7 @@ import (
 )
 
 // Register registers all SemStreams framework components with the provided registry.
-// This includes both protocol-layer and semantic-layer components:
+// This includes protocol-layer, semantic-layer, and example domain components:
 //
 // Protocol Layer (network/data agnostic):
 //   - UDP input (network protocol)
@@ -40,6 +41,9 @@ import (
 // Semantic Layer (domain agnostic):
 //   - Graph processor (entity graph operations)
 //   - Context processor (context enrichment)
+//
+// Domain Layer (example processors):
+//   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
 //
 // Note: Domain-specific components (MAVLink, robotics, etc.) are registered
 // in separate modules like streamkit-robotics.
@@ -113,6 +117,11 @@ func Register(registry *component.Registry) error {
 	// Semantic Layer - Processors
 	if err := graph.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "Graph processor component registration")
+	}
+
+	// Domain Layer - Example Processors
+	if err := iotsensor.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "IoT sensor processor component registration")
 	}
 
 	return nil

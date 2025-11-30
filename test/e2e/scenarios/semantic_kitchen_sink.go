@@ -656,18 +656,22 @@ func (s *SemanticKitchenSinkScenario) executeValidateMetrics(_ context.Context, 
 	metricsText := string(body)
 
 	// Define key metrics to validate (presence only, not values)
-	// Note: Graph processor Prometheus metrics are not yet implemented
-	// so we verify basic dataflow metrics instead
+	// Metrics list curated from processor/graph/indexmanager/metrics.go, pkg/cache/metrics.go,
+	// and processor/json_filter/metrics.go - updated 2025-11-30
 	requiredMetrics := []string{
-		"semstreams_cache_hits_total",          // DataManager L1/L2 cache
+		"indexmanager_events_processed",        // IndexManager events successfully processed
+		"indexmanager_index_updates_total",     // Per-index update counts
+		"semstreams_cache_hits_total",          // DataManager L1/L2 cache hits
 		"semstreams_cache_misses_total",        // DataManager cache misses
-		"semstreams_json_filter_matched_total", // JSON filter metrics
+		"semstreams_json_filter_matched_total", // JSON filter matched messages
 	}
 
 	// Optional metrics (present only when certain features active)
 	optionalMetrics := []string{
-		"semstreams_indexmanager_embeddings_generated_total",
-		"semstreams_graph_edges_created_total",
+		"indexmanager_events_total",               // Total events received
+		"indexmanager_events_failed",              // Processing failures
+		"indexmanager_embeddings_generated_total", // Embedding generation count
+		"semstreams_json_filter_dropped_total",    // JSON filter dropped messages
 	}
 
 	foundRequired := make(map[string]bool)

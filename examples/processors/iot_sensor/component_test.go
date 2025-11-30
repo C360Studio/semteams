@@ -1,0 +1,215 @@
+package iotsensor
+
+import (
+	"encoding/json"
+	"testing"
+
+	"github.com/c360/semstreams/component"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestNewComponent_ValidConfig(t *testing.T) {
+	config := ComponentConfig{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{
+					Name:        "nats_input",
+					Type:        "nats",
+					Subject:     "raw.sensor.>",
+					Required:    true,
+					Description: "NATS subjects with sensor JSON data",
+				},
+			},
+			Outputs: []component.PortDefinition{
+				{
+					Name:        "nats_output",
+					Type:        "nats",
+					Subject:     "events.graph.entity.sensor",
+					Interface:   "domain.iot.sensor.v1",
+					Required:    true,
+					Description: "NATS subject for Graphable sensor readings",
+				},
+			},
+		},
+		OrgID:    "acme",
+		Platform: "logistics",
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nil, // Will be nil for creation test
+	}
+
+	comp, err := NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+	require.NotNil(t, comp)
+
+	// Verify it implements Discoverable
+	discoverable, ok := comp.(component.Discoverable)
+	require.True(t, ok, "Component must implement Discoverable interface")
+
+	// Verify metadata
+	meta := discoverable.Meta()
+	assert.Equal(t, "iot-sensor-processor", meta.Name)
+	assert.Equal(t, "processor", meta.Type)
+	assert.Contains(t, meta.Description, "sensor")
+	assert.Equal(t, "0.1.0", meta.Version)
+}
+
+func TestNewComponent_MissingOrgID(t *testing.T) {
+	config := ComponentConfig{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{
+					Name:    "nats_input",
+					Type:    "nats",
+					Subject: "raw.sensor.>",
+				},
+			},
+			Outputs: []component.PortDefinition{
+				{
+					Name:    "nats_output",
+					Type:    "nats",
+					Subject: "events.graph.entity.sensor",
+				},
+			},
+		},
+		// Missing OrgID
+		Platform: "logistics",
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nil,
+	}
+
+	_, err = NewComponent(rawConfig, deps)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "OrgID")
+}
+
+func TestNewComponent_MissingPlatform(t *testing.T) {
+	config := ComponentConfig{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{
+					Name:    "nats_input",
+					Type:    "nats",
+					Subject: "raw.sensor.>",
+				},
+			},
+			Outputs: []component.PortDefinition{
+				{
+					Name:    "nats_output",
+					Type:    "nats",
+					Subject: "events.graph.entity.sensor",
+				},
+			},
+		},
+		OrgID: "acme",
+		// Missing Platform
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nil,
+	}
+
+	_, err = NewComponent(rawConfig, deps)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Platform")
+}
+
+func TestComponent_InputPorts(t *testing.T) {
+	config := ComponentConfig{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "input1", Type: "nats", Subject: "raw.sensor.1", Required: true},
+				{Name: "input2", Type: "nats", Subject: "raw.sensor.2", Required: false},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "output", Type: "nats", Subject: "events.sensor", Interface: "domain.iot.sensor.v1", Required: true},
+			},
+		},
+		OrgID:    "acme",
+		Platform: "logistics",
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nil,
+	}
+
+	comp, err := NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+
+	inputPorts := comp.InputPorts()
+	assert.Len(t, inputPorts, 2)
+
+	// Check first input port
+	natsPort1, ok := inputPorts[0].Config.(component.NATSPort)
+	assert.True(t, ok, "First input should be NATS port")
+	assert.Equal(t, "raw.sensor.1", natsPort1.Subject)
+
+	// Check second input port
+	natsPort2, ok := inputPorts[1].Config.(component.NATSPort)
+	assert.True(t, ok, "Second input should be NATS port")
+	assert.Equal(t, "raw.sensor.2", natsPort2.Subject)
+}
+
+func TestComponent_OutputPorts(t *testing.T) {
+	config := ComponentConfig{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "input", Type: "nats", Subject: "raw.sensor.>", Required: true},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "output", Type: "nats", Subject: "events.sensor", Interface: "domain.iot.sensor.v1", Required: true},
+			},
+		},
+		OrgID:    "acme",
+		Platform: "logistics",
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nil,
+	}
+
+	comp, err := NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+
+	outputPorts := comp.OutputPorts()
+	assert.Len(t, outputPorts, 1)
+
+	natsPort, ok := outputPorts[0].Config.(component.NATSPort)
+	assert.True(t, ok, "Output should be NATS port")
+	assert.Equal(t, "events.sensor", natsPort.Subject)
+	assert.NotNil(t, natsPort.Interface)
+	if natsPort.Interface != nil {
+		assert.Equal(t, "domain.iot.sensor.v1", natsPort.Interface.Type)
+	}
+}
+
+func TestRegister(t *testing.T) {
+	registry := component.NewRegistry()
+
+	err := Register(registry)
+	require.NoError(t, err)
+
+	// Verify component was registered
+	factory, ok := registry.GetFactory("iot_sensor")
+	require.True(t, ok, "Expected component to be registered")
+	require.NotNil(t, factory, "Expected component factory to be registered")
+}

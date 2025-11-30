@@ -187,17 +187,21 @@ task e2e:semantic  # Runs semantic-basic + semantic-indexes + semantic-kitchen-s
 ### Test Structure
 ```
 test/e2e/
-├── client/               # Observability client for querying SemStreams
-├── config/              # Test configuration
-├── scenarios/           # Test scenario implementations
+├── client/
+│   ├── observability.go   # HTTP client for SemStreams component API
+│   └── nats.go            # NATS KV validation client (wraps natsclient)
+├── config/
+│   ├── constants.go       # Test configuration constants
+│   └── validation.go      # Validation thresholds and result types
+├── scenarios/
 │   ├── core_health.go
 │   ├── core_dataflow.go
 │   ├── core_federation.go
-│   ├── semantic_basic.go
-│   ├── semantic_indexes.go      # NEW - Fast core indexing tests
-│   └── semantic_kitchen_sink.go # ENHANCED - Full semantic + SemEmbed + metrics
+│   ├── semantic_basic.go        # Entity storage validation
+│   ├── semantic_indexes.go      # Index population validation
+│   └── semantic_kitchen_sink.go # Metrics + full stack validation
 └── cmd/e2e/
-    └── main.go         # Test runner CLI
+    └── main.go           # Test runner CLI
 ```
 
 ### Docker Compose Files
@@ -206,6 +210,104 @@ semstreams/
 ├── docker-compose.semantic.yml         # Basic semantic (no embedding service)
 └── docker-compose.semantic-kitchen.yml # Full semantic + SemEmbed + all outputs
 ```
+
+## NATS KV Validation
+
+### Overview
+
+E2E tests now validate actual data storage in NATS KV buckets, not just component health status.
+
+### What Gets Validated
+
+**Before (Component Health Only)**:
+```
+✓ Graph processor healthy
+✓ UDP input healthy
+✓ 5 entities sent
+Result: PASS
+```
+
+**After (With KV Validation)**:
+```
+✓ Graph processor healthy
+✓ UDP input healthy
+✓ 5 entities sent
+✓ 4 entities found in ENTITY_STATES (80%)
+✓ Predicate index has entries
+✓ Spatial index has entries
+✓ Alias index has entries
+Result: PASS with validation: storage_rate=0.80, indexes_populated=3
+```
+
+### Entity Validation (semantic-basic)
+
+Tests validate that entities sent through the pipeline are stored in NATS KV:
+
+- **Storage Rate**: At least 80% of sent entities must be stored (accounts for UDP packet loss)
+- **Entity Structure**: Validates entity has required fields (id, type, properties)
+- **Retrieval**: Retrieves sample entities to verify correct storage format
+
+### Index Validation (semantic-indexes)
+
+Tests validate that indexes are populated correctly:
+
+| Index | Bucket Name | Purpose |
+|-------|-------------|---------|
+| Predicate | `PREDICATE_INDEX` | Property-based lookups |
+| Spatial | `SPATIAL_INDEX` | Geo-location queries |
+| Alias | `ALIAS_INDEX` | Name-to-ID resolution |
+
+### Metrics Validation (semantic-kitchen-sink)
+
+Tests validate Prometheus metrics are exposed:
+
+**Required Metrics** (must be present):
+- `indexmanager_events_processed` - Events processed by IndexManager
+- `indexmanager_index_updates_total` - Index update counts
+- `semstreams_cache_hits_total` - Cache hit count
+- `semstreams_cache_misses_total` - Cache miss count
+- `semstreams_json_filter_matched_total` - JSON filter matches
+
+**Optional Metrics** (reported if present):
+- `indexmanager_events_total` - Total events received
+- `indexmanager_events_failed` - Processing failures
+- `indexmanager_embeddings_generated_total` - Embedding count
+
+### Configuration
+
+Validation thresholds are defined in `test/e2e/config/validation.go`:
+
+```go
+const (
+    // Minimum percentage of sent entities that must be stored
+    DefaultMinStorageRate = 0.80
+
+    // Timeout waiting for NATS processing
+    DefaultValidationTimeout = 5 * time.Second
+)
+```
+
+### Troubleshooting NATS Validation
+
+**"NATS connection failed"**:
+```bash
+# Check if NATS is running
+docker ps | grep nats
+
+# Check NATS logs
+docker logs semstreams-nats
+```
+
+**"Bucket does not exist"**:
+- The NATS KV buckets are created by the graph processor on startup
+- Ensure graph processor is enabled in config
+- Wait for initialization (5-10 seconds)
+
+**"Storage rate below threshold"**:
+- Check graph processor logs for errors
+- Verify entity ID format matches expected pattern
+- Check NATS connection from within Docker network
+- Increase validation timeout if processing is slow
 
 ## External Dependencies
 

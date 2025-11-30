@@ -1,4 +1,4 @@
-// Package main provides the E2E test CLI for StreamKit core components
+// Package main provides the E2E test CLI for SemStreams core components
 package main
 
 import (
@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	// StreamKit E2E infrastructure
+	// SemStreams E2E infrastructure
 	"github.com/c360/semstreams/test/e2e/client"
 	"github.com/c360/semstreams/test/e2e/config"
 	scenarios "github.com/c360/semstreams/test/e2e/scenarios"
@@ -65,9 +65,9 @@ func parseCommandLineFlags() *cliFlags {
 	flag.StringVar(&flags.scenarioName, "scenario", "",
 		"Run specific scenario (core-health, core-dataflow, core-federation, or 'all')")
 	flag.BoolVar(&flags.verbose, "verbose", false, "Enable verbose logging")
-	flag.StringVar(&flags.baseURL, "base-url", config.DefaultEndpoints.HTTP, "StreamKit HTTP endpoint (edge)")
+	flag.StringVar(&flags.baseURL, "base-url", config.DefaultEndpoints.HTTP, "SemStreams HTTP endpoint (edge)")
 	flag.StringVar(&flags.cloudURL, "cloud-url", "http://localhost:8081",
-		"StreamKit cloud HTTP endpoint (federation only)")
+		"SemStreams cloud HTTP endpoint (federation only)")
 	flag.StringVar(&flags.udpEndpoint, "udp-endpoint", config.DefaultEndpoints.UDP, "UDP test endpoint")
 	flag.StringVar(&flags.wsEndpoint, "ws-endpoint", "ws://localhost:8082/stream",
 		"WebSocket endpoint (federation only)")
@@ -75,7 +75,7 @@ func parseCommandLineFlags() *cliFlags {
 	flag.BoolVar(&flags.listScenarios, "list", false, "List available scenarios")
 
 	// Support environment variables for Docker Compose
-	if envURL := os.Getenv("STREAMKIT_BASE_URL"); envURL != "" {
+	if envURL := os.Getenv("SEMSTREAMS_BASE_URL"); envURL != "" {
 		flags.baseURL = envURL
 	}
 	if envUDP := os.Getenv("UDP_ENDPOINT"); envUDP != "" {
@@ -92,7 +92,7 @@ func handleVersionCommand(showVersion bool) bool {
 		return false
 	}
 
-	fmt.Printf("StreamKit E2E Test Runner\n")
+	fmt.Printf("SemStreams E2E Test Runner\n")
 	fmt.Printf("Version: %s\n", version)
 	fmt.Printf("Commit:  %s\n", commit)
 	fmt.Printf("Date:    %s\n", date)
@@ -171,7 +171,7 @@ func runScenarios(
 	edgeClient, cloudClient *client.ObservabilityClient,
 	flags *cliFlags,
 ) int {
-	logger.Info("Connecting to StreamKit",
+	logger.Info("Connecting to SemStreams",
 		"base_url", flags.baseURL,
 		"udp_endpoint", flags.udpEndpoint,
 	)

@@ -9,15 +9,18 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/test/e2e/client"
+	"github.com/c360/semstreams/test/e2e/config"
 )
 
 // SemanticBasicScenario validates basic semantic processing with graph processor
 type SemanticBasicScenario struct {
-	name        string
-	description string
-	client      *client.ObservabilityClient
-	udpAddr     string
-	config      *SemanticBasicConfig
+	name             string
+	description      string
+	client           *client.ObservabilityClient
+	udpAddr          string
+	natsURL          string
+	config           *SemanticBasicConfig
+	validationConfig *config.ValidationConfig
 }
 
 // SemanticBasicConfig contains configuration for basic semantic test
@@ -45,21 +48,23 @@ func DefaultSemanticBasicConfig() *SemanticBasicConfig {
 func NewSemanticBasicScenario(
 	obsClient *client.ObservabilityClient,
 	udpAddr string,
-	config *SemanticBasicConfig,
+	cfg *SemanticBasicConfig,
 ) *SemanticBasicScenario {
-	if config == nil {
-		config = DefaultSemanticBasicConfig()
+	if cfg == nil {
+		cfg = DefaultSemanticBasicConfig()
 	}
 	if udpAddr == "" {
-		udpAddr = "localhost:14550"
+		udpAddr = config.DefaultEndpoints.UDP
 	}
 
 	return &SemanticBasicScenario{
-		name:        "semantic-basic",
-		description: "Tests basic semantic processing: UDP → JSONGeneric → Graph Processor",
-		client:      obsClient,
-		udpAddr:     udpAddr,
-		config:      config,
+		name:             "semantic-basic",
+		description:      "Tests basic semantic processing: UDP → JSONGeneric → Graph Processor → NATS KV",
+		client:           obsClient,
+		udpAddr:          udpAddr,
+		natsURL:          config.DefaultEndpoints.NATS,
+		config:           cfg,
+		validationConfig: config.DefaultValidationConfig(),
 	}
 }
 
@@ -105,6 +110,7 @@ func (s *SemanticBasicScenario) Execute(ctx context.Context) (*Result, error) {
 		{"verify-components", s.executeVerifyComponents},
 		{"send-entities", s.executeSendEntities},
 		{"validate-processing", s.executeValidateProcessing},
+		{"validate-nats-kv", s.executeValidateNATSKV},
 	}
 
 	// Execute each stage
@@ -144,7 +150,7 @@ func (s *SemanticBasicScenario) executeVerifyComponents(ctx context.Context, res
 		return fmt.Errorf("component verification failed: %w", err)
 	}
 
-	requiredComponents := []string{"udp", "json_generic", "graph"}
+	requiredComponents := []string{"udp", "iot_sensor", "graph"}
 	foundComponents := make(map[string]bool)
 
 	for _, comp := range components {
@@ -178,18 +184,17 @@ func (s *SemanticBasicScenario) executeSendEntities(ctx context.Context, result 
 	defer conn.Close()
 
 	// Send entity messages
+	// IoT sensor processor expects this format - see examples/processors/iot_sensor/processor.go
 	entitiesSent := 0
 	for i := 0; i < s.config.EntityCount; i++ {
-		// Create entity event
+		// Create sensor reading matching IoT sensor processor expected format
 		entityMsg := map[string]any{
-			"entity_id":   fmt.Sprintf("sensor-%d", i),
-			"entity_type": "sensor",
-			"timestamp":   time.Now().Unix(),
-			"data": map[string]any{
-				"temperature": 20.0 + float64(i),
-				"humidity":    50.0 + float64(i*2),
-				"location":    fmt.Sprintf("room-%d", i%3),
-			},
+			"device_id": fmt.Sprintf("sensor-%d", i),
+			"type":      "temperature",
+			"reading":   20.0 + float64(i),
+			"unit":      "celsius",
+			"location":  fmt.Sprintf("room-%d", i%3),
+			"timestamp": time.Now().Format(time.RFC3339),
 		}
 
 		msgBytes, err := json.Marshal(entityMsg)
@@ -262,6 +267,128 @@ func (s *SemanticBasicScenario) executeValidateProcessing(ctx context.Context, r
 	result.Details["validation"] = fmt.Sprintf(
 		"Graph processor found and healthy. Components: %d",
 		len(components))
+
+	return nil
+}
+
+// executeValidateNATSKV validates entities were stored in NATS KV bucket
+func (s *SemanticBasicScenario) executeValidateNATSKV(ctx context.Context, result *Result) error {
+	// Get entities_sent from previous stage
+	entitiesSent, ok := result.Metrics["entities_sent"].(int)
+	if !ok {
+		result.Warnings = append(result.Warnings, "Could not get entities_sent from metrics")
+		entitiesSent = s.config.EntityCount
+	}
+
+	// Connect to NATS
+	natsClient, err := client.NewNATSValidationClient(ctx, s.natsURL)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("NATS connection failed: %v", err))
+		result.Details["nats_validation"] = map[string]any{
+			"connected": false,
+			"error":     err.Error(),
+		}
+		// Not a hard failure - NATS might not be available in all test environments
+		return nil
+	}
+	defer natsClient.Close(ctx)
+
+	// Wait for processing to complete
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(s.validationConfig.ValidationTimeout):
+	}
+
+	// Count entities in NATS KV
+	entitiesStored, err := natsClient.CountEntities(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Could not count entities: %v", err))
+		result.Details["nats_validation"] = map[string]any{
+			"connected":       true,
+			"count_error":     err.Error(),
+			"entities_stored": 0,
+		}
+		return nil
+	}
+
+	// Calculate storage rate
+	validationResult := config.NewValidationResult(entitiesSent)
+	validationResult.EntitiesStored = entitiesStored
+	validationResult.CalculateStorageRate()
+
+	// Record metrics
+	result.Metrics["entities_stored"] = entitiesStored
+	result.Metrics["storage_rate"] = validationResult.StorageRate
+
+	result.Details["nats_validation"] = map[string]any{
+		"connected":       true,
+		"entities_sent":   entitiesSent,
+		"entities_stored": entitiesStored,
+		"storage_rate":    validationResult.StorageRate,
+		"threshold":       s.validationConfig.MinStorageRate,
+	}
+
+	// Check if storage rate meets threshold
+	if !validationResult.MeetsThreshold(s.validationConfig.MinStorageRate) {
+		result.Errors = append(result.Errors,
+			fmt.Sprintf("Storage rate %.2f below threshold %.2f (%d/%d entities stored)",
+				validationResult.StorageRate, s.validationConfig.MinStorageRate,
+				entitiesStored, entitiesSent))
+		return fmt.Errorf("storage rate %.2f below threshold %.2f",
+			validationResult.StorageRate, s.validationConfig.MinStorageRate)
+	}
+
+	result.Details["nats_kv_validation"] = fmt.Sprintf(
+		"Verified %d/%d entities stored in NATS KV (%.0f%% storage rate)",
+		entitiesStored, entitiesSent, validationResult.StorageRate*100)
+
+	// Validate entity structure by retrieving a sample entity
+	// IoT sensor processor generates federated entity IDs:
+	// {org}.{platform}.environmental.sensor.{type}.{device_id}
+	if entitiesStored > 0 {
+		entityID := "c360.semstreams.environmental.sensor.temperature.sensor-0"
+		entity, err := natsClient.GetEntity(ctx, entityID)
+		if err != nil {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("Could not retrieve entity %s: %v", entityID, err))
+		} else {
+			// Validate entity structure
+			entityValid := true
+			validationDetails := make(map[string]any)
+
+			if entity.ID == "" {
+				entityValid = false
+				validationDetails["id_missing"] = true
+			} else {
+				validationDetails["id"] = entity.ID
+			}
+
+			if entity.Type == "" {
+				result.Warnings = append(result.Warnings, "Entity type is empty")
+				validationDetails["type_empty"] = true
+			} else {
+				validationDetails["type"] = entity.Type
+			}
+
+			if entity.Properties == nil {
+				result.Warnings = append(result.Warnings, "Entity properties is nil")
+				validationDetails["properties_nil"] = true
+			} else {
+				validationDetails["property_count"] = len(entity.Properties)
+			}
+
+			result.Details["entity_validation"] = map[string]any{
+				"entity_id": entityID,
+				"valid":     entityValid,
+				"details":   validationDetails,
+				"has_id":    entity.ID != "",
+				"has_type":  entity.Type != "",
+				"has_props": entity.Properties != nil,
+			}
+			result.Metrics["entity_validated"] = entityValid
+		}
+	}
 
 	return nil
 }

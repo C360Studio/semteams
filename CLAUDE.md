@@ -126,6 +126,8 @@ Full details: constitution + `docs/agent/*.md`
 - NATS KV buckets (ENTITY_STATES, indexes) (005-graph-package-consolidation)
 - Go 1.25+ + `github.com/c360/semstreams/pkg/retry` (internal dependency, unchanged) (006-errs-package)
 - N/A (utility package, no persistence) (006-errs-package)
+- Go 1.25+ + nats.go/jetstream (NATS client), stretchr/testify (assertions) (007-e2e-test-improvements)
+- NATS JetStream KV buckets (ENTITY_STATES, PREDICATE_INDEX, SPATIAL_INDEX, ALIAS_INDEX, INCOMING_INDEX, OUTGOING_INDEX, TEMPORAL_INDEX) (007-e2e-test-improvements)
 
 - Go 1.25+ + NATS JetStream (KV buckets), existing IndexManager, RuleProcessor (003-triples-architecture)
 - NATS KV (ENTITY_STATES, PREDICATE_INDEX, INCOMING_INDEX, OUTGOING_INDEX, RULE_STATE) (003-triples-architecture)

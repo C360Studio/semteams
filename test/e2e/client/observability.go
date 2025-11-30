@@ -1,4 +1,4 @@
-// Package client provides HTTP clients for StreamKit core component E2E tests
+// Package client provides HTTP clients for SemStreams E2E tests
 package client
 
 import (
@@ -10,13 +10,13 @@ import (
 	"github.com/c360/semstreams/test/e2e/config"
 )
 
-// ObservabilityClient interacts with StreamKit component management endpoints
+// ObservabilityClient interacts with SemStreams component management endpoints
 type ObservabilityClient struct {
 	baseURL    string
 	httpClient *http.Client
 }
 
-// NewObservabilityClient creates a new client for StreamKit observability endpoints
+// NewObservabilityClient creates a new client for SemStreams observability endpoints
 func NewObservabilityClient(baseURL string) *ObservabilityClient {
 	return &ObservabilityClient{
 		baseURL: baseURL,
@@ -34,7 +34,7 @@ type PlatformHealth struct {
 }
 
 // ComponentInfo represents a single component's information
-// Matches StreamKit's /components/list API response format
+// Matches SemStreams /components/list API response format
 type ComponentInfo struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`

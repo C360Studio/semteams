@@ -25,6 +25,17 @@
         "path": "/metrics",
         "include_go_metrics": true
       }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "buffer_size": 1000,
+        "monitor_subjects": ["raw.>", "events.>"],
+        "enable_kv_query": true,
+        "log_level": "DEBUG",
+        "output_to_stdout": true
+      }
     }
   },
   "components": {
@@ -48,25 +59,27 @@
         "buffer_size": 65536
       }
     },
-    "json_generic": {
+    "iot_sensor": {
       "type": "processor",
-      "name": "json_generic",
+      "name": "iot_sensor",
       "enabled": true,
       "config": {
+        "org_id": "c360",
+        "platform": "semstreams",
         "ports": {
           "inputs": [
             {
-              "name": "generic_in",
+              "name": "sensor_in",
               "subject": "raw.udp.messages",
               "type": "nats"
             }
           ],
           "outputs": [
             {
-              "name": "generic_out",
-              "subject": "generic.messages",
+              "name": "sensor_out",
+              "subject": "events.graph.entity.sensor",
               "type": "nats",
-              "interface": "core.json.v1"
+              "interface": "domain.iot.sensor.v1"
             }
           ]
         }
@@ -79,7 +92,7 @@
       "config": {
         "workers": 4,
         "queue_size": 1000,
-        "input_subject": "events.graph.entity.*",
+        "input_subject": "events.graph.entity.sensor",
         "message_handler": {
           "processing_timeout": "5s",
           "max_retries": 3

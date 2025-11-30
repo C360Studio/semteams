@@ -1,4 +1,4 @@
-// Package scenarios provides E2E test scenarios for StreamKit core components
+// Package scenarios provides E2E test scenarios for SemStreams
 package scenarios
 
 import (
@@ -59,7 +59,7 @@ func NewCoreHealthScenario(obsClient *client.ObservabilityClient, config *CoreHe
 
 	return &CoreHealthScenario{
 		name:        "core-health",
-		description: "Validates StreamKit core component health (UDP, JSONGeneric, JSONFilter, JSONMap, File, HTTP POST, WebSocket, ObjectStore)",
+		description: "Validates SemStreams core component health (UDP, JSONGeneric, JSONFilter, JSONMap, File, HTTP POST, WebSocket, ObjectStore)",
 		client:      obsClient,
 		config:      config,
 	}
