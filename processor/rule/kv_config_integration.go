@@ -11,7 +11,6 @@ import (
 
 	"github.com/c360/semstreams/config"
 	"github.com/c360/semstreams/natsclient"
-	rtypes "github.com/c360/semstreams/types/rule"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -255,7 +254,7 @@ func (rcm *ConfigManager) ListRules(_ context.Context) (map[string]Definition, e
 }
 
 // WatchRules watches for rule changes and returns active rules
-func (rcm *ConfigManager) WatchRules(_ context.Context, _ func(ruleID string, rule rtypes.Rule, operation string)) error {
+func (rcm *ConfigManager) WatchRules(_ context.Context, _ func(ruleID string, rule Rule, operation string)) error {
 	// This would set up a more sophisticated watcher
 	// For now, we use the existing subscription mechanism
 

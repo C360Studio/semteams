@@ -9,7 +9,6 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/processor/rule/expression"
-	rtypes "github.com/c360/semstreams/types/rule"
 )
 
 // Definition represents a JSON rule configuration
@@ -39,7 +38,7 @@ type EntityConfig struct {
 // Factory creates rules from configuration
 type Factory interface {
 	// Create creates a rule instance from configuration
-	Create(id string, config Definition, deps Dependencies) (rtypes.Rule, error)
+	Create(id string, config Definition, deps Dependencies) (Rule, error)
 
 	// Type returns the rule type this factory creates
 	Type() string
@@ -143,7 +142,7 @@ func GetRuleSchemas() map[string]Schema {
 }
 
 // CreateRuleFromDefinition creates a rule using the appropriate factory
-func CreateRuleFromDefinition(def Definition, deps Dependencies) (rtypes.Rule, error) {
+func CreateRuleFromDefinition(def Definition, deps Dependencies) (Rule, error) {
 	factory, exists := GetRuleFactory(def.Type)
 	if !exists {
 		return nil, fmt.Errorf("no factory registered for rule type: %s", def.Type)

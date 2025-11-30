@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/message"
-	rtypes "github.com/c360/semstreams/types/rule"
 )
 
 // handleMessage processes incoming NATS messages with dual-format support
@@ -111,7 +110,7 @@ func (rp *Processor) evaluateRulesForMessage(ctx context.Context, subject string
 }
 
 // matchesRuleSubject checks if a NATS subject matches the rule's subscription pattern
-func (rp *Processor) matchesRuleSubject(r rtypes.Rule, subject string) bool {
+func (rp *Processor) matchesRuleSubject(r Rule, subject string) bool {
 	ruleSubjects := r.Subscribe()
 
 	// Check against all rule subscription patterns

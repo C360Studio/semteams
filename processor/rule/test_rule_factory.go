@@ -8,7 +8,6 @@ import (
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/processor/rule/expression"
-	rtypes "github.com/c360/semstreams/types/rule"
 )
 
 // TestRule is a functional rule implementation for testing
@@ -93,9 +92,9 @@ func (r *TestRule) evaluateConditions(data map[string]interface{}) bool {
 }
 
 // ExecuteEvents generates events when rule triggers
-func (r *TestRule) ExecuteEvents(messages []message.Message) ([]rtypes.Event, error) {
+func (r *TestRule) ExecuteEvents(messages []message.Message) ([]Event, error) {
 	if !r.shouldTrigger || len(messages) == 0 {
-		return []rtypes.Event{}, nil
+		return []Event{}, nil
 	}
 
 	msg := messages[len(messages)-1]
@@ -121,7 +120,7 @@ func (r *TestRule) ExecuteEvents(messages []message.Message) ([]rtypes.Event, er
 	}
 
 	r.shouldTrigger = false // Reset trigger state
-	return []rtypes.Event{&event}, nil
+	return []Event{&event}, nil
 }
 
 // extractNestedValue extracts a value from nested map using dot notation
@@ -215,7 +214,7 @@ func (f *TestRuleFactory) Type() string {
 }
 
 // Create creates a test rule from definition
-func (f *TestRuleFactory) Create(ruleID string, def Definition, _ Dependencies) (rtypes.Rule, error) {
+func (f *TestRuleFactory) Create(ruleID string, def Definition, _ Dependencies) (Rule, error) {
 	// Create test rule with conditions from definition
 	// For test rules, subscribe to all subjects by default to simplify testing
 	subjects := []string{">"}

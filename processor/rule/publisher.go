@@ -8,12 +8,11 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/pkg/errs"
-	rtypes "github.com/c360/semstreams/types/rule"
 )
 
 // publishGraphEvents publishes a batch of graph events to appropriate NATS subjects
 // Accepts generic Event interface, works with any event type that implements it
-func (rp *Processor) publishGraphEvents(ctx context.Context, events []rtypes.Event) error {
+func (rp *Processor) publishGraphEvents(ctx context.Context, events []Event) error {
 	if len(events) == 0 {
 		return nil
 	}

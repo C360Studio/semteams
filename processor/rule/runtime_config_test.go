@@ -9,7 +9,6 @@ import (
 
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/processor/rule/expression"
-	rtypes "github.com/c360/semstreams/types/rule"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +19,7 @@ func TestRuntimeConfigurable_ValidateConfigUpdate(t *testing.T) {
 	processor := &Processor{
 		natsClient: &natsclient.Client{},
 		logger:     slog.Default(),
-		rules:      make(map[string]rtypes.Rule),
+		rules:      make(map[string]Rule),
 	}
 
 	tests := []struct {
@@ -166,7 +165,7 @@ func TestRuntimeConfigurable_ApplyConfigUpdate(t *testing.T) {
 	processor := &Processor{
 		natsClient:  &natsclient.Client{},
 		logger:      slog.Default(),
-		rules:       make(map[string]rtypes.Rule),
+		rules:       make(map[string]Rule),
 		ruleConfigs: make(map[string]map[string]any),
 		config:      &Config{},
 	}
@@ -236,7 +235,7 @@ func TestRuntimeConfigurable_GetRuntimeConfig(t *testing.T) {
 	processor := &Processor{
 		natsClient: &natsclient.Client{},
 		logger:     slog.Default(),
-		rules:      make(map[string]rtypes.Rule),
+		rules:      make(map[string]Rule),
 		config: &Config{
 			EnabledRules:           []string{"test_rule"},
 			BufferWindowSize:       "10m",
@@ -350,7 +349,7 @@ func TestDynamicRuleCRUD(t *testing.T) {
 	processor := &Processor{
 		natsClient:  &natsclient.Client{},
 		logger:      slog.Default(),
-		rules:       make(map[string]rtypes.Rule),
+		rules:       make(map[string]Rule),
 		ruleConfigs: make(map[string]map[string]any),
 		config:      &Config{},
 	}

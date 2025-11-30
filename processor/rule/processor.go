@@ -18,7 +18,6 @@ import (
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/cache"
 	"github.com/c360/semstreams/pkg/errs"
-	rtypes "github.com/c360/semstreams/types/rule"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -56,7 +55,7 @@ type Processor struct {
 
 	// Rule processing resources
 	natsClient  *natsclient.Client
-	rules       map[string]rtypes.Rule    // Self-loaded rules
+	rules       map[string]Rule           // Self-loaded rules
 	ruleConfigs map[string]map[string]any // Original rule configurations for GetRuntimeConfig
 
 	// Message cache
@@ -124,7 +123,7 @@ func NewProcessorWithMetrics(natsClient *natsclient.Client, config *Config, metr
 			Version:     "1.0.0",
 		},
 		natsClient:      natsClient,
-		rules:           make(map[string]rtypes.Rule),
+		rules:           make(map[string]Rule),
 		ruleConfigs:     make(map[string]map[string]any),
 		messageCache:    msgCache,
 		config:          config,

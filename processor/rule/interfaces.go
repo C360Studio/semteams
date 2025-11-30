@@ -1,4 +1,4 @@
-// Package rule provides interfaces for rule processing
+// Package rule provides interfaces and implementations for rule processing
 package rule
 
 import (

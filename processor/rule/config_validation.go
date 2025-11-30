@@ -5,7 +5,6 @@ import (
 
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/rule/expression"
-	rtypes "github.com/c360/semstreams/types/rule"
 )
 
 // ValidateConfigUpdate validates proposed configuration changes
@@ -201,7 +200,7 @@ func (rp *Processor) isValidOperator(operator string) bool {
 }
 
 // createRuleFromConfig creates a rule instance from configuration
-func (rp *Processor) createRuleFromConfig(ruleID string, ruleMap map[string]any) (rtypes.Rule, error) {
+func (rp *Processor) createRuleFromConfig(ruleID string, ruleMap map[string]any) (Rule, error) {
 	// Convert map to Definition
 	def := Definition{
 		ID:      ruleID,
