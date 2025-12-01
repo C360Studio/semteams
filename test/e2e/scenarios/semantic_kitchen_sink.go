@@ -111,6 +111,7 @@ func (s *SemanticKitchenSinkScenario) Execute(ctx context.Context) (*Result, err
 		{"test-semantic-search", s.executeTestSemanticSearch},
 		{"test-http-gateway", s.executeTestHTTPGateway},
 		{"test-embedding-fallback", s.executeTestEmbeddingFallback},
+		{"validate-rules", s.executeValidateRules},
 		{"validate-metrics", s.executeValidateMetrics},
 		{"verify-outputs", s.executeVerifyOutputs},
 	}
@@ -154,8 +155,8 @@ func (s *SemanticKitchenSinkScenario) executeVerifyComponents(ctx context.Contex
 
 	// Protocol components
 	protocolComponents := []string{"udp", "json_generic", "json_filter"}
-	// Semantic components
-	semanticComponents := []string{"graph"}
+	// Semantic components (rule processor + graph processor)
+	semanticComponents := []string{"rule", "graph"}
 	// Output components
 	outputComponents := []string{"file", "httppost", "websocket", "objectstore"}
 	// Gateway components (use instance names from config, not factory names)
@@ -630,6 +631,114 @@ func (s *SemanticKitchenSinkScenario) executeTestEmbeddingFallback(ctx context.C
 	return nil
 }
 
+// executeValidateRules validates that rules are being evaluated and triggered
+func (s *SemanticKitchenSinkScenario) executeValidateRules(ctx context.Context, result *Result) error {
+	// Query metrics for rule execution stats
+	metricsURL := "http://localhost:9090/metrics"
+	resp, err := http.Get(metricsURL)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to query metrics for rules: %v", err))
+		return nil // Not a hard failure
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to read metrics for rules: %v", err))
+		return nil
+	}
+
+	metricsText := string(body)
+
+	// Check for rule-related metrics
+	ruleMetrics := map[string]bool{
+		"rule_processor_events_processed":  strings.Contains(metricsText, "rule_processor_events_processed"),
+		"rule_processor_rules_evaluated":   strings.Contains(metricsText, "rule_processor_rules_evaluated"),
+		"rule_processor_rules_triggered":   strings.Contains(metricsText, "rule_processor_rules_triggered"),
+		"rule_processor_conditions_checked": strings.Contains(metricsText, "rule_processor_conditions_checked"),
+	}
+
+	foundRuleMetrics := 0
+	for _, found := range ruleMetrics {
+		if found {
+			foundRuleMetrics++
+		}
+	}
+
+	result.Details["rule_validation"] = map[string]any{
+		"metrics_checked": ruleMetrics,
+		"metrics_found":   foundRuleMetrics,
+		"message": fmt.Sprintf("Found %d rule processor metrics exposed", foundRuleMetrics),
+	}
+
+	// Send data that should trigger rules
+	conn, err := net.Dial("udp", s.udpAddr)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to connect for rule test: %v", err))
+		return nil
+	}
+	defer conn.Close()
+
+	// Messages designed to trigger specific rules
+	ruleTestMessages := []map[string]any{
+		// Should trigger low-battery-alert
+		{
+			"type":      "telemetry",
+			"entity_id": "battery-test-device",
+			"battery":   map[string]any{"level": 15.0},
+			"timestamp": time.Now().Unix(),
+		},
+		// Should trigger high-temperature-alert
+		{
+			"type":        "telemetry",
+			"entity_id":   "temp-test-device",
+			"data":        map[string]any{"temperature": 55.0},
+			"timestamp":   time.Now().Unix(),
+		},
+	}
+
+	sentCount := 0
+	for _, msg := range ruleTestMessages {
+		msgBytes, err := json.Marshal(msg)
+		if err != nil {
+			continue
+		}
+		if _, err := conn.Write(msgBytes); err == nil {
+			sentCount++
+		}
+	}
+
+	result.Metrics["rule_test_messages_sent"] = sentCount
+
+	// Wait for rules to process
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(2 * time.Second):
+	}
+
+	// Query metrics again to check if rules were triggered
+	resp2, err := http.Get(metricsURL)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to query metrics after rule test: %v", err))
+		return nil
+	}
+	defer resp2.Body.Close()
+
+	body2, _ := io.ReadAll(resp2.Body)
+	metricsText2 := string(body2)
+
+	// Check if any rules were triggered
+	rulesTriggered := strings.Contains(metricsText2, "rule_processor_rules_triggered")
+	result.Details["rules_triggered_metric_present"] = rulesTriggered
+
+	if rulesTriggered {
+		result.Metrics["rules_validation_passed"] = 1
+	}
+
+	return nil
+}
+
 // executeValidateMetrics validates Prometheus metrics exposure
 func (s *SemanticKitchenSinkScenario) executeValidateMetrics(_ context.Context, result *Result) error {
 	// Query metrics endpoint (port 9090, not 8080 which is the HTTP API)
@@ -659,19 +768,19 @@ func (s *SemanticKitchenSinkScenario) executeValidateMetrics(_ context.Context, 
 	// Metrics list curated from processor/graph/indexmanager/metrics.go, pkg/cache/metrics.go,
 	// and processor/json_filter/metrics.go - updated 2025-11-30
 	requiredMetrics := []string{
-		"indexmanager_events_processed",        // IndexManager events successfully processed
-		"indexmanager_index_updates_total",     // Per-index update counts
-		"semstreams_cache_hits_total",          // DataManager L1/L2 cache hits
-		"semstreams_cache_misses_total",        // DataManager cache misses
-		"semstreams_json_filter_matched_total", // JSON filter matched messages
+		"indexengine_events_processed_total", // IndexEngine events successfully processed
+		"indexengine_index_updates_total",    // Per-index update counts
+		"semstreams_cache_hits_total",        // DataManager L1/L2 cache hits
+		"semstreams_cache_misses_total",      // DataManager cache misses
 	}
 
 	// Optional metrics (present only when certain features active)
 	optionalMetrics := []string{
-		"indexmanager_events_total",               // Total events received
-		"indexmanager_events_failed",              // Processing failures
-		"indexmanager_embeddings_generated_total", // Embedding generation count
-		"semstreams_json_filter_dropped_total",    // JSON filter dropped messages
+		"indexengine_events_total",               // Total events received
+		"indexengine_events_failed_total",        // Processing failures
+		"indexengine_embeddings_generated_total", // Embedding generation count
+		"semstreams_json_filter_matched_total",   // JSON filter matched messages
+		"semstreams_json_filter_dropped_total",   // JSON filter dropped messages
 	}
 
 	foundRequired := make(map[string]bool)

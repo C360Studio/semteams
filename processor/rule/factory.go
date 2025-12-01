@@ -78,6 +78,12 @@ func CreateRuleProcessor(rawConfig json.RawMessage, deps component.Dependencies)
 		if len(userConfig.EnabledRules) > 0 {
 			ruleConfig.EnabledRules = userConfig.EnabledRules
 		}
+		if len(userConfig.RulesFiles) > 0 {
+			ruleConfig.RulesFiles = userConfig.RulesFiles
+		}
+		if len(userConfig.InlineRules) > 0 {
+			ruleConfig.InlineRules = userConfig.InlineRules
+		}
 		ruleConfig.MessageCache = userConfig.MessageCache
 		ruleConfig.BufferWindowSize = userConfig.BufferWindowSize
 		ruleConfig.AlertCooldownPeriod = userConfig.AlertCooldownPeriod

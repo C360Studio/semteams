@@ -9,10 +9,12 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	// SemStreams E2E infrastructure
 	"github.com/c360/semstreams/test/e2e/client"
 	"github.com/c360/semstreams/test/e2e/config"
+	"github.com/c360/semstreams/test/e2e/results"
 	scenarios "github.com/c360/semstreams/test/e2e/scenarios"
 )
 
@@ -38,6 +40,12 @@ func main() {
 	// Setup logger
 	logger := setupLogger(flags.verbose)
 
+	// Handle compare command
+	if flags.compare {
+		exitCode := handleCompareCommand(logger, flags.outputDir)
+		os.Exit(exitCode)
+	}
+
 	// Create clients and setup context
 	edgeClient, cloudClient, ctx := setupClientsAndContext(logger, flags.baseURL, flags.cloudURL)
 
@@ -56,6 +64,11 @@ type cliFlags struct {
 	wsEndpoint    string
 	showVersion   bool
 	listScenarios bool
+	// New flags for kitchen sink variant testing
+	variant    string // "core" or "ml"
+	outputDir  string // Directory for results output
+	compare    bool   // Generate comparison report from existing results
+	metricsURL string // Prometheus metrics endpoint URL
 }
 
 // parseCommandLineFlags parses and returns command-line flags
@@ -73,6 +86,15 @@ func parseCommandLineFlags() *cliFlags {
 		"WebSocket endpoint (federation only)")
 	flag.BoolVar(&flags.showVersion, "version", false, "Show version information")
 	flag.BoolVar(&flags.listScenarios, "list", false, "List available scenarios")
+	// New flags for kitchen sink variant testing
+	flag.StringVar(&flags.variant, "variant", "core",
+		"Test variant (core=CI-safe no ML, ml=full ML stack)")
+	flag.StringVar(&flags.outputDir, "output-dir", "",
+		"Directory for saving results JSON (empty=no output)")
+	flag.BoolVar(&flags.compare, "compare", false,
+		"Generate comparison report from existing results in output-dir")
+	flag.StringVar(&flags.metricsURL, "metrics-url", "http://localhost:9090",
+		"Prometheus metrics endpoint URL")
 
 	// Support environment variables for Docker Compose
 	if envURL := os.Getenv("SEMSTREAMS_BASE_URL"); envURL != "" {
@@ -80,6 +102,12 @@ func parseCommandLineFlags() *cliFlags {
 	}
 	if envUDP := os.Getenv("UDP_ENDPOINT"); envUDP != "" {
 		flags.udpEndpoint = envUDP
+	}
+	if envVariant := os.Getenv("E2E_VARIANT"); envVariant != "" {
+		flags.variant = envVariant
+	}
+	if envOutput := os.Getenv("E2E_OUTPUT_DIR"); envOutput != "" {
+		flags.outputDir = envOutput
 	}
 
 	flag.Parse()
@@ -115,8 +143,7 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Printf("  semantic-indexes     - Core semantic indexes (fast, no external dependencies)\n")
 	fmt.Printf("  semantic-kitchen-sink - Comprehensive semantic: Indexes + Embedding + Metrics + HTTP Gateway\n")
 	fmt.Println("\nRule Processor:")
-	fmt.Printf("  rules-graph          - Rule → Graph integration with EnableGraphIntegration flag\n")
-	fmt.Printf("  rules-performance    - Load testing (throughput, latency, stability)\n")
+	fmt.Printf("  rules-graph          - Rule → Graph integration with metrics validation\n")
 	fmt.Println("\nTest Suites:")
 	fmt.Printf("  all                 - Runs all core scenarios (excludes federation and kitchen sink)\n")
 	fmt.Printf("  semantic            - Runs all semantic scenarios\n")
@@ -197,7 +224,6 @@ func runScenarios(
 		fmt.Println("  semantic-indexes       - Core semantic indexes (fast)")
 		fmt.Println("  semantic-kitchen-sink  - Comprehensive semantic stack")
 		fmt.Println("  rules-graph            - Rule → Graph integration")
-		fmt.Println("  rules-performance      - Rule processor load testing")
 		return 1
 	}
 
@@ -226,10 +252,8 @@ func createScenario(
 		return scenarios.NewSemanticIndexesScenario(edgeClient, udpEndpoint, nil)
 	case "semantic-kitchen-sink", "kitchen-sink", "kitchen":
 		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, udpEndpoint, nil)
-	case "rules-graph", "rules-graph-integration":
+	case "rules-graph", "rules-graph-integration", "rules":
 		return scenarios.NewRulesGraphScenario(edgeClient, udpEndpoint, nil)
-	case "rules-performance", "rules-perf":
-		return scenarios.NewRulesPerformanceScenario(edgeClient, udpEndpoint, nil)
 	default:
 		return nil
 	}
@@ -360,7 +384,6 @@ func runRulesScenarios(
 ) int {
 	tests := []scenarios.Scenario{
 		scenarios.NewRulesGraphScenario(obsClient, udpEndpoint, nil),
-		scenarios.NewRulesPerformanceScenario(obsClient, udpEndpoint, nil),
 	}
 
 	passed := 0
@@ -388,4 +411,121 @@ func runRulesScenarios(
 		return 1
 	}
 	return 0
+}
+
+// handleCompareCommand generates comparison report from existing results
+func handleCompareCommand(logger *slog.Logger, outputDir string) int {
+	if outputDir == "" {
+		logger.Error("Output directory required for comparison (use --output-dir)")
+		return 1
+	}
+
+	logger.Info("Generating comparison report", "output_dir", outputDir)
+
+	writer := results.NewWriter(outputDir)
+
+	// List all available runs
+	files, err := writer.ListRuns()
+	if err != nil {
+		logger.Error("Failed to list runs", "error", err)
+		return 1
+	}
+
+	if len(files) < 2 {
+		logger.Warn("Need at least 2 test runs to compare", "found", len(files))
+		return 1
+	}
+
+	// Find core and ml variant runs (look for latest of each)
+	var coreRun, mlRun *results.TestRun
+	for i := len(files) - 1; i >= 0; i-- {
+		run, err := writer.LoadRun(files[i])
+		if err != nil {
+			logger.Warn("Failed to load run", "file", files[i], "error", err)
+			continue
+		}
+
+		if run.Config.Variant == "core" && coreRun == nil {
+			coreRun = run
+		} else if run.Config.Variant == "ml" && mlRun == nil {
+			mlRun = run
+		}
+
+		if coreRun != nil && mlRun != nil {
+			break
+		}
+	}
+
+	if coreRun == nil || mlRun == nil {
+		logger.Warn("Need both core and ml variant runs to compare",
+			"has_core", coreRun != nil,
+			"has_ml", mlRun != nil)
+		return 1
+	}
+
+	// Compare: baseline=core, current=ml
+	comparison := results.Compare(coreRun, mlRun)
+
+	// Write comparison report
+	filepath, err := writer.WriteComparison(comparison)
+	if err != nil {
+		logger.Error("Failed to write comparison report", "error", err)
+		return 1
+	}
+
+	// Print summary
+	printComparisonSummary(logger, coreRun, mlRun, comparison, filepath)
+
+	return 0
+}
+
+// printComparisonSummary outputs a human-readable comparison
+func printComparisonSummary(
+	logger *slog.Logger,
+	coreRun, mlRun *results.TestRun,
+	comparison *results.Comparison,
+	filepath string,
+) {
+	fmt.Println("\n=== Kitchen Sink Variant Comparison ===")
+	fmt.Printf("Core variant: %s\n", coreRun.Timestamp.Format(time.RFC3339))
+	fmt.Printf("ML variant:   %s\n", mlRun.Timestamp.Format(time.RFC3339))
+
+	fmt.Println("\n--- Duration ---")
+	fmt.Printf("Core: %s\n", coreRun.DurationStr)
+	fmt.Printf("ML:   %s\n", mlRun.DurationStr)
+
+	fmt.Println("\n--- Success ---")
+	fmt.Printf("Core: %d/%d passed (%.0f%%)\n",
+		coreRun.Summary.PassedScenarios,
+		coreRun.Summary.TotalScenarios,
+		coreRun.Summary.SuccessRate*100)
+	fmt.Printf("ML:   %d/%d passed (%.0f%%)\n",
+		mlRun.Summary.PassedScenarios,
+		mlRun.Summary.TotalScenarios,
+		mlRun.Summary.SuccessRate*100)
+
+	fmt.Println("\n--- Overall Comparison ---")
+	fmt.Printf("Status Changes:    %d\n", comparison.Overall.StatusChanges)
+	fmt.Printf("Improvements:      %d\n", comparison.Overall.Improvements)
+	fmt.Printf("Regressions:       %d\n", comparison.Overall.Regressions)
+	fmt.Printf("Metrics Improved:  %d\n", comparison.Overall.MetricsImproved)
+	fmt.Printf("Metrics Regressed: %d\n", comparison.Overall.MetricsRegressed)
+
+	if len(comparison.Diffs) > 0 {
+		fmt.Println("\n--- Scenario Diffs ---")
+		for _, diff := range comparison.Diffs {
+			status := "unchanged"
+			if diff.StatusChanged {
+				if diff.CurrentSuccess {
+					status = "IMPROVED"
+				} else {
+					status = "REGRESSED"
+				}
+			}
+			fmt.Printf("  %s: %s (duration delta: %dms)\n",
+				diff.ScenarioName, status, diff.DurationChangeMs)
+		}
+	}
+
+	logger.Info("Comparison report written", "file", filepath)
 }

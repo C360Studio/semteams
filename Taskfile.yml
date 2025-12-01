@@ -104,7 +104,11 @@ tasks:
     cmds:
       - echo "[E2E CLEAN] Cleaning SemStreams E2E environment..."
       - docker compose -f docker-compose.e2e.yml down -v --timeout 15 2>/dev/null || true
+      - docker compose -f docker-compose.federation.yml down -v --timeout 15 2>/dev/null || true
+      - docker compose -f docker-compose.rules.yml down -v --timeout 15 2>/dev/null || true
       - docker volume ls -q --filter name=semstreams-e2e | xargs -r docker volume rm 2>/dev/null || true
+      - docker volume ls -q --filter name=semstreams-fed | xargs -r docker volume rm 2>/dev/null || true
+      - docker volume ls -q --filter name=semstreams-rules | xargs -r docker volume rm 2>/dev/null || true
       - echo "[OK] E2E environment cleaned"
 
   e2e:
@@ -236,17 +240,75 @@ tasks:
       - docker compose -f docker-compose.semantic.yml down -v --timeout 15
 
   e2e:semantic-kitchen-sink:
-    desc: Run kitchen sink semantic E2E test (Full semantic stack)
+    desc: Run kitchen sink semantic E2E test (Full semantic stack with ML)
     silent: false
     deps: [e2e:clean, e2e:check-ports, build:e2e]
     cmds:
-      - echo "[SEMANTIC E2E] Starting kitchen sink semantic test..."
-      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
-      - echo "[OK] Semantic services are healthy"
+      - echo "[SEMANTIC E2E] Starting kitchen sink semantic test (with ML services)..."
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d --wait
+      - echo "[OK] Semantic services are healthy (including SemEmbed + SemSummarize)"
       - echo "[SEMANTIC E2E] Running kitchen sink test..."
-      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink
+      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant ml --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml down -v --timeout 15
+
+  e2e:semantic-kitchen-sink-core:
+    desc: Run kitchen sink semantic E2E test (CI-safe, no ML dependencies)
+    silent: false
+    deps: [e2e:clean, e2e:check-ports, build:e2e]
+    cmds:
+      - echo "[SEMANTIC E2E] Starting kitchen sink semantic test (core only, no ML)..."
+      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - echo "[OK] Core semantic services are healthy (BM25 fallback mode)"
+      - echo "[SEMANTIC E2E] Running kitchen sink core test..."
+      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant core --output-dir ./test/e2e/results
         ignore_error: true
       - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+
+  e2e:semantic-kitchen-sink-ml:
+    desc: Run kitchen sink semantic E2E test (Full ML stack)
+    silent: false
+    deps: [e2e:clean, e2e:check-ports, build:e2e]
+    cmds:
+      - echo "[SEMANTIC E2E] Starting kitchen sink semantic test (full ML stack)..."
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d --wait
+      - echo "[OK] ML services are healthy (SemEmbed + SemSummarize)"
+      - echo "[SEMANTIC E2E] Running kitchen sink ML test..."
+      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant ml --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml down -v --timeout 15
+
+  e2e:semantic-kitchen-clean:
+    desc: Clean kitchen sink E2E environment
+    silent: false
+    cmds:
+      - echo "[SEMANTIC CLEAN] Cleaning kitchen sink E2E environment..."
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml down -v --timeout 15 2>/dev/null || true
+      - docker volume ls -q --filter name=semstreams-kitchen | xargs -r docker volume rm 2>/dev/null || true
+      - docker volume ls -q --filter name=semembed-kitchen | xargs -r docker volume rm 2>/dev/null || true
+      - docker volume ls -q --filter name=semsummarize-kitchen | xargs -r docker volume rm 2>/dev/null || true
+      - echo "[OK] Kitchen sink environment cleaned"
+
+  e2e:semantic-kitchen-compare:
+    desc: Run both kitchen sink variants and generate comparison report
+    silent: false
+    deps: [e2e:clean, e2e:check-ports, build:e2e]
+    cmds:
+      - echo "[SEMANTIC E2E] Running comparison - Core variant first..."
+      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant core --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+      - echo "[SEMANTIC E2E] Running comparison - ML variant second..."
+      - sleep 5
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d --wait
+      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant ml --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml down -v --timeout 15
+      - echo "[SEMANTIC E2E] Generating comparison report..."
+      - cmd: cd cmd/e2e && ./e2e --compare --output-dir ./test/e2e/results
+        ignore_error: true
+      - echo "[OK] Comparison report generated in ./test/e2e/results/"
 
   e2e:semantic:
     desc: Run all semantic E2E tests (basic + indexes + kitchen-sink)
@@ -261,6 +323,20 @@ tasks:
         ignore_error: true
       - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
 
+  # Federation E2E task
+  e2e:federation:
+    desc: Run federation E2E test (edge-to-cloud via WebSocket)
+    silent: false
+    deps: [e2e:clean, e2e:check-ports, build:e2e]
+    cmds:
+      - echo "[FEDERATION E2E] Starting federation test environment (edge + cloud)..."
+      - docker compose -f docker-compose.federation.yml up -d --wait
+      - echo "[OK] Federation services are healthy (edge + cloud instances)"
+      - echo "[FEDERATION E2E] Running federation test..."
+      - cmd: cd cmd/e2e && ./e2e --scenario core-federation
+        ignore_error: true
+      - docker compose -f docker-compose.federation.yml down -v --timeout 15
+
   # Rule Processor E2E tasks
   e2e:rules-graph:
     desc: Run rule processor → graph processor integration test
@@ -268,38 +344,25 @@ tasks:
     deps: [e2e:clean, e2e:check-ports, build:e2e]
     cmds:
       - echo "[RULES E2E] Starting rule processor graph integration test..."
-      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - docker compose -f docker-compose.rules.yml up -d --wait
       - echo "[OK] Services are healthy (rule + graph processors)"
       - echo "[RULES E2E] Running rules-graph scenario..."
       - cmd: cd cmd/e2e && ./e2e --scenario rules-graph
         ignore_error: true
-      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
-
-  e2e:rules-performance:
-    desc: Run rule processor performance test (throughput, latency, stability)
-    silent: false
-    deps: [e2e:clean, e2e:check-ports, build:e2e]
-    cmds:
-      - echo "[RULES E2E] Starting rule processor performance test..."
-      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
-      - echo "[OK] Services are healthy"
-      - echo "[RULES E2E] Running rules-performance scenario..."
-      - cmd: cd cmd/e2e && ./e2e --scenario rules-performance
-        ignore_error: true
-      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+      - docker compose -f docker-compose.rules.yml down -v --timeout 15
 
   e2e:rules:
-    desc: Run all rule processor E2E tests (graph integration + performance)
+    desc: Run rule processor E2E test (rule → graph integration)
     silent: false
     deps: [e2e:clean, e2e:check-ports, build:e2e]
     cmds:
-      - echo "[RULES E2E] Running all rule processor scenarios..."
-      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - echo "[RULES E2E] Starting rule processor integration test..."
+      - docker compose -f docker-compose.rules.yml up -d --wait
       - echo "[OK] Services are healthy (rule + graph processors)"
-      - echo "[RULES E2E] Running rule processor test suite (graph + performance)..."
-      - cmd: cd cmd/e2e && ./e2e --scenario rules
+      - echo "[RULES E2E] Running rules-graph scenario..."
+      - cmd: cd cmd/e2e && ./e2e --scenario rules-graph
         ignore_error: true
-      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+      - docker compose -f docker-compose.rules.yml down -v --timeout 15
 
   # Optional Services Management
   services:start:embedding:

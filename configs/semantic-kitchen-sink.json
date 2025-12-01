@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "platform": {
     "org": "c360",
     "id": "semstreams-kitchen-sink",
@@ -71,6 +71,163 @@
         "buffer_size": 65536
       }
     },
+    "file_documents": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/documents.jsonl",
+        "format": "jsonl",
+        "interval": "0",
+        "loop": false
+      }
+    },
+    "file_maintenance": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/maintenance.jsonl",
+        "format": "jsonl",
+        "interval": "0",
+        "loop": false
+      }
+    },
+    "file_observations": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/observations.jsonl",
+        "format": "jsonl",
+        "interval": "0",
+        "loop": false
+      }
+    },
+    "file_sensor_docs": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/sensor_docs.jsonl",
+        "format": "jsonl",
+        "interval": "0",
+        "loop": false
+      }
+    },
+    "file_sensors": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.sensor.file",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/sensors.jsonl",
+        "format": "jsonl",
+        "interval": "100ms",
+        "loop": false
+      }
+    },
+    "document_processor": {
+      "type": "processor",
+      "name": "document_processor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "doc_in",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "doc_out",
+              "subject": "events.graph.entity.document",
+              "type": "nats",
+              "interface": "content.document.v1"
+            }
+          ]
+        },
+        "org_id": "c360",
+        "platform": "logistics"
+      }
+    },
+    "iot_sensor": {
+      "type": "processor",
+      "name": "iot_sensor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "sensor_in",
+              "subject": "raw.sensor.>",
+              "type": "nats"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "sensor_out",
+              "subject": "events.graph.entity.sensor",
+              "type": "nats",
+              "interface": "iot.sensor.v1"
+            }
+          ]
+        },
+        "org_id": "c360",
+        "platform": "logistics"
+      }
+    },
     "json_generic": {
       "type": "processor",
       "name": "json_generic",
@@ -127,7 +284,7 @@
     },
     "rule": {
       "type": "processor",
-      "name": "rule",
+      "name": "rule-processor",
       "enabled": true,
       "config": {
         "ports": {
@@ -137,6 +294,11 @@
               "subject": "generic.messages",
               "type": "nats",
               "interface": "core.json.v1"
+            },
+            {
+              "name": "rule_sensor_in",
+              "subject": "raw.sensor.>",
+              "type": "nats"
             }
           ],
           "outputs": [
@@ -148,7 +310,138 @@
           ]
         },
         "enable_graph_integration": true,
-        "graph_event_subject_prefix": "events.graph.entity"
+        "graph_event_subject_prefix": "events.graph.entity",
+        "inline_rules": [
+          {
+            "id": "low-battery-alert",
+            "type": "expression",
+            "name": "Low Battery Alert",
+            "description": "Triggers when battery level drops below 20%",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "battery.level",
+                "operator": "lte",
+                "value": 20.0,
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "30s",
+            "metadata": {
+              "severity": "warning",
+              "category": "power"
+            }
+          },
+          {
+            "id": "high-temperature-alert",
+            "type": "expression",
+            "name": "High Temperature Alert",
+            "description": "Triggers when temperature exceeds 50 degrees",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "data.temperature",
+                "operator": "gte",
+                "value": 50.0,
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "30s",
+            "metadata": {
+              "severity": "critical",
+              "category": "thermal"
+            }
+          },
+          {
+            "id": "cold-storage-temp-alert",
+            "type": "expression",
+            "name": "Cold Storage Temperature Alert",
+            "description": "Triggers when cold storage temperature exceeds 40F threshold",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "reading",
+                "operator": "gte",
+                "value": 40.0,
+                "required": true
+              },
+              {
+                "field": "unit",
+                "operator": "eq",
+                "value": "fahrenheit",
+                "required": true
+              },
+              {
+                "field": "location",
+                "operator": "contains",
+                "value": "cold-storage",
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "60s",
+            "metadata": {
+              "severity": "critical",
+              "category": "food_safety"
+            }
+          },
+          {
+            "id": "high-humidity-alert",
+            "type": "expression",
+            "name": "High Humidity Alert",
+            "description": "Triggers when humidity exceeds 50% threshold",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "reading",
+                "operator": "gte",
+                "value": 50.0,
+                "required": true
+              },
+              {
+                "field": "type",
+                "operator": "eq",
+                "value": "humidity",
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "30s",
+            "metadata": {
+              "severity": "warning",
+              "category": "environment"
+            }
+          },
+          {
+            "id": "low-air-pressure-alert",
+            "type": "expression",
+            "name": "Low Air Pressure Alert",
+            "description": "Triggers when compressed air pressure drops below 100 PSI",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "reading",
+                "operator": "lt",
+                "value": 100.0,
+                "required": true
+              },
+              {
+                "field": "type",
+                "operator": "eq",
+                "value": "pressure",
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "60s",
+            "metadata": {
+              "severity": "warning",
+              "category": "equipment"
+            }
+          }
+        ]
       }
     },
     "graph": {

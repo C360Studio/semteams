@@ -68,6 +68,14 @@ type SensorReading struct {
 	Unit       string    // e.g., "celsius", "percent", "hpa"
 	ObservedAt time.Time // When measurement was taken
 
+	// Alias field (for ALIAS_INDEX testing)
+	SerialNumber string // e.g., "SN-2025-001234" - manufacturer serial number
+
+	// Geospatial fields (for SPATIAL_INDEX testing)
+	Latitude  *float64 // e.g., 37.7749 (nil if not provided)
+	Longitude *float64 // e.g., -122.4194 (nil if not provided)
+	Altitude  *float64 // e.g., 10.0 meters (optional)
+
 	// Entity reference fields (computed by processor)
 	ZoneEntityID string // e.g., "acme.logistics.facility.zone.area.warehouse-7"
 
@@ -150,6 +158,49 @@ func (s *SensorReading) Triples() []message.Triple {
 			Timestamp:  s.ObservedAt,
 			Confidence: 1.0,
 		},
+	}
+
+	// Alias triple (for ALIAS_INDEX) - serial number as resolvable external ID
+	if s.SerialNumber != "" {
+		triples = append(triples, message.Triple{
+			Subject:    entityID,
+			Predicate:  PredicateSensorSerial,
+			Object:     s.SerialNumber,
+			Source:     "iot_sensor",
+			Timestamp:  s.ObservedAt,
+			Confidence: 1.0,
+		})
+	}
+
+	// Geospatial triples (for SPATIAL_INDEX) - lat/lon coordinates
+	if s.Latitude != nil && s.Longitude != nil {
+		triples = append(triples, message.Triple{
+			Subject:    entityID,
+			Predicate:  PredicateLocationLatitude,
+			Object:     *s.Latitude,
+			Source:     "iot_sensor",
+			Timestamp:  s.ObservedAt,
+			Confidence: 1.0,
+		})
+		triples = append(triples, message.Triple{
+			Subject:    entityID,
+			Predicate:  PredicateLocationLongitude,
+			Object:     *s.Longitude,
+			Source:     "iot_sensor",
+			Timestamp:  s.ObservedAt,
+			Confidence: 1.0,
+		})
+		// Optional altitude
+		if s.Altitude != nil {
+			triples = append(triples, message.Triple{
+				Subject:    entityID,
+				Predicate:  "geo.location.altitude",
+				Object:     *s.Altitude,
+				Source:     "iot_sensor",
+				Timestamp:  s.ObservedAt,
+				Confidence: 1.0,
+			})
+		}
 	}
 
 	return triples

@@ -116,7 +116,7 @@ func NewManager(
 	// Create metrics
 	metrics := NewInternalMetrics()
 	var promMetrics *PrometheusMetrics
-	if config.EventBuffer.Metrics && metricsRegistry != nil {
+	if metricsRegistry != nil {
 		promMetrics = NewPrometheusMetrics("indexengine", metricsRegistry)
 	}
 

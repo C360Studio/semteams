@@ -1,0 +1,88 @@
+# E2E Test Environment for SemStreams Rule Processor
+#
+# This compose file is designed for rule processor E2E testing without
+# external ML service dependencies (semembed, semsummarize).
+#
+# Uses semantic-kitchen-sink.json config which includes:
+#   - Rule processor with inline rules (low-battery-alert, high-temperature-alert)
+#   - Graph processor with enable_graph_integration
+#   - All core components (UDP, JSONGeneric, JSONFilter, File, etc.)
+#
+# Use with task commands:
+#   - task e2e:rules-graph - Run rule → graph integration test
+#   - task e2e:rules       - Run all rule processor tests
+#   - task e2e:clean       - Clean up test environment
+#
+services:
+  # NATS Server with JetStream
+  nats:
+    image: nats:2.11.7-alpine
+    container_name: semstreams-rules-nats
+    ports:
+      - "4222:4222" # Client connections
+      - "8222:8222" # HTTP monitoring
+    command:
+      ["-js", "-sd", "/data", "-m", "8222", "--name", "semstreams-rules-nats"]
+    volumes:
+      - nats-semstreams-rules-data:/data
+    networks:
+      - semstreams-rules-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # SemStreams Application (kitchen-sink config with rules)
+  semstreams:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: semstreams-rules-app
+    command: ["--config", "/app/configs/semantic-kitchen-sink.json"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - SEMSTREAMS_NATS_URLS=nats://nats:4222
+      - SEMSTREAMS_LOG_LEVEL=debug
+      # Embedding disabled (no semembed service)
+      - EMBEDDING_PROVIDER=none
+    volumes:
+      - ./configs:/app/configs:ro
+    ports:
+      - "8080:8080" # HTTP API (health, components)
+      - "9090:9090" # Prometheus metrics
+      - "14550:14550/udp" # UDP input
+    networks:
+      - semstreams-rules-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  semstreams-rules-net:
+    driver: bridge
+
+volumes:
+  nats-semstreams-rules-data:
+    driver: local

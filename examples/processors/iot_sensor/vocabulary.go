@@ -2,6 +2,11 @@ package iotsensor
 
 import "github.com/c360/semstreams/vocabulary"
 
+func init() {
+	// Auto-register IoT sensor vocabulary when package is imported
+	RegisterVocabulary()
+}
+
 // Predicate constants for the IoT sensor domain.
 // These follow the three-level dotted notation: domain.category.property
 const (
@@ -27,6 +32,9 @@ const (
 	// Facility zone predicates
 	PredicateZoneName = "facility.zone.name"
 	PredicateZoneType = "facility.zone.type"
+
+	// Sensor identity predicates (for ALIAS_INDEX)
+	PredicateSensorSerial = "iot.sensor.serial"
 )
 
 // RegisterVocabulary registers all IoT sensor domain predicates with the vocabulary
@@ -114,4 +122,11 @@ func RegisterVocabulary() {
 		vocabulary.WithDescription("Type classification of the zone"),
 		vocabulary.WithDataType("string"),
 	)
+
+	// Sensor identity predicates - registered as alias for ALIAS_INDEX
+	vocabulary.Register(PredicateSensorSerial,
+		vocabulary.WithDescription("Manufacturer serial number for sensor identification"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithAlias(vocabulary.AliasTypeExternal, 0), // Resolvable external ID
+		vocabulary.WithIRI(vocabulary.DcIdentifier))
 }

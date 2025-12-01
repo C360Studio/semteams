@@ -198,6 +198,7 @@ func (s *SemanticIndexesScenario) executeSendTestData(ctx context.Context, resul
 	for i := 0; i < s.config.MessageCount; i++ {
 		// Create sensor reading matching IoT sensor processor expected format
 		// See examples/processors/iot_sensor/processor.go for format
+		// Include serial for ALIAS_INDEX and lat/lon for SPATIAL_INDEX
 		testMsg := map[string]any{
 			"device_id": fmt.Sprintf("sensor-%d", i),
 			"type":      "temperature",
@@ -205,6 +206,12 @@ func (s *SemanticIndexesScenario) executeSendTestData(ctx context.Context, resul
 			"unit":      "celsius",
 			"location":  fmt.Sprintf("warehouse-%d", i%3),
 			"timestamp": time.Now().Format(time.RFC3339),
+			// Serial number for ALIAS_INDEX testing
+			"serial": fmt.Sprintf("SN-2025-%06d", i),
+			// Coordinates for SPATIAL_INDEX testing (San Francisco area)
+			"latitude":  37.7749 + float64(i)*0.001,
+			"longitude": -122.4194 + float64(i)*0.001,
+			"altitude":  10.0 + float64(i),
 		}
 
 		msgBytes, err := json.Marshal(testMsg)

@@ -6,9 +6,11 @@ import (
 	"errors"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/examples/processors/document"
 	iotsensor "github.com/c360/semstreams/examples/processors/iot_sensor"
 	gatewaygraphql "github.com/c360/semstreams/gateway/graphql"
 	gatewayhttp "github.com/c360/semstreams/gateway/http"
+	fileinput "github.com/c360/semstreams/input/file"
 	"github.com/c360/semstreams/input/udp"
 	websocketinput "github.com/c360/semstreams/input/websocket"
 	"github.com/c360/semstreams/output/file"
@@ -19,6 +21,7 @@ import (
 	jsonfilter "github.com/c360/semstreams/processor/json_filter"
 	jsongeneric "github.com/c360/semstreams/processor/json_generic"
 	jsonmap "github.com/c360/semstreams/processor/json_map"
+	"github.com/c360/semstreams/processor/rule"
 	"github.com/c360/semstreams/storage/objectstore"
 )
 
@@ -62,6 +65,10 @@ func Register(registry *component.Registry) error {
 
 	if err := websocketinput.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "WebSocket input component registration")
+	}
+
+	if err := fileinput.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "File input component registration")
 	}
 
 	// Protocol Layer - Processors
@@ -119,9 +126,17 @@ func Register(registry *component.Registry) error {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "Graph processor component registration")
 	}
 
+	if err := rule.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "Rule processor component registration")
+	}
+
 	// Domain Layer - Example Processors
 	if err := iotsensor.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "IoT sensor processor component registration")
+	}
+
+	if err := document.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "Document processor component registration")
 	}
 
 	return nil

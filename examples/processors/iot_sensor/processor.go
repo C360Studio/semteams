@@ -116,6 +116,24 @@ func (p *Processor) Process(input map[string]any) (*SensorReading, error) {
 		observedAt = time.Now()
 	}
 
+	// Extract serial number (optional, for ALIAS_INDEX)
+	var serialNumber string
+	if serial, ok := input["serial"].(string); ok {
+		serialNumber = serial
+	}
+
+	// Extract coordinates (optional, for SPATIAL_INDEX)
+	var latitude, longitude, altitude *float64
+	if lat, err := getFloat64(input, "latitude"); err == nil {
+		latitude = &lat
+	}
+	if lon, err := getFloat64(input, "longitude"); err == nil {
+		longitude = &lon
+	}
+	if alt, err := getFloat64(input, "altitude"); err == nil {
+		altitude = &alt
+	}
+
 	// Build the Graphable payload with organizational context
 	// Processor computes the zone entity ID - this is domain knowledge
 	reading := &SensorReading{
@@ -124,6 +142,10 @@ func (p *Processor) Process(input map[string]any) (*SensorReading, error) {
 		Value:        value,
 		Unit:         unit,
 		ObservedAt:   observedAt,
+		SerialNumber: serialNumber,
+		Latitude:     latitude,
+		Longitude:    longitude,
+		Altitude:     altitude,
 		ZoneEntityID: ZoneEntityID(p.config.OrgID, p.config.Platform, zoneType, locationID),
 		OrgID:        p.config.OrgID,
 		Platform:     p.config.Platform,

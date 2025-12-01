@@ -1,0 +1,335 @@
+// Package client provides HTTP clients for SemStreams E2E tests
+package client
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"math"
+	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/c360/semstreams/test/e2e/config"
+)
+
+// MetricsClient fetches and parses Prometheus metrics from SemStreams
+type MetricsClient struct {
+	baseURL    string
+	httpClient *http.Client
+}
+
+// NewMetricsClient creates a new client for Prometheus metrics endpoints
+func NewMetricsClient(baseURL string) *MetricsClient {
+	return &MetricsClient{
+		baseURL: baseURL,
+		httpClient: &http.Client{
+			Timeout: config.DefaultTestConfig.Timeout,
+		},
+	}
+}
+
+// Metric represents a single parsed Prometheus metric
+type Metric struct {
+	Name   string            `json:"name"`
+	Labels map[string]string `json:"labels,omitempty"`
+	Value  float64           `json:"value"`
+}
+
+// MetricsSnapshot represents a collection of metrics at a point in time
+type MetricsSnapshot struct {
+	Timestamp time.Time         `json:"timestamp"`
+	Metrics   map[string]Metric `json:"metrics"`
+	Raw       string            `json:"raw,omitempty"`
+}
+
+// MetricsReport is a structured summary of key metrics for comparison
+type MetricsReport struct {
+	Timestamp    time.Time           `json:"timestamp"`
+	Duration     time.Duration       `json:"duration_ns"`
+	DurationText string              `json:"duration"`
+	Counters     map[string]float64  `json:"counters"`
+	Gauges       map[string]float64  `json:"gauges"`
+	Histograms   map[string]float64  `json:"histograms,omitempty"`
+	Categories   map[string]Category `json:"categories"`
+}
+
+// Category groups related metrics
+type Category struct {
+	Name    string             `json:"name"`
+	Metrics map[string]float64 `json:"metrics"`
+}
+
+// FetchRaw retrieves raw metrics text from the Prometheus endpoint
+func (c *MetricsClient) FetchRaw(ctx context.Context) (string, error) {
+	url := c.baseURL + "/metrics"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("executing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("reading response: %w", err)
+	}
+
+	return string(body), nil
+}
+
+// FetchSnapshot retrieves and parses all metrics into a snapshot
+func (c *MetricsClient) FetchSnapshot(ctx context.Context) (*MetricsSnapshot, error) {
+	raw, err := c.FetchRaw(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	snapshot := &MetricsSnapshot{
+		Timestamp: time.Now(),
+		Metrics:   make(map[string]Metric),
+		Raw:       raw,
+	}
+
+	// Parse metrics line by line
+	scanner := bufio.NewScanner(strings.NewReader(raw))
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Skip comments and empty lines
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+
+		metric, err := parseLine(line)
+		if err != nil {
+			continue // Skip unparseable lines
+		}
+
+		// Use full metric key (name + labels) for uniqueness
+		key := metric.Name
+		if len(metric.Labels) > 0 {
+			labelStr := formatLabels(metric.Labels)
+			key = fmt.Sprintf("%s{%s}", metric.Name, labelStr)
+		}
+		snapshot.Metrics[key] = metric
+	}
+
+	return snapshot, nil
+}
+
+// FetchReport retrieves metrics and organizes them into a categorized report
+func (c *MetricsClient) FetchReport(ctx context.Context, duration time.Duration) (*MetricsReport, error) {
+	snapshot, err := c.FetchSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	report := &MetricsReport{
+		Timestamp:    snapshot.Timestamp,
+		Duration:     duration,
+		DurationText: duration.String(),
+		Counters:     make(map[string]float64),
+		Gauges:       make(map[string]float64),
+		Histograms:   make(map[string]float64),
+		Categories:   make(map[string]Category),
+	}
+
+	// Initialize categories
+	categories := map[string]*Category{
+		"indexmanager": {Name: "Index Manager", Metrics: make(map[string]float64)},
+		"cache":        {Name: "Cache", Metrics: make(map[string]float64)},
+		"filter":       {Name: "JSON Filter", Metrics: make(map[string]float64)},
+		"embeddings":   {Name: "Embeddings", Metrics: make(map[string]float64)},
+		"rules":        {Name: "Rules", Metrics: make(map[string]float64)},
+		"graph":        {Name: "Graph", Metrics: make(map[string]float64)},
+		"http":         {Name: "HTTP Gateway", Metrics: make(map[string]float64)},
+	}
+
+	// Categorize metrics
+	for key, metric := range snapshot.Metrics {
+		// Classify into counter/gauge based on name patterns
+		if strings.HasSuffix(metric.Name, "_total") ||
+			strings.HasSuffix(metric.Name, "_count") {
+			report.Counters[key] = metric.Value
+		} else if strings.Contains(metric.Name, "_bucket") ||
+			strings.HasSuffix(metric.Name, "_sum") {
+			report.Histograms[key] = metric.Value
+		} else {
+			report.Gauges[key] = metric.Value
+		}
+
+		// Categorize by prefix
+		switch {
+		case strings.HasPrefix(metric.Name, "indexmanager_"):
+			if strings.Contains(metric.Name, "embedding") {
+				categories["embeddings"].Metrics[metric.Name] = metric.Value
+			} else {
+				categories["indexmanager"].Metrics[metric.Name] = metric.Value
+			}
+		case strings.HasPrefix(metric.Name, "semstreams_cache_"):
+			categories["cache"].Metrics[metric.Name] = metric.Value
+		case strings.HasPrefix(metric.Name, "semstreams_json_filter_"):
+			categories["filter"].Metrics[metric.Name] = metric.Value
+		case strings.HasPrefix(metric.Name, "rule_"):
+			categories["rules"].Metrics[metric.Name] = metric.Value
+		case strings.HasPrefix(metric.Name, "graph_"):
+			categories["graph"].Metrics[metric.Name] = metric.Value
+		case strings.HasPrefix(metric.Name, "http_"):
+			categories["http"].Metrics[metric.Name] = metric.Value
+		}
+	}
+
+	// Convert to non-pointer map
+	for name, cat := range categories {
+		if len(cat.Metrics) > 0 {
+			report.Categories[name] = *cat
+		}
+	}
+
+	return report, nil
+}
+
+// GetMetricValue retrieves a specific metric value by name
+func (c *MetricsClient) GetMetricValue(ctx context.Context, metricName string) (float64, error) {
+	snapshot, err := c.FetchSnapshot(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, metric := range snapshot.Metrics {
+		if metric.Name == metricName {
+			return metric.Value, nil
+		}
+	}
+
+	return 0, fmt.Errorf("metric not found: %s", metricName)
+}
+
+// GetMetricsByPrefix retrieves all metrics matching a prefix
+func (c *MetricsClient) GetMetricsByPrefix(ctx context.Context, prefix string) (map[string]float64, error) {
+	snapshot, err := c.FetchSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]float64)
+	for key, metric := range snapshot.Metrics {
+		if strings.HasPrefix(metric.Name, prefix) {
+			result[key] = metric.Value
+		}
+	}
+
+	return result, nil
+}
+
+// Health checks if the metrics endpoint is reachable
+func (c *MetricsClient) Health(ctx context.Context) error {
+	url := c.baseURL + "/metrics"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("metrics endpoint unreachable: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("metrics endpoint returned status %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// parseLine parses a single Prometheus metric line
+// Format: metric_name{label="value",...} value
+var metricLineRegex = regexp.MustCompile(`^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{([^}]*)\})?\s+([0-9eE.+-]+|NaN|Inf|-Inf)`)
+
+func parseLine(line string) (Metric, error) {
+	matches := metricLineRegex.FindStringSubmatch(line)
+	if matches == nil {
+		return Metric{}, fmt.Errorf("invalid metric line: %s", line)
+	}
+
+	metric := Metric{
+		Name:   matches[1],
+		Labels: make(map[string]string),
+	}
+
+	// Parse labels if present
+	if matches[3] != "" {
+		metric.Labels = parseLabels(matches[3])
+	}
+
+	// Parse value
+	value, err := strconv.ParseFloat(matches[4], 64)
+	if err != nil {
+		return Metric{}, fmt.Errorf("parsing value: %w", err)
+	}
+
+	// Validate numeric sanity - log warning but don't fail
+	// Some metrics legitimately have NaN/Inf values (e.g., division by zero)
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		slog.Debug("metric has special float value",
+			"name", metric.Name,
+			"raw_value", matches[4],
+			"is_nan", math.IsNaN(value),
+			"is_inf", math.IsInf(value, 0))
+	}
+
+	metric.Value = value
+
+	return metric, nil
+}
+
+// parseLabels parses the label portion of a metric line
+// Format: label1="value1",label2="value2"
+func parseLabels(labelStr string) map[string]string {
+	labels := make(map[string]string)
+	if labelStr == "" {
+		return labels
+	}
+
+	// Simple parser for label="value" pairs
+	parts := strings.Split(labelStr, ",")
+	for _, part := range parts {
+		kv := strings.SplitN(part, "=", 2)
+		if len(kv) == 2 {
+			key := strings.TrimSpace(kv[0])
+			value := strings.Trim(strings.TrimSpace(kv[1]), "\"")
+			labels[key] = value
+		}
+	}
+
+	return labels
+}
+
+// formatLabels formats labels back to Prometheus format
+func formatLabels(labels map[string]string) string {
+	if len(labels) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(labels))
+	for k, v := range labels {
+		parts = append(parts, fmt.Sprintf("%s=\"%s\"", k, v))
+	}
+	return strings.Join(parts, ",")
+}

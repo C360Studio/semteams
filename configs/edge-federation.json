@@ -87,10 +87,15 @@
               "type": "nats"
             }
           ],
-          "outputs": []
+          "outputs": [
+            {
+              "name": "websocket_server",
+              "type": "network",
+              "subject": "http://0.0.0.0:8082/stream",
+              "description": "WebSocket server endpoint for federation"
+            }
+          ]
         },
-        "http_port": 8082,
-        "path": "/stream",
         "delivery_mode": "at-least-once",
         "ack_timeout": "5s"
       }

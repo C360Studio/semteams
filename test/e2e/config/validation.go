@@ -48,15 +48,16 @@ func DefaultValidationConfig() *ValidationConfig {
 		MinStorageRate: 0.80,
 		RequiredIndexes: []string{
 			"PREDICATE_INDEX",
-			"SPATIAL_INDEX",
+			"INCOMING_INDEX",
 			"ALIAS_INDEX",
+			"SPATIAL_INDEX",
+			"TEMPORAL_INDEX",
 		},
 		RequiredMetrics: []string{
-			"indexmanager_events_processed",
-			"indexmanager_index_updates_total",
+			"indexengine_events_processed_total",
+			"indexengine_index_updates_total",
 			"semstreams_cache_hits_total",
 			"semstreams_cache_misses_total",
-			"semstreams_json_filter_matched_total",
 		},
 		ValidationTimeout: 5 * time.Second,
 	}

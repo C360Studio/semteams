@@ -3,8 +3,17 @@
 # ⚠️  THIS FILE IS FOR KITCHEN SINK E2E TESTING ONLY - DO NOT USE DIRECTLY ⚠️
 #
 # This compose file is designed to work with task commands:
-#   - task e2e:semantic-kitchen-sink  - Run kitchen sink test
-#   - task e2e:clean                  - Clean up test environment
+#   - task e2e:semantic-kitchen-sink         - Run with all features (ML enabled)
+#   - task e2e:semantic-kitchen-sink-core    - Run CI-safe (no ML services)
+#   - task e2e:clean                         - Clean up test environment
+#
+# Profiles:
+#   - (default): NATS + semstreams (CI-safe, no ML dependencies)
+#   - ml: Adds semembed + semsummarize for full semantic testing
+#
+# Usage:
+#   docker compose -f docker-compose.semantic-kitchen.yml up -d              # Core only
+#   docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d # With ML
 #
 # Running this directly will start services but NOT run tests.
 # The E2E tests are executed from the host via cmd/e2e/e2e binary.
@@ -13,9 +22,12 @@
 services:
   # SemEmbed - Lightweight embedding service using fastembed-rs
   # For semantic search testing with OpenAI-compatible API
+  # PROFILE: ml - Only started when --profile ml is specified
   semembed:
     image: ghcr.io/c360studio/semembed:latest
     container_name: semstreams-kitchen-semembed
+    profiles:
+      - ml
     ports:
       - "8081:8081"  # OpenAI-compatible /v1/embeddings endpoint
     environment:
@@ -35,9 +47,12 @@ services:
 
   # SemSummarize - Lightweight summarization service using Candle + SmolLM2
   # For LLM-based community summarization testing
+  # PROFILE: ml - Only started when --profile ml is specified
   semsummarize:
     image: ghcr.io/c360studio/semsummarize:latest
     container_name: semstreams-kitchen-semsummarize
+    profiles:
+      - ml
     ports:
       - "8084:8083"  # POST /summarize endpoint (host:8084 -> container:8083)
     environment:
@@ -83,11 +98,54 @@ services:
       retries: 10
 
   # SemStreams Application (kitchen sink config with all features)
+  # Core variant - runs without ML services (uses BM25 fallback for search)
   semstreams:
     build:
       context: .
       target: production
     container_name: semstreams-kitchen-app
+    command: ["--config", "/app/configs/semantic-kitchen-sink.json"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - SEMSTREAMS_NATS_URLS=nats://nats:4222
+      - SEMSTREAMS_LOG_LEVEL=debug
+      # Embedding disabled by default - BM25 fallback will be used
+      - EMBEDDING_PROVIDER=none
+    volumes:
+      - ./configs:/app/configs:ro
+      - ./testdata:/data/testdata:ro
+    ports:
+      - "8080:8080" # HTTP API (health, components)
+      - "9090:9090" # Prometheus metrics
+      - "14550:14550/udp" # UDP input
+      - "8083:8082" # WebSocket output (host:8083 -> container:8082)
+    networks:
+      - semstreams-kitchen-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/health",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # SemStreams Application with ML services enabled
+  # PROFILE: ml - Only started when --profile ml is specified
+  semstreams-ml:
+    build:
+      context: .
+      target: production
+    container_name: semstreams-kitchen-app-ml
+    profiles:
+      - ml
     command: ["--config", "/app/configs/semantic-kitchen-sink.json"]
     depends_on:
       nats:
@@ -102,11 +160,12 @@ services:
       - EMBEDDING_HTTP_MODEL=BAAI/bge-small-en-v1.5
     volumes:
       - ./configs:/app/configs:ro
+      - ./testdata:/data/testdata:ro
     ports:
-      - "8080:8080" # HTTP API (health, components)
-      - "9090:9090" # Prometheus metrics
-      - "14550:14550/udp" # UDP input
-      - "8083:8082" # WebSocket output (host:8083 -> container:8082)
+      - "8180:8080" # HTTP API (different port to avoid conflict with core)
+      - "9190:9090" # Prometheus metrics
+      - "14650:14550/udp" # UDP input
+      - "8183:8082" # WebSocket output
     networks:
       - semstreams-kitchen-net
     healthcheck:

@@ -6,6 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os/exec"
+	"strconv"
+	"strings"
 
 	"github.com/c360/semstreams/test/e2e/config"
 )
@@ -97,4 +100,39 @@ func (c *ObservabilityClient) GetComponents(ctx context.Context) ([]ComponentInf
 	}
 
 	return components, nil
+}
+
+// CountFileOutputLines counts lines in file output inside a container using docker exec.
+// The containerName should match the container running the file output component.
+// The pattern is the file glob pattern (e.g., "/tmp/streamkit-test*.jsonl").
+// Returns 0 if files don't exist (not an error - just means no output yet).
+func (c *ObservabilityClient) CountFileOutputLines(
+	ctx context.Context,
+	containerName string,
+	pattern string,
+) (int, error) {
+	// Use docker exec to count lines in the file(s)
+	// Shell is needed for glob expansion
+	cmd := exec.CommandContext(ctx, "docker", "exec", containerName,
+		"sh", "-c", fmt.Sprintf("cat %s 2>/dev/null | wc -l", pattern))
+
+	output, err := cmd.Output()
+	if err != nil {
+		// If the command fails (e.g., no files match), return 0
+		// This is not an error - just means no output files yet
+		return 0, nil
+	}
+
+	// Parse the line count from output
+	countStr := strings.TrimSpace(string(output))
+	if countStr == "" {
+		return 0, nil
+	}
+
+	count, err := strconv.Atoi(countStr)
+	if err != nil {
+		return 0, fmt.Errorf("parsing line count %q: %w", countStr, err)
+	}
+
+	return count, nil
 }

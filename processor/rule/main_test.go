@@ -1,15 +1,13 @@
 package rule
 
 import (
-	"fmt"
 	"os"
 	"testing"
 )
 
+// TestMain runs all tests. Integration tests that need NATS should check
+// INTEGRATION_TESTS env var themselves and skip if not set.
+// This allows unit tests to run without the env var.
 func TestMain(m *testing.M) {
-	if os.Getenv("INTEGRATION_TESTS") == "" {
-		fmt.Println("Skipping integration tests. Set INTEGRATION_TESTS=1 to run.")
-		return
-	}
 	os.Exit(m.Run())
 }
