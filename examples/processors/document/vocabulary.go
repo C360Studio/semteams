@@ -10,10 +10,23 @@ func init() {
 // Predicate constants for the content domain.
 // These follow the three-level dotted notation: domain.category.property
 const (
-	// Core content predicates
+	// Dublin Core metadata predicates (for triple metadata - NOT content body)
+	// See: https://www.dublincore.org/specifications/dublin-core/dcmi-terms/
+	PredicateDCTitle      = "dc.title"      // Document title
+	PredicateDCCreator    = "dc.creator"    // Author or creator
+	PredicateDCSubject    = "dc.subject"    // Topic/category of content
+	PredicateDCType       = "dc.type"       // Nature/genre of content
+	PredicateDCDate       = "dc.date"       // Relevant date (creation, publication)
+	PredicateDCIdentifier = "dc.identifier" // Unique identifier
+	PredicateDCFormat     = "dc.format"     // File format or media type
+	PredicateDCLanguage   = "dc.language"   // Language of content
+
+	// Core content predicates (legacy - prefer Dublin Core for metadata)
+	// NOTE: content.text.body should NOT be used in triples for ContentStorable types.
+	// Body content belongs in ObjectStore, not in triples.
 	PredicateContentTitle       = "content.text.title"
 	PredicateContentDescription = "content.text.description"
-	PredicateContentBody        = "content.text.body"
+	PredicateContentBody        = "content.text.body" // DEPRECATED for ContentStorable
 	PredicateContentSummary     = "content.text.summary"
 
 	// Classification predicates
@@ -43,7 +56,56 @@ const (
 
 // RegisterVocabulary registers all content domain predicates with the vocabulary system.
 func RegisterVocabulary() {
-	// Core content predicates - text fields for semantic search
+	// Dublin Core metadata predicates (standard vocabulary for metadata)
+	vocabulary.Register(PredicateDCTitle,
+		vocabulary.WithDescription("Document title (Dublin Core)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI("http://purl.org/dc/terms/title"),
+	)
+
+	vocabulary.Register(PredicateDCCreator,
+		vocabulary.WithDescription("Document creator or author (Dublin Core)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI("http://purl.org/dc/terms/creator"),
+	)
+
+	vocabulary.Register(PredicateDCSubject,
+		vocabulary.WithDescription("Topic or category of content (Dublin Core)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI("http://purl.org/dc/terms/subject"),
+	)
+
+	vocabulary.Register(PredicateDCType,
+		vocabulary.WithDescription("Nature or genre of content (Dublin Core)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI("http://purl.org/dc/terms/type"),
+	)
+
+	vocabulary.Register(PredicateDCDate,
+		vocabulary.WithDescription("Relevant date - creation or publication (Dublin Core)"),
+		vocabulary.WithDataType("timestamp"),
+		vocabulary.WithIRI("http://purl.org/dc/terms/date"),
+	)
+
+	vocabulary.Register(PredicateDCIdentifier,
+		vocabulary.WithDescription("Unique identifier for the resource (Dublin Core)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI("http://purl.org/dc/terms/identifier"),
+	)
+
+	vocabulary.Register(PredicateDCFormat,
+		vocabulary.WithDescription("File format or media type (Dublin Core)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI("http://purl.org/dc/terms/format"),
+	)
+
+	vocabulary.Register(PredicateDCLanguage,
+		vocabulary.WithDescription("Language of content (Dublin Core)"),
+		vocabulary.WithDataType("string"),
+		vocabulary.WithIRI("http://purl.org/dc/terms/language"),
+	)
+
+	// Core content predicates - text fields for semantic search (legacy)
 	vocabulary.Register(PredicateContentTitle,
 		vocabulary.WithDescription("Document or entity title"),
 		vocabulary.WithDataType("string"),

@@ -9,13 +9,13 @@ import (
 	"github.com/c360/semstreams/message"
 )
 
-// Observation represents an observation or inspection record.
+// Observation represents an observation or inspection record. It implements ContentStorable.
 type Observation struct {
 	// Input fields
 	ID          string   `json:"id"`          // e.g., "obs-001"
 	Title       string   `json:"title"`       // e.g., "Safety Hazard Report"
 	Description string   `json:"description"` // What was observed
-	Body        string   `json:"body"`        // Detailed notes
+	Body        string   `json:"body"`        // Detailed notes (stored in ObjectStore)
 	Observer    string   `json:"observer"`    // Who made the observation
 	Severity    string   `json:"severity"`    // low, medium, high, critical
 	ObservedAt  string   `json:"observed_at"` // ISO timestamp
@@ -25,6 +25,9 @@ type Observation struct {
 	// Context fields
 	OrgID    string `json:"-"`
 	Platform string `json:"-"`
+
+	// Storage reference (set by processor)
+	storageRef *message.StorageReference `json:"-"`
 }
 
 // EntityID returns a federated entity ID for the observation.
@@ -42,36 +45,32 @@ func (o *Observation) EntityID() string {
 	)
 }
 
-// Triples returns semantic facts about this observation.
+// Triples returns METADATA ONLY facts about this observation.
+// Body content is stored in ObjectStore, NOT in triples.
 func (o *Observation) Triples() []message.Triple {
 	entityID := o.EntityID()
 	now := time.Now()
 
 	triples := []message.Triple{
+		// Dublin Core: Title
 		{
 			Subject:    entityID,
-			Predicate:  PredicateContentTitle,
+			Predicate:  PredicateDCTitle,
 			Object:     o.Title,
 			Source:     tripleSourceName,
 			Timestamp:  now,
 			Confidence: defaultConfidence,
 		},
+		// Dublin Core: Type
 		{
 			Subject:    entityID,
-			Predicate:  PredicateContentDescription,
-			Object:     o.Description,
-			Source:     tripleSourceName,
-			Timestamp:  now,
-			Confidence: defaultConfidence,
-		},
-		{
-			Subject:    entityID,
-			Predicate:  PredicateContentType,
+			Predicate:  PredicateDCType,
 			Object:     "observation",
 			Source:     tripleSourceName,
 			Timestamp:  now,
 			Confidence: defaultConfidence,
 		},
+		// Observation severity
 		{
 			Subject:    entityID,
 			Predicate:  PredicateObservationSeverity,
@@ -82,10 +81,11 @@ func (o *Observation) Triples() []message.Triple {
 		},
 	}
 
+	// Dublin Core: Creator (observer)
 	if o.Observer != "" {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
-			Predicate:  PredicateObservationObserver,
+			Predicate:  PredicateDCCreator,
 			Object:     o.Observer,
 			Source:     tripleSourceName,
 			Timestamp:  now,
@@ -93,6 +93,7 @@ func (o *Observation) Triples() []message.Triple {
 		})
 	}
 
+	// Dublin Core: Date (observed at)
 	if o.ObservedAt != "" {
 		ts, err := time.Parse(time.RFC3339, o.ObservedAt)
 		if err != nil {
@@ -103,7 +104,7 @@ func (o *Observation) Triples() []message.Triple {
 		} else {
 			triples = append(triples, message.Triple{
 				Subject:    entityID,
-				Predicate:  PredicateObservationObservedAt,
+				Predicate:  PredicateDCDate,
 				Object:     ts,
 				Source:     tripleSourceName,
 				Timestamp:  now,
@@ -112,21 +113,11 @@ func (o *Observation) Triples() []message.Triple {
 		}
 	}
 
-	if o.Body != "" {
-		triples = append(triples, message.Triple{
-			Subject:    entityID,
-			Predicate:  PredicateContentBody,
-			Object:     o.Body,
-			Source:     tripleSourceName,
-			Timestamp:  now,
-			Confidence: defaultConfidence,
-		})
-	}
-
+	// Dublin Core: Subject (category)
 	if o.Category != "" {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
-			Predicate:  PredicateContentCategory,
+			Predicate:  PredicateDCSubject,
 			Object:     o.Category,
 			Source:     tripleSourceName,
 			Timestamp:  now,
@@ -134,6 +125,7 @@ func (o *Observation) Triples() []message.Triple {
 		})
 	}
 
+	// Tags
 	for _, tag := range o.Tags {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
@@ -145,7 +137,47 @@ func (o *Observation) Triples() []message.Triple {
 		})
 	}
 
+	// NOTE: Body and Description are NOT in triples - stored in ObjectStore
+
 	return triples
+}
+
+// StorageRef implements message.Storable interface.
+func (o *Observation) StorageRef() *message.StorageReference {
+	return o.storageRef
+}
+
+// SetStorageRef is called by processor after storing content.
+func (o *Observation) SetStorageRef(ref *message.StorageReference) {
+	o.storageRef = ref
+}
+
+// ContentFields implements message.ContentStorable interface.
+func (o *Observation) ContentFields() map[string]string {
+	fields := map[string]string{
+		message.ContentRoleTitle: "title",
+	}
+	if o.Body != "" {
+		fields[message.ContentRoleBody] = "body"
+	}
+	if o.Description != "" {
+		fields[message.ContentRoleAbstract] = "description"
+	}
+	return fields
+}
+
+// RawContent implements message.ContentStorable interface.
+func (o *Observation) RawContent() map[string]string {
+	content := map[string]string{
+		"title": o.Title,
+	}
+	if o.Body != "" {
+		content["body"] = o.Body
+	}
+	if o.Description != "" {
+		content["description"] = o.Description
+	}
+	return content
 }
 
 // Schema returns the message type for observations.
@@ -185,3 +217,9 @@ func (o *Observation) UnmarshalJSON(data []byte) error {
 	type Alias Observation
 	return json.Unmarshal(data, (*Alias)(o))
 }
+
+// Compile-time interface checks
+var (
+	_ message.ContentStorable = (*Observation)(nil)
+	_ message.Payload         = (*Observation)(nil)
+)

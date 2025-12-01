@@ -711,7 +711,13 @@ func (m *Manager) queueEmbeddingGeneration(ctx context.Context, entityID string,
 		}
 	}
 
-	// Extract text from triples (single source of truth)
+	// ContentStorable path: if StorageRef is present, use it instead of extracting from triples
+	// This supports the Feature 008 pattern where large content is stored in ObjectStore
+	if state.StorageRef != nil {
+		return m.queueEmbeddingWithStorageRef(ctx, entityID, state)
+	}
+
+	// Legacy path: Extract text from triples
 	// Build properties map from triples for text extraction
 	properties := make(map[string]interface{})
 	for _, triple := range state.Triples {
@@ -743,6 +749,37 @@ func (m *Manager) queueEmbeddingGeneration(ctx context.Context, entityID string,
 		"message_type", state.MessageType,
 		"text_length", len(text),
 		"content_hash", contentHash[:8]) // Log first 8 chars of hash
+
+	return nil
+}
+
+// queueEmbeddingWithStorageRef queues an embedding using ContentStorable pattern.
+// The worker will fetch content from ObjectStore using the StorageRef.
+func (m *Manager) queueEmbeddingWithStorageRef(ctx context.Context, entityID string, state *gtypes.EntityState) error {
+	// Create StorageRef for embedding record
+	storageRef := &embedding.StorageRef{
+		StorageInstance: state.StorageRef.StorageInstance,
+		Key:             state.StorageRef.Key,
+	}
+
+	// Calculate content hash from storage key (for deduplication)
+	// This is a simplified hash since we don't have the actual content yet
+	contentHash := embedding.ContentHash(state.StorageRef.Key)
+
+	// Record text extraction
+	if m.promMetrics != nil {
+		m.promMetrics.embeddingTextExtractions.Inc()
+	}
+
+	// Write pending record with StorageRef - worker will fetch content and generate embedding
+	if err := m.embeddingStorage.SavePendingWithStorageRef(ctx, entityID, contentHash, storageRef, nil); err != nil {
+		return errs.WrapTransient(err, "IndexManager", "queueEmbeddingWithStorageRef", "failed to queue embedding")
+	}
+
+	m.logger.Debug("Queued embedding with storage reference",
+		"entity_id", entityID,
+		"message_type", state.MessageType,
+		"storage_key", state.StorageRef.Key)
 
 	return nil
 }

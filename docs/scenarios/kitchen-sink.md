@@ -2,28 +2,35 @@
 
 ## Overview
 
-The Kitchen Sink scenario demonstrates the full SemStreams capability stack through two variants:
-- **Core**: CI-safe, no ML dependencies (BM25 lexical search)
-- **ML**: Full semantic search with embeddings (requires semembed service)
+The Kitchen Sink scenario demonstrates the full SemStreams capability stack—a **Dynamic Knowledge Graph** with progressive enhancement for edge-to-cloud deployment.
+
+**Key differentiator:** Unlike static knowledge graphs that require batch rebuilds, SemStreams maintains a **real-time, incrementally-updated** knowledge graph via KV watch patterns. Entities and indexes update as data arrives.
+
+### Two Variants (Progressive Enhancement)
+
+- **Core (Edge/Offline)**: Full entity storage, all 7 indexes, BM25 lexical search, statistical community summaries. **No external service dependencies**—runs on Raspberry Pi to data center.
+- **ML (Cloud/Connected)**: Everything from Core, plus semembed (neural embeddings) and semsummarize (LLM summaries) for enhanced semantic capabilities.
 
 ## The Problem: Data Without Meaning
 
 Traditional stream processing treats data as opaque bytes flowing through pipes. You can filter, transform, and route messages—but the system has no understanding of *what* the data represents or *how* entities relate to each other.
 
 Consider a logistics operation with:
+
 - **IoT sensors** reporting temperature, humidity, and pressure readings
 - **Maintenance records** documenting equipment repairs
 - **Safety observations** from inspectors
 - **Operational documents** like manuals and procedures
 
 In a traditional system, these are just separate data streams. When a cold storage temperature spikes, you might trigger an alert—but you can't automatically answer:
+
 - *"What maintenance was recently done on this unit?"*
 - *"Are there related safety observations?"*
 - *"What's the trend across all sensors in this zone?"*
 
 ## The Solution: Semantic Streaming
 
-SemStreams transforms raw data streams into a **knowledge graph** that understands entities, relationships, and meaning. Every piece of data becomes a node in a queryable graph with:
+SemStreams transforms raw data streams into a **dynamic knowledge graph** that understands entities, relationships, and meaning. Every piece of data becomes a node in a queryable graph with:
 
 - **Federated Entity IDs**: `{org}.{platform}.{domain}.{type}.{instance}`
 - **Semantic Triples**: Subject-Predicate-Object facts about each entity
@@ -32,133 +39,100 @@ SemStreams transforms raw data streams into a **knowledge graph** that understan
 
 ## Kitchen Sink Architecture
 
-The kitchen sink scenario demonstrates the complete SemStreams capability stack:
+The kitchen sink scenario demonstrates the complete SemStreams capability stack with **ContentStorable** architecture and **pub/sub topology** (not linear pipelines):
 
-```mermaid
-flowchart TB
-    subgraph inputs["Data Sources"]
-        UDP["UDP Input<br/>:14550"]
-        FD["File: documents.jsonl"]
-        FM["File: maintenance.jsonl"]
-        FO["File: observations.jsonl"]
-        FS["File: sensors.jsonl"]
-        FSD["File: sensor_docs.jsonl"]
-    end
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        DYNAMIC KNOWLEDGE GRAPH                              │
+│                   (Real-time updates via KV watch)                          │
+└─────────────────────────────────────────────────────────────────────────────┘
 
-    subgraph nats["NATS JetStream Subjects"]
-        direction TB
-        RAW_UDP["raw.udp.messages"]
-        RAW_DOC["raw.document.corpus"]
-        RAW_SENS["raw.sensor.file"]
-        GEN["generic.messages"]
-        ENT["generic.entities"]
-        GRAPH["events.graph.entity.*"]
-        RULES["events.rule.triggered"]
-    end
+DATA SOURCES                    DOMAIN PROCESSORS                    STORAGE
+─────────────                   ─────────────────                    ───────
 
-    subgraph processors["Semantic Processors"]
-        JG["JSON Generic<br/>Envelope Wrapper"]
-        JF["JSON Filter<br/>type=telemetry"]
-        DOC["Document Processor<br/>→ Graphable Entity"]
-        IOT["IoT Sensor Processor<br/>→ Graphable Entity"]
-        RULE["Rule Processor<br/>5 Alert Rules"]
-        GP["Graph Processor<br/>Entity + Index Manager"]
-    end
+documents.jsonl ──┐
+maintenance.jsonl ├──► raw.document.corpus ──► document_processor ──┬──► ObjectStore
+observations.jsonl│                               (ContentStorable)  │    (body content)
+sensor_docs.jsonl ┘                                      │           │
+                                                         └───────────┼──► events.graph.entity.document
+                                                                     │    (metadata + StorageRef)
+                                                                     │
+sensors.jsonl ────► raw.sensor.file ──────► iot_sensor ──────────────┼──► events.graph.entity.sensor
+                          │                 (Graphable)              │    (triples only)
+                          │                                          │
+                          └──► rule_processor ──► events.rule.triggered
+                                                                     │
+                                                                     ▼
+                                                        ┌────────────────────────┐
+                                                        │ events.graph.entity.*  │
+                                                        │   (wildcard subscribe) │
+                                                        └───────────┬────────────┘
+                                                                    │
+                                                                    ▼
+                                                        ┌────────────────────────┐
+                                                        │    GRAPH PROCESSOR     │
+                                                        │  (single subscriber)   │
+                                                        └───────────┬────────────┘
+                                                                    │
+                    ┌───────────────────────────────────────────────┼───────────────────────────────────┐
+                    │                                               │                                   │
+                    ▼                                               ▼                                   ▼
+        ┌───────────────────┐                           ┌───────────────────┐               ┌───────────────────┐
+        │   ENTITY_STATES   │                           │      INDEXES      │               │ EMBEDDING_INDEX   │
+        │ (metadata+ref)    │                           │                   │               │                   │
+        └───────────────────┘                           │ • PREDICATE       │               └─────────┬─────────┘
+                                                        │ • INCOMING        │                         │
+                                                        │ • OUTGOING        │                         ▼
+                                                        │ • ALIAS           │               ┌───────────────────┐
+                                                        │ • SPATIAL         │               │ EMBEDDING WORKER  │
+                                                        │ • TEMPORAL        │               │                   │
+                                                        └───────────────────┘               │  ◄──── ObjectStore│
+                                                                                            │  (fetch body via  │
+                                                                                            │   StorageRef)     │
+                                                                                            └───────────────────┘
 
-    subgraph storage["Semantic Storage (NATS KV)"]
-        KV["graph_entities_kitchen<br/>(Entity States)"]
-        PI["PREDICATE_INDEX"]
-        II["INCOMING_INDEX"]
-        AI["ALIAS_INDEX"]
-        SI["SPATIAL_INDEX"]
-        TI["TEMPORAL_INDEX"]
-    end
-
-    subgraph outputs["Outputs"]
-        FILE["File Output<br/>JSONL Archive"]
-        HTTP["HTTP POST<br/>Webhooks"]
-        WS["WebSocket<br/>:8082/ws"]
-        OS["ObjectStore<br/>Message Archive"]
-        API["HTTP Gateway<br/>/api-gateway/*"]
-    end
-
-    %% Input flows - UDP path
-    UDP --> RAW_UDP
-    RAW_UDP --> JG
-    JG --> GEN
-    GEN --> JF
-    GEN --> RULE
-    JF --> ENT
-
-    %% Input flows - Document corpus path
-    FD --> RAW_DOC
-    FM --> RAW_DOC
-    FO --> RAW_DOC
-    FSD --> RAW_DOC
-    RAW_DOC --> DOC
-    DOC --> GRAPH
-
-    %% Input flows - Sensor path
-    FS --> RAW_SENS
-    RAW_SENS --> IOT
-    RAW_SENS --> RULE
-    IOT --> GRAPH
-
-    %% Graph processing
-    GRAPH --> GP
-    GP --> KV
-    GP --> PI
-    GP --> II
-    GP --> AI
-    GP --> SI
-    GP --> TI
-
-    %% Output flows
-    ENT --> FILE
-    ENT --> HTTP
-    ENT --> OS
-    RAW_UDP --> WS
-
-    %% Rule output
-    RULE --> RULES
-
-    %% API access
-    API -.-> KV
-    API -.-> PI
-
-    classDef input fill:#e1f5fe,stroke:#01579b
-    classDef processor fill:#fff3e0,stroke:#e65100
-    classDef storage fill:#e8f5e9,stroke:#2e7d32
-    classDef output fill:#fce4ec,stroke:#880e4f
-    classDef nats fill:#f3e5f5,stroke:#4a148c
-
-    class UDP,FD,FM,FO,FS,FSD input
-    class JG,JF,DOC,IOT,RULE,GP processor
-    class KV,PI,II,AI,SI,TI storage
-    class FILE,HTTP,WS,OS,API output
-    class RAW_UDP,RAW_DOC,RAW_SENS,GEN,ENT,GRAPH,RULES nats
+OUTPUTS (subscribe to events.graph.entity.>):
+─────────────────────────────────────────────
+• file output      → JSONL archive
+• httppost         → Webhooks
+• objectstore      → Message archive
+• websocket        → Real-time streaming (from raw.udp.messages)
+• api-gateway      → REST API queries
 ```
+
+**Key architecture points:**
+
+- **NOT linear pipelines** - pub/sub with wildcard subscription
+- **ContentStorable types** (Document, Maintenance, Observation) store body to ObjectStore FIRST
+- **Graph receives metadata only** - body replaced by StorageRef pointer
+- **Embedding worker** fetches full content from ObjectStore when generating vectors
+- **All indexes updated atomically** via KV watch pattern
 
 ## Data Flow Explained
 
 ### 1. Ingestion Layer
 
 **Real-time Telemetry (UDP Path)**
-```
-UDP :14550 → raw.udp.messages → json_generic → generic.messages → json_filter(type=telemetry) → generic.entities
-                                                    ↓
-                                              rule_processor → events.rule.triggered
-```
-Live telemetry arrives via UDP, wrapped in an envelope, filtered by type, and routed to outputs. The rule processor also evaluates incoming messages for alert conditions.
 
-**Document Corpus (File Inputs)**
 ```
-documents.jsonl    ┐
-maintenance.jsonl  ├→ raw.document.corpus → document_processor → events.graph.entity.document
-observations.jsonl │
-sensor_docs.jsonl  ┘
+UDP :14550 → raw.udp.messages → WebSocket (real-time streaming)
 ```
-Rich text content (manuals, work orders, inspection reports, sensor metadata) is transformed into Graphable entities with semantic predicates.
+Live telemetry streams directly to WebSocket for real-time dashboard updates. The focus is on semantic document processing rather than generic message transformation.
+
+**Document Corpus (File Inputs) - ContentStorable Pattern**
+```
+documents.jsonl    ┐                                    ┌→ ObjectStore (body content)
+maintenance.jsonl  ├→ raw.document.corpus → Document   │
+observations.jsonl │                        Processor ─┼→ events.graph.entity.document
+sensor_docs.jsonl  ┘                                    │   (metadata triples + StorageRef)
+                                                        └→ Graph Processor → KV + Indexes
+```
+Rich text content implements the **ContentStorable** interface:
+1. **Process**: Document processor transforms JSON into semantic entities
+2. **Store**: Body content stored in ObjectStore (separate from triples)
+3. **Graph**: Metadata triples (Dublin Core) + StorageRef published to graph
+
+This separation keeps entity state lean while enabling semantic search over full content.
 
 **Sensor Readings (File Input)**
 ```
@@ -166,25 +140,33 @@ sensors.jsonl → raw.sensor.file → iot_sensor → events.graph.entity.sensor
                       ↓
                 rule_processor → events.rule.triggered (if thresholds exceeded)
 ```
-Time-series sensor data becomes queryable entities. The rule processor also monitors sensor streams for threshold violations.
+Time-series sensor data becomes queryable entities. The rule processor monitors sensor streams for threshold violations.
 
 ### 2. Semantic Processing Layer
 
-**Document Processor** transforms incoming JSON into federated entities:
+**Document Processor** transforms incoming JSON into federated entities using **Dublin Core** metadata:
 ```json
 // Input
-{"id": "doc-001", "title": "Safety Manual", "category": "safety"}
+{"id": "doc-001", "title": "Safety Manual", "category": "safety", "body": "Full document text..."}
 
 // Output Entity ID
 "c360.logistics.content.document.safety.doc-001"
 
-// Generated Triples
+// Generated Triples (metadata only - NO body)
 [
-  {"subject": "c360.logistics...", "predicate": "content.title", "object": "Safety Manual"},
-  {"subject": "c360.logistics...", "predicate": "content.type", "object": "document"},
-  {"subject": "c360.logistics...", "predicate": "content.category", "object": "safety"}
+  {"subject": "c360.logistics...", "predicate": "dc.title", "object": "Safety Manual"},
+  {"subject": "c360.logistics...", "predicate": "dc.type", "object": "document"},
+  {"subject": "c360.logistics...", "predicate": "dc.subject", "object": "safety"}
 ]
+
+// StorageRef (points to body in ObjectStore)
+{"storage_instance": "CONTENT_STORE", "key": "content/2024/01/15/14/doc-001_1705334400"}
 ```
+
+The **ContentStorable** interface enables:
+- **Lean Entity State**: Only Dublin Core metadata triples (no large body text)
+- **Content Deduplication**: Body stored once, referenced by multiple entities
+- **Semantic Embedding**: Worker fetches content from ObjectStore using StorageRef
 
 **IoT Sensor Processor** transforms readings into temporal entities:
 ```json
@@ -228,15 +210,19 @@ The **Graph Processor** maintains entity state and relationships:
 }
 ```
 
-**Index Types:**
+**All 7 Indexes:**
 
-| Index | Purpose | Example Query |
-|-------|---------|---------------|
-| PREDICATE_INDEX | Find entities by attribute | "All entities with temperature readings" |
-| INCOMING_INDEX | Find entities pointing to X | "What references warehouse-a?" |
-| ALIAS_INDEX | Resolve alternate identifiers | "temp-001" → full entity ID |
-| SPATIAL_INDEX | Geographic queries | "Sensors within 100m of loading dock" |
-| TEMPORAL_INDEX | Time-range queries | "Events in last 24 hours" |
+| Index | KV Bucket | Purpose | Example Query |
+|-------|-----------|---------|---------------|
+| Entity States | `ENTITY_STATES` | Primary entity storage | "Get entity by ID" |
+| Predicate | `PREDICATE_INDEX` | Find entities by attribute | "All entities with temperature readings" |
+| Incoming | `INCOMING_INDEX` | Find entities pointing TO X | "What references warehouse-a?" |
+| **Outgoing** | `OUTGOING_INDEX` | Find entities X points TO | "What does this sensor relate to?" |
+| Alias | `ALIAS_INDEX` | Resolve alternate identifiers | "temp-001" → full entity ID |
+| Spatial | `SPATIAL_INDEX` | Geographic queries (geohash) | "Sensors within 100m of loading dock" |
+| Temporal | `TEMPORAL_INDEX` | Time-range queries (hourly) | "Events in last 24 hours" |
+
+**Optional indexes:** EMBEDDING_INDEX, EMBEDDING_DEDUP, COMMUNITY_INDEX
 
 ### 4. Query & Output Layer
 
@@ -251,10 +237,62 @@ curl http://localhost:8080/entity/c360.logistics.environmental.sensor.temperatur
 ```
 
 **Multi-destination Output:**
+
 - **File**: JSONL archive for batch analysis
 - **HTTP POST**: Webhooks for external integrations
 - **WebSocket**: Real-time browser dashboards
 - **ObjectStore**: Immutable message archive
+
+### 5. Search & Query Algorithms
+
+SemStreams provides **6 primary query algorithms** plus supporting algorithms. All primary algorithms work in Core mode with graceful degradation.
+
+**Primary Query Algorithms:**
+
+| Algorithm | Implementation | Use Case | Core Mode |
+|-----------|---------------|----------|-----------|
+| **BM25** | `embedding/bm25_embedder.go` | Lexical/keyword search | Native Go |
+| **Vector** | `embedding/http_embedder.go` | Semantic similarity | Falls back to BM25 |
+| **PathRAG** | `graph/query/client.go` | Bounded graph traversal | Native Go |
+| **Hybrid** | `indexmanager/semantic.go` | Semantic + temporal + spatial | Native Go |
+| **GraphRAG Local** | `querymanager/graphrag_search.go` | Within-community search | Native Go |
+| **GraphRAG Global** | `querymanager/graphrag_search.go` | Cross-community search | Statistical summaries |
+
+**Supporting Algorithms:**
+
+| Algorithm | Purpose | Location |
+|-----------|---------|----------|
+| TF-IDF | Community summarization (statistical fallback) | `graphclustering/summarizer.go` |
+| PageRank | Entity importance ranking | `graphclustering/pagerank.go` |
+| LPA | Hierarchical community detection | `graphclustering/lpa.go` |
+| Geohash | Spatial indexing (grid-based) | `indexmanager/indexes.go` |
+
+**Full algorithm documentation:** See `semdocs/docs/advanced/03-algorithm-reference.md`
+
+### 6. ML Services (Optional Enhancement)
+
+Two optional ML services enhance Core capabilities:
+
+| Service | Port | Purpose | Core Fallback |
+|---------|------|---------|---------------|
+| **semembed** | 8081 | Neural vector embeddings | BM25 lexical embeddings |
+| **semsummarize** | 8084 | LLM community summaries | TF-IDF statistical summaries |
+
+**Progressive enhancement model:**
+
+```text
+Level 1: Core (Edge/Offline)
+├── Full entity storage and all 7 indexes
+├── BM25 lexical search + PathRAG graph traversal
+├── Statistical community summaries (TF-IDF)
+└── No external service dependencies
+
+Level 2: ML Enhanced (Cloud/Connected)
+├── Everything from Level 1
+├── semembed: Semantic vector search
+├── semsummarize: LLM-generated summaries
+└── Enhanced GraphRAG with neural embeddings
+```
 
 ## Why This Matters
 
@@ -346,83 +384,105 @@ cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant ml
 | file_sensors | File | `raw.sensor.file` | sensors.jsonl (30 readings) |
 | file_sensor_docs | File | `raw.document.corpus` | sensor_docs.jsonl (15 docs) |
 
-### Processors (6)
+### Processors (4)
 | Component | Input | Output | Description |
 |-----------|-------|--------|-------------|
-| json_generic | `raw.udp.messages` | `generic.messages` | Envelope wrapper |
-| json_filter | `generic.messages` | `generic.entities` | Filters type=telemetry |
-| document_processor | `raw.document.corpus` | `events.graph.entity.document` | Document → Graphable |
+| document_processor | `raw.document.corpus` | `events.graph.entity.document` | ContentStorable → ObjectStore → Graph |
 | iot_sensor | `raw.sensor.>` | `events.graph.entity.sensor` | Sensor → Graphable |
-| rule | `generic.messages`, `raw.sensor.>` | `events.rule.triggered` | 5 alert rules |
-| graph | `events.graph.entity.*` | KV buckets | Entity + Index management |
+| rule | `raw.sensor.>` | `events.rule.triggered` | 5 alert rules |
+| graph | `events.graph.entity.*` | KV buckets | Entity + Index + Embedding management |
 
 ### Outputs (4)
 | Component | Source | Destination | Description |
 |-----------|--------|-------------|-------------|
-| file | `generic.entities` | /tmp/*.jsonl | JSONL archive |
-| httppost | `generic.entities` | localhost:9999 | Webhook delivery |
+| file | `events.graph.entity.>` | /tmp/*.jsonl | JSONL archive of semantic entities |
+| httppost | `events.graph.entity.>` | localhost:9999 | Webhook delivery of entities |
 | websocket | `raw.udp.messages` | :8082/ws | Real-time streaming |
-| objectstore | `generic.entities` | NATS ObjectStore | Message archive |
+| objectstore | `events.graph.entity.>` | NATS ObjectStore | Entity message archive |
 
 ### Gateways (1)
 | Component | Routes | Description |
 |-----------|--------|-------------|
 | api-gateway | `/search/semantic`, `/entity/:id` | REST API for queries |
 
-### Storage (NATS KV Buckets)
+### Storage (NATS KV Buckets + ObjectStore)
+
 | Bucket | Purpose |
 |--------|---------|
-| graph_entities_kitchen | Entity state storage |
+| graph_entities_kitchen | Entity state storage (metadata + StorageRef) |
 | PREDICATE_INDEX | Query by predicate |
 | INCOMING_INDEX | Query incoming relationships |
+| OUTGOING_INDEX | Query outgoing relationships |
 | ALIAS_INDEX | Resolve alternate identifiers |
-| SPATIAL_INDEX | Geographic queries |
-| TEMPORAL_INDEX | Time-range queries |
+| SPATIAL_INDEX | Geographic queries (geohash) |
+| TEMPORAL_INDEX | Time-range queries (hourly buckets) |
+| EMBEDDING_INDEX | Embedding generation queue |
+| EMBEDDING_DEDUP | Content-addressed deduplication |
+| COMMUNITY_INDEX | Community detection results |
+| CONTENT_STORE (ObjectStore) | Document body content storage |
 
 ## Framework Story: What Kitchen Sink Proves
 
-### Core Variant (CI-Safe)
+### Dynamic Knowledge Graph
 
-The core variant proves that SemStreams can:
+**Key differentiator:** SemStreams maintains a **real-time, incrementally-updated** knowledge graph—not a static graph requiring batch rebuilds.
+
+- **Live updates**: Entities and indexes update as data arrives via KV watch patterns
+- **Eventual consistency**: Graph reflects current state within milliseconds
+- **No rebuild cycles**: Add entities, update relationships, query immediately
+
+### Core Variant (Edge/Offline)
+
+The Core variant proves SemStreams runs **anywhere without external dependencies**—from Raspberry Pi to data center:
 
 1. **Ingest heterogeneous data** - Multiple input types (UDP, File) with different formats
-2. **Transform to semantic model** - Raw JSON becomes federated entities with triples
-3. **Persist to knowledge graph** - Entities stored in NATS KV with versioning
-4. **Index for queries** - Multiple index types enable different query patterns
-5. **Evaluate rules** - Threshold-based alerting on streaming data
-6. **Route to outputs** - Fan-out to multiple destinations (file, HTTP, WebSocket)
-7. **Expose query API** - HTTP gateway for semantic queries using BM25 lexical search
+2. **Transform to semantic model** - Raw JSON becomes federated entities with Dublin Core metadata
+3. **Separate content from triples** - ContentStorable stores body in ObjectStore, metadata in triples
+4. **Persist to knowledge graph** - Entities stored in NATS KV with versioning and StorageRef
+5. **All 7 indexes operational** - Predicate, incoming, outgoing, alias, spatial, temporal
+6. **BM25 lexical search** - Native Go, no ML service dependencies
+7. **PathRAG graph traversal** - Bounded DFS with relevance decay
+8. **Statistical summaries** - TF-IDF community summaries without LLM
+9. **Evaluate rules** - Threshold-based alerting on streaming data
+10. **Route to outputs** - Fan-out to multiple destinations (file, HTTP, WebSocket)
 
-### ML Variant (Full Stack)
+### ML Variant (Cloud/Connected)
 
-The ML variant adds:
+The ML variant adds **enhanced semantic capabilities** when connected to ML services:
 
-1. **Embedding generation** - Text content vectorized via semembed service
+1. **Neural embeddings** - Worker fetches body from ObjectStore via StorageRef, vectors via semembed
 2. **Semantic search** - Find similar entities by meaning, not just keywords
-3. **Hybrid retrieval** - Combine BM25 lexical with embedding similarity
+3. **LLM summaries** - semsummarize generates richer community descriptions
+4. **Enhanced GraphRAG** - Community-based search with neural similarity scoring
+5. **Hybrid retrieval** - Combine BM25 lexical with embedding similarity
 
 ### Test Data Story
 
-The logistics warehouse scenario tells a coherent story:
+The logistics warehouse scenario tells a coherent story with **ContentStorable** architecture:
 
 1. **Baseline Setup** (file inputs at startup):
-   - 12 operational documents (safety manuals, SOPs, procedures)
-   - 16 maintenance records (equipment repairs, inspections)
-   - 15 safety observations (incidents, near-misses, violations)
-   - 15 sensor documentation (metadata about monitoring equipment)
-   - 30 sensor readings (temperature, humidity, pressure trends)
+   - 12 operational documents (safety manuals, SOPs, procedures) → ObjectStore + triples
+   - 16 maintenance records (equipment repairs, inspections) → ObjectStore + triples
+   - 15 safety observations (incidents, near-misses, violations) → ObjectStore + triples
+   - 15 sensor documentation (metadata about monitoring equipment) → ObjectStore + triples
+   - 30 sensor readings (temperature, humidity, pressure trends) → triples only
 
-2. **Live Operations** (UDP stream during test):
-   - 20 mixed messages (10 telemetry, 10 regular)
-   - Telemetry messages create/update entity state
-   - Regular messages filtered, routed to outputs only
+2. **Content Storage Pattern**:
+   - Document body stored in ObjectStore (CONTENT_STORE)
+   - Dublin Core metadata in triples (dc.title, dc.type, dc.subject)
+   - StorageRef links entity to full content
+   - Embedding worker fetches content via StorageRef
 
-3. **Alert Scenario**:
+3. **Live Operations** (UDP stream during test):
+   - Real-time telemetry streams to WebSocket for dashboards
+   - Sensor data evaluated by rule processor for alerts
+
+4. **Alert Scenario**:
    - Cold storage sensor (`temp-sensor-001`) shows temperature rising
    - Readings: 36.5°F → 37.1°F → 38.2°F → 41.2°F → 45.1°F → 48.2°F
    - `cold-storage-temp-alert` should trigger when reading >= 40°F
 
-4. **Query Scenario** (what you can ask):
+5. **Query Scenario** (what you can ask):
    - "What maintenance was done on cold storage equipment?"
    - "Are there safety observations related to temperature?"
    - "Find all sensors in zone-a"
@@ -447,14 +507,19 @@ assert.NotNil(entity)
 ### Index Population Assertions (Priority: High)
 
 ```go
-// Verify predicate index populated
+// Verify predicate index populated with Dublin Core predicates
 predicates, _ := kvClient.Keys("PREDICATE_INDEX")
-assert.Contains(predicates, "content.category")
+assert.Contains(predicates, "dc.title")
+assert.Contains(predicates, "dc.subject")
 assert.Contains(predicates, "sensor.type")
 
 // Verify spatial index for sensors with coordinates
 spatialKeys, _ := kvClient.Keys("SPATIAL_INDEX")
 assert.GreaterOrEqual(len(spatialKeys), 15) // sensors have lat/lon
+
+// Verify content stored in ObjectStore
+contentKeys, _ := objStore.List("content/")
+assert.GreaterOrEqual(len(contentKeys), 58) // documents + maintenance + observations + sensor_docs
 ```
 
 ### Rule Triggering Assertions (Priority: Medium)
@@ -478,11 +543,12 @@ assert.Contains(results[0].EntityID, "forklift") // Most relevant
 ### End-to-End Flow Assertions (Priority: Medium)
 
 ```go
-// Verify file output received data
+// Verify file output received semantic entities
 files, _ := filepath.Glob("/tmp/semstreams-kitchen-sink*.jsonl")
 assert.GreaterOrEqual(len(files), 1)
 content, _ := os.ReadFile(files[0])
-assert.Contains(string(content), "telemetry") // filtered messages
+assert.Contains(string(content), "dc.title") // Dublin Core metadata
+assert.Contains(string(content), "storage_ref") // ContentStorable reference
 ```
 
 ## Next Steps

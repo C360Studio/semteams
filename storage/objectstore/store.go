@@ -295,6 +295,121 @@ func (s *Store) Close() error {
 	return nil
 }
 
+// StoreContent stores content from a ContentStorable and returns a StorageReference.
+// This is the high-level method for storing document content separately from triples.
+//
+// Flow:
+//  1. Extract RawContent() and ContentFields() from ContentStorable
+//  2. Create StoredContent envelope with timestamp
+//  3. Store as JSON in ObjectStore
+//  4. Return StorageReference for embedding in messages
+func (s *Store) StoreContent(ctx context.Context, cs message.ContentStorable) (*message.StorageReference, error) {
+	start := time.Now()
+	s.metrics.recordWriteOp("store_content")
+
+	// Create StoredContent envelope
+	stored := NewStoredContent(
+		cs.EntityID(),
+		cs.RawContent(),
+		cs.ContentFields(),
+	)
+
+	// Generate key using entity ID
+	key := s.generateContentKey(cs.EntityID())
+
+	// Marshal to JSON
+	data, err := json.Marshal(stored)
+	if err != nil {
+		s.metrics.recordError("store_content")
+		return nil, fmt.Errorf("failed to marshal content: %w", err)
+	}
+
+	// Store in ObjectStore
+	_, err = s.store.PutBytes(ctx, key, data)
+	if err != nil {
+		s.metrics.recordError("store_content")
+		return nil, fmt.Errorf("failed to store content: %w", err)
+	}
+
+	s.metrics.recordWriteLatency("store_content", time.Since(start).Seconds())
+
+	// Add to cache
+	if s.dataCache != nil {
+		s.dataCache.Set(key, data)
+	}
+
+	// Return reference
+	return &message.StorageReference{
+		StorageInstance: s.bucketName,
+		Key:             key,
+		ContentType:     "application/json",
+		Size:            int64(len(data)),
+	}, nil
+}
+
+// FetchContent retrieves stored content by StorageReference.
+// Returns the StoredContent with fields and content mapping.
+func (s *Store) FetchContent(ctx context.Context, ref *message.StorageReference) (*StoredContent, error) {
+	if ref == nil {
+		return nil, fmt.Errorf("storage reference is nil")
+	}
+
+	start := time.Now()
+	s.metrics.recordReadOp("fetch_content")
+
+	// Check cache first
+	var data []byte
+	var found bool
+
+	if s.dataCache != nil {
+		data, found = s.dataCache.Get(ref.Key)
+		if found {
+			s.metrics.recordCacheHit()
+		} else {
+			s.metrics.recordCacheMiss()
+		}
+	}
+
+	if !found {
+		// Fetch from ObjectStore
+		var err error
+		data, err = s.store.GetBytes(ctx, ref.Key)
+		if err != nil {
+			s.metrics.recordError("fetch_content")
+			return nil, fmt.Errorf("failed to fetch content: %w", err)
+		}
+
+		// Add to cache
+		if s.dataCache != nil {
+			s.dataCache.Set(ref.Key, data)
+		}
+	}
+
+	s.metrics.recordReadLatency("fetch_content", time.Since(start).Seconds())
+
+	// Unmarshal to StoredContent
+	var stored StoredContent
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal content: %w", err)
+	}
+
+	return &stored, nil
+}
+
+// generateContentKey creates a time-bucketed key for content storage.
+// Format: content/year/month/day/hour/entityID_timestamp
+func (s *Store) generateContentKey(entityID string) string {
+	now := time.Now()
+	return fmt.Sprintf("content/%04d/%02d/%02d/%02d/%s_%d",
+		now.Year(),
+		now.Month(),
+		now.Day(),
+		now.Hour(),
+		entityID,
+		now.UnixNano(),
+	)
+}
+
 // DefaultKeyGenerator provides time-based key generation.
 // Keys are formatted as: type/year/month/day/hour/identifier_timestamp
 //

@@ -231,7 +231,7 @@
     "json_generic": {
       "type": "processor",
       "name": "json_generic",
-      "enabled": true,
+      "enabled": false,
       "config": {
         "ports": {
           "inputs": [
@@ -255,7 +255,7 @@
     "json_filter": {
       "type": "processor",
       "name": "json_filter",
-      "enabled": true,
+      "enabled": false,
       "config": {
         "ports": {
           "inputs": [
@@ -469,6 +469,7 @@
           "indexes": {
             "predicate": true,
             "incoming": true,
+            "outgoing": true,
             "alias": true,
             "spatial": true,
             "temporal": true
@@ -477,6 +478,7 @@
             "alias": "ALIAS_INDEX",
             "predicate": "PREDICATE_INDEX",
             "incoming": "INCOMING_INDEX",
+            "outgoing": "OUTGOING_INDEX",
             "spatial": "SPATIAL_INDEX",
             "temporal": "TEMPORAL_INDEX"
           },
@@ -505,9 +507,9 @@
           "inputs": [
             {
               "name": "file_in",
-              "subject": "generic.entities",
+              "subject": "events.graph.entity.>",
               "type": "nats",
-              "interface": "core.json.v1"
+              "interface": "content.document.v1"
             }
           ],
           "outputs": []
@@ -526,9 +528,9 @@
           "inputs": [
             {
               "name": "http_in",
-              "subject": "generic.entities",
+              "subject": "events.graph.entity.>",
               "type": "nats",
-              "interface": "core.json.v1"
+              "interface": "content.document.v1"
             }
           ],
           "outputs": []
@@ -565,9 +567,9 @@
           "inputs": [
             {
               "name": "store_in",
-              "subject": "generic.entities",
+              "subject": "events.graph.entity.>",
               "type": "nats",
-              "interface": "core.json.v1"
+              "interface": "content.document.v1"
             }
           ],
           "outputs": []

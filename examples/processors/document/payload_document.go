@@ -9,14 +9,20 @@ import (
 	"github.com/c360/semstreams/message"
 )
 
-// Document represents a generic document entity. It implements the Graphable
-// interface with federated entity IDs and semantic predicates.
+// Document represents a generic document entity. It implements the ContentStorable
+// interface with federated entity IDs, semantic predicates, and content storage.
+//
+// ContentStorable pattern:
+//   - Triples() returns metadata ONLY (Dublin Core predicates, NO body)
+//   - ContentFields() maps semantic roles to field names in stored content
+//   - RawContent() returns content to store in ObjectStore
+//   - StorageRef() returns reference to stored content (set by processor)
 type Document struct {
 	// Input fields (from incoming JSON)
 	ID          string   `json:"id"`          // e.g., "doc-001"
 	Title       string   `json:"title"`       // e.g., "Safety Manual"
 	Description string   `json:"description"` // Primary text for semantic search
-	Body        string   `json:"body"`        // Full text content
+	Body        string   `json:"body"`        // Full text content (stored in ObjectStore, NOT in triples)
 	Summary     string   `json:"summary"`     // Brief summary
 	Category    string   `json:"category"`    // e.g., "safety", "operations"
 	Tags        []string `json:"tags"`        // Classification tags
@@ -26,6 +32,9 @@ type Document struct {
 	// Context fields (set by processor from config)
 	OrgID    string `json:"-"` // e.g., "acme"
 	Platform string `json:"-"` // e.g., "logistics"
+
+	// Storage reference (set by processor after storing content)
+	storageRef *message.StorageReference `json:"-"`
 }
 
 // EntityID returns a deterministic 6-part federated entity ID following the pattern:
@@ -45,34 +54,27 @@ func (d *Document) EntityID() string {
 	)
 }
 
-// Triples returns semantic facts about this document using domain-appropriate predicates.
+// Triples returns METADATA ONLY facts about this document using Dublin Core predicates.
+// Large content fields (body, description) are stored in ObjectStore, NOT in triples.
+// This prevents bloating entity state and enables efficient embedding extraction.
 func (d *Document) Triples() []message.Triple {
 	entityID := d.EntityID()
 	now := time.Now()
 
 	triples := []message.Triple{
-		// Title - important for search
+		// Dublin Core: Title
 		{
 			Subject:    entityID,
-			Predicate:  PredicateContentTitle,
+			Predicate:  PredicateDCTitle,
 			Object:     d.Title,
 			Source:     tripleSourceName,
 			Timestamp:  now,
 			Confidence: defaultConfidence,
 		},
-		// Description - primary semantic search field
+		// Dublin Core: Type (document)
 		{
 			Subject:    entityID,
-			Predicate:  PredicateContentDescription,
-			Object:     d.Description,
-			Source:     tripleSourceName,
-			Timestamp:  now,
-			Confidence: defaultConfidence,
-		},
-		// Content type classification
-		{
-			Subject:    entityID,
-			Predicate:  PredicateContentType,
+			Predicate:  PredicateDCType,
 			Object:     "document",
 			Source:     tripleSourceName,
 			Timestamp:  now,
@@ -80,33 +82,11 @@ func (d *Document) Triples() []message.Triple {
 		},
 	}
 
-	// Optional fields
-	if d.Body != "" {
-		triples = append(triples, message.Triple{
-			Subject:    entityID,
-			Predicate:  PredicateContentBody,
-			Object:     d.Body,
-			Source:     tripleSourceName,
-			Timestamp:  now,
-			Confidence: defaultConfidence,
-		})
-	}
-
-	if d.Summary != "" {
-		triples = append(triples, message.Triple{
-			Subject:    entityID,
-			Predicate:  PredicateContentSummary,
-			Object:     d.Summary,
-			Source:     tripleSourceName,
-			Timestamp:  now,
-			Confidence: defaultConfidence,
-		})
-	}
-
+	// Dublin Core: Subject (category)
 	if d.Category != "" {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
-			Predicate:  PredicateContentCategory,
+			Predicate:  PredicateDCSubject,
 			Object:     d.Category,
 			Source:     tripleSourceName,
 			Timestamp:  now,
@@ -114,7 +94,7 @@ func (d *Document) Triples() []message.Triple {
 		})
 	}
 
-	// Add tags as separate triples
+	// Tags as classification triples
 	for _, tag := range d.Tags {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
@@ -126,7 +106,7 @@ func (d *Document) Triples() []message.Triple {
 		})
 	}
 
-	// Time predicates - log warnings for invalid timestamps instead of silently skipping
+	// Dublin Core: Date (created)
 	if d.CreatedAt != "" {
 		ts, err := time.Parse(time.RFC3339, d.CreatedAt)
 		if err != nil {
@@ -137,7 +117,7 @@ func (d *Document) Triples() []message.Triple {
 		} else {
 			triples = append(triples, message.Triple{
 				Subject:    entityID,
-				Predicate:  PredicateTimeCreated,
+				Predicate:  PredicateDCDate,
 				Object:     ts,
 				Source:     tripleSourceName,
 				Timestamp:  now,
@@ -146,26 +126,56 @@ func (d *Document) Triples() []message.Triple {
 		}
 	}
 
-	if d.UpdatedAt != "" {
-		ts, err := time.Parse(time.RFC3339, d.UpdatedAt)
-		if err != nil {
-			slog.Warn("invalid updated_at timestamp",
-				"entity_id", entityID,
-				"value", d.UpdatedAt,
-				"error", err)
-		} else {
-			triples = append(triples, message.Triple{
-				Subject:    entityID,
-				Predicate:  PredicateTimeUpdated,
-				Object:     ts,
-				Source:     tripleSourceName,
-				Timestamp:  now,
-				Confidence: defaultConfidence,
-			})
-		}
-	}
+	// NOTE: Body, Description, Summary are NOT in triples.
+	// They are stored in ObjectStore and accessed via StorageRef + ContentFields.
 
 	return triples
+}
+
+// StorageRef implements message.Storable interface.
+// Returns reference to where content is stored in ObjectStore.
+func (d *Document) StorageRef() *message.StorageReference {
+	return d.storageRef
+}
+
+// SetStorageRef is called by processor after storing content in ObjectStore.
+func (d *Document) SetStorageRef(ref *message.StorageReference) {
+	d.storageRef = ref
+}
+
+// ContentFields implements message.ContentStorable interface.
+// Returns semantic role → field name mapping for content stored in ObjectStore.
+// Embedding workers use these roles to find text for embedding generation.
+func (d *Document) ContentFields() map[string]string {
+	fields := map[string]string{
+		message.ContentRoleTitle: "title",
+	}
+	if d.Body != "" {
+		fields[message.ContentRoleBody] = "body"
+	}
+	if d.Description != "" {
+		fields[message.ContentRoleAbstract] = "description"
+	}
+	return fields
+}
+
+// RawContent implements message.ContentStorable interface.
+// Returns content to store in ObjectStore.
+// Field names here match values in ContentFields().
+func (d *Document) RawContent() map[string]string {
+	content := map[string]string{
+		"title": d.Title,
+	}
+	if d.Body != "" {
+		content["body"] = d.Body
+	}
+	if d.Description != "" {
+		content["description"] = d.Description
+	}
+	if d.Summary != "" {
+		content["summary"] = d.Summary
+	}
+	return content
 }
 
 // Schema returns the message type for documents.
@@ -205,3 +215,9 @@ func (d *Document) UnmarshalJSON(data []byte) error {
 	type Alias Document
 	return json.Unmarshal(data, (*Alias)(d))
 }
+
+// Compile-time interface checks
+var (
+	_ message.ContentStorable = (*Document)(nil)
+	_ message.Payload         = (*Document)(nil)
+)

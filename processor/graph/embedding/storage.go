@@ -35,12 +35,25 @@ type Record struct {
 	EntityID    string    `json:"entity_id"`
 	Vector      []float32 `json:"vector,omitempty"`
 	ContentHash string    `json:"content_hash"`
-	SourceText  string    `json:"source_text,omitempty"` // Stored for pending records
+	SourceText  string    `json:"source_text,omitempty"` // Stored for pending records (legacy)
 	Model       string    `json:"model,omitempty"`
 	Dimensions  int       `json:"dimensions,omitempty"`
 	GeneratedAt time.Time `json:"generated_at,omitempty"`
 	Status      Status    `json:"status"`
 	ErrorMsg    string    `json:"error_msg,omitempty"` // If status=failed
+
+	// ContentStorable support (Feature 008)
+	// When StorageRef is set, Worker fetches content from ObjectStore
+	// and uses ContentFields to extract text for embedding.
+	StorageRef    *StorageRef       `json:"storage_ref,omitempty"`
+	ContentFields map[string]string `json:"content_fields,omitempty"` // Role → field name
+}
+
+// StorageRef is a simplified reference for embedding storage.
+// Mirrors message.StorageReference structure.
+type StorageRef struct {
+	StorageInstance string `json:"storage_instance"`
+	Key             string `json:"key"`
 }
 
 // DedupRecord stores content-addressed embeddings for deduplication
@@ -64,7 +77,7 @@ func NewStorage(indexBucket, dedupBucket jetstream.KeyValue) *Storage {
 	}
 }
 
-// SavePending saves a pending embedding request
+// SavePending saves a pending embedding request with source text (legacy mode).
 func (s *Storage) SavePending(ctx context.Context, entityID, contentHash, sourceText string) error {
 	if entityID == "" {
 		return errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "SavePending", "entity_id is empty")
@@ -84,6 +97,42 @@ func (s *Storage) SavePending(ctx context.Context, entityID, contentHash, source
 
 	if _, err := s.indexBucket.Put(ctx, entityID, data); err != nil {
 		return errs.WrapTransient(err, "Storage", "SavePending", "put pending embedding")
+	}
+
+	return nil
+}
+
+// SavePendingWithStorageRef saves a pending embedding request with storage reference.
+// This enables the ContentStorable pattern where text is fetched from ObjectStore.
+// The contentHash is still used for deduplication if provided.
+func (s *Storage) SavePendingWithStorageRef(
+	ctx context.Context,
+	entityID, contentHash string,
+	storageRef *StorageRef,
+	contentFields map[string]string,
+) error {
+	if entityID == "" {
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "SavePendingWithStorageRef", "entity_id is empty")
+	}
+	if storageRef == nil {
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Storage", "SavePendingWithStorageRef", "storage_ref is nil")
+	}
+
+	record := &Record{
+		EntityID:      entityID,
+		ContentHash:   contentHash,
+		StorageRef:    storageRef,
+		ContentFields: contentFields,
+		Status:        StatusPending,
+	}
+
+	data, err := json.Marshal(record)
+	if err != nil {
+		return errs.WrapInvalid(err, "Storage", "SavePendingWithStorageRef", "marshal embedding record")
+	}
+
+	if _, err := s.indexBucket.Put(ctx, entityID, data); err != nil {
+		return errs.WrapTransient(err, "Storage", "SavePendingWithStorageRef", "put pending embedding")
 	}
 
 	return nil

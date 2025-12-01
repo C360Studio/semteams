@@ -14,6 +14,7 @@ import (
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/storage/objectstore"
 )
 
 // ComponentConfig holds configuration for the document processor component.
@@ -75,6 +76,9 @@ type Component struct {
 	// Domain processor (stateless, pure business logic)
 	processor *Processor
 
+	// Content storage (optional - when set, stores content before publishing)
+	contentStore *objectstore.Store
+
 	// Lifecycle management
 	shutdown    chan struct{}
 	done        chan struct{}
@@ -87,6 +91,7 @@ type Component struct {
 	// Metrics
 	messagesProcessed int64
 	messagesWrapped   int64
+	contentStored     int64
 	errors            int64
 	lastActivity      time.Time
 }
@@ -281,6 +286,17 @@ func (c *Component) handleMessage(ctx context.Context, msgData []byte) {
 		return
 	}
 
+	// Store content for ContentStorable payloads (if contentStore is configured)
+	if c.contentStore != nil {
+		if err := c.storeContentIfNeeded(ctx, payload); err != nil {
+			c.logger.Error("Failed to store content",
+				"component", c.name,
+				"entity_id", payload.EntityID(),
+				"error", err)
+			// Continue processing - content storage is optional
+		}
+	}
+
 	// Determine message type and payload based on concrete type
 	var msgType message.Type
 	var msgPayload message.Payload
@@ -345,6 +361,64 @@ func (c *Component) handleMessage(ctx context.Context, msgData []byte) {
 				"output_subject", c.outputSubj)
 		}
 	}
+}
+
+// storeContentIfNeeded stores content for ContentStorable payloads and sets StorageRef.
+// This enables the "process → store → graph" pattern where large content is stored
+// separately from triples.
+func (c *Component) storeContentIfNeeded(ctx context.Context, payload interface {
+	EntityID() string
+}) error {
+	// Type switch to detect ContentStorable and call SetStorageRef
+	switch p := payload.(type) {
+	case *Document:
+		ref, err := c.contentStore.StoreContent(ctx, p)
+		if err != nil {
+			return err
+		}
+		p.SetStorageRef(ref)
+		atomic.AddInt64(&c.contentStored, 1)
+		c.logger.Debug("Stored document content",
+			"entity_id", p.EntityID(),
+			"storage_key", ref.Key)
+	case *Maintenance:
+		ref, err := c.contentStore.StoreContent(ctx, p)
+		if err != nil {
+			return err
+		}
+		p.SetStorageRef(ref)
+		atomic.AddInt64(&c.contentStored, 1)
+		c.logger.Debug("Stored maintenance content",
+			"entity_id", p.EntityID(),
+			"storage_key", ref.Key)
+	case *Observation:
+		ref, err := c.contentStore.StoreContent(ctx, p)
+		if err != nil {
+			return err
+		}
+		p.SetStorageRef(ref)
+		atomic.AddInt64(&c.contentStored, 1)
+		c.logger.Debug("Stored observation content",
+			"entity_id", p.EntityID(),
+			"storage_key", ref.Key)
+	case *SensorDocument:
+		ref, err := c.contentStore.StoreContent(ctx, p)
+		if err != nil {
+			return err
+		}
+		p.SetStorageRef(ref)
+		atomic.AddInt64(&c.contentStored, 1)
+		c.logger.Debug("Stored sensor document content",
+			"entity_id", p.EntityID(),
+			"storage_key", ref.Key)
+	}
+	return nil
+}
+
+// SetContentStore sets the ObjectStore for content storage.
+// When set, ContentStorable payloads will have their content stored before publishing.
+func (c *Component) SetContentStore(store *objectstore.Store) {
+	c.contentStore = store
 }
 
 // Discoverable interface implementation

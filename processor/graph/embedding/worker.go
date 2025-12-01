@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/storage/objectstore"
 )
 
 // Worker processes pending embedding requests asynchronously
@@ -23,6 +26,9 @@ type Worker struct {
 	// KV watching
 	indexBucket jetstream.KeyValue
 	watcher     jetstream.KeyWatcher
+
+	// ContentStorable support (Feature 008)
+	contentStore *objectstore.Store // Optional ObjectStore for fetching content
 
 	// State
 	started  bool
@@ -61,6 +67,14 @@ func NewWorker(
 // WithWorkers sets the number of concurrent workers
 func (w *Worker) WithWorkers(n int) *Worker {
 	w.workers = n
+	return w
+}
+
+// WithContentStore sets the ObjectStore for ContentStorable support.
+// When set, the worker can fetch content from ObjectStore for records
+// that have StorageRef instead of SourceText.
+func (w *Worker) WithContentStore(store *objectstore.Store) *Worker {
+	w.contentStore = store
 	return w
 }
 
@@ -180,6 +194,20 @@ func (w *Worker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
 	entityID := entry.Key()
 	w.logger.Debug("Processing pending embedding", "worker_id", workerID, "entity_id", entityID)
 
+	// Get source text - either from record or from ObjectStore via StorageRef
+	sourceText, err := w.getSourceText(&record)
+	if err != nil {
+		w.logger.Error("Failed to get source text", "entity_id", entityID, "error", err)
+		w.markFailed(entityID, fmt.Sprintf("text extraction failed: %v", err))
+		return
+	}
+
+	if sourceText == "" {
+		w.logger.Debug("No source text found, skipping embedding", "entity_id", entityID)
+		w.markFailed(entityID, "no source text found")
+		return
+	}
+
 	// Check deduplication first
 	dedupRecord, err := w.storage.GetByContentHash(w.ctx, record.ContentHash)
 	if err != nil {
@@ -198,7 +226,7 @@ func (w *Worker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
 		// Generate new embedding
 		w.logger.Debug("Generating new embedding", "entity_id", entityID)
 
-		vectors, err := w.embedder.Generate(w.ctx, []string{record.SourceText})
+		vectors, err := w.embedder.Generate(w.ctx, []string{sourceText})
 		if err != nil {
 			w.logger.Error("Failed to generate embedding", "entity_id", entityID, "error", err)
 			w.markFailed(entityID, fmt.Sprintf("generation failed: %v", err))
@@ -230,6 +258,73 @@ func (w *Worker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
 	}
 
 	w.logger.Info("Embedding generated successfully", "entity_id", entityID, "dimensions", dimensions)
+}
+
+// getSourceText extracts text from the record.
+// For legacy records, uses SourceText directly.
+// For ContentStorable records (with StorageRef), fetches from ObjectStore.
+func (w *Worker) getSourceText(record *Record) (string, error) {
+	// Legacy path: use SourceText if available
+	if record.SourceText != "" {
+		return record.SourceText, nil
+	}
+
+	// ContentStorable path: fetch from ObjectStore
+	if record.StorageRef != nil {
+		return w.fetchTextFromStorage(record.StorageRef, record.ContentFields)
+	}
+
+	return "", nil
+}
+
+// fetchTextFromStorage fetches content from ObjectStore and extracts text using ContentFields.
+func (w *Worker) fetchTextFromStorage(ref *StorageRef, contentFields map[string]string) (string, error) {
+	if w.contentStore == nil {
+		return "", fmt.Errorf("content store not configured")
+	}
+
+	// Convert to message.StorageReference
+	msgRef := &message.StorageReference{
+		StorageInstance: ref.StorageInstance,
+		Key:             ref.Key,
+	}
+
+	// Fetch stored content
+	stored, err := w.contentStore.FetchContent(w.ctx, msgRef)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch content: %w", err)
+	}
+
+	// Extract text using ContentFields (priority: body > abstract > title)
+	return w.extractTextFromContent(stored, contentFields), nil
+}
+
+// extractTextFromContent extracts text from stored content using semantic roles.
+// Priority order: body > abstract > title
+func (w *Worker) extractTextFromContent(stored *objectstore.StoredContent, contentFields map[string]string) string {
+	var parts []string
+
+	// Use ContentFields from record, or fall back to stored ContentFields
+	fields := contentFields
+	if len(fields) == 0 {
+		fields = stored.ContentFields
+	}
+
+	// Priority order for text extraction
+	roles := []string{message.ContentRoleBody, message.ContentRoleAbstract, message.ContentRoleTitle}
+
+	for _, role := range roles {
+		fieldName, ok := fields[role]
+		if !ok {
+			continue
+		}
+		content, ok := stored.Fields[fieldName]
+		if ok && content != "" {
+			parts = append(parts, content)
+		}
+	}
+
+	return strings.Join(parts, " ")
 }
 
 // markFailed marks an embedding as failed

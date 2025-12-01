@@ -8,13 +8,13 @@ import (
 	"github.com/c360/semstreams/message"
 )
 
-// SensorDocument represents rich-text documentation for a sensor.
+// SensorDocument represents rich-text documentation for a sensor. It implements ContentStorable.
 type SensorDocument struct {
 	// Input fields
 	ID          string   `json:"id"`          // e.g., "sensor-doc-001"
 	Title       string   `json:"title"`       // e.g., "Temperature Sensor T-42"
 	Description string   `json:"description"` // Sensor description
-	Body        string   `json:"body"`        // Detailed documentation
+	Body        string   `json:"body"`        // Detailed documentation (stored in ObjectStore)
 	Location    string   `json:"location"`    // Physical location description
 	Reading     float64  `json:"reading"`     // Current/reference reading
 	Unit        string   `json:"unit"`        // Unit of measurement
@@ -24,6 +24,9 @@ type SensorDocument struct {
 	// Context fields
 	OrgID    string `json:"-"`
 	Platform string `json:"-"`
+
+	// Storage reference (set by processor)
+	storageRef *message.StorageReference `json:"-"`
 }
 
 // EntityID returns a federated entity ID for the sensor document.
@@ -41,31 +44,26 @@ func (s *SensorDocument) EntityID() string {
 	)
 }
 
-// Triples returns semantic facts about this sensor document.
+// Triples returns METADATA ONLY facts about this sensor document.
+// Body content is stored in ObjectStore, NOT in triples.
 func (s *SensorDocument) Triples() []message.Triple {
 	entityID := s.EntityID()
 	now := time.Now()
 
 	triples := []message.Triple{
+		// Dublin Core: Title
 		{
 			Subject:    entityID,
-			Predicate:  PredicateContentTitle,
+			Predicate:  PredicateDCTitle,
 			Object:     s.Title,
 			Source:     tripleSourceName,
 			Timestamp:  now,
 			Confidence: defaultConfidence,
 		},
+		// Dublin Core: Type
 		{
 			Subject:    entityID,
-			Predicate:  PredicateContentDescription,
-			Object:     s.Description,
-			Source:     tripleSourceName,
-			Timestamp:  now,
-			Confidence: defaultConfidence,
-		},
-		{
-			Subject:    entityID,
-			Predicate:  PredicateContentType,
+			Predicate:  PredicateDCType,
 			Object:     "sensor_doc",
 			Source:     tripleSourceName,
 			Timestamp:  now,
@@ -73,6 +71,7 @@ func (s *SensorDocument) Triples() []message.Triple {
 		},
 	}
 
+	// Sensor location
 	if s.Location != "" {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
@@ -84,6 +83,7 @@ func (s *SensorDocument) Triples() []message.Triple {
 		})
 	}
 
+	// Sensor reading
 	if s.Reading != 0 {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
@@ -95,6 +95,7 @@ func (s *SensorDocument) Triples() []message.Triple {
 		})
 	}
 
+	// Sensor unit
 	if s.Unit != "" {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
@@ -106,21 +107,11 @@ func (s *SensorDocument) Triples() []message.Triple {
 		})
 	}
 
-	if s.Body != "" {
-		triples = append(triples, message.Triple{
-			Subject:    entityID,
-			Predicate:  PredicateContentBody,
-			Object:     s.Body,
-			Source:     tripleSourceName,
-			Timestamp:  now,
-			Confidence: defaultConfidence,
-		})
-	}
-
+	// Dublin Core: Subject (category)
 	if s.Category != "" {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
-			Predicate:  PredicateContentCategory,
+			Predicate:  PredicateDCSubject,
 			Object:     s.Category,
 			Source:     tripleSourceName,
 			Timestamp:  now,
@@ -128,6 +119,7 @@ func (s *SensorDocument) Triples() []message.Triple {
 		})
 	}
 
+	// Tags
 	for _, tag := range s.Tags {
 		triples = append(triples, message.Triple{
 			Subject:    entityID,
@@ -139,7 +131,50 @@ func (s *SensorDocument) Triples() []message.Triple {
 		})
 	}
 
+	// NOTE: Body and Description are NOT in triples - stored in ObjectStore
+
 	return triples
+}
+
+// StorageRef implements message.Storable interface.
+func (s *SensorDocument) StorageRef() *message.StorageReference {
+	return s.storageRef
+}
+
+// SetStorageRef is called by processor after storing content.
+func (s *SensorDocument) SetStorageRef(ref *message.StorageReference) {
+	s.storageRef = ref
+}
+
+// ContentFields implements message.ContentStorable interface.
+func (s *SensorDocument) ContentFields() map[string]string {
+	fields := map[string]string{
+		message.ContentRoleTitle: "title",
+	}
+	if s.Body != "" {
+		fields[message.ContentRoleBody] = "body"
+	}
+	if s.Description != "" {
+		fields[message.ContentRoleAbstract] = "description"
+	}
+	return fields
+}
+
+// RawContent implements message.ContentStorable interface.
+func (s *SensorDocument) RawContent() map[string]string {
+	content := map[string]string{
+		"title": s.Title,
+	}
+	if s.Body != "" {
+		content["body"] = s.Body
+	}
+	if s.Description != "" {
+		content["description"] = s.Description
+	}
+	if s.Location != "" {
+		content["location"] = s.Location
+	}
+	return content
 }
 
 // Schema returns the message type for sensor documents.
@@ -179,3 +214,9 @@ func (s *SensorDocument) UnmarshalJSON(data []byte) error {
 	type Alias SensorDocument
 	return json.Unmarshal(data, (*Alias)(s))
 }
+
+// Compile-time interface checks
+var (
+	_ message.ContentStorable = (*SensorDocument)(nil)
+	_ message.Payload         = (*SensorDocument)(nil)
+)
