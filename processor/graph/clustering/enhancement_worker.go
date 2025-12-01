@@ -1,4 +1,4 @@
-// Package graphclustering provides graph clustering algorithms and community detection.
+// Package clustering provides graph clustering algorithms and community detection.
 package clustering
 
 import (

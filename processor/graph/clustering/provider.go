@@ -10,6 +10,7 @@ import (
 // Local copy to avoid import cycle with querymanager.
 type Direction string
 
+// Direction constants for relationship traversal.
 const (
 	DirectionOutgoing Direction = "outgoing"
 	DirectionIncoming Direction = "incoming"

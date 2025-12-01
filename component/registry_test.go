@@ -27,7 +27,7 @@ func TestListFactories_PreservesSchemaAndName(t *testing.T) {
 	}
 
 	// Mock factory function
-	mockFactory := func(rawConfig json.RawMessage, deps Dependencies) (Discoverable, error) {
+	mockFactory := func(_ json.RawMessage, _ Dependencies) (Discoverable, error) {
 		return nil, nil
 	}
 
