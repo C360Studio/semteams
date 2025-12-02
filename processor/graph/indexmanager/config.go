@@ -179,6 +179,12 @@ type EmbeddingConfig struct {
 	// CacheBucket is the NATS KV bucket name for embedding cache (optional)
 	// If empty, caching is disabled. Recommended: "EMBEDDINGS_CACHE"
 	CacheBucket string `json:"cache_bucket"`
+
+	// ContentStoreBucket is the NATS ObjectStore bucket name for fetching document content.
+	// Required for ContentStorable pattern - allows embedding worker to fetch full document
+	// content from ObjectStore when StorageRef is provided instead of inline text.
+	// Example: "semstreams_kitchen_sink_store"
+	ContentStoreBucket string `json:"content_store_bucket"`
 }
 
 // DefaultConfig returns a default Config with sensible defaults

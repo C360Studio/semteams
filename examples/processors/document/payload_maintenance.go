@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 )
 
@@ -22,9 +23,9 @@ type Maintenance struct {
 	Category       string   `json:"category"`        // equipment, facility, etc.
 	Tags           []string `json:"tags"`
 
-	// Context fields
-	OrgID    string `json:"-"`
-	Platform string `json:"-"`
+	// Context fields (set by processor from config, preserved through JSON for NATS transport)
+	OrgID    string `json:"org_id,omitempty"`
+	Platform string `json:"platform,omitempty"`
 
 	// Storage reference (set by processor)
 	storageRef *message.StorageReference `json:"-"`
@@ -220,6 +221,7 @@ func (m *Maintenance) UnmarshalJSON(data []byte) error {
 
 // Compile-time interface checks
 var (
+	_ graph.Graphable         = (*Maintenance)(nil)
 	_ message.ContentStorable = (*Maintenance)(nil)
 	_ message.Payload         = (*Maintenance)(nil)
 )

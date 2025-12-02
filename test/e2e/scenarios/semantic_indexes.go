@@ -153,9 +153,9 @@ func (s *SemanticIndexesScenario) executeVerifyComponents(ctx context.Context, r
 
 	// Required components for semantic indexing
 	requiredComponents := []string{
-		"udp",          // Input
+		"udp",        // Input
 		"iot_sensor", // Domain processor
-		"graph",        // Semantic processor with indexes
+		"graph",      // Semantic processor with indexes
 	}
 
 	foundComponents := make(map[string]bool)

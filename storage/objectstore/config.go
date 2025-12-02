@@ -73,6 +73,14 @@ func DefaultConfig() Config {
 			Required:    false,
 			Description: "Storage events (stored, retrieved)",
 		},
+		{
+			Name:        "stored",
+			Type:        "nats",
+			Subject:     "storage.objectstore.stored",
+			Interface:   "storage.stored.v1", // StoredMessage with StorageRef
+			Required:    false,
+			Description: "StoredMessage output for ContentStorable pattern",
+		},
 	}
 
 	return Config{

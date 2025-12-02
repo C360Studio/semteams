@@ -17,7 +17,30 @@ type EntityState struct {
 	ID         string         `json:"id"`
 	Type       string         `json:"type"`
 	Properties map[string]any `json:"properties"`
+	Triples    []Triple       `json:"triples,omitempty"`
+	Version    int            `json:"version"`
 	UpdatedAt  string         `json:"updated_at,omitempty"`
+}
+
+// Triple represents a semantic triple (subject, predicate, object)
+type Triple struct {
+	Subject   string `json:"subject"`
+	Predicate string `json:"predicate"`
+	Object    any    `json:"object"`
+}
+
+// Community represents a detected community/cluster for E2E testing
+type Community struct {
+	ID                 string                 `json:"id"`
+	Level              int                    `json:"level"`
+	Members            []string               `json:"members"`
+	ParentID           *string                `json:"parent_id,omitempty"`
+	StatisticalSummary string                 `json:"statistical_summary,omitempty"`
+	LLMSummary         string                 `json:"llm_summary,omitempty"`
+	Keywords           []string               `json:"keywords,omitempty"`
+	RepEntities        []string               `json:"rep_entities,omitempty"`
+	SummaryStatus      string                 `json:"summary_status,omitempty"`
+	Metadata           map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // NATSValidationClient wraps natsclient.Client for E2E test validation
@@ -163,4 +186,170 @@ func isNoKeysError(err error) bool {
 		return false
 	}
 	return err == jetstream.ErrNoKeysFound
+}
+
+// CountBucketKeys counts the number of keys in a specific KV bucket
+// Returns 0, nil if bucket doesn't exist (graceful degradation)
+func (c *NATSValidationClient) CountBucketKeys(ctx context.Context, bucketName string) (int, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, bucketName)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to get bucket %s: %w", bucketName, err)
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		if isNoKeysError(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("failed to list keys in %s: %w", bucketName, err)
+	}
+
+	return len(keys), nil
+}
+
+// GetBucketKeysSample returns a sample of keys from a bucket (first n keys)
+// Useful for verifying key patterns without loading all data
+func (c *NATSValidationClient) GetBucketKeysSample(ctx context.Context, bucketName string, limit int) ([]string, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, bucketName)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get bucket %s: %w", bucketName, err)
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		if isNoKeysError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list keys in %s: %w", bucketName, err)
+	}
+
+	if len(keys) <= limit {
+		return keys, nil
+	}
+	return keys[:limit], nil
+}
+
+// GetEntitySample returns a sample of entities from ENTITY_STATES bucket
+// Used for entity structure validation in E2E tests
+func (c *NATSValidationClient) GetEntitySample(ctx context.Context, limit int) ([]*EntityState, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, BucketEntityStates)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get entity states bucket: %w", err)
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		if isNoKeysError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list entity keys: %w", err)
+	}
+
+	// Limit the sample size
+	sampleSize := limit
+	if len(keys) < limit {
+		sampleSize = len(keys)
+	}
+
+	entities := make([]*EntityState, 0, sampleSize)
+	for i := 0; i < sampleSize; i++ {
+		entry, err := bucket.Get(ctx, keys[i])
+		if err != nil {
+			// Skip entities that can't be retrieved
+			continue
+		}
+
+		var entity EntityState
+		if err := json.Unmarshal(entry.Value(), &entity); err != nil {
+			// Skip entities that can't be unmarshaled
+			continue
+		}
+
+		entities = append(entities, &entity)
+	}
+
+	return entities, nil
+}
+
+// IndexBuckets defines the standard index bucket names
+var IndexBuckets = struct {
+	EntityStates  string
+	Predicate     string
+	Incoming      string
+	Outgoing      string
+	Alias         string
+	Spatial       string
+	Temporal      string
+	Embedding     string
+	EmbeddingDedp string
+	Community     string
+}{
+	EntityStates:  "ENTITY_STATES",
+	Predicate:     "PREDICATE_INDEX",
+	Incoming:      "INCOMING_INDEX",
+	Outgoing:      "OUTGOING_INDEX",
+	Alias:         "ALIAS_INDEX",
+	Spatial:       "SPATIAL_INDEX",
+	Temporal:      "TEMPORAL_INDEX",
+	Embedding:     "EMBEDDING_INDEX",
+	EmbeddingDedp: "EMBEDDING_DEDUP",
+	Community:     "COMMUNITY_INDEX",
+}
+
+// GetAllCommunities retrieves all communities from the COMMUNITY_INDEX bucket
+// Used for comparing statistical vs LLM-enhanced summaries in E2E tests
+func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*Community, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, IndexBuckets.Community)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get community bucket: %w", err)
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		if isNoKeysError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list community keys: %w", err)
+	}
+
+	var communities []*Community
+	for _, key := range keys {
+		// Skip entity-to-community index entries (they have different structure)
+		// Community keys have format: "graph.community.L{level}.{id}"
+		// Entity index keys have format: "graph.community.entity.{entityID}"
+		if len(key) > 22 && key[:22] == "graph.community.entity" {
+			continue
+		}
+
+		entry, err := bucket.Get(ctx, key)
+		if err != nil {
+			// Skip entries that can't be retrieved
+			continue
+		}
+
+		var comm Community
+		if err := json.Unmarshal(entry.Value(), &comm); err != nil {
+			// Skip entries that can't be unmarshaled as communities
+			continue
+		}
+
+		// Only include valid communities (have ID and members)
+		if comm.ID != "" && len(comm.Members) > 0 {
+			communities = append(communities, &comm)
+		}
+	}
+
+	return communities, nil
 }

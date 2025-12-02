@@ -99,6 +99,55 @@ func TestNewTestClient_WithKVBuckets(t *testing.T) {
 	}
 }
 
+func TestNewTestClient_WithStreams(t *testing.T) {
+	streams := []TestStreamConfig{
+		{Name: "STREAM1", Subjects: []string{"stream1.>"}},
+		{Name: "STREAM2", Subjects: []string{"stream2.>"}},
+	}
+	testClient := NewTestClient(t, WithStreams(streams...))
+	require.NotNil(t, testClient)
+	assert.True(t, testClient.IsReady())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Verify all streams were created
+	for _, streamCfg := range streams {
+		stream, err := testClient.GetStream(ctx, streamCfg.Name)
+		require.NoError(t, err, "Stream %s should exist", streamCfg.Name)
+		require.NotNil(t, stream)
+
+		// Verify stream info
+		info, err := stream.Info(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, streamCfg.Name, info.Config.Name)
+	}
+}
+
+func TestNewTestClient_CreateStreamHelper(t *testing.T) {
+	testClient := NewTestClient(t, WithJetStream())
+	require.NotNil(t, testClient)
+	assert.True(t, testClient.IsReady())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Create stream using helper
+	stream, err := testClient.CreateStream(ctx, "HELPER_STREAM", []string{"helper.>"})
+	require.NoError(t, err)
+	require.NotNil(t, stream)
+
+	// Verify it exists
+	info, err := stream.Info(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "HELPER_STREAM", info.Config.Name)
+
+	// Get stream using helper
+	retrieved, err := testClient.GetStream(ctx, "HELPER_STREAM")
+	require.NoError(t, err)
+	require.NotNil(t, retrieved)
+}
+
 func TestNewTestClient_PubSub(t *testing.T) {
 	testClient := NewTestClient(t, WithMinimalFeatures())
 	require.NotNil(t, testClient)

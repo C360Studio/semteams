@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -46,6 +47,12 @@ func main() {
 		os.Exit(exitCode)
 	}
 
+	// Handle analyze-comparison command
+	if flags.analyzeComparison {
+		exitCode := handleAnalyzeComparisonCommand(logger, flags.outputDir)
+		os.Exit(exitCode)
+	}
+
 	// Create clients and setup context
 	edgeClient, cloudClient, ctx := setupClientsAndContext(logger, flags.baseURL, flags.cloudURL)
 
@@ -65,10 +72,11 @@ type cliFlags struct {
 	showVersion   bool
 	listScenarios bool
 	// New flags for kitchen sink variant testing
-	variant    string // "core" or "ml"
-	outputDir  string // Directory for results output
-	compare    bool   // Generate comparison report from existing results
-	metricsURL string // Prometheus metrics endpoint URL
+	variant           string // "core" or "ml"
+	outputDir         string // Directory for results output
+	compare           bool   // Generate comparison report from existing results
+	analyzeComparison bool   // Generate Core vs ML search comparison report
+	metricsURL        string // Prometheus metrics endpoint URL
 }
 
 // parseCommandLineFlags parses and returns command-line flags
@@ -93,6 +101,8 @@ func parseCommandLineFlags() *cliFlags {
 		"Directory for saving results JSON (empty=no output)")
 	flag.BoolVar(&flags.compare, "compare", false,
 		"Generate comparison report from existing results in output-dir")
+	flag.BoolVar(&flags.analyzeComparison, "analyze-comparison", false,
+		"Generate Core vs ML search comparison report with Jaccard and correlation metrics")
 	flag.StringVar(&flags.metricsURL, "metrics-url", "http://localhost:9090",
 		"Prometheus metrics endpoint URL")
 
@@ -213,7 +223,7 @@ func runScenarios(
 	}
 
 	// Run specific scenario
-	scenario := createScenario(flags.scenarioName, edgeClient, cloudClient, flags.udpEndpoint, flags.wsEndpoint)
+	scenario := createScenario(edgeClient, cloudClient, flags)
 	if scenario == nil {
 		logger.Error("Unknown scenario", "name", flags.scenarioName)
 		fmt.Println("\nAvailable scenarios:")
@@ -233,27 +243,29 @@ func runScenarios(
 
 // createScenario creates a specific scenario by name
 func createScenario(
-	name string,
 	edgeClient *client.ObservabilityClient,
 	cloudClient *client.ObservabilityClient,
-	udpEndpoint string,
-	wsEndpoint string,
+	flags *cliFlags,
 ) scenarios.Scenario {
-	switch name {
+	switch flags.scenarioName {
 	case "core-health", "health":
 		return scenarios.NewCoreHealthScenario(edgeClient, nil)
 	case "core-dataflow", "dataflow":
-		return scenarios.NewCoreDataflowScenario(edgeClient, udpEndpoint, nil)
+		return scenarios.NewCoreDataflowScenario(edgeClient, flags.udpEndpoint, nil)
 	case "core-federation", "federation":
-		return scenarios.NewCoreFederationScenario(edgeClient, cloudClient, udpEndpoint, wsEndpoint, nil)
+		return scenarios.NewCoreFederationScenario(edgeClient, cloudClient, flags.udpEndpoint, flags.wsEndpoint, nil)
 	case "semantic-basic", "basic":
-		return scenarios.NewSemanticBasicScenario(edgeClient, udpEndpoint, nil)
+		return scenarios.NewSemanticBasicScenario(edgeClient, flags.udpEndpoint, nil)
 	case "semantic-indexes", "indexes":
-		return scenarios.NewSemanticIndexesScenario(edgeClient, udpEndpoint, nil)
+		return scenarios.NewSemanticIndexesScenario(edgeClient, flags.udpEndpoint, nil)
 	case "semantic-kitchen-sink", "kitchen-sink", "kitchen":
-		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, udpEndpoint, nil)
+		cfg := scenarios.DefaultSemanticKitchenSinkConfig()
+		cfg.MetricsURL = flags.metricsURL
+		cfg.GatewayURL = flags.baseURL + "/api-gateway"
+		cfg.OutputDir = flags.outputDir
+		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, flags.udpEndpoint, cfg)
 	case "rules-graph", "rules-graph-integration", "rules":
-		return scenarios.NewRulesGraphScenario(edgeClient, udpEndpoint, nil)
+		return scenarios.NewRulesGraphScenario(edgeClient, flags.udpEndpoint, nil)
 	default:
 		return nil
 	}
@@ -528,4 +540,39 @@ func printComparisonSummary(
 	}
 
 	logger.Info("Comparison report written", "file", filepath)
+}
+
+// handleAnalyzeComparisonCommand generates Core vs ML search comparison report
+func handleAnalyzeComparisonCommand(logger *slog.Logger, outputDir string) int {
+	if outputDir == "" {
+		// Use default output directory
+		outputDir = "test/e2e/results"
+	}
+
+	logger.Info("Analyzing Core vs ML search comparison", "output_dir", outputDir)
+
+	report, err := analyzeComparison(outputDir)
+	if err != nil {
+		logger.Error("Failed to analyze comparison", "error", err)
+		fmt.Printf("\nError: %v\n", err)
+		fmt.Println("\nTo generate comparison files, run:")
+		fmt.Println("  1. Run with Core: ./e2e --scenario semantic-kitchen-sink --output-dir test/e2e/results")
+		fmt.Println("  2. Run with ML:   ./e2e --scenario semantic-kitchen-sink --output-dir test/e2e/results (with semembed)")
+		fmt.Println("  3. Analyze:       ./e2e --analyze-comparison --output-dir test/e2e/results")
+		return 1
+	}
+
+	// Print the report
+	printAnalysisReport(report)
+
+	// Optionally save report to JSON
+	reportFile := fmt.Sprintf("%s/comparison-report-%s.json", outputDir, time.Now().Format("20060102-150405"))
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err == nil {
+		if err := os.WriteFile(reportFile, data, 0644); err == nil {
+			logger.Info("Report saved", "file", reportFile)
+		}
+	}
+
+	return 0
 }

@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"runtime"
 	"syscall"
 	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/componentregistry"
@@ -87,6 +90,12 @@ func run() error {
 	// Configure and create services
 	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
 		return err
+	}
+
+	// Pre-create JetStream streams BEFORE services start
+	// This ensures streams exist before any components can publish to them
+	if err := ensureRequiredStreams(ctx, natsClient, cfg); err != nil {
+		slog.Warn("Failed to pre-create streams (non-fatal)", "error", err)
 	}
 
 	// Run application with signal handling
@@ -345,6 +354,67 @@ func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdo
 
 	slog.Info("SemStreams shutdown complete")
 	return nil
+}
+
+// ensureRequiredStreams pre-creates JetStream streams before any components start.
+// This is critical to ensure streams exist before any components can publish to them.
+func ensureRequiredStreams(ctx context.Context, natsClient *natsclient.Client, cfg *config.Config) error {
+	// Check if graph component is configured with a stream
+	graphConfig, ok := cfg.Components["graph"]
+	if !ok || !graphConfig.Enabled {
+		return nil // No graph component or disabled
+	}
+
+	// Parse graph config to get stream name
+	var graphCfg struct {
+		StreamName string `json:"stream_name"`
+	}
+	if err := json.Unmarshal(graphConfig.Config, &graphCfg); err != nil {
+		return nil // Can't parse config, skip
+	}
+
+	if graphCfg.StreamName == "" {
+		return nil // No stream configured
+	}
+
+	slog.Info("Pre-creating JetStream stream before services start",
+		"stream", graphCfg.StreamName)
+
+	js, err := natsClient.JetStream()
+	if err != nil {
+		return fmt.Errorf("get JetStream context: %w", err)
+	}
+
+	// Check if stream already exists
+	_, err = js.Stream(ctx, graphCfg.StreamName)
+	if err == nil {
+		slog.Info("JetStream stream already exists", "stream", graphCfg.StreamName)
+		return nil
+	}
+
+	// Create the stream if it doesn't exist
+	if errors.Is(err, jetstream.ErrStreamNotFound) {
+		streamCfg := jetstream.StreamConfig{
+			Name:      graphCfg.StreamName,
+			Subjects:  []string{"events.graph.entity.>"},
+			Storage:   jetstream.FileStorage,
+			Retention: jetstream.LimitsPolicy,
+			MaxAge:    7 * 24 * time.Hour, // 7 days
+			Replicas:  1,
+		}
+
+		_, err = js.CreateStream(ctx, streamCfg)
+		if err != nil {
+			return fmt.Errorf("create stream %s: %w", graphCfg.StreamName, err)
+		}
+
+		slog.Info("Pre-created JetStream stream",
+			"stream", graphCfg.StreamName,
+			"subjects", []string{"events.graph.entity.>"})
+		return nil
+	}
+
+	return fmt.Errorf("check stream %s: %w", graphCfg.StreamName, err)
 }
 
 // createCoreDependencies creates the core dependencies needed by services

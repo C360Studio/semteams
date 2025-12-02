@@ -22,6 +22,7 @@ import (
 	"github.com/c360/semstreams/pkg/cache"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/worker"
+	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
 	"github.com/c360/semstreams/processor/graph/messagemanager"
@@ -78,6 +79,14 @@ type Processor struct {
 
 	// Configuration
 	config *Config
+
+	// Clustering components (optional, initialized if config.Clustering.Enabled)
+	communityDetector  clustering.CommunityDetector
+	communityStorage   clustering.CommunityStorage
+	enhancementWorker  *clustering.EnhancementWorker
+	clusteringBuckets  map[string]jetstream.KeyValue // For graph provider access
+	detectionMu        sync.Mutex
+	detectionRunning   bool
 }
 
 // Config holds processor configuration
@@ -86,7 +95,11 @@ type Config struct {
 
 	QueueSize int `json:"queue_size"    schema:"type:int,description:Worker queue size,default:10000,category:basic"`
 
-	InputSubject string `json:"input_subject" schema:"type:string,description:NATS subject to subscribe for input messages,default:storage.*.events,category:basic"`
+	InputSubject string `json:"input_subject" schema:"type:string,description:NATS subject to subscribe for input messages,default:events.graph.entity.*,category:basic"`
+
+	// JetStream configuration for durable message consumption
+	StreamName   string `json:"stream_name,omitempty"   schema:"type:string,description:JetStream stream name for durable consumption,category:advanced"`
+	ConsumerName string `json:"consumer_name,omitempty" schema:"type:string,description:JetStream consumer name (durable if set),category:advanced"`
 
 	// Component configurations
 
@@ -97,6 +110,57 @@ type Config struct {
 	Indexer *indexmanager.Config `json:"indexer,omitempty"         schema:"type:object,description:Index manager configuration,category:advanced"`
 
 	Querier *querymanager.Config `json:"querier,omitempty"         schema:"type:object,description:Query manager configuration,category:advanced"`
+
+	// Clustering configures community detection
+	Clustering *ClusteringConfig `json:"clustering,omitempty" schema:"type:object,description:Community detection configuration,category:advanced"`
+}
+
+// ClusteringConfig configures community detection behavior
+type ClusteringConfig struct {
+	// Enabled controls whether community detection is active
+	Enabled bool `json:"enabled" schema:"type:bool,description:Enable community detection,default:false"`
+
+	// Algorithm configures the detection algorithm
+	Algorithm AlgorithmConfig `json:"algorithm,omitempty"`
+
+	// Schedule configures detection timing
+	Schedule ScheduleConfig `json:"schedule,omitempty"`
+
+	// Enhancement configures LLM summarization
+	Enhancement EnhancementConfig `json:"enhancement,omitempty"`
+}
+
+// AlgorithmConfig configures the LPA detector
+type AlgorithmConfig struct {
+	// MaxIterations limits LPA iterations
+	MaxIterations int `json:"max_iterations" schema:"type:int,description:Max LPA iterations,default:100"`
+
+	// Levels is hierarchical community levels
+	Levels int `json:"levels" schema:"type:int,description:Hierarchical levels,default:3"`
+}
+
+// ScheduleConfig configures detection timing
+type ScheduleConfig struct {
+	// InitialDelay before first detection
+	InitialDelay string `json:"initial_delay" schema:"type:string,description:Delay before first detection,default:10s"`
+
+	// DetectionInterval between periodic runs
+	DetectionInterval string `json:"detection_interval" schema:"type:string,description:Interval between detection runs,default:2m"`
+
+	// MinEntities threshold for triggering detection
+	MinEntities int `json:"min_entities" schema:"type:int,description:Min entities for detection,default:10"`
+}
+
+// EnhancementConfig configures LLM summary enhancement
+type EnhancementConfig struct {
+	// Enabled activates the enhancement worker
+	Enabled bool `json:"enabled" schema:"type:bool,description:Enable LLM enhancement,default:false"`
+
+	// SummarizerEndpoint is the semsummarize service URL
+	SummarizerEndpoint string `json:"summarizer_endpoint,omitempty" schema:"type:string,description:Semsummarize endpoint URL"`
+
+	// Workers is concurrent enhancement workers
+	Workers int `json:"workers" schema:"type:int,description:Concurrent workers,default:3"`
 }
 
 // ProcessorDeps holds processor dependencies
@@ -389,6 +453,15 @@ func (p *Processor) Start(ctx context.Context) error {
 	p.logger.Info("Starting graph processor")
 	p.logger.Info("==== CRITICAL: Entered Start() method ====")
 
+	// FIRST: Pre-create JetStream stream before any other initialization
+	// This ensures the stream exists before any other components can publish to it
+	if p.config.StreamName != "" {
+		if err := p.ensureJetStreamStream(ctx); err != nil {
+			p.logger.Error("Failed to pre-create JetStream stream", "error", err)
+			return errs.WrapFatal(err, "Processor", "Start", "JetStream stream pre-creation failed")
+		}
+	}
+
 	// Initialize core modules with context (DataManager, IndexManager, QueryManager)
 	p.logger.Info("Initializing core modules (DataManager, IndexManager, QueryManager)")
 	if err := p.initializeModules(ctx); err != nil {
@@ -529,6 +602,20 @@ func (p *Processor) startBackgroundModules(ctx context.Context) {
 			return p.indexManager.Run(gctx)
 		})
 
+		// Launch clustering loop if enabled
+		if p.config.Clustering != nil && p.config.Clustering.Enabled && p.communityDetector != nil {
+			g.Go(func() error {
+				return p.runClusteringLoop(gctx)
+			})
+
+			// Launch enhancement worker if configured
+			if p.enhancementWorker != nil {
+				g.Go(func() error {
+					return p.runEnhancementWorker(gctx)
+				})
+			}
+		}
+
 		// Wait for modules to complete or error
 		err := g.Wait()
 		if err != nil && !stderrors.Is(err, context.Canceled) {
@@ -646,6 +733,11 @@ func (p *Processor) initializeModules(ctx context.Context) error {
 
 	// Assign all managers atomically
 	p.assignManagers(dataHandler, indexer, querier)
+
+	// Initialize clustering if enabled (after managers are ready)
+	if err := p.initializeClusteringIfEnabled(ctx, buckets); err != nil {
+		return err
+	}
 
 	p.logger.Info("All managers initialized successfully")
 	return nil
@@ -823,15 +915,20 @@ func (p *Processor) initializeBusinessServices() error {
 }
 
 func (p *Processor) setupSubscriptions(ctx context.Context) error {
-	// Use configured subject (defaults to "storage.*.events")
+	// Use configured subject (defaults to "events.graph.entity.*")
 	subject := p.config.InputSubject
 	if subject == "" {
-		subject = "storage.*.events" // Fallback to default
+		subject = "events.graph.entity.*" // Fallback to default
 	}
 
-	p.logger.Info("Setting up subscription",
-		"subject", subject,
-		"workers", p.config.Workers)
+	// Use JetStream if stream name is configured, otherwise fall back to core NATS
+	if p.config.StreamName != "" {
+		return p.setupJetStreamConsumer(ctx, subject)
+	}
+
+	// Fall back to core NATS subscription (fire-and-forget, no persistence)
+	p.logger.Warn("Using core NATS subscription (no persistence) - configure stream_name for durable consumption",
+		"subject", subject)
 
 	err := p.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
 		p.handleMessage(msgCtx, data)
@@ -841,6 +938,142 @@ func (p *Processor) setupSubscriptions(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// ensureJetStreamStream pre-creates the JetStream stream before any other initialization.
+// This is critical to ensure the stream exists before other components start publishing.
+func (p *Processor) ensureJetStreamStream(ctx context.Context) error {
+	p.logger.Info("Pre-creating JetStream stream (before module initialization)",
+		"stream", p.config.StreamName)
+
+	js, err := p.natsClient.JetStream()
+	if err != nil {
+		return errs.WrapTransient(err, "Processor", "ensureJetStreamStream", "failed to get JetStream context")
+	}
+
+	// Check if stream already exists
+	_, err = js.Stream(ctx, p.config.StreamName)
+	if err == nil {
+		p.logger.Info("JetStream stream already exists", "stream", p.config.StreamName)
+		return nil
+	}
+
+	// Create the stream if it doesn't exist
+	if stderrors.Is(err, jetstream.ErrStreamNotFound) {
+		streamCfg := jetstream.StreamConfig{
+			Name:      p.config.StreamName,
+			Subjects:  []string{"events.graph.entity.>"},
+			Storage:   jetstream.FileStorage,
+			Retention: jetstream.LimitsPolicy,
+			MaxAge:    7 * 24 * time.Hour, // 7 days
+			Replicas:  1,
+		}
+
+		_, err = js.CreateStream(ctx, streamCfg)
+		if err != nil {
+			return errs.WrapTransient(err, "Processor", "ensureJetStreamStream",
+				"failed to create stream "+p.config.StreamName)
+		}
+
+		p.logger.Info("Pre-created JetStream stream",
+			"stream", p.config.StreamName,
+			"subjects", []string{"events.graph.entity.>"})
+		return nil
+	}
+
+	return errs.WrapTransient(err, "Processor", "ensureJetStreamStream",
+		"failed to check stream "+p.config.StreamName)
+}
+
+// setupJetStreamConsumer creates a durable JetStream consumer for reliable message processing.
+func (p *Processor) setupJetStreamConsumer(ctx context.Context, subject string) error {
+	p.logger.Info("Setting up JetStream consumer",
+		"stream", p.config.StreamName,
+		"consumer", p.config.ConsumerName,
+		"filter_subject", subject,
+		"workers", p.config.Workers)
+
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    p.config.StreamName,
+		ConsumerName:  p.config.ConsumerName,
+		FilterSubject: subject,
+		DeliverPolicy: "all",   // Process all messages including historical
+		AckPolicy:     "explicit", // Explicit ack required
+		MaxDeliver:    5,       // Retry up to 5 times before giving up
+		AutoCreate:    true,    // Auto-create stream if it doesn't exist
+		AutoCreateConfig: &natsclient.StreamAutoCreateConfig{
+			Subjects:  []string{"events.graph.entity.>"},
+			Storage:   "file",
+			Retention: "limits",
+		},
+	}
+
+	err := p.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		p.handleJetStreamMessage(msgCtx, msg)
+	})
+	if err != nil {
+		return errs.WrapFatal(err, "Processor", "setupJetStreamConsumer",
+			"JetStream consumer failed for stream "+p.config.StreamName)
+	}
+
+	return nil
+}
+
+// handleJetStreamMessage processes a JetStream message with explicit acknowledgment.
+func (p *Processor) handleJetStreamMessage(ctx context.Context, msg jetstream.Msg) {
+	// Log received message subject for debugging
+	p.logger.Debug("JetStream message received",
+		"subject", msg.Subject(),
+		"data_len", len(msg.Data()))
+
+	// Check context before processing
+	select {
+	case <-ctx.Done():
+		p.logger.Debug("Context cancelled, nak-ing message for redelivery")
+		_ = msg.Nak() // Redelivery on context cancellation
+		return
+	default:
+	}
+
+	// Check if processor is started
+	if p.workerPool == nil {
+		p.recordError("Worker pool is nil - processor not started")
+		_ = msg.Nak() // Redelivery - processor may recover
+		return
+	}
+
+	data := msg.Data()
+
+	// Submit to worker pool
+	if err := p.workerPool.Submit(data); err != nil {
+		// Check error type to determine acknowledgment strategy
+		if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
+			// Worker pool stopped unexpectedly - nak for redelivery
+			p.recordError("Worker pool stopped unexpectedly")
+			p.logger.Error("Worker pool no longer running",
+				"error", err,
+				"data_len", len(data))
+			_ = msg.Nak()
+		} else if stderrors.Is(err, worker.ErrQueueFull) {
+			// Queue full is transient - nak with delay for backpressure
+			p.logger.Debug("Worker queue full, nak-ing message",
+				"data_len", len(data))
+			_ = msg.NakWithDelay(time.Second) // Delay redelivery by 1s
+		} else {
+			// Unknown error - nak for redelivery
+			p.recordError(fmt.Sprintf("Unexpected worker pool error: %v", err))
+			p.logger.Warn("Failed to submit message to worker pool",
+				"data_len", len(data),
+				"error", err)
+			_ = msg.Nak()
+		}
+		return
+	}
+
+	// Successfully submitted to worker pool - acknowledge
+	if err := msg.Ack(); err != nil {
+		p.logger.Warn("Failed to ack message", "error", err)
+	}
 }
 
 // Message handling - pure orchestration
@@ -932,6 +1165,299 @@ func (p *Processor) recordError(errorMsg string) {
 	p.health.Healthy = false
 	p.health.LastCheck = time.Now()
 	p.mu.Unlock()
+}
+
+// Clustering Integration
+
+// processorGraphProvider implements clustering.GraphProvider using processor components
+type processorGraphProvider struct {
+	entityReader datamanager.EntityReader
+	kvBucket     jetstream.KeyValue
+}
+
+// GetAllEntityIDs returns all entity IDs from ENTITY_STATES bucket
+func (p *processorGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
+	keys, err := p.kvBucket.ListKeys(ctx)
+	if err != nil {
+		return nil, errs.WrapTransient(err, "processorGraphProvider", "GetAllEntityIDs", "failed to list keys")
+	}
+
+	ids := make([]string, 0)
+	for key := range keys.Keys() {
+		ids = append(ids, key)
+	}
+	return ids, nil
+}
+
+// GetNeighbors returns entity IDs connected to the given entity
+func (p *processorGraphProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
+	entity, err := p.entityReader.GetEntity(ctx, entityID)
+	if err != nil {
+		return []string{}, nil // Entity not found, return empty
+	}
+
+	neighborSet := make(map[string]bool)
+
+	if direction == "outgoing" || direction == "both" {
+		for _, triple := range entity.Triples {
+			if triple.IsRelationship() {
+				neighborSet[triple.Object.(string)] = true
+			}
+		}
+	}
+
+	// For incoming direction, we'd need INCOMING_INDEX
+	// For now, just return outgoing neighbors
+	if direction == "incoming" {
+		return []string{}, nil
+	}
+
+	neighbors := make([]string, 0, len(neighborSet))
+	for id := range neighborSet {
+		neighbors = append(neighbors, id)
+	}
+	return neighbors, nil
+}
+
+// GetEdgeWeight returns the weight of an edge between two entities
+func (p *processorGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error) {
+	entity, err := p.entityReader.GetEntity(ctx, fromID)
+	if err != nil {
+		return 0.0, nil
+	}
+
+	for _, triple := range entity.Triples {
+		if triple.IsRelationship() && triple.Object.(string) == toID {
+			if triple.Confidence > 0 {
+				return triple.Confidence, nil
+			}
+			return 1.0, nil
+		}
+	}
+	return 0.0, nil
+}
+
+// initializeClusteringIfEnabled sets up clustering components if enabled in config
+func (p *Processor) initializeClusteringIfEnabled(ctx context.Context, buckets map[string]jetstream.KeyValue) error {
+	if p.config.Clustering == nil || !p.config.Clustering.Enabled {
+		p.logger.Debug("Clustering disabled, skipping initialization")
+		return nil
+	}
+
+	cfg := p.config.Clustering
+	p.logger.Info("Initializing clustering",
+		"max_iterations", cfg.Algorithm.MaxIterations,
+		"levels", cfg.Algorithm.Levels,
+		"enhancement_enabled", cfg.Enhancement.Enabled)
+
+	// Store buckets for graph provider
+	p.clusteringBuckets = buckets
+
+	// Get COMMUNITY_INDEX bucket
+	communityBucket, ok := buckets["COMMUNITY_INDEX"]
+	if !ok {
+		return errs.WrapFatal(errs.ErrMissingConfig, "Processor",
+			"initializeClusteringIfEnabled", "COMMUNITY_INDEX bucket not found")
+	}
+
+	// Create community storage
+	p.communityStorage = clustering.NewNATSCommunityStorage(communityBucket)
+
+	// Create graph provider using entity data
+	entityBucket, ok := buckets["ENTITY_STATES"]
+	if !ok {
+		return errs.WrapFatal(errs.ErrMissingConfig, "Processor",
+			"initializeClusteringIfEnabled", "ENTITY_STATES bucket not found")
+	}
+
+	graphProvider := &processorGraphProvider{
+		entityReader: p.dataManager,
+		kvBucket:     entityBucket,
+	}
+
+	// Create LPA detector with configuration
+	maxIterations := cfg.Algorithm.MaxIterations
+	if maxIterations <= 0 {
+		maxIterations = 100
+	}
+	levels := cfg.Algorithm.Levels
+	if levels <= 0 {
+		levels = 3
+	}
+
+	detector := clustering.NewLPADetector(graphProvider, p.communityStorage).
+		WithMaxIterations(maxIterations).
+		WithLevels(levels)
+
+	// Enable progressive summarization for statistical summaries
+	summarizer := clustering.NewProgressiveSummarizer()
+	detector = detector.WithProgressiveSummarization(summarizer, p.queryManager)
+
+	p.communityDetector = detector
+
+	// Initialize enhancement worker if LLM enabled
+	if cfg.Enhancement.Enabled && cfg.Enhancement.SummarizerEndpoint != "" {
+		llmSummarizer := clustering.NewHTTPLLMSummarizer(cfg.Enhancement.SummarizerEndpoint)
+
+		workers := cfg.Enhancement.Workers
+		if workers <= 0 {
+			workers = 3
+		}
+
+		workerConfig := &clustering.EnhancementWorkerConfig{
+			LLMSummarizer:   llmSummarizer,
+			Storage:         p.communityStorage,
+			GraphProvider:   graphProvider,
+			Querier:         p.queryManager,
+			CommunityBucket: communityBucket,
+			Logger:          p.logger,
+		}
+
+		worker, err := clustering.NewEnhancementWorker(workerConfig)
+		if err != nil {
+			return errs.WrapFatal(err, "Processor", "initializeClusteringIfEnabled",
+				"failed to create enhancement worker")
+		}
+		p.enhancementWorker = worker.WithWorkers(workers)
+
+		p.logger.Info("Enhancement worker configured",
+			"endpoint", cfg.Enhancement.SummarizerEndpoint,
+			"workers", workers)
+	}
+
+	p.logger.Info("Clustering initialized successfully")
+	return nil
+}
+
+// runClusteringLoop runs periodic community detection
+func (p *Processor) runClusteringLoop(ctx context.Context) error {
+	if p.config.Clustering == nil {
+		return nil
+	}
+
+	cfg := p.config.Clustering
+
+	// Parse timing configuration
+	initialDelay := 10 * time.Second
+	if cfg.Schedule.InitialDelay != "" {
+		if d, err := time.ParseDuration(cfg.Schedule.InitialDelay); err == nil {
+			initialDelay = d
+		}
+	}
+
+	detectionInterval := 2 * time.Minute
+	if cfg.Schedule.DetectionInterval != "" {
+		if d, err := time.ParseDuration(cfg.Schedule.DetectionInterval); err == nil {
+			detectionInterval = d
+		}
+	}
+
+	minEntities := cfg.Schedule.MinEntities
+	if minEntities <= 0 {
+		minEntities = 10
+	}
+
+	p.logger.Info("Starting clustering loop",
+		"initial_delay", initialDelay,
+		"detection_interval", detectionInterval,
+		"min_entities", minEntities)
+
+	// Wait for initial delay
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(initialDelay):
+	}
+
+	// Run initial detection
+	p.runDetectionIfReady(ctx, minEntities)
+
+	// Start periodic detection
+	ticker := time.NewTicker(detectionInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			p.logger.Info("Clustering loop stopped")
+			return ctx.Err()
+		case <-ticker.C:
+			p.runDetectionIfReady(ctx, minEntities)
+		}
+	}
+}
+
+// runDetectionIfReady runs community detection if not already running and entity threshold met
+func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int) {
+	// Skip if previous detection still running
+	p.detectionMu.Lock()
+	if p.detectionRunning {
+		p.detectionMu.Unlock()
+		p.logger.Debug("Skipping detection - previous run still in progress")
+		return
+	}
+	p.detectionRunning = true
+	p.detectionMu.Unlock()
+
+	defer func() {
+		p.detectionMu.Lock()
+		p.detectionRunning = false
+		p.detectionMu.Unlock()
+	}()
+
+	// Check entity count threshold
+	if p.clusteringBuckets != nil {
+		if entityBucket, ok := p.clusteringBuckets["ENTITY_STATES"]; ok {
+			keys, err := entityBucket.ListKeys(ctx)
+			if err == nil {
+				count := 0
+				for range keys.Keys() {
+					count++
+				}
+				if count < minEntities {
+					p.logger.Debug("Skipping detection - not enough entities",
+						"current", count, "required", minEntities)
+					return
+				}
+			}
+		}
+	}
+
+	// Run community detection
+	p.logger.Info("Running community detection")
+	startTime := time.Now()
+
+	communities, err := p.communityDetector.DetectCommunities(ctx)
+	if err != nil {
+		p.logger.Error("Community detection failed", "error", err)
+		return
+	}
+
+	// Count total communities across all levels
+	totalCommunities := 0
+	for _, levelCommunities := range communities {
+		totalCommunities += len(levelCommunities)
+	}
+
+	p.logger.Info("Community detection completed",
+		"duration", time.Since(startTime),
+		"levels", len(communities),
+		"total_communities", totalCommunities)
+}
+
+// runEnhancementWorker runs the LLM enhancement worker
+func (p *Processor) runEnhancementWorker(ctx context.Context) error {
+	if p.enhancementWorker == nil {
+		return nil
+	}
+
+	p.logger.Info("Starting enhancement worker")
+	err := p.enhancementWorker.Start(ctx)
+	if err != nil && err != context.Canceled {
+		p.logger.Error("Enhancement worker error", "error", err)
+	}
+	p.logger.Info("Enhancement worker stopped")
+	return err
 }
 
 // Register registers the graph processor component with the given registry.

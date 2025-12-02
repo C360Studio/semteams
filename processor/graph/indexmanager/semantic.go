@@ -12,6 +12,7 @@ import (
 	"github.com/c360/semstreams/pkg/cache"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/graph/embedding"
+	"github.com/c360/semstreams/storage/objectstore"
 )
 
 // scoredHit represents a search result with its similarity score
@@ -209,13 +210,37 @@ func (m *Manager) initializeCachesAndStorage(buckets map[string]jetstream.KeyVal
 	if hasIndexBucket && hasDedupBucket {
 		m.embeddingStorage = embedding.NewStorage(embeddingIndexBucket, embeddingDedupBucket)
 
-		// Initialize embedding worker for async generation
+		// Initialize embedding worker for async generation with cache callback
 		m.embeddingWorker = embedding.NewWorker(
 			m.embeddingStorage,
 			m.embedder,
 			embeddingIndexBucket,
 			m.logger,
-		).WithWorkers(m.config.Workers) // Use same worker count as index manager
+		).WithWorkers(m.config.Workers). // Use same worker count as index manager
+			WithOnGenerated(func(entityID string, vector []float32) {
+				// Populate vector cache for search when embedding is generated
+				if m.vectorCache != nil {
+					m.vectorCache.Set(entityID, vector)
+					m.logger.Debug("Vector cache populated", "entity_id", entityID, "dimensions", len(vector))
+				}
+			})
+
+		// Configure content store for ContentStorable pattern (if bucket specified)
+		if m.config.Embedding.ContentStoreBucket != "" && m.natsClient != nil {
+			contentStoreCfg := objectstore.Config{
+				BucketName: m.config.Embedding.ContentStoreBucket,
+			}
+			contentStore, err := objectstore.NewStoreWithConfig(ctx, m.natsClient, contentStoreCfg)
+			if err != nil {
+				m.logger.Warn("Failed to create content store - StorageRef embedding disabled",
+					"bucket", m.config.Embedding.ContentStoreBucket,
+					"error", err)
+			} else {
+				m.embeddingWorker.WithContentStore(contentStore)
+				m.logger.Info("Content store configured for ContentStorable embedding",
+					"bucket", m.config.Embedding.ContentStoreBucket)
+			}
+		}
 
 		m.logger.Info("Embedding storage and worker initialized",
 			"workers", m.config.Workers)

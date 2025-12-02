@@ -387,13 +387,76 @@ func (s *Store) FetchContent(ctx context.Context, ref *message.StorageReference)
 
 	s.metrics.recordReadLatency("fetch_content", time.Since(start).Seconds())
 
-	// Unmarshal to StoredContent
+	// Try to unmarshal as StoredContent first (direct content storage format)
 	var stored StoredContent
-	if err := json.Unmarshal(data, &stored); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal content: %w", err)
+	if err := json.Unmarshal(data, &stored); err == nil && stored.EntityID != "" {
+		return &stored, nil
 	}
 
-	return &stored, nil
+	// Fallback: try to parse as BaseMessage and extract content
+	// This handles cases where raw messages were stored
+	return s.extractContentFromBaseMessage(data)
+}
+
+// extractContentFromBaseMessage extracts content from a stored BaseMessage.
+// This enables ContentStorable pattern when raw messages are stored.
+func (s *Store) extractContentFromBaseMessage(data []byte) (*StoredContent, error) {
+	var baseMsg message.BaseMessage
+	if err := baseMsg.UnmarshalJSON(data); err != nil {
+		return nil, fmt.Errorf("failed to parse as BaseMessage: %w", err)
+	}
+
+	payload := baseMsg.Payload()
+	if payload == nil {
+		return nil, fmt.Errorf("BaseMessage has nil payload")
+	}
+
+	// Check if payload implements ContentStorable
+	contentStorable, ok := payload.(message.ContentStorable)
+	if !ok {
+		return nil, fmt.Errorf("payload does not implement ContentStorable: %T", payload)
+	}
+
+	// Get content fields mapping
+	contentFields := contentStorable.ContentFields()
+	if len(contentFields) == 0 {
+		return nil, fmt.Errorf("ContentStorable has no content fields")
+	}
+
+	// Get entity ID
+	graphable, ok := payload.(interface{ EntityID() string })
+	if !ok {
+		return nil, fmt.Errorf("payload does not have EntityID")
+	}
+
+	// Extract content text from Graphable's triples or properties
+	fields := s.extractTextFields(payload, contentFields)
+
+	return &StoredContent{
+		EntityID:      graphable.EntityID(),
+		Fields:        fields,
+		ContentFields: contentFields,
+		StoredAt:      time.Now(),
+	}, nil
+}
+
+// extractTextFields extracts text content from payload using ContentFields mapping
+func (s *Store) extractTextFields(payload message.Payload, contentFields map[string]string) map[string]string {
+	fields := make(map[string]string)
+
+	// Try to get fields from properties (for most payloads)
+	if propsHolder, ok := payload.(interface{ Properties() map[string]any }); ok {
+		props := propsHolder.Properties()
+		for role, fieldName := range contentFields {
+			if val, ok := props[fieldName]; ok {
+				if str, ok := val.(string); ok {
+					fields[role] = str
+				}
+			}
+		}
+	}
+
+	return fields
 }
 
 // generateContentKey creates a time-bucketed key for content storage.

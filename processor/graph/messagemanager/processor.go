@@ -160,7 +160,9 @@ func (mp *Manager) ProcessMessage(ctx context.Context, msg any) ([]*gtypes.Entit
 	if storable, ok := msg.(message.Storable); ok {
 		// Extract storage reference from Storable
 		storageRef = storable.StorageRef()
-		mp.deps.Logger.Debug("Extracted StorageReference from Storable",
+		mp.deps.Logger.Debug("Message implements Storable, processing via Storable path",
+			"msg_type", fmt.Sprintf("%T", msg),
+			"entity_id", storable.EntityID(),
 			"has_storage_ref", storageRef != nil)
 		if storageRef != nil {
 			mp.deps.Logger.Debug("StorageReference details",
@@ -172,10 +174,16 @@ func (mp *Manager) ProcessMessage(ctx context.Context, msg any) ([]*gtypes.Entit
 	}
 
 	// Check if message implements Graphable interface (no storage reference)
+	mp.deps.Logger.Debug("Checking Graphable assertion",
+		"msg_type", fmt.Sprintf("%T", msg),
+		"msg_value", fmt.Sprintf("%+v", msg))
 	if graphable, ok := msg.(gtypes.Graphable); ok {
-		mp.deps.Logger.Debug("Processing Graphable without storage reference")
+		mp.deps.Logger.Debug("Processing Graphable without storage reference",
+			"entity_id", graphable.EntityID())
 		return mp.processSimpleGraphable(ctx, graphable, storageRef)
 	}
+	mp.deps.Logger.Debug("Graphable assertion failed, falling back to legacy processing",
+		"msg_type", fmt.Sprintf("%T", msg))
 
 	// Fall back to basic entity extraction for backward compatibility
 	return mp.processNonGraphableMessage(ctx, msg, storageRef)
@@ -186,7 +194,12 @@ func (mp *Manager) processSimpleGraphable(
 	ctx context.Context, graphable gtypes.Graphable, storageRef *message.StorageReference,
 ) ([]*gtypes.EntityState, error) {
 	entityID := graphable.EntityID()
+	mp.deps.Logger.Debug("processSimpleGraphable called",
+		"graphable_type", fmt.Sprintf("%T", graphable),
+		"entity_id", entityID,
+		"has_storage_ref", storageRef != nil)
 	if entityID == "" {
+		mp.deps.Logger.Debug("Empty entityID, returning empty result")
 		return []*gtypes.EntityState{}, nil
 	}
 

@@ -45,7 +45,7 @@ services:
       retries: 3
       start_period: 30s
 
-  # SemSummarize - Lightweight summarization service using Candle + SmolLM2
+  # SemSummarize - Lightweight summarization service using Candle + FLAN-T5
   # For LLM-based community summarization testing
   # PROFILE: ml - Only started when --profile ml is specified
   semsummarize:
@@ -56,7 +56,7 @@ services:
     ports:
       - "8084:8083"  # POST /summarize endpoint (host:8084 -> container:8083)
     environment:
-      - SEMSUMMARIZE_MODEL=HuggingFaceTB/SmolLM2-135M-Instruct  # 135M params, fast, good quality
+      - SEMSUMMARIZE_MODEL=google/flan-t5-small  # 77M params, proven Candle compatibility
       - SEMSUMMARIZE_PORT=8083
       - RUST_LOG=info
     volumes:

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 )
 
@@ -21,9 +22,9 @@ type SensorDocument struct {
 	Category    string   `json:"category"`    // temperature, pressure, humidity
 	Tags        []string `json:"tags"`
 
-	// Context fields
-	OrgID    string `json:"-"`
-	Platform string `json:"-"`
+	// Context fields (set by processor from config, preserved through JSON for NATS transport)
+	OrgID    string `json:"org_id,omitempty"`
+	Platform string `json:"platform,omitempty"`
 
 	// Storage reference (set by processor)
 	storageRef *message.StorageReference `json:"-"`
@@ -217,6 +218,7 @@ func (s *SensorDocument) UnmarshalJSON(data []byte) error {
 
 // Compile-time interface checks
 var (
+	_ graph.Graphable         = (*SensorDocument)(nil)
 	_ message.ContentStorable = (*SensorDocument)(nil)
 	_ message.Payload         = (*SensorDocument)(nil)
 )

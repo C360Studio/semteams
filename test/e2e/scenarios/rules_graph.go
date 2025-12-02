@@ -342,11 +342,11 @@ func (s *RulesGraphScenario) executeValidateGraphEvents(ctx context.Context, res
 
 	// Build validation summary
 	result.Details["validation"] = map[string]any{
-		"processors_healthy":   true,
-		"active_rules":         activeRules,
-		"messages_received":    messagesReceived,
+		"processors_healthy":    true,
+		"active_rules":          activeRules,
+		"messages_received":     messagesReceived,
 		"evaluations_performed": evaluations,
-		"rules_triggered":      triggers,
+		"rules_triggered":       triggers,
 		"message": fmt.Sprintf(
 			"Rule processor: %d active rules, %d messages received, %d evaluations, %d triggers",
 			activeRules, messagesReceived, evaluations, triggers),

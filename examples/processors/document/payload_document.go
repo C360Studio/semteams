@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 )
 
@@ -29,9 +30,9 @@ type Document struct {
 	CreatedAt   string   `json:"created_at"`  // ISO timestamp
 	UpdatedAt   string   `json:"updated_at"`  // ISO timestamp
 
-	// Context fields (set by processor from config)
-	OrgID    string `json:"-"` // e.g., "acme"
-	Platform string `json:"-"` // e.g., "logistics"
+	// Context fields (set by processor from config, preserved through JSON for NATS transport)
+	OrgID    string `json:"org_id,omitempty"`    // e.g., "acme"
+	Platform string `json:"platform,omitempty"` // e.g., "logistics"
 
 	// Storage reference (set by processor after storing content)
 	storageRef *message.StorageReference `json:"-"`
@@ -218,6 +219,7 @@ func (d *Document) UnmarshalJSON(data []byte) error {
 
 // Compile-time interface checks
 var (
+	_ graph.Graphable         = (*Document)(nil)
 	_ message.ContentStorable = (*Document)(nil)
 	_ message.Payload         = (*Document)(nil)
 )

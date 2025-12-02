@@ -15,6 +15,10 @@ import (
 	"github.com/c360/semstreams/storage/objectstore"
 )
 
+// EmbeddingGeneratedCallback is called when an embedding is successfully generated.
+// The callback receives the entity ID and the generated embedding vector.
+type EmbeddingGeneratedCallback func(entityID string, embedding []float32)
+
 // Worker processes pending embedding requests asynchronously
 type Worker struct {
 	mu sync.RWMutex
@@ -29,6 +33,9 @@ type Worker struct {
 
 	// ContentStorable support (Feature 008)
 	contentStore *objectstore.Store // Optional ObjectStore for fetching content
+
+	// Callbacks
+	onGenerated EmbeddingGeneratedCallback // Called when embedding is generated
 
 	// State
 	started  bool
@@ -75,6 +82,13 @@ func (w *Worker) WithWorkers(n int) *Worker {
 // that have StorageRef instead of SourceText.
 func (w *Worker) WithContentStore(store *objectstore.Store) *Worker {
 	w.contentStore = store
+	return w
+}
+
+// WithOnGenerated sets a callback that is invoked when an embedding is generated.
+// Use this to populate caches or trigger downstream processing.
+func (w *Worker) WithOnGenerated(cb EmbeddingGeneratedCallback) *Worker {
+	w.onGenerated = cb
 	return w
 }
 
@@ -258,6 +272,11 @@ func (w *Worker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
 	}
 
 	w.logger.Info("Embedding generated successfully", "entity_id", entityID, "dimensions", dimensions)
+
+	// Notify callback (for cache population)
+	if w.onGenerated != nil {
+		w.onGenerated(entityID, vector)
+	}
 }
 
 // getSourceText extracts text from the record.

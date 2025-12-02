@@ -109,9 +109,9 @@ func (c *Config) Validate() error {
 			"at least one route mapping is required")
 	}
 
-	// Validate each route
-	for i, route := range c.Routes {
-		if err := route.Validate(); err != nil {
+	// Validate each route (iterate by index to modify in place)
+	for i := range c.Routes {
+		if err := c.Routes[i].Validate(); err != nil {
 			return errs.WrapInvalid(err, "Config", "Validate",
 				fmt.Sprintf("invalid route at index %d", i))
 		}

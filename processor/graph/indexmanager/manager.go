@@ -658,6 +658,24 @@ func (m *Manager) processEntityChange(ctx context.Context, event EntityChange) e
 		entityState = state
 	}
 
+	// Populate metadata cache for semantic search (Feature 007)
+	if m.metadataCache != nil && entityState != nil {
+		if state, ok := entityState.(*gtypes.EntityState); ok {
+			properties := extractPropertiesFromTriples(state.Triples)
+			entityType := state.MessageType.String()
+			if entityType == "" {
+				entityType = "unknown"
+			}
+			m.metadataCache.Set(event.Key, &EntityMetadata{
+				EntityID:   event.Key,
+				EntityType: entityType,
+				Properties: properties,
+				Updated:    time.Now(),
+			})
+			m.logger.Debug("Metadata cache populated", "entity_id", event.Key, "type", entityType, "properties_count", len(properties))
+		}
+	}
+
 	// Update all enabled indexes
 	for indexType, index := range m.indexes {
 		if err := m.updateIndex(ctx, index, indexType, event, entityState); err != nil {
@@ -976,6 +994,20 @@ func extractPositionFromTriples(triples []message.Triple) interface{} {
 	}
 
 	return nil
+}
+
+// extractPropertiesFromTriples converts triples to a property map for metadata caching.
+// This enables semantic search to return properties in search results.
+func extractPropertiesFromTriples(triples []message.Triple) map[string]interface{} {
+	properties := make(map[string]interface{})
+	for _, triple := range triples {
+		// Skip relationships (values that are entity IDs)
+		if triple.IsRelationship() {
+			continue
+		}
+		properties[triple.Predicate] = triple.Object
+	}
+	return properties
 }
 
 // UpdatePredicateIndex updates the predicate index for an entity

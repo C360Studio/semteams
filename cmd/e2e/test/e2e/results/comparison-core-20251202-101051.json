@@ -1,0 +1,55 @@
+{
+  "variant": "core",
+  "embedding_provider": "unknown",
+  "timestamp": "2025-12-02T10:10:51.050551-06:00",
+  "search_results": {
+    "cold storage monitoring": {
+      "query": "cold storage monitoring",
+      "hits": [
+        "c360.logistics.observation.record.high.obs-013",
+        "c360.logistics.sensor.document.temperature.sensor-temp-001"
+      ],
+      "scores": [
+        0.5025727978534124,
+        0.4379233197946072
+      ],
+      "latency_ms": 0,
+      "hit_count": 2
+    },
+    "maintenance schedule": {
+      "query": "maintenance schedule",
+      "hits": [
+        "c360.logistics.content.document.maintenance.doc-maint-001",
+        "c360.logistics.maintenance.work.completed.maint-008"
+      ],
+      "scores": [
+        0.8264584375763186,
+        0.35968032428001273
+      ],
+      "latency_ms": 0,
+      "hit_count": 2
+    },
+    "safety documentation": {
+      "query": "safety documentation",
+      "hits": [
+        "c360.logistics.observation.record.medium.obs-003"
+      ],
+      "scores": [
+        0.4276583913911426
+      ],
+      "latency_ms": 0,
+      "hit_count": 1
+    },
+    "temperature sensor reading": {
+      "query": "temperature sensor reading",
+      "hits": [
+        "c360.logistics.sensor.document.temperature.sensor-temp-003"
+      ],
+      "scores": [
+        0.4355640316681589
+      ],
+      "latency_ms": 0,
+      "hit_count": 1
+    }
+  }
+}

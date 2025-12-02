@@ -26,9 +26,16 @@ type testConfig struct {
 	jetstream    bool
 	kv           bool
 	kvBuckets    []string
+	streams      []TestStreamConfig
 	natsVersion  string
 	timeout      time.Duration
 	startTimeout time.Duration
+}
+
+// TestStreamConfig defines a stream to pre-create for testing
+type TestStreamConfig struct {
+	Name     string
+	Subjects []string
 }
 
 // TestOption for configuring test client
@@ -55,6 +62,14 @@ func WithKVBuckets(buckets ...string) TestOption {
 		cfg.jetstream = true // KV requires JetStream
 		cfg.kv = true
 		cfg.kvBuckets = append(cfg.kvBuckets, buckets...)
+	}
+}
+
+// WithStreams pre-creates JetStream streams for testing
+func WithStreams(streams ...TestStreamConfig) TestOption {
+	return func(cfg *testConfig) {
+		cfg.jetstream = true // Streams require JetStream
+		cfg.streams = append(cfg.streams, streams...)
 	}
 }
 
@@ -187,6 +202,14 @@ func NewSharedTestClient(opts ...TestOption) (*TestClient, error) {
 		}
 	}
 
+	// Setup streams if requested
+	if len(cfg.streams) > 0 {
+		if err := testClient.setupStreams(ctx, cfg.streams); err != nil {
+			testClient.cleanup()
+			return nil, fmt.Errorf("failed to setup streams: %w", err)
+		}
+	}
+
 	return testClient, nil
 }
 
@@ -300,6 +323,14 @@ func NewTestClient(t testing.TB, opts ...TestOption) *TestClient {
 		}
 	}
 
+	// Setup streams if requested
+	if len(cfg.streams) > 0 {
+		if err := testClient.setupStreams(ctx, cfg.streams); err != nil {
+			testClient.cleanup()
+			t.Fatalf("Failed to setup streams: %v", err)
+		}
+	}
+
 	// Register cleanup
 	t.Cleanup(testClient.cleanup)
 
@@ -316,6 +347,22 @@ func (tc *TestClient) setupKVBuckets(ctx context.Context, buckets []string) erro
 		_, err := tc.Client.CreateKeyValueBucket(ctx, cfg)
 		if err != nil {
 			return fmt.Errorf("failed to create KV bucket %s: %w", bucketName, err)
+		}
+	}
+	return nil
+}
+
+// setupStreams creates the requested JetStream streams
+func (tc *TestClient) setupStreams(ctx context.Context, streams []TestStreamConfig) error {
+	for _, streamCfg := range streams {
+		cfg := jetstream.StreamConfig{
+			Name:     streamCfg.Name,
+			Subjects: streamCfg.Subjects,
+		}
+
+		_, err := tc.Client.EnsureStream(ctx, cfg)
+		if err != nil {
+			return fmt.Errorf("failed to create stream %s: %w", streamCfg.Name, err)
 		}
 	}
 	return nil
@@ -351,4 +398,22 @@ func (tc *TestClient) CreateKVBucket(ctx context.Context, name string) (jetstrea
 // GetKVBucket is a helper for getting existing KV buckets during tests
 func (tc *TestClient) GetKVBucket(ctx context.Context, name string) (jetstream.KeyValue, error) {
 	return tc.Client.GetKeyValueBucket(ctx, name)
+}
+
+// CreateStream is a helper for creating JetStream streams during tests
+func (tc *TestClient) CreateStream(ctx context.Context, name string, subjects []string) (jetstream.Stream, error) {
+	cfg := jetstream.StreamConfig{
+		Name:     name,
+		Subjects: subjects,
+	}
+	return tc.Client.EnsureStream(ctx, cfg)
+}
+
+// GetStream is a helper for getting existing JetStream streams during tests
+func (tc *TestClient) GetStream(ctx context.Context, name string) (jetstream.Stream, error) {
+	js, err := tc.Client.JetStream()
+	if err != nil {
+		return nil, err
+	}
+	return js.Stream(ctx, name)
 }

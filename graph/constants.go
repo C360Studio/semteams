@@ -1,9 +1,17 @@
 package graph
 
-// Bucket name constants
+// Bucket name constants for NATS KV storage
 const (
-	BucketEntityStates  = "ENTITY_STATES"
+	// Primary entity storage
+	BucketEntityStates = "ENTITY_STATES"
+
+	// Graph relationship indexes
+	BucketPredicateIndex = "PREDICATE_INDEX"
+	BucketIncomingIndex  = "INCOMING_INDEX"
+	BucketOutgoingIndex  = "OUTGOING_INDEX"
+
+	// Lookup indexes
+	BucketAliasIndex    = "ALIAS_INDEX"
 	BucketSpatialIndex  = "SPATIAL_INDEX"
 	BucketTemporalIndex = "TEMPORAL_INDEX"
-	BucketIncomingIndex = "INCOMING_INDEX"
 )

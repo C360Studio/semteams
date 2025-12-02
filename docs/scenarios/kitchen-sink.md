@@ -267,7 +267,7 @@ SemStreams provides **6 primary query algorithms** plus supporting algorithms. A
 | LPA | Hierarchical community detection | `graphclustering/lpa.go` |
 | Geohash | Spatial indexing (grid-based) | `indexmanager/indexes.go` |
 
-**Full algorithm documentation:** See `semdocs/docs/advanced/03-algorithm-reference.md`
+**Algorithm implementations:** See `processor/graph/embedding/` (BM25, HTTP embedder) and `processor/graph/querymanager/` (PathRAG, GraphRAG, Hybrid)
 
 ### 6. ML Services (Optional Enhancement)
 
@@ -488,59 +488,90 @@ The logistics warehouse scenario tells a coherent story with **ContentStorable**
    - "Find all sensors in zone-a"
    - "What documents mention forklift safety?"
 
-## Assertion Gaps (Future Improvements)
+## Implemented Assertions
 
-Current test validates presence but not behavior. To fully prove the framework story:
+The E2E test now validates actual behavior with comprehensive assertions:
 
-### Entity Storage Assertions (Priority: High)
+### Entity Storage Assertions (Implemented)
 
-```go
-// Verify entities were persisted
-entities, _ := kvClient.Keys("graph_entities_kitchen")
-assert.GreaterOrEqual(len(entities), 58) // 12+16+15+15 from file inputs
+- **Entity count verification**: Compares expected (88 from test data + UDP) vs actual count with data loss detection
+- **Entity retrieval**: Validates specific entities can be retrieved with fully-qualified IDs
+- **Entity structure validation**: Samples 5 entities and validates:
+  - ID format (non-empty, dot-separated segments)
+  - Triples array (non-empty, valid subject/predicate)
+  - Version (positive integer)
+  - UpdatedAt timestamp (if present)
 
-// Verify specific entity exists
-entity, _ := kvClient.Get("c360.logistics.content.document.safety.doc-safety-001")
-assert.NotNil(entity)
+### Index Population Assertions (Implemented)
+
+- **All 7 indexes verified**: entity_states, predicate, incoming, outgoing, alias, spatial, temporal
+- **Key count per bucket**: Reports how many keys in each index
+- **Sample keys**: Returns sample keys for debugging
+
+### Rule Triggering Assertions (Implemented)
+
+- **Rule metrics verification**: Extracts actual counter values (not just presence)
+- **Before/after comparison**: Measures rules triggered during test
+- **Delta tracking**: Reports `rules_triggered_delta` and `rules_evaluated_delta`
+- **Warning on no triggers**: Alerts if test messages don't trigger expected rules
+
+### Search Quality Assertions (Implemented)
+
+- **Score thresholds**: Each query has `minScore` and `minHits` requirements
+- **Quality metrics**:
+  - `search_quality_score`: Average score across all hits
+  - `search_min_score_met`: Count of queries meeting minimum score
+  - `search_min_hits_met`: Count of queries with enough hits
+- **Weak results warning**: Alerts if average score < 0.5
+
+### Core vs ML Comparison (Implemented)
+
+- **Result persistence**: Saves `comparison-{variant}-{timestamp}.json` for each run
+- **Automated analysis**: `--analyze-comparison` generates report with:
+  - Jaccard similarity (hit overlap) per query
+  - Pearson correlation for shared hit scores
+  - Verdict: "ML provides semantic lift" / "Marginal difference"
+
+### Rule Configuration Reference
+
+Rules are defined in the kitchen sink config (`configs/kitchen-sink.yaml`):
+
+```yaml
+rules:
+  - name: low-battery-alert
+    condition:
+      field: battery.level
+      operator: lte
+      value: 20
+    action:
+      type: publish
+      subject: events.rule.triggered
+    severity: warning
+
+  - name: high-temperature-alert
+    condition:
+      field: data.temperature
+      operator: gte
+      value: 50.0
+    action:
+      type: publish
+      subject: events.rule.triggered
+    severity: critical
 ```
 
-### Index Population Assertions (Priority: High)
+## Future Improvements
+
+Areas for further enhancement:
+
+### Content Storage Assertions
 
 ```go
-// Verify predicate index populated with Dublin Core predicates
-predicates, _ := kvClient.Keys("PREDICATE_INDEX")
-assert.Contains(predicates, "dc.title")
-assert.Contains(predicates, "dc.subject")
-assert.Contains(predicates, "sensor.type")
-
-// Verify spatial index for sensors with coordinates
-spatialKeys, _ := kvClient.Keys("SPATIAL_INDEX")
-assert.GreaterOrEqual(len(spatialKeys), 15) // sensors have lat/lon
-
 // Verify content stored in ObjectStore
 contentKeys, _ := objStore.List("content/")
 assert.GreaterOrEqual(len(contentKeys), 58) // documents + maintenance + observations + sensor_docs
 ```
 
-### Rule Triggering Assertions (Priority: Medium)
-
-```go
-// Subscribe to rule output and verify cold-storage alert fired
-sub := nc.Subscribe("events.rule.triggered")
-// Send sensor reading > 40F for cold-storage-1
-// Assert: received message with rule_id="cold-storage-temp-alert"
-```
-
-### Search Quality Assertions (Priority: High for ML)
-
-```go
-// Query and verify relevance
-results := gateway.SemanticSearch("forklift safety procedures")
-assert.GreaterOrEqual(len(results), 2)
-assert.Contains(results[0].EntityID, "forklift") // Most relevant
-```
-
-### End-to-End Flow Assertions (Priority: Medium)
+### End-to-End Flow Assertions
 
 ```go
 // Verify file output received semantic entities

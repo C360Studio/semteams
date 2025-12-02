@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/nats-io/nats.go"
 )
@@ -312,12 +314,12 @@ func (c *Component) handleAPIRequest(msg *nats.Msg) {
 }
 
 // handleWriteRequest handles async write operations
-// core design: Accepts any message, stores it, publishes simple event
+// Stores message and emits StoredMessage with StorageRef for downstream processors
 func (c *Component) handleWriteRequest(msg *nats.Msg) {
 	atomic.AddUint64(&c.messagesReceived, 1)
 	c.lastActivity.Store(time.Now())
 
-	// Store the raw data
+	// Store the raw data first
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -330,12 +332,80 @@ func (c *Component) handleWriteRequest(msg *nats.Msg) {
 
 	atomic.AddUint64(&c.messagesStored, 1)
 
-	// Publish simple storage event
+	// Publish simple storage event (for monitoring/audit)
 	c.publishEvent(Event{
 		Type:      "stored",
 		Key:       key,
 		Timestamp: time.Now(),
 	})
+
+	// Try to emit StoredMessage if we have a "stored" output port
+	// This enables the ContentStorable pattern for semantic search
+	c.emitStoredMessage(msg.Data, key)
+}
+
+// emitStoredMessage attempts to parse the incoming message and emit a StoredMessage
+// with StorageRef for downstream semantic processing
+func (c *Component) emitStoredMessage(data []byte, storageKey string) {
+	if !c.hasPort("stored") {
+		return // No stored output port configured
+	}
+
+	// Try to parse as BaseMessage to extract Graphable payload
+	var baseMsg message.BaseMessage
+	if err := baseMsg.UnmarshalJSON(data); err != nil {
+		c.logger.Debug("Message not a BaseMessage, skipping StoredMessage emit",
+			slog.String("error", err.Error()))
+		return
+	}
+
+	// Extract Graphable payload
+	payload := baseMsg.Payload()
+	graphable, ok := payload.(graph.Graphable)
+	if !ok {
+		c.logger.Debug("Payload not Graphable, skipping StoredMessage emit",
+			slog.String("payload_type", fmt.Sprintf("%T", payload)))
+		return
+	}
+
+	// Create StorageReference
+	storageRef := &message.StorageReference{
+		StorageInstance: c.instanceName,
+		Key:             storageKey,
+		ContentType:     "application/json",
+		Size:            int64(len(data)),
+	}
+
+	// Create StoredMessage wrapping original Graphable + StorageRef
+	storedMsg := NewStoredMessage(graphable, storageRef, baseMsg.Type().Key())
+
+	// Wrap in BaseMessage for transport
+	wrappedMsg := message.NewBaseMessage(
+		storedMsg.Schema(),
+		storedMsg,
+		c.instanceName, // source
+	)
+
+	// Marshal and publish
+	msgData, err := wrappedMsg.MarshalJSON()
+	if err != nil {
+		c.logger.Error("Failed to marshal StoredMessage",
+			slog.String("error", err.Error()))
+		return
+	}
+
+	storedSubject := c.getPortSubject("stored", "storage.%s.stored")
+	if err := c.natsClient.GetConnection().Publish(storedSubject, msgData); err != nil {
+		c.logger.Error("Failed to publish StoredMessage",
+			slog.String("subject", storedSubject),
+			slog.String("error", err.Error()))
+		return
+	}
+
+	c.logger.Debug("Emitted StoredMessage",
+		slog.String("entity_id", graphable.EntityID()),
+		slog.String("storage_key", storageKey),
+		slog.String("subject", storedSubject))
 }
 
 // publishEvent publishes a simple storage event to the events subject

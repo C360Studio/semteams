@@ -93,6 +93,8 @@
         "workers": 4,
         "queue_size": 1000,
         "input_subject": "events.graph.entity.sensor",
+        "stream_name": "GRAPH_EVENTS",
+        "consumer_name": "graph-processor",
         "message_handler": {
           "processing_timeout": "5s",
           "max_retries": 3
