@@ -52,9 +52,19 @@ type Indexer interface {
 	SearchSemantic(ctx context.Context, query string, opts *SemanticSearchOptions) (*SearchResults, error)
 	SearchHybrid(ctx context.Context, query *HybridQuery) (*SearchResults, error)
 
+	// Similarity operations for inference (requires embedding configuration)
+	// FindSimilarEntities returns entities similar to the given entity based on embedding similarity.
+	// Used by SemanticGraphProvider to create virtual edges for clustering.
+	FindSimilarEntities(ctx context.Context, entityID string, threshold float64, limit int) ([]SimilarityHit, error)
+
 	// Metrics
 	GetBacklog() int
 	GetDeduplicationStats() DeduplicationStats
+
+	// Embedding metrics (for clustering coordination)
+	// GetEmbeddingCount returns the number of entities with embeddings in the vector cache.
+	// Used by the clustering system to check embedding coverage before running LPA with semantic edges.
+	GetEmbeddingCount() int
 }
 
 // Bounds represents spatial query bounds
@@ -82,6 +92,14 @@ type DeduplicationStats struct {
 	DeduplicationRate float64 `json:"deduplication_rate"`
 	CacheSize         int     `json:"cache_size"`
 	CacheHitRate      float64 `json:"cache_hit_rate"`
+}
+
+// SimilarityHit represents an entity similarity match for inference operations.
+// Used by FindSimilarEntities to return entities similar to a query entity.
+type SimilarityHit struct {
+	EntityID   string  `json:"entity_id"`   // ID of the similar entity
+	Similarity float64 `json:"similarity"`  // Cosine similarity score (0.0-1.0)
+	EntityType string  `json:"entity_type"` // Type of the entity (for type-batched filtering)
 }
 
 // EntityChange represents a KV change event to be processed

@@ -128,6 +128,47 @@ type ClusteringConfig struct {
 
 	// Enhancement configures LLM summarization
 	Enhancement EnhancementConfig `json:"enhancement,omitempty"`
+
+	// SemanticEdges configures virtual edges based on embedding similarity
+	// This enables community detection even when explicit relationship triples don't exist
+	SemanticEdges SemanticEdgesConfig `json:"semantic_edges,omitempty"`
+
+	// Inference configures relationship inference from community detection
+	Inference InferenceConfig `json:"inference,omitempty"`
+}
+
+// SemanticEdgesConfig configures virtual edge creation from embedding similarity
+type SemanticEdgesConfig struct {
+	// Enabled activates semantic-based virtual edges for clustering
+	// When true, entities with similar embeddings are treated as neighbors
+	Enabled bool `json:"enabled" schema:"type:bool,description:Enable semantic virtual edges,default:false"`
+
+	// SimilarityThreshold is the minimum cosine similarity for virtual edges (0.0-1.0)
+	// Higher values = fewer but stronger virtual connections
+	// Default: 0.6 (stricter than search threshold of 0.3)
+	SimilarityThreshold float64 `json:"similarity_threshold" schema:"type:float,description:Min similarity for virtual edge,default:0.6"`
+
+	// MaxVirtualNeighbors limits virtual neighbors per entity
+	// Controls computation cost during LPA iterations
+	// Default: 5
+	MaxVirtualNeighbors int `json:"max_virtual_neighbors" schema:"type:int,description:Max virtual neighbors per entity,default:5"`
+}
+
+// InferenceConfig configures relationship inference from clustering results
+type InferenceConfig struct {
+	// Enabled activates triple inference from community detection
+	// When true, co-membership in communities creates inferred.clustered_with triples
+	Enabled bool `json:"enabled" schema:"type:bool,description:Enable relationship inference,default:false"`
+
+	// MinCommunitySize is the minimum community size for inference
+	// Singleton communities (size=1) never produce inferences
+	// Default: 2
+	MinCommunitySize int `json:"min_community_size" schema:"type:int,description:Min community size for inference,default:2"`
+
+	// MaxInferredPerCommunity limits inferred relationships per community
+	// Prevents O(n²) explosion in large communities
+	// Default: 50
+	MaxInferredPerCommunity int `json:"max_inferred_per_community" schema:"type:int,description:Max inferred relationships per community,default:50"`
 }
 
 // AlgorithmConfig configures the LPA detector
@@ -149,6 +190,12 @@ type ScheduleConfig struct {
 
 	// MinEntities threshold for triggering detection
 	MinEntities int `json:"min_entities" schema:"type:int,description:Min entities for detection,default:10"`
+
+	// MinEmbeddingCoverage is the minimum ratio of embeddings to entities required for semantic clustering.
+	// When semantic_edges is enabled, clustering will be skipped until this coverage threshold is met.
+	// This prevents clustering from running before embeddings are generated.
+	// Range: 0.0-1.0, Default: 0.5 (50%)
+	MinEmbeddingCoverage float64 `json:"min_embedding_coverage" schema:"type:float,description:Min embedding coverage for semantic clustering (0.0-1.0),default:0.5"`
 }
 
 // EnhancementConfig configures LLM summary enhancement
@@ -1239,8 +1286,15 @@ func (p *processorGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID
 
 // initializeClusteringIfEnabled sets up clustering components if enabled in config
 func (p *Processor) initializeClusteringIfEnabled(ctx context.Context, buckets map[string]jetstream.KeyValue) error {
-	if p.config.Clustering == nil || !p.config.Clustering.Enabled {
-		p.logger.Debug("Clustering disabled, skipping initialization")
+	// Log config state for observability
+	clusteringNil := p.config.Clustering == nil
+	enabled := !clusteringNil && p.config.Clustering.Enabled
+	p.logger.Info("Checking clustering configuration",
+		"clustering_config_nil", clusteringNil,
+		"enabled", enabled)
+
+	if clusteringNil || !enabled {
+		p.logger.Info("Clustering disabled, skipping initialization")
 		return nil
 	}
 
@@ -1270,9 +1324,33 @@ func (p *Processor) initializeClusteringIfEnabled(ctx context.Context, buckets m
 			"initializeClusteringIfEnabled", "ENTITY_STATES bucket not found")
 	}
 
-	graphProvider := &processorGraphProvider{
+	baseProvider := &processorGraphProvider{
 		entityReader: p.dataManager,
 		kvBucket:     entityBucket,
+	}
+
+	// Wrap with SemanticGraphProvider if semantic edges enabled
+	var graphProvider clustering.GraphProvider = baseProvider
+	if cfg.SemanticEdges.Enabled && p.indexManager != nil {
+		// Apply defaults
+		threshold := cfg.SemanticEdges.SimilarityThreshold
+		if threshold <= 0 {
+			threshold = 0.6
+		}
+		maxNeighbors := cfg.SemanticEdges.MaxVirtualNeighbors
+		if maxNeighbors <= 0 {
+			maxNeighbors = 5
+		}
+
+		semanticConfig := clustering.SemanticProviderConfig{
+			SimilarityThreshold: threshold,
+			MaxVirtualNeighbors: maxNeighbors,
+		}
+
+		graphProvider = clustering.NewSemanticGraphProvider(baseProvider, p.indexManager, semanticConfig, p.logger)
+		p.logger.Info("Semantic edges enabled for clustering",
+			"similarity_threshold", threshold,
+			"max_virtual_neighbors", maxNeighbors)
 	}
 
 	// Create LPA detector with configuration
@@ -1406,21 +1484,42 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int) {
 	}()
 
 	// Check entity count threshold
+	var entityCount int
 	if p.clusteringBuckets != nil {
 		if entityBucket, ok := p.clusteringBuckets["ENTITY_STATES"]; ok {
 			keys, err := entityBucket.ListKeys(ctx)
 			if err == nil {
-				count := 0
 				for range keys.Keys() {
-					count++
+					entityCount++
 				}
-				if count < minEntities {
+				if entityCount < minEntities {
 					p.logger.Debug("Skipping detection - not enough entities",
-						"current", count, "required", minEntities)
+						"current", entityCount, "required", minEntities)
 					return
 				}
 			}
 		}
+	}
+
+	// Check embedding coverage for semantic clustering
+	if p.isSemanticClusteringEnabled() && p.indexManager != nil && entityCount > 0 {
+		embeddingCount := p.indexManager.GetEmbeddingCount()
+		coverage := float64(embeddingCount) / float64(entityCount)
+		minCoverage := p.getMinEmbeddingCoverage()
+
+		if coverage < minCoverage {
+			p.logger.Info("Skipping detection - waiting for embeddings",
+				"entities", entityCount,
+				"embeddings", embeddingCount,
+				"coverage", fmt.Sprintf("%.1f%%", coverage*100),
+				"min_coverage", fmt.Sprintf("%.1f%%", minCoverage*100))
+			return
+		}
+
+		p.logger.Info("Embedding coverage sufficient for semantic clustering",
+			"entities", entityCount,
+			"embeddings", embeddingCount,
+			"coverage", fmt.Sprintf("%.1f%%", coverage*100))
 	}
 
 	// Run community detection
@@ -1489,4 +1588,22 @@ func CreateGraphProcessor(rawConfig json.RawMessage, deps component.Dependencies
 	}
 
 	return NewProcessor(processorDeps)
+}
+
+// isSemanticClusteringEnabled checks if semantic edge clustering is enabled
+func (p *Processor) isSemanticClusteringEnabled() bool {
+	if p.config == nil || p.config.Clustering == nil {
+		return false
+	}
+	return p.config.Clustering.SemanticEdges.Enabled
+}
+
+// getMinEmbeddingCoverage returns the minimum embedding coverage threshold for semantic clustering.
+// Returns 0.5 (50%) as default if not configured.
+func (p *Processor) getMinEmbeddingCoverage() float64 {
+	if p.config != nil && p.config.Clustering != nil &&
+		p.config.Clustering.Schedule.MinEmbeddingCoverage > 0 {
+		return p.config.Clustering.Schedule.MinEmbeddingCoverage
+	}
+	return 0.5 // Default: 50% coverage
 }

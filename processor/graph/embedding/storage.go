@@ -296,3 +296,19 @@ func (s *Storage) DeleteEmbedding(ctx context.Context, entityID string) error {
 
 	return nil
 }
+
+// ListGeneratedEntityIDs returns all entity IDs that have embeddings in storage.
+// This is used for pre-warming the vector cache on startup.
+func (s *Storage) ListGeneratedEntityIDs(ctx context.Context) ([]string, error) {
+	keys, err := s.indexBucket.ListKeys(ctx)
+	if err != nil {
+		return nil, errs.WrapTransient(err, "Storage", "ListGeneratedEntityIDs", "list keys")
+	}
+
+	var entityIDs []string
+	for key := range keys.Keys() {
+		entityIDs = append(entityIDs, key)
+	}
+
+	return entityIDs, nil
+}

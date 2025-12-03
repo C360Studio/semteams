@@ -5,6 +5,16 @@
   "title": "graph-processor Configuration",
   "description": "Graph processor for entity extraction and storage",
   "properties": {
+    "clustering": {
+      "type": "object",
+      "description": "Community detection configuration",
+      "category": "advanced"
+    },
+    "consumer_name": {
+      "type": "string",
+      "description": "JetStream consumer name (durable if set)",
+      "category": "advanced"
+    },
     "data_manager": {
       "type": "object",
       "description": "Data manager configuration",
@@ -18,7 +28,7 @@
     "input_subject": {
       "type": "string",
       "description": "NATS subject to subscribe for input messages",
-      "default": "storage.*.events",
+      "default": "events.graph.entity.*",
       "category": "basic"
     },
     "message_handler": {
@@ -36,6 +46,11 @@
       "description": "Worker queue size",
       "default": 10000,
       "category": "basic"
+    },
+    "stream_name": {
+      "type": "string",
+      "description": "JetStream stream name for durable consumption",
+      "category": "advanced"
     },
     "workers": {
       "type": "number",

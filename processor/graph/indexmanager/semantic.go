@@ -762,3 +762,118 @@ func (m *Manager) extractText(properties map[string]interface{}) string {
 
 	return strings.Join(parts, " ")
 }
+
+// FindSimilarEntities returns entities similar to the given entity based on embedding similarity.
+// This method is used by SemanticGraphProvider to create virtual edges for LPA clustering,
+// enabling community detection even when explicit relationship triples don't exist.
+//
+// Parameters:
+//   - entityID: The source entity to find similar entities for
+//   - threshold: Minimum cosine similarity score (0.0-1.0), recommended 0.6 for clustering
+//   - limit: Maximum number of similar entities to return
+//
+// Returns an error if semantic search is not enabled or entity has no embedding.
+func (m *Manager) FindSimilarEntities(
+	ctx context.Context,
+	entityID string,
+	threshold float64,
+	limit int,
+) ([]SimilarityHit, error) {
+	// Validate semantic search is enabled
+	if m.vectorCache == nil || m.embedder == nil {
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("semantic search not enabled"),
+			"IndexManager", "FindSimilarEntities",
+			"configure Embedding.Enabled=true to use similarity-based inference")
+	}
+
+	// Validate inputs
+	if entityID == "" {
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("entityID is empty"),
+			"IndexManager", "FindSimilarEntities",
+			"entityID cannot be empty")
+	}
+	if threshold < 0 || threshold > 1 {
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("threshold out of range: %f", threshold),
+			"IndexManager", "FindSimilarEntities",
+			"threshold must be between 0.0 and 1.0")
+	}
+	if limit <= 0 {
+		limit = 5 // Default limit for clustering neighbors
+	}
+
+	// Get source entity's embedding
+	sourceVec, ok := m.vectorCache.Get(entityID)
+	if !ok {
+		// No embedding for this entity - may be newly created or non-embeddable type
+		return nil, nil
+	}
+
+	// Get source entity's type for potential type-batched filtering
+	var sourceType string
+	if meta, ok := m.metadataCache.Get(entityID); ok {
+		sourceType = meta.EntityType
+	}
+
+	// Compute similarity against all cached entities
+	var hits []SimilarityHit
+	for _, candidateID := range m.vectorCache.Keys() {
+		// Skip self
+		if candidateID == entityID {
+			continue
+		}
+
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return nil, errs.WrapTransient(ctx.Err(), "IndexManager", "FindSimilarEntities", "context cancelled")
+		default:
+		}
+
+		candidateVec, ok := m.vectorCache.Get(candidateID)
+		if !ok {
+			continue // Entry evicted
+		}
+
+		score := embedding.CosineSimilarity(sourceVec, candidateVec)
+
+		// Apply threshold filter
+		if score < threshold {
+			continue
+		}
+
+		// Get candidate type for filtering/reporting
+		var candidateType string
+		if meta, ok := m.metadataCache.Get(candidateID); ok {
+			candidateType = meta.EntityType
+		}
+
+		// Optional: Type-batched filtering for O(n²) mitigation
+		// Only compare within same entity type family when enabled
+		// Uncomment when scaling becomes an issue:
+		// if sourceType != "" && candidateType != "" && !sameTypeFamily(sourceType, candidateType) {
+		//     continue
+		// }
+		_ = sourceType // Silence unused variable warning (reserved for future type batching)
+
+		hits = append(hits, SimilarityHit{
+			EntityID:   candidateID,
+			Similarity: score,
+			EntityType: candidateType,
+		})
+	}
+
+	// Sort by similarity descending
+	sort.Slice(hits, func(i, j int) bool {
+		return hits[i].Similarity > hits[j].Similarity
+	})
+
+	// Apply limit
+	if len(hits) > limit {
+		hits = hits[:limit]
+	}
+
+	return hits, nil
+}

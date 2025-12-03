@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"time"
 
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/pkg/errs"
@@ -376,4 +377,178 @@ func (d *LPADetector) GetCommunitiesByLevel(ctx context.Context, level int) ([]*
 	defer d.mu.RUnlock()
 
 	return d.storage.GetCommunitiesByLevel(ctx, level)
+}
+
+// InferenceConfig holds configuration for relationship inference
+type InferenceConfig struct {
+	// MinCommunitySize is the minimum community size for generating inferences
+	// Singleton communities (size=1) never produce inferences
+	MinCommunitySize int
+
+	// MaxInferredPerCommunity limits inferred relationships per community
+	// Prevents O(n²) explosion in large communities
+	MaxInferredPerCommunity int
+}
+
+// DefaultInferenceConfig returns sensible defaults for relationship inference
+func DefaultInferenceConfig() InferenceConfig {
+	return InferenceConfig{
+		MinCommunitySize:        2,
+		MaxInferredPerCommunity: 50,
+	}
+}
+
+// InferRelationshipsFromCommunities generates inferred triples from community co-membership.
+// For each community with >= minCommunitySize members, this creates bidirectional
+// "inferred.clustered_with" triples between members.
+//
+// Parameters:
+//   - level: Hierarchical level to process (0 = most granular)
+//   - config: Inference configuration (min size, max pairs)
+//
+// Returns triples suitable for persistence via graph.mutation.triple.add.
+// The caller is responsible for persisting these triples.
+//
+// Confidence scoring:
+//   - Base confidence: 0.5 (inferred relationships)
+//   - Adjusted by community tightness: +0.0 to +0.3 based on internal similarity
+//   - Final range: 0.5-0.8 for inferred relationships
+func (d *LPADetector) InferRelationshipsFromCommunities(
+	ctx context.Context,
+	level int,
+	config InferenceConfig,
+) ([]InferredTriple, error) {
+	// Apply defaults
+	if config.MinCommunitySize <= 0 {
+		config.MinCommunitySize = 2
+	}
+	if config.MaxInferredPerCommunity <= 0 {
+		config.MaxInferredPerCommunity = 50
+	}
+
+	// Get communities at level
+	communities, err := d.storage.GetCommunitiesByLevel(ctx, level)
+	if err != nil {
+		return nil, err
+	}
+
+	var triples []InferredTriple
+	now := time.Now()
+
+	for _, community := range communities {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		// Skip communities below minimum size
+		if len(community.Members) < config.MinCommunitySize {
+			continue
+		}
+
+		// Compute community tightness for confidence adjustment
+		tightness := d.computeCommunityTightness(ctx, community)
+
+		// Generate bidirectional pairs with limit
+		pairsGenerated := 0
+		for i := 0; i < len(community.Members) && pairsGenerated < config.MaxInferredPerCommunity; i++ {
+			for j := i + 1; j < len(community.Members) && pairsGenerated < config.MaxInferredPerCommunity; j++ {
+				entityA := community.Members[i]
+				entityB := community.Members[j]
+
+				// Skip if explicit edge exists (don't duplicate)
+				if d.hasExplicitEdge(ctx, entityA, entityB) {
+					continue
+				}
+
+				// Calculate confidence: base 0.5 + tightness bonus (0.0-0.3)
+				confidence := 0.5 + (tightness * 0.3)
+
+				// Create bidirectional triples
+				triples = append(triples,
+					InferredTriple{
+						Subject:     entityA,
+						Predicate:   "inferred.clustered_with",
+						Object:      entityB,
+						Source:      "lpa_community_detection",
+						Confidence:  confidence,
+						Timestamp:   now,
+						CommunityID: community.ID,
+						Level:       level,
+					},
+					InferredTriple{
+						Subject:     entityB,
+						Predicate:   "inferred.clustered_with",
+						Object:      entityA,
+						Source:      "lpa_community_detection",
+						Confidence:  confidence,
+						Timestamp:   now,
+						CommunityID: community.ID,
+						Level:       level,
+					},
+				)
+				pairsGenerated++
+			}
+		}
+	}
+
+	return triples, nil
+}
+
+// InferredTriple represents a relationship inferred from community detection.
+// This is a lightweight struct for returning inference results.
+// The caller converts these to message.Triple for persistence.
+type InferredTriple struct {
+	Subject     string
+	Predicate   string
+	Object      string
+	Source      string
+	Confidence  float64
+	Timestamp   time.Time
+	CommunityID string // Community that produced this inference
+	Level       int    // Hierarchical level
+}
+
+// computeCommunityTightness computes how tightly connected a community is.
+// Returns a value between 0.0 (loose) and 1.0 (very tight).
+// Uses cached similarity scores when available (from SemanticGraphProvider).
+func (d *LPADetector) computeCommunityTightness(ctx context.Context, community *Community) float64 {
+	if len(community.Members) < 2 {
+		return 0.0
+	}
+
+	// Count explicit edges vs possible edges
+	explicitEdges := 0
+	possibleEdges := 0
+
+	for i := 0; i < len(community.Members); i++ {
+		for j := i + 1; j < len(community.Members); j++ {
+			possibleEdges++
+			weight, _ := d.graphProvider.GetEdgeWeight(ctx, community.Members[i], community.Members[j])
+			if weight > 0 {
+				explicitEdges++
+			}
+		}
+	}
+
+	if possibleEdges == 0 {
+		return 0.0
+	}
+
+	// Return edge density as tightness measure
+	return float64(explicitEdges) / float64(possibleEdges)
+}
+
+// hasExplicitEdge checks if there's already an explicit edge between two entities.
+// Returns true if edge exists (to avoid creating duplicate inferred relationships).
+func (d *LPADetector) hasExplicitEdge(ctx context.Context, entityA, entityB string) bool {
+	// Check both directions
+	weightAB, _ := d.graphProvider.GetEdgeWeight(ctx, entityA, entityB)
+	if weightAB >= 0.8 { // Only count high-confidence edges as "explicit"
+		return true
+	}
+	weightBA, _ := d.graphProvider.GetEdgeWeight(ctx, entityB, entityA)
+	return weightBA >= 0.8
 }

@@ -275,6 +275,12 @@ func (m *Manager) Run(ctx context.Context) error {
 		}
 	}
 
+	// Pre-warm vector cache from persistent storage (for semantic clustering)
+	if err := m.PreWarmVectorCache(ctx); err != nil {
+		m.logger.Warn("Failed to pre-warm vector cache - clustering may be delayed", "error", err)
+		// Don't fail - pre-warm is best-effort
+	}
+
 	// Start event and batch processing goroutines
 	eventErr, batchErr := m.startProcessingGoroutines(ctx)
 
@@ -1665,4 +1671,66 @@ func (m *Manager) GetBacklog() int {
 // GetDeduplicationStats returns the current deduplication statistics.
 func (m *Manager) GetDeduplicationStats() DeduplicationStats {
 	return m.metrics.GetDeduplicationStats()
+}
+
+// GetEmbeddingCount returns the number of entities with embeddings currently in the vector cache.
+// This is used by the clustering system to check embedding coverage before running LPA.
+func (m *Manager) GetEmbeddingCount() int {
+	if m.vectorCache == nil {
+		return 0
+	}
+	return m.vectorCache.Size()
+}
+
+// PreWarmVectorCache loads existing embeddings from storage into the in-memory cache.
+// This ensures the vector cache is populated on restart, enabling semantic clustering
+// to work immediately without waiting for embeddings to be regenerated.
+//
+// This method should be called during startup after embedding storage is initialized.
+func (m *Manager) PreWarmVectorCache(ctx context.Context) error {
+	if m.vectorCache == nil {
+		m.logger.Debug("Vector cache not initialized, skipping pre-warm")
+		return nil
+	}
+	if m.embeddingStorage == nil {
+		m.logger.Debug("Embedding storage not initialized, skipping pre-warm")
+		return nil
+	}
+
+	startTime := time.Now()
+
+	// List all entity IDs with generated embeddings
+	entityIDs, err := m.embeddingStorage.ListGeneratedEntityIDs(ctx)
+	if err != nil {
+		return errs.WrapTransient(err, "IndexManager", "PreWarmVectorCache", "failed to list embeddings")
+	}
+
+	loaded := 0
+	for _, entityID := range entityIDs {
+		// Check context for cancellation
+		if ctx.Err() != nil {
+			break
+		}
+
+		record, err := m.embeddingStorage.GetEmbedding(ctx, entityID)
+		if err != nil || record == nil {
+			continue
+		}
+
+		// Only load generated embeddings with vectors
+		if record.Status != embedding.StatusGenerated || len(record.Vector) == 0 {
+			continue
+		}
+
+		m.vectorCache.Set(entityID, record.Vector)
+		loaded++
+	}
+
+	duration := time.Since(startTime)
+	m.logger.Info("Pre-warmed vector cache",
+		"loaded", loaded,
+		"total_entities", len(entityIDs),
+		"duration", duration)
+
+	return nil
 }

@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "document_processor.v1.json",
+  "type": "object",
+  "title": "document_processor Configuration",
+  "description": "Transforms incoming JSON documents into Graphable payloads for semantic search",
+  "properties": {
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "document_processor",
+    "type": "processor",
+    "protocol": "document",
+    "domain": "content",
+    "version": "0.1.0"
+  }
+}
