@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 
@@ -352,4 +353,58 @@ func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*Commun
 	}
 
 	return communities, nil
+}
+
+// WaitForCommunityEnhancement polls communities until all reach terminal status
+// Terminal statuses: "llm-enhanced" or "llm-failed"
+// Returns counts of enhanced, failed, and pending communities
+func (c *NATSValidationClient) WaitForCommunityEnhancement(
+	ctx context.Context,
+	timeout time.Duration,
+	pollInterval time.Duration,
+) (enhanced, failed, pending int, err error) {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		communities, err := c.GetAllCommunities(ctx)
+		if err != nil {
+			return 0, 0, 0, fmt.Errorf("failed to get communities: %w", err)
+		}
+
+		// If no communities exist yet, wait and retry
+		if len(communities) == 0 {
+			select {
+			case <-ctx.Done():
+				return 0, 0, 0, ctx.Err()
+			case <-time.After(pollInterval):
+				continue
+			}
+		}
+
+		enhanced, failed, pending = 0, 0, 0
+		for _, comm := range communities {
+			switch comm.SummaryStatus {
+			case "llm-enhanced":
+				enhanced++
+			case "llm-failed":
+				failed++
+			default: // "statistical" or empty
+				pending++
+			}
+		}
+
+		// All communities reached terminal status
+		if pending == 0 {
+			return enhanced, failed, pending, nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return enhanced, failed, pending, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+
+	// Timeout reached, return current state without error
+	return enhanced, failed, pending, nil
 }

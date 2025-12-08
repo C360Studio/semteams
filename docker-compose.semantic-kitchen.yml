@@ -8,12 +8,15 @@
 #   - task e2e:clean                         - Clean up test environment
 #
 # Profiles:
-#   - (default): NATS + semstreams (CI-safe, no ML dependencies)
-#   - ml: Adds semembed + seminstruct + shimmy for full semantic testing
+#   - core: NATS + semstreams core (CI-safe, no ML dependencies)
+#   - ml: NATS + semembed + seminstruct + shimmy + semstreams-ml (full ML)
 #
 # Usage:
-#   docker compose -f docker-compose.semantic-kitchen.yml up -d              # Core only
-#   docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d # With ML
+#   docker compose -f docker-compose.semantic-kitchen.yml --profile core up -d  # Core only
+#   docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d    # ML only
+#
+# NOTE: core and ml profiles are mutually exclusive - don't use both together
+#       as they share the same NATS KV buckets and will overwrite each other's data
 #
 # Running this directly will start services but NOT run tests.
 # The E2E tests are executed from the host via cmd/e2e/e2e binary.
@@ -121,11 +124,14 @@ services:
 
   # SemStreams Application (kitchen sink config with all features)
   # Core variant - runs without ML services (uses BM25 fallback for search)
+  # PROFILE: core - Only started when --profile core is specified (not with ml)
   semstreams:
     build:
       context: .
       target: production
     container_name: semstreams-kitchen-app
+    profiles:
+      - core
     command: ["--config", "/app/configs/semantic-kitchen-sink.json"]
     depends_on:
       nats:

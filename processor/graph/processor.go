@@ -1536,6 +1536,7 @@ func (p *Processor) setupEnhancementWorker(ctx context.Context, cfg *ClusteringC
 		Querier:         p.queryManager,
 		CommunityBucket: communityBucket,
 		Logger:          p.logger,
+		Registry:        p.metricsRegistry,
 	}
 
 	worker, err := clustering.NewEnhancementWorker(workerConfig)

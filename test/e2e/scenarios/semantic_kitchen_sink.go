@@ -1789,6 +1789,9 @@ type CommunitySummaryReport struct {
 	CommunitiesTotal      int                   `json:"communities_total"`
 	LLMEnhancedCount      int                   `json:"llm_enhanced_count"`
 	StatisticalOnlyCount  int                   `json:"statistical_only_count"`
+	LLMFailedCount        int                   `json:"llm_failed_count,omitempty"`
+	LLMPendingCount       int                   `json:"llm_pending_count,omitempty"`
+	LLMWaitDurationMs     int64                 `json:"llm_wait_duration_ms,omitempty"`
 	AvgSummaryLengthRatio float64               `json:"avg_summary_length_ratio"`
 	AvgWordOverlap        float64               `json:"avg_word_overlap"`
 	NonSingletonCount     int                   `json:"non_singleton_count"`
@@ -1802,6 +1805,14 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 	if s.natsClient == nil {
 		result.Warnings = append(result.Warnings, "NATS client not available, skipping community comparison")
 		return nil
+	}
+
+	// Detect variant early for LLM wait decision
+	variant := "core"
+	if v, ok := result.Metrics["comparison_variant"].(string); ok && v == "ml" {
+		variant = "ml"
+	} else if semembedAvailable, ok := result.Details["semembed_available"].(bool); ok && semembedAvailable {
+		variant = "ml"
 	}
 
 	// LPA clustering runs asynchronously - wait for communities to populate
@@ -1825,6 +1836,47 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 		result.Warnings = append(result.Warnings, "No communities found for comparison (clustering may not have completed)")
 		result.Metrics["communities_total"] = 0
 		return nil
+	}
+
+	// For ML variant, wait up to 2 minutes for LLM enhancement to complete
+	var llmWaitDurationMs int64
+	var llmFailedCount, llmPendingCount int
+	if variant == "ml" {
+		fmt.Printf("[LLM WAIT] Waiting for LLM enhancement to complete (ML variant, %d communities)...\n", len(communities))
+
+		enhanceStart := time.Now()
+		enhanced, failed, pending, waitErr := s.natsClient.WaitForCommunityEnhancement(
+			ctx,
+			2*time.Minute,  // timeout
+			2*time.Second,  // poll interval
+		)
+		llmWaitDurationMs = time.Since(enhanceStart).Milliseconds()
+		llmFailedCount = failed
+		llmPendingCount = pending
+
+		fmt.Printf("[LLM WAIT] Complete: enhanced=%d, failed=%d, pending=%d, duration=%dms\n",
+			enhanced, failed, pending, llmWaitDurationMs)
+
+		if waitErr != nil {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("LLM enhancement wait error: %v", waitErr))
+		}
+
+		if enhanced == 0 && failed == 0 && pending > 0 {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("No LLM enhancements completed within 2 minute timeout (%d still pending)", pending))
+		}
+
+		// Record LLM wait metrics
+		result.Metrics["llm_wait_duration_ms"] = float64(llmWaitDurationMs)
+		result.Metrics["llm_failed_count"] = float64(llmFailedCount)
+		result.Metrics["llm_pending_count"] = float64(llmPendingCount)
+
+		// Refresh communities after waiting
+		communities, err = s.natsClient.GetAllCommunities(ctx)
+		if err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to refresh communities after LLM wait: %v", err))
+		}
 	}
 
 	// Compare statistical vs LLM summaries for each community
@@ -1893,12 +1945,6 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 		avgWordOverlap = totalWordOverlap / float64(ratioCount)
 	}
 
-	// Get variant from earlier comparison stage
-	variant := "unknown"
-	if v, ok := result.Metrics["comparison_variant"].(string); ok {
-		variant = v
-	}
-
 	// Record metrics
 	result.Metrics["communities_total"] = len(communities)
 	result.Metrics["communities_llm_enhanced"] = llmEnhancedCount
@@ -1933,6 +1979,9 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 			CommunitiesTotal:      len(communities),
 			LLMEnhancedCount:      llmEnhancedCount,
 			StatisticalOnlyCount:  statisticalOnlyCount,
+			LLMFailedCount:        llmFailedCount,
+			LLMPendingCount:       llmPendingCount,
+			LLMWaitDurationMs:     llmWaitDurationMs,
 			AvgSummaryLengthRatio: avgLengthRatio,
 			AvgWordOverlap:        avgWordOverlap,
 			NonSingletonCount:     nonSingletonCount,

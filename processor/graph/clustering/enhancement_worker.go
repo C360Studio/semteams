@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -44,6 +46,9 @@ type EnhancementWorker struct {
 	// Configuration
 	workers int // Number of concurrent workers
 
+	// Metrics
+	metrics *EnhancementMetrics
+
 	// Logger
 	logger *slog.Logger
 }
@@ -56,6 +61,7 @@ type EnhancementWorkerConfig struct {
 	Querier         EntityQuerier
 	CommunityBucket jetstream.KeyValue
 	Logger          *slog.Logger
+	Registry        *metric.MetricsRegistry // Optional: for LLM enhancement metrics
 }
 
 // NewEnhancementWorker creates a new enhancement worker
@@ -86,6 +92,12 @@ func NewEnhancementWorker(config *EnhancementWorkerConfig) (*EnhancementWorker, 
 		logger = slog.Default()
 	}
 
+	// Initialize metrics if registry provided
+	var metrics *EnhancementMetrics
+	if config.Registry != nil {
+		metrics = NewEnhancementMetrics("enhancement_worker", config.Registry)
+	}
+
 	return &EnhancementWorker{
 		storage:         config.Storage,
 		llm:             config.LLMSummarizer,
@@ -93,6 +105,7 @@ func NewEnhancementWorker(config *EnhancementWorkerConfig) (*EnhancementWorker, 
 		querier:         config.Querier,
 		communityBucket: config.CommunityBucket,
 		workers:         3, // Default concurrent workers
+		metrics:         metrics,
 		logger:          logger,
 	}, nil
 }
@@ -206,10 +219,18 @@ func (w *EnhancementWorker) handleKVEntry(entry jetstream.KeyValueEntry, workerI
 		"kv_key", entry.Key(),
 		"member_count", len(community.Members))
 
+	// Track metrics: start enhancement attempt
+	startTime := time.Now()
+	w.metrics.RecordEnhancementStart()
+	w.metrics.IncQueueDepth()
+	defer w.metrics.DecQueueDepth()
+
 	// Fetch entities for enhancement
 	entities, err := w.fetchEntities(w.ctx, community.Members)
 	if err != nil {
-		w.logger.Error("Failed to fetch entities", "community_id", communityID, "error", err)
+		latency := time.Since(startTime).Seconds()
+		w.metrics.RecordEnhancementFailed(latency)
+		w.logger.Error("Failed to fetch entities", "community_id", communityID, "error", err, "latency_s", latency)
 		w.markFailed(communityID, fmt.Sprintf("fetch entities failed: %v", err))
 		return
 	}
@@ -217,7 +238,9 @@ func (w *EnhancementWorker) handleKVEntry(entry jetstream.KeyValueEntry, workerI
 	// Generate LLM summary
 	enhanced, err := w.llm.SummarizeCommunity(w.ctx, &community, entities)
 	if err != nil {
-		w.logger.Error("Failed to generate LLM summary", "community_id", communityID, "error", err)
+		latency := time.Since(startTime).Seconds()
+		w.metrics.RecordEnhancementFailed(latency)
+		w.logger.Error("Failed to generate LLM summary", "community_id", communityID, "error", err, "latency_s", latency)
 		w.markFailed(communityID, fmt.Sprintf("LLM generation failed: %v", err))
 		return
 	}
@@ -228,15 +251,22 @@ func (w *EnhancementWorker) handleKVEntry(entry jetstream.KeyValueEntry, workerI
 
 	// Save enhanced community
 	if err := w.storage.SaveCommunity(w.ctx, &community); err != nil {
-		w.logger.Error("Failed to save enhanced community", "community_id", communityID, "error", err)
+		latency := time.Since(startTime).Seconds()
+		w.metrics.RecordEnhancementFailed(latency)
+		w.logger.Error("Failed to save enhanced community", "community_id", communityID, "error", err, "latency_s", latency)
 		w.markFailed(communityID, fmt.Sprintf("save failed: %v", err))
 		return
 	}
 
+	// Record successful enhancement
+	latency := time.Since(startTime).Seconds()
+	w.metrics.RecordEnhancementSuccess(latency)
+
 	w.logger.Info("Community enhanced with LLM summary",
 		"community_id", communityID,
 		"statistical_len", len(community.StatisticalSummary),
-		"llm_len", len(community.LLMSummary))
+		"llm_len", len(community.LLMSummary),
+		"latency_s", latency)
 }
 
 // markFailed marks a community enhancement as failed

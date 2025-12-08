@@ -1,0 +1,55 @@
+{
+  "variant": "ml",
+  "embedding_provider": "http",
+  "timestamp": "2025-12-08T11:55:44.07385-06:00",
+  "search_results": {
+    "Are there safety observations related to temperature?": {
+      "query": "Are there safety observations related to temperature?",
+      "hits": [
+        "c360.logistics.observation.record.low.obs-006",
+        "c360.logistics.observation.record.medium.obs-015"
+      ],
+      "scores": [
+        0.3643272447621027,
+        0.30274274028193265
+      ],
+      "latency_ms": 8,
+      "hit_count": 2
+    },
+    "Find all sensors in zone-a": {
+      "query": "Find all sensors in zone-a",
+      "hits": [
+        "c360.logistics.sensor.document.level.sensor-level-001"
+      ],
+      "scores": [
+        0.3775645720027582
+      ],
+      "latency_ms": 2,
+      "hit_count": 1
+    },
+    "What documents mention forklift safety?": {
+      "query": "What documents mention forklift safety?",
+      "hits": [],
+      "scores": [],
+      "latency_ms": 3,
+      "hit_count": 0
+    },
+    "What maintenance was done on cold storage equipment?": {
+      "query": "What maintenance was done on cold storage equipment?",
+      "hits": [
+        "c360.logistics.observation.record.high.obs-013",
+        "c360.logistics.sensor.document.temperature.sensor-temp-001",
+        "c360.logistics.maintenance.work.completed.maint-008",
+        "c360.logistics.content.document.maintenance.doc-maint-001"
+      ],
+      "scores": [
+        0.543863308830702,
+        0.43951116189629785,
+        0.4383837153213943,
+        0.38162734481226934
+      ],
+      "latency_ms": 4,
+      "hit_count": 4
+    }
+  }
+}

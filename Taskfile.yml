@@ -258,12 +258,12 @@ tasks:
     deps: [e2e:clean, e2e:check-ports, build:e2e]
     cmds:
       - echo "[SEMANTIC E2E] Starting kitchen sink semantic test (core only, no ML)..."
-      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core up -d --wait
       - echo "[OK] Core semantic services are healthy (BM25 fallback mode)"
       - echo "[SEMANTIC E2E] Running kitchen sink core test..."
       - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant core --output-dir ./test/e2e/results
         ignore_error: true
-      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core down -v --timeout 15
 
   e2e:semantic-kitchen-sink-ml:
     desc: Run kitchen sink semantic E2E test (Full ML stack)
@@ -295,10 +295,10 @@ tasks:
     deps: [e2e:clean, e2e:check-ports, build:e2e]
     cmds:
       - echo "[SEMANTIC E2E] Running comparison - Core variant first..."
-      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core up -d --wait
       - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant core --output-dir ./test/e2e/results
         ignore_error: true
-      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core down -v --timeout 15
       - echo "[SEMANTIC E2E] Running comparison - ML variant second..."
       - sleep 5
       - docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d --wait
@@ -316,12 +316,12 @@ tasks:
     deps: [e2e:clean, e2e:check-ports, build:e2e]
     cmds:
       - echo "[SEMANTIC E2E] Running all semantic scenarios..."
-      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
-      - echo "[OK] Semantic services are healthy (including SemEmbed)"
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core up -d --wait
+      - echo "[OK] Semantic services are healthy (core mode)"
       - echo "[SEMANTIC E2E] Running semantic test suite (basic + indexes + kitchen-sink)..."
       - cmd: cd cmd/e2e && ./e2e --scenario semantic
         ignore_error: true
-      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core down -v --timeout 15
 
   # Federation E2E task
   e2e:federation:
@@ -358,12 +358,12 @@ tasks:
     deps: [e2e:clean, e2e:check-ports, build:e2e]
     cmds:
       - echo "[TIER 1] Starting native inference E2E test (BM25 fallback, no external ML)..."
-      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core up -d --wait
       - echo "[OK] Core semantic services are healthy (BM25 fallback mode)"
       - echo "[TIER 1] Running tier1-native scenario..."
       - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant core --output-dir ./test/e2e/results
         ignore_error: true
-      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core down -v --timeout 15
 
   e2e:tier2:
     desc: "Tier 2: LLM inference (neural embeddings + LLM summaries)"
@@ -394,10 +394,10 @@ tasks:
       - sleep 3
       - 'echo ""'
       - 'echo "=== TIER 1: Native Inference (BM25 + LPA) ==="'
-      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core up -d --wait
       - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant core --output-dir ./test/e2e/results
         ignore_error: true
-      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile core down -v --timeout 15
       - sleep 3
       - 'echo ""'
       - 'echo "=== TIER 2: LLM Inference (Neural + Summaries) ==="'
