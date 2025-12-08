@@ -1,0 +1,1115 @@
+{
+  "variant": "ml",
+  "timestamp": "2025-12-08T13:25:39.490612-06:00",
+  "communities_total": 58,
+  "llm_enhanced_count": 0,
+  "statistical_only_count": 58,
+  "llm_pending_count": 49,
+  "llm_wait_duration_ms": 121454,
+  "avg_summary_length_ratio": 0,
+  "avg_word_overlap": 0,
+  "non_singleton_count": 10,
+  "largest_community_size": 31,
+  "avg_non_singleton_size": 17.4,
+  "communities": [
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.power.power-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 power. Key themes: power, iot.sensor.serial, pwr, 2024, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "power",
+        "iot.sensor.serial",
+        "pwr",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.kw",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.humidity.humid-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, 2024, geo.location.latitude, sensor.classification.type, time.observation.recorded.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "2024",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "hum",
+        "001",
+        "geo.location.longitude",
+        "sensor.measurement.percent"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.illumination.light-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 illumination. Key themes: illumination, time.observation.recorded, iot.sensor.serial, lux, 001.",
+      "summary_status": "statistical",
+      "keywords": [
+        "illumination",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "lux",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.fc",
+        "sensor.classification.type",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.humidity.humid-sensor-003",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, geo.location.longitude, iot.sensor.serial, 2024, sensor.measurement.percent.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "geo.location.longitude",
+        "iot.sensor.serial",
+        "2024",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "hum",
+        "003",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.combustible_gas.gas-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 combustible_gas. Key themes: gas, geo.location.latitude, geo.location.longitude, combustible_gas, combustible.",
+      "summary_status": "statistical",
+      "keywords": [
+        "gas",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "combustible_gas",
+        "combustible",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "sensor.measurement.percent_lel",
+        "sensor.classification.type",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.vibration.vibration-sensor-002",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, sensor.measurement.ips, iot.sensor.serial, vib, 002.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "sensor.measurement.ips",
+        "iot.sensor.serial",
+        "vib",
+        "002",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "2024",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, sensor.classification.type, time.observation.recorded, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "geo.location.latitude",
+        "iot.sensor.serial",
+        "temp",
+        "2024",
+        "002",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.humidity.humid-sensor-002",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, time.observation.recorded, iot.sensor.serial, 002, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "002",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "hum",
+        "2024",
+        "geo.location.longitude",
+        "sensor.measurement.percent"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, temp, 003, sensor.measurement.fahrenheit, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "temp",
+        "003",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "time.observation.recorded"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, time.observation.recorded, temp, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "temp",
+        "2024",
+        "001",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.flow.flow-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 flow. Key themes: flow, sensor.classification.type, time.observation.recorded, 2024, 001.",
+      "summary_status": "statistical",
+      "keywords": [
+        "flow",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.gpm",
+        "iot.sensor.serial"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.vibration.vibration-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, iot.sensor.serial, 2024, 001, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "iot.sensor.serial",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "vib",
+        "sensor.measurement.ips",
+        "time.observation.recorded"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.pressure.sensor-pressure-001",
+      "level": 0,
+      "member_count": 22,
+      "statistical_summary": "Community of 22 entities including 7 completeds, 3 temperatures, 1 air_quality. Key themes: content.classification.tag, dc.subject, dc.title, dc.type, sensor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "dc.subject",
+        "dc.title",
+        "dc.type",
+        "sensor",
+        "completed",
+        "temperature",
+        "sensor.document.location",
+        "sensor.document.reading",
+        "doc"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.inventory.doc-inventory-001",
+      "level": 0,
+      "member_count": 5,
+      "statistical_summary": "Community of 5 entities including 3 mediums, 1 quality, 1 inventory. Key themes: content.classification.tag, quality, inventory, medium, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "quality",
+        "inventory",
+        "medium",
+        "dc.type",
+        "dc.title",
+        "dc.subject",
+        "standards",
+        "dc.creator",
+        "jennifer"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.high.obs-001",
+      "level": 0,
+      "member_count": 31,
+      "statistical_summary": "Community of 31 entities including 8 completeds, 4 highs, 3 mediums. Key themes: content.classification.tag, dc.title, dc.type, dc.subject, safety.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "dc.title",
+        "dc.type",
+        "dc.subject",
+        "safety",
+        "dc.creator",
+        "dc.date",
+        "completed",
+        "maintenance",
+        "observation.record.severity"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.level.level-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 level. Key themes: level, sensor.classification.type, time.observation.recorded, iot.sensor.serial, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "level",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.percent",
+        "lvl",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.pressure.pressure-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 pressure. Key themes: pressure, 2024, 001, geo.location.longitude, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "pressure",
+        "2024",
+        "001",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "geo.location.latitude",
+        "sensor.measurement.psi",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "pres"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, geo.location.longitude, sensor.classification.type, temp, 005.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "temp",
+        "005",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, time.observation.recorded, iot.sensor.serial, temp.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "temp",
+        "004",
+        "sensor.classification.type",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, 2024, 002, geo.location.latitude, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "2024",
+        "002",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "temp",
+        "time.observation.recorded"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.pressure.pressure-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 pressure. Key themes: pressure, time.observation.recorded, 2024, 001, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "pressure",
+        "time.observation.recorded",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "sensor.measurement.psi",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "pres",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.vibration.vibration-sensor-002",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, vib, geo.location.longitude, sensor.classification.type, time.observation.recorded.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "vib",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "2024",
+        "002",
+        "geo.location.latitude",
+        "sensor.measurement.ips",
+        "iot.sensor.serial"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.illumination.light-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 illumination. Key themes: illumination, sensor.classification.type, time.observation.recorded, iot.sensor.serial, lux.",
+      "summary_status": "statistical",
+      "keywords": [
+        "illumination",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "lux",
+        "2024",
+        "geo.location.longitude",
+        "sensor.measurement.fc",
+        "001",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.humidity.humid-sensor-003",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, sensor.measurement.percent, time.observation.recorded, iot.sensor.serial, hum.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "sensor.measurement.percent",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "hum",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "2024",
+        "003"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.classification.type, iot.sensor.serial, 003, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "003",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "temp",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.flow.flow-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 flow. Key themes: flow, time.observation.recorded, 2024, geo.location.latitude, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "flow",
+        "time.observation.recorded",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.gpm",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.combustible_gas.gas-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 combustible_gas. Key themes: gas, time.observation.recorded, iot.sensor.serial, 2024, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "gas",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "combustible_gas",
+        "sensor.measurement.percent_lel",
+        "sensor.classification.type",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.classification.type, time.observation.recorded, iot.sensor.serial, temp.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "temp",
+        "2024",
+        "sensor.measurement.fahrenheit",
+        "004",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.humidity.humid-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, sensor.measurement.percent, time.observation.recorded, iot.sensor.serial, hum.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "sensor.measurement.percent",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "hum",
+        "001",
+        "sensor.classification.type",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.medium.obs-009",
+      "level": 1,
+      "member_count": 31,
+      "statistical_summary": "Community of 31 entities including 8 completeds, 4 highs, 3 mediums. Key themes: content.classification.tag, dc.type, dc.title, dc.subject, safety.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "dc.type",
+        "dc.title",
+        "dc.subject",
+        "safety",
+        "dc.creator",
+        "dc.date",
+        "completed",
+        "maintenance",
+        "observation.record.severity"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.humidity.humid-sensor-002",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, iot.sensor.serial, hum, 2024, 002.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "iot.sensor.serial",
+        "hum",
+        "2024",
+        "002",
+        "geo.location.longitude",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.level.sensor-level-001",
+      "level": 1,
+      "member_count": 22,
+      "statistical_summary": "Community of 22 entities including 7 completeds, 3 temperatures, 1 weight. Key themes: content.classification.tag, dc.title, dc.type, dc.subject, sensor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "dc.title",
+        "dc.type",
+        "dc.subject",
+        "sensor",
+        "completed",
+        "temperature",
+        "sensor.document.unit",
+        "doc",
+        "sensor.document.location"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.level.level-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 level. Key themes: level, time.observation.recorded, lvl, 001, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "level",
+        "time.observation.recorded",
+        "lvl",
+        "001",
+        "geo.location.latitude",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, 001, geo.location.latitude, sensor.classification.type, temp.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "001",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "temp",
+        "2024",
+        "geo.location.longitude",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "iot.sensor.serial"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.vibration.vibration-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, sensor.measurement.ips, sensor.classification.type, vib, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "sensor.measurement.ips",
+        "sensor.classification.type",
+        "vib",
+        "2024",
+        "geo.location.longitude",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "001",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.medium.obs-007",
+      "level": 1,
+      "member_count": 5,
+      "statistical_summary": "Community of 5 entities including 3 mediums, 1 quality, 1 inventory. Key themes: content.classification.tag, quality, medium, inventory, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "quality",
+        "medium",
+        "inventory",
+        "dc.type",
+        "dc.title",
+        "dc.subject",
+        "standards",
+        "brown",
+        "observation"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.power.power-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 power. Key themes: power, geo.location.latitude, geo.location.longitude, sensor.measurement.kw, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "power",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.kw",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "pwr",
+        "2024",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, 005, geo.location.longitude, sensor.classification.type, time.observation.recorded.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "005",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "temp",
+        "2024",
+        "geo.location.latitude",
+        "sensor.measurement.fahrenheit"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.flow.flow-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 flow. Key themes: flow, geo.location.longitude, sensor.measurement.gpm, sensor.classification.type, time.observation.recorded.",
+      "summary_status": "statistical",
+      "keywords": [
+        "flow",
+        "geo.location.longitude",
+        "sensor.measurement.gpm",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "001",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, sensor.classification.type, time.observation.recorded, temp.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "temp",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "iot.sensor.serial",
+        "2024",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-002",
+      "level": 2,
+      "member_count": 8,
+      "statistical_summary": "Community of 8 entities including 7 completeds, 1 operations. Key themes: content.classification.tag, completed, dc.subject, dc.type, equipment.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "dc.subject",
+        "dc.type",
+        "equipment",
+        "maintenance",
+        "dc.title",
+        "dc.creator",
+        "dc.date",
+        "maintenance.work.status"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.pressure.pressure-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 pressure. Key themes: pressure, sensor.measurement.psi, sensor.classification.type, time.observation.recorded, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "pressure",
+        "sensor.measurement.psi",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "iot.sensor.serial",
+        "pres",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.vibration.vibration-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, vib, sensor.classification.type, iot.sensor.serial, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "vib",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.ips",
+        "time.observation.recorded"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.illumination.light-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 illumination. Key themes: illumination, sensor.measurement.fc, iot.sensor.serial, 2024, 001.",
+      "summary_status": "statistical",
+      "keywords": [
+        "illumination",
+        "sensor.measurement.fc",
+        "iot.sensor.serial",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "lux",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.level.level-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 level. Key themes: level, sensor.classification.type, time.observation.recorded, 2024, 001.",
+      "summary_status": "statistical",
+      "keywords": [
+        "level",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.percent",
+        "iot.sensor.serial",
+        "lvl"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, time.observation.recorded, temp, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "temp",
+        "2024",
+        "003",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "iot.sensor.serial"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-005",
+      "level": 2,
+      "member_count": 31,
+      "statistical_summary": "Community of 31 entities including 8 completeds, 4 highs, 3 mediums. Key themes: content.classification.tag, dc.type, dc.title, dc.subject, safety.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "dc.type",
+        "dc.title",
+        "dc.subject",
+        "safety",
+        "dc.creator",
+        "dc.date",
+        "completed",
+        "maintenance",
+        "observation.record.severity"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.classification.type, time.observation.recorded, iot.sensor.serial, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.longitude",
+        "sensor.measurement.fahrenheit",
+        "temp",
+        "004",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, iot.sensor.serial, 2024, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "temp",
+        "002"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.humidity.humid-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, sensor.measurement.percent, iot.sensor.serial, hum, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "sensor.measurement.percent",
+        "iot.sensor.serial",
+        "hum",
+        "2024",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.power.power-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 power. Key themes: power, sensor.measurement.kw, sensor.classification.type, time.observation.recorded, pwr.",
+      "summary_status": "statistical",
+      "keywords": [
+        "power",
+        "sensor.measurement.kw",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "pwr",
+        "2024",
+        "geo.location.latitude",
+        "iot.sensor.serial",
+        "001",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, sensor.classification.type, iot.sensor.serial, temp.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "temp",
+        "005",
+        "geo.location.longitude",
+        "time.observation.recorded",
+        "2024",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.level.sensor-level-001",
+      "level": 2,
+      "member_count": 14,
+      "statistical_summary": "Community of 14 entities including 3 temperatures, 1 light, 1 water. Key themes: content.classification.tag, sensor, dc.title, temperature, dc.subject.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "sensor",
+        "dc.title",
+        "temperature",
+        "dc.subject",
+        "dc.type",
+        "doc",
+        "sensor.document.reading",
+        "sensor.document.unit",
+        "sensor.document.location"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.combustible_gas.gas-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 combustible_gas. Key themes: gas, time.observation.recorded, iot.sensor.serial, 2024, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "gas",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.longitude",
+        "combustible_gas",
+        "sensor.measurement.percent_lel",
+        "sensor.classification.type",
+        "combustible",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.medium.obs-011",
+      "level": 2,
+      "member_count": 5,
+      "statistical_summary": "Community of 5 entities including 3 mediums, 1 quality, 1 inventory. Key themes: content.classification.tag, quality, medium, inventory, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "quality",
+        "medium",
+        "inventory",
+        "dc.title",
+        "dc.type",
+        "dc.subject",
+        "standards",
+        "accuracy",
+        "observation.record.severity"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.humidity.humid-sensor-003",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, geo.location.latitude, sensor.classification.type, 2024, 003.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "2024",
+        "003",
+        "geo.location.longitude",
+        "sensor.measurement.percent",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "hum"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.vibration.vibration-sensor-002",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, iot.sensor.serial, 002, geo.location.longitude, sensor.measurement.ips.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "iot.sensor.serial",
+        "002",
+        "geo.location.longitude",
+        "sensor.measurement.ips",
+        "time.observation.recorded",
+        "vib",
+        "2024",
+        "geo.location.latitude",
+        "sensor.classification.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.humidity.humid-sensor-002",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, sensor.measurement.percent, sensor.classification.type, iot.sensor.serial, hum.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "hum",
+        "time.observation.recorded",
+        "2024",
+        "002",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    }
+  ]
+}

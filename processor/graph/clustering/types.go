@@ -101,6 +101,10 @@ type CommunityStorage interface {
 
 	// Clear removes all communities (useful for full recomputation)
 	Clear(ctx context.Context) error
+
+	// GetAllCommunities returns all communities across all levels
+	// Used for archiving enhanced communities before Clear()
+	GetAllCommunities(ctx context.Context) ([]*Community, error)
 }
 
 // Note: Getter methods removed per ADR-PACKAGE-RESPONSIBILITIES-CONSOLIDATION.

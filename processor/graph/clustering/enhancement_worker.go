@@ -43,6 +43,12 @@ type EnhancementWorker struct {
 	cancel   context.CancelFunc
 	wg       sync.WaitGroup
 
+	// Pause/resume coordination
+	pauseMu  sync.RWMutex  // Guards paused state
+	paused   bool          // Whether worker is paused
+	pauseCh  chan struct{} // Closed when pausing requested
+	resumeCh chan struct{} // Closed when resume requested
+
 	// Configuration
 	workers int // Number of concurrent workers
 
@@ -124,6 +130,47 @@ func (w *EnhancementWorker) WithWorkers(n int) *EnhancementWorker {
 	return w
 }
 
+// Pause stops processing new communities while allowing in-flight work to complete.
+// Safe to call multiple times. Returns immediately after signaling workers to pause.
+func (w *EnhancementWorker) Pause() {
+	w.pauseMu.Lock()
+	defer w.pauseMu.Unlock()
+
+	if w.paused || !w.started {
+		return
+	}
+
+	w.paused = true
+	w.pauseCh = make(chan struct{})
+	close(w.pauseCh) // Signal workers to pause
+	w.logger.Debug("Enhancement worker paused")
+}
+
+// Resume allows processing to continue after a Pause.
+// Safe to call multiple times.
+func (w *EnhancementWorker) Resume() {
+	w.pauseMu.Lock()
+	defer w.pauseMu.Unlock()
+
+	if !w.paused {
+		return
+	}
+
+	w.paused = false
+	if w.resumeCh != nil {
+		close(w.resumeCh) // Signal workers to resume
+	}
+	w.resumeCh = make(chan struct{}) // Reset for next pause cycle
+	w.logger.Debug("Enhancement worker resumed")
+}
+
+// IsPaused returns whether the worker is currently paused.
+func (w *EnhancementWorker) IsPaused() bool {
+	w.pauseMu.RLock()
+	defer w.pauseMu.RUnlock()
+	return w.paused
+}
+
 // Start begins watching for communities needing LLM enhancement
 func (w *EnhancementWorker) Start(ctx context.Context) error {
 	w.mu.Lock()
@@ -135,6 +182,9 @@ func (w *EnhancementWorker) Start(ctx context.Context) error {
 
 	// Create context for the worker
 	w.ctx, w.cancel = context.WithCancel(ctx)
+
+	// Initialize pause/resume channels
+	w.resumeCh = make(chan struct{})
 
 	// Start KV watcher for COMMUNITY_INDEX
 	watcher, err := w.communityBucket.WatchAll(w.ctx)
@@ -169,6 +219,15 @@ func (w *EnhancementWorker) processCommunities(workerID int) {
 	w.logger.Debug("Enhancement worker goroutine started", "worker_id", workerID)
 
 	for {
+		// Check if paused before processing
+		if w.IsPaused() {
+			w.logger.Debug("Worker waiting for resume", "worker_id", workerID)
+			if !w.waitForResume() {
+				return // Context cancelled while waiting
+			}
+			w.logger.Debug("Worker resumed", "worker_id", workerID)
+		}
+
 		select {
 		case <-w.ctx.Done():
 			w.logger.Debug("Enhancement worker context cancelled", "worker_id", workerID)
@@ -189,6 +248,21 @@ func (w *EnhancementWorker) processCommunities(workerID int) {
 				w.handleKVEntry(entry, workerID)
 			}
 		}
+	}
+}
+
+// waitForResume blocks until Resume() is called or context is cancelled.
+// Returns true if resumed, false if context cancelled.
+func (w *EnhancementWorker) waitForResume() bool {
+	w.pauseMu.RLock()
+	resumeCh := w.resumeCh
+	w.pauseMu.RUnlock()
+
+	select {
+	case <-w.ctx.Done():
+		return false
+	case <-resumeCh:
+		return true
 	}
 }
 

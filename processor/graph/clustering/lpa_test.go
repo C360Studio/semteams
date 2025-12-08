@@ -124,6 +124,14 @@ func (m *MockCommunityStorage) Clear(_ context.Context) error {
 	return nil
 }
 
+func (m *MockCommunityStorage) GetAllCommunities(_ context.Context) ([]*Community, error) {
+	communities := make([]*Community, 0, len(m.communities))
+	for _, community := range m.communities {
+		communities = append(communities, community)
+	}
+	return communities, nil
+}
+
 // Test Cases
 
 func TestLPADetector_SimpleGraph(t *testing.T) {

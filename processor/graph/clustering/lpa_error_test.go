@@ -75,6 +75,13 @@ func (m *FailingMockStorage) Clear(_ context.Context) error {
 	return nil
 }
 
+func (m *FailingMockStorage) GetAllCommunities(_ context.Context) ([]*Community, error) {
+	if m.failOn == "GetAllCommunities" {
+		return nil, m.err
+	}
+	return []*Community{}, nil
+}
+
 // Test provider failures
 func TestLPADetector_ProviderGetAllEntityIDsError(t *testing.T) {
 	provider := &FailingMockProvider{

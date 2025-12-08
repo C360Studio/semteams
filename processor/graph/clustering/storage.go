@@ -245,6 +245,60 @@ func (s *NATSCommunityStorage) GetCommunitiesByLevel(ctx context.Context, level 
 	return communities, nil
 }
 
+// GetAllCommunities returns all communities across all levels
+// Used by the LPA detector to archive enhanced communities before Clear()
+func (s *NATSCommunityStorage) GetAllCommunities(ctx context.Context) ([]*Community, error) {
+	// If using test store, return from memory
+	if s.kv == nil && s.testStore != nil {
+		communities := make([]*Community, 0, len(s.testStore))
+		for _, c := range s.testStore {
+			communities = append(communities, c)
+		}
+		return communities, nil
+	}
+
+	// If KV is nil without test store, return empty
+	if s.kv == nil {
+		return nil, nil
+	}
+
+	keys, err := s.kv.Keys(ctx)
+	if err != nil {
+		// Empty bucket returns ErrKeyNotFound or "no keys found" error
+		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
+			return nil, nil
+		}
+		return nil, errs.WrapTransient(err, "NATSCommunityStorage", "GetAllCommunities", "list keys")
+	}
+
+	var communities []*Community
+	for _, key := range keys {
+		// Skip non-community keys
+		if !strings.HasPrefix(key, "graph.community.") {
+			continue
+		}
+
+		// Skip entity mapping keys (format: graph.community.entity.{level}.{entityID})
+		if strings.Contains(key, ".entity.") {
+			continue
+		}
+
+		entry, err := s.kv.Get(ctx, key)
+		if err != nil {
+			continue // Skip errors for individual entries
+		}
+
+		var community Community
+		if err := json.Unmarshal(entry.Value(), &community); err != nil {
+			continue // Skip unparseable entries
+		}
+
+		communities = append(communities, &community)
+	}
+
+	return communities, nil
+}
+
 // GetEntityCommunity retrieves the community for an entity at a level
 func (s *NATSCommunityStorage) GetEntityCommunity(ctx context.Context, entityID string, level int) (*Community, error) {
 	if entityID == "" {

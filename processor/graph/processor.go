@@ -106,6 +106,10 @@ type Processor struct {
 	entityChangeCount atomic.Int64  // Count of new entities since last detection
 	detectionTrigger  chan struct{} // Signal to trigger detection from entity callback
 
+	// Enhancement window state - prevents re-detection from overwriting LLM-enhanced communities
+	enhancementDeadline time.Time            // When the enhancement window expires
+	enhancementMode     EnhancementWindowMode // Mode for enhancement window behavior
+
 	// Inference metrics
 	inferredTriples prometheus.Counter
 }
@@ -201,6 +205,18 @@ type AlgorithmConfig struct {
 	Levels int `json:"levels" schema:"type:int,description:Hierarchical levels,default:3"`
 }
 
+// EnhancementWindowMode controls detection behavior during LLM enhancement
+type EnhancementWindowMode string
+
+const (
+	// WindowModeBlocking pauses detection until window expires or all communities reach terminal status
+	WindowModeBlocking EnhancementWindowMode = "blocking"
+	// WindowModeSoft allows detection if significant entity changes occur during window
+	WindowModeSoft EnhancementWindowMode = "soft"
+	// WindowModeNone disables enhancement window (original behavior)
+	WindowModeNone EnhancementWindowMode = "none"
+)
+
 // ScheduleConfig configures detection timing
 type ScheduleConfig struct {
 	// InitialDelay before first detection
@@ -223,6 +239,19 @@ type ScheduleConfig struct {
 	// This prevents clustering from running before embeddings are generated.
 	// Range: 0.0-1.0, Default: 0.5 (50%)
 	MinEmbeddingCoverage float64 `json:"min_embedding_coverage" schema:"type:float,description:Min embedding coverage for semantic clustering (0.0-1.0),default:0.5"`
+
+	// EnhancementWindow is the duration to pause detection after clustering to allow LLM enhancement.
+	// During this window, re-detection is paused to prevent overwriting LLM-enhanced communities.
+	// Set to "0" or empty to disable (original behavior).
+	// Default: 0 (disabled)
+	EnhancementWindow string `json:"enhancement_window" schema:"type:string,description:Pause detection duration for LLM enhancement,default:0"`
+
+	// EnhancementWindowMode controls how the enhancement window behaves:
+	// - "blocking": Hard pause until window expires or all communities reach terminal status (llm-enhanced/llm-failed)
+	// - "soft": Allow detection if entity changes exceed threshold during window
+	// - "none": Disable enhancement window (original behavior)
+	// Default: "blocking"
+	EnhancementWindowMode EnhancementWindowMode `json:"enhancement_window_mode" schema:"type:string,description:Enhancement window mode (blocking|soft|none),default:blocking"`
 }
 
 // EnhancementConfig configures LLM summary enhancement
@@ -1629,12 +1658,31 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 		entityThreshold = 100
 	}
 
+	// Parse enhancement window configuration
+	var enhancementWindow time.Duration
+	if cfg.Schedule.EnhancementWindow != "" {
+		if d, err := time.ParseDuration(cfg.Schedule.EnhancementWindow); err == nil {
+			enhancementWindow = d
+		} else {
+			p.logger.Warn("Invalid enhancement_window config, using default (disabled)",
+				"value", cfg.Schedule.EnhancementWindow, "error", err)
+		}
+	}
+
+	// Set enhancement window mode (default: blocking)
+	p.enhancementMode = cfg.Schedule.EnhancementWindowMode
+	if p.enhancementMode == "" {
+		p.enhancementMode = WindowModeBlocking
+	}
+
 	p.logger.Info("Starting clustering loop (hybrid trigger)",
 		"initial_delay", initialDelay,
 		"max_interval", maxInterval,
 		"min_interval", minInterval,
 		"entity_threshold", entityThreshold,
-		"min_entities", minEntities)
+		"min_entities", minEntities,
+		"enhancement_window", enhancementWindow,
+		"enhancement_window_mode", p.enhancementMode)
 
 	// Wait for initial delay
 	select {
@@ -1645,7 +1693,7 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 
 	// Run initial detection
 	p.entityChangeCount.Store(0)
-	p.runDetectionIfReady(ctx, minEntities)
+	p.runDetectionIfReady(ctx, minEntities, enhancementWindow, entityThreshold)
 	lastRun := time.Now()
 
 	// Start max interval timer
@@ -1663,7 +1711,7 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 			p.logger.Debug("Max interval reached, triggering detection",
 				"entities_since_last", p.entityChangeCount.Load())
 			p.entityChangeCount.Store(0)
-			p.runDetectionIfReady(ctx, minEntities)
+			p.runDetectionIfReady(ctx, minEntities, enhancementWindow, entityThreshold)
 			lastRun = time.Now()
 
 		case <-p.detectionTrigger:
@@ -1674,7 +1722,7 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 					"entities", p.entityChangeCount.Load(),
 					"time_since_last", timeSinceLast)
 				p.entityChangeCount.Store(0)
-				p.runDetectionIfReady(ctx, minEntities)
+				p.runDetectionIfReady(ctx, minEntities, enhancementWindow, entityThreshold)
 				lastRun = time.Now()
 				ticker.Reset(maxInterval) // Reset max interval timer
 			} else {
@@ -1687,8 +1735,41 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 	}
 }
 
-// runDetectionIfReady runs community detection if not already running and entity threshold met
-func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int) {
+// runDetectionIfReady runs community detection if not already running and entity threshold met.
+// The enhancementWindow parameter controls how long to pause detection after clustering
+// to allow LLM enhancement to complete without being overwritten.
+func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int, enhancementWindow time.Duration, entityThreshold int) {
+	// Check enhancement window - prevents re-detection from overwriting LLM-enhanced communities
+	if !p.enhancementDeadline.IsZero() && time.Now().Before(p.enhancementDeadline) {
+		switch p.enhancementMode {
+		case WindowModeBlocking:
+			// Check if all communities have reached terminal status
+			allTerminal, _ := p.checkAllCommunitiesTerminal(ctx)
+			if allTerminal {
+				p.logger.Info("Enhancement window: all communities terminal, allowing detection")
+				p.enhancementDeadline = time.Time{} // Clear window
+			} else {
+				p.logger.Debug("Enhancement window active, skipping detection",
+					"deadline", p.enhancementDeadline,
+					"remaining", time.Until(p.enhancementDeadline))
+				return
+			}
+		case WindowModeSoft:
+			// Allow detection only if significant entity changes occurred
+			if int(p.entityChangeCount.Load()) < entityThreshold {
+				p.logger.Debug("Enhancement window (soft) active, skipping detection",
+					"deadline", p.enhancementDeadline,
+					"entity_changes", p.entityChangeCount.Load(),
+					"threshold", entityThreshold)
+				return
+			}
+			p.logger.Info("Enhancement window soft override: significant entity changes",
+				"entity_changes", p.entityChangeCount.Load())
+		case WindowModeNone:
+			// No enhancement window - continue with detection
+		}
+	}
+
 	// Skip if previous detection still running
 	p.detectionMu.Lock()
 	if p.detectionRunning {
@@ -1748,6 +1829,13 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int) {
 	p.logger.Info("Running community detection")
 	startTime := time.Now()
 
+	// Pause enhancement worker during detection to prevent races
+	// with GetAllCommunities() and SaveCommunity()
+	if p.enhancementWorker != nil {
+		p.enhancementWorker.Pause()
+		defer p.enhancementWorker.Resume()
+	}
+
 	communities, err := p.communityDetector.DetectCommunities(ctx)
 	if err != nil {
 		p.logger.Error("Community detection failed", "error", err)
@@ -1765,10 +1853,50 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int) {
 		"levels", len(communities),
 		"total_communities", totalCommunities)
 
+	// Set enhancement window deadline if configured
+	// This prevents re-detection from overwriting LLM-enhanced communities
+	if enhancementWindow > 0 && totalCommunities > 0 {
+		p.enhancementDeadline = time.Now().Add(enhancementWindow)
+		p.logger.Info("Enhancement window started",
+			"deadline", p.enhancementDeadline,
+			"duration", enhancementWindow,
+			"mode", p.enhancementMode)
+	}
+
 	// Run statistical inference if enabled
 	if p.config.Clustering.Inference.Enabled {
 		p.runInference(ctx, communities)
 	}
+}
+
+// checkAllCommunitiesTerminal checks if all communities have reached terminal enhancement status.
+// Terminal statuses are "llm-enhanced" or "llm-failed" - these won't be re-enhanced.
+// Returns true if all communities are terminal, false if any are still pending ("statistical").
+func (p *Processor) checkAllCommunitiesTerminal(ctx context.Context) (bool, error) {
+	if p.communityStorage == nil {
+		// No storage means no communities to check
+		return true, nil
+	}
+
+	// Get all communities from storage
+	// We need to iterate through levels 0-2 (typical 3 levels)
+	for level := 0; level < 3; level++ {
+		communities, err := p.communityStorage.GetCommunitiesByLevel(ctx, level)
+		if err != nil {
+			p.logger.Debug("Failed to get communities for level", "level", level, "error", err)
+			continue
+		}
+
+		for _, comm := range communities {
+			// Check if community is in terminal status
+			if comm.SummaryStatus != "llm-enhanced" && comm.SummaryStatus != "llm-failed" {
+				// Found a non-terminal community (still "statistical" or empty)
+				return false, nil
+			}
+		}
+	}
+
+	return true, nil
 }
 
 // runInference generates and persists inferred relationships from community detection.

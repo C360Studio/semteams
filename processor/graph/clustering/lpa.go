@@ -3,6 +3,7 @@ package clustering
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"sync"
 	"time"
@@ -23,6 +24,10 @@ const (
 
 	// MaxLevelsLimit is the maximum allowed hierarchical levels
 	MaxLevelsLimit = 10
+
+	// SummaryTransferThreshold is the minimum Jaccard overlap for transferring LLM summaries
+	// between archived and newly detected communities
+	SummaryTransferThreshold = 0.8
 )
 
 // EntityProvider interface for fetching full entity states for summarization
@@ -43,6 +48,9 @@ type LPADetector struct {
 	summarizer     CommunitySummarizer // Optional: generates summaries for communities
 	entityProvider EntityProvider      // Optional: fetches entities for summarization
 
+	// Logging
+	logger *slog.Logger
+
 	// State
 	mu sync.RWMutex
 }
@@ -54,7 +62,14 @@ func NewLPADetector(provider GraphProvider, storage CommunityStorage) *LPADetect
 		storage:       storage,
 		maxIterations: DefaultMaxIterations,
 		levels:        DefaultLevels,
+		logger:        slog.Default(),
 	}
+}
+
+// WithLogger sets the logger for the detector
+func (d *LPADetector) WithLogger(logger *slog.Logger) *LPADetector {
+	d.logger = logger
+	return d
 }
 
 // WithMaxIterations sets the maximum iteration count with validation
@@ -109,6 +124,25 @@ func (d *LPADetector) DetectCommunities(ctx context.Context) (map[int][]*Communi
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	// PHASE 1: Archive LLM-enhanced communities before clearing
+	// This preserves expensive LLM summaries (typically 5-20s per community) that can be
+	// transferred to new communities with similar membership (≥80% overlap).
+	var archivedEnhanced []*Community
+	allComms, err := d.storage.GetAllCommunities(ctx)
+	if err != nil {
+		// Log warning but continue - archival failure shouldn't block detection
+		d.logger.Warn("Failed to archive communities for preservation", "error", err)
+	} else {
+		for _, c := range allComms {
+			if c.SummaryStatus == "llm-enhanced" && c.LLMSummary != "" {
+				archivedEnhanced = append(archivedEnhanced, c)
+			}
+		}
+		if len(archivedEnhanced) > 0 {
+			d.logger.Info("Archived LLM-enhanced communities for preservation", "count", len(archivedEnhanced))
+		}
+	}
+
 	// Clear existing communities
 	if err := d.storage.Clear(ctx); err != nil {
 		return nil, errs.WrapTransient(err, "LPADetector", "DetectCommunities", "clear storage")
@@ -142,6 +176,31 @@ func (d *LPADetector) DetectCommunities(ctx context.Context) (map[int][]*Communi
 		}
 		result[level] = communities
 		prevCommunities = communities
+	}
+
+	// PHASE 2: Transfer LLM summaries from archived communities to new ones
+	// This preserves expensive LLM work when community structure is stable
+	if len(archivedEnhanced) > 0 {
+		transferred := 0
+		failed := 0
+		for _, levelCommunities := range result {
+			for _, newComm := range levelCommunities {
+				if transferSummary(newComm, archivedEnhanced, SummaryTransferThreshold) {
+					// Re-save the community with transferred summary
+					if err := d.storage.SaveCommunity(ctx, newComm); err != nil {
+						d.logger.Warn("Failed to save community with transferred summary",
+							"community_id", newComm.ID, "error", err)
+						failed++
+					} else {
+						transferred++
+					}
+				}
+			}
+		}
+		if transferred > 0 || failed > 0 {
+			d.logger.Info("Transferred LLM summaries to new communities",
+				"transferred", transferred, "failed", failed, "archived", len(archivedEnhanced))
+		}
 	}
 
 	return result, nil
@@ -207,12 +266,14 @@ func (d *LPADetector) detectCommunitiesAtLevel(
 			entities, err := d.entityProvider.GetEntities(ctx, community.Members)
 			if err != nil {
 				// Log warning but continue - community will have no summary
-				fmt.Printf("WARN: Failed to fetch entities for summarization: %v\n", err)
+				d.logger.Warn("Failed to fetch entities for summarization",
+					"community_id", community.ID, "error", err)
 			} else {
 				// Generate statistical summary
 				summarized, err := d.summarizer.SummarizeCommunity(ctx, community, entities)
 				if err != nil {
-					fmt.Printf("WARN: Failed to generate summary: %v\n", err)
+					d.logger.Warn("Failed to generate summary",
+						"community_id", community.ID, "error", err)
 				} else {
 					// Update community with summary
 					community = summarized
@@ -551,4 +612,74 @@ func (d *LPADetector) hasExplicitEdge(ctx context.Context, entityA, entityB stri
 	}
 	weightBA, _ := d.graphProvider.GetEdgeWeight(ctx, entityB, entityA)
 	return weightBA >= 0.8
+}
+
+// transferSummary transfers an LLM summary from an archived community to a new one
+// if their membership overlap exceeds the threshold (using Jaccard index).
+// Uses best-match logic: if multiple archived communities exceed threshold, picks the one
+// with highest overlap to ensure the most relevant summary is transferred.
+// Returns true if a summary was transferred.
+func transferSummary(newComm *Community, archived []*Community, threshold float64) bool {
+	var bestMatch *Community
+	var bestOverlap float64
+
+	for _, old := range archived {
+		// Must be same level
+		if old.Level != newComm.Level {
+			continue
+		}
+
+		overlap := jaccardIndex(newComm.Members, old.Members)
+		if overlap >= threshold && overlap > bestOverlap {
+			bestMatch = old
+			bestOverlap = overlap
+		}
+	}
+
+	if bestMatch == nil {
+		return false
+	}
+
+	// Transfer the LLM summary from best match
+	newComm.LLMSummary = bestMatch.LLMSummary
+	newComm.SummaryStatus = "llm-enhanced"
+
+	// Initialize metadata if nil (atomic assignment pattern)
+	metadata := newComm.Metadata
+	if metadata == nil {
+		metadata = make(map[string]interface{})
+	}
+	metadata["summary_transferred_from"] = bestMatch.ID
+	metadata["membership_overlap"] = bestOverlap
+	newComm.Metadata = metadata
+
+	return true
+}
+
+// jaccardIndex computes the Jaccard similarity index between two sets of members.
+// Jaccard index = |A ∩ B| / |A ∪ B|
+// Returns 0.0 if both sets are empty, otherwise a value between 0.0 and 1.0.
+func jaccardIndex(a, b []string) float64 {
+	if len(a) == 0 && len(b) == 0 {
+		return 0.0
+	}
+
+	setA := make(map[string]bool, len(a))
+	for _, id := range a {
+		setA[id] = true
+	}
+
+	intersection := 0
+	for _, id := range b {
+		if setA[id] {
+			intersection++
+		}
+	}
+
+	union := len(setA) + len(b) - intersection
+	if union == 0 {
+		return 0.0
+	}
+
+	return float64(intersection) / float64(union)
 }
