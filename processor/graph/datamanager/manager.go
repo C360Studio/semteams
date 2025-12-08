@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
 
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
@@ -31,6 +32,125 @@ var (
 	entityIDRegex = regexp.MustCompile(
 		`^[a-zA-Z0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+\.[a-zA-Z0-9]+$`)
 )
+
+// Metrics holds Prometheus metrics for DataManager KV operations
+type Metrics struct {
+	writesTotal     *prometheus.CounterVec   // Total KV write operations by status and operation
+	writeLatency    *prometheus.HistogramVec // KV write latency by operation
+	queueDepth      prometheus.Gauge         // Current write queue depth
+	batchSize       prometheus.Histogram     // Size of write batches
+	droppedWrites   prometheus.Counter       // Total writes dropped due to queue overflow
+	casRetries      prometheus.Counter       // CAS operation retries
+	cacheHits       *prometheus.CounterVec   // Cache hits by level (l1, l2)
+	cacheMisses     prometheus.Counter       // Cache misses (KV fetch required)
+	entitiesCreated prometheus.Counter       // Total entities created
+	entitiesUpdated prometheus.Counter       // Total entities updated
+	entitiesDeleted prometheus.Counter       // Total entities deleted
+}
+
+// newMetrics creates and registers DataManager metrics
+func newMetrics(registry *metric.MetricsRegistry) *Metrics {
+	if registry == nil {
+		return nil
+	}
+
+	m := &Metrics{
+		writesTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "writes_total",
+			Help:      "Total KV write operations",
+		}, []string{"status", "operation"}),
+
+		writeLatency: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "write_latency_seconds",
+			Help:      "KV write latency distribution",
+			Buckets:   prometheus.ExponentialBuckets(0.001, 2, 10), // 1ms to ~1s
+		}, []string{"operation"}),
+
+		queueDepth: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "queue_depth",
+			Help:      "Current write queue depth",
+		}),
+
+		batchSize: prometheus.NewHistogram(prometheus.HistogramOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "batch_size",
+			Help:      "Size of write batches",
+			Buckets:   []float64{1, 5, 10, 25, 50, 100, 200},
+		}),
+
+		droppedWrites: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "dropped_writes_total",
+			Help:      "Total writes dropped due to queue overflow",
+		}),
+
+		casRetries: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "cas_retries_total",
+			Help:      "Total CAS operation retries",
+		}),
+
+		cacheHits: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "cache_hits_total",
+			Help:      "Total cache hits by level",
+		}, []string{"level"}),
+
+		cacheMisses: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "cache_misses_total",
+			Help:      "Total cache misses (KV fetch required)",
+		}),
+
+		entitiesCreated: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "entities_created_total",
+			Help:      "Total entities created",
+		}),
+
+		entitiesUpdated: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "entities_updated_total",
+			Help:      "Total entities updated",
+		}),
+
+		entitiesDeleted: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "entities_deleted_total",
+			Help:      "Total entities deleted",
+		}),
+	}
+
+	// Register all metrics with the registry
+	serviceName := "datamanager"
+	registry.RegisterCounterVec(serviceName, "writes_total", m.writesTotal)
+	registry.RegisterHistogramVec(serviceName, "write_latency_seconds", m.writeLatency)
+	registry.RegisterGauge(serviceName, "queue_depth", m.queueDepth)
+	registry.RegisterHistogram(serviceName, "batch_size", m.batchSize)
+	registry.RegisterCounter(serviceName, "dropped_writes_total", m.droppedWrites)
+	registry.RegisterCounter(serviceName, "cas_retries_total", m.casRetries)
+	registry.RegisterCounterVec(serviceName, "cache_hits_total", m.cacheHits)
+	registry.RegisterCounter(serviceName, "cache_misses_total", m.cacheMisses)
+	registry.RegisterCounter(serviceName, "entities_created_total", m.entitiesCreated)
+	registry.RegisterCounter(serviceName, "entities_updated_total", m.entitiesUpdated)
+	registry.RegisterCounter(serviceName, "entities_deleted_total", m.entitiesDeleted)
+
+	return m
+}
 
 // validateEntityID validates that an entity ID follows the expected format
 func validateEntityID(id string) error {
@@ -62,7 +182,12 @@ func validateEntity(entity *gtypes.EntityState) error {
 	return validateEntityID(entity.ID)
 }
 
-// Manager is the consolidated data management service using framework components
+// EntityCreatedCallback is invoked when a new entity is created in the data store.
+// The callback receives the entity ID and should be non-blocking to avoid
+// impacting write performance. Used by the graph processor for adaptive clustering.
+type EntityCreatedCallback func(entityID string)
+
+// Manager is the consolidated data management service using framework components.
 type Manager struct {
 	// Framework components - no custom implementations!
 	l1Cache     cache.Cache[*gtypes.EntityState] // LRU cache from pkg/cache
@@ -75,11 +200,18 @@ type Manager struct {
 	metricsRegistry *metric.MetricsRegistry
 	logger          *slog.Logger
 
+	// Prometheus metrics for observability
+	metrics *Metrics
+
 	// Configuration
 	config Config
 
 	// State management
 	wg sync.WaitGroup
+
+	// Callbacks for event-driven processing
+	onEntityCreated EntityCreatedCallback
+	callbackMu      sync.RWMutex
 }
 
 // Note: EntityWrite is already defined in types.go
@@ -87,17 +219,11 @@ type Manager struct {
 
 // NewDataManager creates a new data manager using framework components
 func NewDataManager(deps Dependencies) (*Manager, error) {
-	if deps.KVBucket == nil {
-		return nil, errs.WrapInvalid(nil, "DataManager", "NewDataManager", "kvBucket is required")
-	}
-	if deps.Logger == nil {
-		return nil, errs.WrapInvalid(nil, "DataManager", "NewDataManager", "logger is required")
+	if err := validateDependencies(deps); err != nil {
+		return nil, err
 	}
 
-	// Apply defaults to config
-	if deps.Config.Workers == 0 {
-		deps.Config = DefaultConfig()
-	}
+	applyConfigDefaults(&deps)
 
 	m := &Manager{
 		kvBucket:        deps.KVBucket,
@@ -106,67 +232,198 @@ func NewDataManager(deps Dependencies) (*Manager, error) {
 		config:          deps.Config,
 	}
 
-	// Initialize L1 cache (LRU) using framework
-	if m.config.Cache.L1Hot.Size > 0 {
-		opts := []cache.Option[*gtypes.EntityState]{}
-		if m.metricsRegistry != nil {
-			opts = append(opts, cache.WithMetrics[*gtypes.EntityState](
-				m.metricsRegistry, "datamanager_l1"))
-		}
-		var err error
-		m.l1Cache, err = cache.NewLRU[*gtypes.EntityState](
-			m.config.Cache.L1Hot.Size, opts...)
-		if err != nil {
-			return nil, errs.WrapTransient(err, "DataManager", "NewManager", "L1 cache creation")
-		}
+	m.metrics = newMetrics(deps.MetricsRegistry)
+
+	if err := m.initializeL1Cache(); err != nil {
+		return nil, err
 	}
 
 	// Note: L2 cache (TTL) will be initialized in Run() since it needs context
 
-	// Initialize write buffer using framework
-	if m.config.BufferConfig.BatchingEnabled {
-		// Map string overflow policy to buffer.OverflowPolicy
-		var overflowPolicy buffer.OverflowPolicy
-		switch m.config.BufferConfig.OverflowPolicy {
-		case "drop_newest":
-			overflowPolicy = buffer.DropNewest
-		case "block":
-			overflowPolicy = buffer.Block
-		default: // "drop_oldest"
-			overflowPolicy = buffer.DropOldest
-		}
-
-		bufOpts := []buffer.Option[*EntityWrite]{
-			buffer.WithOverflowPolicy[*EntityWrite](overflowPolicy),
-		}
-		if m.metricsRegistry != nil {
-			bufOpts = append(bufOpts, buffer.WithMetrics[*EntityWrite](
-				m.metricsRegistry, "datamanager_buffer"))
-		}
-		var err error
-		m.writeBuffer, err = buffer.NewCircularBuffer[*EntityWrite](
-			m.config.BufferConfig.Capacity, bufOpts...)
-		if err != nil {
-			return nil, errs.WrapTransient(err, "DataManager", "NewManager", "write buffer creation")
-		}
-
-		// Initialize worker pool using framework
-		opts := []worker.Option[*EntityWrite]{}
-		if m.metricsRegistry != nil {
-			opts = append(opts, worker.WithMetricsRegistry[*EntityWrite](m.metricsRegistry, "datamanager_workers"))
-		}
-		m.workers = worker.NewPool[*EntityWrite](
-			m.config.Workers,
-			m.config.BufferConfig.MaxBatchSize,
-			m.processWrite,
-			opts...)
+	if err := m.initializeBufferAndWorkers(); err != nil {
+		return nil, err
 	}
 
 	return m, nil
 }
 
-// Run starts the DataManager and blocks until context is cancelled or fatal error occurs
-func (m *Manager) Run(ctx context.Context) error {
+// validateDependencies checks that required dependencies are provided.
+func validateDependencies(deps Dependencies) error {
+	if deps.KVBucket == nil {
+		return errs.WrapInvalid(nil, "DataManager", "NewDataManager", "kvBucket is required")
+	}
+	if deps.Logger == nil {
+		return errs.WrapInvalid(nil, "DataManager", "NewDataManager", "logger is required")
+	}
+	return nil
+}
+
+// applyConfigDefaults applies default values to zero-value config fields.
+func applyConfigDefaults(deps *Dependencies) {
+	defaults := DefaultConfig()
+
+	// Core config defaults
+	if deps.Config.Workers == 0 {
+		deps.Config.Workers = defaults.Workers
+	}
+	if deps.Config.WriteTimeout == 0 {
+		deps.Config.WriteTimeout = defaults.WriteTimeout
+	}
+	if deps.Config.ReadTimeout == 0 {
+		deps.Config.ReadTimeout = defaults.ReadTimeout
+	}
+	if deps.Config.MaxRetries == 0 {
+		deps.Config.MaxRetries = defaults.MaxRetries
+	}
+	if deps.Config.RetryDelay == 0 {
+		deps.Config.RetryDelay = defaults.RetryDelay
+	}
+
+	applyBufferConfigDefaults(&deps.Config, defaults)
+	applyCacheConfigDefaults(&deps.Config, defaults)
+	applyBucketConfigDefaults(&deps.Config, defaults)
+}
+
+// applyBufferConfigDefaults applies buffer configuration defaults.
+func applyBufferConfigDefaults(config *Config, defaults Config) {
+	// If BufferConfig appears completely unset, apply full defaults
+	bufferConfigIsEmpty := config.BufferConfig.Capacity == 0 &&
+		config.BufferConfig.FlushInterval == 0 &&
+		config.BufferConfig.MaxBatchSize == 0 &&
+		config.BufferConfig.MaxBatchAge == 0 &&
+		config.BufferConfig.OverflowPolicy == "" &&
+		!config.BufferConfig.BatchingEnabled
+
+	if bufferConfigIsEmpty {
+		config.BufferConfig = defaults.BufferConfig
+		return
+	}
+
+	// Apply individual defaults while preserving explicit settings
+	if config.BufferConfig.Capacity == 0 {
+		config.BufferConfig.Capacity = defaults.BufferConfig.Capacity
+	}
+	if config.BufferConfig.FlushInterval == 0 {
+		config.BufferConfig.FlushInterval = defaults.BufferConfig.FlushInterval
+	}
+	if config.BufferConfig.MaxBatchSize == 0 {
+		config.BufferConfig.MaxBatchSize = defaults.BufferConfig.MaxBatchSize
+	}
+	if config.BufferConfig.MaxBatchAge == 0 {
+		config.BufferConfig.MaxBatchAge = defaults.BufferConfig.MaxBatchAge
+	}
+	if config.BufferConfig.OverflowPolicy == "" {
+		config.BufferConfig.OverflowPolicy = defaults.BufferConfig.OverflowPolicy
+	}
+	// Note: BatchingEnabled is NOT defaulted - if user set it explicitly (even to false), respect it
+}
+
+// applyCacheConfigDefaults applies cache configuration defaults.
+func applyCacheConfigDefaults(config *Config, defaults Config) {
+	if config.Cache.L1Hot.Size == 0 {
+		config.Cache.L1Hot = defaults.Cache.L1Hot
+	}
+	if config.Cache.L2Warm.Size == 0 {
+		config.Cache.L2Warm = defaults.Cache.L2Warm
+	}
+}
+
+// applyBucketConfigDefaults applies bucket configuration defaults.
+func applyBucketConfigDefaults(config *Config, defaults Config) {
+	if config.BucketConfig.Name == "" {
+		config.BucketConfig.Name = defaults.BucketConfig.Name
+	}
+	if config.BucketConfig.History == 0 {
+		config.BucketConfig.History = defaults.BucketConfig.History
+	}
+	if config.BucketConfig.Replicas == 0 {
+		config.BucketConfig.Replicas = defaults.BucketConfig.Replicas
+	}
+}
+
+// initializeL1Cache creates the L1 LRU cache if configured.
+func (m *Manager) initializeL1Cache() error {
+	if m.config.Cache.L1Hot.Size == 0 {
+		return nil
+	}
+
+	opts := []cache.Option[*gtypes.EntityState]{}
+	if m.metricsRegistry != nil {
+		opts = append(opts, cache.WithMetrics[*gtypes.EntityState](
+			m.metricsRegistry, "datamanager_l1"))
+	}
+
+	var err error
+	m.l1Cache, err = cache.NewLRU[*gtypes.EntityState](m.config.Cache.L1Hot.Size, opts...)
+	if err != nil {
+		return errs.WrapTransient(err, "DataManager", "initializeL1Cache", "L1 cache creation")
+	}
+	return nil
+}
+
+// initializeBufferAndWorkers creates the write buffer and worker pool if batching is enabled.
+func (m *Manager) initializeBufferAndWorkers() error {
+	if !m.config.BufferConfig.BatchingEnabled {
+		return nil
+	}
+
+	if err := m.initializeWriteBuffer(); err != nil {
+		return err
+	}
+
+	m.initializeWorkerPool()
+	return nil
+}
+
+// initializeWriteBuffer creates the circular write buffer.
+func (m *Manager) initializeWriteBuffer() error {
+	overflowPolicy := m.mapOverflowPolicy()
+
+	bufOpts := []buffer.Option[*EntityWrite]{
+		buffer.WithOverflowPolicy[*EntityWrite](overflowPolicy),
+	}
+	if m.metricsRegistry != nil {
+		bufOpts = append(bufOpts, buffer.WithMetrics[*EntityWrite](
+			m.metricsRegistry, "datamanager_buffer"))
+	}
+
+	var err error
+	m.writeBuffer, err = buffer.NewCircularBuffer[*EntityWrite](
+		m.config.BufferConfig.Capacity, bufOpts...)
+	if err != nil {
+		return errs.WrapTransient(err, "DataManager", "initializeWriteBuffer", "write buffer creation")
+	}
+	return nil
+}
+
+// mapOverflowPolicy converts string overflow policy to buffer.OverflowPolicy.
+func (m *Manager) mapOverflowPolicy() buffer.OverflowPolicy {
+	switch m.config.BufferConfig.OverflowPolicy {
+	case "drop_newest":
+		return buffer.DropNewest
+	case "block":
+		return buffer.Block
+	default:
+		return buffer.DropOldest
+	}
+}
+
+// initializeWorkerPool creates the worker pool for processing writes.
+func (m *Manager) initializeWorkerPool() {
+	opts := []worker.Option[*EntityWrite]{}
+	if m.metricsRegistry != nil {
+		opts = append(opts, worker.WithMetricsRegistry[*EntityWrite](m.metricsRegistry, "datamanager_workers"))
+	}
+	m.workers = worker.NewPool[*EntityWrite](
+		m.config.Workers,
+		m.config.BufferConfig.MaxBatchSize,
+		m.processWrite,
+		opts...)
+}
+
+// Run starts the DataManager and blocks until context is cancelled or fatal error occurs.
+// If onReady is provided, it is called once initialization completes successfully.
+func (m *Manager) Run(ctx context.Context, onReady func()) error {
 	// Initialize L2 cache (TTL) using framework - needs context
 	if err := m.initializeL2Cache(ctx); err != nil {
 		return err
@@ -192,6 +449,11 @@ func (m *Manager) Run(ctx context.Context) error {
 		"cache_l2_size", m.config.Cache.L2Warm.Size,
 		"batching_enabled", m.config.BufferConfig.BatchingEnabled,
 	)
+
+	// Signal ready - worker pool started, caches initialized
+	if onReady != nil {
+		onReady()
+	}
 
 	// Wait for context cancellation or fatal error
 	if err := m.waitForShutdown(ctx, bufferErr); err != nil {
@@ -359,7 +621,7 @@ func (m *Manager) processBufferedWrites(ctx context.Context) error {
 // 	return m.flushBufferWithContext(context.Background())
 // }
 
-// flushBufferWithContext processes pending writes from the buffer with coalescing and context awareness
+// flushBufferWithContext processes pending writes from the buffer
 // Returns error only if fatal - transient submit errors are handled internally
 func (m *Manager) flushBufferWithContext(ctx context.Context) error {
 	if m.writeBuffer == nil || m.workers == nil {
@@ -373,18 +635,25 @@ func (m *Manager) flushBufferWithContext(ctx context.Context) error {
 	default:
 	}
 
+	// Record queue depth before reading
+	if m.metrics != nil {
+		m.metrics.queueDepth.Set(float64(m.writeBuffer.Size()))
+	}
+
 	// Read batch from buffer
 	batch := m.writeBuffer.ReadBatch(m.config.BufferConfig.MaxBatchSize)
 	if len(batch) == 0 {
 		return nil
 	}
 
-	// Coalesce writes to the same entity
-	coalesced := m.coalesceWrites(batch)
+	// Record batch size
+	if m.metrics != nil {
+		m.metrics.batchSize.Observe(float64(len(batch)))
+	}
 
-	// Submit coalesced writes to workers
+	// Submit writes to workers
 	var submitErrors int
-	for _, write := range coalesced {
+	for _, write := range batch {
 		// Check context before each submit
 		select {
 		case <-ctx.Done():
@@ -404,6 +673,13 @@ func (m *Manager) flushBufferWithContext(ctx context.Context) error {
 			}
 			if stderrors.Is(err, worker.ErrQueueFull) {
 				// Queue full is transient - notify callback and continue
+				// CRITICAL: Track dropped writes for diagnosing data loss
+				if m.metrics != nil {
+					m.metrics.droppedWrites.Inc()
+				}
+				m.logger.Warn("Write dropped due to queue full",
+					"entity_id", write.Entity.ID,
+					"operation", write.Operation)
 				if write.Callback != nil {
 					queueErr := errs.WrapTransient(err, "DataManager",
 						"flushBufferWithContext", "worker queue full")
@@ -418,138 +694,14 @@ func (m *Manager) flushBufferWithContext(ctx context.Context) error {
 	}
 
 	// If ALL submits failed, might indicate a problem
-	if submitErrors > 0 && submitErrors == len(coalesced) {
+	if submitErrors > 0 && submitErrors == len(batch) {
 		m.logger.Warn("All writes in batch failed to submit",
-			"batch_size", len(coalesced),
+			"batch_size", len(batch),
 			"errors", submitErrors)
 		// Still transient - queue is just full
 	}
 
 	return nil
-}
-
-// coalesceWrites merges multiple writes to the same entity into a single write
-func (m *Manager) coalesceWrites(writes []*EntityWrite) []*EntityWrite {
-	// Map to track the latest write per entity
-	entityWrites := make(map[string]*EntityWrite)
-
-	// Track order of first appearance
-	order := []string{}
-
-	for _, write := range writes {
-		if write == nil || write.Entity == nil {
-			continue
-		}
-
-		entityID := write.Entity.ID
-
-		// Check if we already have a write for this entity
-		if existing, exists := entityWrites[entityID]; exists {
-			// Merge the writes based on operation type
-			merged := m.mergeWrites(existing, write)
-			entityWrites[entityID] = merged
-		} else {
-			// First write for this entity
-			entityWrites[entityID] = write
-			order = append(order, entityID)
-		}
-	}
-
-	// Build result preserving order
-	result := make([]*EntityWrite, 0, len(entityWrites))
-	for _, entityID := range order {
-		if write, exists := entityWrites[entityID]; exists {
-			result = append(result, write)
-		}
-	}
-
-	// Log coalescing stats if significant
-	if len(result) < len(writes) {
-		m.logger.Debug("Coalesced writes",
-			"original_count", len(writes),
-			"coalesced_count", len(result),
-			"reduction", len(writes)-len(result))
-	}
-
-	return result
-}
-
-// mergeWrites merges two writes to the same entity
-func (m *Manager) mergeWrites(existing, newer *EntityWrite) *EntityWrite {
-	// Handle different operation combinations
-	switch {
-	case newer.Operation == OperationDelete:
-		// Delete supersedes everything
-		return newer
-
-	case existing.Operation == OperationCreate && newer.Operation == OperationUpdate:
-		// Create + Update = Create with updated properties
-		merged := &EntityWrite{
-			Operation: OperationCreate,
-			Entity:    m.mergeEntityStates(existing.Entity, newer.Entity),
-			Timestamp: existing.Timestamp, // Keep original timestamp
-			Callback:  m.combineCallbacks(existing.Callback, newer.Callback),
-		}
-		return merged
-
-	case existing.Operation == OperationUpdate && newer.Operation == OperationUpdate:
-		// Update + Update = Update with merged properties
-		merged := &EntityWrite{
-			Operation: OperationUpdate,
-			Entity:    m.mergeEntityStates(existing.Entity, newer.Entity),
-			Timestamp: existing.Timestamp, // Keep original timestamp
-			Callback:  m.combineCallbacks(existing.Callback, newer.Callback),
-		}
-		return merged
-
-	default:
-		// For other combinations, newer wins
-		return newer
-	}
-}
-
-// mergeEntityStates merges triples from two entity states using semantic triples as single source of truth
-func (m *Manager) mergeEntityStates(existing, newer *gtypes.EntityState) *gtypes.EntityState {
-	if existing == nil {
-		return newer
-	}
-	if newer == nil {
-		return existing
-	}
-
-	// Create merged entity with triples-based approach (triples as single source of truth)
-	merged := &gtypes.EntityState{
-		ID:          existing.ID,
-		Triples:     gtypes.MergeTriples(existing.Triples, newer.Triples), // Triples as single source of truth
-		StorageRef:  newer.StorageRef,                                     // Use newer StorageRef
-		MessageType: newer.MessageType,                                    // Use newer message type
-		UpdatedAt:   newer.UpdatedAt,                                      // Use newer timestamp
-		Version:     newer.Version,                                        // Will be set during actual write
-	}
-
-	return merged
-}
-
-// combineCallbacks combines multiple callbacks into one
-func (m *Manager) combineCallbacks(callbacks ...func(error)) func(error) {
-	// Filter out nil callbacks
-	var nonNil []func(error)
-	for _, cb := range callbacks {
-		if cb != nil {
-			nonNil = append(nonNil, cb)
-		}
-	}
-
-	if len(nonNil) == 0 {
-		return nil
-	}
-
-	// Return a function that calls all callbacks
-	return func(err error) {
-		for _, cb := range nonNil {
-			cb(err)
-		}
-	}
 }
 
 // processWrite processes a single write operation (called by worker pool)
@@ -563,7 +715,7 @@ func (m *Manager) processWrite(ctx context.Context, write *EntityWrite) error {
 		return err
 
 	case OperationUpdate:
-		_, err := m.updateEntityDirect(ctx, write.Entity)
+		_, err := m.updateEntityDirect(ctx, write.Entity, write.Strategy)
 		if write.Callback != nil {
 			write.Callback(err)
 		}
@@ -621,6 +773,8 @@ func (m *Manager) CreateEntity(ctx context.Context, entity *gtypes.EntityState) 
 
 // createEntityDirect performs immediate entity creation
 func (m *Manager) createEntityDirect(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error) {
+	startTime := time.Now()
+
 	if entity == nil {
 		err := errs.WrapInvalid(nil, "DataManager", "createEntityDirect", "entity cannot be nil")
 		return nil, err
@@ -644,16 +798,41 @@ func (m *Manager) createEntityDirect(ctx context.Context, entity *gtypes.EntityS
 
 	// Create in KV bucket
 	if _, err := m.kvBucket.Create(ctx, entity.ID, data); err != nil {
+		// Record write failure
+		if m.metrics != nil {
+			m.metrics.writesTotal.WithLabelValues("failure", "create").Inc()
+			m.metrics.writeLatency.WithLabelValues("create").Observe(time.Since(startTime).Seconds())
+		}
 		if err == jetstream.ErrKeyExists {
+			m.logger.Debug("Create failed: entity already exists",
+				"entity_id", entity.ID)
 			err = errs.WrapInvalid(err, "DataManager", "createEntityDirect", "entity already exists")
 		} else {
+			m.logger.Warn("Create failed: KV error",
+				"entity_id", entity.ID,
+				"error", err)
 			err = errs.Wrap(err, "DataManager", "createEntityDirect", "KV create")
 		}
 		return nil, err
 	}
 
+	// Record write success
+	if m.metrics != nil {
+		m.metrics.writesTotal.WithLabelValues("success", "create").Inc()
+		m.metrics.writeLatency.WithLabelValues("create").Observe(time.Since(startTime).Seconds())
+		m.metrics.entitiesCreated.Inc()
+	}
+
 	// Update caches
 	m.updateCaches(entity)
+
+	// Notify callback of new entity creation (non-blocking)
+	m.callbackMu.RLock()
+	cb := m.onEntityCreated
+	m.callbackMu.RUnlock()
+	if cb != nil {
+		cb(entity.ID)
+	}
 
 	return entity, nil
 }
@@ -671,6 +850,7 @@ func (m *Manager) UpdateEntity(ctx context.Context, entity *gtypes.EntityState) 
 			Operation: OperationUpdate,
 			Entity:    entity,
 			Timestamp: time.Now(),
+			Strategy:  WriteStrategyPut, // Async buffered writes use Put (last-write-wins)
 		}
 
 		if err := m.writeBuffer.Write(write); err != nil {
@@ -682,27 +862,77 @@ func (m *Manager) UpdateEntity(ctx context.Context, entity *gtypes.EntityState) 
 		return entity, nil
 	}
 
-	// Direct write
-	return m.updateEntityDirect(ctx, entity)
+	// Direct sync write uses CAS (caller can handle version conflicts)
+	return m.updateEntityDirect(ctx, entity, WriteStrategyCAS)
 }
 
-// updateEntityDirect performs immediate entity update with CAS
-func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error) {
+// updateEntityDirect performs immediate entity update using the specified strategy
+func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityState, strategy WriteStrategy) (*gtypes.EntityState, error) {
 	if entity == nil {
-		err := errs.WrapInvalid(nil, "DataManager", "updateEntityDirect", "entity cannot be nil")
-		return nil, err
+		return nil, errs.WrapInvalid(nil, "DataManager", "updateEntityDirect", "entity cannot be nil")
 	}
+
+	if strategy == WriteStrategyPut {
+		return m.updateEntityPut(ctx, entity)
+	}
+	return m.updateEntityCAS(ctx, entity)
+}
+
+// updateEntityPut performs entity update using Put (last-write-wins, no CAS)
+// Best for async streaming data where concurrent writes are expected
+func (m *Manager) updateEntityPut(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error) {
+	startTime := time.Now()
+
+	// Update timestamp (version not meaningful for Put)
+	entity.UpdatedAt = time.Now()
+
+	// Serialize entity
+	data, err := json.Marshal(entity)
+	if err != nil {
+		return nil, errs.Wrap(err, "DataManager", "updateEntityPut", "marshal entity")
+	}
+
+	// Put() overwrites regardless of version - no CAS conflict possible
+	if _, err := m.kvBucket.Put(ctx, entity.ID, data); err != nil {
+		if m.metrics != nil {
+			m.metrics.writesTotal.WithLabelValues("failure", "update").Inc()
+			m.metrics.writeLatency.WithLabelValues("update").Observe(time.Since(startTime).Seconds())
+		}
+		m.logger.Warn("Put update failed",
+			"entity_id", entity.ID,
+			"error", err)
+		return nil, errs.Wrap(err, "DataManager", "updateEntityPut", "KV put")
+	}
+
+	// Record write success
+	if m.metrics != nil {
+		m.metrics.writesTotal.WithLabelValues("success", "update").Inc()
+		m.metrics.writeLatency.WithLabelValues("update").Observe(time.Since(startTime).Seconds())
+		m.metrics.entitiesUpdated.Inc()
+	}
+
+	// Update caches
+	m.updateCaches(entity)
+
+	return entity, nil
+}
+
+// updateEntityCAS performs entity update with Compare-And-Swap semantics
+// Best for synchronous mutations where caller can handle version conflicts
+func (m *Manager) updateEntityCAS(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error) {
+	startTime := time.Now()
 
 	// Retry logic for CAS operations
 	retryConfig := retry.DefaultConfig()
 	retryConfig.MaxAttempts = m.config.MaxRetries
 
 	var updatedEntity *gtypes.EntityState
+	var retryCount int
 	err := retry.Do(ctx, retryConfig, func() error {
 		// Get current version
 		current, err := m.GetEntity(ctx, entity.ID)
 		if err != nil {
-			return errs.Wrap(err, "DataManager", "updateEntityDirect", "get current version")
+			return errs.Wrap(err, "DataManager", "updateEntityCAS", "get current version")
 		}
 
 		// Update version and timestamp
@@ -712,16 +942,24 @@ func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityS
 		// Serialize entity
 		data, err := json.Marshal(entity)
 		if err != nil {
-			return errs.Wrap(err, "DataManager", "updateEntityDirect", "marshal entity")
+			return errs.Wrap(err, "DataManager", "updateEntityCAS", "marshal entity")
 		}
 
 		// CAS update
 		if _, err := m.kvBucket.Update(ctx, entity.ID, data, uint64(current.Version)); err != nil {
 			if err == jetstream.ErrKeyNotFound {
-				return errs.WrapInvalid(err, "DataManager", "updateEntityDirect", "entity not found")
+				return errs.WrapInvalid(err, "DataManager", "updateEntityCAS", "entity not found")
 			}
 			// CAS conflict is transient, will retry
-			return errs.WrapTransient(err, "DataManager", "updateEntityDirect", "CAS conflict")
+			retryCount++
+			if m.metrics != nil {
+				m.metrics.casRetries.Inc()
+			}
+			m.logger.Debug("CAS conflict, retrying",
+				"entity_id", entity.ID,
+				"version", current.Version,
+				"retry_count", retryCount)
+			return errs.WrapTransient(err, "DataManager", "updateEntityCAS", "CAS conflict")
 		}
 
 		updatedEntity = entity
@@ -729,8 +967,23 @@ func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityS
 	})
 
 	if err != nil {
-		// Record error after all retries have failed
+		// Record write failure after all retries exhausted
+		if m.metrics != nil {
+			m.metrics.writesTotal.WithLabelValues("failure", "update").Inc()
+			m.metrics.writeLatency.WithLabelValues("update").Observe(time.Since(startTime).Seconds())
+		}
+		m.logger.Warn("CAS update failed after retries",
+			"entity_id", entity.ID,
+			"retries", retryCount,
+			"error", err)
 		return nil, err
+	}
+
+	// Record write success
+	if m.metrics != nil {
+		m.metrics.writesTotal.WithLabelValues("success", "update").Inc()
+		m.metrics.writeLatency.WithLabelValues("update").Observe(time.Since(startTime).Seconds())
+		m.metrics.entitiesUpdated.Inc()
 	}
 
 	// Update caches
@@ -767,6 +1020,8 @@ func (m *Manager) DeleteEntity(ctx context.Context, id string) error {
 
 // deleteEntityDirect performs immediate entity deletion
 func (m *Manager) deleteEntityDirect(ctx context.Context, id string) error {
+	startTime := time.Now()
+
 	// Get entity for cleanup
 	entity, err := m.GetEntity(ctx, id)
 	if err != nil {
@@ -784,12 +1039,26 @@ func (m *Manager) deleteEntityDirect(ctx context.Context, id string) error {
 
 	// Delete from KV
 	if err := m.kvBucket.Delete(ctx, id); err != nil {
+		// Record delete failure
+		if m.metrics != nil {
+			m.metrics.writesTotal.WithLabelValues("failure", "delete").Inc()
+			m.metrics.writeLatency.WithLabelValues("delete").Observe(time.Since(startTime).Seconds())
+		}
 		if err == jetstream.ErrKeyNotFound {
+			m.logger.Debug("Delete failed: entity not found", "entity_id", id)
 			err = errs.WrapInvalid(err, "DataManager", "deleteEntityDirect", "entity not found")
 		} else {
+			m.logger.Warn("Delete failed: KV error", "entity_id", id, "error", err)
 			err = errs.Wrap(err, "DataManager", "deleteEntityDirect", "KV delete")
 		}
 		return err
+	}
+
+	// Record delete success
+	if m.metrics != nil {
+		m.metrics.writesTotal.WithLabelValues("success", "delete").Inc()
+		m.metrics.writeLatency.WithLabelValues("delete").Observe(time.Since(startTime).Seconds())
+		m.metrics.entitiesDeleted.Inc()
 	}
 
 	// Invalidate caches
@@ -800,10 +1069,12 @@ func (m *Manager) deleteEntityDirect(ctx context.Context, id string) error {
 
 // GetEntity retrieves an entity from the store
 func (m *Manager) GetEntity(ctx context.Context, id string) (*gtypes.EntityState, error) {
-
 	// Check L1 cache
 	if m.l1Cache != nil {
 		if entity, found := m.l1Cache.Get(id); found {
+			if m.metrics != nil {
+				m.metrics.cacheHits.WithLabelValues("l1").Inc()
+			}
 			return entity, nil
 		}
 	}
@@ -811,12 +1082,20 @@ func (m *Manager) GetEntity(ctx context.Context, id string) (*gtypes.EntityState
 	// Check L2 cache
 	if m.l2Cache != nil {
 		if entity, found := m.l2Cache.Get(id); found {
+			if m.metrics != nil {
+				m.metrics.cacheHits.WithLabelValues("l2").Inc()
+			}
 			// Promote to L1
 			if m.l1Cache != nil {
 				m.l1Cache.Set(id, entity)
 			}
 			return entity, nil
 		}
+	}
+
+	// Cache miss - must fetch from KV
+	if m.metrics != nil {
+		m.metrics.cacheMisses.Inc()
 	}
 
 	// Fetch from KV
@@ -966,4 +1245,13 @@ func (m *Manager) GetPendingWriteCount() int {
 	// Get the current buffer size
 	// The buffer tracks pending items internally
 	return m.writeBuffer.Size()
+}
+
+// SetEntityCreatedCallback sets a callback function that is invoked when a new entity is created.
+// This is used by the graph processor to track entity changes for adaptive clustering.
+// The callback is invoked synchronously, so it should be non-blocking.
+func (m *Manager) SetEntityCreatedCallback(callback EntityCreatedCallback) {
+	m.callbackMu.Lock()
+	defer m.callbackMu.Unlock()
+	m.onEntityCreated = callback
 }

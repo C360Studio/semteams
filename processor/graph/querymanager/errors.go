@@ -35,6 +35,11 @@ var (
 	// Index manager dependency errors
 	ErrIndexManagerUnavailable = fmt.Errorf("index manager unavailable")
 	ErrIndexManagerTimeout     = fmt.Errorf("index manager timeout")
+
+	// SearchOptions validation errors
+	ErrQueryRequired    = fmt.Errorf("query is required for this search strategy")
+	ErrInvalidTimeRange = fmt.Errorf("invalid time range: end must be after start")
+	ErrInvalidGeoBounds = fmt.Errorf("invalid geo bounds: check north/south/east/west values")
 )
 
 // All wrapper functions removed - use direct errs.Wrap* calls instead

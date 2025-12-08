@@ -6,10 +6,10 @@ import "time"
 // Config configures the DataManager service
 type Config struct {
 	// Buffer configuration (from EntityStore)
-	BufferConfig BufferConfig
+	BufferConfig BufferConfig `json:"buffer,omitempty"`
 
 	// KV bucket configuration
-	BucketConfig BucketConfig
+	BucketConfig BucketConfig `json:"bucket,omitempty"`
 
 	// Cache configuration (from EntityStore)
 	Cache CacheConfig
@@ -32,16 +32,16 @@ type Config struct {
 // BufferConfig configures the write buffer behavior
 type BufferConfig struct {
 	// Buffer capacity
-	Capacity int `default:"10000"`
+	Capacity int `json:"capacity,omitempty" default:"10000"`
 
 	// Batching settings - groups writes for efficient processing
-	BatchingEnabled bool          `default:"true"`
-	FlushInterval   time.Duration `default:"50ms"`  // How often to flush the buffer
-	MaxBatchSize    int           `default:"100"`   // Max writes per batch
-	MaxBatchAge     time.Duration `default:"100ms"` // Max age before forced flush
+	BatchingEnabled bool          `json:"batching_enabled" default:"true"`
+	FlushInterval   time.Duration `json:"flush_interval,omitempty" default:"50ms"` // How often to flush the buffer
+	MaxBatchSize    int           `json:"max_batch_size,omitempty" default:"100"`  // Max writes per batch
+	MaxBatchAge     time.Duration `json:"max_batch_age,omitempty" default:"100ms"` // Max age before forced flush
 
 	// Overflow policy when buffer is full
-	OverflowPolicy string `default:"drop_oldest"` // drop_oldest, drop_newest, block
+	OverflowPolicy string `json:"overflow_policy,omitempty" default:"drop_oldest"` // drop_oldest, drop_newest, block
 }
 
 // BucketConfig configures the NATS KV bucket settings

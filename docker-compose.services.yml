@@ -10,7 +10,7 @@
 #
 # Profiles:
 #   - embedding: Semantic embedding service (SemEmbed - fastembed-rs based)
-#   - summarization: Text summarization service (SemSummarize - Candle + T5/BART)
+#   - inference: LLM inference service (SemInstruct + Shimmy)
 #   - tls: Certificate authority (step-ca)
 #   - observability: Metrics and monitoring (Prometheus + Grafana)
 #   - all: All optional services
@@ -58,45 +58,54 @@ services:
           memory: 512M
           cpus: '0.5'
 
-  # SemSummarize - Lightweight Summarization Service
-  # Optional: LLM-based community summarization (automatic statistical fallback if unavailable)
-  # Provides: Text summarization via Candle + T5/BART models
-  # Uses: Rust + Candle with HuggingFace Hub (supports arm64 + amd64)
-  semsummarize:
-    profiles: ["summarization", "all"]
-    image: ghcr.io/c360studio/semsummarize:latest
-    container_name: semstreams-semsummarize
-    ports:
-      - "8083:8083"  # POST /summarize endpoint
+  # Shimmy - Inference backend (model loading, heavy compute)
+  # Downloads and runs Mistral-7B-Instruct for LLM inference
+  # Provides: Raw model inference endpoint
+  shimmy:
+    profiles: ["inference", "all"]
+    image: ghcr.io/michael-a-kuykendall/shimmy:latest
+    container_name: semstreams-shimmy
     environment:
-      # Model selection (HuggingFace Hub downloads automatically on first run)
-      - SEMSUMMARIZE_MODEL=google/flan-t5-small  # 77M params, fast, good quality
-      # Alternative models (uncomment one):
-      # - SEMSUMMARIZE_MODEL=google/flan-t5-base  # 250M params, higher quality
-      # - SEMSUMMARIZE_MODEL=facebook/bart-base  # 140M params, narrative style
-      - SEMSUMMARIZE_PORT=8083
       - RUST_LOG=info
     volumes:
-      # Model cache persistence (HuggingFace Hub caches to ~/.cache/huggingface)
-      - semsummarize-cache:/home/semsummarize/.cache/huggingface
+      # Model cache persistence (~4GB first run for Mistral-7B)
+      - shimmy-cache:/root/.cache/huggingface
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
-      interval: 30s
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 60s  # Model download may take time on first run
+      retries: 5
+      start_period: 120s  # Model download takes time
     networks:
       - semstreams-services
     restart: unless-stopped
-    # Resource limits (CPU-optimized inference)
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-          cpus: '2.0'
-        reservations:
-          memory: 512M
-          cpus: '0.5'
+
+  # SemInstruct - OpenAI-compatible proxy to shimmy
+  # Optional: LLM-based community summarization (automatic statistical fallback if unavailable)
+  # Provides: OpenAI-compatible /v1/chat/completions endpoint
+  # Uses: Lightweight proxy with retry logic and metrics
+  seminstruct:
+    profiles: ["inference", "all"]
+    image: ghcr.io/c360studio/seminstruct:latest
+    container_name: semstreams-seminstruct
+    ports:
+      - "8083:8083"  # OpenAI-compatible /v1/chat/completions endpoint
+    environment:
+      - SEMINSTRUCT_SHIMMY_URL=http://shimmy:8080
+      - SEMINSTRUCT_PORT=8083
+      - RUST_LOG=info
+    depends_on:
+      shimmy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - semstreams-services
+    restart: unless-stopped
 
   # Step-CA Certificate Authority (Tier 3 ACME)
   # Required by: TLS-enabled components when using automated cert management
@@ -211,7 +220,7 @@ networks:
 volumes:
   semembed-cache:
     driver: local
-  semsummarize-cache:
+  shimmy-cache:
     driver: local
   step-ca-data:
     driver: local

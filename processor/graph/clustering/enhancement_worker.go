@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	gtypes "github.com/c360/semstreams/graph"
@@ -25,7 +26,7 @@ type EnhancementWorker struct {
 
 	// Dependencies
 	storage         CommunityStorage
-	llm             *HTTPLLMSummarizer
+	llm             *LLMSummarizer
 	provider        GraphProvider
 	querier         EntityQuerier
 	communityBucket jetstream.KeyValue
@@ -49,7 +50,7 @@ type EnhancementWorker struct {
 
 // EnhancementWorkerConfig holds configuration for the enhancement worker
 type EnhancementWorkerConfig struct {
-	LLMSummarizer   *HTTPLLMSummarizer
+	LLMSummarizer   *LLMSummarizer
 	Storage         CommunityStorage
 	GraphProvider   GraphProvider
 	Querier         EntityQuerier
@@ -96,8 +97,16 @@ func NewEnhancementWorker(config *EnhancementWorkerConfig) (*EnhancementWorker, 
 	}, nil
 }
 
-// WithWorkers sets the number of concurrent workers
+// WithWorkers sets the number of concurrent workers.
+// Must be called before Start(). Has no effect if worker is already started.
 func (w *EnhancementWorker) WithWorkers(n int) *EnhancementWorker {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.started {
+		w.logger.Warn("Cannot change worker count while running", "requested", n, "current", w.workers)
+		return w
+	}
 	w.workers = n
 	return w
 }
@@ -173,7 +182,7 @@ func (w *EnhancementWorker) processCommunities(workerID int) {
 // handleKVEntry processes a KV entry to check if it needs LLM enhancement
 func (w *EnhancementWorker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
 	// Skip entity mapping keys (graph.community.entity.*)
-	if len(entry.Key()) > 0 && entry.Key()[0:len("graph.community.entity.")] == "graph.community.entity." {
+	if strings.HasPrefix(entry.Key(), "graph.community.entity.") {
 		return
 	}
 

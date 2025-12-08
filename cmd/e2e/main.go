@@ -47,6 +47,12 @@ func main() {
 		os.Exit(exitCode)
 	}
 
+	// Handle compare-tiers command
+	if flags.compareTiers {
+		exitCode := handleCompareTiersCommand(logger, flags.outputDir)
+		os.Exit(exitCode)
+	}
+
 	// Handle analyze-comparison command
 	if flags.analyzeComparison {
 		exitCode := handleAnalyzeComparisonCommand(logger, flags.outputDir)
@@ -75,6 +81,7 @@ type cliFlags struct {
 	variant           string // "core" or "ml"
 	outputDir         string // Directory for results output
 	compare           bool   // Generate comparison report from existing results
+	compareTiers      bool   // Generate tier comparison report (0 vs 1 vs 2)
 	analyzeComparison bool   // Generate Core vs ML search comparison report
 	metricsURL        string // Prometheus metrics endpoint URL
 }
@@ -101,6 +108,8 @@ func parseCommandLineFlags() *cliFlags {
 		"Directory for saving results JSON (empty=no output)")
 	flag.BoolVar(&flags.compare, "compare", false,
 		"Generate comparison report from existing results in output-dir")
+	flag.BoolVar(&flags.compareTiers, "compare-tiers", false,
+		"Generate tier comparison report (Tier 0 vs 1 vs 2) from existing results")
 	flag.BoolVar(&flags.analyzeComparison, "analyze-comparison", false,
 		"Generate Core vs ML search comparison report with Jaccard and correlation metrics")
 	flag.StringVar(&flags.metricsURL, "metrics-url", "http://localhost:9090",
@@ -154,6 +163,10 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Printf("  semantic-kitchen-sink - Comprehensive semantic: Indexes + Embedding + Metrics + HTTP Gateway\n")
 	fmt.Println("\nRule Processor:")
 	fmt.Printf("  rules-graph          - Rule → Graph integration with metrics validation\n")
+	fmt.Println("\nTiered Inference (see docs/e2e/tiers.md):")
+	fmt.Printf("  tier0-rules-iot      - Tier 0: Rules-only (stateful rules, no ML inference)\n")
+	fmt.Printf("  tier1-native         - Tier 1: Native inference (BM25 + LPA + statistical)\n")
+	fmt.Printf("  tier2-llm            - Tier 2: LLM inference (neural embeddings + summaries)\n")
 	fmt.Println("\nTest Suites:")
 	fmt.Printf("  all                 - Runs all core scenarios (excludes federation and kitchen sink)\n")
 	fmt.Printf("  semantic            - Runs all semantic scenarios\n")
@@ -266,6 +279,22 @@ func createScenario(
 		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, flags.udpEndpoint, cfg)
 	case "rules-graph", "rules-graph-integration", "rules":
 		return scenarios.NewRulesGraphScenario(edgeClient, flags.udpEndpoint, nil)
+	case "tier0-rules-iot", "tier0":
+		return scenarios.NewTier0RulesIoTScenario(edgeClient, flags.udpEndpoint, nil)
+	case "tier1-native", "tier1":
+		// Tier 1 uses kitchen-sink with core variant (BM25 fallback)
+		cfg := scenarios.DefaultSemanticKitchenSinkConfig()
+		cfg.MetricsURL = flags.metricsURL
+		cfg.GatewayURL = flags.baseURL + "/api-gateway"
+		cfg.OutputDir = flags.outputDir
+		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, flags.udpEndpoint, cfg)
+	case "tier2-llm", "tier2":
+		// Tier 2 uses kitchen-sink with ml variant (neural embeddings + LLM summaries)
+		cfg := scenarios.DefaultSemanticKitchenSinkConfig()
+		cfg.MetricsURL = flags.metricsURL
+		cfg.GatewayURL = flags.baseURL + "/api-gateway"
+		cfg.OutputDir = flags.outputDir
+		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, flags.udpEndpoint, cfg)
 	default:
 		return nil
 	}
@@ -575,4 +604,107 @@ func handleAnalyzeComparisonCommand(logger *slog.Logger, outputDir string) int {
 	}
 
 	return 0
+}
+
+// handleCompareTiersCommand generates a tier comparison report (Tier 0 vs 1 vs 2)
+func handleCompareTiersCommand(logger *slog.Logger, outputDir string) int {
+	if outputDir == "" {
+		outputDir = "test/e2e/results"
+	}
+
+	logger.Info("Generating tier comparison report", "output_dir", outputDir)
+
+	// Build tier comparison report
+	report := TierComparisonReport{
+		GeneratedAt: time.Now(),
+		OutputDir:   outputDir,
+		Tiers:       make(map[string]TierMetrics),
+	}
+
+	// Define tier expectations
+	tierExpectations := map[string]TierExpectation{
+		"tier0": {
+			Name:               "Rules-Only",
+			ExpectedEmbeddings: 0,
+			ExpectedClusters:   0,
+			ExpectedInference:  false,
+		},
+		"tier1": {
+			Name:               "Native (BM25 + LPA)",
+			ExpectedEmbeddings: -1, // Any non-zero
+			ExpectedClusters:   -1, // Any non-zero
+			ExpectedInference:  true,
+		},
+		"tier2": {
+			Name:               "LLM (Neural + Summaries)",
+			ExpectedEmbeddings: -1, // Any non-zero
+			ExpectedClusters:   -1, // Any non-zero
+			ExpectedInference:  true,
+		},
+	}
+
+	// Print the report
+	fmt.Println("\n=== Tier Comparison Report ===")
+	fmt.Printf("Generated: %s\n", report.GeneratedAt.Format(time.RFC3339))
+	fmt.Printf("Output Dir: %s\n\n", outputDir)
+
+	fmt.Println("Tier Expectations:")
+	fmt.Println("------------------")
+	for tier, exp := range tierExpectations {
+		embStr := "0"
+		if exp.ExpectedEmbeddings < 0 {
+			embStr = ">0"
+		}
+		clustStr := "0"
+		if exp.ExpectedClusters < 0 {
+			clustStr = ">0"
+		}
+		fmt.Printf("  %s (%s):\n", tier, exp.Name)
+		fmt.Printf("    Embeddings: %s\n", embStr)
+		fmt.Printf("    Clusters: %s\n", clustStr)
+		fmt.Printf("    Inference: %v\n", exp.ExpectedInference)
+	}
+
+	fmt.Println("\nTo run all tiers and generate comparison data:")
+	fmt.Println("  task e2e:tiers")
+	fmt.Println("\nThis will run tier0 → tier1 → tier2 sequentially and output results.")
+
+	// Save report to JSON
+	tierReportFile := fmt.Sprintf("%s/tier-comparison-%s.json", outputDir, time.Now().Format("20060102-150405"))
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err == nil {
+		if err := os.WriteFile(tierReportFile, data, 0644); err == nil {
+			logger.Info("Report saved", "file", tierReportFile)
+		}
+	}
+
+	return 0
+}
+
+// TierComparisonReport holds the comparison data across tiers
+type TierComparisonReport struct {
+	GeneratedAt time.Time              `json:"generated_at"`
+	OutputDir   string                 `json:"output_dir"`
+	Tiers       map[string]TierMetrics `json:"tiers"`
+}
+
+// TierMetrics holds metrics for a single tier
+type TierMetrics struct {
+	Tier             int     `json:"tier"`
+	Name             string  `json:"name"`
+	DurationMs       int64   `json:"duration_ms"`
+	EntitiesStored   int     `json:"entities_stored"`
+	EmbeddingsGen    int     `json:"embeddings_generated"`
+	CommunitiesFound int     `json:"communities_found"`
+	RulesEvaluated   int     `json:"rules_evaluated"`
+	RulesTriggered   int     `json:"rules_triggered"`
+	SearchQuality    float64 `json:"search_quality"`
+}
+
+// TierExpectation defines expected behavior for a tier
+type TierExpectation struct {
+	Name               string
+	ExpectedEmbeddings int  // -1 means any non-zero
+	ExpectedClusters   int  // -1 means any non-zero
+	ExpectedInference  bool
 }

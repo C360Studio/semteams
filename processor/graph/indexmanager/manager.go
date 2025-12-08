@@ -234,7 +234,8 @@ func NewManager(
 }
 
 // Run starts KV watching and event processing. It blocks until error or context done and returns only fatal errors.
-func (m *Manager) Run(ctx context.Context) error {
+// If onReady is provided, it is called once initialization completes successfully.
+func (m *Manager) Run(ctx context.Context, onReady func()) error {
 	// Create deduplication cache if enabled
 	if err := m.createDedupCache(ctx); err != nil {
 		return err
@@ -285,6 +286,11 @@ func (m *Manager) Run(ctx context.Context) error {
 	eventErr, batchErr := m.startProcessingGoroutines(ctx)
 
 	m.logger.Info("IndexManager running", "workers", m.config.Workers)
+
+	// Signal ready - watcher established, workers running, processing started
+	if onReady != nil {
+		onReady()
+	}
 
 	// Wait for context cancellation or fatal error
 	if err := m.waitForShutdownSignal(ctx, eventErr, batchErr); err != nil {

@@ -2,6 +2,7 @@
 package rule
 
 import (
+	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 )
 
@@ -36,4 +37,13 @@ type Rule interface {
 
 	// ExecuteEvents generates events when rule conditions are satisfied
 	ExecuteEvents(messages []message.Message) ([]Event, error)
+}
+
+// EntityStateEvaluator is an optional interface for rules that can evaluate
+// directly against EntityState triples, bypassing the message transformation layer.
+// This is more efficient for rules that need to access triple predicates directly.
+type EntityStateEvaluator interface {
+	// EvaluateEntityState evaluates the rule directly against EntityState triples.
+	// Rule conditions should use full predicate paths (e.g., "sensor.measurement.fahrenheit").
+	EvaluateEntityState(entityState *gtypes.EntityState) bool
 }

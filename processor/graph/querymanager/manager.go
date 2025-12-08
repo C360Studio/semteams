@@ -13,6 +13,7 @@ import (
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
+	"github.com/c360/semstreams/processor/graph/llm"
 )
 
 // Ensure Manager implements the Querier interface
@@ -28,6 +29,9 @@ type Manager struct {
 	entityReader      datamanager.EntityReader // Read-only entity access with caching
 	indexManager      indexmanager.Indexer     // Will handle query result caching
 	communityDetector any                      // Optional: CommunityDetector for GraphRAG search (type-erased to avoid import cycle)
+
+	// LLM dependencies for answer generation
+	llmClient llm.Client // Optional: LLM client for answer generation
 
 	// Metrics (simplified - no cache metrics)
 	metrics *Metrics
@@ -48,6 +52,7 @@ type Deps struct {
 	EntityReader      datamanager.EntityReader // Runtime dependency for read-only entity access
 	IndexManager      indexmanager.Indexer     // Runtime dependency
 	CommunityDetector any                      // Optional: CommunityDetector for GraphRAG search (type-erased to avoid import cycle)
+	LLMClient         llm.Client               // Optional: LLM client for answer generation
 	Registry          *metric.MetricsRegistry  // Runtime dependency
 	Logger            *slog.Logger             // Runtime dependency
 }
@@ -74,6 +79,7 @@ func NewManager(deps Deps) (Querier, error) {
 		entityReader:      deps.EntityReader,
 		indexManager:      deps.IndexManager,
 		communityDetector: deps.CommunityDetector, // Optional dependency
+		llmClient:         deps.LLMClient,         // Optional LLM client
 		lastActivity:      time.Now(),
 		logger:            logger,
 	}
@@ -89,9 +95,7 @@ func NewManager(deps Deps) (Querier, error) {
 // GetEntity retrieves a single entity through EntityStore (benefits from its cache)
 func (m *Manager) GetEntity(ctx context.Context, id string) (*gtypes.EntityState, error) {
 	start := time.Now()
-	defer func() {
-		m.lastActivity = time.Now()
-	}()
+	defer m.recordActivity()
 
 	// Apply timeout
 	if m.config.Timeouts.EntityGet > 0 {
@@ -130,9 +134,7 @@ func (m *Manager) GetEntity(ctx context.Context, id string) (*gtypes.EntityState
 // GetEntities retrieves multiple entities efficiently through EntityStore
 func (m *Manager) GetEntities(ctx context.Context, ids []string) ([]*gtypes.EntityState, error) {
 	start := time.Now()
-	defer func() {
-		m.lastActivity = time.Now()
-	}()
+	defer m.recordActivity()
 
 	// Apply timeout
 	if m.config.Timeouts.EntityBatch > 0 {
@@ -161,9 +163,7 @@ func (m *Manager) GetEntities(ctx context.Context, ids []string) ([]*gtypes.Enti
 // GetEntityByAlias retrieves an entity by alias or ID (extracted from graph processor)
 func (m *Manager) GetEntityByAlias(ctx context.Context, aliasOrID string) (*gtypes.EntityState, error) {
 	start := time.Now()
-	defer func() {
-		m.lastActivity = time.Now()
-	}()
+	defer m.recordActivity()
 
 	// First, try to resolve the alias using index manager
 	var entityID string
@@ -203,9 +203,7 @@ func (m *Manager) GetEntityByAlias(ctx context.Context, aliasOrID string) (*gtyp
 // QueryByPredicate queries entities by predicate (delegated to index manager)
 func (m *Manager) QueryByPredicate(ctx context.Context, predicate string) ([]string, error) {
 	start := time.Now()
-	defer func() {
-		m.lastActivity = time.Now()
-	}()
+	defer m.recordActivity()
 
 	if m.indexManager == nil {
 		return nil, errs.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QueryByPredicate",
@@ -234,9 +232,7 @@ func (m *Manager) QueryByPredicate(ctx context.Context, predicate string) ([]str
 // QuerySpatial queries entities by spatial bounds (delegated to index manager)
 func (m *Manager) QuerySpatial(ctx context.Context, bounds SpatialBounds) ([]string, error) {
 	start := time.Now()
-	defer func() {
-		m.lastActivity = time.Now()
-	}()
+	defer m.recordActivity()
 
 	if m.indexManager == nil {
 		return nil, errs.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QuerySpatial",
@@ -273,9 +269,7 @@ func (m *Manager) QuerySpatial(ctx context.Context, bounds SpatialBounds) ([]str
 // QueryTemporal queries entities by temporal bounds (delegated to index manager)
 func (m *Manager) QueryTemporal(ctx context.Context, start, end time.Time) ([]string, error) {
 	startTime := time.Now()
-	defer func() {
-		m.lastActivity = time.Now()
-	}()
+	defer m.recordActivity()
 
 	if m.indexManager == nil {
 		return nil, errs.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "QueryTemporal",
@@ -354,6 +348,13 @@ func (m *Manager) recordError(operation string, err error) {
 	m.errorCount++
 	m.lastError = fmt.Sprintf("%s: %v", operation, err)
 	m.logger.Error("Query manager error", "operation", operation, "error", err)
+}
+
+// recordActivity updates last activity time with proper synchronization
+func (m *Manager) recordActivity() {
+	m.mu.Lock()
+	m.lastActivity = time.Now()
+	m.mu.Unlock()
 }
 
 // Background monitoring methods removed - query manager is now stateless

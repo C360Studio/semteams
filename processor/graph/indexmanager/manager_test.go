@@ -305,7 +305,7 @@ func TestIndexManager_Lifecycle(t *testing.T) {
 		// Start manager in goroutine
 		errorChan := make(chan error, 1)
 		go func() {
-			errorChan <- engine.Run(ctx)
+			errorChan <- engine.Run(ctx, nil)
 		}()
 
 		// Wait for initialization
@@ -339,7 +339,7 @@ func TestIndexManager_Lifecycle(t *testing.T) {
 		cancel() // Cancel immediately
 
 		// Run should return immediately without error
-		err := engine.Run(ctx)
+		err := engine.Run(ctx, nil)
 		assert.NoError(t, err, "Run should return cleanly when context is cancelled")
 	})
 }
@@ -459,7 +459,7 @@ func TestIndexManager_Health(t *testing.T) {
 	// Start manager in goroutine
 	errorChan := make(chan error, 1)
 	go func() {
-		errorChan <- engine.Run(ctx)
+		errorChan <- engine.Run(ctx, nil)
 	}()
 
 	// Wait for initialization

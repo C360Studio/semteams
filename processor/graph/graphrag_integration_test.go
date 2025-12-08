@@ -20,6 +20,7 @@ import (
 	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
+	"github.com/c360/semstreams/processor/graph/llm"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 )
 
@@ -665,19 +666,32 @@ func TestE2E_ResourceLimits(t *testing.T) {
 	t.Logf("✅ Resource limits test completed successfully")
 }
 
-// TestE2E_LLMSummarization tests LLM-based community summarization with semsummarize
-// This test is optional and gracefully degrades if semsummarize is unavailable
+// TestE2E_LLMSummarization tests LLM-based community summarization with seminstruct
+// This test is optional and gracefully degrades if seminstruct is unavailable
 func TestE2E_LLMSummarization(t *testing.T) {
 	setup := setupGraphRAGTest(t)
 	processor := setup.processor
 	ctx := setup.ctx
 	communityStorage := setup.communityStorage
 
-	t.Log("Testing LLM-based community summarization with semsummarize service")
+	t.Log("Testing LLM-based community summarization with seminstruct service")
 
-	// Check if semsummarize is available (optional service)
-	semsummarizeURL := "http://localhost:8084" // Port from docker-compose.semantic-kitchen.yml
-	llmSummarizer := clustering.NewHTTPLLMSummarizer(semsummarizeURL)
+	// Check if seminstruct is available (optional service)
+	semInstructURL := "http://localhost:8084" // Port from docker-compose.semantic-kitchen.yml
+
+	// Create LLM client and summarizer
+	llmClient, err := llm.NewOpenAIClient(llm.Config{
+		Provider: "openai",
+		BaseURL:  semInstructURL + "/v1",
+		Model:    "mistral-7b-instruct-v0.2",
+	}, slog.Default())
+	require.NoError(t, err, "Failed to create LLM client")
+	defer llmClient.Close()
+
+	llmSummarizer, err := clustering.NewLLMSummarizer(clustering.LLMSummarizerConfig{
+		Client: llmClient,
+	})
+	require.NoError(t, err, "Failed to create LLM summarizer")
 
 	// Create test entities with rich content for summarization
 	entities := []struct {
@@ -754,7 +768,7 @@ func TestE2E_LLMSummarization(t *testing.T) {
 			assert.NotContains(t, summarizedComm.StatisticalSummary, "Community of", "LLM summary should be narrative")
 		} else {
 			t.Log("⚠️  LLM service unavailable - fell back to statistical summarization")
-			t.Log("   This is expected if semsummarize is not running")
+			t.Log("   This is expected if seminstruct is not running")
 		}
 	})
 
@@ -798,7 +812,20 @@ func TestE2E_ProgressiveEnhancement(t *testing.T) {
 
 	// Configure progressive summarization
 	progressiveSummarizer := clustering.NewProgressiveSummarizer()
-	llmSummarizer := clustering.NewHTTPLLMSummarizer("http://localhost:8084")
+
+	// Create LLM client and summarizer
+	llmClient, err := llm.NewOpenAIClient(llm.Config{
+		Provider: "openai",
+		BaseURL:  "http://localhost:8084/v1",
+		Model:    "mistral-7b-instruct-v0.2",
+	}, slog.Default())
+	require.NoError(t, err, "Failed to create LLM client")
+	defer llmClient.Close()
+
+	llmSummarizer, err := clustering.NewLLMSummarizer(clustering.LLMSummarizerConfig{
+		Client: llmClient,
+	})
+	require.NoError(t, err, "Failed to create LLM summarizer")
 
 	// Start enhancement worker with KV watch
 	enhancementWorker, err := clustering.NewEnhancementWorker(&clustering.EnhancementWorkerConfig{
@@ -943,7 +970,7 @@ func TestE2E_ProgressiveEnhancement(t *testing.T) {
 
 		if err != nil {
 			t.Logf("⚠️  LLM enhancement not completed: %v", err)
-			t.Log("   This is expected if semsummarize service is not running")
+			t.Log("   This is expected if seminstruct service is not running")
 			t.Log("   Progressive summarization is working - statistical summary is available")
 		} else {
 			// Verify both summaries are present

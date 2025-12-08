@@ -1,0 +1,12 @@
+{
+  "prompts": {
+    "default:community_summary": {
+      "system": "You are a helpful assistant that summarizes communities of related entities. Generate concise, natural language summaries (1-2 sentences) that describe what a community represents.",
+      "user_format": "Summarize this community of {{.EntityCount}} entities:\n\nEntity types:\n{{range .Types}}- {{.Name}}: {{.Count}}\n{{end}}\nKey themes: {{.Keywords}}\n\nGenerate a concise summary (1-2 sentences) describing what this community represents."
+    },
+    "default:search_answer": {
+      "system": "You are a helpful assistant that answers questions based on entity graph context. Be concise and factual.",
+      "user_format": "Question: {{.Query}}\n\nRelevant communities:\n{{range .Communities}}- {{.Summary}}\n{{end}}\n\nAnswer the question concisely based on the above context."
+    }
+  }
+}

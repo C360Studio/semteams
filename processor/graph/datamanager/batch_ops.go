@@ -36,7 +36,7 @@ func (m *Manager) BatchWrite(ctx context.Context, writes []EntityWrite) error {
 			}
 		case OperationUpdate:
 			if write.Entity != nil {
-				_, err = m.updateEntityDirect(ctx, write.Entity)
+				_, err = m.updateEntityDirect(ctx, write.Entity, write.Strategy)
 			}
 		case OperationDelete:
 			if write.Entity != nil {

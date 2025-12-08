@@ -1,0 +1,656 @@
+{
+  "version": "1.4.0",
+  "platform": {
+    "org": "c360",
+    "id": "semstreams-kitchen-sink-ml",
+    "type": "comprehensive-semantic",
+    "region": "local",
+    "instance_id": "semantic-999-ml",
+    "environment": "test"
+  },
+  "nats": {
+    "urls": ["nats://localhost:4222"]
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemStreams Kitchen Sink ML API",
+          "description": "Comprehensive semantic processing with HTTP embeddings",
+          "version": "0.7.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": true
+      }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "buffer_size": 10000,
+        "monitor_subjects": ["*"],
+        "enable_kv_query": true,
+        "log_level": "INFO"
+      }
+    }
+  },
+  "components": {
+    "udp": {
+      "type": "input",
+      "name": "udp",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "udp_out",
+              "subject": "raw.udp.messages",
+              "type": "nats"
+            }
+          ]
+        },
+        "bind": "0.0.0.0",
+        "port": 14550,
+        "buffer_size": 65536
+      }
+    },
+    "file_documents": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/documents.jsonl",
+        "format": "jsonl",
+        "interval": "0",
+        "loop": false
+      }
+    },
+    "file_maintenance": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/maintenance.jsonl",
+        "format": "jsonl",
+        "interval": "0",
+        "loop": false
+      }
+    },
+    "file_observations": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/observations.jsonl",
+        "format": "jsonl",
+        "interval": "0",
+        "loop": false
+      }
+    },
+    "file_sensor_docs": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/sensor_docs.jsonl",
+        "format": "jsonl",
+        "interval": "0",
+        "loop": false
+      }
+    },
+    "file_sensors": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.sensor.file",
+              "type": "nats"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/sensors.jsonl",
+        "format": "jsonl",
+        "interval": "100ms",
+        "loop": false
+      }
+    },
+    "document_processor": {
+      "type": "processor",
+      "name": "document_processor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "doc_in",
+              "subject": "raw.document.corpus",
+              "type": "nats"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "doc_out",
+              "subject": "events.graph.entity.document",
+              "type": "nats",
+              "interface": "content.document.v1"
+            }
+          ]
+        },
+        "org_id": "c360",
+        "platform": "logistics"
+      }
+    },
+    "iot_sensor": {
+      "type": "processor",
+      "name": "iot_sensor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "sensor_in",
+              "subject": "raw.sensor.>",
+              "type": "nats"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "sensor_out",
+              "subject": "events.graph.entity.sensor",
+              "type": "nats",
+              "interface": "iot.sensor.v1"
+            }
+          ]
+        },
+        "org_id": "c360",
+        "platform": "logistics"
+      }
+    },
+    "json_generic": {
+      "type": "processor",
+      "name": "json_generic",
+      "enabled": false,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "generic_in",
+              "subject": "raw.udp.messages",
+              "type": "nats"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "generic_out",
+              "subject": "generic.messages",
+              "type": "nats",
+              "interface": "core.json.v1"
+            }
+          ]
+        }
+      }
+    },
+    "json_filter": {
+      "type": "processor",
+      "name": "json_filter",
+      "enabled": false,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "filter_in",
+              "subject": "generic.messages",
+              "type": "nats",
+              "interface": "core.json.v1"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "entities_out",
+              "subject": "generic.entities",
+              "type": "nats",
+              "interface": "core.json.v1"
+            }
+          ]
+        },
+        "criteria": {
+          "type": {
+            "equals": "telemetry"
+          }
+        }
+      }
+    },
+    "rule": {
+      "type": "processor",
+      "name": "rule-processor",
+      "enabled": true,
+      "config": {
+        "entity_watch_patterns": ["c360.>"],
+        "ports": {
+          "inputs": [
+            {
+              "name": "rule_entity_in",
+              "subject": "events.graph.entity.>",
+              "type": "nats",
+              "description": "Processed entity events with typed BaseMessage payloads"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "rule_out",
+              "subject": "events.rule.triggered",
+              "type": "nats"
+            }
+          ]
+        },
+        "enable_graph_integration": true,
+        "graph_event_subject_prefix": "events.graph.entity",
+        "inline_rules": [
+          {
+            "id": "low-battery-alert",
+            "type": "expression",
+            "name": "Low Battery Alert",
+            "description": "Triggers when battery level drops below 20%",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "battery.level",
+                "operator": "lte",
+                "value": 20.0,
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "30s",
+            "metadata": {
+              "severity": "warning",
+              "category": "power"
+            }
+          },
+          {
+            "id": "high-temperature-alert",
+            "type": "expression",
+            "name": "High Temperature Alert",
+            "description": "Triggers when temperature exceeds 50 degrees",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "data.temperature",
+                "operator": "gte",
+                "value": 50.0,
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "30s",
+            "metadata": {
+              "severity": "critical",
+              "category": "thermal"
+            }
+          },
+          {
+            "id": "cold-storage-temp-alert",
+            "type": "expression",
+            "name": "Cold Storage Temperature Alert",
+            "description": "Triggers when cold storage temperature exceeds 40F threshold",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "measurement.fahrenheit",
+                "operator": "gte",
+                "value": 40.0,
+                "required": true
+              },
+              {
+                "field": "location.zone",
+                "operator": "contains",
+                "value": "cold-storage",
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "60s",
+            "metadata": {
+              "severity": "critical",
+              "category": "food_safety"
+            }
+          },
+          {
+            "id": "high-humidity-alert",
+            "type": "expression",
+            "name": "High Humidity Alert",
+            "description": "Triggers when humidity exceeds 50% threshold",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "measurement.percent",
+                "operator": "gte",
+                "value": 50.0,
+                "required": true
+              },
+              {
+                "field": "classification.type",
+                "operator": "eq",
+                "value": "humidity",
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "30s",
+            "metadata": {
+              "severity": "warning",
+              "category": "environment"
+            }
+          },
+          {
+            "id": "low-air-pressure-alert",
+            "type": "expression",
+            "name": "Low Air Pressure Alert",
+            "description": "Triggers when compressed air pressure drops below 100 PSI",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "measurement.psi",
+                "operator": "lt",
+                "value": 100.0,
+                "required": true
+              },
+              {
+                "field": "classification.type",
+                "operator": "eq",
+                "value": "pressure",
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "60s",
+            "metadata": {
+              "severity": "warning",
+              "category": "equipment"
+            }
+          }
+        ]
+      }
+    },
+    "graph": {
+      "type": "processor",
+      "name": "graph-processor",
+      "enabled": true,
+      "config": {
+        "workers": 8,
+        "queue_size": 5000,
+        "input_subject": "events.graph.entity.*",
+        "stream_name": "GRAPH_EVENTS",
+        "consumer_name": "graph-processor",
+        "message_handler": {
+          "processing_timeout": "5s",
+          "max_retries": 5
+        },
+        "data_manager": {
+          "kv_bucket": "graph_entities_kitchen",
+          "kv_options": {
+            "max_retries": 15,
+            "timeout": "10s"
+          },
+          "enable_edge_tracking": true,
+          "edge_batch_size": 100
+        },
+        "indexer": {
+          "indexes": {
+            "predicate": true,
+            "incoming": true,
+            "outgoing": true,
+            "alias": true,
+            "spatial": true,
+            "temporal": true
+          },
+          "buckets": {
+            "alias": "ALIAS_INDEX",
+            "predicate": "PREDICATE_INDEX",
+            "incoming": "INCOMING_INDEX",
+            "outgoing": "OUTGOING_INDEX",
+            "spatial": "SPATIAL_INDEX",
+            "temporal": "TEMPORAL_INDEX"
+          },
+          "batch_processing": {
+            "size": 50
+          },
+          "embedding": {
+            "enabled": true,
+            "provider": "http",
+            "http_endpoint": "http://semembed:8081/v1",
+            "http_model": "BAAI/bge-small-en-v1.5",
+            "text_fields": [
+              "dc.title",
+              "dc.subject",
+              "dc.description",
+              "title",
+              "description",
+              "summary",
+              "name",
+              "observation.text"
+            ]
+          }
+        },
+        "querier": {
+          "cache_enabled": true,
+          "cache_ttl": "15m",
+          "max_cache_size": 5000,
+          "query_timeout": "10s",
+          "result_limit": 1000
+        },
+        "clustering": {
+          "enabled": true,
+          "algorithm": {
+            "max_iterations": 100,
+            "levels": 3
+          },
+          "schedule": {
+            "initial_delay": "2s",
+            "detection_interval": "30s",
+            "min_detection_interval": "5s",
+            "entity_change_threshold": 100,
+            "min_entities": 10,
+            "min_embedding_coverage": 0.5
+          },
+          "enhancement": {
+            "enabled": true,
+            "workers": 3,
+            "domain": "iot",
+            "llm": {
+              "provider": "openai",
+              "base_url": "http://seminstruct:8083/v1",
+              "model": "qwen2.5-0.5b-instruct-q4-k-m",
+              "timeout_seconds": 60,
+              "max_retries": 3
+            }
+          },
+          "semantic_edges": {
+            "enabled": true,
+            "similarity_threshold": 0.6,
+            "max_virtual_neighbors": 5
+          },
+          "inference": {
+            "enabled": true,
+            "min_community_size": 2,
+            "max_inferred_per_community": 50
+          }
+        }
+      }
+    },
+    "file": {
+      "type": "output",
+      "name": "file",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "file_in",
+              "subject": "events.graph.entity.>",
+              "type": "nats",
+              "interface": "content.document.v1"
+            }
+          ],
+          "outputs": []
+        },
+        "directory": "/tmp",
+        "file_prefix": "semstreams-kitchen-sink-ml",
+        "format": "jsonl"
+      }
+    },
+    "httppost": {
+      "type": "output",
+      "name": "httppost",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "http_in",
+              "subject": "events.graph.entity.>",
+              "type": "nats",
+              "interface": "content.document.v1"
+            }
+          ],
+          "outputs": []
+        },
+        "url": "http://localhost:9999/webhook",
+        "retry_max": 3
+      }
+    },
+    "websocket": {
+      "type": "output",
+      "name": "websocket",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "ws_in",
+              "subject": "raw.udp.messages",
+              "type": "nats"
+            }
+          ],
+          "outputs": []
+        },
+        "http_port": 8082,
+        "path": "/ws"
+      }
+    },
+    "objectstore": {
+      "type": "storage",
+      "name": "objectstore",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "store_in",
+              "subject": "events.graph.entity.>",
+              "type": "nats",
+              "interface": "content.document.v1"
+            }
+          ],
+          "outputs": []
+        },
+        "bucket_name": "semstreams_kitchen_sink_store",
+        "data_cache": {
+          "enabled": true,
+          "strategy": "hybrid",
+          "max_size": 5000,
+          "ttl": "1h",
+          "cleanup_interval": "5m"
+        }
+      }
+    },
+    "api-gateway": {
+      "type": "gateway",
+      "name": "http",
+      "enabled": true,
+      "config": {
+        "enable_cors": true,
+        "cors_origins": ["*"],
+        "max_request_size": 1048576,
+        "routes": [
+          {
+            "path": "/search/semantic",
+            "method": "POST",
+            "nats_subject": "graph.query.semantic",
+            "timeout": "5s",
+            "description": "Semantic similarity search across indexed entities"
+          },
+          {
+            "path": "/entity/:id",
+            "method": "GET",
+            "nats_subject": "graph.query.entity",
+            "timeout": "2s",
+            "description": "Retrieve single entity by ID"
+          }
+        ]
+      }
+    }
+  }
+}

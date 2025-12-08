@@ -16,8 +16,9 @@ import (
 // Indexer watches KV for entity changes and maintains indexes.
 // It provides both update and query operations for all secondary indexes.
 type Indexer interface {
-	// Lifecycle - Run blocks until error or context done
-	Run(ctx context.Context) error
+	// Run starts the IndexManager and blocks until error or context done.
+	// If onReady is provided, it is called once initialization completes successfully.
+	Run(ctx context.Context, onReady func()) error
 
 	// Index update operations (write operations - kept for special operations like bulk imports)
 	UpdatePredicateIndex(ctx context.Context, entityID string, entityState interface{}) error

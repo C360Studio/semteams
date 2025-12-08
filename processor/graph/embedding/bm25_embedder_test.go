@@ -223,8 +223,8 @@ func TestBM25Embedder_Similarity(t *testing.T) {
 func TestBM25Embedder_IncrementalLearning(t *testing.T) {
 	embedder := NewBM25Embedder(BM25Config{Dimensions: 128})
 
-	// First batch
-	texts1 := []string{"document one", "document two"}
+	// First batch - use "forklift" which doesn't get stemmed
+	texts1 := []string{"forklift alpha", "forklift beta"}
 	_, err := embedder.Generate(context.Background(), texts1)
 	if err != nil {
 		t.Fatalf("Generate() batch 1 error = %v", err)
@@ -235,7 +235,7 @@ func TestBM25Embedder_IncrementalLearning(t *testing.T) {
 	}
 
 	// Second batch - should accumulate statistics
-	texts2 := []string{"document three"}
+	texts2 := []string{"forklift gamma"}
 	_, err = embedder.Generate(context.Background(), texts2)
 	if err != nil {
 		t.Fatalf("Generate() batch 2 error = %v", err)
@@ -247,11 +247,11 @@ func TestBM25Embedder_IncrementalLearning(t *testing.T) {
 
 	// Check that term document counts accumulated
 	embedder.mu.RLock()
-	docTermCount := embedder.termDocCount["document"]
+	docTermCount := embedder.termDocCount["forklift"]
 	embedder.mu.RUnlock()
 
 	if docTermCount != 3 {
-		t.Errorf("Term 'document' appears in %d documents, want 3", docTermCount)
+		t.Errorf("Term 'forklift' appears in %d documents, want 3", docTermCount)
 	}
 }
 
@@ -366,5 +366,132 @@ func BenchmarkBM25Embedder_SingleText(b *testing.B) {
 		if err != nil {
 			b.Fatalf("Generate() error = %v", err)
 		}
+	}
+}
+
+func TestBM25Embedder_StopwordRemoval(t *testing.T) {
+	embedder := NewBM25Embedder(BM25Config{})
+
+	tests := []struct {
+		name     string
+		text     string
+		contains []string
+		excludes []string
+	}{
+		{
+			name:     "question words removed",
+			text:     "What documents mention forklift",
+			contains: []string{"document", "forklift"}, // documents → document (stemmed)
+			excludes: []string{"what", "mention"},
+		},
+		{
+			name:     "articles removed",
+			text:     "the quick brown fox",
+			contains: []string{"quick", "brown", "fox"},
+			excludes: []string{"the"},
+		},
+		{
+			name:     "prepositions removed",
+			text:     "sensors in zone with readings",
+			contains: []string{"sensor", "zone", "reading"}, // stemmed
+			excludes: []string{"in", "with"},
+		},
+		{
+			name:     "pronouns removed",
+			text:     "they found it quickly",
+			contains: []string{"found", "quick"}, // quickly → quick (stemmed)
+			excludes: []string{"they", "it"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tokens := embedder.tokenize(tt.text)
+
+			// Check that expected tokens are present
+			for _, expected := range tt.contains {
+				found := false
+				for _, token := range tokens {
+					if token == expected {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("tokenize(%q) should contain %q, got %v", tt.text, expected, tokens)
+				}
+			}
+
+			// Check that stopwords are excluded
+			for _, excluded := range tt.excludes {
+				for _, token := range tokens {
+					if token == excluded {
+						t.Errorf("tokenize(%q) should not contain stopword %q, got %v", tt.text, excluded, tokens)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestBM25Embedder_Stemming(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"documents", "document"},
+		{"running", "run"}, // Doubled consonant handling: running → runn → run
+		{"mentioned", "mention"},
+		{"safely", "safe"},
+		{"equipment", "equip"},
+		{"queries", "query"},
+		{"operation", "opera"},         // -tion removed: operation (9) → opera (5)
+		{"maintenance", "maintenance"}, // No matching suffix
+		{"forklift", "forklift"},       // No suffix to remove
+		{"cold", "cold"},               // Short word unchanged
+		{"boxes", "box"},
+		{"safety", "safety"}, // -ty not matched, -y doesn't meet length requirement
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := stem(tt.input)
+			if got != tt.expected {
+				t.Errorf("stem(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestBM25Embedder_NaturalLanguageQuerySimilarity(t *testing.T) {
+	embedder := NewBM25Embedder(BM25Config{Dimensions: 384})
+
+	// Natural language query vs document title
+	query := "What documents mention forklift safety"
+	doc := "Forklift Operation Manual"
+
+	// Generate embeddings
+	queryEmb, err := embedder.Generate(context.Background(), []string{query})
+	if err != nil {
+		t.Fatalf("Generate(query) error = %v", err)
+	}
+	docEmb, err := embedder.Generate(context.Background(), []string{doc})
+	if err != nil {
+		t.Fatalf("Generate(doc) error = %v", err)
+	}
+
+	// Calculate similarity
+	score := CosineSimilarity(queryEmb[0], docEmb[0])
+
+	// With stopwords removed and stemming, query tokens are:
+	// ["document", "forklift", "safety"] (what, mention filtered)
+	// Document tokens: ["forklift", "operat", "manual"]
+	// "forklift" should match, giving reasonable similarity
+	if score < 0.2 {
+		t.Errorf("Query-document similarity = %f, expected >= 0.2 (forklift should match)", score)
+		t.Logf("Query: %q", query)
+		t.Logf("Query tokens: %v", embedder.tokenize(query))
+		t.Logf("Doc: %q", doc)
+		t.Logf("Doc tokens: %v", embedder.tokenize(doc))
 	}
 }

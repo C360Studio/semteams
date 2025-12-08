@@ -217,11 +217,15 @@ func (m *Manager) initializeCachesAndStorage(buckets map[string]jetstream.KeyVal
 			embeddingIndexBucket,
 			m.logger,
 		).WithWorkers(m.config.Workers). // Use same worker count as index manager
-			WithOnGenerated(func(entityID string, vector []float32) {
+							WithOnGenerated(func(entityID string, vector []float32) {
 				// Populate vector cache for search when embedding is generated
 				if m.vectorCache != nil {
 					m.vectorCache.Set(entityID, vector)
 					m.logger.Debug("Vector cache populated", "entity_id", entityID, "dimensions", len(vector))
+				}
+				// Increment embedding metrics (Fix: these metrics were defined but never incremented)
+				if m.promMetrics != nil {
+					m.promMetrics.embeddingsGenerated.Inc()
 				}
 			})
 

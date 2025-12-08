@@ -1,16 +1,22 @@
-# E2E Test Environment for SemStreams Rule Processor
+# E2E Test Environment for SemStreams Rule Processor (Tier 0)
 #
-# This compose file is designed for rule processor E2E testing without
-# external ML service dependencies (semembed, semsummarize).
+# This compose file is designed for Tier 0 rules-only E2E testing.
+# NO external ML dependencies (semembed, seminstruct) - deterministic behavior.
 #
-# Uses semantic-kitchen-sink.json config which includes:
-#   - Rule processor with inline rules (low-battery-alert, high-temperature-alert)
-#   - Graph processor with enable_graph_integration
-#   - All core components (UDP, JSONGeneric, JSONFilter, File, etc.)
+# Uses tier0-rules-iot.json config which includes:
+#   - Rule processor with stateful rules (OnEnter/OnExit actions)
+#   - Graph processor with embedding/clustering DISABLED
+#   - IoT sensor data processing
+#
+# Tier 0 demonstrates:
+#   - Stateful rules with add_triple/remove_triple actions
+#   - Dynamic graph behavior (relationships created/removed on state transitions)
+#   - Hotpath-only processing (low latency, deterministic)
+#   - PathRAG on explicit edges
 #
 # Use with task commands:
-#   - task e2e:rules-graph - Run rule → graph integration test
-#   - task e2e:rules       - Run all rule processor tests
+#   - task e2e:tier0       - Run Tier 0 rules-only test
+#   - task e2e:rules-graph - Run rule → graph integration test (legacy)
 #   - task e2e:clean       - Clean up test environment
 #
 services:
@@ -48,7 +54,7 @@ services:
       dockerfile: Dockerfile
       target: production
     container_name: semstreams-rules-app
-    command: ["--config", "/app/configs/semantic-kitchen-sink.json"]
+    command: ["--config", "/app/configs/tier0-rules-iot.json"]
     depends_on:
       nats:
         condition: service_healthy
@@ -59,6 +65,7 @@ services:
       - EMBEDDING_PROVIDER=none
     volumes:
       - ./configs:/app/configs:ro
+      - ./testdata:/data/testdata:ro
     ports:
       - "8080:8080" # HTTP API (health, components)
       - "9090:9090" # Prometheus metrics

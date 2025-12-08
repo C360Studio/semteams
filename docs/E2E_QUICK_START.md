@@ -45,6 +45,17 @@ task e2e:clean
 | `task e2e:dataflow` | ~5s | Data pipeline validation |
 | `task e2e` | ~8s | All core tests |
 
+### Tiered Inference Tests
+
+| Command | Duration | Purpose | Dependencies |
+|---------|----------|---------|--------------|
+| `task e2e:tier0` | ~30s | Tier 0: Rules-only (no inference) | NATS only |
+| `task e2e:tier1` | ~60s | Tier 1: BM25 + LPA (statistical) | NATS only |
+| `task e2e:tier2` | ~90s | Tier 2: HTTP + LLM (neural) | NATS + semembed + seminstruct |
+| `task e2e:tiers` | ~3min | All tiers with comparison | Full ML stack |
+
+**Tier comparison output:** Results saved to `cmd/e2e/test/e2e/results/comparison-{variant}-{timestamp}.json`
+
 ## 🚨 Common Mistakes (for Agents)
 
 ### ❌ WRONG: Trying to run outdated commands

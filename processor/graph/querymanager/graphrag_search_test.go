@@ -3,7 +3,10 @@ package querymanager
 import (
 	"context"
 	"fmt"
+	"log/slog"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -611,4 +614,465 @@ func BenchmarkFilterEntitiesByQuery(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = m.filterEntitiesByQuery(entities, query)
 	}
+}
+
+// Tests for SearchOptions
+
+func TestSearchOptions_InferStrategy(t *testing.T) {
+	tests := []struct {
+		name     string
+		opts     SearchOptions
+		expected SearchStrategy
+	}{
+		{
+			name:     "Query only - GraphRAG",
+			opts:     SearchOptions{Query: "test query"},
+			expected: StrategyGraphRAG,
+		},
+		{
+			name:     "Query with geo bounds - GeoGraphRAG",
+			opts:     SearchOptions{Query: "test", GeoBounds: &SpatialBounds{North: 40, South: 39, East: -73, West: -74}},
+			expected: StrategyGeoGraphRAG,
+		},
+		{
+			name: "Query with time range - TemporalGraphRAG",
+			opts: SearchOptions{
+				Query: "test",
+				TimeRange: &TimeRange{
+					Start: time.Now().Add(-24 * time.Hour),
+					End:   time.Now(),
+				},
+			},
+			expected: StrategyTemporalGraphRAG,
+		},
+		{
+			name: "Query with multiple filters - HybridGraphRAG",
+			opts: SearchOptions{
+				Query:      "test",
+				GeoBounds:  &SpatialBounds{North: 40, South: 39, East: -73, West: -74},
+				Predicates: []string{"type"},
+			},
+			expected: StrategyHybridGraphRAG,
+		},
+		{
+			name:     "Query with embeddings - Semantic",
+			opts:     SearchOptions{Query: "test", UseEmbeddings: true},
+			expected: StrategySemantic,
+		},
+		{
+			name:     "Filters only - Exact",
+			opts:     SearchOptions{Predicates: []string{"location"}},
+			expected: StrategyExact,
+		},
+		{
+			name:     "Explicit strategy takes precedence",
+			opts:     SearchOptions{Query: "test", Strategy: StrategySemantic},
+			expected: StrategySemantic,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.opts.InferStrategy()
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestSearchOptions_HasIndexFilters(t *testing.T) {
+	tests := []struct {
+		name     string
+		opts     SearchOptions
+		expected bool
+	}{
+		{
+			name:     "No filters",
+			opts:     SearchOptions{Query: "test"},
+			expected: false,
+		},
+		{
+			name:     "GeoBounds only",
+			opts:     SearchOptions{GeoBounds: &SpatialBounds{North: 40, South: 39, East: -73, West: -74}},
+			expected: true,
+		},
+		{
+			name: "TimeRange only",
+			opts: SearchOptions{TimeRange: &TimeRange{
+				Start: time.Now().Add(-24 * time.Hour),
+				End:   time.Now(),
+			}},
+			expected: true,
+		},
+		{
+			name:     "Predicates only",
+			opts:     SearchOptions{Predicates: []string{"type"}},
+			expected: true,
+		},
+		{
+			name:     "Types only",
+			opts:     SearchOptions{Types: []string{"sensor"}},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.opts.HasIndexFilters()
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestSearchOptions_SetDefaults(t *testing.T) {
+	opts := SearchOptions{}
+	opts.SetDefaults()
+
+	assert.Equal(t, 100, opts.Limit)
+	assert.Equal(t, DefaultMaxCommunities, opts.MaxCommunities)
+}
+
+func TestSearchOptions_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		opts    SearchOptions
+		wantErr error
+	}{
+		{
+			name:    "Valid query-only options",
+			opts:    SearchOptions{Query: "test"},
+			wantErr: nil,
+		},
+		{
+			name:    "Missing query for GraphRAG",
+			opts:    SearchOptions{},
+			wantErr: ErrQueryRequired,
+		},
+		{
+			name:    "Valid exact strategy without query",
+			opts:    SearchOptions{Predicates: []string{"location"}},
+			wantErr: nil,
+		},
+		{
+			name: "Invalid geo bounds - north < south",
+			opts: SearchOptions{
+				Query:     "test",
+				GeoBounds: &SpatialBounds{North: 30, South: 40, East: -73, West: -74},
+			},
+			wantErr: ErrInvalidGeoBounds,
+		},
+		{
+			name: "Invalid geo bounds - north > 90",
+			opts: SearchOptions{
+				Query:     "test",
+				GeoBounds: &SpatialBounds{North: 100, South: 40, East: -73, West: -74},
+			},
+			wantErr: ErrInvalidGeoBounds,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.opts.Validate()
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCombineResults(t *testing.T) {
+	set1 := map[string]bool{"a": true, "b": true, "c": true}
+	set2 := map[string]bool{"b": true, "c": true, "d": true}
+	set3 := map[string]bool{"c": true, "d": true, "e": true}
+
+	t.Run("Empty input", func(t *testing.T) {
+		result := combineResults(nil, false)
+		assert.Nil(t, result)
+	})
+
+	t.Run("Single set", func(t *testing.T) {
+		result := combineResults([]map[string]bool{set1}, false)
+		assert.Equal(t, set1, result)
+	})
+
+	t.Run("Union (OR)", func(t *testing.T) {
+		result := combineResults([]map[string]bool{set1, set2}, false)
+		expected := map[string]bool{"a": true, "b": true, "c": true, "d": true}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("Intersection (AND)", func(t *testing.T) {
+		result := combineResults([]map[string]bool{set1, set2}, true)
+		expected := map[string]bool{"b": true, "c": true}
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("Intersection three sets", func(t *testing.T) {
+		result := combineResults([]map[string]bool{set1, set2, set3}, true)
+		expected := map[string]bool{"c": true}
+		assert.Equal(t, expected, result)
+	})
+}
+
+func TestToSet(t *testing.T) {
+	ids := []string{"a", "b", "c", "a"} // Note: "a" appears twice
+	result := toSet(ids)
+
+	assert.Len(t, result, 3)
+	assert.True(t, result["a"])
+	assert.True(t, result["b"])
+	assert.True(t, result["c"])
+}
+
+func TestGlobalSearchWithOptions_Success(t *testing.T) {
+	ctx := context.Background()
+
+	// Entity IDs using 6-part format
+	e1ID := "c360.platform.robotics.system.drone.e1"
+	e2ID := "c360.platform.robotics.system.drone.e2"
+	e3ID := "c360.platform.networking.system.router.e3"
+
+	// Setup communities
+	comm1 := &clustering.Community{
+		ID:                 "comm-0-robotics",
+		Level:              0,
+		Members:            []string{e1ID, e2ID},
+		StatisticalSummary: "Robotics and autonomous systems",
+		Keywords:           []string{"robotics", "autonomous", "drone"},
+	}
+	comm2 := &clustering.Community{
+		ID:                 "comm-0-network",
+		Level:              0,
+		Members:            []string{e3ID},
+		StatisticalSummary: "Network infrastructure",
+		Keywords:           []string{"network", "router", "switch"},
+	}
+
+	detector := &mockCommunityDetector{
+		communities: map[string]*clustering.Community{
+			"comm-0-robotics": comm1,
+			"comm-0-network":  comm2,
+		},
+	}
+
+	dataHandler := &mockEntityReader{
+		entities: map[string]*gtypes.EntityState{
+			e1ID: {ID: e1ID},
+			e2ID: {ID: e2ID},
+			e3ID: {ID: e3ID},
+		},
+	}
+
+	m := &Manager{
+		communityDetector: detector,
+		entityReader:      dataHandler,
+	}
+
+	opts := &SearchOptions{
+		Query:          "robotics autonomous",
+		Level:          0,
+		MaxCommunities: 1,
+	}
+
+	result, err := m.GlobalSearchWithOptions(ctx, opts)
+
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Len(t, result.CommunitySummaries, 1)
+	assert.Equal(t, "comm-0-robotics", result.CommunitySummaries[0].CommunityID)
+	assert.Equal(t, 2, result.Count)
+}
+
+func TestGlobalSearchWithOptions_InvalidOptions(t *testing.T) {
+	ctx := context.Background()
+
+	detector := &mockCommunityDetector{
+		communities: map[string]*clustering.Community{},
+	}
+
+	m := &Manager{
+		communityDetector: detector,
+		entityReader:      &mockEntityReader{entities: map[string]*gtypes.EntityState{}},
+	}
+
+	// Missing query (not exact strategy)
+	opts := &SearchOptions{}
+
+	_, err := m.GlobalSearchWithOptions(ctx, opts)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid search options")
+}
+
+func TestGlobalSearchWithOptions_NoCommunityDetector(t *testing.T) {
+	ctx := context.Background()
+
+	m := &Manager{
+		communityDetector: nil,
+		entityReader:      &mockEntityReader{entities: map[string]*gtypes.EntityState{}},
+	}
+
+	opts := &SearchOptions{Query: "test"}
+
+	_, err := m.GlobalSearchWithOptions(ctx, opts)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not available")
+}
+
+func TestFilterCommunitiesByMembers(t *testing.T) {
+	m := &Manager{}
+
+	communities := []*clustering.Community{
+		{ID: "comm-1", Members: []string{"e1", "e2", "e3"}},
+		{ID: "comm-2", Members: []string{"e4", "e5"}},
+		{ID: "comm-3", Members: []string{"e6", "e7", "e8"}},
+	}
+
+	t.Run("Filter to matching candidates", func(t *testing.T) {
+		candidates := map[string]bool{"e1": true, "e6": true}
+		result := m.filterCommunitiesByMembers(communities, candidates)
+
+		assert.Len(t, result, 2)
+		assert.Equal(t, "comm-1", result[0].ID)
+		assert.Equal(t, "comm-3", result[1].ID)
+	})
+
+	t.Run("No matching candidates", func(t *testing.T) {
+		candidates := map[string]bool{"e99": true}
+		result := m.filterCommunitiesByMembers(communities, candidates)
+
+		assert.Empty(t, result)
+	})
+
+	t.Run("All communities match", func(t *testing.T) {
+		candidates := map[string]bool{"e2": true, "e5": true, "e7": true}
+		result := m.filterCommunitiesByMembers(communities, candidates)
+
+		assert.Len(t, result, 3)
+	})
+}
+
+func TestGlobalSearchWithOptions_ConcurrentAccess(t *testing.T) {
+	// Entity IDs using 6-part format
+	e1ID := "c360.platform.robotics.system.drone.e1"
+	e2ID := "c360.platform.robotics.system.drone.e2"
+
+	// Setup communities
+	comm := &clustering.Community{
+		ID:                 "comm-0-robotics",
+		Level:              0,
+		Members:            []string{e1ID, e2ID},
+		StatisticalSummary: "Robotics and autonomous systems",
+		Keywords:           []string{"robotics", "autonomous", "drone"},
+	}
+
+	detector := &mockCommunityDetector{
+		communities: map[string]*clustering.Community{
+			"comm-0-robotics": comm,
+		},
+	}
+
+	dataHandler := &mockEntityReader{
+		entities: map[string]*gtypes.EntityState{
+			e1ID: {ID: e1ID},
+			e2ID: {ID: e2ID},
+		},
+	}
+
+	// Use discard logger to avoid nil pointer panic
+	logger := slog.Default()
+
+	m := &Manager{
+		communityDetector: detector,
+		entityReader:      dataHandler,
+		logger:            logger,
+	}
+
+	// Run multiple searches concurrently
+	// Note: This test verifies our new code is race-free.
+	// The existing Manager code in manager.go has similar patterns
+	// that may trigger race detector warnings, but those are pre-existing.
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			opts := &SearchOptions{Query: "robotics", MaxCommunities: 1}
+			_, err := m.GlobalSearchWithOptions(context.Background(), opts)
+			assert.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+}
+
+func TestGlobalSearchWithOptions_ContextCancellation(t *testing.T) {
+	// Entity IDs using 6-part format
+	e1ID := "c360.platform.robotics.system.drone.e1"
+
+	// Setup communities
+	comm := &clustering.Community{
+		ID:                 "comm-0-robotics",
+		Level:              0,
+		Members:            []string{e1ID},
+		StatisticalSummary: "Robotics and autonomous systems",
+	}
+
+	detector := &mockCommunityDetector{
+		communities: map[string]*clustering.Community{
+			"comm-0-robotics": comm,
+		},
+	}
+
+	dataHandler := &mockEntityReader{
+		entities: map[string]*gtypes.EntityState{
+			e1ID: {ID: e1ID},
+		},
+	}
+
+	m := &Manager{
+		communityDetector: detector,
+		entityReader:      dataHandler,
+		logger:            slog.Default(),
+	}
+
+	// Create cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	opts := &SearchOptions{Query: "test"}
+	result, err := m.GlobalSearchWithOptions(ctx, opts)
+
+	// With cancelled context, we may get an error or empty result
+	// depending on where the cancellation is checked
+	// The key is that we don't hang
+	if err != nil {
+		assert.ErrorIs(t, err, context.Canceled)
+	} else {
+		// If no error, result should be valid (possibly empty)
+		assert.NotNil(t, result)
+	}
+}
+
+func TestCollectCandidatesFromIndexes_ContextCancellation(t *testing.T) {
+	m := &Manager{
+		indexManager: nil, // No index manager for this test
+		logger:       slog.Default(),
+	}
+
+	// Create cancelled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	opts := &SearchOptions{
+		GeoBounds: &SpatialBounds{North: 40, South: 39, East: -73, West: -74},
+	}
+
+	// With no indexManager, should return nil without error
+	// Context check happens after indexManager nil check
+	result, err := m.collectCandidatesFromIndexes(ctx, opts)
+	assert.NoError(t, err)
+	assert.Nil(t, result)
 }

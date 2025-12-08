@@ -22,6 +22,9 @@ type Manager struct {
 	deps   Dependencies
 	config Config
 
+	// Prometheus metrics for observability
+	metrics *Metrics
+
 	// Statistics tracking
 	messagesProcessed int64
 	lastActivity      time.Time
@@ -36,6 +39,7 @@ func NewManager(config Config, deps Dependencies, errorCallback func(string)) *M
 	return &Manager{
 		deps:          deps,
 		config:        config,
+		metrics:       NewMetrics(deps.MetricsRegistry, "messagemanager"),
 		errorCallback: errorCallback,
 		lastActivity:  time.Now(),
 	}
@@ -83,10 +87,18 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 	mp.lastActivity = time.Now()
 	mp.mu.Unlock()
 
+	// Record message processed metric
+	if mp.metrics != nil {
+		mp.metrics.MessagesProcessed.Inc()
+	}
+
 	// Always unmarshal as BaseMessage (transport envelope) - enforces clean architecture
 	var baseMsg message.BaseMessage
 	if err := json.Unmarshal(data, &baseMsg); err != nil {
 		mp.recordError(fmt.Sprintf("failed to unmarshal BaseMessage: %v", err))
+		if mp.metrics != nil {
+			mp.metrics.MessagesFailed.Inc()
+		}
 		return err
 	}
 
@@ -118,9 +130,19 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 
 		// Store each entity state
 		for _, state := range entityStates {
+			if mp.metrics != nil {
+				mp.metrics.EntitiesExtracted.Inc()
+				mp.metrics.EntitiesUpdateAttempts.Inc()
+			}
 			if _, err := mp.deps.EntityManager.UpdateEntity(msgCtx, state); err != nil {
 				mp.recordError(fmt.Sprintf("failed to store entity %s: %v", state.ID, err))
+				if mp.metrics != nil {
+					mp.metrics.EntitiesUpdateFailed.Inc()
+				}
 				continue
+			}
+			if mp.metrics != nil {
+				mp.metrics.EntitiesUpdateSuccess.Inc()
 			}
 			// Indexes are now updated via KV watch pattern
 		}
@@ -141,9 +163,19 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 
 	// Store each entity state
 	for _, state := range entityStates {
+		if mp.metrics != nil {
+			mp.metrics.EntitiesExtracted.Inc()
+			mp.metrics.EntitiesUpdateAttempts.Inc()
+		}
 		if _, err := mp.deps.EntityManager.UpdateEntity(msgCtx, state); err != nil {
 			mp.recordError(fmt.Sprintf("failed to store entity %s: %v", state.ID, err))
+			if mp.metrics != nil {
+				mp.metrics.EntitiesUpdateFailed.Inc()
+			}
 			continue
+		}
+		if mp.metrics != nil {
+			mp.metrics.EntitiesUpdateSuccess.Inc()
 		}
 		// Indexes are now updated via KV watch pattern
 	}
@@ -254,9 +286,18 @@ func (mp *Manager) processSimpleGraphable(
 			"entity_id", actualEntityID,
 			"final_triple_count", len(state.Triples))
 
+		if mp.metrics != nil {
+			mp.metrics.EntitiesUpdateAttempts.Inc()
+		}
 		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
+			if mp.metrics != nil {
+				mp.metrics.EntitiesUpdateFailed.Inc()
+			}
 			return nil, errs.WrapTransient(updateErr, "MessageManager",
 				"processSimpleGraphable", "entity update failed")
+		}
+		if mp.metrics != nil {
+			mp.metrics.EntitiesUpdateSuccess.Inc()
 		}
 	} else {
 		// Entity doesn't exist, create it
@@ -264,9 +305,18 @@ func (mp *Manager) processSimpleGraphable(
 			"entity_id", actualEntityID,
 			"triple_count", len(state.Triples))
 
+		if mp.metrics != nil {
+			mp.metrics.EntitiesCreateAttempts.Inc()
+		}
 		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
+			if mp.metrics != nil {
+				mp.metrics.EntitiesCreateFailed.Inc()
+			}
 			return nil, errs.WrapFatal(createErr, "MessageManager",
 				"processSimpleGraphable", "entity creation failed")
+		}
+		if mp.metrics != nil {
+			mp.metrics.EntitiesCreateSuccess.Inc()
 		}
 	}
 
@@ -321,13 +371,31 @@ func (mp *Manager) processNonGraphableMessage(
 		// Entity exists, merge triples and increment version
 		state.Triples = gtypes.MergeTriples(existing.Triples, state.Triples)
 		state.Version = existing.Version + 1
+		if mp.metrics != nil {
+			mp.metrics.EntitiesUpdateAttempts.Inc()
+		}
 		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
+			if mp.metrics != nil {
+				mp.metrics.EntitiesUpdateFailed.Inc()
+			}
 			return nil, errs.WrapTransient(updateErr, "MessageManager", "processNonGraphableMessage", "entity update failed")
+		}
+		if mp.metrics != nil {
+			mp.metrics.EntitiesUpdateSuccess.Inc()
 		}
 	} else {
 		// Entity doesn't exist, create it
+		if mp.metrics != nil {
+			mp.metrics.EntitiesCreateAttempts.Inc()
+		}
 		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
+			if mp.metrics != nil {
+				mp.metrics.EntitiesCreateFailed.Inc()
+			}
 			return nil, errs.WrapFatal(createErr, "MessageManager", "processNonGraphableMessage", "entity creation failed")
+		}
+		if mp.metrics != nil {
+			mp.metrics.EntitiesCreateSuccess.Inc()
 		}
 	}
 
@@ -389,13 +457,31 @@ func (mp *Manager) processMapMessage(
 		// Entity exists, merge triples and increment version
 		state.Triples = gtypes.MergeTriples(existing.Triples, state.Triples)
 		state.Version = existing.Version + 1
+		if mp.metrics != nil {
+			mp.metrics.EntitiesUpdateAttempts.Inc()
+		}
 		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
+			if mp.metrics != nil {
+				mp.metrics.EntitiesUpdateFailed.Inc()
+			}
 			return nil, errs.WrapTransient(updateErr, "MessageManager", "processMapMessage", "entity update failed")
+		}
+		if mp.metrics != nil {
+			mp.metrics.EntitiesUpdateSuccess.Inc()
 		}
 	} else {
 		// Entity doesn't exist, create it
+		if mp.metrics != nil {
+			mp.metrics.EntitiesCreateAttempts.Inc()
+		}
 		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
+			if mp.metrics != nil {
+				mp.metrics.EntitiesCreateFailed.Inc()
+			}
 			return nil, errs.WrapFatal(createErr, "MessageManager", "processMapMessage", "entity creation failed")
+		}
+		if mp.metrics != nil {
+			mp.metrics.EntitiesCreateSuccess.Inc()
 		}
 	}
 

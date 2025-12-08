@@ -59,6 +59,8 @@ type GlobalSearchResult struct {
 	CommunitySummaries []CommunitySummary    `json:"community_summaries"`
 	Count              int                   `json:"count"`
 	Duration           time.Duration         `json:"duration"`
+	Answer             string                `json:"answer,omitempty"`       // LLM-generated answer (if available)
+	AnswerModel        string                `json:"answer_model,omitempty"` // Model used to generate answer
 }
 
 // CommunitySummary represents a community's summary used in global search

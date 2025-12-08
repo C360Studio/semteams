@@ -1,0 +1,4106 @@
+{
+  "variant": "ml",
+  "timestamp": "2025-12-08T10:20:51.375698-06:00",
+  "communities_total": 216,
+  "llm_enhanced_count": 0,
+  "statistical_only_count": 216,
+  "avg_summary_length_ratio": 0,
+  "avg_word_overlap": 0,
+  "non_singleton_count": 6,
+  "largest_community_size": 2,
+  "avg_non_singleton_size": 2,
+  "communities": [
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.pressure.sensor-pressure-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 pressure. Key themes: content.classification.tag, pressure, sensor, compressed, air.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "pressure",
+        "sensor",
+        "compressed",
+        "air",
+        "equipment",
+        "maintenance",
+        "header",
+        "sensor.document.reading",
+        "sensor.document.unit"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, geo.location.latitude, geo.location.longitude, sensor.classification.type, temp.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "temp",
+        "2024",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "005"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.humidity.sensor-humid-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: content.classification.tag, humidity, warehouse, sensor, zone.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "humidity",
+        "warehouse",
+        "sensor",
+        "zone",
+        "dc.subject",
+        "environment",
+        "hvac",
+        "height",
+        "center"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-008",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, maintenance, battery, forklift.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "maintenance",
+        "battery",
+        "forklift",
+        "equipment",
+        "2024",
+        "biweekly",
+        "maintenance.work.status",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.medium.obs-009",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, compliance, medium, angela, battery.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "compliance",
+        "medium",
+        "angela",
+        "battery",
+        "safety",
+        "2024",
+        "equipment",
+        "observation",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-014",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, compressor, service, air, completed.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "compressor",
+        "service",
+        "air",
+        "completed",
+        "dryer",
+        "dc.title",
+        "00z",
+        "dc.subject",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.level.sensor-level-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 level. Key themes: level, content.classification.tag, hydraulic, dock, reservoir.",
+      "summary_status": "statistical",
+      "keywords": [
+        "level",
+        "content.classification.tag",
+        "hydraulic",
+        "dock",
+        "reservoir",
+        "sensor",
+        "sensor.document.location",
+        "maintenance",
+        "percent",
+        "sensor.document.reading"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.operations.doc-ops-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 operations. Key themes: content.classification.tag, operations, forklift, operation, manual.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "operations",
+        "forklift",
+        "operation",
+        "manual",
+        "document",
+        "dc.subject",
+        "equipment",
+        "training",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-005",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, lighting, safety, emergency.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "lighting",
+        "safety",
+        "emergency",
+        "test",
+        "patel",
+        "11t07",
+        "maintenance.work.status",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-006",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, inspection, completed, racking, dc.subject.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "inspection",
+        "completed",
+        "racking",
+        "dc.subject",
+        "safety",
+        "10t13",
+        "dc.date",
+        "martinez",
+        "00z"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, time.observation.recorded, iot.sensor.serial, temp, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "temp",
+        "2024",
+        "geo.location.longitude",
+        "003",
+        "geo.location.latitude",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.vibration.vibration-sensor-002",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, sensor.measurement.ips, time.observation.recorded, iot.sensor.serial, vib.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "sensor.measurement.ips",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "vib",
+        "2024",
+        "sensor.classification.type",
+        "002",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-004",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, hvac, replacement, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "hvac",
+        "replacement",
+        "2024",
+        "garcia",
+        "facility",
+        "quality",
+        "air",
+        "filters"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.medium.obs-015",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, error, medium, labeling, quality.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "error",
+        "medium",
+        "labeling",
+        "quality",
+        "dc.creator",
+        "shipping",
+        "shipment",
+        "observation",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.quality.doc-quality-001",
+      "level": 0,
+      "member_count": 2,
+      "statistical_summary": "Community of 2 entities including 1 quality, 1 medium. Key themes: content.classification.tag, quality, product, standards, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "quality",
+        "product",
+        "standards",
+        "dc.title",
+        "medium",
+        "dc.type",
+        "dc.subject",
+        "00z",
+        "dc.date"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.high.obs-008",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, high, extinguisher, fire, blocked.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "high",
+        "extinguisher",
+        "fire",
+        "blocked",
+        "00z",
+        "observation.record.severity",
+        "08t16",
+        "dc.title",
+        "safety"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.temperature.sensor-temp-002",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: content.classification.tag, temperature, freezer, frozen, sensor.document.location.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "temperature",
+        "freezer",
+        "frozen",
+        "sensor.document.location",
+        "dc.type",
+        "doc",
+        "wall",
+        "5ft",
+        "monitoring"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.medium.obs-002",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, medium, speeding, forklift, safety.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "medium",
+        "speeding",
+        "forklift",
+        "safety",
+        "dc.type",
+        "2024",
+        "pedestrian",
+        "dc.title",
+        "observation.record.severity"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-012",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, service, wrapper, stretch, completed.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "service",
+        "wrapper",
+        "stretch",
+        "completed",
+        "00z",
+        "patel",
+        "quarterly",
+        "dc.date",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.critical.obs-012",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 critical. Key themes: content.classification.tag, miss, falling, near, critical.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "miss",
+        "falling",
+        "near",
+        "critical",
+        "williams",
+        "object",
+        "04t14",
+        "safety",
+        "observation"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.motion.sensor-motion-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 motion. Key themes: content.classification.tag, motion, security, surveillance, sensor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "motion",
+        "security",
+        "surveillance",
+        "sensor",
+        "zone",
+        "southeast",
+        "sensor.document.unit",
+        "301",
+        "alarm"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.pressure.pressure-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 pressure. Key themes: pressure, sensor.measurement.psi, sensor.classification.type, pres, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "pressure",
+        "sensor.measurement.psi",
+        "sensor.classification.type",
+        "pres",
+        "2024",
+        "001",
+        "geo.location.longitude",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.humidity.humid-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, geo.location.latitude, geo.location.longitude, sensor.measurement.percent, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "hum",
+        "001",
+        "iot.sensor.serial",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.logistics.doc-shipping-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 logistics. Key themes: content.classification.tag, logistics, procedures, shipping, receiving.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "logistics",
+        "procedures",
+        "shipping",
+        "receiving",
+        "dc.title",
+        "dc.type",
+        "document",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.training.doc-training-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 training. Key themes: content.classification.tag, training, dc.title, annual, requirements.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "training",
+        "dc.title",
+        "annual",
+        "requirements",
+        "dc.type",
+        "dc.subject",
+        "certification",
+        "compliance",
+        "document"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-010",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, repair, floor, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "repair",
+        "floor",
+        "dc.title",
+        "maintenance",
+        "warehouse",
+        "maintenance.work.status",
+        "robert",
+        "00z"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.power.sensor-power-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 power. Key themes: power, content.classification.tag, electrical, sensor, sensor.document.reading.",
+      "summary_status": "statistical",
+      "keywords": [
+        "power",
+        "content.classification.tag",
+        "electrical",
+        "sensor",
+        "sensor.document.reading",
+        "room",
+        "monitor",
+        "801",
+        "dc.type",
+        "sensor.document.location"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.humidity.humid-sensor-002",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, sensor.measurement.percent, time.observation.recorded, hum, 002.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "sensor.measurement.percent",
+        "time.observation.recorded",
+        "hum",
+        "002",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-002",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, tension, belt, conveyor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "tension",
+        "belt",
+        "conveyor",
+        "sarah",
+        "maintenance",
+        "dc.title",
+        "00z",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.critical.obs-004",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 critical. Key themes: content.classification.tag, conveyor, safety, guard, critical.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "conveyor",
+        "safety",
+        "guard",
+        "critical",
+        "steven",
+        "2024",
+        "clark",
+        "dc.subject",
+        "dc.date"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.high.obs-005",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, stacking, pallet, high, dc.creator.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "stacking",
+        "pallet",
+        "high",
+        "dc.creator",
+        "williams",
+        "dc.title",
+        "improper",
+        "observation",
+        "observation.record.severity"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.flow.flow-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 flow. Key themes: flow, sensor.measurement.gpm, time.observation.recorded, iot.sensor.serial, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "flow",
+        "sensor.measurement.gpm",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "2024",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.door.sensor-door-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 door. Key themes: door, content.classification.tag, emergency, exit, sensor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "door",
+        "content.classification.tag",
+        "emergency",
+        "exit",
+        "sensor",
+        "security",
+        "doc",
+        "boolean",
+        "safety",
+        "401"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.environment.doc-env-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 environment. Key themes: content.classification.tag, environment, compliance, recycling, environmental.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "environment",
+        "compliance",
+        "recycling",
+        "environmental",
+        "procedures",
+        "dc.type",
+        "dc.subject",
+        "waste",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.low.obs-014",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 low. Key themes: content.classification.tag, housekeeping, low, johnson, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "housekeeping",
+        "low",
+        "johnson",
+        "2024",
+        "work",
+        "tripping",
+        "clutter",
+        "cluttered",
+        "mark"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.safety.doc-emergency-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 safety. Key themes: content.classification.tag, safety, emergency, response, plan.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "safety",
+        "emergency",
+        "response",
+        "plan",
+        "dc.type",
+        "dc.title",
+        "document",
+        "dc.subject",
+        "evacuation"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.vibration.vibration-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, sensor.classification.type, iot.sensor.serial, 001, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "001",
+        "geo.location.longitude",
+        "sensor.measurement.ips",
+        "time.observation.recorded",
+        "vib",
+        "2024",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.humidity.humid-sensor-003",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, sensor.classification.type, hum, geo.location.longitude, time.observation.recorded.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "sensor.classification.type",
+        "hum",
+        "geo.location.longitude",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "003",
+        "geo.location.latitude",
+        "sensor.measurement.percent"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, iot.sensor.serial, temp, 2024, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "iot.sensor.serial",
+        "temp",
+        "2024",
+        "geo.location.longitude",
+        "001",
+        "geo.location.latitude",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "time.observation.recorded"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-003",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, service, hydraulic, dock, completed.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "service",
+        "hydraulic",
+        "dock",
+        "completed",
+        "dc.date",
+        "dc.type",
+        "equipment",
+        "quarterly",
+        "wilson"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-015",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, security, completed, cleaning, camera.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "security",
+        "completed",
+        "cleaning",
+        "camera",
+        "thompson",
+        "01t11",
+        "dc.title",
+        "2024",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.low.obs-006",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 low. Key themes: content.classification.tag, low, water, leak, slip.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "low",
+        "water",
+        "leak",
+        "slip",
+        "dc.title",
+        "dc.creator",
+        "maria",
+        "santos",
+        "10t08"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.medium.obs-011",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, inventory, medium, variance, accuracy.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "inventory",
+        "medium",
+        "variance",
+        "accuracy",
+        "brown",
+        "observation",
+        "dc.creator",
+        "dc.subject",
+        "quality"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.medium.obs-003",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, spill, medium, environment, observation.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "spill",
+        "medium",
+        "environment",
+        "observation",
+        "observation.record.severity",
+        "00z",
+        "2024",
+        "rodriguez",
+        "receiving"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.high.obs-010",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, high, unauthorized, observation.record.severity, 00z.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "high",
+        "unauthorized",
+        "observation.record.severity",
+        "00z",
+        "clark",
+        "safety",
+        "visitor",
+        "dc.title",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.technology.doc-it-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 technology. Key themes: content.classification.tag, technology, dc.type, guide, wms.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "technology",
+        "dc.type",
+        "guide",
+        "wms",
+        "training",
+        "dc.title",
+        "warehouse",
+        "management",
+        "system"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.in_progress.maint-016",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 in_progress. Key themes: content.classification.tag, replacement, dock, bumper, dc.creator.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "replacement",
+        "dock",
+        "bumper",
+        "dc.creator",
+        "dc.type",
+        "maintenance",
+        "scheduled",
+        "wilson",
+        "maintenance.work.status"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.inventory.doc-inventory-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 inventory. Key themes: inventory, content.classification.tag, accuracy, standards, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "inventory",
+        "content.classification.tag",
+        "accuracy",
+        "standards",
+        "dc.type",
+        "dc.title",
+        "document",
+        "dc.subject",
+        "counting"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.vibration.sensor-vibration-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, motor, content.classification.tag, sensor, conveyor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "motor",
+        "content.classification.tag",
+        "sensor",
+        "conveyor",
+        "dc.subject",
+        "dc.title",
+        "doc",
+        "sortation",
+        "per"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.compliance.doc-audit-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 compliance. Key themes: content.classification.tag, compliance, audit, inventory, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "compliance",
+        "audit",
+        "inventory",
+        "dc.title",
+        "checklist",
+        "document",
+        "safety",
+        "internal",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.maintenance.doc-maint-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 maintenance. Key themes: content.classification.tag, maintenance, schedule, preventive, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "maintenance",
+        "schedule",
+        "preventive",
+        "dc.type",
+        "document",
+        "dc.subject",
+        "equipment",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.weight.sensor-weight-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 weight. Key themes: content.classification.tag, scale, weight, floor, receiving.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "scale",
+        "weight",
+        "floor",
+        "receiving",
+        "dc.title",
+        "doc",
+        "pounds",
+        "load",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-011",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, calibration, scale, completed, sarah.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "calibration",
+        "scale",
+        "completed",
+        "sarah",
+        "2024",
+        "05t09",
+        "dc.type",
+        "dc.title",
+        "dc.date"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, 2024, geo.location.latitude, sensor.measurement.fahrenheit, time.observation.recorded.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "2024",
+        "geo.location.latitude",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "temp",
+        "004",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "iot.sensor.serial"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-009",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, door, completed, motor, facility.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "door",
+        "completed",
+        "motor",
+        "facility",
+        "wilson",
+        "00z",
+        "dc.subject",
+        "james",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.high.obs-013",
+      "level": 0,
+      "member_count": 2,
+      "statistical_summary": "Community of 2 entities including 1 temperature, 1 high. Key themes: content.classification.tag, temperature, storage, cold, dc.subject.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "temperature",
+        "storage",
+        "cold",
+        "dc.subject",
+        "quality",
+        "dc.title",
+        "dc.type",
+        "high",
+        "excursion"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.safety.doc-safety-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 safety. Key themes: safety, content.classification.tag, warehouse, dc.title, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "safety",
+        "content.classification.tag",
+        "warehouse",
+        "dc.title",
+        "dc.type",
+        "dc.subject",
+        "emergency",
+        "guidelines",
+        "document",
+        "training"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.high.obs-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, safety, exit, high, blocked.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "safety",
+        "exit",
+        "high",
+        "blocked",
+        "williams",
+        "dc.creator",
+        "dc.subject",
+        "15t07",
+        "dc.date"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, temp, geo.location.longitude, sensor.measurement.fahrenheit, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "temp",
+        "geo.location.longitude",
+        "sensor.measurement.fahrenheit",
+        "iot.sensor.serial",
+        "2024",
+        "002",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "time.observation.recorded"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.power.power-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 power. Key themes: power, geo.location.latitude, geo.location.longitude, sensor.measurement.kw, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "power",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.kw",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "001",
+        "pwr"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-007",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, fire, completed, safety, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "fire",
+        "completed",
+        "safety",
+        "2024",
+        "quarterly",
+        "09t06",
+        "dc.type",
+        "maintenance.work.status",
+        "lee"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.light.sensor-light-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 light. Key themes: content.classification.tag, sensor, lighting, light, doc.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "sensor",
+        "lighting",
+        "light",
+        "doc",
+        "sensor.document.unit",
+        "level",
+        "energy",
+        "skylight",
+        "foot"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, hydraulic, forklift, completed, repair.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "hydraulic",
+        "forklift",
+        "completed",
+        "repair",
+        "system",
+        "maintenance.work.status",
+        "dc.date",
+        "2024",
+        "maintenance"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.level.level-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 level. Key themes: 2024, level, sensor.measurement.percent, sensor.classification.type, time.observation.recorded.",
+      "summary_status": "statistical",
+      "keywords": [
+        "2024",
+        "level",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "15t08",
+        "iot.sensor.serial",
+        "lvl",
+        "00z",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.human_resources.doc-hr-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 human_resources. Key themes: content.classification.tag, onboarding, human, guide, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "onboarding",
+        "human",
+        "guide",
+        "dc.type",
+        "dc.subject",
+        "resources",
+        "human_resources",
+        "orientation",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-013",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, parking, repair, 03t16.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "parking",
+        "repair",
+        "03t16",
+        "lot",
+        "light",
+        "dc.type",
+        "maintenance.work.status",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.air_quality.sensor-air-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 air_quality. Key themes: content.classification.tag, air, quality, sensor, main.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "air",
+        "quality",
+        "sensor",
+        "main",
+        "break",
+        "air_quality",
+        "dc.title",
+        "environment",
+        "doc"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.combustible_gas.gas-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 combustible_gas. Key themes: gas, combustible_gas, sensor.measurement.percent_lel, sensor.classification.type, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "gas",
+        "combustible_gas",
+        "sensor.measurement.percent_lel",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "combustible"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.water.sensor-water-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 water. Key themes: water, content.classification.tag, sensor, flow, dc.subject.",
+      "summary_status": "statistical",
+      "keywords": [
+        "water",
+        "content.classification.tag",
+        "sensor",
+        "flow",
+        "dc.subject",
+        "gpm",
+        "conservation",
+        "sensor.document.reading",
+        "901",
+        "sensor.document.location"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.temperature.sensor-temp-003",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, content.classification.tag, dock, sensor, receiving.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "content.classification.tag",
+        "dock",
+        "sensor",
+        "receiving",
+        "area",
+        "sensor.document.unit",
+        "dc.title",
+        "103",
+        "door"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.gas.sensor-gas-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 gas. Key themes: content.classification.tag, gas, propane, forklift, area.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "gas",
+        "propane",
+        "forklift",
+        "area",
+        "dc.subject",
+        "combustible",
+        "dc.title",
+        "detector",
+        "1001"
+      ]
+    },
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.illumination.light-sensor-001",
+      "level": 0,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 illumination. Key themes: illumination, sensor.measurement.fc, sensor.classification.type, time.observation.recorded, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "illumination",
+        "sensor.measurement.fc",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "geo.location.longitude",
+        "lux",
+        "2024",
+        "001",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.illumination.light-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 illumination. Key themes: illumination, time.observation.recorded, 001, sensor.measurement.fc, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "illumination",
+        "time.observation.recorded",
+        "001",
+        "sensor.measurement.fc",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "lux",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-003",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, service, completed, hydraulic, dock.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "service",
+        "completed",
+        "hydraulic",
+        "dock",
+        "dc.title",
+        "2024",
+        "wilson",
+        "00z",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.door.sensor-door-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 door. Key themes: door, content.classification.tag, emergency, exit, sensor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "door",
+        "content.classification.tag",
+        "emergency",
+        "exit",
+        "sensor",
+        "zone",
+        "safety",
+        "frame",
+        "dc.subject",
+        "doc"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.medium.obs-003",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, spill, medium, environment, angela.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "spill",
+        "medium",
+        "environment",
+        "angela",
+        "dc.creator",
+        "dc.date",
+        "dc.subject",
+        "rodriguez",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.in_progress.maint-016",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 in_progress. Key themes: content.classification.tag, replacement, bumper, dock, dc.creator.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "replacement",
+        "bumper",
+        "dock",
+        "dc.creator",
+        "wilson",
+        "dc.subject",
+        "facility",
+        "maintenance",
+        "in_progress"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, iot.sensor.serial, temp, geo.location.latitude, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "iot.sensor.serial",
+        "temp",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "2024",
+        "003",
+        "sensor.classification.type"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-006",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, racking, inspection, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "racking",
+        "inspection",
+        "dc.type",
+        "dc.date",
+        "tom",
+        "00z",
+        "dc.subject",
+        "facility"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-004",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, hvac, 00z, quality.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "hvac",
+        "00z",
+        "quality",
+        "dc.type",
+        "12t08",
+        "maintenance",
+        "dc.creator",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.water.sensor-water-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 water. Key themes: water, content.classification.tag, flow, sensor, utility.",
+      "summary_status": "statistical",
+      "keywords": [
+        "water",
+        "content.classification.tag",
+        "flow",
+        "sensor",
+        "utility",
+        "line",
+        "901",
+        "sensor.document.location",
+        "sensor.document.unit",
+        "leak"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, temp, 2024, geo.location.longitude, sensor.measurement.fahrenheit.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "temp",
+        "2024",
+        "geo.location.longitude",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "004",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-002",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, conveyor, tension, completed, belt.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "conveyor",
+        "tension",
+        "completed",
+        "belt",
+        "2024",
+        "dc.date",
+        "equipment",
+        "dc.type",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-013",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, parking, repair, completed, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "parking",
+        "repair",
+        "completed",
+        "dc.type",
+        "dc.date",
+        "2024",
+        "martinez",
+        "dc.title",
+        "maintenance.work.status"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.power.sensor-power-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 power. Key themes: power, content.classification.tag, electrical, sensor.document.unit, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "power",
+        "content.classification.tag",
+        "electrical",
+        "sensor.document.unit",
+        "dc.type",
+        "801",
+        "energy",
+        "service",
+        "dc.title",
+        "monitor"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-007",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, safety, fire, completed, dc.date.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "safety",
+        "fire",
+        "completed",
+        "dc.date",
+        "suppression",
+        "09t06",
+        "maintenance",
+        "maintenance.work.status",
+        "david"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.environment.doc-env-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 environment. Key themes: content.classification.tag, environment, compliance, recycling, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "environment",
+        "compliance",
+        "recycling",
+        "dc.title",
+        "procedures",
+        "dc.type",
+        "document",
+        "environmental",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.pressure.sensor-pressure-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 pressure. Key themes: content.classification.tag, pressure, compressed, sensor, air.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "pressure",
+        "compressed",
+        "sensor",
+        "air",
+        "maintenance",
+        "dc.title",
+        "main",
+        "sensor.document.location",
+        "header"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.medium.obs-015",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, error, labeling, medium, shipment.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "error",
+        "labeling",
+        "medium",
+        "shipment",
+        "2024",
+        "jennifer",
+        "brown",
+        "observation.record.severity",
+        "observation"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.motion.sensor-motion-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 motion. Key themes: motion, content.classification.tag, security, boolean, surveillance.",
+      "summary_status": "statistical",
+      "keywords": [
+        "motion",
+        "content.classification.tag",
+        "security",
+        "boolean",
+        "surveillance",
+        "sensor",
+        "corner",
+        "301",
+        "high",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.temperature.sensor-temp-001",
+      "level": 1,
+      "member_count": 2,
+      "statistical_summary": "Community of 2 entities including 1 high, 1 temperature. Key themes: content.classification.tag, temperature, storage, cold, quality.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "temperature",
+        "storage",
+        "cold",
+        "quality",
+        "dc.type",
+        "high",
+        "excursion",
+        "dc.title",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.human_resources.doc-hr-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 human_resources. Key themes: content.classification.tag, onboarding, guide, document, training.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "onboarding",
+        "guide",
+        "document",
+        "training",
+        "human_resources",
+        "dc.title",
+        "dc.type",
+        "dc.subject",
+        "human"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-010",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, floor, repair, completed, robert.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "floor",
+        "repair",
+        "completed",
+        "robert",
+        "facility",
+        "warehouse",
+        "dc.subject",
+        "dc.date",
+        "maintenance.work.status"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.critical.obs-012",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 critical. Key themes: content.classification.tag, critical, near, miss, falling.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "critical",
+        "near",
+        "miss",
+        "falling",
+        "dc.creator",
+        "observation",
+        "00z",
+        "safety",
+        "injury"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-015",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, security, completed, camera, cleaning.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "security",
+        "completed",
+        "camera",
+        "cleaning",
+        "00z",
+        "maintenance.work.status",
+        "dc.type",
+        "quarterly",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.medium.obs-002",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, forklift, medium, speeding, safety.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "forklift",
+        "medium",
+        "speeding",
+        "safety",
+        "johnson",
+        "observation",
+        "mark",
+        "14t14",
+        "00z"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.power.power-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 power. Key themes: power, iot.sensor.serial, 2024, geo.location.latitude, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "power",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.kw",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "pwr",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.safety.doc-emergency-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 safety. Key themes: content.classification.tag, safety, emergency, response, dc.subject.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "safety",
+        "emergency",
+        "response",
+        "dc.subject",
+        "evacuation",
+        "dc.title",
+        "plan",
+        "dc.type",
+        "document"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.technology.doc-it-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 technology. Key themes: content.classification.tag, technology, management, inventory, wms.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "technology",
+        "management",
+        "inventory",
+        "wms",
+        "warehouse",
+        "document",
+        "dc.subject",
+        "software",
+        "training"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-011",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, scale, calibration, completed, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "scale",
+        "calibration",
+        "completed",
+        "dc.title",
+        "chen",
+        "quality",
+        "annual",
+        "dc.subject",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.vibration.vibration-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, time.observation.recorded, iot.sensor.serial, vib, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "vib",
+        "2024",
+        "001",
+        "sensor.measurement.ips",
+        "sensor.classification.type",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.high.obs-010",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, high, unauthorized, clark, restricted.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "high",
+        "unauthorized",
+        "clark",
+        "restricted",
+        "safety",
+        "policy",
+        "dc.type",
+        "2024",
+        "escort"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, sensor.classification.type, time.observation.recorded, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "geo.location.longitude",
+        "temp",
+        "001",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.humidity.humid-sensor-002",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, 2024, geo.location.longitude, sensor.measurement.percent, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "2024",
+        "geo.location.longitude",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "hum",
+        "002",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.low.obs-014",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 low. Key themes: content.classification.tag, low, housekeeping, observation.record.severity, 00z.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "low",
+        "housekeeping",
+        "observation.record.severity",
+        "00z",
+        "mark",
+        "cleanup",
+        "work",
+        "dc.type",
+        "observation"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.critical.obs-004",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 critical. Key themes: content.classification.tag, guard, safety, critical, conveyor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "guard",
+        "safety",
+        "critical",
+        "conveyor",
+        "dc.date",
+        "00z",
+        "dc.subject",
+        "hazard",
+        "clark"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.inventory.doc-inventory-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 inventory. Key themes: inventory, content.classification.tag, standards, accuracy, document.",
+      "summary_status": "statistical",
+      "keywords": [
+        "inventory",
+        "content.classification.tag",
+        "standards",
+        "accuracy",
+        "document",
+        "counting",
+        "dc.title",
+        "dc.type",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, sensor.classification.type, time.observation.recorded, temp.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "temp",
+        "geo.location.longitude",
+        "iot.sensor.serial",
+        "2024",
+        "005",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.quality.doc-quality-001",
+      "level": 1,
+      "member_count": 2,
+      "statistical_summary": "Community of 2 entities including 1 quality, 1 medium. Key themes: content.classification.tag, quality, dc.title, dc.subject, product.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "quality",
+        "dc.title",
+        "dc.subject",
+        "product",
+        "medium",
+        "standards",
+        "dc.type",
+        "09t10",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.combustible_gas.gas-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 combustible_gas. Key themes: gas, geo.location.latitude, geo.location.longitude, combustible_gas, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "gas",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "combustible_gas",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "2024",
+        "sensor.measurement.percent_lel",
+        "combustible"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.high.obs-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, safety, blocked, high, exit.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "safety",
+        "blocked",
+        "high",
+        "exit",
+        "dc.subject",
+        "observation",
+        "observation.record.severity",
+        "2024",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.pressure.pressure-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 pressure. Key themes: pressure, 2024, 001, geo.location.latitude, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "pressure",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.psi",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "pres"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-008",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, battery, forklift, completed, maintenance.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "battery",
+        "forklift",
+        "completed",
+        "maintenance",
+        "2024",
+        "equipment",
+        "dc.date",
+        "dc.creator",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.temperature.sensor-temp-002",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: content.classification.tag, temperature, freezer, 102, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "temperature",
+        "freezer",
+        "102",
+        "dc.type",
+        "sensor.document.unit",
+        "east",
+        "wall",
+        "fahrenheit",
+        "frozen"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.operations.doc-ops-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 operations. Key themes: content.classification.tag, operations, forklift, equipment, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "operations",
+        "forklift",
+        "equipment",
+        "dc.title",
+        "operation",
+        "dc.type",
+        "training",
+        "manual",
+        "document"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-014",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, service, compressor, dryer.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "service",
+        "compressor",
+        "dryer",
+        "air",
+        "dc.type",
+        "annual",
+        "dc.creator",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.weight.sensor-weight-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 weight. Key themes: content.classification.tag, weight, scale, floor, receiving.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "weight",
+        "scale",
+        "floor",
+        "receiving",
+        "doc",
+        "inventory",
+        "load",
+        "pounds",
+        "sensor.document.location"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-005",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, lighting, safety, emergency, completed.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "lighting",
+        "safety",
+        "emergency",
+        "completed",
+        "11t07",
+        "maintenance.work.status",
+        "2024",
+        "dc.date",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.humidity.sensor-humid-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: content.classification.tag, humidity, warehouse, sensor, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "humidity",
+        "warehouse",
+        "sensor",
+        "dc.type",
+        "dc.subject",
+        "zone",
+        "center",
+        "percent",
+        "201"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.logistics.doc-shipping-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 logistics. Key themes: content.classification.tag, logistics, receiving, shipping, procedures.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "logistics",
+        "receiving",
+        "shipping",
+        "procedures",
+        "dc.title",
+        "dc.subject",
+        "dc.type",
+        "document"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.vibration.sensor-vibration-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, content.classification.tag, motor, conveyor, sensor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "content.classification.tag",
+        "motor",
+        "conveyor",
+        "sensor",
+        "dc.title",
+        "dc.type",
+        "predictive",
+        "sensor.document.unit",
+        "sensor.document.reading"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.level.sensor-level-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 level. Key themes: content.classification.tag, level, hydraulic, dock, sensor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "level",
+        "hydraulic",
+        "dock",
+        "sensor",
+        "reservoir",
+        "dc.subject",
+        "power",
+        "dc.title",
+        "maintenance"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.vibration.vibration-sensor-002",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, time.observation.recorded, iot.sensor.serial, vib, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "vib",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "2024",
+        "002",
+        "geo.location.latitude",
+        "sensor.measurement.ips"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.gas.sensor-gas-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 gas. Key themes: content.classification.tag, gas, propane, area, forklift.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "gas",
+        "propane",
+        "area",
+        "forklift",
+        "sensor.document.unit",
+        "1001",
+        "lel",
+        "dc.title",
+        "sensor"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-009",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, motor, door, maintenance.work.status.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "motor",
+        "door",
+        "maintenance.work.status",
+        "dc.date",
+        "dc.creator",
+        "07t10",
+        "overhead",
+        "james"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.high.obs-008",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, extinguisher, blocked, high, fire.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "extinguisher",
+        "blocked",
+        "high",
+        "fire",
+        "safety",
+        "audit",
+        "00z",
+        "dc.subject",
+        "mark"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.medium.obs-011",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, medium, inventory, variance, jennifer.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "medium",
+        "inventory",
+        "variance",
+        "jennifer",
+        "count",
+        "observation.record.severity",
+        "discrepancy",
+        "dc.creator",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.high.obs-005",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, stacking, high, pallet, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "stacking",
+        "high",
+        "pallet",
+        "dc.type",
+        "hazard",
+        "observation",
+        "observation.record.severity",
+        "dc.date",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.air_quality.sensor-air-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 air_quality. Key themes: content.classification.tag, quality, air, sensor, adjacent.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "quality",
+        "air",
+        "sensor",
+        "adjacent",
+        "height",
+        "environment",
+        "dc.type",
+        "sensor.document.location",
+        "room"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.level.level-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 level. Key themes: level, sensor.measurement.percent, iot.sensor.serial, lvl, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "level",
+        "sensor.measurement.percent",
+        "iot.sensor.serial",
+        "lvl",
+        "2024",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.humidity.humid-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, sensor.measurement.percent, sensor.classification.type, time.observation.recorded, hum.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "hum",
+        "geo.location.longitude",
+        "iot.sensor.serial",
+        "2024",
+        "001",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, repair, hydraulic, forklift, completed.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "repair",
+        "hydraulic",
+        "forklift",
+        "completed",
+        "mike",
+        "maintenance",
+        "00z",
+        "equipment",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.light.sensor-light-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 light. Key themes: content.classification.tag, light, lighting, sensor, 20ft.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "light",
+        "lighting",
+        "sensor",
+        "20ft",
+        "zone",
+        "row",
+        "sensor.document.reading",
+        "level",
+        "below"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.humidity.humid-sensor-003",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, hum, 2024, geo.location.latitude, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "hum",
+        "2024",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "003",
+        "geo.location.longitude",
+        "sensor.measurement.percent",
+        "time.observation.recorded",
+        "iot.sensor.serial"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, time.observation.recorded, 002, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "002",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "temp",
+        "2024",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.maintenance.doc-maint-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 maintenance. Key themes: content.classification.tag, maintenance, schedule, preventive, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "maintenance",
+        "schedule",
+        "preventive",
+        "dc.type",
+        "document",
+        "dc.subject",
+        "equipment",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.flow.flow-sensor-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 flow. Key themes: flow, geo.location.longitude, sensor.classification.type, time.observation.recorded, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "flow",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "001",
+        "geo.location.latitude",
+        "sensor.measurement.gpm",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.compliance.doc-audit-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 compliance. Key themes: content.classification.tag, compliance, audit, dc.title, checklist.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "compliance",
+        "audit",
+        "dc.title",
+        "checklist",
+        "dc.type",
+        "document",
+        "dc.subject",
+        "internal",
+        "safety"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.safety.doc-safety-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 safety. Key themes: safety, content.classification.tag, warehouse, training, guidelines.",
+      "summary_status": "statistical",
+      "keywords": [
+        "safety",
+        "content.classification.tag",
+        "warehouse",
+        "training",
+        "guidelines",
+        "emergency",
+        "dc.title",
+        "dc.type",
+        "document",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.medium.obs-009",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, medium, compliance, 07t13, battery.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "medium",
+        "compliance",
+        "07t13",
+        "battery",
+        "2024",
+        "00z",
+        "dc.subject",
+        "protective",
+        "observation.record.severity"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.document.training.doc-training-001",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 training. Key themes: training, content.classification.tag, requirements, dc.subject, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "training",
+        "content.classification.tag",
+        "requirements",
+        "dc.subject",
+        "dc.title",
+        "annual",
+        "dc.type",
+        "document",
+        "certification",
+        "safety"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.low.obs-006",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 low. Key themes: content.classification.tag, slip, water, low, leak.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "slip",
+        "water",
+        "low",
+        "leak",
+        "maria",
+        "10t08",
+        "near",
+        "observation",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.temperature.sensor-temp-003",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: content.classification.tag, temperature, dock, sensor, receiving.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "temperature",
+        "dock",
+        "sensor",
+        "receiving",
+        "area",
+        "8ft",
+        "103",
+        "dc.title",
+        "sensor.document.unit"
+      ]
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-012",
+      "level": 1,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, wrapper, service, stretch.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "wrapper",
+        "service",
+        "stretch",
+        "dc.title",
+        "dc.date",
+        "04t14",
+        "quarterly",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.medium.obs-003",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, medium, environment, spill, cleanup.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "medium",
+        "environment",
+        "spill",
+        "cleanup",
+        "dc.title",
+        "observation.record.severity",
+        "rodriguez",
+        "2024",
+        "hydraulic"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.high.obs-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, high, blocked, safety, exit.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "high",
+        "blocked",
+        "safety",
+        "exit",
+        "emergency",
+        "williams",
+        "dc.title",
+        "violation",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, geo.location.longitude, sensor.measurement.fahrenheit, sensor.classification.type, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "geo.location.longitude",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "2024",
+        "time.observation.recorded",
+        "temp",
+        "003",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-006",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, inspection, racking, pallet.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "inspection",
+        "racking",
+        "pallet",
+        "dc.date",
+        "00z",
+        "safety",
+        "10t13",
+        "facility"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.air_quality.sensor-air-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 air_quality. Key themes: content.classification.tag, quality, air, sensor, sensor.document.unit.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "quality",
+        "air",
+        "sensor",
+        "sensor.document.unit",
+        "break",
+        "dc.subject",
+        "height",
+        "air_quality",
+        "room"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.level.level-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 level. Key themes: level, sensor.measurement.percent, sensor.classification.type, time.observation.recorded, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "level",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "lvl",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.illumination.light-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 illumination. Key themes: illumination, sensor.measurement.fc, sensor.classification.type, time.observation.recorded, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "illumination",
+        "sensor.measurement.fc",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "iot.sensor.serial",
+        "lux",
+        "001"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-009",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, motor, door, completed, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "motor",
+        "door",
+        "completed",
+        "dc.title",
+        "dc.date",
+        "dc.type",
+        "wilson",
+        "07t10",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, time.observation.recorded, temp, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "temp",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "2024",
+        "005"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.quality.doc-quality-001",
+      "level": 2,
+      "member_count": 2,
+      "statistical_summary": "Community of 2 entities including 1 medium, 1 quality. Key themes: content.classification.tag, quality, dc.title, dc.subject, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "quality",
+        "dc.title",
+        "dc.subject",
+        "dc.type",
+        "product",
+        "medium",
+        "standards",
+        "inspection",
+        "issue"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.pressure.sensor-pressure-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 pressure. Key themes: content.classification.tag, pressure, sensor, compressed, air.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "pressure",
+        "sensor",
+        "compressed",
+        "air",
+        "maintenance",
+        "sensor.document.location",
+        "room",
+        "dryer",
+        "equipment"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-005",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, safety, lighting, completed, emergency.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "safety",
+        "lighting",
+        "completed",
+        "emergency",
+        "test",
+        "monthly",
+        "lisa",
+        "dc.title",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.safety.doc-safety-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 safety. Key themes: content.classification.tag, safety, warehouse, dc.type, emergency.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "safety",
+        "warehouse",
+        "dc.type",
+        "emergency",
+        "dc.title",
+        "guidelines",
+        "document",
+        "dc.subject",
+        "training"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.pressure.pressure-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 pressure. Key themes: pressure, 001, geo.location.latitude, geo.location.longitude, time.observation.recorded.",
+      "summary_status": "statistical",
+      "keywords": [
+        "pressure",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "pres",
+        "sensor.measurement.psi",
+        "sensor.classification.type",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.training.doc-training-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 training. Key themes: content.classification.tag, training, requirements, document, dc.subject.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "training",
+        "requirements",
+        "document",
+        "dc.subject",
+        "certification",
+        "compliance",
+        "annual",
+        "dc.type",
+        "safety"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.in_progress.maint-016",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 in_progress. Key themes: content.classification.tag, bumper, replacement, dock, james.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "bumper",
+        "replacement",
+        "dock",
+        "james",
+        "dc.type",
+        "dc.title",
+        "loading",
+        "scheduled",
+        "facility"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.high.obs-010",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, unauthorized, high, 00z, policy.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "unauthorized",
+        "high",
+        "00z",
+        "policy",
+        "2024",
+        "dc.subject",
+        "visitor",
+        "steven",
+        "clark"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.motion.sensor-motion-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 motion. Key themes: motion, content.classification.tag, security, dc.title, high.",
+      "summary_status": "statistical",
+      "keywords": [
+        "motion",
+        "content.classification.tag",
+        "security",
+        "dc.title",
+        "high",
+        "doc",
+        "southeast",
+        "sensor.document.location",
+        "value",
+        "boolean"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-002",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, belt, tension, conveyor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "belt",
+        "tension",
+        "conveyor",
+        "maintenance.work.status",
+        "equipment",
+        "dc.title",
+        "adjustment",
+        "maintenance"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.door.sensor-door-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 door. Key themes: door, content.classification.tag, emergency, sensor, exit.",
+      "summary_status": "statistical",
+      "keywords": [
+        "door",
+        "content.classification.tag",
+        "emergency",
+        "sensor",
+        "exit",
+        "doc",
+        "dc.title",
+        "dc.type",
+        "boolean",
+        "zone"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.humidity.sensor-humid-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, content.classification.tag, sensor, warehouse, aisle.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "content.classification.tag",
+        "sensor",
+        "warehouse",
+        "aisle",
+        "201",
+        "height",
+        "10ft",
+        "hvac",
+        "environment"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.level.sensor-level-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 level. Key themes: level, content.classification.tag, hydraulic, dock, sensor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "level",
+        "content.classification.tag",
+        "hydraulic",
+        "dock",
+        "sensor",
+        "reservoir",
+        "power",
+        "sensor.document.location",
+        "unit",
+        "area"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.vibration.vibration-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, sensor.classification.type, time.observation.recorded, 001, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.ips",
+        "iot.sensor.serial",
+        "vib",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.critical.obs-004",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 critical. Key themes: content.classification.tag, critical, conveyor, guard, safety.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "critical",
+        "conveyor",
+        "guard",
+        "safety",
+        "00z",
+        "lockout",
+        "hazard",
+        "clark",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.power.sensor-power-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 power. Key themes: content.classification.tag, power, electrical, sensor.document.unit, monitor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "power",
+        "electrical",
+        "sensor.document.unit",
+        "monitor",
+        "sensor.document.reading",
+        "monitoring",
+        "service",
+        "dc.subject",
+        "energy"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.humidity.humid-sensor-002",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, sensor.classification.type, time.observation.recorded, 2024, 002.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "2024",
+        "002",
+        "sensor.measurement.percent",
+        "iot.sensor.serial",
+        "hum",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.critical.obs-012",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 critical. Key themes: content.classification.tag, near, critical, falling, miss.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "near",
+        "critical",
+        "falling",
+        "miss",
+        "safety",
+        "williams",
+        "patricia",
+        "04t14",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.technology.doc-it-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 technology. Key themes: content.classification.tag, technology, dc.type, document, software.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "technology",
+        "dc.type",
+        "document",
+        "software",
+        "guide",
+        "warehouse",
+        "dc.subject",
+        "system",
+        "wms"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, sensor.measurement.fahrenheit, sensor.classification.type, iot.sensor.serial, temp.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "sensor.measurement.fahrenheit",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "temp",
+        "2024",
+        "002",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "time.observation.recorded"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.inventory.doc-inventory-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 inventory. Key themes: inventory, content.classification.tag, accuracy, standards, document.",
+      "summary_status": "statistical",
+      "keywords": [
+        "inventory",
+        "content.classification.tag",
+        "accuracy",
+        "standards",
+        "document",
+        "dc.subject",
+        "counting",
+        "dc.title",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-003",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, service, hydraulic, dock.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "service",
+        "hydraulic",
+        "dock",
+        "dc.type",
+        "dc.title",
+        "dc.date",
+        "00z",
+        "dc.creator"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.flow.flow-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 flow. Key themes: flow, sensor.measurement.gpm, iot.sensor.serial, geo.location.latitude, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "flow",
+        "sensor.measurement.gpm",
+        "iot.sensor.serial",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "2024",
+        "001",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, hydraulic, completed, forklift, repair.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "hydraulic",
+        "completed",
+        "forklift",
+        "repair",
+        "mike",
+        "equipment",
+        "dc.type",
+        "dc.creator",
+        "maintenance"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-010",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, repair, floor, completed, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "repair",
+        "floor",
+        "completed",
+        "dc.type",
+        "maintenance.work.status",
+        "dc.date",
+        "dc.title",
+        "warehouse",
+        "06t12"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.medium.obs-009",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, compliance, medium, dc.date, 07t13.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "compliance",
+        "medium",
+        "dc.date",
+        "07t13",
+        "ppe",
+        "training",
+        "equipment",
+        "dc.creator",
+        "angela"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.medium.obs-002",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, medium, speeding, safety, forklift.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "medium",
+        "speeding",
+        "safety",
+        "forklift",
+        "dc.creator",
+        "dc.type",
+        "incident",
+        "2024",
+        "14t14"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.light.sensor-light-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 light. Key themes: content.classification.tag, sensor, lighting, light, sensor.document.location.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "sensor",
+        "lighting",
+        "light",
+        "sensor.document.location",
+        "height",
+        "sensor.document.unit",
+        "skylight",
+        "zone",
+        "foot"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.compliance.doc-audit-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 compliance. Key themes: content.classification.tag, compliance, audit, document, dc.subject.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "compliance",
+        "audit",
+        "document",
+        "dc.subject",
+        "safety",
+        "inventory",
+        "dc.title",
+        "internal",
+        "checklist"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-015",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, security, camera, cleaning, completed.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "security",
+        "camera",
+        "cleaning",
+        "completed",
+        "mike",
+        "2024",
+        "dc.creator",
+        "dc.title",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-008",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, forklift, maintenance, battery, completed.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "forklift",
+        "maintenance",
+        "battery",
+        "completed",
+        "dc.creator",
+        "electric",
+        "maintenance.work.status",
+        "dc.title",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.maintenance.doc-maint-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 maintenance. Key themes: content.classification.tag, maintenance, preventive, schedule, equipment.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "maintenance",
+        "preventive",
+        "schedule",
+        "equipment",
+        "dc.title",
+        "dc.type",
+        "document",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.vibration.vibration-sensor-002",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: vibration, sensor.measurement.ips, sensor.classification.type, iot.sensor.serial, geo.location.longitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "vibration",
+        "sensor.measurement.ips",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "geo.location.longitude",
+        "time.observation.recorded",
+        "vib",
+        "2024",
+        "002",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.human_resources.doc-hr-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 human_resources. Key themes: content.classification.tag, onboarding, employee, training, orientation.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "onboarding",
+        "employee",
+        "training",
+        "orientation",
+        "dc.title",
+        "human_resources",
+        "human",
+        "guide",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-007",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, fire, safety, maintenance.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "fire",
+        "safety",
+        "maintenance",
+        "09t06",
+        "maintenance.work.status",
+        "dc.subject",
+        "system",
+        "test"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.water.sensor-water-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 water. Key themes: water, content.classification.tag, sensor, flow, dc.subject.",
+      "summary_status": "statistical",
+      "keywords": [
+        "water",
+        "content.classification.tag",
+        "sensor",
+        "flow",
+        "dc.subject",
+        "line",
+        "901",
+        "sensor.document.reading",
+        "main",
+        "gpm"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.operations.doc-ops-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 operations. Key themes: content.classification.tag, operations, forklift, operation, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "operations",
+        "forklift",
+        "operation",
+        "dc.type",
+        "document",
+        "equipment",
+        "training",
+        "dc.title",
+        "manual"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, iot.sensor.serial, temp, geo.location.latitude, sensor.measurement.fahrenheit.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "iot.sensor.serial",
+        "temp",
+        "geo.location.latitude",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "2024",
+        "004",
+        "geo.location.longitude",
+        "sensor.classification.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.low.obs-006",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 low. Key themes: content.classification.tag, low, water, leak, slip.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "low",
+        "water",
+        "leak",
+        "slip",
+        "dc.type",
+        "observation.record.severity",
+        "santos",
+        "near",
+        "miss"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.medium.obs-015",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, labeling, medium, error, quality.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "labeling",
+        "medium",
+        "error",
+        "quality",
+        "verification",
+        "observation",
+        "shipment",
+        "00z",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.logistics.doc-shipping-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 logistics. Key themes: content.classification.tag, logistics, shipping, receiving, procedures.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "logistics",
+        "shipping",
+        "receiving",
+        "procedures",
+        "dc.title",
+        "dc.type",
+        "dc.subject",
+        "document"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.vibration.sensor-vibration-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 vibration. Key themes: motor, content.classification.tag, vibration, conveyor, sensor.",
+      "summary_status": "statistical",
+      "keywords": [
+        "motor",
+        "content.classification.tag",
+        "vibration",
+        "conveyor",
+        "sensor",
+        "sensor.document.location",
+        "housing",
+        "dc.type",
+        "per",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.low.obs-014",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 low. Key themes: content.classification.tag, housekeeping, low, johnson, dc.date.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "housekeeping",
+        "low",
+        "johnson",
+        "dc.date",
+        "dc.creator",
+        "2024",
+        "dc.title",
+        "dc.type",
+        "observation.record.severity"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-012",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, stretch, wrapper, service, completed.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "stretch",
+        "wrapper",
+        "service",
+        "completed",
+        "dc.creator",
+        "maintenance.work.status",
+        "dc.date",
+        "2024",
+        "equipment"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-011",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, scale, calibration, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "scale",
+        "calibration",
+        "dc.title",
+        "2024",
+        "annual",
+        "sarah",
+        "maintenance.work.status",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.combustible_gas.gas-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 combustible_gas. Key themes: gas, combustible_gas, iot.sensor.serial, 2024, 001.",
+      "summary_status": "statistical",
+      "keywords": [
+        "gas",
+        "combustible_gas",
+        "iot.sensor.serial",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "geo.location.longitude",
+        "sensor.measurement.percent_lel",
+        "sensor.classification.type",
+        "combustible"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.gas.sensor-gas-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 gas. Key themes: gas, content.classification.tag, propane, area, forklift.",
+      "summary_status": "statistical",
+      "keywords": [
+        "gas",
+        "content.classification.tag",
+        "propane",
+        "area",
+        "forklift",
+        "3ft",
+        "station",
+        "lel",
+        "detector",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.temperature.sensor-temp-003",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: content.classification.tag, temperature, dock, sensor, area.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "temperature",
+        "dock",
+        "sensor",
+        "area",
+        "receiving",
+        "sensor.document.unit",
+        "doc",
+        "height",
+        "8ft"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.humidity.humid-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, geo.location.longitude, sensor.measurement.percent, 2024, sensor.classification.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "geo.location.longitude",
+        "sensor.measurement.percent",
+        "2024",
+        "sensor.classification.type",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "hum",
+        "001",
+        "geo.location.latitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-013",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, repair, completed, parking, maintenance.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "repair",
+        "completed",
+        "parking",
+        "maintenance",
+        "2024",
+        "facility",
+        "lot",
+        "lighting",
+        "emergency"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.temperature.sensor-temp-001",
+      "level": 2,
+      "member_count": 2,
+      "statistical_summary": "Community of 2 entities including 1 high, 1 temperature. Key themes: content.classification.tag, temperature, storage, cold, quality.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "temperature",
+        "storage",
+        "cold",
+        "quality",
+        "excursion",
+        "dc.title",
+        "dc.type",
+        "high",
+        "dc.subject"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.safety.doc-emergency-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 safety. Key themes: content.classification.tag, safety, emergency, response, dc.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "safety",
+        "emergency",
+        "response",
+        "dc.type",
+        "evacuation",
+        "plan",
+        "document",
+        "dc.subject",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.high.obs-008",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, extinguisher, high, blocked, fire.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "extinguisher",
+        "high",
+        "blocked",
+        "fire",
+        "safety",
+        "dc.creator",
+        "08t16",
+        "dc.date",
+        "mark"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: temperature, geo.location.longitude, sensor.measurement.fahrenheit, time.observation.recorded, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "geo.location.longitude",
+        "sensor.measurement.fahrenheit",
+        "time.observation.recorded",
+        "iot.sensor.serial",
+        "temp",
+        "2024",
+        "001",
+        "geo.location.latitude",
+        "sensor.classification.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.temperature.sensor-temp-002",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 temperature. Key themes: content.classification.tag, temperature, freezer, fahrenheit, dc.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "temperature",
+        "freezer",
+        "fahrenheit",
+        "dc.title",
+        "wall",
+        "monitoring",
+        "dc.type",
+        "sensor",
+        "doc"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.power.power-sensor-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 power. Key themes: power, sensor.measurement.kw, sensor.classification.type, iot.sensor.serial, pwr.",
+      "summary_status": "statistical",
+      "keywords": [
+        "power",
+        "sensor.measurement.kw",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "pwr",
+        "001",
+        "time.observation.recorded",
+        "2024",
+        "geo.location.latitude",
+        "geo.location.longitude"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.environment.doc-env-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 environment. Key themes: content.classification.tag, environment, compliance, document, waste.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "environment",
+        "compliance",
+        "document",
+        "waste",
+        "dc.title",
+        "dc.subject",
+        "recycling",
+        "environmental",
+        "procedures"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-014",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, service, compressor, air.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "service",
+        "compressor",
+        "air",
+        "dryer",
+        "lee",
+        "maintenance",
+        "equipment",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.weight.sensor-weight-001",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 weight. Key themes: content.classification.tag, scale, weight, floor, receiving.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "scale",
+        "weight",
+        "floor",
+        "receiving",
+        "dc.title",
+        "doc",
+        "dc.subject",
+        "sensor.document.location",
+        "dc.type"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.high.obs-005",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 high. Key themes: content.classification.tag, stacking, high, pallet, williams.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "stacking",
+        "high",
+        "pallet",
+        "williams",
+        "dc.date",
+        "dc.creator",
+        "dc.subject",
+        "training",
+        "dc.title"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-004",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 completed. Key themes: content.classification.tag, completed, hvac, garcia, facility.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "hvac",
+        "garcia",
+        "facility",
+        "dc.date",
+        "2024",
+        "replacement",
+        "monthly",
+        "filter"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.humidity.humid-sensor-003",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 humidity. Key themes: humidity, 2024, 003, geo.location.latitude, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "2024",
+        "003",
+        "geo.location.latitude",
+        "iot.sensor.serial",
+        "hum",
+        "geo.location.longitude",
+        "sensor.measurement.percent",
+        "sensor.classification.type",
+        "time.observation.recorded"
+      ]
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.medium.obs-011",
+      "level": 2,
+      "member_count": 1,
+      "statistical_summary": "Community of 1 entities including 1 medium. Key themes: content.classification.tag, medium, inventory, variance, discrepancy.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "medium",
+        "inventory",
+        "variance",
+        "discrepancy",
+        "jennifer",
+        "05t11",
+        "00z",
+        "quality",
+        "dc.title"
+      ]
+    }
+  ]
+}

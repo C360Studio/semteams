@@ -3,6 +3,7 @@ package rule
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -89,15 +90,16 @@ func (r *ExpressionRule) Evaluate(messages []message.Message) bool {
 	// For expression rules, evaluate the last message
 	msg := messages[len(messages)-1]
 
-	// Get payload data
+	// Get payload data - try multiple approaches
 	payload := msg.Payload()
-	genericPayload, ok := payload.(*message.GenericJSONPayload)
-	if !ok {
-		return false
+	var data map[string]interface{}
+
+	// GenericJSONPayload with nested data structure (for NATS message-based rules)
+	if genericPayload, ok := payload.(*message.GenericJSONPayload); ok {
+		data = genericPayload.Data
 	}
 
-	data := genericPayload.Data
-	if data == nil {
+	if data == nil || len(data) == 0 {
 		return false
 	}
 
@@ -108,6 +110,48 @@ func (r *ExpressionRule) Evaluate(messages []message.Message) bool {
 	}
 
 	return false
+}
+
+// EvaluateEntityState evaluates the rule directly against EntityState triples.
+// This bypasses the message transformation layer and evaluates conditions
+// directly against triple predicates (e.g., "sensor.measurement.fahrenheit").
+func (r *ExpressionRule) EvaluateEntityState(entityState *gtypes.EntityState) bool {
+	if !r.enabled || entityState == nil {
+		return false
+	}
+
+	// Check cooldown
+	if r.cooldown > 0 && time.Since(r.lastTriggered) < r.cooldown {
+		return false
+	}
+
+	if len(r.conditions) == 0 {
+		return false
+	}
+
+	// Build LogicalExpression from rule conditions
+	expr := r.buildLogicalExpression()
+
+	// Use the expression.Evaluator for direct triple evaluation
+	result, err := r.evaluator.Evaluate(entityState, expr)
+	if err != nil {
+		slog.Debug("ExpressionRule: evaluation error",
+			"rule", r.name,
+			"entity_id", entityState.ID,
+			"error", err)
+		return false
+	}
+
+	r.shouldTrigger = result
+	return result
+}
+
+// buildLogicalExpression converts rule conditions to expression.LogicalExpression
+func (r *ExpressionRule) buildLogicalExpression() expression.LogicalExpression {
+	return expression.LogicalExpression{
+		Conditions: r.conditions,
+		Logic:      r.logic,
+	}
 }
 
 // evaluateConditions checks if message data matches rule conditions

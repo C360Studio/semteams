@@ -15,9 +15,7 @@ import (
 // ExecutePath executes a graph path traversal starting from a given entity
 func (qe *Manager) ExecutePath(ctx context.Context, start string, pattern PathPattern) (*QueryResult, error) {
 	startTime := time.Now()
-	defer func() {
-		qe.lastActivity = time.Now()
-	}()
+	defer qe.recordActivity()
 
 	// Apply timeout
 	pathCtx := ctx
@@ -68,9 +66,7 @@ func (qe *Manager) ExecutePath(ctx context.Context, start string, pattern PathPa
 // GetGraphSnapshot creates a snapshot of entities within the specified bounds
 func (qe *Manager) GetGraphSnapshot(ctx context.Context, bounds QueryBounds) (*GraphSnapshot, error) {
 	startTime := time.Now()
-	defer func() {
-		qe.lastActivity = time.Now()
-	}()
+	defer qe.recordActivity()
 
 	// Apply timeout
 	snapshotCtx := ctx
@@ -113,9 +109,7 @@ func (qe *Manager) QueryRelationships(
 	ctx context.Context, entityID string, direction Direction,
 ) ([]*Relationship, error) {
 	startTime := time.Now()
-	defer func() {
-		qe.lastActivity = time.Now()
-	}()
+	defer qe.recordActivity()
 
 	// Validate direction
 	if !qe.isValidDirection(direction) {

@@ -64,6 +64,37 @@ type Category struct {
 	Metrics map[string]float64 `json:"metrics"`
 }
 
+// WaitOpts configures metric waiting behavior
+type WaitOpts struct {
+	Timeout      time.Duration // Max wait time (default 30s)
+	PollInterval time.Duration // Check frequency (default 100ms)
+	Comparator   string        // ">=", "==", ">", "<", "<=" (default ">=")
+}
+
+// DefaultWaitOpts returns sensible defaults for metric waiting
+func DefaultWaitOpts() WaitOpts {
+	return WaitOpts{
+		Timeout:      30 * time.Second,
+		PollInterval: 100 * time.Millisecond,
+		Comparator:   ">=",
+	}
+}
+
+// MetricsBaseline captures metrics at a point in time for comparison
+type MetricsBaseline struct {
+	Timestamp time.Time          `json:"timestamp"`
+	Metrics   map[string]float64 `json:"metrics"`
+}
+
+// MetricsDiff represents the difference between two metric snapshots
+type MetricsDiff struct {
+	BaselineTime time.Time          `json:"baseline_time"`
+	CurrentTime  time.Time          `json:"current_time"`
+	Duration     time.Duration      `json:"duration"`
+	Deltas       map[string]float64 `json:"deltas"`       // current - baseline
+	RatePerSec   map[string]float64 `json:"rate_per_sec"` // delta / duration.Seconds()
+}
+
 // FetchRaw retrieves raw metrics text from the Prometheus endpoint
 func (c *MetricsClient) FetchRaw(ctx context.Context) (string, error) {
 	url := c.baseURL + "/metrics"
@@ -332,4 +363,288 @@ func formatLabels(labels map[string]string) string {
 		parts = append(parts, fmt.Sprintf("%s=\"%s\"", k, v))
 	}
 	return strings.Join(parts, ",")
+}
+
+// SumMetricsByName sums all metrics with the given name (across all label combinations)
+func (c *MetricsClient) SumMetricsByName(ctx context.Context, metricName string) (float64, error) {
+	snapshot, err := c.FetchSnapshot(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	var sum float64
+	found := false
+	for _, metric := range snapshot.Metrics {
+		if metric.Name == metricName {
+			sum += metric.Value
+			found = true
+		}
+	}
+
+	if !found {
+		return 0, fmt.Errorf("metric not found: %s", metricName)
+	}
+
+	return sum, nil
+}
+
+// CaptureBaseline takes a snapshot of all counter metrics for later comparison
+func (c *MetricsClient) CaptureBaseline(ctx context.Context) (*MetricsBaseline, error) {
+	snapshot, err := c.FetchSnapshot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("capturing baseline: %w", err)
+	}
+
+	baseline := &MetricsBaseline{
+		Timestamp: snapshot.Timestamp,
+		Metrics:   make(map[string]float64),
+	}
+
+	// Aggregate metrics by name (sum across labels)
+	aggregated := make(map[string]float64)
+	for _, metric := range snapshot.Metrics {
+		aggregated[metric.Name] += metric.Value
+	}
+
+	baseline.Metrics = aggregated
+	return baseline, nil
+}
+
+// CompareToBaseline compares current metrics to a baseline and returns deltas
+func (c *MetricsClient) CompareToBaseline(ctx context.Context, baseline *MetricsBaseline) (*MetricsDiff, error) {
+	if baseline == nil {
+		return nil, fmt.Errorf("baseline cannot be nil")
+	}
+
+	snapshot, err := c.FetchSnapshot(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetching current metrics: %w", err)
+	}
+
+	// Aggregate current metrics by name
+	current := make(map[string]float64)
+	for _, metric := range snapshot.Metrics {
+		current[metric.Name] += metric.Value
+	}
+
+	diff := &MetricsDiff{
+		BaselineTime: baseline.Timestamp,
+		CurrentTime:  snapshot.Timestamp,
+		Duration:     snapshot.Timestamp.Sub(baseline.Timestamp),
+		Deltas:       make(map[string]float64),
+		RatePerSec:   make(map[string]float64),
+	}
+
+	// Calculate deltas for all metrics in baseline
+	durationSec := diff.Duration.Seconds()
+	for name, baselineValue := range baseline.Metrics {
+		currentValue := current[name]
+		delta := currentValue - baselineValue
+		diff.Deltas[name] = delta
+
+		if durationSec > 0 {
+			diff.RatePerSec[name] = delta / durationSec
+		}
+	}
+
+	// Also include any new metrics not in baseline
+	for name, currentValue := range current {
+		if _, exists := baseline.Metrics[name]; !exists {
+			diff.Deltas[name] = currentValue
+			if durationSec > 0 {
+				diff.RatePerSec[name] = currentValue / durationSec
+			}
+		}
+	}
+
+	return diff, nil
+}
+
+// WaitForMetric polls until a metric reaches the expected value or timeout
+func (c *MetricsClient) WaitForMetric(ctx context.Context, metricName string, expected float64, opts WaitOpts) error {
+	// Apply defaults
+	if opts.Timeout == 0 {
+		opts.Timeout = DefaultWaitOpts().Timeout
+	}
+	if opts.PollInterval == 0 {
+		opts.PollInterval = DefaultWaitOpts().PollInterval
+	}
+	if opts.Comparator == "" {
+		opts.Comparator = DefaultWaitOpts().Comparator
+	}
+
+	deadline := time.Now().Add(opts.Timeout)
+	ticker := time.NewTicker(opts.PollInterval)
+	defer ticker.Stop()
+
+	var lastValue float64
+	var lastErr error
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for %s: %w", metricName, ctx.Err())
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout waiting for %s %s %.2f (last value: %.2f, last error: %v)",
+					metricName, opts.Comparator, expected, lastValue, lastErr)
+			}
+
+			value, err := c.SumMetricsByName(ctx, metricName)
+			if err != nil {
+				lastErr = err
+				continue // Metric may not exist yet, keep trying
+			}
+
+			lastValue = value
+			lastErr = nil
+
+			if compareValue(value, expected, opts.Comparator) {
+				return nil // Success!
+			}
+		}
+	}
+}
+
+// WaitForMetricDelta waits for a metric to increase by at least delta from baseline
+func (c *MetricsClient) WaitForMetricDelta(ctx context.Context, metricName string, baseline, delta float64, opts WaitOpts) error {
+	expected := baseline + delta
+	return c.WaitForMetric(ctx, metricName, expected, opts)
+}
+
+// WaitForMetricChange waits for any change in a metric from its baseline value
+func (c *MetricsClient) WaitForMetricChange(ctx context.Context, metricName string, baseline float64, opts WaitOpts) error {
+	// Apply defaults
+	if opts.Timeout == 0 {
+		opts.Timeout = DefaultWaitOpts().Timeout
+	}
+	if opts.PollInterval == 0 {
+		opts.PollInterval = DefaultWaitOpts().PollInterval
+	}
+
+	deadline := time.Now().Add(opts.Timeout)
+	ticker := time.NewTicker(opts.PollInterval)
+	defer ticker.Stop()
+
+	var lastValue float64
+	var lastErr error
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled while waiting for %s to change: %w", metricName, ctx.Err())
+		case <-ticker.C:
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timeout waiting for %s to change from %.2f (last value: %.2f, last error: %v)",
+					metricName, baseline, lastValue, lastErr)
+			}
+
+			value, err := c.SumMetricsByName(ctx, metricName)
+			if err != nil {
+				lastErr = err
+				continue
+			}
+
+			lastValue = value
+			lastErr = nil
+
+			if value != baseline {
+				return nil // Any change is success
+			}
+		}
+	}
+}
+
+// compareValue compares actual to expected using the given comparator
+func compareValue(actual, expected float64, comparator string) bool {
+	switch comparator {
+	case ">=":
+		return actual >= expected
+	case ">":
+		return actual > expected
+	case "==":
+		return actual == expected
+	case "<=":
+		return actual <= expected
+	case "<":
+		return actual < expected
+	default:
+		return actual >= expected // Default to >=
+	}
+}
+
+// GetMetricByLabels retrieves metrics matching the given name and optional label filters
+func (c *MetricsClient) GetMetricByLabels(ctx context.Context, metricName string, labelFilters map[string]string) ([]Metric, error) {
+	snapshot, err := c.FetchSnapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []Metric
+	for _, metric := range snapshot.Metrics {
+		if metric.Name != metricName {
+			continue
+		}
+
+		// Check label filters if provided
+		if labelFilters != nil {
+			matches := true
+			for key, value := range labelFilters {
+				if metric.Labels[key] != value {
+					matches = false
+					break
+				}
+			}
+			if !matches {
+				continue
+			}
+		}
+
+		results = append(results, metric)
+	}
+
+	return results, nil
+}
+
+// RuleMetrics holds common rule validation metrics for E2E tests
+type RuleMetrics struct {
+	Evaluations    float64 `json:"evaluations"`
+	Triggers       float64 `json:"triggers"`
+	OnEnterFired   float64 `json:"on_enter_fired"`
+	OnExitFired    float64 `json:"on_exit_fired"`
+	WhileTrueFired float64 `json:"while_true_fired"`
+}
+
+// ExtractRuleMetrics gets all rule-related metrics in a single call.
+// This enables consistent rule validation across E2E scenarios.
+func (c *MetricsClient) ExtractRuleMetrics(ctx context.Context) (*RuleMetrics, error) {
+	metrics := &RuleMetrics{}
+
+	// Get evaluation and trigger counts
+	evaluations, err := c.SumMetricsByName(ctx, "semstreams_rule_evaluations_total")
+	if err == nil {
+		metrics.Evaluations = evaluations
+	}
+
+	triggers, err := c.SumMetricsByName(ctx, "semstreams_rule_triggers_total")
+	if err == nil {
+		metrics.Triggers = triggers
+	}
+
+	// Extract state transition metrics
+	transitions, err := c.GetMetricByLabels(ctx, "semstreams_rule_state_transitions_total", nil)
+	if err == nil {
+		for _, t := range transitions {
+			switch t.Labels["transition"] {
+			case "enter":
+				metrics.OnEnterFired += t.Value
+			case "exit":
+				metrics.OnExitFired += t.Value
+			case "while_true":
+				metrics.WhileTrueFired += t.Value
+			}
+		}
+	}
+
+	return metrics, nil
 }

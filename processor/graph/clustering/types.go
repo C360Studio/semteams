@@ -61,6 +61,11 @@ type CommunityDetector interface {
 
 	// GetCommunitiesByLevel returns all communities at a specific hierarchical level
 	GetCommunitiesByLevel(ctx context.Context, level int) ([]*Community, error)
+
+	// InferRelationshipsFromCommunities generates inferred triples from community co-membership.
+	// For each community with >= minCommunitySize members, creates bidirectional
+	// "inferred.clustered_with" triples between members.
+	InferRelationshipsFromCommunities(ctx context.Context, level int, config InferenceConfig) ([]InferredTriple, error)
 }
 
 // GraphProvider abstracts the graph data source for community detection

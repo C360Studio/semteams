@@ -7,16 +7,17 @@ import (
 
 // Metrics holds Prometheus metrics for RuleProcessor component
 type Metrics struct {
-	messagesReceived     *prometheus.CounterVec
-	evaluationsTotal     *prometheus.CounterVec
-	triggersTotal        *prometheus.CounterVec
-	evaluationDuration   *prometheus.HistogramVec
-	bufferSize           *prometheus.GaugeVec
-	bufferExpiredTotal   *prometheus.CounterVec
-	cooldownActive       *prometheus.GaugeVec
-	eventsPublishedTotal *prometheus.CounterVec
-	errorsTotal          *prometheus.CounterVec
-	activeRules          prometheus.Gauge
+	messagesReceived       *prometheus.CounterVec
+	evaluationsTotal       *prometheus.CounterVec
+	triggersTotal          *prometheus.CounterVec
+	evaluationDuration     *prometheus.HistogramVec
+	bufferSize             *prometheus.GaugeVec
+	bufferExpiredTotal     *prometheus.CounterVec
+	cooldownActive         *prometheus.GaugeVec
+	eventsPublishedTotal   *prometheus.CounterVec
+	errorsTotal            *prometheus.CounterVec
+	activeRules            prometheus.Gauge
+	stateTransitionsTotal  *prometheus.CounterVec // OnEnter/OnExit transitions
 }
 
 // newRuleMetrics creates and registers RuleProcessor metrics
@@ -97,6 +98,13 @@ func newRuleMetrics(registry *metric.MetricsRegistry, _ string) *Metrics {
 			Name:      "active_rules",
 			Help:      "Number of active rules loaded",
 		}),
+
+		stateTransitionsTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "rule",
+			Name:      "state_transitions_total",
+			Help:      "Total rule state transitions (OnEnter/OnExit)",
+		}, []string{"rule_name", "transition"}),
 	}
 
 	// Register metrics with Prometheus registry
@@ -111,6 +119,7 @@ func newRuleMetrics(registry *metric.MetricsRegistry, _ string) *Metrics {
 		metrics.eventsPublishedTotal,
 		metrics.errorsTotal,
 		metrics.activeRules,
+		metrics.stateTransitionsTotal,
 	)
 
 	return metrics

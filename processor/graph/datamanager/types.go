@@ -28,6 +28,7 @@ type EntityWrite struct {
 	Callback  func(error)         // Optional completion callback
 	RequestID string              // Optional request ID for tracing
 	Timestamp time.Time           // When request was created
+	Strategy  WriteStrategy       // CAS vs Put for updates (default: CAS)
 }
 
 // Operation represents the type of entity operation
@@ -40,6 +41,19 @@ const (
 	OperationUpdate Operation = "update"
 	// OperationDelete represents deleting an entity.
 	OperationDelete Operation = "delete"
+)
+
+// WriteStrategy determines how concurrent writes are handled
+type WriteStrategy int
+
+const (
+	// WriteStrategyCAS uses Compare-And-Swap with version checking and retries.
+	// Best for synchronous mutation requests where caller can handle conflicts.
+	WriteStrategyCAS WriteStrategy = iota
+
+	// WriteStrategyPut uses last-write-wins without version checking.
+	// Best for async streaming data where CAS would cause race conditions.
+	WriteStrategyPut
 )
 
 // String returns the string representation of the operation
@@ -71,6 +85,5 @@ type BatchWriteResult struct {
 	Results   []WriteResult // Individual write results
 	Succeeded int           // Number of successful writes
 	Failed    int           // Number of failed writes
-	Coalesced int           // Number of writes that were coalesced
 	Duration  time.Duration // Total operation duration
 }

@@ -10,6 +10,31 @@
       "description": "Community detection configuration",
       "category": "advanced"
     },
+    "enhancement": {
+      "type": "object",
+      "description": "Async LLM enhancement for community summaries",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable LLM enhancement worker",
+          "default": false
+        },
+        "workers": {
+          "type": "number",
+          "description": "Number of concurrent LLM workers",
+          "default": 3
+        },
+        "domain": {
+          "type": "string",
+          "description": "Domain for prompt selection (e.g., 'iot', 'robotics')",
+          "default": "default"
+        },
+        "llm": {
+          "$ref": "#/definitions/llm_config"
+        }
+      },
+      "category": "advanced"
+    },
     "consumer_name": {
       "type": "string",
       "description": "JetStream consumer name (durable if set)",
@@ -60,6 +85,55 @@
     }
   },
   "required": [],
+  "definitions": {
+    "llm_config": {
+      "type": "object",
+      "description": "LLM service configuration for OpenAI-compatible APIs",
+      "properties": {
+        "provider": {
+          "type": "string",
+          "description": "LLM provider type",
+          "enum": ["openai", "local", "none"],
+          "default": "openai"
+        },
+        "base_url": {
+          "type": "string",
+          "description": "Base URL for OpenAI-compatible API (e.g., http://shimmy:8080/v1)",
+          "format": "uri"
+        },
+        "model": {
+          "type": "string",
+          "description": "Model identifier (e.g., mistral-7b-instruct, gpt-4)",
+          "default": "mistral-7b-instruct-v0.2"
+        },
+        "api_key": {
+          "type": "string",
+          "description": "API key (optional for local deployments)",
+          "x-sensitive": true
+        },
+        "timeout_seconds": {
+          "type": "number",
+          "description": "Request timeout in seconds",
+          "default": 30
+        },
+        "max_retries": {
+          "type": "number",
+          "description": "Maximum retry attempts",
+          "default": 3
+        },
+        "prompts_file": {
+          "type": "string",
+          "description": "Path to custom prompts JSON file"
+        },
+        "domain": {
+          "type": "string",
+          "description": "Domain for prompt selection",
+          "default": "default"
+        }
+      },
+      "required": ["base_url", "model"]
+    }
+  },
   "x-component-metadata": {
     "name": "graph-processor",
     "type": "processor",

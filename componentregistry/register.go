@@ -10,6 +10,7 @@ import (
 	iotsensor "github.com/c360/semstreams/examples/processors/iot_sensor"
 	gatewaygraphql "github.com/c360/semstreams/gateway/graphql"
 	gatewayhttp "github.com/c360/semstreams/gateway/http"
+	gatewaymcp "github.com/c360/semstreams/gateway/mcp"
 	fileinput "github.com/c360/semstreams/input/file"
 	"github.com/c360/semstreams/input/udp"
 	websocketinput "github.com/c360/semstreams/input/websocket"
@@ -40,6 +41,7 @@ import (
 //   - WebSocket output (broadcasting)
 //   - HTTP gateway (bidirectional HTTP ↔ NATS request/reply)
 //   - GraphQL gateway (schema-driven queries for AI agents)
+//   - MCP gateway (AI agent integration via in-process GraphQL)
 //
 // Semantic Layer (domain agnostic):
 //   - Graph processor (entity graph operations)
@@ -119,6 +121,10 @@ func Register(registry *component.Registry) error {
 
 	if err := gatewaygraphql.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "GraphQL gateway component registration")
+	}
+
+	if err := gatewaymcp.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "MCP gateway component registration")
 	}
 
 	// Semantic Layer - Processors

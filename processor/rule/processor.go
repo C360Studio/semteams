@@ -54,9 +54,10 @@ type Processor struct {
 	flowMetrics component.FlowMetrics
 
 	// Rule processing resources
-	natsClient  *natsclient.Client
-	rules       map[string]Rule           // Self-loaded rules
-	ruleConfigs map[string]map[string]any // Original rule configurations for GetRuntimeConfig
+	natsClient      *natsclient.Client
+	rules           map[string]Rule           // Self-loaded rules
+	ruleDefinitions map[string]Definition     // Rule definitions for stateful evaluation
+	ruleConfigs     map[string]map[string]any // Original rule configurations for GetRuntimeConfig
 
 	// Message cache
 	messageCache cache.Cache[message.Message]
@@ -124,6 +125,7 @@ func NewProcessorWithMetrics(natsClient *natsclient.Client, config *Config, metr
 		},
 		natsClient:      natsClient,
 		rules:           make(map[string]Rule),
+		ruleDefinitions: make(map[string]Definition),
 		ruleConfigs:     make(map[string]map[string]any),
 		messageCache:    msgCache,
 		config:          config,
@@ -244,14 +246,14 @@ func (rp *Processor) Initialize() error {
 	return nil
 }
 
-// watchEntityStates, handleEntityUpdates, and entityStateToMessage are in entity_watcher.go
+// watchEntityStates and handleEntityUpdates are in entity_watcher.go
 // loadRuleDefinitionsFromFiles and loadRules are in rule_loader.go
 
 // run is the main background goroutine that handles processor lifecycle
 func (rp *Processor) run(ctx context.Context) {
 	defer close(rp.done)
 
-	// Start KV watchers for entity state changes
+	// Start KV watchers for entity state changes FIRST
 	if err := rp.watchEntityStates(ctx); err != nil {
 		rp.logger.Warn("Failed to start entity state watching", "error", err)
 		// Don't fail - rules can still process semantic messages
@@ -262,6 +264,13 @@ func (rp *Processor) run(ctx context.Context) {
 		rp.logger.Error("Failed to setup subscriptions", "error", err)
 		return
 	}
+
+	// NOW mark healthy - watchers established, subscriptions ready
+	rp.mu.Lock()
+	rp.health.Healthy = true
+	rp.health.LastCheck = time.Now()
+	rp.mu.Unlock()
+	rp.logger.Info("Rule processor ready - watchers and subscriptions established")
 
 	// Wait for shutdown signal or context cancellation
 	select {
@@ -348,7 +357,7 @@ func (rp *Processor) Start(ctx context.Context) error {
 	rp.done = make(chan struct{})
 	rp.running = true
 	rp.startTime = time.Now()
-	rp.health.Healthy = true
+	// Note: health.Healthy is set in run() after watchers and subscriptions are established
 
 	// Start background goroutine with context
 	go rp.run(ctx)

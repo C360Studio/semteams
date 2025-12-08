@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -99,74 +97,9 @@ func (rp *Processor) handleEntityUpdates(ctx context.Context, watcher jetstream.
 				entityState = &state
 			}
 
-			// Convert to message for rule evaluation
-			msg := rp.entityStateToMessage(action, entry.Key(), entityState)
-
-			// Process through rules
-			rp.evaluateRulesForMessage(ctx, entry.Key(), msg)
+			// Process through rules with direct EntityState evaluation
+			// This bypasses the message transformation layer
+			rp.evaluateRulesForEntityState(ctx, entry.Key(), action, entityState)
 		}
 	}
-}
-
-// entityStateToMessage converts EntityState to Message for rule evaluation
-func (rp *Processor) entityStateToMessage(action, entityKey string, entityState *gtypes.EntityState) message.Message {
-	// Create message type for entity state
-	msgType := message.Type{
-		Domain:   "entity",
-		Category: "state",
-		Version:  "v1",
-	}
-
-	// Create payload data
-	payloadData := map[string]any{
-		"action":    action,
-		"entity_id": entityKey,
-		"timestamp": time.Now(),
-		"source":    "kv-watch",
-	}
-
-	// Add entity state data if not deleted
-	if entityState != nil {
-		// Extract type from entity ID
-		eid, _ := message.ParseEntityID(entityState.ID)
-		payloadData["entity_type"] = eid.Type
-		payloadData["triples"] = entityState.Triples
-		payloadData["version"] = entityState.Version
-		payloadData["updated_at"] = entityState.UpdatedAt
-
-		// Extract structured properties from triples for rule matching
-		// Build nested maps from predicates (e.g., "robotics.battery.level" -> {"battery": {"level": value}})
-		for _, triple := range entityState.Triples {
-			parts := strings.Split(triple.Predicate, ".")
-			if len(parts) >= 3 {
-				// Skip domain (first part), use remaining parts to build nested structure
-				// e.g., "robotics.battery.level" -> battery.level
-				nestParts := parts[1:] // Skip domain
-
-				// Navigate/create nested maps
-				current := payloadData
-				for i, part := range nestParts {
-					if i == len(nestParts)-1 {
-						// Last part - set the value
-						current[part] = triple.Object
-					} else {
-						// Intermediate part - ensure map exists
-						if _, exists := current[part]; !exists {
-							current[part] = make(map[string]any)
-						}
-						// Navigate deeper
-						if nextMap, ok := current[part].(map[string]any); ok {
-							current = nextMap
-						}
-					}
-				}
-			}
-		}
-	}
-
-	// Create generic payload
-	payload := message.NewGenericJSON(payloadData)
-
-	// Create base message
-	return message.NewBaseMessage(msgType, payload, "kv-watch")
 }

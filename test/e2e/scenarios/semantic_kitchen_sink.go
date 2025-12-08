@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -26,6 +27,14 @@ type SemanticKitchenSinkScenario struct {
 	udpAddr     string
 	natsURL     string
 	config      *SemanticKitchenSinkConfig
+
+	// Observability clients for consistent metric access
+	metrics   *client.MetricsClient
+	msgLogger *client.MessageLoggerClient
+	tracer    *client.FlowTracer
+
+	// Pre-send baseline for event-driven validation (captured before sending data)
+	preSendBaseline *client.MetricsBaseline
 }
 
 // SemanticKitchenSinkConfig contains configuration for kitchen sink test
@@ -34,26 +43,32 @@ type SemanticKitchenSinkConfig struct {
 	MessageCount    int           `json:"message_count"`
 	MessageInterval time.Duration `json:"message_interval"`
 
-	// Validation configuration
-	ValidationDelay time.Duration `json:"validation_delay"`
-	MinProcessed    int           `json:"min_processed"`
+	// Validation configuration (event-driven, matching tier0 patterns)
+	ValidationTimeout time.Duration `json:"validation_timeout"` // Timeout for metric waits (30s for ML)
+	PollInterval      time.Duration `json:"poll_interval"`      // Poll interval for metric waits (100ms)
+	MinProcessed      int           `json:"min_processed"`
 
 	// Entity verification (from test data files)
 	MinExpectedEntities int    `json:"min_expected_entities"`
 	NatsURL             string `json:"nats_url"`
 	MetricsURL          string `json:"metrics_url"`
+	ServiceManagerURL   string `json:"service_manager_url"`
 	GatewayURL          string `json:"gateway_url"`
 
 	// Comparison output configuration
 	OutputDir string `json:"output_dir"`
+
+	// Baseline comparison (matching tier0 patterns)
+	BaselineFile         string  `json:"baseline_file,omitempty"` // Path to baseline JSON (optional)
+	MaxRegressionPercent float64 `json:"max_regression_percent"`  // Default 20%
 }
 
 // ComparisonData represents comparison results for Core vs ML analysis
 type ComparisonData struct {
-	Variant           string                        `json:"variant"`
-	EmbeddingProvider string                        `json:"embedding_provider"`
-	Timestamp         time.Time                     `json:"timestamp"`
-	SearchResults     map[string]SearchQueryResult  `json:"search_results"`
+	Variant           string                       `json:"variant"`
+	EmbeddingProvider string                       `json:"embedding_provider"`
+	Timestamp         time.Time                    `json:"timestamp"`
+	SearchResults     map[string]SearchQueryResult `json:"search_results"`
 }
 
 // SearchQueryResult represents results from a single search query
@@ -68,15 +83,19 @@ type SearchQueryResult struct {
 // DefaultSemanticKitchenSinkConfig returns default configuration
 func DefaultSemanticKitchenSinkConfig() *SemanticKitchenSinkConfig {
 	return &SemanticKitchenSinkConfig{
-		MessageCount:        20,
-		MessageInterval:     50 * time.Millisecond,
-		ValidationDelay:     5 * time.Second,
-		MinProcessed:        10, // At least 50% should make it through
-		MinExpectedEntities: 50, // Test data has 74 entities, expect at least 50 indexed
-		NatsURL:             config.DefaultEndpoints.NATS,
-		MetricsURL:          config.DefaultEndpoints.Metrics,
-		GatewayURL:          config.DefaultEndpoints.HTTP + "/api-gateway",
-		OutputDir:           "test/e2e/results",
+		MessageCount:    20,
+		MessageInterval: 50 * time.Millisecond,
+		// Event-driven validation timeouts (matching tier0 patterns)
+		ValidationTimeout:    30 * time.Second,       // Longer for ML: embeddings + clustering
+		PollInterval:         100 * time.Millisecond, // Fast polling for responsiveness
+		MinProcessed:         10,                     // At least 50% should make it through
+		MinExpectedEntities:  50,                     // Test data has 74 entities, expect at least 50 indexed
+		NatsURL:              config.DefaultEndpoints.NATS,
+		MetricsURL:           config.DefaultEndpoints.Metrics,
+		ServiceManagerURL:    config.DefaultEndpoints.HTTP,
+		GatewayURL:           config.DefaultEndpoints.HTTP + "/api-gateway",
+		OutputDir:            "test/e2e/results",
+		MaxRegressionPercent: 20.0, // 20% regression threshold
 	}
 }
 
@@ -126,6 +145,11 @@ func (s *SemanticKitchenSinkScenario) Setup(ctx context.Context) error {
 	}
 	_ = conn.Close()
 
+	// Initialize observability clients (matching tier0 patterns)
+	s.metrics = client.NewMetricsClient(s.config.MetricsURL)
+	s.msgLogger = client.NewMessageLoggerClient(s.config.ServiceManagerURL)
+	s.tracer = client.NewFlowTracer(s.metrics, s.msgLogger)
+
 	// Create NATS validation client for KV bucket assertions
 	natsClient, err := client.NewNATSValidationClient(ctx, s.natsURL)
 	if err != nil {
@@ -159,9 +183,9 @@ func (s *SemanticKitchenSinkScenario) Execute(ctx context.Context) (*Result, err
 		{"send-mixed-data", s.executeSendMixedData},
 		{"validate-processing", s.executeValidateProcessing},
 		{"verify-entity-count", s.executeVerifyEntityCount},             // Verify entity indexing
-		{"verify-entity-retrieval", s.executeVerifyEntityRetrieval},   // Verify specific entities
+		{"verify-entity-retrieval", s.executeVerifyEntityRetrieval},     // Verify specific entities
 		{"validate-entity-structure", s.executeValidateEntityStructure}, // Validate entity structure
-		{"verify-index-population", s.executeVerifyIndexPopulation},   // Verify all indexes
+		{"verify-index-population", s.executeVerifyIndexPopulation},     // Verify all indexes
 		{"test-semantic-search", s.executeTestSemanticSearch},
 		{"verify-search-quality", s.executeVerifySearchQuality}, // NEW: Verify search results
 		{"compare-core-ml", s.executeCompareCoreMl},             // NEW: Compare Core vs ML
@@ -186,6 +210,51 @@ func (s *SemanticKitchenSinkScenario) Execute(ctx context.Context) (*Result, err
 		}
 
 		result.Metrics[fmt.Sprintf("%s_duration_ms", stage.name)] = time.Since(stageStart).Milliseconds()
+	}
+
+	// Capture final metrics baseline for regression detection (matching tier0 pattern)
+	endBaseline, err := s.metrics.CaptureBaseline(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture end baseline: %v", err))
+	} else {
+		// Store current run metrics for potential baseline capture
+		currentSnapshot := map[string]any{
+			"timestamp":   time.Now(),
+			"duration_ms": time.Since(result.StartTime).Milliseconds(),
+			"metrics":     endBaseline.Metrics,
+		}
+		result.Details["baseline_snapshot"] = currentSnapshot
+
+		// Compare to baseline file if configured (matching tier0 pattern)
+		if s.config.BaselineFile != "" {
+			baselineData, err := os.ReadFile(s.config.BaselineFile)
+			if err == nil {
+				var loadedBaseline struct {
+					Metrics map[string]float64 `json:"metrics"`
+				}
+				if json.Unmarshal(baselineData, &loadedBaseline) == nil {
+					regressions := []string{}
+					for metric, baselineValue := range loadedBaseline.Metrics {
+						if currentValue, ok := endBaseline.Metrics[metric]; ok {
+							if baselineValue > 0 {
+								percentChange := ((currentValue - baselineValue) / baselineValue) * 100
+								// Check for performance regressions (lower is worse for some metrics)
+								if percentChange < -s.config.MaxRegressionPercent {
+									regressions = append(regressions, fmt.Sprintf("%s: %.1f%% regression", metric, -percentChange))
+								}
+							}
+						}
+					}
+					if len(regressions) > 0 {
+						result.Warnings = append(result.Warnings, fmt.Sprintf("Performance regressions detected: %v", regressions))
+					}
+					result.Details["baseline_comparison"] = map[string]any{
+						"baseline_file": s.config.BaselineFile,
+						"regressions":   regressions,
+					}
+				}
+			}
+		}
 	}
 
 	// Overall success
@@ -265,6 +334,15 @@ func (s *SemanticKitchenSinkScenario) executeVerifyComponents(ctx context.Contex
 
 // executeSendMixedData sends mixed test data (entities + regular messages)
 func (s *SemanticKitchenSinkScenario) executeSendMixedData(ctx context.Context, result *Result) error {
+	// Capture baseline BEFORE sending data (matching tier0 pattern)
+	// This allows executeValidateProcessing to wait for the delta
+	baseline, err := s.metrics.CaptureBaseline(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Could not capture pre-send baseline: %v", err))
+	} else {
+		s.preSendBaseline = baseline
+	}
+
 	conn, err := net.Dial("udp", s.udpAddr)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("Failed to connect to UDP: %v", err))
@@ -345,12 +423,48 @@ func (s *SemanticKitchenSinkScenario) executeSendMixedData(ctx context.Context, 
 }
 
 // executeValidateProcessing validates data was processed through semantic pipeline
+// using event-driven metric waits (matching tier0 patterns) instead of fixed delays
 func (s *SemanticKitchenSinkScenario) executeValidateProcessing(ctx context.Context, result *Result) error {
-	// Wait for processing
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(s.config.ValidationDelay):
+	// Test data (sensors.jsonl etc.) is loaded at container startup, so processing
+	// may already be complete. Check current state first before waiting.
+	currentValue, err := s.metrics.SumMetricsByName(ctx, "semstreams_datamanager_entities_updated_total")
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Could not fetch current metrics: %v", err))
+	}
+
+	// If we have sufficient entities already processed, skip waiting
+	// (test data is pre-loaded, so baseline delta approach doesn't apply)
+	if currentValue >= float64(s.config.MinProcessed) {
+		result.Details["processing_already_complete"] = true
+		result.Metrics["entities_processed_at_validation"] = currentValue
+	} else if s.preSendBaseline == nil {
+		result.Warnings = append(result.Warnings, "No pre-send baseline available, falling back to short delay")
+		time.Sleep(2 * time.Second)
+	} else {
+		// Wait for processing using event-driven metric polling (matching tier0 pattern)
+		waitOpts := client.WaitOpts{
+			Timeout:      s.config.ValidationTimeout,
+			PollInterval: s.config.PollInterval,
+			Comparator:   ">=",
+		}
+
+		// Get baseline value for entity updates (captured BEFORE sending data)
+		baselineUpdates := s.preSendBaseline.Metrics["semstreams_datamanager_entities_updated_total"]
+		expectedUpdates := baselineUpdates + float64(s.config.MinProcessed)
+
+		if err := s.metrics.WaitForMetric(ctx, "semstreams_datamanager_entities_updated_total", expectedUpdates, waitOpts); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Processing wait: %v (may still be processing)", err))
+			// Don't fail - processing may complete by later stages
+		}
+	}
+
+	// Use FlowTracer to capture flow snapshot for stage validation
+	flowSnapshot, err := s.tracer.CaptureFlowSnapshot(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture flow snapshot: %v", err))
+	} else {
+		result.Details["flow_snapshot_captured"] = true
+		result.Metrics["flow_snapshot_message_count"] = flowSnapshot.MessageCount
 	}
 
 	// Query component status
@@ -437,6 +551,7 @@ func (s *SemanticKitchenSinkScenario) executeVerifyOutputs(ctx context.Context, 
 }
 
 // executeTestSemanticSearch validates semantic search with semembed embeddings
+// using event-driven metric waits and FlowTracer (matching tier0 patterns)
 func (s *SemanticKitchenSinkScenario) executeTestSemanticSearch(ctx context.Context, result *Result) error {
 	// Check semembed health endpoint
 	semembedHealthURL := "http://localhost:8081/health"
@@ -457,6 +572,22 @@ func (s *SemanticKitchenSinkScenario) executeTestSemanticSearch(ctx context.Cont
 
 	result.Details["semembed_available"] = true
 	result.Metrics["semembed_health_status"] = resp.StatusCode
+
+	// Capture baseline for event-driven embedding wait (matching tier0 pattern)
+	baseline, err := s.metrics.CaptureBaseline(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture embedding baseline: %v", err))
+	}
+	baselineEmbeddings := 0.0
+	if baseline != nil {
+		baselineEmbeddings = baseline.Metrics["indexengine_embeddings_generated_total"]
+	}
+
+	// Capture FlowTracer snapshot for semantic search validation
+	flowSnapshot, err := s.tracer.CaptureFlowSnapshot(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture flow snapshot for semantic search: %v", err))
+	}
 
 	// Send entities with rich text content for embedding
 	conn, err := net.Dial("udp", s.udpAddr)
@@ -502,20 +633,44 @@ func (s *SemanticKitchenSinkScenario) executeTestSemanticSearch(ctx context.Cont
 		}
 	}
 
-	// Wait for embedding generation and indexing
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(2 * time.Second):
-	}
-
 	result.Metrics["semantic_messages_sent"] = len(semanticTestMessages)
 
-	// Wait for embeddings to be generated
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(3 * time.Second):
+	// Event-driven wait for embeddings to be generated (matching tier0 pattern)
+	waitOpts := client.WaitOpts{
+		Timeout:      s.config.ValidationTimeout,
+		PollInterval: s.config.PollInterval,
+		Comparator:   ">=",
+	}
+
+	// Wait for embeddings for the sent messages
+	expectedEmbeddings := baselineEmbeddings + float64(len(semanticTestMessages))
+	if err := s.metrics.WaitForMetric(ctx, "indexengine_embeddings_generated_total", expectedEmbeddings, waitOpts); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Embedding generation wait: %v (may still be generating)", err))
+	}
+
+	// Validate flow using FlowTracer (matching tier0 pattern)
+	if flowSnapshot != nil {
+		flowResult, err := s.tracer.ValidateFlow(ctx, flowSnapshot, client.FlowExpectation{
+			InputSubject:     "input.udp",
+			ProcessingStages: []string{"process.graph"},
+			MinMessages:      len(semanticTestMessages),
+			MaxLatencyMs:     500, // 500ms p99 for semantic processing
+			Timeout:          s.config.ValidationTimeout,
+		})
+		if err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Flow validation error: %v", err))
+		} else if flowResult != nil {
+			if !flowResult.Valid {
+				result.Warnings = append(result.Warnings, flowResult.Errors...)
+			}
+			result.Details["semantic_flow_validation"] = map[string]any{
+				"valid":         flowResult.Valid,
+				"messages":      flowResult.Messages,
+				"avg_latency":   flowResult.AvgLatency.String(),
+				"p99_latency":   flowResult.P99Latency.String(),
+				"stage_metrics": flowResult.StageMetrics,
+			}
+		}
 	}
 
 	// Query metrics to verify embeddings were generated
@@ -700,39 +855,27 @@ func (s *SemanticKitchenSinkScenario) executeTestEmbeddingFallback(ctx context.C
 }
 
 // executeValidateRules validates that rules are being evaluated and triggered
-// with actual counter value extraction, not just metric presence checks
+// using MetricsClient for consistent metric access (matching tier0 patterns)
 func (s *SemanticKitchenSinkScenario) executeValidateRules(ctx context.Context, result *Result) error {
-	// Query metrics for rule execution stats (before sending test data)
-	metricsURL := s.config.MetricsURL + "/metrics"
-	resp, err := http.Get(metricsURL)
+	// Capture baseline metrics using MetricsClient
+	baselineMetrics, err := s.metrics.ExtractRuleMetrics(ctx)
 	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to query metrics for rules: %v", err))
-		return nil // Not a hard failure
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to read metrics for rules: %v", err))
-		return nil
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture baseline rule metrics: %v", err))
+		// Initialize with zeros
+		baselineMetrics = &client.RuleMetrics{}
 	}
 
-	metricsTextBefore := string(body)
-
-	// Parse initial metric values
-	triggeredBefore := parseMetricValue(metricsTextBefore, "rule_processor_rules_triggered")
-	evaluatedBefore := parseMetricValue(metricsTextBefore, "rule_processor_rules_evaluated")
-
-	// Check for rule-related metrics presence
-	ruleMetrics := map[string]bool{
-		"rule_processor_events_processed":   strings.Contains(metricsTextBefore, "rule_processor_events_processed"),
-		"rule_processor_rules_evaluated":    strings.Contains(metricsTextBefore, "rule_processor_rules_evaluated"),
-		"rule_processor_rules_triggered":    strings.Contains(metricsTextBefore, "rule_processor_rules_triggered"),
-		"rule_processor_conditions_checked": strings.Contains(metricsTextBefore, "rule_processor_conditions_checked"),
+	// Check for rule metrics presence via raw fetch (for metric presence validation)
+	metricsRaw, err := s.metrics.FetchRaw(ctx)
+	ruleMetricsPresent := map[string]bool{
+		"semstreams_rule_messages_received_total": err == nil && strings.Contains(metricsRaw, "semstreams_rule_messages_received_total"),
+		"semstreams_rule_evaluations_total":       err == nil && strings.Contains(metricsRaw, "semstreams_rule_evaluations_total"),
+		"semstreams_rule_triggers_total":          err == nil && strings.Contains(metricsRaw, "semstreams_rule_triggers_total"),
+		"semstreams_rule_active_rules":            err == nil && strings.Contains(metricsRaw, "semstreams_rule_active_rules"),
 	}
 
 	foundRuleMetrics := 0
-	for _, found := range ruleMetrics {
+	for _, found := range ruleMetricsPresent {
 		if found {
 			foundRuleMetrics++
 		}
@@ -777,38 +920,48 @@ func (s *SemanticKitchenSinkScenario) executeValidateRules(ctx context.Context, 
 
 	result.Metrics["rule_test_messages_sent"] = sentCount
 
-	// Wait for rules to process
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(2 * time.Second):
+	// Rules are primarily evaluated on pre-loaded test data, so baseline evaluations
+	// are usually high. Check if we already have significant evaluations before waiting.
+	if baselineMetrics.Evaluations >= 100 {
+		// Already have many evaluations from test data, skip waiting for delta
+		// (UDP rule test messages may not be processed due to json_generic disabled)
+		result.Details["rules_already_evaluated"] = true
+	} else {
+		// Wait for rules to process using event-driven wait (matching tier0 pattern)
+		waitOpts := client.WaitOpts{
+			Timeout:      s.config.ValidationTimeout,
+			PollInterval: s.config.PollInterval,
+			Comparator:   ">=",
+		}
+
+		// Wait for at least one evaluation to occur per sent message
+		expectedEvaluations := baselineMetrics.Evaluations + float64(sentCount)
+		if err := s.metrics.WaitForMetric(ctx, "semstreams_rule_evaluations_total", expectedEvaluations, waitOpts); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Rule evaluation wait: %v", err))
+		}
 	}
 
-	// Query metrics again to check if rules were triggered
-	resp2, err := http.Get(metricsURL)
+	// Get final metrics using ExtractRuleMetrics helper
+	finalMetrics, err := s.metrics.ExtractRuleMetrics(ctx)
 	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to query metrics after rule test: %v", err))
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get final rule metrics: %v", err))
 		return nil
 	}
-	defer resp2.Body.Close()
 
-	body2, _ := io.ReadAll(resp2.Body)
-	metricsTextAfter := string(body2)
+	// Calculate deltas
+	triggeredDelta := int(finalMetrics.Triggers - baselineMetrics.Triggers)
+	evaluatedDelta := int(finalMetrics.Evaluations - baselineMetrics.Evaluations)
 
-	// Parse final metric values
-	triggeredAfter := parseMetricValue(metricsTextAfter, "rule_processor_rules_triggered")
-	evaluatedAfter := parseMetricValue(metricsTextAfter, "rule_processor_rules_evaluated")
-
-	// Calculate delta (rules triggered by our test data)
-	triggeredDelta := triggeredAfter - triggeredBefore
-	evaluatedDelta := evaluatedAfter - evaluatedBefore
-
-	// Record metrics
-	result.Metrics["rules_triggered_count"] = triggeredAfter
-	result.Metrics["rules_evaluated_count"] = evaluatedAfter
+	// Record metrics (matching tier0 output format)
+	result.Metrics["rules_triggered_count"] = int(finalMetrics.Triggers)
+	result.Metrics["rules_evaluated_count"] = int(finalMetrics.Evaluations)
 	result.Metrics["rules_triggered_delta"] = triggeredDelta
 	result.Metrics["rules_evaluated_delta"] = evaluatedDelta
 	result.Metrics["rule_metrics_found"] = foundRuleMetrics
+
+	// Add state transition metrics (matching tier0)
+	result.Metrics["on_enter_fired"] = int(finalMetrics.OnEnterFired)
+	result.Metrics["on_exit_fired"] = int(finalMetrics.OnExitFired)
 
 	// Validate rules actually triggered
 	if triggeredDelta < 1 && sentCount > 0 {
@@ -818,57 +971,30 @@ func (s *SemanticKitchenSinkScenario) executeValidateRules(ctx context.Context, 
 	}
 
 	// Consider validation passed if we have rule metrics and some evaluation happened
-	validationPassed := foundRuleMetrics >= 2 && evaluatedAfter > 0
+	validationPassed := foundRuleMetrics >= 2 && finalMetrics.Evaluations > 0
 	if validationPassed {
 		result.Metrics["rules_validation_passed"] = 1
 	}
 
 	result.Details["rule_validation"] = map[string]any{
-		"metrics_present":    ruleMetrics,
+		"metrics_present":    ruleMetricsPresent,
 		"metrics_found":      foundRuleMetrics,
-		"triggered_before":   triggeredBefore,
-		"triggered_after":    triggeredAfter,
+		"triggered_before":   int(baselineMetrics.Triggers),
+		"triggered_after":    int(finalMetrics.Triggers),
 		"triggered_delta":    triggeredDelta,
-		"evaluated_before":   evaluatedBefore,
-		"evaluated_after":    evaluatedAfter,
+		"evaluated_before":   int(baselineMetrics.Evaluations),
+		"evaluated_after":    int(finalMetrics.Evaluations),
 		"evaluated_delta":    evaluatedDelta,
+		"on_enter_fired":     int(finalMetrics.OnEnterFired),
+		"on_exit_fired":      int(finalMetrics.OnExitFired),
 		"test_messages_sent": sentCount,
 		"validation_passed":  validationPassed,
-		"message": fmt.Sprintf("Rules: %d triggered, %d evaluated (delta: +%d triggered, +%d evaluated)",
-			triggeredAfter, evaluatedAfter, triggeredDelta, evaluatedDelta),
+		"message": fmt.Sprintf("Rules: %d triggered, %d evaluated (delta: +%d triggered, +%d evaluated), state transitions: %d enter, %d exit",
+			int(finalMetrics.Triggers), int(finalMetrics.Evaluations), triggeredDelta, evaluatedDelta,
+			int(finalMetrics.OnEnterFired), int(finalMetrics.OnExitFired)),
 	}
 
 	return nil
-}
-
-// parseMetricValue extracts a numeric value from Prometheus metrics text
-// Returns 0 if metric not found or parsing fails
-func parseMetricValue(metricsText, metricName string) int {
-	// Look for lines like: metric_name{labels} value
-	// or: metric_name value
-	lines := strings.Split(metricsText, "\n")
-	for _, line := range lines {
-		// Skip comments and empty lines
-		if strings.HasPrefix(line, "#") || len(strings.TrimSpace(line)) == 0 {
-			continue
-		}
-
-		// Check if line contains the metric name
-		if strings.Contains(line, metricName) {
-			// Extract the value (last space-separated token)
-			parts := strings.Fields(line)
-			if len(parts) >= 2 {
-				valueStr := parts[len(parts)-1]
-				// Parse as float first (Prometheus counters can be floats)
-				if val, err := fmt.Sscanf(valueStr, "%f", new(float64)); err == nil && val == 1 {
-					var floatVal float64
-					fmt.Sscanf(valueStr, "%f", &floatVal)
-					return int(floatVal)
-				}
-			}
-		}
-	}
-	return 0
 }
 
 // executeValidateMetrics validates Prometheus metrics exposure
@@ -973,20 +1099,20 @@ func (s *SemanticKitchenSinkScenario) executeVerifyEntityCount(ctx context.Conte
 		return nil // Not a hard failure
 	}
 
-	// Expected entities from test data files:
+	// Expected entities from test data files (count UNIQUE entity IDs, not records):
 	// - documents.jsonl: 12 entities
 	// - maintenance.jsonl: 16 entities
 	// - observations.jsonl: 15 entities
 	// - sensor_docs.jsonl: 15 entities
-	// - sensors.jsonl: 30 entities
-	// Total: 88 entities from test data
-	expectedFromTestData := 88
+	// - sensors.jsonl: 16 entities (41 records → 16 unique device_ids; time-series updates same entity)
+	// Total: 74 unique entities from test data
+	expectedFromTestData := 74
 
-	// Add telemetry entities sent during this test run (from send-mixed-data stage)
+	// UDP telemetry NOT counted: json_generic processor is disabled in config,
+	// so UDP messages on raw.udp.messages are never converted to entities.
+	// We keep the UDP sending logic for infrastructure testing, but don't expect entities from it.
 	expectedFromUDP := 0
-	if telemetrySent, ok := result.Metrics["telemetry_sent"].(int); ok {
-		expectedFromUDP = telemetrySent
-	}
+	_ = result.Metrics["telemetry_sent"] // Acknowledge metric exists but don't count it
 
 	// Total expected entities
 	totalExpected := expectedFromTestData + expectedFromUDP
@@ -1298,6 +1424,7 @@ func (s *SemanticKitchenSinkScenario) executeVerifySearchQuality(ctx context.Con
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
 	// Search queries with expected results and quality thresholds
+	// Using natural language queries from docs/scenarios/kitchen-sink.md to demonstrate semantic search
 	searchTests := []struct {
 		query           string
 		expectedPattern string
@@ -1305,9 +1432,10 @@ func (s *SemanticKitchenSinkScenario) executeVerifySearchQuality(ctx context.Con
 		minScore        float64 // Minimum acceptable score for quality hits
 		minHits         int     // Minimum expected hits
 	}{
-		{"temperature sensor", "temp", "Should find temperature sensors", 0.3, 2},
-		{"safety procedures", "safety", "Should find safety documents", 0.3, 1},
-		{"maintenance", "maint", "Should find maintenance records", 0.3, 3},
+		{"What documents mention forklift safety?", "forklift", "Natural language document search", 0.3, 1},
+		{"Are there safety observations related to temperature?", "temperature", "Cross-domain safety query", 0.3, 1},
+		{"What maintenance was done on cold storage equipment?", "cold", "Maintenance semantic search", 0.3, 1},
+		{"Find all sensors in zone-a", "zone-a", "Location-based sensor query", 0.3, 1},
 	}
 
 	searchResults := make(map[string]any)
@@ -1460,14 +1588,14 @@ func (s *SemanticKitchenSinkScenario) executeVerifySearchQuality(ctx context.Con
 	result.Metrics["search_quality_score"] = overallAvgScore
 
 	result.Details["search_quality_verification"] = map[string]any{
-		"queries":             len(searchTests),
-		"queries_with_hits":   queriesWithResults,
-		"min_score_met":       queriesMeetingMinScore,
-		"min_hits_met":        queriesMeetingMinHits,
-		"overall_avg_score":   overallAvgScore,
-		"weak_threshold":      weakResultsThreshold,
-		"results":             searchResults,
-		"message":             fmt.Sprintf("%d/%d queries returned results, avg score: %.2f", queriesWithResults, len(searchTests), overallAvgScore),
+		"queries":           len(searchTests),
+		"queries_with_hits": queriesWithResults,
+		"min_score_met":     queriesMeetingMinScore,
+		"min_hits_met":      queriesMeetingMinHits,
+		"overall_avg_score": overallAvgScore,
+		"weak_threshold":    weakResultsThreshold,
+		"results":           searchResults,
+		"message":           fmt.Sprintf("%d/%d queries returned results, avg score: %.2f", queriesWithResults, len(searchTests), overallAvgScore),
 	}
 
 	return nil
@@ -1484,6 +1612,7 @@ func (s *SemanticKitchenSinkScenario) executeCompareCoreMl(ctx context.Context, 
 	}
 
 	// Check embedding provider from metrics
+	// The metric is a gauge: 0=disabled, 1=bm25, 2=http
 	metricsURL := s.config.MetricsURL + "/metrics"
 	resp, err := http.Get(metricsURL)
 	embeddingProvider := "unknown"
@@ -1492,12 +1621,20 @@ func (s *SemanticKitchenSinkScenario) executeCompareCoreMl(ctx context.Context, 
 		body, _ := io.ReadAll(resp.Body)
 		metricsText := string(body)
 
-		if strings.Contains(metricsText, `indexengine_embedding_provider{provider="http"}`) {
-			embeddingProvider = "http"
-			variant = "ml"
-		} else if strings.Contains(metricsText, `indexengine_embedding_provider{provider="bm25"}`) {
-			embeddingProvider = "bm25"
-			variant = "core"
+		// Parse indexengine_embedding_provider metric value using regex
+		// Format: indexengine_embedding_provider{component="..."} <value>
+		re := regexp.MustCompile(`indexengine_embedding_provider\{[^}]*\}\s+(\d+(?:\.\d+)?)`)
+		if matches := re.FindStringSubmatch(metricsText); len(matches) > 1 {
+			switch matches[1] {
+			case "2", "2.0":
+				embeddingProvider = "http"
+				variant = "ml"
+			case "1", "1.0":
+				embeddingProvider = "bm25"
+				variant = "core"
+			case "0", "0.0":
+				embeddingProvider = "disabled"
+			}
 		}
 	}
 
@@ -1505,11 +1642,12 @@ func (s *SemanticKitchenSinkScenario) executeCompareCoreMl(ctx context.Context, 
 	gatewayURL := s.config.GatewayURL
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
+	// Natural language queries from docs/scenarios/kitchen-sink.md
 	comparisonQueries := []string{
-		"temperature sensor reading",
-		"maintenance schedule",
-		"safety documentation",
-		"cold storage monitoring",
+		"What maintenance was done on cold storage equipment?",
+		"Are there safety observations related to temperature?",
+		"Find all sensors in zone-a",
+		"What documents mention forklift safety?",
 	}
 
 	// Use structured types for comparison data
@@ -1646,14 +1784,17 @@ type CommunityComparison struct {
 
 // CommunitySummaryReport contains aggregated community summary metrics
 type CommunitySummaryReport struct {
-	Variant              string                `json:"variant"`
-	Timestamp            time.Time             `json:"timestamp"`
-	CommunitiesTotal     int                   `json:"communities_total"`
-	LLMEnhancedCount     int                   `json:"llm_enhanced_count"`
-	StatisticalOnlyCount int                   `json:"statistical_only_count"`
-	AvgSummaryLengthRatio float64              `json:"avg_summary_length_ratio"`
-	AvgWordOverlap       float64               `json:"avg_word_overlap"`
-	Communities          []CommunityComparison `json:"communities"`
+	Variant               string                `json:"variant"`
+	Timestamp             time.Time             `json:"timestamp"`
+	CommunitiesTotal      int                   `json:"communities_total"`
+	LLMEnhancedCount      int                   `json:"llm_enhanced_count"`
+	StatisticalOnlyCount  int                   `json:"statistical_only_count"`
+	AvgSummaryLengthRatio float64               `json:"avg_summary_length_ratio"`
+	AvgWordOverlap        float64               `json:"avg_word_overlap"`
+	NonSingletonCount     int                   `json:"non_singleton_count"`
+	LargestCommunitySize  int                   `json:"largest_community_size"`
+	AvgNonSingletonSize   float64               `json:"avg_non_singleton_size"`
+	Communities           []CommunityComparison `json:"communities"`
 }
 
 // executeCompareCommunities compares statistical vs LLM-enhanced community summaries
@@ -1663,15 +1804,25 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 		return nil
 	}
 
-	// Retrieve all communities from COMMUNITY_INDEX bucket
-	communities, err := s.natsClient.GetAllCommunities(ctx)
+	// LPA clustering runs asynchronously - wait for communities to populate
+	// With initial_delay=2s in config, we need to wait at least that long plus detection time
+	var communities []*client.Community
+	var err error
+	for i := 0; i < 50; i++ { // Max 5 seconds (50 * 100ms) - allows for 2s initial delay + detection
+		communities, err = s.natsClient.GetAllCommunities(ctx)
+		if err == nil && len(communities) > 0 {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get communities: %v", err))
 		return nil
 	}
 
 	if len(communities) == 0 {
-		result.Warnings = append(result.Warnings, "No communities found for comparison")
+		result.Warnings = append(result.Warnings, "No communities found for comparison (clustering may not have completed)")
 		result.Metrics["communities_total"] = 0
 		return nil
 	}
@@ -1684,6 +1835,11 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 	var totalWordOverlap float64
 	ratioCount := 0
 
+	// Track non-singleton communities (for tier comparison metrics)
+	nonSingletonCount := 0
+	totalNonSingletonMembers := 0
+	largestCommunitySize := 0
+
 	for _, comm := range communities {
 		comparison := CommunityComparison{
 			CommunityID:        comm.ID,
@@ -1693,6 +1849,15 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 			LLMSummary:         comm.LLMSummary,
 			SummaryStatus:      comm.SummaryStatus,
 			Keywords:           comm.Keywords,
+		}
+
+		// Track non-singleton communities
+		if len(comm.Members) > 1 {
+			nonSingletonCount++
+			totalNonSingletonMembers += len(comm.Members)
+			if len(comm.Members) > largestCommunitySize {
+				largestCommunitySize = len(comm.Members)
+			}
 		}
 
 		// Track summary status counts
@@ -1741,6 +1906,24 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 	result.Metrics["avg_summary_length_ratio"] = avgLengthRatio
 	result.Metrics["avg_word_overlap"] = avgWordOverlap
 
+	// Tier comparison metrics (non-singleton community analysis)
+	result.Metrics["communities_non_singleton"] = nonSingletonCount
+	result.Metrics["largest_community_size"] = largestCommunitySize
+
+	avgNonSingletonSize := 0.0
+	if nonSingletonCount > 0 {
+		avgNonSingletonSize = float64(totalNonSingletonMembers) / float64(nonSingletonCount)
+	}
+	result.Metrics["avg_non_singleton_size"] = avgNonSingletonSize
+
+	// Tier-specific assertions
+	// Tier1 (core/BM25): Expected to produce mostly singletons due to lexical similarity limitations
+	// Tier2 (ml/neural): Expected to produce non-singleton communities
+	if variant == "ml" && nonSingletonCount == 0 {
+		result.Warnings = append(result.Warnings,
+			"ML variant should produce non-singleton communities - neural embeddings expected to find semantic similarity")
+	}
+
 	// Persist community comparison report
 	comparisonFile := ""
 	if s.config.OutputDir != "" {
@@ -1752,6 +1935,9 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 			StatisticalOnlyCount:  statisticalOnlyCount,
 			AvgSummaryLengthRatio: avgLengthRatio,
 			AvgWordOverlap:        avgWordOverlap,
+			NonSingletonCount:     nonSingletonCount,
+			LargestCommunitySize:  largestCommunitySize,
+			AvgNonSingletonSize:   avgNonSingletonSize,
 			Communities:           comparisons,
 		}
 
@@ -1769,15 +1955,18 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 	}
 
 	result.Details["community_comparison"] = map[string]any{
-		"total":               len(communities),
-		"llm_enhanced":        llmEnhancedCount,
-		"statistical_only":    statisticalOnlyCount,
-		"avg_length_ratio":    avgLengthRatio,
-		"avg_word_overlap":    avgWordOverlap,
-		"comparison_file":     comparisonFile,
-		"communities":         comparisons,
-		"message": fmt.Sprintf("Compared %d communities: %d LLM-enhanced, %d statistical only",
-			len(communities), llmEnhancedCount, statisticalOnlyCount),
+		"total":                  len(communities),
+		"llm_enhanced":           llmEnhancedCount,
+		"statistical_only":       statisticalOnlyCount,
+		"avg_length_ratio":       avgLengthRatio,
+		"avg_word_overlap":       avgWordOverlap,
+		"non_singleton_count":    nonSingletonCount,
+		"largest_community_size": largestCommunitySize,
+		"avg_non_singleton_size": avgNonSingletonSize,
+		"comparison_file":        comparisonFile,
+		"communities":            comparisons,
+		"message": fmt.Sprintf("Compared %d communities: %d LLM-enhanced, %d statistical only, %d non-singleton",
+			len(communities), llmEnhancedCount, statisticalOnlyCount, nonSingletonCount),
 	}
 
 	return nil

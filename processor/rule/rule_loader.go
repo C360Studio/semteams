@@ -92,10 +92,13 @@ func (rp *Processor) loadRules() error {
 		}
 
 		rp.rules[def.ID] = rule
+		rp.ruleDefinitions[def.ID] = def // Store definition for stateful evaluation
 		rp.logger.Info("Loaded rule from definition",
 			"rule_id", def.ID,
 			"rule_type", def.Type,
-			"rule_name", def.Name)
+			"rule_name", def.Name,
+			"on_enter_actions", len(def.OnEnter),
+			"on_exit_actions", len(def.OnExit))
 	}
 
 	// Legacy support: enabled_rules (deprecated)

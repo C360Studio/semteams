@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/c360/semstreams/component"
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/cache"
@@ -25,10 +27,22 @@ import (
 	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
+	"github.com/c360/semstreams/processor/graph/llm"
 	"github.com/c360/semstreams/processor/graph/messagemanager"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
+)
+
+// Clustering configuration defaults
+const (
+	DefaultMaxIterations        = 100
+	DefaultClusteringLevels     = 3
+	DefaultEnhancementWorkers   = 3
+	DefaultSimilarityThreshold  = 0.6
+	DefaultMaxVirtualNeighbors  = 5
+	DefaultEntityChangeThreshold = 100
 )
 
 // schema defines the configuration schema for graph processor component
@@ -81,12 +95,19 @@ type Processor struct {
 	config *Config
 
 	// Clustering components (optional, initialized if config.Clustering.Enabled)
-	communityDetector  clustering.CommunityDetector
-	communityStorage   clustering.CommunityStorage
-	enhancementWorker  *clustering.EnhancementWorker
-	clusteringBuckets  map[string]jetstream.KeyValue // For graph provider access
-	detectionMu        sync.Mutex
-	detectionRunning   bool
+	communityDetector clustering.CommunityDetector
+	communityStorage  clustering.CommunityStorage
+	enhancementWorker *clustering.EnhancementWorker
+	clusteringBuckets map[string]jetstream.KeyValue // For graph provider access
+	detectionMu       sync.Mutex
+	detectionRunning  bool
+
+	// Entity change tracking for adaptive clustering
+	entityChangeCount atomic.Int64  // Count of new entities since last detection
+	detectionTrigger  chan struct{} // Signal to trigger detection from entity callback
+
+	// Inference metrics
+	inferredTriples prometheus.Counter
 }
 
 // Config holds processor configuration
@@ -185,8 +206,14 @@ type ScheduleConfig struct {
 	// InitialDelay before first detection
 	InitialDelay string `json:"initial_delay" schema:"type:string,description:Delay before first detection,default:10s"`
 
-	// DetectionInterval between periodic runs
-	DetectionInterval string `json:"detection_interval" schema:"type:string,description:Interval between detection runs,default:2m"`
+	// DetectionInterval is the maximum time between detection runs (triggers even if no new entities)
+	DetectionInterval string `json:"detection_interval" schema:"type:string,description:Max interval between detection runs,default:30s"`
+
+	// MinDetectionInterval is the minimum time between detection runs (burst protection)
+	MinDetectionInterval string `json:"min_detection_interval" schema:"type:string,description:Min interval between detection runs,default:5s"`
+
+	// EntityChangeThreshold triggers detection after N new entities arrive (0 disables)
+	EntityChangeThreshold int `json:"entity_change_threshold" schema:"type:int,description:Trigger detection after N new entities,default:100"`
 
 	// MinEntities threshold for triggering detection
 	MinEntities int `json:"min_entities" schema:"type:int,description:Min entities for detection,default:10"`
@@ -203,11 +230,14 @@ type EnhancementConfig struct {
 	// Enabled activates the enhancement worker
 	Enabled bool `json:"enabled" schema:"type:bool,description:Enable LLM enhancement,default:false"`
 
-	// SummarizerEndpoint is the semsummarize service URL
-	SummarizerEndpoint string `json:"summarizer_endpoint,omitempty" schema:"type:string,description:Semsummarize endpoint URL"`
+	// LLM configures the LLM client for summarization
+	LLM llm.Config `json:"llm,omitempty" schema:"type:object,description:LLM configuration"`
 
 	// Workers is concurrent enhancement workers
 	Workers int `json:"workers" schema:"type:int,description:Concurrent workers,default:3"`
+
+	// Domain for prompt selection (e.g., "iot", "default")
+	Domain string `json:"domain,omitempty" schema:"type:string,description:Prompt domain,default:default"`
 }
 
 // ProcessorDeps holds processor dependencies
@@ -530,20 +560,23 @@ func (p *Processor) Start(ctx context.Context) error {
 		return err
 	}
 
-	// Setup NATS subscriptions
+	// Start background modules FIRST (DataManager and IndexManager)
+	// They must be running before we subscribe to NATS to avoid data loss
+	p.logger.Debug("Starting background modules (DataManager and IndexManager)")
+	if err := p.startBackgroundModules(ctx); err != nil {
+		return errs.WrapFatal(err, "Processor", "Start", "subsystems not ready")
+	}
+	p.logger.Debug("Background modules started and ready")
+
+	// NOW setup NATS subscriptions - subsystems ready to handle data
 	if err := p.setupNATSSubscriptions(ctx); err != nil {
 		return err
 	}
 
-	// Mark component as healthy
+	// Mark component as healthy LAST
 	p.markComponentHealthy()
 
-	// Start background modules (DataManager and IndexManager)
-	p.logger.Debug("Starting background modules (DataManager and IndexManager)")
-	p.startBackgroundModules(ctx)
-	p.logger.Debug("Background modules started")
-
-	p.logger.Info("Graph processor started successfully")
+	p.logger.Info("Graph processor started successfully - all subsystems ready")
 
 	return nil
 }
@@ -556,6 +589,7 @@ func (p *Processor) setupWorkerPoolAndHandlers(ctx context.Context) error {
 		p.config.Workers,
 		p.config.QueueSize,
 		p.messageManager.ProcessWork,
+		worker.WithMetricsRegistry[[]byte](p.metricsRegistry, "graph_processor"),
 	)
 
 	// Assign with proper locking
@@ -616,7 +650,8 @@ func (p *Processor) markComponentHealthy() {
 }
 
 // startBackgroundModules starts DataManager and IndexManager in background goroutines
-func (p *Processor) startBackgroundModules(ctx context.Context) {
+// and waits for them to signal ready (or returns error on timeout/failure).
+func (p *Processor) startBackgroundModules(ctx context.Context) error {
 	// Create cancellable context for background modules
 	moduleCtx, moduleCancel := context.WithCancel(ctx)
 
@@ -624,6 +659,12 @@ func (p *Processor) startBackgroundModules(ctx context.Context) {
 	p.moduleCancel = moduleCancel
 	p.moduleDone = make(chan error, 1)
 	p.mu.Unlock()
+
+	// Track startup readiness
+	var wg sync.WaitGroup
+	var startErr atomic.Pointer[error]
+
+	wg.Add(2) // DataManager + IndexManager
 
 	// Start background modules in goroutine
 	go func() {
@@ -639,14 +680,29 @@ func (p *Processor) startBackgroundModules(ctx context.Context) {
 		// Create error group for modules
 		g, gctx := errgroup.WithContext(moduleCtx)
 
-		// Launch DataManager
+		// Launch DataManager with onReady callback
 		g.Go(func() error {
-			return p.dataLifecycle.Run(gctx)
+			err := p.dataLifecycle.Run(gctx, func() {
+				p.logger.Debug("DataManager ready")
+				wg.Done()
+			})
+			if err != nil {
+				// If we fail before signaling ready, decrement WaitGroup
+				startErr.CompareAndSwap(nil, &err)
+			}
+			return err
 		})
 
-		// Launch IndexManager
+		// Launch IndexManager with onReady callback
 		g.Go(func() error {
-			return p.indexManager.Run(gctx)
+			err := p.indexManager.Run(gctx, func() {
+				p.logger.Debug("IndexManager ready")
+				wg.Done()
+			})
+			if err != nil {
+				startErr.CompareAndSwap(nil, &err)
+			}
+			return err
 		})
 
 		// Launch clustering loop if enabled
@@ -680,6 +736,29 @@ func (p *Processor) startBackgroundModules(ctx context.Context) {
 		}
 		p.mu.Unlock()
 	}()
+
+	// Wait for both subsystems to signal ready (with timeout)
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	readyTimeout := 30 * time.Second
+	select {
+	case <-done:
+		// Check if any startup error occurred
+		if errPtr := startErr.Load(); errPtr != nil {
+			return fmt.Errorf("subsystem startup failed: %w", *errPtr)
+		}
+		p.logger.Info("All subsystems ready")
+		return nil
+	case <-time.After(readyTimeout):
+		moduleCancel() // Cancel the modules if timeout
+		return fmt.Errorf("subsystems failed to start within %v", readyTimeout)
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Stop waits for graceful cleanup
@@ -949,9 +1028,10 @@ func (p *Processor) initializeBusinessServices() error {
 	}
 
 	msgDeps := messagemanager.Dependencies{
-		EntityManager: p.entityManager,
-		IndexManager:  p.indexManager,
-		Logger:        p.logger,
+		EntityManager:   p.entityManager,
+		IndexManager:    p.indexManager,
+		Logger:          p.logger,
+		MetricsRegistry: p.metricsRegistry,
 	}
 
 	p.messageManager = messagemanager.NewManager(msgConfig, msgDeps, p.recordError)
@@ -1044,10 +1124,10 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, subject string) 
 		StreamName:    p.config.StreamName,
 		ConsumerName:  p.config.ConsumerName,
 		FilterSubject: subject,
-		DeliverPolicy: "all",   // Process all messages including historical
+		DeliverPolicy: "all",      // Process all messages including historical
 		AckPolicy:     "explicit", // Explicit ack required
-		MaxDeliver:    5,       // Retry up to 5 times before giving up
-		AutoCreate:    true,    // Auto-create stream if it doesn't exist
+		MaxDeliver:    5,          // Retry up to 5 times before giving up
+		AutoCreate:    true,       // Auto-create stream if it doesn't exist
 		AutoCreateConfig: &natsclient.StreamAutoCreateConfig{
 			Subjects:  []string{"events.graph.entity.>"},
 			Storage:   "file",
@@ -1067,6 +1147,8 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, subject string) 
 }
 
 // handleJetStreamMessage processes a JetStream message with explicit acknowledgment.
+// Uses async worker pool for throughput. Messages are ACK'd after successful submission
+// to the worker pool. The write buffer provides durability for in-flight messages.
 func (p *Processor) handleJetStreamMessage(ctx context.Context, msg jetstream.Msg) {
 	// Log received message subject for debugging
 	p.logger.Debug("JetStream message received",
@@ -1091,7 +1173,7 @@ func (p *Processor) handleJetStreamMessage(ctx context.Context, msg jetstream.Ms
 
 	data := msg.Data()
 
-	// Submit to worker pool
+	// Submit to worker pool for async processing
 	if err := p.workerPool.Submit(data); err != nil {
 		// Check error type to determine acknowledgment strategy
 		if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
@@ -1118,6 +1200,8 @@ func (p *Processor) handleJetStreamMessage(ctx context.Context, msg jetstream.Ms
 	}
 
 	// Successfully submitted to worker pool - acknowledge
+	// Note: Processing happens async. The write buffer provides durability for in-flight data.
+	// If processing fails after ACK, the data is still in the buffer and will be written.
 	if err := msg.Ack(); err != nil {
 		p.logger.Warn("Failed to ack message", "error", err)
 	}
@@ -1286,15 +1370,7 @@ func (p *processorGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID
 
 // initializeClusteringIfEnabled sets up clustering components if enabled in config
 func (p *Processor) initializeClusteringIfEnabled(ctx context.Context, buckets map[string]jetstream.KeyValue) error {
-	// Log config state for observability
-	clusteringNil := p.config.Clustering == nil
-	enabled := !clusteringNil && p.config.Clustering.Enabled
-	p.logger.Info("Checking clustering configuration",
-		"clustering_config_nil", clusteringNil,
-		"enabled", enabled)
-
-	if clusteringNil || !enabled {
-		p.logger.Info("Clustering disabled, skipping initialization")
+	if !p.isClusteringEnabled() {
 		return nil
 	}
 
@@ -1304,23 +1380,58 @@ func (p *Processor) initializeClusteringIfEnabled(ctx context.Context, buckets m
 		"levels", cfg.Algorithm.Levels,
 		"enhancement_enabled", cfg.Enhancement.Enabled)
 
-	// Store buckets for graph provider
 	p.clusteringBuckets = buckets
 
-	// Get COMMUNITY_INDEX bucket
-	communityBucket, ok := buckets["COMMUNITY_INDEX"]
-	if !ok {
-		return errs.WrapFatal(errs.ErrMissingConfig, "Processor",
-			"initializeClusteringIfEnabled", "COMMUNITY_INDEX bucket not found")
+	communityBucket, graphProvider, err := p.setupGraphProvider(ctx, buckets, cfg)
+	if err != nil {
+		return err
 	}
 
-	// Create community storage
+	p.communityDetector = p.createCommunityDetector(graphProvider, cfg)
+	p.initializeInferenceMetrics()
+
+	if err := p.setupEnhancementWorker(ctx, cfg, communityBucket, graphProvider); err != nil {
+		return err
+	}
+
+	p.setupEntityChangeCallback(cfg)
+	return nil
+}
+
+// isClusteringEnabled checks if clustering is configured and enabled.
+func (p *Processor) isClusteringEnabled() bool {
+	clusteringNil := p.config.Clustering == nil
+	enabled := !clusteringNil && p.config.Clustering.Enabled
+	p.logger.Info("Checking clustering configuration",
+		"clustering_config_nil", clusteringNil,
+		"enabled", enabled)
+
+	if clusteringNil || !enabled {
+		p.logger.Info("Clustering disabled, skipping initialization")
+		return false
+	}
+	return true
+}
+
+// setupGraphProvider creates the graph provider and community storage from buckets.
+func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]jetstream.KeyValue, cfg *ClusteringConfig) (jetstream.KeyValue, clustering.GraphProvider, error) {
+	// Check context before bucket operations
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	default:
+	}
+
+	communityBucket, ok := buckets["COMMUNITY_INDEX"]
+	if !ok {
+		return nil, nil, errs.WrapFatal(errs.ErrMissingConfig, "Processor",
+			"initializeClusteringIfEnabled", "COMMUNITY_INDEX bucket not found")
+	}
 	p.communityStorage = clustering.NewNATSCommunityStorage(communityBucket)
 
-	// Create graph provider using entity data
 	entityBucket, ok := buckets["ENTITY_STATES"]
 	if !ok {
-		return errs.WrapFatal(errs.ErrMissingConfig, "Processor",
+		return nil, nil, errs.WrapFatal(errs.ErrMissingConfig, "Processor",
 			"initializeClusteringIfEnabled", "ENTITY_STATES bucket not found")
 	}
 
@@ -1329,85 +1440,144 @@ func (p *Processor) initializeClusteringIfEnabled(ctx context.Context, buckets m
 		kvBucket:     entityBucket,
 	}
 
-	// Wrap with SemanticGraphProvider if semantic edges enabled
-	var graphProvider clustering.GraphProvider = baseProvider
-	if cfg.SemanticEdges.Enabled && p.indexManager != nil {
-		// Apply defaults
-		threshold := cfg.SemanticEdges.SimilarityThreshold
-		if threshold <= 0 {
-			threshold = 0.6
-		}
-		maxNeighbors := cfg.SemanticEdges.MaxVirtualNeighbors
-		if maxNeighbors <= 0 {
-			maxNeighbors = 5
-		}
+	graphProvider := p.wrapWithSemanticProvider(baseProvider, cfg)
+	return communityBucket, graphProvider, nil
+}
 
-		semanticConfig := clustering.SemanticProviderConfig{
-			SimilarityThreshold: threshold,
-			MaxVirtualNeighbors: maxNeighbors,
-		}
-
-		graphProvider = clustering.NewSemanticGraphProvider(baseProvider, p.indexManager, semanticConfig, p.logger)
-		p.logger.Info("Semantic edges enabled for clustering",
-			"similarity_threshold", threshold,
-			"max_virtual_neighbors", maxNeighbors)
+// wrapWithSemanticProvider wraps base provider with semantic edges if enabled.
+func (p *Processor) wrapWithSemanticProvider(baseProvider clustering.GraphProvider, cfg *ClusteringConfig) clustering.GraphProvider {
+	if !cfg.SemanticEdges.Enabled || p.indexManager == nil {
+		return baseProvider
 	}
 
-	// Create LPA detector with configuration
+	threshold := cfg.SemanticEdges.SimilarityThreshold
+	if threshold <= 0 {
+		threshold = DefaultSimilarityThreshold
+	}
+	maxNeighbors := cfg.SemanticEdges.MaxVirtualNeighbors
+	if maxNeighbors <= 0 {
+		maxNeighbors = DefaultMaxVirtualNeighbors
+	}
+
+	semanticConfig := clustering.SemanticProviderConfig{
+		SimilarityThreshold: threshold,
+		MaxVirtualNeighbors: maxNeighbors,
+	}
+
+	p.logger.Info("Semantic edges enabled for clustering",
+		"similarity_threshold", threshold,
+		"max_virtual_neighbors", maxNeighbors)
+
+	return clustering.NewSemanticGraphProvider(baseProvider, p.indexManager, semanticConfig, p.logger)
+}
+
+// createCommunityDetector creates the LPA detector with configuration.
+func (p *Processor) createCommunityDetector(graphProvider clustering.GraphProvider, cfg *ClusteringConfig) clustering.CommunityDetector {
 	maxIterations := cfg.Algorithm.MaxIterations
 	if maxIterations <= 0 {
-		maxIterations = 100
+		maxIterations = DefaultMaxIterations
 	}
 	levels := cfg.Algorithm.Levels
 	if levels <= 0 {
-		levels = 3
+		levels = DefaultClusteringLevels
 	}
 
 	detector := clustering.NewLPADetector(graphProvider, p.communityStorage).
 		WithMaxIterations(maxIterations).
 		WithLevels(levels)
 
-	// Enable progressive summarization for statistical summaries
 	summarizer := clustering.NewProgressiveSummarizer()
-	detector = detector.WithProgressiveSummarization(summarizer, p.queryManager)
+	return detector.WithProgressiveSummarization(summarizer, p.queryManager)
+}
 
-	p.communityDetector = detector
+// initializeInferenceMetrics creates the inference metrics counter.
+func (p *Processor) initializeInferenceMetrics() {
+	if p.metricsRegistry == nil {
+		return
+	}
+	p.inferredTriples = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "semstreams_graph_inferred_triples_total",
+		Help: "Total inferred relationship triples from community detection",
+	})
+	p.metricsRegistry.RegisterCounter("graph", "semstreams_graph_inferred_triples_total", p.inferredTriples)
+}
 
-	// Initialize enhancement worker if LLM enabled
-	if cfg.Enhancement.Enabled && cfg.Enhancement.SummarizerEndpoint != "" {
-		llmSummarizer := clustering.NewHTTPLLMSummarizer(cfg.Enhancement.SummarizerEndpoint)
-
-		workers := cfg.Enhancement.Workers
-		if workers <= 0 {
-			workers = 3
-		}
-
-		workerConfig := &clustering.EnhancementWorkerConfig{
-			LLMSummarizer:   llmSummarizer,
-			Storage:         p.communityStorage,
-			GraphProvider:   graphProvider,
-			Querier:         p.queryManager,
-			CommunityBucket: communityBucket,
-			Logger:          p.logger,
-		}
-
-		worker, err := clustering.NewEnhancementWorker(workerConfig)
-		if err != nil {
-			return errs.WrapFatal(err, "Processor", "initializeClusteringIfEnabled",
-				"failed to create enhancement worker")
-		}
-		p.enhancementWorker = worker.WithWorkers(workers)
-
-		p.logger.Info("Enhancement worker configured",
-			"endpoint", cfg.Enhancement.SummarizerEndpoint,
-			"workers", workers)
+// setupEnhancementWorker creates the LLM enhancement worker if enabled.
+func (p *Processor) setupEnhancementWorker(ctx context.Context, cfg *ClusteringConfig, communityBucket jetstream.KeyValue, graphProvider clustering.GraphProvider) error {
+	if !cfg.Enhancement.Enabled || !cfg.Enhancement.LLM.IsEnabled() {
+		return nil
 	}
 
-	p.logger.Info("Clustering initialized successfully")
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	llmClient, err := llm.NewOpenAIClient(cfg.Enhancement.LLM.ToOpenAIConfig())
+	if err != nil {
+		return errs.WrapFatal(err, "Processor", "setupEnhancementWorker", "failed to create LLM client")
+	}
+
+	llmSummarizer, err := clustering.NewLLMSummarizer(clustering.LLMSummarizerConfig{Client: llmClient})
+	if err != nil {
+		return errs.WrapFatal(err, "Processor", "setupEnhancementWorker", "failed to create LLM summarizer")
+	}
+
+	workers := cfg.Enhancement.Workers
+	if workers <= 0 {
+		workers = DefaultEnhancementWorkers
+	}
+
+	workerConfig := &clustering.EnhancementWorkerConfig{
+		LLMSummarizer:   llmSummarizer,
+		Storage:         p.communityStorage,
+		GraphProvider:   graphProvider,
+		Querier:         p.queryManager,
+		CommunityBucket: communityBucket,
+		Logger:          p.logger,
+	}
+
+	worker, err := clustering.NewEnhancementWorker(workerConfig)
+	if err != nil {
+		return errs.WrapFatal(err, "Processor", "setupEnhancementWorker", "failed to create enhancement worker")
+	}
+	p.enhancementWorker = worker.WithWorkers(workers)
+
+	p.logger.Info("Enhancement worker configured",
+		"base_url", cfg.Enhancement.LLM.BaseURL,
+		"model", cfg.Enhancement.LLM.Model,
+		"workers", workers)
 	return nil
 }
 
-// runClusteringLoop runs periodic community detection
+// setupEntityChangeCallback configures the entity creation callback for adaptive clustering.
+func (p *Processor) setupEntityChangeCallback(cfg *ClusteringConfig) {
+	p.detectionTrigger = make(chan struct{}, 1)
+
+	threshold := cfg.Schedule.EntityChangeThreshold
+	if threshold <= 0 {
+		threshold = DefaultEntityChangeThreshold
+	}
+
+	p.dataManager.SetEntityCreatedCallback(func(_ string) {
+		newCount := p.entityChangeCount.Add(1)
+		if int(newCount) >= threshold {
+			select {
+			case p.detectionTrigger <- struct{}{}:
+			default:
+			}
+		}
+	})
+
+	p.logger.Info("Clustering initialized successfully", "entity_change_threshold", threshold)
+}
+
+// runClusteringLoop runs periodic community detection with hybrid triggers.
+// Detection is triggered by:
+// 1. Max interval timer (detection_interval, default 30s) - ensures detection even in quiet periods
+// 2. Entity change threshold (entity_change_threshold, default 100) - triggers immediately when threshold reached
+// 3. Min interval protection (min_detection_interval, default 5s) - prevents hammering during bursts
 func (p *Processor) runClusteringLoop(ctx context.Context) error {
 	if p.config.Clustering == nil {
 		return nil
@@ -1415,18 +1585,36 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 
 	cfg := p.config.Clustering
 
-	// Parse timing configuration
+	// Parse timing configuration with error logging
 	initialDelay := 10 * time.Second
 	if cfg.Schedule.InitialDelay != "" {
 		if d, err := time.ParseDuration(cfg.Schedule.InitialDelay); err == nil {
 			initialDelay = d
+		} else {
+			p.logger.Warn("Invalid initial_delay config, using default",
+				"value", cfg.Schedule.InitialDelay, "default", initialDelay, "error", err)
 		}
 	}
 
-	detectionInterval := 2 * time.Minute
+	// Max interval between detection runs (triggers even if no new entities)
+	maxInterval := 30 * time.Second
 	if cfg.Schedule.DetectionInterval != "" {
 		if d, err := time.ParseDuration(cfg.Schedule.DetectionInterval); err == nil {
-			detectionInterval = d
+			maxInterval = d
+		} else {
+			p.logger.Warn("Invalid detection_interval config, using default",
+				"value", cfg.Schedule.DetectionInterval, "default", maxInterval, "error", err)
+		}
+	}
+
+	// Min interval between detection runs (burst protection)
+	minInterval := 5 * time.Second
+	if cfg.Schedule.MinDetectionInterval != "" {
+		if d, err := time.ParseDuration(cfg.Schedule.MinDetectionInterval); err == nil {
+			minInterval = d
+		} else {
+			p.logger.Warn("Invalid min_detection_interval config, using default",
+				"value", cfg.Schedule.MinDetectionInterval, "default", minInterval, "error", err)
 		}
 	}
 
@@ -1435,9 +1623,16 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 		minEntities = 10
 	}
 
-	p.logger.Info("Starting clustering loop",
+	entityThreshold := cfg.Schedule.EntityChangeThreshold
+	if entityThreshold <= 0 {
+		entityThreshold = 100
+	}
+
+	p.logger.Info("Starting clustering loop (hybrid trigger)",
 		"initial_delay", initialDelay,
-		"detection_interval", detectionInterval,
+		"max_interval", maxInterval,
+		"min_interval", minInterval,
+		"entity_threshold", entityThreshold,
 		"min_entities", minEntities)
 
 	// Wait for initial delay
@@ -1448,10 +1643,12 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 	}
 
 	// Run initial detection
+	p.entityChangeCount.Store(0)
 	p.runDetectionIfReady(ctx, minEntities)
+	lastRun := time.Now()
 
-	// Start periodic detection
-	ticker := time.NewTicker(detectionInterval)
+	// Start max interval timer
+	ticker := time.NewTicker(maxInterval)
 	defer ticker.Stop()
 
 	for {
@@ -1459,8 +1656,32 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 		case <-ctx.Done():
 			p.logger.Info("Clustering loop stopped")
 			return ctx.Err()
+
 		case <-ticker.C:
+			// Max interval reached - run detection regardless of entity count
+			p.logger.Debug("Max interval reached, triggering detection",
+				"entities_since_last", p.entityChangeCount.Load())
+			p.entityChangeCount.Store(0)
 			p.runDetectionIfReady(ctx, minEntities)
+			lastRun = time.Now()
+
+		case <-p.detectionTrigger:
+			// Entity threshold reached - check min interval for burst protection
+			timeSinceLast := time.Since(lastRun)
+			if timeSinceLast >= minInterval {
+				p.logger.Debug("Entity threshold reached, triggering detection",
+					"entities", p.entityChangeCount.Load(),
+					"time_since_last", timeSinceLast)
+				p.entityChangeCount.Store(0)
+				p.runDetectionIfReady(ctx, minEntities)
+				lastRun = time.Now()
+				ticker.Reset(maxInterval) // Reset max interval timer
+			} else {
+				p.logger.Debug("Entity threshold reached but min interval not elapsed",
+					"entities", p.entityChangeCount.Load(),
+					"time_since_last", timeSinceLast,
+					"min_interval", minInterval)
+			}
 		}
 	}
 }
@@ -1542,6 +1763,67 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int) {
 		"duration", time.Since(startTime),
 		"levels", len(communities),
 		"total_communities", totalCommunities)
+
+	// Run statistical inference if enabled
+	if p.config.Clustering.Inference.Enabled {
+		p.runInference(ctx, communities)
+	}
+}
+
+// runInference generates and persists inferred relationships from community detection.
+// For each level's communities, it creates "inferred.clustered_with" triples between
+// co-members, then persists them via the data manager.
+func (p *Processor) runInference(ctx context.Context, communities map[int][]*clustering.Community) {
+	startTime := time.Now()
+	totalInferred := 0
+
+	// Convert processor config to clustering config
+	inferConfig := clustering.InferenceConfig{
+		MinCommunitySize:        p.config.Clustering.Inference.MinCommunitySize,
+		MaxInferredPerCommunity: p.config.Clustering.Inference.MaxInferredPerCommunity,
+	}
+
+	// Process each level
+	for level := range communities {
+		inferred, err := p.communityDetector.InferRelationshipsFromCommunities(ctx, level, inferConfig)
+		if err != nil {
+			p.logger.Warn("Inference failed for level",
+				"level", level,
+				"error", err)
+			continue
+		}
+
+		// Persist inferred triples
+		for _, triple := range inferred {
+			msgTriple := message.Triple{
+				Subject:    triple.Subject,
+				Predicate:  triple.Predicate,
+				Object:     triple.Object,
+				Source:     triple.Source,
+				Confidence: triple.Confidence,
+				Timestamp:  triple.Timestamp,
+				Context:    triple.CommunityID, // Store community ID as context
+			}
+
+			if err := p.dataManager.AddTriple(ctx, msgTriple); err != nil {
+				p.logger.Debug("Failed to persist inferred triple",
+					"subject", triple.Subject,
+					"object", triple.Object,
+					"error", err)
+				continue
+			}
+			totalInferred++
+		}
+	}
+
+	// Update metrics
+	if p.inferredTriples != nil {
+		p.inferredTriples.Add(float64(totalInferred))
+	}
+
+	p.logger.Info("Statistical inference completed",
+		"duration", time.Since(startTime),
+		"inferred_triples", totalInferred)
 }
 
 // runEnhancementWorker runs the LLM enhancement worker

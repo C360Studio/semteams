@@ -69,7 +69,9 @@ type DataConsistency interface {
 // DataLifecycle manages component lifecycle and observability.
 // Used by the main processor to start/stop the manager and monitor health.
 type DataLifecycle interface {
-	Run(ctx context.Context) error
+	// Run starts the DataManager and blocks until context is cancelled.
+	// If onReady is provided, it is called once initialization completes successfully.
+	Run(ctx context.Context, onReady func()) error
 	FlushPendingWrites(ctx context.Context) error
 	GetPendingWriteCount() int
 	GetCacheStats() CacheStats

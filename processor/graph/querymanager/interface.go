@@ -32,6 +32,7 @@ type Querier interface {
 	// GraphRAG search operations
 	LocalSearch(ctx context.Context, entityID string, query string, level int) (*LocalSearchResult, error)
 	GlobalSearch(ctx context.Context, query string, level int, maxCommunities int) (*GlobalSearchResult, error)
+	GlobalSearchWithOptions(ctx context.Context, opts *SearchOptions) (*GlobalSearchResult, error)
 
 	// Community operations
 	GetCommunity(ctx context.Context, communityID string) (*clustering.Community, error)

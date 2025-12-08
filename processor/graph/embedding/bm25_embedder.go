@@ -10,6 +10,33 @@ import (
 	"unicode"
 )
 
+// stopwords contains common English words to filter from queries and documents.
+// These words provide little semantic value for similarity matching.
+var stopwords = map[string]bool{
+	// Question words
+	"what": true, "where": true, "when": true, "why": true, "how": true, "which": true,
+	// Articles
+	"a": true, "an": true, "the": true,
+	// Prepositions
+	"in": true, "on": true, "at": true, "to": true, "for": true, "with": true, "by": true,
+	"from": true, "of": true, "about": true, "into": true,
+	// Common verbs
+	"is": true, "are": true, "was": true, "were": true, "be": true, "been": true, "being": true,
+	"have": true, "has": true, "had": true, "do": true, "does": true, "did": true, "done": true,
+	// Pronouns
+	"i": true, "you": true, "he": true, "she": true, "it": true, "we": true, "they": true,
+	"me": true, "him": true, "her": true, "us": true, "them": true,
+	"my": true, "your": true, "his": true, "its": true, "our": true, "their": true,
+	"this": true, "that": true, "these": true, "those": true,
+	// Conjunctions
+	"and": true, "or": true, "but": true, "if": true, "then": true, "else": true,
+	// Other common words
+	"there": true, "here": true, "all": true, "any": true, "some": true, "no": true, "not": true,
+	"can": true, "will": true, "would": true, "could": true, "should": true, "may": true, "might": true,
+	"must": true, "shall": true,
+	"find": true, "get": true, "mention": true, "show": true, "tell": true, "give": true,
+}
+
 // BM25Embedder implements pure Go lexical embeddings using BM25 algorithm.
 //
 // This embedder provides a fallback when neural embedding services are unavailable.
@@ -160,9 +187,14 @@ func (b *BM25Embedder) Close() error {
 	return nil
 }
 
-// tokenize splits text into lowercase tokens.
+// tokenize splits text into lowercase tokens with stopword removal and stemming.
 //
-// Simple tokenization: lowercase, split on non-alphanumeric, filter short tokens.
+// Processing steps:
+//  1. Lowercase the text
+//  2. Split on non-alphanumeric characters
+//  3. Filter tokens shorter than 2 characters
+//  4. Remove common stopwords (the, is, what, etc.)
+//  5. Apply simple suffix stemming (documents → document)
 func (b *BM25Embedder) tokenize(text string) []string {
 	// Lowercase
 	text = strings.ToLower(text)
@@ -177,7 +209,10 @@ func (b *BM25Embedder) tokenize(text string) []string {
 		} else if current.Len() > 0 {
 			token := current.String()
 			if len(token) >= 2 { // Filter very short tokens
-				tokens = append(tokens, token)
+				// Skip stopwords and apply stemming
+				if !stopwords[token] {
+					tokens = append(tokens, stem(token))
+				}
 			}
 			current.Reset()
 		}
@@ -186,12 +221,77 @@ func (b *BM25Embedder) tokenize(text string) []string {
 	// Don't forget last token
 	if current.Len() > 0 {
 		token := current.String()
-		if len(token) >= 2 {
-			tokens = append(tokens, token)
+		if len(token) >= 2 && !stopwords[token] {
+			tokens = append(tokens, stem(token))
 		}
 	}
 
 	return tokens
+}
+
+// stem applies simple suffix stripping to reduce words to root form.
+// This is a lightweight stemmer - not as comprehensive as Porter but zero dependencies.
+func stem(word string) string {
+	if len(word) < 4 {
+		return word
+	}
+
+	// Handle -ies → -y (e.g., "queries" → "query")
+	if strings.HasSuffix(word, "ies") && len(word) > 4 {
+		return word[:len(word)-3] + "y"
+	}
+
+	// Handle -ied → -y (e.g., "carried" → "carry")
+	if strings.HasSuffix(word, "ied") && len(word) > 4 {
+		return word[:len(word)-3] + "y"
+	}
+
+	// Handle -ing (e.g., "running" → "run")
+	if strings.HasSuffix(word, "ing") && len(word) > 5 {
+		base := word[:len(word)-3]
+		// Handle doubled consonant (running → run)
+		if len(base) > 2 && base[len(base)-1] == base[len(base)-2] {
+			return base[:len(base)-1]
+		}
+		return base
+	}
+
+	// Handle -ed (e.g., "mentioned" → "mention")
+	if strings.HasSuffix(word, "ed") && len(word) > 4 {
+		return word[:len(word)-2]
+	}
+
+	// Handle -ly (e.g., "safely" → "safe")
+	if strings.HasSuffix(word, "ly") && len(word) > 4 {
+		return word[:len(word)-2]
+	}
+
+	// Handle -tion (e.g., "operation" → "operat")
+	if strings.HasSuffix(word, "tion") && len(word) > 5 {
+		return word[:len(word)-4]
+	}
+
+	// Handle -ment (e.g., "equipment" → "equip")
+	if strings.HasSuffix(word, "ment") && len(word) > 5 {
+		return word[:len(word)-4]
+	}
+
+	// Handle -ness (e.g., "darkness" → "dark")
+	if strings.HasSuffix(word, "ness") && len(word) > 5 {
+		return word[:len(word)-4]
+	}
+
+	// Handle -es (e.g., "boxes" → "box")
+	if strings.HasSuffix(word, "es") && len(word) > 3 {
+		return word[:len(word)-2]
+	}
+
+	// Handle -s (e.g., "documents" → "document")
+	if strings.HasSuffix(word, "s") && len(word) > 3 && !strings.HasSuffix(word, "ss") {
+		return word[:len(word)-1]
+	}
+
+	return word
 }
 
 // computeTermFrequencies counts term occurrences.

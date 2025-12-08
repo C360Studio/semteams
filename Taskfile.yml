@@ -246,7 +246,7 @@ tasks:
     cmds:
       - echo "[SEMANTIC E2E] Starting kitchen sink semantic test (with ML services)..."
       - docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d --wait
-      - echo "[OK] Semantic services are healthy (including SemEmbed + SemSummarize)"
+      - echo "[OK] Semantic services are healthy (including SemEmbed + SemInstruct)"
       - echo "[SEMANTIC E2E] Running kitchen sink test..."
       - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant ml --output-dir ./test/e2e/results
         ignore_error: true
@@ -272,7 +272,7 @@ tasks:
     cmds:
       - echo "[SEMANTIC E2E] Starting kitchen sink semantic test (full ML stack)..."
       - docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d --wait
-      - echo "[OK] ML services are healthy (SemEmbed + SemSummarize)"
+      - echo "[OK] ML services are healthy (SemEmbed + SemInstruct)"
       - echo "[SEMANTIC E2E] Running kitchen sink ML test..."
       - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant ml --output-dir ./test/e2e/results
         ignore_error: true
@@ -286,7 +286,7 @@ tasks:
       - docker compose -f docker-compose.semantic-kitchen.yml --profile ml down -v --timeout 15 2>/dev/null || true
       - docker volume ls -q --filter name=semstreams-kitchen | xargs -r docker volume rm 2>/dev/null || true
       - docker volume ls -q --filter name=semembed-kitchen | xargs -r docker volume rm 2>/dev/null || true
-      - docker volume ls -q --filter name=semsummarize-kitchen | xargs -r docker volume rm 2>/dev/null || true
+      - docker volume ls -q --filter name=shimmy-kitchen | xargs -r docker volume rm 2>/dev/null || true
       - echo "[OK] Kitchen sink environment cleaned"
 
   e2e:semantic-kitchen-compare:
@@ -336,6 +336,80 @@ tasks:
       - cmd: cd cmd/e2e && ./e2e --scenario core-federation
         ignore_error: true
       - docker compose -f docker-compose.federation.yml down -v --timeout 15
+
+  # Tiered Inference E2E tasks (Tier 0: Rules, Tier 1: Native/BM25, Tier 2: LLM)
+  # See docs/e2e/tiers.md for tier architecture documentation
+  e2e:tier0:
+    desc: "Tier 0: Rules-only processing (stateful rules + PathRAG, no inference)"
+    silent: false
+    deps: [e2e:clean, e2e:check-ports, build:e2e]
+    cmds:
+      - echo "[TIER 0] Starting rules-only E2E test (deterministic, no ML)..."
+      - docker compose -f docker-compose.rules.yml up -d --wait
+      - echo "[OK] Services are healthy (stateful rules + graph)"
+      - echo "[TIER 0] Running tier0-rules-iot scenario..."
+      - cmd: cd cmd/e2e && ./e2e --scenario tier0-rules-iot --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.rules.yml down -v --timeout 15
+
+  e2e:tier1:
+    desc: "Tier 1: Native inference (BM25 + LPA + statistical summaries)"
+    silent: false
+    deps: [e2e:clean, e2e:check-ports, build:e2e]
+    cmds:
+      - echo "[TIER 1] Starting native inference E2E test (BM25 fallback, no external ML)..."
+      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - echo "[OK] Core semantic services are healthy (BM25 fallback mode)"
+      - echo "[TIER 1] Running tier1-native scenario..."
+      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant core --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+
+  e2e:tier2:
+    desc: "Tier 2: LLM inference (neural embeddings + LLM summaries)"
+    silent: false
+    deps: [e2e:clean, e2e:check-ports, build:e2e]
+    cmds:
+      - echo "[TIER 2] Starting LLM inference E2E test (SemEmbed + SemInstruct)..."
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d --wait
+      - echo "[OK] ML services are healthy (SemEmbed + SemInstruct)"
+      - echo "[TIER 2] Running tier2-llm scenario..."
+      # ML app runs on port 8180 (HTTP), 9190 (metrics), 14650 (UDP) to avoid conflict with core
+      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant ml --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml down -v --timeout 15
+
+  e2e:tiers:
+    desc: Run all tier E2E tests (Tier 0 → 1 → 2) with comparison report
+    silent: false
+    deps: [e2e:clean, e2e:check-ports, build:e2e]
+    cmds:
+      - 'echo "[TIERS] Running all inference tier E2E tests..."'
+      - 'echo ""'
+      - 'echo "=== TIER 0: Rules-Only (Deterministic) ==="'
+      - docker compose -f docker-compose.rules.yml up -d --wait
+      - cmd: cd cmd/e2e && ./e2e --scenario tier0-rules-iot --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.rules.yml down -v --timeout 15
+      - sleep 3
+      - 'echo ""'
+      - 'echo "=== TIER 1: Native Inference (BM25 + LPA) ==="'
+      - docker compose -f docker-compose.semantic-kitchen.yml up -d --wait
+      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant core --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.semantic-kitchen.yml down -v --timeout 15
+      - sleep 3
+      - 'echo ""'
+      - 'echo "=== TIER 2: LLM Inference (Neural + Summaries) ==="'
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml up -d --wait
+      - cmd: cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --variant ml --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker-compose.semantic-kitchen.yml --profile ml down -v --timeout 15
+      - 'echo ""'
+      - 'echo "[TIERS] Generating comparison report..."'
+      - cmd: cd cmd/e2e && ./e2e --compare-tiers --output-dir ./test/e2e/results
+        ignore_error: true
+      - 'echo "[OK] All tier tests complete. Results in ./test/e2e/results/"'
 
   # Rule Processor E2E tasks
   e2e:rules-graph:

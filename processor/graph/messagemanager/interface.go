@@ -5,6 +5,7 @@ import (
 	"context"
 
 	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 )
 
@@ -22,9 +23,10 @@ type MessageHandler interface {
 
 // Dependencies defines all dependencies needed by message manager
 type Dependencies struct {
-	EntityManager datamanager.EntityManager
-	IndexManager  IndexManager
-	Logger        Logger
+	EntityManager   datamanager.EntityManager
+	IndexManager    IndexManager
+	Logger          Logger
+	MetricsRegistry *metric.MetricsRegistry
 }
 
 // IndexManager interface for index operations

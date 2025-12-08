@@ -1,20 +1,16 @@
 package clustering
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"math"
-	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/processor/graph/llm"
 )
 
 // extractEntityType extracts the type from an entity ID using message.ParseEntityID
@@ -435,64 +431,65 @@ func extractTerms(text string) []string {
 	return terms
 }
 
-// HTTPLLMSummarizer implements CommunitySummarizer using HTTP LLM API (semsummarize)
-// This summarizer calls an external LLM service for higher quality natural language summaries
-type HTTPLLMSummarizer struct {
-	// BaseURL is the endpoint URL for the summarization service (e.g., "http://semsummarize:8083")
-	BaseURL string
+// LLMSummarizer implements CommunitySummarizer using an OpenAI-compatible LLM API.
+// This summarizer calls an external LLM service for higher quality natural language summaries.
+//
+// It works with any OpenAI-compatible backend:
+//   - shimmy (recommended for local inference)
+//   - OpenAI cloud
+//   - Ollama, vLLM, etc.
+type LLMSummarizer struct {
+	// Client is the LLM client for making chat completion requests.
+	Client llm.Client
 
-	// Timeout for HTTP requests
-	Timeout time.Duration
-
-	// FallbackSummarizer is used if HTTP service is unavailable
+	// FallbackSummarizer is used if LLM service is unavailable.
 	FallbackSummarizer *StatisticalSummarizer
 
-	// HTTPClient for making requests
-	client *http.Client
+	// MaxTokens limits the response length (default: 150).
+	MaxTokens int
 }
 
-// summarizeRequest matches semsummarize API request format
-type summarizeRequest struct {
-	Text        string  `json:"text"`
-	MaxLength   int     `json:"max_length,omitempty"`
-	MinLength   int     `json:"min_length,omitempty"`
-	NumBeams    int     `json:"num_beams,omitempty"`
-	DoSample    bool    `json:"do_sample,omitempty"`
-	Temperature float64 `json:"temperature,omitempty"`
+// LLMSummarizerConfig configures the LLM summarizer.
+type LLMSummarizerConfig struct {
+	// Client is the LLM client (required).
+	Client llm.Client
+
+	// MaxTokens limits the response length (default: 150).
+	MaxTokens int
 }
 
-// summarizeResponse matches semsummarize API response format
-type summarizeResponse struct {
-	Summary string  `json:"summary"`
-	Model   string  `json:"model"`
-	Latency float64 `json:"latency_ms"`
-}
-
-// NewHTTPLLMSummarizer creates an HTTP-based LLM summarizer with default settings
-func NewHTTPLLMSummarizer(baseURL string) *HTTPLLMSummarizer {
-	return &HTTPLLMSummarizer{
-		BaseURL:            baseURL,
-		Timeout:            10 * time.Second,
-		FallbackSummarizer: NewStatisticalSummarizer(),
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+// NewLLMSummarizer creates an LLM-based summarizer with the given configuration.
+func NewLLMSummarizer(cfg LLMSummarizerConfig) (*LLMSummarizer, error) {
+	if cfg.Client == nil {
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "LLMSummarizer",
+			"NewLLMSummarizer", "client is required")
 	}
+
+	maxTokens := cfg.MaxTokens
+	if maxTokens == 0 {
+		maxTokens = 150
+	}
+
+	return &LLMSummarizer{
+		Client:             cfg.Client,
+		FallbackSummarizer: NewStatisticalSummarizer(),
+		MaxTokens:          maxTokens,
+	}, nil
 }
 
-// SummarizeCommunity generates an LLM-based summary of the community
-func (s *HTTPLLMSummarizer) SummarizeCommunity(
+// SummarizeCommunity generates an LLM-based summary of the community.
+func (s *LLMSummarizer) SummarizeCommunity(
 	ctx context.Context,
 	community *Community,
 	entities []*gtypes.EntityState,
 ) (*Community, error) {
 	if community == nil {
-		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "HTTPLLMSummarizer",
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "LLMSummarizer",
 			"SummarizeCommunity", "community is nil")
 	}
 
 	if len(entities) == 0 {
-		return nil, errs.WrapInvalid(errs.ErrInvalidData, "HTTPLLMSummarizer",
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "LLMSummarizer",
 			"SummarizeCommunity", "entities list is empty")
 	}
 
@@ -508,16 +505,34 @@ func (s *HTTPLLMSummarizer) SummarizeCommunity(
 	keywords := s.FallbackSummarizer.extractKeywords(entities)
 	repEntities := s.FallbackSummarizer.findRepresentativeEntities(ctx, entities)
 
-	// Build input text for LLM from entity information
-	inputText := s.buildLLMInputText(entities, keywords)
+	// Build prompt data
+	promptData := s.buildPromptData(entities, keywords)
+
+	// Render the prompt template using direct package variable
+	rendered, err := llm.CommunityPrompt.Render(promptData)
+	if err != nil {
+		// If prompt rendering fails, fall back to statistical
+		statSummary := s.FallbackSummarizer.generateSummary(entities, keywords)
+		community.StatisticalSummary = statSummary
+		community.Keywords = keywords
+		community.RepEntities = repEntities
+		community.SummaryStatus = "statistical-fallback"
+		return community, nil
+	}
 
 	// Call LLM service for summary generation
-	summary, err := s.callLLMService(ctx, inputText)
+	temperature := 0.7
+	resp, err := s.Client.ChatCompletion(ctx, llm.ChatRequest{
+		SystemPrompt: rendered.System,
+		UserPrompt:   rendered.User,
+		MaxTokens:    s.MaxTokens,
+		Temperature:  &temperature,
+	})
 	if err != nil {
 		// If community already has a statistical summary (progressive enhancement path),
 		// return error so enhancement worker can mark as "llm-failed"
 		if community.StatisticalSummary != "" {
-			return nil, errs.WrapTransient(err, "HTTPLLMSummarizer",
+			return nil, errs.WrapTransient(err, "LLMSummarizer",
 				"SummarizeCommunity", "LLM service unavailable")
 		}
 
@@ -531,7 +546,7 @@ func (s *HTTPLLMSummarizer) SummarizeCommunity(
 	}
 
 	// Update community with LLM-generated summary
-	community.LLMSummary = summary
+	community.LLMSummary = resp.Content
 	community.Keywords = keywords
 	community.RepEntities = repEntities
 	community.SummaryStatus = "llm-enhanced"
@@ -539,106 +554,114 @@ func (s *HTTPLLMSummarizer) SummarizeCommunity(
 	return community, nil
 }
 
-// buildLLMInputText creates a structured text representation of the community for the LLM
-func (s *HTTPLLMSummarizer) buildLLMInputText(
-	entities []*gtypes.EntityState,
-	keywords []string,
-) string {
-	var builder strings.Builder
-
-	// Count entity types
-	typeCount := make(map[string]int)
-	for _, entity := range entities {
-		typeCount[extractEntityType(entity.ID)]++
+// parseEntityID extracts the 6 parts from a federated entity ID.
+// Entity ID format: {org}.{platform}.{domain}.{system}.{type}.{instance}
+func parseEntityID(entityID string) llm.EntityParts {
+	parts := strings.Split(entityID, ".")
+	ep := llm.EntityParts{Full: entityID}
+	if len(parts) >= 6 {
+		ep.Org = parts[0]
+		ep.Platform = parts[1]
+		ep.Domain = parts[2]
+		ep.System = parts[3]
+		ep.Type = parts[4]
+		ep.Instance = strings.Join(parts[5:], ".") // Instance may contain dots
 	}
-
-	// Build prompt for LLM
-	builder.WriteString(fmt.Sprintf("Summarize this community of %d entities:\n\n", len(entities)))
-
-	// Entity type distribution
-	builder.WriteString("Entity types:\n")
-	for typeName, count := range typeCount {
-		builder.WriteString(fmt.Sprintf("- %s: %d\n", typeName, count))
-	}
-	builder.WriteString("\n")
-
-	// Key themes
-	if len(keywords) > 0 {
-		builder.WriteString("Key themes: ")
-		builder.WriteString(strings.Join(keywords[:min(5, len(keywords))], ", "))
-		builder.WriteString("\n\n")
-	}
-
-	// Sample entity details (first 5 entities)
-	builder.WriteString("Sample entities:\n")
-	maxSamples := min(5, len(entities))
-	for i := 0; i < maxSamples; i++ {
-		entity := entities[i]
-		builder.WriteString(fmt.Sprintf("- %s (%s)", entity.ID, extractEntityType(entity.ID)))
-		if nameValue, found := entity.GetPropertyValue("name"); found {
-			if name, ok := nameValue.(string); ok {
-				builder.WriteString(fmt.Sprintf(": %s", name))
-			}
-		}
-		builder.WriteString("\n")
-	}
-
-	builder.WriteString("\nGenerate a concise, natural language summary (1-2 sentences) describing what this community represents.")
-
-	return builder.String()
+	return ep
 }
 
-// callLLMService makes HTTP request to semsummarize service
-func (s *HTTPLLMSummarizer) callLLMService(ctx context.Context, text string) (string, error) {
-	// Create request
-	reqBody := summarizeRequest{
-		Text:      text,
-		MaxLength: 100, // Max tokens for summary
-		MinLength: 20,  // Min tokens for summary
+// domainGroupBuilder is a helper for building DomainGroup.
+type domainGroupBuilder struct {
+	domain      string
+	count       int
+	systemTypes map[string]int
+}
+
+// buildPromptData creates the data structure for prompt template rendering.
+// It parses 6-part entity IDs and groups by domain (part[2]).
+func (s *LLMSummarizer) buildPromptData(
+	entities []*gtypes.EntityState,
+	keywords []string,
+) llm.CommunitySummaryData {
+	// Group by domain (part[2] of entity ID)
+	domainGroups := make(map[string]*domainGroupBuilder)
+	orgPlatforms := make(map[string]int)
+
+	for _, entity := range entities {
+		parsed := parseEntityID(entity.ID)
+
+		// Track org.platform frequency
+		op := parsed.Org + "." + parsed.Platform
+		orgPlatforms[op]++
+
+		// Group by domain
+		dg, ok := domainGroups[parsed.Domain]
+		if !ok {
+			dg = &domainGroupBuilder{
+				domain:      parsed.Domain,
+				systemTypes: make(map[string]int),
+			}
+			domainGroups[parsed.Domain] = dg
+		}
+		dg.count++
+		st := parsed.System + "." + parsed.Type
+		dg.systemTypes[st]++
 	}
 
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", errs.WrapInvalid(err, "HTTPLLMSummarizer", "callLLMService", "marshal request")
+	// Convert to slice
+	domains := make([]llm.DomainGroup, 0, len(domainGroups))
+	for _, dg := range domainGroups {
+		sts := make([]llm.SystemType, 0, len(dg.systemTypes))
+		for name, count := range dg.systemTypes {
+			sts = append(sts, llm.SystemType{Name: name, Count: count})
+		}
+		domains = append(domains, llm.DomainGroup{
+			Domain:      dg.domain,
+			Count:       dg.count,
+			SystemTypes: sts,
+		})
 	}
 
-	// Make HTTP request with context
-	url := fmt.Sprintf("%s/summarize", s.BaseURL)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", errs.WrapInvalid(err, "HTTPLLMSummarizer", "callLLMService", "create request")
+	// Find dominant domain (>2/3 of entities)
+	dominantDomain := "mixed"
+	total := len(entities)
+	for _, dg := range domains {
+		if dg.Count > total*2/3 {
+			dominantDomain = dg.Domain
+			break
+		}
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-
-	// Execute request
-	resp, err := s.client.Do(req)
-	if err != nil {
-		return "", errs.WrapTransient(err, "HTTPLLMSummarizer", "callLLMService",
-			"HTTP request failed (service may be unavailable)")
-	}
-	defer resp.Body.Close()
-
-	// Check status code
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return "", errs.WrapTransient(
-			fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body)),
-			"HTTPLLMSummarizer", "callLLMService", "non-OK status code")
+	// Find common org.platform (if all entities share it)
+	orgPlatform := ""
+	for op, count := range orgPlatforms {
+		if count == total {
+			orgPlatform = op
+			break
+		}
 	}
 
-	// Parse response
-	var result summarizeResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", errs.WrapInvalid(err, "HTTPLLMSummarizer", "callLLMService", "decode response")
+	// Build parsed sample entities
+	maxSamples := min(5, len(entities))
+	samples := make([]llm.EntityParts, maxSamples)
+	for i := 0; i < maxSamples; i++ {
+		samples[i] = parseEntityID(entities[i].ID)
 	}
 
-	if result.Summary == "" {
-		return "", errs.WrapInvalid(errs.ErrInvalidData, "HTTPLLMSummarizer",
-			"callLLMService", "empty summary returned")
+	// Format keywords
+	keywordStr := ""
+	if len(keywords) > 0 {
+		keywordStr = strings.Join(keywords[:min(5, len(keywords))], ", ")
 	}
 
-	return result.Summary, nil
+	return llm.CommunitySummaryData{
+		EntityCount:    total,
+		Domains:        domains,
+		DominantDomain: dominantDomain,
+		OrgPlatform:    orgPlatform,
+		Keywords:       keywordStr,
+		SampleEntities: samples,
+	}
 }
 
 // ProgressiveSummarizer provides progressive enhancement - statistical summary immediately,

@@ -287,18 +287,14 @@
       "name": "rule-processor",
       "enabled": true,
       "config": {
+        "entity_watch_patterns": ["c360.>"],
         "ports": {
           "inputs": [
             {
-              "name": "rule_in",
-              "subject": "generic.messages",
+              "name": "rule_entity_in",
+              "subject": "events.graph.entity.>",
               "type": "nats",
-              "interface": "core.json.v1"
-            },
-            {
-              "name": "rule_sensor_in",
-              "subject": "raw.sensor.>",
-              "type": "nats"
+              "description": "Processed entity events with typed BaseMessage payloads"
             }
           ],
           "outputs": [
@@ -362,19 +358,13 @@
             "enabled": true,
             "conditions": [
               {
-                "field": "reading",
+                "field": "measurement.fahrenheit",
                 "operator": "gte",
                 "value": 40.0,
                 "required": true
               },
               {
-                "field": "unit",
-                "operator": "eq",
-                "value": "fahrenheit",
-                "required": true
-              },
-              {
-                "field": "location",
+                "field": "location.zone",
                 "operator": "contains",
                 "value": "cold-storage",
                 "required": true
@@ -395,13 +385,13 @@
             "enabled": true,
             "conditions": [
               {
-                "field": "reading",
+                "field": "measurement.percent",
                 "operator": "gte",
                 "value": 50.0,
                 "required": true
               },
               {
-                "field": "type",
+                "field": "classification.type",
                 "operator": "eq",
                 "value": "humidity",
                 "required": true
@@ -422,13 +412,13 @@
             "enabled": true,
             "conditions": [
               {
-                "field": "reading",
+                "field": "measurement.psi",
                 "operator": "lt",
                 "value": 100.0,
                 "required": true
               },
               {
-                "field": "type",
+                "field": "classification.type",
                 "operator": "eq",
                 "value": "pressure",
                 "required": true
@@ -515,14 +505,16 @@
             "levels": 3
           },
           "schedule": {
-            "initial_delay": "10s",
-            "detection_interval": "2m",
+            "initial_delay": "2s",
+            "detection_interval": "30s",
+            "min_detection_interval": "5s",
+            "entity_change_threshold": 100,
             "min_entities": 10,
             "min_embedding_coverage": 0.5
           },
           "enhancement": {
             "enabled": true,
-            "summarizer_endpoint": "http://semsummarize:8083",
+            "summarizer_endpoint": "http://seminstruct:8083",
             "workers": 3
           },
           "semantic_edges": {

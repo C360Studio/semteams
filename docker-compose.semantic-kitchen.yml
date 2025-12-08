@@ -9,7 +9,7 @@
 #
 # Profiles:
 #   - (default): NATS + semstreams (CI-safe, no ML dependencies)
-#   - ml: Adds semembed + semsummarize for full semantic testing
+#   - ml: Adds semembed + seminstruct + shimmy for full semantic testing
 #
 # Usage:
 #   docker compose -f docker-compose.semantic-kitchen.yml up -d              # Core only
@@ -45,22 +45,44 @@ services:
       retries: 3
       start_period: 30s
 
-  # SemSummarize - Lightweight summarization service using Candle + FLAN-T5
-  # For LLM-based community summarization testing
+  # Shimmy - Inference backend (model loading, heavy compute)
+  # Downloads and runs Mistral-7B-Instruct for LLM inference
   # PROFILE: ml - Only started when --profile ml is specified
-  semsummarize:
-    image: ghcr.io/c360studio/semsummarize:latest
-    container_name: semstreams-kitchen-semsummarize
+  shimmy:
+    image: ghcr.io/c360studio/semshimmy:latest
+    container_name: semstreams-kitchen-shimmy
+    profiles:
+      - ml
+    environment:
+      - RUST_LOG=info
+    volumes:
+      - shimmy-kitchen-cache:/root/.cache/huggingface
+    networks:
+      - semstreams-kitchen-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11435/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s  # Model download takes time (~4GB first run)
+
+  # SemInstruct - OpenAI-compatible proxy to shimmy
+  # Lightweight proxy with retry logic and metrics
+  # PROFILE: ml - Only started when --profile ml is specified
+  seminstruct:
+    image: ghcr.io/c360studio/seminstruct:latest
+    container_name: semstreams-kitchen-seminstruct
     profiles:
       - ml
     ports:
-      - "8084:8083"  # POST /summarize endpoint (host:8084 -> container:8083)
+      - "8084:8083"  # OpenAI-compatible /v1/chat/completions
     environment:
-      - SEMSUMMARIZE_MODEL=google/flan-t5-small  # 77M params, proven Candle compatibility
-      - SEMSUMMARIZE_PORT=8083
+      - SEMINSTRUCT_SHIMMY_URL=http://shimmy:11435
+      - SEMINSTRUCT_PORT=8083
       - RUST_LOG=info
-    volumes:
-      - semsummarize-kitchen-cache:/home/semsummarize/.cache/huggingface
+    depends_on:
+      shimmy:
+        condition: service_healthy
     networks:
       - semstreams-kitchen-net
     healthcheck:
@@ -68,7 +90,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 60s  # Model download may take time on first run
+      start_period: 10s
 
   # NATS Server with JetStream
   nats:
@@ -146,18 +168,18 @@ services:
     container_name: semstreams-kitchen-app-ml
     profiles:
       - ml
-    command: ["--config", "/app/configs/semantic-kitchen-sink.json"]
+    entrypoint: ["sh", "-c"]
+    command: ["sleep 30 && /app/semstreams --config /app/configs/semantic-kitchen-sink-ml.json"]
     depends_on:
       nats:
         condition: service_healthy
       semembed:
         condition: service_healthy
+      seminstruct:
+        condition: service_healthy
     environment:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
-      - EMBEDDING_PROVIDER=http
-      - EMBEDDING_HTTP_ENDPOINT=http://semembed:8081/v1/embeddings
-      - EMBEDDING_HTTP_MODEL=BAAI/bge-small-en-v1.5
     volumes:
       - ./configs:/app/configs:ro
       - ./testdata:/data/testdata:ro
@@ -191,5 +213,5 @@ volumes:
     driver: local
   semembed-kitchen-cache:
     driver: local
-  semsummarize-kitchen-cache:
+  shimmy-kitchen-cache:
     driver: local
