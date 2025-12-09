@@ -1,10 +1,6 @@
-# What is a Community (and Why You Should Care)
+# Communities
 
-## The Simple Answer
-
-A community is a group of entities that are more connected to each other than to everything else. Think cliques in a social network, or equipment that works together in a factory.
-
-You don't define communities - they emerge automatically from the relationships in your data.
+A community is a group of entities that are more connected to each other than to everything else. You don't define communities - they emerge automatically from the relationships in your data.
 
 ## Why Communities Matter
 
@@ -34,7 +30,7 @@ If sensor-42 suddenly appears in a different community, something changed:
 
 You didn't have to write alert rules for this - the change in community membership IS the signal.
 
-## Concrete Example: Robotics Fleet
+## Example: Robotics Fleet
 
 **Your data:**
 - 50 drones
@@ -141,6 +137,37 @@ When entities change, communities are recomputed. But summaries are preserved wh
 - If overlap >= 80%, existing summaries are copied to new community
 - Prevents re-running expensive LLM calls for minor membership changes
 
+## Configuration
+
+```json
+{
+  "clustering": {
+    "enabled": true,
+    "schedule": {
+      "initial_delay": "10s",
+      "detection_interval": "30s",
+      "entity_change_threshold": 100
+    },
+    "lpa": {
+      "max_iterations": 10,
+      "levels": 3
+    },
+    "llm": {
+      "base_url": "http://seminstruct:8083/v1",
+      "model": "default"
+    }
+  }
+}
+```
+
+| Setting | Effect |
+|---------|--------|
+| `initial_delay` | Wait before first detection |
+| `detection_interval` | Max time between runs |
+| `entity_change_threshold` | Trigger after N entity changes |
+| `max_iterations` | LPA convergence limit |
+| `levels` | Hierarchical depth (0-2) |
+
 ## What You Control
 
 1. **Triple design**: How you structure triples determines what relationships exist
@@ -157,7 +184,7 @@ When entities change, communities are recomputed. But summaries are preserved wh
 ## Common Questions
 
 **Q: How many communities will I get?**
-A: Depends on your data's structure. Dense, well-connected data → fewer, larger communities. Sparse, isolated entities → many singleton communities.
+A: Depends on your data's structure. Dense, well-connected data produces fewer, larger communities. Sparse, isolated entities produce many singleton communities.
 
 **Q: Can I force entities into specific communities?**
 A: Not directly. But you can create explicit relationships via rules (`add_triple`) that will influence clustering.
@@ -170,6 +197,6 @@ A: No. Statistical summaries work well for programmatic use. LLM summaries are f
 
 ## Next Steps
 
-- [Rules and Graph](RULES_AND_GRAPH.md) - Shape communities with rules
-- [Index Usage](INDEX_USAGE.md) - Design triples for discovery
-- [Dynamic Graph](DYNAMIC_GRAPH.md) - How communities evolve
+- [Indexes](03-indexes.md) - How indexes feed community detection
+- [Triples](02-triples.md) - Design relationships that cluster
+- [Tiers](../basics/06-tiers.md) - Choose your capability level

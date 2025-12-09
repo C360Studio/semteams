@@ -1,4 +1,4 @@
-# Index Usage: How Indexes Affect Discovery and Clustering
+# Indexes
 
 SemStreams maintains seven indexes. Understanding which indexes affect community detection helps you design triples that enable the queries you need.
 
@@ -284,6 +284,6 @@ nats kv get EMBEDDING_INDEX "drone-007"
 
 ## Next Steps
 
-- [Rules and Graph](RULES_AND_GRAPH.md) - Rules create triples that feed indexes
-- [What is a Community?](WHAT_IS_A_COMMUNITY.md) - How indexes enable clustering
-- [processor/graph/indexmanager/README.md](../../processor/graph/indexmanager/README.md) - Complete index reference
+- [Communities](04-communities.md) - How indexes enable clustering
+- [Triples](02-triples.md) - Design triples that feed indexes
+- [Vocabulary](../basics/04-vocabulary.md) - Predicate naming conventions
