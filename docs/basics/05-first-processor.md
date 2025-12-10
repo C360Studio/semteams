@@ -2,6 +2,24 @@
 
 This tutorial walks through building a domain processor from scratch. We'll use IoT sensor readings as the example domain.
 
+> **Note**: Processors are the most common Component type to develop—they transform domain data into semantic entities. For other Component types (Input, Output, Gateway), see [Component Development](../development/components.md).
+
+## Designing Your Domain Model
+
+Building a processor means creating a lightweight domain ontology:
+
+- **Vocabulary**: The predicates that describe facts about your entities
+- **Entity structure**: How you identify and relate entities
+- **Business logic**: Rules encoded in your Triples() method
+
+SemStreams lets you define this without OWL/SPARQL complexity. You can:
+
+- Create custom vocabularies from scratch
+- Map to standard vocabularies (Dublin Core, Schema.org) via IRI mappings
+- Encode as much or as little ontological structure as you need
+
+Start with your vocabulary—it shapes everything else.
+
 ## What You're Building
 
 A processor that:
@@ -10,111 +28,9 @@ A processor that:
 2. Transforms them into graph entities with semantic triples
 3. Creates relationships to zone entities
 
-## Step 1: Define Your Payload
+## Step 1: Design Your Vocabulary
 
-Start with the struct that holds your incoming data:
-
-```go
-package iotsensor
-
-import (
-    "fmt"
-    "time"
-    "github.com/c360/semstreams/message"
-)
-
-// SensorReading represents an IoT sensor measurement.
-type SensorReading struct {
-    DeviceID   string    // e.g., "sensor-042"
-    SensorType string    // e.g., "temperature", "humidity"
-    Value      float64   // e.g., 23.5
-    Unit       string    // e.g., "celsius", "percent"
-    ObservedAt time.Time
-
-    // Reference to another entity
-    ZoneEntityID string // e.g., "acme.logistics.facility.zone.area.warehouse-7"
-
-    // Context (set by processor)
-    OrgID    string
-    Platform string
-}
-```
-
-## Step 2: Implement EntityID()
-
-Return a deterministic 6-part federated identifier:
-
-```go
-func (s *SensorReading) EntityID() string {
-    return fmt.Sprintf("%s.%s.environmental.sensor.%s.%s",
-        s.OrgID,      // "acme"
-        s.Platform,   // "logistics"
-        s.SensorType, // "temperature"
-        s.DeviceID,   // "sensor-042"
-    )
-}
-// Result: "acme.logistics.environmental.sensor.temperature.sensor-042"
-```
-
-**Requirements:**
-
-- 6 parts separated by dots
-- Deterministic: same input always produces same ID
-- Hierarchical: enables prefix queries (`acme.logistics.*`)
-
-## Step 3: Implement Triples()
-
-Return all facts about this entity:
-
-```go
-func (s *SensorReading) Triples() []message.Triple {
-    entityID := s.EntityID()
-
-    return []message.Triple{
-        // Property: measurement value
-        {
-            Subject:   entityID,
-            Predicate: fmt.Sprintf("sensor.measurement.%s", s.Unit),
-            Object:    s.Value,
-            Source:    "iot_sensor",
-            Timestamp: s.ObservedAt,
-        },
-        // Property: sensor type
-        {
-            Subject:   entityID,
-            Predicate: "sensor.classification.type",
-            Object:    s.SensorType,
-            Source:    "iot_sensor",
-            Timestamp: s.ObservedAt,
-        },
-        // Relationship: zone reference (creates graph edge)
-        {
-            Subject:   entityID,
-            Predicate: "geo.location.zone",
-            Object:    s.ZoneEntityID,
-            Source:    "iot_sensor",
-            Timestamp: s.ObservedAt,
-        },
-        // Property: timestamp
-        {
-            Subject:   entityID,
-            Predicate: "time.observation.recorded",
-            Object:    s.ObservedAt,
-            Source:    "iot_sensor",
-            Timestamp: s.ObservedAt,
-        },
-    }
-}
-```
-
-**Key distinction:**
-
-- `Object: s.Value` (a number) = property
-- `Object: s.ZoneEntityID` (entity ID string) = relationship (edge)
-
-## Step 4: Define Your Predicates
-
-Create constants for your vocabulary:
+Start by defining the predicates that describe facts about your entities. This shapes your entire domain model.
 
 ```go
 package iotsensor
@@ -144,7 +60,116 @@ const (
 )
 ```
 
-Use these constants in your `Triples()` method instead of string literals.
+**Vocabulary design principles:**
+
+- Use three-part dotted notation: `domain.category.property`
+- Include units in measurement predicates for clarity
+- Distinguish property predicates (literal values) from relationship predicates (entity references)
+- Use constants—not string literals—to prevent typos
+
+See [Vocabulary](04-vocabulary.md) for complete design guidelines.
+
+## Step 2: Define Your Payload
+
+With your vocabulary defined, create the struct that holds incoming data:
+
+```go
+package iotsensor
+
+import (
+    "fmt"
+    "time"
+    "github.com/c360/semstreams/message"
+)
+
+// SensorReading represents an IoT sensor measurement.
+type SensorReading struct {
+    DeviceID   string    // e.g., "sensor-042"
+    SensorType string    // e.g., "temperature", "humidity"
+    Value      float64   // e.g., 23.5
+    Unit       string    // e.g., "celsius", "percent"
+    ObservedAt time.Time
+
+    // Reference to another entity
+    ZoneEntityID string // e.g., "acme.logistics.facility.zone.area.warehouse-7"
+
+    // Context (set by processor)
+    OrgID    string
+    Platform string
+}
+```
+
+## Step 3: Implement EntityID()
+
+Return a deterministic 6-part federated identifier:
+
+```go
+func (s *SensorReading) EntityID() string {
+    return fmt.Sprintf("%s.%s.environmental.sensor.%s.%s",
+        s.OrgID,      // "acme"
+        s.Platform,   // "logistics"
+        s.SensorType, // "temperature"
+        s.DeviceID,   // "sensor-042"
+    )
+}
+// Result: "acme.logistics.environmental.sensor.temperature.sensor-042"
+```
+
+**Requirements:**
+
+- 6 parts separated by dots
+- Deterministic: same input always produces same ID
+- Hierarchical: enables pattern queries via NATS wildcards (`acme.logistics.*`, `*.sensor.*`)
+
+## Step 4: Implement Triples()
+
+Return all facts about this entity using your vocabulary constants:
+
+```go
+func (s *SensorReading) Triples() []message.Triple {
+    entityID := s.EntityID()
+
+    return []message.Triple{
+        // Property: measurement value
+        {
+            Subject:   entityID,
+            Predicate: fmt.Sprintf("sensor.measurement.%s", s.Unit),
+            Object:    s.Value,
+            Source:    "iot_sensor",
+            Timestamp: s.ObservedAt,
+        },
+        // Property: sensor type
+        {
+            Subject:   entityID,
+            Predicate: PredicateClassificationType,
+            Object:    s.SensorType,
+            Source:    "iot_sensor",
+            Timestamp: s.ObservedAt,
+        },
+        // Relationship: zone reference (creates graph edge)
+        {
+            Subject:   entityID,
+            Predicate: PredicateLocationZone,
+            Object:    s.ZoneEntityID,
+            Source:    "iot_sensor",
+            Timestamp: s.ObservedAt,
+        },
+        // Property: timestamp
+        {
+            Subject:   entityID,
+            Predicate: PredicateObservationRecorded,
+            Object:    s.ObservedAt,
+            Source:    "iot_sensor",
+            Timestamp: s.ObservedAt,
+        },
+    }
+}
+```
+
+**Key distinction:**
+
+- `Object: s.Value` (a number) = property
+- `Object: s.ZoneEntityID` (entity ID string) = relationship (edge)
 
 ## Step 5: Create the Processor
 
@@ -367,6 +392,6 @@ Before deploying your processor:
 
 ## Next Steps
 
-- [Tiers](06-tiers.md) - Choose your capability level
-- [Vocabulary](04-vocabulary.md) - Design your predicates
+- [Configuration](06-configuration.md) - Choose your capability level
 - [Indexes](../graph/03-indexes.md) - How triples become queryable
+- [Testing Guide](../development/testing.md#testing-graphable-implementations) - Test your Graphable implementations

@@ -1,18 +1,22 @@
-# Tiers: Progressive Enhancement
+# Configuration: Progressive Enhancement
 
-SemStreams provides three tiers of capability. Start simple, add capabilities as needed.
+SemStreams capabilities are controlled entirely by JSON configuration. Enable features as needed—start simple, add capabilities progressively.
 
-## Overview
+## Common Configurations
 
-| Tier | Name | Capabilities | Requirements |
-|------|------|--------------|--------------|
-| **0** | Rules | Stateful rules, explicit relationships | NATS only |
-| **1** | Native | + BM25 search, statistical communities | Same as Tier 0 |
-| **2** | LLM | + Neural embeddings, LLM summaries | + semembed + LLM service |
+These are typical configuration presets. Mix and match features based on your needs.
 
-## Tier 0: Rules-Only
+| Config | Name | Capabilities | Requirements |
+|--------|------|--------------|--------------|
+| **Rules-Only** | Tier 0 | Stateful rules, explicit relationships | NATS only |
+| **Native** | Tier 1 | + BM25 search, statistical communities | Same as above |
+| **LLM** | Tier 2 | + Neural embeddings, LLM summaries | + semembed + LLM service |
 
-Deterministic processing with stateful rules. No ML, no external services.
+> **Default**: Native configuration. The Graph processor enables BM25 embeddings by default. For Rules-Only (no search), explicitly disable embeddings in your config.
+
+## Rules-Only Configuration
+
+Deterministic processing with stateful rules. No search, no external services. **Requires explicit configuration** to disable default BM25 embeddings.
 
 ### Capabilities
 
@@ -46,13 +50,13 @@ Deterministic processing with stateful rules. No ML, no external services.
 - Low-latency alerting
 - Deterministic state machines
 
-## Tier 1: Native Inference
+## Native Inference Configuration
 
 Statistical capabilities that run locally. No external services required.
 
 ### Native Capabilities
 
-Everything in Tier 0, plus:
+Everything in Rules-Only, plus:
 
 - BM25 embeddings (384-D vectors)
 - LPA clustering (community detection)
@@ -79,20 +83,20 @@ Everything in Tier 0, plus:
 - CI/CD pipelines (no external dependencies)
 - Air-gapped environments
 - Cost-sensitive deployments
-- Moderate quality requirements
+- Keyword search sufficient for your domain
 
-## Tier 2: LLM Inference
+## LLM Inference Configuration
 
 Full semantic capabilities with external ML services.
 
 ### Capabilities
 
-Everything in Tier 1, plus:
+Everything in Native, plus:
 
 - Neural embeddings (dense vectors via semembed)
 - LLM summaries (semantic community descriptions)
 - Hybrid search (neural + BM25 + filters)
-- GraphRAG with LLM-quality summaries
+- GraphRAG with LLM-enhanced summaries
 
 ### Configuration
 
@@ -123,8 +127,8 @@ Everything in Tier 1, plus:
 ### When to Use
 
 - Production with full semantic capabilities
-- High-quality search requirements
-- Knowledge graph enrichment
+- Dense vector search required for your domain
+- LLM-enhanced summaries for knowledge graph enrichment
 
 ## Processing: Hotpath vs Async
 
@@ -168,45 +172,45 @@ T+20s:    Enhanced communities available
 | Inference | Retrieval Enabled |
 |-----------|-------------------|
 | Explicit triples | PathRAG traversal |
-| BM25 embeddings | Semantic search (basic) |
-| Neural embeddings | Semantic search (quality) |
+| BM25 embeddings | Semantic search (keyword-based) |
+| Neural embeddings | Semantic search (dense vectors) |
 | Communities | GraphRAG LocalSearch |
-| Statistical summaries | GraphRAG GlobalSearch (basic) |
-| LLM summaries | GraphRAG GlobalSearch (quality) |
+| Statistical summaries | GraphRAG GlobalSearch (statistical) |
+| LLM summaries | GraphRAG GlobalSearch (LLM-enhanced) |
 
 No embeddings = no semantic search. No communities = no GraphRAG.
 
 ## Graceful Fallback
 
-Higher tiers fall back automatically:
+Higher configurations fall back automatically:
 
 ```go
 // GraphRAG GlobalSearch
 summary := community.LLMSummary
 if summary == "" {
-    summary = community.StatisticalSummary  // Tier 1 fallback
+    summary = community.StatisticalSummary  // Native config fallback
 }
 ```
 
-## Choosing a Tier
+## Choosing a Configuration
 
 ### Decision Flowchart
 
 ```text
-Need deterministic only? → Tier 0
+Need deterministic only? → Rules-Only
 Need semantic search? → Do you have ML infrastructure?
-  Yes → Tier 2
-  No  → Tier 1
-Need LLM summaries? → Tier 2
+  Yes → LLM
+  No  → Native
+Need LLM summaries? → LLM
 ```
 
 ### Cost/Benefit
 
-| Tier | Compute | Dependencies | Quality |
-|------|---------|--------------|---------|
-| 0 | Low | None | N/A |
-| 1 | Medium | None | Good |
-| 2 | High | semembed, LLM | Best |
+| Config | Compute | Dependencies | Search Type |
+|--------|---------|--------------|-------------|
+| Rules-Only | Low | None | Explicit edges only |
+| Native | Medium | None | Keyword-based (BM25) |
+| LLM | High | semembed, LLM | Semantic + LLM summaries |
 
 ## Next Steps
 

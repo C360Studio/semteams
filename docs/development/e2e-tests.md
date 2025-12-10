@@ -455,4 +455,4 @@ ERROR Scenario FAILED name=semantic-basic
 
 - [Testing Patterns](testing.md) - Unit and integration test patterns
 - [Configuration](../reference/configuration.md) - Test environment configuration
-- [Tiers](../basics/06-tiers.md) - Tier capabilities and requirements
+- [Configuration](../basics/06-configuration.md) - Configuration capabilities and requirements

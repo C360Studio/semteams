@@ -12,14 +12,14 @@ func init() {
 const (
 	// Dublin Core metadata predicates (for triple metadata - NOT content body)
 	// See: https://www.dublincore.org/specifications/dublin-core/dcmi-terms/
-	PredicateDCTitle      = "dc.title"      // Document title
-	PredicateDCCreator    = "dc.creator"    // Author or creator
-	PredicateDCSubject    = "dc.subject"    // Topic/category of content
-	PredicateDCType       = "dc.type"       // Nature/genre of content
-	PredicateDCDate       = "dc.date"       // Relevant date (creation, publication)
-	PredicateDCIdentifier = "dc.identifier" // Unique identifier
-	PredicateDCFormat     = "dc.format"     // File format or media type
-	PredicateDCLanguage   = "dc.language"   // Language of content
+	PredicateDCTitle      = "dc.terms.title"      // Document title
+	PredicateDCCreator    = "dc.terms.creator"    // Author or creator
+	PredicateDCSubject    = "dc.terms.subject"    // Topic/category of content
+	PredicateDCType       = "dc.terms.type"       // Nature/genre of content
+	PredicateDCDate       = "dc.terms.date"       // Relevant date (creation, publication)
+	PredicateDCIdentifier = "dc.terms.identifier" // Unique identifier
+	PredicateDCFormat     = "dc.terms.format"     // File format or media type
+	PredicateDCLanguage   = "dc.terms.language"   // Language of content
 
 	// Core content predicates (legacy - prefer Dublin Core for metadata)
 	// NOTE: content.text.body should NOT be used in triples for ContentStorable types.

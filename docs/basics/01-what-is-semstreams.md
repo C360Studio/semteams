@@ -21,14 +21,20 @@ Define the facts you want to capture about your domain:
 
 ```go
 const (
-    DroneType        = "drone.type"
+    DroneType        = "drone.classification.type"
     DroneBattery     = "drone.telemetry.battery"
     DroneAltitude    = "drone.telemetry.altitude"
-    FleetMembership  = "fleet.membership"
+    FleetMembership  = "fleet.membership.current"
 )
 ```
 
-Predicates follow `domain.category.property` format. This is not optional - consistent predicate naming is how you make your graph queryable.
+Predicates follow `domain.category.property` format—a three-part dotted notation. This is not optional because:
+
+1. **NATS Wildcard Queries**: Dotted notation maps to NATS subject wildcards (e.g., `sensor.measurement.*` finds all measurement predicates)
+2. **KV Key Patterns**: Entity IDs and predicates become KV bucket keys, enabling prefix-based lookups
+3. **SQL-Like Semantics**: The three-part structure gives your knowledge graph SQL-like query capabilities via wildcard matching
+
+Inconsistent predicate names fragment your indexes and break wildcard queries.
 
 ### 2. A Graphable Implementation
 
@@ -77,7 +83,7 @@ Entities stored in NATS KV with version tracking:
 {
   "id": "acme.ops.robotics.gcs.drone.001",
   "triples": [
-    {"predicate": "drone.type", "object": "cargo"},
+    {"predicate": "drone.classification.type", "object": "cargo"},
     {"predicate": "drone.telemetry.battery", "object": 78}
   ],
   "version": 5
@@ -108,7 +114,7 @@ Entities that reference each other cluster into communities. You don't define co
 | 1 | + BM25 search, statistical communities | + Search index |
 | 2 | + Neural embeddings, LLM summaries | + Embedding service, LLM |
 
-Start with Tier 0. Add capabilities as needed.
+Start with Rules-Only. Add capabilities as needed. Each configuration is controlled via JSON—see [Configuration](06-configuration.md) for details.
 
 ## Entity ID Format
 
@@ -137,10 +143,10 @@ When a triple's Object is another entity ID, it creates a traversable edge:
 
 ```go
 // This creates an edge in the graph:
-{Subject: droneID, Predicate: "fleet.membership", Object: "acme.ops.fleet.rescue"}
+{Subject: droneID, Predicate: "fleet.membership.current", Object: "acme.ops.fleet.rescue"}
 
 // This is just a property (no edge):
-{Subject: droneID, Predicate: "drone.name", Object: "Alpha-1"}
+{Subject: droneID, Predicate: "drone.metadata.name", Object: "Alpha-1"}
 ```
 
 Edges are what community detection uses to cluster related entities.
@@ -167,4 +173,4 @@ Edges are what community detection uses to cluster related entities.
 - [Graphable Interface](03-graphable-interface.md) - Implementation details
 - [Vocabulary](04-vocabulary.md) - Designing your predicates
 - [First Processor](05-first-processor.md) - Step-by-step tutorial
-- [Tiers](06-tiers.md) - Progressive enhancement options
+- [Configuration](06-configuration.md) - Progressive enhancement options

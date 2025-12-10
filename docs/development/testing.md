@@ -424,6 +424,58 @@ func assertTripleValue(t *testing.T, entity *EntityState, predicate string, expe
 }
 ```
 
+## Testing Graphable Implementations
+
+When implementing the `Graphable` interface, test two key properties:
+
+### EntityID Determinism
+
+The same input must always produce the same ID:
+
+```go
+func TestSensorReading_EntityID(t *testing.T) {
+    s := &SensorReading{
+        DeviceID:   "sensor-042",
+        SensorType: "temperature",
+        OrgID:      "acme",
+        Platform:   "logistics",
+    }
+
+    expected := "acme.logistics.environmental.sensor.temperature.sensor-042"
+    assert.Equal(t, expected, s.EntityID())
+}
+```
+
+### Triple Completeness
+
+Verify all expected triples are generated:
+
+```go
+func TestSensorReading_Triples(t *testing.T) {
+    s := &SensorReading{
+        DeviceID:     "sensor-042",
+        SensorType:   "temperature",
+        Value:        23.5,
+        Unit:         "celsius",
+        ZoneEntityID: "acme.logistics.facility.zone.area.warehouse-7",
+        OrgID:        "acme",
+        Platform:     "logistics",
+    }
+
+    triples := s.Triples()
+
+    // Find measurement triple
+    var found bool
+    for _, tr := range triples {
+        if tr.Predicate == "sensor.measurement.celsius" {
+            assert.Equal(t, 23.5, tr.Object)
+            found = true
+        }
+    }
+    assert.True(t, found, "measurement triple not found")
+}
+```
+
 ## Race Detection
 
 Always run tests with race detection:

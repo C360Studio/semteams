@@ -98,6 +98,32 @@ Registration is optional but enables:
 - Data type validation
 - RDF/Turtle export with standard IRIs
 
+## Standard Vocabularies
+
+SemStreams supports mapping predicates to established vocabularies like Dublin Core. This enables interoperability with existing semantic systems.
+
+Standard vocabulary predicates should be defined in the `vocabulary/` package so all processors can import them. The package provides:
+- **IRI constants** (`vocabulary.DcTitle` = `http://purl.org/dc/terms/title`)
+- **Predicate constants** for dotted notation (e.g., `vocabulary.DCTermsTitle` = `dc.terms.title`)
+
+**Using Standard Predicates**
+
+```go
+import "github.com/c360/semstreams/vocabulary"
+
+// Use standard Dublin Core predicates
+func (d *Document) Triples() []message.Triple {
+    return []message.Triple{
+        {Subject: d.EntityID(), Predicate: vocabulary.DCTermsTitle, Object: d.Title},
+        {Subject: d.EntityID(), Predicate: vocabulary.DCTermsCreator, Object: d.Author},
+    }
+}
+```
+
+Internally, predicates use dotted notation (`dc.terms.title`). At API boundaries (RDF export), they translate to standard IRIs (`http://purl.org/dc/terms/title`).
+
+See [vocabulary/standards.go](../../vocabulary/standards.go) for available IRI constants and [vocabulary/README.md](../../vocabulary/README.md) for the full vocabulary API.
+
 ## Unit-Specific Predicates
 
 Include units in the predicate for clarity:
@@ -260,5 +286,5 @@ Migrate data before removing the old predicate.
 ## Next Steps
 
 - [First Processor](05-first-processor.md) - Use your vocabulary in a processor
-- [Tiers](06-tiers.md) - How vocabulary affects capabilities
+- [Configuration](06-configuration.md) - How vocabulary affects capabilities
 - [Indexes](../graph/03-indexes.md) - How predicates become indexes

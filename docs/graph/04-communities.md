@@ -199,4 +199,4 @@ A: No. Statistical summaries work well for programmatic use. LLM summaries are f
 
 - [Indexes](03-indexes.md) - How indexes feed community detection
 - [Triples](02-triples.md) - Design relationships that cluster
-- [Tiers](../basics/06-tiers.md) - Choose your capability level
+- [Configuration](../basics/06-configuration.md) - Choose your capability level

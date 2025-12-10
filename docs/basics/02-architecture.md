@@ -12,7 +12,7 @@ NATS Stream → Processor → Graph Storage → Indexes → Community Detection
              Interface        bucket        buckets         bucket
 ```
 
-## Processing Pipeline
+## Processing Flow
 
 ### 1. Message Arrival
 
@@ -94,17 +94,29 @@ Entities that reference each other cluster into communities. Detection runs:
 
 Communities enable GraphRAG-style queries at different granularity levels.
 
-## Component Responsibilities
+## Components
 
-| Component | Role |
-|-----------|------|
-| MessageManager | Receives messages, invokes Graphable transformation |
-| DataManager | Stores entities, handles versioning |
-| IndexManager | Maintains all 7 indexes |
-| RuleProcessor | Evaluates rules, executes actions |
-| ClusterManager | Runs community detection, manages summaries |
+SemStreams uses a component-based architecture. Components are self-describing units that connect via NATS:
 
-## Storage: NATS KV Buckets
+| Type | Examples | Role |
+|------|----------|------|
+| Input | UDP, WebSocket, File | Ingest data from external sources |
+| Processor | Graph, JSONMap, Rule | Transform and enrich data |
+| Output | File, HTTPPost, WebSocket | Export data to external systems |
+| Storage | ObjectStore | Persist data to NATS JetStream |
+| Gateway | HTTP, GraphQL, MCP | Expose APIs for queries and mutations |
+
+### Flow-Based Design
+
+Components connect through NATS subjects rather than direct calls:
+
+- **Loose coupling**: Components don't know about each other—they publish/subscribe to subjects
+- **Hook points**: Add components at any point by subscribing to existing subjects
+- **Configuration-driven**: Flows are JSON configs declaring which components to use and how to connect them
+
+The Graph processor is central to semantic processing, but it's one component among many. You can build flows with just protocol-layer components (UDP → JSONMap → File) or add semantic processing (UDP → Graph → GraphQL).
+
+## State: NATS KV Buckets
 
 All state lives in NATS JetStream KV buckets:
 
@@ -162,7 +174,7 @@ A sensor reading arrives:
 
 ## What SemStreams Is Not
 
-- **Not a database replacement**: No arbitrary SQL, no ACID transactions
+- **Not a database replacement**: No arbitrary SQL or ACID transactions—but dotted notation with NATS subject/KV wildcards provides SQL-like query basics (prefix matching, pattern queries)
 - **Not a batch system**: Updates flow continuously, no ETL windows
 - **Not a time-series DB**: Use InfluxDB/Prometheus for metrics
 - **Not full-text search**: Use Elasticsearch for document search
@@ -171,4 +183,4 @@ A sensor reading arrives:
 
 - [Graphable Interface](03-graphable-interface.md) - Implement entity transformation
 - [Vocabulary](04-vocabulary.md) - Design your predicates
-- [Tiers](06-tiers.md) - Choose your capability level
+- [Configuration](06-configuration.md) - Choose your capability level

@@ -204,6 +204,31 @@ The core Graphable interface intentionally excludes:
 
 This keeps the interface minimal. Additional capabilities are added via separate interfaces when needed.
 
+## Interface Composition
+
+Graphable is the foundation of a composable interface hierarchy:
+
+**Semantic Interfaces** (what the entity IS):
+
+| Interface | Adds | Use When |
+|-----------|------|----------|
+| `Graphable` | EntityID + Triples | All semantic entities |
+| `Storable` | StorageRef | Entity has external storage reference |
+| `ContentStorable` | ContentFields + RawContent | Large content stored in ObjectStore |
+
+**Behavioral Interfaces** (optional capabilities):
+
+| Interface | Provides | Discovered By |
+|-----------|----------|---------------|
+| `Locatable` | Location coordinates | Spatial indexing |
+| `Timeable` | Timestamp | Temporal indexing |
+| `Observable` | Observation semantics | Sensor processing |
+| `Correlatable` | Correlation ID | Distributed tracing |
+
+Implement only what you need. Services discover capabilities at runtime via type assertions.
+
+See [Message Interfaces](../reference/message-interfaces.md) for complete details.
+
 ## Common Patterns
 
 ### Multiple Entity Types
@@ -252,48 +277,9 @@ fleetID := fmt.Sprintf("%s.%s.ops.fleet.cargo.%s", orgID, platform, fleetName)
 {Predicate: "fleet.membership", Object: fleetName}
 ```
 
-## Testing Graphable Implementations
-
-```go
-func TestSensorReading_EntityID(t *testing.T) {
-    s := &SensorReading{
-        DeviceID:   "sensor-042",
-        SensorType: "temperature",
-        OrgID:      "acme",
-        Platform:   "logistics",
-    }
-
-    expected := "acme.logistics.environmental.sensor.temperature.sensor-042"
-    assert.Equal(t, expected, s.EntityID())
-}
-
-func TestSensorReading_Triples(t *testing.T) {
-    s := &SensorReading{
-        DeviceID:     "sensor-042",
-        SensorType:   "temperature",
-        Value:        23.5,
-        Unit:         "celsius",
-        ZoneEntityID: "acme.logistics.facility.zone.area.warehouse-7",
-        OrgID:        "acme",
-        Platform:     "logistics",
-    }
-
-    triples := s.Triples()
-
-    // Find measurement triple
-    var found bool
-    for _, t := range triples {
-        if t.Predicate == "sensor.measurement.celsius" {
-            assert.Equal(t, 23.5, t.Object)
-            found = true
-        }
-    }
-    assert.True(t, found, "measurement triple not found")
-}
-```
-
 ## Next Steps
 
 - [Vocabulary](04-vocabulary.md) - Designing your predicates
 - [First Processor](05-first-processor.md) - Building a complete processor
 - [Indexes](../graph/03-indexes.md) - How triples become indexed
+- [Testing Guide](../development/testing.md#testing-graphable-implementations) - Testing your Graphable implementations
