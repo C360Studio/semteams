@@ -16,7 +16,6 @@ import (
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
 )
 
 // objectstoreSchema defines the configuration schema for ObjectStore component
@@ -198,11 +197,9 @@ func (c *Component) Start(ctx context.Context) error {
 		}
 	}
 
-	// Ensure JetStream streams exist for any JetStreamPort outputs
-	if err := c.ensureJetStreamOutputs(ctx); err != nil {
-		c.logger.Error("Failed to ensure JetStream outputs", "name", c.instanceName, "error", err)
-		return fmt.Errorf("failed to ensure JetStream outputs: %w", err)
-	}
+	// NOTE: Stream creation is handled centrally by config.StreamsManager
+	// which derives streams from component port definitions at startup.
+	// Components no longer need to create their own streams.
 
 	c.started = true
 	c.lastActivity.Store(time.Now())
@@ -210,81 +207,6 @@ func (c *Component) Start(ctx context.Context) error {
 	return nil
 }
 
-// ensureJetStreamOutputs creates JetStream streams for any output ports of type JetStreamPort.
-// This ensures the stream exists before we start publishing to it.
-func (c *Component) ensureJetStreamOutputs(ctx context.Context) error {
-	if c.config.Ports == nil {
-		return nil
-	}
-
-	for _, portDef := range c.config.Ports.Outputs {
-		if portDef.Type != "jetstream" {
-			continue
-		}
-
-		// Build the port to get JetStreamPort config
-		port := component.BuildPortFromDefinition(portDef, component.DirectionOutput)
-		jsPort, ok := port.Config.(component.JetStreamPort)
-		if !ok {
-			continue
-		}
-
-		if jsPort.StreamName == "" {
-			c.logger.Warn("JetStream output port missing stream_name", "port", portDef.Name)
-			continue
-		}
-
-		js, err := c.natsClient.JetStream()
-		if err != nil {
-			return fmt.Errorf("get JetStream context: %w", err)
-		}
-
-		// Determine storage type
-		storage := jetstream.FileStorage
-		if jsPort.Storage == "memory" {
-			storage = jetstream.MemoryStorage
-		}
-
-		// Determine retention policy
-		retention := jetstream.LimitsPolicy
-		switch jsPort.RetentionPolicy {
-		case "interest":
-			retention = jetstream.InterestPolicy
-		case "work_queue":
-			retention = jetstream.WorkQueuePolicy
-		}
-
-		// Determine max age (default 7 days)
-		maxAge := 7 * 24 * time.Hour
-		if jsPort.RetentionDays > 0 {
-			maxAge = time.Duration(jsPort.RetentionDays) * 24 * time.Hour
-		}
-
-		streamCfg := jetstream.StreamConfig{
-			Name:      jsPort.StreamName,
-			Subjects:  jsPort.Subjects,
-			Storage:   storage,
-			Retention: retention,
-			MaxAge:    maxAge,
-			Replicas:  1,
-		}
-		if jsPort.Replicas > 0 {
-			streamCfg.Replicas = jsPort.Replicas
-		}
-
-		_, err = js.CreateOrUpdateStream(ctx, streamCfg)
-		if err != nil {
-			return fmt.Errorf("create stream %s: %w", jsPort.StreamName, err)
-		}
-
-		c.logger.Info("Ensured JetStream output stream",
-			"name", c.instanceName,
-			"stream", jsPort.StreamName,
-			"subjects", jsPort.Subjects)
-	}
-
-	return nil
-}
 
 // Stop cleanly shuts down the component
 func (c *Component) Stop(_ time.Duration) error {

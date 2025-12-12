@@ -76,6 +76,13 @@ func run() error {
 	defer natsClient.Close(ctx)
 	defer configManager.Stop(5 * time.Second)
 
+	// Ensure JetStream streams exist before components start
+	// Streams are derived from component port definitions or explicit config
+	streamsManager := config.NewStreamsManager(natsClient, logger)
+	if err := streamsManager.EnsureStreams(ctx, cfg); err != nil {
+		return fmt.Errorf("ensure streams: %w", err)
+	}
+
 	// Setup registries and manager
 	componentRegistry, manager, err := setupRegistriesAndManager(cfg)
 	if err != nil {

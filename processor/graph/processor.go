@@ -17,6 +17,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/config"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
@@ -122,8 +123,13 @@ type Config struct {
 
 	InputSubject string `json:"input_subject" schema:"type:string,description:NATS subject to subscribe for input messages,default:events.graph.entity.*,category:basic"`
 
+	// InputSubjects supports multiple input subjects for multi-stream subscription.
+	// Each subject is mapped to its stream using convention: subject "component.action.type" → stream "COMPONENT"
+	InputSubjects []string `json:"input_subjects,omitempty" schema:"type:array,description:Multiple NATS subjects to subscribe (derives streams from convention),category:basic"`
+
 	// JetStream configuration for durable message consumption
-	StreamName     string   `json:"stream_name,omitempty"     schema:"type:string,description:JetStream stream name for durable consumption,category:advanced"`
+	// StreamName is deprecated in favor of InputSubjects with convention-derived streams
+	StreamName     string   `json:"stream_name,omitempty"     schema:"type:string,description:JetStream stream name for durable consumption (deprecated: use input_subjects),category:advanced"`
 	StreamSubjects []string `json:"stream_subjects,omitempty" schema:"type:array,description:JetStream stream subjects (defaults to input_subject pattern),category:advanced"`
 	ConsumerName   string   `json:"consumer_name,omitempty"   schema:"type:string,description:JetStream consumer name (durable if set),category:advanced"`
 
@@ -560,9 +566,14 @@ func (p *Processor) Start(ctx context.Context) error {
 	p.logger.Info("Starting graph processor")
 	p.logger.Info("==== CRITICAL: Entered Start() method ====")
 
-	// Wait for JetStream stream to exist (created by publisher component)
-	// This implements subscriber retry policy - stream should be created by ObjectStore
-	if p.config.StreamName != "" {
+	// Wait for JetStream streams to exist (created by StreamsManager or publisher components)
+	// Multi-stream mode: wait for all convention-derived streams
+	// Legacy mode: wait for single configured stream
+	if len(p.config.InputSubjects) > 0 {
+		if err := p.waitForInputSubjectStreams(ctx); err != nil {
+			return err
+		}
+	} else if p.config.StreamName != "" {
 		if err := p.waitForStream(ctx, p.config.StreamName); err != nil {
 			p.logger.Error("Stream not available", "stream", p.config.StreamName, "error", err)
 			return errs.WrapFatal(err, "Processor", "Start", "JetStream stream not available")
@@ -1089,7 +1100,12 @@ func (p *Processor) getStreamSubjects() []string {
 }
 
 func (p *Processor) setupSubscriptions(ctx context.Context) error {
-	// Use configured subject (defaults to "events.graph.entity.*")
+	// Check for new multi-stream subscription mode (InputSubjects)
+	if len(p.config.InputSubjects) > 0 {
+		return p.setupMultiStreamSubscriptions(ctx)
+	}
+
+	// Legacy mode: single subject/stream configuration
 	subject := p.config.InputSubject
 	if subject == "" {
 		subject = "events.graph.entity.*" // Fallback to default
@@ -1101,7 +1117,7 @@ func (p *Processor) setupSubscriptions(ctx context.Context) error {
 	}
 
 	// Fall back to core NATS subscription (fire-and-forget, no persistence)
-	p.logger.Warn("Using core NATS subscription (no persistence) - configure stream_name for durable consumption",
+	p.logger.Warn("Using core NATS subscription (no persistence) - configure stream_name or input_subjects for durable consumption",
 		"subject", subject)
 
 	err := p.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
@@ -1109,6 +1125,117 @@ func (p *Processor) setupSubscriptions(ctx context.Context) error {
 	})
 	if err != nil {
 		return errs.WrapFatal(err, "Processor", "setupSubscriptions", "NATS subscription failed for "+subject)
+	}
+
+	return nil
+}
+
+// setupMultiStreamSubscriptions handles multiple input subjects with convention-derived streams.
+// Each input subject is mapped to its stream using convention: "component.action.type" → "COMPONENT" stream.
+// This enables Graph to consume from multiple independent component streams (e.g., OBJECTSTORE, SENSOR).
+func (p *Processor) setupMultiStreamSubscriptions(ctx context.Context) error {
+	// Derive unique streams from input subjects using naming convention
+	// Convention: subject "objectstore.stored.entity" → stream "OBJECTSTORE"
+	streamSubjects := make(map[string][]string) // stream name → filter subjects
+	for _, subject := range p.config.InputSubjects {
+		streamName := config.DeriveStreamName(subject)
+		if streamName == "" {
+			p.logger.Warn("Could not derive stream name from subject, skipping",
+				"subject", subject)
+			continue
+		}
+		streamSubjects[streamName] = append(streamSubjects[streamName], subject)
+	}
+
+	if len(streamSubjects) == 0 {
+		return errs.WrapInvalid(nil, "Processor", "setupMultiStreamSubscriptions",
+			"no valid streams derived from input_subjects")
+	}
+
+	p.logger.Info("Setting up multi-stream subscriptions",
+		"input_subjects", p.config.InputSubjects,
+		"derived_streams", len(streamSubjects))
+
+	// Wait for all streams to be available, then set up consumers
+	for streamName, subjects := range streamSubjects {
+		// Wait for stream to exist (created by publishing component)
+		if err := p.waitForStream(ctx, streamName); err != nil {
+			return errs.WrapFatal(err, "Processor", "setupMultiStreamSubscriptions",
+				"stream "+streamName+" not available")
+		}
+
+		// Set up consumer for this stream with filter subjects
+		for _, subject := range subjects {
+			if err := p.setupStreamConsumer(ctx, streamName, subject); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// setupStreamConsumer creates a JetStream consumer for a specific stream and filter subject.
+func (p *Processor) setupStreamConsumer(ctx context.Context, streamName, filterSubject string) error {
+	// Generate unique consumer name from stream and filter
+	consumerName := fmt.Sprintf("graph-%s-%s",
+		strings.ToLower(streamName),
+		strings.ReplaceAll(strings.ReplaceAll(filterSubject, ".", "-"), "*", "all"))
+
+	p.logger.Info("Setting up stream consumer",
+		"stream", streamName,
+		"consumer", consumerName,
+		"filter_subject", filterSubject)
+
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    streamName,
+		ConsumerName:  consumerName,
+		FilterSubject: filterSubject,
+		DeliverPolicy: "all",      // Process all messages including historical
+		AckPolicy:     "explicit", // Explicit ack required
+		MaxDeliver:    5,          // Retry up to 5 times before giving up
+		AutoCreate:    false,      // Stream should already exist (created by StreamsManager)
+	}
+
+	err := p.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		p.handleJetStreamMessage(msgCtx, msg)
+	})
+	if err != nil {
+		return errs.WrapFatal(err, "Processor", "setupStreamConsumer",
+			fmt.Sprintf("consumer failed for stream %s filter %s", streamName, filterSubject))
+	}
+
+	return nil
+}
+
+// waitForInputSubjectStreams waits for all streams derived from InputSubjects to exist.
+// Uses the naming convention to derive stream names from subjects.
+func (p *Processor) waitForInputSubjectStreams(ctx context.Context) error {
+	// Derive unique streams from input subjects
+	streamSet := make(map[string]bool)
+	for _, subject := range p.config.InputSubjects {
+		streamName := config.DeriveStreamName(subject)
+		if streamName != "" {
+			streamSet[streamName] = true
+		}
+	}
+
+	if len(streamSet) == 0 {
+		p.logger.Warn("No streams derived from input_subjects")
+		return nil
+	}
+
+	p.logger.Info("Waiting for input subject streams",
+		"input_subjects", p.config.InputSubjects,
+		"derived_streams", len(streamSet))
+
+	// Wait for each stream
+	for streamName := range streamSet {
+		if err := p.waitForStream(ctx, streamName); err != nil {
+			p.logger.Error("Stream not available", "stream", streamName, "error", err)
+			return errs.WrapFatal(err, "Processor", "waitForInputSubjectStreams",
+				"stream "+streamName+" not available")
+		}
 	}
 
 	return nil
