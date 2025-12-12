@@ -5,12 +5,34 @@ SemStreams processes event streams into a semantic knowledge graph stored in NAT
 ## System Overview
 
 ```text
-NATS Stream → Processor → Graph Storage → Indexes → Community Detection
-                  │              │             │              │
-                  ▼              ▼             ▼              ▼
-             Graphable     ENTITY_STATES   7 indexes    COMMUNITY_INDEX
-             Interface        bucket        buckets         bucket
+Input → Domain Processor → Storage → Graph → Output/Gateway
+  │           │               │        │           │
+ UDP      iot_sensor     ObjectStore  KV+      File, HTTP,
+ File     document       (raw docs)   Indexes  WebSocket,
+                                               API Gateway
 ```
+
+## Components
+
+SemStreams uses a component-based architecture. Components are self-describing units that connect via NATS:
+
+| Type | Examples | Role |
+|------|----------|------|
+| Input | UDP, WebSocket, File | Ingest data from external sources |
+| Processor | Graph, JSONMap, Rule | Transform and enrich data |
+| Output | File, HTTPPost, WebSocket | Export data to external systems |
+| Storage | ObjectStore | Persist data to NATS JetStream |
+| Gateway | HTTP, GraphQL, MCP | Expose APIs for queries and mutations |
+
+### Flow-Based Design
+
+Components connect through NATS subjects rather than direct calls:
+
+- **Loose coupling**: Components don't know about each other—they publish/subscribe to subjects
+- **Hook points**: Add components at any point by subscribing to existing subjects
+- **Configuration-driven**: Flows are JSON configs declaring which components to use and how to connect them
+
+The Graph processor is central to semantic processing, but it's one component among many. You can build flows with just protocol-layer components (UDP → JSONMap → File) or add semantic processing (UDP → Graph → GraphQL).
 
 ## Processing Flow
 
@@ -94,31 +116,11 @@ Entities that reference each other cluster into communities. Detection runs:
 
 Communities enable GraphRAG-style queries at different granularity levels.
 
-## Components
-
-SemStreams uses a component-based architecture. Components are self-describing units that connect via NATS:
-
-| Type | Examples | Role |
-|------|----------|------|
-| Input | UDP, WebSocket, File | Ingest data from external sources |
-| Processor | Graph, JSONMap, Rule | Transform and enrich data |
-| Output | File, HTTPPost, WebSocket | Export data to external systems |
-| Storage | ObjectStore | Persist data to NATS JetStream |
-| Gateway | HTTP, GraphQL, MCP | Expose APIs for queries and mutations |
-
-### Flow-Based Design
-
-Components connect through NATS subjects rather than direct calls:
-
-- **Loose coupling**: Components don't know about each other—they publish/subscribe to subjects
-- **Hook points**: Add components at any point by subscribing to existing subjects
-- **Configuration-driven**: Flows are JSON configs declaring which components to use and how to connect them
-
-The Graph processor is central to semantic processing, but it's one component among many. You can build flows with just protocol-layer components (UDP → JSONMap → File) or add semantic processing (UDP → Graph → GraphQL).
-
 ## State: NATS KV Buckets
 
-All state lives in NATS JetStream KV buckets:
+All state lives in NATS JetStream KV buckets.
+
+> **Note**: SemStreams connects to a single NATS server. NATS clustering is not in scope for MVP due to edge/offline-first deployment focus. See [Known Limitations](../reference/known-limitations.md).
 
 | Bucket | Contents |
 |--------|----------|
