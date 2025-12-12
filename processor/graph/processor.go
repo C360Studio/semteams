@@ -123,8 +123,9 @@ type Config struct {
 	InputSubject string `json:"input_subject" schema:"type:string,description:NATS subject to subscribe for input messages,default:events.graph.entity.*,category:basic"`
 
 	// JetStream configuration for durable message consumption
-	StreamName   string `json:"stream_name,omitempty"   schema:"type:string,description:JetStream stream name for durable consumption,category:advanced"`
-	ConsumerName string `json:"consumer_name,omitempty" schema:"type:string,description:JetStream consumer name (durable if set),category:advanced"`
+	StreamName     string   `json:"stream_name,omitempty"     schema:"type:string,description:JetStream stream name for durable consumption,category:advanced"`
+	StreamSubjects []string `json:"stream_subjects,omitempty" schema:"type:array,description:JetStream stream subjects (defaults to input_subject pattern),category:advanced"`
+	ConsumerName   string   `json:"consumer_name,omitempty"   schema:"type:string,description:JetStream consumer name (durable if set),category:advanced"`
 
 	// Component configurations
 
@@ -559,12 +560,12 @@ func (p *Processor) Start(ctx context.Context) error {
 	p.logger.Info("Starting graph processor")
 	p.logger.Info("==== CRITICAL: Entered Start() method ====")
 
-	// FIRST: Pre-create JetStream stream before any other initialization
-	// This ensures the stream exists before any other components can publish to it
+	// Wait for JetStream stream to exist (created by publisher component)
+	// This implements subscriber retry policy - stream should be created by ObjectStore
 	if p.config.StreamName != "" {
-		if err := p.ensureJetStreamStream(ctx); err != nil {
-			p.logger.Error("Failed to pre-create JetStream stream", "error", err)
-			return errs.WrapFatal(err, "Processor", "Start", "JetStream stream pre-creation failed")
+		if err := p.waitForStream(ctx, p.config.StreamName); err != nil {
+			p.logger.Error("Stream not available", "stream", p.config.StreamName, "error", err)
+			return errs.WrapFatal(err, "Processor", "Start", "JetStream stream not available")
 		}
 	}
 
@@ -1070,6 +1071,23 @@ func (p *Processor) initializeBusinessServices() error {
 	return nil
 }
 
+// getStreamSubjects returns configured stream subjects or derives from input subject
+func (p *Processor) getStreamSubjects() []string {
+	if len(p.config.StreamSubjects) > 0 {
+		return p.config.StreamSubjects
+	}
+	// Derive from input subject - convert * to > for stream wildcard
+	subject := p.config.InputSubject
+	if subject == "" {
+		subject = "events.graph.entity.*"
+	}
+	// Convert single-level wildcard (*) to multi-level (>) for stream capture
+	if subject[len(subject)-1] == '*' {
+		subject = subject[:len(subject)-1] + ">"
+	}
+	return []string{subject}
+}
+
 func (p *Processor) setupSubscriptions(ctx context.Context) error {
 	// Use configured subject (defaults to "events.graph.entity.*")
 	subject := p.config.InputSubject
@@ -1096,49 +1114,53 @@ func (p *Processor) setupSubscriptions(ctx context.Context) error {
 	return nil
 }
 
-// ensureJetStreamStream pre-creates the JetStream stream before any other initialization.
-// This is critical to ensure the stream exists before other components start publishing.
-func (p *Processor) ensureJetStreamStream(ctx context.Context) error {
-	p.logger.Info("Pre-creating JetStream stream (before module initialization)",
-		"stream", p.config.StreamName)
+// waitForStream waits for a JetStream stream to exist with exponential backoff.
+// The stream should be created by the publishing component (e.g., ObjectStore).
+// This implements the subscriber retry policy for loosely-coupled stream ownership.
+func (p *Processor) waitForStream(ctx context.Context, streamName string) error {
+	backoff := []time.Duration{
+		500 * time.Millisecond,
+		1 * time.Second,
+		2 * time.Second,
+		5 * time.Second,
+		10 * time.Second,
+	}
 
 	js, err := p.natsClient.JetStream()
 	if err != nil {
-		return errs.WrapTransient(err, "Processor", "ensureJetStreamStream", "failed to get JetStream context")
+		return errs.WrapTransient(err, "Processor", "waitForStream", "failed to get JetStream context")
 	}
 
-	// Check if stream already exists
-	_, err = js.Stream(ctx, p.config.StreamName)
-	if err == nil {
-		p.logger.Info("JetStream stream already exists", "stream", p.config.StreamName)
-		return nil
-	}
+	p.logger.Info("Waiting for JetStream stream", "stream", streamName)
 
-	// Create the stream if it doesn't exist
-	if stderrors.Is(err, jetstream.ErrStreamNotFound) {
-		streamCfg := jetstream.StreamConfig{
-			Name:      p.config.StreamName,
-			Subjects:  []string{"events.graph.entity.>"},
-			Storage:   jetstream.FileStorage,
-			Retention: jetstream.LimitsPolicy,
-			MaxAge:    7 * 24 * time.Hour, // 7 days
-			Replicas:  1,
+	for i, delay := range backoff {
+		_, err := js.Stream(ctx, streamName)
+		if err == nil {
+			p.logger.Info("JetStream stream found", "stream", streamName, "attempts", i+1)
+			return nil
 		}
 
-		_, err = js.CreateStream(ctx, streamCfg)
-		if err != nil {
-			return errs.WrapTransient(err, "Processor", "ensureJetStreamStream",
-				"failed to create stream "+p.config.StreamName)
+		if !stderrors.Is(err, jetstream.ErrStreamNotFound) {
+			return errs.WrapTransient(err, "Processor", "waitForStream",
+				"failed to check stream "+streamName)
 		}
 
-		p.logger.Info("Pre-created JetStream stream",
-			"stream", p.config.StreamName,
-			"subjects", []string{"events.graph.entity.>"})
-		return nil
+		p.logger.Info("Stream not found, waiting...",
+			"stream", streamName,
+			"attempt", i+1,
+			"retry_in", delay)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(delay):
+		}
 	}
 
-	return errs.WrapTransient(err, "Processor", "ensureJetStreamStream",
-		"failed to check stream "+p.config.StreamName)
+	return errs.WrapTransient(
+		stderrors.New("stream not found after retries"),
+		"Processor", "waitForStream",
+		"stream "+streamName+" not available after "+fmt.Sprint(len(backoff))+" attempts")
 }
 
 // setupJetStreamConsumer creates a durable JetStream consumer for reliable message processing.
@@ -1158,7 +1180,7 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, subject string) 
 		MaxDeliver:    5,          // Retry up to 5 times before giving up
 		AutoCreate:    true,       // Auto-create stream if it doesn't exist
 		AutoCreateConfig: &natsclient.StreamAutoCreateConfig{
-			Subjects:  []string{"events.graph.entity.>"},
+			Subjects:  p.getStreamSubjects(),
 			Storage:   "file",
 			Retention: "limits",
 		},

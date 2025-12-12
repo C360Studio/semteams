@@ -22,7 +22,7 @@ func TestNewClient(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.NotNil(t, manager)
-	assert.Equal(t, "nats://localhost:4222", manager.URL())
+	assert.Equal(t, "nats://localhost:4222", manager.URLs())
 	assert.Equal(t, StatusDisconnected, manager.Status())
 	assert.False(t, manager.IsHealthy())
 }

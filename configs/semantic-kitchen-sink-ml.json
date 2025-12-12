@@ -192,7 +192,7 @@
           "outputs": [
             {
               "name": "doc_out",
-              "subject": "events.graph.entity.document",
+              "subject": "document.processed.entity",
               "type": "nats",
               "interface": "content.document.v1"
             }
@@ -218,7 +218,7 @@
           "outputs": [
             {
               "name": "sensor_out",
-              "subject": "events.graph.entity.sensor",
+              "subject": "sensor.processed.entity",
               "type": "nats",
               "interface": "iot.sensor.v1"
             }
@@ -292,21 +292,21 @@
           "inputs": [
             {
               "name": "rule_entity_in",
-              "subject": "events.graph.entity.>",
+              "subject": "objectstore.stored.entity",
               "type": "nats",
-              "description": "Processed entity events with typed BaseMessage payloads"
+              "description": "Stored entity events with StorageRef"
             }
           ],
           "outputs": [
             {
               "name": "rule_out",
-              "subject": "events.rule.triggered",
+              "subject": "rule.triggered.alert",
               "type": "nats"
             }
           ]
         },
         "enable_graph_integration": true,
-        "graph_event_subject_prefix": "events.graph.entity",
+        "graph_event_subject_prefix": "objectstore.stored",
         "inline_rules": [
           {
             "id": "low-battery-alert",
@@ -441,8 +441,8 @@
       "config": {
         "workers": 8,
         "queue_size": 5000,
-        "input_subject": "events.graph.entity.*",
-        "stream_name": "GRAPH_EVENTS",
+        "input_subject": "objectstore.stored.entity",
+        "stream_name": "OBJECTSTORE_STORED",
         "consumer_name": "graph-processor",
         "message_handler": {
           "processing_timeout": "5s",
@@ -482,6 +482,7 @@
             "provider": "http",
             "http_endpoint": "http://semembed:8081/v1",
             "http_model": "BAAI/bge-small-en-v1.5",
+            "content_store_bucket": "semstreams_kitchen_sink_store",
             "text_fields": [
               "dc.title",
               "dc.subject",
@@ -551,7 +552,7 @@
           "inputs": [
             {
               "name": "file_in",
-              "subject": "events.graph.entity.>",
+              "subject": "objectstore.stored.entity",
               "type": "nats",
               "interface": "content.document.v1"
             }
@@ -572,7 +573,7 @@
           "inputs": [
             {
               "name": "http_in",
-              "subject": "events.graph.entity.>",
+              "subject": "objectstore.stored.entity",
               "type": "nats",
               "interface": "content.document.v1"
             }
@@ -610,13 +611,20 @@
         "ports": {
           "inputs": [
             {
-              "name": "store_in",
-              "subject": "events.graph.entity.>",
-              "type": "nats",
-              "interface": "content.document.v1"
+              "name": "write",
+              "subject": "*.processed.entity",
+              "type": "nats"
             }
           ],
-          "outputs": []
+          "outputs": [
+            {
+              "name": "stored",
+              "subject": "objectstore.stored.entity",
+              "type": "jetstream",
+              "stream_name": "OBJECTSTORE_STORED",
+              "subjects": ["objectstore.stored.>"]
+            }
+          ]
         },
         "bucket_name": "semstreams_kitchen_sink_store",
         "data_cache": {

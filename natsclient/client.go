@@ -64,7 +64,7 @@ type Status struct {
 
 // Client manages NATS connections with circuit breaker pattern
 type Client struct {
-	url      string
+	urls     string // comma-separated NATS server URLs for clustering support
 	status   atomic.Value // stores ConnectionStatus
 	failures atomic.Int32
 	logger   Logger
@@ -129,10 +129,12 @@ type Client struct {
 	closed  atomic.Bool // Track if client is closed
 }
 
-// NewClient creates a new NATS client with optional configuration
-func NewClient(url string, opts ...ClientOption) (*Client, error) {
+// NewClient creates a new NATS client with optional configuration.
+// The urls parameter accepts comma-separated NATS server URLs for clustering support
+// (e.g., "nats://server1:4222,nats://server2:4222").
+func NewClient(urls string, opts ...ClientOption) (*Client, error) {
 	c := &Client{
-		url:    url,
+		urls:   urls,
 		logger: &defaultLogger{},
 		// Sensible defaults
 		maxReconnects:    -1, // infinite by default
@@ -157,14 +159,14 @@ func NewClient(url string, opts ...ClientOption) (*Client, error) {
 	c.backoff.Store(time.Second)
 	c.lastFailure.Store(time.Time{})
 
-	c.logger.Debugf("Created NATS client for %s", url)
+	c.logger.Debugf("Created NATS client for %s", urls)
 
 	return c, nil
 }
 
-// URL returns the NATS server URL
-func (m *Client) URL() string {
-	return m.url
+// URLs returns the NATS server URLs (comma-separated for clustering)
+func (m *Client) URLs() string {
+	return m.urls
 }
 
 // Status returns the current connection status
@@ -413,7 +415,7 @@ func (m *Client) Connect(ctx context.Context) error {
 	}
 
 	m.setStatus(StatusConnecting)
-	m.logger.Printf("Connecting to NATS at %s", m.url)
+	m.logger.Printf("Connecting to NATS at %s", m.urls)
 
 	// Build connection options
 	opts := m.buildConnectionOptions()
@@ -421,7 +423,7 @@ func (m *Client) Connect(ctx context.Context) error {
 	// Attempt connection with context timeout
 	connectDone := make(chan error, 1)
 	go func() {
-		conn, err := nats.Connect(m.url, opts...)
+		conn, err := nats.Connect(m.urls, opts...)
 		if err != nil {
 			connectDone <- err
 			return
@@ -470,7 +472,7 @@ func (m *Client) Connect(ctx context.Context) error {
 	m.setStatus(StatusConnected)
 	m.resetCircuit()
 
-	m.logger.Printf("Successfully connected to NATS at %s", m.url)
+	m.logger.Printf("Successfully connected to NATS at %s", m.urls)
 
 	// Start health monitoring if configured
 	if m.healthInterval > 0 {
