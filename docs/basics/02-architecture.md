@@ -177,9 +177,18 @@ A sensor reading arrives:
 ## What SemStreams Is Not
 
 - **Not a database replacement**: No arbitrary SQL or ACID transactions—but dotted notation with NATS subject/KV wildcards provides SQL-like query basics (prefix matching, pattern queries)
-- **Not a batch system**: Updates flow continuously, no ETL windows
+- **Hybrid streaming/batch**: Entity updates flow continuously, but community detection and summarization run periodically (configurable intervals)
 - **Not a time-series DB**: Use InfluxDB/Prometheus for metrics
 - **Not full-text search**: Use Elasticsearch for document search
+
+## Background Concepts
+
+New to knowledge graphs or event-driven systems? See [Concepts](../concepts/) for background on:
+
+- [Event-Driven Basics](../concepts/01-event-driven-basics.md) - Pub/sub, streams, NATS
+- [Knowledge Graphs](../concepts/02-knowledge-graphs.md) - Triples, SPO model
+- [Community Detection](../concepts/04-community-detection.md) - LPA algorithm details
+- [GraphRAG Pattern](../concepts/05-graphrag-pattern.md) - Community-based RAG
 
 ## Next Steps
 

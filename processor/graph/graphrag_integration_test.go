@@ -745,8 +745,8 @@ func TestE2E_LLMSummarization(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	t.Run("LLM_generates_natural_language_summary", func(t *testing.T) {
-		// Attempt LLM summarization
-		summarizedComm, err := llmSummarizer.SummarizeCommunity(ctx, community, createdEntities)
+		// Attempt LLM summarization (no entity content in test)
+		summarizedComm, err := llmSummarizer.SummarizeCommunity(ctx, community, createdEntities, nil)
 		require.NoError(t, err, "Summarization should not error (graceful fallback on failure)")
 		require.NotNil(t, summarizedComm)
 
@@ -773,8 +773,8 @@ func TestE2E_LLMSummarization(t *testing.T) {
 	})
 
 	t.Run("LLM_summary_integrates_with_GlobalSearch", func(t *testing.T) {
-		// Save community with LLM-generated summary
-		summarizedComm, _ := llmSummarizer.SummarizeCommunity(ctx, community, createdEntities)
+		// Save community with LLM-generated summary (no entity content in test)
+		summarizedComm, _ := llmSummarizer.SummarizeCommunity(ctx, community, createdEntities, nil)
 		err := communityStorage.SaveCommunity(ctx, summarizedComm)
 		require.NoError(t, err)
 

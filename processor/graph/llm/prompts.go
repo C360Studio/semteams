@@ -45,6 +45,8 @@ Key themes: {{.Keywords}}
 Sample entities (parsed):
 {{range .SampleEntities}}- {{.Full}}
   org={{.Org}} platform={{.Platform}} domain={{.Domain}} system={{.System}} type={{.Type}} instance={{.Instance}}
+{{if .Title}}  title: {{.Title}}{{end}}
+{{if .Abstract}}  description: {{.Abstract}}{{end}}
 {{end}}
 Generate a concise summary describing what this community represents.`,
 	}
@@ -62,6 +64,7 @@ Relevant communities:
 {{end}}
 Top matching entities:
 {{range .Entities}}- {{.ID}} ({{.Type}}){{if .Name}}: {{.Name}}{{end}}
+{{if .Description}}  {{.Description}}{{end}}
 {{end}}
 Based on the above context, answer the question concisely.`,
 	}
@@ -140,6 +143,13 @@ func LoadPromptsFromFile(path string) error {
 	return nil
 }
 
+// EntityContent contains description fields fetched via NATS from ObjectStore.
+// Used to enrich LLM prompts with actual entity titles and descriptions.
+type EntityContent struct {
+	Title    string // From ContentRole "title"
+	Abstract string // From ContentRole "abstract" or description
+}
+
 // EntityParts represents parsed 6-part entity ID components.
 // Entity IDs follow the pattern: {org}.{platform}.{domain}.{system}.{type}.{instance}
 type EntityParts struct {
@@ -150,6 +160,8 @@ type EntityParts struct {
 	System   string // Part 3: System/subsystem
 	Type     string // Part 4: Entity type
 	Instance string // Part 5: Instance ID
+	Title    string // Entity title from content store (optional)
+	Abstract string // Entity abstract from content store (optional)
 }
 
 // DomainGroup groups entities by their domain (part[2] of entity ID).
@@ -191,9 +203,10 @@ type CommunitySummaryInfo struct {
 
 // EntitySample represents a sample entity for search prompts.
 type EntitySample struct {
-	ID   string
-	Type string
-	Name string
+	ID          string
+	Type        string
+	Name        string
+	Description string // From content store abstract (optional)
 }
 
 // EntityDescriptionData is the data structure for entity_description prompts.

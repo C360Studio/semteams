@@ -103,6 +103,9 @@ type Processor struct {
 	detectionMu       sync.Mutex
 	detectionRunning  bool
 
+	// LLM content fetching (optional, for enriched prompts)
+	contentFetcher llm.ContentFetcher
+
 	// Entity change tracking for adaptive clustering
 	entityChangeCount atomic.Int64  // Count of new entities since last detection
 	detectionTrigger  chan struct{} // Signal to trigger detection from entity callback
@@ -1024,12 +1027,28 @@ func (p *Processor) initializeQueryManager(
 		queryConfig = *p.config.Querier
 	}
 
+	// Create ContentFetcher if NATS client is available (optional, for enriched LLM prompts)
+	if p.natsClient != nil && p.contentFetcher == nil {
+		fetcher, err := llm.NewNATSContentFetcher(
+			p.natsClient,
+			llm.WithContentSubject("storage.objectstore.api"),
+			llm.WithContentLogger(p.logger),
+		)
+		if err != nil {
+			p.logger.Warn("Failed to create content fetcher, LLM prompts will not include entity content",
+				"error", err)
+		} else {
+			p.contentFetcher = fetcher
+		}
+	}
+
 	queryDeps := querymanager.Deps{
-		Config:       queryConfig,
-		EntityReader: entityReader,
-		IndexManager: indexer,
-		Registry:     p.metricsRegistry,
-		Logger:       p.logger,
+		Config:         queryConfig,
+		EntityReader:   entityReader,
+		IndexManager:   indexer,
+		ContentFetcher: p.contentFetcher,
+		Registry:       p.metricsRegistry,
+		Logger:         p.logger,
 	}
 
 	p.logger.Debug("Creating QueryManager instance")
@@ -1697,7 +1716,16 @@ func (p *Processor) setupEnhancementWorker(ctx context.Context, cfg *ClusteringC
 		return errs.WrapFatal(err, "Processor", "setupEnhancementWorker", "failed to create LLM client")
 	}
 
-	llmSummarizer, err := clustering.NewLLMSummarizer(clustering.LLMSummarizerConfig{Client: llmClient})
+	// Create LLM summarizer with optional content fetcher (reuse from QueryManager initialization)
+	summarizerOpts := []clustering.LLMSummarizerOption{}
+	if p.contentFetcher != nil {
+		summarizerOpts = append(summarizerOpts, clustering.WithContentFetcher(p.contentFetcher))
+	}
+
+	llmSummarizer, err := clustering.NewLLMSummarizer(
+		clustering.LLMSummarizerConfig{Client: llmClient},
+		summarizerOpts...,
+	)
 	if err != nil {
 		return errs.WrapFatal(err, "Processor", "setupEnhancementWorker", "failed to create LLM summarizer")
 	}

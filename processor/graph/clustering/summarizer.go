@@ -447,6 +447,10 @@ type LLMSummarizer struct {
 
 	// MaxTokens limits the response length (default: 150).
 	MaxTokens int
+
+	// ContentFetcher optionally fetches entity content (title, abstract) for richer prompts.
+	// If nil, prompts use only entity IDs and triple-derived keywords.
+	ContentFetcher llm.ContentFetcher
 }
 
 // LLMSummarizerConfig configures the LLM summarizer.
@@ -458,8 +462,22 @@ type LLMSummarizerConfig struct {
 	MaxTokens int
 }
 
+// LLMSummarizerOption configures an LLMSummarizer using the functional options pattern.
+// Options return errors for validation (following natsclient pattern).
+type LLMSummarizerOption func(*LLMSummarizer) error
+
+// WithContentFetcher sets the ContentFetcher for enriching prompts with entity content.
+// If not set, prompts use only entity IDs and triple-derived keywords.
+func WithContentFetcher(fetcher llm.ContentFetcher) LLMSummarizerOption {
+	return func(s *LLMSummarizer) error {
+		s.ContentFetcher = fetcher
+		return nil
+	}
+}
+
 // NewLLMSummarizer creates an LLM-based summarizer with the given configuration.
-func NewLLMSummarizer(cfg LLMSummarizerConfig) (*LLMSummarizer, error) {
+// Optional functional options can be provided to configure additional features.
+func NewLLMSummarizer(cfg LLMSummarizerConfig, opts ...LLMSummarizerOption) (*LLMSummarizer, error) {
 	if cfg.Client == nil {
 		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "LLMSummarizer",
 			"NewLLMSummarizer", "client is required")
@@ -470,14 +488,25 @@ func NewLLMSummarizer(cfg LLMSummarizerConfig) (*LLMSummarizer, error) {
 		maxTokens = 150
 	}
 
-	return &LLMSummarizer{
+	s := &LLMSummarizer{
 		Client:             cfg.Client,
 		FallbackSummarizer: NewStatisticalSummarizer(),
 		MaxTokens:          maxTokens,
-	}, nil
+	}
+
+	// Apply functional options
+	for _, opt := range opts {
+		if err := opt(s); err != nil {
+			return nil, err
+		}
+	}
+
+	return s, nil
 }
 
 // SummarizeCommunity generates an LLM-based summary of the community.
+// Implements CommunitySummarizer interface with 3-param signature.
+// Content fetching happens internally using the optional ContentFetcher.
 func (s *LLMSummarizer) SummarizeCommunity(
 	ctx context.Context,
 	community *Community,
@@ -505,8 +534,26 @@ func (s *LLMSummarizer) SummarizeCommunity(
 	keywords := s.FallbackSummarizer.extractKeywords(entities)
 	repEntities := s.FallbackSummarizer.findRepresentativeEntities(ctx, entities)
 
-	// Build prompt data
-	promptData := s.buildPromptData(entities, keywords)
+	// Fetch entity content internally if ContentFetcher is configured
+	// Only fetch for representative entities (performance optimization)
+	var entityContent map[string]*llm.EntityContent
+	if s.ContentFetcher != nil {
+		repEntitySet := make(map[string]bool, len(repEntities))
+		for _, id := range repEntities {
+			repEntitySet[id] = true
+		}
+		repEntityList := make([]*gtypes.EntityState, 0, len(repEntities))
+		for _, entity := range entities {
+			if repEntitySet[entity.ID] {
+				repEntityList = append(repEntityList, entity)
+			}
+		}
+		// Fetch content - errors are logged but not fatal (graceful degradation)
+		entityContent, _ = s.ContentFetcher.FetchEntityContent(ctx, repEntityList)
+	}
+
+	// Build prompt data with optional entity content
+	promptData := s.buildPromptData(entities, keywords, entityContent)
 
 	// Render the prompt template using direct package variable
 	rendered, err := llm.CommunityPrompt.Render(promptData)
@@ -582,6 +629,7 @@ type domainGroupBuilder struct {
 func (s *LLMSummarizer) buildPromptData(
 	entities []*gtypes.EntityState,
 	keywords []string,
+	entityContent map[string]*llm.EntityContent,
 ) llm.CommunitySummaryData {
 	// Group by domain (part[2] of entity ID)
 	domainGroups := make(map[string]*domainGroupBuilder)
@@ -641,11 +689,19 @@ func (s *LLMSummarizer) buildPromptData(
 		}
 	}
 
-	// Build parsed sample entities
+	// Build parsed sample entities with optional content
 	maxSamples := min(5, len(entities))
 	samples := make([]llm.EntityParts, maxSamples)
 	for i := 0; i < maxSamples; i++ {
 		samples[i] = parseEntityID(entities[i].ID)
+
+		// Populate content if available
+		if entityContent != nil {
+			if content, ok := entityContent[entities[i].ID]; ok {
+				samples[i].Title = content.Title
+				samples[i].Abstract = content.Abstract
+			}
+		}
 	}
 
 	// Format keywords

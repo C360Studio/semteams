@@ -309,7 +309,7 @@ func (w *EnhancementWorker) handleKVEntry(entry jetstream.KeyValueEntry, workerI
 		return
 	}
 
-	// Generate LLM summary
+	// Generate LLM summary (content fetching happens internally via ContentFetcher)
 	enhanced, err := w.llm.SummarizeCommunity(w.ctx, &community, entities)
 	if err != nil {
 		latency := time.Since(startTime).Seconds()

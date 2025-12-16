@@ -453,6 +453,14 @@ func (m *Manager) generateAnswer(
 		maxEntities = len(searchResult.Entities)
 	}
 
+	// Fetch content for top entities (optional, for richer prompts)
+	topEntities := searchResult.Entities[:maxEntities]
+	var entityContent map[string]*llm.EntityContent
+	if m.contentFetcher != nil {
+		// Fetch content via ContentFetcher interface - errors are logged but not fatal
+		entityContent, _ = m.contentFetcher.FetchEntityContent(answerCtx, topEntities)
+	}
+
 	entities := make([]llm.EntitySample, 0, maxEntities)
 	for i := 0; i < maxEntities; i++ {
 		entity := searchResult.Entities[i]
@@ -473,11 +481,23 @@ func (m *Manager) generateAnswer(
 			}
 		}
 
-		entities = append(entities, llm.EntitySample{
+		sample := llm.EntitySample{
 			ID:   entity.ID,
 			Type: entityType,
 			Name: name,
-		})
+		}
+
+		// Enrich with content from ObjectStore if available
+		if entityContent != nil {
+			if content, ok := entityContent[entity.ID]; ok {
+				sample.Description = content.Abstract
+				if sample.Name == "" && content.Title != "" {
+					sample.Name = content.Title
+				}
+			}
+		}
+
+		entities = append(entities, sample)
 	}
 
 	// Build prompt data

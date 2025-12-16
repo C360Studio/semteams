@@ -426,3 +426,11 @@ Community detection exposes Prometheus metrics:
 - [LLM Enhancement](02-llm-enhancement.md) - LLM integration details
 - [Performance Tuning](03-performance.md) - Optimization strategies
 - [Communities Concept](../graph/04-communities.md) - Community overview
+
+### Background Concepts
+
+For foundational understanding of the algorithms and metrics used here:
+
+- [Community Detection Concepts](../concepts/04-community-detection.md) - LPA intuition, failure modes, tuning guidance
+- [Embeddings](../concepts/03-embeddings.md) - What vectors are, cosine similarity explained
+- [Similarity Metrics](../concepts/07-similarity-metrics.md) - TF-IDF, Jaccard, threshold tuning

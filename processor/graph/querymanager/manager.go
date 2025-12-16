@@ -31,7 +31,8 @@ type Manager struct {
 	communityDetector any                      // Optional: CommunityDetector for GraphRAG search (type-erased to avoid import cycle)
 
 	// LLM dependencies for answer generation
-	llmClient llm.Client // Optional: LLM client for answer generation
+	llmClient      llm.Client          // Optional: LLM client for answer generation
+	contentFetcher llm.ContentFetcher  // Optional: for fetching entity content
 
 	// Metrics (simplified - no cache metrics)
 	metrics *Metrics
@@ -53,6 +54,7 @@ type Deps struct {
 	IndexManager      indexmanager.Indexer     // Runtime dependency
 	CommunityDetector any                      // Optional: CommunityDetector for GraphRAG search (type-erased to avoid import cycle)
 	LLMClient         llm.Client               // Optional: LLM client for answer generation
+	ContentFetcher    llm.ContentFetcher       // Optional: for fetching entity content
 	Registry          *metric.MetricsRegistry  // Runtime dependency
 	Logger            *slog.Logger             // Runtime dependency
 }
@@ -80,6 +82,7 @@ func NewManager(deps Deps) (Querier, error) {
 		indexManager:      deps.IndexManager,
 		communityDetector: deps.CommunityDetector, // Optional dependency
 		llmClient:         deps.LLMClient,         // Optional LLM client
+		contentFetcher:    deps.ContentFetcher,    // Optional for content fetching
 		lastActivity:      time.Now(),
 		logger:            logger,
 	}
