@@ -1,344 +1,167 @@
-// Package semstreams provides a two-layer framework for semantic stream processing,
-// combining protocol-level data handling with generic semantic capabilities.
+// Package semstreams provides a stream processor that builds semantic knowledge graphs
+// from event data, with automatic community detection and progressive AI enhancement.
 //
-// # Philosophy: Two-Layer Generic Framework
+// # Overview
 //
-// SemStreams is a generic framework with two independent layers:
+// SemStreams transforms event streams into a living knowledge graph stored in NATS KV.
+// You define a vocabulary of predicates, implement a simple interface, and the system
+// maintains entities, relationships, indexes, and communities automatically.
 //
-// Layer 1 - Protocol Layer (network/data agnostic):
-//   - Network Protocols: UDP, TCP, HTTP, WebSocket
-//   - Data Formats: JSON, CSV, raw bytes
-//   - Messaging: NATS (pub/sub, JetStream, KV)
-//   - Infrastructure: Metrics, health checks, logging
+// Key characteristics:
+//   - Edge-first: Deploy on a Raspberry Pi with just NATS, or scale to clusters
+//   - Offline-capable: NATS JetStream provides local persistence and sync
+//   - Progressive: Start with rules, add search, then embeddings and LLM as needed
+//   - Domain-driven: No mandatory AI dependencies—you enable what you need
 //
-// Layer 2 - Semantic Layer (domain agnostic):
-//   - Entity tracking: Generic entity lifecycle and relationships
-//   - Graph structures: Entity graphs and patterns
-//   - Vocabularies: Extensible semantic vocabularies (SOSA/SSN compatible)
-//   - Enrichment: Generic semantic enrichment pipeline
+// # Core Concept
 //
-// SemStreams MUST NOT contain:
-//   - Domain-specific protocols (MAVLink, ROS, industrial protocols)
-//   - Domain-specific business logic (robotics control, IoT rules)
-//   - Domain assumptions (robot types, sensor models, industrial processes)
+//	Events → Graphable Interface → Knowledge Graph → Queries
 //
-// Domain-specific code belongs in separate modules (semstreams-robotics, semstreams-iot)
+// 1. Events arrive (telemetry, records, notifications)
+// 2. Your processor transforms them into entities with triples
+// 3. SemStreams maintains the graph, indexes, and communities
+// 4. Query by relationships, predicates, or semantic similarity
+//
+// # The Graphable Interface
+//
+// Your domain types implement Graphable to become graph entities:
+//
+//	type Graphable interface {
+//	    EntityID() string          // 6-part federated identifier
+//	    Triples() []message.Triple // Facts about this entity
+//	}
+//
+// Example:
+//
+//	func (d *DroneTelemetry) EntityID() string {
+//	    return fmt.Sprintf("acme.ops.robotics.gcs.drone.%s", d.DroneID)
+//	}
+//
+//	func (d *DroneTelemetry) Triples() []message.Triple {
+//	    id := d.EntityID()
+//	    return []message.Triple{
+//	        {Subject: id, Predicate: "drone.telemetry.battery", Object: d.Battery},
+//	        {Subject: id, Predicate: "fleet.membership.current", Object: d.FleetID},
+//	    }
+//	}
+//
+// # Entity ID Format
+//
+// Use 6-part hierarchical identifiers for federation and queryability:
+//
+//	org.platform.domain.system.type.instance
+//
+// Example: acme.ops.robotics.gcs.drone.001
+//
+// # Predicates
+//
+// Predicates follow domain.category.property format:
+//
+//	sensor.measurement.celsius
+//	geo.location.zone
+//	fleet.membership.current
+//
+// Dotted notation enables NATS wildcard queries (sensor.measurement.*) and
+// provides SQL-like query semantics via prefix matching.
+//
+// # Progressive Enhancement (Tiers)
+//
+// SemStreams supports three capability tiers:
+//
+//	Tier 0: Rules engine, explicit relationships, structural indexing (NATS only)
+//	Tier 1: + BM25 search, statistical communities (+ search index)
+//	Tier 2: + Neural embeddings, LLM summaries (+ embedding service, LLM)
+//
+// Start with Tier 0. Add capabilities as resources allow.
 //
 // # Architecture
 //
-// SemStreams provides a two-layer foundation for semantic stream processing:
+// Components connect via NATS subjects in flow-based configurations:
 //
-//	┌─────────────────────────────────────┐
-//	│          Flow Engine                │  Component lifecycle
-//	│  (start, stop, connect, monitor)    │  State management
-//	└─────────────────────────────────────┘
-//	           ↓ orchestrates
-//	┌─────────────────────────────────────┐
-//	│         Components                  │  Inputs, Processors,
-//	│   (input, processor, output)        │  Outputs, Services
-//	└─────────────────────────────────────┘
-//	           ↓ communicate via
-//	┌─────────────────────────────────────┐
-//	│         NATS Messaging              │  Subjects, streams,
-//	│     (pub/sub, request/reply)        │  KV stores
-//	└─────────────────────────────────────┘
+//	Input → Processor → Storage → Graph → Gateway
+//	  │         │          │        │        │
+//	 UDP    iot_sensor  ObjectStore KV+   GraphQL
+//	 File   document    (raw docs)  Indexes  MCP
 //
-// # Advanced Patterns
+// Component types:
+//   - Input: UDP, WebSocket, File - ingest external data
+//   - Processor: Graph, JSONMap, Rule - transform and enrich
+//   - Output: File, HTTPPost, WebSocket - export data
+//   - Storage: ObjectStore - persist to NATS JetStream
+//   - Gateway: HTTP, GraphQL, MCP - expose query APIs
 //
-// Fan-Out Pattern (Multiple Outputs):
+// # State: NATS KV Buckets
 //
-// Multiple components can subscribe to the same NATS subject, creating
-// parallel output paths. Each output processes independently - failure
-// in one doesn't affect others. This pattern is demonstrated in the
-// core-flow.json configuration.
+// All state lives in NATS JetStream KV buckets:
 //
-//	                ┌─────────────┐
-//	                │  Processor  │
-//	                │  (JSONMap)  │
-//	                └──────┬──────┘
-//	                       │
-//	            mapped.messages (NATS subject)
-//	                       │
-//	     ┌─────────────────┼─────────────────┐
-//	     ↓                 ↓                 ↓
-//	┌────────┐       ┌──────────┐      ┌──────────┐
-//	│  File  │       │HTTPPost  │      │ObjectStore│
-//	│ Output │       │ Output   │      │ Storage  │
-//	└────────┘       └──────────┘      └──────────┘
-//	 /tmp/*.jsonl    webhook endpoint   NATS bucket
+// Core buckets (always created):
+//   - ENTITY_STATES: Entity records with triples and version
+//   - PREDICATE_INDEX: Predicate → entity IDs
+//   - INCOMING_INDEX: Entity ID → referencing entities
+//   - OUTGOING_INDEX: Entity ID → referenced entities
+//   - ALIAS_INDEX: Alias → entity ID
+//   - SPATIAL_INDEX: Geohash → entity IDs
+//   - TEMPORAL_INDEX: Time bucket → entity IDs
+//   - RULE_STATE: Rule evaluation state per entity
 //
-// Benefits:
-//   - Parallel processing: Outputs run concurrently
-//   - Fault isolation: One output failure doesn't affect others
-//   - Dynamic subscription: Add/remove outputs without code changes
-//   - Load distribution: NATS handles message delivery
+// Optional buckets (created when features enabled):
+//   - STRUCTURAL_INDEX: K-core levels and pivot distances
+//   - EMBEDDING_INDEX: Entity ID → embedding vector
+//   - COMMUNITY_INDEX: Community records with members and summaries
 //
-// Early Tap Pattern (Raw Data Access):
+// # Package Organization
 //
-// Components can tap into data streams at any point in the pipeline.
-// Example: WebSocket output subscribing to raw UDP data before processing.
-//
-//	    ┌─────────┐
-//	    │   UDP   │
-//	    │  Input  │
-//	    └────┬────┘
-//	         │
-//	    raw.udp.messages
-//	         │
-//	    ┌────┼────────────────────┐
-//	    ↓    ↓                    ↓
-//	┌────────┐              ┌──────────┐
-//	│WebSocket│             │Processors│
-//	│ Output  │             │(filter,  │
-//	│ (raw)   │             │ map...)  │
-//	└────────┘              └──────────┘
-//	:8082/ws                      │
-//	                         mapped.messages
-//	                              ↓
-//	                        (other outputs)
-//
-// Use cases:
-//   - Real-time monitoring: Show raw data in dashboards
-//   - Debugging: Inspect data before transformation
-//   - Parallel processing: Different paths for raw vs processed
-//   - Low-latency: Skip processing overhead
-//
-// Federation Pattern (Instance-to-Instance):
-//
-// StreamKit instances can communicate over network boundaries using
-// WebSocket connections. This enables edge-to-cloud, multi-region,
-// and hierarchical processing topologies.
-//
-//	┌────────────────────────────┐     ┌────────────────────────────┐
-//	│      Instance A (Edge)     │     │     Instance B (Cloud)     │
-//	│                            │     │                            │
-//	│  ┌──────┐                  │     │                            │
-//	│  │ UDP  │                  │     │                            │
-//	│  │Input │                  │     │                            │
-//	│  └───┬──┘                  │     │                            │
-//	│      ↓                     │     │                            │
-//	│  ┌──────────┐              │     │                            │
-//	│  │Processors│              │     │  ┌──────────────┐          │
-//	│  │(filter,  │              │     │  │  WebSocket   │          │
-//	│  │ map...)  │              │     │  │    Input     │          │
-//	│  └────┬─────┘              │     │  │  :8081/ingest│          │
-//	│       ↓                    │     │  └───────┬──────┘          │
-//	│  ┌──────────────┐          │     │          ↓                 │
-//	│  │  WebSocket   │          │  ws://        ┌──────────┐       │
-//	│  │    Output    ├──────────┼─────────────→ │federated │       │
-//	│  │:8080/federation         │     │         │  .data   │       │
-//	│  └──────────────┘          │     │         └────┬─────┘       │
-//	│                            │     │              ↓              │
-//	└────────────────────────────┘     │      ┌───────────────┐     │
-//	                                   │      │  Processors   │     │
-//	                                   │      │   Storage     │     │
-//	                                   │      │   Analytics   │     │
-//	                                   │      └───────────────┘     │
-//	                                   └────────────────────────────┘
-//
-// Federation use cases:
-//   - Edge-to-Cloud: IoT devices send processed data to central hub
-//   - Multi-Region: Cross-datacenter data replication
-//   - Hierarchical: Pre-process at edge, aggregate at cloud
-//   - Failover: Route data to backup instance on failure
-//
-// Bidirectional Communication (Request/Reply):
-//
-// WebSocket connections are bidirectional, enabling the input instance
-// to send requests back to the output instance. This unlocks advanced
-// patterns beyond simple data streaming.
-//
-//	┌────────────────┐                    ┌────────────────┐
-//	│  Instance A    │                    │  Instance B    │
-//	│  (Data Source) │                    │  (Subscriber)  │
-//	│                │                    │                │
-//	│  WebSocket Out │◄───── REQUEST ─────│ WebSocket In   │
-//	│  :8080         │                    │ :8081          │
-//	│                │                    │                │
-//	│                │─────► REPLY ───────►                │
-//	│                │                    │                │
-//	│                │                    │                │
-//	│                │───► DATA STREAM ───►                │
-//	└────────────────┘                    └────────────────┘
-//
-// Request/Reply patterns enabled:
-//   - Backpressure: "Slow down, queue full" → adjust send rate
-//   - Acknowledgment: "Received batch ID=123" → reliable delivery
-//
-// This maps naturally to NATS request/reply pattern, exposed over WebSocket:
-//   - Client sends request on "ws.request.{topic}"
-//   - Server replies on "ws.reply.{topic}.{client_id}"
-//   - Standard NATS timeout/retry semantics apply
-//
-// Example: Backpressure Control
-//
-//	Instance B → Instance A:
-//	  Request: {"type": "backpressure", "rate_limit": 100, "unit": "msg/sec"}
-//	  Reply:   {"status": "ok", "current_rate": 250, "adjusted_to": 100}
-//
-// This bidirectional capability transforms federation from simple data
-// forwarding into a distributed control plane.
-//
-// # Framework Packages
-//
-// Protocol Layer - Component System:
+// Core packages:
 //   - component: Component lifecycle, registry, port definitions
-//   - componentregistry: Registration of protocol and semantic components
-//
-// Protocol Layer - Flow Management:
+//   - componentregistry: Registration of all component types
 //   - engine: Component orchestration and lifecycle
 //   - flowstore: Flow persistence (NATS KV)
 //   - config: Configuration loading and validation
 //
-// Protocol Layer - Infrastructure:
+// Graph packages:
+//   - graph: Knowledge graph processing core
+//   - message: Triple and entity message types
+//   - vocabulary: Predicate definitions and standards
+//
+// Infrastructure:
 //   - natsclient: NATS connection management
-//   - service: HTTP services (discovery, flow-builder, metrics)
+//   - gateway: HTTP, GraphQL, MCP API endpoints
+//   - service: Discovery, flow-builder, metrics services
 //   - metric: Prometheus metrics
-//   - errors: Structured error handling
 //   - health: Health check system
 //
-// Protocol Layer - Components (Input):
-//   - input/udp: UDP socket input
-//   - input/websocket_input: WebSocket input for federation
+// Components:
+//   - input/: UDP, WebSocket, File inputs
+//   - output/: File, HTTPPost, WebSocket outputs
+//   - processor/: Graph, JSONMap, JSONFilter, Rule processors
+//   - storage/: ObjectStore for raw document persistence
 //
-// Protocol Layer - Components (Output):
-//   - output/websocket: WebSocket broadcasting
-//   - output/file: File output
-//   - output/httppost: HTTP POST output
-//
-// Protocol Layer - Components (Processor):
-//   - processor/parser: JSON/CSV parsing
-//   - processor/json_map: JSON field mapping
-//   - processor/json_filter: JSON filtering
-//   - processor/json_generic: Generic JSON processing
-//
-// Protocol Layer - Utilities:
+// Utilities:
 //   - pkg/buffer: Ring buffer for streaming
 //   - pkg/cache: LRU caching
 //   - pkg/retry: Retry policies
 //   - pkg/worker: Worker pools
-//   - pkg/timestamp: Time utilities
 //
-// Semantic Layer - Components:
-//   - (To be added during merge from semstreams-old)
-//   - Entity extraction and tracking
-//   - Semantic enrichment
-//   - Graph operations
-//   - Vocabulary management
+// # Usage
 //
-// # Layer Independence
+// Build and run:
 //
-// The two layers are independent - protocol layer has NO dependencies on semantic layer:
-//
-//  1. Protocol components work without semantic components loaded
-//  2. Semantic components extend protocol layer via standard component interfaces
-//  3. Domain code (robotics, IoT) goes in separate modules
-//  4. Both layers are generic and extensible
-//
-// Verification:
-//
-//	# Protocol-only flows work without semantic components
-//	./bin/semstreams --config configs/protocol-flow.json
-//
-//	# No domain-specific code in framework
-//	! grep -r 'MAVLink|ROS|robotics|drone' semstreams/ --include="*.go"
-//
-// # Usage Patterns
-//
-// Basic Flow Setup:
-//
-//	// Create NATS client
-//	natsClient, _ := natsclient.NewClient("nats://localhost:4222")
-//	natsClient.Connect(ctx)
-//
-//	// Create component registry with protocol and semantic components
-//	registry := component.NewRegistry()
-//	componentregistry.Register(registry)
-//
-//	// Create flow engine
-//	engine := engine.NewEngine(natsClient, registry, logger)
-//
-//	// Load and start flow
-//	flow, _ := loadFlow("udp-to-websocket.json")
-//	engine.StartFlow(ctx, flow)
-//
-// Custom Protocol Component:
-//
-//	// Register a custom protocol handler
-//	func RegisterTCPInput(registry *component.Registry) error {
-//	    return registry.RegisterWithConfig(component.RegistrationConfig{
-//	        Name:        "tcp",
-//	        Factory:     CreateTCPInput,
-//	        Schema:      tcpSchema,
-//	        Type:        "input",
-//	        Protocol:    "tcp",
-//	        Domain:      "network",
-//	        Description: "TCP socket input",
-//	        Version:     "1.0.0",
-//	    })
-//	}
-//
-// # Extension Points
-//
-// SemStreams provides two extension mechanisms:
-//
-//  1. Protocol Layer Extension (network/data handling):
-//     - Add new input types (TCP, MQTT, etc.)
-//     - Add new output types (Kafka, databases, etc.)
-//     - Add new processors (custom formats, transformations)
-//
-//  2. Domain-Specific Extensions (separate modules):
-//     - Import semstreams packages
-//     - Create domain-specific components (robotics, IoT, industrial)
-//     - Register components in downstream module
-//     - Build flows using framework + domain components
-//
-// See semstreams-robotics for MAVLink/ROS domain extension examples.
-//
-// # Design Principles
-//
-// Separation of Concerns:
-//   - Protocol handling ≠ Protocol semantics
-//   - Data transport ≠ Data interpretation
-//   - Flow orchestration ≠ Domain logic
-//
-// Composition Over Configuration:
-//   - Small, focused components
-//   - Connect via NATS subjects
-//   - Build complex behaviors from simple pieces
-//
-// Testability:
-//   - Explicit dependencies (no globals)
-//   - Isolated component testing
-//   - Integration tests with testcontainers
-//
-// Performance:
-//   - Zero-copy where possible
-//   - Bounded buffers (backpressure)
-//   - Efficient serialization
-//
-// # Binary
-//
-// Build and run SemStreams:
-//
-//	# Build framework binary (protocol + semantic layers)
 //	task build
-//
-//	# Run with protocol-only config (no semantic components loaded)
-//	./bin/semstreams --config configs/protocol-flow.json
-//
-//	# Run with semantic processing enabled
 //	./bin/semstreams --config configs/semantic-flow.json
 //
-// The SemStreams binary uses componentregistry.Register() to register
-// both protocol-level and semantic components. Protocol components work
-// independently without semantic layer.
+// The binary uses componentregistry.Register() to register all component types.
+// Flow configuration determines which components are instantiated.
+//
+// # Documentation
+//
+// See docs/ for comprehensive documentation:
+//   - docs/basics/: Getting started, core interfaces
+//   - docs/concepts/: Background knowledge, algorithms
+//   - docs/advanced/: Clustering, LLM, performance tuning
+//   - docs/rules/: Rules engine reference
+//   - docs/contributing/: Development, testing, CI
 //
 // # Version
 //
-// Current: v0.4.0-alpha (Two-layer framework)
-//
-// This version merges protocol and semantic capabilities into a unified
-// framework with clean layer separation. Domain-specific code has been
-// extracted to separate modules (semstreams-robotics, semstreams-iot).
+// Current: v0.5.0-alpha
 package semstreams

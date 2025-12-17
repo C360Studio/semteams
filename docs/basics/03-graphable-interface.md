@@ -281,5 +281,5 @@ fleetID := fmt.Sprintf("%s.%s.ops.fleet.cargo.%s", orgID, platform, fleetName)
 
 - [Vocabulary](04-vocabulary.md) - Designing your predicates
 - [First Processor](05-first-processor.md) - Building a complete processor
-- [Indexes](../graph/03-indexes.md) - How triples become indexed
-- [Testing Guide](../development/testing.md#testing-graphable-implementations) - Testing your Graphable implementations
+- [Index Reference](../advanced/05-index-reference.md) - How triples become indexed
+- [Testing Guide](../contributing/01-testing.md#testing-graphable-implementations) - Testing your Graphable implementations

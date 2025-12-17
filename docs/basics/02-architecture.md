@@ -24,6 +24,19 @@ SemStreams uses a component-based architecture. Components are self-describing u
 | Storage | ObjectStore | Persist data to NATS JetStream |
 | Gateway | HTTP, GraphQL, MCP | Expose APIs for queries and mutations |
 
+### GraphQL Access Patterns
+
+SemStreams provides two GraphQL approaches:
+
+| Pattern | Description | Use Case |
+|---------|-------------|----------|
+| **Generic** | Built-in executor returning `Entity` with triples | AI agents, MCP, exploration |
+| **Domain** | Generated type-safe resolvers via `domain-graphql-generator` | Production apps, third-party APIs |
+
+The generic executor works immediately with any domain—no configuration needed. For production applications requiring compile-time type safety, see [Domain-Specific GraphQL](../advanced/04-domain-graphql.md).
+
+> **Note:** GraphQL schemas (`.graphql` files for API types) are unrelated to Component Schemas (struct tags for config validation). See [domain-graphql-generator](../../cmd/domain-graphql-generator/README.md#schema-concepts) for details.
+
 ### Flow-Based Design
 
 Components connect through NATS subjects rather than direct calls:

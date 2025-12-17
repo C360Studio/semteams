@@ -215,5 +215,5 @@ Need LLM summaries? → LLM
 ## Next Steps
 
 - [Rules](../rules/01-overview.md) - Stateful rules engine
-- [Communities](../graph/04-communities.md) - How clustering works
+- [Community Detection](../concepts/04-community-detection.md) - How clustering works
 - [Advanced: LLM Enhancement](../advanced/02-llm-enhancement.md) - LLM details

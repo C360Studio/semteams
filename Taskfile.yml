@@ -502,7 +502,7 @@ tasks:
     desc: Generate component schemas and OpenAPI spec
     cmds:
       - mkdir -p schemas specs
-      - go run ./cmd/schema-exporter -out ./schemas -openapi ./specs/openapi.v3.yaml
+      - go run ./cmd/component-schema-exporter -out ./schemas -openapi ./specs/openapi.v3.yaml
       - echo "✅ Schemas and OpenAPI spec generated"
 
   schema:validate:

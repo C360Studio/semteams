@@ -47,12 +47,8 @@ func TestNewComponent_ValidConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, comp)
 
-	// Verify it implements Discoverable
-	discoverable, ok := comp.(component.Discoverable)
-	require.True(t, ok, "Component must implement Discoverable interface")
-
-	// Verify metadata
-	meta := discoverable.Meta()
+	// Verify metadata (NewComponent returns component.Discoverable)
+	meta := comp.Meta()
 	assert.Equal(t, "iot-sensor-processor", meta.Name)
 	assert.Equal(t, "processor", meta.Type)
 	assert.Contains(t, meta.Description, "sensor")

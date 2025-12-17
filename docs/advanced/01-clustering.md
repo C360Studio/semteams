@@ -425,7 +425,7 @@ Community detection exposes Prometheus metrics:
 
 - [LLM Enhancement](02-llm-enhancement.md) - LLM integration details
 - [Performance Tuning](03-performance.md) - Optimization strategies
-- [Communities Concept](../graph/04-communities.md) - Community overview
+- [Community Detection](../concepts/04-community-detection.md) - Community overview
 
 ### Background Concepts
 

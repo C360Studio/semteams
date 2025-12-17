@@ -393,5 +393,5 @@ Before deploying your processor:
 ## Next Steps
 
 - [Configuration](06-configuration.md) - Choose your capability level
-- [Indexes](../graph/03-indexes.md) - How triples become queryable
-- [Testing Guide](../development/testing.md#testing-graphable-implementations) - Test your Graphable implementations
+- [Index Reference](../advanced/05-index-reference.md) - How triples become queryable
+- [Testing Guide](../contributing/01-testing.md#testing-graphable-implementations) - Test your Graphable implementations

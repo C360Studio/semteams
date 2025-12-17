@@ -329,4 +329,4 @@ Migrate data before removing the old predicate.
 
 - [First Processor](05-first-processor.md) - Use your vocabulary in a processor
 - [Configuration](06-configuration.md) - How vocabulary affects capabilities
-- [Indexes](../graph/03-indexes.md) - How predicates become indexes
+- [Index Reference](../advanced/05-index-reference.md) - How predicates become indexes
