@@ -834,3 +834,336 @@ func convertCommunityToGraphQL(comm *clustering.Community) *Community {
 		SummaryStatus: comm.SummaryStatus,
 	}
 }
+
+// PathSearch performs bounded graph traversal from a starting entity (PathRAG)
+func (r *BaseResolver) PathSearch(ctx context.Context, startEntity string,
+	maxDepth, maxNodes int, direction string, edgeTypes []string,
+	decayFactor float64) (*PathSearchResult, error) {
+
+	var result *PathSearchResult
+	var err error
+
+	queryFn := func() error {
+		if r.queryManager == nil {
+			return wrapError(fmt.Errorf("PathSearch requires QueryManager backend"), "PathSearch")
+		}
+
+		// Build PathPattern from params
+		dir := querymanager.DirectionOutgoing
+		switch strings.ToUpper(direction) {
+		case "INCOMING":
+			dir = querymanager.DirectionIncoming
+		case "BOTH":
+			dir = querymanager.DirectionBoth
+		}
+
+		pattern := querymanager.PathPattern{
+			MaxDepth:    maxDepth,
+			MaxNodes:    maxNodes,
+			Direction:   dir,
+			EdgeTypes:   edgeTypes,
+			DecayFactor: decayFactor,
+			IncludeSelf: true,
+		}
+
+		// Execute path traversal
+		qmResult, qErr := r.queryManager.ExecutePath(ctx, startEntity, pattern)
+		if qErr != nil {
+			return qErr
+		}
+
+		// Convert to GraphQL types
+		result = convertPathResultToGraphQL(qmResult)
+		return nil
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "PathSearch", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "PathSearch")
+	}
+	return result, nil
+}
+
+// convertPathResultToGraphQL converts QueryManager result to GraphQL types
+func convertPathResultToGraphQL(qmResult *querymanager.QueryResult) *PathSearchResult {
+	if qmResult == nil {
+		return nil
+	}
+
+	// Convert entities
+	entities := make([]*PathEntity, len(qmResult.Entities))
+	for i, e := range qmResult.Entities {
+		eid, _ := message.ParseEntityID(e.ID)
+
+		// Build properties map from triples
+		properties := make(map[string]interface{})
+		for _, triple := range e.Triples {
+			if !triple.IsRelationship() {
+				properties[triple.Predicate] = triple.Object
+			}
+		}
+
+		entities[i] = &PathEntity{
+			ID:         e.ID,
+			Type:       eid.Type,
+			Properties: properties,
+		}
+	}
+
+	// Calculate scores from paths (score by shortest path distance with decay)
+	scores := make(map[string]float64)
+	for _, path := range qmResult.Paths {
+		for _, entityID := range path.Entities {
+			if _, exists := scores[entityID]; !exists {
+				scores[entityID] = path.Weight
+			}
+		}
+	}
+
+	// Apply scores to entities
+	for _, pe := range entities {
+		if score, ok := scores[pe.ID]; ok {
+			pe.Score = score
+		}
+	}
+
+	// Convert paths
+	paths := make([][]PathStep, len(qmResult.Paths))
+	for i, p := range qmResult.Paths {
+		steps := make([]PathStep, len(p.Edges))
+		for j, edge := range p.Edges {
+			steps[j] = PathStep{
+				From:      edge.From,
+				To:        edge.To,
+				Predicate: edge.EdgeType,
+			}
+		}
+		paths[i] = steps
+	}
+
+	return &PathSearchResult{
+		Entities:  entities,
+		Paths:     paths,
+		Truncated: qmResult.Truncated,
+	}
+}
+
+// CommunitiesByLevel retrieves all communities at a specific hierarchical level
+func (r *BaseResolver) CommunitiesByLevel(ctx context.Context, level int) ([]*Community, error) {
+	var communities []*Community
+	var err error
+
+	queryFn := func() error {
+		if r.queryManager == nil {
+			return wrapError(fmt.Errorf("CommunitiesByLevel requires QueryManager backend"), "CommunitiesByLevel")
+		}
+
+		comms, qErr := r.queryManager.GetCommunitiesByLevel(ctx, level)
+		if qErr != nil {
+			return qErr
+		}
+
+		communities = make([]*Community, len(comms))
+		for i, comm := range comms {
+			communities[i] = convertCommunityToGraphQL(comm)
+		}
+		return nil
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "CommunitiesByLevel", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "CommunitiesByLevel")
+	}
+	return communities, nil
+}
+
+// SpatialSearch finds entities within geographic bounds
+func (r *BaseResolver) SpatialSearch(ctx context.Context,
+	north, south, east, west float64, limit int) ([]*Entity, error) {
+
+	var entities []*Entity
+	var err error
+
+	queryFn := func() error {
+		if r.queryManager == nil {
+			return wrapError(fmt.Errorf("SpatialSearch requires QueryManager backend"), "SpatialSearch")
+		}
+
+		bounds := querymanager.SpatialBounds{
+			North: north,
+			South: south,
+			East:  east,
+			West:  west,
+		}
+
+		entityIDs, qErr := r.queryManager.QuerySpatial(ctx, bounds)
+		if qErr != nil {
+			return qErr
+		}
+
+		// Apply limit
+		if limit > 0 && len(entityIDs) > limit {
+			entityIDs = entityIDs[:limit]
+		}
+
+		// Load entities
+		entityStates, qErr := r.queryManager.GetEntities(ctx, entityIDs)
+		if qErr != nil {
+			return qErr
+		}
+
+		entities = convertEntityStatesToGraphQL(entityStates)
+		return nil
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "SpatialSearch", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "SpatialSearch")
+	}
+	return entities, nil
+}
+
+// TemporalSearch finds entities within a time range
+func (r *BaseResolver) TemporalSearch(ctx context.Context,
+	startTime, endTime time.Time, limit int) ([]*Entity, error) {
+
+	var entities []*Entity
+	var err error
+
+	queryFn := func() error {
+		if r.queryManager == nil {
+			return wrapError(fmt.Errorf("TemporalSearch requires QueryManager backend"), "TemporalSearch")
+		}
+
+		entityIDs, qErr := r.queryManager.QueryTemporal(ctx, startTime, endTime)
+		if qErr != nil {
+			return qErr
+		}
+
+		// Apply limit
+		if limit > 0 && len(entityIDs) > limit {
+			entityIDs = entityIDs[:limit]
+		}
+
+		// Load entities
+		entityStates, qErr := r.queryManager.GetEntities(ctx, entityIDs)
+		if qErr != nil {
+			return qErr
+		}
+
+		entities = convertEntityStatesToGraphQL(entityStates)
+		return nil
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "TemporalSearch", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "TemporalSearch")
+	}
+	return entities, nil
+}
+
+// GraphSnapshot retrieves a bounded spatial/temporal subgraph
+func (r *BaseResolver) GraphSnapshot(ctx context.Context,
+	north, south, east, west *float64,
+	startTime, endTime *time.Time,
+	entityTypes []string, maxEntities int) (*GraphSnapshot, error) {
+
+	var snapshot *GraphSnapshot
+	var err error
+
+	queryFn := func() error {
+		if r.queryManager == nil {
+			return wrapError(fmt.Errorf("GraphSnapshot requires QueryManager backend"), "GraphSnapshot")
+		}
+
+		// Build query bounds
+		bounds := querymanager.QueryBounds{
+			EntityTypes: entityTypes,
+			MaxEntities: maxEntities,
+		}
+
+		if north != nil && south != nil && east != nil && west != nil {
+			bounds.Spatial = &querymanager.SpatialBounds{
+				North: *north,
+				South: *south,
+				East:  *east,
+				West:  *west,
+			}
+		}
+
+		if startTime != nil && endTime != nil {
+			bounds.Temporal = &querymanager.TemporalBounds{
+				Start: *startTime,
+				End:   *endTime,
+			}
+		}
+
+		qmSnapshot, qErr := r.queryManager.GetGraphSnapshot(ctx, bounds)
+		if qErr != nil {
+			return qErr
+		}
+
+		// Convert to GraphQL types
+		snapshot = convertSnapshotToGraphQL(qmSnapshot)
+		return nil
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "GraphSnapshot", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "GraphSnapshot")
+	}
+	return snapshot, nil
+}
+
+// convertSnapshotToGraphQL converts QueryManager snapshot to GraphQL types
+func convertSnapshotToGraphQL(qmSnapshot *querymanager.GraphSnapshot) *GraphSnapshot {
+	if qmSnapshot == nil {
+		return nil
+	}
+
+	// Convert entities
+	entities := convertEntityStatesToGraphQL(qmSnapshot.Entities)
+
+	// Convert relationships
+	relationships := make([]SnapshotRelationship, len(qmSnapshot.Relationships))
+	for i, rel := range qmSnapshot.Relationships {
+		relationships[i] = SnapshotRelationship{
+			FromEntityID: rel.FromEntityID,
+			ToEntityID:   rel.ToEntityID,
+			EdgeType:     rel.EdgeType,
+		}
+	}
+
+	return &GraphSnapshot{
+		Entities:      entities,
+		Relationships: relationships,
+		Count:         qmSnapshot.Count,
+		Truncated:     qmSnapshot.Truncated,
+		Timestamp:     qmSnapshot.Timestamp,
+	}
+}

@@ -485,10 +485,13 @@ func TestOutgoingIndex_HandleDelete(t *testing.T) {
 				return
 			}
 
-			// Verify entity is no longer in index
-			_, err = index.GetOutgoing(ctx, tt.entityID)
-			if err == nil {
-				t.Error("GetOutgoing() should return error for deleted entity, got nil")
+			// Verify entity is no longer in index (should return empty slice, not error)
+			entries, err := index.GetOutgoing(ctx, tt.entityID)
+			if err != nil {
+				t.Errorf("GetOutgoing() should return empty slice for deleted entity, got error: %v", err)
+			}
+			if len(entries) != 0 {
+				t.Errorf("GetOutgoing() should return empty slice for deleted entity, got %d entries", len(entries))
 			}
 		})
 	}
@@ -580,7 +583,7 @@ func TestOutgoingIndex_GetOutgoing(t *testing.T) {
 			entityID:     "acme.telemetry.robotics.gcs1.drone.999",
 			setupTriples: nil, // Don't create entity
 			wantCount:    0,
-			wantErr:      true,
+			wantErr:      false, // Not found returns empty slice, not error
 		},
 		{
 			name:     "entity with no relationships (only properties)",
@@ -595,7 +598,7 @@ func TestOutgoingIndex_GetOutgoing(t *testing.T) {
 				},
 			},
 			wantCount: 0,
-			wantErr:   true, // Should return ErrNotFound since no relationships
+			wantErr:   false, // No relationships returns empty slice, not error
 		},
 	}
 
@@ -745,7 +748,7 @@ func TestOutgoingIndex_GetOutgoingByPredicate(t *testing.T) {
 			predicate:    "ops.fleet.member_of",
 			setupTriples: nil,
 			wantCount:    0,
-			wantErr:      true,
+			wantErr:      false, // Not found returns empty slice, not error
 		},
 	}
 

@@ -94,11 +94,13 @@ Pure Go implementation using lexical matching. Tokenizes text, computes term fre
 
 ### Neural (Tier 2 - Semantic)
 
-External HTTP service providing semantic embeddings. Sends text to a neural model (Ollama, OpenAI, etc.) which encodes semantic meaning into a dense vector.
+External HTTP service providing semantic embeddings. Sends text to a neural model which encodes semantic meaning into a dense vector.
+
+SemStreams provides **semembed** as a default embedding service for Tier 2 deployments. It exposes an OpenAI-compatible `/v1/embeddings` endpoint and supports models like `BAAI/bge-small-en-v1.5`. You can also use Ollama, OpenAI, or any compatible service.
 
 **Characteristics:**
 - Semantic understanding ("car" ≈ "automobile")
-- Requires external service
+- Requires external service (semembed provided)
 - Higher quality clustering
 - Automatic BM25 fallback if service unavailable
 
@@ -218,12 +220,46 @@ Structural analysis surfaces patterns you didn't explicitly model.
 
 ## ObjectStore Requirement
 
-ObjectStore is required for embeddings because text content lives there:
+ObjectStore is a separate component that stores text content for embedding generation:
 
-- **Telemetry-only flows**: ObjectStore not needed, no embeddings
+```text
+┌─────────────┐      store       ┌─────────────┐
+│  Processor  │─────────────────►│ ObjectStore │
+│             │                  │   (MinIO)   │
+└─────────────┘                  └──────┬──────┘
+       │                                │
+       │ publish                        │ fetch
+       ▼                                │
+┌─────────────┐                         │
+│    NATS     │                         │
+│  (events)   │                         │
+└──────┬──────┘                         │
+       │                                │
+       │ consume                        │
+       ▼                                │
+┌─────────────┐      retrieve    ┌──────┴──────┐
+│  Embedding  │◄─────────────────│ StorageRef  │
+│   Worker    │                  │ (in event)  │
+└──────┬──────┘                  └─────────────┘
+       │
+       │ store vector
+       ▼
+┌─────────────┐
+│  EMBEDDING  │
+│    INDEX    │
+└─────────────┘
+```
+
+**Flow:**
+1. Processor stores document content to ObjectStore, receives StorageRef
+2. Processor publishes event with StorageRef attached
+3. EmbeddingWorker consumes event, extracts StorageRef
+4. EmbeddingWorker fetches text content from ObjectStore using StorageRef
+5. EmbeddingWorker generates vector and stores in EMBEDDING_INDEX
+
+**Deployment implications:**
+- **Telemetry-only flows**: ObjectStore not needed, no embeddings generated
 - **Document flows**: ObjectStore required for ContentStorable pattern
-
-The processor calls ObjectStore to store content—it's not a separate component in the message flow.
 
 ## Common Issues
 
@@ -255,9 +291,9 @@ This is expected. Telemetry entities implement only `Graphable`—they have no t
 **Concepts (mental models):**
 - [Real-Time Inference](00-real-time-inference.md) - How tiers affect embeddings
 - [Knowledge Graphs](02-knowledge-graphs.md) - Triple patterns for explicit relationships
-- [Community Detection](04-community-detection.md) - How LPA uses virtual edges
-- [GraphRAG Pattern](05-graphrag-pattern.md) - Semantic search over communities
-- [Similarity Metrics](07-similarity-metrics.md) - Cosine similarity tuning
+- [Similarity Metrics](04-similarity-metrics.md) - Cosine similarity tuning
+- [Community Detection](05-community-detection.md) - How LPA uses virtual edges
+- [GraphRAG Pattern](07-graphrag-pattern.md) - Semantic search over communities
 
 **Basics (how to implement):**
 - [Implementing ContentStorable](../basics/05-content-storable.md) - Document entity pattern

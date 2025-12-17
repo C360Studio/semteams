@@ -201,6 +201,14 @@ Export or expose data:
 - **GraphQL**: Query API
 - **HTTP**: Webhooks, notifications
 
+### HTTP Request/Reply Gateway
+
+For services that need HTTP access to NATS, SemStreams provides an HTTP Request/Reply gateway that maps HTTP routes to NATS subjects. This enables REST-style access to any NATS service.
+
+See [Configuration Guide](../basics/06-configuration.md) for HTTP gateway setup.
+
+> **Note**: For knowledge graph queries, use the [GraphQL gateway](09-query-access.md) instead. The HTTP Request/Reply gateway is for generic NATS service integration, not graph queries.
+
 ## Eventual Consistency
 
 In event-driven systems, not everything updates simultaneously.

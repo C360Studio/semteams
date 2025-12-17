@@ -569,6 +569,9 @@ func (m *mockQueryManager) WarmCache(_ context.Context, _ []string) error {
 func (m *mockQueryManager) GetCacheStats() querymanager.CacheStats {
 	return querymanager.CacheStats{}
 }
+func (m *mockQueryManager) GlobalSearchWithOptions(_ context.Context, _ *querymanager.SearchOptions) (*querymanager.GlobalSearchResult, error) {
+	return nil, nil
+}
 
 // TestGetCommunity tests the GetCommunity resolver
 func TestGetCommunity(t *testing.T) {

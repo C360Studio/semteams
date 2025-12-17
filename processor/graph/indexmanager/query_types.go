@@ -30,6 +30,11 @@ type SemanticSearchOptions struct {
 
 	// Types filters results to specific entity types
 	Types []string `json:"types"`
+
+	// MinCoreFilter filters results to entities with k-core number >= this value.
+	// Set to 0 to disable k-core filtering (default).
+	// Higher values filter to more densely connected (central) entities.
+	MinCoreFilter int `json:"min_core_filter,omitempty"`
 }
 
 // SearchResults represents the results of a semantic search query

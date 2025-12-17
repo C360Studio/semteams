@@ -37,7 +37,7 @@ type Gateway struct {
 
 	// Components
 	resolver *gql.BaseResolver // Reuses GraphQL gateway's resolver
-	executor *Executor         // In-process GraphQL execution
+	executor *gql.Executor     // In-process GraphQL execution
 	server   *Server           // MCP server with SSE transport
 
 	// Lifecycle state
@@ -102,7 +102,7 @@ func NewMCPGateway(rawConfig json.RawMessage, deps component.Dependencies) (comp
 	}
 
 	// Create in-process GraphQL executor
-	executor, err := NewExecutor(resolver, logger)
+	executor, err := gql.NewExecutor(resolver, logger)
 	if err != nil {
 		return nil, errs.WrapFatal(err, "MCPGateway", "NewMCPGateway", "create executor")
 	}

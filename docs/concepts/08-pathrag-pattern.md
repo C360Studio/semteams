@@ -119,7 +119,7 @@ This dramatically reduces traversal time in graphs with many relationship types.
 
 ## API and Response
 
-PathRAG is accessible via REST API. Queries return a structured response containing:
+PathRAG is accessible via the MCP (Model Context Protocol) gateway using GraphQL queries. Queries return a structured response containing:
 
 | Field | Description |
 |-------|-------------|
@@ -219,9 +219,10 @@ These indexes maintain entity-to-entity relationships for efficient traversal. T
 
 **Concepts**
 - [Real-Time Inference](00-real-time-inference.md) - PathRAG works at Tier 0 (no ML required)
-- [GraphRAG Pattern](05-graphrag-pattern.md) - Semantic search alternative for topic-based queries
+- [GraphRAG Pattern](07-graphrag-pattern.md) - Semantic search alternative for topic-based queries
 - [Knowledge Graphs](02-knowledge-graphs.md) - How triples create the relationships PathRAG traverses
-- [Community Detection](04-community-detection.md) - How communities differ from structural paths
+- [Community Detection](05-community-detection.md) - How communities differ from structural paths
+- [Structural Inference](06-structural-analysis.md) - Background topology analysis (separate Tier 0 feature)
 
 **Configuration**
 - [Configuration Guide](../basics/06-configuration.md) - Index and traversal settings

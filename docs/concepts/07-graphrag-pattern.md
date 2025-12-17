@@ -118,7 +118,7 @@ Statistical summaries are fast and deterministic. LLM summaries add natural lang
 
 ### Enable GraphRAG
 
-GraphRAG requires clustering to be enabled. Configure detection interval and entity change threshold to control how often communities are recomputed. See [Community Detection](04-community-detection.md) for clustering configuration details.
+GraphRAG requires clustering to be enabled. Configure detection interval and entity change threshold to control how often communities are recomputed. See [Community Detection](05-community-detection.md) for clustering configuration details.
 
 ### Search Parameters
 
@@ -133,13 +133,23 @@ GraphRAG requires clustering to be enabled. Configure detection interval and ent
 
 For LLM-enhanced summaries and natural language answers, configure an LLM provider (HTTP endpoint or local model). See [LLM Enhancement](../advanced/02-llm-enhancement.md) for configuration details.
 
-## Query Capabilities
+## API and Response
 
-GraphRAG exposes two main query patterns:
+GraphRAG is accessible via the MCP (Model Context Protocol) gateway using GraphQL queries. Two query patterns are available:
 
 **Natural Language Q&A** — Submit a question in plain English. The system finds relevant communities, assembles context, and returns an LLM-generated answer with source attribution.
 
 **Community Search** — Search for communities by topic or keywords. Returns matching community summaries and their key entities without LLM synthesis.
+
+### Response Fields
+
+| Field | Description |
+|-------|-------------|
+| `answer` | LLM-generated response (Q&A mode only) |
+| `communities` | List of matched communities with summaries |
+| `entities` | Key entities from matched communities |
+| `relationships` | Connections between returned entities |
+| `sources` | Attribution linking answer to specific communities/entities |
 
 ## How Context Flows to the LLM
 
@@ -211,8 +221,8 @@ The LLM receives organized context—summaries, key entities, relationships—ra
 
 **Concepts**
 - [Real-Time Inference](00-real-time-inference.md) - How GraphRAG fits in the hybrid streaming model
-- [PathRAG Pattern](06-pathrag-pattern.md) - Structural traversal alternative for impact analysis
-- [Community Detection](04-community-detection.md) - How communities form via LPA
+- [Community Detection](05-community-detection.md) - How communities form via LPA
+- [PathRAG Pattern](08-pathrag-pattern.md) - Structural traversal alternative for impact analysis
 - [Embeddings](03-embeddings.md) - Semantic matching that enables community search
 
 **Configuration**

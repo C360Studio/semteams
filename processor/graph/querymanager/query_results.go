@@ -7,15 +7,24 @@ import (
 	gtypes "github.com/c360/semstreams/graph"
 )
 
+// Truncation reason constants for QueryResult.TruncationReason
+const (
+	TruncationReasonTimeout   = "timeout"   // Context deadline exceeded
+	TruncationReasonCancelled = "cancelled" // Context was cancelled
+	TruncationReasonMaxNodes  = "max_nodes" // MaxNodes limit reached
+)
+
 // QueryResult represents the result of a complex query
 type QueryResult struct {
-	Entities   []*gtypes.EntityState `json:"entities"`
-	Paths      []GraphPath           `json:"paths"`
-	Count      int                   `json:"count"`
-	Duration   time.Duration         `json:"duration"`
-	Cached     bool                  `json:"cached"`
-	CacheLayer string                `json:"cache_layer,omitempty"`
-	Error      error                 `json:"error,omitempty"`
+	Entities         []*gtypes.EntityState `json:"entities"`
+	Paths            []GraphPath           `json:"paths"`
+	Count            int                   `json:"count"`
+	Duration         time.Duration         `json:"duration"`
+	Cached           bool                  `json:"cached"`
+	CacheLayer       string                `json:"cache_layer,omitempty"`
+	Error            error                 `json:"error,omitempty"`
+	Truncated        bool                  `json:"truncated,omitempty"`
+	TruncationReason string                `json:"truncation_reason,omitempty"` // "timeout", "max_nodes", "cancelled"
 }
 
 // GraphSnapshot represents a snapshot of entities within bounds

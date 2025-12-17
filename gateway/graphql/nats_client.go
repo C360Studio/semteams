@@ -95,6 +95,44 @@ type CommunitySummary struct {
 	Relevance   float64  `json:"relevance"`
 }
 
+// PathSearchResult represents the result of a path traversal query (PathRAG)
+type PathSearchResult struct {
+	Entities  []*PathEntity `json:"entities"`
+	Paths     [][]PathStep  `json:"paths"`
+	Truncated bool          `json:"truncated"`
+}
+
+// PathEntity represents an entity discovered during path traversal
+type PathEntity struct {
+	ID         string                 `json:"id"`
+	Type       string                 `json:"type"`
+	Score      float64                `json:"score"`
+	Properties map[string]interface{} `json:"properties,omitempty"`
+}
+
+// PathStep represents a single edge in a traversal path
+type PathStep struct {
+	From      string `json:"from"`
+	To        string `json:"to"`
+	Predicate string `json:"predicate"`
+}
+
+// GraphSnapshot represents a bounded spatial/temporal subgraph
+type GraphSnapshot struct {
+	Entities      []*Entity              `json:"entities"`
+	Relationships []SnapshotRelationship `json:"relationships"`
+	Count         int                    `json:"count"`
+	Truncated     bool                   `json:"truncated"`
+	Timestamp     time.Time              `json:"timestamp"`
+}
+
+// SnapshotRelationship represents a relationship within a graph snapshot
+type SnapshotRelationship struct {
+	FromEntityID string `json:"from_entity_id"`
+	ToEntityID   string `json:"to_entity_id"`
+	EdgeType     string `json:"edge_type"`
+}
+
 // QueryEntityByID queries a single entity by ID via NATS
 func (nc *NATSClient) QueryEntityByID(ctx context.Context, id string) (*Entity, error) {
 	// Create request

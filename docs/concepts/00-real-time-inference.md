@@ -104,13 +104,37 @@ All tiers include rules and clustering. The difference is how virtual edges form
 
 ### Tier 0: Structural
 
-Embeddings disabled. All entities cluster based on explicit relationships from triples.
+Build and enrich graphs using structure alone—no embeddings required.
 
-- Communities form from graph structure only
-- Entities connect via triples like `sensor-001 located_in zone-A`
-- Summaries from entity types and predicate names
+Tier 0 provides three complementary capabilities for graph construction:
 
-**Use case:** Any deployment where explicit relationships are sufficient—telemetry, network topology, highly structured domains.
+| Capability | Description | Timing |
+|------------|-------------|--------|
+| **Explicit Triples** | Relationships from source data (SPO format) | Sync, per-event |
+| **Rules Engine** | Pattern-based inference (IF A→B AND B→C THEN A→C) | Sync, per-event |
+| **Structural Inference** | Topology analysis suggests missing relationships | Async, after clustering |
+
+#### Explicit Triples
+
+Entities connect via triples like `sensor-001 located_in zone-A`. Communities form from graph structure only. Summaries derive from entity types and predicate names.
+
+#### Rules Engine
+
+Evaluates patterns on entity changes. Can create new triples, fire alerts, or update state. Deterministic, no external dependencies.
+
+#### Structural Inference
+
+Analyzes graph topology to detect potential missing relationships:
+
+- **K-core decomposition**: Identifies graph backbone vs periphery
+- **Pivot-based distances**: Estimates structural distance between entities
+- **Anomaly detection**: Finds gaps (e.g., semantically similar but structurally distant)
+
+Detected anomalies are queued for review. Approved suggestions become new triples in the graph.
+
+See [Structural Inference](06-structural-analysis.md) for details.
+
+**Use case:** Any deployment where explicit relationships are sufficient—telemetry, network topology, highly structured domains. Structural inference adds value when you want the system to suggest missing connections.
 
 ### Tier 1: Statistical
 
@@ -214,6 +238,8 @@ Rules provide real-time responsiveness. Embeddings enable similarity. Clustering
 ## Related
 
 - [Event-Driven Basics](01-event-driven-basics.md) - How events flow through the system
-- [Community Detection](04-community-detection.md) - How clustering works
-- [GraphRAG Pattern](05-graphrag-pattern.md) - How communities enable RAG
-- [PathRAG Pattern](06-pathrag-pattern.md) - Structural traversal (Tier 0)
+- [Similarity Metrics](04-similarity-metrics.md) - Cosine, Jaccard, TF-IDF fundamentals
+- [Community Detection](05-community-detection.md) - How clustering works
+- [Structural Inference](06-structural-analysis.md) - Tier 0 topology analysis and anomaly detection
+- [GraphRAG Pattern](07-graphrag-pattern.md) - How communities enable RAG
+- [PathRAG Pattern](08-pathrag-pattern.md) - Structural traversal queries

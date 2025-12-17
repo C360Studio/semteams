@@ -4,6 +4,7 @@ package indexmanager
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	stderrors "errors"
 	"fmt"
 	"log/slog"
@@ -62,6 +63,9 @@ type Manager struct {
 	metadataCache    cache.Cache[*EntityMetadata] // TTL cache: entityID -> metadata
 	embeddingStorage *embedding.Storage           // Persistent KV storage for embeddings
 	embeddingWorker  *embedding.Worker            // Async worker for embedding generation
+
+	// Structural index components (optional - nil when disabled)
+	structuralIndices *StructuralIndexHolder // Cached k-core and pivot indices
 
 	// Event processing
 	eventChan chan EntityChange
@@ -195,29 +199,30 @@ func NewManager(
 	}
 
 	engine := &Manager{
-		config:          config,
-		natsClient:      natsClient,
-		entityBucket:    entityBucket,
-		predicateBucket: buckets[config.Buckets.Predicate],
-		incomingBucket:  buckets[config.Buckets.Incoming],
-		aliasBucket:     buckets[config.Buckets.Alias],
-		spatialBucket:   buckets[config.Buckets.Spatial],
-		temporalBucket:  buckets[config.Buckets.Temporal],
-		watcher:         watcher,
-		eventBuffer:     eventBuffer,
-		workers:         workers,
-		eventChan:       eventChan,
-		batchChan:       batchChan,
-		predicateCache:  predicateCache,
-		spatialCache:    spatialCache,
-		temporalCache:   temporalCache,
-		incomingCache:   incomingCache,
-		aliasCache:      aliasCache,
-		metrics:         metrics,
-		promMetrics:     promMetrics,
-		metricsRegistry: metricsRegistry,
-		indexes:         make(map[string]Index),
-		logger:          logger,
+		config:            config,
+		natsClient:        natsClient,
+		entityBucket:      entityBucket,
+		predicateBucket:   buckets[config.Buckets.Predicate],
+		incomingBucket:    buckets[config.Buckets.Incoming],
+		aliasBucket:       buckets[config.Buckets.Alias],
+		spatialBucket:     buckets[config.Buckets.Spatial],
+		temporalBucket:    buckets[config.Buckets.Temporal],
+		watcher:           watcher,
+		eventBuffer:       eventBuffer,
+		workers:           workers,
+		eventChan:         eventChan,
+		batchChan:         batchChan,
+		predicateCache:    predicateCache,
+		spatialCache:      spatialCache,
+		temporalCache:     temporalCache,
+		incomingCache:     incomingCache,
+		aliasCache:        aliasCache,
+		metrics:           metrics,
+		promMetrics:       promMetrics,
+		metricsRegistry:   metricsRegistry,
+		indexes:           make(map[string]Index),
+		structuralIndices: NewStructuralIndexHolder(),
+		logger:            logger,
 	}
 
 	// Initialize enabled indexes
@@ -1527,8 +1532,22 @@ func (m *Manager) GetIncomingRelationships(ctx context.Context, targetEntityID s
 
 	entry, err := m.incomingBucket.Get(queryCtx, targetEntityID)
 	if err != nil {
+		if errors.Is(err, jetstream.ErrKeyNotFound) {
+			// Entity not in index = no incoming relationships (not an error)
+			m.metrics.RecordQuery(false)
+			return []Relationship{}, nil
+		}
+		// Actual error - propagate it
 		m.metrics.RecordQuery(false)
-		return []Relationship{}, nil // No incoming relationships
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("incoming").Inc()
+		}
+		return nil, errs.WrapTransient(
+			err,
+			"IndexManager",
+			"GetIncomingRelationships",
+			fmt.Sprintf("failed to query incoming relationships for: %s", targetEntityID),
+		)
 	}
 
 	var incomingIDs []string
@@ -1563,6 +1582,68 @@ func (m *Manager) GetIncomingRelationships(ctx context.Context, targetEntityID s
 	if m.incomingCache != nil {
 		m.incomingCache.Set(targetEntityID, relationships)
 	}
+	return relationships, nil
+}
+
+// GetOutgoingRelationships returns outgoing relationships from an entity using OUTGOING_INDEX.
+// This provides efficient forward edge traversal without loading full entity state.
+func (m *Manager) GetOutgoingRelationships(ctx context.Context, entityID string) ([]OutgoingRelationship, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("outgoing").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("outgoing").Inc()
+		}
+	}()
+
+	// Get the outgoing index from the indexes map
+	outgoingIndex, exists := m.indexes["outgoing"]
+	if !exists {
+		// Outgoing index not configured, return empty
+		return []OutgoingRelationship{}, nil
+	}
+
+	outIdx, ok := outgoingIndex.(*OutgoingIndex)
+	if !ok {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("outgoing").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			ErrIndexDisabled,
+			"IndexManager",
+			"GetOutgoingRelationships",
+			"outgoing index is not of expected type",
+		)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	entries, err := outIdx.GetOutgoing(queryCtx, entityID)
+	if err != nil {
+		m.metrics.RecordQuery(false)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("outgoing").Inc()
+		}
+		return nil, errs.WrapTransient(
+			err,
+			"IndexManager",
+			"GetOutgoingRelationships",
+			fmt.Sprintf("failed to query outgoing relationships for: %s", entityID),
+		)
+	}
+
+	// Convert OutgoingEntry to OutgoingRelationship
+	relationships := make([]OutgoingRelationship, len(entries))
+	for i, entry := range entries {
+		relationships[i] = OutgoingRelationship{
+			ToEntityID: entry.ToEntityID,
+			EdgeType:   entry.Predicate,
+		}
+	}
+
+	m.metrics.RecordQuery(false)
 	return relationships, nil
 }
 

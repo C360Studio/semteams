@@ -13,8 +13,8 @@ Background knowledge for understanding SemStreams' algorithms and architecture.
 **Coming from Go/streaming?** You know NATS and event-driven systems. Start with:
 
 - [Embeddings](03-embeddings.md) - What vectors are, why they enable semantic similarity
-- [GraphRAG Pattern](05-graphrag-pattern.md) - Community-based retrieval for LLM context
-- [Community Detection](04-community-detection.md) - How LPA clusters entities
+- [Similarity Metrics](04-similarity-metrics.md) - Cosine, Jaccard, TF-IDF with practical guidance
+- [GraphRAG Pattern](07-graphrag-pattern.md) - Community-based retrieval for LLM context
 
 **Coming from ML/LLM?** You know models and vectors. Start with:
 
@@ -23,44 +23,51 @@ Background knowledge for understanding SemStreams' algorithms and architecture.
 
 **Want to tune the system?** Read:
 
-- [Similarity Metrics](07-similarity-metrics.md) - Cosine, Jaccard, TF-IDF with practical guidance
-- [Community Detection](04-community-detection.md) - LPA parameters and failure modes
+- [Similarity Metrics](04-similarity-metrics.md) - Cosine, Jaccard, TF-IDF with practical guidance
+- [Community Detection](05-community-detection.md) - LPA parameters and failure modes
 
 ## Concept Map
 
 ```text
 Events arrive continuously ◄── 00-real-time-inference.md
         │
-        ├─────────────────────────────┐
-        │                             │
-        ▼                             ▼
-┌───────────────┐            ┌────────────────┐
-│ Rules Engine  │            │ Knowledge Graph │◄── 02-knowledge-graphs.md
-│ (sync/event)  │            │  (Triples/SPO)  │
-└───────────────┘            └────────┬───────┘
-        │                             │
-        │                        ┌────┴────┐
-        │                        ▼         ▼
-        │                    Explicit   Virtual     ◄── 03-embeddings.md
-        │                     Edges      Edges
-        │                   (triples) (similarity)
-        │                        │         │
-        │                        └────┬────┘
-        │                             ▼
-        │                    ┌─────────────────┐
-        └───────────────────►│   Communities    │◄── 04-community-detection.md
-                             │   (LPA clusters) │
-                             └────────┬────────┘
-                                      │
-                                 ┌────┴────┐
-                                 ▼         ▼
-                              GraphRAG   PathRAG    ◄── 05/06-*rag-pattern.md
-                             (semantic) (structural)
-                                 │         │
-                                 └────┬────┘
-                                      ▼
-                                LLM-enhanced
-                                  answers
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│                    TIER 0: STRUCTURAL                    │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────┐  │
+│  │  Explicit   │  │   Rules     │  │   Structural    │  │◄── 06-structural-analysis.md
+│  │  Triples    │  │   Engine    │  │   Inference     │  │
+│  │  (SPO)      │  │  (patterns) │  │ (k-core, pivot) │  │
+│  └──────┬──────┘  └──────┬──────┘  └────────┬────────┘  │
+│         │                │                   │           │
+│         └────────────────┼───────────────────┘           │
+│                          ▼                               │
+│                   Knowledge Graph ◄── 02-knowledge-graphs.md
+└─────────────────────────────────────────────────────────┘
+                           │
+        ┌──────────────────┼──────────────────┐
+        │                  │                  │
+        ▼                  ▼                  ▼
+   TIER 1: BM25      TIER 2: Neural    (stays at Tier 0)
+   Virtual Edges     Virtual Edges
+        │                  │
+        └────────┬─────────┘
+                 ▼
+        ┌─────────────────┐
+        │   Communities   │◄── 05-community-detection.md
+        │  (LPA clusters) │
+        └────────┬────────┘
+                 │
+     ┌───────────┴───────────┐
+     │                       │
+     ▼                       ▼
+  GraphRAG               PathRAG     ◄── Query Patterns
+ (semantic)            (structural)       07/08
+     │                       │
+     └───────────┬───────────┘
+                 ▼
+           LLM-enhanced
+             answers
 ```
 
 ## All Concepts
@@ -71,10 +78,12 @@ Events arrive continuously ◄── 00-real-time-inference.md
 | [01-event-driven-basics](01-event-driven-basics.md) | Pub/sub, NATS, streams, eventual consistency | ML/LLM devs |
 | [02-knowledge-graphs](02-knowledge-graphs.md) | Triples, SPO model, semantic vs property graphs | Both |
 | [03-embeddings](03-embeddings.md) | Vectors, similarity, virtual edges | Go devs |
-| [04-community-detection](04-community-detection.md) | LPA algorithm, tuning, hierarchical levels | Both |
-| [05-graphrag-pattern](05-graphrag-pattern.md) | Community-based RAG, local/global search | Go devs |
-| [06-pathrag-pattern](06-pathrag-pattern.md) | Bounded traversal, decay, resource limits | Both |
-| [07-similarity-metrics](07-similarity-metrics.md) | Cosine, Jaccard, TF-IDF tuning | Go devs |
+| [04-similarity-metrics](04-similarity-metrics.md) | Cosine, Jaccard, TF-IDF tuning | Go devs |
+| [05-community-detection](05-community-detection.md) | LPA algorithm, tuning, hierarchical levels | Both |
+| [06-structural-analysis](06-structural-analysis.md) | Structural inference (Tier 0): k-core, pivot, anomaly detection | Both |
+| [07-graphrag-pattern](07-graphrag-pattern.md) | Community-based RAG, local/global search | Go devs |
+| [08-pathrag-pattern](08-pathrag-pattern.md) | Bounded traversal, decay, resource limits | Both |
+| [09-query-access](09-query-access.md) | GraphQL HTTP, MCP gateway, query operations | Both |
 
 ## Related Documentation
 

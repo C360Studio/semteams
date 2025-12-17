@@ -39,6 +39,12 @@ type Indexer interface {
 	// Simple index Gets (single KV lookup operations)
 	GetPredicateIndex(ctx context.Context, predicate string) ([]string, error)
 	GetIncomingRelationships(ctx context.Context, targetEntityID string) ([]Relationship, error)
+	// GetOutgoingRelationships returns outgoing relationships from an entity using OUTGOING_INDEX.
+	// This provides O(1) lookup for forward edge traversal without loading full entity state.
+	// Used by PathRAG traversal, relationship listing APIs, and dependency analysis.
+	// Returns empty slice if entity has no outgoing relationships or is not in the index.
+	// Returns error only on actual failures (not-found is not an error).
+	GetOutgoingRelationships(ctx context.Context, entityID string) ([]OutgoingRelationship, error)
 	ResolveAlias(ctx context.Context, alias string) (string, error)
 
 	// Complex queries (multiple KV lookups)
@@ -66,6 +72,56 @@ type Indexer interface {
 	// GetEmbeddingCount returns the number of entities with embeddings in the vector cache.
 	// Used by the clustering system to check embedding coverage before running LPA with semantic edges.
 	GetEmbeddingCount() int
+
+	// Structural index operations (requires structural index configuration)
+	// GetKCoreIndex returns the current k-core index for filtering queries.
+	// Returns nil if structural indexing is disabled or not yet computed.
+	GetKCoreIndex() KCoreIndex
+
+	// GetPivotIndex returns the current pivot index for distance estimation.
+	// Returns nil if structural indexing is disabled or not yet computed.
+	GetPivotIndex() PivotIndex
+
+	// FilterByKCore filters entity IDs to only include those with core number >= minCore.
+	// Returns the input slice unchanged if k-core index is not available.
+	FilterByKCore(entityIDs []string, minCore int) []string
+
+	// PruneByPivotDistance filters candidates to those potentially reachable from source within maxHops.
+	// Uses triangle inequality bounds - may include some unreachable entities (false positives ok).
+	// Returns the input slice unchanged if pivot index is not available.
+	PruneByPivotDistance(source string, candidates []string, maxHops int) []string
+}
+
+// KCoreIndex provides k-core decomposition data for query filtering.
+// This interface abstracts the structural index to avoid import cycles.
+type KCoreIndex interface {
+	// GetCore returns the core number for an entity (0 if not found).
+	GetCore(entityID string) int
+
+	// FilterByMinCore returns only entities with core >= minCore.
+	FilterByMinCore(entityIDs []string, minCore int) []string
+
+	// GetEntitiesInCore returns all entities with exactly the given core number.
+	GetEntitiesInCore(core int) []string
+
+	// GetEntitiesAboveCore returns all entities with core >= minCore.
+	GetEntitiesAboveCore(minCore int) []string
+}
+
+// PivotIndex provides pivot-based distance estimation for path pruning.
+// This interface abstracts the structural index to avoid import cycles.
+type PivotIndex interface {
+	// EstimateDistance returns lower and upper bounds for shortest path distance.
+	// Returns (MaxHopDistance, MaxHopDistance) if entities are disconnected or unknown.
+	EstimateDistance(entityA, entityB string) (lower, upper int)
+
+	// IsWithinHops returns true if entities might be within maxHops of each other.
+	// Uses lower bound - if lower > maxHops, definitely not within range.
+	IsWithinHops(entityA, entityB string, maxHops int) bool
+
+	// GetReachableCandidates returns entities potentially within maxHops of source.
+	// May include false positives but no false negatives.
+	GetReachableCandidates(source string, maxHops int) []string
 }
 
 // Bounds represents spatial query bounds
@@ -83,6 +139,13 @@ type Relationship struct {
 	Weight       float64                `json:"weight"`
 	Properties   map[string]interface{} `json:"properties"`
 	CreatedAt    time.Time              `json:"created_at"`
+}
+
+// OutgoingRelationship represents an outgoing relationship from an entity.
+// Used by GetOutgoingRelationships to return forward edges in the graph.
+type OutgoingRelationship struct {
+	ToEntityID string `json:"to_entity_id"`
+	EdgeType   string `json:"edge_type"` // Predicate/relationship type
 }
 
 // DeduplicationStats provides metrics on event deduplication

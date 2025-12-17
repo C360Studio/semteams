@@ -28,9 +28,11 @@ import (
 	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
+	"github.com/c360/semstreams/processor/graph/inference"
 	"github.com/c360/semstreams/processor/graph/llm"
 	"github.com/c360/semstreams/processor/graph/messagemanager"
 	"github.com/c360/semstreams/processor/graph/querymanager"
+	"github.com/c360/semstreams/processor/graph/structuralindex"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -38,11 +40,11 @@ import (
 
 // Clustering configuration defaults
 const (
-	DefaultMaxIterations        = 100
-	DefaultClusteringLevels     = 3
-	DefaultEnhancementWorkers   = 3
-	DefaultSimilarityThreshold  = 0.6
-	DefaultMaxVirtualNeighbors  = 5
+	DefaultMaxIterations         = 100
+	DefaultClusteringLevels      = 3
+	DefaultEnhancementWorkers    = 3
+	DefaultSimilarityThreshold   = 0.6
+	DefaultMaxVirtualNeighbors   = 5
 	DefaultEntityChangeThreshold = 100
 )
 
@@ -111,11 +113,23 @@ type Processor struct {
 	detectionTrigger  chan struct{} // Signal to trigger detection from entity callback
 
 	// Enhancement window state - prevents re-detection from overwriting LLM-enhanced communities
-	enhancementDeadline time.Time            // When the enhancement window expires
+	enhancementDeadline time.Time             // When the enhancement window expires
 	enhancementMode     EnhancementWindowMode // Mode for enhancement window behavior
 
 	// Inference metrics
 	inferredTriples prometheus.Counter
+
+	// Structural index components (optional, initialized if config.Clustering.StructuralIndex.Enabled)
+	structuralMu       sync.RWMutex                       // Protects structuralIndices and previousKCore
+	structuralIndices  *structuralindex.StructuralIndices // Current k-core and pivot indices
+	previousKCore      *structuralindex.KCoreIndex        // Previous k-core for demotion detection
+	structuralComputer *structuralIndexComputer           // Helper for computing indices
+	graphProvider      clustering.GraphProvider           // Cached graph provider for structural computation
+
+	// Anomaly detection components (optional, initialized if config.Clustering.AnomalyDetection.Enabled)
+	inferenceOrchestrator *inference.Orchestrator
+	anomalyStorage        inference.Storage
+	reviewWorker          *inference.ReviewWorker
 }
 
 // Config holds processor configuration
@@ -170,6 +184,64 @@ type ClusteringConfig struct {
 
 	// Inference configures relationship inference from community detection
 	Inference InferenceConfig `json:"inference,omitempty"`
+
+	// StructuralIndex configures structural graph indices (k-core, pivot distance)
+	// These indices enable query-time filtering and pruning for improved performance
+	StructuralIndex StructuralIndexConfig `json:"structural_index,omitempty"`
+
+	// AnomalyDetection configures structural anomaly detection (Phase 3 inference)
+	// Detects semantic-structural gaps, core isolation, and transitivity gaps
+	AnomalyDetection *inference.Config `json:"anomaly_detection,omitempty"`
+}
+
+// StructuralIndexConfig configures structural graph indexing for query optimization
+type StructuralIndexConfig struct {
+	// Enabled controls whether structural indices are computed
+	Enabled bool `json:"enabled" schema:"type:bool,description:Enable structural indexing,default:false"`
+
+	// KCore configures k-core decomposition filtering
+	KCore KCoreConfig `json:"kcore,omitempty"`
+
+	// Pivot configures pivot-based distance indexing
+	Pivot PivotConfig `json:"pivot,omitempty"`
+
+	// ComputeInterval is how often to recompute structural indices
+	// Default: 1h (indices change slowly as graph structure evolves)
+	ComputeInterval string `json:"compute_interval" schema:"type:string,description:Interval between index recomputation,default:1h"`
+
+	// ComputeOnStartup triggers index computation when processor starts
+	// Default: true
+	ComputeOnStartup bool `json:"compute_on_startup" schema:"type:bool,description:Compute indices on startup,default:true"`
+}
+
+// KCoreConfig configures k-core decomposition for query filtering
+type KCoreConfig struct {
+	// Enabled activates k-core filtering in semantic search
+	// When true, entities with low core numbers (peripheral nodes) can be filtered out
+	Enabled bool `json:"enabled" schema:"type:bool,description:Enable k-core filtering,default:false"`
+
+	// MinCoreFilter is the minimum core number for entities in search results
+	// Entities with core < MinCoreFilter are excluded from semantic search results
+	// Set to 0 to disable filtering (include all entities)
+	// Default: 0 (no filtering)
+	MinCoreFilter int `json:"min_core_filter" schema:"type:int,description:Minimum core number for search results,default:0"`
+}
+
+// PivotConfig configures pivot-based distance indexing for path queries
+type PivotConfig struct {
+	// Enabled activates pivot-based distance pruning in path traversal
+	// When true, unreachable candidates are pruned early using distance bounds
+	Enabled bool `json:"enabled" schema:"type:bool,description:Enable pivot distance pruning,default:false"`
+
+	// PivotCount is the number of pivot nodes to select for distance computation
+	// More pivots = tighter bounds but higher computation cost
+	// Default: 16
+	PivotCount int `json:"pivot_count" schema:"type:int,description:Number of pivot nodes,default:16"`
+
+	// MaxHopDistance is the maximum hop distance for path queries
+	// Candidates beyond this distance are pruned
+	// Default: 10
+	MaxHopDistance int `json:"max_hop_distance" schema:"type:int,description:Maximum hop distance for pruning,default:10"`
 }
 
 // SemanticEdgesConfig configures virtual edge creation from embedding similarity
@@ -761,6 +833,13 @@ func (p *Processor) startBackgroundModules(ctx context.Context) error {
 					return p.runEnhancementWorker(gctx)
 				})
 			}
+
+			// Launch review worker if configured
+			if p.reviewWorker != nil {
+				g.Go(func() error {
+					return p.runReviewWorker(gctx)
+				})
+			}
 		}
 
 		// Wait for modules to complete or error
@@ -981,6 +1060,7 @@ func (p *Processor) createIndexBuckets(ctx context.Context, entityBucket jetstre
 		{"EMBEDDING_INDEX", "Vector embeddings with metadata and status"},
 		{"EMBEDDING_DEDUP", "Content-addressed embedding deduplication"},
 		{"COMMUNITY_INDEX", "Graph community detection and clustering"},
+		{"ANOMALY_INDEX", "Structural anomaly detection results"},
 	}
 
 	for _, cfg := range indexBucketConfigs {
@@ -1587,6 +1667,23 @@ func (p *Processor) initializeClusteringIfEnabled(ctx context.Context, buckets m
 	p.communityDetector = p.createCommunityDetector(graphProvider, cfg)
 	p.initializeInferenceMetrics()
 
+	// Cache graph provider for structural index computation
+	p.graphProvider = graphProvider
+
+	// Initialize structural index computer if enabled
+	if cfg.StructuralIndex.Enabled {
+		p.structuralComputer = newStructuralIndexComputer(graphProvider, cfg.StructuralIndex, p.logger)
+		p.logger.Info("Structural index computation enabled",
+			"kcore_enabled", cfg.StructuralIndex.KCore.Enabled,
+			"pivot_enabled", cfg.StructuralIndex.Pivot.Enabled,
+			"pivot_count", cfg.StructuralIndex.Pivot.PivotCount)
+	}
+
+	// Initialize anomaly detection if enabled
+	if err := p.initializeAnomalyDetectionIfEnabled(ctx, buckets); err != nil {
+		return err
+	}
+
 	if err := p.setupEnhancementWorker(ctx, cfg, communityBucket, graphProvider); err != nil {
 		return err
 	}
@@ -1697,6 +1794,218 @@ func (p *Processor) initializeInferenceMetrics() {
 		Help: "Total inferred relationship triples from community detection",
 	})
 	p.metricsRegistry.RegisterCounter("graph", "semstreams_graph_inferred_triples_total", p.inferredTriples)
+}
+
+// initializeAnomalyDetectionIfEnabled sets up anomaly detection components if enabled.
+func (p *Processor) initializeAnomalyDetectionIfEnabled(ctx context.Context, buckets map[string]jetstream.KeyValue) error {
+	cfg := p.config.Clustering
+	if cfg == nil || cfg.AnomalyDetection == nil || !cfg.AnomalyDetection.Enabled {
+		return nil
+	}
+
+	p.logger.Info("Initializing anomaly detection")
+
+	// Get ANOMALY_INDEX bucket
+	anomalyBucket, ok := buckets["ANOMALY_INDEX"]
+	if !ok {
+		return errs.WrapFatal(errs.ErrMissingConfig, "Processor",
+			"initializeAnomalyDetectionIfEnabled", "ANOMALY_INDEX bucket not found")
+	}
+
+	// Create storage
+	p.anomalyStorage = inference.NewNATSAnomalyStorage(anomalyBucket, p.logger)
+
+	// Create orchestrator
+	orchestratorCfg := inference.OrchestratorConfig{
+		Config:  *cfg.AnomalyDetection,
+		Storage: p.anomalyStorage,
+		Logger:  p.logger,
+	}
+
+	orchestrator, err := inference.NewOrchestrator(orchestratorCfg)
+	if err != nil {
+		return errs.WrapFatal(err, "Processor", "initializeAnomalyDetectionIfEnabled",
+			"failed to create inference orchestrator")
+	}
+
+	// Register detectors
+	orchestrator.RegisterDetector(inference.NewSemanticGapDetector(nil))
+	orchestrator.RegisterDetector(inference.NewCoreAnomalyDetector(nil))
+	orchestrator.RegisterDetector(inference.NewTransitivityDetector(nil))
+
+	p.inferenceOrchestrator = orchestrator
+
+	p.logger.Info("Anomaly detection initialized",
+		"detectors", orchestrator.GetRegisteredDetectors())
+
+	// Initialize review worker if enabled
+	if cfg.AnomalyDetection.Review.Enabled {
+		// Create LLM client if configured
+		var llmClient llm.Client
+		if cfg.AnomalyDetection.Review.LLM.IsEnabled() {
+			var llmErr error
+			llmClient, llmErr = llm.NewOpenAIClient(cfg.AnomalyDetection.Review.LLM.ToOpenAIConfig())
+			if llmErr != nil {
+				return errs.WrapFatal(llmErr, "Processor", "initializeAnomalyDetectionIfEnabled",
+					"failed to create LLM client for review worker")
+			}
+		}
+
+		// Get JetStream for applier
+		js, jsErr := p.natsClient.JetStream()
+		if jsErr != nil {
+			return errs.WrapFatal(jsErr, "Processor", "initializeAnomalyDetectionIfEnabled",
+				"failed to get JetStream for review worker applier")
+		}
+
+		// Create applier (publishes to entity stream)
+		applier := inference.NewNATSRelationshipApplier(
+			js,
+			"events.graph.entity.inferred",
+			p.logger,
+		)
+
+		// Create review metrics if metrics registry is available
+		reviewMetrics := inference.NewReviewMetrics("graph_processor", p.metricsRegistry)
+
+		reviewWorkerCfg := &inference.ReviewWorkerConfig{
+			AnomalyBucket: anomalyBucket,
+			Storage:       p.anomalyStorage,
+			LLMClient:     llmClient,
+			Applier:       applier,
+			Config:        cfg.AnomalyDetection.Review,
+			Metrics:       reviewMetrics,
+			Logger:        p.logger,
+		}
+
+		reviewWorker, rwErr := inference.NewReviewWorker(reviewWorkerCfg)
+		if rwErr != nil {
+			return errs.WrapFatal(rwErr, "Processor", "initializeAnomalyDetectionIfEnabled",
+				"failed to create review worker")
+		}
+		p.reviewWorker = reviewWorker
+
+		p.logger.Info("Review worker initialized",
+			"workers", cfg.AnomalyDetection.Review.Workers,
+			"auto_approve_threshold", cfg.AnomalyDetection.Review.AutoApproveThreshold,
+			"auto_reject_threshold", cfg.AnomalyDetection.Review.AutoRejectThreshold)
+	}
+
+	return nil
+}
+
+// computeStructuralIndices computes k-core and pivot indices.
+// Called after community detection in the clustering loop.
+func (p *Processor) computeStructuralIndices(ctx context.Context) error {
+	if p.structuralComputer == nil {
+		return nil
+	}
+
+	startTime := time.Now()
+	p.logger.Info("Computing structural indices")
+
+	// Preserve previous k-core for demotion detection (read with lock)
+	p.structuralMu.RLock()
+	if p.structuralIndices != nil && p.structuralIndices.KCore != nil {
+		// Store reference to previous k-core before releasing lock
+		prevKCore := p.structuralIndices.KCore
+		p.structuralMu.RUnlock()
+
+		// Update previousKCore with write lock
+		p.structuralMu.Lock()
+		p.previousKCore = prevKCore
+		p.structuralMu.Unlock()
+	} else {
+		p.structuralMu.RUnlock()
+	}
+
+	// Compute new indices (expensive operation, outside lock)
+	indices, err := p.structuralComputer.Compute(ctx)
+	if err != nil {
+		p.logger.Error("Structural index computation failed", "error", err)
+		return err
+	}
+
+	// Update structural indices with write lock
+	p.structuralMu.Lock()
+	p.structuralIndices = indices
+	p.structuralMu.Unlock()
+
+	// Update IndexManager's structural index holder for query-time access
+	// (IndexManager's holder has its own mutex protection)
+	if p.indexManager != nil {
+		if mgr, ok := p.indexManager.(*indexmanager.Manager); ok {
+			holder := mgr.GetStructuralIndices()
+			if holder != nil {
+				holder.SetKCoreIndex(indices.KCore)
+				holder.SetPivotIndex(indices.Pivot)
+			}
+		}
+	}
+
+	p.logger.Info("Structural indices computed",
+		"duration", time.Since(startTime),
+		"entities", indices.KCore.EntityCount,
+		"max_core", indices.KCore.MaxCore,
+		"pivots", len(indices.Pivot.Pivots))
+
+	return nil
+}
+
+// runAnomalyDetection runs anomaly detection using the inference orchestrator.
+// Called after structural index computation in the clustering loop.
+func (p *Processor) runAnomalyDetection(ctx context.Context) {
+	if p.inferenceOrchestrator == nil {
+		return
+	}
+
+	// Read structural indices with lock
+	p.structuralMu.RLock()
+	indices := p.structuralIndices
+	prevKCore := p.previousKCore
+	p.structuralMu.RUnlock()
+
+	if indices == nil {
+		return
+	}
+
+	// Pause review worker during detection to avoid processing stale anomalies
+	if p.reviewWorker != nil {
+		p.reviewWorker.Pause()
+		defer p.reviewWorker.Resume()
+	}
+
+	startTime := time.Now()
+	p.logger.Info("Running anomaly detection")
+
+	// Build dependencies for detectors (using local copies from locked read)
+	deps := &inference.DetectorDependencies{
+		StructuralIndices:   indices,
+		PreviousKCore:       prevKCore,
+		SimilarityFinder:    newSimilarityFinderAdapter(p.indexManager),
+		RelationshipQuerier: newRelationshipQuerierAdapter(p.indexManager),
+		Logger:              p.logger,
+	}
+
+	// Set dependencies on orchestrator
+	p.inferenceOrchestrator.SetDependencies(deps)
+
+	// Run detection
+	result, err := p.inferenceOrchestrator.RunDetection(ctx)
+	if err != nil {
+		p.logger.Error("Anomaly detection failed", "error", err)
+		return
+	}
+
+	p.logger.Info("Anomaly detection completed",
+		"duration", time.Since(startTime),
+		"anomalies", result.AnomalyCount(),
+		"truncated", result.Truncated)
+
+	// Log breakdown by type
+	for anomalyType, count := range result.CountByType() {
+		p.logger.Info("Anomalies detected", "type", anomalyType, "count", count)
+	}
 }
 
 // setupEnhancementWorker creates the LLM enhancement worker if enabled.
@@ -2030,6 +2339,20 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int, en
 		"levels", len(communities),
 		"total_communities", totalCommunities)
 
+	// Compute structural indices if enabled (needed for anomaly detection)
+	if p.structuralComputer != nil && p.config.Clustering.StructuralIndex.Enabled {
+		if err := p.computeStructuralIndices(ctx); err != nil {
+			p.logger.Warn("Structural index computation failed", "error", err)
+			// Continue - anomaly detection will skip if indices unavailable
+		}
+	}
+
+	// Run anomaly detection if enabled
+	if p.inferenceOrchestrator != nil && p.config.Clustering.AnomalyDetection != nil &&
+		p.config.Clustering.AnomalyDetection.Enabled {
+		p.runAnomalyDetection(ctx)
+	}
+
 	// Set enhancement window deadline if configured
 	// This prevents re-detection from overwriting LLM-enhanced communities
 	if enhancementWindow > 0 && totalCommunities > 0 {
@@ -2144,6 +2467,30 @@ func (p *Processor) runEnhancementWorker(ctx context.Context) error {
 		p.logger.Error("Enhancement worker error", "error", err)
 	}
 	p.logger.Info("Enhancement worker stopped")
+	return err
+}
+
+// runReviewWorker runs the anomaly review worker
+func (p *Processor) runReviewWorker(ctx context.Context) error {
+	if p.reviewWorker == nil {
+		return nil
+	}
+
+	p.logger.Info("Starting review worker")
+	err := p.reviewWorker.Start(ctx)
+	if err != nil && err != context.Canceled {
+		p.logger.Error("Review worker error", "error", err)
+	}
+
+	// Wait for context cancellation
+	<-ctx.Done()
+
+	// Stop the worker gracefully
+	if stopErr := p.reviewWorker.Stop(); stopErr != nil {
+		p.logger.Warn("Review worker stop error", "error", stopErr)
+	}
+
+	p.logger.Info("Review worker stopped")
 	return err
 }
 

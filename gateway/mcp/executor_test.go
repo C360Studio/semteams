@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	gql "github.com/c360/semstreams/gateway/graphql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +14,7 @@ func TestNewExecutor(t *testing.T) {
 	mq := newMockQuerier()
 	resolver := createTestResolver(mq)
 
-	exec, err := NewExecutor(resolver, testLogger())
+	exec, err := gql.NewExecutor(resolver, testLogger())
 	require.NoError(t, err)
 	assert.NotNil(t, exec)
 }
@@ -21,7 +22,7 @@ func TestNewExecutor(t *testing.T) {
 func TestNewExecutor_NilResolver(t *testing.T) {
 	// NewExecutor with nil resolver should still work (schema parsing succeeds)
 	// The resolver being nil will cause runtime errors when executing queries
-	exec, err := NewExecutor(nil, testLogger())
+	exec, err := gql.NewExecutor(nil, testLogger())
 	require.NoError(t, err)
 	assert.NotNil(t, exec)
 }

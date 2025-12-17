@@ -1240,8 +1240,8 @@ func (idx *OutgoingIndex) GetOutgoing(ctx context.Context, entityID string) ([]O
 	entry, err := idx.bucket.Get(ctx, entityID)
 	if err != nil {
 		if stderrors.Is(err, jetstream.ErrKeyNotFound) {
-			return nil, errs.WrapInvalid(jetstream.ErrKeyNotFound, "OutgoingIndex", "GetOutgoing",
-				fmt.Sprintf("entity %s not found", entityID))
+			// Entity not in index = no outgoing relationships (not an error)
+			return []OutgoingEntry{}, nil
 		}
 		errMsg := fmt.Sprintf("get outgoing index for entity %s", entityID)
 		return nil, errs.WrapTransient(err, "OutgoingIndex", "GetOutgoing", errMsg)

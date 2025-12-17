@@ -91,11 +91,11 @@ Each entity starts with a unique label. In each iteration, entities adopt the mo
 
 ### LPA Limitations
 
-**Non-deterministic**: Tie-breaking is random. Running twice may produce slightly different communities.
+**Non-deterministic**: When multiple labels tie for majority, tie-breaking is random. Running twice may produce different communities.
 
-**Disconnected components**: Entities with no edges form singleton communities (or don't cluster).
+**Disconnected components**: Entities with no edges have no neighbors to propagate labels from, so they form singleton communities.
 
-**Resolution limit**: May miss very small communities within large dense regions.
+**Large community bias**: Dense, well-connected regions can absorb adjacent smaller communities. Unlike modularity-based methods, LPA has no resolution limit—but it can still miss fine structure when labels from large communities dominate propagation.
 
 ## Graph Edges in SemStreams
 
@@ -279,8 +279,9 @@ Many single-entity communities.
 **Concepts**
 - [Knowledge Graphs](02-knowledge-graphs.md) - Defining relationships that create explicit edges
 - [Embeddings](03-embeddings.md) - How virtual edges are computed from content similarity
-- [GraphRAG Pattern](05-graphrag-pattern.md) - How communities enable retrieval-augmented generation
-- [Similarity Metrics](07-similarity-metrics.md) - TF-IDF and threshold tuning
+- [Structural Analysis](06-structural-analysis.md) - K-core decomposition complements community clustering
+- [GraphRAG Pattern](07-graphrag-pattern.md) - How communities enable retrieval-augmented generation
+- [Similarity Metrics](04-similarity-metrics.md) - TF-IDF and threshold tuning
 
 **Configuration**
 - [Clustering Configuration](../advanced/01-clustering.md) - Full parameter reference

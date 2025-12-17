@@ -366,9 +366,28 @@ func (m *Manager) computeSimilarityScores(queryEmbedding []float32, opts *Semant
 			}
 		}
 
+		// Apply k-core filter if specified
+		if opts.MinCoreFilter > 0 {
+			if !m.passesKCoreFilter(entityID, opts.MinCoreFilter) {
+				continue
+			}
+		}
+
 		hits = append(hits, scoredHit{entityID: entityID, score: score})
 	}
 	return hits
+}
+
+// passesKCoreFilter checks if entity has core number >= minCore
+func (m *Manager) passesKCoreFilter(entityID string, minCore int) bool {
+	if m.structuralIndices == nil {
+		return true // No index available, include all
+	}
+	idx := m.structuralIndices.GetKCoreIndex()
+	if idx == nil {
+		return true // No index computed yet, include all
+	}
+	return idx.GetCore(entityID) >= minCore
 }
 
 // matchesTypeFilter checks if entity matches any of the specified types

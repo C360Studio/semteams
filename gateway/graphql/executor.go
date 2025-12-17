@@ -1,4 +1,4 @@
-package mcp
+package graphql
 
 import (
 	"context"
@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
-	gql "github.com/c360/semstreams/gateway/graphql"
 	"github.com/vektah/gqlparser/v2"
 	"github.com/vektah/gqlparser/v2/ast"
 )
 
-// GraphQL schema for the MCP gateway.
-// This schema exposes the BaseResolver methods to AI agents.
+// GraphQL schema for the SemStreams gateway.
+// This schema exposes the BaseResolver methods to clients.
 const schemaSDL = `
 type Query {
   """Get a single entity by ID"""
@@ -50,6 +50,47 @@ type Query {
 
   """Get the community containing an entity at a specific level"""
   entityCommunity(entityId: ID!, level: Int!): Community
+
+  """Get all communities at a specific hierarchical level"""
+  communitiesByLevel(level: Int!): [Community!]!
+
+  """Perform bounded graph traversal from a starting entity (PathRAG)"""
+  pathSearch(
+    startEntity: ID!
+    maxDepth: Int
+    maxNodes: Int
+    direction: RelationshipDirection
+    edgeTypes: [String!]
+    decayFactor: Float
+  ): PathSearchResult
+
+  """Find entities within geographic bounds"""
+  spatialSearch(
+    north: Float!
+    south: Float!
+    east: Float!
+    west: Float!
+    limit: Int
+  ): [Entity!]!
+
+  """Find entities within a time range"""
+  temporalSearch(
+    startTime: DateTime!
+    endTime: DateTime!
+    limit: Int
+  ): [Entity!]!
+
+  """Get a bounded graph snapshot (spatial/temporal/type filtered)"""
+  graphSnapshot(
+    north: Float
+    south: Float
+    east: Float
+    west: Float
+    startTime: DateTime
+    endTime: DateTime
+    entityTypes: [String!]
+    maxEntities: Int
+  ): GraphSnapshot
 }
 
 """Direction for relationship queries"""
@@ -117,6 +158,44 @@ type Community {
   summaryStatus: String
 }
 
+"""Result from path traversal search (PathRAG)"""
+type PathSearchResult {
+  entities: [PathEntity!]!
+  paths: [[PathStep!]!]!
+  truncated: Boolean!
+}
+
+"""An entity discovered during path traversal"""
+type PathEntity {
+  id: ID!
+  type: String!
+  score: Float!
+  properties: JSON
+}
+
+"""A single edge in a traversal path"""
+type PathStep {
+  from: ID!
+  to: ID!
+  predicate: String!
+}
+
+"""A bounded graph snapshot"""
+type GraphSnapshot {
+  entities: [Entity!]!
+  relationships: [SnapshotRelationship!]!
+  count: Int!
+  truncated: Boolean!
+  timestamp: DateTime!
+}
+
+"""A relationship in a graph snapshot"""
+type SnapshotRelationship {
+  fromEntityId: ID!
+  toEntityId: ID!
+  edgeType: String!
+}
+
 """JSON scalar for arbitrary property data"""
 scalar JSON
 
@@ -127,12 +206,12 @@ scalar DateTime
 // Executor provides in-process GraphQL execution against the BaseResolver.
 type Executor struct {
 	schema   *ast.Schema
-	resolver *gql.BaseResolver
+	resolver *BaseResolver
 	logger   *slog.Logger
 }
 
 // NewExecutor creates a new GraphQL executor.
-func NewExecutor(resolver *gql.BaseResolver, logger *slog.Logger) (*Executor, error) {
+func NewExecutor(resolver *BaseResolver, logger *slog.Logger) (*Executor, error) {
 	// Parse schema
 	schema, err := gqlparser.LoadSchema(&ast.Source{
 		Name:  "schema.graphql",
@@ -269,6 +348,21 @@ func (e *Executor) executeField(ctx context.Context, field *ast.Field, variables
 	case "entityCommunity":
 		return e.resolveEntityCommunity(ctx, args, field.SelectionSet)
 
+	case "communitiesByLevel":
+		return e.resolveCommunitiesByLevel(ctx, args, field.SelectionSet)
+
+	case "pathSearch":
+		return e.resolvePathSearch(ctx, args, field.SelectionSet)
+
+	case "spatialSearch":
+		return e.resolveSpatialSearch(ctx, args, field.SelectionSet)
+
+	case "temporalSearch":
+		return e.resolveTemporalSearch(ctx, args, field.SelectionSet)
+
+	case "graphSnapshot":
+		return e.resolveGraphSnapshot(ctx, args, field.SelectionSet)
+
 	default:
 		return nil, fmt.Errorf("unknown field: %s", field.Name)
 	}
@@ -369,7 +463,7 @@ func (e *Executor) resolveRelationships(ctx context.Context, args map[string]any
 		}
 	}
 
-	filters := gql.RelationshipFilters{
+	filters := RelationshipFilters{
 		EntityID:  entityID,
 		Direction: direction,
 		EdgeTypes: edgeTypes,
@@ -509,9 +603,204 @@ func (e *Executor) resolveEntityCommunity(ctx context.Context, args map[string]a
 	return e.formatCommunity(community, selections)
 }
 
+func (e *Executor) resolveCommunitiesByLevel(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
+	level := 0
+	if l, ok := args["level"].(int); ok {
+		level = l
+	} else if l, ok := args["level"].(int64); ok {
+		level = int(l)
+	}
+
+	communities, err := e.resolver.CommunitiesByLevel(ctx, level)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]map[string]any, len(communities))
+	for i, c := range communities {
+		formatted, err := e.formatCommunity(c, selections)
+		if err != nil {
+			return nil, err
+		}
+		result[i] = formatted
+	}
+	return result, nil
+}
+
+func (e *Executor) resolvePathSearch(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
+	startEntity, ok := args["startEntity"].(string)
+	if !ok {
+		return nil, fmt.Errorf("startEntity argument required")
+	}
+
+	// Defaults
+	maxDepth := 3
+	maxNodes := 100
+	direction := "OUTGOING"
+	decayFactor := 0.8
+	var edgeTypes []string
+
+	// Override from args
+	if d, ok := args["maxDepth"].(int); ok {
+		maxDepth = d
+	} else if d, ok := args["maxDepth"].(int64); ok {
+		maxDepth = int(d)
+	}
+	if n, ok := args["maxNodes"].(int); ok {
+		maxNodes = n
+	} else if n, ok := args["maxNodes"].(int64); ok {
+		maxNodes = int(n)
+	}
+	if d, ok := args["direction"].(string); ok {
+		direction = d
+	}
+	if f, ok := args["decayFactor"].(float64); ok {
+		decayFactor = f
+	}
+	if et, ok := args["edgeTypes"].([]any); ok {
+		edgeTypes = make([]string, len(et))
+		for i, v := range et {
+			edgeTypes[i] = fmt.Sprintf("%v", v)
+		}
+	}
+
+	result, err := e.resolver.PathSearch(ctx, startEntity, maxDepth, maxNodes, direction, edgeTypes, decayFactor)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+
+	return e.formatPathSearchResult(result, selections)
+}
+
+func (e *Executor) resolveSpatialSearch(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
+	north, ok := args["north"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("north argument required")
+	}
+	south, ok := args["south"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("south argument required")
+	}
+	east, ok := args["east"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("east argument required")
+	}
+	west, ok := args["west"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("west argument required")
+	}
+
+	limit := 100
+	if l, ok := args["limit"].(int); ok {
+		limit = l
+	} else if l, ok := args["limit"].(int64); ok {
+		limit = int(l)
+	}
+
+	entities, err := e.resolver.SpatialSearch(ctx, north, south, east, west, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return e.formatEntities(entities, selections)
+}
+
+func (e *Executor) resolveTemporalSearch(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
+	startTimeStr, ok := args["startTime"].(string)
+	if !ok {
+		return nil, fmt.Errorf("startTime argument required")
+	}
+	endTimeStr, ok := args["endTime"].(string)
+	if !ok {
+		return nil, fmt.Errorf("endTime argument required")
+	}
+
+	startTime, err := parseDateTime(startTimeStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid startTime: %w", err)
+	}
+	endTime, err := parseDateTime(endTimeStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid endTime: %w", err)
+	}
+
+	limit := 100
+	if l, ok := args["limit"].(int); ok {
+		limit = l
+	} else if l, ok := args["limit"].(int64); ok {
+		limit = int(l)
+	}
+
+	entities, err := e.resolver.TemporalSearch(ctx, startTime, endTime, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return e.formatEntities(entities, selections)
+}
+
+func (e *Executor) resolveGraphSnapshot(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
+	// All parameters are optional for graphSnapshot
+	var north, south, east, west *float64
+	var startTime, endTime *time.Time
+	var entityTypes []string
+	maxEntities := 1000
+
+	if n, ok := args["north"].(float64); ok {
+		north = &n
+	}
+	if s, ok := args["south"].(float64); ok {
+		south = &s
+	}
+	if eastVal, ok := args["east"].(float64); ok {
+		east = &eastVal
+	}
+	if w, ok := args["west"].(float64); ok {
+		west = &w
+	}
+	if st, ok := args["startTime"].(string); ok {
+		t, err := parseDateTime(st)
+		if err != nil {
+			return nil, fmt.Errorf("invalid startTime: %w", err)
+		}
+		startTime = &t
+	}
+	if et, ok := args["endTime"].(string); ok {
+		t, err := parseDateTime(et)
+		if err != nil {
+			return nil, fmt.Errorf("invalid endTime: %w", err)
+		}
+		endTime = &t
+	}
+	if types, ok := args["entityTypes"].([]any); ok {
+		entityTypes = make([]string, len(types))
+		for i, v := range types {
+			entityTypes[i] = fmt.Sprintf("%v", v)
+		}
+	}
+	if m, ok := args["maxEntities"].(int); ok {
+		maxEntities = m
+	} else if m, ok := args["maxEntities"].(int64); ok {
+		maxEntities = int(m)
+	}
+
+	result, err := e.resolver.GraphSnapshot(ctx, north, south, east, west, startTime, endTime, entityTypes, maxEntities)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+
+	return e.formatGraphSnapshot(result, selections)
+}
+
 // Formatting helpers - convert internal types to GraphQL-compatible maps
 
-func (e *Executor) formatEntity(entity *gql.Entity, selections ast.SelectionSet) (map[string]any, error) {
+func (e *Executor) formatEntity(entity *Entity, selections ast.SelectionSet) (map[string]any, error) {
 	result := make(map[string]any)
 
 	for _, sel := range selections {
@@ -546,7 +835,7 @@ func (e *Executor) formatEntity(entity *gql.Entity, selections ast.SelectionSet)
 	return result, nil
 }
 
-func (e *Executor) formatEntities(entities []*gql.Entity, selections ast.SelectionSet) ([]map[string]any, error) {
+func (e *Executor) formatEntities(entities []*Entity, selections ast.SelectionSet) ([]map[string]any, error) {
 	result := make([]map[string]any, len(entities))
 	for i, entity := range entities {
 		formatted, err := e.formatEntity(entity, selections)
@@ -558,7 +847,7 @@ func (e *Executor) formatEntities(entities []*gql.Entity, selections ast.Selecti
 	return result, nil
 }
 
-func (e *Executor) formatRelationship(rel *gql.Relationship, selections ast.SelectionSet) (map[string]any, error) {
+func (e *Executor) formatRelationship(rel *Relationship, selections ast.SelectionSet) (map[string]any, error) {
 	result := make(map[string]any)
 
 	for _, sel := range selections {
@@ -591,7 +880,7 @@ func (e *Executor) formatRelationship(rel *gql.Relationship, selections ast.Sele
 	return result, nil
 }
 
-func (e *Executor) formatRelationships(rels []*gql.Relationship, selections ast.SelectionSet) ([]map[string]any, error) {
+func (e *Executor) formatRelationships(rels []*Relationship, selections ast.SelectionSet) ([]map[string]any, error) {
 	result := make([]map[string]any, len(rels))
 	for i, rel := range rels {
 		formatted, err := e.formatRelationship(rel, selections)
@@ -603,7 +892,7 @@ func (e *Executor) formatRelationships(rels []*gql.Relationship, selections ast.
 	return result, nil
 }
 
-func (e *Executor) formatSemanticSearchResult(r *gql.SemanticSearchResult, selections ast.SelectionSet) (map[string]any, error) {
+func (e *Executor) formatSemanticSearchResult(r *SemanticSearchResult, selections ast.SelectionSet) (map[string]any, error) {
 	result := make(map[string]any)
 
 	for _, sel := range selections {
@@ -634,7 +923,7 @@ func (e *Executor) formatSemanticSearchResult(r *gql.SemanticSearchResult, selec
 	return result, nil
 }
 
-func (e *Executor) formatSemanticSearchResults(results []*gql.SemanticSearchResult, selections ast.SelectionSet) ([]map[string]any, error) {
+func (e *Executor) formatSemanticSearchResults(results []*SemanticSearchResult, selections ast.SelectionSet) ([]map[string]any, error) {
 	formatted := make([]map[string]any, len(results))
 	for i, r := range results {
 		f, err := e.formatSemanticSearchResult(r, selections)
@@ -646,7 +935,7 @@ func (e *Executor) formatSemanticSearchResults(results []*gql.SemanticSearchResu
 	return formatted, nil
 }
 
-func (e *Executor) formatLocalSearchResult(r *gql.LocalSearchResult, selections ast.SelectionSet) (map[string]any, error) {
+func (e *Executor) formatLocalSearchResult(r *LocalSearchResult, selections ast.SelectionSet) (map[string]any, error) {
 	result := make(map[string]any)
 
 	for _, sel := range selections {
@@ -677,7 +966,7 @@ func (e *Executor) formatLocalSearchResult(r *gql.LocalSearchResult, selections 
 	return result, nil
 }
 
-func (e *Executor) formatGlobalSearchResult(r *gql.GlobalSearchResult, selections ast.SelectionSet) (map[string]any, error) {
+func (e *Executor) formatGlobalSearchResult(r *GlobalSearchResult, selections ast.SelectionSet) (map[string]any, error) {
 	result := make(map[string]any)
 
 	for _, sel := range selections {
@@ -712,7 +1001,7 @@ func (e *Executor) formatGlobalSearchResult(r *gql.GlobalSearchResult, selection
 	return result, nil
 }
 
-func (e *Executor) formatCommunitySummary(s *gql.CommunitySummary, selections ast.SelectionSet) map[string]any {
+func (e *Executor) formatCommunitySummary(s *CommunitySummary, selections ast.SelectionSet) map[string]any {
 	result := make(map[string]any)
 
 	for _, sel := range selections {
@@ -743,7 +1032,7 @@ func (e *Executor) formatCommunitySummary(s *gql.CommunitySummary, selections as
 	return result
 }
 
-func (e *Executor) formatCommunity(c *gql.Community, selections ast.SelectionSet) (map[string]any, error) {
+func (e *Executor) formatCommunity(c *Community, selections ast.SelectionSet) (map[string]any, error) {
 	result := make(map[string]any)
 
 	for _, sel := range selections {
@@ -776,6 +1065,183 @@ func (e *Executor) formatCommunity(c *gql.Community, selections ast.SelectionSet
 	}
 
 	return result, nil
+}
+
+func (e *Executor) formatPathSearchResult(r *PathSearchResult, selections ast.SelectionSet) (map[string]any, error) {
+	result := make(map[string]any)
+
+	for _, sel := range selections {
+		field, ok := sel.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		key := field.Name
+		if field.Alias != "" {
+			key = field.Alias
+		}
+
+		switch field.Name {
+		case "entities":
+			entities := make([]map[string]any, len(r.Entities))
+			for i, pe := range r.Entities {
+				entities[i] = e.formatPathEntity(pe, field.SelectionSet)
+			}
+			result[key] = entities
+		case "paths":
+			paths := make([][]map[string]any, len(r.Paths))
+			for i, path := range r.Paths {
+				steps := make([]map[string]any, len(path))
+				for j, step := range path {
+					steps[j] = e.formatPathStep(&step, field.SelectionSet)
+				}
+				paths[i] = steps
+			}
+			result[key] = paths
+		case "truncated":
+			result[key] = r.Truncated
+		}
+	}
+
+	return result, nil
+}
+
+func (e *Executor) formatPathEntity(pe *PathEntity, selections ast.SelectionSet) map[string]any {
+	result := make(map[string]any)
+
+	for _, sel := range selections {
+		field, ok := sel.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		key := field.Name
+		if field.Alias != "" {
+			key = field.Alias
+		}
+
+		switch field.Name {
+		case "id":
+			result[key] = pe.ID
+		case "type":
+			result[key] = pe.Type
+		case "score":
+			result[key] = pe.Score
+		case "properties":
+			result[key] = pe.Properties
+		}
+	}
+
+	return result
+}
+
+func (e *Executor) formatPathStep(step *PathStep, selections ast.SelectionSet) map[string]any {
+	result := make(map[string]any)
+
+	for _, sel := range selections {
+		field, ok := sel.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		key := field.Name
+		if field.Alias != "" {
+			key = field.Alias
+		}
+
+		switch field.Name {
+		case "from":
+			result[key] = step.From
+		case "to":
+			result[key] = step.To
+		case "predicate":
+			result[key] = step.Predicate
+		}
+	}
+
+	return result
+}
+
+func (e *Executor) formatGraphSnapshot(s *GraphSnapshot, selections ast.SelectionSet) (map[string]any, error) {
+	result := make(map[string]any)
+
+	for _, sel := range selections {
+		field, ok := sel.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		key := field.Name
+		if field.Alias != "" {
+			key = field.Alias
+		}
+
+		switch field.Name {
+		case "entities":
+			formatted, err := e.formatEntities(s.Entities, field.SelectionSet)
+			if err != nil {
+				return nil, err
+			}
+			result[key] = formatted
+		case "relationships":
+			rels := make([]map[string]any, len(s.Relationships))
+			for i, r := range s.Relationships {
+				rels[i] = e.formatSnapshotRelationship(&r, field.SelectionSet)
+			}
+			result[key] = rels
+		case "count":
+			result[key] = s.Count
+		case "truncated":
+			result[key] = s.Truncated
+		case "timestamp":
+			result[key] = s.Timestamp.Format("2006-01-02T15:04:05Z07:00")
+		}
+	}
+
+	return result, nil
+}
+
+func (e *Executor) formatSnapshotRelationship(r *SnapshotRelationship, selections ast.SelectionSet) map[string]any {
+	result := make(map[string]any)
+
+	for _, sel := range selections {
+		field, ok := sel.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		key := field.Name
+		if field.Alias != "" {
+			key = field.Alias
+		}
+
+		switch field.Name {
+		case "fromEntityId":
+			result[key] = r.FromEntityID
+		case "toEntityId":
+			result[key] = r.ToEntityID
+		case "edgeType":
+			result[key] = r.EdgeType
+		}
+	}
+
+	return result
+}
+
+// parseDateTime parses a DateTime string in various formats
+func parseDateTime(s string) (time.Time, error) {
+	formats := []string{
+		time.RFC3339,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05",
+		"2006-01-02",
+	}
+	for _, format := range formats {
+		if t, err := time.Parse(format, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unable to parse datetime: %s", s)
 }
 
 // resolveValue resolves a GraphQL value, handling variables.

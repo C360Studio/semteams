@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	gql "github.com/c360/semstreams/gateway/graphql"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -22,7 +23,7 @@ const maxResponseSize = 10 * 1024 * 1024 // 10MB
 // Server manages the MCP server with SSE transport.
 type Server struct {
 	config      Config
-	executor    *Executor
+	executor    *gql.Executor
 	logger      *slog.Logger
 	mcpServer   *server.MCPServer
 	httpServer  *http.Server
@@ -37,7 +38,7 @@ type Server struct {
 }
 
 // NewServer creates a new MCP server.
-func NewServer(config Config, executor *Executor, metrics MetricsRecorder, logger *slog.Logger) (*Server, error) {
+func NewServer(config Config, executor *gql.Executor, metrics MetricsRecorder, logger *slog.Logger) (*Server, error) {
 	if executor == nil {
 		return nil, errs.WrapFatal(fmt.Errorf("executor is nil"), "Server", "NewServer",
 			"executor is required")

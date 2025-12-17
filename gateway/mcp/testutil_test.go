@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/graph"
 	gql "github.com/c360/semstreams/gateway/graphql"
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 )
@@ -234,7 +234,7 @@ func createTestResolver(mq *mockQuerier) *gql.BaseResolver {
 }
 
 // createTestExecutor creates an Executor with a mock querier for testing
-func createTestExecutor(mq *mockQuerier) (*Executor, error) {
+func createTestExecutor(mq *mockQuerier) (*gql.Executor, error) {
 	resolver := createTestResolver(mq)
-	return NewExecutor(resolver, testLogger())
+	return gql.NewExecutor(resolver, testLogger())
 }

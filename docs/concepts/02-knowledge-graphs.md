@@ -365,6 +365,6 @@ Query with wildcards: `acme.logistics.facility.zone.area.warehouse-7.*`
 - [Query API](../reference/query-api.md) - Querying entities
 
 **Concepts (mental models):**
-- [PathRAG Pattern](06-pathrag-pattern.md) - Traversing relationships
-- [Community Detection](04-community-detection.md) - Clustering from edges
+- [Community Detection](05-community-detection.md) - Clustering from edges
+- [PathRAG Pattern](08-pathrag-pattern.md) - Traversing relationships
 - [Real-Time Inference](00-real-time-inference.md) - How triples flow through tiers

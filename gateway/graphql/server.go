@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -12,12 +13,12 @@ import (
 	"github.com/c360/semstreams/pkg/errs"
 )
 
-// Server manages the HTTP server for GraphQL endpoint
-// Phase 1: Provides HTTP server setup and playground
-// Phase 2: Will add gqlgen-generated schema and resolvers
+// Server manages the HTTP server for GraphQL endpoint.
+// Provides a standard GraphQL HTTP endpoint with optional playground.
 type Server struct {
 	config     Config
 	resolver   *BaseResolver
+	executor   *Executor
 	logger     *slog.Logger
 	httpServer *http.Server
 	mux        *http.ServeMux
@@ -58,11 +59,18 @@ func (s *Server) Setup() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Phase 1: Setup basic routes
-	// Phase 2: Will add gqlgen handler
+	// Create GraphQL executor
+	executor, err := NewExecutor(s.resolver, s.logger)
+	if err != nil {
+		return errs.WrapFatal(err, "Server", "Setup", "failed to create GraphQL executor")
+	}
+	s.executor = executor
 
 	// Health check endpoint
 	s.mux.HandleFunc("/health", s.handleHealth)
+
+	// GraphQL query endpoint
+	s.mux.HandleFunc(s.config.Path, s.handleGraphQL)
 
 	// GraphQL Playground (if enabled)
 	if s.config.EnablePlayground {
@@ -200,6 +208,56 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"healthy"}`))
+}
+
+// handleGraphQL handles GraphQL query requests
+func (s *Server) handleGraphQL(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		json.NewEncoder(w).Encode(map[string]any{
+			"errors": []map[string]any{{"message": "Method not allowed. Use POST."}},
+		})
+		return
+	}
+
+	var req struct {
+		Query         string         `json:"query"`
+		Variables     map[string]any `json:"variables"`
+		OperationName string         `json:"operationName"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
+			"errors": []map[string]any{{"message": "Invalid JSON request body"}},
+		})
+		return
+	}
+
+	if req.Query == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
+			"errors": []map[string]any{{"message": "Query is required"}},
+		})
+		return
+	}
+
+	result, err := s.executor.Execute(r.Context(), req.Query, req.Variables)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err != nil {
+		s.logger.Warn("GraphQL execution failed", "error", err)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]any{
+			"errors": []map[string]any{{"message": err.Error()}},
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(result)
 }
 
 // corsMiddleware adds CORS headers to responses

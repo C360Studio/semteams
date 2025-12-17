@@ -1,0 +1,130 @@
+// Package inference provides structural anomaly detection for missing relationships.
+package inference
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+
+	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/c360/semstreams/pkg/errs"
+)
+
+// RelationshipApplier creates new relationships from approved anomaly suggestions.
+type RelationshipApplier interface {
+	// ApplyRelationship publishes a new relationship triple to the entity stream.
+	ApplyRelationship(ctx context.Context, suggestion *RelationshipSuggestion) error
+}
+
+// NATSRelationshipApplier publishes relationship triples to the entity stream.
+// The normal ingestion pipeline then indexes the new relationships.
+type NATSRelationshipApplier struct {
+	js      jetstream.JetStream
+	subject string
+	logger  *slog.Logger
+}
+
+// NewNATSRelationshipApplier creates a new applier that publishes to NATS.
+func NewNATSRelationshipApplier(
+	js jetstream.JetStream,
+	subject string,
+	logger *slog.Logger,
+) *NATSRelationshipApplier {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &NATSRelationshipApplier{
+		js:      js,
+		subject: subject,
+		logger:  logger,
+	}
+}
+
+// inferredTriple represents the message format for inferred relationships.
+// This matches the standard triple format used by the ingestion pipeline.
+type inferredTriple struct {
+	Subject   string `json:"subject"`
+	Predicate string `json:"predicate"`
+	Object    string `json:"object"`
+	Context   string `json:"context,omitempty"`
+}
+
+// ApplyRelationship publishes a new relationship triple to the entity stream.
+func (a *NATSRelationshipApplier) ApplyRelationship(
+	ctx context.Context,
+	suggestion *RelationshipSuggestion,
+) error {
+	if suggestion == nil {
+		return errs.WrapInvalid(nil, "RelationshipApplier", "ApplyRelationship",
+			"suggestion is nil")
+	}
+
+	if suggestion.FromEntity == "" || suggestion.ToEntity == "" {
+		return errs.WrapInvalid(nil, "RelationshipApplier", "ApplyRelationship",
+			"from_entity and to_entity are required")
+	}
+
+	if suggestion.Predicate == "" {
+		return errs.WrapInvalid(nil, "RelationshipApplier", "ApplyRelationship",
+			"predicate is required")
+	}
+
+	// Build triple message
+	triple := &inferredTriple{
+		Subject:   suggestion.FromEntity,
+		Predicate: suggestion.Predicate,
+		Object:    suggestion.ToEntity,
+		Context:   "inference.structural", // Mark source as structural inference
+	}
+
+	// Serialize
+	data, err := json.Marshal(triple)
+	if err != nil {
+		return errs.WrapInvalid(err, "RelationshipApplier", "ApplyRelationship",
+			"failed to serialize triple")
+	}
+
+	// Publish to entity stream
+	_, err = a.js.Publish(ctx, a.subject, data)
+	if err != nil {
+		return errs.WrapTransient(err, "RelationshipApplier", "ApplyRelationship",
+			fmt.Sprintf("failed to publish triple: %s -> %s -> %s",
+				suggestion.FromEntity, suggestion.Predicate, suggestion.ToEntity))
+	}
+
+	a.logger.Info("Applied inferred relationship",
+		"from", suggestion.FromEntity,
+		"predicate", suggestion.Predicate,
+		"to", suggestion.ToEntity,
+		"confidence", suggestion.Confidence)
+
+	return nil
+}
+
+// NoOpApplier is a no-op implementation for testing or disabled mode.
+type NoOpApplier struct {
+	logger *slog.Logger
+}
+
+// NewNoOpApplier creates an applier that logs but doesn't persist.
+func NewNoOpApplier(logger *slog.Logger) *NoOpApplier {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &NoOpApplier{logger: logger}
+}
+
+// ApplyRelationship logs the suggestion but doesn't persist it.
+func (a *NoOpApplier) ApplyRelationship(
+	_ context.Context,
+	suggestion *RelationshipSuggestion,
+) error {
+	a.logger.Debug("NoOpApplier: would apply relationship",
+		"from", suggestion.FromEntity,
+		"predicate", suggestion.Predicate,
+		"to", suggestion.ToEntity,
+		"confidence", suggestion.Confidence)
+	return nil
+}
