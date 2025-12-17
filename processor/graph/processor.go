@@ -132,233 +132,6 @@ type Processor struct {
 	reviewWorker          *inference.ReviewWorker
 }
 
-// Config holds processor configuration
-type Config struct {
-	Workers int `json:"workers"       schema:"type:int,description:Number of worker goroutines,default:10,category:basic"`
-
-	QueueSize int `json:"queue_size"    schema:"type:int,description:Worker queue size,default:10000,category:basic"`
-
-	InputSubject string `json:"input_subject" schema:"type:string,description:NATS subject to subscribe for input messages,default:events.graph.entity.*,category:basic"`
-
-	// InputSubjects supports multiple input subjects for multi-stream subscription.
-	// Each subject is mapped to its stream using convention: subject "component.action.type" → stream "COMPONENT"
-	InputSubjects []string `json:"input_subjects,omitempty" schema:"type:array,description:Multiple NATS subjects to subscribe (derives streams from convention),category:basic"`
-
-	// JetStream configuration for durable message consumption
-	// StreamName is deprecated in favor of InputSubjects with convention-derived streams
-	StreamName     string   `json:"stream_name,omitempty"     schema:"type:string,description:JetStream stream name for durable consumption (deprecated: use input_subjects),category:advanced"`
-	StreamSubjects []string `json:"stream_subjects,omitempty" schema:"type:array,description:JetStream stream subjects (defaults to input_subject pattern),category:advanced"`
-	ConsumerName   string   `json:"consumer_name,omitempty"   schema:"type:string,description:JetStream consumer name (durable if set),category:advanced"`
-
-	// Component configurations
-
-	MessageHandler *messagemanager.Config `json:"message_handler,omitempty" schema:"type:object,description:Message handler configuration,category:advanced"`
-
-	DataManager *datamanager.Config `json:"data_manager,omitempty"    schema:"type:object,description:Data manager configuration,category:advanced"`
-
-	Indexer *indexmanager.Config `json:"indexer,omitempty"         schema:"type:object,description:Index manager configuration,category:advanced"`
-
-	Querier *querymanager.Config `json:"querier,omitempty"         schema:"type:object,description:Query manager configuration,category:advanced"`
-
-	// Clustering configures community detection
-	Clustering *ClusteringConfig `json:"clustering,omitempty" schema:"type:object,description:Community detection configuration,category:advanced"`
-}
-
-// ClusteringConfig configures community detection behavior
-type ClusteringConfig struct {
-	// Enabled controls whether community detection is active
-	Enabled bool `json:"enabled" schema:"type:bool,description:Enable community detection,default:false"`
-
-	// Algorithm configures the detection algorithm
-	Algorithm AlgorithmConfig `json:"algorithm,omitempty"`
-
-	// Schedule configures detection timing
-	Schedule ScheduleConfig `json:"schedule,omitempty"`
-
-	// Enhancement configures LLM summarization
-	Enhancement EnhancementConfig `json:"enhancement,omitempty"`
-
-	// SemanticEdges configures virtual edges based on embedding similarity
-	// This enables community detection even when explicit relationship triples don't exist
-	SemanticEdges SemanticEdgesConfig `json:"semantic_edges,omitempty"`
-
-	// Inference configures relationship inference from community detection
-	Inference InferenceConfig `json:"inference,omitempty"`
-
-	// StructuralIndex configures structural graph indices (k-core, pivot distance)
-	// These indices enable query-time filtering and pruning for improved performance
-	StructuralIndex StructuralIndexConfig `json:"structural_index,omitempty"`
-
-	// AnomalyDetection configures structural anomaly detection (Phase 3 inference)
-	// Detects semantic-structural gaps, core isolation, and transitivity gaps
-	AnomalyDetection *inference.Config `json:"anomaly_detection,omitempty"`
-}
-
-// StructuralIndexConfig configures structural graph indexing for query optimization
-type StructuralIndexConfig struct {
-	// Enabled controls whether structural indices are computed
-	Enabled bool `json:"enabled" schema:"type:bool,description:Enable structural indexing,default:false"`
-
-	// KCore configures k-core decomposition filtering
-	KCore KCoreConfig `json:"kcore,omitempty"`
-
-	// Pivot configures pivot-based distance indexing
-	Pivot PivotConfig `json:"pivot,omitempty"`
-
-	// ComputeInterval is how often to recompute structural indices
-	// Default: 1h (indices change slowly as graph structure evolves)
-	ComputeInterval string `json:"compute_interval" schema:"type:string,description:Interval between index recomputation,default:1h"`
-
-	// ComputeOnStartup triggers index computation when processor starts
-	// Default: true
-	ComputeOnStartup bool `json:"compute_on_startup" schema:"type:bool,description:Compute indices on startup,default:true"`
-}
-
-// KCoreConfig configures k-core decomposition for query filtering
-type KCoreConfig struct {
-	// Enabled activates k-core filtering in semantic search
-	// When true, entities with low core numbers (peripheral nodes) can be filtered out
-	Enabled bool `json:"enabled" schema:"type:bool,description:Enable k-core filtering,default:false"`
-
-	// MinCoreFilter is the minimum core number for entities in search results
-	// Entities with core < MinCoreFilter are excluded from semantic search results
-	// Set to 0 to disable filtering (include all entities)
-	// Default: 0 (no filtering)
-	MinCoreFilter int `json:"min_core_filter" schema:"type:int,description:Minimum core number for search results,default:0"`
-}
-
-// PivotConfig configures pivot-based distance indexing for path queries
-type PivotConfig struct {
-	// Enabled activates pivot-based distance pruning in path traversal
-	// When true, unreachable candidates are pruned early using distance bounds
-	Enabled bool `json:"enabled" schema:"type:bool,description:Enable pivot distance pruning,default:false"`
-
-	// PivotCount is the number of pivot nodes to select for distance computation
-	// More pivots = tighter bounds but higher computation cost
-	// Default: 16
-	PivotCount int `json:"pivot_count" schema:"type:int,description:Number of pivot nodes,default:16"`
-
-	// MaxHopDistance is the maximum hop distance for path queries
-	// Candidates beyond this distance are pruned
-	// Default: 10
-	MaxHopDistance int `json:"max_hop_distance" schema:"type:int,description:Maximum hop distance for pruning,default:10"`
-}
-
-// SemanticEdgesConfig configures virtual edge creation from embedding similarity
-type SemanticEdgesConfig struct {
-	// Enabled activates semantic-based virtual edges for clustering
-	// When true, entities with similar embeddings are treated as neighbors
-	Enabled bool `json:"enabled" schema:"type:bool,description:Enable semantic virtual edges,default:false"`
-
-	// SimilarityThreshold is the minimum cosine similarity for virtual edges (0.0-1.0)
-	// Higher values = fewer but stronger virtual connections
-	// Default: 0.6 (stricter than search threshold of 0.3)
-	SimilarityThreshold float64 `json:"similarity_threshold" schema:"type:float,description:Min similarity for virtual edge,default:0.6"`
-
-	// MaxVirtualNeighbors limits virtual neighbors per entity
-	// Controls computation cost during LPA iterations
-	// Default: 5
-	MaxVirtualNeighbors int `json:"max_virtual_neighbors" schema:"type:int,description:Max virtual neighbors per entity,default:5"`
-}
-
-// InferenceConfig configures relationship inference from clustering results
-type InferenceConfig struct {
-	// Enabled activates triple inference from community detection
-	// When true, co-membership in communities creates inferred.clustered_with triples
-	Enabled bool `json:"enabled" schema:"type:bool,description:Enable relationship inference,default:false"`
-
-	// MinCommunitySize is the minimum community size for inference
-	// Singleton communities (size=1) never produce inferences
-	// Default: 2
-	MinCommunitySize int `json:"min_community_size" schema:"type:int,description:Min community size for inference,default:2"`
-
-	// MaxInferredPerCommunity limits inferred relationships per community
-	// Prevents O(n²) explosion in large communities
-	// Default: 50
-	MaxInferredPerCommunity int `json:"max_inferred_per_community" schema:"type:int,description:Max inferred relationships per community,default:50"`
-}
-
-// AlgorithmConfig configures the LPA detector
-type AlgorithmConfig struct {
-	// MaxIterations limits LPA iterations
-	MaxIterations int `json:"max_iterations" schema:"type:int,description:Max LPA iterations,default:100"`
-
-	// Levels is hierarchical community levels
-	Levels int `json:"levels" schema:"type:int,description:Hierarchical levels,default:3"`
-}
-
-// EnhancementWindowMode controls detection behavior during LLM enhancement
-type EnhancementWindowMode string
-
-const (
-	// WindowModeBlocking pauses detection until window expires or all communities reach terminal status
-	WindowModeBlocking EnhancementWindowMode = "blocking"
-	// WindowModeSoft allows detection if significant entity changes occur during window
-	WindowModeSoft EnhancementWindowMode = "soft"
-	// WindowModeNone disables enhancement window (original behavior)
-	WindowModeNone EnhancementWindowMode = "none"
-)
-
-// ScheduleConfig configures detection timing
-type ScheduleConfig struct {
-	// InitialDelay before first detection
-	InitialDelay string `json:"initial_delay" schema:"type:string,description:Delay before first detection,default:10s"`
-
-	// DetectionInterval is the maximum time between detection runs (triggers even if no new entities)
-	DetectionInterval string `json:"detection_interval" schema:"type:string,description:Max interval between detection runs,default:30s"`
-
-	// MinDetectionInterval is the minimum time between detection runs (burst protection)
-	MinDetectionInterval string `json:"min_detection_interval" schema:"type:string,description:Min interval between detection runs,default:5s"`
-
-	// EntityChangeThreshold triggers detection after N new entities arrive (0 disables)
-	EntityChangeThreshold int `json:"entity_change_threshold" schema:"type:int,description:Trigger detection after N new entities,default:100"`
-
-	// MinEntities threshold for triggering detection
-	MinEntities int `json:"min_entities" schema:"type:int,description:Min entities for detection,default:10"`
-
-	// MinEmbeddingCoverage is the minimum ratio of embeddings to entities required for semantic clustering.
-	// When semantic_edges is enabled, clustering will be skipped until this coverage threshold is met.
-	// This prevents clustering from running before embeddings are generated.
-	// Range: 0.0-1.0, Default: 0.5 (50%)
-	MinEmbeddingCoverage float64 `json:"min_embedding_coverage" schema:"type:float,description:Min embedding coverage for semantic clustering (0.0-1.0),default:0.5"`
-
-	// EnhancementWindow is the duration to pause detection after clustering to allow LLM enhancement.
-	// During this window, re-detection is paused to prevent overwriting LLM-enhanced communities.
-	// Set to "0" or empty to disable (original behavior).
-	// Default: 0 (disabled)
-	EnhancementWindow string `json:"enhancement_window" schema:"type:string,description:Pause detection duration for LLM enhancement,default:0"`
-
-	// EnhancementWindowMode controls how the enhancement window behaves:
-	// - "blocking": Hard pause until window expires or all communities reach terminal status (llm-enhanced/llm-failed)
-	// - "soft": Allow detection if entity changes exceed threshold during window
-	// - "none": Disable enhancement window (original behavior)
-	// Default: "blocking"
-	EnhancementWindowMode EnhancementWindowMode `json:"enhancement_window_mode" schema:"type:string,description:Enhancement window mode (blocking|soft|none),default:blocking"`
-}
-
-// EnhancementConfig configures LLM summary enhancement
-type EnhancementConfig struct {
-	// Enabled activates the enhancement worker
-	Enabled bool `json:"enabled" schema:"type:bool,description:Enable LLM enhancement,default:false"`
-
-	// LLM configures the LLM client for summarization
-	LLM llm.Config `json:"llm,omitempty" schema:"type:object,description:LLM configuration"`
-
-	// Workers is concurrent enhancement workers
-	Workers int `json:"workers" schema:"type:int,description:Concurrent workers,default:3"`
-
-	// Domain for prompt selection (e.g., "iot", "default")
-	Domain string `json:"domain,omitempty" schema:"type:string,description:Prompt domain,default:default"`
-}
-
-// ProcessorDeps holds processor dependencies
-type ProcessorDeps struct {
-	Config          *Config
-	NATSClient      *natsclient.Client
-	MetricsRegistry *metric.MetricsRegistry
-	Logger          *slog.Logger
-}
-
 // NewProcessor creates a new graph processor instance
 func NewProcessor(deps ProcessorDeps) (*Processor, error) {
 	if deps.NATSClient == nil {
@@ -1797,7 +1570,7 @@ func (p *Processor) initializeInferenceMetrics() {
 }
 
 // initializeAnomalyDetectionIfEnabled sets up anomaly detection components if enabled.
-func (p *Processor) initializeAnomalyDetectionIfEnabled(ctx context.Context, buckets map[string]jetstream.KeyValue) error {
+func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, buckets map[string]jetstream.KeyValue) error {
 	cfg := p.config.Clustering
 	if cfg == nil || cfg.AnomalyDetection == nil || !cfg.AnomalyDetection.Enabled {
 		return nil
@@ -2226,97 +1999,159 @@ func (p *Processor) runClusteringLoop(ctx context.Context) error {
 // to allow LLM enhancement to complete without being overwritten.
 func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int, enhancementWindow time.Duration, entityThreshold int) {
 	// Check enhancement window - prevents re-detection from overwriting LLM-enhanced communities
-	if !p.enhancementDeadline.IsZero() && time.Now().Before(p.enhancementDeadline) {
-		switch p.enhancementMode {
-		case WindowModeBlocking:
-			// Check if all communities have reached terminal status
-			allTerminal, _ := p.checkAllCommunitiesTerminal(ctx)
-			if allTerminal {
-				p.logger.Info("Enhancement window: all communities terminal, allowing detection")
-				p.enhancementDeadline = time.Time{} // Clear window
-			} else {
-				p.logger.Debug("Enhancement window active, skipping detection",
-					"deadline", p.enhancementDeadline,
-					"remaining", time.Until(p.enhancementDeadline))
-				return
-			}
-		case WindowModeSoft:
-			// Allow detection only if significant entity changes occurred
-			if int(p.entityChangeCount.Load()) < entityThreshold {
-				p.logger.Debug("Enhancement window (soft) active, skipping detection",
-					"deadline", p.enhancementDeadline,
-					"entity_changes", p.entityChangeCount.Load(),
-					"threshold", entityThreshold)
-				return
-			}
-			p.logger.Info("Enhancement window soft override: significant entity changes",
-				"entity_changes", p.entityChangeCount.Load())
-		case WindowModeNone:
-			// No enhancement window - continue with detection
-		}
+	if !p.shouldProceedWithDetection(ctx, entityThreshold) {
+		return
 	}
 
 	// Skip if previous detection still running
-	p.detectionMu.Lock()
-	if p.detectionRunning {
-		p.detectionMu.Unlock()
-		p.logger.Debug("Skipping detection - previous run still in progress")
+	if !p.acquireDetectionLock() {
 		return
 	}
-	p.detectionRunning = true
-	p.detectionMu.Unlock()
-
-	defer func() {
-		p.detectionMu.Lock()
-		p.detectionRunning = false
-		p.detectionMu.Unlock()
-	}()
+	defer p.releaseDetectionLock()
 
 	// Check entity count threshold
-	var entityCount int
-	if p.clusteringBuckets != nil {
-		if entityBucket, ok := p.clusteringBuckets["ENTITY_STATES"]; ok {
-			keys, err := entityBucket.ListKeys(ctx)
-			if err == nil {
-				for range keys.Keys() {
-					entityCount++
-				}
-				if entityCount < minEntities {
-					p.logger.Debug("Skipping detection - not enough entities",
-						"current", entityCount, "required", minEntities)
-					return
-				}
-			}
-		}
+	entityCount, ok := p.checkEntityCountThreshold(ctx, minEntities)
+	if !ok {
+		return
 	}
 
 	// Check embedding coverage for semantic clustering
-	if p.isSemanticClusteringEnabled() && p.indexManager != nil && entityCount > 0 {
-		embeddingCount := p.indexManager.GetEmbeddingCount()
-		coverage := float64(embeddingCount) / float64(entityCount)
-		minCoverage := p.getMinEmbeddingCoverage()
-
-		if coverage < minCoverage {
-			p.logger.Info("Skipping detection - waiting for embeddings",
-				"entities", entityCount,
-				"embeddings", embeddingCount,
-				"coverage", fmt.Sprintf("%.1f%%", coverage*100),
-				"min_coverage", fmt.Sprintf("%.1f%%", minCoverage*100))
-			return
-		}
-
-		p.logger.Info("Embedding coverage sufficient for semantic clustering",
-			"entities", entityCount,
-			"embeddings", embeddingCount,
-			"coverage", fmt.Sprintf("%.1f%%", coverage*100))
+	if !p.checkEmbeddingCoverage(entityCount) {
+		return
 	}
 
 	// Run community detection
+	communities := p.executeCommunityDetection(ctx, enhancementWindow)
+	if communities == nil {
+		return
+	}
+
+	// Run statistical inference if enabled
+	if p.config.Clustering.Inference.Enabled {
+		p.runInference(ctx, communities)
+	}
+}
+
+// shouldProceedWithDetection checks if detection should proceed based on enhancement window state.
+func (p *Processor) shouldProceedWithDetection(ctx context.Context, entityThreshold int) bool {
+	if p.enhancementDeadline.IsZero() || !time.Now().Before(p.enhancementDeadline) {
+		return true
+	}
+
+	switch p.enhancementMode {
+	case WindowModeBlocking:
+		allTerminal, _ := p.checkAllCommunitiesTerminal(ctx)
+		if allTerminal {
+			p.logger.Info("Enhancement window: all communities terminal, allowing detection")
+			p.enhancementDeadline = time.Time{}
+			return true
+		}
+		p.logger.Debug("Enhancement window active, skipping detection",
+			"deadline", p.enhancementDeadline,
+			"remaining", time.Until(p.enhancementDeadline))
+		return false
+
+	case WindowModeSoft:
+		if int(p.entityChangeCount.Load()) < entityThreshold {
+			p.logger.Debug("Enhancement window (soft) active, skipping detection",
+				"deadline", p.enhancementDeadline,
+				"entity_changes", p.entityChangeCount.Load(),
+				"threshold", entityThreshold)
+			return false
+		}
+		p.logger.Info("Enhancement window soft override: significant entity changes",
+			"entity_changes", p.entityChangeCount.Load())
+		return true
+
+	case WindowModeNone:
+		return true
+	}
+
+	return true
+}
+
+// acquireDetectionLock attempts to acquire the detection lock. Returns false if already running.
+func (p *Processor) acquireDetectionLock() bool {
+	p.detectionMu.Lock()
+	defer p.detectionMu.Unlock()
+
+	if p.detectionRunning {
+		p.logger.Debug("Skipping detection - previous run still in progress")
+		return false
+	}
+	p.detectionRunning = true
+	return true
+}
+
+// releaseDetectionLock releases the detection lock.
+func (p *Processor) releaseDetectionLock() {
+	p.detectionMu.Lock()
+	p.detectionRunning = false
+	p.detectionMu.Unlock()
+}
+
+// checkEntityCountThreshold checks if there are enough entities for detection.
+func (p *Processor) checkEntityCountThreshold(ctx context.Context, minEntities int) (int, bool) {
+	if p.clusteringBuckets == nil {
+		return 0, true
+	}
+
+	entityBucket, ok := p.clusteringBuckets["ENTITY_STATES"]
+	if !ok {
+		return 0, true
+	}
+
+	keys, err := entityBucket.ListKeys(ctx)
+	if err != nil {
+		return 0, true
+	}
+
+	var entityCount int
+	for range keys.Keys() {
+		entityCount++
+	}
+
+	if entityCount < minEntities {
+		p.logger.Debug("Skipping detection - not enough entities",
+			"current", entityCount, "required", minEntities)
+		return entityCount, false
+	}
+
+	return entityCount, true
+}
+
+// checkEmbeddingCoverage checks if embedding coverage is sufficient for semantic clustering.
+func (p *Processor) checkEmbeddingCoverage(entityCount int) bool {
+	if !p.isSemanticClusteringEnabled() || p.indexManager == nil || entityCount == 0 {
+		return true
+	}
+
+	embeddingCount := p.indexManager.GetEmbeddingCount()
+	coverage := float64(embeddingCount) / float64(entityCount)
+	minCoverage := p.getMinEmbeddingCoverage()
+
+	if coverage < minCoverage {
+		p.logger.Info("Skipping detection - waiting for embeddings",
+			"entities", entityCount,
+			"embeddings", embeddingCount,
+			"coverage", fmt.Sprintf("%.1f%%", coverage*100),
+			"min_coverage", fmt.Sprintf("%.1f%%", minCoverage*100))
+		return false
+	}
+
+	p.logger.Info("Embedding coverage sufficient for semantic clustering",
+		"entities", entityCount,
+		"embeddings", embeddingCount,
+		"coverage", fmt.Sprintf("%.1f%%", coverage*100))
+	return true
+}
+
+// executeCommunityDetection runs the detection algorithm and post-processing.
+func (p *Processor) executeCommunityDetection(ctx context.Context, enhancementWindow time.Duration) map[int][]*clustering.Community {
 	p.logger.Info("Running community detection")
 	startTime := time.Now()
 
 	// Pause enhancement worker during detection to prevent races
-	// with GetAllCommunities() and SaveCommunity()
 	if p.enhancementWorker != nil {
 		p.enhancementWorker.Pause()
 		defer p.enhancementWorker.Resume()
@@ -2325,7 +2160,7 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int, en
 	communities, err := p.communityDetector.DetectCommunities(ctx)
 	if err != nil {
 		p.logger.Error("Community detection failed", "error", err)
-		return
+		return nil
 	}
 
 	// Count total communities across all levels
@@ -2343,7 +2178,6 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int, en
 	if p.structuralComputer != nil && p.config.Clustering.StructuralIndex.Enabled {
 		if err := p.computeStructuralIndices(ctx); err != nil {
 			p.logger.Warn("Structural index computation failed", "error", err)
-			// Continue - anomaly detection will skip if indices unavailable
 		}
 	}
 
@@ -2354,7 +2188,6 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int, en
 	}
 
 	// Set enhancement window deadline if configured
-	// This prevents re-detection from overwriting LLM-enhanced communities
 	if enhancementWindow > 0 && totalCommunities > 0 {
 		p.enhancementDeadline = time.Now().Add(enhancementWindow)
 		p.logger.Info("Enhancement window started",
@@ -2363,10 +2196,7 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int, en
 			"mode", p.enhancementMode)
 	}
 
-	// Run statistical inference if enabled
-	if p.config.Clustering.Inference.Enabled {
-		p.runInference(ctx, communities)
-	}
+	return communities
 }
 
 // checkAllCommunitiesTerminal checks if all communities have reached terminal enhancement status.

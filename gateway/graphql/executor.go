@@ -203,15 +203,33 @@ scalar JSON
 scalar DateTime
 `
 
+// defaultMaxQueryDepth is the default maximum query nesting depth.
+const defaultMaxQueryDepth = 10
+
 // Executor provides in-process GraphQL execution against the BaseResolver.
+// Executor is safe for concurrent use by multiple goroutines after creation,
+// as all fields are read-only after initialization.
 type Executor struct {
 	schema   *ast.Schema
 	resolver *BaseResolver
 	logger   *slog.Logger
+	maxDepth int
+}
+
+// ExecutorOption configures an Executor.
+type ExecutorOption func(*Executor)
+
+// WithMaxDepth sets the maximum query nesting depth.
+func WithMaxDepth(depth int) ExecutorOption {
+	return func(e *Executor) {
+		if depth > 0 {
+			e.maxDepth = depth
+		}
+	}
 }
 
 // NewExecutor creates a new GraphQL executor.
-func NewExecutor(resolver *BaseResolver, logger *slog.Logger) (*Executor, error) {
+func NewExecutor(resolver *BaseResolver, logger *slog.Logger, opts ...ExecutorOption) (*Executor, error) {
 	// Parse schema
 	schema, err := gqlparser.LoadSchema(&ast.Source{
 		Name:  "schema.graphql",
@@ -221,19 +239,41 @@ func NewExecutor(resolver *BaseResolver, logger *slog.Logger) (*Executor, error)
 		return nil, fmt.Errorf("failed to parse GraphQL schema: %w", err)
 	}
 
-	return &Executor{
+	e := &Executor{
 		schema:   schema,
 		resolver: resolver,
 		logger:   logger,
-	}, nil
+		maxDepth: defaultMaxQueryDepth,
+	}
+
+	for _, opt := range opts {
+		opt(e)
+	}
+
+	return e, nil
 }
 
 // Execute executes a GraphQL query and returns the result.
 func (e *Executor) Execute(ctx context.Context, query string, variables map[string]any) (any, error) {
+	// Check context before expensive operations
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context cancelled before execution: %w", err)
+	}
+
 	// Parse query
 	doc, parseErrs := gqlparser.LoadQuery(e.schema, query)
 	if parseErrs != nil {
 		return nil, fmt.Errorf("GraphQL parse error: %v", parseErrs)
+	}
+
+	// Validate query depth to prevent DoS attacks
+	if err := e.validateQueryDepth(doc); err != nil {
+		return nil, err
+	}
+
+	// Check context after parsing
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("context cancelled during parsing: %w", err)
 	}
 
 	// Execute operations
@@ -242,6 +282,11 @@ func (e *Executor) Execute(ctx context.Context, query string, variables map[stri
 	for _, op := range doc.Operations {
 		if op.Operation != ast.Query {
 			return nil, fmt.Errorf("only Query operations are supported, got %s", op.Operation)
+		}
+
+		// Check context before each operation
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("context cancelled during execution: %w", err)
 		}
 
 		// Execute each field in the selection set
@@ -257,6 +302,37 @@ func (e *Executor) Execute(ctx context.Context, query string, variables map[stri
 	}
 
 	return map[string]any{"data": result}, nil
+}
+
+// validateQueryDepth checks that the query doesn't exceed the maximum depth.
+func (e *Executor) validateQueryDepth(doc *ast.QueryDocument) error {
+	for _, op := range doc.Operations {
+		depth := e.calculateDepth(op.SelectionSet, 0)
+		if depth > e.maxDepth {
+			return fmt.Errorf("query depth %d exceeds maximum allowed depth of %d", depth, e.maxDepth)
+		}
+	}
+	return nil
+}
+
+// calculateDepth recursively calculates the maximum depth of a selection set.
+func (e *Executor) calculateDepth(selections ast.SelectionSet, current int) int {
+	maxDepth := current
+	for _, sel := range selections {
+		if field, ok := sel.(*ast.Field); ok {
+			// Skip introspection fields from depth calculation
+			if strings.HasPrefix(field.Name, "__") {
+				continue
+			}
+			if len(field.SelectionSet) > 0 {
+				depth := e.calculateDepth(field.SelectionSet, current+1)
+				if depth > maxDepth {
+					maxDepth = depth
+				}
+			}
+		}
+	}
+	return maxDepth
 }
 
 // executeSelectionSet executes a selection set and returns the results.

@@ -58,48 +58,74 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 		}
 	}()
 
-	// Create context for this message processing that respects parent deadline
-	var msgCtx context.Context
-	var cancel context.CancelFunc
-
-	// Check if parent has a deadline and respect it
-	if deadline, ok := ctx.Deadline(); ok {
-		// Use minimum of remaining time or 30 seconds
-		remaining := time.Until(deadline)
-		if remaining > 30*time.Second {
-			msgCtx, cancel = context.WithTimeout(ctx, 30*time.Second)
-		} else if remaining > 0 {
-			// Use parent's remaining time
-			msgCtx, cancel = context.WithTimeout(ctx, remaining)
-		} else {
-			// Already past deadline
-			return context.DeadlineExceeded
-		}
-	} else {
-		// No parent deadline, use 30 second timeout
-		msgCtx, cancel = context.WithTimeout(ctx, 30*time.Second)
+	// Create context for this message processing
+	msgCtx, cancel, err := mp.createMessageContext(ctx)
+	if err != nil {
+		return err
 	}
 	defer cancel()
 
 	// Update message processing stats
+	mp.recordMessageProcessed()
+
+	// Parse and extract payload from transport envelope
+	payload, messageType, err := mp.parseBaseMessage(data)
+	if err != nil {
+		return err
+	}
+
+	// Handle StoredMessage payloads (from ObjectStore)
+	if storedMsg, ok := payload.(*objectstore.StoredMessage); ok {
+		return mp.processStoredMessage(msgCtx, storedMsg, messageType)
+	}
+
+	// Handle other payload types (generic processing)
+	return mp.processGenericPayload(msgCtx, payload, messageType)
+}
+
+// createMessageContext creates a context with appropriate timeout for message processing.
+func (mp *Manager) createMessageContext(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	const defaultTimeout = 30 * time.Second
+
+	// Check if parent has a deadline and respect it
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return nil, nil, context.DeadlineExceeded
+		}
+		if remaining > defaultTimeout {
+			remaining = defaultTimeout
+		}
+		msgCtx, cancel := context.WithTimeout(ctx, remaining)
+		return msgCtx, cancel, nil
+	}
+
+	// No parent deadline, use default timeout
+	msgCtx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	return msgCtx, cancel, nil
+}
+
+// recordMessageProcessed updates message processing stats and metrics.
+func (mp *Manager) recordMessageProcessed() {
 	atomic.AddInt64(&mp.messagesProcessed, 1)
 	mp.mu.Lock()
 	mp.lastActivity = time.Now()
 	mp.mu.Unlock()
 
-	// Record message processed metric
 	if mp.metrics != nil {
 		mp.metrics.MessagesProcessed.Inc()
 	}
+}
 
-	// Always unmarshal as BaseMessage (transport envelope) - enforces clean architecture
+// parseBaseMessage unmarshals raw data into a BaseMessage and extracts the payload.
+func (mp *Manager) parseBaseMessage(data []byte) (any, string, error) {
 	var baseMsg message.BaseMessage
 	if err := json.Unmarshal(data, &baseMsg); err != nil {
 		mp.recordError(fmt.Sprintf("failed to unmarshal BaseMessage: %v", err))
 		if mp.metrics != nil {
 			mp.metrics.MessagesFailed.Inc()
 		}
-		return err
+		return nil, "", err
 	}
 
 	// Extract message type for logging
@@ -108,66 +134,51 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 		messageType = msgType.Domain + "." + msgType.Category
 	}
 
-	// Extract payload from transport envelope
-	payload := baseMsg.Payload()
+	return baseMsg.Payload(), messageType, nil
+}
 
-	// Handle StoredMessage payloads (from ObjectStore)
-	if storedMsg, ok := payload.(*objectstore.StoredMessage); ok {
-		mp.deps.Logger.Debug("Processing StoredMessage from BaseMessage",
-			"entity_id", storedMsg.EntityID(),
-			"message_type", storedMsg.MessageType(),
-			"has_storage_ref", storedMsg.StorageRef() != nil,
-			"transport_type", messageType)
+// processStoredMessage handles StoredMessage payloads from ObjectStore.
+func (mp *Manager) processStoredMessage(ctx context.Context, storedMsg *objectstore.StoredMessage, messageType string) error {
+	mp.deps.Logger.Debug("Processing StoredMessage from BaseMessage",
+		"entity_id", storedMsg.EntityID(),
+		"message_type", storedMsg.MessageType(),
+		"has_storage_ref", storedMsg.StorageRef() != nil,
+		"transport_type", messageType)
 
-		// Process as Storable with storage reference
-		entityStates, err := mp.ProcessMessage(msgCtx, storedMsg)
-		if err != nil {
-			mp.recordError(fmt.Sprintf("failed to process StoredMessage: %v", err))
-			return err
-		}
-
-		mp.deps.Logger.Debug("Processed StoredMessage into entity states", "count", len(entityStates))
-
-		// Store each entity state
-		for _, state := range entityStates {
-			if mp.metrics != nil {
-				mp.metrics.EntitiesExtracted.Inc()
-				mp.metrics.EntitiesUpdateAttempts.Inc()
-			}
-			if _, err := mp.deps.EntityManager.UpdateEntity(msgCtx, state); err != nil {
-				mp.recordError(fmt.Sprintf("failed to store entity %s: %v", state.ID, err))
-				if mp.metrics != nil {
-					mp.metrics.EntitiesUpdateFailed.Inc()
-				}
-				continue
-			}
-			if mp.metrics != nil {
-				mp.metrics.EntitiesUpdateSuccess.Inc()
-			}
-			// Indexes are now updated via KV watch pattern
-		}
-		return nil
+	entityStates, err := mp.ProcessMessage(ctx, storedMsg)
+	if err != nil {
+		mp.recordError(fmt.Sprintf("failed to process StoredMessage: %v", err))
+		return err
 	}
 
-	// Handle other payload types (generic processing)
+	mp.deps.Logger.Debug("Processed StoredMessage into entity states", "count", len(entityStates))
+	mp.storeEntityStates(ctx, entityStates)
+	return nil
+}
+
+// processGenericPayload handles non-StoredMessage payload types.
+func (mp *Manager) processGenericPayload(ctx context.Context, payload any, messageType string) error {
 	mp.deps.Logger.Debug("Processing generic payload from BaseMessage", "type", messageType)
 
-	// Process message into entity states
-	entityStates, err := mp.ProcessMessage(msgCtx, payload)
+	entityStates, err := mp.ProcessMessage(ctx, payload)
 	if err != nil {
 		mp.recordError(fmt.Sprintf("failed to process payload: %v", err))
 		return err
 	}
 
 	mp.deps.Logger.Debug("Processed entity states from payload", "count", len(entityStates))
+	mp.storeEntityStates(ctx, entityStates)
+	return nil
+}
 
-	// Store each entity state
+// storeEntityStates persists entity states and records metrics.
+func (mp *Manager) storeEntityStates(ctx context.Context, entityStates []*gtypes.EntityState) {
 	for _, state := range entityStates {
 		if mp.metrics != nil {
 			mp.metrics.EntitiesExtracted.Inc()
 			mp.metrics.EntitiesUpdateAttempts.Inc()
 		}
-		if _, err := mp.deps.EntityManager.UpdateEntity(msgCtx, state); err != nil {
+		if _, err := mp.deps.EntityManager.UpdateEntity(ctx, state); err != nil {
 			mp.recordError(fmt.Sprintf("failed to store entity %s: %v", state.ID, err))
 			if mp.metrics != nil {
 				mp.metrics.EntitiesUpdateFailed.Inc()
@@ -177,10 +188,7 @@ func (mp *Manager) ProcessWork(ctx context.Context, data []byte) error {
 		if mp.metrics != nil {
 			mp.metrics.EntitiesUpdateSuccess.Inc()
 		}
-		// Indexes are now updated via KV watch pattern
 	}
-
-	return nil
 }
 
 // ProcessMessage processes any message type into entity states

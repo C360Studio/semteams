@@ -72,7 +72,7 @@ Updates use compare-and-swap with version numbers (optimistic concurrency).
 
 ### 4. Index Maintenance
 
-Seven indexes are maintained automatically via KV watchers:
+Core indexes are maintained automatically via KV watchers:
 
 | Index | Question Answered |
 |-------|-------------------|
@@ -82,7 +82,14 @@ Seven indexes are maintained automatically via KV watchers:
 | `ALIAS_INDEX` | "Resolve friendly name to entity ID" |
 | `SPATIAL_INDEX` | "Entities near this location" |
 | `TEMPORAL_INDEX` | "Entities in this time range" |
-| `EMBEDDING_INDEX` | "Semantically similar entities" |
+
+Optional indexes (enabled via configuration):
+
+| Index | Question Answered | Requirements |
+|-------|-------------------|--------------|
+| `STRUCTURAL_INDEX` | "Core connectivity and distance estimation" | Tier 0 |
+| `EMBEDDING_INDEX` | "Semantically similar entities" | Tier 1+ |
+| `COMMUNITY_INDEX` | "What community does this entity belong to?" | Tier 1+ |
 
 Indexes update asynchronously after entity saves. There's a brief window where an entity exists but isn't fully indexed.
 
@@ -106,7 +113,21 @@ Stateful rules evaluate conditions against entity state:
 
 Rules can add/remove triples and publish messages, creating derived facts dynamically.
 
-### 6. Community Detection
+### 6. Structural Indexing (Optional)
+
+When enabled, structural indexing computes graph-theoretic properties:
+
+- **K-core decomposition**: Identifies the dense backbone of the graph. Each entity gets a core number indicating how central and well-connected it is. Higher core = more central.
+- **Pivot-based distances**: Pre-computes distances to landmark nodes for O(1) distance estimation between any two entities.
+
+These indices enable:
+- Filtering noise (exclude peripheral entities from search results)
+- Path query optimization (prune unreachable candidates early)
+- Anomaly detection (core demotion, isolation detection)
+
+Structural indexing requires only NATS—no external services.
+
+### 7. Community Detection (Optional)
 
 Entities that reference each other cluster into communities. Detection runs:
 
@@ -116,11 +137,22 @@ Entities that reference each other cluster into communities. Detection runs:
 
 Communities enable GraphRAG-style queries at different granularity levels.
 
+### 8. Anomaly Detection (Optional)
+
+With structural indexing enabled, SemStreams can detect structural anomalies:
+
+- **Core isolation**: Entities disconnected from their expected peer group
+- **Core demotion**: Entities losing connectivity over time (core number decreasing)
+
+With embeddings also enabled (Tier 1+):
+
+- **Semantic-structural gaps**: Entities that are semantically similar but lack graph connections—potential missing relationships
+
 ## State: NATS KV Buckets
 
 All state lives in NATS JetStream KV buckets.
 
-> **Note**: SemStreams connects to a single NATS server. NATS clustering is not in scope for MVP due to edge/offline-first deployment focus. See [Known Limitations](../reference/known-limitations.md).
+**Core buckets** (always created):
 
 | Bucket | Contents |
 |--------|----------|
@@ -131,9 +163,15 @@ All state lives in NATS JetStream KV buckets.
 | `ALIAS_INDEX` | Alias → entity ID |
 | `SPATIAL_INDEX` | Geohash → entity IDs |
 | `TEMPORAL_INDEX` | Time bucket → entity IDs |
-| `EMBEDDING_INDEX` | Entity ID → embedding vector |
-| `COMMUNITY_INDEX` | Community records with members and summaries |
 | `RULE_STATE` | Rule evaluation state per entity |
+
+**Optional buckets** (created when features enabled):
+
+| Bucket | Contents | Feature |
+|--------|----------|---------|
+| `STRUCTURAL_INDEX` | K-core levels and pivot distances | Structural indexing |
+| `EMBEDDING_INDEX` | Entity ID → embedding vector | Semantic search |
+| `COMMUNITY_INDEX` | Community records with members and summaries | Community detection |
 
 ## Data Flow Example
 
@@ -159,10 +197,18 @@ A sensor reading arrives:
                               │
 6. Entity change count: 99 → 100, threshold reached
                               │
-7. ClusterManager runs:       ▼
+7. (If enabled) Structural indexing:
+   K-core recomputed → core numbers updated
+   Pivot distances recalculated
+                              │
+8. (If enabled) Community detection:
    LPA groups entities → communities updated
    Statistical summaries generated
    LLM summaries queued (if Tier 2)
+                              │
+9. (If enabled) Anomaly detection:
+   Check for core isolation/demotion
+   Check for semantic-structural gaps (Tier 1+)
 ```
 
 ## Consistency Model
@@ -171,8 +217,10 @@ A sensor reading arrives:
 |-----------|-------------|
 | Entity by ID | Immediate |
 | Index queries | Eventually consistent (milliseconds) |
+| Structural indices | Batch (configurable interval, default 1h) |
 | Community membership | Batch (seconds to minutes) |
 | Community summaries | Async (depends on LLM) |
+| Anomaly detection | Batch (runs after structural/community updates) |
 
 ## What SemStreams Is Not
 

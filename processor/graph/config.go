@@ -1,0 +1,52 @@
+package graph
+
+import (
+	"log/slog"
+
+	"github.com/c360/semstreams/metric"
+	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/processor/graph/datamanager"
+	"github.com/c360/semstreams/processor/graph/indexmanager"
+	"github.com/c360/semstreams/processor/graph/messagemanager"
+	"github.com/c360/semstreams/processor/graph/querymanager"
+)
+
+// Config holds processor configuration
+type Config struct {
+	Workers int `json:"workers"       schema:"type:int,description:Number of worker goroutines,default:10,category:basic"`
+
+	QueueSize int `json:"queue_size"    schema:"type:int,description:Worker queue size,default:10000,category:basic"`
+
+	InputSubject string `json:"input_subject" schema:"type:string,description:NATS subject to subscribe for input messages,default:events.graph.entity.*,category:basic"`
+
+	// InputSubjects supports multiple input subjects for multi-stream subscription.
+	// Each subject is mapped to its stream using convention: subject "component.action.type" → stream "COMPONENT"
+	InputSubjects []string `json:"input_subjects,omitempty" schema:"type:array,description:Multiple NATS subjects to subscribe (derives streams from convention),category:basic"`
+
+	// JetStream configuration for durable message consumption
+	// StreamName is deprecated in favor of InputSubjects with convention-derived streams
+	StreamName     string   `json:"stream_name,omitempty"     schema:"type:string,description:JetStream stream name for durable consumption (deprecated: use input_subjects),category:advanced"`
+	StreamSubjects []string `json:"stream_subjects,omitempty" schema:"type:array,description:JetStream stream subjects (defaults to input_subject pattern),category:advanced"`
+	ConsumerName   string   `json:"consumer_name,omitempty"   schema:"type:string,description:JetStream consumer name (durable if set),category:advanced"`
+
+	// Component configurations
+
+	MessageHandler *messagemanager.Config `json:"message_handler,omitempty" schema:"type:object,description:Message handler configuration,category:advanced"`
+
+	DataManager *datamanager.Config `json:"data_manager,omitempty"    schema:"type:object,description:Data manager configuration,category:advanced"`
+
+	Indexer *indexmanager.Config `json:"indexer,omitempty"         schema:"type:object,description:Index manager configuration,category:advanced"`
+
+	Querier *querymanager.Config `json:"querier,omitempty"         schema:"type:object,description:Query manager configuration,category:advanced"`
+
+	// Clustering configures community detection
+	Clustering *ClusteringConfig `json:"clustering,omitempty" schema:"type:object,description:Community detection configuration,category:advanced"`
+}
+
+// ProcessorDeps holds processor dependencies
+type ProcessorDeps struct {
+	Config          *Config
+	NATSClient      *natsclient.Client
+	MetricsRegistry *metric.MetricsRegistry
+	Logger          *slog.Logger
+}

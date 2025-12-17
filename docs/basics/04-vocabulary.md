@@ -160,6 +160,27 @@ Relationship predicates have entity IDs as values:
 
 The distinction matters because relationships create edges in the graph.
 
+## What Each Feature Requires
+
+Different SemStreams features have different requirements from your vocabulary and payload implementation:
+
+| Feature | Requires | Interface |
+|---------|----------|-----------|
+| Entity storage | Any triples | `Graphable` |
+| PREDICATE_INDEX | Any triples | `Graphable` |
+| INCOMING/OUTGOING_INDEX | Relationship predicates (Object = entity ID) | `Graphable` |
+| Community detection (LPA) | Relationship predicates (edges to traverse) | `Graphable` |
+| Structural indexing | Relationship predicates (graph structure) | `Graphable` |
+| Semantic search (Tier 1+) | Text content for embeddings | `ContentStorable` |
+| Semantic edges (Tier 1+) | Embeddings to compute similarity | `ContentStorable` |
+
+**Key distinction:**
+
+- **`Graphable`**: Provides `EntityID()` and `Triples()`. Required for all graph operations.
+- **`ContentStorable`**: Extends `Graphable` with `ContentFields()` and `RawContent()`. Required only for semantic search—tells embedding workers where to find text content.
+
+If you only need graph structure (relationships, communities, structural indexing), `Graphable` is sufficient. Implement `ContentStorable` only when you need semantic similarity based on text content.
+
 ## Common Predicate Domains
 
 | Domain | Use For | Examples |
@@ -227,9 +248,30 @@ Relationship predicates create edges:
 GetIncoming(ctx, fleetID, "fleet.membership.current")
 ```
 
-### Community Detection
+### Community Detection (LPA)
 
-LPA traverses edges created by relationship predicates. Entities that share relationships cluster together.
+LPA (Label Propagation Algorithm) discovers communities by traversing edges in the graph. **Edges only exist when triples have relationship predicates**—predicates where the Object is a valid 6-part entity ID.
+
+**Requirements for LPA to work:**
+
+1. **Relationship predicates must exist**: At least some triples must reference other entities
+2. **Valid entity IDs as Objects**: The Object must be a 6-part dotted entity ID (e.g., `acme.ops.fleet.cargo.rescue`)
+3. **Bidirectional awareness**: INCOMING_INDEX and OUTGOING_INDEX track these edges
+
+```go
+// This creates an edge (LPA can traverse it):
+{Subject: droneID, Predicate: "fleet.membership.current", Object: "acme.ops.fleet.cargo.rescue"}
+
+// This does NOT create an edge (Object is a literal, not an entity ID):
+{Subject: droneID, Predicate: "drone.telemetry.battery", Object: 78}
+{Subject: droneID, Predicate: "drone.status.name", Object: "active"}
+```
+
+**If your entities have no relationship predicates, LPA will produce only singleton communities** (each entity in its own community). This is expected behavior—there are no edges to traverse.
+
+For domains without natural relationships, consider:
+- Adding explicit relationship predicates (e.g., `zone.contains`, `sensor.monitors`)
+- Enabling semantic edges (Tier 1+) to create virtual edges based on embedding similarity
 
 ## Best Practices
 

@@ -29,7 +29,7 @@ func newMockMetricsRecorder() *mockMetricsRecorder {
 	}
 }
 
-func (m *mockMetricsRecorder) RecordRequest(ctx context.Context, success bool, duration time.Duration) {
+func (m *mockMetricsRecorder) RecordRequest(_ context.Context, success bool, duration time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.calls = append(m.calls, mockMetricCall{
@@ -76,7 +76,7 @@ func newMockQuerier() *mockQuerier {
 	}
 }
 
-func (m *mockQuerier) GetEntity(ctx context.Context, id string) (*graph.EntityState, error) {
+func (m *mockQuerier) GetEntity(_ context.Context, id string) (*graph.EntityState, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -85,7 +85,7 @@ func (m *mockQuerier) GetEntity(ctx context.Context, id string) (*graph.EntitySt
 	return m.entities[id], nil
 }
 
-func (m *mockQuerier) GetEntities(ctx context.Context, ids []string) ([]*graph.EntityState, error) {
+func (m *mockQuerier) GetEntities(_ context.Context, ids []string) ([]*graph.EntityState, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -100,7 +100,7 @@ func (m *mockQuerier) GetEntities(ctx context.Context, ids []string) ([]*graph.E
 	return result, nil
 }
 
-func (m *mockQuerier) GetEntityByAlias(ctx context.Context, aliasOrID string) (*graph.EntityState, error) {
+func (m *mockQuerier) GetEntityByAlias(_ context.Context, aliasOrID string) (*graph.EntityState, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -114,15 +114,15 @@ func (m *mockQuerier) GetEntityByAlias(ctx context.Context, aliasOrID string) (*
 	return nil, nil
 }
 
-func (m *mockQuerier) ExecutePath(ctx context.Context, start string, pattern querymanager.PathPattern) (*querymanager.QueryResult, error) {
+func (m *mockQuerier) ExecutePath(_ context.Context, _ string, _ querymanager.PathPattern) (*querymanager.QueryResult, error) {
 	return nil, nil
 }
 
-func (m *mockQuerier) GetGraphSnapshot(ctx context.Context, bounds querymanager.QueryBounds) (*querymanager.GraphSnapshot, error) {
+func (m *mockQuerier) GetGraphSnapshot(_ context.Context, _ querymanager.QueryBounds) (*querymanager.GraphSnapshot, error) {
 	return nil, nil
 }
 
-func (m *mockQuerier) QueryRelationships(ctx context.Context, entityID string, direction querymanager.Direction) ([]*querymanager.Relationship, error) {
+func (m *mockQuerier) QueryRelationships(_ context.Context, _ string, _ querymanager.Direction) ([]*querymanager.Relationship, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -131,7 +131,7 @@ func (m *mockQuerier) QueryRelationships(ctx context.Context, entityID string, d
 	return m.relationships, nil
 }
 
-func (m *mockQuerier) LocalSearch(ctx context.Context, entityID string, query string, level int) (*querymanager.LocalSearchResult, error) {
+func (m *mockQuerier) LocalSearch(_ context.Context, _ string, _ string, _ int) (*querymanager.LocalSearchResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -140,7 +140,7 @@ func (m *mockQuerier) LocalSearch(ctx context.Context, entityID string, query st
 	return m.localSearchResult, nil
 }
 
-func (m *mockQuerier) GlobalSearch(ctx context.Context, query string, level int, maxCommunities int) (*querymanager.GlobalSearchResult, error) {
+func (m *mockQuerier) GlobalSearch(_ context.Context, _ string, _ int, _ int) (*querymanager.GlobalSearchResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -149,7 +149,7 @@ func (m *mockQuerier) GlobalSearch(ctx context.Context, query string, level int,
 	return m.globalSearchResult, nil
 }
 
-func (m *mockQuerier) GlobalSearchWithOptions(ctx context.Context, opts *querymanager.SearchOptions) (*querymanager.GlobalSearchResult, error) {
+func (m *mockQuerier) GlobalSearchWithOptions(_ context.Context, _ *querymanager.SearchOptions) (*querymanager.GlobalSearchResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -158,7 +158,7 @@ func (m *mockQuerier) GlobalSearchWithOptions(ctx context.Context, opts *queryma
 	return m.globalSearchResult, nil
 }
 
-func (m *mockQuerier) GetCommunity(ctx context.Context, communityID string) (*clustering.Community, error) {
+func (m *mockQuerier) GetCommunity(_ context.Context, communityID string) (*clustering.Community, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -167,7 +167,7 @@ func (m *mockQuerier) GetCommunity(ctx context.Context, communityID string) (*cl
 	return m.communities[communityID], nil
 }
 
-func (m *mockQuerier) GetEntityCommunity(ctx context.Context, entityID string, level int) (*clustering.Community, error) {
+func (m *mockQuerier) GetEntityCommunity(_ context.Context, entityID string, _ int) (*clustering.Community, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.err != nil {
@@ -176,27 +176,27 @@ func (m *mockQuerier) GetEntityCommunity(ctx context.Context, entityID string, l
 	return m.entityCommunities[entityID], nil
 }
 
-func (m *mockQuerier) GetCommunitiesByLevel(ctx context.Context, level int) ([]*clustering.Community, error) {
+func (m *mockQuerier) GetCommunitiesByLevel(_ context.Context, _ int) ([]*clustering.Community, error) {
 	return nil, nil
 }
 
-func (m *mockQuerier) QueryByPredicate(ctx context.Context, predicate string) ([]string, error) {
+func (m *mockQuerier) QueryByPredicate(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
 
-func (m *mockQuerier) QuerySpatial(ctx context.Context, bounds querymanager.SpatialBounds) ([]string, error) {
+func (m *mockQuerier) QuerySpatial(_ context.Context, _ querymanager.SpatialBounds) ([]string, error) {
 	return nil, nil
 }
 
-func (m *mockQuerier) QueryTemporal(ctx context.Context, start, end time.Time) ([]string, error) {
+func (m *mockQuerier) QueryTemporal(_ context.Context, _, _ time.Time) ([]string, error) {
 	return nil, nil
 }
 
-func (m *mockQuerier) InvalidateEntity(entityID string) error {
+func (m *mockQuerier) InvalidateEntity(_ string) error {
 	return nil
 }
 
-func (m *mockQuerier) WarmCache(ctx context.Context, entityIDs []string) error {
+func (m *mockQuerier) WarmCache(_ context.Context, _ []string) error {
 	return nil
 }
 

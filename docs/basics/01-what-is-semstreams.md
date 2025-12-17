@@ -2,6 +2,18 @@
 
 SemStreams is a stream processor that builds a semantic knowledge graph from event data. You define a vocabulary of predicates for your domain, implement a simple interface, and the system maintains a living graph with automatic community detection.
 
+## Why SemStreams?
+
+Traditional knowledge graph systems assume cloud-first deployments with abundant compute and always-on connectivity. SemStreams takes a different approach: **edge-first, offline-capable, progressively enhanced**.
+
+**Resource-adaptive**: Deploy on a Raspberry Pi with just NATS, or scale to a cluster with neural embeddings and LLM summarization. The same codebase works across the spectrum—you enable what your resources support.
+
+**Domain-driven**: No mandatory AI dependencies. Start with explicit relationships and rules. Add BM25 search when you need it. Enable neural embeddings when the domain benefits from semantic similarity. You decide what makes sense for your use case.
+
+**Offline-resilient**: NATS JetStream provides the foundation—local persistence, automatic sync when connectivity returns. Your knowledge graph keeps working when the network doesn't.
+
+The core opinion: **users should decide what to enable**. SemStreams provides the building blocks; you compose them based on your constraints and requirements.
+
 ## The Core Concept
 
 ```text
@@ -90,7 +102,9 @@ Entities stored in NATS KV with version tracking:
 }
 ```
 
-### Seven Indexes
+### Indexes
+
+**Core Indexes** (always available):
 
 | Index | Question It Answers |
 |-------|---------------------|
@@ -100,21 +114,43 @@ Entities stored in NATS KV with version tracking:
 | ALIAS_INDEX | "Resolve friendly name to entity ID" |
 | SPATIAL_INDEX | "Entities near this location" |
 | TEMPORAL_INDEX | "Entities in this time range" |
-| EMBEDDING_INDEX | "Semantically similar entities" |
+
+**Optional Indexes** (enabled via configuration):
+
+| Index | Question It Answers | Requirements |
+|-------|---------------------|--------------|
+| STRUCTURAL_INDEX | "Core connectivity and distance estimation" | Tier 0 |
+| EMBEDDING_INDEX | "Semantically similar entities" | Tier 1+ |
+| COMMUNITY_INDEX | "What community does this entity belong to?" | Tier 1+ |
+
+### Structural Indexing
+
+When enabled, structural indexing computes:
+
+- **K-core decomposition**: Identifies the dense backbone of the graph. Higher core numbers indicate more central, densely connected entities. Useful for filtering noise and detecting hubs.
+- **Pivot-based distance**: Pre-computes distances to landmark nodes for O(1) distance estimation. Enables efficient multi-hop filtering and path query optimization.
 
 ### Automatic Community Detection
 
-Entities that reference each other cluster into communities. You don't define communities - they emerge from relationships in your data.
+Entities that reference each other cluster into communities. You don't define communities—they emerge from relationships in your data.
+
+### Anomaly Detection
+
+With structural indexing and embeddings enabled, SemStreams can detect anomalies:
+
+- **Core isolation**: Entities disconnected from their expected peer group
+- **Core demotion**: Entities losing connectivity over time
+- **Semantic-structural gaps**: Semantically similar entities that lack graph connections (requires Tier 1+)
 
 ### Progressive Enhancement (Tiers)
 
 | Tier | Capabilities | Requirements |
 |------|--------------|--------------|
-| 0 | Rules engine, explicit relationships | NATS only |
+| 0 | Rules engine, explicit relationships, structural indexing | NATS only |
 | 1 | + BM25 search, statistical communities | + Search index |
-| 2 | + Neural embeddings, LLM summaries | + Embedding service, LLM |
+| 2 | + Neural embeddings, LLM summaries, semantic-structural anomaly detection | + Embedding service, LLM |
 
-Start with Rules-Only. Add capabilities as needed. Each configuration is controlled via JSON—see [Configuration](06-configuration.md) for details.
+Start with Tier 0. Add capabilities as needed. Each configuration is controlled via JSON—see [Configuration](06-configuration.md) for details.
 
 ## Entity ID Format
 

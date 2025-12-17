@@ -59,8 +59,8 @@ func (s *Server) Setup() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Create GraphQL executor
-	executor, err := NewExecutor(s.resolver, s.logger)
+	// Create GraphQL executor with config options
+	executor, err := NewExecutor(s.resolver, s.logger, WithMaxDepth(s.config.MaxQueryDepth))
 	if err != nil {
 		return errs.WrapFatal(err, "Server", "Setup", "failed to create GraphQL executor")
 	}
@@ -210,6 +210,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Write([]byte(`{"status":"healthy"}`))
 }
 
+// maxRequestBodySize limits GraphQL request body size to prevent memory exhaustion (10MB).
+const maxRequestBodySize = 10 * 1024 * 1024
+
 // handleGraphQL handles GraphQL query requests
 func (s *Server) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -221,14 +224,25 @@ func (s *Server) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Limit request body size to prevent memory exhaustion
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodySize)
+
 	var req struct {
 		Query         string         `json:"query"`
 		Variables     map[string]any `json:"variables"`
-		OperationName string         `json:"operationName"`
+		OperationName string         `json:"operationName"` // Parsed for GraphQL spec compliance
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		// Check if error is due to body too large
+		if err.Error() == "http: request body too large" {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			json.NewEncoder(w).Encode(map[string]any{
+				"errors": []map[string]any{{"message": "Request body too large"}},
+			})
+			return
+		}
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]any{
 			"errors": []map[string]any{{"message": "Invalid JSON request body"}},
@@ -257,7 +271,9 @@ func (s *Server) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(result)
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		s.logger.Error("Failed to encode GraphQL response", "error", err)
+	}
 }
 
 // corsMiddleware adds CORS headers to responses

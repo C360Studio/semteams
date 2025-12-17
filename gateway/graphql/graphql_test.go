@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -712,4 +716,199 @@ func TestGetEntityCommunity(t *testing.T) {
 		assert.Error(t, err)
 		assert.Nil(t, community)
 	})
+}
+
+// HTTP Handler Tests
+
+func testLogger() *slog.Logger {
+	return slog.Default()
+}
+
+func TestServer_HandleGraphQL_Success(t *testing.T) {
+	mockQM := &mockQueryManager{
+		communities: map[string]*clustering.Community{
+			"comm-1": {ID: "comm-1", Level: 1, Members: []string{"e1", "e2"}},
+		},
+	}
+
+	resolver := NewBaseResolver(mockQM, nil)
+	config := DefaultConfig()
+	config.BindAddress = "127.0.0.1:0"
+
+	server, err := NewServer(config, resolver, testLogger())
+	require.NoError(t, err)
+	require.NoError(t, server.Setup())
+
+	reqBody := `{"query": "{ community(id: \"comm-1\") { id level } }"}`
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	rec := httptest.NewRecorder()
+	server.mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+	data, ok := response["data"].(map[string]any)
+	require.True(t, ok, "response should have data field")
+	community, ok := data["community"].(map[string]any)
+	require.True(t, ok, "data should have community field")
+	assert.Equal(t, "comm-1", community["id"])
+}
+
+func TestServer_HandleGraphQL_MethodNotAllowed(t *testing.T) {
+	mockQM := &mockQueryManager{}
+	resolver := NewBaseResolver(mockQM, nil)
+	config := DefaultConfig()
+	config.BindAddress = "127.0.0.1:0"
+
+	server, err := NewServer(config, resolver, testLogger())
+	require.NoError(t, err)
+	require.NoError(t, server.Setup())
+
+	req := httptest.NewRequest(http.MethodGet, "/graphql", nil)
+	rec := httptest.NewRecorder()
+	server.mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	errors, ok := response["errors"].([]any)
+	require.True(t, ok)
+	require.Len(t, errors, 1)
+}
+
+func TestServer_HandleGraphQL_InvalidJSON(t *testing.T) {
+	mockQM := &mockQueryManager{}
+	resolver := NewBaseResolver(mockQM, nil)
+	config := DefaultConfig()
+	config.BindAddress = "127.0.0.1:0"
+
+	server, err := NewServer(config, resolver, testLogger())
+	require.NoError(t, err)
+	require.NoError(t, server.Setup())
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader("not valid json"))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	errors, ok := response["errors"].([]any)
+	require.True(t, ok)
+	require.Len(t, errors, 1)
+}
+
+func TestServer_HandleGraphQL_EmptyQuery(t *testing.T) {
+	mockQM := &mockQueryManager{}
+	resolver := NewBaseResolver(mockQM, nil)
+	config := DefaultConfig()
+	config.BindAddress = "127.0.0.1:0"
+
+	server, err := NewServer(config, resolver, testLogger())
+	require.NoError(t, err)
+	require.NoError(t, server.Setup())
+
+	reqBody := `{"query": ""}`
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	errors, ok := response["errors"].([]any)
+	require.True(t, ok)
+	require.Len(t, errors, 1)
+}
+
+func TestServer_HandleGraphQL_InvalidQuery(t *testing.T) {
+	mockQM := &mockQueryManager{}
+	resolver := NewBaseResolver(mockQM, nil)
+	config := DefaultConfig()
+	config.BindAddress = "127.0.0.1:0"
+
+	server, err := NewServer(config, resolver, testLogger())
+	require.NoError(t, err)
+	require.NoError(t, server.Setup())
+
+	reqBody := `{"query": "{ invalidField }"}`
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.mux.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestServer_HandleGraphQL_QueryDepthExceeded(t *testing.T) {
+	mockQM := &mockQueryManager{}
+	resolver := NewBaseResolver(mockQM, nil)
+	config := DefaultConfig()
+	config.BindAddress = "127.0.0.1:0"
+	config.MaxQueryDepth = 1 // Very shallow limit - only allow depth 1
+
+	server, err := NewServer(config, resolver, testLogger())
+	require.NoError(t, err)
+	require.NoError(t, server.Setup())
+
+	// Query with depth 2: pathSearch -> entities -> id
+	// depth 0: pathSearch
+	// depth 1: entities
+	// depth 2: id (but id has no sub-selections, so entities is the deepest with selections)
+	// Actually: pathSearch { entities { id } } = depth 2 (pathSearch.entities.id)
+	reqBody := `{"query": "{ pathSearch(startEntity: \"e1\") { entities { id } } }"}`
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.mux.ServeHTTP(rec, req)
+
+	// With depth limit 1, a query with depth 2 should fail
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	errors, ok := response["errors"].([]any)
+	require.True(t, ok, "response should have errors array")
+	require.Len(t, errors, 1)
+	errMsg := errors[0].(map[string]any)["message"].(string)
+	assert.Contains(t, errMsg, "depth")
+}
+
+func TestServer_HandleGraphQL_WithVariables(t *testing.T) {
+	mockQM := &mockQueryManager{
+		communities: map[string]*clustering.Community{
+			"comm-var": {ID: "comm-var", Level: 2, Members: []string{"e1"}},
+		},
+	}
+
+	resolver := NewBaseResolver(mockQM, nil)
+	config := DefaultConfig()
+	config.BindAddress = "127.0.0.1:0"
+
+	server, err := NewServer(config, resolver, testLogger())
+	require.NoError(t, err)
+	require.NoError(t, server.Setup())
+
+	reqBody := `{"query": "query GetComm($id: ID!) { community(id: $id) { id } }", "variables": {"id": "comm-var"}}`
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.mux.ServeHTTP(rec, req)
+
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	data := response["data"].(map[string]any)
+	community := data["community"].(map[string]any)
+	assert.Equal(t, "comm-var", community["id"])
 }

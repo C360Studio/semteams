@@ -553,51 +553,74 @@ func (s *SemanticKitchenSinkScenario) executeVerifyOutputs(ctx context.Context, 
 // executeTestSemanticSearch validates semantic search with semembed embeddings
 // using event-driven metric waits and FlowTracer (matching tier0 patterns)
 func (s *SemanticKitchenSinkScenario) executeTestSemanticSearch(ctx context.Context, result *Result) error {
-	// Check semembed health endpoint
+	// Check semembed health
+	if !s.checkSemembedHealth(result) {
+		return nil
+	}
+
+	// Capture baseline for event-driven embedding wait
+	baselineEmbeddings := s.captureEmbeddingBaseline(ctx, result)
+
+	// Capture FlowTracer snapshot
+	flowSnapshot, err := s.tracer.CaptureFlowSnapshot(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture flow snapshot for semantic search: %v", err))
+	}
+
+	// Send semantic test messages
+	semanticTestMessages := s.buildSemanticTestMessages()
+	if err := s.sendSemanticTestMessages(result, semanticTestMessages); err != nil {
+		return err
+	}
+
+	// Wait for embeddings and validate flow
+	s.waitForEmbeddings(ctx, result, baselineEmbeddings, len(semanticTestMessages))
+	s.validateSemanticFlow(ctx, result, flowSnapshot, len(semanticTestMessages))
+
+	// Verify embedding metrics
+	s.verifyEmbeddingMetrics(result, len(semanticTestMessages))
+
+	return nil
+}
+
+// checkSemembedHealth checks the semembed health endpoint.
+func (s *SemanticKitchenSinkScenario) checkSemembedHealth(result *Result) bool {
 	semembedHealthURL := "http://localhost:8081/health"
 	resp, err := http.Get(semembedHealthURL)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("semembed health check failed: %v", err))
-		// Not a hard failure - might be running in environment without semembed
 		result.Details["semembed_available"] = false
-		return nil
+		return false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("semembed unhealthy: status=%d", resp.StatusCode))
 		result.Details["semembed_available"] = false
-		return nil
+		return false
 	}
 
 	result.Details["semembed_available"] = true
 	result.Metrics["semembed_health_status"] = resp.StatusCode
+	return true
+}
 
-	// Capture baseline for event-driven embedding wait (matching tier0 pattern)
+// captureEmbeddingBaseline captures the baseline embedding count.
+func (s *SemanticKitchenSinkScenario) captureEmbeddingBaseline(ctx context.Context, result *Result) float64 {
 	baseline, err := s.metrics.CaptureBaseline(ctx)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture embedding baseline: %v", err))
+		return 0.0
 	}
-	baselineEmbeddings := 0.0
 	if baseline != nil {
-		baselineEmbeddings = baseline.Metrics["indexengine_embeddings_generated_total"]
+		return baseline.Metrics["indexengine_embeddings_generated_total"]
 	}
+	return 0.0
+}
 
-	// Capture FlowTracer snapshot for semantic search validation
-	flowSnapshot, err := s.tracer.CaptureFlowSnapshot(ctx)
-	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture flow snapshot for semantic search: %v", err))
-	}
-
-	// Send entities with rich text content for embedding
-	conn, err := net.Dial("udp", s.udpAddr)
-	if err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("Failed to connect for semantic test: %v", err))
-		return fmt.Errorf("UDP connection failed: %w", err)
-	}
-	defer conn.Close()
-
-	semanticTestMessages := []map[string]any{
+// buildSemanticTestMessages creates test messages for semantic search testing.
+func (s *SemanticKitchenSinkScenario) buildSemanticTestMessages() []map[string]any {
+	return []map[string]any{
 		{
 			"type":        "telemetry",
 			"entity_id":   "robot-alpha",
@@ -621,88 +644,106 @@ func (s *SemanticKitchenSinkScenario) executeTestSemanticSearch(ctx context.Cont
 			},
 		},
 	}
+}
 
-	for i, msg := range semanticTestMessages {
+// sendSemanticTestMessages sends test messages via UDP.
+func (s *SemanticKitchenSinkScenario) sendSemanticTestMessages(result *Result, messages []map[string]any) error {
+	conn, err := net.Dial("udp", s.udpAddr)
+	if err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("Failed to connect for semantic test: %v", err))
+		return fmt.Errorf("UDP connection failed: %w", err)
+	}
+	defer conn.Close()
+
+	for i, msg := range messages {
 		msgBytes, err := json.Marshal(msg)
 		if err != nil {
 			continue
 		}
-
 		if _, err := conn.Write(msgBytes); err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to send semantic message %d: %v", i, err))
 		}
 	}
 
-	result.Metrics["semantic_messages_sent"] = len(semanticTestMessages)
+	result.Metrics["semantic_messages_sent"] = len(messages)
+	return nil
+}
 
-	// Event-driven wait for embeddings to be generated (matching tier0 pattern)
+// waitForEmbeddings waits for embeddings to be generated.
+func (s *SemanticKitchenSinkScenario) waitForEmbeddings(ctx context.Context, result *Result, baseline float64, messageCount int) {
 	waitOpts := client.WaitOpts{
 		Timeout:      s.config.ValidationTimeout,
 		PollInterval: s.config.PollInterval,
 		Comparator:   ">=",
 	}
 
-	// Wait for embeddings for the sent messages
-	expectedEmbeddings := baselineEmbeddings + float64(len(semanticTestMessages))
+	expectedEmbeddings := baseline + float64(messageCount)
 	if err := s.metrics.WaitForMetric(ctx, "indexengine_embeddings_generated_total", expectedEmbeddings, waitOpts); err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Embedding generation wait: %v (may still be generating)", err))
 	}
+}
 
-	// Validate flow using FlowTracer (matching tier0 pattern)
-	if flowSnapshot != nil {
-		flowResult, err := s.tracer.ValidateFlow(ctx, flowSnapshot, client.FlowExpectation{
-			InputSubject:     "input.udp",
-			ProcessingStages: []string{"process.graph"},
-			MinMessages:      len(semanticTestMessages),
-			MaxLatencyMs:     500, // 500ms p99 for semantic processing
-			Timeout:          s.config.ValidationTimeout,
-		})
-		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Flow validation error: %v", err))
-		} else if flowResult != nil {
-			if !flowResult.Valid {
-				result.Warnings = append(result.Warnings, flowResult.Errors...)
-			}
-			result.Details["semantic_flow_validation"] = map[string]any{
-				"valid":         flowResult.Valid,
-				"messages":      flowResult.Messages,
-				"avg_latency":   flowResult.AvgLatency.String(),
-				"p99_latency":   flowResult.P99Latency.String(),
-				"stage_metrics": flowResult.StageMetrics,
-			}
-		}
+// validateSemanticFlow validates the message flow using FlowTracer.
+func (s *SemanticKitchenSinkScenario) validateSemanticFlow(ctx context.Context, result *Result, flowSnapshot *client.FlowSnapshot, messageCount int) {
+	if flowSnapshot == nil {
+		return
 	}
 
-	// Query metrics to verify embeddings were generated
+	flowResult, err := s.tracer.ValidateFlow(ctx, flowSnapshot, client.FlowExpectation{
+		InputSubject:     "input.udp",
+		ProcessingStages: []string{"process.graph"},
+		MinMessages:      messageCount,
+		MaxLatencyMs:     500,
+		Timeout:          s.config.ValidationTimeout,
+	})
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Flow validation error: %v", err))
+		return
+	}
+
+	if flowResult != nil {
+		if !flowResult.Valid {
+			result.Warnings = append(result.Warnings, flowResult.Errors...)
+		}
+		result.Details["semantic_flow_validation"] = map[string]any{
+			"valid":         flowResult.Valid,
+			"messages":      flowResult.Messages,
+			"avg_latency":   flowResult.AvgLatency.String(),
+			"p99_latency":   flowResult.P99Latency.String(),
+			"stage_metrics": flowResult.StageMetrics,
+		}
+	}
+}
+
+// verifyEmbeddingMetrics queries and verifies embedding metrics.
+func (s *SemanticKitchenSinkScenario) verifyEmbeddingMetrics(result *Result, messageCount int) {
 	metricsURL := s.config.MetricsURL + "/metrics"
 	metricsResp, err := http.Get(metricsURL)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to query metrics: %v", err))
-	} else {
-		defer metricsResp.Body.Close()
-		body, _ := io.ReadAll(metricsResp.Body)
-		metricsText := string(body)
+		return
+	}
+	defer metricsResp.Body.Close()
 
-		// Check for embedding metrics
-		embeddingsGenerated := strings.Contains(metricsText, "indexengine_embeddings_generated_total")
-		embeddingsActive := strings.Contains(metricsText, "indexengine_embeddings_active")
-		embeddingProvider := strings.Contains(metricsText, "indexengine_embedding_provider")
+	body, _ := io.ReadAll(metricsResp.Body)
+	metricsText := string(body)
 
-		result.Details["semantic_search_test"] = map[string]any{
-			"semembed_healthy":            true,
-			"messages_sent":               len(semanticTestMessages),
-			"embedding_tested":            true,
-			"embeddings_generated_metric": embeddingsGenerated,
-			"embeddings_active_metric":    embeddingsActive,
-			"embedding_provider_metric":   embeddingProvider,
-		}
+	embeddingsGenerated := strings.Contains(metricsText, "indexengine_embeddings_generated_total")
+	embeddingsActive := strings.Contains(metricsText, "indexengine_embeddings_active")
+	embeddingProvider := strings.Contains(metricsText, "indexengine_embedding_provider")
 
-		if embeddingsGenerated && embeddingsActive && embeddingProvider {
-			result.Metrics["embedding_metrics_verified"] = 1
-		}
+	result.Details["semantic_search_test"] = map[string]any{
+		"semembed_healthy":            true,
+		"messages_sent":               messageCount,
+		"embedding_tested":            true,
+		"embeddings_generated_metric": embeddingsGenerated,
+		"embeddings_active_metric":    embeddingsActive,
+		"embedding_provider_metric":   embeddingProvider,
 	}
 
-	return nil
+	if embeddingsGenerated && embeddingsActive && embeddingProvider {
+		result.Metrics["embedding_metrics_verified"] = 1
+	}
 }
 
 // executeTestHTTPGateway validates HTTP Gateway query endpoints
@@ -1419,161 +1460,197 @@ func (s *SemanticKitchenSinkScenario) executeVerifyIndexPopulation(ctx context.C
 // executeVerifySearchQuality validates that semantic search returns expected results
 // with score threshold assertions, not just binary hit/no-hit checks
 func (s *SemanticKitchenSinkScenario) executeVerifySearchQuality(ctx context.Context, result *Result) error {
-	// Test search via HTTP Gateway
-	gatewayURL := s.config.GatewayURL
 	httpClient := &http.Client{Timeout: 10 * time.Second}
+	searchTests := s.getSearchQualityTests()
 
-	// Search queries with expected results and quality thresholds
-	// Using natural language queries from docs/scenarios/kitchen-sink.md to demonstrate semantic search
-	searchTests := []struct {
-		query           string
-		expectedPattern string
-		description     string
-		minScore        float64 // Minimum acceptable score for quality hits
-		minHits         int     // Minimum expected hits
-	}{
+	// Execute all search tests
+	stats := &searchQualityStats{
+		searchResults: make(map[string]any),
+		allScores:     []float64{},
+	}
+
+	for _, test := range searchTests {
+		s.executeSearchQualityTest(ctx, httpClient, test, stats)
+	}
+
+	// Record results
+	s.recordSearchQualityResults(result, searchTests, stats)
+
+	return nil
+}
+
+// searchQualityTest defines a search quality test case.
+type searchQualityTest struct {
+	query           string
+	expectedPattern string
+	description     string
+	minScore        float64
+	minHits         int
+}
+
+// searchQualityStats tracks aggregate statistics for search quality tests.
+type searchQualityStats struct {
+	searchResults          map[string]any
+	allScores              []float64
+	queriesWithResults     int
+	queriesMeetingMinScore int
+	queriesMeetingMinHits  int
+}
+
+// getSearchQualityTests returns the search quality test cases.
+func (s *SemanticKitchenSinkScenario) getSearchQualityTests() []searchQualityTest {
+	return []searchQualityTest{
 		{"What documents mention forklift safety?", "forklift", "Natural language document search", 0.3, 1},
 		{"Are there safety observations related to temperature?", "temperature", "Cross-domain safety query", 0.3, 1},
 		{"What maintenance was done on cold storage equipment?", "cold", "Maintenance semantic search", 0.3, 1},
 		{"Find all sensors in zone-a", "zone-a", "Location-based sensor query", 0.3, 1},
 	}
+}
 
-	searchResults := make(map[string]any)
-	queriesWithResults := 0
-	queriesMeetingMinScore := 0
-	queriesMeetingMinHits := 0
-	allScores := []float64{}
+// executeSearchQualityTest executes a single search quality test.
+func (s *SemanticKitchenSinkScenario) executeSearchQualityTest(
+	ctx context.Context,
+	httpClient *http.Client,
+	test searchQualityTest,
+	stats *searchQualityStats,
+) {
+	searchQuery := map[string]any{
+		"query":     test.query,
+		"threshold": 0.1,
+		"limit":     10,
+	}
 
-	for _, test := range searchTests {
-		searchQuery := map[string]any{
-			"query":     test.query,
-			"threshold": 0.1, // Low threshold to get results
-			"limit":     10,  // Get more results for quality analysis
+	queryJSON, err := json.Marshal(searchQuery)
+	if err != nil {
+		return
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		s.config.GatewayURL+"/search/semantic", strings.NewReader(string(queryJSON)))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		stats.searchResults[test.query] = map[string]any{
+			"error":       err.Error(),
+			"description": test.description,
 		}
+		return
+	}
 
-		queryJSON, err := json.Marshal(searchQuery)
-		if err != nil {
-			continue
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		stats.searchResults[test.query] = map[string]any{
+			"status":      resp.StatusCode,
+			"description": test.description,
 		}
+		return
+	}
 
-		req, err := http.NewRequestWithContext(ctx, "POST",
-			gatewayURL+"/search/semantic", strings.NewReader(string(queryJSON)))
-		if err != nil {
-			continue
+	var searchResp struct {
+		Data struct {
+			Query string `json:"query"`
+			Hits  []struct {
+				EntityID string  `json:"entity_id"`
+				Score    float64 `json:"score"`
+			} `json:"hits"`
+		} `json:"data"`
+		Error string `json:"error"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &searchResp); err != nil {
+		stats.searchResults[test.query] = map[string]any{
+			"error":       "parse error",
+			"description": test.description,
 		}
-		req.Header.Set("Content-Type", "application/json")
+		return
+	}
 
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			searchResults[test.query] = map[string]any{
-				"error":       err.Error(),
-				"description": test.description,
-			}
-			continue
+	s.processSearchQualityHits(test, searchResp.Data.Hits, stats)
+}
+
+// processSearchQualityHits processes hits from a search quality test.
+func (s *SemanticKitchenSinkScenario) processSearchQualityHits(
+	test searchQualityTest,
+	hits []struct {
+		EntityID string  `json:"entity_id"`
+		Score    float64 `json:"score"`
+	},
+	stats *searchQualityStats,
+) {
+	if len(hits) > 0 {
+		stats.queriesWithResults++
+	}
+	if len(hits) >= test.minHits {
+		stats.queriesMeetingMinHits++
+	}
+
+	matchesPattern := false
+	topHits := []string{}
+	topScores := []float64{}
+	hitsAboveMinScore := 0
+	var scoreSum float64
+
+	for _, hit := range hits {
+		topHits = append(topHits, hit.EntityID)
+		topScores = append(topScores, hit.Score)
+		stats.allScores = append(stats.allScores, hit.Score)
+		scoreSum += hit.Score
+
+		if hit.Score >= test.minScore {
+			hitsAboveMinScore++
 		}
-
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			searchResults[test.query] = map[string]any{
-				"status":      resp.StatusCode,
-				"description": test.description,
-			}
-			continue
-		}
-
-		// Parse response
-		var searchResp struct {
-			Data struct {
-				Query string `json:"query"`
-				Hits  []struct {
-					EntityID string  `json:"entity_id"`
-					Score    float64 `json:"score"`
-				} `json:"hits"`
-			} `json:"data"`
-			Error string `json:"error"`
-		}
-
-		if err := json.Unmarshal(bodyBytes, &searchResp); err != nil {
-			searchResults[test.query] = map[string]any{
-				"error":       "parse error",
-				"description": test.description,
-			}
-			continue
-		}
-
-		hasResults := len(searchResp.Data.Hits) > 0
-		if hasResults {
-			queriesWithResults++
-		}
-
-		// Check if meets minimum hits requirement
-		meetsMinHits := len(searchResp.Data.Hits) >= test.minHits
-		if meetsMinHits {
-			queriesMeetingMinHits++
-		}
-
-		// Check scores and calculate average
-		matchesPattern := false
-		topHits := []string{}
-		topScores := []float64{}
-		hitsAboveMinScore := 0
-		var scoreSum float64
-
-		for _, hit := range searchResp.Data.Hits {
-			topHits = append(topHits, hit.EntityID)
-			topScores = append(topScores, hit.Score)
-			allScores = append(allScores, hit.Score)
-			scoreSum += hit.Score
-
-			if hit.Score >= test.minScore {
-				hitsAboveMinScore++
-			}
-			if strings.Contains(strings.ToLower(hit.EntityID), test.expectedPattern) {
-				matchesPattern = true
-			}
-		}
-
-		// Calculate average score for this query
-		avgScore := 0.0
-		if len(searchResp.Data.Hits) > 0 {
-			avgScore = scoreSum / float64(len(searchResp.Data.Hits))
-		}
-
-		// Check if meets minimum score threshold
-		meetsMinScore := hitsAboveMinScore > 0
-		if meetsMinScore {
-			queriesMeetingMinScore++
-		}
-
-		searchResults[test.query] = map[string]any{
-			"hit_count":           len(searchResp.Data.Hits),
-			"top_hits":            topHits,
-			"top_scores":          topScores,
-			"matches_pattern":     matchesPattern,
-			"expected":            test.expectedPattern,
-			"description":         test.description,
-			"avg_score":           avgScore,
-			"min_score_threshold": test.minScore,
-			"min_hits_threshold":  test.minHits,
-			"hits_above_min":      hitsAboveMinScore,
-			"meets_min_score":     meetsMinScore,
-			"meets_min_hits":      meetsMinHits,
+		if strings.Contains(strings.ToLower(hit.EntityID), test.expectedPattern) {
+			matchesPattern = true
 		}
 	}
 
-	// Calculate overall search quality score (average of all scores)
+	avgScore := 0.0
+	if len(hits) > 0 {
+		avgScore = scoreSum / float64(len(hits))
+	}
+
+	meetsMinScore := hitsAboveMinScore > 0
+	if meetsMinScore {
+		stats.queriesMeetingMinScore++
+	}
+
+	stats.searchResults[test.query] = map[string]any{
+		"hit_count":           len(hits),
+		"top_hits":            topHits,
+		"top_scores":          topScores,
+		"matches_pattern":     matchesPattern,
+		"expected":            test.expectedPattern,
+		"description":         test.description,
+		"avg_score":           avgScore,
+		"min_score_threshold": test.minScore,
+		"min_hits_threshold":  test.minHits,
+		"hits_above_min":      hitsAboveMinScore,
+		"meets_min_score":     meetsMinScore,
+		"meets_min_hits":      len(hits) >= test.minHits,
+	}
+}
+
+// recordSearchQualityResults records search quality test results.
+func (s *SemanticKitchenSinkScenario) recordSearchQualityResults(
+	result *Result,
+	searchTests []searchQualityTest,
+	stats *searchQualityStats,
+) {
 	overallAvgScore := 0.0
-	if len(allScores) > 0 {
+	if len(stats.allScores) > 0 {
 		var sum float64
-		for _, s := range allScores {
-			sum += s
+		for _, score := range stats.allScores {
+			sum += score
 		}
-		overallAvgScore = sum / float64(len(allScores))
+		overallAvgScore = sum / float64(len(stats.allScores))
 	}
 
-	// Quality threshold warning
 	weakResultsThreshold := 0.5
 	if overallAvgScore > 0 && overallAvgScore < weakResultsThreshold {
 		result.Warnings = append(result.Warnings,
@@ -1582,65 +1659,80 @@ func (s *SemanticKitchenSinkScenario) executeVerifySearchQuality(ctx context.Con
 	}
 
 	result.Metrics["search_queries_tested"] = len(searchTests)
-	result.Metrics["search_queries_with_results"] = queriesWithResults
-	result.Metrics["search_min_score_met"] = queriesMeetingMinScore
-	result.Metrics["search_min_hits_met"] = queriesMeetingMinHits
+	result.Metrics["search_queries_with_results"] = stats.queriesWithResults
+	result.Metrics["search_min_score_met"] = stats.queriesMeetingMinScore
+	result.Metrics["search_min_hits_met"] = stats.queriesMeetingMinHits
 	result.Metrics["search_quality_score"] = overallAvgScore
 
 	result.Details["search_quality_verification"] = map[string]any{
 		"queries":           len(searchTests),
-		"queries_with_hits": queriesWithResults,
-		"min_score_met":     queriesMeetingMinScore,
-		"min_hits_met":      queriesMeetingMinHits,
+		"queries_with_hits": stats.queriesWithResults,
+		"min_score_met":     stats.queriesMeetingMinScore,
+		"min_hits_met":      stats.queriesMeetingMinHits,
 		"overall_avg_score": overallAvgScore,
 		"weak_threshold":    weakResultsThreshold,
-		"results":           searchResults,
-		"message":           fmt.Sprintf("%d/%d queries returned results, avg score: %.2f", queriesWithResults, len(searchTests), overallAvgScore),
+		"results":           stats.searchResults,
+		"message":           fmt.Sprintf("%d/%d queries returned results, avg score: %.2f", stats.queriesWithResults, len(searchTests), overallAvgScore),
 	}
-
-	return nil
 }
 
 // executeCompareCoreMl captures search results for Core vs ML comparison
 // and persists results to JSON for later analysis
-func (s *SemanticKitchenSinkScenario) executeCompareCoreMl(ctx context.Context, result *Result) error {
-	// Detect which variant is running based on semembed availability
-	variant := "core"
-	semembedAvailable, ok := result.Details["semembed_available"].(bool)
-	if ok && semembedAvailable {
-		variant = "ml"
+// variantInfo holds detected variant and embedding provider information
+type variantInfo struct {
+	variant           string
+	embeddingProvider string
+}
+
+// detectVariantAndProvider detects which variant (core/ml) is running based on semembed availability and metrics
+func (s *SemanticKitchenSinkScenario) detectVariantAndProvider(result *Result) variantInfo {
+	info := variantInfo{variant: "core", embeddingProvider: "unknown"}
+
+	// Check semembed availability first
+	if semembedAvailable, ok := result.Details["semembed_available"].(bool); ok && semembedAvailable {
+		info.variant = "ml"
 	}
 
-	// Check embedding provider from metrics
-	// The metric is a gauge: 0=disabled, 1=bm25, 2=http
+	// Check embedding provider from metrics (overrides semembed detection)
 	metricsURL := s.config.MetricsURL + "/metrics"
 	resp, err := http.Get(metricsURL)
-	embeddingProvider := "unknown"
-	if err == nil {
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		metricsText := string(body)
+	if err != nil {
+		return info
+	}
+	defer resp.Body.Close()
 
-		// Parse indexengine_embedding_provider metric value using regex
-		// Format: indexengine_embedding_provider{component="..."} <value>
-		re := regexp.MustCompile(`indexengine_embedding_provider\{[^}]*\}\s+(\d+(?:\.\d+)?)`)
-		if matches := re.FindStringSubmatch(metricsText); len(matches) > 1 {
-			switch matches[1] {
-			case "2", "2.0":
-				embeddingProvider = "http"
-				variant = "ml"
-			case "1", "1.0":
-				embeddingProvider = "bm25"
-				variant = "core"
-			case "0", "0.0":
-				embeddingProvider = "disabled"
-			}
+	body, _ := io.ReadAll(resp.Body)
+	metricsText := string(body)
+
+	// Parse indexengine_embedding_provider metric value using regex
+	// Format: indexengine_embedding_provider{component="..."} <value>
+	re := regexp.MustCompile(`indexengine_embedding_provider\{[^}]*\}\s+(\d+(?:\.\d+)?)`)
+	if matches := re.FindStringSubmatch(metricsText); len(matches) > 1 {
+		switch matches[1] {
+		case "2", "2.0":
+			info.embeddingProvider = "http"
+			info.variant = "ml"
+		case "1", "1.0":
+			info.embeddingProvider = "bm25"
+			info.variant = "core"
+		case "0", "0.0":
+			info.embeddingProvider = "disabled"
 		}
 	}
 
-	// Run comparison queries
-	gatewayURL := s.config.GatewayURL
+	return info
+}
+
+// comparisonQueryResults holds the results of running comparison queries
+type comparisonQueryResults struct {
+	searchResults map[string]SearchQueryResult
+	queryResults  map[string]any
+}
+
+// runComparisonQueries executes comparison search queries and returns the results
+func (s *SemanticKitchenSinkScenario) runComparisonQueries(ctx context.Context) comparisonQueryResults {
 	httpClient := &http.Client{Timeout: 10 * time.Second}
+	gatewayURL := s.config.GatewayURL
 
 	// Natural language queries from docs/scenarios/kitchen-sink.md
 	comparisonQueries := []string{
@@ -1650,121 +1742,134 @@ func (s *SemanticKitchenSinkScenario) executeCompareCoreMl(ctx context.Context, 
 		"What documents mention forklift safety?",
 	}
 
-	// Use structured types for comparison data
-	searchResults := make(map[string]SearchQueryResult)
-	queryResults := make(map[string]any) // For backward compatibility with result.Details
+	results := comparisonQueryResults{
+		searchResults: make(map[string]SearchQueryResult),
+		queryResults:  make(map[string]any),
+	}
 
 	for _, query := range comparisonQueries {
-		searchQuery := map[string]any{
-			"query":     query,
-			"threshold": 0.1,
-			"limit":     10,
-		}
-
-		queryJSON, _ := json.Marshal(searchQuery)
-		req, err := http.NewRequestWithContext(ctx, "POST",
-			gatewayURL+"/search/semantic", strings.NewReader(string(queryJSON)))
-		if err != nil {
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		// Track latency
-		queryStart := time.Now()
-		resp, err := httpClient.Do(req)
-		latencyMs := time.Since(queryStart).Milliseconds()
-
-		if err != nil {
-			queryResults[query] = map[string]any{"error": err.Error()}
-			continue
-		}
-
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		var searchResp struct {
-			Data struct {
-				Hits []struct {
-					EntityID string  `json:"entity_id"`
-					Score    float64 `json:"score"`
-				} `json:"hits"`
-			} `json:"data"`
-		}
-
-		if err := json.Unmarshal(bodyBytes, &searchResp); err != nil {
-			continue
-		}
-
-		// Capture results for comparison
-		hitIDs := []string{}
-		scores := []float64{}
-		for _, hit := range searchResp.Data.Hits {
-			hitIDs = append(hitIDs, hit.EntityID)
-			scores = append(scores, hit.Score)
-		}
-
-		// Store in structured format for JSON persistence
-		searchResults[query] = SearchQueryResult{
-			Query:     query,
-			Hits:      hitIDs,
-			Scores:    scores,
-			LatencyMs: latencyMs,
-			HitCount:  len(hitIDs),
-		}
-
-		// Store in map format for backward compatibility
-		queryResults[query] = map[string]any{
-			"hits":       hitIDs,
-			"scores":     scores,
-			"count":      len(hitIDs),
-			"latency_ms": latencyMs,
-		}
+		s.executeComparisonQuery(ctx, httpClient, gatewayURL, query, &results)
 	}
 
-	// Persist comparison results to JSON file
-	comparisonFile := ""
-	if s.config.OutputDir != "" {
-		compData := ComparisonData{
-			Variant:           variant,
-			EmbeddingProvider: embeddingProvider,
-			Timestamp:         time.Now(),
-			SearchResults:     searchResults,
-		}
+	return results
+}
 
-		// Ensure output directory exists
-		if err := os.MkdirAll(s.config.OutputDir, 0755); err != nil {
-			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("Failed to create output directory: %v", err))
-		} else {
-			// Generate filename with variant and timestamp
-			filename := fmt.Sprintf("comparison-%s-%s.json",
-				variant, time.Now().Format("20060102-150405"))
-			comparisonFile = filepath.Join(s.config.OutputDir, filename)
+// executeComparisonQuery runs a single comparison query and stores the results
+func (s *SemanticKitchenSinkScenario) executeComparisonQuery(
+	ctx context.Context,
+	httpClient *http.Client,
+	gatewayURL string,
+	query string,
+	results *comparisonQueryResults,
+) {
+	searchQuery := map[string]any{"query": query, "threshold": 0.1, "limit": 10}
+	queryJSON, _ := json.Marshal(searchQuery)
 
-			data, err := json.MarshalIndent(compData, "", "  ")
-			if err != nil {
-				result.Warnings = append(result.Warnings,
-					fmt.Sprintf("Failed to marshal comparison data: %v", err))
-			} else {
-				if err := os.WriteFile(comparisonFile, data, 0644); err != nil {
-					result.Warnings = append(result.Warnings,
-						fmt.Sprintf("Failed to write comparison file: %v", err))
-				}
-			}
-		}
+	req, err := http.NewRequestWithContext(ctx, "POST",
+		gatewayURL+"/search/semantic", strings.NewReader(string(queryJSON)))
+	if err != nil {
+		return
 	}
+	req.Header.Set("Content-Type", "application/json")
+
+	queryStart := time.Now()
+	resp, err := httpClient.Do(req)
+	latencyMs := time.Since(queryStart).Milliseconds()
+
+	if err != nil {
+		results.queryResults[query] = map[string]any{"error": err.Error()}
+		return
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	var searchResp struct {
+		Data struct {
+			Hits []struct {
+				EntityID string  `json:"entity_id"`
+				Score    float64 `json:"score"`
+			} `json:"hits"`
+		} `json:"data"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &searchResp); err != nil {
+		return
+	}
+
+	hitIDs := make([]string, 0, len(searchResp.Data.Hits))
+	scores := make([]float64, 0, len(searchResp.Data.Hits))
+	for _, hit := range searchResp.Data.Hits {
+		hitIDs = append(hitIDs, hit.EntityID)
+		scores = append(scores, hit.Score)
+	}
+
+	results.searchResults[query] = SearchQueryResult{
+		Query: query, Hits: hitIDs, Scores: scores, LatencyMs: latencyMs, HitCount: len(hitIDs),
+	}
+	results.queryResults[query] = map[string]any{
+		"hits": hitIDs, "scores": scores, "count": len(hitIDs), "latency_ms": latencyMs,
+	}
+}
+
+// persistComparisonResults saves comparison data to a JSON file
+func (s *SemanticKitchenSinkScenario) persistComparisonResults(
+	info variantInfo,
+	searchResults map[string]SearchQueryResult,
+	result *Result,
+) string {
+	if s.config.OutputDir == "" {
+		return ""
+	}
+
+	compData := ComparisonData{
+		Variant:           info.variant,
+		EmbeddingProvider: info.embeddingProvider,
+		Timestamp:         time.Now(),
+		SearchResults:     searchResults,
+	}
+
+	if err := os.MkdirAll(s.config.OutputDir, 0755); err != nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Failed to create output directory: %v", err))
+		return ""
+	}
+
+	filename := fmt.Sprintf("comparison-%s-%s.json", info.variant, time.Now().Format("20060102-150405"))
+	comparisonFile := filepath.Join(s.config.OutputDir, filename)
+
+	data, err := json.MarshalIndent(compData, "", "  ")
+	if err != nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Failed to marshal comparison data: %v", err))
+		return ""
+	}
+
+	if err := os.WriteFile(comparisonFile, data, 0644); err != nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Failed to write comparison file: %v", err))
+		return ""
+	}
+
+	return comparisonFile
+}
+
+func (s *SemanticKitchenSinkScenario) executeCompareCoreMl(ctx context.Context, result *Result) error {
+	info := s.detectVariantAndProvider(result)
+	queryResults := s.runComparisonQueries(ctx)
+	comparisonFile := s.persistComparisonResults(info, queryResults.searchResults, result)
 
 	result.Details["core_ml_comparison"] = map[string]any{
-		"variant":            variant,
-		"embedding_provider": embeddingProvider,
-		"queries":            queryResults,
+		"variant":            info.variant,
+		"embedding_provider": info.embeddingProvider,
+		"queries":            queryResults.queryResults,
 		"comparison_file":    comparisonFile,
 		"message": fmt.Sprintf("Captured %d search queries for %s variant (%s embeddings)",
-			len(comparisonQueries), variant, embeddingProvider),
+			4, info.variant, info.embeddingProvider),
 	}
 
-	result.Metrics["comparison_variant"] = variant
-	result.Metrics["embedding_provider"] = embeddingProvider
+	result.Metrics["comparison_variant"] = info.variant
+	result.Metrics["embedding_provider"] = info.embeddingProvider
 
 	return nil
 }
@@ -1800,6 +1905,205 @@ type CommunitySummaryReport struct {
 	Communities           []CommunityComparison `json:"communities"`
 }
 
+// llmWaitResult holds the results of waiting for LLM enhancement
+type llmWaitResult struct {
+	durationMs   int64
+	failedCount  int
+	pendingCount int
+}
+
+// communityStats holds aggregated statistics about communities
+type communityStats struct {
+	comparisons          []CommunityComparison
+	llmEnhancedCount     int
+	statisticalOnlyCount int
+	avgLengthRatio       float64
+	avgWordOverlap       float64
+	nonSingletonCount    int
+	largestCommunitySize int
+	avgNonSingletonSize  float64
+}
+
+// detectCommunityVariant determines if running core or ml variant
+func (s *SemanticKitchenSinkScenario) detectCommunityVariant(result *Result) string {
+	if v, ok := result.Metrics["comparison_variant"].(string); ok && v == "ml" {
+		return "ml"
+	}
+	if semembedAvailable, ok := result.Details["semembed_available"].(bool); ok && semembedAvailable {
+		return "ml"
+	}
+	return "core"
+}
+
+// waitForCommunities polls until communities are available
+func (s *SemanticKitchenSinkScenario) waitForCommunities(ctx context.Context) ([]*client.Community, error) {
+	var communities []*client.Community
+	var err error
+	for i := 0; i < 50; i++ { // Max 5 seconds (50 * 100ms)
+		communities, err = s.natsClient.GetAllCommunities(ctx)
+		if err == nil && len(communities) > 0 {
+			return communities, nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return communities, err
+}
+
+// waitForLLMEnhancement waits for LLM enhancement to complete for ML variant
+func (s *SemanticKitchenSinkScenario) waitForLLMEnhancement(
+	ctx context.Context,
+	communityCount int,
+	result *Result,
+) llmWaitResult {
+	fmt.Printf("[LLM WAIT] Waiting for LLM enhancement to complete (ML variant, %d communities)...\n", communityCount)
+
+	enhanceStart := time.Now()
+	enhanced, failed, pending, waitErr := s.natsClient.WaitForCommunityEnhancement(
+		ctx, 2*time.Minute, 2*time.Second,
+	)
+	waitResult := llmWaitResult{
+		durationMs:   time.Since(enhanceStart).Milliseconds(),
+		failedCount:  failed,
+		pendingCount: pending,
+	}
+
+	fmt.Printf("[LLM WAIT] Complete: enhanced=%d, failed=%d, pending=%d, duration=%dms\n",
+		enhanced, failed, pending, waitResult.durationMs)
+
+	if waitErr != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("LLM enhancement wait error: %v", waitErr))
+	}
+	if enhanced == 0 && failed == 0 && pending > 0 {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("No LLM enhancements completed within 2 minute timeout (%d still pending)", pending))
+	}
+
+	result.Metrics["llm_wait_duration_ms"] = float64(waitResult.durationMs)
+	result.Metrics["llm_failed_count"] = float64(waitResult.failedCount)
+	result.Metrics["llm_pending_count"] = float64(waitResult.pendingCount)
+
+	return waitResult
+}
+
+// analyzeCommunities computes statistics and comparisons for communities
+func (s *SemanticKitchenSinkScenario) analyzeCommunities(communities []*client.Community) communityStats {
+	stats := communityStats{comparisons: make([]CommunityComparison, 0, len(communities))}
+	var totalLengthRatio, totalWordOverlap float64
+	var ratioCount, totalNonSingletonMembers int
+
+	for _, comm := range communities {
+		comparison := s.buildCommunityComparison(comm, &totalLengthRatio, &totalWordOverlap, &ratioCount)
+
+		if len(comm.Members) > 1 {
+			stats.nonSingletonCount++
+			totalNonSingletonMembers += len(comm.Members)
+			if len(comm.Members) > stats.largestCommunitySize {
+				stats.largestCommunitySize = len(comm.Members)
+			}
+		}
+
+		switch comm.SummaryStatus {
+		case "llm-enhanced":
+			stats.llmEnhancedCount++
+		case "statistical", "":
+			stats.statisticalOnlyCount++
+		}
+
+		stats.comparisons = append(stats.comparisons, comparison)
+	}
+
+	if ratioCount > 0 {
+		stats.avgLengthRatio = totalLengthRatio / float64(ratioCount)
+		stats.avgWordOverlap = totalWordOverlap / float64(ratioCount)
+	}
+	if stats.nonSingletonCount > 0 {
+		stats.avgNonSingletonSize = float64(totalNonSingletonMembers) / float64(stats.nonSingletonCount)
+	}
+
+	return stats
+}
+
+// buildCommunityComparison creates a comparison record for a single community
+func (s *SemanticKitchenSinkScenario) buildCommunityComparison(
+	comm *client.Community,
+	totalLengthRatio, totalWordOverlap *float64,
+	ratioCount *int,
+) CommunityComparison {
+	comparison := CommunityComparison{
+		CommunityID:        comm.ID,
+		Level:              comm.Level,
+		MemberCount:        len(comm.Members),
+		StatisticalSummary: comm.StatisticalSummary,
+		LLMSummary:         comm.LLMSummary,
+		SummaryStatus:      comm.SummaryStatus,
+		Keywords:           comm.Keywords,
+	}
+
+	if comm.LLMSummary != "" && comm.StatisticalSummary != "" && len(comm.StatisticalSummary) > 0 {
+		comparison.SummaryLengthRatio = float64(len(comm.LLMSummary)) / float64(len(comm.StatisticalSummary))
+		*totalLengthRatio += comparison.SummaryLengthRatio
+		*ratioCount++
+		comparison.WordOverlap = wordJaccard(comm.StatisticalSummary, comm.LLMSummary)
+		*totalWordOverlap += comparison.WordOverlap
+	}
+
+	return comparison
+}
+
+// persistCommunityReport saves the community comparison report to a JSON file
+func (s *SemanticKitchenSinkScenario) persistCommunityReport(
+	variant string,
+	stats communityStats,
+	llmWait llmWaitResult,
+	result *Result,
+) string {
+	if s.config.OutputDir == "" {
+		return ""
+	}
+
+	report := CommunitySummaryReport{
+		Variant:               variant,
+		Timestamp:             time.Now(),
+		CommunitiesTotal:      len(stats.comparisons),
+		LLMEnhancedCount:      stats.llmEnhancedCount,
+		StatisticalOnlyCount:  stats.statisticalOnlyCount,
+		LLMFailedCount:        llmWait.failedCount,
+		LLMPendingCount:       llmWait.pendingCount,
+		LLMWaitDurationMs:     llmWait.durationMs,
+		AvgSummaryLengthRatio: stats.avgLengthRatio,
+		AvgWordOverlap:        stats.avgWordOverlap,
+		NonSingletonCount:     stats.nonSingletonCount,
+		LargestCommunitySize:  stats.largestCommunitySize,
+		AvgNonSingletonSize:   stats.avgNonSingletonSize,
+		Communities:           stats.comparisons,
+	}
+
+	filename := fmt.Sprintf("community-comparison-%s-%s.json", variant, time.Now().Format("20060102-150405"))
+	comparisonFile := filepath.Join(s.config.OutputDir, filename)
+
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err == nil {
+		if err := os.WriteFile(comparisonFile, data, 0644); err != nil {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("Failed to write community comparison file: %v", err))
+		}
+	}
+
+	return comparisonFile
+}
+
+// recordCommunityMetrics records community statistics to result metrics
+func (s *SemanticKitchenSinkScenario) recordCommunityMetrics(stats communityStats, result *Result) {
+	result.Metrics["communities_total"] = len(stats.comparisons)
+	result.Metrics["communities_llm_enhanced"] = stats.llmEnhancedCount
+	result.Metrics["communities_statistical_only"] = stats.statisticalOnlyCount
+	result.Metrics["avg_summary_length_ratio"] = stats.avgLengthRatio
+	result.Metrics["avg_word_overlap"] = stats.avgWordOverlap
+	result.Metrics["communities_non_singleton"] = stats.nonSingletonCount
+	result.Metrics["largest_community_size"] = stats.largestCommunitySize
+	result.Metrics["avg_non_singleton_size"] = stats.avgNonSingletonSize
+}
+
 // executeCompareCommunities compares statistical vs LLM-enhanced community summaries
 func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Context, result *Result) error {
 	if s.natsClient == nil {
@@ -1807,215 +2111,53 @@ func (s *SemanticKitchenSinkScenario) executeCompareCommunities(ctx context.Cont
 		return nil
 	}
 
-	// Detect variant early for LLM wait decision
-	variant := "core"
-	if v, ok := result.Metrics["comparison_variant"].(string); ok && v == "ml" {
-		variant = "ml"
-	} else if semembedAvailable, ok := result.Details["semembed_available"].(bool); ok && semembedAvailable {
-		variant = "ml"
-	}
-
-	// LPA clustering runs asynchronously - wait for communities to populate
-	// With initial_delay=2s in config, we need to wait at least that long plus detection time
-	var communities []*client.Community
-	var err error
-	for i := 0; i < 50; i++ { // Max 5 seconds (50 * 100ms) - allows for 2s initial delay + detection
-		communities, err = s.natsClient.GetAllCommunities(ctx)
-		if err == nil && len(communities) > 0 {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	variant := s.detectCommunityVariant(result)
+	communities, err := s.waitForCommunities(ctx)
 
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get communities: %v", err))
 		return nil
 	}
-
 	if len(communities) == 0 {
 		result.Warnings = append(result.Warnings, "No communities found for comparison (clustering may not have completed)")
 		result.Metrics["communities_total"] = 0
 		return nil
 	}
 
-	// For ML variant, wait up to 2 minutes for LLM enhancement to complete
-	var llmWaitDurationMs int64
-	var llmFailedCount, llmPendingCount int
+	var llmWait llmWaitResult
 	if variant == "ml" {
-		fmt.Printf("[LLM WAIT] Waiting for LLM enhancement to complete (ML variant, %d communities)...\n", len(communities))
-
-		enhanceStart := time.Now()
-		enhanced, failed, pending, waitErr := s.natsClient.WaitForCommunityEnhancement(
-			ctx,
-			2*time.Minute,  // timeout
-			2*time.Second,  // poll interval
-		)
-		llmWaitDurationMs = time.Since(enhanceStart).Milliseconds()
-		llmFailedCount = failed
-		llmPendingCount = pending
-
-		fmt.Printf("[LLM WAIT] Complete: enhanced=%d, failed=%d, pending=%d, duration=%dms\n",
-			enhanced, failed, pending, llmWaitDurationMs)
-
-		if waitErr != nil {
-			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("LLM enhancement wait error: %v", waitErr))
-		}
-
-		if enhanced == 0 && failed == 0 && pending > 0 {
-			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("No LLM enhancements completed within 2 minute timeout (%d still pending)", pending))
-		}
-
-		// Record LLM wait metrics
-		result.Metrics["llm_wait_duration_ms"] = float64(llmWaitDurationMs)
-		result.Metrics["llm_failed_count"] = float64(llmFailedCount)
-		result.Metrics["llm_pending_count"] = float64(llmPendingCount)
-
+		llmWait = s.waitForLLMEnhancement(ctx, len(communities), result)
 		// Refresh communities after waiting
-		communities, err = s.natsClient.GetAllCommunities(ctx)
-		if err != nil {
+		if refreshed, err := s.natsClient.GetAllCommunities(ctx); err == nil {
+			communities = refreshed
+		} else {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to refresh communities after LLM wait: %v", err))
 		}
 	}
 
-	// Compare statistical vs LLM summaries for each community
-	comparisons := make([]CommunityComparison, 0, len(communities))
-	llmEnhancedCount := 0
-	statisticalOnlyCount := 0
-	var totalLengthRatio float64
-	var totalWordOverlap float64
-	ratioCount := 0
+	stats := s.analyzeCommunities(communities)
+	s.recordCommunityMetrics(stats, result)
 
-	// Track non-singleton communities (for tier comparison metrics)
-	nonSingletonCount := 0
-	totalNonSingletonMembers := 0
-	largestCommunitySize := 0
-
-	for _, comm := range communities {
-		comparison := CommunityComparison{
-			CommunityID:        comm.ID,
-			Level:              comm.Level,
-			MemberCount:        len(comm.Members),
-			StatisticalSummary: comm.StatisticalSummary,
-			LLMSummary:         comm.LLMSummary,
-			SummaryStatus:      comm.SummaryStatus,
-			Keywords:           comm.Keywords,
-		}
-
-		// Track non-singleton communities
-		if len(comm.Members) > 1 {
-			nonSingletonCount++
-			totalNonSingletonMembers += len(comm.Members)
-			if len(comm.Members) > largestCommunitySize {
-				largestCommunitySize = len(comm.Members)
-			}
-		}
-
-		// Track summary status counts
-		switch comm.SummaryStatus {
-		case "llm-enhanced":
-			llmEnhancedCount++
-		case "statistical", "":
-			statisticalOnlyCount++
-		}
-
-		// Calculate metrics only when both summaries exist
-		if comm.LLMSummary != "" && comm.StatisticalSummary != "" {
-			// Length ratio: how much longer/shorter is LLM summary
-			if len(comm.StatisticalSummary) > 0 {
-				comparison.SummaryLengthRatio = float64(len(comm.LLMSummary)) / float64(len(comm.StatisticalSummary))
-				totalLengthRatio += comparison.SummaryLengthRatio
-				ratioCount++
-			}
-
-			// Word overlap: Jaccard similarity on word sets
-			comparison.WordOverlap = wordJaccard(comm.StatisticalSummary, comm.LLMSummary)
-			totalWordOverlap += comparison.WordOverlap
-		}
-
-		comparisons = append(comparisons, comparison)
-	}
-
-	// Calculate averages
-	avgLengthRatio := 0.0
-	avgWordOverlap := 0.0
-	if ratioCount > 0 {
-		avgLengthRatio = totalLengthRatio / float64(ratioCount)
-		avgWordOverlap = totalWordOverlap / float64(ratioCount)
-	}
-
-	// Record metrics
-	result.Metrics["communities_total"] = len(communities)
-	result.Metrics["communities_llm_enhanced"] = llmEnhancedCount
-	result.Metrics["communities_statistical_only"] = statisticalOnlyCount
-	result.Metrics["avg_summary_length_ratio"] = avgLengthRatio
-	result.Metrics["avg_word_overlap"] = avgWordOverlap
-
-	// Tier comparison metrics (non-singleton community analysis)
-	result.Metrics["communities_non_singleton"] = nonSingletonCount
-	result.Metrics["largest_community_size"] = largestCommunitySize
-
-	avgNonSingletonSize := 0.0
-	if nonSingletonCount > 0 {
-		avgNonSingletonSize = float64(totalNonSingletonMembers) / float64(nonSingletonCount)
-	}
-	result.Metrics["avg_non_singleton_size"] = avgNonSingletonSize
-
-	// Tier-specific assertions
-	// Tier1 (core/BM25): Expected to produce mostly singletons due to lexical similarity limitations
-	// Tier2 (ml/neural): Expected to produce non-singleton communities
-	if variant == "ml" && nonSingletonCount == 0 {
+	if variant == "ml" && stats.nonSingletonCount == 0 {
 		result.Warnings = append(result.Warnings,
 			"ML variant should produce non-singleton communities - neural embeddings expected to find semantic similarity")
 	}
 
-	// Persist community comparison report
-	comparisonFile := ""
-	if s.config.OutputDir != "" {
-		report := CommunitySummaryReport{
-			Variant:               variant,
-			Timestamp:             time.Now(),
-			CommunitiesTotal:      len(communities),
-			LLMEnhancedCount:      llmEnhancedCount,
-			StatisticalOnlyCount:  statisticalOnlyCount,
-			LLMFailedCount:        llmFailedCount,
-			LLMPendingCount:       llmPendingCount,
-			LLMWaitDurationMs:     llmWaitDurationMs,
-			AvgSummaryLengthRatio: avgLengthRatio,
-			AvgWordOverlap:        avgWordOverlap,
-			NonSingletonCount:     nonSingletonCount,
-			LargestCommunitySize:  largestCommunitySize,
-			AvgNonSingletonSize:   avgNonSingletonSize,
-			Communities:           comparisons,
-		}
-
-		filename := fmt.Sprintf("community-comparison-%s-%s.json",
-			variant, time.Now().Format("20060102-150405"))
-		comparisonFile = filepath.Join(s.config.OutputDir, filename)
-
-		data, err := json.MarshalIndent(report, "", "  ")
-		if err == nil {
-			if err := os.WriteFile(comparisonFile, data, 0644); err != nil {
-				result.Warnings = append(result.Warnings,
-					fmt.Sprintf("Failed to write community comparison file: %v", err))
-			}
-		}
-	}
+	comparisonFile := s.persistCommunityReport(variant, stats, llmWait, result)
 
 	result.Details["community_comparison"] = map[string]any{
-		"total":                  len(communities),
-		"llm_enhanced":           llmEnhancedCount,
-		"statistical_only":       statisticalOnlyCount,
-		"avg_length_ratio":       avgLengthRatio,
-		"avg_word_overlap":       avgWordOverlap,
-		"non_singleton_count":    nonSingletonCount,
-		"largest_community_size": largestCommunitySize,
-		"avg_non_singleton_size": avgNonSingletonSize,
+		"total":                  len(stats.comparisons),
+		"llm_enhanced":           stats.llmEnhancedCount,
+		"statistical_only":       stats.statisticalOnlyCount,
+		"avg_length_ratio":       stats.avgLengthRatio,
+		"avg_word_overlap":       stats.avgWordOverlap,
+		"non_singleton_count":    stats.nonSingletonCount,
+		"largest_community_size": stats.largestCommunitySize,
+		"avg_non_singleton_size": stats.avgNonSingletonSize,
 		"comparison_file":        comparisonFile,
-		"communities":            comparisons,
+		"communities":            stats.comparisons,
 		"message": fmt.Sprintf("Compared %d communities: %d LLM-enhanced, %d statistical only, %d non-singleton",
-			len(communities), llmEnhancedCount, statisticalOnlyCount, nonSingletonCount),
+			len(stats.comparisons), stats.llmEnhancedCount, stats.statisticalOnlyCount, stats.nonSingletonCount),
 	}
 
 	return nil

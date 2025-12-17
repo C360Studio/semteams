@@ -15,9 +15,9 @@ import (
 	"github.com/c360/semstreams/storage/objectstore"
 )
 
-// EmbeddingGeneratedCallback is called when an embedding is successfully generated.
+// GeneratedCallback is called when an embedding is successfully generated.
 // The callback receives the entity ID and the generated embedding vector.
-type EmbeddingGeneratedCallback func(entityID string, embedding []float32)
+type GeneratedCallback func(entityID string, embedding []float32)
 
 // Worker processes pending embedding requests asynchronously
 type Worker struct {
@@ -35,7 +35,7 @@ type Worker struct {
 	contentStore *objectstore.Store // Optional ObjectStore for fetching content
 
 	// Callbacks
-	onGenerated EmbeddingGeneratedCallback // Called when embedding is generated
+	onGenerated GeneratedCallback // Called when embedding is generated
 
 	// State
 	started  bool
@@ -87,7 +87,7 @@ func (w *Worker) WithContentStore(store *objectstore.Store) *Worker {
 
 // WithOnGenerated sets a callback that is invoked when an embedding is generated.
 // Use this to populate caches or trigger downstream processing.
-func (w *Worker) WithOnGenerated(cb EmbeddingGeneratedCallback) *Worker {
+func (w *Worker) WithOnGenerated(cb GeneratedCallback) *Worker {
 	w.onGenerated = cb
 	return w
 }

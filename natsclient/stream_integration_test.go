@@ -141,7 +141,7 @@ func TestIntegration_ConsumeStreamWithConfig(t *testing.T) {
 		AckPolicy:     "explicit",
 	}
 
-	err = client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {
+	err = client.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 		received.Add(1)
 		msg.Ack()
 		wg.Done()
@@ -196,7 +196,7 @@ func TestIntegration_ConsumeStreamWithConfig_AutoCreate(t *testing.T) {
 	}
 
 	var received atomic.Int32
-	err = client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {
+	err = client.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 		received.Add(1)
 		msg.Ack()
 	})
@@ -301,7 +301,7 @@ func TestIntegration_ConsumeStreamWithConfig_DeliverPolicies(t *testing.T) {
 				AckPolicy:     "explicit",
 			}
 
-			err = client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {
+			err = client.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 				received.Add(1)
 				msg.Ack()
 			})
@@ -360,7 +360,7 @@ func TestIntegration_ConsumeStreamWithConfig_AckPolicies(t *testing.T) {
 		AckPolicy:     "explicit",
 	}
 
-	err = client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {
+	err = client.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 		received.Add(1)
 		// Explicitly ack
 		msg.Ack()
@@ -414,7 +414,7 @@ func TestIntegration_ConsumeStreamWithConfig_Nak(t *testing.T) {
 		AckWait:       100 * time.Millisecond,
 	}
 
-	err = client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {
+	err = client.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 		count := deliveryCount.Add(1)
 		if count == 1 {
 			// First delivery - Nak for redelivery
@@ -460,7 +460,7 @@ func TestIntegration_ConsumeStreamWithConfig_MissingStreamName(t *testing.T) {
 		ConsumerName: "test-consumer",
 	}
 
-	err = client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {})
+	err = client.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, _ jetstream.Msg) {})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "stream name is required")
 }
@@ -476,7 +476,7 @@ func TestIntegration_ConsumeStreamWithConfig_NotConnected(t *testing.T) {
 		ConsumerName: "test-consumer",
 	}
 
-	err = client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {})
+	err = client.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, _ jetstream.Msg) {})
 	assert.Equal(t, ErrNotConnected, err)
 }
 
@@ -513,7 +513,7 @@ func TestIntegration_StopConsumer(t *testing.T) {
 		AckPolicy:     "explicit",
 	}
 
-	err = client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {
+	err = client.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 		msg.Ack()
 	})
 	require.NoError(t, err)
@@ -559,7 +559,7 @@ func TestIntegration_StopAllConsumers(t *testing.T) {
 			AckPolicy:     "explicit",
 		}
 
-		err = client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {
+		err = client.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 			msg.Ack()
 		})
 		require.NoError(t, err)

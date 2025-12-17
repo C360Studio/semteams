@@ -115,7 +115,8 @@ func (c *Client) Reply(ctx context.Context, replyTo string, data []byte) error {
 }
 
 // ReplyWithHeaders sends a reply with custom headers.
-func (c *Client) ReplyWithHeaders(ctx context.Context, replyTo string, data []byte, headers map[string]string) error {
+// Note: ctx is accepted for API consistency but not currently used.
+func (c *Client) ReplyWithHeaders(_ context.Context, replyTo string, data []byte, headers map[string]string) error {
 	if replyTo == "" {
 		return nil // No reply requested
 	}

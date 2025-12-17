@@ -606,85 +606,138 @@ func (m *Manager) GlobalSearchWithOptions(
 			"GlobalSearchWithOptions", "invalid search options")
 	}
 
-	// Check if community detector is available
+	// Get community detector
+	detector, err := m.getCommunityDetector()
+	if err != nil {
+		return nil, err
+	}
+
+	// Collect candidate entities from index pre-filters
+	candidateIDs := m.collectCandidateIDsFromFilters(ctx, opts)
+
+	// Get and filter communities
+	communities, err := m.getFilteredCommunities(ctx, detector, opts.Level, candidateIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(communities) == 0 {
+		return m.emptySearchResult(startTime), nil
+	}
+
+	// Score and select top communities
+	scoredCommunities := m.scoreCommunitySummaries(communities, opts.Query)
+	topCommunities := m.selectTopCommunities(scoredCommunities, opts.MaxCommunities)
+
+	// Collect and load entities from communities
+	entityIDs := m.collectEntityIDsFromCommunities(topCommunities, candidateIDs, opts.Limit)
+	entities, err := m.GetEntities(ctx, entityIDs)
+	if err != nil {
+		return nil, errs.WrapTransient(err, "QueryManager", "GlobalSearchWithOptions",
+			"failed to load entities from communities")
+	}
+
+	// Filter entities and build response
+	matchedEntities := m.filterEntitiesByQueryWithOptions(ctx, entities, opts)
+	summaries := m.buildCommunitySummaries(topCommunities, scoredCommunities)
+
+	return &GlobalSearchResult{
+		Entities:           matchedEntities,
+		CommunitySummaries: summaries,
+		Count:              len(matchedEntities),
+		Duration:           time.Since(startTime),
+	}, nil
+}
+
+// getCommunityDetector validates and returns the community detector interface.
+func (m *Manager) getCommunityDetector() (communityDetectorInterface, error) {
 	if m.communityDetector == nil {
 		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GlobalSearchWithOptions", "community detector not available")
 	}
 
-	// Type assert to community detector interface
 	detector, ok := m.communityDetector.(communityDetectorInterface)
 	if !ok {
 		return nil, errs.WrapTransient(errs.ErrMissingConfig, "QueryManager",
 			"GlobalSearchWithOptions", "community detector does not implement required interface")
 	}
 
-	// 1. If index filters present, collect candidate entities FIRST
-	var candidateIDs map[string]bool
-	if opts.HasIndexFilters() {
-		candidates, err := m.collectCandidatesFromIndexes(ctx, opts)
-		if err != nil {
-			// Log warning but don't fail - fall back to full search
-			m.logger.Warn("Index pre-filter failed, falling back to full search",
-				"error", err,
-				"strategy", opts.InferStrategy())
-		} else if len(candidates) > 0 {
-			candidateIDs = candidates
-			m.logger.Debug("Index pre-filter applied",
-				"candidate_count", len(candidates),
-				"strategy", opts.InferStrategy())
-		}
+	return detector, nil
+}
+
+// collectCandidateIDsFromFilters collects candidate entity IDs from index pre-filters.
+func (m *Manager) collectCandidateIDsFromFilters(ctx context.Context, opts *SearchOptions) map[string]bool {
+	if !opts.HasIndexFilters() {
+		return nil
 	}
 
-	// 2. Get all communities at the specified level
-	communities, err := detector.GetCommunitiesByLevel(ctx, opts.Level)
+	candidates, err := m.collectCandidatesFromIndexes(ctx, opts)
+	if err != nil {
+		m.logger.Warn("Index pre-filter failed, falling back to full search",
+			"error", err,
+			"strategy", opts.InferStrategy())
+		return nil
+	}
+
+	if len(candidates) > 0 {
+		m.logger.Debug("Index pre-filter applied",
+			"candidate_count", len(candidates),
+			"strategy", opts.InferStrategy())
+	}
+
+	return candidates
+}
+
+// getFilteredCommunities gets communities at the specified level and filters by candidates.
+func (m *Manager) getFilteredCommunities(
+	ctx context.Context,
+	detector communityDetectorInterface,
+	level int,
+	candidateIDs map[string]bool,
+) ([]*clustering.Community, error) {
+	communities, err := detector.GetCommunitiesByLevel(ctx, level)
 	if err != nil {
 		return nil, errs.WrapTransient(err, "QueryManager", "GlobalSearchWithOptions",
-			fmt.Sprintf("failed to get communities at level %d", opts.Level))
+			fmt.Sprintf("failed to get communities at level %d", level))
 	}
 
-	if len(communities) == 0 {
-		return &GlobalSearchResult{
-			Entities:           []*gtypes.EntityState{},
-			CommunitySummaries: []CommunitySummary{},
-			Count:              0,
-			Duration:           time.Since(startTime),
-		}, nil
-	}
-
-	// 3. If we have candidates, filter communities to only those containing candidates
-	if len(candidateIDs) > 0 {
+	if len(candidateIDs) > 0 && len(communities) > 0 {
 		communities = m.filterCommunitiesByMembers(communities, candidateIDs)
 		m.logger.Debug("Filtered communities by candidates",
 			"remaining_communities", len(communities),
 			"candidate_count", len(candidateIDs))
-
-		if len(communities) == 0 {
-			// No communities contain any candidates
-			return &GlobalSearchResult{
-				Entities:           []*gtypes.EntityState{},
-				CommunitySummaries: []CommunitySummary{},
-				Count:              0,
-				Duration:           time.Since(startTime),
-			}, nil
-		}
 	}
 
-	// 4. Score communities based on their summaries
-	scoredCommunities := m.scoreCommunitySummaries(communities, opts.Query)
+	return communities, nil
+}
 
-	// 5. Select top-N communities
-	selectedCount := opts.MaxCommunities
-	if len(scoredCommunities) < selectedCount {
-		selectedCount = len(scoredCommunities)
+// emptySearchResult returns an empty search result.
+func (m *Manager) emptySearchResult(startTime time.Time) *GlobalSearchResult {
+	return &GlobalSearchResult{
+		Entities:           []*gtypes.EntityState{},
+		CommunitySummaries: []CommunitySummary{},
+		Count:              0,
+		Duration:           time.Since(startTime),
 	}
-	topCommunities := scoredCommunities[:selectedCount]
+}
 
-	// 6. Collect entity IDs from selected communities
+// selectTopCommunities selects the top N communities from scored results.
+func (m *Manager) selectTopCommunities(scoredCommunities []*clustering.Community, maxCount int) []*clustering.Community {
+	if len(scoredCommunities) < maxCount {
+		maxCount = len(scoredCommunities)
+	}
+	return scoredCommunities[:maxCount]
+}
+
+// collectEntityIDsFromCommunities collects entity IDs from communities with limits applied.
+func (m *Manager) collectEntityIDsFromCommunities(
+	communities []*clustering.Community,
+	candidateIDs map[string]bool,
+	limit int,
+) []string {
 	entityIDSet := make(map[string]bool)
-	for _, comm := range topCommunities {
+	for _, comm := range communities {
 		for _, memberID := range comm.Members {
-			// If we have candidates, only include members that are candidates
 			if len(candidateIDs) > 0 && !candidateIDs[memberID] {
 				continue
 			}
@@ -692,7 +745,6 @@ func (m *Manager) GlobalSearchWithOptions(
 		}
 	}
 
-	// Convert to slice
 	entityIDs := make([]string, 0, len(entityIDSet))
 	for id := range entityIDSet {
 		entityIDs = append(entityIDs, id)
@@ -702,21 +754,18 @@ func (m *Manager) GlobalSearchWithOptions(
 	if len(entityIDs) > MaxTotalEntitiesInSearch {
 		entityIDs = entityIDs[:MaxTotalEntitiesInSearch]
 	}
-	if opts.Limit > 0 && len(entityIDs) > opts.Limit {
-		entityIDs = entityIDs[:opts.Limit]
+	if limit > 0 && len(entityIDs) > limit {
+		entityIDs = entityIDs[:limit]
 	}
 
-	// 7. Load entities
-	entities, err := m.GetEntities(ctx, entityIDs)
-	if err != nil {
-		return nil, errs.WrapTransient(err, "QueryManager", "GlobalSearchWithOptions",
-			"failed to load entities from communities")
-	}
+	return entityIDs
+}
 
-	// 8. Filter entities based on query (keyword or semantic)
-	matchedEntities := m.filterEntitiesByQueryWithOptions(ctx, entities, opts)
-
-	// 9. Build community summaries for response
+// buildCommunitySummaries builds community summaries for the response.
+func (m *Manager) buildCommunitySummaries(
+	topCommunities []*clustering.Community,
+	scoredCommunities []*clustering.Community,
+) []CommunitySummary {
 	summaries := make([]CommunitySummary, len(topCommunities))
 	for i, comm := range topCommunities {
 		var relevance float64
@@ -740,13 +789,7 @@ func (m *Manager) GlobalSearchWithOptions(
 			Relevance:   relevance,
 		}
 	}
-
-	return &GlobalSearchResult{
-		Entities:           matchedEntities,
-		CommunitySummaries: summaries,
-		Count:              len(matchedEntities),
-		Duration:           time.Since(startTime),
-	}, nil
+	return summaries
 }
 
 // collectCandidatesFromIndexes queries indexes to pre-filter candidate entities.
