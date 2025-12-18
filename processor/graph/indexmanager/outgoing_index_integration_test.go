@@ -38,9 +38,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 		// Create entity with multiple outgoing relationships
 		entityID := "acme.telemetry.robotics.gcs1.drone.001"
 		state := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				// Relationship triple: fleet membership
 				{
@@ -105,9 +103,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 	t.Run("query_by_predicate", func(t *testing.T) {
 		entityID := "acme.telemetry.robotics.gcs2.drone.002"
 		state := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -157,9 +153,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Initial state with 1 relationship
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -182,9 +176,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Update: add more relationships
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				// Keep existing
 				{
@@ -227,9 +219,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Initial state with 3 relationships
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -266,9 +256,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Update: keep only 1 relationship
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -296,9 +284,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Initial state
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -316,9 +302,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Update: change target entity for same predicate
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -347,9 +331,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Initial state: no relationships
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -365,15 +347,14 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 		err := outgoingIndex.HandleCreate(ctx, entityID, initialState)
 		require.NoError(t, err)
 
-		// Verify no index entry (no relationships)
-		_, err = outgoingIndex.GetOutgoing(ctx, entityID)
-		assert.Error(t, err, "should not find index for entity with no relationships")
+		// Verify empty result (no relationships) - not-found returns empty slice, not error
+		outgoing, err := outgoingIndex.GetOutgoing(ctx, entityID)
+		assert.NoError(t, err, "not-found is not an error")
+		assert.Empty(t, outgoing, "should return empty slice for entity with no relationships")
 
 		// Update: add relationships
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -390,7 +371,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify relationships now indexed
-		outgoing, err := outgoingIndex.GetOutgoing(ctx, entityID)
+		outgoing, err = outgoingIndex.GetOutgoing(ctx, entityID)
 		require.NoError(t, err)
 		assert.Len(t, outgoing, 1)
 	})
@@ -400,9 +381,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Initial state with relationships
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -432,9 +411,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Update: remove all relationships
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -450,9 +427,10 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 		err = outgoingIndex.HandleUpdate(ctx, entityID, updatedState)
 		require.NoError(t, err)
 
-		// Verify index entry removed (no relationships)
-		_, err = outgoingIndex.GetOutgoing(ctx, entityID)
-		assert.Error(t, err, "should not find index after all relationships removed")
+		// Verify empty result after all relationships removed - not-found returns empty slice, not error
+		outgoing, err = outgoingIndex.GetOutgoing(ctx, entityID)
+		assert.NoError(t, err, "not-found is not an error")
+		assert.Empty(t, outgoing, "should return empty slice after all relationships removed")
 	})
 
 	t.Run("delete_entity_cleanup", func(t *testing.T) {
@@ -460,9 +438,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 		// Create entity with relationships
 		state := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -494,11 +470,12 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 		err = outgoingIndex.HandleDelete(ctx, entityID)
 		require.NoError(t, err)
 
-		// Verify index entry removed
-		_, err = outgoingIndex.GetOutgoing(ctx, entityID)
-		assert.Error(t, err, "should not find index after delete")
+		// Verify empty result after delete - not-found returns empty slice, not error
+		outgoing, err = outgoingIndex.GetOutgoing(ctx, entityID)
+		assert.NoError(t, err, "not-found is not an error")
+		assert.Empty(t, outgoing, "should return empty slice after delete")
 
-		// Verify bucket entry removed
+		// Verify bucket entry removed (low-level check)
 		_, err = outgoingBucket.Get(ctx, entityID)
 		assert.Error(t, err, "bucket entry should be removed")
 		assert.Equal(t, jetstream.ErrKeyNotFound, err, "should return key not found error")
@@ -515,9 +492,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 
 				entityID := "acme.telemetry.robotics.concurrent." + string(rune('a'+index))
 				state := &gtypes.EntityState{
-					Node: gtypes.NodeProperties{
-						ID: entityID,
-					},
+					ID: entityID,
 					Triples: []message.Triple{
 						{
 							Subject:   entityID,
@@ -556,9 +531,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 	t.Run("context_cancellation", func(t *testing.T) {
 		entityID := "acme.telemetry.robotics.cancel.drone.001"
 		state := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -583,8 +556,9 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 	t.Run("get_nonexistent_entity", func(t *testing.T) {
 		nonExistentID := "acme.telemetry.robotics.does.not.exist"
 
+		// Not-found returns empty slice, not error (same convention as IncomingIndex)
 		outgoing, err := outgoingIndex.GetOutgoing(ctx, nonExistentID)
-		assert.Error(t, err, "should error for non-existent entity")
-		assert.Nil(t, outgoing, "should return nil for non-existent entity")
+		assert.NoError(t, err, "not-found is not an error")
+		assert.Empty(t, outgoing, "should return empty slice for non-existent entity")
 	})
 }

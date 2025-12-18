@@ -309,6 +309,6 @@
 //
 // Run tests:
 //
-//	go test ./processor/json_map -v              # Unit tests
-//	INTEGRATION_TESTS=1 go test ./processor/json_map -v  # Integration tests
+//	go test ./processor/json_map -v                        # Unit tests
+//	go test -tags=integration ./processor/json_map -v      # Integration tests
 package jsonmapprocessor

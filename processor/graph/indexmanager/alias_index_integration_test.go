@@ -132,9 +132,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Initial state with 1 alias
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -156,9 +154,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Update: add 2 more aliases (keep the first one)
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -204,9 +200,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Initial state with 3 aliases
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -240,9 +234,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Update: keep only 1 alias
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -281,9 +273,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Initial state: [a, b]
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -304,9 +294,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Update: [b, c] - remove a, keep b, add c
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -353,9 +341,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Initial state: no aliases
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				// No alias predicates, just some other data
 				{
@@ -372,9 +358,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Update: add aliases
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -414,9 +398,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Initial state with aliases
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -437,9 +419,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Update: remove all aliases
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				// No alias predicates
 				{
@@ -472,9 +452,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Initial state
 		initialState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -501,9 +479,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Update with SAME aliases (no changes)
 		updatedState := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -552,9 +528,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		// Create entity with multiple aliases
 		state := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,
@@ -614,9 +588,7 @@ func TestAliasIndex_Integration(t *testing.T) {
 
 		entityID := "test.entity.009"
 		state := &gtypes.EntityState{
-			Node: gtypes.NodeProperties{
-				ID: entityID,
-			},
+			ID: entityID,
 			Triples: []message.Triple{
 				{
 					Subject:   entityID,

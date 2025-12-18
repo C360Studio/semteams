@@ -7,7 +7,6 @@ package iotsensor
 import (
 	"context"
 	"log/slog"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -90,7 +89,7 @@ func setupDataManager(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		dataErrors <- dataManager.Run(ctx)
+		dataErrors <- dataManager.Run(ctx, func() {})
 	}()
 
 	return dataManager, dataErrors
@@ -122,7 +121,7 @@ func setupIndexManager(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		indexErrors <- indexManager.Run(ctx)
+		indexErrors <- indexManager.Run(ctx, func() {})
 	}()
 
 	return indexManager, indexErrors
@@ -194,10 +193,6 @@ func waitForShutdown(t *testing.T, wg *sync.WaitGroup) {
 func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
-	}
-
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration tests (set INTEGRATION_TESTS=1 to run)")
 	}
 
 	// Create test NATS client with JetStream and KV
@@ -283,22 +278,22 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 			state := entityStates[0]
 
 			// T041: Write test: EntityState contains correct 6-part entity ID from SensorReading
-			entityID := state.Node.ID
+			entityID := state.ID
 			parts := strings.Split(entityID, ".")
 			if len(parts) != tt.wantEntityParts {
-				t.Errorf("EntityState.Node.ID = %q has %d parts, want %d parts",
+				t.Errorf("EntityState.ID = %q has %d parts, want %d parts",
 					entityID, len(parts), tt.wantEntityParts)
 			}
 
 			// Verify entity ID matches what SensorReading.EntityID() returns
 			expectedEntityID := tt.reading.EntityID()
 			if entityID != expectedEntityID {
-				t.Errorf("EntityState.Node.ID = %q, want %q", entityID, expectedEntityID)
+				t.Errorf("EntityState.ID = %q, want %q", entityID, expectedEntityID)
 			}
 
 			// Verify entity ID is valid per message package
 			if !message.IsValidEntityID(entityID) {
-				t.Errorf("EntityState.Node.ID = %q is not a valid 6-part entity ID", entityID)
+				t.Errorf("EntityState.ID = %q is not a valid 6-part entity ID", entityID)
 			}
 
 			// T042: Write test: EntityState contains all triples from SensorReading.Triples()
@@ -391,10 +386,6 @@ func TestZone_ProcessedByMessageManager_ProducesEntityState(t *testing.T) {
 		t.Skip("Skipping integration test in short mode")
 	}
 
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration tests (set INTEGRATION_TESTS=1 to run)")
-	}
-
 	// Create test NATS client with JetStream and KV
 	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
 	ctx := context.Background()
@@ -443,8 +434,8 @@ func TestZone_ProcessedByMessageManager_ProducesEntityState(t *testing.T) {
 
 	// Verify zone entity ID is correct
 	expectedEntityID := zone.EntityID()
-	if state.Node.ID != expectedEntityID {
-		t.Errorf("EntityState.Node.ID = %q, want %q", state.Node.ID, expectedEntityID)
+	if state.ID != expectedEntityID {
+		t.Errorf("EntityState.ID = %q, want %q", state.ID, expectedEntityID)
 	}
 
 	// Verify zone has expected triples
@@ -470,10 +461,6 @@ func TestZone_ProcessedByMessageManager_ProducesEntityState(t *testing.T) {
 func TestMultipleSensorReadings_SameDevice_ConsistentEntityID(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
-	}
-
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration tests (set INTEGRATION_TESTS=1 to run)")
 	}
 
 	// Create test NATS client with JetStream and KV
@@ -547,16 +534,16 @@ func TestMultipleSensorReadings_SameDevice_ConsistentEntityID(t *testing.T) {
 
 	// Verify entity IDs are the same (same device)
 	// This is the key invariant: the same device should always produce the same entity ID
-	if states2[0].Node.ID != states1[0].Node.ID {
+	if states2[0].ID != states1[0].ID {
 		t.Errorf("Second reading has different entity ID: %q vs %q",
-			states2[0].Node.ID, states1[0].Node.ID)
+			states2[0].ID, states1[0].ID)
 	}
 
 	// Verify both states have all expected triples
 	expectedEntityID := reading1.EntityID()
 	for i, state := range []*graph.EntityState{states1[0], states2[0]} {
-		if state.Node.ID != expectedEntityID {
-			t.Errorf("State %d has entity ID %q, want %q", i+1, state.Node.ID, expectedEntityID)
+		if state.ID != expectedEntityID {
+			t.Errorf("State %d has entity ID %q, want %q", i+1, state.ID, expectedEntityID)
 		}
 
 		// Each state should have the complete set of triples for that reading

@@ -1,0 +1,40 @@
+version: "3"
+
+# Semantic Tier: Neural embeddings, LLM summaries, semantic search
+# Requires external ML services: SemEmbed, SemInstruct
+
+tasks:
+  default:
+    desc: "Semantic tier: Neural embeddings + LLM (~90s)"
+    silent: false
+    deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
+    cmds:
+      - echo "[SEMANTIC] Starting semantic tier E2E test (SemEmbed + SemInstruct)..."
+      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
+      - echo "[OK] ML services are healthy (SemEmbed + SemInstruct)"
+      - echo "[SEMANTIC] Running semantic tier scenario..."
+      # ML app runs on port 8180 (HTTP), 9190 (metrics), 14650 (UDP) to avoid conflict
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant ml --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker/compose/tiered.yml --profile semantic down -v --timeout 15
+
+  compare:
+    desc: Run statistical vs semantic and generate comparison report
+    silent: false
+    deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
+    cmds:
+      - echo "[COMPARE] Running statistical variant first..."
+      - docker compose -f docker/compose/tiered.yml --profile statistical up -d --wait
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant core --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker/compose/tiered.yml --profile statistical down -v --timeout 15
+      - echo "[COMPARE] Running semantic variant second..."
+      - sleep 5
+      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant ml --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker/compose/tiered.yml --profile semantic down -v --timeout 15
+      - echo "[COMPARE] Generating comparison report..."
+      - cmd: cd cmd/e2e && ./e2e --compare --output-dir ./test/e2e/results
+        ignore_error: true
+      - echo "[OK] Comparison report generated in ./test/e2e/results/"

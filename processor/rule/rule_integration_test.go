@@ -25,11 +25,8 @@ import (
 
 // getTestNATSClient creates a NATS client for integration tests
 func getTestNATSClient(t *testing.T) *natsclient.Client {
-	if os.Getenv("INTEGRATION_TESTS") == "" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
-
 	// Create test client for this test
+	// Build tag ensures this only runs with -tags=integration
 	testClient, err := natsclient.NewSharedTestClient(
 		natsclient.WithJetStream(),
 		natsclient.WithKV(),
@@ -83,13 +80,14 @@ func TestIntegration_KVEntityStateWatch(t *testing.T) {
 	}
 
 	// Create a rule that triggers on battery level changes
+	// NOTE: Field must match the FULL triple predicate path
 	ruleDef := rule.Definition{
 		ID:   "battery_low_watch",
 		Type: "test_rule",
 		Name: "Battery Low Watcher",
 		Conditions: []expression.ConditionExpression{
 			{
-				Field:    "battery.level",
+				Field:    "robotics.battery.level", // Must match full triple predicate
 				Operator: "lte",
 				Value:    25.0,
 				Required: true,
@@ -166,11 +164,7 @@ func TestIntegration_KVEntityStateWatch(t *testing.T) {
 	// Update entity state in KV bucket (simulating graph processor update)
 	entityID := "c360.platform1.test.drone.drone1"
 	entityState := gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     entityID,
-			Type:   "drone",
-			Status: gtypes.StatusActive,
-		},
+		ID: entityID,
 		Triples: []message.Triple{
 			{
 				Subject:   entityID,

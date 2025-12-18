@@ -60,7 +60,7 @@ func setupTestIndexManager(t *testing.T, testClient *natsclient.TestClient) (Ind
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		managerErrors <- indexManager.Run(ctx)
+		managerErrors <- indexManager.Run(ctx, func() {})
 	}()
 
 	time.Sleep(100 * time.Millisecond)
@@ -79,11 +79,7 @@ func setupTestIndexManager(t *testing.T, testClient *natsclient.TestClient) (Ind
 // createTestEntity creates a test entity for index testing
 func createTestEntity(entityID string, triples []message.Triple) *gtypes.EntityState {
 	return &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:     entityID,
-			Type:   "domain.type",
-			Status: gtypes.StatusActive,
-		},
+		ID:        entityID,
 		Triples:   triples,
 		Version:   1,
 		UpdatedAt: time.Now(),
@@ -96,7 +92,7 @@ func putEntityInBucket(ctx context.Context, bucket jetstream.KeyValue, entity *g
 	if err != nil {
 		return err
 	}
-	_, err = bucket.Put(ctx, entity.Node.ID, entityData)
+	_, err = bucket.Put(ctx, entity.ID, entityData)
 	return err
 }
 
@@ -213,7 +209,7 @@ func TestIndexManager_IntegrationWithNATS(t *testing.T) {
 
 		results, err := indexManager.GetPredicateIndex(ctx, "status")
 		require.NoError(t, err, "Failed to query predicate index")
-		assert.Contains(t, results, entity.Node.ID, "Entity should be in predicate index")
+		assert.Contains(t, results, entity.ID, "Entity should be in predicate index")
 	})
 
 	t.Run("Alias Operations", func(t *testing.T) {

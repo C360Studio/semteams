@@ -224,7 +224,7 @@ func TestMCP_IntegrationWithNATS(t *testing.T) {
 	// Create MCP components
 	logger := slog.Default()
 	resolver := gql.NewBaseResolver(queryManager, nil)
-	executor, err := NewExecutor(resolver, logger)
+	executor, err := gql.NewExecutor(resolver, logger)
 	require.NoError(t, err, "Failed to create executor")
 
 	t.Run("GraphQL Entity Query via Executor", func(t *testing.T) {
@@ -329,7 +329,7 @@ func TestMCP_ServerIntegrationWithNATS(t *testing.T) {
 	// Create MCP server components
 	logger := slog.Default()
 	resolver := gql.NewBaseResolver(queryManager, nil)
-	executor, err := NewExecutor(resolver, logger)
+	executor, err := gql.NewExecutor(resolver, logger)
 	require.NoError(t, err, "Failed to create executor")
 
 	cfg := Config{

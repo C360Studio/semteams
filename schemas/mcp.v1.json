@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "mcp.v1.json",
+  "type": "object",
+  "title": "mcp Configuration",
+  "description": "MCP gateway for AI agent integration via GraphQL",
+  "properties": {},
+  "required": [],
+  "x-component-metadata": {
+    "name": "mcp",
+    "type": "gateway",
+    "protocol": "mcp",
+    "domain": "network",
+    "version": "0.1.0"
+  }
+}

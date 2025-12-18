@@ -1,9 +1,9 @@
+//go:build integration
+
 package component
 
 import (
-	"fmt"
 	"log"
-	"os"
 	"testing"
 
 	"github.com/c360/semstreams/natsclient"
@@ -15,12 +15,7 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	if os.Getenv("INTEGRATION_TESTS") == "" {
-		fmt.Println("Skipping integration tests. Set INTEGRATION_TESTS=1 to run.")
-		return
-	}
-
-	// Setup: Create shared NATS test client with testcontainers
+	// Build tag ensures this only runs with -tags=integration
 	testClient, err := natsclient.NewSharedTestClient(
 		natsclient.WithJetStream(),
 	)
@@ -36,14 +31,13 @@ func TestMain(m *testing.M) {
 	// Cleanup
 	testClient.Terminate()
 
-	os.Exit(exitCode)
+	if exitCode != 0 {
+		log.Fatal("tests failed")
+	}
 }
 
 // getSharedNATSClient returns the shared NATS connection for integration tests
 func getSharedNATSClient(t *testing.T) *nats.Conn {
-	if os.Getenv("INTEGRATION_TESTS") == "" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 	if sharedNATSClient == nil {
 		t.Fatal("Shared NATS client not initialized - TestMain should have created it")
 	}

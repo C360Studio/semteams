@@ -36,10 +36,7 @@ func TestIntegration_SpatialIndex_ProcessesTriples(t *testing.T) {
 
 	// Test entity with PROPER triples (not properties) - triples are single source of truth
 	entity := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   "c360.platform1.robotics.test.drone.0",
-			Type: "drone",
-		},
+		ID: "c360.platform1.robotics.test.drone.0",
 		Triples: []message.Triple{
 			{
 				Subject:   "c360.platform1.robotics.test.drone.0",
@@ -119,10 +116,7 @@ func TestIntegration_SpatialIndex_SkipsWithoutTriples(t *testing.T) {
 
 	// Test entity with NO triples - spatial index should gracefully handle this
 	entity := &gtypes.EntityState{
-		Node: gtypes.NodeProperties{
-			ID:   "c360.platform1.robotics.test.drone.1",
-			Type: "drone",
-		},
+		ID:      "c360.platform1.robotics.test.drone.1",
 		Triples: nil, // Entity with no triples should not be indexed
 	}
 

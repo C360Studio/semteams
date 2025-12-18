@@ -1,0 +1,36 @@
+version: "3"
+
+# Federation E2E tests: Edge-to-cloud communication via WebSocket
+
+tasks:
+  basic:
+    desc: Run federation E2E test (edge-to-cloud via WebSocket)
+    silent: false
+    deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
+    cmds:
+      - echo "[FEDERATION] Starting federation test environment (edge + cloud)..."
+      - docker compose -f docker/compose/federation.yml up -d --wait
+      - echo "[OK] Federation services are healthy (edge + cloud instances)"
+      - echo "[FEDERATION] Running federation test..."
+      - cmd: cd cmd/e2e && ./e2e --scenario core-federation
+        ignore_error: true
+      - docker compose -f docker/compose/federation.yml down -v --timeout 15
+
+  rules:
+    desc: Run rule processor to graph processor integration test
+    silent: false
+    deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
+    cmds:
+      - echo "[FEDERATION] Starting rule processor graph integration test..."
+      - docker compose -f docker/compose/rules.yml up -d --wait
+      - echo "[OK] Services are healthy (rule + graph processors)"
+      - echo "[FEDERATION] Running rules-graph scenario..."
+      - cmd: cd cmd/e2e && ./e2e --scenario rules-graph
+        ignore_error: true
+      - docker compose -f docker/compose/rules.yml down -v --timeout 15
+
+  all:
+    desc: Run all federation tests
+    cmds:
+      - task: basic
+      - task: rules

@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -646,11 +645,6 @@ func (s *FlowServiceHTTPSuite) TestHTTP_FullLifecycle() {
 func TestFlowServiceHTTPSuite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration tests in short mode")
-	}
-
-	// Skip if INTEGRATION_TESTS not set
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration tests (set INTEGRATION_TESTS=1 to run)")
 	}
 
 	suite.Run(t, new(FlowServiceHTTPSuite))

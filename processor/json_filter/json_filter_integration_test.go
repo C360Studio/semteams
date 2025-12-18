@@ -5,7 +5,6 @@ package jsonfilter_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -27,38 +26,34 @@ var (
 
 // TestMain sets up a single shared NATS container for all JSON filter processor tests
 func TestMain(m *testing.M) {
-	if os.Getenv("INTEGRATION_TESTS") != "" {
-		// Create a single shared test client for integration tests
-		testClient, err := natsclient.NewSharedTestClient(
-			natsclient.WithJetStream(),
-			natsclient.WithKV(),
-			natsclient.WithTestTimeout(5*time.Second),
-			natsclient.WithStartTimeout(30*time.Second),
-		)
-		if err != nil {
-			panic("Failed to create shared test client: " + err.Error())
-		}
-
-		sharedTestClient = testClient
-		sharedNATSClient = testClient.Client
+	// Create a single shared test client for integration tests
+	// Build tag ensures this only runs with -tags=integration
+	testClient, err := natsclient.NewSharedTestClient(
+		natsclient.WithJetStream(),
+		natsclient.WithKV(),
+		natsclient.WithTestTimeout(5*time.Second),
+		natsclient.WithStartTimeout(30*time.Second),
+	)
+	if err != nil {
+		panic("Failed to create shared test client: " + err.Error())
 	}
+
+	sharedTestClient = testClient
+	sharedNATSClient = testClient.Client
 
 	// Run all tests
 	exitCode := m.Run()
 
-	// Cleanup integration test resources if they were created
-	if sharedTestClient != nil {
-		sharedTestClient.Terminate()
-	}
+	// Cleanup integration test resources
+	sharedTestClient.Terminate()
 
-	os.Exit(exitCode)
+	if exitCode != 0 {
+		panic("tests failed")
+	}
 }
 
 // getSharedNATSClient returns the shared NATS client for integration tests
 func getSharedNATSClient(t *testing.T) *natsclient.Client {
-	if os.Getenv("INTEGRATION_TESTS") == "" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 	if sharedNATSClient == nil {
 		t.Fatal("Shared NATS client not initialized - TestMain should have created it")
 	}

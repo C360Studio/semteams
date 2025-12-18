@@ -1,8 +1,9 @@
+//go:build integration
+
 package service
 
 import (
 	"log"
-	"os"
 	"testing"
 	"time"
 
@@ -17,15 +18,7 @@ var (
 
 // TestMain sets up a single shared NATS container for all service package tests
 func TestMain(m *testing.M) {
-	// Run unit tests even without INTEGRATION_TESTS set
-	// Integration tests will skip themselves if INTEGRATION_TESTS is not set
-	if os.Getenv("INTEGRATION_TESTS") == "" {
-		log.Println("Running unit tests only. Set INTEGRATION_TESTS=1 to run integration tests.")
-		exitCode := m.Run()
-		os.Exit(exitCode)
-	}
-
-	// Create a single shared test client for integration tests
+	// Build tag ensures this only runs with -tags=integration
 	testClient, err := natsclient.NewSharedTestClient(
 		natsclient.WithJetStream(),
 		natsclient.WithKV(),
@@ -45,7 +38,9 @@ func TestMain(m *testing.M) {
 	// Cleanup
 	testClient.Terminate()
 
-	os.Exit(exitCode)
+	if exitCode != 0 {
+		log.Fatal("tests failed")
+	}
 }
 
 // getSharedTestClient returns the shared test client for tests that need it

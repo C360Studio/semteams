@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -19,10 +18,6 @@ import (
 )
 
 func TestRuntimeMetricsIntegration(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
-
 	// Setup NATS client for testing
 	testClient := natsclient.NewTestClient(t,
 		natsclient.WithJetStream(),
@@ -178,9 +173,6 @@ func TestRuntimeMetricsIntegration(t *testing.T) {
 }
 
 func TestRuntimeMetrics_WithMockPrometheus(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 
 	// Create a mock Prometheus server that returns valid responses
 	mockPrometheus := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

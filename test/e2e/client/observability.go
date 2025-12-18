@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/c360/semstreams/test/e2e/config"
 )
@@ -100,6 +101,80 @@ func (c *ObservabilityClient) GetComponents(ctx context.Context) ([]ComponentInf
 	}
 
 	return components, nil
+}
+
+// WaitForComponentHealthy waits until a specific component reports healthy status.
+// This is useful after Docker compose --wait passes (which only checks /health endpoint)
+// but before individual components like graph processor have finished initialization.
+func (c *ObservabilityClient) WaitForComponentHealthy(ctx context.Context, name string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	var lastState string
+
+	for time.Now().Before(deadline) {
+		components, err := c.GetComponents(ctx)
+		if err != nil {
+			lastErr = err
+		} else {
+			for _, comp := range components {
+				if comp.Name == name {
+					lastState = comp.State
+					if comp.Healthy {
+						return nil
+					}
+					break
+				}
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+
+	if lastErr != nil {
+		return fmt.Errorf("component %s not healthy after %v: last error: %w", name, timeout, lastErr)
+	}
+	return fmt.Errorf("component %s not healthy after %v: last state: %s", name, timeout, lastState)
+}
+
+// WaitForAllComponentsHealthy waits until all components report healthy status.
+func (c *ObservabilityClient) WaitForAllComponentsHealthy(ctx context.Context, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	var unhealthyComponents []string
+
+	for time.Now().Before(deadline) {
+		components, err := c.GetComponents(ctx)
+		if err != nil {
+			lastErr = err
+		} else {
+			unhealthyComponents = nil
+			allHealthy := true
+			for _, comp := range components {
+				if !comp.Healthy {
+					allHealthy = false
+					unhealthyComponents = append(unhealthyComponents, fmt.Sprintf("%s(%s)", comp.Name, comp.State))
+				}
+			}
+			if allHealthy {
+				return nil
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+
+	if lastErr != nil {
+		return fmt.Errorf("components not healthy after %v: last error: %w", timeout, lastErr)
+	}
+	return fmt.Errorf("components not healthy after %v: unhealthy: %v", timeout, unhealthyComponents)
 }
 
 // CountFileOutputLines counts lines in file output inside a container using docker exec.

@@ -1,0 +1,33 @@
+version: '3'
+
+tasks:
+  bins:
+    desc: Remove local binaries
+    cmds:
+      - echo "[CLEAN] Removing local binaries..."
+      - rm -f bin/semstreams
+      - rm -f cmd/e2e/e2e
+      - echo "[OK] Local binaries removed"
+
+  docker:
+    desc: Clean Docker build cache and SemStreams images
+    cmds:
+      - echo "[CLEAN] Cleaning Docker build cache and images..."
+      - docker compose -f docker/compose/e2e.yml down -v --timeout 15 2>/dev/null || true
+      - docker volume ls -q --filter name=semstreams | xargs -r docker volume rm 2>/dev/null || true
+      - docker images --filter reference=semstreams-semstreams --format "{{.ID}}" | xargs -r docker rmi -f 2>/dev/null || true
+      - docker builder prune -f
+      - echo "[OK] Docker cache and images cleaned"
+
+  go:
+    desc: Clean Go build and test cache
+    cmds:
+      - echo "[CLEAN] Cleaning Go build cache..."
+      - go clean -cache -testcache -modcache
+      - echo "[OK] Go cache cleaned"
+
+  all:
+    desc: Clean everything (binaries, Docker, Go cache)
+    deps: [bins, docker, go]
+    cmds:
+      - echo "[OK] Complete cleanup finished"

@@ -20,7 +20,6 @@ import (
 	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/datamanager"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
-	"github.com/c360/semstreams/processor/graph/llm"
 	"github.com/c360/semstreams/processor/graph/querymanager"
 )
 
@@ -667,24 +666,24 @@ func TestE2E_ResourceLimits(t *testing.T) {
 }
 
 // TestE2E_LLMSummarization tests LLM-based community summarization with seminstruct
-// This test is optional and gracefully degrades if seminstruct is unavailable
+// This test uses testcontainers to start shimmy + seminstruct with Qwen 0.5B model.
 func TestE2E_LLMSummarization(t *testing.T) {
 	setup := setupGraphRAGTest(t)
 	processor := setup.processor
 	ctx := setup.ctx
 	communityStorage := setup.communityStorage
 
-	t.Log("Testing LLM-based community summarization with seminstruct service")
+	t.Log("Testing LLM-based community summarization with testcontainer services")
 
-	// Check if seminstruct is available (optional service)
-	semInstructURL := "http://localhost:8084" // Port from docker-compose.semantic-kitchen.yml
+	// Start LLM services via testcontainers
+	llmHelper, err := StartLLMServices(ctx, t)
+	if err != nil {
+		t.Fatalf("Failed to start LLM testcontainers: %v", err)
+	}
+	defer llmHelper.Close(ctx)
 
-	// Create LLM client and summarizer
-	llmClient, err := llm.NewOpenAIClient(llm.Config{
-		Provider: "openai",
-		BaseURL:  semInstructURL + "/v1",
-		Model:    "mistral-7b-instruct-v0.2",
-	}, slog.Default())
+	// Create LLM client using testcontainer helper
+	llmClient, err := llmHelper.NewLLMClient()
 	require.NoError(t, err, "Failed to create LLM client")
 	defer llmClient.Close()
 
@@ -745,36 +744,32 @@ func TestE2E_LLMSummarization(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	t.Run("LLM_generates_natural_language_summary", func(t *testing.T) {
-		// Attempt LLM summarization (no entity content in test)
-		summarizedComm, err := llmSummarizer.SummarizeCommunity(ctx, community, createdEntities, nil)
-		require.NoError(t, err, "Summarization should not error (graceful fallback on failure)")
+		// Attempt LLM summarization with testcontainer services
+		summarizedComm, err := llmSummarizer.SummarizeCommunity(ctx, community, createdEntities)
+		require.NoError(t, err, "Summarization should not error")
 		require.NotNil(t, summarizedComm)
 
 		// Check summary was generated
 		assert.NotEmpty(t, summarizedComm.StatisticalSummary, "Summary should not be empty")
 		assert.NotEmpty(t, summarizedComm.Keywords, "Keywords should be extracted")
-		assert.Contains(t, []string{"llm", "statistical-fallback"}, summarizedComm.SummaryStatus,
-			"Summarizer should be llm or statistical-fallback")
+
+		// STRICT ASSERTION: LLM must be used, no graceful degradation hiding failures
+		// If testcontainers started successfully, LLM summarization must work
+		assert.Equal(t, "llm", summarizedComm.SummaryStatus,
+			"LLM summarization must succeed when testcontainers are running (got: %s)", summarizedComm.SummaryStatus)
 
 		// Log results
 		t.Logf("Summarizer used: %s", summarizedComm.SummaryStatus)
 		t.Logf("StatisticalSummary: %s", summarizedComm.StatisticalSummary)
 		t.Logf("Keywords: %v", summarizedComm.Keywords)
 
-		// If LLM was used, summary should be more natural than statistical
-		if summarizedComm.SummaryStatus == "llm" {
-			t.Log("✅ LLM service available - testing LLM-generated summary")
-			// LLM summaries should be narrative style, not just entity counts
-			assert.NotContains(t, summarizedComm.StatisticalSummary, "Community of", "LLM summary should be narrative")
-		} else {
-			t.Log("⚠️  LLM service unavailable - fell back to statistical summarization")
-			t.Log("   This is expected if seminstruct is not running")
-		}
+		// LLM summaries should be narrative style, not just entity counts
+		assert.NotContains(t, summarizedComm.StatisticalSummary, "Community of", "LLM summary should be narrative")
 	})
 
 	t.Run("LLM_summary_integrates_with_GlobalSearch", func(t *testing.T) {
 		// Save community with LLM-generated summary (no entity content in test)
-		summarizedComm, _ := llmSummarizer.SummarizeCommunity(ctx, community, createdEntities, nil)
+		summarizedComm, _ := llmSummarizer.SummarizeCommunity(ctx, community, createdEntities)
 		err := communityStorage.SaveCommunity(ctx, summarizedComm)
 		require.NoError(t, err)
 
@@ -810,15 +805,18 @@ func TestE2E_ProgressiveEnhancement(t *testing.T) {
 
 	t.Log("Testing progressive community summarization with async LLM enhancement")
 
+	// Start LLM services via testcontainers
+	llmHelper, err := StartLLMServices(ctx, t)
+	if err != nil {
+		t.Fatalf("Failed to start LLM testcontainers: %v", err)
+	}
+	defer llmHelper.Close(ctx)
+
 	// Configure progressive summarization
 	progressiveSummarizer := clustering.NewProgressiveSummarizer()
 
-	// Create LLM client and summarizer
-	llmClient, err := llm.NewOpenAIClient(llm.Config{
-		Provider: "openai",
-		BaseURL:  "http://localhost:8084/v1",
-		Model:    "mistral-7b-instruct-v0.2",
-	}, slog.Default())
+	// Create LLM client using testcontainer helper
+	llmClient, err := llmHelper.NewLLMClient()
 	require.NoError(t, err, "Failed to create LLM client")
 	defer llmClient.Close()
 
@@ -965,23 +963,21 @@ func TestE2E_ProgressiveEnhancement(t *testing.T) {
 
 		require.NotEmpty(t, testCommID, "Should find test community ID")
 
-		// Wait for enhancement (up to 10 seconds)
-		enhancedComm, err := waitForLLMEnhancement(testCommID, 10*time.Second)
+		// Wait for enhancement (up to 30 seconds - Qwen 0.5B may need time for first inference)
+		enhancedComm, err := waitForLLMEnhancement(testCommID, 30*time.Second)
 
-		if err != nil {
-			t.Logf("⚠️  LLM enhancement not completed: %v", err)
-			t.Log("   This is expected if seminstruct service is not running")
-			t.Log("   Progressive summarization is working - statistical summary is available")
-		} else {
-			// Verify both summaries are present
-			assert.NotEmpty(t, enhancedComm.StatisticalSummary, "Statistical summary should be preserved")
-			assert.NotEmpty(t, enhancedComm.LLMSummary, "LLM summary should be populated")
-			assert.Equal(t, "llm-enhanced", enhancedComm.SummaryStatus)
+		// STRICT ASSERTION: LLM enhancement must succeed when testcontainers are running
+		require.NoError(t, err, "LLM enhancement must succeed with testcontainers (no graceful degradation)")
 
-			t.Logf("✅ LLM enhancement completed asynchronously:")
-			t.Logf("   Statistical: %s", enhancedComm.StatisticalSummary)
-			t.Logf("   LLM: %s", enhancedComm.LLMSummary)
-		}
+		// Verify both summaries are present
+		assert.NotEmpty(t, enhancedComm.StatisticalSummary, "Statistical summary should be preserved")
+		assert.NotEmpty(t, enhancedComm.LLMSummary, "LLM summary should be populated")
+		assert.Equal(t, "llm-enhanced", enhancedComm.SummaryStatus,
+			"Status must be 'llm-enhanced' when testcontainers are running")
+
+		t.Logf("✅ LLM enhancement completed asynchronously:")
+		t.Logf("   Statistical: %s", enhancedComm.StatisticalSummary)
+		t.Logf("   LLM: %s", enhancedComm.LLMSummary)
 	})
 
 	t.Logf("✅ Progressive enhancement test completed successfully")

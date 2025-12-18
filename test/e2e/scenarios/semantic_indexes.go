@@ -291,31 +291,32 @@ func (s *SemanticIndexesScenario) executeValidateIndexing(ctx context.Context, r
 
 // executeVerifyGraphProcessor verifies graph processor health
 func (s *SemanticIndexesScenario) executeVerifyGraphProcessor(ctx context.Context, result *Result) error {
-	components, err := s.client.GetComponents(ctx)
-	if err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("Failed to get components: %v", err))
-		return fmt.Errorf("component query failed: %w", err)
+	// Wait for graph processor to become healthy (up to 30 seconds)
+	// This handles the race condition where Docker healthcheck passes but
+	// the graph processor is still initializing its subsystems
+	if err := s.client.WaitForComponentHealthy(ctx, "graph", 30*time.Second); err != nil {
+		result.Errors = append(result.Errors, fmt.Sprintf("Graph processor not healthy: %v", err))
+		return fmt.Errorf("graph processor unhealthy: %w", err)
 	}
 
-	// Verify graph processor is healthy
-	for _, comp := range components {
-		if comp.Name == "graph" {
-			if !comp.Healthy {
-				result.Errors = append(result.Errors, "Graph processor is not healthy")
-				return fmt.Errorf("graph processor unhealthy: %s", comp.State)
+	// Get final state for reporting
+	components, err := s.client.GetComponents(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get final component state: %v", err))
+	} else {
+		for _, comp := range components {
+			if comp.Name == "graph" {
+				result.Details["final_verification"] = map[string]any{
+					"graph_healthy": comp.Healthy,
+					"graph_state":   comp.State,
+					"message":       "Core semantic indexing verified successfully",
+				}
+				break
 			}
-
-			result.Details["final_verification"] = map[string]any{
-				"graph_healthy": true,
-				"graph_state":   comp.State,
-				"message":       "Core semantic indexing verified successfully",
-			}
-			return nil
 		}
 	}
 
-	result.Errors = append(result.Errors, "Graph processor not found in final verification")
-	return fmt.Errorf("graph processor not found")
+	return nil
 }
 
 // executeValidateNATSIndexes validates that indexes are populated in NATS KV

@@ -224,6 +224,6 @@
 //
 // Run tests:
 //
-//	go test ./processor/json_filter -v              # Unit tests
-//	INTEGRATION_TESTS=1 go test ./processor/json_filter -v  # Integration tests
+//	go test ./processor/json_filter -v                        # Unit tests
+//	go test -tags=integration ./processor/json_filter -v      # Integration tests
 package jsonfilter

@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -20,10 +19,6 @@ import (
 )
 
 func TestRuntimeHealthIntegration(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
-
 	// Setup NATS client for testing
 	testClient := natsclient.NewTestClient(t,
 		natsclient.WithJetStream(),
@@ -191,9 +186,6 @@ func TestRuntimeHealthIntegration(t *testing.T) {
 
 // TestGetComponentsHealth_ComponentStates tests health retrieval for different component states
 func TestGetComponentsHealth_ComponentStates(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 
 	// This test verifies that getComponentsHealth correctly handles components in different states
 	// We test the mapping logic by examining the output for components in various lifecycle states

@@ -269,14 +269,17 @@ The engine integrates with the config package for dynamic component management:
 The engine package includes comprehensive integration tests using testcontainers:
 
 ```bash
-# Run all tests
-go test ./engine/... -v
+# Run unit tests
+go test ./engine/...
 
 # Run with race detection
-go test ./engine/... -race
+go test -race ./engine/...
 
-# Run integration tests only
-INTEGRATION_TESTS=1 go test ./engine/... -v
+# Run integration tests (requires Docker for testcontainers)
+go test -tags=integration ./engine/...
+
+# Run integration tests with verbose output
+go test -tags=integration -v ./engine/...
 ```
 
 ## Performance Considerations

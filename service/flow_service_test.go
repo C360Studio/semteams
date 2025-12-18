@@ -1,3 +1,5 @@
+//go:build integration
+
 package service_test
 
 import (
@@ -9,7 +11,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 
 	"github.com/c360/semstreams/component"
@@ -26,10 +27,7 @@ import (
 func createTestFlowService(t *testing.T) (*http.ServeMux, *flowstore.Store, *natsclient.Client) {
 	t.Helper()
 
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test (set INTEGRATION_TESTS=1 to run)")
-	}
-
+	// Build tag ensures this only runs with -tags=integration
 	// Create NATS client using shared test helper
 	testClient := natsclient.NewTestClient(t,
 		natsclient.WithJetStream(),

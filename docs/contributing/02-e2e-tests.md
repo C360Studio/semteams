@@ -16,47 +16,102 @@ E2E tests follow the **Observer Pattern**: they run against real services in Doc
 ## Quick Reference
 
 ```bash
-# Most common commands
-task e2e:semantic-indexes   # Fast development test (~5s)
-task e2e:semantic           # Full semantic suite (~20s)
-task e2e:health             # Core health checks (~3s)
-task e2e:clean              # Clean up containers
+# 5 E2E tasks - one per tier
+task e2e:core        # Platform boots, data flows (~10s)
+task e2e:structural  # Rules + structural inference (~30s)
+task e2e:statistical # BM25 + community detection (~60s)
+task e2e:semantic    # Neural embeddings + LLM (~90s)
+task e2e:gateway     # GraphQL + MCP APIs (~20s)
+
+# Cleanup
+task e2e:clean
 ```
 
-## Test Categories
+## Test Tiers
 
-### Protocol Tests
+### Core (`task e2e:core`)
 
-Core pipeline validation without semantic features.
+Platform boots, data flows. Validates basic health and dataflow.
 
-| Command | Duration | Purpose |
-|---------|----------|---------|
-| `task e2e:health` | ~3s | Component health checks |
-| `task e2e:dataflow` | ~5s | Data pipeline validation |
-| `task e2e:federation` | ~7s | Edge-to-cloud federation |
-| `task e2e` | ~8s | All protocol tests |
+| Duration | Purpose | Dependencies |
+|----------|---------|--------------|
+| ~10s | Component health + data pipeline | NATS only |
 
-### Semantic Tests
+**Coverage**:
+- UDP input component
+- JSON processors (filter, map)
+- Output components (file, HTTP POST, WebSocket)
+- Data transformation validation
 
-Semantic layer validation with indexing and graph processing.
+### Structural (`task e2e:structural`)
 
-| Command | Duration | Purpose | Dependencies |
-|---------|----------|---------|--------------|
-| `task e2e:semantic-basic` | ~5s | Basic entity processing | NATS only |
-| `task e2e:semantic-indexes` | ~5s | Core indexing (fast) | NATS only |
-| `task e2e:semantic-kitchen-sink` | ~15s | Full stack + metrics | NATS + SemEmbed |
-| `task e2e:semantic` | ~20s | All semantic tests | NATS + SemEmbed |
+Rules + structural inference. Deterministic behavior, no embeddings.
 
-### Tiered Inference Tests
+| Duration | Purpose | Dependencies |
+|----------|---------|--------------|
+| ~30s | Stateful rules + PathRAG | NATS only |
 
-Validation of different inference tiers.
+**Coverage**:
+- Stateful rules with OnEnter/OnExit
+- Dynamic graph manipulation (add_triple/remove_triple)
+- Alert generation
+- PathRAG on explicit edges
+- Anomaly flags in index (assertion on index state, not LLM output)
 
-| Command | Duration | Purpose | Dependencies |
-|---------|----------|---------|--------------|
-| `task e2e:tier0` | ~30s | Rules-only | NATS |
-| `task e2e:tier1` | ~60s | BM25 + LPA | NATS |
-| `task e2e:tier2` | ~90s | Neural + LLM | Full ML stack |
-| `task e2e:tiers` | ~3min | All tiers comparison | Full stack |
+### Statistical (`task e2e:statistical`)
+
+BM25 + community detection. No external ML services required.
+
+| Duration | Purpose | Dependencies |
+|----------|---------|--------------|
+| ~60s | BM25 embeddings + LPA communities | NATS only |
+
+**Coverage**:
+- All structural tier coverage
+- BM25 embedding generation
+- Community detection (Label Propagation)
+- Keyword search
+- TF-IDF summaries
+
+### Semantic (`task e2e:semantic`)
+
+Neural embeddings + LLM. Full ML stack validation.
+
+| Duration | Purpose | Dependencies |
+|----------|---------|--------------|
+| ~90s | Neural embeddings + LLM summaries | NATS + SemEmbed + SemInstruct |
+
+**Coverage**:
+- All statistical tier coverage
+- Neural embeddings (via SemEmbed)
+- LLM summary quality
+- Semantic search relevance
+
+### Gateway (`task e2e:gateway`)
+
+GraphQL + MCP APIs. Runs against statistical tier (no ML deps for CI).
+
+| Duration | Purpose | Dependencies |
+|----------|---------|--------------|
+| ~20s | API contract validation | NATS only |
+
+**Coverage**:
+- GraphQL operations (entity queries, relationships, search)
+- MCP protocol (tool invocation via SSE)
+- Rate limiting
+- Error handling
+
+## Assertion Strategy
+
+| Tier | What We Assert | What We DON'T Assert |
+|------|----------------|---------------------|
+| **Core** | Health endpoints, data flows | - |
+| **Structural** | Entities in KV, predicates indexed, anomaly flags in index, PathRAG edges | LLM response quality |
+| **Statistical** | Above + BM25 embeddings, communities detected | LLM summaries |
+| **Semantic** | Above + LLM summary quality, semantic search relevance | - |
+| **Gateway** | API contracts (GraphQL shape, MCP protocol) | LLM content |
+
+**Key insight**: Anomaly worker can run at structural tier with LLM, but we only assert on *index state* (flag exists), not LLM reasoning. LLM output assertions wait until semantic tier.
 
 ## Test Selection Guide
 
@@ -65,129 +120,88 @@ Validation of different inference tiers.
 Fast feedback for iterative changes:
 
 ```bash
-task e2e:semantic-indexes  # ~5s, NATS only
+task e2e:core  # ~10s, platform basics
 ```
-
-Use this for:
-- Index implementation changes
-- Query manager updates
-- Entity processing logic
 
 ### Pre-Commit
 
-Validate core functionality before committing:
+Validate core functionality:
 
 ```bash
-task e2e
-task e2e:semantic-indexes
+task e2e:core
+task e2e:structural
 ```
 
 ### Pre-Merge
 
-Full validation before merging:
+Full CI validation (no ML dependencies):
+
+```bash
+task e2e:core
+task e2e:structural
+task e2e:statistical
+task e2e:gateway
+```
+
+### Full Validation
+
+Complete stack with ML services:
 
 ```bash
 task e2e:semantic
 ```
 
-### Release Validation
+## Running Tests
 
-Complete stack with all dependencies:
+### Using Task Runner
 
 ```bash
-task e2e:tiers
+# List available e2e tasks
+task --list | grep e2e
+
+# Run specific tier
+task e2e:structural
+
+# Run with cleanup first
+task e2e:clean && task e2e:core
 ```
 
-## Test Scenarios
+### Direct CLI
 
-### core-health
+```bash
+# Build first
+task build:e2e
 
-Validates component availability and health endpoints.
+# List available scenarios
+cd cmd/e2e && ./e2e --list
 
-**Coverage**:
-- UDP input component
-- JSON processors
-- Output components (file, HTTP POST, WebSocket)
+# Run specific scenario
+cd cmd/e2e && ./e2e --scenario tiered --variant core
 
-### core-dataflow
-
-Tests complete data pipeline flow.
-
-**Coverage**:
-- UDP input to JSONFilter to JSONMap to File output
-- Data transformation validation
-- Message delivery confirmation
-
-### semantic-basic
-
-Basic semantic processing validation.
-
-**Coverage**:
-- Entity processing pipeline
-- Graph processor initialization
-- Entity storage in NATS KV
-
-### semantic-indexes
-
-Fast test for core indexing without external dependencies.
-
-**Coverage**:
-- Predicate index (entity property lookups)
-- Spatial index (geo-location queries)
-- Temporal index (time-based queries)
-- Alias index (name resolution)
-- Incoming/Outgoing indexes (relationship queries)
-
-### semantic-kitchen-sink
-
-Comprehensive stack validation including LLM integration.
-
-**Coverage**:
-- All indexes
-- Embedding service connectivity
-- HTTP Gateway endpoints
-- Semantic search
-- Prometheus metrics
-- Multiple output types
-
-## KV Validation
-
-Tests validate actual data storage, not just component health.
-
-### What Gets Validated
-
-```
-Before (Component Health Only):
-  ✓ Graph processor healthy
-  ✓ 5 entities sent
-  Result: PASS
-
-After (With KV Validation):
-  ✓ Graph processor healthy
-  ✓ 5 entities sent
-  ✓ 4 entities found in ENTITY_STATES (80%)
-  ✓ Predicate index has entries
-  ✓ Spatial index has entries
-  Result: PASS with validation: storage_rate=0.80
+# With verbose output
+cd cmd/e2e && ./e2e --scenario tiered --verbose
 ```
 
-### Validation Thresholds
+### Debug Mode
 
-```go
-const (
-    DefaultMinStorageRate   = 0.80  // 80% of sent entities must be stored
-    DefaultValidationTimeout = 5 * time.Second
-)
+Leave containers running for inspection:
+
+```bash
+task e2e:core:debug
+docker logs -f semstreams-e2e-app
 ```
 
-### Index Validation
+## Docker Compose Files
 
-| Index | Bucket | Validation |
-|-------|--------|------------|
-| Predicate | `PREDICATE_INDEX` | Has entries after entity processing |
-| Spatial | `SPATIAL_INDEX` | Has geohash entries |
-| Alias | `ALIAS_INDEX` | Resolves known aliases |
-| Incoming | `INCOMING_INDEX` | Tracks inbound references |
+All compose files are in `docker/compose/`:
+
+| File | Purpose | Profiles |
+|------|---------|----------|
+| `e2e.yml` | Core E2E tests | - |
+| `rules.yml` | Structural tier | - |
+| `tiered.yml` | Statistical + Semantic | `statistical`, `semantic` |
+| `gateway.yml` | Gateway testing | - |
+| `federation.yml` | Edge-to-cloud federation | - |
 
 ## Directory Structure
 
@@ -198,215 +212,105 @@ test/e2e/
 │   ├── nats.go             # NATS KV validation
 │   └── metrics.go          # Prometheus metrics client
 ├── config/
-│   ├── constants.go        # Test configuration
-│   └── validation.go       # Validation thresholds
+│   └── constants.go        # Test configuration
 └── scenarios/
     ├── core_health.go
     ├── core_dataflow.go
-    ├── core_federation.go
     ├── semantic_basic.go
     ├── semantic_indexes.go
-    └── semantic_kitchen_sink.go
+    ├── tiered.go           # Statistical + Semantic tiers
+    ├── tier0_rules_iot.go  # Structural tier
+    ├── gateway_graphql.go
+    └── gateway_mcp.go
 
 cmd/e2e/
 └── main.go                 # Test runner CLI
+
+taskfiles/e2e/
+├── common.yml              # Shared tasks (clean, check-ports)
+├── core.yml                # Core protocol tests
+├── structural.yml          # Structural tier
+├── statistical.yml         # Statistical tier
+├── semantic.yml            # Semantic tier
+├── gateway.yml             # Gateway tests
+└── federation.yml          # Federation tests
 ```
 
-## Docker Compose Files
+## KV Validation
 
-| File | Purpose |
-|------|---------|
-| `docker-compose.semantic.yml` | Basic semantic (no embedding) |
-| `docker-compose.semantic-kitchen.yml` | Full stack with SemEmbed |
-| `docker-compose.rules.yml` | Rules processor testing |
+Tests validate actual data storage, not just component health.
 
-## Running Tests
-
-### Using Task Runner
-
-```bash
-# List available e2e tasks
-task --list | grep e2e
-
-# Run specific scenario
-task e2e:semantic-indexes
-
-# Run with cleanup
-task e2e:clean && task e2e:semantic
-```
-
-### Direct CLI
-
-```bash
-# Build first
-task build:e2e
-
-# Run specific scenario
-cd cmd/e2e && ./e2e --scenario semantic-indexes
-
-# With verbose output
-cd cmd/e2e && ./e2e --scenario semantic-kitchen-sink --verbose
-```
-
-### Debug Mode
-
-Leave containers running for inspection:
-
-```bash
-task e2e:debug
-docker logs -f semstreams-e2e-app
-```
-
-## Adding New Scenarios
-
-1. Create scenario file in `test/e2e/scenarios/`:
+### Validation Thresholds
 
 ```go
-type MyScenario struct {
-    client *client.Client
-}
-
-func (s *MyScenario) Name() string {
-    return "my-scenario"
-}
-
-func (s *MyScenario) Description() string {
-    return "Validates X functionality"
-}
-
-func (s *MyScenario) Setup(ctx context.Context) error {
-    // Initialize clients, prepare test data
-    return nil
-}
-
-func (s *MyScenario) Execute(ctx context.Context) (*Result, error) {
-    // Run test logic, collect metrics
-    return &Result{Passed: true, Metrics: map[string]any{}}, nil
-}
-
-func (s *MyScenario) Teardown(ctx context.Context) error {
-    // Clean up resources
-    return nil
-}
+const (
+    DefaultMinStorageRate   = 0.80  // 80% of sent entities must be stored
+    DefaultValidationTimeout = 5 * time.Second
+)
 ```
 
-2. Register in `cmd/e2e/main.go`:
+### Index Validation by Tier
 
-```go
-func createScenario(name string) (Scenario, error) {
-    switch name {
-    case "my-scenario":
-        return scenarios.NewMyScenario(), nil
-    // ...
-    }
-}
-```
-
-3. Add task to `Taskfile.yml`:
-
-```yaml
-e2e:my-scenario:
-  desc: Run my scenario
-  cmds:
-    - task: e2e:run
-      vars:
-        SCENARIO: my-scenario
-```
-
-4. Update documentation.
+| Tier | Indexes Validated |
+|------|-------------------|
+| Structural | ENTITY_STATES, PREDICATE_INDEX, SPATIAL_INDEX, TEMPORAL_INDEX, ALIAS_INDEX, INCOMING_INDEX, OUTGOING_INDEX |
+| Statistical | All above + EMBEDDING_INDEX (BM25), COMMUNITY_INDEX |
+| Semantic | All above + EMBEDDING_INDEX (neural), enhanced communities |
 
 ## Troubleshooting
 
 ### Port Conflicts
 
 ```bash
-# Check for port conflicts
 task e2e:check-ports
-
-# Kill specific port
 lsof -ti:8080 | xargs kill -9
-
-# Clean all containers
 task e2e:clean
 ```
-
-### Container Not Found
-
-This is normal before first run. Containers are created during test execution.
 
 ### Services Not Healthy
 
 ```bash
-# Check container logs
 docker logs semstreams-e2e-app
-
-# Check all container status
-docker compose -f docker-compose.semantic-kitchen.yml ps
+docker compose -f docker/compose/tiered.yml ps
 ```
 
 ### NATS Connection Failed
 
 ```bash
-# Check NATS is running
 docker ps | grep nats
-
-# Check NATS logs
-docker logs semstreams-nats
+docker logs semstreams-tiered-nats
 ```
-
-### Bucket Does Not Exist
-
-KV buckets are created by graph processor on startup. Wait for initialization (5-10s) or check graph processor logs.
 
 ### Storage Rate Below Threshold
 
-Possible causes:
-- Graph processor errors (check logs)
-- Entity ID format mismatch
-- Processing too slow (increase timeout)
-
-### Missing Metrics
-
-Metrics are populated after data processing. Ensure:
-- Messages are being sent
-- Graph processor is healthy
-- Sufficient processing time (5s delay)
-
-### SemEmbed Not Starting
-
-```bash
-# Check logs
-docker logs semstreams-kitchen-semembed
-
-# Verify port
-lsof -i :8081
-
-# Test health
-curl http://localhost:8081/health
-```
+Check graph processor logs for errors. Increase timeout if processing is slow.
 
 ## CI Integration
 
-### PR Checks (Fast)
+### PR Checks
 
 ```yaml
 steps:
-  - task e2e:health
-  - task e2e:semantic-indexes
+  - task e2e:core
+  - task e2e:structural
+  - task e2e:gateway
 ```
 
-### Main Branch (Full)
+### Main Branch
+
+```yaml
+steps:
+  - task e2e:core
+  - task e2e:structural
+  - task e2e:statistical
+  - task e2e:gateway
+```
+
+### Release
 
 ```yaml
 steps:
   - task e2e:semantic
-```
-
-### Release (Complete)
-
-```yaml
-steps:
-  - task e2e:tiers
 ```
 
 ## External Dependencies
@@ -420,39 +324,19 @@ Lightweight Rust embedding service using fastembed-rs.
 | Port | 8081 |
 | Model | BAAI/bge-small-en-v1.5 |
 | API | OpenAI-compatible /v1/embeddings |
-| Used by | semantic-kitchen-sink only |
+| Used by | semantic tier |
 
-### seminstruct
+### SemInstruct
 
 OpenAI-compatible LLM proxy for summarization.
 
 | Property | Value |
 |----------|-------|
 | Port | 8083 |
-| Backend | semshimmy or OpenAI |
-| Used by | tier2, semantic-kitchen-sink |
-
-## Test Output
-
-### Success
-
-```
-INFO [E2E] Running scenario: semantic-indexes
-INFO Setting up scenario name=semantic-indexes
-INFO Executing scenario name=semantic-indexes
-INFO Scenario completed successfully duration=3.2s
-✅ Semantic scenario PASSED name=semantic-indexes
-```
-
-### Failure
-
-```
-ERROR Scenario failed error="storage rate 0.60 below threshold 0.80"
-ERROR Scenario FAILED name=semantic-basic
-```
+| Backend | shimmy or OpenAI |
+| Used by | semantic tier |
 
 ## Related Documentation
 
 - [Testing Patterns](01-testing.md) - Unit and integration test patterns
 - [Configuration](../reference/configuration.md) - Test environment configuration
-- [Configuration](../basics/06-configuration.md) - Configuration capabilities and requirements

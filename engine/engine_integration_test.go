@@ -5,7 +5,6 @@ package flowengine_test
 import (
 	"context"
 	"log/slog"
-	"os"
 	"testing"
 	"time"
 
@@ -425,11 +424,6 @@ func (s *EngineIntegrationSuite) TestFullLifecycle() {
 func TestEngineIntegrationSuite(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration tests in short mode")
-	}
-
-	// Skip if INTEGRATION_TESTS not set
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration tests (set INTEGRATION_TESTS=1 to run)")
 	}
 
 	suite.Run(t, new(EngineIntegrationSuite))

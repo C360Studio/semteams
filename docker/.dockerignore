@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# Build artifacts
+bin/
+dist/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.test
+*.out
+coverage.html
+coverage.txt
+test/e2e/results/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Development files
+.env
+.env.*
+*.local
+
+# Taskfiles (not needed in container)
+Taskfile.yml
+taskfiles/
+
+# Specs and schemas (generated)
+specs/
+schemas/
+
+# Docker files (avoid recursion)
+docker/
+docker-compose*.yml
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log

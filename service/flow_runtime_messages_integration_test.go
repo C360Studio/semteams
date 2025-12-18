@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"testing"
 	"time"
 
@@ -19,10 +18,6 @@ import (
 )
 
 func TestRuntimeMessagesIntegration(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
-
 	// Setup NATS client using shared testcontainer
 	natsClient := getSharedNATSClient(t)
 
@@ -350,9 +345,6 @@ func TestRuntimeMessagesIntegration(t *testing.T) {
 
 // TestRuntimeMessagesLoggerUnavailable tests graceful degradation when message logger is not available
 func TestRuntimeMessagesLoggerUnavailable(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 
 	// Setup NATS client
 	natsClient := getSharedNATSClient(t)
@@ -437,9 +429,6 @@ func TestRuntimeMessagesLoggerUnavailable(t *testing.T) {
 
 // TestRuntimeMessagesWithActualNATSFlow tests integration with real NATS message flow
 func TestRuntimeMessagesWithActualNATSFlow(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 
 	// Setup NATS client
 	natsClient := getSharedNATSClient(t)

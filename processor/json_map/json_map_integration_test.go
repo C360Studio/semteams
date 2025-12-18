@@ -5,7 +5,6 @@ package jsonmapprocessor_test
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -27,48 +26,46 @@ var (
 
 // TestMain sets up a single shared NATS container for all JSON map processor tests
 func TestMain(m *testing.M) {
-	if os.Getenv("INTEGRATION_TESTS") != "" {
-		// Create a single shared test client for integration tests
-		testClient, err := natsclient.NewSharedTestClient(
-			natsclient.WithJetStream(),
-			natsclient.WithKV(),
-			natsclient.WithTestTimeout(5*time.Second),
-			natsclient.WithStartTimeout(30*time.Second),
-		)
-		if err != nil {
-			panic("Failed to create shared test client: " + err.Error())
-		}
-
-		sharedTestClient = testClient
-		sharedNATSClient = testClient.Client
+	// Create a single shared test client for integration tests
+	// Build tag ensures this only runs with -tags=integration
+	testClient, err := natsclient.NewSharedTestClient(
+		natsclient.WithJetStream(),
+		natsclient.WithKV(),
+		natsclient.WithTestTimeout(5*time.Second),
+		natsclient.WithStartTimeout(30*time.Second),
+	)
+	if err != nil {
+		panic("Failed to create shared test client: " + err.Error())
 	}
+
+	sharedTestClient = testClient
+	sharedNATSClient = testClient.Client
 
 	// Run all tests
 	exitCode := m.Run()
 
-	// Cleanup integration test resources if they were created
-	if sharedTestClient != nil {
-		sharedTestClient.Terminate()
-	}
+	// Cleanup integration test resources
+	sharedTestClient.Terminate()
 
-	os.Exit(exitCode)
+	if exitCode != 0 {
+		panic("tests failed")
+	}
 }
 
 // getSharedNATSClient returns the shared NATS client for integration tests
 func getSharedNATSClient(t *testing.T) *natsclient.Client {
-	if os.Getenv("INTEGRATION_TESTS") == "" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 	if sharedNATSClient == nil {
 		t.Fatal("Shared NATS client not initialized - TestMain should have created it")
 	}
 	return sharedNATSClient
 }
 
-// createGenericJSONMessage creates a GenericJSONPayload
+// createGenericJSONMessage creates a BaseMessage with GenericJSONPayload
 func createGenericJSONMessage(data map[string]any) ([]byte, error) {
 	payload := message.NewGenericJSON(data)
-	return json.Marshal(payload)
+	msgType := payload.Schema()
+	baseMsg := message.NewBaseMessage(msgType, payload, "test")
+	return json.Marshal(baseMsg)
 }
 
 // TestIntegration_FieldRenaming tests basic field renaming with real NATS
@@ -139,11 +136,13 @@ func TestIntegration_FieldRenaming(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	err = natsClient.Subscribe(ctx, "test.jsonmap.output", func(_ context.Context, data []byte) {
-		var payload message.GenericJSONPayload
-		if err := json.Unmarshal(data, &payload); err == nil {
-			receiveMu.Lock()
-			receivedMessages = append(receivedMessages, payload)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(data, &baseMsg); err == nil {
+			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
+				receiveMu.Lock()
+				receivedMessages = append(receivedMessages, *payload)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
@@ -241,11 +240,13 @@ func TestIntegration_StringTransforms(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	err = natsClient.Subscribe(ctx, "test.jsonmap.transform.output", func(_ context.Context, data []byte) {
-		var payload message.GenericJSONPayload
-		if err := json.Unmarshal(data, &payload); err == nil {
-			receiveMu.Lock()
-			receivedMessages = append(receivedMessages, payload)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(data, &baseMsg); err == nil {
+			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
+				receiveMu.Lock()
+				receivedMessages = append(receivedMessages, *payload)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
@@ -339,11 +340,13 @@ func TestIntegration_AddRemoveFields(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	err = natsClient.Subscribe(ctx, "test.jsonmap.addremove.output", func(_ context.Context, data []byte) {
-		var payload message.GenericJSONPayload
-		if err := json.Unmarshal(data, &payload); err == nil {
-			receiveMu.Lock()
-			receivedMessages = append(receivedMessages, payload)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(data, &baseMsg); err == nil {
+			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
+				receiveMu.Lock()
+				receivedMessages = append(receivedMessages, *payload)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
@@ -447,11 +450,13 @@ func TestIntegration_CombinedTransformations(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	err = natsClient.Subscribe(ctx, "test.jsonmap.combined.output", func(_ context.Context, data []byte) {
-		var payload message.GenericJSONPayload
-		if err := json.Unmarshal(data, &payload); err == nil {
-			receiveMu.Lock()
-			receivedMessages = append(receivedMessages, payload)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(data, &baseMsg); err == nil {
+			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
+				receiveMu.Lock()
+				receivedMessages = append(receivedMessages, *payload)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)

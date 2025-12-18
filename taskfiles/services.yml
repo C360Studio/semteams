@@ -1,0 +1,52 @@
+version: '3'
+
+tasks:
+  start:embedding:
+    desc: Start embedding service (SemEmbed)
+    cmds:
+      - echo "[SERVICES] Starting embedding service..."
+      - docker compose -f docker/compose/services.yml --profile embedding up -d
+      - echo "[OK] Embedding service started at http://localhost:8081"
+      - echo "     Components with Embedding.Enabled=true will now have semantic search"
+
+  start:tls:
+    desc: Start certificate authority (step-ca)
+    cmds:
+      - echo "[SERVICES] Starting certificate authority..."
+      - docker compose -f docker/compose/services.yml --profile tls up -d
+      - echo "[OK] Certificate authority started at https://localhost:9000"
+      - echo "     Use step-ca for automated certificate management"
+
+  start:observability:
+    desc: Start observability stack (Prometheus + Grafana)
+    cmds:
+      - echo "[SERVICES] Starting observability stack..."
+      - docker compose -f docker/compose/services.yml --profile observability up -d
+      - echo "[OK] Observability stack started"
+      - 'echo "     Prometheus: http://localhost:9090"'
+      - 'echo "     Grafana:    http://localhost:3000 (admin/admin)"'
+      - 'echo "     Dashboards: SemStreams Overview, Cache Performance, IndexManager, Graph Processor"'
+
+  start:all:
+    desc: Start all optional services
+    cmds:
+      - echo "[SERVICES] Starting all optional services..."
+      - docker compose -f docker/compose/services.yml --profile all up -d
+      - echo "[OK] All optional services started"
+
+  stop:
+    desc: Stop all optional services
+    cmds:
+      - echo "[SERVICES] Stopping optional services..."
+      - docker compose -f docker/compose/services.yml --profile all down
+      - echo "[OK] Optional services stopped"
+
+  status:
+    desc: Show status of optional services
+    cmds:
+      - docker compose -f docker/compose/services.yml ps
+
+  logs:
+    desc: Show logs from optional services
+    cmds:
+      - docker compose -f docker/compose/services.yml logs -f

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -24,9 +23,6 @@ import (
 
 // TestWebSocketFederation_AckFlow tests successful ack flow between Output and Input
 func TestWebSocketFederation_AckFlow(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 
 	// Create shared NATS client
 	natsClient := natsclient.NewTestClient(t, natsclient.WithFastStartup())
@@ -132,9 +128,6 @@ func TestWebSocketFederation_AckFlow(t *testing.T) {
 
 // TestWebSocketFederation_NackFlow tests nack flow when NATS publish fails
 func TestWebSocketFederation_NackFlow(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 
 	// Create NATS clients (separate for Output and Input)
 	natsClientOutput := natsclient.NewTestClient(t, natsclient.WithFastStartup())
@@ -234,9 +227,6 @@ func TestWebSocketFederation_NackFlow(t *testing.T) {
 
 // TestWebSocketFederation_MessageEnvelopeProtocol tests the envelope structure
 func TestWebSocketFederation_MessageEnvelopeProtocol(t *testing.T) {
-	if os.Getenv("INTEGRATION_TESTS") != "1" {
-		t.Skip("Skipping integration test. Set INTEGRATION_TESTS=1 to run.")
-	}
 
 	// Create NATS client
 	natsClient := natsclient.NewTestClient(t, natsclient.WithFastStartup())

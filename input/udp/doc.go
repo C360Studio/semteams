@@ -163,9 +163,9 @@
 //
 // Run tests:
 //
-//	go test ./input/udp -v              # Unit tests
-//	INTEGRATION_TESTS=1 go test ./input/udp -v  # Integration tests
-//	go test ./input/udp -race           # Race detector
+//	go test ./input/udp -v                        # Unit tests
+//	go test -tags=integration ./input/udp -v      # Integration tests
+//	go test ./input/udp -race                     # Race detector
 //
 // # Limitations
 //

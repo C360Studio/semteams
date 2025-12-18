@@ -323,7 +323,7 @@ Post-refactoring validation requires comprehensive integration tests with real N
 
 **Test File**: `rule_integration_test.go`
 **Pattern**: Follow `json_filter_integration_test.go` (testcontainers + shared NATS client)
-**Guard**: `INTEGRATION_TESTS=1` environment variable
+**Guard**: `//go:build integration` build tag (run with `go test -tags=integration`)
 
 #### Integration Test Scenarios
 

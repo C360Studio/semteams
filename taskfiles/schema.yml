@@ -1,0 +1,24 @@
+version: '3'
+
+tasks:
+  generate:
+    desc: Generate component schemas and OpenAPI spec
+    cmds:
+      - mkdir -p schemas specs
+      - go run ./cmd/component-schema-exporter -out ./schemas -openapi ./specs/openapi.v3.yaml
+      - echo "Schemas and OpenAPI spec generated"
+
+  validate:
+    desc: Validate generated schemas against meta-schema
+    cmds:
+      - echo "Schema validation not yet implemented"
+
+  check-changes:
+    desc: Check for uncommitted schema changes
+    cmds:
+      - git diff --exit-code schemas/ specs/openapi.v3.yaml || (echo "Schema/OpenAPI files changed! Run 'task schema:generate' and commit."; exit 1)
+
+  docs:
+    desc: Serve OpenAPI docs at http://localhost:8081
+    cmds:
+      - npx @redocly/cli preview-docs specs/openapi.v3.yaml --port 8081

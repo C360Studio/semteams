@@ -1,0 +1,155 @@
+# Federation E2E Test Environment
+#
+# ⚠️  THIS FILE IS FOR FEDERATION E2E TESTING ONLY ⚠️
+#
+# This compose file creates a two-instance federation topology:
+#   Edge Instance  → WebSocket Output :8082
+#   Cloud Instance → WebSocket Input (client) → File Output
+#
+# Use with task commands:
+#   - task e2e:federation - Run federation test scenario
+#   - task e2e:clean      - Clean up test environment
+#
+services:
+  # Edge NATS Server
+  nats-edge:
+    image: nats:2.12.3-alpine
+    container_name: semstreams-fed-edge-nats
+    ports:
+      - "4222:4222" # Client connections
+      - "8221:8222" # HTTP monitoring (mapped to avoid conflict)
+    command:
+      ["-js", "-sd", "/data", "-m", "8222", "--name", "streamkit-edge-nats"]
+    volumes:
+      - semstreams-fed-edge-nats-data:/data
+    networks:
+      - semstreams-fed-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Cloud NATS Server
+  nats-cloud:
+    image: nats:2.12.3-alpine
+    container_name: semstreams-fed-cloud-nats
+    ports:
+      - "4223:4222" # Client connections (different external port)
+      - "8223:8222" # HTTP monitoring
+    command:
+      ["-js", "-sd", "/data", "-m", "8222", "--name", "streamkit-cloud-nats"]
+    volumes:
+      - semstreams-fed-cloud-nats-data:/data
+    networks:
+      - semstreams-fed-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Edge SemStreams Instance
+  semstreams-edge:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile
+      target: production
+    container_name: semstreams-fed-edge
+    depends_on:
+      nats-edge:
+        condition: service_healthy
+    command: ["--config", "/app/configs/edge-federation.json"]
+    environment:
+      - SEMSTREAMS_NATS_URLS=nats://nats-edge:4222
+      - SEMSTREAMS_LOG_LEVEL=debug
+    volumes:
+      - ../../configs:/app/configs:ro
+    ports:
+      - "8080:8080" # HTTP API
+      - "9091:9091" # Prometheus metrics
+      - "14550:14550/udp" # UDP input
+      - "8082:8082" # WebSocket output (federation)
+    networks:
+      semstreams-fed-net:
+        aliases:
+          - edge
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/readyz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Cloud SemStreams Instance
+  semstreams-cloud:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile
+      target: production
+    container_name: semstreams-fed-cloud
+    depends_on:
+      nats-cloud:
+        condition: service_healthy
+      semstreams-edge:
+        condition: service_healthy
+    command: ["--config", "/app/configs/cloud-federation.json"]
+    environment:
+      - SEMSTREAMS_NATS_URLS=nats://nats-cloud:4222
+      - SEMSTREAMS_LOG_LEVEL=debug
+    volumes:
+      - ../../configs:/app/configs:ro
+      - /tmp:/tmp # Share /tmp for file output verification
+    ports:
+      - "8081:8080" # HTTP API (different external port)
+      - "9092:9092" # Prometheus metrics
+    networks:
+      semstreams-fed-net:
+        aliases:
+          - cloud
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/readyz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  semstreams-fed-net:
+    driver: bridge
+
+volumes:
+  semstreams-fed-edge-nats-data:
+    driver: local
+  semstreams-fed-cloud-nats-data:
+    driver: local

@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: write
@@ -166,14 +166,15 @@ jobs:
             - [Production Deployment](https://github.com/C360Studio/semstreams/blob/main/docs/deployment/production.md)
             - [Operations Runbook](https://github.com/C360Studio/semstreams/blob/main/docs/deployment/operations.md)
 
-            ## Docker Compose Quick Start
+            ## Docker Quick Start
 
             ```bash
-            # Download example config
-            curl -O https://raw.githubusercontent.com/C360Studio/semstreams/${{ steps.version.outputs.VERSION }}/docker-compose.production.yml
-
-            # Start SemStreams
-            docker compose -f docker-compose.production.yml up -d
+            # Start SemStreams with NATS
+            docker run -d --name nats -p 4222:4222 nats:latest
+            docker run -d --name semstreams \
+              --network host \
+              -e SEMSTREAMS_NATS_URL=nats://localhost:4222 \
+              ghcr.io/c360studio/semstreams:${{ steps.version.outputs.VERSION }}
 
             # Verify
             curl http://localhost:8080/health

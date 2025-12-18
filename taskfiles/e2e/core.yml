@@ -1,0 +1,52 @@
+version: "3"
+
+tasks:
+  default:
+    desc: Run core E2E tests (health + dataflow)
+    silent: false
+    deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
+    cmds:
+      - echo "[E2E] Starting SemStreams E2E environment..."
+      - docker compose -f docker/compose/e2e.yml up -d --wait
+      - echo "[OK] All services are healthy"
+      - echo "[E2E] Running core tests (health + dataflow)..."
+      - cmd: cd cmd/e2e && ./e2e --scenario all
+        ignore_error: true
+      - docker compose -f docker/compose/e2e.yml down -v --timeout 15
+
+  debug:
+    desc: Start E2E environment for debugging (leaves containers running)
+    silent: false
+    deps: [":e2e:clean", ":e2e:check-ports"]
+    cmds:
+      - echo "[E2E DEBUG] Starting SemStreams E2E environment..."
+      - docker compose -f docker/compose/e2e.yml up -d
+      - echo "[E2E DEBUG] Waiting for NATS to be ready..."
+      - |
+        for i in {1..30}; do
+          if curl -sf http://localhost:8222/healthz > /dev/null 2>&1; then
+            echo "[OK] NATS is ready"
+            break
+          fi
+          echo "Waiting for NATS... ($i/30)"
+          sleep 2
+        done
+      - echo "[E2E DEBUG] Waiting 5 seconds for SemStreams to start..."
+      - sleep 5
+      - echo "[E2E DEBUG] Checking SemStreams logs..."
+      - docker logs semstreams-e2e-app
+      - echo ""
+      - echo "[E2E DEBUG] Environment is running. Use the following commands:"
+      - echo "  docker logs -f semstreams-e2e-app    (Follow SemStreams logs)"
+      - echo "  docker logs -f semstreams-e2e-nats   (Follow NATS logs)"
+      - echo "  curl http://localhost:8080/health   (Test health endpoint)"
+      - echo "  task e2e:clean                      (Clean up when done)"
+
+  rebuild:
+    desc: Force rebuild Docker images from scratch
+    deps: [":e2e:clean", ":clean:bins"]
+    cmds:
+      - echo "[E2E REBUILD] Force rebuilding Docker images with --no-cache..."
+      - docker compose -f docker/compose/e2e.yml build --no-cache
+      - echo "[OK] Docker images rebuilt from scratch"
+      - echo "Tip - Now run task e2e:core to test with fresh images"

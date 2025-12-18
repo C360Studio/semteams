@@ -31,8 +31,11 @@ go test -race ./...
 # Run specific package
 go test ./processor/graph/...
 
-# Run integration tests (requires NATS)
-INTEGRATION_TESTS=1 go test ./processor/graph/...
+# Run integration tests (requires Docker for testcontainers)
+go test -tags=integration ./...
+
+# Run integration tests with race detection
+go test -race -tags=integration ./...
 
 # Run with coverage
 go test -cover ./...
@@ -211,7 +214,7 @@ func (m *MockGraphProvider) AddEdge(from, to string, weight float64) {
 
 ### Build Tag Convention
 
-Use `//go:build integration` for tests requiring external services:
+Use `//go:build integration` for tests requiring external services like NATS:
 
 ```go
 //go:build integration
@@ -223,32 +226,87 @@ import (
     "testing"
     "time"
 
-    "github.com/nats-io/nats.go"
+    "github.com/c360/semstreams/natsclient"
 )
 
 func TestGraphProcessorIntegration(t *testing.T) {
-    // Skip if NATS not available
-    nc, err := nats.Connect(nats.DefaultURL)
-    if err != nil {
-        t.Skip("NATS not available")
-    }
-    defer nc.Close()
+    // Create test client - testcontainers will start NATS automatically
+    testClient := natsclient.NewTestClient(t,
+        natsclient.WithJetStream(),
+        natsclient.WithKV())
+    natsClient := testClient.Client
 
     // Test with real NATS
     // ...
 }
 ```
 
-### Environment Variable Check
+### Running Integration Tests
 
-Alternative approach:
+Integration tests are excluded from normal `go test ./...` runs. To run them:
+
+```bash
+# Run all integration tests
+go test -tags=integration ./...
+
+# Run with race detection (recommended)
+go test -race -tags=integration ./...
+
+# Run specific package integration tests
+go test -tags=integration -v ./processor/graph/...
+```
+
+### Shared Test Client Pattern
+
+For packages with multiple integration tests, use a shared NATS container via `TestMain`:
 
 ```go
-func TestIntegration(t *testing.T) {
-    if os.Getenv("INTEGRATION_TESTS") != "1" {
-        t.Skip("skipping integration test")
+//go:build integration
+
+package mypackage
+
+import (
+    "log"
+    "testing"
+    "time"
+
+    "github.com/c360/semstreams/natsclient"
+)
+
+var (
+    sharedTestClient *natsclient.TestClient
+    sharedNATSClient *natsclient.Client
+)
+
+func TestMain(m *testing.M) {
+    // Build tag ensures this only runs with -tags=integration
+    testClient, err := natsclient.NewSharedTestClient(
+        natsclient.WithJetStream(),
+        natsclient.WithKV(),
+        natsclient.WithTestTimeout(5*time.Second),
+        natsclient.WithStartTimeout(30*time.Second),
+    )
+    if err != nil {
+        log.Fatalf("Failed to create shared test client: %v", err)
     }
-    // ...
+
+    sharedTestClient = testClient
+    sharedNATSClient = testClient.Client
+
+    exitCode := m.Run()
+
+    sharedTestClient.Terminate()
+
+    if exitCode != 0 {
+        log.Fatal("tests failed")
+    }
+}
+
+func getSharedNATSClient(t *testing.T) *natsclient.Client {
+    if sharedNATSClient == nil {
+        t.Fatal("Shared NATS client not initialized")
+    }
+    return sharedNATSClient
 }
 ```
 

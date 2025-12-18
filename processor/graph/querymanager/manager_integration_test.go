@@ -82,7 +82,7 @@ func setupDataManager(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		dataErrors <- dataManager.Run(ctx)
+		dataErrors <- dataManager.Run(ctx, func() {})
 	}()
 
 	return dataManager, dataErrors
@@ -112,7 +112,7 @@ func setupIndexManager(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		indexErrors <- indexManager.Run(ctx)
+		indexErrors <- indexManager.Run(ctx, func() {})
 	}()
 
 	return indexManager, indexErrors

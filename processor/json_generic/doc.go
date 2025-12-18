@@ -267,8 +267,8 @@
 //
 // Run tests:
 //
-//	go test ./processor/json_generic -v              # Unit tests
-//	INTEGRATION_TESTS=1 go test ./processor/json_generic -v  # Integration tests (when available)
+//	go test ./processor/json_generic -v                        # Unit tests
+//	go test -tags=integration ./processor/json_generic -v      # Integration tests (when available)
 //
 // # Design Decisions
 //

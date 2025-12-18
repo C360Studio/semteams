@@ -352,10 +352,17 @@ func extractSchemaFromRegistration(name string, reg *component.Registration) map
 		prop["description"] = propSchema.Description
 
 		if propSchema.Default != nil {
-			// Normalize int to float64 since JSON unmarshal produces float64 for numbers
+			// Normalize types since JSON unmarshal produces different types
 			switch v := propSchema.Default.(type) {
 			case int:
 				prop["default"] = float64(v)
+			case []string:
+				// Convert []string to []any for JSON comparison compatibility
+				anySlice := make([]any, len(v))
+				for i, s := range v {
+					anySlice[i] = s
+				}
+				prop["default"] = anySlice
 			default:
 				prop["default"] = propSchema.Default
 			}

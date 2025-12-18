@@ -77,7 +77,7 @@ type cliFlags struct {
 	wsEndpoint    string
 	showVersion   bool
 	listScenarios bool
-	// New flags for kitchen sink variant testing
+	// Tiered test variant flags
 	variant           string // "core" or "ml"
 	outputDir         string // Directory for results output
 	compare           bool   // Generate comparison report from existing results
@@ -101,7 +101,7 @@ func parseCommandLineFlags() *cliFlags {
 		"WebSocket endpoint (federation only)")
 	flag.BoolVar(&flags.showVersion, "version", false, "Show version information")
 	flag.BoolVar(&flags.listScenarios, "list", false, "List available scenarios")
-	// New flags for kitchen sink variant testing
+	// Tiered test variant flags
 	flag.StringVar(&flags.variant, "variant", "core",
 		"Test variant (core=CI-safe no ML, ml=full ML stack)")
 	flag.StringVar(&flags.outputDir, "output-dir", "",
@@ -152,25 +152,39 @@ func handleListCommand(listScenarios bool) bool {
 		return false
 	}
 
-	fmt.Println("Available scenarios:")
-	fmt.Println("\nProtocol Layer:")
-	fmt.Printf("  core-health         - Validates core component health (UDP, JSONFilter, JSONMap, File, HTTP POST, WebSocket)\n")
-	fmt.Printf("  core-dataflow       - Tests complete data pipeline: UDP → JSONFilter → JSONMap → File\n")
-	fmt.Printf("  core-federation     - Tests federation: Edge (UDP → WebSocket Out) → Cloud (WebSocket In → File)\n")
-	fmt.Println("\nSemantic Layer:")
-	fmt.Printf("  semantic-basic       - Basic semantic processing: UDP → JSONGeneric → Graph Processor\n")
-	fmt.Printf("  semantic-indexes     - Core semantic indexes (fast, no external dependencies)\n")
-	fmt.Printf("  semantic-kitchen-sink - Comprehensive semantic: Indexes + Embedding + Metrics + HTTP Gateway\n")
-	fmt.Println("\nRule Processor:")
-	fmt.Printf("  rules-graph          - Rule → Graph integration with metrics validation\n")
-	fmt.Println("\nTiered Inference (see docs/e2e/tiers.md):")
-	fmt.Printf("  tier0-rules-iot      - Tier 0: Rules-only (stateful rules, no ML inference)\n")
-	fmt.Printf("  tier1-native         - Tier 1: Native inference (BM25 + LPA + statistical)\n")
-	fmt.Printf("  tier2-llm            - Tier 2: LLM inference (neural embeddings + summaries)\n")
-	fmt.Println("\nTest Suites:")
-	fmt.Printf("  all                 - Runs all core scenarios (excludes federation and kitchen sink)\n")
-	fmt.Printf("  semantic            - Runs all semantic scenarios\n")
-	fmt.Printf("  rules               - Runs all rule processor scenarios\n")
+	fmt.Println("Available E2E Tasks (task e2e:<tier>):")
+	fmt.Println("")
+	fmt.Println("  e2e:core        - Platform boots, data flows (~10s)")
+	fmt.Println("  e2e:structural  - Rules + structural inference (~30s)")
+	fmt.Println("  e2e:statistical - BM25 + community detection (~60s)")
+	fmt.Println("  e2e:semantic    - Neural embeddings + LLM (~90s)")
+	fmt.Println("  e2e:gateway     - GraphQL + MCP APIs (~20s)")
+	fmt.Println("")
+	fmt.Println("Individual Scenarios:")
+	fmt.Println("")
+	fmt.Println("  Core:")
+	fmt.Println("    core-health     - Component health checks")
+	fmt.Println("    core-dataflow   - UDP → Filter → Map → File pipeline")
+	fmt.Println("    core-federation - Edge → Cloud federation via WebSocket")
+	fmt.Println("")
+	fmt.Println("  Structural (rules, no embeddings):")
+	fmt.Println("    semantic-indexes  - Core index validation")
+	fmt.Println("    tier0-rules-iot   - Stateful rules + PathRAG")
+	fmt.Println("")
+	fmt.Println("  Statistical (BM25, no external ML):")
+	fmt.Println("    semantic-basic    - Basic semantic: UDP → Graph Processor")
+	fmt.Println("    tiered            - Full stack with --variant core")
+	fmt.Println("")
+	fmt.Println("  Semantic (requires SemEmbed + SemInstruct):")
+	fmt.Println("    tiered            - Full stack with --variant ml")
+	fmt.Println("")
+	fmt.Println("  Gateway:")
+	fmt.Println("    gateway-graphql   - GraphQL operations")
+	fmt.Println("    gateway-mcp       - MCP protocol via SSE")
+	fmt.Println("")
+	fmt.Println("Variant flag (for tiered scenario):")
+	fmt.Println("  --variant core  - CI-safe, BM25 fallback, no ML services")
+	fmt.Println("  --variant ml    - Full ML stack, requires SemEmbed + SemInstruct")
 	return true
 }
 
@@ -233,20 +247,16 @@ func runScenarios(
 	} else if flags.scenarioName == "rules" {
 		logger.Info("Running all rule processor scenarios...")
 		return runRulesScenarios(ctx, logger, edgeClient, flags.udpEndpoint)
+	} else if flags.scenarioName == "gateway" {
+		logger.Info("Running all gateway scenarios...")
+		return runGatewayScenarios(ctx, logger, edgeClient, flags.baseURL)
 	}
 
 	// Run specific scenario
 	scenario := createScenario(edgeClient, cloudClient, flags)
 	if scenario == nil {
 		logger.Error("Unknown scenario", "name", flags.scenarioName)
-		fmt.Println("\nAvailable scenarios:")
-		fmt.Println("  core-health            - Validates core component health")
-		fmt.Println("  core-dataflow          - Tests complete data pipeline")
-		fmt.Println("  core-federation        - Tests edge-to-cloud federation")
-		fmt.Println("  semantic-basic         - Basic semantic processing")
-		fmt.Println("  semantic-indexes       - Core semantic indexes (fast)")
-		fmt.Println("  semantic-kitchen-sink  - Comprehensive semantic stack")
-		fmt.Println("  rules-graph            - Rule → Graph integration")
+		fmt.Println("\nRun with --list to see all available scenarios")
 		return 1
 	}
 
@@ -254,47 +264,54 @@ func runScenarios(
 	return runScenario(ctx, logger, scenario)
 }
 
-// createScenario creates a specific scenario by name
+// createScenario creates a specific scenario by name.
+//
+// Tier mapping (for backwards compatibility):
+//   - tier0 → tier0-rules-iot (rules-only, no embeddings)
+//   - tier1 → tiered --variant core (BM25 fallback)
+//   - tier2 → tiered --variant ml (neural embeddings)
 func createScenario(
 	edgeClient *client.ObservabilityClient,
 	cloudClient *client.ObservabilityClient,
 	flags *cliFlags,
 ) scenarios.Scenario {
 	switch flags.scenarioName {
+	// Core scenarios
 	case "core-health", "health":
 		return scenarios.NewCoreHealthScenario(edgeClient, nil)
 	case "core-dataflow", "dataflow":
 		return scenarios.NewCoreDataflowScenario(edgeClient, flags.udpEndpoint, nil)
 	case "core-federation", "federation":
 		return scenarios.NewCoreFederationScenario(edgeClient, cloudClient, flags.udpEndpoint, flags.wsEndpoint, nil)
+
+	// Semantic scenarios
 	case "semantic-basic", "basic":
 		return scenarios.NewSemanticBasicScenario(edgeClient, flags.udpEndpoint, nil)
 	case "semantic-indexes", "indexes":
 		return scenarios.NewSemanticIndexesScenario(edgeClient, flags.udpEndpoint, nil)
-	case "semantic-kitchen-sink", "kitchen-sink", "kitchen":
-		cfg := scenarios.DefaultSemanticKitchenSinkConfig()
+	case "tiered", "semantic-kitchen-sink", "kitchen-sink", "kitchen", "tier1-native", "tier1", "tier2-llm", "tier2":
+		// All tier aliases use tiered scenario with variant flag:
+		//   --variant core → BM25 fallback (statistical tier)
+		//   --variant ml   → neural embeddings (semantic tier)
+		cfg := scenarios.DefaultTieredConfig()
 		cfg.MetricsURL = flags.metricsURL
 		cfg.GatewayURL = flags.baseURL + "/api-gateway"
 		cfg.OutputDir = flags.outputDir
-		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, flags.udpEndpoint, cfg)
+		return scenarios.NewTieredScenario(edgeClient, flags.udpEndpoint, cfg)
+
+	// Rules scenarios
 	case "rules-graph", "rules-graph-integration", "rules":
 		return scenarios.NewRulesGraphScenario(edgeClient, flags.udpEndpoint, nil)
 	case "tier0-rules-iot", "tier0":
 		return scenarios.NewTier0RulesIoTScenario(edgeClient, flags.udpEndpoint, nil)
-	case "tier1-native", "tier1":
-		// Tier 1 uses kitchen-sink with core variant (BM25 fallback)
-		cfg := scenarios.DefaultSemanticKitchenSinkConfig()
-		cfg.MetricsURL = flags.metricsURL
-		cfg.GatewayURL = flags.baseURL + "/api-gateway"
-		cfg.OutputDir = flags.outputDir
-		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, flags.udpEndpoint, cfg)
-	case "tier2-llm", "tier2":
-		// Tier 2 uses kitchen-sink with ml variant (neural embeddings + LLM summaries)
-		cfg := scenarios.DefaultSemanticKitchenSinkConfig()
-		cfg.MetricsURL = flags.metricsURL
-		cfg.GatewayURL = flags.baseURL + "/api-gateway"
-		cfg.OutputDir = flags.outputDir
-		return scenarios.NewSemanticKitchenSinkScenario(edgeClient, flags.udpEndpoint, cfg)
+
+	// Gateway scenarios
+	case "gateway-graphql", "graphql":
+		return scenarios.NewGraphQLGatewayScenario(edgeClient, flags.baseURL, nil)
+	case "gateway-mcp", "mcp":
+		mcpURL := "http://localhost:8081"
+		return scenarios.NewMCPGatewayScenario(edgeClient, mcpURL, nil)
+
 	default:
 		return nil
 	}
@@ -386,7 +403,7 @@ func runSemanticScenarios(
 	tests := []scenarios.Scenario{
 		scenarios.NewSemanticBasicScenario(obsClient, udpEndpoint, nil),
 		scenarios.NewSemanticIndexesScenario(obsClient, udpEndpoint, nil),
-		scenarios.NewSemanticKitchenSinkScenario(obsClient, udpEndpoint, nil),
+		scenarios.NewTieredScenario(obsClient, udpEndpoint, nil),
 	}
 
 	passed := 0
@@ -444,6 +461,45 @@ func runRulesScenarios(
 	}
 
 	logger.Info("Rule processor test suite complete",
+		"passed", passed,
+		"failed", failed,
+		"total", len(tests))
+
+	if failed > 0 {
+		return 1
+	}
+	return 0
+}
+
+// runGatewayScenarios executes all gateway scenarios
+func runGatewayScenarios(
+	ctx context.Context,
+	logger *slog.Logger,
+	obsClient *client.ObservabilityClient,
+	baseURL string,
+) int {
+	tests := []scenarios.Scenario{
+		scenarios.NewGraphQLGatewayScenario(obsClient, baseURL, nil),
+		scenarios.NewMCPGatewayScenario(obsClient, "http://localhost:8081", nil),
+	}
+
+	passed := 0
+	failed := 0
+
+	for _, scenario := range tests {
+		logger.Info("Running gateway scenario", "name", scenario.Name())
+		exitCode := runScenario(ctx, logger, scenario)
+
+		if exitCode == 0 {
+			passed++
+			logger.Info("Gateway scenario PASSED", "name", scenario.Name())
+		} else {
+			failed++
+			logger.Error("Gateway scenario FAILED", "name", scenario.Name())
+		}
+	}
+
+	logger.Info("Gateway test suite complete",
 		"passed", passed,
 		"failed", failed,
 		"total", len(tests))
@@ -585,8 +641,8 @@ func handleAnalyzeComparisonCommand(logger *slog.Logger, outputDir string) int {
 		logger.Error("Failed to analyze comparison", "error", err)
 		fmt.Printf("\nError: %v\n", err)
 		fmt.Println("\nTo generate comparison files, run:")
-		fmt.Println("  1. Run with Core: ./e2e --scenario semantic-kitchen-sink --output-dir test/e2e/results")
-		fmt.Println("  2. Run with ML:   ./e2e --scenario semantic-kitchen-sink --output-dir test/e2e/results (with semembed)")
+		fmt.Println("  1. Run with Core: ./e2e --scenario tiered --output-dir test/e2e/results")
+		fmt.Println("  2. Run with ML:   ./e2e --scenario tiered --variant ml --output-dir test/e2e/results")
 		fmt.Println("  3. Analyze:       ./e2e --analyze-comparison --output-dir test/e2e/results")
 		return 1
 	}
@@ -704,7 +760,7 @@ type TierMetrics struct {
 // TierExpectation defines expected behavior for a tier
 type TierExpectation struct {
 	Name               string
-	ExpectedEmbeddings int  // -1 means any non-zero
-	ExpectedClusters   int  // -1 means any non-zero
+	ExpectedEmbeddings int // -1 means any non-zero
+	ExpectedClusters   int // -1 means any non-zero
 	ExpectedInference  bool
 }

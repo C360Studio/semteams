@@ -1,3 +1,5 @@
+//go:build integration
+
 package service_test
 
 import (
@@ -5,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -90,11 +91,7 @@ func (t *TestMockComponent) Stop(_ time.Duration) error {
 
 // TestComponentManagerConfigUpdates tests that config updates actually create/update/remove components
 func TestComponentManagerConfigUpdates(t *testing.T) {
-	// Skip if running unit tests without INTEGRATION_TESTS set
-	if os.Getenv("INTEGRATION_TESTS") == "" {
-		t.Skip("Skipping integration test - set INTEGRATION_TESTS=1 to run")
-	}
-
+	// Build tag ensures this only runs with -tags=integration
 	ctx := context.Background()
 
 	// Create real NATS test client with KV support

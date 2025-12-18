@@ -1,0 +1,33 @@
+version: "3"
+
+tasks:
+  default:
+    desc: Run all unit tests
+    cmds:
+      - go test ./...
+
+  race:
+    desc: Run tests with race detector
+    cmds:
+      - go test -race ./...
+
+  integration:
+    desc: Run integration tests (uses testcontainers for Docker infra)
+    cmds:
+      - echo "[INTEGRATION] Running integration tests with real NATS (via testcontainers)..."
+      - go test -race -tags=integration ./...
+      - echo "[OK] Integration tests complete"
+
+  integration:iot:
+    desc: Run IoT sensor integration tests only
+    cmds:
+      - echo "[INTEGRATION] Running IoT sensor integration tests..."
+      - go test -race -tags=integration -v ./examples/processors/iot_sensor/...
+      - echo "[OK] IoT sensor integration tests complete"
+
+  integration:graph:
+    desc: Run graph processor integration tests
+    cmds:
+      - echo "[INTEGRATION] Running graph processor integration tests..."
+      - go test -race -tags=integration -v ./processor/graph/...
+      - echo "[OK] Graph processor integration tests complete"

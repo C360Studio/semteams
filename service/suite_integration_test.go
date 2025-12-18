@@ -29,9 +29,9 @@ func (s *ServiceSuite) SetupSuite() {
 	s.testClient = sharedTestClient
 	s.natsClient = sharedNATSClient
 
-	// Skip if running unit tests without INTEGRATION_TESTS set
+	// Safety check - shared client should always exist when running with -tags=integration
 	if s.testClient == nil || s.natsClient == nil {
-		s.T().Skip("Skipping integration test - set INTEGRATION_TESTS=1 to run")
+		s.T().Fatal("Shared NATS client not initialized - TestMain should have created it")
 	}
 }
 

@@ -91,6 +91,47 @@ func (r *TestRule) evaluateConditions(data map[string]interface{}) bool {
 	return true
 }
 
+// EvaluateEntityState evaluates the rule directly against EntityState triples.
+// This implements the EntityStateEvaluator interface for KV watch-based evaluation.
+func (r *TestRule) EvaluateEntityState(entityState *gtypes.EntityState) bool {
+	if !r.enabled || entityState == nil {
+		return false
+	}
+
+	if len(r.conditions) == 0 {
+		// No conditions - trigger on any entity state
+		r.shouldTrigger = true
+		return true
+	}
+
+	// Evaluate conditions against triples
+	for _, cond := range r.conditions {
+		// Find triple with matching predicate
+		var value interface{}
+		found := false
+		for _, triple := range entityState.Triples {
+			if triple.Predicate == cond.Field {
+				value = triple.Object
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			// Required field not found
+			return false
+		}
+
+		// Evaluate condition
+		if !evaluateCondition(value, cond.Operator, cond.Value) {
+			return false
+		}
+	}
+
+	r.shouldTrigger = true
+	return true
+}
+
 // ExecuteEvents generates events when rule triggers
 func (r *TestRule) ExecuteEvents(messages []message.Message) ([]Event, error) {
 	if !r.shouldTrigger || len(messages) == 0 {
