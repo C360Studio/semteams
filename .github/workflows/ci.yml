@@ -57,6 +57,11 @@ jobs:
       - name: Pull NATS image
         run: docker pull nats:latest
 
+      - name: Pull LLM test images
+        run: |
+          docker pull ghcr.io/c360studio/semshimmy:latest
+          docker pull ghcr.io/c360studio/seminstruct:latest
+
       - name: Run unit tests
         run: go test -v -race ./...
 
