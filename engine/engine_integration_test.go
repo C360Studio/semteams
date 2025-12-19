@@ -77,6 +77,17 @@ func (s *EngineIntegrationSuite) SetupTest() {
 }
 
 func (s *EngineIntegrationSuite) TearDownTest() {
+	// Clean up all component configs to prevent test pollution
+	// Each test should start with a clean slate
+	cfg := s.configMgr.GetConfig()
+	currentConfig := cfg.Get()
+	for name := range currentConfig.Components {
+		delete(currentConfig.Components, name)
+	}
+	if err := cfg.Update(currentConfig); err == nil {
+		_ = s.configMgr.PushToKV(s.ctx)
+	}
+
 	s.configMgr.Stop(5 * time.Second)
 	s.cancel()
 }

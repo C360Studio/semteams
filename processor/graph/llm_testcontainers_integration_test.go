@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/processor/graph/llm"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/go-connections/nat"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/network"
@@ -178,6 +179,10 @@ func (h *LLMTestHelper) startShimmy(ctx context.Context, cfg *llmTestConfig) (st
 		Networks: []string{h.network.Name},
 		NetworkAliases: map[string][]string{
 			h.network.Name: {"shimmy"},
+		},
+		// Explicit DNS servers for external resolution (Hugging Face CDN)
+		HostConfigModifier: func(hc *container.HostConfig) {
+			hc.DNS = []string{"8.8.8.8", "1.1.1.1"}
 		},
 		WaitingFor: wait.ForAll(
 			wait.ForListeningPort(nat.Port("11435/tcp")),

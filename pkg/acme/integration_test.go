@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -20,8 +21,20 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+// skipIfNotLinux skips tests that require NetworkMode: "host" which only works on Linux.
+// Docker Desktop on macOS/Windows runs containers in a Linux VM, so host network mode
+// doesn't provide direct access to the host's network stack.
+func skipIfNotLinux(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS != "linux" {
+		t.Skipf("Skipping test on %s: NetworkMode 'host' only works on Linux", runtime.GOOS)
+	}
+}
+
 // TestACMEIntegration_FullLifecycle tests the complete ACME certificate lifecycle with real step-ca
 func TestACMEIntegration_FullLifecycle(t *testing.T) {
+	skipIfNotLinux(t) // NetworkMode: "host" required for step-ca to reach challenge server
+
 	ctx := context.Background()
 
 	// Start step-ca container
@@ -157,8 +170,9 @@ func startStepCA(ctx context.Context, t *testing.T) (testcontainers.Container, s
 		Image: "smallstep/step-ca:latest",
 		// Use host network mode so step-ca can connect back to the test's challenge servers
 		// This is required for TLS-ALPN-01 (port 443) and HTTP-01 (port 80) challenges
+		// HostAccessPorts alone is insufficient - we need full host network access
+		NetworkMode:     "host",
 		HostAccessPorts: []int{443, 80},
-		ExposedPorts:    []string{"9000/tcp"},
 		Env: map[string]string{
 			"DOCKER_STEPCA_INIT_NAME":             "SemStreams Test CA",
 			"DOCKER_STEPCA_INIT_DNS_NAMES":        "localhost,step-ca,host.docker.internal",
@@ -167,7 +181,6 @@ func startStepCA(ctx context.Context, t *testing.T) (testcontainers.Container, s
 		},
 		WaitingFor: wait.ForAll(
 			wait.ForLog("Serving HTTPS"),
-			wait.ForListeningPort("9000/tcp"),
 		).WithDeadline(60 * time.Second),
 	}
 
@@ -207,14 +220,8 @@ func startStepCA(ctx context.Context, t *testing.T) (testcontainers.Container, s
 	// Wait for reload to complete
 	time.Sleep(2 * time.Second)
 
-	// Get mapped port
-	mappedPort, err := container.MappedPort(ctx, "9000")
-	if err != nil {
-		container.Terminate(ctx)
-		return nil, "", nil, fmt.Errorf("failed to get mapped port: %w", err)
-	}
-
-	stepCAURL := fmt.Sprintf("https://localhost:%s", mappedPort.Port())
+	// With host network mode, step-ca listens directly on port 9000
+	stepCAURL := "https://localhost:9000"
 
 	// Extract root CA certificate from container
 	// step-ca generates root CA at /home/step/certs/root_ca.crt
@@ -245,6 +252,8 @@ func startStepCA(ctx context.Context, t *testing.T) (testcontainers.Container, s
 
 // TestACMEIntegration_TLSHandshake tests that ACME-obtained certificates work for TLS handshakes
 func TestACMEIntegration_TLSHandshake(t *testing.T) {
+	skipIfNotLinux(t) // NetworkMode: "host" required for step-ca to reach challenge server
+
 	ctx := context.Background()
 
 	// Start step-ca container

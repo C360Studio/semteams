@@ -24,7 +24,10 @@ func TestStatefulEvaluator_Integration(t *testing.T) {
 
 	// Create processor with default config
 	config := DefaultConfig()
-	processor := NewProcessor(testClient.Client, &config)
+	processor, err := NewProcessor(testClient.Client, &config)
+	if err != nil {
+		t.Fatalf("Failed to create processor: %v", err)
+	}
 
 	// Initialize processor
 	if err := processor.Initialize(); err != nil {

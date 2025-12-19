@@ -563,13 +563,13 @@ func (w *Output) setupShutdownChannels() {
 // cleanupOnError cleans up resources when Start fails
 func (w *Output) cleanupOnError() {
 	// Clean up channels if we created them
+	// Note: We close but don't nil the channels to avoid race conditions
+	// with goroutines that may be reading from them in select statements
 	if w.shutdown != nil {
 		close(w.shutdown)
-		w.shutdown = nil
 	}
 	if w.done != nil {
 		close(w.done)
-		w.done = nil
 	}
 	// Clean up server if we created it
 	if w.server != nil {
@@ -745,12 +745,12 @@ func (w *Output) Stop(timeout time.Duration) error {
 	w.closeAllClients()
 
 	// Clear references and close done channel to signal completion
+	// Note: We close but don't nil shutdown/done channels to avoid race conditions
+	// with goroutines that may be reading from them in select statements
 	w.server = nil
 	if w.done != nil {
 		close(w.done)
-		w.done = nil
 	}
-	w.shutdown = nil
 	w.wg = nil
 	w.mu.Unlock()
 
