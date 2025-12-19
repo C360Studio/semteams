@@ -6,7 +6,7 @@ Run Prometheus and Grafana locally to monitor SemStreams during development and 
 
 ```bash
 # Start observability stack
-task services:start:observability
+task observe:up
 
 # Open dashboards
 open http://localhost:3000  # Grafana (admin/admin)
@@ -16,7 +16,7 @@ open http://localhost:9090  # Prometheus
 Stop when done:
 
 ```bash
-task services:stop
+task observe:down
 ```
 
 ## Architecture
@@ -92,7 +92,7 @@ Start observability before running e2e tests to watch metrics in real-time:
 
 ```bash
 # Terminal 1: Start observability
-task services:start:observability
+task observe:up
 
 # Terminal 2: Run e2e tests
 task e2e:core:default

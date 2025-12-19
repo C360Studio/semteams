@@ -136,7 +136,7 @@ All state lives in NATS JetStream KV buckets:
 | [docs/basics/](docs/basics/) | Getting started, core interfaces |
 | [docs/concepts/](docs/concepts/) | Background knowledge, algorithms |
 | [docs/advanced/](docs/advanced/) | Clustering, LLM, performance tuning |
-| [docs/rules/](docs/rules/) | Rules engine reference |
+| [docs/operations/](docs/operations/) | Local monitoring, deployment |
 | [docs/contributing/](docs/contributing/) | Development, testing, CI |
 
 ## Requirements
