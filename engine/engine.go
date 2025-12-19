@@ -470,14 +470,8 @@ func (e *Engine) deleteComponentConfig(ctx context.Context, name string) error {
 	}
 
 	// Delete the component key from KV
-	// PushToKV only puts keys that exist in memory - it doesn't delete removed keys
 	if err := e.configMgr.DeleteComponentFromKV(ctx, name); err != nil {
 		return fmt.Errorf("delete from KV: %w", err)
-	}
-
-	// Push remaining config to KV
-	if err := e.configMgr.PushToKV(ctx); err != nil {
-		return fmt.Errorf("push to KV: %w", err)
 	}
 
 	return nil
