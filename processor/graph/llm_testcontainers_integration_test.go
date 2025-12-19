@@ -162,6 +162,36 @@ func StartLLMServices(ctx context.Context, t *testing.T, opts ...LLMTestOption) 
 		t.Logf("  Semembed: %s", helper.SemembedURL)
 	}
 
+	// Warmup: Make a test inference call to ensure model is fully loaded.
+	// The /v1/models endpoint returns success before tensors are loaded,
+	// causing 502 errors on first real inference request in CI.
+	t.Log("Warming up LLM services with test inference...")
+	client, err := helper.NewLLMClient()
+	if err != nil {
+		helper.Close(ctx)
+		return nil, fmt.Errorf("failed to create warmup client: %w", err)
+	}
+
+	// Retry warmup with backoff - model may still be loading tensors
+	var warmupErr error
+	for attempt := 0; attempt < 10; attempt++ {
+		if attempt > 0 {
+			time.Sleep(time.Duration(attempt) * 500 * time.Millisecond)
+		}
+		_, warmupErr = client.ChatCompletion(ctx, llm.ChatRequest{
+			UserPrompt: "Say 'ready'",
+		})
+		if warmupErr == nil {
+			t.Log("LLM warmup successful")
+			break
+		}
+		t.Logf("Warmup attempt %d failed: %v", attempt+1, warmupErr)
+	}
+	if warmupErr != nil {
+		helper.Close(ctx)
+		return nil, fmt.Errorf("LLM warmup failed after retries: %w", warmupErr)
+	}
+
 	return helper, nil
 }
 

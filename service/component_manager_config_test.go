@@ -374,11 +374,14 @@ func TestComponentManagerConfigUpdates(t *testing.T) {
 		}
 
 		// Push config update via KV store
+		// Add delay between puts to ensure KV watcher processes each update.
+		// Rapid puts can cause the watcher to miss updates in CI.
 		for name, compConfig := range multiConfig.Components {
 			data, err := json.Marshal(compConfig)
 			require.NoError(t, err)
 			_, err = kv.Put(ctx, "components."+name, data)
 			require.NoError(t, err)
+			time.Sleep(50 * time.Millisecond)
 		}
 
 		// Wait for components to be created (replace arbitrary sleep with proper wait)
