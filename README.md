@@ -80,11 +80,11 @@ Dotted notation enables NATS wildcard queries (`sensor.measurement.*`).
 
 | Tier | Capabilities | Requirements |
 |------|--------------|--------------|
-| 0 | Rules engine, explicit relationships, structural indexing | NATS only |
-| 1 | + BM25 search, statistical communities | + Search index |
-| 2 | + Neural embeddings, LLM summaries | + Embedding service, LLM |
+| Structural | Rules engine, explicit relationships, structural indexing | NATS only |
+| Statistical | + BM25 search, statistical communities | + Search index |
+| Semantic | + Neural embeddings, LLM summaries | + Embedding service, LLM |
 
-Start with Tier 0. Add capabilities as resources allow.
+Start with Structural. Add capabilities as resources allow.
 
 ## Architecture
 
@@ -143,8 +143,8 @@ All state lives in NATS JetStream KV buckets:
 
 - Go 1.25+
 - NATS Server with JetStream enabled
-- (Optional) Embedding service for Tier 1+
-- (Optional) LLM service for Tier 2
+- (Optional) Embedding service for Statistical/Semantic tiers
+- (Optional) LLM service for Semantic tier
 
 ## License
 
