@@ -463,6 +463,21 @@ func sanitizeNATSKey(key string) string {
 	return strings.ReplaceAll(key, " ", "_")
 }
 
+// DeleteComponentFromKV deletes a component's configuration from NATS KV.
+// This should be called when a component is removed (e.g., during undeploy).
+// PushToKV only puts keys that exist in memory - it doesn't delete removed keys.
+func (cm *Manager) DeleteComponentFromKV(ctx context.Context, name string) error {
+	key := fmt.Sprintf("components.%s", sanitizeNATSKey(name))
+	if err := cm.kvStore.Delete(ctx, key); err != nil {
+		if err == natsclient.ErrKVKeyNotFound {
+			return nil // Key already deleted, not an error
+		}
+		return fmt.Errorf("delete component %s from KV: %w", name, err)
+	}
+	cm.logger.Debug("Deleted component from KV", "component", name, "key", key)
+	return nil
+}
+
 // PushToKV pushes the current configuration to NATS KV
 // This is useful for initial setup or config synchronization
 func (cm *Manager) PushToKV(ctx context.Context) error {

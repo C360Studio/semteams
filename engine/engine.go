@@ -451,7 +451,7 @@ func (e *Engine) disableComponent(ctx context.Context, name string) error {
 	return nil
 }
 
-// deleteComponentConfig removes a component config from KV
+// deleteComponentConfig removes a component config from memory and KV
 func (e *Engine) deleteComponentConfig(ctx context.Context, name string) error {
 	safeConfig := e.configMgr.GetConfig()
 	currentConfig := safeConfig.Get()
@@ -461,14 +461,21 @@ func (e *Engine) deleteComponentConfig(ctx context.Context, name string) error {
 		return fmt.Errorf("component %s not found", name)
 	}
 
-	// Delete from config
+	// Delete from in-memory config
 	delete(currentConfig.Components, name)
 
-	// Update config and push to KV
+	// Update the SafeConfig with the modified config
 	if err := safeConfig.Update(currentConfig); err != nil {
 		return fmt.Errorf("update config: %w", err)
 	}
 
+	// Delete the component key from KV
+	// PushToKV only puts keys that exist in memory - it doesn't delete removed keys
+	if err := e.configMgr.DeleteComponentFromKV(ctx, name); err != nil {
+		return fmt.Errorf("delete from KV: %w", err)
+	}
+
+	// Push remaining config to KV
 	if err := e.configMgr.PushToKV(ctx); err != nil {
 		return fmt.Errorf("push to KV: %w", err)
 	}
