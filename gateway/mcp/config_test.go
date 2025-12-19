@@ -87,10 +87,10 @@ func TestConfig_Validate_Timeout(t *testing.T) {
 			errSubstr: "invalid timeout duration",
 		},
 		{
-			name:      "empty becomes default",
-			timeout:   "",
-			wantErr:   false,
-			expected:  30 * time.Second,
+			name:     "empty becomes default",
+			timeout:  "",
+			wantErr:  false,
+			expected: 30 * time.Second,
 		},
 	}
 

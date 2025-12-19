@@ -64,7 +64,7 @@ type Status struct {
 
 // Client manages NATS connections with circuit breaker pattern
 type Client struct {
-	urls     string // comma-separated NATS server URLs for clustering support
+	urls     string       // comma-separated NATS server URLs for clustering support
 	status   atomic.Value // stores ConnectionStatus
 	failures atomic.Int32
 	logger   Logger

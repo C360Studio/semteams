@@ -31,7 +31,7 @@ type Document struct {
 	UpdatedAt   string   `json:"updated_at"`  // ISO timestamp
 
 	// Context fields (set by processor from config, preserved through JSON for NATS transport)
-	OrgID    string `json:"org_id,omitempty"`    // e.g., "acme"
+	OrgID    string `json:"org_id,omitempty"`   // e.g., "acme"
 	Platform string `json:"platform,omitempty"` // e.g., "logistics"
 
 	// Storage reference (set by processor after storing content)

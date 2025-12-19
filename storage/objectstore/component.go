@@ -207,7 +207,6 @@ func (c *Component) Start(ctx context.Context) error {
 	return nil
 }
 
-
 // Stop cleanly shuts down the component
 func (c *Component) Stop(_ time.Duration) error {
 	if !c.started {

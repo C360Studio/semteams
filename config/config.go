@@ -36,8 +36,8 @@ type Config struct {
 	Platform   PlatformConfig       `json:"platform"`
 	Security   security.Config      `json:"security,omitempty"` // Platform-wide security configuration
 	NATS       NATSConfig           `json:"nats"`
-	Services   types.ServiceConfigs `json:"services"`   // Map of service configs
-	Components ComponentConfigs     `json:"components"` // Map of component instance configs
+	Services   types.ServiceConfigs `json:"services"`          // Map of service configs
+	Components ComponentConfigs     `json:"components"`        // Map of component instance configs
 	Streams    StreamConfigs        `json:"streams,omitempty"` // Optional explicit JetStream stream definitions
 	// Graph and ObjectStore moved to components (graph-processor and objectstore)
 }

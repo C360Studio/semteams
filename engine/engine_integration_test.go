@@ -77,19 +77,18 @@ func (s *EngineIntegrationSuite) SetupTest() {
 }
 
 func (s *EngineIntegrationSuite) TearDownTest() {
-	// Clean up all component configs to prevent test pollution
-	// Each test should start with a clean slate
-	cfg := s.configMgr.GetConfig()
-	currentConfig := cfg.Get()
-	for name := range currentConfig.Components {
-		delete(currentConfig.Components, name)
-	}
-	if err := cfg.Update(currentConfig); err == nil {
-		_ = s.configMgr.PushToKV(s.ctx)
-	}
-
+	// Stop config manager first
 	s.configMgr.Stop(5 * time.Second)
 	s.cancel()
+
+	// Delete the entire KV bucket to prevent test pollution
+	// PushToKV only puts keys - it doesn't delete keys removed from memory
+	// Next test's NewConfigManager() will create a fresh empty bucket
+	ctx := context.Background()
+	if err := s.natsClient.DeleteKeyValueBucket(ctx, "semstreams_config"); err != nil {
+		// Log but don't fail - bucket might not exist
+		s.T().Logf("Warning: failed to delete KV bucket: %v", err)
+	}
 }
 
 // TestDeployFlow tests deploying a flow with core components to component configs

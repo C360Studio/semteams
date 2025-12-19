@@ -186,7 +186,9 @@ func (h *LLMTestHelper) startShimmy(ctx context.Context, cfg *llmTestConfig) (st
 		},
 		WaitingFor: wait.ForAll(
 			wait.ForListeningPort(nat.Port("11435/tcp")),
-			wait.ForHTTP("/health").
+			// Wait for /v1/models instead of /health - model list only works when model is loaded
+			// /health returns OK before model is ready, causing 502 errors on inference
+			wait.ForHTTP("/v1/models").
 				WithPort(nat.Port("11435/tcp")).
 				WithStartupTimeout(cfg.shimmyTimeout),
 		),

@@ -26,24 +26,24 @@ type ComparisonReport struct {
 
 // QueryComparison represents comparison results for a single query
 type QueryComparison struct {
-	Query        string  `json:"query"`
+	Query        string   `json:"query"`
 	CoreHits     []string `json:"core_hits"`
 	MLHits       []string `json:"ml_hits"`
-	HitOverlap   float64 `json:"hit_overlap"`    // Jaccard similarity (intersection/union)
-	ScoreCorr    float64 `json:"score_corr"`     // Pearson correlation of shared hit scores
-	CoreAvgScore float64 `json:"core_avg_score"`
-	MLAvgScore   float64 `json:"ml_avg_score"`
-	Insight      string  `json:"insight"`        // "ML finds more results", "Similar results", etc.
+	HitOverlap   float64  `json:"hit_overlap"` // Jaccard similarity (intersection/union)
+	ScoreCorr    float64  `json:"score_corr"`  // Pearson correlation of shared hit scores
+	CoreAvgScore float64  `json:"core_avg_score"`
+	MLAvgScore   float64  `json:"ml_avg_score"`
+	Insight      string   `json:"insight"` // "ML finds more results", "Similar results", etc.
 }
 
 // ComparisonSummary summarizes the overall comparison
 type ComparisonSummary struct {
-	AvgHitOverlap   float64 `json:"avg_hit_overlap"`    // Average Jaccard across queries
-	AvgScoreCorr    float64 `json:"avg_score_corr"`     // Average correlation
-	MLBetterCount   int     `json:"ml_better_count"`    // Queries where ML found more relevant results
-	CoreBetterCount int     `json:"core_better_count"`  // Queries where Core found more relevant results
-	TiedCount       int     `json:"tied_count"`         // Queries where results were similar
-	Verdict         string  `json:"verdict"`            // "ML provides semantic lift" / "Marginal difference"
+	AvgHitOverlap   float64 `json:"avg_hit_overlap"`   // Average Jaccard across queries
+	AvgScoreCorr    float64 `json:"avg_score_corr"`    // Average correlation
+	MLBetterCount   int     `json:"ml_better_count"`   // Queries where ML found more relevant results
+	CoreBetterCount int     `json:"core_better_count"` // Queries where Core found more relevant results
+	TiedCount       int     `json:"tied_count"`        // Queries where results were similar
+	Verdict         string  `json:"verdict"`           // "ML provides semantic lift" / "Marginal difference"
 }
 
 // analyzeComparison generates a comparison report from Core and ML comparison files

@@ -299,8 +299,8 @@ func (c *Component) handleMessage(ctx context.Context, msgData []byte) {
 			Category: "sensor",
 			Version:  "v1",
 		},
-		reading,  // SensorReading implements Graphable
-		c.name,   // source component name
+		reading, // SensorReading implements Graphable
+		c.name,  // source component name
 	)
 
 	// Marshal the BaseMessage

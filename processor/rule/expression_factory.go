@@ -326,8 +326,8 @@ func (r *ExpressionRule) ExecuteEvents(messages []message.Message) ([]Event, err
 	}
 
 	event := gtypes.Event{
-		Type:     gtypes.EventEntityUpdate,
-		EntityID: fmt.Sprintf("rule.%s.triggered", r.id),
+		Type:       gtypes.EventEntityUpdate,
+		EntityID:   fmt.Sprintf("rule.%s.triggered", r.id),
 		Properties: properties,
 		Metadata: gtypes.EventMetadata{
 			Source:    r.name,

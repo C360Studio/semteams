@@ -31,8 +31,8 @@ type Manager struct {
 	communityDetector any                      // Optional: CommunityDetector for GraphRAG search (type-erased to avoid import cycle)
 
 	// LLM dependencies for answer generation
-	llmClient      llm.Client          // Optional: LLM client for answer generation
-	contentFetcher llm.ContentFetcher  // Optional: for fetching entity content
+	llmClient      llm.Client         // Optional: LLM client for answer generation
+	contentFetcher llm.ContentFetcher // Optional: for fetching entity content
 
 	// Metrics (simplified - no cache metrics)
 	metrics *Metrics
