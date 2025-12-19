@@ -85,6 +85,7 @@ type BatchProcessingConfig struct {
 type IndexesConfig struct {
 	Predicate bool `json:"predicate" default:"true"`
 	Incoming  bool `json:"incoming"  default:"true"`
+	Outgoing  bool `json:"outgoing"  default:"true"`
 	Alias     bool `json:"alias"     default:"true"`
 	Spatial   bool `json:"spatial"   default:"true"`
 	Temporal  bool `json:"temporal"  default:"true"`
@@ -108,6 +109,7 @@ type BucketsConfig struct {
 	EntityStates string `json:"entity_states" default:"ENTITY_STATES"`
 	Predicate    string `json:"predicate"     default:"PREDICATE_INDEX"`
 	Incoming     string `json:"incoming"      default:"INCOMING_INDEX"`
+	Outgoing     string `json:"outgoing"      default:"OUTGOING_INDEX"`
 	Alias        string `json:"alias"         default:"ALIAS_INDEX"`
 	Spatial      string `json:"spatial"       default:"SPATIAL_INDEX"`
 	Temporal     string `json:"temporal"      default:"TEMPORAL_INDEX"`
@@ -210,6 +212,7 @@ func DefaultConfig() Config {
 		Indexes: IndexesConfig{
 			Predicate: true,
 			Incoming:  true,
+			Outgoing:  true,
 			Alias:     true,
 			Spatial:   true,
 			Temporal:  true,
@@ -227,6 +230,7 @@ func DefaultConfig() Config {
 			EntityStates: "ENTITY_STATES",
 			Predicate:    "PREDICATE_INDEX",
 			Incoming:     "INCOMING_INDEX",
+			Outgoing:     "OUTGOING_INDEX",
 			Alias:        "ALIAS_INDEX",
 			Spatial:      "SPATIAL_INDEX",
 			Temporal:     "TEMPORAL_INDEX",
@@ -568,6 +572,9 @@ func (c *Config) GetEnabledIndexes() []string {
 	if c.Indexes.Incoming {
 		enabled = append(enabled, "incoming")
 	}
+	if c.Indexes.Outgoing {
+		enabled = append(enabled, "outgoing")
+	}
 	if c.Indexes.Alias {
 		enabled = append(enabled, "alias")
 	}
@@ -587,6 +594,8 @@ func (c *Config) IsIndexEnabled(indexType string) bool {
 		return c.Indexes.Predicate
 	case "incoming":
 		return c.Indexes.Incoming
+	case "outgoing":
+		return c.Indexes.Outgoing
 	case "alias":
 		return c.Indexes.Alias
 	case "spatial":

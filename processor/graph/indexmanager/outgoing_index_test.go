@@ -169,7 +169,7 @@ func TestOutgoingIndex_HandleCreate(t *testing.T) {
 			mockBucket := NewMockKeyValue()
 
 			// Create index with mock
-			index := NewOutgoingIndex(mockBucket, nil, nil, nil, nil)
+			index := NewOutgoingIndex(mockBucket, nil, nil, nil)
 
 			// Create entity state
 			entityState := &gtypes.EntityState{
@@ -365,7 +365,7 @@ func TestOutgoingIndex_HandleUpdate(t *testing.T) {
 			mockBucket := NewMockKeyValue()
 
 			// Create index
-			index := NewOutgoingIndex(mockBucket, nil, nil, nil, nil)
+			index := NewOutgoingIndex(mockBucket, nil, nil, nil)
 
 			// Setup initial state
 			initialState := &gtypes.EntityState{
@@ -461,7 +461,7 @@ func TestOutgoingIndex_HandleDelete(t *testing.T) {
 			mockBucket := NewMockKeyValue()
 
 			// Create index
-			index := NewOutgoingIndex(mockBucket, nil, nil, nil, nil)
+			index := NewOutgoingIndex(mockBucket, nil, nil, nil)
 
 			// Setup initial state if provided
 			if tt.initialTriples != nil {
@@ -610,7 +610,7 @@ func TestOutgoingIndex_GetOutgoing(t *testing.T) {
 			mockBucket := NewMockKeyValue()
 
 			// Create index
-			index := NewOutgoingIndex(mockBucket, nil, nil, nil, nil)
+			index := NewOutgoingIndex(mockBucket, nil, nil, nil)
 
 			// Setup test data if provided
 			if tt.setupTriples != nil {
@@ -760,7 +760,7 @@ func TestOutgoingIndex_GetOutgoingByPredicate(t *testing.T) {
 			mockBucket := NewMockKeyValue()
 
 			// Create index
-			index := NewOutgoingIndex(mockBucket, nil, nil, nil, nil)
+			index := NewOutgoingIndex(mockBucket, nil, nil, nil)
 
 			// Setup test data if provided
 			if tt.setupTriples != nil {
@@ -868,7 +868,7 @@ func TestOutgoingIndex_ExtractsRelationshipsFromTriples(t *testing.T) {
 			mockBucket := NewMockKeyValue()
 
 			// Create index
-			index := NewOutgoingIndex(mockBucket, nil, nil, nil, nil)
+			index := NewOutgoingIndex(mockBucket, nil, nil, nil)
 
 			// Create entity with triples (single source of truth)
 			entityState := &gtypes.EntityState{

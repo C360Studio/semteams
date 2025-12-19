@@ -34,6 +34,10 @@ type EntityReader interface {
 type EntityWriter interface {
 	CreateEntity(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error)
 	UpdateEntity(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error)
+	// UpsertEntity atomically creates or updates an entity using Put semantics.
+	// This is the preferred method for streaming data where idempotency is required.
+	// It avoids TOCTOU races that occur with separate GetEntity → Create/Update patterns.
+	UpsertEntity(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error)
 	DeleteEntity(ctx context.Context, id string) error
 }
 

@@ -322,7 +322,8 @@ func TestTemporalResolver_ErrorBoundaries(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	resolver := NewTemporalResolver(ctx, bucket)
+	resolver, err := NewTemporalResolver(ctx, bucket)
+	require.NoError(t, err)
 	defer resolver.Close()
 
 	t.Run("empty_history", func(t *testing.T) {

@@ -95,7 +95,10 @@ func CreateRuleProcessor(rawConfig json.RawMessage, deps component.Dependencies)
 	}
 
 	// Create processor with metrics if available
-	processor := NewProcessorWithMetrics(deps.NATSClient, &ruleConfig, deps.MetricsRegistry)
+	processor, err := NewProcessorWithMetrics(deps.NATSClient, &ruleConfig, deps.MetricsRegistry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create rule processor: %w", err)
+	}
 
 	// Set logger from dependencies
 	logger := deps.Logger

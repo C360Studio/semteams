@@ -230,8 +230,8 @@ func createTestEntity(ctx context.Context, processor *Processor, id string, enti
 	return processor.entityManager.CreateEntity(ctx, entity)
 }
 
-// TestE2E_LocalSearch tests local community search end-to-end
-func TestE2E_LocalSearch(t *testing.T) {
+// TestLocalSearch tests local community search
+func TestLocalSearch(t *testing.T) {
 	setup := setupGraphRAGTest(t)
 	processor := setup.processor
 	ctx := setup.ctx
@@ -327,8 +327,8 @@ func TestE2E_LocalSearch(t *testing.T) {
 	t.Logf("✅ LocalSearch E2E test completed successfully")
 }
 
-// TestE2E_GlobalSearch tests global cross-community search
-func TestE2E_GlobalSearch(t *testing.T) {
+// TestGlobalSearch tests global cross-community search
+func TestGlobalSearch(t *testing.T) {
 	setup := setupGraphRAGTest(t)
 	processor := setup.processor
 	ctx := setup.ctx
@@ -458,8 +458,8 @@ func TestE2E_GlobalSearch(t *testing.T) {
 	t.Logf("✅ GlobalSearch E2E test completed successfully")
 }
 
-// TestE2E_CommunitySummaries tests community summary accuracy
-func TestE2E_CommunitySummaries(t *testing.T) {
+// TestCommunitySummaries tests community summary accuracy
+func TestCommunitySummaries(t *testing.T) {
 	setup := setupGraphRAGTest(t)
 	processor := setup.processor
 	ctx := setup.ctx
@@ -531,8 +531,8 @@ func TestE2E_CommunitySummaries(t *testing.T) {
 	t.Logf("✅ Community summaries test completed successfully")
 }
 
-// TestE2E_PerformanceComparison tests that local search is faster than global
-func TestE2E_PerformanceComparison(t *testing.T) {
+// TestPerformanceComparison tests that local search is faster than global
+func TestPerformanceComparison(t *testing.T) {
 	setup := setupGraphRAGTest(t)
 	processor := setup.processor
 	ctx := setup.ctx
@@ -607,8 +607,8 @@ func TestE2E_PerformanceComparison(t *testing.T) {
 	t.Logf("✅ Performance comparison test completed successfully")
 }
 
-// TestE2E_ResourceLimits tests that resource limits are enforced
-func TestE2E_ResourceLimits(t *testing.T) {
+// TestResourceLimits tests that resource limits are enforced
+func TestResourceLimits(t *testing.T) {
 	setup := setupGraphRAGTest(t)
 	processor := setup.processor
 	ctx := setup.ctx
@@ -665,9 +665,9 @@ func TestE2E_ResourceLimits(t *testing.T) {
 	t.Logf("✅ Resource limits test completed successfully")
 }
 
-// TestE2E_LLMSummarization tests LLM-based community summarization with seminstruct
+// TestLLMSummarization tests LLM-based community summarization with seminstruct.
 // This test uses testcontainers to start shimmy + seminstruct with Qwen 0.5B model.
-func TestE2E_LLMSummarization(t *testing.T) {
+func TestLLMSummarization(t *testing.T) {
 	setup := setupGraphRAGTest(t)
 	processor := setup.processor
 	ctx := setup.ctx
@@ -749,22 +749,23 @@ func TestE2E_LLMSummarization(t *testing.T) {
 		require.NoError(t, err, "Summarization should not error")
 		require.NotNil(t, summarizedComm)
 
-		// Check summary was generated
-		assert.NotEmpty(t, summarizedComm.StatisticalSummary, "Summary should not be empty")
+		// Check LLM summary was generated (LLMSummary field, not StatisticalSummary)
+		assert.NotEmpty(t, summarizedComm.LLMSummary, "LLM summary should not be empty")
 		assert.NotEmpty(t, summarizedComm.Keywords, "Keywords should be extracted")
 
 		// STRICT ASSERTION: LLM must be used, no graceful degradation hiding failures
 		// If testcontainers started successfully, LLM summarization must work
-		assert.Equal(t, "llm", summarizedComm.SummaryStatus,
-			"LLM summarization must succeed when testcontainers are running (got: %s)", summarizedComm.SummaryStatus)
+		// Status is "llm-enhanced" when LLM succeeds (not just "llm")
+		assert.Equal(t, "llm-enhanced", summarizedComm.SummaryStatus,
+			"LLM summarization must succeed when testcontainers are running (got: %q)", summarizedComm.SummaryStatus)
 
 		// Log results
 		t.Logf("Summarizer used: %s", summarizedComm.SummaryStatus)
-		t.Logf("StatisticalSummary: %s", summarizedComm.StatisticalSummary)
+		t.Logf("LLMSummary: %s", summarizedComm.LLMSummary)
 		t.Logf("Keywords: %v", summarizedComm.Keywords)
 
 		// LLM summaries should be narrative style, not just entity counts
-		assert.NotContains(t, summarizedComm.StatisticalSummary, "Community of", "LLM summary should be narrative")
+		assert.NotContains(t, summarizedComm.LLMSummary, "Community of", "LLM summary should be narrative")
 	})
 
 	t.Run("LLM_summary_integrates_with_GlobalSearch", func(t *testing.T) {
@@ -796,189 +797,8 @@ func TestE2E_LLMSummarization(t *testing.T) {
 	t.Logf("✅ LLM summarization test completed successfully")
 }
 
-func TestE2E_ProgressiveEnhancement(t *testing.T) {
-	setup := setupGraphRAGTest(t)
-	processor := setup.processor
-	ctx := setup.ctx
-	communityStorage := setup.communityStorage
-	detector := setup.detector
-
-	t.Log("Testing progressive community summarization with async LLM enhancement")
-
-	// Start LLM services via testcontainers
-	llmHelper, err := StartLLMServices(ctx, t)
-	if err != nil {
-		t.Fatalf("Failed to start LLM testcontainers: %v", err)
-	}
-	defer llmHelper.Close(ctx)
-
-	// Configure progressive summarization
-	progressiveSummarizer := clustering.NewProgressiveSummarizer()
-
-	// Create LLM client using testcontainer helper
-	llmClient, err := llmHelper.NewLLMClient()
-	require.NoError(t, err, "Failed to create LLM client")
-	defer llmClient.Close()
-
-	llmSummarizer, err := clustering.NewLLMSummarizer(clustering.LLMSummarizerConfig{
-		Client: llmClient,
-	})
-	require.NoError(t, err, "Failed to create LLM summarizer")
-
-	// Start enhancement worker with KV watch
-	enhancementWorker, err := clustering.NewEnhancementWorker(&clustering.EnhancementWorkerConfig{
-		LLMSummarizer: llmSummarizer,
-		Storage:       communityStorage,
-		GraphProvider: &testGraphProvider{
-			entityReader: processor.entityManager,
-			kvBucket:     nil, // Not needed for this test
-		},
-		Querier:         setup.queryManager,
-		CommunityBucket: setup.communityBucket, // For KV watch
-	})
-	require.NoError(t, err)
-
-	// Start worker in background
-	workerCtx, cancelWorker := context.WithCancel(ctx)
-	defer cancelWorker()
-	go func() {
-		_ = enhancementWorker.Start(workerCtx)
-	}()
-
-	// Configure detector with progressive summarization (no NATS connection needed)
-	detector.WithProgressiveSummarization(
-		progressiveSummarizer,
-		setup.queryManager, // Implements EntityProvider
-	)
-
-	// Create test entities
-	entities := []struct {
-		id         string
-		entityType string
-		properties map[string]any
-	}{
-		{
-			"drone-prog-1", "robotics.drone",
-			map[string]any{
-				"name":        "Autonomous Delivery Drone",
-				"description": "UAV for package delivery with obstacle avoidance",
-			},
-		},
-		{
-			"sensor-prog-1", "robotics.sensor",
-			map[string]any{
-				"name":        "LiDAR Sensor Array",
-				"description": "3D mapping sensor for autonomous navigation",
-			},
-		},
-		{
-			"controller-prog-1", "robotics.controller",
-			map[string]any{
-				"name":        "Flight Controller",
-				"description": "Real-time control system for drone stabilization",
-			},
-		},
-	}
-
-	// Create entities in the graph
-	for _, spec := range entities {
-		_, err := createTestEntity(ctx, processor, spec.id, spec.entityType, spec.properties)
-		require.NoError(t, err, "Failed to create entity %s", spec.id)
-	}
-
-	time.Sleep(200 * time.Millisecond)
-
-	t.Run("Statistical_summary_available_immediately", func(t *testing.T) {
-		// Run community detection
-		communities, err := detector.DetectCommunities(ctx)
-		require.NoError(t, err)
-		require.NotEmpty(t, communities)
-
-		// Get level 0 communities
-		level0Communities := communities[0]
-		require.NotEmpty(t, level0Communities)
-
-		// Find our test community (contains drone-prog-1)
-		var testComm *clustering.Community
-		for _, comm := range level0Communities {
-			for _, memberID := range comm.Members {
-				if memberID == "drone-prog-1" {
-					testComm = comm
-					break
-				}
-			}
-			if testComm != nil {
-				break
-			}
-		}
-
-		require.NotNil(t, testComm, "Should find community containing drone-prog-1")
-
-		// Verify statistical summary is present immediately
-		assert.NotEmpty(t, testComm.StatisticalSummary, "Statistical summary should be present")
-		assert.Equal(t, "statistical", testComm.SummaryStatus, "Status should be 'statistical'")
-		assert.Empty(t, testComm.LLMSummary, "LLM summary should be empty initially")
-
-		t.Logf("✅ Statistical summary generated immediately:")
-		t.Logf("   StatisticalSummary: %s", testComm.StatisticalSummary)
-		t.Logf("   Keywords: %v", testComm.Keywords)
-	})
-
-	t.Run("LLM_enhancement_happens_asynchronously", func(t *testing.T) {
-		// Wait for async LLM enhancement to complete
-		waitForLLMEnhancement := func(communityID string, maxWait time.Duration) (*clustering.Community, error) {
-			deadline := time.Now().Add(maxWait)
-			for time.Now().Before(deadline) {
-				comm, err := communityStorage.GetCommunity(ctx, communityID)
-				if err != nil {
-					return nil, err
-				}
-				if comm.SummaryStatus == "llm-enhanced" {
-					return comm, nil
-				}
-				if comm.SummaryStatus == "llm-failed" {
-					return comm, fmt.Errorf("LLM enhancement failed")
-				}
-				time.Sleep(500 * time.Millisecond)
-			}
-			return nil, fmt.Errorf("timeout waiting for LLM enhancement")
-		}
-
-		// Get the community ID from detector
-		communities, err := detector.DetectCommunities(ctx)
-		require.NoError(t, err)
-
-		var testCommID string
-		for _, comm := range communities[0] {
-			for _, memberID := range comm.Members {
-				if memberID == "drone-prog-1" {
-					testCommID = comm.ID
-					break
-				}
-			}
-			if testCommID != "" {
-				break
-			}
-		}
-
-		require.NotEmpty(t, testCommID, "Should find test community ID")
-
-		// Wait for enhancement (up to 30 seconds - Qwen 0.5B may need time for first inference)
-		enhancedComm, err := waitForLLMEnhancement(testCommID, 30*time.Second)
-
-		// STRICT ASSERTION: LLM enhancement must succeed when testcontainers are running
-		require.NoError(t, err, "LLM enhancement must succeed with testcontainers (no graceful degradation)")
-
-		// Verify both summaries are present
-		assert.NotEmpty(t, enhancedComm.StatisticalSummary, "Statistical summary should be preserved")
-		assert.NotEmpty(t, enhancedComm.LLMSummary, "LLM summary should be populated")
-		assert.Equal(t, "llm-enhanced", enhancedComm.SummaryStatus,
-			"Status must be 'llm-enhanced' when testcontainers are running")
-
-		t.Logf("✅ LLM enhancement completed asynchronously:")
-		t.Logf("   Statistical: %s", enhancedComm.StatisticalSummary)
-		t.Logf("   LLM: %s", enhancedComm.LLMSummary)
-	})
-
-	t.Logf("✅ Progressive enhancement test completed successfully")
-}
+// NOTE: TestProgressiveEnhancement was removed and moved to E2E tests.
+// Progressive enhancement tests system-level behavior (async LLM worker, community storage,
+// KV watches) which is better tested in isolation via E2E rather than as an integration
+// test that shares state with other tests.
+// See: task e2e:semantic for progressive enhancement verification.

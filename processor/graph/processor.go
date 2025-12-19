@@ -828,6 +828,7 @@ func (p *Processor) createIndexBuckets(ctx context.Context, entityBucket jetstre
 		{"ALIAS_INDEX", "Alias index for entity resolution"},
 		{"PREDICATE_INDEX", "Predicate index for property queries"},
 		{"INCOMING_INDEX", "Incoming edge index for relationship queries"},
+		{"OUTGOING_INDEX", "Outgoing edge index for relationship queries"},
 		{"SPATIAL_INDEX", "Spatial index for geospatial queries"},
 		{"TEMPORAL_INDEX", "Temporal index for time-based queries"},
 		{"EMBEDDING_INDEX", "Vector embeddings with metadata and status"},

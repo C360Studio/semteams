@@ -100,9 +100,9 @@ Optional indexes (enabled via configuration):
 
 | Index | Question Answered | Requirements |
 |-------|-------------------|--------------|
-| `STRUCTURAL_INDEX` | "Core connectivity and distance estimation" | Tier 0 |
-| `EMBEDDING_INDEX` | "Semantically similar entities" | Tier 1+ |
-| `COMMUNITY_INDEX` | "What community does this entity belong to?" | Tier 1+ |
+| `STRUCTURAL_INDEX` | "Core connectivity and distance estimation" | Tier 0 (Structural) |
+| `EMBEDDING_INDEX` | "Semantically similar entities" | Tier 1+ (Statistical/Semantic) |
+| `COMMUNITY_INDEX` | "What community does this entity belong to?" | Tier 1+ (Statistical/Semantic) |
 
 Indexes update asynchronously after entity saves. There's a brief window where an entity exists but isn't fully indexed.
 
@@ -182,9 +182,9 @@ All state lives in NATS JetStream KV buckets.
 
 | Bucket | Contents | Feature |
 |--------|----------|---------|
-| `STRUCTURAL_INDEX` | K-core levels and pivot distances | Structural indexing |
-| `EMBEDDING_INDEX` | Entity ID → embedding vector | Semantic search |
-| `COMMUNITY_INDEX` | Community records with members and summaries | Community detection |
+| `STRUCTURAL_INDEX` | K-core levels and pivot distances | Tier 0 (Structural) |
+| `EMBEDDING_INDEX` | Entity ID → embedding vector | Tier 1+ (Statistical/Semantic) |
+| `COMMUNITY_INDEX` | Community records with members and summaries | Tier 1+ (Statistical/Semantic) |
 
 ## Data Flow Example
 
@@ -246,10 +246,11 @@ A sensor reading arrives:
 
 New to knowledge graphs or event-driven systems? See [Concepts](../concepts/) for background on:
 
+- [Real-Time Inference](../concepts/00-real-time-inference.md) - Tier system (Structural → Statistical → Semantic)
 - [Event-Driven Basics](../concepts/01-event-driven-basics.md) - Pub/sub, streams, NATS
 - [Knowledge Graphs](../concepts/02-knowledge-graphs.md) - Triples, SPO model
-- [Community Detection](../concepts/04-community-detection.md) - LPA algorithm details
-- [GraphRAG Pattern](../concepts/05-graphrag-pattern.md) - Community-based RAG
+- [Community Detection](../concepts/05-community-detection.md) - LPA algorithm details
+- [GraphRAG Pattern](../concepts/07-graphrag-pattern.md) - Community-based RAG
 
 ## Next Steps
 

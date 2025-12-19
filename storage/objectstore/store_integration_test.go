@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/c360/semstreams/examples/processors/document"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/cache"
@@ -221,6 +223,197 @@ func TestIntegration_Caching(t *testing.T) {
 	assert.Equal(t, data1, data2)
 }
 
+// TestIntegration_ByteSliceNotDoubleEncoded verifies []byte inputs are stored directly
+// without being re-marshaled to base64. This prevents data corruption when JSON bytes
+// from NATS messages are stored.
+func TestIntegration_ByteSliceNotDoubleEncoded(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := objectstore.Config{
+		BucketName: "TEST_BYTE_SLICE",
+	}
+
+	ctx := context.Background()
+	store, err := objectstore.NewStoreWithConfig(ctx, natsClient, config)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Given: valid JSON as []byte (simulating NATS message data)
+	input := []byte(`{"type":"document","title":"Safety Manual","entity_id":"doc-123"}`)
+
+	// When: stored and retrieved
+	key, err := store.Store(ctx, input)
+	require.NoError(t, err)
+	assert.NotEmpty(t, key)
+
+	retrieved, err := store.Get(ctx, key)
+	require.NoError(t, err)
+
+	// Then: data is identical (not base64 encoded)
+	assert.Equal(t, input, retrieved, "stored bytes should match input exactly - no base64 encoding")
+
+	// Verify it's still valid JSON that can be unmarshaled
+	var parsed map[string]any
+	err = json.Unmarshal(retrieved, &parsed)
+	require.NoError(t, err)
+	assert.Equal(t, "Safety Manual", parsed["title"])
+	assert.Equal(t, "doc-123", parsed["entity_id"])
+}
+
+// TestIntegration_RawMessageNotDoubleEncoded verifies json.RawMessage is stored directly
+func TestIntegration_RawMessageNotDoubleEncoded(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := objectstore.Config{
+		BucketName: "TEST_RAW_MESSAGE",
+	}
+
+	ctx := context.Background()
+	store, err := objectstore.NewStoreWithConfig(ctx, natsClient, config)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Given: valid JSON as json.RawMessage
+	input := json.RawMessage(`{"entity_id":"entity-456","properties":{"name":"Test"}}`)
+
+	// When: stored and retrieved
+	key, err := store.Store(ctx, input)
+	require.NoError(t, err)
+	assert.NotEmpty(t, key)
+
+	retrieved, err := store.Get(ctx, key)
+	require.NoError(t, err)
+
+	// Then: data is identical (not base64 encoded)
+	assert.Equal(t, []byte(input), retrieved, "stored json.RawMessage should match input exactly")
+
+	// Verify it's still valid JSON
+	var parsed map[string]any
+	err = json.Unmarshal(retrieved, &parsed)
+	require.NoError(t, err)
+	assert.Equal(t, "entity-456", parsed["entity_id"])
+}
+
+// TestIntegration_BaseMessageRoundTrip verifies the full flow:
+// 1. Create BaseMessage with Document payload
+// 2. Marshal to []byte (simulating NATS transport)
+// 3. Store via Store(ctx, []byte)
+// 4. Fetch via FetchContent()
+// 5. Verify BaseMessage can be parsed and payload extracted
+//
+// This test validates the fix for the double-encoding bug that was preventing
+// embeddings from being generated.
+func TestIntegration_BaseMessageRoundTrip(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := objectstore.Config{
+		BucketName: "TEST_BASE_MESSAGE",
+	}
+
+	ctx := context.Background()
+	store, err := objectstore.NewStoreWithConfig(ctx, natsClient, config)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// 1. Create a Document payload (implements ContentStorable)
+	doc := &document.Document{
+		ID:          "doc-test-001",
+		Title:       "Safety Manual",
+		Description: "A comprehensive guide to workplace safety",
+		Body:        "This document covers all safety procedures...",
+		Category:    "safety",
+		OrgID:       "test-org",
+		Platform:    "test-platform",
+	}
+
+	// 2. Create BaseMessage wrapping the Document
+	baseMsg := message.NewBaseMessage(doc.Schema(), doc, "test-source")
+
+	// 3. Marshal to []byte (simulating what happens in NATS transport)
+	msgBytes, err := baseMsg.MarshalJSON()
+	require.NoError(t, err)
+	t.Logf("Marshaled BaseMessage: %s", string(msgBytes))
+
+	// 4. Store the bytes (this is what objectstore component does)
+	key, err := store.Store(ctx, msgBytes)
+	require.NoError(t, err)
+	assert.NotEmpty(t, key)
+
+	// 5. Retrieve raw bytes and verify they're not corrupted
+	retrieved, err := store.Get(ctx, key)
+	require.NoError(t, err)
+	assert.Equal(t, msgBytes, retrieved, "stored bytes should match original - no base64 encoding")
+
+	// 6. Verify we can unmarshal the retrieved data back to BaseMessage
+	var parsedMsg message.BaseMessage
+	err = parsedMsg.UnmarshalJSON(retrieved)
+	require.NoError(t, err, "should be able to unmarshal stored data as BaseMessage")
+
+	// 7. Verify payload was preserved correctly
+	payload := parsedMsg.Payload()
+	require.NotNil(t, payload, "payload should not be nil")
+
+	// 8. Verify it's a ContentStorable with the expected content fields
+	contentStorable, ok := payload.(message.ContentStorable)
+	require.True(t, ok, "payload should implement ContentStorable")
+
+	contentFields := contentStorable.ContentFields()
+	assert.Contains(t, contentFields, message.ContentRoleTitle)
+	assert.Contains(t, contentFields, message.ContentRoleBody)
+	assert.Contains(t, contentFields, message.ContentRoleAbstract)
+
+	// 9. Verify we can use FetchContent to get the stored content
+	// First store using StoreContent to get a proper StorageReference
+	storageRef, err := store.StoreContent(ctx, contentStorable)
+	require.NoError(t, err)
+
+	// Fetch the content back
+	storedContent, err := store.FetchContent(ctx, storageRef)
+	require.NoError(t, err)
+	assert.Equal(t, contentStorable.EntityID(), storedContent.EntityID)
+	assert.NotEmpty(t, storedContent.Fields)
+}
+
+// TestIntegration_StructStillMarshaledCorrectly verifies structs are still properly marshaled
+func TestIntegration_StructStillMarshaledCorrectly(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := objectstore.Config{
+		BucketName: "TEST_STRUCT_MARSHAL",
+	}
+
+	ctx := context.Background()
+	store, err := objectstore.NewStoreWithConfig(ctx, natsClient, config)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Given: a struct (not []byte)
+	input := struct {
+		Type     string `json:"type"`
+		EntityID string `json:"entity_id"`
+		Value    int    `json:"value"`
+	}{
+		Type:     "sensor",
+		EntityID: "sensor-789",
+		Value:    42,
+	}
+
+	// When: stored and retrieved
+	key, err := store.Store(ctx, input)
+	require.NoError(t, err)
+
+	retrieved, err := store.Get(ctx, key)
+	require.NoError(t, err)
+
+	// Then: struct was properly marshaled to JSON
+	var parsed map[string]any
+	err = json.Unmarshal(retrieved, &parsed)
+	require.NoError(t, err)
+	assert.Equal(t, "sensor", parsed["type"])
+	assert.Equal(t, "sensor-789", parsed["entity_id"])
+	assert.Equal(t, float64(42), parsed["value"]) // JSON numbers are float64
+}
+
 // TestIntegration_Metrics verifies that ObjectStore operations are properly instrumented
 func TestIntegration_Metrics(t *testing.T) {
 	natsClient := getSharedNATSClient(t)
@@ -354,4 +547,242 @@ func TestIntegration_Metrics(t *testing.T) {
 
 	// Verify bucket label
 	assert.Equal(t, "TEST_METRICS", *writeOps.Metric[0].Label[0].Value, "should have correct bucket label")
+}
+
+// TestIntegration_BinaryStorable tests storing content with binary data
+func TestIntegration_BinaryStorable(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := objectstore.Config{
+		BucketName: "TEST_BINARY",
+	}
+
+	ctx := context.Background()
+	store, err := objectstore.NewStoreWithConfig(ctx, natsClient, config)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Create a BinaryStorable implementation
+	binaryDoc := &testBinaryDocument{
+		id:          "binary-doc-001",
+		title:       "Video Tutorial",
+		description: "How to use the system",
+		videoData:   []byte("fake video data - would be MP4 bytes"),
+		imageData:   []byte{0x89, 0x50, 0x4E, 0x47}, // PNG magic bytes
+	}
+
+	// Store content with binary
+	ref, err := store.StoreContent(ctx, binaryDoc)
+	require.NoError(t, err)
+	assert.NotEmpty(t, ref.Key)
+
+	// Fetch the content metadata
+	storedContent, err := store.FetchContent(ctx, ref)
+	require.NoError(t, err)
+
+	// Verify text fields
+	assert.Equal(t, "binary-doc-001", storedContent.EntityID)
+	assert.Equal(t, "Video Tutorial", storedContent.Fields["title"])
+	assert.Equal(t, "How to use the system", storedContent.Fields["description"])
+
+	// Verify binary references exist
+	assert.True(t, storedContent.HasBinaryContent(), "should have binary content")
+	assert.Len(t, storedContent.BinaryRefs, 2, "should have 2 binary refs")
+
+	// Verify video reference (media role maps to "video" field)
+	videoRef := storedContent.GetBinaryRefByRole(message.ContentRoleMedia)
+	require.NotNil(t, videoRef, "should have video ref via media role")
+	assert.Equal(t, "video/mp4", videoRef.ContentType)
+	assert.Equal(t, int64(len(binaryDoc.videoData)), videoRef.Size)
+	assert.Contains(t, videoRef.Key, "binary/")
+
+	// Verify thumbnail reference (thumbnail role maps to "thumbnail" field)
+	thumbRef := storedContent.GetBinaryRefByRole(message.ContentRoleThumbnail)
+	require.NotNil(t, thumbRef, "should have thumbnail ref via thumbnail role")
+	assert.Equal(t, "image/png", thumbRef.ContentType)
+	assert.Equal(t, int64(len(binaryDoc.imageData)), thumbRef.Size)
+
+	// Fetch actual binary data
+	videoBytes, err := store.FetchBinary(ctx, *videoRef)
+	require.NoError(t, err)
+	assert.Equal(t, binaryDoc.videoData, videoBytes, "video data should match")
+
+	thumbBytes, err := store.FetchBinary(ctx, *thumbRef)
+	require.NoError(t, err)
+	assert.Equal(t, binaryDoc.imageData, thumbBytes, "thumbnail data should match")
+}
+
+// TestIntegration_BinaryStorable_LargeContent tests storing larger binary content
+func TestIntegration_BinaryStorable_LargeContent(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := objectstore.Config{
+		BucketName: "TEST_BINARY_LARGE",
+	}
+
+	ctx := context.Background()
+	store, err := objectstore.NewStoreWithConfig(ctx, natsClient, config)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Create 1MB of binary data
+	largeData := make([]byte, 1024*1024)
+	for i := range largeData {
+		largeData[i] = byte(i % 256)
+	}
+
+	binaryDoc := &testBinaryDocument{
+		id:          "large-binary-001",
+		title:       "Large File",
+		description: "Testing large binary storage",
+		videoData:   largeData,
+		imageData:   nil, // No thumbnail
+	}
+
+	// Store content with large binary
+	ref, err := store.StoreContent(ctx, binaryDoc)
+	require.NoError(t, err)
+
+	// Fetch and verify
+	storedContent, err := store.FetchContent(ctx, ref)
+	require.NoError(t, err)
+
+	videoRef := storedContent.GetBinaryRefByRole(message.ContentRoleMedia)
+	require.NotNil(t, videoRef, "should have video ref via media role")
+	assert.Equal(t, int64(1024*1024), videoRef.Size)
+
+	// Fetch and verify data integrity
+	retrieved, err := store.FetchBinary(ctx, *videoRef)
+	require.NoError(t, err)
+	assert.Equal(t, largeData, retrieved, "large binary data should match exactly")
+}
+
+// TestIntegration_ContentStorable_NoBinary verifies backward compatibility
+// when ContentStorable doesn't implement BinaryStorable
+func TestIntegration_ContentStorable_NoBinary(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := objectstore.Config{
+		BucketName: "TEST_NO_BINARY",
+	}
+
+	ctx := context.Background()
+	store, err := objectstore.NewStoreWithConfig(ctx, natsClient, config)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Use Document which implements ContentStorable but NOT BinaryStorable
+	doc := &document.Document{
+		ID:          "doc-no-binary-001",
+		Title:       "Text Only Document",
+		Description: "This document has no binary content",
+		Body:        "Just text content here",
+		Category:    "text",
+		OrgID:       "test-org",
+		Platform:    "test",
+	}
+
+	// Store content - should work without binary
+	ref, err := store.StoreContent(ctx, doc)
+	require.NoError(t, err)
+
+	// Fetch and verify
+	storedContent, err := store.FetchContent(ctx, ref)
+	require.NoError(t, err)
+
+	assert.Equal(t, doc.EntityID(), storedContent.EntityID)
+	assert.False(t, storedContent.HasBinaryContent(), "should not have binary content")
+	assert.Empty(t, storedContent.BinaryRefs, "binary refs should be empty")
+
+	// Verify text fields still work
+	assert.Equal(t, "Text Only Document", storedContent.Fields["title"])
+	assert.Equal(t, "This document has no binary content", storedContent.Fields["description"])
+}
+
+// TestIntegration_FetchBinary_EmptyKey tests error handling for empty key
+func TestIntegration_FetchBinary_EmptyKey(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := objectstore.Config{
+		BucketName: "TEST_BINARY_ERROR",
+	}
+
+	ctx := context.Background()
+	store, err := objectstore.NewStoreWithConfig(ctx, natsClient, config)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Try to fetch with empty key
+	emptyRef := objectstore.BinaryRef{
+		ContentType: "image/jpeg",
+		Size:        100,
+		Key:         "", // Empty key
+	}
+
+	_, err = store.FetchBinary(ctx, emptyRef)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "empty key")
+}
+
+// testBinaryDocument implements BinaryStorable for testing
+type testBinaryDocument struct {
+	id          string
+	title       string
+	description string
+	videoData   []byte
+	imageData   []byte
+	storageRef  *message.StorageReference
+}
+
+func (d *testBinaryDocument) EntityID() string {
+	return d.id
+}
+
+func (d *testBinaryDocument) Triples() []message.Triple {
+	return []message.Triple{
+		{Subject: d.id, Predicate: "hasTitle", Object: d.title},
+	}
+}
+
+func (d *testBinaryDocument) StorageRef() *message.StorageReference {
+	return d.storageRef
+}
+
+func (d *testBinaryDocument) RawContent() map[string]string {
+	return map[string]string{
+		"title":       d.title,
+		"description": d.description,
+	}
+}
+
+func (d *testBinaryDocument) ContentFields() map[string]string {
+	fields := map[string]string{
+		message.ContentRoleTitle:    "title",
+		message.ContentRoleAbstract: "description",
+	}
+	// Map binary roles to binary field names
+	if len(d.videoData) > 0 {
+		fields[message.ContentRoleMedia] = "video"
+	}
+	if len(d.imageData) > 0 {
+		fields[message.ContentRoleThumbnail] = "thumbnail"
+	}
+	return fields
+}
+
+func (d *testBinaryDocument) BinaryFields() map[string]message.BinaryContent {
+	fields := make(map[string]message.BinaryContent)
+	if len(d.videoData) > 0 {
+		fields["video"] = message.BinaryContent{
+			ContentType: "video/mp4",
+			Data:        d.videoData,
+		}
+	}
+	if len(d.imageData) > 0 {
+		fields["thumbnail"] = message.BinaryContent{
+			ContentType: "image/png",
+			Data:        d.imageData,
+		}
+	}
+	return fields
 }

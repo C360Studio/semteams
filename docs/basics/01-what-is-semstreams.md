@@ -119,9 +119,9 @@ Entities stored in NATS KV with version tracking:
 
 | Index | Question It Answers | Requirements |
 |-------|---------------------|--------------|
-| STRUCTURAL_INDEX | "Core connectivity and distance estimation" | Tier 0 |
-| EMBEDDING_INDEX | "Semantically similar entities" | Tier 1+ |
-| COMMUNITY_INDEX | "What community does this entity belong to?" | Tier 1+ |
+| STRUCTURAL_INDEX | "Core connectivity and distance estimation" | Tier 0 (Structural) |
+| EMBEDDING_INDEX | "Semantically similar entities" | Tier 1+ (Statistical/Semantic) |
+| COMMUNITY_INDEX | "What community does this entity belong to?" | Tier 1+ (Statistical/Semantic) |
 
 ### Structural Indexing
 
@@ -144,13 +144,19 @@ With structural indexing and embeddings enabled, SemStreams can detect anomalies
 
 ### Progressive Enhancement (Tiers)
 
-| Tier | Capabilities | Requirements |
-|------|--------------|--------------|
-| 0 | Rules engine, explicit relationships, structural indexing | NATS only |
-| 1 | + BM25 search, statistical communities | + Search index |
-| 2 | + Neural embeddings, LLM summaries, semantic-structural anomaly detection | + Embedding service, LLM |
+SemStreams supports three capability tiers. Start minimal, add capabilities as your resources and requirements grow.
 
-Start with Tier 0. Add capabilities as needed. Each configuration is controlled via JSON—see [Configuration](06-configuration.md) for details.
+| Tier | Name | Capabilities | Requirements |
+|------|------|--------------|--------------|
+| 0 | **Structural** | Rules engine, explicit relationships, structural indexing | NATS only |
+| 1 | **Statistical** | + BM25 search, lexical similarity, statistical communities | Same |
+| 2 | **Semantic** | + Neural embeddings, meaning-based similarity, LLM summaries | + Embedding service |
+
+**Why tiers?** Edge deployments can't run neural models. Cloud deployments want semantic search. Tiers let you match capabilities to constraints—same codebase, different configs.
+
+Start with Tier 0 (Structural). Add Statistical for keyword search. Add Semantic when you need "machine" to match "equipment".
+
+For details on what each tier provides, see [Real-Time Inference](../concepts/00-real-time-inference.md). Each configuration is controlled via JSON—see [Configuration](06-configuration.md) for details.
 
 ## Entity ID Format
 

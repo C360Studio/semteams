@@ -1,0 +1,432 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "gnetId": null,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "gridPos": {
+        "h": 2,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "options": {
+        "content": "# E2E Test Monitoring\nWatch metrics during e2e test execution. Start tests in another terminal: `task e2e:core:default` or `task e2e:tiers`",
+        "mode": "markdown"
+      },
+      "pluginVersion": "9.0.0",
+      "title": "",
+      "transparent": true,
+      "type": "text"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {"text": "Down", "color": "red"},
+                "1": {"text": "Up", "color": "green"}
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 2},
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [{"expr": "up{job=\"semstreams\",instance=\"statistical\"}", "refId": "A"}],
+      "title": "Statistical Tier",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {"text": "Down", "color": "red"},
+                "1": {"text": "Up", "color": "green"}
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "red", "value": null},
+              {"color": "green", "value": 1}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 4, "y": 2},
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [{"expr": "up{job=\"semstreams\",instance=\"semantic\"}", "refId": "A"}],
+      "title": "Semantic Tier",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 8, "y": 2},
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [{"expr": "semstreams_messages_processed_total", "refId": "A"}],
+      "title": "Messages Processed",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{"color": "green", "value": null}]
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 2},
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [{"expr": "sum(semstreams_index_size)", "refId": "A"}],
+      "title": "Entities Indexed",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 100},
+              {"color": "red", "value": 500}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 2},
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [{"expr": "semstreams_indexmanager_backlog_size", "refId": "A"}],
+      "title": "Index Backlog",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "red", "value": 1}
+            ]
+          }
+        }
+      },
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 2},
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": false},
+        "textMode": "value_and_name"
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [{"expr": "semstreams_messages_failed_total", "refId": "A"}],
+      "title": "Failed Messages",
+      "type": "stat"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Messages/sec",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "none"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "ops"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6},
+      "id": 7,
+      "options": {
+        "legend": {"calcs": ["mean", "max", "sum"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {"expr": "rate(semstreams_messages_processed_total{instance=\"statistical\"}[30s])", "legendFormat": "Statistical", "refId": "A"},
+        {"expr": "rate(semstreams_messages_processed_total{instance=\"semantic\"}[30s])", "legendFormat": "Semantic", "refId": "B"}
+      ],
+      "title": "Message Rate by Tier",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Updates/sec",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "none"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "ops"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6},
+      "id": 8,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {"expr": "rate(semstreams_index_updates_total{instance=\"statistical\"}[30s])", "legendFormat": "Statistical", "refId": "A"},
+        {"expr": "rate(semstreams_index_updates_total{instance=\"semantic\"}[30s])", "legendFormat": "Semantic", "refId": "B"}
+      ],
+      "title": "Index Update Rate by Tier",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Rules/sec",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "none"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "ops"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 14},
+      "id": 9,
+      "options": {
+        "legend": {"calcs": ["mean", "max", "sum"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {"expr": "rate(semstreams_rule_evaluations_total[30s])", "legendFormat": "Evaluations", "refId": "A"},
+        {"expr": "rate(semstreams_rule_triggers_total[30s])", "legendFormat": "Triggers", "refId": "B"}
+      ],
+      "title": "Rule Engine Activity",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Latency (ms)",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "none"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
+          "unit": "ms"
+        }
+      },
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 14},
+      "id": 10,
+      "options": {
+        "legend": {"calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "multi"}
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {"expr": "histogram_quantile(0.50, rate(semstreams_processing_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p50", "refId": "A"},
+        {"expr": "histogram_quantile(0.95, rate(semstreams_processing_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p95", "refId": "B"},
+        {"expr": "histogram_quantile(0.99, rate(semstreams_processing_duration_seconds_bucket[1m])) * 1000", "legendFormat": "p99", "refId": "C"}
+      ],
+      "title": "Processing Latency Percentiles",
+      "type": "timeseries"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "palette-classic"},
+          "custom": {
+            "axisLabel": "Count",
+            "axisPlacement": "auto",
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {"group": "A", "mode": "normal"}
+          },
+          "mappings": [],
+          "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]}
+        }
+      },
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 22},
+      "id": 11,
+      "options": {
+        "legend": {"calcs": ["lastNotNull"], "displayMode": "table", "placement": "right"},
+        "tooltip": {"mode": "multi"}
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {"expr": "semstreams_index_size{index=\"predicate\"}", "legendFormat": "Predicate", "refId": "A"},
+        {"expr": "semstreams_index_size{index=\"incoming\"}", "legendFormat": "Incoming", "refId": "B"},
+        {"expr": "semstreams_index_size{index=\"outgoing\"}", "legendFormat": "Outgoing", "refId": "C"},
+        {"expr": "semstreams_index_size{index=\"spatial\"}", "legendFormat": "Spatial", "refId": "D"},
+        {"expr": "semstreams_index_size{index=\"temporal\"}", "legendFormat": "Temporal", "refId": "E"},
+        {"expr": "semstreams_index_size{index=\"alias\"}", "legendFormat": "Alias", "refId": "F"},
+        {"expr": "semstreams_index_size{index=\"structural\"}", "legendFormat": "Structural", "refId": "G"},
+        {"expr": "semstreams_index_size{index=\"embedding\"}", "legendFormat": "Embedding", "refId": "H"},
+        {"expr": "semstreams_index_size{index=\"community\"}", "legendFormat": "Community", "refId": "I"}
+      ],
+      "title": "Index Population Over Time",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 36,
+  "style": "dark",
+  "tags": ["semstreams", "e2e", "testing"],
+  "templating": {"list": []},
+  "time": {"from": "now-15m", "to": "now"},
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "E2E Testing",
+  "uid": "semstreams-e2e",
+  "version": 1
+}

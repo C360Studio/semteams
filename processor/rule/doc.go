@@ -120,8 +120,11 @@
 //	    },
 //	}
 //
-//	processor := rule.NewProcessor(natsClient, &config)
-//	err := processor.Initialize()
+//	processor, err := rule.NewProcessor(natsClient, &config)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	err = processor.Initialize()
 //	err = processor.Start(ctx)
 //
 // For comprehensive documentation, see:

@@ -5,6 +5,7 @@ package graph
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"testing"
 	"time"
@@ -163,16 +164,23 @@ func TestIntegration_MessageProcessing(t *testing.T) {
 	require.NoError(t, err, "Processor should be ready after Start()")
 
 	// Create a Storable message (what ObjectStore sends to GraphProcessor)
-	expectedEntityID := "c360.platform1.robotics.mav1.battery.0"
+	// Use unique entity ID with timestamp to avoid conflicts between test runs
+	expectedEntityID := fmt.Sprintf("c360.platform1.robotics.mav1.battery.msgproc.%d", time.Now().UnixNano())
 
 	// Create test payload with battery data
 	testPayload := &TestGraphablePayload{
 		ID: expectedEntityID,
 		Properties: map[string]interface{}{
+			"type":                     "battery",
 			"robotics.battery.level":   75,
 			"robotics.battery.voltage": 16.72,
 		},
 		TripleData: []map[string]interface{}{
+			{
+				"subject":   expectedEntityID,
+				"predicate": "type",
+				"object":    "battery",
+			},
 			{
 				"subject":   expectedEntityID,
 				"predicate": "robotics.battery.level",

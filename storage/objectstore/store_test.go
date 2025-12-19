@@ -1,6 +1,7 @@
 package objectstore
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/c360/semstreams/message"
@@ -104,4 +105,33 @@ func TestDefaultKeyGenerator_MultipleCalls(t *testing.T) {
 		assert.False(t, seen[key], "Generated duplicate key: %s", key)
 		seen[key] = true
 	}
+}
+
+// TestDefaultKeyGenerator_ByteSlice tests key generation with []byte input
+// Note: []byte doesn't implement message.Message, so defaults are used
+func TestDefaultKeyGenerator_ByteSlice(t *testing.T) {
+	gen := &DefaultKeyGenerator{}
+
+	// JSON bytes that might come from NATS
+	jsonData := []byte(`{"type":"document","title":"Safety Manual"}`)
+
+	key := gen.GenerateKey(jsonData)
+
+	// Should use defaults since []byte doesn't implement message.Message
+	assert.Contains(t, key, "message/")
+	assert.Contains(t, key, "/unknown_")
+}
+
+// TestDefaultKeyGenerator_RawMessage tests key generation with json.RawMessage input
+func TestDefaultKeyGenerator_RawMessage(t *testing.T) {
+	gen := &DefaultKeyGenerator{}
+
+	// json.RawMessage - raw JSON bytes
+	rawMsg := json.RawMessage(`{"entity_id":"entity-123","properties":{}}`)
+
+	key := gen.GenerateKey(rawMsg)
+
+	// Should use defaults since json.RawMessage doesn't implement message.Message
+	assert.Contains(t, key, "message/")
+	assert.Contains(t, key, "/unknown_")
 }

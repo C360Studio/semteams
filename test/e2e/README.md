@@ -77,23 +77,18 @@ GraphQL + MCP APIs. Runs against statistical tier (no ML deps for CI).
 
 ## Test Scenarios
 
-### core-health
-Component availability and health endpoints.
+Detailed documentation for each scenario is available in [test/e2e/docs/](./docs/).
 
-### core-dataflow
-Complete data pipeline: UDP → JSONFilter → JSONMap → File output
-
-### tier0-rules-iot (structural)
-Stateful rules, dynamic graph manipulation, alert generation, PathRAG
-
-### tiered (statistical/semantic)
-Full stack validation with BM25 (--variant core) or neural (--variant ml)
-
-### gateway-graphql
-GraphQL operations: entities, relationships, search, communities
-
-### gateway-mcp
-MCP protocol: tool invocation via SSE, rate limiting
+| Scenario | Variant | Tier | Purpose | Doc |
+|----------|---------|------|---------|-----|
+| core-health | - | Core | Component availability and health endpoints | [docs/core-health.md](./docs/core-health.md) |
+| core-dataflow | - | Core | Complete data pipeline: UDP → JSONFilter → JSONMap → File | [docs/core-dataflow.md](./docs/core-dataflow.md) |
+| core-federation | - | Core | Edge-to-cloud data flow with ack/nack protocol | [docs/core-federation.md](./docs/core-federation.md) |
+| tiered | `structural` | Structural | Rules-only, ZERO embeddings/clusters, OnEnter/OnExit | [docs/tiered.md](./docs/tiered.md) |
+| tiered | `statistical` | Statistical | BM25 embeddings, LPA communities, no external ML | [docs/tiered.md](./docs/tiered.md) |
+| tiered | `semantic` | Semantic | Neural embeddings + LLM summaries | [docs/tiered.md](./docs/tiered.md) |
+| gateway-graphql | - | Gateway | GraphQL operations: entities, relationships, search | [docs/gateway-graphql.md](./docs/gateway-graphql.md) |
+| gateway-mcp | - | Gateway | MCP protocol: tool invocation via SSE, rate limiting | [docs/gateway-mcp.md](./docs/gateway-mcp.md) |
 
 ## Directory Structure
 
@@ -108,10 +103,8 @@ test/e2e/
 └── scenarios/
     ├── core_health.go
     ├── core_dataflow.go
-    ├── semantic_basic.go
-    ├── semantic_indexes.go
-    ├── tiered.go           # Statistical + Semantic tiers
-    ├── tier0_rules_iot.go  # Structural tier
+    ├── core_federation.go
+    ├── tiered.go           # Structural + Statistical + Semantic (via --variant)
     ├── gateway_graphql.go
     └── gateway_mcp.go
 
@@ -150,7 +143,9 @@ task e2e:clean       # Clean up containers
 ```bash
 task build:e2e
 cd cmd/e2e && ./e2e --list
-cd cmd/e2e && ./e2e --scenario tiered --variant core
+cd cmd/e2e && ./e2e --scenario tiered --variant structural
+cd cmd/e2e && ./e2e --scenario tiered --variant statistical
+cd cmd/e2e && ./e2e --scenario tiered --variant semantic
 ```
 
 ## NATS KV Validation

@@ -57,7 +57,7 @@ func TestIndexManager_EntityDeleteCleanupIntegration(t *testing.T) {
 		require.True(t, ok)
 
 		// Manually register OutgoingIndex for tests
-		outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], nil, manager.metrics, manager.promMetrics, manager.logger)
+		outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], manager.metrics, manager.promMetrics, manager.logger)
 		manager.indexes["outgoing"] = outgoingIndex
 
 		ctx := context.Background()
@@ -143,7 +143,7 @@ func TestIndexManager_EntityDeleteCleanupIntegration(t *testing.T) {
 		require.True(t, ok)
 
 		// Manually register OutgoingIndex for tests
-		outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], nil, manager.metrics, manager.promMetrics, manager.logger)
+		outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], manager.metrics, manager.promMetrics, manager.logger)
 		manager.indexes["outgoing"] = outgoingIndex
 
 		ctx := context.Background()
@@ -190,7 +190,7 @@ func TestIndexManager_EntityDeleteCleanupIntegration(t *testing.T) {
 		require.True(t, ok)
 
 		// Manually register OutgoingIndex for tests
-		outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], nil, manager.metrics, manager.promMetrics, manager.logger)
+		outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], manager.metrics, manager.promMetrics, manager.logger)
 		manager.indexes["outgoing"] = outgoingIndex
 
 		ctx := context.Background()

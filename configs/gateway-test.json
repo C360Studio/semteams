@@ -1,0 +1,155 @@
+{
+  "version": "1.1.0",
+  "platform": {
+    "org": "c360",
+    "id": "semstreams-gateway-test",
+    "type": "gateway-e2e",
+    "region": "local",
+    "instance_id": "gateway-test-001",
+    "environment": "test"
+  },
+  "nats": {
+    "urls": ["nats://localhost:4222"]
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8085,
+        "swagger_ui": false,
+        "server_info": {
+          "title": "SemStreams Gateway Test API",
+          "description": "Gateway E2E testing configuration",
+          "version": "0.1.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": true
+      }
+    }
+  },
+  "components": {
+    "udp": {
+      "type": "input",
+      "name": "udp",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "udp_out",
+              "subject": "raw.udp.messages",
+              "type": "nats"
+            }
+          ]
+        },
+        "bind": "0.0.0.0",
+        "port": 14550,
+        "buffer_size": 65536
+      }
+    },
+    "graph": {
+      "type": "processor",
+      "name": "graph",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "storage_in",
+              "subject": "storage.*.events",
+              "type": "nats"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "graph_out",
+              "subject": "graph.events",
+              "type": "nats"
+            }
+          ]
+        },
+        "workers": 5,
+        "queue_size": 1000,
+        "data_manager": {
+          "cache": {
+            "l1_size": 1000,
+            "l2_size": 10000,
+            "ttl": "5m"
+          },
+          "buffer": {
+            "capacity": 10000,
+            "flush_interval": "50ms",
+            "batching_enabled": true,
+            "max_batch_size": 100
+          }
+        },
+        "index_manager": {
+          "workers": 10,
+          "enabled_indexes": [
+            "predicate",
+            "incoming",
+            "outgoing",
+            "alias",
+            "spatial",
+            "temporal"
+          ]
+        },
+        "embedding": {
+          "provider": "bm25",
+          "bm25": {
+            "k1": 1.5,
+            "b": 0.75
+          }
+        }
+      }
+    },
+    "graphql-gateway": {
+      "type": "gateway",
+      "name": "graphql",
+      "enabled": true,
+      "config": {
+        "bind_address": ":8080",
+        "path": "/graphql",
+        "enable_playground": true,
+        "enable_cors": true,
+        "cors_origins": ["*"],
+        "timeout": "30s",
+        "max_query_depth": 10,
+        "nats_subjects": {
+          "entity_query": "graph.query.entity",
+          "entities_query": "graph.query.entities",
+          "type_query": "graph.query.type",
+          "relationship_query": "graph.query.relationships",
+          "semantic_search": "graph.query.semantic"
+        }
+      }
+    },
+    "mcp-gateway": {
+      "type": "gateway",
+      "name": "mcp",
+      "enabled": true,
+      "config": {
+        "bind_address": ":8081",
+        "path": "/mcp",
+        "timeout": "30s",
+        "server_name": "semstreams-gateway-test",
+        "server_version": "1.0.0",
+        "max_request_size": 1048576
+      }
+    }
+  }
+}

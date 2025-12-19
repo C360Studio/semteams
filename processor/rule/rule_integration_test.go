@@ -128,7 +128,8 @@ func TestIntegration_KVEntityStateWatch(t *testing.T) {
 
 	// Create processor with metrics
 	metricsRegistry := metric.NewMetricsRegistry()
-	processor := rule.NewProcessorWithMetrics(natsClient, &config, metricsRegistry)
+	processor, err := rule.NewProcessorWithMetrics(natsClient, &config, metricsRegistry)
+	require.NoError(t, err)
 	require.NotNil(t, processor)
 
 	// Initialize and start
@@ -230,10 +231,11 @@ func TestIntegration_DynamicRuleCRUD(t *testing.T) {
 	}
 	config.EnableGraphIntegration = false
 
-	processor := rule.NewProcessor(natsClient, &config)
+	processor, err := rule.NewProcessor(natsClient, &config)
+	require.NoError(t, err)
 	require.NotNil(t, processor)
 
-	err := processor.Initialize()
+	err = processor.Initialize()
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -372,7 +374,8 @@ func TestIntegration_JSONDSLRuleLoading(t *testing.T) {
 	config.RulesFiles = []string{ruleFile}
 	config.EnableGraphIntegration = false
 
-	processor := rule.NewProcessor(natsClient, &config)
+	processor, err := rule.NewProcessor(natsClient, &config)
+	require.NoError(t, err)
 	require.NotNil(t, processor)
 
 	err = processor.Initialize()
@@ -432,10 +435,11 @@ func TestIntegration_PrometheusMetrics(t *testing.T) {
 	config.InlineRules = []rule.Definition{ruleDef}
 	config.EnableGraphIntegration = false
 
-	processor := rule.NewProcessorWithMetrics(natsClient, &config, metricsRegistry)
+	processor, err := rule.NewProcessorWithMetrics(natsClient, &config, metricsRegistry)
+	require.NoError(t, err)
 	require.NotNil(t, processor)
 
-	err := processor.Initialize()
+	err = processor.Initialize()
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -525,10 +529,11 @@ func TestIntegration_GraphIntegration(t *testing.T) {
 	config.InlineRules = []rule.Definition{ruleDef}
 	config.EnableGraphIntegration = true // Enable graph integration
 
-	processor := rule.NewProcessor(natsClient, &config)
+	processor, err := rule.NewProcessor(natsClient, &config)
+	require.NoError(t, err)
 	require.NotNil(t, processor)
 
-	err := processor.Initialize()
+	err = processor.Initialize()
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

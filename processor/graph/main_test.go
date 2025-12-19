@@ -29,6 +29,7 @@ func TestMain(m *testing.M) {
 			"ALIAS_INDEX",
 			"PREDICATE_INDEX",
 			"INCOMING_INDEX",
+			"OUTGOING_INDEX",
 			"SPATIAL_INDEX",
 			"TEMPORAL_INDEX",
 		),

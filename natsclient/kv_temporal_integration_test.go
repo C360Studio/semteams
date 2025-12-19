@@ -28,7 +28,8 @@ func TestTemporalResolver_BinarySearch(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	resolver := NewTemporalResolver(ctx, bucket)
+	resolver, err := NewTemporalResolver(ctx, bucket)
+	require.NoError(t, err)
 
 	// Create many revisions with known timestamps
 	entityID := "test.entity"
@@ -169,7 +170,8 @@ func TestTemporalResolver_Performance(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	resolver := NewTemporalResolver(ctx, bucket)
+	resolver, err := NewTemporalResolver(ctx, bucket)
+	require.NoError(t, err)
 
 	// Benchmark binary search
 	targetTime := time.Now().Add(-30 * time.Minute)
@@ -219,7 +221,8 @@ func TestTemporalResolver_RangeQueries(t *testing.T) {
 		}
 	}
 
-	resolver := NewTemporalResolver(ctx, bucket)
+	resolver, err := NewTemporalResolver(ctx, bucket)
+	require.NoError(t, err)
 
 	t.Run("GetRangeAtTimestamp", func(t *testing.T) {
 		targetTime := time.Now().Add(-5 * time.Second)

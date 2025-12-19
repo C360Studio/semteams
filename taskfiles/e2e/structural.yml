@@ -13,6 +13,6 @@ tasks:
       - docker compose -f docker/compose/rules.yml up -d --wait
       - echo "[OK] Services are healthy (rules + graph)"
       - echo "[STRUCTURAL] Running structural tier scenario..."
-      - cmd: cd cmd/e2e && ./e2e --scenario tier0-rules-iot --output-dir ./test/e2e/results
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant structural --output-dir ./test/e2e/results
         ignore_error: true
       - docker compose -f docker/compose/rules.yml down -v --timeout 15

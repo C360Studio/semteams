@@ -86,4 +86,62 @@ const (
 	// ContentRoleTitle is the document or entity title.
 	// Typically included in embeddings for context.
 	ContentRoleTitle = "title"
+
+	// ContentRoleMedia is the primary media content (video, image, audio).
+	// Used for binary content that may be processed by multimodal embedders.
+	ContentRoleMedia = "media"
+
+	// ContentRoleThumbnail is a preview image for media content.
+	ContentRoleThumbnail = "thumbnail"
 )
+
+// BinaryContent describes a binary field for storage.
+// Used by BinaryStorable implementations to provide binary data
+// along with its content type for proper handling.
+type BinaryContent struct {
+	ContentType string // MIME type: "image/jpeg", "video/mp4", "application/pdf"
+	Data        []byte // The actual binary data
+}
+
+// BinaryStorable extends ContentStorable for payloads with binary content.
+//
+// This interface enables storage of images, videos, PDFs, and other binary
+// files alongside text content. Binary data is stored directly in ObjectStore
+// (no base64 encoding) with JSON metadata referencing the binary keys.
+//
+// Example implementation:
+//
+//	type VideoDocument struct {
+//	    Title       string
+//	    Description string
+//	    VideoData   []byte
+//	    Thumbnail   []byte
+//	}
+//
+//	func (v *VideoDocument) RawContent() map[string]string {
+//	    return map[string]string{
+//	        "title":       v.Title,
+//	        "description": v.Description,
+//	    }
+//	}
+//
+//	func (v *VideoDocument) BinaryFields() map[string]BinaryContent {
+//	    return map[string]BinaryContent{
+//	        "video":     {ContentType: "video/mp4", Data: v.VideoData},
+//	        "thumbnail": {ContentType: "image/jpeg", Data: v.Thumbnail},
+//	    }
+//	}
+type BinaryStorable interface {
+	ContentStorable
+
+	// BinaryFields returns binary content to store in ObjectStore.
+	//
+	// Each field is stored as a separate binary blob with its own key.
+	// The returned map keys are field names that can be referenced in
+	// ContentFields for semantic role mapping.
+	//
+	// Example return value:
+	//   {"video": {ContentType: "video/mp4", Data: videoBytes},
+	//    "thumbnail": {ContentType: "image/jpeg", Data: thumbBytes}}
+	BinaryFields() map[string]BinaryContent
+}

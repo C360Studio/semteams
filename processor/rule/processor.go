@@ -102,15 +102,20 @@ type Processor struct {
 }
 
 // NewProcessor creates a new rule processor
-func NewProcessor(natsClient *natsclient.Client, config *Config) *Processor {
+func NewProcessor(natsClient *natsclient.Client, config *Config) (*Processor, error) {
 	return NewProcessorWithMetrics(natsClient, config, nil)
 }
 
 // NewProcessorWithMetrics creates a new rule processor with optional metrics
-func NewProcessorWithMetrics(natsClient *natsclient.Client, config *Config, metricsRegistry *metric.MetricsRegistry) *Processor {
+func NewProcessorWithMetrics(natsClient *natsclient.Client, config *Config, metricsRegistry *metric.MetricsRegistry) (*Processor, error) {
 	if config == nil {
 		defaultConfig := DefaultConfig()
 		config = &defaultConfig
+	}
+
+	// Validate required configuration
+	if config.Ports == nil {
+		return nil, fmt.Errorf("rule processor config missing required Ports configuration")
 	}
 
 	// Create message cache - will be initialized with context in Start()
@@ -151,27 +156,21 @@ func NewProcessorWithMetrics(natsClient *natsclient.Client, config *Config, metr
 	// Set up input and output ports
 	rp.setupPorts()
 
-	return rp
+	return rp, nil
 }
 
-// setupPorts initializes input and output port definitions
+// setupPorts initializes input and output port definitions.
+// Ports configuration is validated in the constructor, so config.Ports is guaranteed non-nil.
 func (rp *Processor) setupPorts() {
-	// Use ports from config if available
-	if rp.config.Ports != nil {
-		rp.inputPorts = make([]component.Port, len(rp.config.Ports.Inputs))
-		for i, portDef := range rp.config.Ports.Inputs {
-			rp.inputPorts[i] = convertDefinitionToPort(portDef, component.DirectionInput)
-		}
-
-		rp.outputPorts = make([]component.Port, len(rp.config.Ports.Outputs))
-		for i, portDef := range rp.config.Ports.Outputs {
-			rp.outputPorts[i] = convertDefinitionToPort(portDef, component.DirectionOutput)
-		}
-		return
+	rp.inputPorts = make([]component.Port, len(rp.config.Ports.Inputs))
+	for i, portDef := range rp.config.Ports.Inputs {
+		rp.inputPorts[i] = convertDefinitionToPort(portDef, component.DirectionInput)
 	}
 
-	// All configs should have Ports configured - no fallback needed in greenfield
-	panic("Rule processor config missing required Ports configuration")
+	rp.outputPorts = make([]component.Port, len(rp.config.Ports.Outputs))
+	for i, portDef := range rp.config.Ports.Outputs {
+		rp.outputPorts[i] = convertDefinitionToPort(portDef, component.DirectionOutput)
+	}
 }
 
 // Meta returns component metadata

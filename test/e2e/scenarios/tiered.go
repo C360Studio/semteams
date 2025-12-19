@@ -39,12 +39,15 @@ type TieredScenario struct {
 
 // TieredConfig contains configuration for tiered E2E tests
 type TieredConfig struct {
+	// Variant configuration
+	Variant string `json:"variant"` // "structural", "statistical", "semantic"
+
 	// Test data configuration
 	MessageCount    int           `json:"message_count"`
 	MessageInterval time.Duration `json:"message_interval"`
 
 	// Validation configuration (event-driven, matching tier0 patterns)
-	ValidationTimeout time.Duration `json:"validation_timeout"` // Timeout for metric waits (30s for ML)
+	ValidationTimeout time.Duration `json:"validation_timeout"` // Timeout for metric waits (30s for semantic)
 	PollInterval      time.Duration `json:"poll_interval"`      // Poll interval for metric waits (100ms)
 	MinProcessed      int           `json:"min_processed"`
 
@@ -61,6 +64,13 @@ type TieredConfig struct {
 	// Baseline comparison (matching tier0 patterns)
 	BaselineFile         string  `json:"baseline_file,omitempty"` // Path to baseline JSON (optional)
 	MaxRegressionPercent float64 `json:"max_regression_percent"`  // Default 20%
+
+	// Structural tier config (rules-only, from tier0_rules_iot.go)
+	ExpectedEmbeddings int `json:"expected_embeddings"` // 0 for structural variant
+	ExpectedClusters   int `json:"expected_clusters"`   // 0 for structural variant
+	MinRulesEvaluated  int `json:"min_rules_evaluated"` // Min rules evaluated for structural
+	MinOnEnterFired    int `json:"min_on_enter_fired"`  // Min OnEnter transitions
+	MinOnExitFired     int `json:"min_on_exit_fired"`   // Min OnExit transitions
 }
 
 // ComparisonData represents comparison results for Core vs ML analysis
@@ -83,10 +93,11 @@ type SearchQueryResult struct {
 // DefaultTieredConfig returns default configuration
 func DefaultTieredConfig() *TieredConfig {
 	return &TieredConfig{
+		Variant:         "", // Auto-detect from environment
 		MessageCount:    20,
 		MessageInterval: 50 * time.Millisecond,
 		// Event-driven validation timeouts (matching tier0 patterns)
-		ValidationTimeout:    30 * time.Second,       // Longer for ML: embeddings + clustering
+		ValidationTimeout:    30 * time.Second,       // Longer for semantic: embeddings + clustering
 		PollInterval:         100 * time.Millisecond, // Fast polling for responsiveness
 		MinProcessed:         10,                     // At least 50% should make it through
 		MinExpectedEntities:  50,                     // Test data has 74 entities, expect at least 50 indexed
@@ -96,6 +107,12 @@ func DefaultTieredConfig() *TieredConfig {
 		GatewayURL:           config.DefaultEndpoints.HTTP + "/api-gateway",
 		OutputDir:            "test/e2e/results",
 		MaxRegressionPercent: 20.0, // 20% regression threshold
+		// Structural tier defaults (from tier0_rules_iot.go)
+		ExpectedEmbeddings: 0, // Structural: NO embeddings
+		ExpectedClusters:   0, // Structural: NO clustering
+		MinRulesEvaluated:  5,
+		MinOnEnterFired:    2, // Expect at least 2 OnEnter transitions
+		MinOnExitFired:     1, // Expect at least 1 OnExit transition
 	}
 }
 
@@ -174,27 +191,68 @@ func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
 		Warnings:     []string{},
 	}
 
-	// Track execution stages
-	stages := []struct {
-		name string
-		fn   func(context.Context, *Result) error
-	}{
-		{"verify-components", s.executeVerifyComponents},
-		{"send-mixed-data", s.executeSendMixedData},
-		{"validate-processing", s.executeValidateProcessing},
-		{"verify-entity-count", s.executeVerifyEntityCount},             // Verify entity indexing
-		{"verify-entity-retrieval", s.executeVerifyEntityRetrieval},     // Verify specific entities
-		{"validate-entity-structure", s.executeValidateEntityStructure}, // Validate entity structure
-		{"verify-index-population", s.executeVerifyIndexPopulation},     // Verify all indexes
-		{"test-semantic-search", s.executeTestSemanticSearch},
-		{"verify-search-quality", s.executeVerifySearchQuality}, // NEW: Verify search results
-		{"compare-core-ml", s.executeCompareCoreMl},             // NEW: Compare Core vs ML
-		{"compare-communities", s.executeCompareCommunities},    // NEW: Compare community summaries
-		{"test-http-gateway", s.executeTestHTTPGateway},
-		{"test-embedding-fallback", s.executeTestEmbeddingFallback},
-		{"validate-rules", s.executeValidateRules},
-		{"validate-metrics", s.executeValidateMetrics},
-		{"verify-outputs", s.executeVerifyOutputs},
+	// Detect variant if not explicitly set
+	variant := s.config.Variant
+	if variant == "" {
+		info := s.detectVariantAndProvider(result)
+		variant = info.variant
+		result.Details["detected_variant"] = variant
+		result.Details["detected_embedding_provider"] = info.embeddingProvider
+	}
+	result.Metrics["variant"] = variant
+
+	// Define all possible stages with variant filters
+	type stage struct {
+		name     string
+		fn       func(context.Context, *Result) error
+		variants []string // Empty = run for all variants
+	}
+
+	allStages := []stage{
+		{"verify-components", s.executeVerifyComponents, nil},
+		{"send-mixed-data", s.executeSendMixedData, nil},
+		{"validate-processing", s.executeValidateProcessing, nil},
+		{"verify-entity-count", s.executeVerifyEntityCount, nil},
+		{"verify-entity-retrieval", s.executeVerifyEntityRetrieval, nil},
+		{"validate-entity-structure", s.executeValidateEntityStructure, nil},
+		{"verify-index-population", s.executeVerifyIndexPopulation, nil},
+
+		// Structural-only stages
+		{"validate-zero-embeddings", s.executeValidateZeroEmbeddings, []string{"structural"}},
+		{"validate-zero-clusters", s.executeValidateZeroClusters, []string{"structural"}},
+		{"validate-rule-transitions", s.executeValidateRuleTransitions, []string{"structural"}},
+
+		// Statistical and Semantic stages (skip for structural)
+		{"test-semantic-search", s.executeTestSemanticSearch, []string{"statistical", "semantic"}},
+		{"verify-search-quality", s.executeVerifySearchQuality, []string{"statistical", "semantic"}},
+		{"test-http-gateway", s.executeTestHTTPGateway, []string{"statistical", "semantic"}},
+		{"test-embedding-fallback", s.executeTestEmbeddingFallback, []string{"statistical", "semantic"}},
+
+		// Variant comparison stages
+		{"compare-statistical-semantic", s.executeCompareStatisticalSemantic, []string{"statistical", "semantic"}},
+		{"compare-communities", s.executeCompareCommunities, []string{"semantic"}}, // Semantic only
+
+		// Common stages
+		{"validate-rules", s.executeValidateRules, nil},
+		{"validate-metrics", s.executeValidateMetrics, nil},
+		{"verify-outputs", s.executeVerifyOutputs, nil},
+	}
+
+	// Filter stages based on variant
+	stages := []stage{}
+	for _, st := range allStages {
+		if len(st.variants) == 0 {
+			// Run for all variants
+			stages = append(stages, st)
+		} else {
+			// Check if current variant is in the allowed list
+			for _, allowedVariant := range st.variants {
+				if variant == allowedVariant {
+					stages = append(stages, st)
+					break
+				}
+			}
+		}
 	}
 
 	// Execute each stage
@@ -1687,13 +1745,13 @@ type variantInfo struct {
 	embeddingProvider string
 }
 
-// detectVariantAndProvider detects which variant (core/ml) is running based on semembed availability and metrics
+// detectVariantAndProvider detects which variant (structural/statistical/semantic) is running based on semembed availability and metrics
 func (s *TieredScenario) detectVariantAndProvider(result *Result) variantInfo {
-	info := variantInfo{variant: "core", embeddingProvider: "unknown"}
+	info := variantInfo{variant: "statistical", embeddingProvider: "unknown"} // Default to statistical (BM25)
 
 	// Check semembed availability first
 	if semembedAvailable, ok := result.Details["semembed_available"].(bool); ok && semembedAvailable {
-		info.variant = "ml"
+		info.variant = "semantic"
 	}
 
 	// Check embedding provider from metrics (overrides semembed detection)
@@ -1714,13 +1772,24 @@ func (s *TieredScenario) detectVariantAndProvider(result *Result) variantInfo {
 		switch matches[1] {
 		case "2", "2.0":
 			info.embeddingProvider = "http"
-			info.variant = "ml"
+			info.variant = "semantic"
 		case "1", "1.0":
 			info.embeddingProvider = "bm25"
-			info.variant = "core"
+			info.variant = "statistical"
 		case "0", "0.0":
 			info.embeddingProvider = "disabled"
+			info.variant = "structural" // No embeddings = structural (rules-only)
 		}
+	}
+
+	// Legacy mapping for backwards compatibility
+	// Map old "core" to "statistical" and "ml" to "semantic"
+	if s.config.Variant == "core" {
+		info.variant = "statistical"
+		result.Details["legacy_variant_mapped"] = "core -> statistical"
+	} else if s.config.Variant == "ml" {
+		info.variant = "semantic"
+		result.Details["legacy_variant_mapped"] = "ml -> semantic"
 	}
 
 	return info
@@ -1857,12 +1926,14 @@ func (s *TieredScenario) persistComparisonResults(
 	return comparisonFile
 }
 
-func (s *TieredScenario) executeCompareCoreMl(ctx context.Context, result *Result) error {
+// executeCompareStatisticalSemantic captures search results for Statistical vs Semantic comparison
+// (renamed from executeCompareCoreMl for clarity)
+func (s *TieredScenario) executeCompareStatisticalSemantic(ctx context.Context, result *Result) error {
 	info := s.detectVariantAndProvider(result)
 	queryResults := s.runComparisonQueries(ctx)
 	comparisonFile := s.persistComparisonResults(info, queryResults.searchResults, result)
 
-	result.Details["core_ml_comparison"] = map[string]any{
+	result.Details["statistical_semantic_comparison"] = map[string]any{
 		"variant":            info.variant,
 		"embedding_provider": info.embeddingProvider,
 		"queries":            queryResults.queryResults,
@@ -1927,15 +1998,21 @@ type communityStats struct {
 	avgNonSingletonSize  float64
 }
 
-// detectCommunityVariant determines if running core or ml variant
+// detectCommunityVariant determines if running structural, statistical, or semantic variant
 func (s *TieredScenario) detectCommunityVariant(result *Result) string {
-	if v, ok := result.Metrics["comparison_variant"].(string); ok && v == "ml" {
-		return "ml"
+	// Check if already detected in comparison stage
+	if v, ok := result.Metrics["comparison_variant"].(string); ok {
+		return v
 	}
+	// Check if variant was set in result metrics
+	if v, ok := result.Metrics["variant"].(string); ok {
+		return v
+	}
+	// Fallback to semembed detection
 	if semembedAvailable, ok := result.Details["semembed_available"].(bool); ok && semembedAvailable {
-		return "ml"
+		return "semantic"
 	}
-	return "core"
+	return "statistical"
 }
 
 // waitForCommunities polls until communities are available
@@ -2128,7 +2205,7 @@ func (s *TieredScenario) executeCompareCommunities(ctx context.Context, result *
 	}
 
 	var llmWait llmWaitResult
-	if variant == "ml" {
+	if variant == "semantic" {
 		llmWait = s.waitForLLMEnhancement(ctx, len(communities), result)
 		// Refresh communities after waiting
 		if refreshed, err := s.natsClient.GetAllCommunities(ctx); err == nil {
@@ -2141,9 +2218,19 @@ func (s *TieredScenario) executeCompareCommunities(ctx context.Context, result *
 	stats := s.analyzeCommunities(communities)
 	s.recordCommunityMetrics(stats, result)
 
-	if variant == "ml" && stats.nonSingletonCount == 0 {
+	// For semantic tier, require at least one LLM-enhanced community
+	// This verifies the progressive enhancement workflow is working:
+	// 1. Communities detected by clustering
+	// 2. Statistical summaries generated immediately
+	// 3. LLM enhancement worker processes communities asynchronously
+	// 4. At least one community gets LLM-enhanced summary
+	if variant == "semantic" && stats.llmEnhancedCount == 0 {
+		return fmt.Errorf("semantic tier requires at least one LLM-enhanced community, got 0 (progressive enhancement failed)")
+	}
+
+	if variant == "semantic" && stats.nonSingletonCount == 0 {
 		result.Warnings = append(result.Warnings,
-			"ML variant should produce non-singleton communities - neural embeddings expected to find semantic similarity")
+			"Semantic variant should produce non-singleton communities - neural embeddings expected to find semantic similarity")
 	}
 
 	comparisonFile := s.persistCommunityReport(variant, stats, llmWait, result)
@@ -2198,4 +2285,96 @@ func toWordSet(s string) map[string]bool {
 		}
 	}
 	return set
+}
+
+// Structural variant validation functions (ported from tier0_rules_iot.go)
+
+// executeValidateZeroEmbeddings validates that NO embeddings were generated (structural tier constraint)
+func (s *TieredScenario) executeValidateZeroEmbeddings(ctx context.Context, result *Result) error {
+	embeddingCount, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_generated_total")
+
+	result.Metrics["embeddings_generated"] = int(embeddingCount)
+
+	if int(embeddingCount) > s.config.ExpectedEmbeddings {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Structural tier constraint violated: embeddings=%d (expected %d)",
+				int(embeddingCount), s.config.ExpectedEmbeddings))
+	}
+
+	result.Details["zero_embeddings_validation"] = map[string]any{
+		"embeddings_generated": int(embeddingCount),
+		"expected":             s.config.ExpectedEmbeddings,
+		"constraint_met":       int(embeddingCount) <= s.config.ExpectedEmbeddings,
+		"message":              fmt.Sprintf("Embeddings: %d (expected %d for structural tier)", int(embeddingCount), s.config.ExpectedEmbeddings),
+	}
+
+	return nil
+}
+
+// executeValidateZeroClusters validates that NO clustering occurred (structural tier constraint)
+func (s *TieredScenario) executeValidateZeroClusters(ctx context.Context, result *Result) error {
+	clusteringCount, _ := s.metrics.SumMetricsByName(ctx, "semstreams_clustering_runs_total")
+
+	result.Metrics["clustering_runs"] = int(clusteringCount)
+
+	if int(clusteringCount) > s.config.ExpectedClusters {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Structural tier constraint violated: clustering_runs=%d (expected %d)",
+				int(clusteringCount), s.config.ExpectedClusters))
+	}
+
+	result.Details["zero_clusters_validation"] = map[string]any{
+		"clustering_runs": int(clusteringCount),
+		"expected":        s.config.ExpectedClusters,
+		"constraint_met":  int(clusteringCount) <= s.config.ExpectedClusters,
+		"message":         fmt.Sprintf("Clustering runs: %d (expected %d for structural tier)", int(clusteringCount), s.config.ExpectedClusters),
+	}
+
+	return nil
+}
+
+// executeValidateRuleTransitions validates stateful rule OnEnter/OnExit transitions (structural tier)
+func (s *TieredScenario) executeValidateRuleTransitions(ctx context.Context, result *Result) error {
+	// Get rule metrics using MetricsClient
+	ruleMetrics, err := s.metrics.ExtractRuleMetrics(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to extract rule metrics: %v", err))
+		return nil
+	}
+
+	onEnterFired := int(ruleMetrics.OnEnterFired)
+	onExitFired := int(ruleMetrics.OnExitFired)
+
+	result.Metrics["on_enter_fired"] = onEnterFired
+	result.Metrics["on_exit_fired"] = onExitFired
+
+	// Validate minimum state transitions
+	violations := []string{}
+	if onEnterFired < s.config.MinOnEnterFired {
+		violations = append(violations,
+			fmt.Sprintf("OnEnter: %d < %d (expected)", onEnterFired, s.config.MinOnEnterFired))
+	}
+	if onExitFired < s.config.MinOnExitFired {
+		violations = append(violations,
+			fmt.Sprintf("OnExit: %d < %d (expected)", onExitFired, s.config.MinOnExitFired))
+	}
+
+	result.Details["rule_transitions_validation"] = map[string]any{
+		"on_enter_fired":    onEnterFired,
+		"on_exit_fired":     onExitFired,
+		"min_on_enter":      s.config.MinOnEnterFired,
+		"min_on_exit":       s.config.MinOnExitFired,
+		"violations":        violations,
+		"validation_passed": len(violations) == 0,
+		"stateful_behavior": onEnterFired > 0 || onExitFired > 0,
+		"dynamic_graph":     onExitFired > 0, // OnExit removes triples = dynamic graph
+		"message":           fmt.Sprintf("Rule transitions: %d OnEnter, %d OnExit", onEnterFired, onExitFired),
+	}
+
+	if len(violations) > 0 {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Rule transition validation issues: %v", violations))
+	}
+
+	return nil
 }

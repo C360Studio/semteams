@@ -31,7 +31,7 @@ func TestOutgoingIndex_Integration(t *testing.T) {
 	require.NoError(t, err, "Failed to create OUTGOING_INDEX bucket")
 
 	// Create OutgoingIndex with real NATS
-	outgoingIndex := NewOutgoingIndex(outgoingBucket, nil, nil, nil, nil)
+	outgoingIndex := NewOutgoingIndex(outgoingBucket, nil, nil, nil)
 	require.NotNil(t, outgoingIndex, "outgoing index should be created")
 
 	t.Run("create_entity_with_relationships", func(t *testing.T) {

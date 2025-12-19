@@ -178,7 +178,8 @@ func (mp *Manager) storeEntityStates(ctx context.Context, entityStates []*gtypes
 			mp.metrics.EntitiesExtracted.Inc()
 			mp.metrics.EntitiesUpdateAttempts.Inc()
 		}
-		if _, err := mp.deps.EntityManager.UpdateEntity(ctx, state); err != nil {
+		// Use UpsertEntity for atomic create-or-update semantics
+		if _, err := mp.deps.EntityManager.UpsertEntity(ctx, state); err != nil {
 			mp.recordError(fmt.Sprintf("failed to store entity %s: %v", state.ID, err))
 			if mp.metrics != nil {
 				mp.metrics.EntitiesUpdateFailed.Inc()
@@ -276,10 +277,10 @@ func (mp *Manager) processSimpleGraphable(
 		UpdatedAt:   time.Now(),
 	}
 
-	// Check for existing entity to merge triples and increment version
-	existing, err := mp.deps.EntityManager.GetEntity(ctx, actualEntityID)
-	var entityExists = (err == nil && existing != nil)
-	if entityExists {
+	// Try to merge with existing entity if present (best-effort, non-blocking)
+	// This avoids TOCTOU race conditions by using upsert semantics
+	existing, _ := mp.deps.EntityManager.GetEntity(ctx, actualEntityID)
+	if existing != nil {
 		// Entity exists, merge triples and increment version
 		mp.deps.Logger.Debug("Entity exists, merging triples",
 			"entity_id", actualEntityID,
@@ -293,39 +294,21 @@ func (mp *Manager) processSimpleGraphable(
 		mp.deps.Logger.Debug("Merged triples complete",
 			"entity_id", actualEntityID,
 			"final_triple_count", len(state.Triples))
+	}
 
+	// Use upsert to atomically create or update - avoids TOCTOU race
+	if mp.metrics != nil {
+		mp.metrics.EntitiesUpdateAttempts.Inc()
+	}
+	if _, err := mp.deps.EntityManager.UpsertEntity(ctx, state); err != nil {
 		if mp.metrics != nil {
-			mp.metrics.EntitiesUpdateAttempts.Inc()
+			mp.metrics.EntitiesUpdateFailed.Inc()
 		}
-		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
-			if mp.metrics != nil {
-				mp.metrics.EntitiesUpdateFailed.Inc()
-			}
-			return nil, errs.WrapTransient(updateErr, "MessageManager",
-				"processSimpleGraphable", "entity update failed")
-		}
-		if mp.metrics != nil {
-			mp.metrics.EntitiesUpdateSuccess.Inc()
-		}
-	} else {
-		// Entity doesn't exist, create it
-		mp.deps.Logger.Debug("Creating new entity",
-			"entity_id", actualEntityID,
-			"triple_count", len(state.Triples))
-
-		if mp.metrics != nil {
-			mp.metrics.EntitiesCreateAttempts.Inc()
-		}
-		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
-			if mp.metrics != nil {
-				mp.metrics.EntitiesCreateFailed.Inc()
-			}
-			return nil, errs.WrapFatal(createErr, "MessageManager",
-				"processSimpleGraphable", "entity creation failed")
-		}
-		if mp.metrics != nil {
-			mp.metrics.EntitiesCreateSuccess.Inc()
-		}
+		return nil, errs.WrapTransient(err, "MessageManager",
+			"processSimpleGraphable", "entity upsert failed")
+	}
+	if mp.metrics != nil {
+		mp.metrics.EntitiesUpdateSuccess.Inc()
 	}
 
 	return []*gtypes.EntityState{state}, nil
@@ -372,39 +355,26 @@ func (mp *Manager) processNonGraphableMessage(
 		UpdatedAt:   now,
 	}
 
-	// Check for existing entity to preserve triples and increment version
-	existing, err := mp.deps.EntityManager.GetEntity(ctx, entityID)
-	var entityExists = (err == nil && existing != nil)
-	if entityExists {
+	// Try to merge with existing entity if present (best-effort, non-blocking)
+	existing, _ := mp.deps.EntityManager.GetEntity(ctx, entityID)
+	if existing != nil {
 		// Entity exists, merge triples and increment version
 		state.Triples = gtypes.MergeTriples(existing.Triples, state.Triples)
 		state.Version = existing.Version + 1
+	}
+
+	// Use upsert to atomically create or update - avoids TOCTOU race
+	if mp.metrics != nil {
+		mp.metrics.EntitiesUpdateAttempts.Inc()
+	}
+	if _, err := mp.deps.EntityManager.UpsertEntity(ctx, state); err != nil {
 		if mp.metrics != nil {
-			mp.metrics.EntitiesUpdateAttempts.Inc()
+			mp.metrics.EntitiesUpdateFailed.Inc()
 		}
-		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
-			if mp.metrics != nil {
-				mp.metrics.EntitiesUpdateFailed.Inc()
-			}
-			return nil, errs.WrapTransient(updateErr, "MessageManager", "processNonGraphableMessage", "entity update failed")
-		}
-		if mp.metrics != nil {
-			mp.metrics.EntitiesUpdateSuccess.Inc()
-		}
-	} else {
-		// Entity doesn't exist, create it
-		if mp.metrics != nil {
-			mp.metrics.EntitiesCreateAttempts.Inc()
-		}
-		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
-			if mp.metrics != nil {
-				mp.metrics.EntitiesCreateFailed.Inc()
-			}
-			return nil, errs.WrapFatal(createErr, "MessageManager", "processNonGraphableMessage", "entity creation failed")
-		}
-		if mp.metrics != nil {
-			mp.metrics.EntitiesCreateSuccess.Inc()
-		}
+		return nil, errs.WrapTransient(err, "MessageManager", "processNonGraphableMessage", "entity upsert failed")
+	}
+	if mp.metrics != nil {
+		mp.metrics.EntitiesUpdateSuccess.Inc()
 	}
 
 	return []*gtypes.EntityState{state}, nil
@@ -458,39 +428,26 @@ func (mp *Manager) processMapMessage(
 		UpdatedAt:   now,
 	}
 
-	// Check for existing entity to merge triples and increment version
-	existing, err := mp.deps.EntityManager.GetEntity(ctx, entityID)
-	var entityExists = (err == nil && existing != nil)
-	if entityExists {
+	// Try to merge with existing entity if present (best-effort, non-blocking)
+	existing, _ := mp.deps.EntityManager.GetEntity(ctx, entityID)
+	if existing != nil {
 		// Entity exists, merge triples and increment version
 		state.Triples = gtypes.MergeTriples(existing.Triples, state.Triples)
 		state.Version = existing.Version + 1
+	}
+
+	// Use upsert to atomically create or update - avoids TOCTOU race
+	if mp.metrics != nil {
+		mp.metrics.EntitiesUpdateAttempts.Inc()
+	}
+	if _, err := mp.deps.EntityManager.UpsertEntity(ctx, state); err != nil {
 		if mp.metrics != nil {
-			mp.metrics.EntitiesUpdateAttempts.Inc()
+			mp.metrics.EntitiesUpdateFailed.Inc()
 		}
-		if _, updateErr := mp.deps.EntityManager.UpdateEntity(ctx, state); updateErr != nil {
-			if mp.metrics != nil {
-				mp.metrics.EntitiesUpdateFailed.Inc()
-			}
-			return nil, errs.WrapTransient(updateErr, "MessageManager", "processMapMessage", "entity update failed")
-		}
-		if mp.metrics != nil {
-			mp.metrics.EntitiesUpdateSuccess.Inc()
-		}
-	} else {
-		// Entity doesn't exist, create it
-		if mp.metrics != nil {
-			mp.metrics.EntitiesCreateAttempts.Inc()
-		}
-		if _, createErr := mp.deps.EntityManager.CreateEntity(ctx, state); createErr != nil {
-			if mp.metrics != nil {
-				mp.metrics.EntitiesCreateFailed.Inc()
-			}
-			return nil, errs.WrapFatal(createErr, "MessageManager", "processMapMessage", "entity creation failed")
-		}
-		if mp.metrics != nil {
-			mp.metrics.EntitiesCreateSuccess.Inc()
-		}
+		return nil, errs.WrapTransient(err, "MessageManager", "processMapMessage", "entity upsert failed")
+	}
+	if mp.metrics != nil {
+		mp.metrics.EntitiesUpdateSuccess.Inc()
 	}
 
 	return []*gtypes.EntityState{state}, nil

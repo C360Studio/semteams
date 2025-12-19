@@ -75,3 +75,37 @@ func (es *EntityState) GetPropertyValue(predicate string) (any, bool) {
 
 	return nil, false
 }
+
+// Clone returns a deep copy of the EntityState.
+// This is used to avoid race conditions when multiple goroutines
+// process the same entity concurrently.
+func (es *EntityState) Clone() *EntityState {
+	if es == nil {
+		return nil
+	}
+
+	clone := &EntityState{
+		ID:          es.ID,
+		MessageType: es.MessageType,
+		Version:     es.Version,
+		UpdatedAt:   es.UpdatedAt,
+	}
+
+	// Deep copy triples slice
+	if es.Triples != nil {
+		clone.Triples = make([]message.Triple, len(es.Triples))
+		copy(clone.Triples, es.Triples)
+	}
+
+	// Deep copy storage reference
+	if es.StorageRef != nil {
+		clone.StorageRef = &message.StorageReference{
+			StorageInstance: es.StorageRef.StorageInstance,
+			Key:             es.StorageRef.Key,
+			ContentType:     es.StorageRef.ContentType,
+			Size:            es.StorageRef.Size,
+		}
+	}
+
+	return clone
+}

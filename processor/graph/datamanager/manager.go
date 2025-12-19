@@ -785,6 +785,9 @@ func (m *Manager) createEntityDirect(ctx context.Context, entity *gtypes.EntityS
 		return nil, err
 	}
 
+	// Deep copy entity to avoid race conditions when workers process concurrent writes
+	entity = entity.Clone()
+
 	// Set version and timestamps
 	entity.Version = 1
 	entity.UpdatedAt = time.Now()
@@ -866,6 +869,35 @@ func (m *Manager) UpdateEntity(ctx context.Context, entity *gtypes.EntityState) 
 	return m.updateEntityDirect(ctx, entity, WriteStrategyCAS)
 }
 
+// UpsertEntity atomically creates or updates an entity using Put semantics.
+// This is the preferred method for streaming data where idempotency is required.
+// Unlike the GetEntity → Create/Update pattern, this avoids TOCTOU race conditions.
+func (m *Manager) UpsertEntity(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error) {
+	// Validate entity before processing
+	if err := validateEntity(entity); err != nil {
+		return nil, err
+	}
+
+	// Use buffered write if available
+	if m.writeBuffer != nil && m.config.BufferConfig.BatchingEnabled {
+		write := &EntityWrite{
+			Operation: OperationUpdate, // Update with Put strategy is effectively upsert
+			Entity:    entity,
+			Timestamp: time.Now(),
+			Strategy:  WriteStrategyPut, // Put() creates if not exists, updates if exists
+		}
+
+		if err := m.writeBuffer.Write(write); err != nil {
+			return nil, errs.Wrap(err, "DataManager", "UpsertEntity", "buffer write")
+		}
+
+		return entity, nil
+	}
+
+	// Direct write using Put (upsert semantics)
+	return m.updateEntityPut(ctx, entity)
+}
+
 // updateEntityDirect performs immediate entity update using the specified strategy
 func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityState, strategy WriteStrategy) (*gtypes.EntityState, error) {
 	if entity == nil {
@@ -882,6 +914,9 @@ func (m *Manager) updateEntityDirect(ctx context.Context, entity *gtypes.EntityS
 // Best for async streaming data where concurrent writes are expected
 func (m *Manager) updateEntityPut(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error) {
 	startTime := time.Now()
+
+	// Deep copy entity to avoid race conditions when workers process concurrent writes
+	entity = entity.Clone()
 
 	// Update timestamp (version not meaningful for Put)
 	entity.UpdatedAt = time.Now()
@@ -921,6 +956,9 @@ func (m *Manager) updateEntityPut(ctx context.Context, entity *gtypes.EntityStat
 // Best for synchronous mutations where caller can handle version conflicts
 func (m *Manager) updateEntityCAS(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error) {
 	startTime := time.Now()
+
+	// Deep copy entity to avoid race conditions when workers process concurrent writes
+	entity = entity.Clone()
 
 	// Retry logic for CAS operations
 	retryConfig := retry.DefaultConfig()

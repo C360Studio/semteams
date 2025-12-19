@@ -14,8 +14,8 @@
 |--------|---------|----------|
 | [basics/](basics/) | Getting started, core interfaces, first processor | New users |
 | [concepts/](concepts/) | Background knowledge, algorithms, theory | Learning fundamentals |
-| [advanced/](advanced/) | Clustering, LLM, performance, GraphQL | Production tuning |
-| [rules/](rules/) | Rules engine reference | Rule authors |
+| [advanced/](advanced/) | Clustering, LLM, performance, GraphQL, rules engine | Production tuning |
+| [operations/](operations/) | Local monitoring, deployment, observability | Operators |
 | [contributing/](contributing/) | Development, testing, CI | Contributors |
 
 ## Learning Paths
@@ -31,12 +31,14 @@
 3. [Basics](basics/) - Implementation patterns
 
 **Production operators**:
-1. [Configuration](basics/06-configuration.md) - Capability tiers
-2. [Clustering](advanced/01-clustering.md) - LPA tuning
-3. [Performance](advanced/03-performance.md) - Optimization strategies
+1. [Local Monitoring](operations/01-local-monitoring.md) - Prometheus + Grafana setup
+2. [Configuration](basics/06-configuration.md) - Capability tiers
+3. [Clustering](advanced/01-clustering.md) - LPA tuning
+4. [Performance](advanced/03-performance.md) - Optimization strategies
 
 ## Quick Reference
 
 - [Index Reference](advanced/05-index-reference.md) - The seven indexes
-- [Community Detection](concepts/04-community-detection.md) - LPA algorithm
+- [Rules Engine](advanced/06-rules-engine.md) - Condition-based actions
+- [Community Detection](concepts/05-community-detection.md) - LPA algorithm
 - [Query Access](concepts/09-query-access.md) - GraphQL and MCP gateway

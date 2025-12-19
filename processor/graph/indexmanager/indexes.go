@@ -1123,11 +1123,8 @@ type OutgoingIndex struct {
 }
 
 // NewOutgoingIndex creates a new OutgoingIndex with the given KV bucket.
-// The kvStore parameter is accepted for API consistency with other indexes but not used
-// since OutgoingIndex uses simple Put operations without CAS retry logic.
 func NewOutgoingIndex(
 	bucket jetstream.KeyValue,
-	_ *natsclient.KVStore, // unused - simple Put operations don't need CAS retry
 	metrics *InternalMetrics,
 	promMetrics *PrometheusMetrics,
 	logger *slog.Logger,

@@ -39,6 +39,7 @@ type Manager struct {
 	entityBucket    jetstream.KeyValue
 	predicateBucket jetstream.KeyValue
 	incomingBucket  jetstream.KeyValue
+	outgoingBucket  jetstream.KeyValue
 	aliasBucket     jetstream.KeyValue
 	spatialBucket   jetstream.KeyValue
 	temporalBucket  jetstream.KeyValue
@@ -204,6 +205,7 @@ func NewManager(
 		entityBucket:      entityBucket,
 		predicateBucket:   buckets[config.Buckets.Predicate],
 		incomingBucket:    buckets[config.Buckets.Incoming],
+		outgoingBucket:    buckets[config.Buckets.Outgoing],
 		aliasBucket:       buckets[config.Buckets.Alias],
 		spatialBucket:     buckets[config.Buckets.Spatial],
 		temporalBucket:    buckets[config.Buckets.Temporal],
@@ -430,6 +432,11 @@ func (m *Manager) initializeIndexes() error {
 	if m.config.Indexes.Incoming && m.incomingBucket != nil {
 		index := NewIncomingIndex(m.incomingBucket, m.metrics, m.promMetrics, m.logger)
 		m.indexes["incoming"] = index
+	}
+
+	if m.config.Indexes.Outgoing && m.outgoingBucket != nil {
+		index := NewOutgoingIndex(m.outgoingBucket, m.metrics, m.promMetrics, m.logger)
+		m.indexes["outgoing"] = index
 	}
 
 	if m.config.Indexes.Alias && m.aliasBucket != nil {

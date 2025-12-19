@@ -17,7 +17,7 @@ type TemporalResolver struct {
 
 // NewTemporalResolver creates a resolver for timestamp-based queries
 // The context is used for the cache background cleanup goroutine lifecycle
-func NewTemporalResolver(ctx context.Context, bucket jetstream.KeyValue) *TemporalResolver {
+func NewTemporalResolver(ctx context.Context, bucket jetstream.KeyValue) (*TemporalResolver, error) {
 	// Use TTL cache with 5-second expiration for history entries
 	// This eliminates ~100 lines of custom cache code
 	histCache, err := cache.NewTTL[[]jetstream.KeyValueEntry](
@@ -30,14 +30,13 @@ func NewTemporalResolver(ctx context.Context, bucket jetstream.KeyValue) *Tempor
 		}),
 	)
 	if err != nil {
-		// For NewTemporalResolver, we'll panic on cache creation failure since it's a fundamental dependency
-		panic(fmt.Sprintf("failed to create temporal resolver cache: %v", err))
+		return nil, fmt.Errorf("failed to create temporal resolver cache: %w", err)
 	}
 
 	return &TemporalResolver{
 		bucket:       bucket,
 		historyCache: histCache,
-	}
+	}, nil
 }
 
 // NewTemporalResolverWithCache creates a resolver with custom cache TTL
@@ -46,7 +45,7 @@ func NewTemporalResolverWithCache(
 	ctx context.Context,
 	bucket jetstream.KeyValue,
 	cacheTTL time.Duration,
-) *TemporalResolver {
+) (*TemporalResolver, error) {
 	// Use TTL cache with custom expiration
 	cleanupInterval := cacheTTL / 5 // Clean up at 1/5 of TTL
 	if cleanupInterval < 1*time.Second {
@@ -62,14 +61,13 @@ func NewTemporalResolverWithCache(
 		}),
 	)
 	if err != nil {
-		// For NewTemporalResolverWithCache, we'll panic on cache creation failure since it's a fundamental dependency
-		panic(fmt.Sprintf("failed to create temporal resolver cache: %v", err))
+		return nil, fmt.Errorf("failed to create temporal resolver cache: %w", err)
 	}
 
 	return &TemporalResolver{
 		bucket:       bucket,
 		historyCache: histCache,
-	}
+	}, nil
 }
 
 // getCachedHistory retrieves history from cache or fetches it

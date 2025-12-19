@@ -86,35 +86,57 @@ func TestIntegration_GraphQLWithQueryManager(t *testing.T) {
 
 	// Test 1: Query entity by ID using QueryManager backend
 	t.Run("QueryEntityByID_UsesQueryManager", func(t *testing.T) {
-		entity, err := resolver.QueryEntityByID(ctx, entity1ID)
+		// Poll for entity availability (async KV writes + cache propagation)
+		var entity *graphql.Entity
+		var err error
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			entity, err = resolver.QueryEntityByID(ctx, entity1ID)
+			if err == nil && entity != nil {
+				break
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+
 		require.NoError(t, err)
 		assert.NotNil(t, entity)
 		assert.Equal(t, entity1ID, entity.ID)
 		assert.Equal(t, "drone", entity.Type)
 
-		// Verify properties
-		name, found := entity.Properties["name"]
-		assert.True(t, found)
+		// Verify properties - properties are keyed by full predicate
+		name, found := entity.Properties["robotics.drone.name"]
+		assert.True(t, found, "Property 'robotics.drone.name' should exist")
 		assert.Equal(t, "Test Drone GraphQL", name)
 	})
 
 	// Test 2: Query relationships using QueryManager backend
 	t.Run("QueryRelationships_Outgoing", func(t *testing.T) {
-		// Query outgoing relationships from entity1
+		// Poll for relationship indexing (async OutgoingIndex updates)
+		// EdgeTypes filter uses full predicate name
 		filters := graphql.RelationshipFilters{
 			EntityID:  entity1ID,
 			Direction: "outgoing",
-			EdgeTypes: []string{"connects_to"},
+			EdgeTypes: []string{"robotics.component.connects_to"},
 		}
 
-		relationships, err := resolver.QueryRelationships(ctx, filters)
+		var relationships []*graphql.Relationship
+		var err error
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			relationships, err = resolver.QueryRelationships(ctx, filters)
+			if err == nil && len(relationships) > 0 {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+
 		require.NoError(t, err)
 		require.Len(t, relationships, 1, "Should find one outgoing relationship")
 
 		rel := relationships[0]
 		assert.Equal(t, entity1ID, rel.FromEntityID)
 		assert.Equal(t, entity2ID, rel.ToEntityID)
-		assert.Equal(t, "connects_to", rel.EdgeType)
+		assert.Equal(t, "robotics.component.connects_to", rel.EdgeType)
 	})
 
 	// Test 3: Query incoming relationships

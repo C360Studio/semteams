@@ -271,7 +271,7 @@ func setupTestManager(t *testing.T) (*Manager, map[string]*MockKeyValue) {
 	require.True(t, ok, "Failed to cast to *Manager")
 
 	// Manually register OutgoingIndex for tests (not yet in production config)
-	outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], nil, engineImpl.metrics, engineImpl.promMetrics, engineImpl.logger)
+	outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], engineImpl.metrics, engineImpl.promMetrics, engineImpl.logger)
 	engineImpl.indexes["outgoing"] = outgoingIndex
 
 	return engineImpl, mockBuckets

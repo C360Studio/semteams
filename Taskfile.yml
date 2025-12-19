@@ -40,6 +40,22 @@ tasks:
     cmds:
       - task --list
 
+  # Observability shortcuts
+  observe:up:
+    desc: Start Prometheus + Grafana for local monitoring
+    cmds:
+      - task: services:start:observability
+
+  observe:down:
+    desc: Stop observability stack
+    cmds:
+      - task: services:stop
+
+  observe:logs:
+    desc: Tail Prometheus and Grafana logs
+    cmds:
+      - docker compose -f docker/compose/services.yml --profile observability logs -f
+
   # Composite tasks
   check:
     desc: Run all checks (lint + test)

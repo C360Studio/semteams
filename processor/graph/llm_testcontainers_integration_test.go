@@ -29,7 +29,8 @@ const (
 	semembedImage = "ghcr.io/c360studio/semembed:latest"
 
 	// defaultLLMModel is the lightweight model used for CI testing (Qwen 0.5B, ~300MB).
-	defaultLLMModel = "Qwen/Qwen2.5-0.5B-Instruct"
+	// Use the quantized model name as registered in shimmy.
+	defaultLLMModel = "qwen2.5-0.5b-instruct-q4-k-m"
 
 	// Timeouts for container startup
 	shimmyStartupTimeout      = 180 * time.Second // Model download on first run
@@ -169,7 +170,7 @@ func StartLLMServices(ctx context.Context, t *testing.T, opts ...LLMTestOption) 
 func (h *LLMTestHelper) startShimmy(ctx context.Context, cfg *llmTestConfig) (string, error) {
 	req := testcontainers.ContainerRequest{
 		Image:        shimmyImage,
-		ExposedPorts: []string{"8080/tcp"},
+		ExposedPorts: []string{"11435/tcp"}, // shimmy listens on 11435
 		Env: map[string]string{
 			"RUST_LOG": "info",
 			"MODEL":    cfg.model,
@@ -179,9 +180,9 @@ func (h *LLMTestHelper) startShimmy(ctx context.Context, cfg *llmTestConfig) (st
 			h.network.Name: {"shimmy"},
 		},
 		WaitingFor: wait.ForAll(
-			wait.ForListeningPort(nat.Port("8080/tcp")),
+			wait.ForListeningPort(nat.Port("11435/tcp")),
 			wait.ForHTTP("/health").
-				WithPort(nat.Port("8080/tcp")).
+				WithPort(nat.Port("11435/tcp")).
 				WithStartupTimeout(cfg.shimmyTimeout),
 		),
 	}
@@ -202,7 +203,7 @@ func (h *LLMTestHelper) startShimmy(ctx context.Context, cfg *llmTestConfig) (st
 		return "", fmt.Errorf("failed to get shimmy host: %w", err)
 	}
 
-	port, err := container.MappedPort(ctx, nat.Port("8080/tcp"))
+	port, err := container.MappedPort(ctx, nat.Port("11435/tcp"))
 	if err != nil {
 		return "", fmt.Errorf("failed to get shimmy port: %w", err)
 	}
@@ -210,7 +211,7 @@ func (h *LLMTestHelper) startShimmy(ctx context.Context, cfg *llmTestConfig) (st
 	h.ShimmyURL = fmt.Sprintf("http://%s:%s", host, port.Port())
 
 	// Return internal network hostname for seminstruct to connect
-	return "shimmy:8080", nil
+	return "shimmy:11435", nil
 }
 
 // startSeminstruct starts the seminstruct OpenAI-compatible proxy container.

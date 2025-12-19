@@ -102,8 +102,8 @@ func parseCommandLineFlags() *cliFlags {
 	flag.BoolVar(&flags.showVersion, "version", false, "Show version information")
 	flag.BoolVar(&flags.listScenarios, "list", false, "List available scenarios")
 	// Tiered test variant flags
-	flag.StringVar(&flags.variant, "variant", "core",
-		"Test variant (core=CI-safe no ML, ml=full ML stack)")
+	flag.StringVar(&flags.variant, "variant", "",
+		"Test variant: structural (rules-only), statistical (BM25), semantic (neural+LLM)")
 	flag.StringVar(&flags.outputDir, "output-dir", "",
 		"Directory for saving results JSON (empty=no output)")
 	flag.BoolVar(&flags.compare, "compare", false,
@@ -167,24 +167,19 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Println("    core-dataflow   - UDP → Filter → Map → File pipeline")
 	fmt.Println("    core-federation - Edge → Cloud federation via WebSocket")
 	fmt.Println("")
-	fmt.Println("  Structural (rules, no embeddings):")
-	fmt.Println("    semantic-indexes  - Core index validation")
-	fmt.Println("    tier0-rules-iot   - Stateful rules + PathRAG")
-	fmt.Println("")
-	fmt.Println("  Statistical (BM25, no external ML):")
-	fmt.Println("    semantic-basic    - Basic semantic: UDP → Graph Processor")
-	fmt.Println("    tiered            - Full stack with --variant core")
-	fmt.Println("")
-	fmt.Println("  Semantic (requires SemEmbed + SemInstruct):")
-	fmt.Println("    tiered            - Full stack with --variant ml")
+	fmt.Println("  Tiered (unified scenario with --variant flag):")
+	fmt.Println("    tiered --variant structural  - Rules-only, ZERO embeddings/clusters")
+	fmt.Println("    tiered --variant statistical - BM25 embeddings, no external ML")
+	fmt.Println("    tiered --variant semantic    - Neural embeddings + LLM summaries")
 	fmt.Println("")
 	fmt.Println("  Gateway:")
 	fmt.Println("    gateway-graphql   - GraphQL operations")
 	fmt.Println("    gateway-mcp       - MCP protocol via SSE")
 	fmt.Println("")
 	fmt.Println("Variant flag (for tiered scenario):")
-	fmt.Println("  --variant core  - CI-safe, BM25 fallback, no ML services")
-	fmt.Println("  --variant ml    - Full ML stack, requires SemEmbed + SemInstruct")
+	fmt.Println("  --variant structural  - Rules-only, validates ZERO ML inference")
+	fmt.Println("  --variant statistical - BM25 fallback, no external ML services")
+	fmt.Println("  --variant semantic    - Full ML stack (SemEmbed + SemInstruct)")
 	return true
 }
 
@@ -266,10 +261,14 @@ func runScenarios(
 
 // createScenario creates a specific scenario by name.
 //
-// Tier mapping (for backwards compatibility):
-//   - tier0 → tier0-rules-iot (rules-only, no embeddings)
-//   - tier1 → tiered --variant core (BM25 fallback)
-//   - tier2 → tiered --variant ml (neural embeddings)
+// Tiered scenario supports three variants:
+//   - structural  → rules-only, ZERO embeddings/clusters
+//   - statistical → BM25 embeddings, no external ML
+//   - semantic    → neural embeddings + LLM summaries
+//
+// Legacy variant names are supported for backwards compatibility:
+//   - core → statistical
+//   - ml   → semantic
 func createScenario(
 	edgeClient *client.ObservabilityClient,
 	cloudClient *client.ObservabilityClient,
@@ -284,26 +283,28 @@ func createScenario(
 	case "core-federation", "federation":
 		return scenarios.NewCoreFederationScenario(edgeClient, cloudClient, flags.udpEndpoint, flags.wsEndpoint, nil)
 
-	// Semantic scenarios
-	case "semantic-basic", "basic":
-		return scenarios.NewSemanticBasicScenario(edgeClient, flags.udpEndpoint, nil)
-	case "semantic-indexes", "indexes":
-		return scenarios.NewSemanticIndexesScenario(edgeClient, flags.udpEndpoint, nil)
-	case "tiered", "semantic-kitchen-sink", "kitchen-sink", "kitchen", "tier1-native", "tier1", "tier2-llm", "tier2":
-		// All tier aliases use tiered scenario with variant flag:
-		//   --variant core → BM25 fallback (statistical tier)
-		//   --variant ml   → neural embeddings (semantic tier)
+	// Tiered scenario (unified: structural, statistical, semantic)
+	case "tiered", "structural", "statistical", "semantic":
 		cfg := scenarios.DefaultTieredConfig()
 		cfg.MetricsURL = flags.metricsURL
 		cfg.GatewayURL = flags.baseURL + "/api-gateway"
 		cfg.OutputDir = flags.outputDir
+		// Set variant from flag or scenario name
+		cfg.Variant = flags.variant
+		if cfg.Variant == "" {
+			// Allow scenario name to specify variant directly
+			if flags.scenarioName == "structural" || flags.scenarioName == "statistical" || flags.scenarioName == "semantic" {
+				cfg.Variant = flags.scenarioName
+			}
+		}
+		// Map legacy variant names
+		switch cfg.Variant {
+		case "core":
+			cfg.Variant = "statistical"
+		case "ml":
+			cfg.Variant = "semantic"
+		}
 		return scenarios.NewTieredScenario(edgeClient, flags.udpEndpoint, cfg)
-
-	// Rules scenarios
-	case "rules-graph", "rules-graph-integration", "rules":
-		return scenarios.NewRulesGraphScenario(edgeClient, flags.udpEndpoint, nil)
-	case "tier0-rules-iot", "tier0":
-		return scenarios.NewTier0RulesIoTScenario(edgeClient, flags.udpEndpoint, nil)
 
 	// Gateway scenarios
 	case "gateway-graphql", "graphql":
@@ -400,10 +401,10 @@ func runSemanticScenarios(
 	obsClient *client.ObservabilityClient,
 	udpEndpoint string,
 ) int {
+	// Run tiered scenario (covers all semantic functionality)
+	cfg := scenarios.DefaultTieredConfig()
 	tests := []scenarios.Scenario{
-		scenarios.NewSemanticBasicScenario(obsClient, udpEndpoint, nil),
-		scenarios.NewSemanticIndexesScenario(obsClient, udpEndpoint, nil),
-		scenarios.NewTieredScenario(obsClient, udpEndpoint, nil),
+		scenarios.NewTieredScenario(obsClient, udpEndpoint, cfg),
 	}
 
 	passed := 0
@@ -433,34 +434,37 @@ func runSemanticScenarios(
 	return 0
 }
 
-// runRulesScenarios executes all rule processor scenarios
+// runRulesScenarios executes structural tier (rules-only) scenario
 func runRulesScenarios(
 	ctx context.Context,
 	logger *slog.Logger,
 	obsClient *client.ObservabilityClient,
 	udpEndpoint string,
 ) int {
+	// Run tiered scenario with structural variant
+	cfg := scenarios.DefaultTieredConfig()
+	cfg.Variant = "structural"
 	tests := []scenarios.Scenario{
-		scenarios.NewRulesGraphScenario(obsClient, udpEndpoint, nil),
+		scenarios.NewTieredScenario(obsClient, udpEndpoint, cfg),
 	}
 
 	passed := 0
 	failed := 0
 
 	for _, scenario := range tests {
-		logger.Info("Running rule processor scenario", "name", scenario.Name())
+		logger.Info("Running structural tier scenario", "name", scenario.Name())
 		exitCode := runScenario(ctx, logger, scenario)
 
 		if exitCode == 0 {
 			passed++
-			logger.Info("Rule processor scenario PASSED", "name", scenario.Name())
+			logger.Info("Structural tier scenario PASSED", "name", scenario.Name())
 		} else {
 			failed++
-			logger.Error("Rule processor scenario FAILED", "name", scenario.Name())
+			logger.Error("Structural tier scenario FAILED", "name", scenario.Name())
 		}
 	}
 
-	logger.Info("Rule processor test suite complete",
+	logger.Info("Structural tier test suite complete",
 		"passed", passed,
 		"failed", failed,
 		"total", len(tests))
