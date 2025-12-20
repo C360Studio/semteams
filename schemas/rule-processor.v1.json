@@ -23,14 +23,6 @@
       "default": true,
       "category": "basic"
     },
-    "enabled_rules": {
-      "type": "array",
-      "description": "List of rule IDs to enable for processing (deprecated: use rules_files)",
-      "items": {
-        "type": "string"
-      },
-      "category": "basic"
-    },
     "entity_watch_patterns": {
       "type": "array",
       "description": "NATS KV patterns to watch for entity changes (e.g. 'telemetry.robotics.\u003e')",
