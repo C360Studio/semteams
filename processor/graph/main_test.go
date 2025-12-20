@@ -25,6 +25,7 @@ func TestMain(m *testing.M) {
 		natsclient.WithJetStream(),
 		natsclient.WithKV(),
 		natsclient.WithKVBuckets(
+			// Core entity and index buckets
 			"ENTITY_STATES",
 			"ALIAS_INDEX",
 			"PREDICATE_INDEX",
@@ -32,6 +33,10 @@ func TestMain(m *testing.M) {
 			"OUTGOING_INDEX",
 			"SPATIAL_INDEX",
 			"TEMPORAL_INDEX",
+			// Embedding buckets (required for semantic search features)
+			"EMBEDDING_INDEX",
+			"EMBEDDING_DEDUP",
+			"EMBEDDINGS_CACHE",
 		),
 		natsclient.WithTestTimeout(5*time.Second),
 		natsclient.WithStartTimeout(30*time.Second),

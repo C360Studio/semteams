@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -794,10 +795,26 @@ func TestWebSocketOutput_ThreadSafety(t *testing.T) {
 // COMPREHENSIVE LIFECYCLE TESTING - V1-QUALITY-005
 // =============================================================================
 
-// createTestWebSocketOutput creates a test instance for lifecycle testing
+// testPortCounter provides unique ports for concurrent test instances.
+// Starting at 20000 to avoid conflicts with other tests using ports in 18000 range.
+var testPortCounter uint32 = 20000
+
+// getNextTestPort returns a unique port for each test instance.
+// This prevents port collision when StandardLifecycleTests runs 50+ concurrent Start() calls.
+func getNextTestPort() int {
+	// Use atomic to safely increment across concurrent goroutines
+	port := atomic.AddUint32(&testPortCounter, 1)
+	return int(port)
+}
+
+// createTestWebSocketOutput creates a test instance for lifecycle testing.
+// Each call returns an instance with a unique port to prevent bind conflicts
+// during concurrent lifecycle tests.
 func createTestWebSocketOutput() component.LifecycleComponent {
 	// Use nil NATS client for testing to avoid external dependencies
-	ws := NewOutput(18080, "/test", []string{"test.subject"}, nil)
+	// Use unique port to prevent "address already in use" errors in concurrent tests
+	port := getNextTestPort()
+	ws := NewOutput(port, "/test", []string{"test.subject"}, nil)
 	return ws
 }
 

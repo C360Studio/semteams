@@ -41,16 +41,29 @@ func setupTestIndexManager(t *testing.T, testClient *natsclient.TestClient) (Ind
 	temporalBucket, err := testClient.CreateKVBucket(ctx, "TEMPORAL_INDEX")
 	require.NoError(t, err, "Failed to create TEMPORAL_INDEX bucket")
 
+	// Embedding buckets for semantic search features
+	embeddingIndexBucket, err := testClient.CreateKVBucket(ctx, "EMBEDDING_INDEX")
+	require.NoError(t, err, "Failed to create EMBEDDING_INDEX bucket")
+
+	embeddingDedupBucket, err := testClient.CreateKVBucket(ctx, "EMBEDDING_DEDUP")
+	require.NoError(t, err, "Failed to create EMBEDDING_DEDUP bucket")
+
+	embeddingCacheBucket, err := testClient.CreateKVBucket(ctx, "EMBEDDINGS_CACHE")
+	require.NoError(t, err, "Failed to create EMBEDDINGS_CACHE bucket")
+
 	ctx, cancel := context.WithCancel(ctx)
 
 	config := DefaultConfig()
 	buckets := map[string]jetstream.KeyValue{
-		"ENTITY_STATES":   entityBucket,
-		"PREDICATE_INDEX": predicateBucket,
-		"INCOMING_INDEX":  incomingBucket,
-		"ALIAS_INDEX":     aliasBucket,
-		"SPATIAL_INDEX":   spatialBucket,
-		"TEMPORAL_INDEX":  temporalBucket,
+		"ENTITY_STATES":    entityBucket,
+		"PREDICATE_INDEX":  predicateBucket,
+		"INCOMING_INDEX":   incomingBucket,
+		"ALIAS_INDEX":      aliasBucket,
+		"SPATIAL_INDEX":    spatialBucket,
+		"TEMPORAL_INDEX":   temporalBucket,
+		"EMBEDDING_INDEX":  embeddingIndexBucket,
+		"EMBEDDING_DEDUP":  embeddingDedupBucket,
+		"EMBEDDINGS_CACHE": embeddingCacheBucket,
 	}
 	indexManager, err := NewManager(config, buckets, testClient.Client, nil, nil)
 	require.NoError(t, err, "Failed to create index manager")

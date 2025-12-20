@@ -21,6 +21,20 @@ func TestMain(m *testing.M) {
 	testClient, err := natsclient.NewSharedTestClient(
 		natsclient.WithJetStream(),
 		natsclient.WithKV(),
+		natsclient.WithKVBuckets(
+			// Core entity and index buckets
+			"ENTITY_STATES",
+			"ALIAS_INDEX",
+			"PREDICATE_INDEX",
+			"INCOMING_INDEX",
+			"OUTGOING_INDEX",
+			"SPATIAL_INDEX",
+			"TEMPORAL_INDEX",
+			// Embedding buckets (required for semantic search features)
+			"EMBEDDING_INDEX",
+			"EMBEDDING_DEDUP",
+			"EMBEDDINGS_CACHE",
+		),
 	)
 	if err != nil {
 		log.Fatalf("Failed to create shared test client: %v", err)

@@ -162,12 +162,14 @@ func TestRuntimeConfigurable_ValidateConfigUpdate(t *testing.T) {
 // TestRuntimeConfigurable_ApplyConfigUpdate tests dynamic rule application
 func TestRuntimeConfigurable_ApplyConfigUpdate(t *testing.T) {
 	// Create processor with test dependencies
+	// Use DefaultConfig() to ensure valid duration strings and avoid parse warnings
+	cfg := DefaultConfig()
 	processor := &Processor{
 		natsClient:  &natsclient.Client{},
 		logger:      slog.Default(),
 		rules:       make(map[string]Rule),
 		ruleConfigs: make(map[string]map[string]any),
-		config:      &Config{},
+		config:      &cfg,
 	}
 
 	// Test adding a new rule
@@ -345,13 +347,14 @@ func TestConfigSchema(t *testing.T) {
 func TestDynamicRuleCRUD(t *testing.T) {
 	ctx := context.Background()
 
-	// Create processor
+	// Create processor with DefaultConfig() to ensure valid duration strings
+	cfg := DefaultConfig()
 	processor := &Processor{
 		natsClient:  &natsclient.Client{},
 		logger:      slog.Default(),
 		rules:       make(map[string]Rule),
 		ruleConfigs: make(map[string]map[string]any),
-		config:      &Config{},
+		config:      &cfg,
 	}
 
 	// CREATE - Add a new rule
