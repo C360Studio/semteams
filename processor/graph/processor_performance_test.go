@@ -307,7 +307,7 @@ func TestIntegration_GraphProcessorPerformanceFeatures(t *testing.T) {
 	t.Logf("🎉 Performance features verified: Write batching + Multi-tier caching working!")
 
 	// Graceful shutdown - waits for pending index updates to complete
-	processor.Stop(ctx)
+	processor.Stop(5 * time.Second)
 
 	cancel()
 
