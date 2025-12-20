@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -668,6 +669,10 @@ func TestResourceLimits(t *testing.T) {
 // TestLLMSummarization tests LLM-based community summarization with seminstruct.
 // This test uses testcontainers to start shimmy + seminstruct with Qwen 0.5B model.
 func TestLLMSummarization(t *testing.T) {
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("LLM tests timeout in GitHub Actions - model loading too slow on shared runners")
+	}
+
 	setup := setupGraphRAGTest(t)
 	processor := setup.processor
 	ctx := setup.ctx
