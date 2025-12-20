@@ -34,7 +34,7 @@ const (
 	defaultLLMModel = "qwen2.5-0.5b-instruct-q4-k-m"
 
 	// Timeouts for container startup
-	shimmyStartupTimeout      = 180 * time.Second // Model download on first run
+	shimmyStartupTimeout      = 300 * time.Second // 5 min for model loading in CI (no GPU)
 	seminstructStartupTimeout = 30 * time.Second
 	semembedStartupTimeout    = 60 * time.Second
 	cleanupTimeout            = 30 * time.Second
