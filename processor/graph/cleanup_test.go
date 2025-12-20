@@ -263,7 +263,7 @@ func TestTriple_IsExpired(t *testing.T) {
 				Subject:   "c360.platform1.robotics.mav1.drone.001",
 				Predicate: "proximity.near",
 				Object:    "c360.platform1.robotics.mav1.drone.002",
-				ExpiresAt: timePtr(now.Add(1 * time.Millisecond)), // Slightly future to avoid timing race
+				ExpiresAt: timePtr(now.Add(1 * time.Second)), // Future to avoid timing race in CI
 			},
 			expired: false, // Equal to now is NOT expired (must be After)
 		},
