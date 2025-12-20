@@ -192,7 +192,6 @@ Returns:
 
 ```json
 {
-  "enabled_rules": ["battery-low", "fleet-assignment"],
   "buffer_window_size": "10m",
   "alert_cooldown_period": "2m",
   "enable_graph_integration": true,
@@ -213,7 +212,6 @@ err := processor.ApplyConfigUpdate(changes)
 ```
 
 Dynamically updateable:
-- `enabled_rules`
 - `enable_graph_integration`
 - `rules` (add/update/remove)
 

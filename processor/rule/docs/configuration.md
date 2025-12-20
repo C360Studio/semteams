@@ -9,7 +9,6 @@ type Config struct {
     Ports                  *component.PortConfig
     RulesFiles             []string
     InlineRules            []Definition
-    EnabledRules           []string
     MessageCache           cache.Config
     BufferWindowSize       string
     AlertCooldownPeriod    string
@@ -234,7 +233,6 @@ func DefaultConfig() Config {
                 {Name: "control_commands", Type: "nats", Subject: "control.*.commands"},
             },
         },
-        EnabledRules: []string{},
         MessageCache: cache.Config{
             Enabled:         true,
             Strategy:        cache.StrategyTTL,
@@ -264,7 +262,6 @@ Some settings can be updated at runtime without restart.
 
 | Setting | Hot Reload | Notes |
 |---------|------------|-------|
-| `enabled_rules` | Yes | Rules reloaded immediately |
 | `enable_graph_integration` | Yes | Takes effect on next action |
 | `rules` (individual) | Yes | Add/update/remove rules |
 | `entity_watch_patterns` | No | Requires restart |
@@ -291,7 +288,6 @@ err := processor.ApplyConfigUpdate(changes)
 config := processor.GetRuntimeConfig()
 // Returns:
 // {
-//   "enabled_rules": [...],
 //   "buffer_window_size": "10m",
 //   "alert_cooldown_period": "2m",
 //   "enable_graph_integration": true,

@@ -27,39 +27,6 @@ func (rp *Processor) ValidateConfigUpdate(changes map[string]any) error {
 		}
 	}
 
-	// Validate enabled_rules if present
-	if enabledRulesVal, ok := changes["enabled_rules"]; ok {
-		enabledRules, ok := enabledRulesVal.([]string)
-		if !ok {
-			// Try to convert from []any to []string
-			if anySlice, ok := enabledRulesVal.([]any); ok {
-				enabledRules = make([]string, len(anySlice))
-				for i, v := range anySlice {
-					if s, ok := v.(string); ok {
-						enabledRules[i] = s
-					} else {
-						return errs.WrapInvalid(
-							fmt.Errorf("enabled_rules[%d] must be string, got %T", i, v),
-							"RuleProcessor", "ValidateConfigUpdate", "validate enabled_rules type")
-					}
-				}
-			} else {
-				return errs.WrapInvalid(
-					fmt.Errorf("enabled_rules must be array of strings, got %T", enabledRulesVal),
-					"RuleProcessor", "ValidateConfigUpdate", "validate enabled_rules type")
-			}
-		}
-
-		// Validate rule names are known types
-		for _, ruleName := range enabledRules {
-			if !rp.isKnownRuleType(ruleName) {
-				return errs.WrapInvalid(
-					fmt.Errorf("unknown rule type: %s", ruleName),
-					"RuleProcessor", "ValidateConfigUpdate", "validate rule type")
-			}
-		}
-	}
-
 	// Validate entity_watch_patterns if present
 	if patternsVal, ok := changes["entity_watch_patterns"]; ok {
 		if _, ok := patternsVal.([]string); !ok {

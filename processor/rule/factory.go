@@ -75,9 +75,6 @@ func CreateRuleProcessor(rawConfig json.RawMessage, deps component.Dependencies)
 		if userConfig.Ports != nil {
 			ruleConfig.Ports = userConfig.Ports
 		}
-		if len(userConfig.EnabledRules) > 0 {
-			ruleConfig.EnabledRules = userConfig.EnabledRules
-		}
 		if len(userConfig.RulesFiles) > 0 {
 			ruleConfig.RulesFiles = userConfig.RulesFiles
 		}

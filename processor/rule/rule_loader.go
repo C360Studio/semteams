@@ -101,12 +101,6 @@ func (rp *Processor) loadRules() error {
 			"on_exit_actions", len(def.OnExit))
 	}
 
-	// Legacy support: enabled_rules (deprecated)
-	if len(rp.config.EnabledRules) > 0 {
-		rp.logger.Warn("EnabledRules is deprecated - use rules_files or inline_rules instead",
-			"enabled_rules", rp.config.EnabledRules)
-	}
-
 	// Warn if no rules are configured
 	if len(rp.rules) == 0 {
 		rp.logger.Warn("No rules configured - processor will not trigger any actions. " +

@@ -20,19 +20,6 @@ func (rp *Processor) ApplyConfigUpdate(changes map[string]any) error {
 		}
 	}
 
-	// Apply enabled_rules changes
-	if enabledRulesVal, ok := changes["enabled_rules"]; ok {
-		enabledRules := rp.convertToStringSlice(enabledRulesVal)
-		rp.config.EnabledRules = enabledRules
-
-		// Reload rules with new enabled list
-		if err := rp.loadRules(); err != nil {
-			return errs.Wrap(err, "RuleProcessor", "ApplyConfigUpdate", "reload enabled rules")
-		}
-
-		rp.logger.Info("Updated enabled rules", "rules", enabledRules)
-	}
-
 	// Apply entity_watch_patterns changes
 	if patternsVal, ok := changes["entity_watch_patterns"]; ok {
 		patterns := rp.convertToStringSlice(patternsVal)
@@ -109,7 +96,6 @@ func (rp *Processor) GetRuntimeConfig() map[string]any {
 	}
 
 	return map[string]any{
-		"enabled_rules":            rp.config.EnabledRules,
 		"buffer_window_size":       rp.config.BufferWindowSize,
 		"alert_cooldown_period":    rp.config.AlertCooldownPeriod,
 		"enable_graph_integration": rp.config.EnableGraphIntegration,

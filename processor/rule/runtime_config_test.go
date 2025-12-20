@@ -121,13 +121,6 @@ func TestRuntimeConfigurable_ValidateConfigUpdate(t *testing.T) {
 			errorMsg:  "must have at least one condition",
 		},
 		{
-			name: "valid_enabled_rules_update",
-			changes: map[string]any{
-				"enabled_rules": []string{"test_rule"},
-			},
-			wantError: false,
-		},
-		{
 			name: "valid_entity_watch_patterns",
 			changes: map[string]any{
 				"entity_watch_patterns": []string{"*.robotics.*.battery.*", "*.sensors.*"},
@@ -203,20 +196,6 @@ func TestRuntimeConfigurable_ApplyConfigUpdate(t *testing.T) {
 		require.Contains(t, rules, "battery_test")
 	})
 
-	// Test updating enabled_rules
-	t.Run("update_enabled_rules", func(t *testing.T) {
-		changes := map[string]any{
-			"enabled_rules": []string{"test_rule"},
-		}
-
-		err := processor.ApplyConfigUpdate(changes)
-		require.NoError(t, err)
-
-		config := processor.GetRuntimeConfig()
-		enabledRules := config["enabled_rules"].([]string)
-		assert.Equal(t, []string{"test_rule"}, enabledRules)
-	})
-
 	// Test toggling graph integration
 	t.Run("toggle_graph_integration", func(t *testing.T) {
 		changes := map[string]any{
@@ -239,7 +218,6 @@ func TestRuntimeConfigurable_GetRuntimeConfig(t *testing.T) {
 		logger:     slog.Default(),
 		rules:      make(map[string]Rule),
 		config: &Config{
-			EnabledRules:           []string{"test_rule"},
 			BufferWindowSize:       "10m",
 			AlertCooldownPeriod:    "2m",
 			EnableGraphIntegration: true,
@@ -251,7 +229,6 @@ func TestRuntimeConfigurable_GetRuntimeConfig(t *testing.T) {
 	config := processor.GetRuntimeConfig()
 
 	// Verify all expected fields are present
-	assert.NotNil(t, config["enabled_rules"])
 	assert.NotNil(t, config["buffer_window_size"])
 	assert.NotNil(t, config["alert_cooldown_period"])
 	assert.NotNil(t, config["enable_graph_integration"])
@@ -261,7 +238,6 @@ func TestRuntimeConfigurable_GetRuntimeConfig(t *testing.T) {
 	assert.NotNil(t, config["is_running"])
 
 	// Check specific values
-	assert.Equal(t, []string{"test_rule"}, config["enabled_rules"])
 	assert.Equal(t, true, config["enable_graph_integration"])
 	assert.Equal(t, true, config["is_running"])
 }
@@ -338,7 +314,6 @@ func TestConfigSchema(t *testing.T) {
 	componentSchema := processor.ConfigSchema()
 	assert.NotNil(t, componentSchema)
 	assert.NotEmpty(t, componentSchema.Properties)
-	assert.Contains(t, componentSchema.Properties, "enabled_rules")
 	assert.Contains(t, componentSchema.Properties, "rules")
 
 }

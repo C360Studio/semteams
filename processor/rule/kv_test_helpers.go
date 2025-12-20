@@ -225,9 +225,8 @@ func AssertEventuallyTrue(t *testing.T, condition func() bool, timeout time.Dura
 }
 
 // CreateRuleTestConfig creates a test configuration for rule processor
-func CreateRuleTestConfig(enabledRules []string, watchPatterns []string) Config {
+func CreateRuleTestConfig(watchPatterns []string) Config {
 	config := DefaultConfig()
-	config.EnabledRules = enabledRules
 	config.EntityWatchPatterns = watchPatterns
 
 	// Set reasonable test values
