@@ -333,21 +333,30 @@ func (e *Engine) mapFactoryToComponentType(factoryName string) (types.ComponentT
 	}
 }
 
-// writeComponentConfigs writes component configs to semstreams_config KV
+// writeComponentConfigs writes component configs to memory and KV atomically
 func (e *Engine) writeComponentConfigs(ctx context.Context, configs map[string]types.ComponentConfig) error {
-	// Write each component config directly to KV
-	// Manager is already watching this bucket and will pick up the changes
-	for name, compConfig := range configs {
-		key := fmt.Sprintf("components.%s", name)
-		data, err := json.Marshal(compConfig)
-		if err != nil {
-			return fmt.Errorf("marshal component %s: %w", name, err)
-		}
+	// Get current config once
+	safeConfig := e.configMgr.GetConfig()
+	currentConfig := safeConfig.Get()
 
-		// Use the KV from Manager to write
-		if err := e.writeToKV(ctx, key, data); err != nil {
-			return fmt.Errorf("write component %s to KV: %w", name, err)
-		}
+	// Initialize components map if nil
+	if currentConfig.Components == nil {
+		currentConfig.Components = make(config.ComponentConfigs)
+	}
+
+	// Add all components to memory in a single pass
+	for name, compConfig := range configs {
+		currentConfig.Components[name] = compConfig
+	}
+
+	// Update atomically - this ensures Start() will see all components
+	if err := safeConfig.Update(currentConfig); err != nil {
+		return fmt.Errorf("update config: %w", err)
+	}
+
+	// Then push to KV for persistence (single push, not per-component)
+	if err := e.configMgr.PushToKV(ctx); err != nil {
+		return fmt.Errorf("push to KV: %w", err)
 	}
 
 	return nil
