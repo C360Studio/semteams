@@ -21,6 +21,7 @@ func TestConfigManager_ShutdownSequence(t *testing.T) {
 
 	// Create initial config
 	cfg := &Config{
+		Version: "1.0.0",
 		Platform: PlatformConfig{
 			ID:     "test-platform",
 			Type:   "edge",
@@ -92,6 +93,7 @@ func TestConfigManager_ConcurrentShutdown(t *testing.T) {
 		natsclient.WithKV())
 
 	cfg := &Config{
+		Version: "1.0.0",
 		Platform: PlatformConfig{
 			ID:     "test-platform",
 			Type:   "edge",

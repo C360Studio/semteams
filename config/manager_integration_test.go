@@ -34,6 +34,7 @@ func (s *ManagerIntegrationSuite) SetupSuite() {
 func (s *ManagerIntegrationSuite) SetupTest() {
 	// Create base config with required fields
 	baseConfig := &Config{
+		Version: "1.0.0",
 		Platform: PlatformConfig{
 			Org:  "c360",
 			ID:   "integration-test",

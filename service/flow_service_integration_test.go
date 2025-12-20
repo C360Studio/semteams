@@ -56,6 +56,7 @@ func (s *FlowServiceHTTPSuite) SetupTest() {
 
 	// Create base config
 	baseConfig := &config.Config{
+		Version: "1.0.0",
 		Platform: config.PlatformConfig{
 			Org:         "test",
 			ID:          "test-platform",

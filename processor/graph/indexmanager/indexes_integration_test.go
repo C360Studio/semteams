@@ -27,15 +27,18 @@ func TestIndexManager_EntityDeleteCleanupIntegration(t *testing.T) {
 		config.BatchProcessing.Size = 10
 		config.BatchProcessing.Interval = 10 * time.Millisecond
 
-		// Create mock buckets including OUTGOING_INDEX
+		// Create mock buckets including OUTGOING_INDEX and embedding buckets
 		mockBuckets := map[string]*MockKeyValue{
-			"ENTITY_STATES":   NewMockKeyValue(),
-			"PREDICATE_INDEX": NewMockKeyValue(),
-			"INCOMING_INDEX":  NewMockKeyValue(),
-			"OUTGOING_INDEX":  NewMockKeyValue(),
-			"ALIAS_INDEX":     NewMockKeyValue(),
-			"SPATIAL_INDEX":   NewMockKeyValue(),
-			"TEMPORAL_INDEX":  NewMockKeyValue(),
+			"ENTITY_STATES":    NewMockKeyValue(),
+			"PREDICATE_INDEX":  NewMockKeyValue(),
+			"INCOMING_INDEX":   NewMockKeyValue(),
+			"OUTGOING_INDEX":   NewMockKeyValue(),
+			"ALIAS_INDEX":      NewMockKeyValue(),
+			"SPATIAL_INDEX":    NewMockKeyValue(),
+			"TEMPORAL_INDEX":   NewMockKeyValue(),
+			"EMBEDDING_INDEX":  NewMockKeyValue(),
+			"EMBEDDING_DEDUP":  NewMockKeyValue(),
+			"EMBEDDINGS_CACHE": NewMockKeyValue(),
 		}
 
 		buckets := make(map[string]jetstream.KeyValue)
@@ -116,13 +119,16 @@ func TestIndexManager_EntityDeleteCleanupIntegration(t *testing.T) {
 		config.EventBuffer.Metrics = true
 
 		mockBuckets := map[string]*MockKeyValue{
-			"ENTITY_STATES":   NewMockKeyValue(),
-			"PREDICATE_INDEX": NewMockKeyValue(),
-			"INCOMING_INDEX":  NewMockKeyValue(),
-			"OUTGOING_INDEX":  NewMockKeyValue(),
-			"ALIAS_INDEX":     NewMockKeyValue(),
-			"SPATIAL_INDEX":   NewMockKeyValue(),
-			"TEMPORAL_INDEX":  NewMockKeyValue(),
+			"ENTITY_STATES":    NewMockKeyValue(),
+			"PREDICATE_INDEX":  NewMockKeyValue(),
+			"INCOMING_INDEX":   NewMockKeyValue(),
+			"OUTGOING_INDEX":   NewMockKeyValue(),
+			"ALIAS_INDEX":      NewMockKeyValue(),
+			"SPATIAL_INDEX":    NewMockKeyValue(),
+			"TEMPORAL_INDEX":   NewMockKeyValue(),
+			"EMBEDDING_INDEX":  NewMockKeyValue(),
+			"EMBEDDING_DEDUP":  NewMockKeyValue(),
+			"EMBEDDINGS_CACHE": NewMockKeyValue(),
 		}
 
 		buckets := make(map[string]jetstream.KeyValue)
@@ -163,13 +169,16 @@ func TestIndexManager_EntityDeleteCleanupIntegration(t *testing.T) {
 		config.EventBuffer.Metrics = true
 
 		mockBuckets := map[string]*MockKeyValue{
-			"ENTITY_STATES":   NewMockKeyValue(),
-			"PREDICATE_INDEX": NewMockKeyValue(),
-			"INCOMING_INDEX":  NewMockKeyValue(),
-			"OUTGOING_INDEX":  NewMockKeyValue(),
-			"ALIAS_INDEX":     NewMockKeyValue(),
-			"SPATIAL_INDEX":   NewMockKeyValue(),
-			"TEMPORAL_INDEX":  NewMockKeyValue(),
+			"ENTITY_STATES":    NewMockKeyValue(),
+			"PREDICATE_INDEX":  NewMockKeyValue(),
+			"INCOMING_INDEX":   NewMockKeyValue(),
+			"OUTGOING_INDEX":   NewMockKeyValue(),
+			"ALIAS_INDEX":      NewMockKeyValue(),
+			"SPATIAL_INDEX":    NewMockKeyValue(),
+			"TEMPORAL_INDEX":   NewMockKeyValue(),
+			"EMBEDDING_INDEX":  NewMockKeyValue(),
+			"EMBEDDING_DEDUP":  NewMockKeyValue(),
+			"EMBEDDINGS_CACHE": NewMockKeyValue(),
 		}
 
 		buckets := make(map[string]jetstream.KeyValue)

@@ -178,21 +178,3 @@ func TestNewClient_StorageCreation(t *testing.T) {
 		t.Logf("Client creation failed as expected (no ACME server): %v", err)
 	}
 }
-
-func TestSaveAndLoadAccount(t *testing.T) {
-	// This is a placeholder for future account persistence tests
-	// Full testing requires mocking the ACME server interaction
-	t.Skip("Account save/load requires ACME server mock - see integration tests")
-}
-
-func TestObtainCertificate(t *testing.T) {
-	// This is a placeholder for future certificate obtainment tests
-	// Full testing requires mocking the ACME server
-	t.Skip("Certificate obtainment requires ACME server mock - see integration tests")
-}
-
-func TestRenewCertificateIfNeeded(t *testing.T) {
-	// This is a placeholder for future renewal tests
-	// Full testing requires mocking the ACME server and existing certificates
-	t.Skip("Certificate renewal requires ACME server mock - see integration tests")
-}

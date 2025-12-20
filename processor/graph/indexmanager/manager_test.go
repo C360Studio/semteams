@@ -237,16 +237,21 @@ func setupTestManager(t *testing.T) (*Manager, map[string]*MockKeyValue) {
 	config.EventBuffer.Metrics = true // Keep metrics enabled to test full behavior
 	config.BatchProcessing.Size = 10
 	config.BatchProcessing.Interval = 10 * time.Millisecond
+	// Disable embedding for unit tests - mock watchers don't support proper shutdown
+	config.Embedding.Enabled = false
 
-	// Create mock buckets
+	// Create mock buckets including embedding buckets for semantic search
 	mockBuckets := map[string]*MockKeyValue{
-		"ENTITY_STATES":   NewMockKeyValue(),
-		"PREDICATE_INDEX": NewMockKeyValue(),
-		"INCOMING_INDEX":  NewMockKeyValue(),
-		"OUTGOING_INDEX":  NewMockKeyValue(),
-		"ALIAS_INDEX":     NewMockKeyValue(),
-		"SPATIAL_INDEX":   NewMockKeyValue(),
-		"TEMPORAL_INDEX":  NewMockKeyValue(),
+		"ENTITY_STATES":    NewMockKeyValue(),
+		"PREDICATE_INDEX":  NewMockKeyValue(),
+		"INCOMING_INDEX":   NewMockKeyValue(),
+		"OUTGOING_INDEX":   NewMockKeyValue(),
+		"ALIAS_INDEX":      NewMockKeyValue(),
+		"SPATIAL_INDEX":    NewMockKeyValue(),
+		"TEMPORAL_INDEX":   NewMockKeyValue(),
+		"EMBEDDING_INDEX":  NewMockKeyValue(),
+		"EMBEDDING_DEDUP":  NewMockKeyValue(),
+		"EMBEDDINGS_CACHE": NewMockKeyValue(),
 	}
 
 	// Convert to interface map
@@ -255,11 +260,17 @@ func setupTestManager(t *testing.T) (*Manager, map[string]*MockKeyValue) {
 		buckets[name] = mockBucket
 	}
 
-	// Setup mock expectations for WatchAll
+	// Setup mock expectations for WatchAll on ENTITY_STATES
 	mockWatcher := NewMockKeyWatcher()
 	mockBuckets["ENTITY_STATES"].On("WatchAll", mock.Anything).Return(mockWatcher, nil)
 	mockWatcher.On("Updates").Return(mockWatcher.updates)
 	mockWatcher.On("Stop").Return(nil)
+
+	// Setup mock expectations for WatchAll on EMBEDDING_INDEX (used by embedding worker)
+	embeddingWatcher := NewMockKeyWatcher()
+	mockBuckets["EMBEDDING_INDEX"].On("WatchAll", mock.Anything).Return(embeddingWatcher, nil)
+	embeddingWatcher.On("Updates").Return(embeddingWatcher.updates)
+	embeddingWatcher.On("Stop").Return(nil)
 
 	// Use a test-specific metrics registry to avoid conflicts
 	testRegistry := metric.NewMetricsRegistry()

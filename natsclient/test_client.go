@@ -189,8 +189,11 @@ func NewSharedTestClient(opts ...TestOption) (*TestClient, error) {
 		Client:    client,
 		URL:       url,
 		cleanup: func() {
-			_ = client.Close(context.Background())        // Best effort test cleanup
-			_ = container.Terminate(context.Background()) // Best effort test cleanup
+			// Use timeout context for drain to prevent hanging, then terminate container
+			closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer closeCancel()
+			_ = client.Close(closeCtx)                    // Wait for drain with timeout
+			_ = container.Terminate(context.Background()) // Then terminate container
 		},
 	}
 
@@ -310,8 +313,11 @@ func NewTestClient(t testing.TB, opts ...TestOption) *TestClient {
 		Client:    client,
 		URL:       url,
 		cleanup: func() {
-			_ = client.Close(context.Background())        // Best effort test cleanup
-			_ = container.Terminate(context.Background()) // Best effort test cleanup
+			// Use timeout context for drain to prevent hanging, then terminate container
+			closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer closeCancel()
+			_ = client.Close(closeCtx)                    // Wait for drain with timeout
+			_ = container.Terminate(context.Background()) // Then terminate container
 		},
 	}
 

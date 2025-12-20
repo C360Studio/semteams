@@ -15,6 +15,7 @@ import (
 func TestConfigManager_PatternMatching(t *testing.T) {
 	// Create a minimal config
 	cfg := &Config{
+		Version:    "1.0.0",
 		Services:   make(types.ServiceConfigs),
 		Components: make(ComponentConfigs),
 	}
@@ -54,6 +55,7 @@ func TestConfigManager_PatternMatching(t *testing.T) {
 func TestConfigManager_Subscriptions(t *testing.T) {
 	// Create a test config
 	cfg := &Config{
+		Version: "1.0.0",
 		Services: types.ServiceConfigs{
 			"metrics": types.ServiceConfig{
 				Name:    "metrics",
@@ -124,6 +126,7 @@ func TestConfigManager_KVUpdates(t *testing.T) {
 
 	// Create initial config with required fields
 	cfg := &Config{
+		Version: "1.0.0",
 		Platform: PlatformConfig{
 			Org:  "c360",
 			ID:   "test-platform",
@@ -195,6 +198,7 @@ func TestConfigManager_KVUpdates(t *testing.T) {
 func TestConfigManager_PushToKV(t *testing.T) {
 	// Create a config to push
 	cfg := &Config{
+		Version: "1.0.0",
 		Platform: PlatformConfig{
 			Org: "test-org",
 			ID:  "test-id",
@@ -282,6 +286,7 @@ func TestConfigManager_PushToKV(t *testing.T) {
 
 func TestConfigManager_MultipleSubscribers(t *testing.T) {
 	cfg := &Config{
+		Version:    "1.0.0",
 		Services:   make(types.ServiceConfigs),
 		Components: make(ComponentConfigs),
 	}
