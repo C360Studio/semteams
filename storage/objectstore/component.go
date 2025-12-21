@@ -399,11 +399,23 @@ func (c *Component) emitStoredMessage(data []byte, storageKey string) {
 	}
 
 	storedSubject := c.getPortSubject("stored", "storage.%s.stored")
-	if err := c.natsClient.GetConnection().Publish(storedSubject, msgData); err != nil {
-		c.logger.Error("Failed to publish StoredMessage",
-			slog.String("subject", storedSubject),
-			slog.String("error", err.Error()))
-		return
+
+	// Use JetStream publishing when port type is "jetstream" for durability
+	if c.isJetStreamPort("stored") {
+		if err := c.natsClient.PublishToStream(context.Background(), storedSubject, msgData); err != nil {
+			c.logger.Error("Failed to publish StoredMessage to JetStream",
+				slog.String("subject", storedSubject),
+				slog.String("error", err.Error()))
+			return
+		}
+	} else {
+		// Fallback to core NATS for non-JetStream ports
+		if err := c.natsClient.GetConnection().Publish(storedSubject, msgData); err != nil {
+			c.logger.Error("Failed to publish StoredMessage",
+				slog.String("subject", storedSubject),
+				slog.String("error", err.Error()))
+			return
+		}
 	}
 
 	c.logger.Debug("Emitted StoredMessage",
@@ -474,6 +486,19 @@ func (c *Component) hasPort(name string) bool {
 	for _, port := range c.config.Ports.Outputs {
 		if port.Name == name {
 			return true
+		}
+	}
+	return false
+}
+
+// isJetStreamPort checks if an output port is configured for JetStream
+func (c *Component) isJetStreamPort(portName string) bool {
+	if c.config.Ports == nil {
+		return false
+	}
+	for _, port := range c.config.Ports.Outputs {
+		if port.Name == portName {
+			return port.Type == "jetstream"
 		}
 	}
 	return false
