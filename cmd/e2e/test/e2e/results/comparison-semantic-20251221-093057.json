@@ -1,0 +1,123 @@
+{
+  "variant": "semantic",
+  "embedding_provider": "http",
+  "timestamp": "2025-12-21T09:30:57.963225-05:00",
+  "search_results": {
+    "Are there safety observations related to temperature?": {
+      "query": "Are there safety observations related to temperature?",
+      "hits": [
+        "c360.logistics.sensor.document.water.sensor-water-001",
+        "c360.logistics.sensor.document.humidity.sensor-humid-001",
+        "c360.logistics.observation.record.low.obs-006",
+        "c360.logistics.observation.record.critical.obs-004",
+        "c360.logistics.sensor.document.power.sensor-power-001",
+        "c360.logistics.observation.record.high.obs-008",
+        "c360.logistics.observation.record.high.obs-013",
+        "c360.logistics.content.document.quality.doc-quality-001",
+        "c360.logistics.content.document.environment.doc-env-001",
+        "c360.logistics.content.document.compliance.doc-audit-001"
+      ],
+      "scores": [
+        0.5615905888981128,
+        0.5615905888981128,
+        0.5615905888981128,
+        0.5615905888981128,
+        0.5615905888981128,
+        0.5615905888981128,
+        0.5615905888981128,
+        0.5615905888981128,
+        0.5615905888981128,
+        0.5615905888981128
+      ],
+      "latency_ms": 10,
+      "hit_count": 10
+    },
+    "Find all sensors in zone-a": {
+      "query": "Find all sensors in zone-a",
+      "hits": [
+        "c360.logistics.observation.record.medium.obs-015",
+        "c360.logistics.content.document.maintenance.doc-maint-001",
+        "c360.logistics.content.document.inventory.doc-inventory-001",
+        "c360.logistics.content.document.training.doc-training-001",
+        "c360.logistics.sensor.document.weight.sensor-weight-001",
+        "c360.logistics.sensor.document.vibration.sensor-vibration-001",
+        "c360.logistics.observation.record.medium.obs-009",
+        "c360.logistics.content.document.safety.doc-emergency-001",
+        "c360.logistics.observation.record.low.obs-014",
+        "c360.logistics.sensor.document.door.sensor-door-001"
+      ],
+      "scores": [
+        0.5119974996895498,
+        0.5119974996895498,
+        0.5119974996895498,
+        0.5119974996895498,
+        0.5119974996895498,
+        0.5119974996895498,
+        0.5119974996895498,
+        0.5119974996895498,
+        0.5119974996895498,
+        0.5119974996895498
+      ],
+      "latency_ms": 15,
+      "hit_count": 10
+    },
+    "What documents mention forklift safety?": {
+      "query": "What documents mention forklift safety?",
+      "hits": [
+        "c360.logistics.observation.record.medium.obs-002",
+        "c360.logistics.observation.record.high.obs-010",
+        "c360.logistics.content.document.operations.doc-ops-001",
+        "c360.logistics.content.document.logistics.doc-shipping-001",
+        "c360.logistics.sensor.document.temperature.sensor-temp-003",
+        "c360.logistics.sensor.document.air_quality.sensor-air-001",
+        "c360.logistics.sensor.document.gas.sensor-gas-001",
+        "c360.logistics.observation.record.medium.obs-011",
+        "c360.logistics.content.document.safety.doc-safety-001",
+        "c360.logistics.content.document.human_resources.doc-hr-001"
+      ],
+      "scores": [
+        0.7289711480271859,
+        0.7289711480271859,
+        0.7289711480271859,
+        0.7289711480271859,
+        0.7289711480271859,
+        0.7289711480271859,
+        0.7289711480271859,
+        0.7289711480271859,
+        0.7289711480271859,
+        0.7289711480271859
+      ],
+      "latency_ms": 37,
+      "hit_count": 10
+    },
+    "What maintenance was done on cold storage equipment?": {
+      "query": "What maintenance was done on cold storage equipment?",
+      "hits": [
+        "c360.logistics.sensor.document.vibration.sensor-vibration-001",
+        "c360.logistics.observation.record.medium.obs-009",
+        "c360.logistics.content.document.safety.doc-emergency-001",
+        "c360.logistics.observation.record.low.obs-014",
+        "c360.logistics.sensor.document.door.sensor-door-001",
+        "c360.logistics.observation.record.high.obs-005",
+        "c360.logistics.observation.record.medium.obs-003",
+        "c360.logistics.observation.record.medium.obs-007",
+        "c360.logistics.observation.record.critical.obs-012",
+        "c360.logistics.content.document.technology.doc-it-001"
+      ],
+      "scores": [
+        0.5771520574547985,
+        0.5771520574547985,
+        0.5771520574547985,
+        0.5771520574547985,
+        0.5771520574547985,
+        0.5771520574547985,
+        0.5771520574547985,
+        0.5771520574547985,
+        0.5771520574547985,
+        0.5771520574547985
+      ],
+      "latency_ms": 14,
+      "hit_count": 10
+    }
+  }
+}

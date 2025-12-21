@@ -445,12 +445,27 @@
       "name": "graph-processor",
       "enabled": true,
       "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "objectstore_in",
+              "subject": "objectstore.stored.entity",
+              "type": "jetstream",
+              "interface": "storage.stored.v1",
+              "description": "Stored document entity events from ObjectStore"
+            },
+            {
+              "name": "sensor_in",
+              "subject": "sensor.processed.entity",
+              "type": "jetstream",
+              "interface": "iot.sensor.v1",
+              "description": "Sensor entity events from IoT processor"
+            }
+          ],
+          "outputs": []
+        },
         "workers": 8,
         "queue_size": 5000,
-        "input_subjects": [
-          "objectstore.stored.entity",
-          "sensor.processed.entity"
-        ],
         "message_handler": {
           "processing_timeout": "5s",
           "max_retries": 5
@@ -534,6 +549,15 @@
             "enabled": true,
             "min_community_size": 2,
             "max_inferred_per_community": 50
+          }
+        },
+        "gateway": {
+          "graphql": {
+            "enabled": true,
+            "bind_address": ":8084",
+            "path": "/graphql",
+            "enable_playground": true,
+            "timeout": "30s"
           }
         }
       }

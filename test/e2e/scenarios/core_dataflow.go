@@ -224,12 +224,13 @@ func (s *CoreDataflowScenario) executeValidateProcessing(ctx context.Context, re
 	case <-time.After(s.config.ValidationDelay):
 	}
 
+	containerName := "semstreams-e2e-app"
+	filePattern := "/tmp/streamkit-test*.jsonl"
+
 	// Check file output - the file component writes to /tmp/streamkit-test*.jsonl
-	// Use docker exec to count lines in the output file(s)
-	lineCount, err := s.client.CountFileOutputLines(ctx, "semstreams-e2e-app", "/tmp/streamkit-test*.jsonl")
+	lineCount, err := s.client.CountFileOutputLines(ctx, containerName, filePattern)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("File check failed: %v", err))
-		// Fall back to component-only validation
 		return s.executeValidateComponentsOnly(ctx, result)
 	}
 
@@ -242,11 +243,85 @@ func (s *CoreDataflowScenario) executeValidateProcessing(ctx context.Context, re
 		return fmt.Errorf("insufficient output: %d lines < %d minimum", lineCount, s.config.MinProcessed)
 	}
 
+	// Content validation: verify JSON structure and filter behavior
+	contentIssues := s.validateOutputContent(ctx, result, containerName, filePattern)
+	if len(contentIssues) > 0 {
+		for _, issue := range contentIssues {
+			result.Warnings = append(result.Warnings, issue)
+		}
+	}
+
 	result.Details["file_validation"] = fmt.Sprintf(
 		"Verified %d lines written to file output (minimum: %d)",
 		lineCount, s.config.MinProcessed)
 
 	return nil
+}
+
+// validateOutputContent validates the content of file output lines
+func (s *CoreDataflowScenario) validateOutputContent(
+	ctx context.Context,
+	result *Result,
+	containerName, filePattern string,
+) []string {
+	var issues []string
+
+	// Get actual lines for content validation (limit to 20 for performance)
+	lines, err := s.client.GetFileOutputLines(ctx, containerName, filePattern, 20)
+	if err != nil || len(lines) == 0 {
+		issues = append(issues, "Could not retrieve file output lines for content validation")
+		return issues
+	}
+
+	validJSON := 0
+	invalidJSON := 0
+	hasValueField := 0
+	valuesAboveFilter := 0 // Values that passed the filter (> 50)
+
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+
+		var msg map[string]any
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			invalidJSON++
+			continue
+		}
+		validJSON++
+
+		// Check for expected fields
+		if val, ok := msg["value"]; ok {
+			hasValueField++
+			// Verify filter behavior: values should be > 50 if filter is active
+			if numVal, ok := val.(float64); ok && numVal > 50 {
+				valuesAboveFilter++
+			}
+		}
+	}
+
+	result.Metrics["content_valid_json"] = validJSON
+	result.Metrics["content_invalid_json"] = invalidJSON
+	result.Metrics["content_has_value_field"] = hasValueField
+	result.Metrics["content_values_above_filter"] = valuesAboveFilter
+
+	result.Details["content_validation"] = map[string]any{
+		"lines_checked":       len(lines),
+		"valid_json":          validJSON,
+		"invalid_json":        invalidJSON,
+		"has_value_field":     hasValueField,
+		"values_above_filter": valuesAboveFilter,
+	}
+
+	if invalidJSON > 0 {
+		issues = append(issues, fmt.Sprintf("%d/%d lines had invalid JSON", invalidJSON, len(lines)))
+	}
+
+	if hasValueField == 0 && validJSON > 0 {
+		issues = append(issues, "No output messages have 'value' field - may indicate mapping issue")
+	}
+
+	return issues
 }
 
 // executeValidateComponentsOnly is a fallback validation that only checks component health

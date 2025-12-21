@@ -8,9 +8,7 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/examples/processors/document"
 	iotsensor "github.com/c360/semstreams/examples/processors/iot_sensor"
-	gatewaygraphql "github.com/c360/semstreams/gateway/graphql"
 	gatewayhttp "github.com/c360/semstreams/gateway/http"
-	gatewaymcp "github.com/c360/semstreams/gateway/mcp"
 	fileinput "github.com/c360/semstreams/input/file"
 	"github.com/c360/semstreams/input/udp"
 	websocketinput "github.com/c360/semstreams/input/websocket"
@@ -40,12 +38,10 @@ import (
 //   - HTTP POST output (webhooks)
 //   - WebSocket output (broadcasting)
 //   - HTTP gateway (bidirectional HTTP ↔ NATS request/reply)
-//   - GraphQL gateway (schema-driven queries for AI agents)
-//   - MCP gateway (AI agent integration via in-process GraphQL)
 //
 // Semantic Layer (domain agnostic):
-//   - Graph processor (entity graph operations)
-//   - Context processor (context enrichment)
+//   - Graph processor (entity graph operations with optional GraphQL/MCP gateway output ports)
+//   - Rule processor (rule-based transformations)
 //
 // Domain Layer (example processors):
 //   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
@@ -115,16 +111,10 @@ func Register(registry *component.Registry) error {
 	}
 
 	// Protocol Layer - Gateways
+	// Note: GraphQL and MCP gateways are now output ports of the graph processor,
+	// not standalone components. They are configured via graph processor's gateway config.
 	if err := gatewayhttp.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "HTTP gateway component registration")
-	}
-
-	if err := gatewaygraphql.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "GraphQL gateway component registration")
-	}
-
-	if err := gatewaymcp.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "MCP gateway component registration")
 	}
 
 	// Semantic Layer - Processors

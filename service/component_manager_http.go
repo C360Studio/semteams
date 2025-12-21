@@ -686,22 +686,35 @@ func (cm *ComponentManager) handleFlowValidation(w http.ResponseWriter, r *http.
 		return
 	}
 
+	graph := cm.GetFlowGraph()
 	analysis := cm.ValidateFlowConnectivity()
+
+	// Check for stream requirement issues (JetStream subscribers connected to NATS publishers)
+	streamWarnings := graph.ValidateStreamRequirements()
+
+	// Determine validation status including stream requirement issues
+	validationStatus := analysis.ValidationStatus
+	if len(streamWarnings) > 0 {
+		validationStatus = "critical" // Stream requirement issues are critical
+	}
 
 	// Add additional metadata for E2E testing
 	response := map[string]any{
 		"timestamp":            time.Now().UTC(),
-		"validation_status":    analysis.ValidationStatus,
+		"validation_status":    validationStatus,
 		"connected_components": analysis.ConnectedComponents,
 		"connected_edges":      analysis.ConnectedEdges,
 		"disconnected_nodes":   analysis.DisconnectedNodes,
 		"orphaned_ports":       analysis.OrphanedPorts,
+		"stream_warnings":      streamWarnings,
 		"summary": map[string]any{
-			"total_components":        len(cm.GetFlowGraph().GetNodes()),
+			"total_components":        len(graph.GetNodes()),
 			"total_connections":       len(analysis.ConnectedEdges),
 			"component_groups":        len(analysis.ConnectedComponents),
 			"orphaned_port_count":     len(analysis.OrphanedPorts),
 			"disconnected_node_count": len(analysis.DisconnectedNodes),
+			"stream_warning_count":    len(streamWarnings),
+			"has_stream_issues":       len(streamWarnings) > 0,
 		},
 	}
 

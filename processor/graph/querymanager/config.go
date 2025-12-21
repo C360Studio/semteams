@@ -331,6 +331,9 @@ func (c *Config) setQueryDefaults() {
 	if c.Query.MaxConcurrency == 0 {
 		c.Query.MaxConcurrency = 10
 	}
+	if c.Query.MaxPathLength == 0 {
+		c.Query.MaxPathLength = 20
+	}
 }
 
 // setTimeoutDefaults sets default values for timeout configuration

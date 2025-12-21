@@ -27,6 +27,8 @@ import (
 	"github.com/c360/semstreams/pkg/worker"
 	"github.com/c360/semstreams/processor/graph/clustering"
 	"github.com/c360/semstreams/processor/graph/datamanager"
+	graphqlgateway "github.com/c360/semstreams/processor/graph/gateway/graphql"
+	mcpgateway "github.com/c360/semstreams/processor/graph/gateway/mcp"
 	"github.com/c360/semstreams/processor/graph/indexmanager"
 	"github.com/c360/semstreams/processor/graph/inference"
 	"github.com/c360/semstreams/processor/graph/llm"
@@ -130,6 +132,10 @@ type Processor struct {
 	inferenceOrchestrator *inference.Orchestrator
 	anomalyStorage        inference.Storage
 	reviewWorker          *inference.ReviewWorker
+
+	// Gateway servers (output ports for HTTP access to graph queries)
+	graphqlServer *graphqlgateway.Server
+	mcpServer     *mcpgateway.Server
 }
 
 // NewProcessor creates a new graph processor instance
@@ -153,7 +159,61 @@ func NewProcessor(deps ProcessorDeps) (*Processor, error) {
 			Type:    "semantic-processor",
 			Version: "1.0.0",
 		},
-		inputPorts: []component.Port{
+		health: component.HealthStatus{
+			Healthy:    true,
+			LastCheck:  time.Now(),
+			ErrorCount: 0,
+		},
+	}
+
+	// Build ports from config (standard pattern) or use defaults
+	p.inputPorts, p.outputPorts = p.buildPortsFromConfig()
+
+	return p, nil
+}
+
+// buildPortsFromConfig creates input/output ports from configuration.
+// If Ports is configured, builds dynamic ports from it.
+// Otherwise falls back to legacy InputSubjects or hardcoded defaults.
+func (p *Processor) buildPortsFromConfig() ([]component.Port, []component.Port) {
+	var inputPorts []component.Port
+	var outputPorts []component.Port
+
+	// Standard ports pattern: build from Ports config
+	if p.config.Ports != nil && len(p.config.Ports.Inputs) > 0 {
+		p.logger.Info("Building ports from Ports config",
+			"input_count", len(p.config.Ports.Inputs),
+			"output_count", len(p.config.Ports.Outputs))
+		inputPorts = p.buildInputPortsFromConfig()
+		outputPorts = p.buildOutputPortsFromConfig()
+		return inputPorts, outputPorts
+	}
+
+	// Log why we're using fallback
+	if p.config.Ports != nil {
+		p.logger.Warn("Ports configured but Inputs empty, using legacy fallback",
+			"ports_not_nil", true,
+			"inputs_nil", p.config.Ports.Inputs == nil,
+			"inputs_len", len(p.config.Ports.Inputs))
+	}
+
+	// Legacy: build from InputSubjects if configured
+	if len(p.config.InputSubjects) > 0 {
+		for i, subject := range p.config.InputSubjects {
+			port := component.Port{
+				Name:        fmt.Sprintf("input_%d", i),
+				Direction:   component.DirectionInput,
+				Description: fmt.Sprintf("Entity events from %s", subject),
+				Required:    i == 0, // First input is required
+				Config: component.JetStreamPort{
+					Subjects: []string{subject},
+				},
+			}
+			inputPorts = append(inputPorts, port)
+		}
+	} else {
+		// Hardcoded default fallback
+		inputPorts = []component.Port{
 			{
 				Name:        "entities_input",
 				Direction:   component.DirectionInput,
@@ -167,66 +227,217 @@ func NewProcessor(deps ProcessorDeps) (*Processor, error) {
 					},
 				},
 			},
-			{
-				Name:        "mutations_api",
-				Direction:   component.DirectionInput,
-				Description: "Request/Reply API for graph mutations",
-				Required:    false,
-				Config: component.NATSRequestPort{
-					Subject: "graph.mutations",
-					Timeout: "500ms",
+		}
+	}
+
+	// Always include mutations API as input
+	inputPorts = append(inputPorts, component.Port{
+		Name:        "mutations_api",
+		Direction:   component.DirectionInput,
+		Description: "Request/Reply API for graph mutations",
+		Required:    false,
+		Config: component.NATSRequestPort{
+			Subject: "graph.mutations",
+			Timeout: "500ms",
+		},
+	})
+
+	// Default output ports (KV buckets)
+	outputPorts = []component.Port{
+		{
+			Name:        "entity_states",
+			Direction:   component.DirectionOutput,
+			Description: "Writes entity states to ENTITY_STATES KV bucket",
+			Required:    false,
+			Config: component.KVWritePort{
+				Bucket: "ENTITY_STATES",
+				Interface: &component.InterfaceContract{
+					Type:    "graph.EntityState",
+					Version: "v1",
 				},
 			},
 		},
-		outputPorts: []component.Port{
-			{
-				Name:        "entity_states",
-				Direction:   component.DirectionOutput,
-				Description: "Writes entity states to ENTITY_STATES KV bucket",
-				Required:    false,
-				Config: component.KVWritePort{
-					Bucket: "ENTITY_STATES",
-					Interface: &component.InterfaceContract{
-						Type:    "graph.EntityState",
-						Version: "v1",
-					},
+		{
+			Name:        "predicate_index",
+			Direction:   component.DirectionOutput,
+			Description: "Writes predicate indexes to PREDICATE_INDEX KV bucket",
+			Required:    false,
+			Config: component.KVWritePort{
+				Bucket: "PREDICATE_INDEX",
+				Interface: &component.InterfaceContract{
+					Type:    "graph.PredicateEntry",
+					Version: "v1",
 				},
 			},
-			{
-				Name:        "predicate_index",
-				Direction:   component.DirectionOutput,
-				Description: "Writes predicate indexes to PREDICATE_INDEX KV bucket",
-				Required:    false,
-				Config: component.KVWritePort{
-					Bucket: "PREDICATE_INDEX",
-					Interface: &component.InterfaceContract{
-						Type:    "graph.PredicateEntry",
-						Version: "v1",
-					},
-				},
-			},
-			{
-				Name:        "entities_output",
-				Direction:   component.DirectionOutput,
-				Description: "Processed entity events for downstream consumers",
-				Required:    false,
-				Config: component.NATSPort{
-					Subject: "events.graph.processed",
-					Interface: &component.InterfaceContract{
-						Type:    "graph.Entity",
-						Version: "v1",
-					},
-				},
-			},
-		},
-		health: component.HealthStatus{
-			Healthy:    true,
-			LastCheck:  time.Now(),
-			ErrorCount: 0,
 		},
 	}
 
-	return p, nil
+	return inputPorts, outputPorts
+}
+
+// buildInputPortsFromConfig creates input ports from Ports.Inputs configuration
+func (p *Processor) buildInputPortsFromConfig() []component.Port {
+	var ports []component.Port
+
+	for _, def := range p.config.Ports.Inputs {
+		port := component.Port{
+			Name:        def.Name,
+			Direction:   component.DirectionInput,
+			Description: def.Description,
+			Required:    def.Required,
+		}
+
+		// Build appropriate port config based on type
+		switch def.Type {
+		case "jetstream":
+			port.Config = component.JetStreamPort{
+				Subjects:   []string{def.Subject},
+				StreamName: def.StreamName,
+				Interface: func() *component.InterfaceContract {
+					if def.Interface != "" {
+						return &component.InterfaceContract{Type: def.Interface, Version: "v1"}
+					}
+					return nil
+				}(),
+			}
+		case "nats":
+			port.Config = component.NATSPort{
+				Subject: def.Subject,
+				Interface: func() *component.InterfaceContract {
+					if def.Interface != "" {
+						return &component.InterfaceContract{Type: def.Interface, Version: "v1"}
+					}
+					return nil
+				}(),
+			}
+		case "nats-request":
+			timeout := def.Timeout
+			if timeout == "" {
+				timeout = "500ms"
+			}
+			port.Config = component.NATSRequestPort{
+				Subject: def.Subject,
+				Timeout: timeout,
+			}
+		case "kv-watch":
+			port.Config = component.KVWatchPort{
+				Bucket: def.Subject, // Subject field used for bucket name in KV context
+				Interface: func() *component.InterfaceContract {
+					if def.Interface != "" {
+						return &component.InterfaceContract{Type: def.Interface, Version: "v1"}
+					}
+					return nil
+				}(),
+			}
+		default:
+			// Default to NATS port
+			port.Config = component.NATSPort{
+				Subject: def.Subject,
+			}
+		}
+
+		ports = append(ports, port)
+	}
+
+	// Always include mutations API as input (standard for graph processor)
+	ports = append(ports, component.Port{
+		Name:        "mutations_api",
+		Direction:   component.DirectionInput,
+		Description: "Request/Reply API for graph mutations",
+		Required:    false,
+		Config: component.NATSRequestPort{
+			Subject: "graph.mutations",
+			Timeout: "500ms",
+		},
+	})
+
+	return ports
+}
+
+// buildOutputPortsFromConfig creates output ports from Ports.Outputs configuration
+func (p *Processor) buildOutputPortsFromConfig() []component.Port {
+	var ports []component.Port
+
+	for _, def := range p.config.Ports.Outputs {
+		port := component.Port{
+			Name:        def.Name,
+			Direction:   component.DirectionOutput,
+			Description: def.Description,
+			Required:    def.Required,
+		}
+
+		// Build appropriate port config based on type
+		switch def.Type {
+		case "jetstream":
+			port.Config = component.JetStreamPort{
+				Subjects:   []string{def.Subject},
+				StreamName: def.StreamName,
+				Interface: func() *component.InterfaceContract {
+					if def.Interface != "" {
+						return &component.InterfaceContract{Type: def.Interface, Version: "v1"}
+					}
+					return nil
+				}(),
+			}
+		case "nats":
+			port.Config = component.NATSPort{
+				Subject: def.Subject,
+				Interface: func() *component.InterfaceContract {
+					if def.Interface != "" {
+						return &component.InterfaceContract{Type: def.Interface, Version: "v1"}
+					}
+					return nil
+				}(),
+			}
+		case "kv-write":
+			port.Config = component.KVWritePort{
+				Bucket: def.Subject, // Subject field used for bucket name in KV context
+				Interface: func() *component.InterfaceContract {
+					if def.Interface != "" {
+						return &component.InterfaceContract{Type: def.Interface, Version: "v1"}
+					}
+					return nil
+				}(),
+			}
+		default:
+			// Default to NATS port
+			port.Config = component.NATSPort{
+				Subject: def.Subject,
+			}
+		}
+
+		ports = append(ports, port)
+	}
+
+	// Always include KV bucket outputs (standard for graph processor)
+	ports = append(ports, component.Port{
+		Name:        "entity_states",
+		Direction:   component.DirectionOutput,
+		Description: "Writes entity states to ENTITY_STATES KV bucket",
+		Required:    false,
+		Config: component.KVWritePort{
+			Bucket: "ENTITY_STATES",
+			Interface: &component.InterfaceContract{
+				Type:    "graph.EntityState",
+				Version: "v1",
+			},
+		},
+	})
+	ports = append(ports, component.Port{
+		Name:        "predicate_index",
+		Direction:   component.DirectionOutput,
+		Description: "Writes predicate indexes to PREDICATE_INDEX KV bucket",
+		Required:    false,
+		Config: component.KVWritePort{
+			Bucket: "PREDICATE_INDEX",
+			Interface: &component.InterfaceContract{
+				Type:    "graph.PredicateEntry",
+				Version: "v1",
+			},
+		},
+	})
+
+	return ports
 }
 
 // DefaultConfig returns default processor configuration
@@ -415,9 +626,14 @@ func (p *Processor) Start(ctx context.Context) error {
 	p.logger.Info("==== CRITICAL: Entered Start() method ====")
 
 	// Wait for JetStream streams to exist (created by StreamsManager or publisher components)
-	// Multi-stream mode: wait for all convention-derived streams
-	// Legacy mode: wait for single configured stream
-	if len(p.config.InputSubjects) > 0 {
+	// Standard ports mode: wait for streams from jetstream port definitions
+	// Legacy InputSubjects mode: wait for all convention-derived streams
+	// Legacy single stream mode: wait for single configured stream
+	if p.config.Ports != nil && len(p.config.Ports.Inputs) > 0 {
+		if err := p.waitForPortStreams(ctx); err != nil {
+			return err
+		}
+	} else if len(p.config.InputSubjects) > 0 {
 		if err := p.waitForInputSubjectStreams(ctx); err != nil {
 			return err
 		}
@@ -460,6 +676,11 @@ func (p *Processor) Start(ctx context.Context) error {
 	// NOW setup NATS subscriptions - subsystems ready to handle data
 	if err := p.setupNATSSubscriptions(ctx); err != nil {
 		return err
+	}
+
+	// Start gateway output ports (GraphQL/MCP) after QueryManager is ready
+	if err := p.startGateways(ctx); err != nil {
+		return errs.WrapFatal(err, "Processor", "Start", "gateway startup failed")
 	}
 
 	// Mark component as healthy LAST
@@ -661,7 +882,10 @@ func (p *Processor) startBackgroundModules(ctx context.Context) error {
 func (p *Processor) Stop(timeout time.Duration) error {
 	p.logger.Info("Waiting for graceful shutdown", "timeout", timeout)
 
-	// Stop background modules first
+	// Stop gateway output ports first (they depend on QueryManager)
+	p.stopGateways(timeout)
+
+	// Stop background modules
 	p.mu.Lock()
 	moduleCancel := p.moduleCancel
 	moduleDone := p.moduleDone
@@ -973,7 +1197,12 @@ func (p *Processor) getStreamSubjects() []string {
 }
 
 func (p *Processor) setupSubscriptions(ctx context.Context) error {
-	// Check for new multi-stream subscription mode (InputSubjects)
+	// Standard ports pattern: use Ports config if available
+	if p.config.Ports != nil && len(p.config.Ports.Inputs) > 0 {
+		return p.setupPortsSubscriptions(ctx)
+	}
+
+	// Legacy: check for multi-stream subscription mode (InputSubjects)
 	if len(p.config.InputSubjects) > 0 {
 		return p.setupMultiStreamSubscriptions(ctx)
 	}
@@ -1000,6 +1229,81 @@ func (p *Processor) setupSubscriptions(ctx context.Context) error {
 		return errs.WrapFatal(err, "Processor", "setupSubscriptions", "NATS subscription failed for "+subject)
 	}
 
+	return nil
+}
+
+// setupPortsSubscriptions sets up subscriptions based on Ports configuration.
+// This is the standard pattern - each input port definition specifies type and subject.
+func (p *Processor) setupPortsSubscriptions(ctx context.Context) error {
+	p.logger.Info("Setting up subscriptions from ports configuration",
+		"input_count", len(p.config.Ports.Inputs))
+
+	for _, portDef := range p.config.Ports.Inputs {
+		// Skip non-subscribable port types
+		if portDef.Type == "nats-request" || portDef.Type == "kv-watch" {
+			continue
+		}
+
+		subject := portDef.Subject
+		if subject == "" {
+			p.logger.Warn("Port has no subject, skipping", "port", portDef.Name)
+			continue
+		}
+
+		switch portDef.Type {
+		case "jetstream":
+			// JetStream subscription - derive stream name from subject
+			streamName := portDef.StreamName
+			if streamName == "" {
+				streamName = config.DeriveStreamName(subject)
+			}
+			if streamName == "" {
+				p.logger.Warn("Could not derive stream name from subject, using NATS",
+					"port", portDef.Name, "subject", subject)
+				if err := p.setupNATSSubscription(ctx, subject); err != nil {
+					return err
+				}
+				continue
+			}
+
+			// Wait for stream and setup consumer
+			if err := p.waitForStream(ctx, streamName); err != nil {
+				return errs.WrapFatal(err, "Processor", "setupPortsSubscriptions",
+					fmt.Sprintf("stream %s not available for port %s", streamName, portDef.Name))
+			}
+			if err := p.setupStreamConsumer(ctx, streamName, subject); err != nil {
+				return err
+			}
+
+		case "nats":
+			// Simple NATS subscription
+			if err := p.setupNATSSubscription(ctx, subject); err != nil {
+				return err
+			}
+
+		default:
+			p.logger.Warn("Unknown port type, treating as NATS",
+				"port", portDef.Name, "type", portDef.Type)
+			if err := p.setupNATSSubscription(ctx, subject); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// setupNATSSubscription creates a simple NATS subscription for a subject
+func (p *Processor) setupNATSSubscription(ctx context.Context, subject string) error {
+	p.logger.Info("Setting up NATS subscription", "subject", subject)
+
+	err := p.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
+		p.handleMessage(msgCtx, data)
+	})
+	if err != nil {
+		return errs.WrapFatal(err, "Processor", "setupNATSSubscription",
+			"NATS subscription failed for "+subject)
+	}
 	return nil
 }
 
@@ -1051,9 +1355,13 @@ func (p *Processor) setupMultiStreamSubscriptions(ctx context.Context) error {
 // setupStreamConsumer creates a JetStream consumer for a specific stream and filter subject.
 func (p *Processor) setupStreamConsumer(ctx context.Context, streamName, filterSubject string) error {
 	// Generate unique consumer name from stream and filter
+	// NATS consumer names cannot contain '.', '*', or '>' characters
+	sanitizedSubject := strings.ReplaceAll(filterSubject, ".", "-")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, "*", "all")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
 	consumerName := fmt.Sprintf("graph-%s-%s",
 		strings.ToLower(streamName),
-		strings.ReplaceAll(strings.ReplaceAll(filterSubject, ".", "-"), "*", "all"))
+		sanitizedSubject)
 
 	p.logger.Info("Setting up stream consumer",
 		"stream", streamName,
@@ -1076,6 +1384,46 @@ func (p *Processor) setupStreamConsumer(ctx context.Context, streamName, filterS
 	if err != nil {
 		return errs.WrapFatal(err, "Processor", "setupStreamConsumer",
 			fmt.Sprintf("consumer failed for stream %s filter %s", streamName, filterSubject))
+	}
+
+	return nil
+}
+
+// waitForPortStreams waits for all JetStream streams required by port definitions.
+// Only waits for ports with type="jetstream" - NATS ports don't require streams.
+func (p *Processor) waitForPortStreams(ctx context.Context) error {
+	streamSet := make(map[string]bool)
+
+	for _, portDef := range p.config.Ports.Inputs {
+		// Only jetstream ports require waiting for streams
+		if portDef.Type != "jetstream" {
+			continue
+		}
+
+		// Use explicit stream name if provided, otherwise derive from subject
+		streamName := portDef.StreamName
+		if streamName == "" {
+			streamName = config.DeriveStreamName(portDef.Subject)
+		}
+		if streamName != "" {
+			streamSet[streamName] = true
+		}
+	}
+
+	if len(streamSet) == 0 {
+		p.logger.Debug("No JetStream ports configured, skipping stream wait")
+		return nil
+	}
+
+	p.logger.Info("Waiting for port streams",
+		"stream_count", len(streamSet))
+
+	for streamName := range streamSet {
+		if err := p.waitForStream(ctx, streamName); err != nil {
+			p.logger.Error("Stream not available", "stream", streamName, "error", err)
+			return errs.WrapFatal(err, "Processor", "waitForPortStreams",
+				"stream "+streamName+" not available")
+		}
 	}
 
 	return nil
@@ -2325,6 +2673,151 @@ func (p *Processor) runReviewWorker(ctx context.Context) error {
 	return err
 }
 
+// startGateways starts the GraphQL and MCP gateway servers if configured.
+// This must be called after QueryManager is ready.
+func (p *Processor) startGateways(ctx context.Context) error {
+	if p.config.Gateway == nil {
+		return nil
+	}
+
+	// Start GraphQL gateway if enabled
+	if p.config.Gateway.GraphQL != nil && p.config.Gateway.GraphQL.Enabled {
+		if err := p.startGraphQLGateway(ctx); err != nil {
+			return fmt.Errorf("graphql gateway: %w", err)
+		}
+	}
+
+	// Start MCP gateway if enabled
+	if p.config.Gateway.MCP != nil && p.config.Gateway.MCP.Enabled {
+		if err := p.startMCPGateway(ctx); err != nil {
+			return fmt.Errorf("mcp gateway: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// startGraphQLGateway creates and starts the GraphQL gateway server.
+func (p *Processor) startGraphQLGateway(ctx context.Context) error {
+	config := *p.config.Gateway.GraphQL
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
+	// Create metrics recorder for GraphQL operations
+	metricsRecorder := graphqlgateway.NewMetricsRecorder(p.logger.With("component", "graphql-metrics"))
+
+	// Create resolver with direct QueryManager access
+	resolver := graphqlgateway.NewResolver(p.queryManager, metricsRecorder)
+
+	// Create server
+	server, err := graphqlgateway.NewServer(config, resolver, p.logger.With("gateway", "graphql"))
+	if err != nil {
+		return fmt.Errorf("create server: %w", err)
+	}
+
+	// Setup routes
+	if err := server.Setup(); err != nil {
+		return fmt.Errorf("setup server: %w", err)
+	}
+
+	p.graphqlServer = server
+
+	// Start server in background goroutine
+	ready := make(chan struct{})
+	go func() {
+		if err := server.Start(ctx, ready); err != nil {
+			p.logger.Error("GraphQL gateway error", "error", err)
+		}
+	}()
+
+	// Wait for server to be ready
+	select {
+	case <-ready:
+		p.logger.Info("GraphQL gateway started",
+			"address", config.BindAddress,
+			"path", config.Path)
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("server failed to start within timeout")
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	return nil
+}
+
+// startMCPGateway creates and starts the MCP gateway server.
+func (p *Processor) startMCPGateway(ctx context.Context) error {
+	config := *p.config.Gateway.MCP
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("invalid config: %w", err)
+	}
+
+	// Create metrics recorder and GraphQL resolver/executor for MCP to use
+	metricsRecorder := graphqlgateway.NewMetricsRecorder(p.logger.With("component", "mcp-metrics"))
+	resolver := graphqlgateway.NewResolver(p.queryManager, metricsRecorder)
+	executor, err := graphqlgateway.NewExecutor(resolver, p.logger.With("component", "mcp-executor"))
+	if err != nil {
+		return fmt.Errorf("create executor: %w", err)
+	}
+
+	// Create MCP server (no metrics recorder for now)
+	server, err := mcpgateway.NewServer(config, executor, nil, p.logger.With("gateway", "mcp"))
+	if err != nil {
+		return fmt.Errorf("create server: %w", err)
+	}
+
+	// Setup routes
+	if err := server.Setup(); err != nil {
+		return fmt.Errorf("setup server: %w", err)
+	}
+
+	p.mcpServer = server
+
+	// Start server in background goroutine
+	ready := make(chan struct{})
+	go func() {
+		if err := server.Start(ctx, ready); err != nil {
+			p.logger.Error("MCP gateway error", "error", err)
+		}
+	}()
+
+	// Wait for server to be ready
+	select {
+	case <-ready:
+		p.logger.Info("MCP gateway started",
+			"address", config.BindAddress,
+			"path", config.Path)
+	case <-time.After(5 * time.Second):
+		return fmt.Errorf("server failed to start within timeout")
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	return nil
+}
+
+// stopGateways stops the GraphQL and MCP gateway servers.
+func (p *Processor) stopGateways(timeout time.Duration) {
+	// Stop MCP gateway first (it depends on GraphQL executor)
+	if p.mcpServer != nil {
+		if err := p.mcpServer.Stop(timeout); err != nil {
+			p.logger.Warn("Error stopping MCP gateway", "error", err)
+		}
+		p.mcpServer = nil
+		p.logger.Info("MCP gateway stopped")
+	}
+
+	// Stop GraphQL gateway
+	if p.graphqlServer != nil {
+		if err := p.graphqlServer.Stop(timeout); err != nil {
+			p.logger.Warn("Error stopping GraphQL gateway", "error", err)
+		}
+		p.graphqlServer = nil
+		p.logger.Info("GraphQL gateway stopped")
+	}
+}
+
 // Register registers the graph processor component with the given registry.
 func Register(registry *component.Registry) error {
 	return registry.RegisterWithConfig(component.RegistrationConfig{
@@ -2344,6 +2837,24 @@ func CreateGraphProcessor(rawConfig json.RawMessage, deps component.Dependencies
 	var config Config
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
 		return nil, errs.WrapInvalid(err, "Processor", "ConfigFromJSON", "invalid JSON configuration")
+	}
+
+	// Debug: Log ports config parsing
+	if deps.Logger != nil {
+		if config.Ports != nil {
+			deps.Logger.Info("CreateGraphProcessor: Ports config parsed",
+				"inputs_count", len(config.Ports.Inputs),
+				"outputs_count", len(config.Ports.Outputs))
+			for i, input := range config.Ports.Inputs {
+				deps.Logger.Info("CreateGraphProcessor: Input port",
+					"index", i,
+					"name", input.Name,
+					"subject", input.Subject,
+					"type", input.Type)
+			}
+		} else {
+			deps.Logger.Warn("CreateGraphProcessor: Ports config is NIL")
+		}
 	}
 
 	processorDeps := ProcessorDeps{

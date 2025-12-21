@@ -18,7 +18,6 @@ type PlatformMeta = types.PlatformMeta
 // components to receive properly structured dependencies rather than individual fields.
 type Dependencies struct {
 	NATSClient      *natsclient.Client      // NATS client for messaging
-	QueryManager    any                     // Query manager for graph queries (type: querymanager.Querier, can be nil)
 	MetricsRegistry *metric.MetricsRegistry // Metrics registry for Prometheus (can be nil)
 	Logger          *slog.Logger            // Structured logger (can be nil, defaults to slog.Default())
 	Platform        PlatformMeta            // Platform identity (organization and platform)

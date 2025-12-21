@@ -20,9 +20,8 @@ type CoreHealthScenario struct {
 // CoreHealthConfig contains configuration for core health check
 type CoreHealthConfig struct {
 	// Validation thresholds
-	RequireAllHealthy    bool          `json:"require_all_healthy"`
-	MinHealthyComponents int           `json:"min_healthy_components"`
-	MaxStartupTime       time.Duration `json:"max_startup_time"`
+	RequireAllHealthy    bool `json:"require_all_healthy"`
+	MinHealthyComponents int  `json:"min_healthy_components"`
 
 	// Required core components
 	RequiredComponents []string `json:"required_components"`
@@ -33,7 +32,6 @@ func DefaultCoreHealthConfig() *CoreHealthConfig {
 	return &CoreHealthConfig{
 		RequireAllHealthy:    true,
 		MinHealthyComponents: 8, // UDP, JSONGeneric, JSONFilter, JSONMap, File, HTTP POST, WebSocket, ObjectStore
-		MaxStartupTime:       10 * time.Second,
 		RequiredComponents: []string{
 			// Input (network)
 			"udp",

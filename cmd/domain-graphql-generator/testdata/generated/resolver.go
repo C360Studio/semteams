@@ -4,16 +4,17 @@ package robotapi
 
 import (
 	"context"
-	"github.com/c360/semstreams/gateway/graphql"
+
+	"github.com/c360/semstreams/processor/graph/gateway/graphql"
 )
 
 // Resolver is the root resolver
 type Resolver struct {
-	base *graphql.BaseResolver
+	base *graphql.Resolver
 }
 
 // NewResolver creates a new resolver
-func NewResolver(base *graphql.BaseResolver) *Resolver {
+func NewResolver(base *graphql.Resolver) *Resolver {
 	return &Resolver{base: base}
 }
 

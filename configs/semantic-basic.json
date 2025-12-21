@@ -90,9 +90,20 @@
       "name": "graph-processor",
       "enabled": true,
       "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "sensor_in",
+              "subject": "sensor.processed.entity",
+              "type": "jetstream",
+              "interface": "iot.sensor.v1",
+              "description": "Sensor entity events from IoT processor"
+            }
+          ],
+          "outputs": []
+        },
         "workers": 4,
         "queue_size": 1000,
-        "input_subjects": ["sensor.processed.entity"],
         "message_handler": {
           "processing_timeout": "5s",
           "max_retries": 3

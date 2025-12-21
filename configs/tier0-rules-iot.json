@@ -110,7 +110,7 @@
             {
               "name": "sensor_out",
               "subject": "events.graph.entity.sensor",
-              "type": "nats",
+              "type": "jetstream",
               "interface": "iot.sensor.v1"
             }
           ]
@@ -295,11 +295,20 @@
       "name": "graph-processor",
       "enabled": true,
       "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "events_in",
+              "subject": "events.graph.entity.>",
+              "type": "jetstream",
+              "interface": "graph.Entity",
+              "description": "Entity events from upstream processors"
+            }
+          ],
+          "outputs": []
+        },
         "workers": 4,
         "queue_size": 1000,
-        "input_subject": "events.graph.entity.*",
-        "stream_name": "GRAPH_EVENTS",
-        "consumer_name": "graph-processor",
         "message_handler": {
           "processing_timeout": "5s",
           "max_retries": 3
@@ -346,6 +355,15 @@
         },
         "clustering": {
           "enabled": false
+        },
+        "gateway": {
+          "graphql": {
+            "enabled": true,
+            "bind_address": ":8082",
+            "path": "/graphql",
+            "enable_playground": true,
+            "timeout": "30s"
+          }
         }
       }
     },

@@ -3,7 +3,7 @@
 package robotapi
 
 import (
-	"github.com/c360/semstreams/gateway/graphql"
+	"github.com/c360/semstreams/processor/graph/gateway/graphql"
 )
 
 // entityRobot converts Entity to GraphQL Robot
@@ -13,12 +13,12 @@ func entityRobot(e *graphql.Entity) (*Robot, error) {
 	}
 
 	return &Robot{
-		ID: getID(e),
-		Name: getName(e),
-		Status: getStatus(e),
+		ID:       getID(e),
+		Name:     getName(e),
+		Status:   getStatus(e),
 		Location: getLocation(e),
-		Model: getModel(e),
-		Tasks: nil /* TODO: implement QueryRelationships resolver */,
+		Model:    getModel(e),
+		Tasks:    nil, /* TODO: implement QueryRelationships resolver */
 	}, nil
 }
 
@@ -42,12 +42,12 @@ func entityTask(e *graphql.Entity) (*Task, error) {
 	}
 
 	return &Task{
-		Title: getTitle(e),
-		AssignedRobots: nil /* TODO: implement QueryRelationships resolver */,
-		ID: getID(e),
-		Description: getDescription(e),
-		Status: getStatus(e),
-		Priority: getPriority(e),
+		Title:          getTitle(e),
+		AssignedRobots: nil, /* TODO: implement QueryRelationships resolver */
+		ID:             getID(e),
+		Description:    getDescription(e),
+		Status:         getStatus(e),
+		Priority:       getPriority(e),
 	}, nil
 }
 

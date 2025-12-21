@@ -158,7 +158,6 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Println("  e2e:structural  - Rules + structural inference (~30s)")
 	fmt.Println("  e2e:statistical - BM25 + community detection (~60s)")
 	fmt.Println("  e2e:semantic    - Neural embeddings + LLM (~90s)")
-	fmt.Println("  e2e:gateway     - GraphQL + MCP APIs (~20s)")
 	fmt.Println("")
 	fmt.Println("Individual Scenarios:")
 	fmt.Println("")
@@ -171,10 +170,6 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Println("    tiered --variant structural  - Rules-only, ZERO embeddings/clusters")
 	fmt.Println("    tiered --variant statistical - BM25 embeddings, no external ML")
 	fmt.Println("    tiered --variant semantic    - Neural embeddings + LLM summaries")
-	fmt.Println("")
-	fmt.Println("  Gateway:")
-	fmt.Println("    gateway-graphql   - GraphQL operations")
-	fmt.Println("    gateway-mcp       - MCP protocol via SSE")
 	fmt.Println("")
 	fmt.Println("Variant flag (for tiered scenario):")
 	fmt.Println("  --variant structural  - Rules-only, validates ZERO ML inference")
@@ -242,9 +237,6 @@ func runScenarios(
 	} else if flags.scenarioName == "rules" {
 		logger.Info("Running all rule processor scenarios...")
 		return runRulesScenarios(ctx, logger, edgeClient, flags.udpEndpoint)
-	} else if flags.scenarioName == "gateway" {
-		logger.Info("Running all gateway scenarios...")
-		return runGatewayScenarios(ctx, logger, edgeClient, flags.baseURL)
 	}
 
 	// Run specific scenario
@@ -304,14 +296,14 @@ func createScenario(
 		case "ml":
 			cfg.Variant = "semantic"
 		}
+		// Set GraphQL URL based on variant (different ports per docker profile)
+		switch cfg.Variant {
+		case "semantic":
+			cfg.GraphQLURL = "http://localhost:8182/graphql"
+		default:
+			cfg.GraphQLURL = "http://localhost:8082/graphql"
+		}
 		return scenarios.NewTieredScenario(edgeClient, flags.udpEndpoint, cfg)
-
-	// Gateway scenarios
-	case "gateway-graphql", "graphql":
-		return scenarios.NewGraphQLGatewayScenario(edgeClient, flags.baseURL, nil)
-	case "gateway-mcp", "mcp":
-		mcpURL := "http://localhost:8081"
-		return scenarios.NewMCPGatewayScenario(edgeClient, mcpURL, nil)
 
 	default:
 		return nil
@@ -465,45 +457,6 @@ func runRulesScenarios(
 	}
 
 	logger.Info("Structural tier test suite complete",
-		"passed", passed,
-		"failed", failed,
-		"total", len(tests))
-
-	if failed > 0 {
-		return 1
-	}
-	return 0
-}
-
-// runGatewayScenarios executes all gateway scenarios
-func runGatewayScenarios(
-	ctx context.Context,
-	logger *slog.Logger,
-	obsClient *client.ObservabilityClient,
-	baseURL string,
-) int {
-	tests := []scenarios.Scenario{
-		scenarios.NewGraphQLGatewayScenario(obsClient, baseURL, nil),
-		scenarios.NewMCPGatewayScenario(obsClient, "http://localhost:8081", nil),
-	}
-
-	passed := 0
-	failed := 0
-
-	for _, scenario := range tests {
-		logger.Info("Running gateway scenario", "name", scenario.Name())
-		exitCode := runScenario(ctx, logger, scenario)
-
-		if exitCode == 0 {
-			passed++
-			logger.Info("Gateway scenario PASSED", "name", scenario.Name())
-		} else {
-			failed++
-			logger.Error("Gateway scenario FAILED", "name", scenario.Name())
-		}
-	}
-
-	logger.Info("Gateway test suite complete",
 		"passed", passed,
 		"failed", failed,
 		"total", len(tests))

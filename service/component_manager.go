@@ -1266,21 +1266,8 @@ func (cm *ComponentManager) buildComponentDependencies() component.Dependencies 
 		}
 	}
 
-	// Try to get QueryManager from graph processor if it exists and is initialized
-	var queryMgr any
-	cm.mu.RLock()
-	if graphProcessor, exists := cm.components["graph-processor"]; exists {
-		// Type assert to interface with GetQueryManager() method
-		// Note: Using any to avoid import cycles with processor/graph/querymanager
-		if processor, ok := graphProcessor.Component.(interface{ GetQueryManager() any }); ok {
-			queryMgr = processor.GetQueryManager()
-		}
-	}
-	cm.mu.RUnlock()
-
 	deps := component.Dependencies{
 		NATSClient:      cm.natsClient,
-		QueryManager:    queryMgr,
 		MetricsRegistry: cm.BaseService.metricsRegistry,
 		Logger:          cm.BaseService.logger,
 		Platform: component.PlatformMeta{

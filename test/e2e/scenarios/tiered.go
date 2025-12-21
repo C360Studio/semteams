@@ -57,6 +57,7 @@ type TieredConfig struct {
 	MetricsURL          string `json:"metrics_url"`
 	ServiceManagerURL   string `json:"service_manager_url"`
 	GatewayURL          string `json:"gateway_url"`
+	GraphQLURL          string `json:"graphql_url"` // GraphQL endpoint (port varies by profile)
 
 	// Comparison output configuration
 	OutputDir string `json:"output_dir"`
@@ -105,6 +106,7 @@ func DefaultTieredConfig() *TieredConfig {
 		MetricsURL:           config.DefaultEndpoints.Metrics,
 		ServiceManagerURL:    config.DefaultEndpoints.HTTP,
 		GatewayURL:           config.DefaultEndpoints.HTTP + "/api-gateway",
+		GraphQLURL:           "http://localhost:8082/graphql", // Default for statistical profile
 		OutputDir:            "test/e2e/results",
 		MaxRegressionPercent: 20.0, // 20% regression threshold
 		// Structural tier defaults (from tier0_rules_iot.go)
@@ -155,6 +157,13 @@ func (s *TieredScenario) Description() string {
 
 // Setup prepares the scenario
 func (s *TieredScenario) Setup(ctx context.Context) error {
+	// Pre-flight: Validate flowgraph configuration before running tests
+	// This catches issues like JetStream subscribers connected to NATS publishers
+	// which would cause components to hang waiting for streams that never get created
+	if err := s.client.CheckFlowHealth(ctx); err != nil {
+		return fmt.Errorf("flowgraph pre-flight validation failed: %w", err)
+	}
+
 	// Verify UDP endpoint is reachable
 	conn, err := net.Dial("udp", s.udpAddr)
 	if err != nil {
@@ -203,11 +212,15 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"validate-zero-clusters", s.executeValidateZeroClusters, []string{"structural"}},
 		{"validate-rule-transitions", s.executeValidateRuleTransitions, []string{"structural"}},
 
-		// Statistical and Semantic stages (skip for structural)
+		// Statistical and Semantic stages (require QueryManager via graph processor)
+		{"test-pathrag", s.executeTestPathRAG, []string{"statistical", "semantic"}},
 		{"test-semantic-search", s.executeTestSemanticSearch, []string{"statistical", "semantic"}},
 		{"verify-search-quality", s.executeVerifySearchQuality, []string{"statistical", "semantic"}},
 		{"test-http-gateway", s.executeTestHTTPGateway, []string{"statistical", "semantic"}},
 		{"test-embedding-fallback", s.executeTestEmbeddingFallback, []string{"statistical", "semantic"}},
+		{"test-graphrag-local", s.executeTestGraphRAGLocal, []string{"statistical", "semantic"}},
+		{"test-graphrag-global", s.executeTestGraphRAGGlobal, []string{"statistical", "semantic"}},
+		{"validate-community-structure", s.executeValidateCommunityStructure, []string{"statistical", "semantic"}},
 
 		// Variant comparison stages
 		{"compare-statistical-semantic", s.executeCompareStatisticalSemantic, []string{"statistical", "semantic"}},
@@ -349,21 +362,30 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 		return fmt.Errorf("component verification failed: %w", err)
 	}
 
-	// Input components
-	inputComponents := []string{"udp"}
-	// Domain processors (document_processor, iot_sensor handle domain-specific data)
-	domainProcessors := []string{"document_processor", "iot_sensor"}
-	// Semantic components (rule processor + graph processor)
-	semanticComponents := []string{"rule", "graph"}
-	// Output components
-	outputComponents := []string{"file", "httppost", "websocket", "objectstore"}
-	// Gateway components (use instance names from config, not factory names)
-	gatewayComponents := []string{"api-gateway"}
+	var allRequired []string
 
-	allRequired := append(inputComponents, domainProcessors...)
-	allRequired = append(allRequired, semanticComponents...)
-	allRequired = append(allRequired, outputComponents...)
-	allRequired = append(allRequired, gatewayComponents...)
+	// Structural tier uses minimal tier0-rules-iot config
+	if s.config.Variant == "structural" {
+		// Minimal components for structural/rules-only testing
+		allRequired = []string{"udp", "iot_sensor", "rule", "graph", "file"}
+	} else {
+		// Full components for statistical/semantic tiers
+		// Input components
+		inputComponents := []string{"udp"}
+		// Domain processors (document_processor, iot_sensor handle domain-specific data)
+		domainProcessors := []string{"document_processor", "iot_sensor"}
+		// Semantic components (rule processor + graph processor)
+		semanticComponents := []string{"rule", "graph"}
+		// Output components
+		outputComponents := []string{"file", "httppost", "websocket", "objectstore"}
+		// Gateway components (use instance names from config, not factory names)
+		gatewayComponents := []string{"api-gateway"}
+
+		allRequired = append(inputComponents, domainProcessors...)
+		allRequired = append(allRequired, semanticComponents...)
+		allRequired = append(allRequired, outputComponents...)
+		allRequired = append(allRequired, gatewayComponents...)
+	}
 
 	foundComponents := make(map[string]bool)
 	for _, comp := range components {
@@ -384,11 +406,8 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 	}
 
 	result.Details["component_breakdown"] = map[string]any{
-		"inputs":   inputComponents,
-		"domain":   domainProcessors,
-		"semantic": semanticComponents,
-		"outputs":  outputComponents,
-		"gateways": gatewayComponents,
+		"variant":  s.config.Variant,
+		"required": allRequired,
 		"total":    len(allRequired),
 		"found":    len(components),
 	}

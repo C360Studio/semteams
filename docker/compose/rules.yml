@@ -68,6 +68,7 @@ services:
       - ../../testdata:/data/testdata:ro
     ports:
       - "8080:8080" # HTTP API (health, components)
+      - "8082:8082" # GraphQL gateway
       - "9090:9090" # Prometheus metrics
       - "14550:14550/udp" # UDP input
     networks:

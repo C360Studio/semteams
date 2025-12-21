@@ -147,6 +147,51 @@ func (s *TieredScenario) buildCommunityComparison(
 	return comparison
 }
 
+// llmQualityIssue represents a quality issue found in LLM summaries
+type llmQualityIssue struct {
+	CommunityID string
+	Issue       string
+}
+
+// validateLLMSummaryQuality validates quality of LLM-enhanced community summaries
+func (s *TieredScenario) validateLLMSummaryQuality(communities []*client.Community) []llmQualityIssue {
+	var issues []llmQualityIssue
+
+	for _, comm := range communities {
+		if comm.SummaryStatus != "llm-enhanced" {
+			continue
+		}
+
+		// Check minimum summary length (50 chars)
+		if len(comm.LLMSummary) < 50 {
+			issues = append(issues, llmQualityIssue{
+				CommunityID: comm.ID,
+				Issue:       fmt.Sprintf("LLM summary too short: %d chars (min 50)", len(comm.LLMSummary)),
+			})
+			continue
+		}
+
+		// Check that at least one keyword appears in the summary
+		keywordFound := false
+		summaryLower := strings.ToLower(comm.LLMSummary)
+		for _, kw := range comm.Keywords {
+			if strings.Contains(summaryLower, strings.ToLower(kw)) {
+				keywordFound = true
+				break
+			}
+		}
+
+		if !keywordFound && len(comm.Keywords) > 0 {
+			issues = append(issues, llmQualityIssue{
+				CommunityID: comm.ID,
+				Issue:       fmt.Sprintf("LLM summary contains no keywords (keywords: %v)", comm.Keywords),
+			})
+		}
+	}
+
+	return issues
+}
+
 // persistCommunityReport saves the community comparison report to a JSON file
 func (s *TieredScenario) persistCommunityReport(
 	variant string,
@@ -245,9 +290,19 @@ func (s *TieredScenario) executeCompareCommunities(ctx context.Context, result *
 		return fmt.Errorf("semantic tier requires at least one LLM-enhanced community, got 0 (progressive enhancement failed)")
 	}
 
+	// Semantic tier MUST produce non-singleton communities (neural embeddings find semantic similarity)
 	if variant == "semantic" && stats.nonSingletonCount == 0 {
-		result.Warnings = append(result.Warnings,
-			"Semantic variant should produce non-singleton communities - neural embeddings expected to find semantic similarity")
+		return fmt.Errorf("semantic tier should produce non-singleton communities but found 0 (clustering may have failed)")
+	}
+
+	// Validate LLM summary quality for semantic tier
+	if variant == "semantic" {
+		qualityIssues := s.validateLLMSummaryQuality(communities)
+		for _, issue := range qualityIssues {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("LLM quality issue in %s: %s", issue.CommunityID, issue.Issue))
+		}
+		result.Metrics["llm_quality_issues"] = len(qualityIssues)
 	}
 
 	comparisonFile := s.persistCommunityReport(variant, stats, llmWait, result)

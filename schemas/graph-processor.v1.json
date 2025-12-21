@@ -12,7 +12,7 @@
     },
     "consumer_name": {
       "type": "string",
-      "description": "JetStream consumer name (durable if set)",
+      "description": "JetStream consumer name (deprecated: use ports)",
       "category": "advanced"
     },
     "data_manager": {
@@ -27,13 +27,12 @@
     },
     "input_subject": {
       "type": "string",
-      "description": "NATS subject to subscribe for input messages",
-      "default": "events.graph.entity.*",
+      "description": "NATS subject to subscribe for input messages (deprecated: use ports)",
       "category": "basic"
     },
     "input_subjects": {
       "type": "array",
-      "description": "Multiple NATS subjects to subscribe (derives streams from convention)",
+      "description": "Multiple NATS subjects to subscribe (deprecated: use ports)",
       "items": {
         "type": "string"
       },
@@ -43,6 +42,11 @@
       "type": "object",
       "description": "Message handler configuration",
       "category": "advanced"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration for inputs and outputs",
+      "category": "basic"
     },
     "querier": {
       "type": "object",
@@ -57,12 +61,12 @@
     },
     "stream_name": {
       "type": "string",
-      "description": "JetStream stream name for durable consumption (deprecated: use input_subjects)",
+      "description": "JetStream stream name for durable consumption (deprecated: use ports)",
       "category": "advanced"
     },
     "stream_subjects": {
       "type": "array",
-      "description": "JetStream stream subjects (defaults to input_subject pattern)",
+      "description": "JetStream stream subjects (deprecated: use ports)",
       "items": {
         "type": "string"
       },

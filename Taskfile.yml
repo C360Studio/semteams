@@ -99,8 +99,8 @@ tasks:
   e2e:all:
     desc: Run all E2E tests (core -> structural -> statistical -> semantic -> gateway)
     cmds:
-      - task: e2e:core:default
-      - task: e2e:structural:default
-      - task: e2e:statistical:default
-      - task: e2e:semantic:default
-      - task: e2e:gateway:default
+      - task: e2e:core
+      - task: e2e:structural
+      - task: e2e:statistical
+      - task: e2e:semantic
+      - task: e2e:gateway

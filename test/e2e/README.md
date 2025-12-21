@@ -9,12 +9,11 @@ E2E tests follow the **Observer Pattern**: they run against real services in Doc
 ## Quick Start
 
 ```bash
-# 5 E2E tasks - one per tier
+# 4 E2E tasks - one per tier
 task e2e:core        # Platform boots, data flows (~10s)
 task e2e:structural  # Rules + structural inference (~30s)
 task e2e:statistical # BM25 + community detection (~60s)
 task e2e:semantic    # Neural embeddings + LLM (~90s)
-task e2e:gateway     # GraphQL + MCP APIs (~20s)
 
 # Cleanup
 task e2e:clean
@@ -57,14 +56,6 @@ Neural embeddings + LLM. Full ML stack validation.
 |----------|---------|--------------|
 | ~90s | Neural embeddings + LLM summaries | NATS + SemEmbed + SemInstruct |
 
-### Gateway (`task e2e:gateway`)
-
-GraphQL + MCP APIs. Runs against statistical tier (no ML deps for CI).
-
-| Duration | Purpose | Dependencies |
-|----------|---------|--------------|
-| ~20s | API contract validation | NATS only |
-
 ## Assertion Strategy
 
 | Tier | What We Assert | What We DON'T Assert |
@@ -73,7 +64,6 @@ GraphQL + MCP APIs. Runs against statistical tier (no ML deps for CI).
 | **Structural** | Entities in KV, predicates indexed, anomaly flags in index, PathRAG edges | LLM response quality |
 | **Statistical** | Above + BM25 embeddings, communities detected | LLM summaries |
 | **Semantic** | Above + LLM summary quality, semantic search relevance | - |
-| **Gateway** | API contracts (GraphQL shape, MCP protocol) | LLM content |
 
 ## Test Scenarios
 
@@ -87,8 +77,6 @@ Detailed documentation for each scenario is available in [test/e2e/docs/](./docs
 | tiered | `structural` | Structural | Rules-only, ZERO embeddings/clusters, OnEnter/OnExit | [docs/tiered.md](./docs/tiered.md) |
 | tiered | `statistical` | Statistical | BM25 embeddings, LPA communities, no external ML | [docs/tiered.md](./docs/tiered.md) |
 | tiered | `semantic` | Semantic | Neural embeddings + LLM summaries | [docs/tiered.md](./docs/tiered.md) |
-| gateway-graphql | - | Gateway | GraphQL operations: entities, relationships, search | [docs/gateway-graphql.md](./docs/gateway-graphql.md) |
-| gateway-mcp | - | Gateway | MCP protocol: tool invocation via SSE, rate limiting | [docs/gateway-mcp.md](./docs/gateway-mcp.md) |
 
 ## Directory Structure
 
@@ -104,9 +92,7 @@ test/e2e/
     ├── core_health.go
     ├── core_dataflow.go
     ├── core_federation.go
-    ├── tiered.go           # Structural + Statistical + Semantic (via --variant)
-    ├── gateway_graphql.go
-    └── gateway_mcp.go
+    └── tiered.go           # Structural + Statistical + Semantic (via --variant)
 
 cmd/e2e/
 └── main.go                 # Test runner CLI
@@ -117,14 +103,12 @@ taskfiles/e2e/
 ├── structural.yml          # Structural tier
 ├── statistical.yml         # Statistical tier
 ├── semantic.yml            # Semantic tier
-├── gateway.yml             # Gateway tests
 └── federation.yml          # Federation tests
 
 docker/compose/
 ├── e2e.yml                 # Core E2E tests
 ├── rules.yml               # Structural tier
 ├── tiered.yml              # Statistical + Semantic (profiles: statistical, semantic)
-├── gateway.yml             # Gateway tests
 └── federation.yml          # Edge-to-cloud
 ```
 
@@ -187,7 +171,6 @@ docker logs semstreams-tiered-nats # Check NATS logs
 ```yaml
 - task e2e:core
 - task e2e:structural
-- task e2e:gateway
 ```
 
 ### Main Branch
@@ -195,7 +178,6 @@ docker logs semstreams-tiered-nats # Check NATS logs
 - task e2e:core
 - task e2e:structural
 - task e2e:statistical
-- task e2e:gateway
 ```
 
 ### Release

@@ -211,3 +211,165 @@ func (c *ObservabilityClient) CountFileOutputLines(
 
 	return count, nil
 }
+
+// GetFileOutputLines retrieves the actual content lines from file output inside a container.
+// Returns the lines as a slice of strings for content validation.
+func (c *ObservabilityClient) GetFileOutputLines(
+	ctx context.Context,
+	containerName string,
+	pattern string,
+	maxLines int,
+) ([]string, error) {
+	// Use docker exec to read lines from the file(s)
+	// Shell is needed for glob expansion
+	cmdStr := fmt.Sprintf("cat %s 2>/dev/null", pattern)
+	if maxLines > 0 {
+		cmdStr = fmt.Sprintf("cat %s 2>/dev/null | head -n %d", pattern, maxLines)
+	}
+
+	cmd := exec.CommandContext(ctx, "docker", "exec", containerName, "sh", "-c", cmdStr)
+
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, nil // No files match - return empty slice
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return nil, nil // Empty output
+	}
+
+	return lines, nil
+}
+
+// FlowValidation represents the result of flowgraph validation from /components/validate
+type FlowValidation struct {
+	Timestamp           string                   `json:"timestamp"`
+	ValidationStatus    string                   `json:"validation_status"`
+	ConnectedComponents [][]string               `json:"connected_components"`
+	ConnectedEdges      []map[string]interface{} `json:"connected_edges"`
+	DisconnectedNodes   []DisconnectedNode       `json:"disconnected_nodes"`
+	OrphanedPorts       []OrphanedPort           `json:"orphaned_ports"`
+	StreamWarnings      []StreamWarning          `json:"stream_warnings"`
+	Summary             FlowValidationSummary    `json:"summary"`
+}
+
+// DisconnectedNode represents a component with no connections
+type DisconnectedNode struct {
+	ComponentName string   `json:"component_name"`
+	Issue         string   `json:"issue"`
+	Suggestions   []string `json:"suggestions,omitempty"`
+}
+
+// OrphanedPort represents a port with no connections
+type OrphanedPort struct {
+	ComponentName string `json:"component_name"`
+	PortName      string `json:"port_name"`
+	Direction     string `json:"direction"`
+	ConnectionID  string `json:"connection_id"`
+	Pattern       string `json:"pattern"`
+	Issue         string `json:"issue"`
+	Required      bool   `json:"required"`
+}
+
+// StreamWarning represents a JetStream subscriber connected to NATS publisher issue
+type StreamWarning struct {
+	Severity       string   `json:"severity"`
+	SubscriberComp string   `json:"subscriber_component"`
+	SubscriberPort string   `json:"subscriber_port"`
+	Subjects       []string `json:"subjects"`
+	PublisherComps []string `json:"publisher_components"`
+	Issue          string   `json:"issue"`
+}
+
+// FlowValidationSummary contains summary statistics from flow validation
+type FlowValidationSummary struct {
+	TotalComponents       int  `json:"total_components"`
+	TotalConnections      int  `json:"total_connections"`
+	ComponentGroups       int  `json:"component_groups"`
+	OrphanedPortCount     int  `json:"orphaned_port_count"`
+	DisconnectedNodeCount int  `json:"disconnected_node_count"`
+	StreamWarningCount    int  `json:"stream_warning_count"`
+	HasStreamIssues       bool `json:"has_stream_issues"`
+}
+
+// ValidateFlowGraph calls /components/validate and returns the flow validation result.
+// This performs pre-flight validation to catch configuration issues before running tests.
+func (c *ObservabilityClient) ValidateFlowGraph(ctx context.Context) (*FlowValidation, error) {
+	url := c.baseURL + "/components/validate"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("flow validation request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("flow validation returned status %d", resp.StatusCode)
+	}
+
+	var validation FlowValidation
+	if err := json.NewDecoder(resp.Body).Decode(&validation); err != nil {
+		return nil, fmt.Errorf("failed to decode validation response: %w", err)
+	}
+
+	return &validation, nil
+}
+
+// CheckFlowHealth performs flow validation and returns an error if there are critical issues.
+// This is a convenience method for pre-flight checks in e2e test setup.
+func (c *ObservabilityClient) CheckFlowHealth(ctx context.Context) error {
+	validation, err := c.ValidateFlowGraph(ctx)
+	if err != nil {
+		return fmt.Errorf("flow validation failed: %w", err)
+	}
+
+	// Check for critical stream issues (highest priority)
+	// These indicate JetStream subscribers waiting for streams that won't be created
+	if len(validation.StreamWarnings) > 0 {
+		var issues []string
+		for _, w := range validation.StreamWarnings {
+			issues = append(issues, w.Issue)
+		}
+		return fmt.Errorf("critical stream configuration issues: %v", issues)
+	}
+
+	// Check for disconnected nodes, but ignore expected gateway components
+	// Gateway components (graphql, mcp) query via request/response, not streams
+	var criticalDisconnected []string
+	for _, n := range validation.DisconnectedNodes {
+		// Skip gateway components - they're expected to be disconnected from stream flow
+		if isExpectedDisconnectedComponent(n.ComponentName) {
+			continue
+		}
+		criticalDisconnected = append(criticalDisconnected, fmt.Sprintf("%s: %s", n.ComponentName, n.Issue))
+	}
+	if len(criticalDisconnected) > 0 {
+		return fmt.Errorf("disconnected components detected: %v", criticalDisconnected)
+	}
+
+	// Check validation status (but only if we have stream issues)
+	// "warnings" status from orphaned ports or disconnected gateways is acceptable
+	if validation.ValidationStatus == "critical" && validation.Summary.HasStreamIssues {
+		return fmt.Errorf("flow validation status is critical")
+	}
+
+	return nil
+}
+
+// isExpectedDisconnectedComponent returns true for components that are expected
+// to not have stream connections (e.g., gateways that use request/response patterns)
+func isExpectedDisconnectedComponent(name string) bool {
+	// HTTP gateway components query via NATS request/response, not stream subscriptions
+	// They appear "disconnected" in the flow graph but this is expected behavior
+	// Note: GraphQL/MCP gateways are now output ports of graph-processor, not standalone components
+	if len(name) > 8 && name[len(name)-8:] == "-gateway" {
+		return true
+	}
+	return false
+}

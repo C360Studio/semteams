@@ -3,7 +3,6 @@ package flowgraph
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/c360/semstreams/component"
@@ -30,7 +29,8 @@ type PortInfo struct {
 	ConnectionID string // Subject, bucket, or network address
 	Pattern      InteractionPattern
 	Interface    *component.InterfaceContract
-	Required     bool // Whether this port is required for the component to function
+	Required     bool               // Whether this port is required for the component to function
+	PortConfig   component.Portable // Original port configuration for type checking
 }
 
 // FlowEdge represents a connection between two component ports
@@ -164,11 +164,12 @@ func (g *FlowGraph) extractPortInfo(ports []component.Port) []PortInfo {
 
 	for _, port := range ports {
 		portInfo := PortInfo{
-			Name:      port.Name,
-			Direction: port.Direction,
-			Pattern:   g.classifyInteractionPattern(port.Config),
-			Interface: g.extractInterfaceContract(port.Config),
-			Required:  port.Required,
+			Name:       port.Name,
+			Direction:  port.Direction,
+			Pattern:    g.classifyInteractionPattern(port.Config),
+			Interface:  g.extractInterfaceContract(port.Config),
+			Required:   port.Required,
+			PortConfig: port.Config, // Store original config for type checking
 		}
 
 		// Extract connection ID based on port type
@@ -290,29 +291,6 @@ func (g *FlowGraph) ConnectComponentsByPatterns() error {
 	// Build connection maps by pattern and connection ID
 	publishers := g.buildPublisherMap()   // Output ports
 	subscribers := g.buildSubscriberMap() // Input ports
-
-	// DEBUG: Log publishers by pattern
-	log.Printf("[FlowGraph] Publishers by pattern:")
-	for pattern, connMap := range publishers {
-		log.Printf("  Pattern=%s, connections=%d", pattern, len(connMap))
-		for connID, ports := range connMap {
-			log.Printf("    ConnectionID=%s, ports=%d", connID, len(ports))
-			for _, port := range ports {
-				log.Printf("      Component=%s, Port=%s", port.ComponentName, port.PortName)
-			}
-		}
-	}
-
-	log.Printf("[FlowGraph] Subscribers by pattern:")
-	for pattern, connMap := range subscribers {
-		log.Printf("  Pattern=%s, connections=%d", pattern, len(connMap))
-		for connID, ports := range connMap {
-			log.Printf("    ConnectionID=%s, ports=%d", connID, len(ports))
-			for _, port := range ports {
-				log.Printf("      Component=%s, Port=%s", port.ComponentName, port.PortName)
-			}
-		}
-	}
 
 	var warnings []string
 
@@ -459,21 +437,11 @@ func matchTokens(subjectTokens, patternTokens []string) bool {
 
 // connectStreamPorts connects stream pattern ports (NATS, JetStream)
 func (g *FlowGraph) connectStreamPorts(publishers, subscribers map[string][]ComponentPortRef) {
-	log.Printf("[connectStreamPorts] Publishers count: %d, Subscribers count: %d", len(publishers), len(subscribers))
-
 	// Stream pattern: publishers -> subscribers with NATS pattern matching
 	for pubConnID, pubs := range publishers {
 		for subConnID, subs := range subscribers {
 			// Check if publisher subject matches subscriber pattern or vice versa
-			match := matchNATSPattern(pubConnID, subConnID) || matchNATSPattern(subConnID, pubConnID)
-			log.Printf("[connectStreamPorts] Comparing pub=%s sub=%s match=%v", pubConnID, subConnID, match)
-
-			if match {
-				log.Printf(
-					"[connectStreamPorts] MATCH FOUND! Creating edges between pub=%s and sub=%s",
-					pubConnID,
-					subConnID,
-				)
+			if matchNATSPattern(pubConnID, subConnID) || matchNATSPattern(subConnID, pubConnID) {
 				// Connect all matching publishers to subscribers
 				for _, pub := range pubs {
 					for _, sub := range subs {
@@ -485,20 +453,11 @@ func (g *FlowGraph) connectStreamPorts(publishers, subscribers map[string][]Comp
 							Metadata:     EdgeMetadata{},
 						}
 						g.edges = append(g.edges, edge)
-						log.Printf(
-							"[connectStreamPorts] Created edge: %s.%s -> %s.%s",
-							pub.ComponentName,
-							pub.PortName,
-							sub.ComponentName,
-							sub.PortName,
-						)
 					}
 				}
 			}
 		}
 	}
-
-	log.Printf("[connectStreamPorts] Total edges created: %d", len(g.edges))
 }
 
 // connectRequestPorts connects request pattern ports (bidirectional NATS request-reply)
@@ -821,4 +780,110 @@ func (g *FlowGraph) isInterfaceAlternativePort(port PortInfo) bool {
 	}
 
 	return false
+}
+
+// StreamRequirementWarning represents a mismatch between JetStream subscriber and NATS publisher
+type StreamRequirementWarning struct {
+	Severity       string   `json:"severity"`
+	SubscriberComp string   `json:"subscriber_component"`
+	SubscriberPort string   `json:"subscriber_port"`
+	Subjects       []string `json:"subjects"`
+	PublisherComps []string `json:"publisher_components"`
+	Issue          string   `json:"issue"`
+}
+
+// ValidateStreamRequirements checks that JetStream subscribers have corresponding
+// JetStream publishers. When a component subscribes via JetStream, it expects a
+// durable stream to exist. Streams are only created by components that publish
+// with JetStream output ports (via EnsureStreams). If a JetStream subscriber is
+// connected only to NATS publishers, no stream will be created and the subscriber
+// will hang waiting for a stream that never appears.
+func (g *FlowGraph) ValidateStreamRequirements() []StreamRequirementWarning {
+	var warnings []StreamRequirementWarning
+
+	// For each edge, check if the subscriber is JetStream and publisher is NATS
+	for _, edge := range g.edges {
+		if edge.Pattern != PatternStream {
+			continue
+		}
+
+		// Get the subscriber's port info
+		subscriberNode, ok := g.nodes[edge.To.ComponentName]
+		if !ok {
+			continue
+		}
+
+		var subscriberPort *PortInfo
+		for i := range subscriberNode.InputPorts {
+			if subscriberNode.InputPorts[i].Name == edge.To.PortName {
+				subscriberPort = &subscriberNode.InputPorts[i]
+				break
+			}
+		}
+		if subscriberPort == nil {
+			continue
+		}
+
+		// Check if subscriber is JetStream
+		jsPort, isJetStream := subscriberPort.PortConfig.(component.JetStreamPort)
+		if !isJetStream {
+			continue // Subscriber is not JetStream, no stream requirement
+		}
+
+		// Get the publisher's port info
+		publisherNode, ok := g.nodes[edge.From.ComponentName]
+		if !ok {
+			continue
+		}
+
+		var publisherPort *PortInfo
+		for i := range publisherNode.OutputPorts {
+			if publisherNode.OutputPorts[i].Name == edge.From.PortName {
+				publisherPort = &publisherNode.OutputPorts[i]
+				break
+			}
+		}
+		if publisherPort == nil {
+			continue
+		}
+
+		// Check if publisher is NOT JetStream (i.e., won't create stream)
+		_, pubIsJetStream := publisherPort.PortConfig.(component.JetStreamPort)
+		if pubIsJetStream {
+			continue // Publisher is JetStream, will create stream - OK
+		}
+
+		// Publisher is NATS but subscriber expects JetStream - this is a problem!
+		warnings = append(warnings, StreamRequirementWarning{
+			Severity:       "critical",
+			SubscriberComp: edge.To.ComponentName,
+			SubscriberPort: edge.To.PortName,
+			Subjects:       jsPort.Subjects,
+			PublisherComps: []string{edge.From.ComponentName},
+			Issue: fmt.Sprintf(
+				"JetStream subscriber expects stream for subjects %v but publisher '%s' uses NATS (no stream will be created)",
+				jsPort.Subjects, edge.From.ComponentName,
+			),
+		})
+	}
+
+	// Deduplicate warnings by subscriber port (multiple publishers may connect to same subscriber)
+	deduped := make(map[string]*StreamRequirementWarning)
+	for i := range warnings {
+		w := &warnings[i]
+		key := fmt.Sprintf("%s:%s", w.SubscriberComp, w.SubscriberPort)
+		if existing, ok := deduped[key]; ok {
+			// Merge publisher components
+			existing.PublisherComps = append(existing.PublisherComps, w.PublisherComps...)
+		} else {
+			deduped[key] = w
+		}
+	}
+
+	result := make([]StreamRequirementWarning, 0, len(deduped))
+	for _, w := range deduped {
+		result = append(result, *w)
+	}
+
+	return result
 }

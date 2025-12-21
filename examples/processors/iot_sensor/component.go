@@ -70,11 +70,12 @@ var iotSensorSchema = component.GenerateConfigSchema(reflect.TypeOf(ComponentCon
 // It bridges the gap between the stateless domain processor and the stateful
 // component framework that handles NATS messaging and lifecycle management.
 type Component struct {
-	name       string
-	subjects   []string
-	outputSubj string
-	natsClient *natsclient.Client
-	logger     *slog.Logger
+	name        string
+	subjects    []string
+	outputSubj  string
+	outputPorts []component.PortDefinition // Store full port definitions for OutputPorts()
+	natsClient  *natsclient.Client
+	logger      *slog.Logger
 
 	// Domain processor (stateless, pure business logic)
 	processor *Processor
@@ -149,15 +150,16 @@ func NewComponent(
 	})
 
 	return &Component{
-		name:       "iot-sensor-processor",
-		subjects:   inputSubjects,
-		outputSubj: outputSubject,
-		natsClient: deps.NATSClient,
-		logger:     deps.GetLogger(),
-		processor:  processor,
-		shutdown:   make(chan struct{}),
-		done:       make(chan struct{}),
-		wg:         &sync.WaitGroup{},
+		name:        "iot-sensor-processor",
+		subjects:    inputSubjects,
+		outputSubj:  outputSubject,
+		outputPorts: config.Ports.Outputs, // Store full port definitions
+		natsClient:  deps.NATSClient,
+		logger:      deps.GetLogger(),
+		processor:   processor,
+		shutdown:    make(chan struct{}),
+		done:        make(chan struct{}),
+		wg:          &sync.WaitGroup{},
 	}, nil
 }
 
@@ -368,23 +370,48 @@ func (c *Component) InputPorts() []component.Port {
 
 // OutputPorts returns the NATS output port for Graphable sensor readings.
 func (c *Component) OutputPorts() []component.Port {
-	if c.outputSubj == "" {
+	if len(c.outputPorts) == 0 {
 		return []component.Port{}
 	}
-	return []component.Port{
-		{
-			Name:      "output",
+
+	ports := make([]component.Port, 0, len(c.outputPorts))
+	for _, def := range c.outputPorts {
+		port := component.Port{
+			Name:      def.Name,
 			Direction: component.DirectionOutput,
-			Required:  false,
-			Config: component.NATSPort{
-				Subject: c.outputSubj,
-				Interface: &component.InterfaceContract{
-					Type:    "domain.iot.sensor.v1",
-					Version: "v1",
-				},
-			},
-		},
+			Required:  def.Required,
+		}
+
+		// Build appropriate port config based on type from config
+		switch def.Type {
+		case "jetstream":
+			port.Config = component.JetStreamPort{
+				Subjects:   []string{def.Subject},
+				StreamName: def.StreamName,
+				Interface: func() *component.InterfaceContract {
+					if def.Interface != "" {
+						return &component.InterfaceContract{Type: def.Interface, Version: "v1"}
+					}
+					return nil
+				}(),
+			}
+		default:
+			// Default to NATS port
+			port.Config = component.NATSPort{
+				Subject: def.Subject,
+				Interface: func() *component.InterfaceContract {
+					if def.Interface != "" {
+						return &component.InterfaceContract{Type: def.Interface, Version: "v1"}
+					}
+					return nil
+				}(),
+			}
+		}
+
+		ports = append(ports, port)
 	}
+
+	return ports
 }
 
 // ConfigSchema returns the configuration schema for this processor.

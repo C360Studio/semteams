@@ -33,6 +33,10 @@ type CoreFederationConfig struct {
 	ValidationDelay    time.Duration `json:"validation_delay"`
 	MinMessagesOnCloud int           `json:"min_messages_on_cloud"`
 	AckVerification    bool          `json:"ack_verification"`
+
+	// Container configuration for file output verification
+	CloudContainerName string `json:"cloud_container_name"`
+	CloudOutputPattern string `json:"cloud_output_pattern"`
 }
 
 // DefaultCoreFederationConfig returns default configuration
@@ -43,6 +47,8 @@ func DefaultCoreFederationConfig() *CoreFederationConfig {
 		ValidationDelay:    5 * time.Second,
 		MinMessagesOnCloud: 15, // At least 75% should make it through
 		AckVerification:    true,
+		CloudContainerName: "semstreams-fed-cloud",
+		CloudOutputPattern: "/tmp/cloud-federated*.jsonl",
 	}
 }
 
@@ -255,16 +261,34 @@ func (s *CoreFederationScenario) verifyFederationFlow(ctx context.Context, resul
 	result.Details["edge_components"] = edgeComponents
 	result.Details["cloud_components"] = cloudComponents
 
-	// Look for file output on cloud (evidence of received data)
-	// Note: In real test, we'd check file system or component metrics
-	// For MVP, we verify components are running and metrics exist
-
 	if len(cloudComponents) == 0 {
 		return fmt.Errorf("no components running on cloud instance")
 	}
 
 	result.Metrics["edge_components"] = len(edgeComponents)
 	result.Metrics["cloud_components"] = len(cloudComponents)
+
+	// Verify messages actually arrived on cloud by counting file output lines
+	lineCount, err := s.cloudClient.CountFileOutputLines(
+		ctx,
+		s.config.CloudContainerName,
+		s.config.CloudOutputPattern,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to count cloud output lines: %w", err)
+	}
+
+	result.Metrics["cloud_messages_received"] = lineCount
+	result.Details["federation_verification"] = map[string]any{
+		"messages_sent":     result.Metrics["messages_sent"],
+		"messages_received": lineCount,
+		"minimum_required":  s.config.MinMessagesOnCloud,
+	}
+
+	if lineCount < s.config.MinMessagesOnCloud {
+		return fmt.Errorf("federation verification failed: only %d/%d messages arrived on cloud (minimum required: %d)",
+			lineCount, s.config.MessageCount, s.config.MinMessagesOnCloud)
+	}
 
 	return nil
 }
@@ -308,12 +332,13 @@ func (s *CoreFederationScenario) verifyAckProtocol(ctx context.Context, result *
 	wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	var response map[string]interface{}
 	if err := wsConn.ReadJSON(&response); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("no ack/nack received: %v", err))
-	} else {
-		result.Details["ack_response"] = response
-		if msgType, ok := response["type"].(string); ok {
-			result.Metrics["ack_type"] = msgType
-		}
+		// When AckVerification is enabled, failure to receive ack is a hard error
+		return fmt.Errorf("ack verification failed: no ack/nack received within timeout: %w", err)
+	}
+
+	result.Details["ack_response"] = response
+	if msgType, ok := response["type"].(string); ok {
+		result.Metrics["ack_type"] = msgType
 	}
 
 	return nil
