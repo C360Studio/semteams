@@ -187,6 +187,15 @@ func (s *TieredScenario) validateLLMSummaryQuality(communities []*client.Communi
 				Issue:       fmt.Sprintf("LLM summary contains no keywords (keywords: %v)", comm.Keywords),
 			})
 		}
+
+		// Check that LLM summary is more detailed (longer) than statistical summary
+		if comm.StatisticalSummary != "" && len(comm.LLMSummary) <= len(comm.StatisticalSummary) {
+			issues = append(issues, llmQualityIssue{
+				CommunityID: comm.ID,
+				Issue: fmt.Sprintf("LLM summary (%d chars) not longer than statistical (%d chars)",
+					len(comm.LLMSummary), len(comm.StatisticalSummary)),
+			})
+		}
 	}
 
 	return issues
@@ -303,6 +312,12 @@ func (s *TieredScenario) executeCompareCommunities(ctx context.Context, result *
 				fmt.Sprintf("LLM quality issue in %s: %s", issue.CommunityID, issue.Issue))
 		}
 		result.Metrics["llm_quality_issues"] = len(qualityIssues)
+
+		// Fail if majority of enhanced communities have quality issues
+		if stats.llmEnhancedCount > 0 && len(qualityIssues) > stats.llmEnhancedCount/2 {
+			return fmt.Errorf("LLM quality issues in %d/%d enhanced communities (majority failed)",
+				len(qualityIssues), stats.llmEnhancedCount)
+		}
 	}
 
 	comparisonFile := s.persistCommunityReport(variant, stats, llmWait, result)
