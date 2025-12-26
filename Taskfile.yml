@@ -72,10 +72,10 @@ tasks:
       - 'echo "[TIERS] Running all inference tier E2E tests..."'
       - 'echo ""'
       - 'echo "=== STRUCTURAL (Rules-Only) ==="'
-      - docker compose -f docker/compose/rules.yml up -d --wait
-      - cmd: cd cmd/e2e && ./e2e --scenario tier0-rules-iot --output-dir ./test/e2e/results
+      - docker compose -f docker/compose/structural.yml up -d --wait
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant structural --output-dir ./test/e2e/results
         ignore_error: true
-      - docker compose -f docker/compose/rules.yml down -v --timeout 15
+      - docker compose -f docker/compose/structural.yml down -v --timeout 15
       - sleep 3
       - 'echo ""'
       - 'echo "=== STATISTICAL (BM25 + LPA) ==="'

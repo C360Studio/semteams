@@ -2,10 +2,10 @@
   "version": "1.1.0",
   "platform": {
     "org": "c360",
-    "id": "semstreams-tier0-rules",
+    "id": "semstreams-structural",
     "type": "rules-only",
     "region": "local",
-    "instance_id": "tier0-001",
+    "instance_id": "structural-001",
     "environment": "test"
   },
   "tier": "rules",
@@ -20,7 +20,7 @@
         "http_port": 8080,
         "swagger_ui": true,
         "server_info": {
-          "title": "SemStreams Tier 0 - Rules Only",
+          "title": "SemStreams Structural Tier - Rules Only",
           "description": "Stateful rules processing with deterministic graph behavior (no ML inference)",
           "version": "0.7.0"
         }
@@ -63,13 +63,97 @@
             {
               "name": "file_out",
               "subject": "raw.sensor.file",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
-        "path": "/data/testdata/tier0/iot-sensors.jsonl",
+        "path": "/data/testdata/semantic/sensors.jsonl",
         "format": "jsonl",
         "interval": "100ms",
+        "loop": false
+      }
+    },
+    "file_documents": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "jetstream"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/documents.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
+        "loop": false
+      }
+    },
+    "file_maintenance": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "jetstream"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/maintenance.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
+        "loop": false
+      }
+    },
+    "file_observations": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "jetstream"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/observations.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
+        "loop": false
+      }
+    },
+    "file_sensor_docs": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.document.corpus",
+              "type": "jetstream"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/sensor_docs.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
         "loop": false
       }
     },
@@ -84,7 +168,7 @@
             {
               "name": "udp_out",
               "subject": "raw.sensor.udp",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
@@ -103,13 +187,13 @@
             {
               "name": "sensor_in",
               "subject": "raw.sensor.>",
-              "type": "nats"
+              "type": "jetstream"
             }
           ],
           "outputs": [
             {
               "name": "sensor_out",
-              "subject": "events.graph.entity.sensor",
+              "subject": "sensor.processed.entity",
               "type": "jetstream",
               "interface": "iot.sensor.v1"
             }
@@ -117,6 +201,63 @@
         },
         "org_id": "c360",
         "platform": "logistics"
+      }
+    },
+    "document_processor": {
+      "type": "processor",
+      "name": "document_processor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "doc_in",
+              "subject": "raw.document.corpus",
+              "type": "jetstream"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "doc_out",
+              "subject": "document.processed.entity",
+              "type": "jetstream",
+              "interface": "content.document.v1"
+            }
+          ]
+        },
+        "org_id": "c360",
+        "platform": "logistics"
+      }
+    },
+    "objectstore": {
+      "type": "storage",
+      "name": "objectstore",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "write",
+              "subject": "document.processed.entity",
+              "type": "jetstream"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "stored",
+              "subject": "objectstore.stored.entity",
+              "type": "jetstream"
+            }
+          ]
+        },
+        "bucket_name": "semstreams_structural_store",
+        "data_cache": {
+          "enabled": true,
+          "strategy": "hybrid",
+          "max_size": 5000,
+          "ttl": "1h",
+          "cleanup_interval": "5m"
+        }
       }
     },
     "rule": {
@@ -129,21 +270,27 @@
           "inputs": [
             {
               "name": "rule_entity_in",
-              "subject": "events.graph.entity.>",
-              "type": "nats",
-              "description": "Processed entity events with typed BaseMessage payloads"
+              "subject": "objectstore.stored.entity",
+              "type": "jetstream",
+              "description": "Stored document entity events"
+            },
+            {
+              "name": "rule_sensor_in",
+              "subject": "sensor.processed.entity",
+              "type": "jetstream",
+              "description": "Sensor entity events (bypass ObjectStore)"
             }
           ],
           "outputs": [
             {
               "name": "rule_out",
               "subject": "events.rule.triggered",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
         "enable_graph_integration": true,
-        "graph_event_subject_prefix": "events.graph.entity",
+        "graph_event_subject_prefix": "objectstore.stored",
         "inline_rules": [
           {
             "id": "cold-storage-temp-alert",
@@ -298,11 +445,18 @@
         "ports": {
           "inputs": [
             {
-              "name": "events_in",
-              "subject": "events.graph.entity.>",
+              "name": "objectstore_in",
+              "subject": "objectstore.stored.entity",
               "type": "jetstream",
-              "interface": "graph.Entity",
-              "description": "Entity events from upstream processors"
+              "interface": "storage.stored.v1",
+              "description": "Stored document entity events from ObjectStore"
+            },
+            {
+              "name": "sensor_in",
+              "subject": "sensor.processed.entity",
+              "type": "jetstream",
+              "interface": "iot.sensor.v1",
+              "description": "Sensor entity events from IoT processor"
             }
           ],
           "outputs": []
@@ -314,7 +468,7 @@
           "max_retries": 3
         },
         "data_manager": {
-          "kv_bucket": "graph_entities_tier0",
+          "kv_bucket": "graph_entities_structural",
           "kv_options": {
             "max_retries": 5,
             "timeout": "5s"
@@ -376,14 +530,14 @@
           "inputs": [
             {
               "name": "file_in",
-              "subject": "events.graph.entity.>",
-              "type": "nats"
+              "subject": "objectstore.stored.entity",
+              "type": "jetstream"
             }
           ],
           "outputs": []
         },
         "directory": "/tmp",
-        "file_prefix": "semstreams-tier0-rules",
+        "file_prefix": "semstreams-structural",
         "format": "jsonl"
       }
     }

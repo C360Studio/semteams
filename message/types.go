@@ -177,3 +177,105 @@ func ParseEntityID(s string) (EntityID, error) {
 		Instance: parts[5],
 	}, nil
 }
+
+// TypePrefix returns the 5-part prefix identifying the entity type level.
+// Format: org.platform.domain.system.type
+// This groups all instances of the same type (siblings).
+//
+// Example:
+//
+//	eid := EntityID{Org: "c360", Platform: "logistics", Domain: "environmental",
+//	                System: "sensor", Type: "temperature", Instance: "cold-storage-01"}
+//	eid.TypePrefix() // Returns "c360.logistics.environmental.sensor.temperature"
+func (eid EntityID) TypePrefix() string {
+	return fmt.Sprintf("%s.%s.%s.%s.%s",
+		eid.Org, eid.Platform, eid.Domain, eid.System, eid.Type)
+}
+
+// SystemPrefix returns the 4-part prefix identifying the system level.
+// Format: org.platform.domain.system
+// This groups all entity types within the same system.
+//
+// Example:
+//
+//	eid := EntityID{Org: "c360", Platform: "logistics", Domain: "environmental",
+//	                System: "sensor", Type: "temperature", Instance: "cold-storage-01"}
+//	eid.SystemPrefix() // Returns "c360.logistics.environmental.sensor"
+func (eid EntityID) SystemPrefix() string {
+	return fmt.Sprintf("%s.%s.%s.%s",
+		eid.Org, eid.Platform, eid.Domain, eid.System)
+}
+
+// DomainPrefix returns the 3-part prefix identifying the domain level.
+// Format: org.platform.domain
+// This groups all systems within the same domain.
+//
+// Example:
+//
+//	eid := EntityID{Org: "c360", Platform: "logistics", Domain: "environmental",
+//	                System: "sensor", Type: "temperature", Instance: "cold-storage-01"}
+//	eid.DomainPrefix() // Returns "c360.logistics.environmental"
+func (eid EntityID) DomainPrefix() string {
+	return fmt.Sprintf("%s.%s.%s",
+		eid.Org, eid.Platform, eid.Domain)
+}
+
+// PlatformPrefix returns the 2-part prefix identifying the platform level.
+// Format: org.platform
+// This groups all domains within the same platform.
+//
+// Example:
+//
+//	eid := EntityID{Org: "c360", Platform: "logistics", Domain: "environmental",
+//	                System: "sensor", Type: "temperature", Instance: "cold-storage-01"}
+//	eid.PlatformPrefix() // Returns "c360.logistics"
+func (eid EntityID) PlatformPrefix() string {
+	return fmt.Sprintf("%s.%s", eid.Org, eid.Platform)
+}
+
+// HasPrefix checks if this EntityID has the given prefix.
+// Used for hierarchical grouping and sibling detection.
+//
+// Example:
+//
+//	eid := EntityID{Org: "c360", Platform: "logistics", Domain: "environmental",
+//	                System: "sensor", Type: "temperature", Instance: "cold-storage-01"}
+//	eid.HasPrefix("c360.logistics.environmental.sensor.temperature") // true (same type)
+//	eid.HasPrefix("c360.logistics.environmental.sensor")             // true (same system)
+//	eid.HasPrefix("c360.logistics.environmental")                    // true (same domain)
+//	eid.HasPrefix("c360.logistics.facility")                         // false (different domain)
+func (eid EntityID) HasPrefix(prefix string) bool {
+	key := eid.Key()
+	// Exact match or prefix with dot separator
+	return key == prefix || strings.HasPrefix(key, prefix+".")
+}
+
+// IsSibling checks if another EntityID is a sibling (same type-level prefix).
+// Siblings are entities of the same type within the same system.
+//
+// Example:
+//
+//	sensor1 := EntityID{Org: "c360", Platform: "logistics", Domain: "environmental",
+//	                    System: "sensor", Type: "temperature", Instance: "cold-storage-01"}
+//	sensor2 := EntityID{Org: "c360", Platform: "logistics", Domain: "environmental",
+//	                    System: "sensor", Type: "temperature", Instance: "cold-storage-02"}
+//	sensor1.IsSibling(sensor2) // true - same type prefix
+//
+//	humid := EntityID{Org: "c360", Platform: "logistics", Domain: "environmental",
+//	                  System: "sensor", Type: "humidity", Instance: "zone-a"}
+//	sensor1.IsSibling(humid) // false - different type
+func (eid EntityID) IsSibling(other EntityID) bool {
+	return eid.TypePrefix() == other.TypePrefix() && eid.Instance != other.Instance
+}
+
+// IsSameSystem checks if another EntityID is in the same system.
+// Entities in the same system may have different types but share the system-level prefix.
+func (eid EntityID) IsSameSystem(other EntityID) bool {
+	return eid.SystemPrefix() == other.SystemPrefix()
+}
+
+// IsSameDomain checks if another EntityID is in the same domain.
+// Entities in the same domain may have different systems but share the domain-level prefix.
+func (eid EntityID) IsSameDomain(other EntityID) bool {
+	return eid.DomainPrefix() == other.DomainPrefix()
+}

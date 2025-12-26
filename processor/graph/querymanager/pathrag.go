@@ -100,16 +100,17 @@ func (qe *Manager) executePathTraversal(ctx context.Context, start string, patte
 			"QueryManager", "ExecutePath", "start entity not found")
 	}
 
-	// Initialize with start entity
-	state.visited[start] = true
-	state.entities[start] = startEntity
-	state.pathTo[start] = []string{start}
-	state.edgesTo[start] = []GraphEdge{}
-	state.scores[start] = 1.0
+	// Initialize with start entity - use entity.ID as key for consistency
+	// This ensures the map key matches entity.ID for correct score lookup in resolver
+	state.visited[startEntity.ID] = true
+	state.entities[startEntity.ID] = startEntity
+	state.pathTo[startEntity.ID] = []string{startEntity.ID}
+	state.edgesTo[startEntity.ID] = []GraphEdge{}
+	state.scores[startEntity.ID] = 1.0
 	state.nodesVisited = 1
 
 	// Perform traversal (DFS respecting MaxDepth)
-	if err := qe.traverseGraph(ctx, pattern, state, start, 0); err != nil {
+	if err := qe.traverseGraph(ctx, pattern, state, startEntity.ID, 0); err != nil {
 		// Context cancellation is not an error, just truncation
 		if err == context.DeadlineExceeded {
 			state.truncated = true
@@ -156,10 +157,25 @@ func (qe *Manager) traverseGraph(ctx context.Context, pattern PathPattern, state
 		return nil
 	}
 
-	// Get relationships based on Direction
+	// Get explicit relationships based on Direction
 	relationships, err := qe.getRelationshipsForTraversal(ctx, current, pattern.Direction)
 	if err != nil {
-		return nil // Log error but continue - don't fail entire traversal for one node
+		// Log error but continue - don't fail entire traversal for one node
+		if qe.logger != nil {
+			qe.logger.Debug("failed to get explicit relationships", "entity", current, "error", err)
+		}
+	}
+
+	// Add inferred sibling relationships if enabled
+	if pattern.IncludeSiblings {
+		siblings, err := qe.getSiblingRelationships(ctx, current)
+		if err != nil {
+			if qe.logger != nil {
+				qe.logger.Debug("failed to get sibling relationships", "entity", current, "error", err)
+			}
+		} else {
+			relationships = append(relationships, siblings...)
+		}
 	}
 
 	for _, rel := range relationships {
@@ -320,6 +336,66 @@ func (qe *Manager) getRelationshipsForTraversal(ctx context.Context, entityID st
 	return relationships, nil
 }
 
+// getSiblingRelationships returns inferred sibling relationships based on EntityID hierarchy.
+// Siblings are entities that share the same type-level prefix (org.platform.domain.system.type).
+// These relationships are inferred at query time, not stored explicitly.
+func (qe *Manager) getSiblingRelationships(ctx context.Context, entityID string) ([]*Relationship, error) {
+	// Parse the entity ID to get the type prefix
+	parsed, err := message.ParseEntityID(entityID)
+	if err != nil {
+		// Not a valid 6-part EntityID, can't infer siblings
+		if qe.logger != nil {
+			qe.logger.Debug("cannot infer siblings for non-standard EntityID",
+				"entity", entityID, "error", err)
+		}
+		return nil, nil
+	}
+
+	// Get the type prefix (5-part: org.platform.domain.system.type)
+	typePrefix := parsed.TypePrefix()
+
+	// Find all entities with the same type prefix
+	siblingIDs, err := qe.entityReader.ListWithPrefix(ctx, typePrefix)
+	if err != nil {
+		if qe.logger != nil {
+			qe.logger.Warn("failed to list sibling entities",
+				"entity", entityID, "prefix", typePrefix, "error", err)
+		}
+		return nil, err
+	}
+
+	// Build sibling relationships
+	var siblings []*Relationship
+	for _, siblingID := range siblingIDs {
+		// Skip self
+		if siblingID == entityID {
+			continue
+		}
+
+		// Create an inferred sibling relationship
+		siblings = append(siblings, &Relationship{
+			FromEntityID: entityID,
+			ToEntityID:   siblingID,
+			EdgeType:     "graph.rel.sibling", // Inferred relationship type
+			Weight:       0.7,                 // Lower weight than explicit relationships
+			Properties: map[string]interface{}{
+				"inferred":    true,
+				"inference":   "type_prefix",
+				"type_prefix": typePrefix,
+			},
+		})
+	}
+
+	if qe.logger != nil && len(siblings) > 0 {
+		qe.logger.Debug("inferred sibling relationships",
+			"entity", entityID,
+			"prefix", typePrefix,
+			"siblings_found", len(siblings))
+	}
+
+	return siblings, nil
+}
+
 // matchesEdgeTypes checks if edge type is in allowed list (empty = all)
 func (qe *Manager) matchesEdgeTypes(edgeType string, allowedTypes []string) bool {
 	if len(allowedTypes) == 0 {
@@ -353,10 +429,17 @@ func (qe *Manager) matchesNodeTypes(entityID string, allowedTypes []string) bool
 
 // buildPathResult constructs QueryResult from traversal state
 func (qe *Manager) buildPathResult(state *pathTraversalState, pattern PathPattern) *QueryResult {
-	// Collect entities in deterministic order
+	// Collect entities (order determined by subsequent sort in resolver)
 	entities := make([]*gtypes.EntityState, 0, len(state.entities))
-	for _, entity := range state.entities {
+	for mapKey, entity := range state.entities {
 		entities = append(entities, entity)
+		// DEBUG: Log any mismatch between map key and entity.ID
+		if mapKey != entity.ID && qe.logger != nil {
+			qe.logger.Warn("PathRAG score key mismatch",
+				"map_key", mapKey,
+				"entity_id", entity.ID,
+				"score", state.scores[mapKey])
+		}
 	}
 
 	// Build GraphPath objects for each discovered path
@@ -389,6 +472,7 @@ func (qe *Manager) buildPathResult(state *pathTraversalState, pattern PathPatter
 		Entities: entities,
 		Paths:    paths,
 		Count:    len(entities),
+		Scores:   state.scores,
 	}
 }
 

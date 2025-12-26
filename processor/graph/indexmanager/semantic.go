@@ -348,14 +348,8 @@ func (m *Manager) computeSimilarityScores(queryEmbedding []float32, opts *Semant
 
 		score := embedding.CosineSimilarity(queryEmbedding, vec)
 
-		// Filter out noise - very low similarity scores indicate no meaningful relationship
-		const minReasonableScore = 0.3
-		if score < minReasonableScore {
-			continue
-		}
-
-		// Apply user-specified threshold
-		if opts.Threshold > 0 && score < opts.Threshold {
+		// Apply user-specified threshold (default 0.3 set in handleQuerySemantic)
+		if score < opts.Threshold {
 			continue
 		}
 
@@ -655,7 +649,6 @@ func (m *Manager) scoreAndFilterCandidates(
 	queryEmbedding []float32,
 	minScore float64,
 ) []scoredHit {
-	const minReasonableScore = 0.3
 	var hits []scoredHit
 
 	for entityID := range candidates {
@@ -665,10 +658,7 @@ func (m *Manager) scoreAndFilterCandidates(
 		}
 
 		score := embedding.CosineSimilarity(queryEmbedding, vec)
-		if score < minReasonableScore {
-			continue
-		}
-		if minScore > 0 && score < minScore {
+		if score < minScore {
 			continue
 		}
 

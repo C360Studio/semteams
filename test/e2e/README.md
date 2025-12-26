@@ -107,7 +107,7 @@ taskfiles/e2e/
 
 docker/compose/
 ├── e2e.yml                 # Core E2E tests
-├── rules.yml               # Structural tier
+├── structural.yml          # Structural tier
 ├── tiered.yml              # Statistical + Semantic (profiles: statistical, semantic)
 └── federation.yml          # Edge-to-cloud
 ```

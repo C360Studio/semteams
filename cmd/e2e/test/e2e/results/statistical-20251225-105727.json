@@ -1,0 +1,486 @@
+{
+  "variant": {
+    "name": "statistical",
+    "embedding_provider": "",
+    "semembed_available": false
+  },
+  "entities": {
+    "expected_count": 74,
+    "actual_count": 74,
+    "missing_count": 0,
+    "data_loss_percent": 0,
+    "sampled_count": 5,
+    "validated_count": 5,
+    "retrieved_count": 5
+  },
+  "indexes": {
+    "expected_indexes": 7,
+    "populated_indexes": 7
+  },
+  "search": {
+    "stats": {
+      "total_queries": 7,
+      "queries_with_results": 7,
+      "queries_meeting_min_score": 5,
+      "queries_meeting_min_hits": 7,
+      "overall_avg_score": 0.18525089066930014,
+      "known_answer_tests_passed": 5,
+      "known_answer_tests_total": 6,
+      "known_answer_failures": [
+        "query \"What documents mention forklift safety?\": missing required [doc-ops-001] - Natural language document search"
+      ],
+      "results": [
+        {
+          "query": "What documents mention forklift safety?",
+          "description": "Natural language document search",
+          "hits": [
+            {
+              "entity_id": "c360.logistics.observation.record.medium.obs-002",
+              "score": 0.23268388409614071
+            },
+            {
+              "entity_id": "c360.logistics.content.document.safety.doc-safety-001",
+              "score": 0.21024889062896454
+            },
+            {
+              "entity_id": "c360.logistics.content.document.compliance.doc-audit-001",
+              "score": 0.13789335000607436
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.medium.obs-009",
+              "score": 0.12549684182553958
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.high.obs-010",
+              "score": 0.12241471546188665
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-003",
+              "score": 0.12027788843201699
+            },
+            {
+              "entity_id": "c360.logistics.content.document.logistics.doc-shipping-001",
+              "score": 0.11327585514465026
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-001",
+              "score": 0.11028586755592296
+            }
+          ],
+          "latency_ms": 2,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": false,
+            "meets_min_hits": true,
+            "hits_above_min_score": 0,
+            "avg_score": 0.14657216164389952,
+            "known_answer_passed": false,
+            "missing_required": [
+              "doc-ops-001"
+            ]
+          }
+        },
+        {
+          "query": "Are there safety observations related to temperature?",
+          "description": "Cross-domain safety query",
+          "hits": [
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-009",
+              "score": 0.1808499181870954
+            },
+            {
+              "entity_id": "c360.logistics.content.document.logistics.doc-shipping-001",
+              "score": 0.15249368253964743
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.humidity.sensor-humid-001",
+              "score": 0.13043765523369788
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-011",
+              "score": 0.12262622864995201
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-002",
+              "score": 0.12124375404428091
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-001",
+              "score": 0.12123283796582211
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.low.obs-006",
+              "score": 0.1187379889870825
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-015",
+              "score": 0.11152879648659213
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.weight.sensor-weight-001",
+              "score": 0.11082305728052834
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.high.obs-013",
+              "score": 0.10955457437706184
+            }
+          ],
+          "latency_ms": 1,
+          "validation": {
+            "matches_pattern": true,
+            "meets_min_score": false,
+            "meets_min_hits": true,
+            "hits_above_min_score": 0,
+            "avg_score": 0.12795284937517606,
+            "known_answer_passed": true
+          }
+        },
+        {
+          "query": "What maintenance was done on cold storage equipment?",
+          "description": "Maintenance semantic search",
+          "hits": [
+            {
+              "entity_id": "c360.logistics.observation.record.high.obs-013",
+              "score": 0.3683751464003718
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.motion.sensor-motion-001",
+              "score": 0.3363914810898912
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-001",
+              "score": 0.2826923486180001
+            },
+            {
+              "entity_id": "c360.logistics.content.document.operations.doc-ops-001",
+              "score": 0.2165667647930681
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.door.sensor-door-001",
+              "score": 0.1793377846207405
+            },
+            {
+              "entity_id": "c360.logistics.content.document.human_resources.doc-hr-001",
+              "score": 0.14819926102051253
+            },
+            {
+              "entity_id": "c360.logistics.content.document.compliance.doc-audit-001",
+              "score": 0.13658300321613778
+            },
+            {
+              "entity_id": "c360.logistics.content.document.maintenance.doc-maint-001",
+              "score": 0.12433401798233557
+            },
+            {
+              "entity_id": "c360.logistics.content.document.safety.doc-emergency-001",
+              "score": 0.11964091443202815
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-002",
+              "score": 0.11308466968159543
+            }
+          ],
+          "latency_ms": 1,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": true,
+            "meets_min_hits": true,
+            "hits_above_min_score": 2,
+            "avg_score": 0.20252053918546808,
+            "known_answer_passed": true
+          }
+        },
+        {
+          "query": "Find all sensors in zone-a",
+          "description": "Location-based sensor query",
+          "hits": [
+            {
+              "entity_id": "c360.logistics.observation.record.high.obs-001",
+              "score": 0.33820399334267115
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.pressure.sensor-pressure-001",
+              "score": 0.2569045638755454
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.level.sensor-level-001",
+              "score": 0.18293593630135327
+            },
+            {
+              "entity_id": "c360.logistics.content.document.operations.doc-ops-001",
+              "score": 0.17202038089660882
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.humidity.sensor-humid-001",
+              "score": 0.15382796217090283
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-014",
+              "score": 0.15228183779284174
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.critical.obs-012",
+              "score": 0.14408777431914468
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.door.sensor-door-001",
+              "score": 0.14097550699281566
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.medium.obs-002",
+              "score": 0.12544647444205118
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-001",
+              "score": 0.1228356491956829
+            }
+          ],
+          "latency_ms": 1,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": true,
+            "meets_min_hits": true,
+            "hits_above_min_score": 1,
+            "avg_score": 0.17895200793296176,
+            "known_answer_passed": true
+          }
+        },
+        {
+          "query": "forklift operation inspection equipment maintenance",
+          "description": "Operations query should return operations docs",
+          "hits": [
+            {
+              "entity_id": "c360.logistics.content.document.operations.doc-ops-001",
+              "score": 0.3271109236785696
+            },
+            {
+              "entity_id": "c360.logistics.content.document.human_resources.doc-hr-001",
+              "score": 0.2564572386032123
+            },
+            {
+              "entity_id": "c360.logistics.content.document.safety.doc-emergency-001",
+              "score": 0.22671606997010746
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.medium.obs-009",
+              "score": 0.20882403146796258
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-003",
+              "score": 0.19919108638122676
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.high.obs-010",
+              "score": 0.1869320661482106
+            },
+            {
+              "entity_id": "c360.logistics.content.document.maintenance.doc-maint-001",
+              "score": 0.18292934038454903
+            },
+            {
+              "entity_id": "c360.logistics.content.document.compliance.doc-audit-001",
+              "score": 0.16731967730007585
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.motion.sensor-motion-001",
+              "score": 0.15820030964324672
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.high.obs-008",
+              "score": 0.1463868167443875
+            }
+          ],
+          "latency_ms": 1,
+          "validation": {
+            "matches_pattern": true,
+            "meets_min_score": true,
+            "meets_min_hits": true,
+            "hits_above_min_score": 1,
+            "avg_score": 0.20600675603215485,
+            "known_answer_passed": true,
+            "unexpected_found": [
+              "c360.logistics.sensor.document.motion.sensor-motion-001"
+            ]
+          }
+        },
+        {
+          "query": "cold storage temperature monitoring refrigeration",
+          "description": "Temperature query should return temp sensors",
+          "hits": [
+            {
+              "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-001",
+              "score": 0.44453940927827873
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.high.obs-013",
+              "score": 0.377329980558558
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-003",
+              "score": 0.23549733932687433
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-002",
+              "score": 0.18285696136568866
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.critical.obs-004",
+              "score": 0.17873977110353326
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.motion.sensor-motion-001",
+              "score": 0.15925061907910437
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-011",
+              "score": 0.11674202398819385
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.weight.sensor-weight-001",
+              "score": 0.10550522636083273
+            }
+          ],
+          "latency_ms": 1,
+          "validation": {
+            "matches_pattern": true,
+            "meets_min_score": true,
+            "meets_min_hits": true,
+            "hits_above_min_score": 2,
+            "avg_score": 0.225057666382633,
+            "known_answer_passed": true
+          }
+        },
+        {
+          "query": "hydraulic fluid maintenance equipment repair",
+          "description": "Maintenance query should return maintenance records",
+          "hits": [
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-001",
+              "score": 0.3213910262607463
+            },
+            {
+              "entity_id": "c360.logistics.content.document.operations.doc-ops-001",
+              "score": 0.2563977570030722
+            },
+            {
+              "entity_id": "c360.logistics.content.document.maintenance.doc-maint-001",
+              "score": 0.24580255360955092
+            },
+            {
+              "entity_id": "c360.logistics.content.document.human_resources.doc-hr-001",
+              "score": 0.22445456919062917
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.medium.obs-003",
+              "score": 0.2155831399470065
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-003",
+              "score": 0.1852945692462833
+            },
+            {
+              "entity_id": "c360.logistics.content.document.technology.doc-it-001",
+              "score": 0.17555327530457457
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.level.sensor-level-001",
+              "score": 0.17497489483891188
+            },
+            {
+              "entity_id": "c360.logistics.sensor.document.water.sensor-water-001",
+              "score": 0.15928174857504132
+            },
+            {
+              "entity_id": "c360.logistics.content.document.training.doc-training-001",
+              "score": 0.14046510072812485
+            }
+          ],
+          "latency_ms": 1,
+          "validation": {
+            "matches_pattern": true,
+            "meets_min_score": true,
+            "meets_min_hits": true,
+            "hits_above_min_score": 1,
+            "avg_score": 0.2099198634703941,
+            "known_answer_passed": true
+          }
+        }
+      ],
+      "executed_at": "2025-12-25T10:57:27.259909-05:00",
+      "total_latency_ms": 8
+    },
+    "weak_results_threshold": 0.5,
+    "is_weak": true
+  },
+  "rules": {
+    "evaluated_count": 1470,
+    "triggered_count": 0,
+    "validation_passed": true
+  },
+  "communities": {
+    "total_communities": 216,
+    "non_singleton_count": 0,
+    "largest_size": 0,
+    "average_size": 0,
+    "with_keywords": 216
+  },
+  "pathrag": {
+    "start_entity": "c360.logistics.content.document.operations.doc-ops-001",
+    "entities_found": 1,
+    "paths_found": 1,
+    "entities": [
+      {
+        "id": "c360.logistics.content.document.operations.doc-ops-001",
+        "score": 0
+      }
+    ],
+    "scores_valid": true,
+    "truncated": false,
+    "latency_ms": 2,
+    "boundary_test": {
+      "max_nodes_limit": 3,
+      "entities_returned": 1,
+      "respected_limit": false
+    }
+  },
+  "structural_indexes": {},
+  "components": {
+    "expected_count": 15,
+    "found_count": 15
+  },
+  "outputs": {
+    "expected_count": 4,
+    "found_count": 4
+  },
+  "timing": {
+    "total_duration_ms": 1770,
+    "stage_durations": {
+      "send-mixed-data": 1027,
+      "test-embedding-fallback": 1,
+      "test-http-gateway": 1,
+      "test-pathrag": 2,
+      "test-pathrag-boundary": 0,
+      "validate-community-structure": 44,
+      "validate-entity-structure": 2,
+      "validate-metrics": 1,
+      "validate-processing": 16,
+      "validate-rules": 19,
+      "verify-components": 1,
+      "verify-entity-count": 6,
+      "verify-entity-retrieval": 5,
+      "verify-index-population": 13,
+      "verify-outputs": 0,
+      "verify-search-quality": 10,
+      "verify-structural-indexes": 0,
+      "wait-for-embeddings": 611
+    }
+  },
+  "metadata": {
+    "variant": "statistical",
+    "started_at": "2025-12-25T10:57:25.570829-05:00",
+    "completed_at": "2025-12-25T10:57:27.341745-05:00",
+    "success": true,
+    "error_count": 0,
+    "warning_count": 6
+  }
+}

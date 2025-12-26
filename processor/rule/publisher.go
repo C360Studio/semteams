@@ -10,6 +10,19 @@ import (
 	"github.com/c360/semstreams/pkg/errs"
 )
 
+// isJetStreamPortBySubject checks if an output port with the given subject is configured for JetStream
+func (rp *Processor) isJetStreamPortBySubject(subject string) bool {
+	if rp.config == nil || rp.config.Ports == nil {
+		return false
+	}
+	for _, port := range rp.config.Ports.Outputs {
+		if port.Subject == subject {
+			return port.Type == "jetstream"
+		}
+	}
+	return false
+}
+
 // publishGraphEvents publishes a batch of graph events to appropriate NATS subjects
 // Accepts generic Event interface, works with any event type that implements it
 func (rp *Processor) publishGraphEvents(ctx context.Context, events []Event) error {
@@ -36,9 +49,15 @@ func (rp *Processor) publishGraphEvents(ctx context.Context, events []Event) err
 			return errs.Wrap(err, "RuleProcessor", "publishEvent", "marshal event")
 		}
 
-		// Publish to NATS
-		if err := rp.natsClient.Publish(ctx, subject, data); err != nil {
-			return errs.WrapTransient(err, "RuleProcessor", "publishEvent", fmt.Sprintf("publish to %s", subject))
+		// Publish to NATS, respecting port type configuration
+		var publishErr error
+		if rp.isJetStreamPortBySubject(subject) {
+			publishErr = rp.natsClient.PublishToStream(ctx, subject, data)
+		} else {
+			publishErr = rp.natsClient.Publish(ctx, subject, data)
+		}
+		if publishErr != nil {
+			return errs.WrapTransient(publishErr, "RuleProcessor", "publishEvent", fmt.Sprintf("publish to %s", subject))
 		}
 
 		// Update metrics
@@ -81,8 +100,15 @@ func (rp *Processor) publishRuleEvent(ctx context.Context, ruleName, eventType s
 		}
 	}
 
-	if err := rp.natsClient.Publish(ctx, subject, data); err != nil {
-		return errs.WrapTransient(err, "RuleProcessor", "publishRuleEvent", fmt.Sprintf("publish to %s", subject))
+	// Publish to NATS, respecting port type configuration
+	var publishErr error
+	if rp.isJetStreamPortBySubject(subject) {
+		publishErr = rp.natsClient.PublishToStream(ctx, subject, data)
+	} else {
+		publishErr = rp.natsClient.Publish(ctx, subject, data)
+	}
+	if publishErr != nil {
+		return errs.WrapTransient(publishErr, "RuleProcessor", "publishRuleEvent", fmt.Sprintf("publish to %s", subject))
 	}
 
 	// Update metrics

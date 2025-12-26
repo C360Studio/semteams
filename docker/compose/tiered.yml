@@ -3,15 +3,18 @@
 # ⚠️  THIS FILE IS FOR TIERED E2E TESTING ONLY - DO NOT USE DIRECTLY ⚠️
 #
 # This compose file is designed to work with task commands:
+#   - task e2e:structural   - Rules + graph traversal (no ML)
 #   - task e2e:statistical  - BM25 + community detection (no ML)
 #   - task e2e:semantic     - Neural embeddings + LLM (requires ML services)
 #   - task e2e:clean        - Clean up test environment
 #
 # Profiles:
+#   - structural: NATS + semstreams (rules-only, no ML dependencies)
 #   - statistical: NATS + semstreams (BM25 fallback, no ML dependencies)
 #   - semantic: NATS + semembed + seminstruct + shimmy + semstreams-ml (full ML)
 #
 # Usage:
+#   docker compose -f docker/compose/tiered.yml --profile structural up -d
 #   docker compose -f docker/compose/tiered.yml --profile statistical up -d
 #   docker compose -f docker/compose/tiered.yml --profile semantic up -d
 #
@@ -151,6 +154,49 @@ services:
       - "9090:9090" # Prometheus metrics
       - "14550:14550/udp" # UDP input
       - "8083:8082" # WebSocket output (host:8083 -> container:8082)
+    networks:
+      - semstreams-tiered-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/readyz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # SemStreams Application (structural tier config)
+  # Structural variant - rules-only, no embeddings or clustering
+  # PROFILE: structural - Only started when --profile structural is specified
+  semstreams-structural:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile
+      target: production
+    container_name: semstreams-tiered-app-structural
+    profiles:
+      - structural
+    command: ["--config", "/app/configs/structural.json"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - SEMSTREAMS_NATS_URLS=nats://nats:4222
+      - SEMSTREAMS_LOG_LEVEL=debug
+      - EMBEDDING_PROVIDER=none
+    volumes:
+      - ../../configs:/app/configs:ro
+      - ../../testdata:/data/testdata:ro
+    ports:
+      - "8080:8080" # HTTP API (health, components)
+      - "8082:8082" # GraphQL gateway
+      - "9090:9090" # Prometheus metrics
+      - "14550:14550/udp" # UDP input
     networks:
       - semstreams-tiered-net
     healthcheck:

@@ -28,7 +28,7 @@
           "inputs": [
             {
               "name": "entity_stream",
-              "type": "nats",
+              "type": "jetstream",
               "subject": "events.entity.>",
               "required": true,
               "description": "Entity event stream for graph indexing"

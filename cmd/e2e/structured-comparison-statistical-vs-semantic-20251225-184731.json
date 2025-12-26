@@ -1,0 +1,151 @@
+{
+  "baseline_variant": "statistical",
+  "target_variant": "semantic",
+  "baseline_file": "./test/e2e/results/statistical-20251225-183823.json",
+  "target_file": "./test/e2e/results/semantic-20251225-184152.json",
+  "generated_at": "2025-12-25T18:47:31.315267-05:00",
+  "sections": {
+    "variant": {
+      "baseline_name": "statistical",
+      "target_name": "semantic",
+      "baseline_provider": "",
+      "target_provider": ""
+    },
+    "entities": {
+      "baseline_count": 74,
+      "target_count": 74,
+      "count_diff": 0,
+      "baseline_loss_percent": 0,
+      "target_loss_percent": 0
+    },
+    "indexes": {
+      "baseline_populated": 7,
+      "target_populated": 7,
+      "populated_diff": 0
+    },
+    "search": {
+      "baseline_queries": 7,
+      "target_queries": 7,
+      "baseline_with_results": 7,
+      "target_with_results": 7,
+      "baseline_avg_score": 0.18301049008473866,
+      "target_avg_score": 0.6894220243363062,
+      "baseline_known_answer_pct": 100,
+      "target_known_answer_pct": 100,
+      "query_diffs": [
+        {
+          "query": "Are there safety observations related to temperature?",
+          "baseline_hits": 10,
+          "target_hits": 10,
+          "hits_diff": 0,
+          "baseline_avg_score": 0.12538080456601491,
+          "target_avg_score": 0.675019325369315,
+          "insight": "Similar hits, target has higher scores"
+        },
+        {
+          "query": "Find all sensors in zone-a",
+          "baseline_hits": 10,
+          "target_hits": 10,
+          "hits_diff": 0,
+          "baseline_avg_score": 0.17868005585922447,
+          "target_avg_score": 0.618027142427658,
+          "insight": "Similar hits, target has higher scores"
+        },
+        {
+          "query": "What documents mention forklift safety?",
+          "baseline_hits": 10,
+          "target_hits": 10,
+          "hits_diff": 0,
+          "baseline_avg_score": 0.13406085944757087,
+          "target_avg_score": 0.7171459181606371,
+          "insight": "Similar hits, target has higher scores"
+        },
+        {
+          "query": "What maintenance was done on cold storage equipment?",
+          "baseline_hits": 10,
+          "target_hits": 10,
+          "hits_diff": 0,
+          "baseline_avg_score": 0.20320259243132072,
+          "target_avg_score": 0.6689621229658359,
+          "insight": "Similar hits, target has higher scores"
+        },
+        {
+          "query": "cold storage temperature monitoring refrigeration",
+          "baseline_hits": 8,
+          "target_hits": 10,
+          "hits_diff": 2,
+          "baseline_avg_score": 0.22679980824974688,
+          "target_avg_score": 0.7307265060540064,
+          "insight": "Target finds +2 more results"
+        },
+        {
+          "query": "forklift operation inspection equipment maintenance",
+          "baseline_hits": 10,
+          "target_hits": 10,
+          "hits_diff": 0,
+          "baseline_avg_score": 0.2136765826625969,
+          "target_avg_score": 0.7330467246404918,
+          "insight": "Similar hits, target has higher scores"
+        },
+        {
+          "query": "hydraulic fluid maintenance equipment repair",
+          "baseline_hits": 10,
+          "target_hits": 10,
+          "hits_diff": 0,
+          "baseline_avg_score": 0.2080305910096972,
+          "target_avg_score": 0.6830264307361992,
+          "insight": "Similar hits, target has higher scores"
+        }
+      ]
+    },
+    "rules": {
+      "baseline_evaluated": 3905,
+      "target_evaluated": 5605,
+      "baseline_triggered": 0,
+      "target_triggered": 0,
+      "baseline_passed": true,
+      "target_passed": true
+    },
+    "communities": {
+      "baseline_total": 111,
+      "target_total": 46,
+      "total_diff": -65,
+      "baseline_largest": 15,
+      "target_largest": 42,
+      "baseline_avg_size": 4,
+      "target_avg_size": 11
+    },
+    "pathrag": {
+      "baseline_entities": 5,
+      "target_entities": 5,
+      "entities_diff": 0,
+      "baseline_latency_ms": 4,
+      "target_latency_ms": 9,
+      "both_scores_valid": true
+    },
+    "structural_indexes": {
+      "baseline_kcore_max": 0,
+      "target_kcore_max": 0,
+      "kcore_max_diff": 0,
+      "baseline_pivots": 0,
+      "target_pivots": 0,
+      "pivots_diff": 0,
+      "both_kcore_verified": false,
+      "both_pivot_verified": false
+    },
+    "graphrag": {
+      "baseline_local_success": false,
+      "target_local_success": false,
+      "baseline_global_success": false,
+      "target_global_success": false,
+      "baseline_local_latency_ms": 0,
+      "target_local_latency_ms": 0,
+      "baseline_global_latency_ms": 0,
+      "target_global_latency_ms": 0
+    }
+  },
+  "summary": {
+    "tier_capability_diff": "statistical → semantic",
+    "search_improvement": "Target has better search (7/7 queries with results, avg score 0.689)"
+  }
+}

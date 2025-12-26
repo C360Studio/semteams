@@ -506,9 +506,9 @@ func (s *Store) extractTextFields(payload message.Payload, contentFields map[str
 	// This is the primary path for Document and other ContentStorable types
 	if rawContent, ok := payload.(interface{ RawContent() map[string]string }); ok {
 		content := rawContent.RawContent()
-		for role, fieldName := range contentFields {
+		for _, fieldName := range contentFields {
 			if val, ok := content[fieldName]; ok && val != "" {
-				fields[role] = val
+				fields[fieldName] = val
 			}
 		}
 		if len(fields) > 0 {
@@ -519,10 +519,10 @@ func (s *Store) extractTextFields(payload message.Payload, contentFields map[str
 	// Priority 2: Try Properties (generic properties interface)
 	if propsHolder, ok := payload.(interface{ Properties() map[string]any }); ok {
 		props := propsHolder.Properties()
-		for role, fieldName := range contentFields {
+		for _, fieldName := range contentFields {
 			if val, ok := props[fieldName]; ok {
 				if str, ok := val.(string); ok && str != "" {
-					fields[role] = str
+					fields[fieldName] = str
 				}
 			}
 		}

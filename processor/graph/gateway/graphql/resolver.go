@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -429,9 +430,11 @@ func (r *Resolver) CommunitiesByLevel(ctx context.Context, level int) ([]*Commun
 }
 
 // PathSearch performs bounded graph traversal from a starting entity (PathRAG).
+// When includeSiblings is true, PathRAG will also traverse inferred sibling relationships
+// based on the 6-part EntityID structure (entities with the same type prefix are siblings).
 func (r *Resolver) PathSearch(ctx context.Context, startEntity string,
 	maxDepth, maxNodes int, direction string, edgeTypes []string,
-	decayFactor float64) (*PathSearchResult, error) {
+	decayFactor float64, includeSiblings bool) (*PathSearchResult, error) {
 
 	var result *PathSearchResult
 	var err error
@@ -446,12 +449,13 @@ func (r *Resolver) PathSearch(ctx context.Context, startEntity string,
 		}
 
 		pattern := querymanager.PathPattern{
-			MaxDepth:    maxDepth,
-			MaxNodes:    maxNodes,
-			Direction:   dir,
-			EdgeTypes:   edgeTypes,
-			DecayFactor: decayFactor,
-			IncludeSelf: true,
+			MaxDepth:        maxDepth,
+			MaxNodes:        maxNodes,
+			Direction:       dir,
+			EdgeTypes:       edgeTypes,
+			DecayFactor:     decayFactor,
+			IncludeSelf:     true,
+			IncludeSiblings: includeSiblings,
 		}
 
 		qmResult, qErr := r.queryManager.ExecutePath(ctx, startEntity, pattern)
@@ -696,13 +700,10 @@ func convertPathResultToGraphQL(qmResult *querymanager.QueryResult) *PathSearchR
 		}
 	}
 
-	scores := make(map[string]float64)
-	for _, path := range qmResult.Paths {
-		for _, entityID := range path.Entities {
-			if _, exists := scores[entityID]; !exists {
-				scores[entityID] = path.Weight
-			}
-		}
+	// Use pre-calculated decay scores from PathRAG traversal
+	scores := qmResult.Scores
+	if scores == nil {
+		scores = make(map[string]float64)
 	}
 
 	for _, pe := range entities {
@@ -710,6 +711,15 @@ func convertPathResultToGraphQL(qmResult *querymanager.QueryResult) *PathSearchR
 			pe.Score = score
 		}
 	}
+
+	// Sort entities by score descending with ID as stable tiebreaker
+	// Using SliceStable ensures deterministic ordering for equal scores
+	sort.SliceStable(entities, func(i, j int) bool {
+		if entities[i].Score != entities[j].Score {
+			return entities[i].Score > entities[j].Score
+		}
+		return entities[i].ID < entities[j].ID // Deterministic tiebreaker
+	})
 
 	paths := make([][]PathStep, len(qmResult.Paths))
 	for i, p := range qmResult.Paths {

@@ -198,7 +198,7 @@ All compose files are in `docker/compose/`:
 | File | Purpose | Profiles |
 |------|---------|----------|
 | `e2e.yml` | Core E2E tests | - |
-| `rules.yml` | Structural tier | - |
+| `structural.yml` | Structural tier | - |
 | `tiered.yml` | Statistical + Semantic | `statistical`, `semantic` |
 | `gateway.yml` | Gateway testing | - |
 | `federation.yml` | Edge-to-cloud federation | - |
@@ -219,7 +219,7 @@ test/e2e/
     ├── semantic_basic.go
     ├── semantic_indexes.go
     ├── tiered.go           # Statistical + Semantic tiers
-    ├── tier0_rules_iot.go  # Structural tier
+    ├── tiered_structural.go  # Structural tier validation
     ├── gateway_graphql.go
     └── gateway_mcp.go
 

@@ -59,6 +59,22 @@ func main() {
 		os.Exit(exitCode)
 	}
 
+	// Handle structured comparison command
+	if flags.compareStructured {
+		if flags.baselineFile != "" && flags.targetFile != "" {
+			// Compare specific files
+			exitCode := handleStructuredCompareCommand(logger, flags.baselineFile, flags.targetFile)
+			os.Exit(exitCode)
+		} else if flags.baselineVariant != "" && flags.targetVariant != "" {
+			// Auto-find latest files for each variant
+			exitCode := handleAutoCompareCommand(logger, flags.outputDir, flags.baselineVariant, flags.targetVariant)
+			os.Exit(exitCode)
+		} else {
+			logger.Error("compare-structured requires either --baseline/--target or --baseline-variant/--target-variant")
+			os.Exit(1)
+		}
+	}
+
 	// Create clients and setup context
 	edgeClient, cloudClient, ctx := setupClientsAndContext(logger, flags.baseURL, flags.cloudURL)
 
@@ -84,6 +100,12 @@ type cliFlags struct {
 	compareTiers      bool   // Generate tier comparison report (0 vs 1 vs 2)
 	analyzeComparison bool   // Generate Core vs ML search comparison report
 	metricsURL        string // Prometheus metrics endpoint URL
+	// Structured comparison flags
+	compareStructured bool   // Compare two structured result files
+	baselineFile      string // Baseline structured result file
+	targetFile        string // Target structured result file
+	baselineVariant   string // Baseline variant for auto-compare
+	targetVariant     string // Target variant for auto-compare
 }
 
 // parseCommandLineFlags parses and returns command-line flags
@@ -114,6 +136,17 @@ func parseCommandLineFlags() *cliFlags {
 		"Generate Core vs ML search comparison report with Jaccard and correlation metrics")
 	flag.StringVar(&flags.metricsURL, "metrics-url", "http://localhost:9090",
 		"Prometheus metrics endpoint URL")
+	// Structured comparison flags
+	flag.BoolVar(&flags.compareStructured, "compare-structured", false,
+		"Compare two structured result files (requires --baseline and --target)")
+	flag.StringVar(&flags.baselineFile, "baseline", "",
+		"Baseline structured result file for comparison")
+	flag.StringVar(&flags.targetFile, "target", "",
+		"Target structured result file for comparison")
+	flag.StringVar(&flags.baselineVariant, "baseline-variant", "",
+		"Baseline variant for auto-compare (finds latest file)")
+	flag.StringVar(&flags.targetVariant, "target-variant", "",
+		"Target variant for auto-compare (finds latest file)")
 
 	// Support environment variables for Docker Compose
 	if envURL := os.Getenv("SEMSTREAMS_BASE_URL"); envURL != "" {
@@ -248,7 +281,7 @@ func runScenarios(
 	}
 
 	logger.Info("Running scenario", "name", flags.scenarioName)
-	return runScenario(ctx, logger, scenario)
+	return runScenario(ctx, logger, scenario, flags.outputDir)
 }
 
 // createScenario creates a specific scenario by name.
@@ -297,9 +330,11 @@ func createScenario(
 			cfg.Variant = "semantic"
 		}
 		// Set GraphQL URL based on variant (different ports per docker profile)
+		// Also set longer timeout for semantic tier (neural embeddings are slower)
 		switch cfg.Variant {
 		case "semantic":
 			cfg.GraphQLURL = "http://localhost:8182/graphql"
+			cfg.ValidationTimeout = 60 * time.Second // Neural embeddings need more time
 		default:
 			cfg.GraphQLURL = "http://localhost:8082/graphql"
 		}
@@ -311,7 +346,7 @@ func createScenario(
 }
 
 // runScenario executes a single scenario
-func runScenario(ctx context.Context, logger *slog.Logger, scenario scenarios.Scenario) int {
+func runScenario(ctx context.Context, logger *slog.Logger, scenario scenarios.Scenario, outputDir string) int {
 	logger.Info("Setting up scenario", "name", scenario.Name())
 
 	if err := scenario.Setup(ctx); err != nil {
@@ -344,6 +379,16 @@ func runScenario(ctx context.Context, logger *slog.Logger, scenario scenarios.Sc
 		"duration", result.Duration,
 		"metrics", result.Metrics)
 
+	// Save structured results if output directory is specified and results exist
+	if outputDir != "" && result.Structured != nil {
+		filepath, err := scenarios.SaveStructuredResults(result.Structured, outputDir)
+		if err != nil {
+			logger.Warn("Failed to save structured results", "error", err)
+		} else {
+			logger.Info("Saved structured results", "file", filepath)
+		}
+	}
+
 	return 0
 }
 
@@ -364,7 +409,7 @@ func runAllScenarios(
 
 	for _, scenario := range tests {
 		logger.Info("Running scenario", "name", scenario.Name())
-		exitCode := runScenario(ctx, logger, scenario)
+		exitCode := runScenario(ctx, logger, scenario, "")
 
 		if exitCode == 0 {
 			passed++
@@ -404,7 +449,7 @@ func runSemanticScenarios(
 
 	for _, scenario := range tests {
 		logger.Info("Running semantic scenario", "name", scenario.Name())
-		exitCode := runScenario(ctx, logger, scenario)
+		exitCode := runScenario(ctx, logger, scenario, "")
 
 		if exitCode == 0 {
 			passed++
@@ -445,7 +490,7 @@ func runRulesScenarios(
 
 	for _, scenario := range tests {
 		logger.Info("Running structural tier scenario", "name", scenario.Name())
-		exitCode := runScenario(ctx, logger, scenario)
+		exitCode := runScenario(ctx, logger, scenario, "")
 
 		if exitCode == 0 {
 			passed++
@@ -490,8 +535,8 @@ func handleCompareCommand(logger *slog.Logger, outputDir string) int {
 		return 1
 	}
 
-	// Find core and ml variant runs (look for latest of each)
-	var coreRun, mlRun *results.TestRun
+	// Find statistical and semantic variant runs (look for latest of each)
+	var statisticalRun, semanticRun *results.TestRun
 	for i := len(files) - 1; i >= 0; i-- {
 		run, err := writer.LoadRun(files[i])
 		if err != nil {
@@ -499,26 +544,27 @@ func handleCompareCommand(logger *slog.Logger, outputDir string) int {
 			continue
 		}
 
-		if run.Config.Variant == "core" && coreRun == nil {
-			coreRun = run
-		} else if run.Config.Variant == "ml" && mlRun == nil {
-			mlRun = run
+		// Support both old (core/ml) and new (statistical/semantic) variant names
+		if (run.Config.Variant == "statistical" || run.Config.Variant == "core") && statisticalRun == nil {
+			statisticalRun = run
+		} else if (run.Config.Variant == "semantic" || run.Config.Variant == "ml") && semanticRun == nil {
+			semanticRun = run
 		}
 
-		if coreRun != nil && mlRun != nil {
+		if statisticalRun != nil && semanticRun != nil {
 			break
 		}
 	}
 
-	if coreRun == nil || mlRun == nil {
-		logger.Warn("Need both core and ml variant runs to compare",
-			"has_core", coreRun != nil,
-			"has_ml", mlRun != nil)
+	if statisticalRun == nil || semanticRun == nil {
+		logger.Warn("Need both statistical and semantic variant runs to compare",
+			"has_statistical", statisticalRun != nil,
+			"has_semantic", semanticRun != nil)
 		return 1
 	}
 
-	// Compare: baseline=core, current=ml
-	comparison := results.Compare(coreRun, mlRun)
+	// Compare: baseline=statistical, current=semantic
+	comparison := results.Compare(statisticalRun, semanticRun)
 
 	// Write comparison report
 	filepath, err := writer.WriteComparison(comparison)
@@ -528,7 +574,7 @@ func handleCompareCommand(logger *slog.Logger, outputDir string) int {
 	}
 
 	// Print summary
-	printComparisonSummary(logger, coreRun, mlRun, comparison, filepath)
+	printComparisonSummary(logger, statisticalRun, semanticRun, comparison, filepath)
 
 	return 0
 }
@@ -536,27 +582,27 @@ func handleCompareCommand(logger *slog.Logger, outputDir string) int {
 // printComparisonSummary outputs a human-readable comparison
 func printComparisonSummary(
 	logger *slog.Logger,
-	coreRun, mlRun *results.TestRun,
+	statisticalRun, semanticRun *results.TestRun,
 	comparison *results.Comparison,
 	filepath string,
 ) {
-	fmt.Println("\n=== Kitchen Sink Variant Comparison ===")
-	fmt.Printf("Core variant: %s\n", coreRun.Timestamp.Format(time.RFC3339))
-	fmt.Printf("ML variant:   %s\n", mlRun.Timestamp.Format(time.RFC3339))
+	fmt.Println("\n=== Statistical vs Semantic Variant Comparison ===")
+	fmt.Printf("Statistical variant: %s\n", statisticalRun.Timestamp.Format(time.RFC3339))
+	fmt.Printf("Semantic variant:    %s\n", semanticRun.Timestamp.Format(time.RFC3339))
 
 	fmt.Println("\n--- Duration ---")
-	fmt.Printf("Core: %s\n", coreRun.DurationStr)
-	fmt.Printf("ML:   %s\n", mlRun.DurationStr)
+	fmt.Printf("Statistical: %s\n", statisticalRun.DurationStr)
+	fmt.Printf("Semantic:    %s\n", semanticRun.DurationStr)
 
 	fmt.Println("\n--- Success ---")
-	fmt.Printf("Core: %d/%d passed (%.0f%%)\n",
-		coreRun.Summary.PassedScenarios,
-		coreRun.Summary.TotalScenarios,
-		coreRun.Summary.SuccessRate*100)
-	fmt.Printf("ML:   %d/%d passed (%.0f%%)\n",
-		mlRun.Summary.PassedScenarios,
-		mlRun.Summary.TotalScenarios,
-		mlRun.Summary.SuccessRate*100)
+	fmt.Printf("Statistical: %d/%d passed (%.0f%%)\n",
+		statisticalRun.Summary.PassedScenarios,
+		statisticalRun.Summary.TotalScenarios,
+		statisticalRun.Summary.SuccessRate*100)
+	fmt.Printf("Semantic:    %d/%d passed (%.0f%%)\n",
+		semanticRun.Summary.PassedScenarios,
+		semanticRun.Summary.TotalScenarios,
+		semanticRun.Summary.SuccessRate*100)
 
 	fmt.Println("\n--- Overall Comparison ---")
 	fmt.Printf("Status Changes:    %d\n", comparison.Overall.StatusChanges)
@@ -591,7 +637,7 @@ func handleAnalyzeComparisonCommand(logger *slog.Logger, outputDir string) int {
 		outputDir = "test/e2e/results"
 	}
 
-	logger.Info("Analyzing Core vs ML search comparison", "output_dir", outputDir)
+	logger.Info("Analyzing Statistical vs Semantic search comparison", "output_dir", outputDir)
 
 	report, err := analyzeComparison(outputDir)
 	if err != nil {
@@ -636,19 +682,19 @@ func handleCompareTiersCommand(logger *slog.Logger, outputDir string) int {
 
 	// Define tier expectations
 	tierExpectations := map[string]TierExpectation{
-		"tier0": {
+		"structural": {
 			Name:               "Rules-Only",
 			ExpectedEmbeddings: 0,
 			ExpectedClusters:   0,
 			ExpectedInference:  false,
 		},
-		"tier1": {
+		"statistical": {
 			Name:               "Native (BM25 + LPA)",
 			ExpectedEmbeddings: -1, // Any non-zero
 			ExpectedClusters:   -1, // Any non-zero
 			ExpectedInference:  true,
 		},
-		"tier2": {
+		"semantic": {
 			Name:               "LLM (Neural + Summaries)",
 			ExpectedEmbeddings: -1, // Any non-zero
 			ExpectedClusters:   -1, // Any non-zero
@@ -680,7 +726,7 @@ func handleCompareTiersCommand(logger *slog.Logger, outputDir string) int {
 
 	fmt.Println("\nTo run all tiers and generate comparison data:")
 	fmt.Println("  task e2e:tiers")
-	fmt.Println("\nThis will run tier0 → tier1 → tier2 sequentially and output results.")
+	fmt.Println("\nThis will run structural → statistical → semantic sequentially and output results.")
 
 	// Save report to JSON
 	tierReportFile := fmt.Sprintf("%s/tier-comparison-%s.json", outputDir, time.Now().Format("20060102-150405"))

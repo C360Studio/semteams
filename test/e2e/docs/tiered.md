@@ -2,15 +2,38 @@
 
 ## Purpose
 
-The unified e2e test scenario covering all three tiers: Structural, Statistical, and Semantic. This single scenario replaces the previous separate scenarios (`tier0-rules-iot`, `semantic-basic`, `semantic-indexes`, `rules-graph`) with a variant-based approach.
+The unified e2e test scenario covering all three tiers: Structural, Statistical, and Semantic. This single scenario replaces the previous separate scenarios with a variant-based approach.
 
-## Three Variants
+## Progressive Enhancement Model
 
-| Variant | What It Tests | Dependencies | Duration |
-|---------|---------------|--------------|----------|
-| `structural` | Rules-only, ZERO ML inference | NATS | ~30s |
-| `statistical` | BM25 embeddings, communities | NATS | ~60s |
-| `semantic` | Neural embeddings + LLM summaries | NATS + SemEmbed + SemInstruct | ~90s |
+**SemStreams is about progressive enhancement.** Each tier builds on the previous, adding capabilities while inheriting all lower-tier features:
+
+| Tier | Variant | Includes | Adds | Dependencies |
+|------|---------|----------|------|--------------|
+| **0** | `structural` | Foundation | Entity storage, graph indexes, rules, PathRAG, k-core, pivot | NATS |
+| **1** | `statistical` | Tier 0 + | BM25 embeddings, LPA communities, semantic search | NATS |
+| **2** | `semantic` | Tier 1 + | Neural embeddings, LLM summaries, GraphRAG | NATS + SemEmbed + SemInstruct |
+
+### Tier 0: Structural (Foundation)
+- Entity storage and retrieval
+- Graph relationship indexes (incoming, outgoing, predicate, alias, spatial, temporal)
+- Rules engine with state transitions (OnEnter/OnExit)
+- **PathRAG graph traversal** (pure graph, no ML)
+- **K-core decomposition** (graph centrality)
+- **Pivot distance index** (approximate shortest paths)
+
+### Tier 1: Statistical (Tier 0 + Search)
+- All Tier 0 capabilities
+- BM25 lexical embeddings
+- LPA community detection
+- Semantic search with scoring
+- Embedding fallback handling
+
+### Tier 2: Semantic (Tier 1 + ML)
+- All Tier 1 capabilities
+- Neural embeddings (SemEmbed)
+- LLM-enhanced community summaries
+- **GraphRAG local/global queries**
 
 ## Invocation
 
@@ -77,27 +100,39 @@ task e2e:semantic
 
 ## Stage Matrix
 
-| Stage | Structural | Statistical | Semantic |
-|-------|------------|-------------|----------|
-| verify-components | ✓ | ✓ | ✓ |
-| send-mixed-data | ✓ | ✓ | ✓ |
-| validate-processing | ✓ | ✓ | ✓ |
-| verify-entity-count | ✓ | ✓ | ✓ |
-| verify-entity-retrieval | ✓ | ✓ | ✓ |
-| validate-entity-structure | ✓ | ✓ | ✓ |
-| verify-index-population | ✓ | ✓ | ✓ |
-| **validate-zero-embeddings** | ✓ | - | - |
-| **validate-zero-clusters** | ✓ | - | - |
-| **validate-rule-transitions** | ✓ | - | - |
-| test-semantic-search | - | ✓ | ✓ |
-| verify-search-quality | - | ✓ | ✓ |
-| compare-statistical-semantic | - | ✓ | ✓ |
-| **compare-communities** | - | - | ✓ |
-| test-http-gateway | - | ✓ | ✓ |
-| test-embedding-fallback | - | ✓ | ✓ |
-| validate-rules | ✓ | ✓ | ✓ |
-| validate-metrics | ✓ | ✓ | ✓ |
-| verify-outputs | ✓ | ✓ | ✓ |
+Stages are organized by tier following the progressive enhancement model:
+
+| Stage | Tier | Structural | Statistical | Semantic |
+|-------|------|------------|-------------|----------|
+| **Common Setup** | | | | |
+| verify-components | all | ✓ | ✓ | ✓ |
+| send-mixed-data | all | ✓ | ✓ | ✓ |
+| validate-processing | all | ✓ | ✓ | ✓ |
+| verify-entity-count | all | ✓ | ✓ | ✓ |
+| verify-entity-retrieval | all | ✓ | ✓ | ✓ |
+| validate-entity-structure | all | ✓ | ✓ | ✓ |
+| verify-index-population | all | ✓ | ✓ | ✓ |
+| **Tier 0: Structural** | | | | |
+| test-pathrag | 0 | ✓ | ✓ | ✓ |
+| test-pathrag-boundary | 0 | ✓ | ✓ | ✓ |
+| verify-structural-indexes | 0 | ✓ | ✓ | ✓ |
+| **Tier 0 Only: Zero-ML Validation** | | | | |
+| validate-zero-embeddings | 0 | ✓ | - | - |
+| validate-zero-clusters | 0 | ✓ | - | - |
+| validate-rule-transitions | 0 | ✓ | - | - |
+| **Tier 1+: Statistical** | | | | |
+| wait-for-embeddings | 1+ | - | ✓ | ✓ |
+| verify-search-quality | 1+ | - | ✓ | ✓ |
+| test-http-gateway | 1+ | - | ✓ | ✓ |
+| test-embedding-fallback | 1+ | - | ✓ | ✓ |
+| validate-community-structure | 1+ | - | ✓ | ✓ |
+| **Tier 2: Semantic** | | | | |
+| test-graphrag-local | 2 | - | - | ✓ |
+| test-graphrag-global | 2 | - | - | ✓ |
+| **Common Validation** | | | | |
+| validate-rules | all | ✓ | ✓ | ✓ |
+| validate-metrics | all | ✓ | ✓ | ✓ |
+| verify-outputs | all | ✓ | ✓ | ✓ |
 
 ## Configuration
 
@@ -163,7 +198,7 @@ Results saved to `OutputDir`:
 
 | Variant | Compose Profile | Command |
 |---------|-----------------|---------|
-| structural | `rules.yml` | `docker compose -f docker/compose/rules.yml` |
+| structural | `structural.yml` | `docker compose -f docker/compose/structural.yml` |
 | statistical | `tiered.yml --profile statistical` | `docker compose -f docker/compose/tiered.yml --profile statistical` |
 | semantic | `tiered.yml --profile semantic` | `docker compose -f docker/compose/tiered.yml --profile semantic` |
 
@@ -213,4 +248,4 @@ Results saved to `OutputDir`:
 - `test/e2e/client/tracer.go` - FlowTracer for message validation
 - `test/e2e/client/nats.go` - NATS validation client
 - `docker/compose/tiered.yml` - Docker Compose configuration
-- `docker/compose/rules.yml` - Rules-only Docker Compose
+- `docker/compose/structural.yml` - Structural tier Docker Compose

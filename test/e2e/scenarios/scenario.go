@@ -39,9 +39,13 @@ type Result struct {
 	Success bool   `json:"success"`
 	Error   string `json:"error,omitempty"`
 
-	// Detailed results
+	// Detailed results (legacy flat format)
 	Metrics  map[string]any `json:"metrics,omitempty"`
 	Details  map[string]any `json:"details,omitempty"`
 	Errors   []string       `json:"errors,omitempty"`
 	Warnings []string       `json:"warnings,omitempty"`
+
+	// Structured results (new typed format for tiered scenarios)
+	// This is populated alongside Metrics/Details for backward compatibility
+	Structured *TieredResults `json:"structured,omitempty"`
 }

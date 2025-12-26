@@ -23,6 +23,11 @@ type ClusteringConfig struct {
 	// This enables community detection even when explicit relationship triples don't exist
 	SemanticEdges SemanticEdgesConfig `json:"semantic_edges,omitempty"`
 
+	// EntityIDEdges configures virtual edges based on EntityID hierarchy
+	// Entities with the same TypePrefix are treated as siblings for clustering
+	// This is enabled by default since it has zero storage overhead
+	EntityIDEdges *EntityIDEdgesConfig `json:"entityid_edges,omitempty"`
+
 	// Inference configures relationship inference from community detection
 	Inference InferenceConfig `json:"inference,omitempty"`
 
@@ -100,6 +105,28 @@ type SemanticEdgesConfig struct {
 	// Controls computation cost during LPA iterations
 	// Default: 5
 	MaxVirtualNeighbors int `json:"max_virtual_neighbors" schema:"type:int,description:Max virtual neighbors per entity,default:5"`
+}
+
+// EntityIDEdgesConfig configures EntityID-based virtual edges for sibling detection.
+// Entities with the same TypePrefix (org.platform.domain.system.type) are treated as siblings.
+// This enables community detection without explicit relationship triples.
+type EntityIDEdgesConfig struct {
+	// Enabled controls whether EntityID edges are generated
+	// Default: true (zero storage overhead, works with any data)
+	Enabled bool `json:"enabled" schema:"type:bool,description:Enable EntityID virtual edges,default:true"`
+
+	// SiblingWeight is the edge weight for sibling relationships (0.0-1.0)
+	// Lower than explicit relationships (1.0) to ensure explicit edges take precedence
+	// Default: 0.7
+	SiblingWeight float64 `json:"sibling_weight" schema:"type:float,description:Weight for sibling edges,default:0.7"`
+
+	// MaxSiblings limits siblings per entity to prevent large clusters
+	// Default: 10
+	MaxSiblings int `json:"max_siblings" schema:"type:int,description:Max siblings per entity,default:10"`
+
+	// IncludeSiblings enables sibling detection via shared TypePrefix
+	// Default: true
+	IncludeSiblings bool `json:"include_siblings" schema:"type:bool,description:Include sibling relationships,default:true"`
 }
 
 // InferenceConfig configures relationship inference from clustering results

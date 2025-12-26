@@ -1145,15 +1145,34 @@ func (i *Input) drainMessageQueue(ctx context.Context) {
 	}
 }
 
+// isJetStreamPortBySubject checks if an output port with the given subject is configured for JetStream
+func (i *Input) isJetStreamPortBySubject(subject string) bool {
+	if i.config.Ports == nil {
+		return false
+	}
+	for _, port := range i.config.Ports.Outputs {
+		if port.Subject == subject {
+			return port.Type == "jetstream"
+		}
+	}
+	return false
+}
+
 // handleMessage processes a single message envelope
 func (i *Input) handleMessage(ctx context.Context, envelope *MessageEnvelope, conn *websocket.Conn) {
 	switch envelope.Type {
 	case "data":
-		// Publish data message to NATS
-		if err := i.natsClient.Publish(ctx, i.dataSubject, envelope.Payload); err != nil {
+		// Publish data message to NATS, respecting port type configuration
+		var publishErr error
+		if i.isJetStreamPortBySubject(i.dataSubject) {
+			publishErr = i.natsClient.PublishToStream(ctx, i.dataSubject, envelope.Payload)
+		} else {
+			publishErr = i.natsClient.Publish(ctx, i.dataSubject, envelope.Payload)
+		}
+		if publishErr != nil {
 			i.trackError("publish_error")
 			// Send nack on failure
-			i.sendNack(conn, envelope.ID, "publish_failed", err.Error())
+			i.sendNack(conn, envelope.ID, "publish_failed", publishErr.Error())
 		} else {
 			if i.metrics != nil {
 				i.metrics.messagesPublished.WithLabelValues(i.name, i.dataSubject).Inc()
@@ -1164,8 +1183,15 @@ func (i *Input) handleMessage(ctx context.Context, envelope *MessageEnvelope, co
 		}
 
 	case "request":
-		// Publish request to control subject
-		if err := i.natsClient.Publish(ctx, i.controlSubject+".request", envelope.Payload); err != nil {
+		// Publish request to control subject, respecting port type configuration
+		controlReqSubject := i.controlSubject + ".request"
+		var publishErr error
+		if i.isJetStreamPortBySubject(i.controlSubject) {
+			publishErr = i.natsClient.PublishToStream(ctx, controlReqSubject, envelope.Payload)
+		} else {
+			publishErr = i.natsClient.Publish(ctx, controlReqSubject, envelope.Payload)
+		}
+		if publishErr != nil {
 			i.trackError("publish_error")
 		}
 

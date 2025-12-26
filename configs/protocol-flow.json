@@ -49,7 +49,7 @@
             {
               "name": "udp_out",
               "subject": "raw.udp.messages",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
@@ -68,7 +68,7 @@
             {
               "name": "generic_in",
               "subject": "raw.udp.messages",
-              "type": "nats",
+              "type": "jetstream",
               "description": "Plain JSON from UDP"
             }
           ],
@@ -76,7 +76,7 @@
             {
               "name": "generic_out",
               "subject": "generic.messages",
-              "type": "nats",
+              "type": "jetstream",
               "interface": "core .json.v1",
               "description": "GenericJSON wrapped messages"
             }
@@ -94,7 +94,7 @@
             {
               "name": "filter_in",
               "subject": "generic.messages",
-              "type": "nats",
+              "type": "jetstream",
               "interface": "core .json.v1"
             }
           ],
@@ -102,7 +102,7 @@
             {
               "name": "filter_out",
               "subject": "filtered.messages",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
@@ -119,14 +119,14 @@
             {
               "name": "map_in",
               "subject": "filtered.messages",
-              "type": "nats"
+              "type": "jetstream"
             }
           ],
           "outputs": [
             {
               "name": "map_out",
               "subject": "mapped.messages",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
@@ -143,7 +143,7 @@
             {
               "name": "file_in",
               "subject": "mapped.messages",
-              "type": "nats",
+              "type": "jetstream",
               "interface": "core .json.v1"
             }
           ],
@@ -164,7 +164,7 @@
             {
               "name": "http_in",
               "subject": "mapped.messages",
-              "type": "nats",
+              "type": "jetstream",
               "interface": "core .json.v1"
             }
           ],
@@ -184,7 +184,7 @@
             {
               "name": "ws_in",
               "subject": "raw.udp.messages",
-              "type": "nats"
+              "type": "jetstream"
             }
           ],
           "outputs": []
@@ -203,7 +203,7 @@
             {
               "name": "store_in",
               "subject": "mapped.messages",
-              "type": "nats",
+              "type": "jetstream",
               "interface": "core .json.v1"
             }
           ],

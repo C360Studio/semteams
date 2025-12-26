@@ -128,7 +128,7 @@ func NewOutput(rawConfig json.RawMessage, deps component.Dependencies) (componen
 	// Extract subjects from port configuration
 	var inputSubjects []string
 	for _, input := range config.Ports.Inputs {
-		if input.Type == "nats" {
+		if input.Type == "nats" || input.Type == "jetstream" {
 			inputSubjects = append(inputSubjects, input.Subject)
 		}
 	}

@@ -27,6 +27,9 @@ type EntityReader interface {
 	GetEntity(ctx context.Context, id string) (*gtypes.EntityState, error)
 	ExistsEntity(ctx context.Context, id string) (bool, error)
 	BatchGet(ctx context.Context, ids []string) ([]*gtypes.EntityState, error)
+	// ListWithPrefix returns entity IDs that have the given prefix.
+	// Used for hierarchical entity queries like finding siblings in PathRAG.
+	ListWithPrefix(ctx context.Context, prefix string) ([]string, error)
 }
 
 // EntityWriter provides basic entity mutation operations.
@@ -51,6 +54,9 @@ type EntityManager interface {
 	UpdateEntityWithTriples(ctx context.Context, entity *gtypes.EntityState, addTriples []message.Triple, removePredicates []string) (*gtypes.EntityState, error)
 	BatchWrite(ctx context.Context, writes []EntityWrite) error
 	List(ctx context.Context, pattern string) ([]string, error)
+	// ListWithPrefix returns entity IDs that have the given prefix.
+	// Used for hierarchical entity queries like finding siblings in PathRAG.
+	ListWithPrefix(ctx context.Context, prefix string) ([]string, error)
 }
 
 // TripleManager provides semantic triple operations.

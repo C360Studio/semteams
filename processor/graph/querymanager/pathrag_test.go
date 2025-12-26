@@ -1,6 +1,7 @@
 package querymanager
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -426,5 +427,199 @@ func TestProcessNeighborFiltering(t *testing.T) {
 	t.Run("NodeTypes filter - valid entity ID no match", func(t *testing.T) {
 		result := m.matchesNodeTypes("org.platform.domain.system.sensor.temp-01", []string{"zone"})
 		assert.False(t, result)
+	})
+}
+
+// TestScoreMapKeyConsistency verifies that scores map keys match entity IDs.
+// This test reproduces a bug where using a different key (e.g., input parameter)
+// than entity.ID causes score lookup failures in the resolver.
+func TestGetSiblingRelationships(t *testing.T) {
+	t.Run("Valid EntityID returns siblings from mock reader", func(t *testing.T) {
+		// Create a mock entity reader that returns sibling entity IDs
+		mockReader := &mockEntityReaderWithPrefix{
+			prefixResults: map[string][]string{
+				"c360.logistics.environmental.sensor.temperature": {
+					"c360.logistics.environmental.sensor.temperature.cold-storage-01",
+					"c360.logistics.environmental.sensor.temperature.cold-storage-02",
+					"c360.logistics.environmental.sensor.temperature.warehouse-a",
+				},
+			},
+		}
+
+		m := &Manager{
+			entityReader: mockReader,
+		}
+
+		entityID := "c360.logistics.environmental.sensor.temperature.cold-storage-01"
+		siblings, err := m.getSiblingRelationships(nil, entityID)
+
+		require.NoError(t, err)
+		require.Len(t, siblings, 2, "Should find 2 siblings (excluding self)")
+
+		// Verify sibling properties
+		for _, sibling := range siblings {
+			assert.Equal(t, entityID, sibling.FromEntityID)
+			assert.NotEqual(t, entityID, sibling.ToEntityID, "Should not include self")
+			assert.Equal(t, "graph.rel.sibling", sibling.EdgeType)
+			assert.Equal(t, 0.7, sibling.Weight, "Sibling weight should be 0.7")
+			assert.True(t, sibling.Properties["inferred"].(bool), "Should be marked as inferred")
+			assert.Equal(t, "type_prefix", sibling.Properties["inference"])
+		}
+	})
+
+	t.Run("Invalid EntityID returns nil", func(t *testing.T) {
+		m := &Manager{}
+
+		// Invalid EntityID (not 6 parts)
+		siblings, err := m.getSiblingRelationships(nil, "invalid-entity-id")
+
+		assert.NoError(t, err, "Should not error for invalid EntityID, just return nil")
+		assert.Nil(t, siblings, "Should return nil for invalid EntityID")
+	})
+
+	t.Run("Entity with no siblings returns empty slice", func(t *testing.T) {
+		mockReader := &mockEntityReaderWithPrefix{
+			prefixResults: map[string][]string{
+				"c360.logistics.environmental.sensor.temperature": {
+					"c360.logistics.environmental.sensor.temperature.only-one", // Just self
+				},
+			},
+		}
+
+		m := &Manager{
+			entityReader: mockReader,
+		}
+
+		entityID := "c360.logistics.environmental.sensor.temperature.only-one"
+		siblings, err := m.getSiblingRelationships(nil, entityID)
+
+		require.NoError(t, err)
+		assert.Empty(t, siblings, "Should return empty slice when no siblings exist")
+	})
+}
+
+// mockEntityReaderWithPrefix is a mock implementation of EntityReader for testing
+type mockEntityReaderWithPrefix struct {
+	prefixResults map[string][]string
+}
+
+func (m *mockEntityReaderWithPrefix) GetEntity(_ context.Context, _ string) (*gtypes.EntityState, error) {
+	return nil, nil
+}
+
+func (m *mockEntityReaderWithPrefix) ExistsEntity(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
+func (m *mockEntityReaderWithPrefix) BatchGet(_ context.Context, _ []string) ([]*gtypes.EntityState, error) {
+	return nil, nil
+}
+
+func (m *mockEntityReaderWithPrefix) ListWithPrefix(_ context.Context, prefix string) ([]string, error) {
+	if results, ok := m.prefixResults[prefix]; ok {
+		return results, nil
+	}
+	return []string{}, nil
+}
+
+func TestScoreMapKeyConsistency(t *testing.T) {
+	m := &Manager{}
+
+	t.Run("Scores map keys must match entity.ID for correct lookup", func(t *testing.T) {
+		// Simulate the scenario where map key differs from entity.ID
+		// This is the suspected root cause of the decay scoring bug
+		startEntityID := "c360.logistics.content.document.operations.doc-ops-001"
+
+		entity1 := &gtypes.EntityState{ID: startEntityID}
+		entity2 := &gtypes.EntityState{ID: "c360.logistics.content.document.operations.doc-ops-002"}
+		entity3 := &gtypes.EntityState{ID: "c360.logistics.content.document.operations.doc-ops-003"}
+
+		state := &pathTraversalState{
+			entities: map[string]*gtypes.EntityState{
+				startEntityID: entity1,
+				entity2.ID:    entity2,
+				entity3.ID:    entity3,
+			},
+			scores: map[string]float64{
+				startEntityID: 1.0,
+				entity2.ID:    0.8,
+				entity3.ID:    0.64,
+			},
+			pathTo: map[string][]string{
+				startEntityID: {startEntityID},
+				entity2.ID:    {startEntityID, entity2.ID},
+				entity3.ID:    {startEntityID, entity2.ID, entity3.ID},
+			},
+			edgesTo: map[string][]GraphEdge{
+				startEntityID: {},
+				entity2.ID:    {{From: startEntityID, To: entity2.ID, Weight: 0.8}},
+				entity3.ID:    {{From: entity2.ID, To: entity3.ID, Weight: 0.64}},
+			},
+		}
+
+		pattern := PathPattern{IncludeSelf: true}
+		result := m.buildPathResult(state, pattern)
+
+		// Verify all entities are present
+		require.Equal(t, 3, result.Count)
+		require.Len(t, result.Entities, 3)
+
+		// CRITICAL: Verify that scores map keys match entity IDs
+		// This is the invariant that must hold for correct score lookup
+		for _, entity := range result.Entities {
+			score, found := result.Scores[entity.ID]
+			assert.True(t, found, "Score not found for entity %s - map key mismatch!", entity.ID)
+			assert.Greater(t, score, 0.0, "Entity %s has zero score, likely lookup failure", entity.ID)
+		}
+
+		// Verify start entity has score 1.0
+		assert.Equal(t, 1.0, result.Scores[startEntityID], "Start entity should have score 1.0")
+	})
+
+	t.Run("Documents ID mismatch behavior for regression prevention", func(t *testing.T) {
+		// This test documents what happens if map keys don't match entity.ID.
+		// The fix in ExecutePath prevents this from happening by always using
+		// entity.ID as the map key. This test ensures we understand the behavior
+		// and have debug logging to catch any future regressions.
+
+		inputParam := "start-entity-input"         // Key used in state maps
+		actualEntityID := "start-entity-actual-id" // Entity's actual ID field (different!)
+
+		entity1 := &gtypes.EntityState{ID: actualEntityID} // Note: ID differs from map key!
+		entity2 := &gtypes.EntityState{ID: "entity-2"}
+
+		state := &pathTraversalState{
+			entities: map[string]*gtypes.EntityState{
+				inputParam: entity1, // Using inputParam as key, but entity.ID is different
+				entity2.ID: entity2,
+			},
+			scores: map[string]float64{
+				inputParam: 1.0, // Score stored under inputParam
+				entity2.ID: 0.8,
+			},
+			pathTo: map[string][]string{
+				inputParam: {inputParam},
+				entity2.ID: {inputParam, entity2.ID},
+			},
+			edgesTo: map[string][]GraphEdge{
+				inputParam: {},
+				entity2.ID: {{From: inputParam, To: entity2.ID, Weight: 0.8}},
+			},
+		}
+
+		pattern := PathPattern{IncludeSelf: true}
+		result := m.buildPathResult(state, pattern)
+
+		// Document the expected behavior: score lookup fails when keys don't match
+		// This is caught by debug logging in buildPathResult
+		_, foundByActualID := result.Scores[entity1.ID]
+		_, foundByMapKey := result.Scores[inputParam]
+
+		// Score is stored under inputParam, not actualEntityID
+		assert.False(t, foundByActualID, "Score should NOT be found by entity.ID when keys mismatch")
+		assert.True(t, foundByMapKey, "Score should be found by original map key")
+
+		// The fix in ExecutePath ensures this mismatch never occurs in practice
+		// by always using entity.ID as the map key
 	})
 }

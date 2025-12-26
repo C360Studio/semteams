@@ -39,7 +39,7 @@
             {
               "name": "ws_data",
               "subject": "cloud.federated.data",
-              "type": "nats",
+              "type": "jetstream",
               "description": "Data received from edge via WebSocket"
             }
           ]
@@ -72,7 +72,7 @@
             {
               "name": "file_in",
               "subject": "cloud.federated.data",
-              "type": "nats"
+              "type": "jetstream"
             }
           ],
           "outputs": []

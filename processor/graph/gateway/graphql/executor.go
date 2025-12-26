@@ -58,6 +58,8 @@ type Query {
     direction: RelationshipDirection
     edgeTypes: [String!]
     decayFactor: Float
+    """Include inferred sibling relationships based on EntityID hierarchy (same type prefix)"""
+    includeSiblings: Boolean
   ): PathSearchResult
 
   """Find entities within geographic bounds"""
@@ -642,6 +644,7 @@ func (e *Executor) resolvePathSearch(ctx context.Context, args map[string]any, s
 	maxNodes := 100
 	direction := "OUTGOING"
 	decayFactor := 0.8
+	includeSiblings := false
 	var edgeTypes []string
 
 	if d, ok := args["maxDepth"].(int); ok {
@@ -660,6 +663,9 @@ func (e *Executor) resolvePathSearch(ctx context.Context, args map[string]any, s
 	if f, ok := args["decayFactor"].(float64); ok {
 		decayFactor = f
 	}
+	if s, ok := args["includeSiblings"].(bool); ok {
+		includeSiblings = s
+	}
 	if et, ok := args["edgeTypes"].([]any); ok {
 		edgeTypes = make([]string, len(et))
 		for i, v := range et {
@@ -667,7 +673,7 @@ func (e *Executor) resolvePathSearch(ctx context.Context, args map[string]any, s
 		}
 	}
 
-	result, err := e.resolver.PathSearch(ctx, startEntity, maxDepth, maxNodes, direction, edgeTypes, decayFactor)
+	result, err := e.resolver.PathSearch(ctx, startEntity, maxDepth, maxNodes, direction, edgeTypes, decayFactor, includeSiblings)
 	if err != nil {
 		return nil, err
 	}

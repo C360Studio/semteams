@@ -94,6 +94,7 @@ type Input struct {
 	interval   time.Duration
 	loop       bool
 	subject    string
+	config     Config // Store full config for port type checking
 	natsClient *natsclient.Client
 	logger     *slog.Logger
 
@@ -154,7 +155,7 @@ func (c *Config) Validate() error {
 	// Validate output ports
 	if c.Ports != nil {
 		for _, output := range c.Ports.Outputs {
-			if output.Type == "nats" && output.Subject == "" {
+			if (output.Type == "nats" || output.Type == "jetstream") && output.Subject == "" {
 				return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "NATS output subject validation")
 			}
 		}
@@ -189,7 +190,7 @@ func (c *Config) getConfiguredPorts() (path, subject string, interval time.Durat
 	// Extract output subject from ports config
 	if c.Ports != nil {
 		for _, output := range c.Ports.Outputs {
-			if output.Type == "nats" && output.Subject != "" {
+			if (output.Type == "nats" || output.Type == "jetstream") && output.Subject != "" {
 				subject = output.Subject
 				break
 			}
@@ -229,6 +230,7 @@ func NewInput(deps InputDeps) *Input {
 		interval:   interval,
 		loop:       loop,
 		subject:    subject,
+		config:     deps.Config, // Store full config for port type checking
 		natsClient: deps.NATSClient,
 		logger:     logger,
 		startTime:  time.Now(),
@@ -588,8 +590,30 @@ func (f *Input) recordParseError() {
 	}
 }
 
+// isJetStreamPortBySubject checks if an output port with the given subject is configured for JetStream
+func (f *Input) isJetStreamPortBySubject(subject string) bool {
+	if f.config.Ports == nil {
+		return false
+	}
+	for _, port := range f.config.Ports.Outputs {
+		if port.Subject == subject {
+			return port.Type == "jetstream"
+		}
+	}
+	return false
+}
+
 // publishToNATS publishes a line to the configured NATS subject
-func (f *Input) publishToNATS(_ context.Context, data []byte) error {
+func (f *Input) publishToNATS(ctx context.Context, data []byte) error {
+	// Check if output port is configured for JetStream
+	if f.isJetStreamPortBySubject(f.subject) {
+		if err := f.natsClient.PublishToStream(ctx, f.subject, data); err != nil {
+			return errs.WrapTransient(err, "file-input", "publishToNATS", "JetStream publish")
+		}
+		return nil
+	}
+
+	// Fallback to core NATS for non-JetStream ports
 	nc := f.natsClient.GetConnection()
 	if nc == nil {
 		return errs.WrapTransient(fmt.Errorf("NATS connection not available"), "file-input", "publishToNATS", "NATS connection check")

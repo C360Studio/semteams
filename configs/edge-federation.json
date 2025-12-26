@@ -39,7 +39,7 @@
             {
               "name": "udp_out",
               "subject": "edge.raw.data",
-              "type": "nats",
+              "type": "jetstream",
               "description": "Raw UDP data from edge devices"
             }
           ]
@@ -59,14 +59,14 @@
             {
               "name": "filter_in",
               "subject": "edge.raw.data",
-              "type": "nats"
+              "type": "jetstream"
             }
           ],
           "outputs": [
             {
               "name": "filter_out",
               "subject": "edge.filtered.data",
-              "type": "nats",
+              "type": "jetstream",
               "description": "Filtered data ready for federation"
             }
           ]
@@ -84,7 +84,7 @@
             {
               "name": "ws_in",
               "subject": "edge.filtered.data",
-              "type": "nats"
+              "type": "jetstream"
             }
           ],
           "outputs": [

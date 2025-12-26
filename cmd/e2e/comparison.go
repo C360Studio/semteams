@@ -1,4 +1,4 @@
-// Package main provides comparison analysis for Core vs ML search results
+// Package main provides comparison analysis for Statistical vs Semantic search results
 package main
 
 import (
@@ -14,64 +14,64 @@ import (
 	"github.com/c360/semstreams/test/e2e/scenarios"
 )
 
-// ComparisonReport represents the full Core vs ML comparison report
+// ComparisonReport represents the full Statistical vs Semantic comparison report
 type ComparisonReport struct {
-	CoreVariant   string            `json:"core_variant"`
-	MLVariant     string            `json:"ml_variant"`
-	CoreTimestamp time.Time         `json:"core_timestamp"`
-	MLTimestamp   time.Time         `json:"ml_timestamp"`
-	Queries       []QueryComparison `json:"queries"`
-	Summary       ComparisonSummary `json:"summary"`
+	StatisticalVariant   string            `json:"statistical_variant"`
+	SemanticVariant      string            `json:"semantic_variant"`
+	StatisticalTimestamp time.Time         `json:"statistical_timestamp"`
+	SemanticTimestamp    time.Time         `json:"semantic_timestamp"`
+	Queries              []QueryComparison `json:"queries"`
+	Summary              ComparisonSummary `json:"summary"`
 }
 
 // QueryComparison represents comparison results for a single query
 type QueryComparison struct {
-	Query        string   `json:"query"`
-	CoreHits     []string `json:"core_hits"`
-	MLHits       []string `json:"ml_hits"`
-	HitOverlap   float64  `json:"hit_overlap"` // Jaccard similarity (intersection/union)
-	ScoreCorr    float64  `json:"score_corr"`  // Pearson correlation of shared hit scores
-	CoreAvgScore float64  `json:"core_avg_score"`
-	MLAvgScore   float64  `json:"ml_avg_score"`
-	Insight      string   `json:"insight"` // "ML finds more results", "Similar results", etc.
+	Query               string   `json:"query"`
+	StatisticalHits     []string `json:"statistical_hits"`
+	SemanticHits        []string `json:"semantic_hits"`
+	HitOverlap          float64  `json:"hit_overlap"` // Jaccard similarity (intersection/union)
+	ScoreCorr           float64  `json:"score_corr"`  // Pearson correlation of shared hit scores
+	StatisticalAvgScore float64  `json:"statistical_avg_score"`
+	SemanticAvgScore    float64  `json:"semantic_avg_score"`
+	Insight             string   `json:"insight"` // "Semantic finds more results", "Similar results", etc.
 }
 
 // ComparisonSummary summarizes the overall comparison
 type ComparisonSummary struct {
-	AvgHitOverlap   float64 `json:"avg_hit_overlap"`   // Average Jaccard across queries
-	AvgScoreCorr    float64 `json:"avg_score_corr"`    // Average correlation
-	MLBetterCount   int     `json:"ml_better_count"`   // Queries where ML found more relevant results
-	CoreBetterCount int     `json:"core_better_count"` // Queries where Core found more relevant results
-	TiedCount       int     `json:"tied_count"`        // Queries where results were similar
-	Verdict         string  `json:"verdict"`           // "ML provides semantic lift" / "Marginal difference"
+	AvgHitOverlap          float64 `json:"avg_hit_overlap"`          // Average Jaccard across queries
+	AvgScoreCorr           float64 `json:"avg_score_corr"`           // Average correlation
+	SemanticBetterCount    int     `json:"semantic_better_count"`    // Queries where Semantic found more relevant results
+	StatisticalBetterCount int     `json:"statistical_better_count"` // Queries where Statistical found more relevant results
+	TiedCount              int     `json:"tied_count"`               // Queries where results were similar
+	Verdict                string  `json:"verdict"`                  // "Semantic provides semantic lift" / "Marginal difference"
 }
 
-// analyzeComparison generates a comparison report from Core and ML comparison files
+// analyzeComparison generates a comparison report from Statistical and Semantic comparison files
 func analyzeComparison(outputDir string) (*ComparisonReport, error) {
-	// Find latest core and ml comparison files
-	coreFile, err := findLatestComparison(outputDir, "core")
+	// Find latest statistical and semantic comparison files
+	statisticalFile, err := findLatestComparison(outputDir, "statistical")
 	if err != nil {
-		return nil, fmt.Errorf("failed to find core comparison: %w", err)
+		return nil, fmt.Errorf("failed to find statistical comparison: %w", err)
 	}
 
-	mlFile, err := findLatestComparison(outputDir, "ml")
+	semanticFile, err := findLatestComparison(outputDir, "semantic")
 	if err != nil {
-		return nil, fmt.Errorf("failed to find ml comparison: %w", err)
+		return nil, fmt.Errorf("failed to find semantic comparison: %w", err)
 	}
 
 	// Load comparison data
-	coreData, err := loadComparisonData(coreFile)
+	statisticalData, err := loadComparisonData(statisticalFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load core data: %w", err)
+		return nil, fmt.Errorf("failed to load statistical data: %w", err)
 	}
 
-	mlData, err := loadComparisonData(mlFile)
+	semanticData, err := loadComparisonData(semanticFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load ml data: %w", err)
+		return nil, fmt.Errorf("failed to load semantic data: %w", err)
 	}
 
 	// Generate comparison report
-	return generateComparisonReport(coreData, mlData), nil
+	return generateComparisonReport(statisticalData, semanticData), nil
 }
 
 // findLatestComparison finds the most recent comparison file for a variant
@@ -106,65 +106,65 @@ func loadComparisonData(filepath string) (*scenarios.ComparisonData, error) {
 	return &compData, nil
 }
 
-// generateComparisonReport creates a comparison report from Core and ML data
-func generateComparisonReport(coreData, mlData *scenarios.ComparisonData) *ComparisonReport {
+// generateComparisonReport creates a comparison report from Statistical and Semantic data
+func generateComparisonReport(statisticalData, semanticData *scenarios.ComparisonData) *ComparisonReport {
 	report := &ComparisonReport{
-		CoreVariant:   coreData.Variant,
-		MLVariant:     mlData.Variant,
-		CoreTimestamp: coreData.Timestamp,
-		MLTimestamp:   mlData.Timestamp,
-		Queries:       []QueryComparison{},
+		StatisticalVariant:   statisticalData.Variant,
+		SemanticVariant:      semanticData.Variant,
+		StatisticalTimestamp: statisticalData.Timestamp,
+		SemanticTimestamp:    semanticData.Timestamp,
+		Queries:              []QueryComparison{},
 	}
 
 	// Get all unique queries
 	querySet := make(map[string]bool)
-	for query := range coreData.SearchResults {
+	for query := range statisticalData.SearchResults {
 		querySet[query] = true
 	}
-	for query := range mlData.SearchResults {
+	for query := range semanticData.SearchResults {
 		querySet[query] = true
 	}
 
 	// Compare each query
 	var totalJaccard, totalCorr float64
 	var corrCount int
-	mlBetter, coreBetter, tied := 0, 0, 0
+	semanticBetter, statisticalBetter, tied := 0, 0, 0
 
 	for query := range querySet {
-		coreResult := coreData.SearchResults[query]
-		mlResult := mlData.SearchResults[query]
+		statisticalResult := statisticalData.SearchResults[query]
+		semanticResult := semanticData.SearchResults[query]
 
 		qc := QueryComparison{
-			Query:    query,
-			CoreHits: coreResult.Hits,
-			MLHits:   mlResult.Hits,
+			Query:           query,
+			StatisticalHits: statisticalResult.Hits,
+			SemanticHits:    semanticResult.Hits,
 		}
 
 		// Calculate Jaccard similarity
-		qc.HitOverlap = jaccard(coreResult.Hits, mlResult.Hits)
+		qc.HitOverlap = jaccard(statisticalResult.Hits, semanticResult.Hits)
 		totalJaccard += qc.HitOverlap
 
 		// Calculate average scores
-		qc.CoreAvgScore = avgScore(coreResult.Scores)
-		qc.MLAvgScore = avgScore(mlResult.Scores)
+		qc.StatisticalAvgScore = avgScore(statisticalResult.Scores)
+		qc.SemanticAvgScore = avgScore(semanticResult.Scores)
 
 		// Calculate score correlation for shared hits
-		coreScoreMap := buildScoreMap(coreResult.Hits, coreResult.Scores)
-		mlScoreMap := buildScoreMap(mlResult.Hits, mlResult.Scores)
-		qc.ScoreCorr = scoreCorrelation(coreScoreMap, mlScoreMap)
+		statisticalScoreMap := buildScoreMap(statisticalResult.Hits, statisticalResult.Scores)
+		semanticScoreMap := buildScoreMap(semanticResult.Hits, semanticResult.Scores)
+		qc.ScoreCorr = scoreCorrelation(statisticalScoreMap, semanticScoreMap)
 		if !math.IsNaN(qc.ScoreCorr) {
 			totalCorr += qc.ScoreCorr
 			corrCount++
 		}
 
 		// Determine insight
-		qc.Insight = determineInsight(coreResult, mlResult, qc.HitOverlap)
+		qc.Insight = determineInsight(statisticalResult, semanticResult, qc.HitOverlap)
 
 		// Track which is better
-		if len(mlResult.Hits) > len(coreResult.Hits) && qc.MLAvgScore >= qc.CoreAvgScore {
-			mlBetter++
-		} else if len(coreResult.Hits) > len(mlResult.Hits) && qc.CoreAvgScore > qc.MLAvgScore {
-			coreBetter++
+		if len(semanticResult.Hits) > len(statisticalResult.Hits) && qc.SemanticAvgScore >= qc.StatisticalAvgScore {
+			semanticBetter++
+		} else if len(statisticalResult.Hits) > len(semanticResult.Hits) && qc.StatisticalAvgScore > qc.SemanticAvgScore {
+			statisticalBetter++
 		} else {
 			tied++
 		}
@@ -175,10 +175,10 @@ func generateComparisonReport(coreData, mlData *scenarios.ComparisonData) *Compa
 	// Calculate summary
 	queryCount := len(querySet)
 	report.Summary = ComparisonSummary{
-		AvgHitOverlap:   totalJaccard / float64(queryCount),
-		MLBetterCount:   mlBetter,
-		CoreBetterCount: coreBetter,
-		TiedCount:       tied,
+		AvgHitOverlap:          totalJaccard / float64(queryCount),
+		SemanticBetterCount:    semanticBetter,
+		StatisticalBetterCount: statisticalBetter,
+		TiedCount:              tied,
 	}
 
 	if corrCount > 0 {
@@ -297,18 +297,18 @@ func pearsonCorrelation(x, y []float64) float64 {
 }
 
 // determineInsight generates a human-readable insight for a query comparison
-func determineInsight(coreResult, mlResult scenarios.SearchQueryResult, overlap float64) string {
-	coreCnt := len(coreResult.Hits)
-	mlCnt := len(mlResult.Hits)
+func determineInsight(statisticalResult, semanticResult scenarios.SearchQueryResult, overlap float64) string {
+	statisticalCnt := len(statisticalResult.Hits)
+	semanticCnt := len(semanticResult.Hits)
 
-	if coreCnt == 0 && mlCnt == 0 {
+	if statisticalCnt == 0 && semanticCnt == 0 {
 		return "No results from either variant"
 	}
-	if coreCnt == 0 {
-		return "ML found results where Core found none"
+	if statisticalCnt == 0 {
+		return "Semantic found results where Statistical found none"
 	}
-	if mlCnt == 0 {
-		return "Core found results where ML found none"
+	if semanticCnt == 0 {
+		return "Statistical found results where Semantic found none"
 	}
 	if overlap > 0.8 {
 		return "Very similar results"
@@ -316,25 +316,25 @@ func determineInsight(coreResult, mlResult scenarios.SearchQueryResult, overlap 
 	if overlap > 0.5 {
 		return "Moderate overlap in results"
 	}
-	if mlCnt > coreCnt {
-		return "ML finds more results"
+	if semanticCnt > statisticalCnt {
+		return "Semantic finds more results"
 	}
-	if coreCnt > mlCnt {
-		return "Core finds more results"
+	if statisticalCnt > semanticCnt {
+		return "Statistical finds more results"
 	}
 	return "Different but equal-sized result sets"
 }
 
 // determineVerdict generates the overall comparison verdict
 func determineVerdict(summary ComparisonSummary) string {
-	if summary.MLBetterCount > summary.CoreBetterCount+summary.TiedCount {
-		return "ML provides significant semantic lift"
+	if summary.SemanticBetterCount > summary.StatisticalBetterCount+summary.TiedCount {
+		return "Semantic provides significant improvement"
 	}
-	if summary.MLBetterCount > summary.CoreBetterCount {
-		return "ML provides moderate semantic improvement"
+	if summary.SemanticBetterCount > summary.StatisticalBetterCount {
+		return "Semantic provides moderate improvement"
 	}
-	if summary.CoreBetterCount > summary.MLBetterCount {
-		return "Core performs better for this dataset"
+	if summary.StatisticalBetterCount > summary.SemanticBetterCount {
+		return "Statistical performs better for this dataset"
 	}
 	if summary.AvgHitOverlap > 0.7 {
 		return "Marginal difference - results highly similar"
@@ -344,15 +344,15 @@ func determineVerdict(summary ComparisonSummary) string {
 
 // printAnalysisReport prints the comparison report to stdout
 func printAnalysisReport(report *ComparisonReport) {
-	fmt.Println("\n=== Core vs ML Search Comparison Report ===")
-	fmt.Printf("Core timestamp: %s\n", report.CoreTimestamp.Format(time.RFC3339))
-	fmt.Printf("ML timestamp:   %s\n", report.MLTimestamp.Format(time.RFC3339))
+	fmt.Println("\n=== Statistical vs Semantic Search Comparison Report ===")
+	fmt.Printf("Statistical timestamp: %s\n", report.StatisticalTimestamp.Format(time.RFC3339))
+	fmt.Printf("Semantic timestamp:    %s\n", report.SemanticTimestamp.Format(time.RFC3339))
 
 	fmt.Println("\n--- Query-by-Query Comparison ---")
 	for _, qc := range report.Queries {
 		fmt.Printf("\nQuery: %q\n", qc.Query)
-		fmt.Printf("  Core hits: %d, avg score: %.3f\n", len(qc.CoreHits), qc.CoreAvgScore)
-		fmt.Printf("  ML hits:   %d, avg score: %.3f\n", len(qc.MLHits), qc.MLAvgScore)
+		fmt.Printf("  Statistical hits: %d, avg score: %.3f\n", len(qc.StatisticalHits), qc.StatisticalAvgScore)
+		fmt.Printf("  Semantic hits:    %d, avg score: %.3f\n", len(qc.SemanticHits), qc.SemanticAvgScore)
 		fmt.Printf("  Hit overlap (Jaccard): %.2f\n", qc.HitOverlap)
 		if !math.IsNaN(qc.ScoreCorr) {
 			fmt.Printf("  Score correlation: %.2f\n", qc.ScoreCorr)
@@ -360,9 +360,9 @@ func printAnalysisReport(report *ComparisonReport) {
 		fmt.Printf("  Insight: %s\n", qc.Insight)
 
 		// Show hit details if different
-		if len(qc.CoreHits) > 0 || len(qc.MLHits) > 0 {
-			fmt.Printf("  Core top 3: %s\n", formatTopHits(qc.CoreHits, 3))
-			fmt.Printf("  ML top 3:   %s\n", formatTopHits(qc.MLHits, 3))
+		if len(qc.StatisticalHits) > 0 || len(qc.SemanticHits) > 0 {
+			fmt.Printf("  Statistical top 3: %s\n", formatTopHits(qc.StatisticalHits, 3))
+			fmt.Printf("  Semantic top 3:    %s\n", formatTopHits(qc.SemanticHits, 3))
 		}
 	}
 
@@ -371,9 +371,9 @@ func printAnalysisReport(report *ComparisonReport) {
 	if !math.IsNaN(report.Summary.AvgScoreCorr) {
 		fmt.Printf("Average score correlation:     %.2f\n", report.Summary.AvgScoreCorr)
 	}
-	fmt.Printf("Queries where ML better:   %d\n", report.Summary.MLBetterCount)
-	fmt.Printf("Queries where Core better: %d\n", report.Summary.CoreBetterCount)
-	fmt.Printf("Queries tied:              %d\n", report.Summary.TiedCount)
+	fmt.Printf("Queries where Semantic better:    %d\n", report.Summary.SemanticBetterCount)
+	fmt.Printf("Queries where Statistical better: %d\n", report.Summary.StatisticalBetterCount)
+	fmt.Printf("Queries tied:                     %d\n", report.Summary.TiedCount)
 	fmt.Printf("\nVerdict: %s\n", report.Summary.Verdict)
 }
 

@@ -255,90 +255,9 @@ func (s *TieredScenario) recordCommunityMetrics(stats communityStats, result *Re
 	result.Metrics["avg_non_singleton_size"] = stats.avgNonSingletonSize
 }
 
-// executeCompareCommunities compares statistical vs LLM-enhanced community summaries
-func (s *TieredScenario) executeCompareCommunities(ctx context.Context, result *Result) error {
-	if s.natsClient == nil {
-		result.Warnings = append(result.Warnings, "NATS client not available, skipping community comparison")
-		return nil
-	}
-
-	variant := s.detectCommunityVariant(result)
-	communities, err := s.waitForCommunities(ctx)
-
-	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get communities: %v", err))
-		return nil
-	}
-	if len(communities) == 0 {
-		result.Warnings = append(result.Warnings, "No communities found for comparison (clustering may not have completed)")
-		result.Metrics["communities_total"] = 0
-		return nil
-	}
-
-	var llmWait llmWaitResult
-	if variant == "semantic" {
-		llmWait = s.waitForLLMEnhancement(ctx, len(communities), result)
-		// Refresh communities after waiting
-		if refreshed, err := s.natsClient.GetAllCommunities(ctx); err == nil {
-			communities = refreshed
-		} else {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to refresh communities after LLM wait: %v", err))
-		}
-	}
-
-	stats := s.analyzeCommunities(communities)
-	s.recordCommunityMetrics(stats, result)
-
-	// For semantic tier, require at least one LLM-enhanced community
-	// This verifies the progressive enhancement workflow is working:
-	// 1. Communities detected by clustering
-	// 2. Statistical summaries generated immediately
-	// 3. LLM enhancement worker processes communities asynchronously
-	// 4. At least one community gets LLM-enhanced summary
-	if variant == "semantic" && stats.llmEnhancedCount == 0 {
-		return fmt.Errorf("semantic tier requires at least one LLM-enhanced community, got 0 (progressive enhancement failed)")
-	}
-
-	// Semantic tier MUST produce non-singleton communities (neural embeddings find semantic similarity)
-	if variant == "semantic" && stats.nonSingletonCount == 0 {
-		return fmt.Errorf("semantic tier should produce non-singleton communities but found 0 (clustering may have failed)")
-	}
-
-	// Validate LLM summary quality for semantic tier
-	if variant == "semantic" {
-		qualityIssues := s.validateLLMSummaryQuality(communities)
-		for _, issue := range qualityIssues {
-			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("LLM quality issue in %s: %s", issue.CommunityID, issue.Issue))
-		}
-		result.Metrics["llm_quality_issues"] = len(qualityIssues)
-
-		// Fail if majority of enhanced communities have quality issues
-		if stats.llmEnhancedCount > 0 && len(qualityIssues) > stats.llmEnhancedCount/2 {
-			return fmt.Errorf("LLM quality issues in %d/%d enhanced communities (majority failed)",
-				len(qualityIssues), stats.llmEnhancedCount)
-		}
-	}
-
-	comparisonFile := s.persistCommunityReport(variant, stats, llmWait, result)
-
-	result.Details["community_comparison"] = map[string]any{
-		"total":                  len(stats.comparisons),
-		"llm_enhanced":           stats.llmEnhancedCount,
-		"statistical_only":       stats.statisticalOnlyCount,
-		"avg_length_ratio":       stats.avgLengthRatio,
-		"avg_word_overlap":       stats.avgWordOverlap,
-		"non_singleton_count":    stats.nonSingletonCount,
-		"largest_community_size": stats.largestCommunitySize,
-		"avg_non_singleton_size": stats.avgNonSingletonSize,
-		"comparison_file":        comparisonFile,
-		"communities":            stats.comparisons,
-		"message": fmt.Sprintf("Compared %d communities: %d LLM-enhanced, %d statistical only, %d non-singleton",
-			len(stats.comparisons), stats.llmEnhancedCount, stats.statisticalOnlyCount, stats.nonSingletonCount),
-	}
-
-	return nil
-}
+// NOTE: executeCompareCommunities removed - use CLI compare instead:
+//   ./e2e --compare-structured --baseline results/statistical.json --target results/semantic.json
+// Community data is captured in structured results by executeValidateCommunityStructure.
 
 // wordJaccard calculates Jaccard similarity on word sets
 func wordJaccard(a, b string) float64 {

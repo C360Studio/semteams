@@ -366,7 +366,7 @@ func (rp *Processor) Start(ctx context.Context) error {
 	// Count subjects for logging
 	subjectCount := 0
 	for _, port := range rp.config.Ports.Inputs {
-		if port.Type == "nats" && port.Subject != "" {
+		if (port.Type == "nats" || port.Type == "jetstream") && port.Subject != "" {
 			subjectCount++
 		}
 	}
@@ -384,7 +384,7 @@ func (rp *Processor) setupSubscriptions(ctx context.Context) error {
 	// Get subjects from ports
 	var subjects []string
 	for _, port := range rp.config.Ports.Inputs {
-		if port.Type == "nats" && port.Subject != "" {
+		if (port.Type == "nats" || port.Type == "jetstream") && port.Subject != "" {
 			subjects = append(subjects, port.Subject)
 		}
 	}

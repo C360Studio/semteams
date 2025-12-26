@@ -50,7 +50,7 @@
             {
               "name": "udp_out",
               "subject": "raw.udp.messages",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
@@ -71,7 +71,7 @@
             {
               "name": "sensor_in",
               "subject": "raw.udp.messages",
-              "type": "nats"
+              "type": "jetstream"
             }
           ],
           "outputs": [

@@ -52,6 +52,6 @@ tasks:
         ignore_error: true
       - docker compose -f docker/compose/tiered.yml --profile semantic down -v --timeout 15
       - echo "[COMPARE] Generating comparison report..."
-      - cmd: cd cmd/e2e && ./e2e --compare --output-dir ./test/e2e/results
+      - cmd: cd cmd/e2e && ./e2e --analyze-comparison --output-dir ./test/e2e/results
         ignore_error: true
       - echo "[OK] Comparison report generated in ./test/e2e/results/"

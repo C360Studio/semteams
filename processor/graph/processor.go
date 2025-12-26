@@ -971,7 +971,12 @@ func (p *Processor) initializeModules(ctx context.Context) error {
 		return err
 	}
 
-	// Initialize QueryManager
+	// Initialize clustering core BEFORE QueryManager (creates p.communityDetector for DI)
+	if err := p.initializeClusteringCore(ctx, buckets, dataHandler); err != nil {
+		return err
+	}
+
+	// Initialize QueryManager with CommunityDetector available
 	querier, err := p.initializeQueryManager(dataHandler, indexer)
 	if err != nil {
 		return err
@@ -980,8 +985,8 @@ func (p *Processor) initializeModules(ctx context.Context) error {
 	// Assign all managers atomically
 	p.assignManagers(dataHandler, indexer, querier)
 
-	// Initialize clustering if enabled (after managers are ready)
-	if err := p.initializeClusteringIfEnabled(ctx, buckets); err != nil {
+	// Complete clustering setup (requires p.dataManager from assignManagers)
+	if err := p.initializeClusteringCallbacks(); err != nil {
 		return err
 	}
 
@@ -1121,12 +1126,13 @@ func (p *Processor) initializeQueryManager(
 	}
 
 	queryDeps := querymanager.Deps{
-		Config:         queryConfig,
-		EntityReader:   entityReader,
-		IndexManager:   indexer,
-		ContentFetcher: p.contentFetcher,
-		Registry:       p.metricsRegistry,
-		Logger:         p.logger,
+		Config:            queryConfig,
+		EntityReader:      entityReader,
+		IndexManager:      indexer,
+		CommunityDetector: p.communityDetector, // Available via initializeClusteringCore
+		ContentFetcher:    p.contentFetcher,
+		Registry:          p.metricsRegistry,
+		Logger:            p.logger,
 	}
 
 	p.logger.Debug("Creating QueryManager instance")
@@ -1767,21 +1773,23 @@ func (p *processorGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID
 	return 0.0, nil
 }
 
-// initializeClusteringIfEnabled sets up clustering components if enabled in config
-func (p *Processor) initializeClusteringIfEnabled(ctx context.Context, buckets map[string]jetstream.KeyValue) error {
+// initializeClusteringCore sets up core clustering components needed for QueryManager DI.
+// This creates the CommunityDetector but defers callback setup until dataManager is assigned.
+// Must be called BEFORE initializeQueryManager so CommunityDetector is available for injection.
+func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[string]jetstream.KeyValue, entityReader datamanager.EntityReader) error {
 	if !p.isClusteringEnabled() {
 		return nil
 	}
 
 	cfg := p.config.Clustering
-	p.logger.Info("Initializing clustering",
+	p.logger.Info("Initializing clustering core",
 		"max_iterations", cfg.Algorithm.MaxIterations,
 		"levels", cfg.Algorithm.Levels,
 		"enhancement_enabled", cfg.Enhancement.Enabled)
 
 	p.clusteringBuckets = buckets
 
-	communityBucket, graphProvider, err := p.setupGraphProvider(ctx, buckets, cfg)
+	communityBucket, graphProvider, err := p.setupGraphProvider(ctx, buckets, cfg, entityReader)
 	if err != nil {
 		return err
 	}
@@ -1810,6 +1818,17 @@ func (p *Processor) initializeClusteringIfEnabled(ctx context.Context, buckets m
 		return err
 	}
 
+	return nil
+}
+
+// initializeClusteringCallbacks sets up entity change callbacks for clustering.
+// Must be called AFTER assignManagers so p.dataManager is available.
+func (p *Processor) initializeClusteringCallbacks() error {
+	if !p.isClusteringEnabled() {
+		return nil
+	}
+
+	cfg := p.config.Clustering
 	p.setupEntityChangeCallback(cfg)
 	return nil
 }
@@ -1830,7 +1849,7 @@ func (p *Processor) isClusteringEnabled() bool {
 }
 
 // setupGraphProvider creates the graph provider and community storage from buckets.
-func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]jetstream.KeyValue, cfg *ClusteringConfig) (jetstream.KeyValue, clustering.GraphProvider, error) {
+func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]jetstream.KeyValue, cfg *ClusteringConfig, entityReader datamanager.EntityReader) (jetstream.KeyValue, clustering.GraphProvider, error) {
 	// Check context before bucket operations
 	select {
 	case <-ctx.Done():
@@ -1841,18 +1860,18 @@ func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]j
 	communityBucket, ok := buckets["COMMUNITY_INDEX"]
 	if !ok {
 		return nil, nil, errs.WrapFatal(errs.ErrMissingConfig, "Processor",
-			"initializeClusteringIfEnabled", "COMMUNITY_INDEX bucket not found")
+			"initializeClusteringCore", "COMMUNITY_INDEX bucket not found")
 	}
 	p.communityStorage = clustering.NewNATSCommunityStorage(communityBucket)
 
 	entityBucket, ok := buckets["ENTITY_STATES"]
 	if !ok {
 		return nil, nil, errs.WrapFatal(errs.ErrMissingConfig, "Processor",
-			"initializeClusteringIfEnabled", "ENTITY_STATES bucket not found")
+			"initializeClusteringCore", "ENTITY_STATES bucket not found")
 	}
 
 	baseProvider := &processorGraphProvider{
-		entityReader: p.dataManager,
+		entityReader: entityReader, // Use parameter instead of p.dataManager
 		kvBucket:     entityBucket,
 	}
 

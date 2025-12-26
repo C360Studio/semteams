@@ -152,3 +152,327 @@ func TestParseEntityIDValidation(t *testing.T) {
 		t.Errorf("Parsed EntityID failed IsValid() check")
 	}
 }
+
+func TestEntityIDPrefixMethods(t *testing.T) {
+	eid := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "sensor",
+		Type:     "temperature",
+		Instance: "cold-storage-01",
+	}
+
+	tests := []struct {
+		name   string
+		method func() string
+		want   string
+	}{
+		{
+			name:   "TypePrefix",
+			method: eid.TypePrefix,
+			want:   "c360.logistics.environmental.sensor.temperature",
+		},
+		{
+			name:   "SystemPrefix",
+			method: eid.SystemPrefix,
+			want:   "c360.logistics.environmental.sensor",
+		},
+		{
+			name:   "DomainPrefix",
+			method: eid.DomainPrefix,
+			want:   "c360.logistics.environmental",
+		},
+		{
+			name:   "PlatformPrefix",
+			method: eid.PlatformPrefix,
+			want:   "c360.logistics",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.method()
+			if got != tt.want {
+				t.Errorf("%s() = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEntityIDHasPrefix(t *testing.T) {
+	eid := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "sensor",
+		Type:     "temperature",
+		Instance: "cold-storage-01",
+	}
+
+	tests := []struct {
+		name   string
+		prefix string
+		want   bool
+	}{
+		{
+			name:   "exact type prefix match",
+			prefix: "c360.logistics.environmental.sensor.temperature",
+			want:   true,
+		},
+		{
+			name:   "system prefix match",
+			prefix: "c360.logistics.environmental.sensor",
+			want:   true,
+		},
+		{
+			name:   "domain prefix match",
+			prefix: "c360.logistics.environmental",
+			want:   true,
+		},
+		{
+			name:   "platform prefix match",
+			prefix: "c360.logistics",
+			want:   true,
+		},
+		{
+			name:   "org prefix match",
+			prefix: "c360",
+			want:   true,
+		},
+		{
+			name:   "full key match",
+			prefix: "c360.logistics.environmental.sensor.temperature.cold-storage-01",
+			want:   true,
+		},
+		{
+			name:   "different domain - no match",
+			prefix: "c360.logistics.facility",
+			want:   false,
+		},
+		{
+			name:   "different org - no match",
+			prefix: "acme",
+			want:   false,
+		},
+		{
+			name:   "partial match in middle - no match",
+			prefix: "logistics.environmental",
+			want:   false,
+		},
+		{
+			name:   "partial type name - no match",
+			prefix: "c360.logistics.environmental.sensor.temp",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := eid.HasPrefix(tt.prefix)
+			if got != tt.want {
+				t.Errorf("HasPrefix(%q) = %v, want %v", tt.prefix, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEntityIDIsSibling(t *testing.T) {
+	sensor1 := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "sensor",
+		Type:     "temperature",
+		Instance: "cold-storage-01",
+	}
+
+	sensor2 := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "sensor",
+		Type:     "temperature",
+		Instance: "cold-storage-02",
+	}
+
+	humid := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "sensor",
+		Type:     "humidity",
+		Instance: "zone-a",
+	}
+
+	otherOrg := EntityID{
+		Org:      "acme",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "sensor",
+		Type:     "temperature",
+		Instance: "warehouse-1",
+	}
+
+	tests := []struct {
+		name string
+		a    EntityID
+		b    EntityID
+		want bool
+		desc string
+	}{
+		{
+			name: "same type different instance - siblings",
+			a:    sensor1,
+			b:    sensor2,
+			want: true,
+			desc: "Two temperature sensors in same system are siblings",
+		},
+		{
+			name: "different type same system - not siblings",
+			a:    sensor1,
+			b:    humid,
+			want: false,
+			desc: "Temperature and humidity sensors are not siblings",
+		},
+		{
+			name: "same type different org - not siblings",
+			a:    sensor1,
+			b:    otherOrg,
+			want: false,
+			desc: "Same type but different org are not siblings",
+		},
+		{
+			name: "same entity - not sibling of itself",
+			a:    sensor1,
+			b:    sensor1,
+			want: false,
+			desc: "An entity is not a sibling of itself",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.a.IsSibling(tt.b)
+			if got != tt.want {
+				t.Errorf("IsSibling() = %v, want %v (%s)", got, tt.want, tt.desc)
+			}
+		})
+	}
+}
+
+func TestEntityIDIsSameSystem(t *testing.T) {
+	temp := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "sensor",
+		Type:     "temperature",
+		Instance: "cold-storage-01",
+	}
+
+	humid := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "sensor",
+		Type:     "humidity",
+		Instance: "zone-a",
+	}
+
+	differentSystem := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "monitor",
+		Type:     "display",
+		Instance: "main",
+	}
+
+	tests := []struct {
+		name string
+		a    EntityID
+		b    EntityID
+		want bool
+	}{
+		{
+			name: "same system different types - true",
+			a:    temp,
+			b:    humid,
+			want: true,
+		},
+		{
+			name: "different systems - false",
+			a:    temp,
+			b:    differentSystem,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.a.IsSameSystem(tt.b)
+			if got != tt.want {
+				t.Errorf("IsSameSystem() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEntityIDIsSameDomain(t *testing.T) {
+	sensor := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "sensor",
+		Type:     "temperature",
+		Instance: "cold-storage-01",
+	}
+
+	monitor := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "environmental",
+		System:   "monitor",
+		Type:     "display",
+		Instance: "main",
+	}
+
+	facility := EntityID{
+		Org:      "c360",
+		Platform: "logistics",
+		Domain:   "facility",
+		System:   "zone",
+		Type:     "area",
+		Instance: "warehouse-7",
+	}
+
+	tests := []struct {
+		name string
+		a    EntityID
+		b    EntityID
+		want bool
+	}{
+		{
+			name: "same domain different systems - true",
+			a:    sensor,
+			b:    monitor,
+			want: true,
+		},
+		{
+			name: "different domains - false",
+			a:    sensor,
+			b:    facility,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.a.IsSameDomain(tt.b)
+			if got != tt.want {
+				t.Errorf("IsSameDomain() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

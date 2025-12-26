@@ -86,6 +86,18 @@ func (m *mockEntityReader) BatchGet(_ context.Context, ids []string) ([]*gtypes.
 	return result, nil
 }
 
+// ListWithPrefix returns entity IDs matching the given prefix
+func (m *mockEntityReader) ListWithPrefix(_ context.Context, prefix string) ([]string, error) {
+	var result []string
+	prefixDot := prefix + "."
+	for id := range m.entities {
+		if id == prefix || (len(id) > len(prefix) && id[:len(prefixDot)] == prefixDot) {
+			result = append(result, id)
+		}
+	}
+	return result, nil
+}
+
 func Test_scoreCommunitySummaries(t *testing.T) {
 	m := &Manager{}
 

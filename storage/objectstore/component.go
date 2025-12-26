@@ -323,10 +323,39 @@ func (c *Component) handleWriteRequest(msg *nats.Msg) {
 	atomic.AddUint64(&c.messagesReceived, 1)
 	c.lastActivity.Store(time.Now())
 
-	// Store the raw data first
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
+	// Try to parse as BaseMessage to check for ContentStorable payload
+	var baseMsg message.BaseMessage
+	if err := baseMsg.UnmarshalJSON(msg.Data); err == nil {
+		// Successfully parsed - check if payload is ContentStorable
+		if cs, ok := baseMsg.Payload().(message.ContentStorable); ok {
+			// Use StoreContent for proper key generation and StoredContent envelope
+			storageRef, err := c.store.StoreContent(ctx, cs)
+			if err != nil {
+				c.logger.Error("Failed to store ContentStorable",
+					slog.String("entity_id", cs.EntityID()),
+					slog.String("error", err.Error()))
+				return
+			}
+
+			atomic.AddUint64(&c.messagesStored, 1)
+
+			// Publish storage event
+			c.publishEvent(Event{
+				Type:      "stored",
+				Key:       storageRef.Key,
+				Timestamp: time.Now(),
+			})
+
+			// Emit StoredMessage with proper StorageRef
+			c.emitStoredMessageFromContentStorable(&baseMsg, cs, storageRef)
+			return
+		}
+	}
+
+	// Fallback: store raw bytes for non-ContentStorable messages
 	key, err := c.store.Store(ctx, msg.Data)
 	if err != nil {
 		c.logger.Error("Failed to store message",
@@ -421,6 +450,68 @@ func (c *Component) emitStoredMessage(data []byte, storageKey string) {
 	c.logger.Debug("Emitted StoredMessage",
 		slog.String("entity_id", graphable.EntityID()),
 		slog.String("storage_key", storageKey),
+		slog.String("subject", storedSubject))
+}
+
+// emitStoredMessageFromContentStorable emits a StoredMessage for ContentStorable payloads
+// This is used when we've already stored via StoreContent and have a proper StorageRef
+func (c *Component) emitStoredMessageFromContentStorable(
+	baseMsg *message.BaseMessage,
+	cs message.ContentStorable,
+	storageRef *message.StorageReference,
+) {
+	if !c.hasPort("stored") {
+		return
+	}
+
+	// ContentStorable must also be Graphable for downstream processing
+	graphable, ok := cs.(graph.Graphable)
+	if !ok {
+		c.logger.Debug("ContentStorable not Graphable, skipping StoredMessage emit",
+			slog.String("entity_id", cs.EntityID()))
+		return
+	}
+
+	// Create StoredMessage wrapping original Graphable + StorageRef
+	storedMsg := NewStoredMessage(graphable, storageRef, baseMsg.Type().Key())
+
+	// Wrap in BaseMessage for transport
+	wrappedMsg := message.NewBaseMessage(
+		storedMsg.Schema(),
+		storedMsg,
+		c.instanceName,
+	)
+
+	// Marshal and publish
+	msgData, err := wrappedMsg.MarshalJSON()
+	if err != nil {
+		c.logger.Error("Failed to marshal StoredMessage",
+			slog.String("error", err.Error()))
+		return
+	}
+
+	storedSubject := c.getPortSubject("stored", "storage.%s.stored")
+
+	// Use JetStream publishing when port type is "jetstream" for durability
+	if c.isJetStreamPort("stored") {
+		if err := c.natsClient.PublishToStream(context.Background(), storedSubject, msgData); err != nil {
+			c.logger.Error("Failed to publish StoredMessage to JetStream",
+				slog.String("subject", storedSubject),
+				slog.String("error", err.Error()))
+			return
+		}
+	} else {
+		if err := c.natsClient.GetConnection().Publish(storedSubject, msgData); err != nil {
+			c.logger.Error("Failed to publish StoredMessage",
+				slog.String("subject", storedSubject),
+				slog.String("error", err.Error()))
+			return
+		}
+	}
+
+	c.logger.Debug("Emitted StoredMessage for ContentStorable",
+		slog.String("entity_id", cs.EntityID()),
+		slog.String("storage_key", storageRef.Key),
 		slog.String("subject", storedSubject))
 }
 

@@ -65,6 +65,10 @@ type PathPattern struct {
 	MaxNodes    int           `json:"max_nodes,omitempty"`    // Max nodes to visit (0 = unlimited)
 	MaxTime     time.Duration `json:"max_time,omitempty"`     // Query timeout (0 = use default)
 	DecayFactor float64       `json:"decay_factor,omitempty"` // Relevance decay per hop (0 = no decay)
+
+	// Hierarchical relationship inference based on 6-part EntityID structure
+	// When enabled, PathRAG will infer relationships from EntityID prefixes
+	IncludeSiblings bool `json:"include_siblings,omitempty"` // Include entities with same type prefix (siblings)
 }
 
 // QueryBounds represents spatial/temporal bounds for graph snapshots

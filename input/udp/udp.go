@@ -116,6 +116,7 @@ type Input struct {
 	port       int
 	bind       string
 	subject    string
+	config     InputConfig // Store full config for port type checking
 	natsClient *natsclient.Client
 	logger     *slog.Logger // Structured logger
 
@@ -189,7 +190,7 @@ func (c *InputConfig) Validate() error {
 
 		// Check output ports
 		for _, output := range c.Ports.Outputs {
-			if output.Type == "nats" && output.Subject == "" {
+			if (output.Type == "nats" || output.Type == "jetstream") && output.Subject == "" {
 				return errs.WrapInvalid(
 					errs.ErrInvalidConfig,
 					"InputConfig", "Validate", "NATS output subject validation")
@@ -253,7 +254,7 @@ func (c *InputConfig) getConfiguredPorts() (port int, bind, subject string) {
 		}
 		// Extract NATS output subject (including empty ones for validation)
 		for _, output := range c.Ports.Outputs {
-			if output.Type == "nats" {
+			if output.Type == "nats" || output.Type == "jetstream" {
 				subject = output.Subject
 				break
 			}
@@ -332,6 +333,7 @@ func NewInput(deps InputDeps) *Input {
 		port:        port,
 		bind:        bind,
 		subject:     subject,
+		config:      deps.Config, // Store full config for port type checking
 		natsClient:  deps.NATSClient,
 		logger:      logger,
 		buffer:      messageBuffer,
@@ -739,8 +741,21 @@ func (u *Input) processBufferedMessages(ctx context.Context) {
 	}
 }
 
+// isJetStreamPortBySubject checks if an output port with the given subject is configured for JetStream
+func (u *Input) isJetStreamPortBySubject(subject string) bool {
+	if u.config.Ports == nil {
+		return false
+	}
+	for _, port := range u.config.Ports.Outputs {
+		if port.Subject == subject {
+			return port.Type == "jetstream"
+		}
+	}
+	return false
+}
+
 // publishToNATS publishes the received data to the configured NATS subject
-func (u *Input) publishToNATS(_ context.Context, data []byte) error {
+func (u *Input) publishToNATS(ctx context.Context, data []byte) error {
 	if u.natsClient == nil {
 		return errs.WrapInvalid(fmt.Errorf("NATS client not available"),
 			"udp-input", "publishToNATS", "NATS client check")
@@ -759,10 +774,16 @@ func (u *Input) publishToNATS(_ context.Context, data []byte) error {
 		start = time.Now()
 	}
 
-	// Publish raw data directly to NATS
-	// The robotics processor will parse the MAVLink messages
-	if err := nc.Publish(u.subject, data); err != nil {
-		return errs.WrapTransient(err, "udp-input", "publishToNATS", "NATS publish")
+	// Publish raw data to NATS, respecting port type configuration
+	var publishErr error
+	if u.isJetStreamPortBySubject(u.subject) {
+		publishErr = u.natsClient.PublishToStream(ctx, u.subject, data)
+	} else {
+		// Fallback to core NATS for non-JetStream ports
+		publishErr = nc.Publish(u.subject, data)
+	}
+	if publishErr != nil {
+		return errs.WrapTransient(publishErr, "udp-input", "publishToNATS", "NATS publish")
 	}
 
 	// Record publish latency metric

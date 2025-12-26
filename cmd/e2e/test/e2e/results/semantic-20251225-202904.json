@@ -1,0 +1,346 @@
+{
+  "variant": {
+    "name": "semantic",
+    "embedding_provider": "",
+    "semembed_available": true
+  },
+  "entities": {
+    "expected_count": 74,
+    "actual_count": 74,
+    "missing_count": 0,
+    "data_loss_percent": 0,
+    "sampled_count": 5,
+    "validated_count": 5,
+    "retrieved_count": 5
+  },
+  "indexes": {
+    "expected_indexes": 7,
+    "populated_indexes": 7
+  },
+  "search": {
+    "stats": {
+      "total_queries": 7,
+      "queries_with_results": 0,
+      "queries_meeting_min_score": 0,
+      "queries_meeting_min_hits": 0,
+      "overall_avg_score": 0,
+      "known_answer_tests_passed": 0,
+      "known_answer_tests_total": 6,
+      "known_answer_failures": [
+        "query \"What documents mention forklift safety?\": missing required [] - Natural language document search",
+        "query \"Are there safety observations related to temperature?\": missing required [] - Cross-domain safety query",
+        "query \"What maintenance was done on cold storage equipment?\": missing required [] - Maintenance semantic search",
+        "query \"forklift operation inspection equipment maintenance\": missing required [] - Operations query should return operations docs",
+        "query \"cold storage temperature monitoring refrigeration\": missing required [] - Temperature query should return temp sensors",
+        "query \"hydraulic fluid maintenance equipment repair\": missing required [] - Maintenance query should return maintenance records"
+      ],
+      "results": [
+        {
+          "query": "What documents mention forklift safety?",
+          "description": "Natural language document search",
+          "hits": null,
+          "latency_ms": 1,
+          "error": "http status 404",
+          "http_status": 404,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": false,
+            "meets_min_hits": false,
+            "hits_above_min_score": 0,
+            "avg_score": 0,
+            "known_answer_passed": false
+          }
+        },
+        {
+          "query": "Are there safety observations related to temperature?",
+          "description": "Cross-domain safety query",
+          "hits": null,
+          "latency_ms": 1,
+          "error": "http status 404",
+          "http_status": 404,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": false,
+            "meets_min_hits": false,
+            "hits_above_min_score": 0,
+            "avg_score": 0,
+            "known_answer_passed": false
+          }
+        },
+        {
+          "query": "What maintenance was done on cold storage equipment?",
+          "description": "Maintenance semantic search",
+          "hits": null,
+          "latency_ms": 1,
+          "error": "http status 404",
+          "http_status": 404,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": false,
+            "meets_min_hits": false,
+            "hits_above_min_score": 0,
+            "avg_score": 0,
+            "known_answer_passed": false
+          }
+        },
+        {
+          "query": "Find all sensors in zone-a",
+          "description": "Location-based sensor query",
+          "hits": null,
+          "latency_ms": 1,
+          "error": "http status 404",
+          "http_status": 404,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": false,
+            "meets_min_hits": false,
+            "hits_above_min_score": 0,
+            "avg_score": 0,
+            "known_answer_passed": false
+          }
+        },
+        {
+          "query": "forklift operation inspection equipment maintenance",
+          "description": "Operations query should return operations docs",
+          "hits": null,
+          "latency_ms": 1,
+          "error": "http status 404",
+          "http_status": 404,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": false,
+            "meets_min_hits": false,
+            "hits_above_min_score": 0,
+            "avg_score": 0,
+            "known_answer_passed": false
+          }
+        },
+        {
+          "query": "cold storage temperature monitoring refrigeration",
+          "description": "Temperature query should return temp sensors",
+          "hits": null,
+          "latency_ms": 1,
+          "error": "http status 404",
+          "http_status": 404,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": false,
+            "meets_min_hits": false,
+            "hits_above_min_score": 0,
+            "avg_score": 0,
+            "known_answer_passed": false
+          }
+        },
+        {
+          "query": "hydraulic fluid maintenance equipment repair",
+          "description": "Maintenance query should return maintenance records",
+          "hits": null,
+          "latency_ms": 1,
+          "error": "http status 404",
+          "http_status": 404,
+          "validation": {
+            "matches_pattern": false,
+            "meets_min_score": false,
+            "meets_min_hits": false,
+            "hits_above_min_score": 0,
+            "avg_score": 0,
+            "known_answer_passed": false
+          }
+        }
+      ],
+      "executed_at": "2025-12-25T20:29:04.049264-05:00",
+      "total_latency_ms": 7
+    },
+    "weak_results_threshold": 0.5,
+    "is_weak": false
+  },
+  "rules": {
+    "evaluated_count": 4745,
+    "triggered_count": 0,
+    "validation_passed": true
+  },
+  "communities": {
+    "total_communities": 48,
+    "non_singleton_count": 15,
+    "largest_size": 41,
+    "average_size": 12,
+    "with_keywords": 48
+  },
+  "pathrag_sensor": {
+    "start_entity": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+    "entities_found": 5,
+    "paths_found": 5,
+    "entities": [
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+        "score": 1
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+        "score": 0.5120000000000001
+      }
+    ],
+    "scores_valid": true,
+    "truncated": false,
+    "latency_ms": 4,
+    "boundary_test": {
+      "max_nodes_limit": 3,
+      "entities_returned": 2,
+      "respected_limit": true
+    }
+  },
+  "pathrag_document": {
+    "start_entity": "c360.logistics.maintenance.work.completed.maint-001",
+    "entities_found": 20,
+    "paths_found": 20,
+    "entities": [
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-001",
+        "score": 1
+      },
+      {
+        "id": "c360.logistics.observation.record.high.obs-008",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-008",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.observation.record.high.obs-001",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-002",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-003",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-004",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-005",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-006",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-007",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-009",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-010",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-011",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-012",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-013",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-014",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-015",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.observation.record.high.obs-005",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.observation.record.high.obs-010",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.observation.record.high.obs-013",
+        "score": 0.5120000000000001
+      }
+    ],
+    "scores_valid": true,
+    "truncated": false,
+    "latency_ms": 6
+  },
+  "structural_indexes": {},
+  "graphrag": {
+    "global_query": {
+      "query": "logistics warehouse operations",
+      "entities_used": 0,
+      "communities_used": 0,
+      "latency_ms": 0,
+      "success": false
+    }
+  },
+  "components": {
+    "expected_count": 12,
+    "found_count": 12
+  },
+  "outputs": {
+    "expected_count": 2,
+    "found_count": 2
+  },
+  "timing": {
+    "total_duration_ms": 1847,
+    "stage_durations": {
+      "send-mixed-data": 1042,
+      "test-embedding-fallback": 0,
+      "test-graphrag-global": 0,
+      "test-graphrag-local": 0,
+      "test-http-gateway": 0,
+      "test-pathrag-boundary": 0,
+      "test-pathrag-document": 6,
+      "test-pathrag-sensor": 4,
+      "validate-community-structure": 13,
+      "validate-entity-structure": 2,
+      "validate-metrics": 1,
+      "validate-processing": 7,
+      "validate-rules": 18,
+      "verify-components": 0,
+      "verify-entity-count": 2,
+      "verify-entity-retrieval": 2,
+      "verify-index-population": 14,
+      "verify-outputs": 0,
+      "verify-search-quality": 5,
+      "verify-structural-indexes": 0,
+      "wait-for-embeddings": 720
+    }
+  },
+  "metadata": {
+    "variant": "semantic",
+    "started_at": "2025-12-25T20:29:02.245421-05:00",
+    "completed_at": "2025-12-25T20:29:04.093397-05:00",
+    "success": true,
+    "error_count": 0,
+    "warning_count": 12
+  }
+}

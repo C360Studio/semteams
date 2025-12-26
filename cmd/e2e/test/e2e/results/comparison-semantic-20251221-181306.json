@@ -1,0 +1,123 @@
+{
+  "variant": "semantic",
+  "embedding_provider": "http",
+  "timestamp": "2025-12-21T18:13:06.339148-05:00",
+  "search_results": {
+    "Are there safety observations related to temperature?": {
+      "query": "Are there safety observations related to temperature?",
+      "hits": [
+        "c360.logistics.sensor.document.temperature.sensor-temp-002",
+        "c360.logistics.maintenance.work.completed.maint-010",
+        "c360.logistics.maintenance.work.completed.maint-012",
+        "c360.logistics.content.document.quality.doc-quality-001",
+        "c360.logistics.content.document.logistics.doc-shipping-001",
+        "c360.logistics.maintenance.work.completed.maint-009",
+        "c360.logistics.maintenance.work.completed.maint-011",
+        "c360.logistics.observation.record.high.obs-013",
+        "c360.logistics.maintenance.work.completed.maint-013",
+        "c360.logistics.maintenance.work.in_progress.maint-016"
+      ],
+      "scores": [
+        0.6214578908071032,
+        0.5512469679951684,
+        0.5512469679951684,
+        0.5512469679951684,
+        0.5512469679951684,
+        0.5512469679951684,
+        0.5512469679951684,
+        0.5512469679951684,
+        0.5512469679951684,
+        0.5512469679951684
+      ],
+      "latency_ms": 17,
+      "hit_count": 10
+    },
+    "Find all sensors in zone-a": {
+      "query": "Find all sensors in zone-a",
+      "hits": [
+        "c360.logistics.observation.record.medium.obs-009",
+        "c360.logistics.content.document.maintenance.doc-maint-001",
+        "c360.logistics.observation.record.low.obs-014",
+        "c360.logistics.sensor.document.vibration.sensor-vibration-001",
+        "c360.logistics.maintenance.work.completed.maint-014",
+        "c360.logistics.observation.record.medium.obs-015",
+        "c360.logistics.sensor.document.level.sensor-level-001",
+        "c360.logistics.maintenance.work.completed.maint-015",
+        "c360.logistics.maintenance.work.completed.maint-001",
+        "c360.logistics.maintenance.work.completed.maint-004"
+      ],
+      "scores": [
+        0.5707471650594792,
+        0.5707471650594792,
+        0.5707471650594792,
+        0.5707471650594792,
+        0.5707471650594792,
+        0.5707471650594792,
+        0.5707471650594792,
+        0.5707471650594792,
+        0.5707471650594792,
+        0.5707471650594792
+      ],
+      "latency_ms": 9,
+      "hit_count": 10
+    },
+    "What documents mention forklift safety?": {
+      "query": "What documents mention forklift safety?",
+      "hits": [
+        "c360.logistics.sensor.document.temperature.sensor-temp-002",
+        "c360.logistics.observation.record.high.obs-008",
+        "c360.logistics.sensor.document.temperature.sensor-temp-003",
+        "c360.logistics.observation.record.high.obs-005",
+        "c360.logistics.content.document.human_resources.doc-hr-001",
+        "c360.logistics.content.document.compliance.doc-audit-001",
+        "c360.logistics.observation.record.medium.obs-011",
+        "c360.logistics.observation.record.medium.obs-009",
+        "c360.logistics.content.document.maintenance.doc-maint-001",
+        "c360.logistics.observation.record.low.obs-014"
+      ],
+      "scores": [
+        0.5718660266203409,
+        0.5655338704802767,
+        0.5655338704802767,
+        0.5655338704802767,
+        0.5655338704802767,
+        0.5655338704802767,
+        0.5655338704802767,
+        0.5655338704802767,
+        0.5655338704802767,
+        0.5655338704802767
+      ],
+      "latency_ms": 31,
+      "hit_count": 10
+    },
+    "What maintenance was done on cold storage equipment?": {
+      "query": "What maintenance was done on cold storage equipment?",
+      "hits": [
+        "c360.logistics.sensor.document.temperature.sensor-temp-002",
+        "c360.logistics.sensor.document.temperature.sensor-temp-003",
+        "c360.logistics.observation.record.high.obs-005",
+        "c360.logistics.content.document.human_resources.doc-hr-001",
+        "c360.logistics.content.document.compliance.doc-audit-001",
+        "c360.logistics.observation.record.medium.obs-011",
+        "c360.logistics.observation.record.medium.obs-009",
+        "c360.logistics.content.document.maintenance.doc-maint-001",
+        "c360.logistics.observation.record.low.obs-014",
+        "c360.logistics.sensor.document.vibration.sensor-vibration-001"
+      ],
+      "scores": [
+        0.5569779884303969,
+        0.5506246147936319,
+        0.5506246147936319,
+        0.5506246147936319,
+        0.5506246147936319,
+        0.5506246147936319,
+        0.5506246147936319,
+        0.5506246147936319,
+        0.5506246147936319,
+        0.5506246147936319
+      ],
+      "latency_ms": 17,
+      "hit_count": 10
+    }
+  }
+}

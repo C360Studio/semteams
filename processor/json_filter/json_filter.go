@@ -72,6 +72,7 @@ type Processor struct {
 	subjects    []string
 	outputSubjs []string // Support multiple output subjects
 	rules       []FilterRule
+	config      Config // Store full config for port type checking
 	natsClient  *natsclient.Client
 	logger      *slog.Logger
 
@@ -113,14 +114,14 @@ func NewProcessor(
 	var outputSubjects []string
 
 	for _, input := range config.Ports.Inputs {
-		if input.Type == "nats" {
+		if input.Type == "nats" || input.Type == "jetstream" {
 			inputSubjects = append(inputSubjects, input.Subject)
 		}
 	}
 
 	// Collect all output subjects (support multiple outputs)
 	for _, output := range config.Ports.Outputs {
-		if output.Type == "nats" {
+		if output.Type == "nats" || output.Type == "jetstream" {
 			outputSubjects = append(outputSubjects, output.Subject)
 		}
 	}
@@ -143,6 +144,7 @@ func NewProcessor(
 		subjects:    inputSubjects,
 		outputSubjs: outputSubjects,
 		rules:       config.Rules,
+		config:      config, // Store full config for port type checking
 		natsClient:  deps.NATSClient,
 		logger:      deps.GetLogger(),
 		shutdown:    make(chan struct{}),
@@ -241,6 +243,19 @@ func (f *Processor) Stop(timeout time.Duration) error {
 	return nil
 }
 
+// isJetStreamPortBySubject checks if an output port with the given subject is configured for JetStream
+func (f *Processor) isJetStreamPortBySubject(subject string) bool {
+	if f.config.Ports == nil {
+		return false
+	}
+	for _, port := range f.config.Ports.Outputs {
+		if port.Subject == subject {
+			return port.Type == "jetstream"
+		}
+	}
+	return false
+}
+
 // handleMessage processes incoming GenericJSON messages
 func (f *Processor) handleMessage(ctx context.Context, msgData []byte) {
 	atomic.AddInt64(&f.messagesProcessed, 1)
@@ -304,13 +319,19 @@ func (f *Processor) handleMessage(ctx context.Context, msgData []byte) {
 		// Publish to all output subjects
 		for _, subject := range f.outputSubjs {
 			if subject != "" {
-				if err := f.natsClient.Publish(ctx, subject, msgData); err != nil {
+				var publishErr error
+				if f.isJetStreamPortBySubject(subject) {
+					publishErr = f.natsClient.PublishToStream(ctx, subject, msgData)
+				} else {
+					publishErr = f.natsClient.Publish(ctx, subject, msgData)
+				}
+				if publishErr != nil {
 					atomic.AddInt64(&f.errors, 1)
 					f.metrics.recordError(f.name, "publish")
 					f.logger.Error("Failed to publish filtered message",
 						"component", f.name,
 						"output_subject", subject,
-						"error", err)
+						"error", publishErr)
 				} else {
 					f.logger.Debug("Published filtered message",
 						"component", f.name,

@@ -78,6 +78,7 @@ type Processor struct {
 	mappings     []FieldMapping
 	addFields    map[string]any
 	removeFields map[string]bool // Set for fast lookup
+	config       Config          // Store full config for port type checking
 	natsClient   *natsclient.Client
 	logger       *slog.Logger
 
@@ -118,7 +119,7 @@ func NewProcessor(
 	var outputSubject string
 
 	for _, input := range config.Ports.Inputs {
-		if input.Type == "nats" {
+		if input.Type == "nats" || input.Type == "jetstream" {
 			inputSubjects = append(inputSubjects, input.Subject)
 		}
 	}
@@ -153,6 +154,7 @@ func NewProcessor(
 		mappings:     config.Mappings,
 		addFields:    config.AddFields,
 		removeFields: removeFieldsSet,
+		config:       config, // Store full config for port type checking
 		natsClient:   deps.NATSClient,
 		logger:       deps.GetLogger(),
 		shutdown:     make(chan struct{}),
@@ -255,6 +257,19 @@ func (m *Processor) Stop(timeout time.Duration) error {
 	return nil
 }
 
+// isJetStreamPortBySubject checks if an output port with the given subject is configured for JetStream
+func (m *Processor) isJetStreamPortBySubject(subject string) bool {
+	if m.config.Ports == nil {
+		return false
+	}
+	for _, port := range m.config.Ports.Outputs {
+		if port.Subject == subject {
+			return port.Type == "jetstream"
+		}
+	}
+	return false
+}
+
 // handleMessage processes incoming GenericJSON messages
 func (m *Processor) handleMessage(ctx context.Context, msgData []byte) {
 	atomic.AddInt64(&m.messagesProcessed, 1)
@@ -337,13 +352,19 @@ func (m *Processor) handleMessage(ctx context.Context, msgData []byte) {
 		// Record transformation metrics
 		m.metrics.recordTransformation(m.name, duration, len(transformedData))
 
-		if err := m.natsClient.Publish(ctx, m.outputSubj, transformedData); err != nil {
+		var publishErr error
+		if m.isJetStreamPortBySubject(m.outputSubj) {
+			publishErr = m.natsClient.PublishToStream(ctx, m.outputSubj, transformedData)
+		} else {
+			publishErr = m.natsClient.Publish(ctx, m.outputSubj, transformedData)
+		}
+		if publishErr != nil {
 			atomic.AddInt64(&m.errors, 1)
 			m.metrics.recordError(m.name, "publish")
 			m.logger.Error("Failed to publish transformed message",
 				"component", m.name,
 				"output_subject", m.outputSubj,
-				"error", err)
+				"error", publishErr)
 		} else {
 			m.logger.Debug("Published BaseMessage with transformed GenericJSON payload",
 				"component", m.name,

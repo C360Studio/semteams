@@ -70,6 +70,7 @@ type Component struct {
 	name       string
 	subjects   []string
 	outputSubj string
+	config     ComponentConfig // Store full config for port type checking
 	natsClient *natsclient.Client
 	logger     *slog.Logger
 
@@ -127,7 +128,7 @@ func NewComponent(
 	var outputSubject string
 
 	for _, input := range config.Ports.Inputs {
-		if input.Type == "nats" {
+		if input.Type == "nats" || input.Type == "jetstream" {
 			inputSubjects = append(inputSubjects, input.Subject)
 		}
 	}
@@ -152,6 +153,7 @@ func NewComponent(
 		name:       "document-processor",
 		subjects:   inputSubjects,
 		outputSubj: outputSubject,
+		config:     config, // Store full config for port type checking
 		natsClient: deps.NATSClient,
 		logger:     deps.GetLogger(),
 		processor:  processor,
@@ -255,6 +257,19 @@ func (c *Component) IsStarted() bool {
 	return c.running
 }
 
+// isJetStreamPortBySubject checks if an output port with the given subject is configured for JetStream
+func (c *Component) isJetStreamPortBySubject(subject string) bool {
+	if c.config.Ports == nil {
+		return false
+	}
+	for _, port := range c.config.Ports.Outputs {
+		if port.Subject == subject {
+			return port.Type == "jetstream"
+		}
+	}
+	return false
+}
+
 // handleMessage processes incoming document JSON messages.
 func (c *Component) handleMessage(ctx context.Context, msgData []byte) {
 	atomic.AddInt64(&c.messagesProcessed, 1)
@@ -349,12 +364,18 @@ func (c *Component) handleMessage(ctx context.Context, msgData []byte) {
 
 	// Publish to output subject
 	if c.outputSubj != "" {
-		if err := c.natsClient.Publish(ctx, c.outputSubj, wrappedData); err != nil {
+		var publishErr error
+		if c.isJetStreamPortBySubject(c.outputSubj) {
+			publishErr = c.natsClient.PublishToStream(ctx, c.outputSubj, wrappedData)
+		} else {
+			publishErr = c.natsClient.Publish(ctx, c.outputSubj, wrappedData)
+		}
+		if publishErr != nil {
 			atomic.AddInt64(&c.errors, 1)
 			c.logger.Error("Failed to publish wrapped message",
 				"component", c.name,
 				"output_subject", c.outputSubj,
-				"error", err)
+				"error", publishErr)
 		} else {
 			c.logger.Debug("Published wrapped message",
 				"component", c.name,

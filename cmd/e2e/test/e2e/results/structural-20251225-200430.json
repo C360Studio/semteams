@@ -1,0 +1,104 @@
+{
+  "variant": {
+    "name": "structural",
+    "embedding_provider": "",
+    "semembed_available": false
+  },
+  "entities": {
+    "expected_count": 74,
+    "actual_count": 74,
+    "missing_count": 0,
+    "data_loss_percent": 0,
+    "sampled_count": 5,
+    "validated_count": 5,
+    "retrieved_count": 5
+  },
+  "indexes": {
+    "expected_indexes": 7,
+    "populated_indexes": 7
+  },
+  "search": {
+    "stats": null,
+    "weak_results_threshold": 0,
+    "is_weak": false
+  },
+  "rules": {
+    "evaluated_count": 888,
+    "triggered_count": 3,
+    "validation_passed": true
+  },
+  "pathrag_sensor": {
+    "start_entity": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+    "entities_found": 5,
+    "paths_found": 5,
+    "entities": [
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+        "score": 1
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+        "score": 0.5120000000000001
+      }
+    ],
+    "scores_valid": true,
+    "truncated": false,
+    "latency_ms": 4,
+    "boundary_test": {
+      "max_nodes_limit": 3,
+      "entities_returned": 1,
+      "respected_limit": true
+    }
+  },
+  "structural_indexes": {},
+  "components": {
+    "expected_count": 12,
+    "found_count": 12
+  },
+  "outputs": {
+    "expected_count": 2,
+    "found_count": 2
+  },
+  "timing": {
+    "total_duration_ms": 1745,
+    "stage_durations": {
+      "send-mixed-data": 1030,
+      "test-pathrag-boundary": 0,
+      "test-pathrag-sensor": 4,
+      "validate-entity-structure": 4,
+      "validate-metrics": 2,
+      "validate-processing": 15,
+      "validate-rule-transitions": 8,
+      "validate-rules": 19,
+      "validate-zero-clusters": 2,
+      "validate-zero-embeddings": 3,
+      "verify-components": 1,
+      "verify-entity-count": 4,
+      "verify-entity-retrieval": 5,
+      "verify-index-population": 15,
+      "verify-outputs": 0,
+      "verify-structural-indexes": 0,
+      "wait-for-entity-stabilization": 625
+    }
+  },
+  "metadata": {
+    "variant": "structural",
+    "started_at": "2025-12-25T20:04:28.798651-05:00",
+    "completed_at": "2025-12-25T20:04:30.544336-05:00",
+    "success": true,
+    "error_count": 0,
+    "warning_count": 4
+  }
+}

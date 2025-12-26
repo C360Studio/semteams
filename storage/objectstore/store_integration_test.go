@@ -786,3 +786,92 @@ func (d *testBinaryDocument) BinaryFields() map[string]message.BinaryContent {
 	}
 	return fields
 }
+
+// TestIntegration_ExtractTextFields_KeyMapping verifies that when raw BaseMessage bytes
+// are stored and then fetched via FetchContent, the extractTextFields function correctly
+// uses fieldName (not role) as the key in StoredContent.Fields.
+//
+// This test validates the fix for a bug where extractTextFields was using role as key:
+//
+//	fields[role] = val  // BUG: stored {"abstract": "desc text"}
+//
+// Instead of:
+//
+//	fields[fieldName] = val  // CORRECT: stored {"description": "desc text"}
+//
+// The worker expects Fields to be keyed by fieldName so it can look up:
+//
+//	fieldName := contentFields["abstract"]  // = "description"
+//	content := stored.Fields["description"] // Must find it here!
+func TestIntegration_ExtractTextFields_KeyMapping(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := objectstore.Config{
+		BucketName: "TEST_EXTRACT_FIELDS",
+	}
+
+	ctx := context.Background()
+	store, err := objectstore.NewStoreWithConfig(ctx, natsClient, config)
+	require.NoError(t, err)
+	defer store.Close()
+
+	// Create a Document with description field
+	// Document.ContentFields() returns {"abstract": "description", "body": "body", "title": "title"}
+	// Note: "abstract" role maps to "description" fieldName
+	doc := &document.Document{
+		ID:          "test-doc-001",
+		Title:       "Test Document Title",
+		Description: "This is the abstract/description text", // Maps to "abstract" role
+		Body:        "This is the body text",
+		Category:    "test",
+		OrgID:       "test",
+		Platform:    "test",
+	}
+
+	// Create BaseMessage with Document payload
+	baseMsg := message.NewBaseMessage(doc.Schema(), doc, "test-source")
+
+	// Marshal to bytes (simulating what ObjectStore component receives from NATS)
+	msgBytes, err := baseMsg.MarshalJSON()
+	require.NoError(t, err)
+
+	// Store raw bytes (this is what ObjectStore component does via handleWriteRequest)
+	key, err := store.Store(ctx, msgBytes)
+	require.NoError(t, err)
+
+	// Create a StorageReference pointing to the stored bytes
+	ref := &message.StorageReference{
+		StorageInstance: config.BucketName,
+		Key:             key,
+	}
+
+	// FetchContent should fall back to extractContentFromBaseMessage
+	// which uses extractTextFields internally
+	storedContent, err := store.FetchContent(ctx, ref)
+	require.NoError(t, err)
+	require.NotNil(t, storedContent)
+
+	// CRITICAL ASSERTION: Fields should be keyed by fieldName, NOT role
+	// The worker does: stored.Fields[contentFields["abstract"]] = stored.Fields["description"]
+	assert.Equal(t, "This is the abstract/description text", storedContent.Fields["description"],
+		"Fields should be keyed by fieldName ('description'), not role ('abstract')")
+
+	assert.Equal(t, "This is the body text", storedContent.Fields["body"],
+		"Fields should contain body content keyed by 'body'")
+
+	assert.Equal(t, "Test Document Title", storedContent.Fields["title"],
+		"Fields should contain title content keyed by 'title'")
+
+	// Verify that role is NOT used as key (would indicate the bug is present)
+	_, hasAbstractKey := storedContent.Fields["abstract"]
+	assert.False(t, hasAbstractKey,
+		"Fields should NOT have 'abstract' as key - that's the role, not the fieldName")
+
+	// Verify ContentFields mapping is preserved correctly
+	assert.Equal(t, "description", storedContent.ContentFields[message.ContentRoleAbstract],
+		"ContentFields should map abstract role to description fieldName")
+	assert.Equal(t, "body", storedContent.ContentFields[message.ContentRoleBody],
+		"ContentFields should map body role to body fieldName")
+	assert.Equal(t, "title", storedContent.ContentFields[message.ContentRoleTitle],
+		"ContentFields should map title role to title fieldName")
+}

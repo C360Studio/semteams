@@ -61,8 +61,8 @@
           "outputs": [
             {
               "name": "udp_out",
-              "subject": "raw.udp.messages",
-              "type": "nats"
+              "subject": "raw.sensor.udp",
+              "type": "jetstream"
             }
           ]
         },
@@ -82,13 +82,13 @@
             {
               "name": "file_out",
               "subject": "raw.document.corpus",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
         "path": "/data/testdata/semantic/documents.jsonl",
         "format": "jsonl",
-        "interval": "0",
+        "interval": "10ms",
         "loop": false
       }
     },
@@ -103,13 +103,13 @@
             {
               "name": "file_out",
               "subject": "raw.document.corpus",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
         "path": "/data/testdata/semantic/maintenance.jsonl",
         "format": "jsonl",
-        "interval": "0",
+        "interval": "10ms",
         "loop": false
       }
     },
@@ -124,13 +124,13 @@
             {
               "name": "file_out",
               "subject": "raw.document.corpus",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
         "path": "/data/testdata/semantic/observations.jsonl",
         "format": "jsonl",
-        "interval": "0",
+        "interval": "10ms",
         "loop": false
       }
     },
@@ -145,13 +145,13 @@
             {
               "name": "file_out",
               "subject": "raw.document.corpus",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
         "path": "/data/testdata/semantic/sensor_docs.jsonl",
         "format": "jsonl",
-        "interval": "0",
+        "interval": "10ms",
         "loop": false
       }
     },
@@ -166,7 +166,7 @@
             {
               "name": "file_out",
               "subject": "raw.sensor.file",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
@@ -186,14 +186,14 @@
             {
               "name": "doc_in",
               "subject": "raw.document.corpus",
-              "type": "nats"
+              "type": "jetstream"
             }
           ],
           "outputs": [
             {
               "name": "doc_out",
               "subject": "document.processed.entity",
-              "type": "nats",
+              "type": "jetstream",
               "interface": "content.document.v1"
             }
           ]
@@ -212,7 +212,7 @@
             {
               "name": "sensor_in",
               "subject": "raw.sensor.>",
-              "type": "nats"
+              "type": "jetstream"
             }
           ],
           "outputs": [
@@ -228,60 +228,6 @@
         "platform": "logistics"
       }
     },
-    "json_generic": {
-      "type": "processor",
-      "name": "json_generic",
-      "enabled": false,
-      "config": {
-        "ports": {
-          "inputs": [
-            {
-              "name": "generic_in",
-              "subject": "raw.udp.messages",
-              "type": "nats"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "generic_out",
-              "subject": "generic.messages",
-              "type": "nats",
-              "interface": "core.json.v1"
-            }
-          ]
-        }
-      }
-    },
-    "json_filter": {
-      "type": "processor",
-      "name": "json_filter",
-      "enabled": false,
-      "config": {
-        "ports": {
-          "inputs": [
-            {
-              "name": "filter_in",
-              "subject": "generic.messages",
-              "type": "nats",
-              "interface": "core.json.v1"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "entities_out",
-              "subject": "generic.entities",
-              "type": "nats",
-              "interface": "core.json.v1"
-            }
-          ]
-        },
-        "criteria": {
-          "type": {
-            "equals": "telemetry"
-          }
-        }
-      }
-    },
     "rule": {
       "type": "processor",
       "name": "rule-processor",
@@ -293,13 +239,13 @@
             {
               "name": "rule_entity_in",
               "subject": "objectstore.stored.entity",
-              "type": "nats",
+              "type": "jetstream",
               "description": "Stored document entity events"
             },
             {
               "name": "rule_sensor_in",
               "subject": "sensor.processed.entity",
-              "type": "nats",
+              "type": "jetstream",
               "description": "Sensor entity events (bypass ObjectStore)"
             }
           ],
@@ -307,7 +253,7 @@
             {
               "name": "rule_out",
               "subject": "rule.triggered.alert",
-              "type": "nats"
+              "type": "jetstream"
             }
           ]
         },
@@ -506,13 +452,16 @@
             "http_model": "BAAI/bge-small-en-v1.5",
             "content_store_bucket": "semstreams_kitchen_sink_store",
             "text_fields": [
-              "dc.title",
-              "dc.subject",
-              "dc.description",
+              "dc.terms.title",
+              "dc.terms.subject",
+              "dc.terms.description",
               "title",
               "description",
               "summary",
               "name",
+              "body",
+              "content",
+              "text",
               "observation.text"
             ]
           }
@@ -557,6 +506,12 @@
             "similarity_threshold": 0.6,
             "max_virtual_neighbors": 5
           },
+          "entityid_edges": {
+            "enabled": true,
+            "sibling_weight": 0.7,
+            "max_siblings": 10,
+            "include_siblings": true
+          },
           "inference": {
             "enabled": true,
             "min_community_size": 2,
@@ -584,7 +539,7 @@
             {
               "name": "file_in",
               "subject": "objectstore.stored.entity",
-              "type": "nats",
+              "type": "jetstream",
               "interface": "content.document.v1"
             }
           ],
@@ -593,45 +548,6 @@
         "directory": "/tmp",
         "file_prefix": "semstreams-kitchen-sink-ml",
         "format": "jsonl"
-      }
-    },
-    "httppost": {
-      "type": "output",
-      "name": "httppost",
-      "enabled": true,
-      "config": {
-        "ports": {
-          "inputs": [
-            {
-              "name": "http_in",
-              "subject": "objectstore.stored.entity",
-              "type": "nats",
-              "interface": "content.document.v1"
-            }
-          ],
-          "outputs": []
-        },
-        "url": "http://localhost:9999/webhook",
-        "retry_max": 3
-      }
-    },
-    "websocket": {
-      "type": "output",
-      "name": "websocket",
-      "enabled": true,
-      "config": {
-        "ports": {
-          "inputs": [
-            {
-              "name": "ws_in",
-              "subject": "raw.udp.messages",
-              "type": "nats"
-            }
-          ],
-          "outputs": []
-        },
-        "http_port": 8082,
-        "path": "/ws"
       }
     },
     "objectstore": {
@@ -644,7 +560,8 @@
             {
               "name": "write",
               "subject": "document.processed.entity",
-              "type": "nats"
+              "type": "jetstream",
+              "stream_name": "DOCUMENT"
             }
           ],
           "outputs": [
@@ -663,32 +580,6 @@
           "ttl": "1h",
           "cleanup_interval": "5m"
         }
-      }
-    },
-    "api-gateway": {
-      "type": "gateway",
-      "name": "http",
-      "enabled": true,
-      "config": {
-        "enable_cors": true,
-        "cors_origins": ["*"],
-        "max_request_size": 1048576,
-        "routes": [
-          {
-            "path": "/search/semantic",
-            "method": "POST",
-            "nats_subject": "graph.query.semantic",
-            "timeout": "5s",
-            "description": "Semantic similarity search across indexed entities"
-          },
-          {
-            "path": "/entity/:id",
-            "method": "GET",
-            "nats_subject": "graph.query.entity",
-            "timeout": "2s",
-            "description": "Retrieve single entity by ID"
-          }
-        ]
       }
     }
   }

@@ -1,0 +1,123 @@
+{
+  "variant": "semantic",
+  "embedding_provider": "http",
+  "timestamp": "2025-12-21T19:39:31.983597-05:00",
+  "search_results": {
+    "Are there safety observations related to temperature?": {
+      "query": "Are there safety observations related to temperature?",
+      "hits": [
+        "c360.logistics.sensor.document.weight.sensor-weight-001",
+        "c360.logistics.maintenance.work.completed.maint-003",
+        "c360.logistics.sensor.document.motion.sensor-motion-001",
+        "c360.logistics.maintenance.work.completed.maint-013",
+        "c360.logistics.observation.record.low.obs-014",
+        "c360.logistics.sensor.document.level.sensor-level-001",
+        "c360.logistics.content.document.quality.doc-quality-001",
+        "c360.logistics.maintenance.work.completed.maint-001",
+        "c360.logistics.sensor.document.vibration.sensor-vibration-001",
+        "c360.logistics.sensor.document.pressure.sensor-pressure-001"
+      ],
+      "scores": [
+        0.5790847196231295,
+        0.5790847196231295,
+        0.5790847196231295,
+        0.5790847196231295,
+        0.5790847196231295,
+        0.5790847196231295,
+        0.5790847196231295,
+        0.5790847196231295,
+        0.5790847196231295,
+        0.5790847196231295
+      ],
+      "latency_ms": 23,
+      "hit_count": 10
+    },
+    "Find all sensors in zone-a": {
+      "query": "Find all sensors in zone-a",
+      "hits": [
+        "c360.logistics.observation.record.medium.obs-009",
+        "c360.logistics.content.document.environment.doc-env-001",
+        "c360.logistics.observation.record.high.obs-010",
+        "c360.logistics.sensor.document.water.sensor-water-001",
+        "c360.logistics.maintenance.work.completed.maint-004",
+        "c360.logistics.content.document.human_resources.doc-hr-001",
+        "c360.logistics.sensor.document.door.sensor-door-001",
+        "c360.logistics.observation.record.medium.obs-015",
+        "c360.logistics.maintenance.work.completed.maint-015",
+        "c360.logistics.sensor.document.power.sensor-power-001"
+      ],
+      "scores": [
+        0.5282219861809985,
+        0.5282219861809985,
+        0.5282219861809985,
+        0.5282219861809985,
+        0.5282219861809985,
+        0.5282219861809985,
+        0.5282219861809985,
+        0.5282219861809985,
+        0.5282219861809985,
+        0.5282219861809985
+      ],
+      "latency_ms": 18,
+      "hit_count": 10
+    },
+    "What documents mention forklift safety?": {
+      "query": "What documents mention forklift safety?",
+      "hits": [
+        "c360.logistics.content.document.inventory.doc-inventory-001",
+        "c360.logistics.content.document.compliance.doc-audit-001",
+        "c360.logistics.sensor.document.temperature.sensor-temp-003",
+        "c360.logistics.sensor.document.light.sensor-light-001",
+        "c360.logistics.sensor.document.weight.sensor-weight-001",
+        "c360.logistics.maintenance.work.completed.maint-003",
+        "c360.logistics.sensor.document.motion.sensor-motion-001",
+        "c360.logistics.maintenance.work.completed.maint-013",
+        "c360.logistics.observation.record.low.obs-014",
+        "c360.logistics.sensor.document.level.sensor-level-001"
+      ],
+      "scores": [
+        0.6513651716555756,
+        0.6513651716555756,
+        0.6513651716555756,
+        0.6513651716555756,
+        0.6513651716555756,
+        0.6513651716555756,
+        0.6513651716555756,
+        0.6513651716555756,
+        0.6513651716555756,
+        0.6513651716555756
+      ],
+      "latency_ms": 33,
+      "hit_count": 10
+    },
+    "What maintenance was done on cold storage equipment?": {
+      "query": "What maintenance was done on cold storage equipment?",
+      "hits": [
+        "c360.logistics.content.document.training.doc-training-001",
+        "c360.logistics.content.document.inventory.doc-inventory-001",
+        "c360.logistics.content.document.compliance.doc-audit-001",
+        "c360.logistics.sensor.document.temperature.sensor-temp-003",
+        "c360.logistics.sensor.document.light.sensor-light-001",
+        "c360.logistics.sensor.document.weight.sensor-weight-001",
+        "c360.logistics.maintenance.work.completed.maint-003",
+        "c360.logistics.sensor.document.motion.sensor-motion-001",
+        "c360.logistics.maintenance.work.completed.maint-013",
+        "c360.logistics.observation.record.low.obs-014"
+      ],
+      "scores": [
+        0.666602922904015,
+        0.666602922904015,
+        0.666602922904015,
+        0.666602922904015,
+        0.666602922904015,
+        0.666602922904015,
+        0.666602922904015,
+        0.666602922904015,
+        0.666602922904015,
+        0.666602922904015
+      ],
+      "latency_ms": 25,
+      "hit_count": 10
+    }
+  }
+}

@@ -139,14 +139,26 @@ func (s *TieredScenario) validateGraphRAGLocalResult(resp *graphRAGLocalResponse
 		entityIDs = append(entityIDs, e.ID)
 	}
 
-	result.Details["graphrag_local_test"] = map[string]any{
-		"start_entity":   entityID,
-		"query":          query,
-		"entities_found": entityCount,
-		"community_id":   ls.CommunityID,
-		"entity_ids":     entityIDs,
-		"latency_ms":     latency.Milliseconds(),
-		"message":        fmt.Sprintf("GraphRAG local search: found %d entities in community %s", entityCount, ls.CommunityID),
+	result.Details["graphrag_local"] = map[string]any{
+		"query":            query,
+		"entities_used":    entityCount,
+		"communities_used": 1, // Single community context for local search
+		"latency_ms":       latency.Milliseconds(),
+		"success":          true,
+		// Additional fields for debugging
+		"start_entity": entityID,
+		"community_id": ls.CommunityID,
+		"entity_ids":   entityIDs,
+	}
+
+	// Validate community context is returned (Phase 2 improvement)
+	if ls.CommunityID == "" {
+		return fmt.Errorf("GraphRAG local search missing community context for entity %s", entityID)
+	}
+
+	// Validate at least one entity is returned
+	if entityCount == 0 {
+		return fmt.Errorf("GraphRAG local search returned no entities for query %q in community %s", query, ls.CommunityID)
 	}
 
 	return nil
@@ -159,8 +171,10 @@ func (s *TieredScenario) executeTestGraphRAGGlobal(ctx context.Context, result *
 
 	resp, latency, err := s.sendGraphRAGGlobalRequest(ctx, searchQuery, gatewayURL)
 	if err != nil {
-		result.Details["graphrag_global_test"] = map[string]any{
-			"query": searchQuery, "error": err.Error(),
+		result.Details["graphrag_global"] = map[string]any{
+			"query":   searchQuery,
+			"error":   err.Error(),
+			"success": false,
 		}
 		// GraphRAG global may fail if no communities exist - warn but don't fail
 		result.Warnings = append(result.Warnings, fmt.Sprintf("GraphRAG global search failed: %v", err))
@@ -246,17 +260,32 @@ func (s *TieredScenario) validateGraphRAGGlobalResult(resp *graphRAGGlobalRespon
 			"keywords":     cs.Keywords,
 			"level":        cs.Level,
 			"relevance":    cs.Relevance,
+			"has_summary":  cs.Summary != "",
 		})
 	}
 
-	result.Details["graphrag_global_test"] = map[string]any{
-		"query":             query,
-		"entities_found":    entityCount,
-		"communities_found": communityCount,
-		"entity_ids":        entityIDs,
-		"communities":       communityDetails,
-		"latency_ms":        latency.Milliseconds(),
-		"message":           fmt.Sprintf("GraphRAG global search: found %d entities across %d communities", entityCount, communityCount),
+	result.Details["graphrag_global"] = map[string]any{
+		"query":            query,
+		"entities_used":    entityCount,
+		"communities_used": communityCount,
+		"latency_ms":       latency.Milliseconds(),
+		"success":          true,
+		// Additional fields for debugging
+		"entity_ids":  entityIDs,
+		"communities": communityDetails,
+	}
+
+	// Phase 2 improvement: Validate multi-community results for broad queries
+	if communityCount < 2 {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("GraphRAG global search returned only %d communities for broad query %q, expected >= 2", communityCount, query))
+	}
+
+	// Phase 2 improvement: Validate each community has a summary
+	for _, cs := range gs.CommunitySummaries {
+		if cs.Summary == "" {
+			return fmt.Errorf("GraphRAG global search: community %s missing summary", cs.CommunityID)
+		}
 	}
 
 	return nil

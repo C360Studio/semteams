@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -337,7 +338,7 @@ func (p *Processor) handleQueryByPredicate(msg *nats.Msg) {
 func (p *Processor) handleQuerySemantic(msg *nats.Msg) {
 	// Rate limiting check (semantic search can be expensive)
 	if !p.queryLimiter.Allow() {
-		err := errs.WrapTransient(nil, "GraphProcessor", "handleQuerySemantic",
+		err := errs.WrapTransient(errors.New("rate limit exceeded"), "GraphProcessor", "handleQuerySemantic",
 			"rate limit exceeded")
 		p.respondQueryWithError(msg, err)
 		return

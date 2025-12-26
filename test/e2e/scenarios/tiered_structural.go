@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Structural variant validation functions (ported from tier0_rules_iot.go)
+// Structural variant validation functions for rules-only testing
 
 // executeValidateZeroEmbeddings validates that NO embeddings were generated (structural tier constraint)
 func (s *TieredScenario) executeValidateZeroEmbeddings(ctx context.Context, result *Result) error {
@@ -133,33 +133,74 @@ type pathRAGStep struct {
 	To        string `json:"to"`
 }
 
-// executeTestPathRAG validates PathRAG traversal (Tier 0 feature - structural graph navigation)
-func (s *TieredScenario) executeTestPathRAG(ctx context.Context, result *Result) error {
-	startEntity := "c360.logistics.content.document.safety.doc-safety-001"
-
-	// Use configured GraphQL URL (varies by profile: 8082 for statistical, 8182 for semantic)
+// executeTestPathRAGSensor validates PathRAG traversal using a sensor entity.
+// Sensor entities demonstrate EntityID sibling inference (structured IoT data).
+// PathRAG is a Tier 0 capability that runs on ALL tiers.
+func (s *TieredScenario) executeTestPathRAGSensor(ctx context.Context, result *Result) error {
+	startEntity := s.getPathRAGSensorEntity()
 	gatewayURL := s.config.GraphQLURL
 
 	resp, latency, err := s.sendPathRAGRequest(ctx, startEntity, gatewayURL)
 	if err != nil {
-		result.Details["pathrag_test"] = map[string]any{
+		result.Details["pathrag_sensor_test"] = map[string]any{
 			"start_entity": startEntity, "error": err.Error(), "gateway_url": gatewayURL,
 		}
 		return err
 	}
 
-	result.Metrics["pathrag_latency_ms"] = latency.Milliseconds()
-	return s.validatePathRAGResult(resp, startEntity, latency, result)
+	result.Metrics["pathrag_sensor_latency_ms"] = latency.Milliseconds()
+	return s.validatePathRAGResultNamed(resp, startEntity, latency, result, "pathrag_sensor_test")
+}
+
+// executeTestPathRAGDocument validates PathRAG traversal using a document entity.
+// Document entities demonstrate text-based similarity (statistical/semantic enhancements).
+// PathRAG is a Tier 0 capability that runs on ALL tiers.
+func (s *TieredScenario) executeTestPathRAGDocument(ctx context.Context, result *Result) error {
+	startEntity := s.getPathRAGDocumentEntity()
+	gatewayURL := s.config.GraphQLURL
+
+	resp, latency, err := s.sendPathRAGRequest(ctx, startEntity, gatewayURL)
+	if err != nil {
+		result.Details["pathrag_document_test"] = map[string]any{
+			"start_entity": startEntity, "error": err.Error(), "gateway_url": gatewayURL,
+		}
+		return err
+	}
+
+	result.Metrics["pathrag_document_latency_ms"] = latency.Milliseconds()
+	return s.validatePathRAGResultNamed(resp, startEntity, latency, result, "pathrag_document_test")
+}
+
+// getPathRAGSensorEntity returns a sensor entity for PathRAG testing.
+// All tiers now use testdata/semantic/sensors.jsonl which contains temperature sensors.
+// Sensor entities demonstrate EntityID sibling inference (structural IoT data).
+func (s *TieredScenario) getPathRAGSensorEntity() string {
+	// All tiers use testdata/semantic/sensors.jsonl
+	// Entity IDs follow format: {org}.{platform}.environmental.sensor.{type}.{device_id}
+	// From sensors.jsonl: device_id=temp-sensor-001, type=temperature
+	// Config: org_id=c360, platform=logistics
+	return "c360.logistics.environmental.sensor.temperature.temp-sensor-001"
+}
+
+// getPathRAGDocumentEntity returns a document entity for PathRAG testing.
+// All tiers use testdata/semantic/maintenance.jsonl which contains maintenance records.
+// Document entities demonstrate text-based similarity (statistical/semantic enhancements).
+func (s *TieredScenario) getPathRAGDocumentEntity() string {
+	// All tiers use testdata/semantic/maintenance.jsonl
+	// Use maintenance entity which has 15+ siblings with same type prefix
+	// This allows sibling inference to find related entities
+	return "c360.logistics.maintenance.work.completed.maint-001"
 }
 
 // sendPathRAGRequest sends the PathRAG GraphQL query and returns the parsed response
+// Uses includeSiblings=true to leverage EntityID hierarchy for sibling detection
 func (s *TieredScenario) sendPathRAGRequest(ctx context.Context, startEntity, gatewayURL string) (*pathRAGResponse, time.Duration, error) {
 	graphqlQuery := map[string]any{
-		"query": `query($startEntity: ID!, $maxDepth: Int, $maxNodes: Int) {
-			pathSearch(startEntity: $startEntity, maxDepth: $maxDepth, maxNodes: $maxNodes) {
+		"query": `query($startEntity: ID!, $maxDepth: Int, $maxNodes: Int, $includeSiblings: Boolean) {
+			pathSearch(startEntity: $startEntity, maxDepth: $maxDepth, maxNodes: $maxNodes, includeSiblings: $includeSiblings) {
 				entities { id type score } paths { from predicate to } truncated
 			}}`,
-		"variables": map[string]any{"startEntity": startEntity, "maxDepth": 2, "maxNodes": 10},
+		"variables": map[string]any{"startEntity": startEntity, "maxDepth": 2, "maxNodes": 10, "includeSiblings": true},
 	}
 
 	queryJSON, err := json.Marshal(graphqlQuery)
@@ -204,41 +245,134 @@ func (s *TieredScenario) sendPathRAGRequest(ctx context.Context, startEntity, ga
 	return &graphqlResp, latency, nil
 }
 
-// validatePathRAGResult validates the PathRAG response and records results
+// validatePathRAGResult validates the PathRAG response and records results (backward compatible)
 func (s *TieredScenario) validatePathRAGResult(resp *pathRAGResponse, startEntity string, latency time.Duration, result *Result) error {
+	return s.validatePathRAGResultNamed(resp, startEntity, latency, result, "pathrag_test")
+}
+
+// validatePathRAGResultNamed validates the PathRAG response and records results with a custom test name
+func (s *TieredScenario) validatePathRAGResultNamed(resp *pathRAGResponse, startEntity string, latency time.Duration, result *Result, testName string) error {
 	ps := resp.Data.PathSearch
 	entityCount := len(ps.Entities)
 	// Count total paths (each path is a sequence of steps)
 	pathCount := len(ps.Paths)
 
-	result.Metrics["pathrag_entities_found"] = entityCount
-	result.Metrics["pathrag_paths_found"] = pathCount
+	// Use test-specific metric names
+	metricsPrefix := testName[:len(testName)-5] // Remove "_test" suffix
+	result.Metrics[metricsPrefix+"_entities_found"] = entityCount
+	result.Metrics[metricsPrefix+"_paths_found"] = pathCount
 
 	if entityCount == 0 {
-		result.Details["pathrag_test"] = map[string]any{
+		result.Details[testName] = map[string]any{
 			"start_entity": startEntity, "entities_found": 0, "message": "No entities returned",
 		}
 		return fmt.Errorf("PathRAG returned no entities for start entity %s", startEntity)
 	}
 
 	// Verify scores decrease with depth (decay factor working)
-	scoresValid, prevScore := true, 2.0
+	// This is a hard failure - with controlled input, decay scoring should be deterministic
+	scoresValid := true
+	var decayViolation string
+	prevScore := 2.0
 	entityIDs := make([]string, 0, len(ps.Entities))
+	entityScores := make([]float64, 0, len(ps.Entities))
 	for i, e := range ps.Entities {
 		entityIDs = append(entityIDs, e.ID)
+		entityScores = append(entityScores, e.Score)
 		if i > 0 && e.Score > prevScore {
 			scoresValid = false
-			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("PathRAG score increased: %s has %.3f > previous %.3f", e.ID, e.Score, prevScore))
+			decayViolation = fmt.Sprintf("entity %s has score %.3f > previous %.3f", e.ID, e.Score, prevScore)
 		}
 		prevScore = e.Score
 	}
 
-	result.Details["pathrag_test"] = map[string]any{
+	result.Details[testName] = map[string]any{
 		"start_entity": startEntity, "entities_found": entityCount, "paths_found": pathCount,
-		"truncated": ps.Truncated, "entity_ids": entityIDs, "scores_valid": scoresValid,
-		"latency_ms": latency.Milliseconds(),
-		"message":    fmt.Sprintf("PathRAG traversal successful: found %d entities via %d paths", entityCount, pathCount),
+		"truncated": ps.Truncated, "entity_ids": entityIDs, "entity_scores": entityScores,
+		"scores_valid": scoresValid, "latency_ms": latency.Milliseconds(),
+		"message": fmt.Sprintf("PathRAG traversal successful: found %d entities via %d paths", entityCount, pathCount),
 	}
+
+	// Hard failure on decay scoring violation - input is controlled, results should be deterministic
+	if !scoresValid {
+		return fmt.Errorf("PathRAG decay scoring violated: %s", decayViolation)
+	}
+
+	return nil
+}
+
+// executeTestPathRAGBoundary validates PathRAG respects maxNodes limit
+// PathRAG is a Tier 0 capability that runs on ALL tiers.
+func (s *TieredScenario) executeTestPathRAGBoundary(ctx context.Context, result *Result) error {
+	startEntity := s.getPathRAGSensorEntity()
+	gatewayURL := s.config.GraphQLURL
+
+	// Query with tight bounds to verify maxNodes is respected
+	graphqlQuery := map[string]any{
+		"query": `query($startEntity: ID!, $maxDepth: Int, $maxNodes: Int) {
+			pathSearch(startEntity: $startEntity, maxDepth: $maxDepth, maxNodes: $maxNodes) {
+				entities { id type score } paths { from predicate to } truncated
+			}}`,
+		"variables": map[string]any{"startEntity": startEntity, "maxDepth": 2, "maxNodes": 3},
+	}
+
+	queryJSON, err := json.Marshal(graphqlQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal PathRAG boundary query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create PathRAG boundary request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("PathRAG boundary request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("PathRAG boundary returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read PathRAG boundary response: %w", err)
+	}
+
+	var graphqlResp pathRAGResponse
+	if err := json.Unmarshal(bodyBytes, &graphqlResp); err != nil {
+		return fmt.Errorf("failed to parse PathRAG boundary response: %w", err)
+	}
+
+	if len(graphqlResp.Errors) > 0 {
+		return fmt.Errorf("PathRAG boundary GraphQL error: %s", graphqlResp.Errors[0].Message)
+	}
+
+	// Verify result count respects maxNodes limit
+	// Note: maxNodes refers to traversal nodes, but start entity is always included
+	// So total entities = start entity (1) + up to maxNodes traversed nodes
+	entityCount := len(graphqlResp.Data.PathSearch.Entities)
+	maxNodes := 3
+	expectedMax := maxNodes + 1 // +1 for start entity which is always included
+
+	result.Metrics["pathrag_boundary_entities"] = entityCount
+	result.Metrics["pathrag_boundary_max_nodes"] = maxNodes
+	result.Details["pathrag_boundary_test"] = map[string]any{
+		"entities_returned":     entityCount,
+		"max_nodes_limit":       maxNodes,
+		"expected_max_total":    expectedMax,
+		"respected_limit":       entityCount <= expectedMax,
+		"includes_start_entity": true,
+	}
+
+	if entityCount > expectedMax {
+		return fmt.Errorf("PathRAG maxNodes violated: got %d entities, expected <= %d (maxNodes=%d + start entity)", entityCount, expectedMax, maxNodes)
+	}
+
 	return nil
 }

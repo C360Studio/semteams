@@ -87,6 +87,32 @@ func (m *Manager) List(ctx context.Context, _ string) ([]string, error) {
 	return keys, nil
 }
 
+// ListWithPrefix returns entity IDs that have the given prefix.
+// This is used for hierarchical entity queries, such as finding all siblings
+// (entities with the same type-level prefix) for PathRAG traversal.
+//
+// Example: prefix "c360.logistics.environmental.sensor.temperature" returns all
+// temperature sensor entities like "c360.logistics.environmental.sensor.temperature.cold-storage-01"
+func (m *Manager) ListWithPrefix(ctx context.Context, prefix string) ([]string, error) {
+	keys, err := m.kvBucket.Keys(ctx)
+	if err != nil {
+		return nil, errs.Wrap(err, "DataManager", "ListWithPrefix", "list keys")
+	}
+
+	// Filter keys by prefix
+	var matched []string
+	prefixDot := prefix + "."
+	for _, key := range keys {
+		// Match if key starts with prefix followed by a dot (proper hierarchy match)
+		// or if key exactly equals prefix (exact match)
+		if key == prefix || (len(key) > len(prefix) && key[:len(prefixDot)] == prefixDot) {
+			matched = append(matched, key)
+		}
+	}
+
+	return matched, nil
+}
+
 // GetCacheStats returns cache statistics
 func (m *Manager) GetCacheStats() CacheStats {
 	stats := CacheStats{}

@@ -25,6 +25,7 @@ type QueryResult struct {
 	Error            error                 `json:"error,omitempty"`
 	Truncated        bool                  `json:"truncated,omitempty"`
 	TruncationReason string                `json:"truncation_reason,omitempty"` // "timeout", "max_nodes", "cancelled"
+	Scores           map[string]float64    `json:"scores,omitempty"`            // Entity ID -> decay score (for PathRAG)
 }
 
 // GraphSnapshot represents a snapshot of entities within bounds

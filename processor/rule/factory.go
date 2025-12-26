@@ -24,34 +24,9 @@ func Register(registry *component.Registry) error {
 }
 
 // convertDefinitionToPort converts a PortDefinition to Port
+// Delegates to component.BuildPortFromDefinition for consistent port type handling
 func convertDefinitionToPort(portDef component.PortDefinition, direction component.Direction) component.Port {
-	port := component.Port{
-		Name:        portDef.Name,
-		Direction:   direction,
-		Required:    portDef.Required,
-		Description: portDef.Description,
-	}
-
-	// Create appropriate config based on type
-	switch portDef.Type {
-	case "nats":
-		port.Config = component.NATSPort{
-			Subject: portDef.Subject,
-		}
-	case "nats-request":
-		port.Config = component.NATSRequestPort{
-			Subject: portDef.Subject,
-			Timeout: portDef.Timeout,
-		}
-	case "kv-watch":
-		// For KV watch ports, we'd need additional fields in PortDefinition
-		// For now, this is a minimal implementation
-		port.Config = component.KVWatchPort{
-			Bucket: "ENTITY_STATES", // Default bucket
-		}
-	}
-
-	return port
+	return component.BuildPortFromDefinition(portDef, direction)
 }
 
 // CreateRuleProcessor creates a rule processor with the new factory pattern
