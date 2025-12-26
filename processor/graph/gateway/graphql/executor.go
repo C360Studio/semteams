@@ -41,6 +41,13 @@ type Query {
   """Global search across community summaries (GraphRAG)"""
   globalSearch(query: String!, level: Int, maxCommunities: Int): GlobalSearchResult
 
+  """
+  Similarity search using embeddings (BM25 or neural depending on tier config).
+  Returns entities ranked by cosine similarity score.
+  Works on both statistical (BM25) and semantic (neural) tiers.
+  """
+  similaritySearch(query: String!, limit: Int): [Entity!]!
+
   """Get a community by ID"""
   community(id: ID!): Community
 
@@ -126,6 +133,8 @@ type Entity {
   properties: JSON
   createdAt: DateTime
   updatedAt: DateTime
+  """Similarity score for search results (0.0-1.0, higher is more relevant)"""
+  score: Float
 }
 
 """A relationship between two entities"""
@@ -437,6 +446,8 @@ func (e *Executor) executeField(ctx context.Context, field *ast.Field, variables
 		return e.resolveLocalSearch(ctx, args, field.SelectionSet)
 	case "globalSearch":
 		return e.resolveGlobalSearch(ctx, args, field.SelectionSet)
+	case "similaritySearch":
+		return e.resolveSimilaritySearch(ctx, args, field.SelectionSet)
 	case "community":
 		return e.resolveCommunity(ctx, args, field.SelectionSet)
 	case "entityCommunity":
@@ -631,6 +642,33 @@ func (e *Executor) resolveGlobalSearch(ctx context.Context, args map[string]any,
 	}
 
 	return e.formatGlobalSearchResult(result, selections)
+}
+
+func (e *Executor) resolveSimilaritySearch(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
+	query, ok := args["query"].(string)
+	if !ok {
+		return nil, fmt.Errorf("query argument required")
+	}
+
+	limit := 10
+	if l, ok := args["limit"].(int); ok {
+		limit = l
+	} else if l, ok := args["limit"].(int64); ok {
+		limit = int(l)
+	}
+
+	entities, err := e.resolver.SimilaritySearch(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	// Format entities with scores
+	results := make([]map[string]any, 0, len(entities))
+	for _, entity := range entities {
+		results = append(results, e.formatEntityWithScore(entity, selections))
+	}
+
+	return results, nil
 }
 
 func (e *Executor) resolveCommunity(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
@@ -952,6 +990,45 @@ func (e *Executor) formatEntities(entities []*Entity, selections ast.SelectionSe
 		result[i] = formatted
 	}
 	return result, nil
+}
+
+// formatEntityWithScore formats an entity including its score field.
+// Used by similaritySearch to include similarity scores in results.
+func (e *Executor) formatEntityWithScore(entity *Entity, selections ast.SelectionSet) map[string]any {
+	result := make(map[string]any)
+
+	for _, sel := range selections {
+		field, ok := sel.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		key := field.Name
+		if field.Alias != "" {
+			key = field.Alias
+		}
+
+		switch field.Name {
+		case "id":
+			result[key] = entity.ID
+		case "type":
+			result[key] = entity.Type
+		case "properties":
+			result[key] = entity.Properties
+		case "createdAt":
+			if !entity.CreatedAt.IsZero() {
+				result[key] = entity.CreatedAt.Format("2006-01-02T15:04:05Z07:00")
+			}
+		case "updatedAt":
+			if !entity.UpdatedAt.IsZero() {
+				result[key] = entity.UpdatedAt.Format("2006-01-02T15:04:05Z07:00")
+			}
+		case "score":
+			result[key] = entity.Score
+		}
+	}
+
+	return result
 }
 
 func (e *Executor) formatRelationship(rel *Relationship, selections ast.SelectionSet) (map[string]any, error) {

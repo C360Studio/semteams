@@ -9,6 +9,7 @@ type Entity struct {
 	Properties map[string]interface{} `json:"properties"`
 	CreatedAt  time.Time              `json:"created_at,omitempty"`
 	UpdatedAt  time.Time              `json:"updated_at,omitempty"`
+	Score      float64                `json:"score,omitempty"` // Similarity score for search results
 }
 
 // Relationship represents a generic relationship between entities.
@@ -56,8 +57,8 @@ type SnapshotRelationship struct {
 	EdgeType     string `json:"edge_type"`
 }
 
-// SemanticSearchResult represents a semantic search result.
-type SemanticSearchResult struct {
+// SimilaritySearchResult represents a similarity search result.
+type SimilaritySearchResult struct {
 	Entity *Entity `json:"entity"`
 	Score  float64 `json:"score"`
 }

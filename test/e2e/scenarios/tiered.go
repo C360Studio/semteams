@@ -277,10 +277,18 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"test-http-gateway", s.executeTestHTTPGateway, []string{"statistical", "semantic"}},
 		{"test-embedding-fallback", s.executeTestEmbeddingFallback, []string{"statistical", "semantic"}},
 		{"validate-community-structure", s.executeValidateCommunityStructure, []string{"statistical", "semantic"}},
+		// Structural indexes (k-core, pivot) - require community detection for meaningful structure
+		{"validate-kcore-index", s.executeValidateKCoreIndex, []string{"statistical", "semantic"}},
+		{"validate-pivot-index", s.executeValidatePivotIndex, []string{"statistical", "semantic"}},
 
 		// === Tier 2: Semantic capabilities (semantic only) ===
 		{"test-graphrag-local", s.executeTestGraphRAGLocal, []string{"semantic"}},
 		{"test-graphrag-global", s.executeTestGraphRAGGlobal, []string{"semantic"}},
+
+		// Wait for rule evaluations to stabilize (semantic tier only)
+		// Semantic tier's neural embeddings are slower, so rule evaluations via KV watch
+		// may still be in progress when validate-rules would normally run
+		{"wait-for-rule-stabilization", s.executeWaitForRuleStabilization, []string{"semantic"}},
 
 		// === Common validation stages (all tiers) ===
 		{"validate-rules", s.executeValidateRules, nil},
@@ -879,6 +887,67 @@ func (s *TieredScenario) executeWaitForEntityStabilization(ctx context.Context, 
 	}
 
 	return nil
+}
+
+// executeWaitForRuleStabilization waits for rule evaluation count to stabilize.
+// This is needed because rules are evaluated asynchronously via KV watch,
+// and the semantic tier's slower embedding generation means rule evaluations
+// may still be in progress when validate-rules runs.
+func (s *TieredScenario) executeWaitForRuleStabilization(ctx context.Context, result *Result) error {
+	startTime := time.Now()
+
+	// Get initial evaluation count
+	initialMetrics, err := s.metrics.ExtractRuleMetrics(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get initial rule metrics: %v", err))
+		return nil
+	}
+
+	// Poll until evaluation count stabilizes (no change for 2 consecutive polls)
+	lastCount := initialMetrics.Evaluations
+	stableCount := 0
+	requiredStablePolls := 2 // Must be stable for 2 consecutive polls
+
+	ticker := time.NewTicker(s.config.PollInterval)
+	defer ticker.Stop()
+
+	timeout := time.After(s.config.ValidationTimeout)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timeout:
+			result.Details["rule_stabilization"] = map[string]any{
+				"stabilized":    false,
+				"final_count":   lastCount,
+				"wait_duration": time.Since(startTime).String(),
+			}
+			return nil
+		case <-ticker.C:
+			currentMetrics, err := s.metrics.ExtractRuleMetrics(ctx)
+			if err != nil {
+				continue
+			}
+
+			if currentMetrics.Evaluations == lastCount {
+				stableCount++
+				if stableCount >= requiredStablePolls {
+					result.Details["rule_stabilization"] = map[string]any{
+						"stabilized":    true,
+						"final_count":   currentMetrics.Evaluations,
+						"wait_duration": time.Since(startTime).String(),
+						"on_enter":      currentMetrics.OnEnterFired,
+						"on_exit":       currentMetrics.OnExitFired,
+					}
+					return nil
+				}
+			} else {
+				stableCount = 0
+				lastCount = currentMetrics.Evaluations
+			}
+		}
+	}
 }
 
 // getEntityCountForEmbeddings returns the expected number of entities for embedding wait.
@@ -1721,8 +1790,15 @@ func (s *TieredScenario) executeVerifyStructuralIndexes(ctx context.Context, res
 // executeVerifySearchQuality validates that semantic search returns expected results
 // with score threshold assertions, not just binary hit/no-hit checks
 func (s *TieredScenario) executeVerifySearchQuality(ctx context.Context, result *Result) error {
-	// Use the search package with GraphQL endpoint for globalSearch queries
-	executor := search.NewExecutor(s.config.GraphQLURL, 10*time.Second)
+	// Use similarity search for both statistical and semantic tiers (embedding-based with real scores)
+	// Statistical tier uses BM25 embeddings, semantic tier uses neural embeddings
+	// Structural tier has no embeddings, so uses global search (community-based)
+	var executor *search.Executor
+	if s.config.Variant == "statistical" || s.config.Variant == "semantic" {
+		executor = search.NewSimilarityExecutor(s.config.GraphQLURL, 10*time.Second)
+	} else {
+		executor = search.NewExecutor(s.config.GraphQLURL, 10*time.Second)
+	}
 	queries := search.DefaultQueries()
 
 	// Execute all queries and get stats

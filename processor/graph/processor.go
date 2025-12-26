@@ -990,6 +990,11 @@ func (p *Processor) initializeModules(ctx context.Context) error {
 		return err
 	}
 
+	// Initialize enhancement worker (requires p.queryManager from assignManagers)
+	if err := p.initializeEnhancementWorkerIfEnabled(ctx); err != nil {
+		return err
+	}
+
 	p.logger.Info("All managers initialized successfully")
 	return nil
 }
@@ -1790,7 +1795,7 @@ func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[st
 
 	p.clusteringBuckets = buckets
 
-	communityBucket, graphProvider, err := p.setupGraphProvider(ctx, buckets, cfg, entityReader)
+	_, graphProvider, err := p.setupGraphProvider(ctx, buckets, cfg, entityReader)
 	if err != nil {
 		return err
 	}
@@ -1811,9 +1816,8 @@ func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[st
 		return err
 	}
 
-	if err := p.setupEnhancementWorker(ctx, cfg, communityBucket, graphProvider); err != nil {
-		return err
-	}
+	// NOTE: setupEnhancementWorker is called separately in initializeEnhancementWorkerIfEnabled
+	// AFTER assignManagers, because it requires p.queryManager to be set.
 
 	return nil
 }
@@ -1828,6 +1832,33 @@ func (p *Processor) initializeClusteringCallbacks() error {
 	cfg := p.config.GraphAnalysis.CommunityDetection
 	p.setupEntityChangeCallback(cfg)
 	return nil
+}
+
+// initializeEnhancementWorkerIfEnabled sets up the LLM enhancement worker.
+// Must be called AFTER assignManagers so p.queryManager is available.
+func (p *Processor) initializeEnhancementWorkerIfEnabled(ctx context.Context) error {
+	if !p.isCommunityDetectionEnabled() {
+		return nil
+	}
+
+	cfg := p.config.GraphAnalysis.CommunityDetection
+	if !cfg.Enhancement.Enabled {
+		return nil
+	}
+
+	// Get the community bucket from cached buckets
+	communityBucket, ok := p.clusteringBuckets["COMMUNITY_INDEX"]
+	if !ok {
+		return errs.WrapFatal(errs.ErrMissingConfig, "Processor",
+			"initializeEnhancementWorkerIfEnabled", "COMMUNITY_INDEX bucket not found")
+	}
+
+	if p.graphProvider == nil {
+		return errs.WrapFatal(errs.ErrMissingConfig, "Processor",
+			"initializeEnhancementWorkerIfEnabled", "graph provider not initialized")
+	}
+
+	return p.setupEnhancementWorker(ctx, cfg, communityBucket, p.graphProvider)
 }
 
 // isCommunityDetectionEnabled checks if community detection is configured and enabled.

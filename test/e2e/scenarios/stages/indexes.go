@@ -29,6 +29,7 @@ func DefaultIndexSpecs() []IndexSpec {
 		{"alias", client.IndexBuckets.Alias, false},     // May be empty if no aliases
 		{"spatial", client.IndexBuckets.Spatial, false}, // May be empty if no geo data
 		{"temporal", client.IndexBuckets.Temporal, true},
+		{"structural", client.IndexBuckets.Structural, false}, // Only populated for Tier 1+ (statistical/semantic)
 	}
 }
 

@@ -1016,3 +1016,69 @@ func GetPropertyOrDefault(entity *Entity, path string, defaultValue interface{})
 	}
 	return value
 }
+
+// SimilaritySearch performs similarity search using embeddings (BM25 or neural).
+// Returns entities ranked by cosine similarity score to the query text.
+// Works on both statistical (BM25) and semantic (neural) tiers.
+func (r *Resolver) SimilaritySearch(ctx context.Context, query string, limit int) ([]*Entity, error) {
+	var entities []*Entity
+	var err error
+
+	queryFn := func() error {
+		// Get similarity search results with scores
+		searchResult, qErr := r.queryManager.SearchSimilar(ctx, query, limit)
+		if qErr != nil {
+			return qErr
+		}
+
+		if searchResult == nil || len(searchResult.Hits) == 0 {
+			entities = []*Entity{}
+			return nil
+		}
+
+		// Collect entity IDs for batch fetch
+		entityIDs := make([]string, len(searchResult.Hits))
+		scoreMap := make(map[string]float64, len(searchResult.Hits))
+		for i, hit := range searchResult.Hits {
+			entityIDs[i] = hit.EntityID
+			scoreMap[hit.EntityID] = hit.Score
+		}
+
+		// Batch fetch entity states
+		entityStates, qErr := r.queryManager.GetEntities(ctx, entityIDs)
+		if qErr != nil {
+			return qErr
+		}
+
+		// Convert to GraphQL entities with scores
+		entities = make([]*Entity, 0, len(entityStates))
+		for _, state := range entityStates {
+			entity := convertEntityStateToGraphQL(state)
+			if entity != nil {
+				// Set the similarity score from search results
+				if score, ok := scoreMap[entity.ID]; ok {
+					entity.Score = score
+				}
+				entities = append(entities, entity)
+			}
+		}
+
+		// Sort by score descending to maintain ranking
+		sort.Slice(entities, func(i, j int) bool {
+			return entities[i].Score > entities[j].Score
+		})
+
+		return nil
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "SimilaritySearch", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "SimilaritySearch")
+	}
+	return entities, nil
+}

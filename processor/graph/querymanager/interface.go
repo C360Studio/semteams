@@ -59,6 +59,30 @@ type Querier interface {
 	// GetHierarchyStats returns entity counts grouped by next hierarchy level.
 	// Used by MCP tools to understand graph structure at each EntityID level.
 	GetHierarchyStats(ctx context.Context, prefix string) (*HierarchyStats, error)
+
+	// SearchSimilar performs similarity search using embeddings (BM25 or neural).
+	// Returns entities ranked by cosine similarity score to the query text.
+	// Works on both statistical (BM25) and semantic (neural) tiers.
+	// Used by the similaritySearch GraphQL query.
+	SearchSimilar(ctx context.Context, query string, limit int) (*SimilaritySearchResult, error)
+}
+
+// SimilaritySearchResult represents the results of a similarity search query
+type SimilaritySearchResult struct {
+	// Hits are the matched entities with their scores
+	Hits []SimilarityHit `json:"hits"`
+
+	// Total is the total number of hits (may be greater than len(Hits) if limited)
+	Total int `json:"total"`
+}
+
+// SimilarityHit represents a single similarity search result
+type SimilarityHit struct {
+	// EntityID is the unique identifier of the matched entity
+	EntityID string `json:"entity_id"`
+
+	// Score is the similarity score (0-1, higher is more similar)
+	Score float64 `json:"score"`
 }
 
 // PathPattern represents a graph traversal pattern

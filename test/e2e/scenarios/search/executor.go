@@ -10,18 +10,42 @@ import (
 	"time"
 )
 
+// SearchMode determines which GraphQL query to use for search.
+type SearchMode string
+
+const (
+	// SearchModeGlobal uses globalSearch (community-based GraphRAG search).
+	SearchModeGlobal SearchMode = "global"
+	// SearchModeSimilarity uses similaritySearch (embedding similarity search).
+	// Works on both statistical (BM25) and semantic (neural) tiers.
+	SearchModeSimilarity SearchMode = "similarity"
+)
+
 // Executor executes search queries against the GraphQL gateway.
 type Executor struct {
 	httpClient *http.Client
-	graphqlURL string // GraphQL endpoint (e.g., http://localhost:8084/graphql)
+	graphqlURL string     // GraphQL endpoint (e.g., http://localhost:8084/graphql)
+	mode       SearchMode // Which search query to use
 }
 
-// NewExecutor creates a new search executor.
+// NewExecutor creates a new search executor using globalSearch.
 // graphqlURL should be the full GraphQL endpoint (e.g., http://localhost:8084/graphql).
 func NewExecutor(graphqlURL string, timeout time.Duration) *Executor {
 	return &Executor{
 		httpClient: &http.Client{Timeout: timeout},
 		graphqlURL: graphqlURL,
+		mode:       SearchModeGlobal,
+	}
+}
+
+// NewSimilarityExecutor creates a new search executor using similaritySearch.
+// This provides embedding-based similarity search with real scores.
+// Works on both statistical (BM25) and semantic (neural) tiers.
+func NewSimilarityExecutor(graphqlURL string, timeout time.Duration) *Executor {
+	return &Executor{
+		httpClient: &http.Client{Timeout: timeout},
+		graphqlURL: graphqlURL,
+		mode:       SearchModeSimilarity,
 	}
 }
 
@@ -82,7 +106,8 @@ func (e *Executor) ExecuteAll(ctx context.Context, queries []Query) *Stats {
 	return stats
 }
 
-// ExecuteOne runs a single query via GraphQL globalSearch and returns the result.
+// ExecuteOne runs a single query via GraphQL and returns the result.
+// Uses globalSearch or semanticSearch based on executor mode.
 func (e *Executor) ExecuteOne(ctx context.Context, q Query) Result {
 	result := Result{
 		Query:       q.Text,
@@ -95,21 +120,40 @@ func (e *Executor) ExecuteOne(ctx context.Context, q Query) Result {
 		limit = 10
 	}
 
-	// Build GraphQL query using globalSearch
-	// Note: globalSearch searches across community summaries (GraphRAG pattern)
-	graphqlQuery := map[string]any{
-		"query": `query($query: String!, $level: Int, $maxCommunities: Int) {
-			globalSearch(query: $query, level: $level, maxCommunities: $maxCommunities) {
-				entities { id type }
-				communitySummaries { communityId summary relevance }
-				count
-			}
-		}`,
-		"variables": map[string]any{
-			"query":          q.Text,
-			"level":          0,
-			"maxCommunities": limit,
-		},
+	// Build GraphQL query based on mode
+	var graphqlQuery map[string]any
+	if e.mode == SearchModeSimilarity {
+		// Use similaritySearch for embedding-based similarity with real scores
+		// Works on both statistical (BM25) and semantic (neural) tiers
+		graphqlQuery = map[string]any{
+			"query": `query($query: String!, $limit: Int) {
+				similaritySearch(query: $query, limit: $limit) {
+					id
+					type
+					score
+				}
+			}`,
+			"variables": map[string]any{
+				"query": q.Text,
+				"limit": limit,
+			},
+		}
+	} else {
+		// Use globalSearch for community-based GraphRAG search
+		graphqlQuery = map[string]any{
+			"query": `query($query: String!, $level: Int, $maxCommunities: Int) {
+				globalSearch(query: $query, level: $level, maxCommunities: $maxCommunities) {
+					entities { id type }
+					communitySummaries { communityId summary relevance }
+					count
+				}
+			}`,
+			"variables": map[string]any{
+				"query":          q.Text,
+				"level":          0,
+				"maxCommunities": limit,
+			},
+		}
 	}
 
 	queryJSON, err := json.Marshal(graphqlQuery)
@@ -153,47 +197,80 @@ func (e *Executor) ExecuteOne(ctx context.Context, q Query) Result {
 		return result
 	}
 
-	// Parse GraphQL response
-	var gqlResp struct {
-		Data struct {
-			GlobalSearch struct {
-				Entities []struct {
-					ID   string `json:"id"`
-					Type string `json:"type"`
-				} `json:"entities"`
-				CommunitySummaries []struct {
-					CommunityID string  `json:"communityId"`
-					Summary     string  `json:"summary"`
-					Relevance   float64 `json:"relevance"`
-				} `json:"communitySummaries"`
-				Count int `json:"count"`
-			} `json:"globalSearch"`
-		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
-	}
+	// Parse GraphQL response based on mode
+	if e.mode == SearchModeSimilarity {
+		var gqlResp struct {
+			Data struct {
+				SimilaritySearch []struct {
+					ID    string  `json:"id"`
+					Type  string  `json:"type"`
+					Score float64 `json:"score"`
+				} `json:"similaritySearch"`
+			} `json:"data"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
 
-	if err := json.Unmarshal(bodyBytes, &gqlResp); err != nil {
-		result.Error = fmt.Sprintf("parse error: %v", err)
-		return result
-	}
+		if err := json.Unmarshal(bodyBytes, &gqlResp); err != nil {
+			result.Error = fmt.Sprintf("parse error: %v", err)
+			return result
+		}
 
-	if len(gqlResp.Errors) > 0 {
-		result.Error = gqlResp.Errors[0].Message
-		return result
-	}
+		if len(gqlResp.Errors) > 0 {
+			result.Error = gqlResp.Errors[0].Message
+			return result
+		}
 
-	// Convert entities to hits
-	// GraphQL globalSearch returns entities from matching communities
-	// Use community relevance as score proxy (entities inherit community relevance)
-	for _, entity := range gqlResp.Data.GlobalSearch.Entities {
-		// Default score of 1.0 since globalSearch doesn't return per-entity scores
-		// The relevance is at the community level, not entity level
-		result.Hits = append(result.Hits, Hit{
-			EntityID: entity.ID,
-			Score:    1.0,
-		})
+		// Convert similaritySearch results to hits with real scores
+		for _, entity := range gqlResp.Data.SimilaritySearch {
+			result.Hits = append(result.Hits, Hit{
+				EntityID: entity.ID,
+				Score:    entity.Score,
+			})
+		}
+	} else {
+		var gqlResp struct {
+			Data struct {
+				GlobalSearch struct {
+					Entities []struct {
+						ID   string `json:"id"`
+						Type string `json:"type"`
+					} `json:"entities"`
+					CommunitySummaries []struct {
+						CommunityID string  `json:"communityId"`
+						Summary     string  `json:"summary"`
+						Relevance   float64 `json:"relevance"`
+					} `json:"communitySummaries"`
+					Count int `json:"count"`
+				} `json:"globalSearch"`
+			} `json:"data"`
+			Errors []struct {
+				Message string `json:"message"`
+			} `json:"errors"`
+		}
+
+		if err := json.Unmarshal(bodyBytes, &gqlResp); err != nil {
+			result.Error = fmt.Sprintf("parse error: %v", err)
+			return result
+		}
+
+		if len(gqlResp.Errors) > 0 {
+			result.Error = gqlResp.Errors[0].Message
+			return result
+		}
+
+		// Convert entities to hits
+		// GraphQL globalSearch returns entities from matching communities
+		// Use community relevance as score proxy (entities inherit community relevance)
+		for _, entity := range gqlResp.Data.GlobalSearch.Entities {
+			// Default score of 1.0 since globalSearch doesn't return per-entity scores
+			// The relevance is at the community level, not entity level
+			result.Hits = append(result.Hits, Hit{
+				EntityID: entity.ID,
+				Score:    1.0,
+			})
+		}
 	}
 
 	// Validate result

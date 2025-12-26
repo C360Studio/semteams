@@ -1,0 +1,144 @@
+{
+  "baseline_variant": "statistical",
+  "target_variant": "semantic",
+  "baseline_file": "test/e2e/results/statistical-20251226-124952.json",
+  "target_file": "test/e2e/results/semantic-20251226-144611.json",
+  "generated_at": "2025-12-26T14:47:27.814765-05:00",
+  "sections": {
+    "variant": {
+      "baseline_name": "statistical",
+      "target_name": "semantic",
+      "baseline_provider": "",
+      "target_provider": ""
+    },
+    "entities": {
+      "baseline_count": 74,
+      "target_count": 74,
+      "count_diff": 0,
+      "baseline_loss_percent": 0,
+      "target_loss_percent": 0
+    },
+    "indexes": {
+      "baseline_populated": 7,
+      "target_populated": 7,
+      "populated_diff": 0
+    },
+    "search": {
+      "baseline_queries": 7,
+      "target_queries": 7,
+      "baseline_with_results": 6,
+      "target_with_results": 6,
+      "baseline_avg_score": 1,
+      "target_avg_score": 1,
+      "baseline_known_answer_pct": 33.33333333333333,
+      "target_known_answer_pct": 0,
+      "query_diffs": [
+        {
+          "query": "Are there safety observations related to temperature?",
+          "baseline_hits": 3,
+          "target_hits": 3,
+          "hits_diff": 0,
+          "baseline_avg_score": 1,
+          "target_avg_score": 1,
+          "insight": "Similar results"
+        },
+        {
+          "query": "Find all sensors in zone-a",
+          "baseline_hits": 3,
+          "target_hits": 4,
+          "hits_diff": 1,
+          "baseline_avg_score": 1,
+          "target_avg_score": 1,
+          "insight": "Target finds +1 more results"
+        },
+        {
+          "query": "What documents mention forklift safety?",
+          "baseline_hits": 1,
+          "target_hits": 1,
+          "hits_diff": 0,
+          "baseline_avg_score": 1,
+          "target_avg_score": 1,
+          "insight": "Similar results"
+        },
+        {
+          "query": "What maintenance was done on cold storage equipment?",
+          "baseline_hits": 5,
+          "target_hits": 5,
+          "hits_diff": 0,
+          "baseline_avg_score": 1,
+          "target_avg_score": 1,
+          "insight": "Similar results"
+        },
+        {
+          "query": "cold storage temperature monitoring refrigeration",
+          "baseline_hits": 0,
+          "target_hits": 1,
+          "hits_diff": 1,
+          "baseline_avg_score": 0,
+          "target_avg_score": 1,
+          "insight": "Target finds 1 results where baseline found none"
+        },
+        {
+          "query": "forklift operation inspection equipment maintenance",
+          "baseline_hits": 2,
+          "target_hits": 1,
+          "hits_diff": -1,
+          "baseline_avg_score": 1,
+          "target_avg_score": 1,
+          "insight": "Baseline finds +1 more results"
+        },
+        {
+          "query": "hydraulic fluid maintenance equipment repair",
+          "baseline_hits": 1,
+          "target_hits": 0,
+          "hits_diff": -1,
+          "baseline_avg_score": 1,
+          "target_avg_score": 0,
+          "insight": "Baseline finds 1 results where target found none"
+        }
+      ]
+    },
+    "rules": {
+      "baseline_evaluated": 891,
+      "target_evaluated": 891,
+      "baseline_triggered": 3,
+      "target_triggered": 3,
+      "baseline_passed": true,
+      "target_passed": true
+    },
+    "communities": {
+      "baseline_total": 216,
+      "target_total": 219,
+      "total_diff": 3,
+      "baseline_largest": 0,
+      "target_largest": 0,
+      "baseline_avg_size": 0,
+      "target_avg_size": 0
+    },
+    "pathrag": {
+      "baseline_entities": 5,
+      "target_entities": 5,
+      "entities_diff": 0,
+      "baseline_latency_ms": 3,
+      "target_latency_ms": 3,
+      "both_scores_valid": true
+    },
+    "graphrag": {
+      "baseline_local_success": false,
+      "target_local_success": false,
+      "baseline_global_success": false,
+      "target_global_success": false,
+      "baseline_local_latency_ms": 0,
+      "target_local_latency_ms": 0,
+      "baseline_global_latency_ms": 0,
+      "target_global_latency_ms": 0
+    }
+  },
+  "summary": {
+    "tier_capability_diff": "statistical → semantic",
+    "search_improvement": "Similar search performance",
+    "improvements": [
+      "Communities detected: +3"
+    ]
+  }
+}

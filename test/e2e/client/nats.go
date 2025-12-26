@@ -293,6 +293,7 @@ var IndexBuckets = struct {
 	Embedding     string
 	EmbeddingDedp string
 	Community     string
+	Structural    string
 }{
 	EntityStates:  "ENTITY_STATES",
 	Predicate:     "PREDICATE_INDEX",
@@ -304,6 +305,7 @@ var IndexBuckets = struct {
 	Embedding:     "EMBEDDING_INDEX",
 	EmbeddingDedp: "EMBEDDING_DEDUP",
 	Community:     "COMMUNITY_INDEX",
+	Structural:    "STRUCTURAL_INDEX",
 }
 
 // GetAllCommunities retrieves all communities from the COMMUNITY_INDEX bucket

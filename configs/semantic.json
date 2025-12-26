@@ -261,126 +261,145 @@
         "graph_event_subject_prefix": "objectstore.stored",
         "inline_rules": [
           {
-            "id": "low-battery-alert",
-            "type": "expression",
-            "name": "Low Battery Alert",
-            "description": "Triggers when battery level drops below 20%",
-            "enabled": true,
-            "conditions": [
-              {
-                "field": "battery.level",
-                "operator": "lte",
-                "value": 20.0,
-                "required": true
-              }
-            ],
-            "logic": "and",
-            "cooldown": "30s",
-            "metadata": {
-              "severity": "warning",
-              "category": "power"
-            }
-          },
-          {
-            "id": "high-temperature-alert",
-            "type": "expression",
-            "name": "High Temperature Alert",
-            "description": "Triggers when temperature exceeds 50 degrees",
-            "enabled": true,
-            "conditions": [
-              {
-                "field": "data.temperature",
-                "operator": "gte",
-                "value": 50.0,
-                "required": true
-              }
-            ],
-            "logic": "and",
-            "cooldown": "30s",
-            "metadata": {
-              "severity": "critical",
-              "category": "thermal"
-            }
-          },
-          {
             "id": "cold-storage-temp-alert",
             "type": "expression",
             "name": "Cold Storage Temperature Alert",
-            "description": "Triggers when cold storage temperature exceeds 40F threshold",
+            "description": "Fires when cold storage temperature exceeds safe threshold (40F). OnEnter creates alert triple, OnExit removes it.",
             "enabled": true,
             "conditions": [
               {
-                "field": "measurement.fahrenheit",
+                "field": "sensor.measurement.fahrenheit",
                 "operator": "gte",
                 "value": 40.0,
                 "required": true
               },
               {
-                "field": "location.zone",
+                "field": "geo.location.zone",
                 "operator": "contains",
                 "value": "cold-storage",
                 "required": true
               }
             ],
             "logic": "and",
-            "cooldown": "60s",
+            "cooldown": "5s",
+            "on_enter": [
+              {
+                "type": "add_triple",
+                "predicate": "alert.active",
+                "object": "cold-storage-violation"
+              },
+              {
+                "type": "publish",
+                "subject": "alerts.cold-storage"
+              }
+            ],
+            "on_exit": [
+              {
+                "type": "remove_triple",
+                "predicate": "alert.active",
+                "object": "cold-storage-violation"
+              },
+              {
+                "type": "publish",
+                "subject": "alerts.cold-storage.cleared"
+              }
+            ],
             "metadata": {
               "severity": "critical",
-              "category": "food_safety"
+              "category": "food_safety",
+              "tier": 0
             }
           },
           {
             "id": "high-humidity-alert",
             "type": "expression",
             "name": "High Humidity Alert",
-            "description": "Triggers when humidity exceeds 50% threshold",
+            "description": "Fires when humidity exceeds 50% threshold. Demonstrates stateful rule transitions.",
             "enabled": true,
             "conditions": [
               {
-                "field": "measurement.percent",
+                "field": "sensor.measurement.percent",
                 "operator": "gte",
                 "value": 50.0,
                 "required": true
               },
               {
-                "field": "classification.type",
+                "field": "sensor.classification.type",
                 "operator": "eq",
                 "value": "humidity",
                 "required": true
               }
             ],
             "logic": "and",
-            "cooldown": "30s",
+            "cooldown": "5s",
+            "on_enter": [
+              {
+                "type": "add_triple",
+                "predicate": "alert.active",
+                "object": "high-humidity-warning"
+              },
+              {
+                "type": "publish",
+                "subject": "alerts.humidity"
+              }
+            ],
+            "on_exit": [
+              {
+                "type": "remove_triple",
+                "predicate": "alert.active",
+                "object": "high-humidity-warning"
+              }
+            ],
             "metadata": {
               "severity": "warning",
-              "category": "environment"
+              "category": "environment",
+              "tier": 0
             }
           },
           {
-            "id": "low-air-pressure-alert",
+            "id": "low-pressure-alert",
             "type": "expression",
             "name": "Low Air Pressure Alert",
-            "description": "Triggers when compressed air pressure drops below 100 PSI",
+            "description": "Fires when compressed air pressure drops below 100 PSI. OnEnter/OnExit demonstrate dynamic graph state.",
             "enabled": true,
             "conditions": [
               {
-                "field": "measurement.psi",
+                "field": "sensor.measurement.psi",
                 "operator": "lt",
                 "value": 100.0,
                 "required": true
               },
               {
-                "field": "classification.type",
+                "field": "sensor.classification.type",
                 "operator": "eq",
                 "value": "pressure",
                 "required": true
               }
             ],
             "logic": "and",
-            "cooldown": "60s",
+            "cooldown": "5s",
+            "on_enter": [
+              {
+                "type": "add_triple",
+                "predicate": "alert.active",
+                "object": "low-pressure-warning"
+              },
+              {
+                "type": "publish",
+                "subject": "alerts.pressure"
+              }
+            ],
+            "on_exit": [
+              {
+                "type": "remove_triple",
+                "predicate": "alert.active",
+                "object": "low-pressure-warning"
+              }
+            ],
             "metadata": {
               "severity": "warning",
-              "category": "equipment"
+              "category": "equipment",
+              "tier": 0
             }
           }
         ]

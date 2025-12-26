@@ -1,0 +1,57 @@
+{
+  "baseline_variant": "structural",
+  "target_variant": "statistical",
+  "baseline_file": "test/e2e/results/structural-20251226-122957.json",
+  "target_file": "test/e2e/results/statistical-20251226-122828.json",
+  "generated_at": "2025-12-26T12:30:21.941321-05:00",
+  "sections": {
+    "variant": {
+      "baseline_name": "structural",
+      "target_name": "statistical",
+      "baseline_provider": "",
+      "target_provider": ""
+    },
+    "entities": {
+      "baseline_count": 74,
+      "target_count": 74,
+      "count_diff": 0,
+      "baseline_loss_percent": 0,
+      "target_loss_percent": 0
+    },
+    "indexes": {
+      "baseline_populated": 7,
+      "target_populated": 7,
+      "populated_diff": 0
+    },
+    "search": {
+      "baseline_queries": 0,
+      "target_queries": 7,
+      "baseline_with_results": 0,
+      "target_with_results": 6,
+      "baseline_avg_score": 0,
+      "target_avg_score": 1,
+      "baseline_known_answer_pct": 0,
+      "target_known_answer_pct": 33.33333333333333
+    },
+    "rules": {
+      "baseline_evaluated": 891,
+      "target_evaluated": 1485,
+      "baseline_triggered": 3,
+      "target_triggered": 0,
+      "baseline_passed": true,
+      "target_passed": true
+    },
+    "pathrag": {
+      "baseline_entities": 5,
+      "target_entities": 5,
+      "entities_diff": 0,
+      "baseline_latency_ms": 3,
+      "target_latency_ms": 4,
+      "both_scores_valid": true
+    }
+  },
+  "summary": {
+    "tier_capability_diff": "structural → statistical",
+    "search_improvement": "Target has better search (6/7 queries with results, avg score 1.000)"
+  }
+}

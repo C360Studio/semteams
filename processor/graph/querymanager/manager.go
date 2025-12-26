@@ -470,6 +470,60 @@ func sortHierarchyLevels(levels []HierarchyLevel) {
 	}
 }
 
+// SearchSimilar performs similarity search using embeddings (BM25 or neural).
+// Returns entities ranked by cosine similarity score to the query text.
+// Works on both statistical (BM25) and semantic (neural) tiers.
+func (m *Manager) SearchSimilar(ctx context.Context, query string, limit int) (*SimilaritySearchResult, error) {
+	start := time.Now()
+	defer m.recordActivity()
+
+	if m.indexManager == nil {
+		return nil, errs.WrapTransient(ErrIndexManagerUnavailable, "QueryManager", "SearchSimilar",
+			"index manager dependency unavailable")
+	}
+
+	// Set default limit
+	if limit <= 0 {
+		limit = 10
+	}
+
+	// Configure similarity search options
+	opts := &indexmanager.SemanticSearchOptions{
+		Threshold: 0.1, // Low threshold to get more results, ranked by score
+		Limit:     limit,
+	}
+
+	// Delegate to index manager's semantic search (internal name unchanged)
+	results, err := m.indexManager.SearchSemantic(ctx, query, opts)
+	if err != nil {
+		m.recordError("SearchSimilar", err)
+		if m.metrics != nil {
+			m.metrics.RecordQuery("query_engine", "similarity", time.Since(start), 0, false)
+		}
+		return nil, errs.WrapTransient(err, "QueryManager", "SearchSimilar",
+			"index manager similarity search failed")
+	}
+
+	// Convert to querymanager types
+	hits := make([]SimilarityHit, len(results.Hits))
+	for i, hit := range results.Hits {
+		hits[i] = SimilarityHit{
+			EntityID: hit.EntityID,
+			Score:    hit.Score,
+		}
+	}
+
+	// Record metrics
+	if m.metrics != nil {
+		m.metrics.RecordQuery("query_engine", "similarity", time.Since(start), len(hits), true)
+	}
+
+	return &SimilaritySearchResult{
+		Hits:  hits,
+		Total: results.Total,
+	}, nil
+}
+
 // Helper methods
 
 // getSizeRange returns a size range label for metrics
