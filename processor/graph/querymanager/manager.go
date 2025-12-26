@@ -330,6 +330,146 @@ func (m *Manager) GetCacheStats() CacheStats {
 	return CacheStats{}
 }
 
+// EntityID Hierarchy Navigation
+
+// ListWithPrefix returns entity IDs matching the given prefix.
+// Used for EntityID hierarchy navigation (e.g., "c360.logistics" returns all logistics entities).
+func (m *Manager) ListWithPrefix(ctx context.Context, prefix string) ([]string, error) {
+	defer m.recordActivity()
+	return m.entityReader.ListWithPrefix(ctx, prefix)
+}
+
+// GetHierarchyStats returns entity counts grouped by next hierarchy level.
+// Used by MCP tools to understand graph structure at each EntityID level.
+func (m *Manager) GetHierarchyStats(ctx context.Context, prefix string) (*HierarchyStats, error) {
+	defer m.recordActivity()
+
+	ids, err := m.entityReader.ListWithPrefix(ctx, prefix)
+	if err != nil {
+		m.recordError("GetHierarchyStats", err)
+		return nil, err
+	}
+
+	// Group by next hierarchy level
+	childCounts := make(map[string]int)
+	for _, id := range ids {
+		nextLevel := extractNextLevel(id, prefix)
+		if nextLevel != "" {
+			childCounts[nextLevel]++
+		}
+	}
+
+	// Build result with sorted children for deterministic output
+	stats := &HierarchyStats{
+		Prefix:        prefix,
+		TotalEntities: len(ids),
+		Children:      make([]HierarchyLevel, 0, len(childCounts)),
+	}
+
+	for childPrefix, count := range childCounts {
+		stats.Children = append(stats.Children, HierarchyLevel{
+			Prefix: childPrefix,
+			Name:   extractLastSegment(childPrefix),
+			Count:  count,
+		})
+	}
+
+	// Sort children alphabetically by prefix for deterministic output
+	sortHierarchyLevels(stats.Children)
+
+	return stats, nil
+}
+
+// extractNextLevel extracts the next hierarchy level from an entity ID given a prefix.
+// For example: extractNextLevel("c360.logistics.sensor.temp.001", "c360") returns "c360.logistics"
+func extractNextLevel(entityID, prefix string) string {
+	// Handle empty prefix (root level)
+	if prefix == "" {
+		parts := splitEntityID(entityID)
+		if len(parts) > 0 {
+			return parts[0]
+		}
+		return ""
+	}
+
+	// Entity ID must start with prefix
+	if !hasPrefix(entityID, prefix) {
+		return ""
+	}
+
+	// Get the part after the prefix
+	remainder := entityID[len(prefix):]
+	if len(remainder) == 0 {
+		return "" // Entity ID equals prefix exactly
+	}
+
+	// Skip the dot separator
+	if remainder[0] == '.' {
+		remainder = remainder[1:]
+	}
+
+	// Find the next segment
+	parts := splitEntityID(remainder)
+	if len(parts) > 0 {
+		return prefix + "." + parts[0]
+	}
+
+	return ""
+}
+
+// extractLastSegment returns the last segment of a dotted prefix
+func extractLastSegment(prefix string) string {
+	parts := splitEntityID(prefix)
+	if len(parts) > 0 {
+		return parts[len(parts)-1]
+	}
+	return prefix
+}
+
+// splitEntityID splits an entity ID by dots
+func splitEntityID(id string) []string {
+	if id == "" {
+		return nil
+	}
+	var parts []string
+	start := 0
+	for i := 0; i <= len(id); i++ {
+		if i == len(id) || id[i] == '.' {
+			if i > start {
+				parts = append(parts, id[start:i])
+			}
+			start = i + 1
+		}
+	}
+	return parts
+}
+
+// hasPrefix checks if entityID starts with prefix (with proper dot boundary)
+func hasPrefix(entityID, prefix string) bool {
+	if len(entityID) < len(prefix) {
+		return false
+	}
+	if entityID[:len(prefix)] != prefix {
+		return false
+	}
+	// Must be exact match or followed by a dot
+	if len(entityID) == len(prefix) {
+		return true
+	}
+	return entityID[len(prefix)] == '.'
+}
+
+// sortHierarchyLevels sorts hierarchy levels alphabetically by prefix
+func sortHierarchyLevels(levels []HierarchyLevel) {
+	for i := 0; i < len(levels)-1; i++ {
+		for j := i + 1; j < len(levels); j++ {
+			if levels[i].Prefix > levels[j].Prefix {
+				levels[i], levels[j] = levels[j], levels[i]
+			}
+		}
+	}
+}
+
 // Helper methods
 
 // getSizeRange returns a size range label for metrics

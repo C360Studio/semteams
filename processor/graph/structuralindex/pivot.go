@@ -267,6 +267,10 @@ func (c *PivotComputer) bfsFromPivot(pivot string, pivotIdx int, neighbors map[s
 			for _, neighbor := range neighbors[node] {
 				if !visited[neighbor] {
 					visited[neighbor] = true
+					// Skip neighbors not in our entity set (they won't have distance vectors)
+					if _, exists := distanceVectors[neighbor]; !exists {
+						continue
+					}
 					distanceVectors[neighbor][pivotIdx] = distance + 1
 					nextQueue = append(nextQueue, neighbor)
 				}

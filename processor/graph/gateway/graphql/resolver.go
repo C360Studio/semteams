@@ -614,6 +614,88 @@ func (r *Resolver) GraphSnapshot(ctx context.Context,
 	return snapshot, nil
 }
 
+// EntitiesByPrefix retrieves entities matching an EntityID prefix.
+// This enables hierarchical navigation of the 6-part EntityID structure.
+func (r *Resolver) EntitiesByPrefix(ctx context.Context, prefix string, limit int) (*PrefixQueryResult, error) {
+	var result *PrefixQueryResult
+	var err error
+
+	queryFn := func() error {
+		entityIDs, qErr := r.queryManager.ListWithPrefix(ctx, prefix)
+		if qErr != nil {
+			return qErr
+		}
+
+		totalCount := len(entityIDs)
+		truncated := false
+
+		if limit > 0 && len(entityIDs) > limit {
+			entityIDs = entityIDs[:limit]
+			truncated = true
+		}
+
+		result = &PrefixQueryResult{
+			EntityIDs:  entityIDs,
+			TotalCount: totalCount,
+			Truncated:  truncated,
+			Prefix:     prefix,
+		}
+		return nil
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "EntitiesByPrefix", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "EntitiesByPrefix")
+	}
+	return result, nil
+}
+
+// EntityIdHierarchy retrieves statistics about the EntityID hierarchy.
+// This enables understanding the graph structure at each level.
+func (r *Resolver) EntityIdHierarchy(ctx context.Context, prefix string) (*HierarchyStats, error) {
+	var result *HierarchyStats
+	var err error
+
+	queryFn := func() error {
+		stats, qErr := r.queryManager.GetHierarchyStats(ctx, prefix)
+		if qErr != nil {
+			return qErr
+		}
+
+		children := make([]HierarchyLevel, len(stats.Children))
+		for i, c := range stats.Children {
+			children[i] = HierarchyLevel{
+				Prefix: c.Prefix,
+				Name:   c.Name,
+				Count:  c.Count,
+			}
+		}
+
+		result = &HierarchyStats{
+			Prefix:        stats.Prefix,
+			TotalEntities: stats.TotalEntities,
+			Children:      children,
+		}
+		return nil
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "EntityIdHierarchy", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "EntityIdHierarchy")
+	}
+	return result, nil
+}
+
 // Converter helpers
 
 func convertEntityStateToGraphQL(state *graph.EntityState) *Entity {

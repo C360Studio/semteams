@@ -106,3 +106,25 @@ type GraphSnapshot struct {
 	Truncated     bool                   `json:"truncated"`
 	Timestamp     time.Time              `json:"timestamp"`
 }
+
+// PrefixQueryResult represents the result of an EntityID prefix query.
+type PrefixQueryResult struct {
+	EntityIDs  []string `json:"entity_ids"`
+	TotalCount int      `json:"total_count"`
+	Truncated  bool     `json:"truncated"`
+	Prefix     string   `json:"prefix"`
+}
+
+// HierarchyStats represents EntityID hierarchy statistics.
+type HierarchyStats struct {
+	Prefix        string           `json:"prefix"`
+	TotalEntities int              `json:"total_entities"`
+	Children      []HierarchyLevel `json:"children"`
+}
+
+// HierarchyLevel represents a single level in the EntityID hierarchy.
+type HierarchyLevel struct {
+	Prefix string `json:"prefix"`
+	Name   string `json:"name"`
+	Count  int    `json:"count"`
+}

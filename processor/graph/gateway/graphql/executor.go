@@ -89,6 +89,27 @@ type Query {
     entityTypes: [String!]
     maxEntities: Int
   ): GraphSnapshot
+
+  """
+  List entities matching an EntityID prefix (hierarchy navigation).
+  Prefix examples: 'c360', 'c360.logistics', 'c360.logistics.environmental.sensor.temperature'
+  Returns entity IDs only for efficiency; use entities(ids:) to fetch full state.
+  """
+  entitiesByPrefix(
+    """The EntityID prefix to match (e.g., 'c360.logistics')"""
+    prefix: String!
+    """Maximum number of entity IDs to return"""
+    limit: Int
+  ): PrefixQueryResult!
+
+  """
+  Get EntityID hierarchy statistics (counts at each level).
+  Useful for understanding graph structure and navigating the implicit hierarchy.
+  """
+  entityIdHierarchy(
+    """The prefix to get hierarchy stats for (empty or omitted = root level)"""
+    prefix: String
+  ): HierarchyStats!
 }
 
 """Direction for relationship queries"""
@@ -186,6 +207,45 @@ type SnapshotRelationship {
   fromEntityId: ID!
   toEntityId: ID!
   edgeType: String!
+}
+
+"""Result from prefix-based entity query"""
+type PrefixQueryResult {
+  """Entity IDs matching the prefix"""
+  entityIds: [ID!]!
+
+  """Total count (may exceed returned IDs if limit applied)"""
+  totalCount: Int!
+
+  """Whether results were truncated by limit"""
+  truncated: Boolean!
+
+  """The prefix that was queried"""
+  prefix: String!
+}
+
+"""EntityID hierarchy statistics"""
+type HierarchyStats {
+  """The prefix queried (empty string = root)"""
+  prefix: String!
+
+  """Total entities under this prefix"""
+  totalEntities: Int!
+
+  """Breakdown by next level (e.g., platforms under org)"""
+  children: [HierarchyLevel!]!
+}
+
+"""A single level in the EntityID hierarchy"""
+type HierarchyLevel {
+  """The full prefix for this level"""
+  prefix: String!
+
+  """Human-readable name (last segment of prefix)"""
+  name: String!
+
+  """Entity count at or under this level"""
+  count: Int!
 }
 
 """JSON scalar for arbitrary property data"""
@@ -391,6 +451,10 @@ func (e *Executor) executeField(ctx context.Context, field *ast.Field, variables
 		return e.resolveTemporalSearch(ctx, args, field.SelectionSet)
 	case "graphSnapshot":
 		return e.resolveGraphSnapshot(ctx, args, field.SelectionSet)
+	case "entitiesByPrefix":
+		return e.resolveEntitiesByPrefix(ctx, args, field.SelectionSet)
+	case "entityIdHierarchy":
+		return e.resolveEntityIdHierarchy(ctx, args, field.SelectionSet)
 	default:
 		return nil, fmt.Errorf("unknown field: %s", field.Name)
 	}
@@ -806,6 +870,41 @@ func (e *Executor) resolveGraphSnapshot(ctx context.Context, args map[string]any
 	return e.formatGraphSnapshot(result, selections)
 }
 
+func (e *Executor) resolveEntitiesByPrefix(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
+	prefix, ok := args["prefix"].(string)
+	if !ok {
+		return nil, fmt.Errorf("prefix argument required")
+	}
+
+	limit := 0
+	if l, ok := args["limit"].(int); ok {
+		limit = l
+	} else if l, ok := args["limit"].(int64); ok {
+		limit = int(l)
+	}
+
+	result, err := e.resolver.EntitiesByPrefix(ctx, prefix, limit)
+	if err != nil {
+		return nil, err
+	}
+
+	return e.formatPrefixQueryResult(result, selections)
+}
+
+func (e *Executor) resolveEntityIdHierarchy(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
+	prefix := ""
+	if p, ok := args["prefix"].(string); ok {
+		prefix = p
+	}
+
+	result, err := e.resolver.EntityIdHierarchy(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	return e.formatHierarchyStats(result, selections)
+}
+
 // Formatting helpers
 
 func (e *Executor) formatEntity(entity *Entity, selections ast.SelectionSet) (map[string]any, error) {
@@ -1187,6 +1286,93 @@ func (e *Executor) formatSnapshotRelationship(r *SnapshotRelationship, selection
 			result[key] = r.ToEntityID
 		case "edgeType":
 			result[key] = r.EdgeType
+		}
+	}
+
+	return result
+}
+
+func (e *Executor) formatPrefixQueryResult(r *PrefixQueryResult, selections ast.SelectionSet) (map[string]any, error) {
+	result := make(map[string]any)
+
+	for _, sel := range selections {
+		field, ok := sel.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		key := field.Name
+		if field.Alias != "" {
+			key = field.Alias
+		}
+
+		switch field.Name {
+		case "entityIds":
+			result[key] = r.EntityIDs
+		case "totalCount":
+			result[key] = r.TotalCount
+		case "truncated":
+			result[key] = r.Truncated
+		case "prefix":
+			result[key] = r.Prefix
+		}
+	}
+
+	return result, nil
+}
+
+func (e *Executor) formatHierarchyStats(s *HierarchyStats, selections ast.SelectionSet) (map[string]any, error) {
+	result := make(map[string]any)
+
+	for _, sel := range selections {
+		field, ok := sel.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		key := field.Name
+		if field.Alias != "" {
+			key = field.Alias
+		}
+
+		switch field.Name {
+		case "prefix":
+			result[key] = s.Prefix
+		case "totalEntities":
+			result[key] = s.TotalEntities
+		case "children":
+			children := make([]map[string]any, len(s.Children))
+			for i, c := range s.Children {
+				children[i] = e.formatHierarchyLevel(&c, field.SelectionSet)
+			}
+			result[key] = children
+		}
+	}
+
+	return result, nil
+}
+
+func (e *Executor) formatHierarchyLevel(l *HierarchyLevel, selections ast.SelectionSet) map[string]any {
+	result := make(map[string]any)
+
+	for _, sel := range selections {
+		field, ok := sel.(*ast.Field)
+		if !ok {
+			continue
+		}
+
+		key := field.Name
+		if field.Alias != "" {
+			key = field.Alias
+		}
+
+		switch field.Name {
+		case "prefix":
+			result[key] = l.Prefix
+		case "name":
+			result[key] = l.Name
+		case "count":
+			result[key] = l.Count
 		}
 	}
 

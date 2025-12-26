@@ -8,14 +8,17 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/config"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // objectstoreSchema defines the configuration schema for ObjectStore component
@@ -179,21 +182,31 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 
 	// Subscribe to write requests (async fire-and-forget)
+	// Check port type to determine subscription method (JetStream vs core NATS)
 	if c.hasPort("write") {
 		writeSubject := c.getPortSubject("write", "storage.%s.write")
 		c.logger.Debug("Subscribing to write subject", "name", c.instanceName, "subject", writeSubject)
-		c.writeSub, err = nc.Subscribe(writeSubject, c.handleWriteRequest)
-		if err != nil {
-			c.logger.Error(
-				"Failed to subscribe to write subject",
-				"name",
-				c.instanceName,
-				"subject",
-				writeSubject,
-				"error",
-				err,
-			)
-			return fmt.Errorf("failed to subscribe to write subject %s: %w", writeSubject, err)
+
+		if c.isJetStreamInputPort("write") {
+			// JetStream subscription - use durable consumer
+			if err := c.setupJetStreamConsumer(ctx, "write", writeSubject); err != nil {
+				return fmt.Errorf("failed to setup JetStream consumer for write: %w", err)
+			}
+		} else {
+			// Core NATS subscription
+			c.writeSub, err = nc.Subscribe(writeSubject, c.handleWriteRequest)
+			if err != nil {
+				c.logger.Error(
+					"Failed to subscribe to write subject",
+					"name",
+					c.instanceName,
+					"subject",
+					writeSubject,
+					"error",
+					err,
+				)
+				return fmt.Errorf("failed to subscribe to write subject %s: %w", writeSubject, err)
+			}
 		}
 	}
 
@@ -317,7 +330,7 @@ func (c *Component) handleAPIRequest(msg *nats.Msg) {
 	}
 }
 
-// handleWriteRequest handles async write operations
+// handleWriteRequest handles async write operations via core NATS
 // Stores message and emits StoredMessage with StorageRef for downstream processors
 func (c *Component) handleWriteRequest(msg *nats.Msg) {
 	atomic.AddUint64(&c.messagesReceived, 1)
@@ -326,55 +339,7 @@ func (c *Component) handleWriteRequest(msg *nats.Msg) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Try to parse as BaseMessage to check for ContentStorable payload
-	var baseMsg message.BaseMessage
-	if err := baseMsg.UnmarshalJSON(msg.Data); err == nil {
-		// Successfully parsed - check if payload is ContentStorable
-		if cs, ok := baseMsg.Payload().(message.ContentStorable); ok {
-			// Use StoreContent for proper key generation and StoredContent envelope
-			storageRef, err := c.store.StoreContent(ctx, cs)
-			if err != nil {
-				c.logger.Error("Failed to store ContentStorable",
-					slog.String("entity_id", cs.EntityID()),
-					slog.String("error", err.Error()))
-				return
-			}
-
-			atomic.AddUint64(&c.messagesStored, 1)
-
-			// Publish storage event
-			c.publishEvent(Event{
-				Type:      "stored",
-				Key:       storageRef.Key,
-				Timestamp: time.Now(),
-			})
-
-			// Emit StoredMessage with proper StorageRef
-			c.emitStoredMessageFromContentStorable(&baseMsg, cs, storageRef)
-			return
-		}
-	}
-
-	// Fallback: store raw bytes for non-ContentStorable messages
-	key, err := c.store.Store(ctx, msg.Data)
-	if err != nil {
-		c.logger.Error("Failed to store message",
-			slog.String("error", err.Error()))
-		return
-	}
-
-	atomic.AddUint64(&c.messagesStored, 1)
-
-	// Publish simple storage event (for monitoring/audit)
-	c.publishEvent(Event{
-		Type:      "stored",
-		Key:       key,
-		Timestamp: time.Now(),
-	})
-
-	// Try to emit StoredMessage if we have a "stored" output port
-	// This enables the ContentStorable pattern for semantic search
-	c.emitStoredMessage(msg.Data, key)
+	c.processWriteMessage(ctx, msg.Data)
 }
 
 // emitStoredMessage attempts to parse the incoming message and emit a StoredMessage
@@ -593,6 +558,184 @@ func (c *Component) isJetStreamPort(portName string) bool {
 		}
 	}
 	return false
+}
+
+// isJetStreamInputPort checks if an input port is configured for JetStream
+func (c *Component) isJetStreamInputPort(portName string) bool {
+	if c.config.Ports == nil {
+		return false
+	}
+	for _, port := range c.config.Ports.Inputs {
+		if port.Name == portName {
+			return port.Type == "jetstream"
+		}
+	}
+	return false
+}
+
+// getInputPortDef returns the port definition for an input port
+func (c *Component) getInputPortDef(portName string) *component.PortDefinition {
+	if c.config.Ports == nil {
+		return nil
+	}
+	for _, port := range c.config.Ports.Inputs {
+		if port.Name == portName {
+			return &port
+		}
+	}
+	return nil
+}
+
+// setupJetStreamConsumer creates a JetStream consumer for an input port
+func (c *Component) setupJetStreamConsumer(ctx context.Context, portName, subject string) error {
+	portDef := c.getInputPortDef(portName)
+	if portDef == nil {
+		return fmt.Errorf("port %s not found", portName)
+	}
+
+	// Derive stream name from subject or use explicit stream name
+	streamName := portDef.StreamName
+	if streamName == "" {
+		streamName = config.DeriveStreamName(subject)
+	}
+	if streamName == "" {
+		return fmt.Errorf("could not derive stream name for subject %s", subject)
+	}
+
+	// Wait for stream to be available
+	if err := c.waitForStream(ctx, streamName); err != nil {
+		return fmt.Errorf("stream %s not available: %w", streamName, err)
+	}
+
+	// Generate unique consumer name
+	sanitizedSubject := strings.ReplaceAll(subject, ".", "-")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, "*", "all")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
+	consumerName := fmt.Sprintf("objectstore-%s-%s", c.instanceName, sanitizedSubject)
+
+	c.logger.Info("Setting up JetStream consumer",
+		"stream", streamName,
+		"consumer", consumerName,
+		"filter_subject", subject)
+
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    streamName,
+		ConsumerName:  consumerName,
+		FilterSubject: subject,
+		DeliverPolicy: "all",
+		AckPolicy:     "explicit",
+		MaxDeliver:    5,
+		AutoCreate:    false,
+	}
+
+	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		c.handleJetStreamWriteRequest(msgCtx, msg)
+	})
+	if err != nil {
+		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+	}
+
+	return nil
+}
+
+// waitForStream waits for a JetStream stream to be available
+func (c *Component) waitForStream(ctx context.Context, streamName string) error {
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return fmt.Errorf("failed to get JetStream context: %w", err)
+	}
+
+	// Retry with backoff
+	maxRetries := 30
+	retryInterval := 100 * time.Millisecond
+	maxInterval := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		_, err := js.Stream(ctx, streamName)
+		if err == nil {
+			c.logger.Debug("Stream available", "stream", streamName)
+			return nil
+		}
+
+		if i < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retryInterval):
+				retryInterval = min(retryInterval*2, maxInterval)
+			}
+		}
+	}
+
+	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+}
+
+// handleJetStreamWriteRequest handles JetStream messages for write operations
+func (c *Component) handleJetStreamWriteRequest(ctx context.Context, msg jetstream.Msg) {
+	atomic.AddUint64(&c.messagesReceived, 1)
+	c.lastActivity.Store(time.Now())
+
+	// Process the message using existing logic
+	c.processWriteMessage(ctx, msg.Data())
+
+	// Acknowledge the message
+	if err := msg.Ack(); err != nil {
+		c.logger.Error("Failed to ack JetStream message",
+			slog.String("error", err.Error()))
+	}
+}
+
+// processWriteMessage contains the shared logic for processing write messages
+// Used by both core NATS and JetStream handlers
+func (c *Component) processWriteMessage(ctx context.Context, data []byte) {
+	// Try to parse as BaseMessage to check for ContentStorable payload
+	var baseMsg message.BaseMessage
+	if err := baseMsg.UnmarshalJSON(data); err == nil {
+		// Successfully parsed - check if payload is ContentStorable
+		if cs, ok := baseMsg.Payload().(message.ContentStorable); ok {
+			// Use StoreContent for proper key generation and StoredContent envelope
+			storageRef, err := c.store.StoreContent(ctx, cs)
+			if err != nil {
+				c.logger.Error("Failed to store ContentStorable",
+					slog.String("entity_id", cs.EntityID()),
+					slog.String("error", err.Error()))
+				return
+			}
+
+			atomic.AddUint64(&c.messagesStored, 1)
+
+			// Publish storage event
+			c.publishEvent(Event{
+				Type:      "stored",
+				Key:       storageRef.Key,
+				Timestamp: time.Now(),
+			})
+
+			// Emit StoredMessage with proper StorageRef
+			c.emitStoredMessageFromContentStorable(&baseMsg, cs, storageRef)
+			return
+		}
+	}
+
+	// Fallback: store raw bytes for non-ContentStorable messages
+	key, err := c.store.Store(ctx, data)
+	if err != nil {
+		c.logger.Error("Failed to store message",
+			slog.String("error", err.Error()))
+		return
+	}
+
+	atomic.AddUint64(&c.messagesStored, 1)
+
+	// Publish simple storage event (for monitoring/audit)
+	c.publishEvent(Event{
+		Type:      "stored",
+		Key:       key,
+		Timestamp: time.Now(),
+	})
+
+	// Try to emit StoredMessage if we have a "stored" output port
+	c.emitStoredMessage(data, key)
 }
 
 // getPortSubject gets the subject for a named port, or generates a default

@@ -99,7 +99,7 @@ type Processor struct {
 	// Configuration
 	config *Config
 
-	// Clustering components (optional, initialized if config.Clustering.Enabled)
+	// Community detection components (optional, initialized if config.GraphAnalysis.CommunityDetection.Enabled)
 	communityDetector clustering.CommunityDetector
 	communityStorage  clustering.CommunityStorage
 	enhancementWorker *clustering.EnhancementWorker
@@ -121,14 +121,14 @@ type Processor struct {
 	// Inference metrics
 	inferredTriples prometheus.Counter
 
-	// Structural index components (optional, initialized if config.Clustering.StructuralIndex.Enabled)
+	// Structural index components (optional, initialized if config.GraphAnalysis.StructuralIndex.Enabled)
 	structuralMu       sync.RWMutex                       // Protects structuralIndices and previousKCore
 	structuralIndices  *structuralindex.StructuralIndices // Current k-core and pivot indices
 	previousKCore      *structuralindex.KCoreIndex        // Previous k-core for demotion detection
 	structuralComputer *structuralIndexComputer           // Helper for computing indices
 	graphProvider      clustering.GraphProvider           // Cached graph provider for structural computation
 
-	// Anomaly detection components (optional, initialized if config.Clustering.AnomalyDetection.Enabled)
+	// Anomaly detection components (optional, initialized if config.GraphAnalysis.AnomalyDetection.Enabled)
 	inferenceOrchestrator *inference.Orchestrator
 	anomalyStorage        inference.Storage
 	reviewWorker          *inference.ReviewWorker
@@ -815,8 +815,8 @@ func (p *Processor) startBackgroundModules(ctx context.Context) error {
 			return err
 		})
 
-		// Launch clustering loop if enabled
-		if p.config.Clustering != nil && p.config.Clustering.Enabled && p.communityDetector != nil {
+		// Launch community detection loop if enabled
+		if p.isCommunityDetectionEnabled() && p.communityDetector != nil {
 			g.Go(func() error {
 				return p.runClusteringLoop(gctx)
 			})
@@ -1777,12 +1777,13 @@ func (p *processorGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID
 // This creates the CommunityDetector but defers callback setup until dataManager is assigned.
 // Must be called BEFORE initializeQueryManager so CommunityDetector is available for injection.
 func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[string]jetstream.KeyValue, entityReader datamanager.EntityReader) error {
-	if !p.isClusteringEnabled() {
-		return nil
+	if !p.isCommunityDetectionEnabled() {
+		// Even if community detection is disabled, we may still need structural indexing
+		return p.initializeStructuralIndexOnly(ctx, buckets, entityReader)
 	}
 
-	cfg := p.config.Clustering
-	p.logger.Info("Initializing clustering core",
+	cfg := p.config.GraphAnalysis.CommunityDetection
+	p.logger.Info("Initializing graph analysis (community detection)",
 		"max_iterations", cfg.Algorithm.MaxIterations,
 		"levels", cfg.Algorithm.Levels,
 		"enhancement_enabled", cfg.Enhancement.Enabled)
@@ -1800,13 +1801,9 @@ func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[st
 	// Cache graph provider for structural index computation
 	p.graphProvider = graphProvider
 
-	// Initialize structural index computer if enabled
-	if cfg.StructuralIndex.Enabled {
-		p.structuralComputer = newStructuralIndexComputer(graphProvider, cfg.StructuralIndex, p.logger)
-		p.logger.Info("Structural index computation enabled",
-			"kcore_enabled", cfg.StructuralIndex.KCore.Enabled,
-			"pivot_enabled", cfg.StructuralIndex.Pivot.Enabled,
-			"pivot_count", cfg.StructuralIndex.Pivot.PivotCount)
+	// Initialize structural index computer if enabled (from GraphAnalysis, not CommunityDetection)
+	if err := p.initializeStructuralIndexIfEnabled(graphProvider); err != nil {
+		return err
 	}
 
 	// Initialize anomaly detection if enabled
@@ -1824,32 +1821,36 @@ func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[st
 // initializeClusteringCallbacks sets up entity change callbacks for clustering.
 // Must be called AFTER assignManagers so p.dataManager is available.
 func (p *Processor) initializeClusteringCallbacks() error {
-	if !p.isClusteringEnabled() {
+	if !p.isCommunityDetectionEnabled() {
 		return nil
 	}
 
-	cfg := p.config.Clustering
+	cfg := p.config.GraphAnalysis.CommunityDetection
 	p.setupEntityChangeCallback(cfg)
 	return nil
 }
 
-// isClusteringEnabled checks if clustering is configured and enabled.
-func (p *Processor) isClusteringEnabled() bool {
-	clusteringNil := p.config.Clustering == nil
-	enabled := !clusteringNil && p.config.Clustering.Enabled
-	p.logger.Info("Checking clustering configuration",
-		"clustering_config_nil", clusteringNil,
-		"enabled", enabled)
-
-	if clusteringNil || !enabled {
-		p.logger.Info("Clustering disabled, skipping initialization")
+// isCommunityDetectionEnabled checks if community detection is configured and enabled.
+func (p *Processor) isCommunityDetectionEnabled() bool {
+	if p.config.GraphAnalysis == nil {
+		p.logger.Info("GraphAnalysis config nil, community detection disabled")
+		return false
+	}
+	if p.config.GraphAnalysis.CommunityDetection == nil {
+		p.logger.Info("CommunityDetection config nil, community detection disabled")
+		return false
+	}
+	enabled := p.config.GraphAnalysis.CommunityDetection.Enabled
+	p.logger.Info("Checking community detection configuration", "enabled", enabled)
+	if !enabled {
+		p.logger.Info("Community detection disabled, skipping initialization")
 		return false
 	}
 	return true
 }
 
 // setupGraphProvider creates the graph provider and community storage from buckets.
-func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]jetstream.KeyValue, cfg *ClusteringConfig, entityReader datamanager.EntityReader) (jetstream.KeyValue, clustering.GraphProvider, error) {
+func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]jetstream.KeyValue, cfg *CommunityDetectionConfig, entityReader datamanager.EntityReader) (jetstream.KeyValue, clustering.GraphProvider, error) {
 	// Check context before bucket operations
 	select {
 	case <-ctx.Done():
@@ -1880,7 +1881,7 @@ func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]j
 }
 
 // wrapWithSemanticProvider wraps base provider with semantic edges if enabled.
-func (p *Processor) wrapWithSemanticProvider(baseProvider clustering.GraphProvider, cfg *ClusteringConfig) clustering.GraphProvider {
+func (p *Processor) wrapWithSemanticProvider(baseProvider clustering.GraphProvider, cfg *CommunityDetectionConfig) clustering.GraphProvider {
 	if !cfg.SemanticEdges.Enabled || p.indexManager == nil {
 		return baseProvider
 	}
@@ -1907,7 +1908,7 @@ func (p *Processor) wrapWithSemanticProvider(baseProvider clustering.GraphProvid
 }
 
 // createCommunityDetector creates the LPA detector with configuration.
-func (p *Processor) createCommunityDetector(graphProvider clustering.GraphProvider, cfg *ClusteringConfig) clustering.CommunityDetector {
+func (p *Processor) createCommunityDetector(graphProvider clustering.GraphProvider, cfg *CommunityDetectionConfig) clustering.CommunityDetector {
 	maxIterations := cfg.Algorithm.MaxIterations
 	if maxIterations <= 0 {
 		maxIterations = DefaultMaxIterations
@@ -1937,12 +1938,65 @@ func (p *Processor) initializeInferenceMetrics() {
 	p.metricsRegistry.RegisterCounter("graph", "semstreams_graph_inferred_triples_total", p.inferredTriples)
 }
 
-// initializeAnomalyDetectionIfEnabled sets up anomaly detection components if enabled.
-func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, buckets map[string]jetstream.KeyValue) error {
-	cfg := p.config.Clustering
-	if cfg == nil || cfg.AnomalyDetection == nil || !cfg.AnomalyDetection.Enabled {
+// isStructuralIndexEnabled checks if structural indexing is configured and enabled.
+func (p *Processor) isStructuralIndexEnabled() bool {
+	if p.config.GraphAnalysis == nil {
+		return false
+	}
+	return p.config.GraphAnalysis.StructuralIndex.Enabled
+}
+
+// initializeStructuralIndexIfEnabled sets up the structural index computer if enabled.
+func (p *Processor) initializeStructuralIndexIfEnabled(graphProvider clustering.GraphProvider) error {
+	if !p.isStructuralIndexEnabled() {
 		return nil
 	}
+
+	cfg := p.config.GraphAnalysis.StructuralIndex
+	p.structuralComputer = newStructuralIndexComputer(graphProvider, cfg, p.logger)
+	p.logger.Info("Structural index computation enabled",
+		"kcore_enabled", cfg.KCore.Enabled,
+		"pivot_enabled", cfg.Pivot.Enabled,
+		"pivot_count", cfg.Pivot.PivotCount)
+	return nil
+}
+
+// initializeStructuralIndexOnly initializes structural indexing when community detection is disabled.
+// This allows k-core and pivot indexes to be computed without LPA community detection.
+func (p *Processor) initializeStructuralIndexOnly(ctx context.Context, buckets map[string]jetstream.KeyValue, entityReader datamanager.EntityReader) error {
+	if !p.isStructuralIndexEnabled() {
+		p.logger.Debug("Structural index not enabled, skipping initialization")
+		return nil
+	}
+
+	p.logger.Info("Initializing structural index (community detection disabled)")
+	p.clusteringBuckets = buckets
+
+	// Get entity bucket for graph provider
+	entityBucket, ok := buckets["ENTITY_STATES"]
+	if !ok {
+		return errs.WrapFatal(errs.ErrMissingConfig, "Processor",
+			"initializeStructuralIndexOnly", "ENTITY_STATES bucket not found")
+	}
+
+	// Create minimal graph provider for structural indexing
+	graphProvider := &processorGraphProvider{
+		entityReader: entityReader,
+		kvBucket:     entityBucket,
+	}
+
+	// Cache graph provider and initialize structural computer
+	p.graphProvider = graphProvider
+	return p.initializeStructuralIndexIfEnabled(graphProvider)
+}
+
+// initializeAnomalyDetectionIfEnabled sets up anomaly detection components if enabled.
+func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, buckets map[string]jetstream.KeyValue) error {
+	if p.config.GraphAnalysis == nil || p.config.GraphAnalysis.AnomalyDetection == nil ||
+		!p.config.GraphAnalysis.AnomalyDetection.Enabled {
+		return nil
+	}
+	cfg := p.config.GraphAnalysis.AnomalyDetection
 
 	p.logger.Info("Initializing anomaly detection")
 
@@ -1958,7 +2012,7 @@ func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, bucke
 
 	// Create orchestrator
 	orchestratorCfg := inference.OrchestratorConfig{
-		Config:  *cfg.AnomalyDetection,
+		Config:  *cfg,
 		Storage: p.anomalyStorage,
 		Logger:  p.logger,
 	}
@@ -1980,12 +2034,12 @@ func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, bucke
 		"detectors", orchestrator.GetRegisteredDetectors())
 
 	// Initialize review worker if enabled
-	if cfg.AnomalyDetection.Review.Enabled {
+	if cfg.Review.Enabled {
 		// Create LLM client if configured
 		var llmClient llm.Client
-		if cfg.AnomalyDetection.Review.LLM.IsEnabled() {
+		if cfg.Review.LLM.IsEnabled() {
 			var llmErr error
-			llmClient, llmErr = llm.NewOpenAIClient(cfg.AnomalyDetection.Review.LLM.ToOpenAIConfig())
+			llmClient, llmErr = llm.NewOpenAIClient(cfg.Review.LLM.ToOpenAIConfig())
 			if llmErr != nil {
 				return errs.WrapFatal(llmErr, "Processor", "initializeAnomalyDetectionIfEnabled",
 					"failed to create LLM client for review worker")
@@ -2014,7 +2068,7 @@ func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, bucke
 			Storage:       p.anomalyStorage,
 			LLMClient:     llmClient,
 			Applier:       applier,
-			Config:        cfg.AnomalyDetection.Review,
+			Config:        cfg.Review,
 			Metrics:       reviewMetrics,
 			Logger:        p.logger,
 		}
@@ -2027,9 +2081,9 @@ func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, bucke
 		p.reviewWorker = reviewWorker
 
 		p.logger.Info("Review worker initialized",
-			"workers", cfg.AnomalyDetection.Review.Workers,
-			"auto_approve_threshold", cfg.AnomalyDetection.Review.AutoApproveThreshold,
-			"auto_reject_threshold", cfg.AnomalyDetection.Review.AutoRejectThreshold)
+			"workers", cfg.Review.Workers,
+			"auto_approve_threshold", cfg.Review.AutoApproveThreshold,
+			"auto_reject_threshold", cfg.Review.AutoRejectThreshold)
 	}
 
 	return nil
@@ -2150,7 +2204,7 @@ func (p *Processor) runAnomalyDetection(ctx context.Context) {
 }
 
 // setupEnhancementWorker creates the LLM enhancement worker if enabled.
-func (p *Processor) setupEnhancementWorker(ctx context.Context, cfg *ClusteringConfig, communityBucket jetstream.KeyValue, graphProvider clustering.GraphProvider) error {
+func (p *Processor) setupEnhancementWorker(ctx context.Context, cfg *CommunityDetectionConfig, communityBucket jetstream.KeyValue, graphProvider clustering.GraphProvider) error {
 	if !cfg.Enhancement.Enabled || !cfg.Enhancement.LLM.IsEnabled() {
 		return nil
 	}
@@ -2209,7 +2263,7 @@ func (p *Processor) setupEnhancementWorker(ctx context.Context, cfg *ClusteringC
 }
 
 // setupEntityChangeCallback configures the entity creation callback for adaptive clustering.
-func (p *Processor) setupEntityChangeCallback(cfg *ClusteringConfig) {
+func (p *Processor) setupEntityChangeCallback(cfg *CommunityDetectionConfig) {
 	p.detectionTrigger = make(chan struct{}, 1)
 
 	threshold := cfg.Schedule.EntityChangeThreshold
@@ -2236,11 +2290,11 @@ func (p *Processor) setupEntityChangeCallback(cfg *ClusteringConfig) {
 // 2. Entity change threshold (entity_change_threshold, default 100) - triggers immediately when threshold reached
 // 3. Min interval protection (min_detection_interval, default 5s) - prevents hammering during bursts
 func (p *Processor) runClusteringLoop(ctx context.Context) error {
-	if p.config.Clustering == nil {
+	if p.config.GraphAnalysis == nil || p.config.GraphAnalysis.CommunityDetection == nil {
 		return nil
 	}
 
-	cfg := p.config.Clustering
+	cfg := p.config.GraphAnalysis.CommunityDetection
 
 	// Parse timing configuration with error logging
 	initialDelay := 10 * time.Second
@@ -2395,7 +2449,7 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int, en
 	}
 
 	// Run statistical inference if enabled
-	if p.config.Clustering.Inference.Enabled {
+	if p.config.GraphAnalysis.CommunityDetection.Inference.Enabled {
 		p.runInference(ctx, communities)
 	}
 }
@@ -2543,15 +2597,16 @@ func (p *Processor) executeCommunityDetection(ctx context.Context, enhancementWi
 		"total_communities", totalCommunities)
 
 	// Compute structural indices if enabled (needed for anomaly detection)
-	if p.structuralComputer != nil && p.config.Clustering.StructuralIndex.Enabled {
+	if p.structuralComputer != nil && p.isStructuralIndexEnabled() {
 		if err := p.computeStructuralIndices(ctx); err != nil {
 			p.logger.Warn("Structural index computation failed", "error", err)
 		}
 	}
 
 	// Run anomaly detection if enabled
-	if p.inferenceOrchestrator != nil && p.config.Clustering.AnomalyDetection != nil &&
-		p.config.Clustering.AnomalyDetection.Enabled {
+	if p.inferenceOrchestrator != nil && p.config.GraphAnalysis != nil &&
+		p.config.GraphAnalysis.AnomalyDetection != nil &&
+		p.config.GraphAnalysis.AnomalyDetection.Enabled {
 		p.runAnomalyDetection(ctx)
 	}
 
@@ -2606,8 +2661,8 @@ func (p *Processor) runInference(ctx context.Context, communities map[int][]*clu
 
 	// Convert processor config to clustering config
 	inferConfig := clustering.InferenceConfig{
-		MinCommunitySize:        p.config.Clustering.Inference.MinCommunitySize,
-		MaxInferredPerCommunity: p.config.Clustering.Inference.MaxInferredPerCommunity,
+		MinCommunitySize:        p.config.GraphAnalysis.CommunityDetection.Inference.MinCommunitySize,
+		MaxInferredPerCommunity: p.config.GraphAnalysis.CommunityDetection.Inference.MaxInferredPerCommunity,
 	}
 
 	// Process each level
@@ -2888,18 +2943,20 @@ func CreateGraphProcessor(rawConfig json.RawMessage, deps component.Dependencies
 
 // isSemanticClusteringEnabled checks if semantic edge clustering is enabled
 func (p *Processor) isSemanticClusteringEnabled() bool {
-	if p.config == nil || p.config.Clustering == nil {
+	if p.config == nil || p.config.GraphAnalysis == nil ||
+		p.config.GraphAnalysis.CommunityDetection == nil {
 		return false
 	}
-	return p.config.Clustering.SemanticEdges.Enabled
+	return p.config.GraphAnalysis.CommunityDetection.SemanticEdges.Enabled
 }
 
 // getMinEmbeddingCoverage returns the minimum embedding coverage threshold for semantic clustering.
 // Returns 0.5 (50%) as default if not configured.
 func (p *Processor) getMinEmbeddingCoverage() float64 {
-	if p.config != nil && p.config.Clustering != nil &&
-		p.config.Clustering.Schedule.MinEmbeddingCoverage > 0 {
-		return p.config.Clustering.Schedule.MinEmbeddingCoverage
+	if p.config != nil && p.config.GraphAnalysis != nil &&
+		p.config.GraphAnalysis.CommunityDetection != nil &&
+		p.config.GraphAnalysis.CommunityDetection.Schedule.MinEmbeddingCoverage > 0 {
+		return p.config.GraphAnalysis.CommunityDetection.Schedule.MinEmbeddingCoverage
 	}
 	return 0.5 // Default: 50% coverage
 }

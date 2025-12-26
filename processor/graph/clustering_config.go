@@ -5,8 +5,24 @@ import (
 	"github.com/c360/semstreams/processor/graph/llm"
 )
 
-// ClusteringConfig configures community detection behavior
-type ClusteringConfig struct {
+// GraphAnalysisConfig configures graph analysis features including community detection,
+// structural indexing, and anomaly detection. Each feature can be enabled independently.
+type GraphAnalysisConfig struct {
+	// CommunityDetection configures LPA-based community detection
+	CommunityDetection *CommunityDetectionConfig `json:"community_detection,omitempty"`
+
+	// StructuralIndex configures structural graph indices (k-core, pivot distance)
+	// These indices enable query-time filtering and pruning for improved performance
+	// Can be enabled independently of community detection
+	StructuralIndex StructuralIndexConfig `json:"structural_index,omitempty"`
+
+	// AnomalyDetection configures structural anomaly detection (Phase 3 inference)
+	// Detects semantic-structural gaps, core isolation, and transitivity gaps
+	AnomalyDetection *inference.Config `json:"anomaly_detection,omitempty"`
+}
+
+// CommunityDetectionConfig configures LPA-based community detection behavior
+type CommunityDetectionConfig struct {
 	// Enabled controls whether community detection is active
 	Enabled bool `json:"enabled" schema:"type:bool,description:Enable community detection,default:false"`
 
@@ -30,14 +46,6 @@ type ClusteringConfig struct {
 
 	// Inference configures relationship inference from community detection
 	Inference InferenceConfig `json:"inference,omitempty"`
-
-	// StructuralIndex configures structural graph indices (k-core, pivot distance)
-	// These indices enable query-time filtering and pruning for improved performance
-	StructuralIndex StructuralIndexConfig `json:"structural_index,omitempty"`
-
-	// AnomalyDetection configures structural anomaly detection (Phase 3 inference)
-	// Detects semantic-structural gaps, core isolation, and transitivity gaps
-	AnomalyDetection *inference.Config `json:"anomaly_detection,omitempty"`
 }
 
 // StructuralIndexConfig configures structural graph indexing for query optimization

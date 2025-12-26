@@ -417,7 +417,7 @@
           "max_retries": 5
         },
         "data_manager": {
-          "kv_bucket": "graph_entities_kitchen",
+          "kv_bucket": "ENTITY_STATES",
           "kv_options": {
             "max_retries": 15,
             "timeout": "10s"
@@ -470,40 +470,56 @@
           "query_timeout": "10s",
           "result_limit": 1000
         },
-        "clustering": {
-          "enabled": true,
-          "algorithm": {
-            "max_iterations": 100,
-            "levels": 3
-          },
-          "schedule": {
-            "initial_delay": "2s",
-            "detection_interval": "30s",
-            "min_detection_interval": "5s",
-            "entity_change_threshold": 100,
-            "min_entities": 10,
-            "min_embedding_coverage": 0
-          },
-          "enhancement": {
+        "graph_analysis": {
+          "community_detection": {
             "enabled": true,
-            "summarizer_endpoint": "http://seminstruct:8083",
-            "workers": 3
+            "algorithm": {
+              "max_iterations": 100,
+              "levels": 3
+            },
+            "schedule": {
+              "initial_delay": "2s",
+              "detection_interval": "30s",
+              "min_detection_interval": "5s",
+              "entity_change_threshold": 100,
+              "min_entities": 10,
+              "min_embedding_coverage": 0
+            },
+            "enhancement": {
+              "enabled": true,
+              "summarizer_endpoint": "http://seminstruct:8083",
+              "workers": 3
+            },
+            "semantic_edges": {
+              "enabled": true,
+              "similarity_threshold": 0.6,
+              "max_virtual_neighbors": 5
+            },
+            "entityid_edges": {
+              "enabled": true,
+              "sibling_weight": 0.7,
+              "max_siblings": 10,
+              "include_siblings": true
+            },
+            "inference": {
+              "enabled": true,
+              "min_community_size": 2,
+              "max_inferred_per_community": 50
+            }
           },
-          "semantic_edges": {
+          "structural_index": {
             "enabled": true,
-            "similarity_threshold": 0.6,
-            "max_virtual_neighbors": 5
-          },
-          "entityid_edges": {
-            "enabled": true,
-            "sibling_weight": 0.7,
-            "max_siblings": 10,
-            "include_siblings": true
-          },
-          "inference": {
-            "enabled": true,
-            "min_community_size": 2,
-            "max_inferred_per_community": 50
+            "compute_on_startup": true,
+            "compute_interval": "1h",
+            "kcore": {
+              "enabled": true,
+              "min_core_filter": 0
+            },
+            "pivot": {
+              "enabled": true,
+              "pivot_count": 16,
+              "max_hop_distance": 10
+            }
           }
         },
         "gateway": {

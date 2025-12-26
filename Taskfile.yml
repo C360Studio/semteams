@@ -28,10 +28,6 @@ includes:
     taskfile: ./taskfiles/e2e/statistical.yml
   e2e:semantic:
     taskfile: ./taskfiles/e2e/semantic.yml
-  e2e:federation:
-    taskfile: ./taskfiles/e2e/federation.yml
-  e2e:gateway:
-    taskfile: ./taskfiles/e2e/gateway.yml
 
 tasks:
   # Default task
@@ -72,10 +68,10 @@ tasks:
       - 'echo "[TIERS] Running all inference tier E2E tests..."'
       - 'echo ""'
       - 'echo "=== STRUCTURAL (Rules-Only) ==="'
-      - docker compose -f docker/compose/structural.yml up -d --wait
+      - docker compose -f docker/compose/tiered.yml --profile structural up -d --wait
       - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant structural --output-dir ./test/e2e/results
         ignore_error: true
-      - docker compose -f docker/compose/structural.yml down -v --timeout 15
+      - docker compose -f docker/compose/tiered.yml --profile structural down -v --timeout 15
       - sleep 3
       - 'echo ""'
       - 'echo "=== STATISTICAL (BM25 + LPA) ==="'
@@ -97,10 +93,9 @@ tasks:
       - 'echo "[OK] All tier tests complete. Results in ./test/e2e/results/"'
 
   e2e:all:
-    desc: Run all E2E tests (core -> structural -> statistical -> semantic -> gateway)
+    desc: Run all E2E tests (core -> structural -> statistical -> semantic)
     cmds:
       - task: e2e:core
       - task: e2e:structural
       - task: e2e:statistical
       - task: e2e:semantic
-      - task: e2e:gateway

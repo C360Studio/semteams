@@ -67,14 +67,15 @@ func (qe *Manager) ExecutePath(ctx context.Context, start string, pattern PathPa
 
 // pathTraversalState tracks state during bounded graph traversal
 type pathTraversalState struct {
-	visited          map[string]bool
-	entities         map[string]*gtypes.EntityState
-	pathTo           map[string][]string    // Full path to each node
-	edgesTo          map[string][]GraphEdge // Edges along path to each node
-	scores           map[string]float64
-	nodesVisited     int
-	truncated        bool
-	truncationReason string // "timeout", "max_nodes", "cancelled"
+	visited           map[string]bool
+	arrivedViaSibling map[string]bool // Track if node was reached via sibling edge
+	entities          map[string]*gtypes.EntityState
+	pathTo            map[string][]string    // Full path to each node
+	edgesTo           map[string][]GraphEdge // Edges along path to each node
+	scores            map[string]float64
+	nodesVisited      int
+	truncated         bool
+	truncationReason  string // "timeout", "max_nodes", "cancelled"
 }
 
 // executePathTraversal performs bounded graph traversal with full PathPattern support.
@@ -82,11 +83,12 @@ type pathTraversalState struct {
 func (qe *Manager) executePathTraversal(ctx context.Context, start string, pattern PathPattern) (*QueryResult, error) {
 	// Initialize traversal state
 	state := &pathTraversalState{
-		visited:  make(map[string]bool),
-		entities: make(map[string]*gtypes.EntityState),
-		pathTo:   make(map[string][]string),
-		edgesTo:  make(map[string][]GraphEdge),
-		scores:   make(map[string]float64),
+		visited:           make(map[string]bool),
+		arrivedViaSibling: make(map[string]bool),
+		entities:          make(map[string]*gtypes.EntityState),
+		pathTo:            make(map[string][]string),
+		edgesTo:           make(map[string][]GraphEdge),
+		scores:            make(map[string]float64),
 	}
 
 	// Get start entity
@@ -166,8 +168,10 @@ func (qe *Manager) traverseGraph(ctx context.Context, pattern PathPattern, state
 		}
 	}
 
-	// Add inferred sibling relationships if enabled
-	if pattern.IncludeSiblings {
+	// Add inferred sibling relationships if enabled.
+	// Skip sibling lookup if we arrived at this node via a sibling edge to prevent
+	// artificial depth chains (siblings of siblings would create depth 2+ instead of flat peers).
+	if pattern.IncludeSiblings && !state.arrivedViaSibling[current] {
 		siblings, err := qe.getSiblingRelationships(ctx, current)
 		if err != nil {
 			if qe.logger != nil {
@@ -227,6 +231,11 @@ func (qe *Manager) processNeighbor(ctx context.Context, pattern PathPattern, sta
 	state.visited[target] = true
 	state.entities[target] = targetEntity
 	state.nodesVisited++
+
+	// Track if we arrived via sibling edge (to prevent recursive sibling lookup)
+	if rel.EdgeType == "graph.rel.sibling" {
+		state.arrivedViaSibling[target] = true
+	}
 
 	// Update path and edge state
 	qe.updateTraversalState(state, current, target, rel, pattern, depth)

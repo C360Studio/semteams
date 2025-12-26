@@ -632,13 +632,14 @@ func (c *MetricsClient) ExtractRuleMetrics(ctx context.Context) (*RuleMetrics, e
 	}
 
 	// Extract state transition metrics
+	// Note: transition label values are "entered", "exited", "while_true" per state_tracker.go
 	transitions, err := c.GetMetricByLabels(ctx, "semstreams_rule_state_transitions_total", nil)
 	if err == nil {
 		for _, t := range transitions {
 			switch t.Labels["transition"] {
-			case "enter":
+			case "entered":
 				metrics.OnEnterFired += t.Value
-			case "exit":
+			case "exited":
 				metrics.OnExitFired += t.Value
 			case "while_true":
 				metrics.WhileTrueFired += t.Value

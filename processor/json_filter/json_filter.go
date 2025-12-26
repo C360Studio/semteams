@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // Config holds configuration for JSON filter processor
@@ -172,25 +174,9 @@ func (f *Processor) Start(ctx context.Context) error {
 		return errs.WrapFatal(errs.ErrMissingConfig, "JSONFilterProcessor", "Start", "NATS client required")
 	}
 
-	// Subscribe to input subjects
-	for _, subject := range f.subjects {
-		f.logger.Debug("Subscribing to NATS subject",
-			"component", f.name,
-			"subject", subject)
-
-		if err := f.natsClient.Subscribe(ctx, subject, f.handleMessage); err != nil {
-			f.logger.Error("Failed to subscribe to NATS subject",
-				"component", f.name,
-				"subject", subject,
-				"error", err)
-			return errs.WrapTransient(err, "JSONFilterProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
-		}
-
-		f.logger.Debug("Subscribed to NATS subject successfully",
-			"component", f.name,
-			"subject", subject,
-			"output_subjects", f.outputSubjs,
-			"rules_count", len(f.rules))
+	// Subscribe to input ports based on port type
+	if err := f.setupSubscriptions(ctx); err != nil {
+		return err
 	}
 
 	f.mu.Lock()
@@ -205,6 +191,148 @@ func (f *Processor) Start(ctx context.Context) error {
 		"rules", len(f.rules))
 
 	return nil
+}
+
+// setupSubscriptions creates subscriptions for input ports based on port type
+func (f *Processor) setupSubscriptions(ctx context.Context) error {
+	for _, port := range f.config.Ports.Inputs {
+		if port.Subject == "" {
+			continue
+		}
+
+		switch port.Type {
+		case "jetstream":
+			if err := f.setupJetStreamConsumer(ctx, port); err != nil {
+				return errs.WrapTransient(err, "JSONFilterProcessor", "Start",
+					fmt.Sprintf("JetStream consumer for %s", port.Subject))
+			}
+
+		case "nats":
+			if err := f.natsClient.Subscribe(ctx, port.Subject, f.handleMessage); err != nil {
+				f.logger.Error("Failed to subscribe to NATS subject",
+					"component", f.name,
+					"subject", port.Subject,
+					"error", err)
+				return errs.WrapTransient(err, "JSONFilterProcessor", "Start",
+					fmt.Sprintf("subscribe to %s", port.Subject))
+			}
+			f.logger.Debug("Subscribed to NATS subject successfully",
+				"component", f.name,
+				"subject", port.Subject,
+				"output_subjects", f.outputSubjs,
+				"rules_count", len(f.rules))
+
+		default:
+			f.logger.Warn("Unknown port type, skipping", "port", port.Name, "type", port.Type)
+		}
+	}
+	return nil
+}
+
+// setupJetStreamConsumer creates a JetStream consumer for an input port
+func (f *Processor) setupJetStreamConsumer(ctx context.Context, port component.PortDefinition) error {
+	streamName := port.StreamName
+	if streamName == "" {
+		streamName = f.deriveStreamName(port.Subject)
+	}
+	if streamName == "" {
+		return fmt.Errorf("could not derive stream name for subject %s", port.Subject)
+	}
+
+	if err := f.waitForStream(ctx, streamName); err != nil {
+		return fmt.Errorf("stream %s not available: %w", streamName, err)
+	}
+
+	sanitizedSubject := sanitizeSubject(port.Subject)
+	consumerName := fmt.Sprintf("json-filter-%s", sanitizedSubject)
+
+	f.logger.Info("Setting up JetStream consumer",
+		"stream", streamName,
+		"consumer", consumerName,
+		"filter_subject", port.Subject)
+
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    streamName,
+		ConsumerName:  consumerName,
+		FilterSubject: port.Subject,
+		DeliverPolicy: "all",
+		AckPolicy:     "explicit",
+		MaxDeliver:    5,
+		AutoCreate:    false,
+	}
+
+	err := f.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		f.handleMessage(msgCtx, msg.Data())
+		if ackErr := msg.Ack(); ackErr != nil {
+			f.logger.Error("Failed to ack JetStream message", "error", ackErr)
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+	}
+
+	f.logger.Info("JSON filter subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
+	return nil
+}
+
+// waitForStream waits for a JetStream stream to be available
+func (f *Processor) waitForStream(ctx context.Context, streamName string) error {
+	js, err := f.natsClient.JetStream()
+	if err != nil {
+		return fmt.Errorf("failed to get JetStream context: %w", err)
+	}
+
+	maxRetries := 30
+	retryInterval := 100 * time.Millisecond
+	maxInterval := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		_, err := js.Stream(ctx, streamName)
+		if err == nil {
+			return nil
+		}
+		if i < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retryInterval):
+				retryInterval = min(retryInterval*2, maxInterval)
+			}
+		}
+	}
+	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+}
+
+// deriveStreamName extracts stream name from subject convention
+func (f *Processor) deriveStreamName(subject string) string {
+	// Handle wildcard subjects
+	subject = strings.TrimPrefix(subject, "*.")
+	subject = strings.TrimSuffix(subject, ".>")
+	subject = strings.TrimSuffix(subject, ".*")
+
+	parts := strings.Split(subject, ".")
+	if len(parts) == 0 || parts[0] == "" || parts[0] == "*" || parts[0] == ">" {
+		return ""
+	}
+	return strings.ToUpper(parts[0])
+}
+
+// sanitizeSubject replaces invalid consumer name characters
+func sanitizeSubject(subject string) string {
+	result := ""
+	for _, c := range subject {
+		switch c {
+		case '.':
+			result += "-"
+		case '*':
+			result += "all"
+		case '>':
+			result += "wildcard"
+		default:
+			result += string(c)
+		}
+	}
+	return result
 }
 
 // Stop gracefully stops the processor

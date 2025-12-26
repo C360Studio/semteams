@@ -6,15 +6,18 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/config"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/storage/objectstore"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // ComponentConfig holds configuration for the document processor component.
@@ -181,23 +184,44 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.WrapFatal(errs.ErrMissingConfig, "DocumentComponent", "Start", "NATS client required")
 	}
 
-	// Subscribe to input subjects
-	for _, subject := range c.subjects {
-		c.logger.Debug("Subscribing to NATS subject",
-			"component", c.name,
-			"subject", subject)
-
-		if err := c.natsClient.Subscribe(ctx, subject, c.handleMessage); err != nil {
-			c.logger.Error("Failed to subscribe to NATS subject",
-				"component", c.name,
-				"subject", subject,
-				"error", err)
-			return errs.WrapTransient(err, "DocumentComponent", "Start", fmt.Sprintf("subscribe to %s", subject))
+	// Subscribe to input subjects - check port type for each
+	for i, port := range c.config.Ports.Inputs {
+		subject := port.Subject
+		if subject == "" && i < len(c.subjects) {
+			subject = c.subjects[i]
 		}
 
-		c.logger.Debug("Subscribed to NATS subject successfully",
+		c.logger.Debug("Setting up subscription",
+			"component", c.name,
+			"port", port.Name,
+			"subject", subject,
+			"type", port.Type)
+
+		if port.Type == "jetstream" {
+			// JetStream subscription - use durable consumer
+			if err := c.setupJetStreamConsumer(ctx, port.Name, subject); err != nil {
+				c.logger.Error("Failed to setup JetStream consumer",
+					"component", c.name,
+					"port", port.Name,
+					"subject", subject,
+					"error", err)
+				return errs.WrapTransient(err, "DocumentComponent", "Start", fmt.Sprintf("setup JetStream consumer for %s", subject))
+			}
+		} else {
+			// Core NATS subscription
+			if err := c.natsClient.Subscribe(ctx, subject, c.handleMessage); err != nil {
+				c.logger.Error("Failed to subscribe to NATS subject",
+					"component", c.name,
+					"subject", subject,
+					"error", err)
+				return errs.WrapTransient(err, "DocumentComponent", "Start", fmt.Sprintf("subscribe to %s", subject))
+			}
+		}
+
+		c.logger.Debug("Subscription setup successfully",
 			"component", c.name,
 			"subject", subject,
+			"type", port.Type,
 			"output_subject", c.outputSubj)
 	}
 
@@ -268,6 +292,116 @@ func (c *Component) isJetStreamPortBySubject(subject string) bool {
 		}
 	}
 	return false
+}
+
+// getInputPortDef returns the port definition for an input port by name
+func (c *Component) getInputPortDef(portName string) *component.PortDefinition {
+	if c.config.Ports == nil {
+		return nil
+	}
+	for _, port := range c.config.Ports.Inputs {
+		if port.Name == portName {
+			return &port
+		}
+	}
+	return nil
+}
+
+// setupJetStreamConsumer creates a JetStream consumer for an input port
+func (c *Component) setupJetStreamConsumer(ctx context.Context, portName, subject string) error {
+	portDef := c.getInputPortDef(portName)
+	if portDef == nil {
+		return fmt.Errorf("port %s not found", portName)
+	}
+
+	// Derive stream name from subject or use explicit stream name
+	streamName := portDef.StreamName
+	if streamName == "" {
+		streamName = config.DeriveStreamName(subject)
+	}
+	if streamName == "" {
+		return fmt.Errorf("could not derive stream name for subject %s", subject)
+	}
+
+	// Wait for stream to be available
+	if err := c.waitForStream(ctx, streamName); err != nil {
+		return fmt.Errorf("stream %s not available: %w", streamName, err)
+	}
+
+	// Generate unique consumer name
+	sanitizedSubject := strings.ReplaceAll(subject, ".", "-")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, "*", "all")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
+	consumerName := fmt.Sprintf("document-processor-%s", sanitizedSubject)
+
+	c.logger.Info("Setting up JetStream consumer",
+		"stream", streamName,
+		"consumer", consumerName,
+		"filter_subject", subject)
+
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    streamName,
+		ConsumerName:  consumerName,
+		FilterSubject: subject,
+		DeliverPolicy: "all",
+		AckPolicy:     "explicit",
+		MaxDeliver:    5,
+		AutoCreate:    false,
+	}
+
+	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		c.handleJetStreamMessage(msgCtx, msg)
+	})
+	if err != nil {
+		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+	}
+
+	return nil
+}
+
+// waitForStream waits for a JetStream stream to be available
+func (c *Component) waitForStream(ctx context.Context, streamName string) error {
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return fmt.Errorf("failed to get JetStream context: %w", err)
+	}
+
+	// Retry with backoff
+	maxRetries := 30
+	retryInterval := 100 * time.Millisecond
+	maxInterval := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		_, err := js.Stream(ctx, streamName)
+		if err == nil {
+			c.logger.Debug("Stream available", "stream", streamName)
+			return nil
+		}
+
+		if i < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retryInterval):
+				retryInterval = min(retryInterval*2, maxInterval)
+			}
+		}
+	}
+
+	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+}
+
+// handleJetStreamMessage handles JetStream messages and delegates to handleMessage
+func (c *Component) handleJetStreamMessage(ctx context.Context, msg jetstream.Msg) {
+	// Process the message using existing logic
+	c.handleMessage(ctx, msg.Data())
+
+	// Acknowledge the message
+	if err := msg.Ack(); err != nil {
+		c.logger.Error("Failed to ack JetStream message",
+			"component", c.name,
+			"error", err)
+	}
 }
 
 // handleMessage processes incoming document JSON messages.

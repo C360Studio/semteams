@@ -258,8 +258,9 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"test-pathrag-boundary", s.executeTestPathRAGBoundary, nil},
 		// Document PathRAG runs on all tiers (entity stabilization ensures documents are loaded)
 		{"test-pathrag-document", s.executeTestPathRAGDocument, nil},
-		// K-core and pivot structural indexes
-		{"verify-structural-indexes", s.executeVerifyStructuralIndexes, nil},
+		// EntityID hierarchy navigation (6-part EntityID structure)
+		{"test-entityid-hierarchy", s.executeTestEntityIdHierarchy, nil},
+		{"test-entities-by-prefix", s.executeTestEntitiesByPrefix, nil},
 
 		// === Tier 0 ONLY: Zero-ML constraint validation ===
 		// These verify structural tier has NO ML inference

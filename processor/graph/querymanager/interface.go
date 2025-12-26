@@ -50,6 +50,15 @@ type Querier interface {
 
 	// Cache statistics
 	GetCacheStats() CacheStats
+
+	// EntityID hierarchy navigation
+	// ListWithPrefix returns entity IDs matching the given prefix.
+	// Used for EntityID hierarchy navigation (e.g., "c360.logistics" returns all logistics entities).
+	ListWithPrefix(ctx context.Context, prefix string) ([]string, error)
+
+	// GetHierarchyStats returns entity counts grouped by next hierarchy level.
+	// Used by MCP tools to understand graph structure at each EntityID level.
+	GetHierarchyStats(ctx context.Context, prefix string) (*HierarchyStats, error)
 }
 
 // PathPattern represents a graph traversal pattern
@@ -114,4 +123,29 @@ type Relationship struct {
 	Weight       float64                `json:"weight"`
 	CreatedAt    time.Time              `json:"created_at"`
 	UpdatedAt    time.Time              `json:"updated_at"`
+}
+
+// HierarchyStats represents entity counts grouped by EntityID hierarchy level.
+// Used for navigating the implicit graph structure created by 6-part EntityIDs.
+type HierarchyStats struct {
+	// Prefix is the queried prefix (empty string = root)
+	Prefix string `json:"prefix"`
+
+	// TotalEntities is the count of all entities under this prefix
+	TotalEntities int `json:"total_entities"`
+
+	// Children contains breakdown by next hierarchy level
+	Children []HierarchyLevel `json:"children"`
+}
+
+// HierarchyLevel represents a single level in the EntityID hierarchy
+type HierarchyLevel struct {
+	// Prefix is the full prefix for this level
+	Prefix string `json:"prefix"`
+
+	// Name is the human-readable name (last segment of prefix)
+	Name string `json:"name"`
+
+	// Count is the number of entities at or under this level
+	Count int `json:"count"`
 }

@@ -375,38 +375,146 @@ func (rp *Processor) Start(ctx context.Context) error {
 	return nil
 }
 
-// setupSubscriptions creates NATS subscriptions for input subjects
+// setupSubscriptions creates subscriptions for input subjects based on port type
 func (rp *Processor) setupSubscriptions(ctx context.Context) error {
 	if !rp.natsClient.IsHealthy() {
 		return errs.WrapFatal(errs.ErrNoConnection, "RuleProcessor", "Start", "check NATS health")
 	}
 
-	// Get subjects from ports
-	var subjects []string
 	for _, port := range rp.config.Ports.Inputs {
-		if (port.Type == "nats" || port.Type == "jetstream") && port.Subject != "" {
-			subjects = append(subjects, port.Subject)
-		}
-	}
-
-	for _, subject := range subjects {
-		// Skip entity.events subjects since we use KV watch for entity states
-		if strings.HasPrefix(subject, "events.graph.entity") {
-			rp.logger.Info("Skipping NATS subscription - using KV watch for entity states", "subject", subject)
+		if port.Subject == "" {
 			continue
 		}
 
-		err := rp.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
-			rp.handleMessage(msgCtx, subject, data)
-		})
-		if err != nil {
-			return errs.Wrap(err, "RuleProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
+		// Skip entity.events subjects since we use KV watch for entity states
+		if strings.HasPrefix(port.Subject, "events.graph.entity") {
+			rp.logger.Info("Skipping subscription - using KV watch for entity states", "subject", port.Subject)
+			continue
 		}
 
-		rp.logger.Info("Rule processor subscribed", "subject", subject)
+		switch port.Type {
+		case "jetstream":
+			// JetStream subscription - use durable consumer
+			if err := rp.setupJetStreamConsumer(ctx, port); err != nil {
+				return errs.Wrap(err, "RuleProcessor", "setupSubscriptions",
+					fmt.Sprintf("JetStream consumer for %s", port.Subject))
+			}
+
+		case "nats":
+			// Core NATS subscription
+			subject := port.Subject // capture for closure
+			err := rp.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
+				rp.handleMessage(msgCtx, subject, data)
+			})
+			if err != nil {
+				return errs.Wrap(err, "RuleProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
+			}
+			rp.logger.Info("Rule processor subscribed (NATS)", "subject", subject)
+
+		default:
+			rp.logger.Warn("Unknown port type, skipping", "port", port.Name, "type", port.Type)
+		}
 	}
 
 	return nil
+}
+
+// setupJetStreamConsumer creates a JetStream consumer for an input port
+func (rp *Processor) setupJetStreamConsumer(ctx context.Context, port component.PortDefinition) error {
+	// Derive stream name from subject or use explicit stream name
+	streamName := port.StreamName
+	if streamName == "" {
+		streamName = deriveStreamName(port.Subject)
+	}
+	if streamName == "" {
+		return fmt.Errorf("could not derive stream name for subject %s", port.Subject)
+	}
+
+	// Wait for stream to be available
+	if err := rp.waitForStream(ctx, streamName); err != nil {
+		return fmt.Errorf("stream %s not available: %w", streamName, err)
+	}
+
+	// Generate unique consumer name
+	sanitizedSubject := strings.ReplaceAll(port.Subject, ".", "-")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, "*", "all")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
+	consumerName := fmt.Sprintf("rule-processor-%s", sanitizedSubject)
+
+	rp.logger.Info("Setting up JetStream consumer",
+		"stream", streamName,
+		"consumer", consumerName,
+		"filter_subject", port.Subject)
+
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    streamName,
+		ConsumerName:  consumerName,
+		FilterSubject: port.Subject,
+		DeliverPolicy: "all",
+		AckPolicy:     "explicit",
+		MaxDeliver:    5,
+		AutoCreate:    false,
+	}
+
+	subject := port.Subject // capture for closure
+	err := rp.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		rp.handleMessage(msgCtx, subject, msg.Data())
+		if ackErr := msg.Ack(); ackErr != nil {
+			rp.logger.Error("Failed to ack JetStream message", "error", ackErr)
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+	}
+
+	rp.logger.Info("Rule processor subscribed (JetStream)", "subject", subject, "stream", streamName)
+	return nil
+}
+
+// waitForStream waits for a JetStream stream to be available
+func (rp *Processor) waitForStream(ctx context.Context, streamName string) error {
+	js, err := rp.natsClient.JetStream()
+	if err != nil {
+		return fmt.Errorf("failed to get JetStream context: %w", err)
+	}
+
+	maxRetries := 30
+	retryInterval := 100 * time.Millisecond
+	maxInterval := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		_, err := js.Stream(ctx, streamName)
+		if err == nil {
+			rp.logger.Debug("Stream available", "stream", streamName)
+			return nil
+		}
+
+		if i < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retryInterval):
+				retryInterval = min(retryInterval*2, maxInterval)
+			}
+		}
+	}
+
+	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+}
+
+// deriveStreamName extracts stream name from subject convention.
+// Convention: subject "component.action.type" → stream "COMPONENT"
+func deriveStreamName(subject string) string {
+	// Handle wildcard subjects
+	subject = strings.TrimPrefix(subject, "*.")
+	subject = strings.TrimSuffix(subject, ".>")
+	subject = strings.TrimSuffix(subject, ".*")
+
+	parts := strings.Split(subject, ".")
+	if len(parts) == 0 || parts[0] == "" || parts[0] == "*" || parts[0] == ">" {
+		return ""
+	}
+	return strings.ToUpper(parts[0])
 }
 
 // Message handling functions (handleMessage, handleSemanticMessage, evaluateRulesForMessage,

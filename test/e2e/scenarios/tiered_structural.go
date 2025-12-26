@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -296,6 +297,232 @@ func (s *TieredScenario) validatePathRAGResultNamed(resp *pathRAGResponse, start
 	// Hard failure on decay scoring violation - input is controlled, results should be deterministic
 	if !scoresValid {
 		return fmt.Errorf("PathRAG decay scoring violated: %s", decayViolation)
+	}
+
+	return nil
+}
+
+// executeTestEntityIdHierarchy validates the EntityID hierarchy GraphQL queries.
+// This tests that the 6-part EntityID structure can be navigated via GraphQL.
+// EntityID hierarchy is a Tier 0 capability that runs on ALL tiers.
+func (s *TieredScenario) executeTestEntityIdHierarchy(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
+	// Test 1: Get hierarchy stats from root
+	hierarchyQuery := map[string]any{
+		"query": `query($prefix: String) {
+			entityIdHierarchy(prefix: $prefix) {
+				prefix totalEntities children { prefix name count }
+			}}`,
+		"variables": map[string]any{"prefix": ""},
+	}
+
+	queryJSON, err := json.Marshal(hierarchyQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal hierarchy query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create hierarchy request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := httpClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("hierarchy request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("hierarchy returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read hierarchy response: %w", err)
+	}
+
+	var hierarchyResp struct {
+		Data struct {
+			EntityIdHierarchy struct {
+				Prefix        string `json:"prefix"`
+				TotalEntities int    `json:"totalEntities"`
+				Children      []struct {
+					Prefix string `json:"prefix"`
+					Name   string `json:"name"`
+					Count  int    `json:"count"`
+				} `json:"children"`
+			} `json:"entityIdHierarchy"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &hierarchyResp); err != nil {
+		return fmt.Errorf("failed to parse hierarchy response: %w", err)
+	}
+
+	if len(hierarchyResp.Errors) > 0 {
+		return fmt.Errorf("hierarchy GraphQL error: %s", hierarchyResp.Errors[0].Message)
+	}
+
+	hierarchy := hierarchyResp.Data.EntityIdHierarchy
+
+	result.Metrics["hierarchy_total_entities"] = hierarchy.TotalEntities
+	result.Metrics["hierarchy_children_count"] = len(hierarchy.Children)
+	result.Metrics["hierarchy_latency_ms"] = latency.Milliseconds()
+
+	// Validate we found entities
+	if hierarchy.TotalEntities == 0 {
+		result.Details["entityid_hierarchy_test"] = map[string]any{
+			"prefix":         "",
+			"total_entities": 0,
+			"error":          "No entities found in hierarchy",
+		}
+		return fmt.Errorf("entityIdHierarchy returned 0 entities")
+	}
+
+	// Validate we have at least one child level (org level should have platforms)
+	if len(hierarchy.Children) == 0 {
+		result.Details["entityid_hierarchy_test"] = map[string]any{
+			"prefix":         "",
+			"total_entities": hierarchy.TotalEntities,
+			"error":          "No children found at root level",
+		}
+		return fmt.Errorf("entityIdHierarchy returned no children at root level")
+	}
+
+	// Collect child info for logging
+	childInfo := make([]map[string]any, len(hierarchy.Children))
+	for i, child := range hierarchy.Children {
+		childInfo[i] = map[string]any{
+			"prefix": child.Prefix,
+			"name":   child.Name,
+			"count":  child.Count,
+		}
+	}
+
+	result.Details["entityid_hierarchy_test"] = map[string]any{
+		"prefix":         "",
+		"total_entities": hierarchy.TotalEntities,
+		"children":       childInfo,
+		"latency_ms":     latency.Milliseconds(),
+		"message":        fmt.Sprintf("Hierarchy query successful: %d entities across %d org-level children", hierarchy.TotalEntities, len(hierarchy.Children)),
+	}
+
+	return nil
+}
+
+// executeTestEntitiesByPrefix validates the entitiesByPrefix GraphQL query.
+// This tests that entities can be queried by EntityID prefix.
+// EntityID prefix query is a Tier 0 capability that runs on ALL tiers.
+func (s *TieredScenario) executeTestEntitiesByPrefix(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
+	// Test: Query entities by prefix (all temperature sensors)
+	prefix := "c360.logistics.environmental.sensor.temperature"
+	prefixQuery := map[string]any{
+		"query": `query($prefix: String!, $limit: Int) {
+			entitiesByPrefix(prefix: $prefix, limit: $limit) {
+				entityIds totalCount truncated prefix
+			}}`,
+		"variables": map[string]any{"prefix": prefix, "limit": 100},
+	}
+
+	queryJSON, err := json.Marshal(prefixQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal prefix query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create prefix request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := httpClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("prefix request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("prefix query returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read prefix response: %w", err)
+	}
+
+	var prefixResp struct {
+		Data struct {
+			EntitiesByPrefix struct {
+				EntityIDs  []string `json:"entityIds"`
+				TotalCount int      `json:"totalCount"`
+				Truncated  bool     `json:"truncated"`
+				Prefix     string   `json:"prefix"`
+			} `json:"entitiesByPrefix"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &prefixResp); err != nil {
+		return fmt.Errorf("failed to parse prefix response: %w", err)
+	}
+
+	if len(prefixResp.Errors) > 0 {
+		return fmt.Errorf("prefix query GraphQL error: %s", prefixResp.Errors[0].Message)
+	}
+
+	prefixResult := prefixResp.Data.EntitiesByPrefix
+
+	result.Metrics["prefix_query_total_count"] = prefixResult.TotalCount
+	result.Metrics["prefix_query_returned"] = len(prefixResult.EntityIDs)
+	result.Metrics["prefix_query_latency_ms"] = latency.Milliseconds()
+
+	// We expect at least 1 temperature sensor from the test data
+	if prefixResult.TotalCount == 0 {
+		result.Details["entities_by_prefix_test"] = map[string]any{
+			"prefix":      prefix,
+			"total_count": 0,
+			"error":       "No entities found for temperature sensor prefix",
+		}
+		return fmt.Errorf("entitiesByPrefix returned 0 entities for prefix %s", prefix)
+	}
+
+	// Verify all returned entity IDs match the prefix
+	for _, entityID := range prefixResult.EntityIDs {
+		if !strings.HasPrefix(entityID, prefix) {
+			result.Details["entities_by_prefix_test"] = map[string]any{
+				"prefix":    prefix,
+				"entity_id": entityID,
+				"error":     "Entity ID does not match prefix",
+			}
+			return fmt.Errorf("entity %s does not match prefix %s", entityID, prefix)
+		}
+	}
+
+	result.Details["entities_by_prefix_test"] = map[string]any{
+		"prefix":      prefix,
+		"total_count": prefixResult.TotalCount,
+		"returned":    len(prefixResult.EntityIDs),
+		"truncated":   prefixResult.Truncated,
+		"entity_ids":  prefixResult.EntityIDs,
+		"latency_ms":  latency.Milliseconds(),
+		"message":     fmt.Sprintf("Prefix query successful: found %d temperature sensors", prefixResult.TotalCount),
 	}
 
 	return nil

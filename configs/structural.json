@@ -468,7 +468,7 @@
           "max_retries": 3
         },
         "data_manager": {
-          "kv_bucket": "graph_entities_structural",
+          "kv_bucket": "ENTITY_STATES",
           "kv_options": {
             "max_retries": 5,
             "timeout": "5s"
@@ -507,8 +507,13 @@
           "query_timeout": "5s",
           "result_limit": 500
         },
-        "clustering": {
-          "enabled": false
+        "graph_analysis": {
+          "community_detection": {
+            "enabled": false
+          },
+          "structural_index": {
+            "enabled": false
+          }
         },
         "gateway": {
           "graphql": {

@@ -99,6 +99,11 @@ func (m *Manager) ListWithPrefix(ctx context.Context, prefix string) ([]string, 
 		return nil, errs.Wrap(err, "DataManager", "ListWithPrefix", "list keys")
 	}
 
+	// Empty prefix returns all keys (root-level hierarchy query)
+	if prefix == "" {
+		return keys, nil
+	}
+
 	// Filter keys by prefix
 	var matched []string
 	prefixDot := prefix + "."
