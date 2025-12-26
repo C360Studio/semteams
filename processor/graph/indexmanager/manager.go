@@ -8,7 +8,6 @@ import (
 	stderrors "errors"
 	"fmt"
 	"log/slog"
-	"math"
 	"sync"
 	"time"
 
@@ -1400,38 +1399,40 @@ func (m *Manager) QuerySpatial(ctx context.Context, bounds Bounds) ([]string, er
 		return nil, ErrInvalidBounds
 	}
 
-	// For Phase 1, implement a simple spatial query
-	// In production, this would use proper geospatial indexing
+	// Delegate to SpatialIndex which has the correct geohash calculation
 	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
 	defer cancel()
 
-	var allEntities []string
-
-	// Simple approach: check multiple geohash cells within bounds
-	// This is inefficient but functional for Phase 1
-	for lat := bounds.South; lat <= bounds.North; lat += 0.1 {
-		for lon := bounds.West; lon <= bounds.East; lon += 0.1 {
-			geohash := m.calculateGeohash(lat, lon, 7)
-			entry, err := m.spatialBucket.Get(queryCtx, geohash)
-			if err != nil {
-				continue // No entities in this cell
-			}
-
-			var spatialData map[string]interface{}
-			if err := json.Unmarshal(entry.Value(), &spatialData); err != nil {
-				continue // Invalid data
-			}
-
-			if entities, ok := spatialData["entities"].(map[string]interface{}); ok {
-				for entityID := range entities {
-					allEntities = append(allEntities, entityID)
-				}
-			}
+	// Get the SpatialIndex from the indexes map
+	indexInterface, ok := m.indexes["spatial"]
+	if !ok {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("spatial").Inc()
 		}
+		return nil, ErrIndexDisabled
+	}
+
+	spatialIndex, ok := indexInterface.(*SpatialIndex)
+	if !ok {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("spatial").Inc()
+		}
+		return nil, errs.Wrap(ErrIndexDisabled, "IndexManager", "QuerySpatial", "spatial index type assertion failed")
+	}
+
+	entities, err := spatialIndex.QueryBounds(queryCtx, bounds)
+	if err != nil {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("spatial").Inc()
+		}
+		return nil, err
 	}
 
 	m.metrics.RecordQuery(false)
-	return allEntities, nil
+	return entities, nil
 }
 
 // QueryTemporal queries entities within time range
@@ -1464,6 +1465,7 @@ func (m *Manager) QueryTemporal(ctx context.Context, start, end time.Time) ([]st
 	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
 	defer cancel()
 
+	seen := make(map[string]bool) // Deduplicate entities across events
 	var allEntities []string
 
 	// Query hourly buckets within time range
@@ -1493,7 +1495,10 @@ func (m *Manager) QueryTemporal(ctx context.Context, start, end time.Time) ([]st
 			for _, event := range events {
 				if eventMap, ok := event.(map[string]interface{}); ok {
 					if entityID, ok := eventMap["entity"].(string); ok {
-						allEntities = append(allEntities, entityID)
+						if !seen[entityID] {
+							seen[entityID] = true
+							allEntities = append(allEntities, entityID)
+						}
 					}
 				}
 			}
@@ -1747,14 +1752,6 @@ func (m *Manager) ResolveAliases(ctx context.Context, aliases []string) (map[str
 	}
 
 	return results, nil
-}
-
-// calculateGeohash calculates a simple geohash for spatial queries
-func (m *Manager) calculateGeohash(lat, lon float64, _ int) string {
-	// Simplified geohash for Phase 1
-	latInt := int(math.Floor((lat + 90.0) * 100))
-	lonInt := int(math.Floor((lon + 180.0) * 100))
-	return fmt.Sprintf("geo_%d_%d", latInt, lonInt)
 }
 
 // GetBacklog returns the number of pending events in the processing queue.

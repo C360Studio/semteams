@@ -261,6 +261,10 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		// EntityID hierarchy navigation (6-part EntityID structure)
 		{"test-entityid-hierarchy", s.executeTestEntityIdHierarchy, nil},
 		{"test-entities-by-prefix", s.executeTestEntitiesByPrefix, nil},
+		// Spatial/Temporal index queries (all tiers have indexed geo/time data)
+		{"test-spatial-query", s.executeTestSpatialQuery, nil},
+		{"test-temporal-query", s.executeTestTemporalQuery, nil},
+		{"test-zone-relationships", s.executeTestZoneRelationships, nil},
 
 		// === Tier 0 ONLY: Zero-ML constraint validation ===
 		// These verify structural tier has NO ML inference

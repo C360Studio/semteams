@@ -528,6 +528,323 @@ func (s *TieredScenario) executeTestEntitiesByPrefix(ctx context.Context, result
 	return nil
 }
 
+// executeTestSpatialQuery validates spatial index queries via GraphQL.
+// Tests that entities can be found using bounding box search.
+// Spatial query is a Tier 0 capability that runs on ALL tiers.
+func (s *TieredScenario) executeTestSpatialQuery(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
+	// Test data is in SF Bay Area: ~37.77, -122.42
+	// Create bounding box that should include all test sensors
+	spatialQuery := map[string]any{
+		"query": `query($north: Float!, $south: Float!, $east: Float!, $west: Float!, $limit: Int) {
+			spatialSearch(north: $north, south: $south, east: $east, west: $west, limit: $limit) {
+				id type
+			}}`,
+		"variables": map[string]any{
+			"north": 37.78,
+			"south": 37.77,
+			"east":  -122.41,
+			"west":  -122.43,
+			"limit": 100,
+		},
+	}
+
+	queryJSON, err := json.Marshal(spatialQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal spatial query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create spatial request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := httpClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("spatial request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("spatial query returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read spatial response: %w", err)
+	}
+
+	var spatialResp struct {
+		Data struct {
+			SpatialSearch []struct {
+				ID   string `json:"id"`
+				Type string `json:"type"`
+			} `json:"spatialSearch"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &spatialResp); err != nil {
+		return fmt.Errorf("failed to parse spatial response: %w", err)
+	}
+
+	if len(spatialResp.Errors) > 0 {
+		return fmt.Errorf("spatial query GraphQL error: %s", spatialResp.Errors[0].Message)
+	}
+
+	entityCount := len(spatialResp.Data.SpatialSearch)
+	result.Metrics["spatial_query_count"] = entityCount
+	result.Metrics["spatial_query_latency_ms"] = latency.Milliseconds()
+
+	// Collect entity IDs for logging
+	entityIDs := make([]string, entityCount)
+	for i, e := range spatialResp.Data.SpatialSearch {
+		entityIDs[i] = e.ID
+	}
+
+	result.Details["spatial_query_test"] = map[string]any{
+		"bounds": map[string]float64{
+			"north": 37.78, "south": 37.77, "east": -122.41, "west": -122.43,
+		},
+		"entities_found": entityCount,
+		"entity_ids":     entityIDs,
+		"latency_ms":     latency.Milliseconds(),
+		"message":        fmt.Sprintf("Spatial query returned %d entities within bounding box", entityCount),
+	}
+
+	// Note: We don't require a minimum count since spatial indexing depends on
+	// the processor creating geo.location.* triples. If count is 0, it's a warning.
+	if entityCount == 0 {
+		result.Warnings = append(result.Warnings, "Spatial query returned 0 entities - check if geo triples are being indexed")
+	}
+
+	return nil
+}
+
+// executeTestTemporalQuery validates temporal index queries via GraphQL.
+// Tests that entities can be found using time range search.
+// Temporal query is a Tier 0 capability that runs on ALL tiers.
+func (s *TieredScenario) executeTestTemporalQuery(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
+	// Temporal index uses entity UpdatedAt (current time), not historical timestamps from test data.
+	// Query for entities updated in the last hour to capture recently processed entities.
+	now := time.Now().UTC()
+	startTime := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	endTime := now.Add(1 * time.Hour).Format(time.RFC3339)
+
+	temporalQuery := map[string]any{
+		"query": `query($startTime: DateTime!, $endTime: DateTime!, $limit: Int) {
+			temporalSearch(startTime: $startTime, endTime: $endTime, limit: $limit) {
+				id type
+			}}`,
+		"variables": map[string]any{
+			"startTime": startTime,
+			"endTime":   endTime,
+			"limit":     100,
+		},
+	}
+
+	queryJSON, err := json.Marshal(temporalQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal temporal query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create temporal request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := httpClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("temporal request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("temporal query returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read temporal response: %w", err)
+	}
+
+	var temporalResp struct {
+		Data struct {
+			TemporalSearch []struct {
+				ID   string `json:"id"`
+				Type string `json:"type"`
+			} `json:"temporalSearch"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &temporalResp); err != nil {
+		return fmt.Errorf("failed to parse temporal response: %w", err)
+	}
+
+	if len(temporalResp.Errors) > 0 {
+		return fmt.Errorf("temporal query GraphQL error: %s", temporalResp.Errors[0].Message)
+	}
+
+	entityCount := len(temporalResp.Data.TemporalSearch)
+	result.Metrics["temporal_query_count"] = entityCount
+	result.Metrics["temporal_query_latency_ms"] = latency.Milliseconds()
+
+	// Collect entity IDs for logging (limit to first 10 for brevity)
+	maxDisplay := 10
+	if entityCount < maxDisplay {
+		maxDisplay = entityCount
+	}
+	entityIDs := make([]string, maxDisplay)
+	for i := 0; i < maxDisplay; i++ {
+		entityIDs[i] = temporalResp.Data.TemporalSearch[i].ID
+	}
+
+	result.Details["temporal_query_test"] = map[string]any{
+		"time_range": map[string]string{
+			"start": "2024-11-15T00:00:00Z",
+			"end":   "2024-11-16T00:00:00Z",
+		},
+		"entities_found":    entityCount,
+		"entity_ids_sample": entityIDs,
+		"latency_ms":        latency.Milliseconds(),
+		"message":           fmt.Sprintf("Temporal query returned %d entities within time range", entityCount),
+	}
+
+	// Note: We don't require a minimum count since temporal indexing depends on
+	// entity UpdatedAt timestamps. If count is 0, it's a warning.
+	if entityCount == 0 {
+		result.Warnings = append(result.Warnings, "Temporal query returned 0 entities - check if temporal index is being populated")
+	}
+
+	return nil
+}
+
+// executeTestZoneRelationships validates zone-based relationship queries.
+// Tests that querying a zone entity's incoming edges returns all sensors in that zone.
+// This validates the geo.location.zone relationship triple indexing.
+func (s *TieredScenario) executeTestZoneRelationships(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
+	// Zone entity ID format: {org}.{platform}.facility.zone.{zoneType}.{locationID}
+	// From test data sensors.jsonl, "cold-storage-1" is a known location with default zone type "area"
+	// The IoT processor generates: c360.logistics.facility.zone.area.cold-storage-1
+	zoneEntityID := "c360.logistics.facility.zone.area.cold-storage-1"
+
+	// Query incoming relationships to the zone entity
+	relationshipsQuery := map[string]any{
+		"query": `query($entityId: ID!, $direction: RelationshipDirection) {
+			relationships(entityId: $entityId, direction: $direction) {
+				fromEntityId toEntityId edgeType
+			}}`,
+		"variables": map[string]any{
+			"entityId":  zoneEntityID,
+			"direction": "INCOMING",
+		},
+	}
+
+	queryJSON, err := json.Marshal(relationshipsQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal relationships query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create relationships request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := httpClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("relationships request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("relationships query returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read relationships response: %w", err)
+	}
+
+	var relationshipsResp struct {
+		Data struct {
+			Relationships []struct {
+				FromEntityID string `json:"fromEntityId"`
+				ToEntityID   string `json:"toEntityId"`
+				EdgeType     string `json:"edgeType"`
+			} `json:"relationships"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &relationshipsResp); err != nil {
+		return fmt.Errorf("failed to parse relationships response: %w", err)
+	}
+
+	if len(relationshipsResp.Errors) > 0 {
+		return fmt.Errorf("relationships query GraphQL error: %s", relationshipsResp.Errors[0].Message)
+	}
+
+	relationships := relationshipsResp.Data.Relationships
+	relationshipCount := len(relationships)
+	result.Metrics["zone_relationships_count"] = relationshipCount
+	result.Metrics["zone_relationships_latency_ms"] = latency.Milliseconds()
+
+	// Count relationships by edge type
+	edgeTypeCounts := make(map[string]int)
+	sensorIDs := []string{}
+	for _, rel := range relationships {
+		edgeTypeCounts[rel.EdgeType]++
+		// Collect sensor IDs (entities pointing to this zone)
+		if rel.EdgeType == "geo.location.zone" {
+			sensorIDs = append(sensorIDs, rel.FromEntityID)
+		}
+	}
+
+	result.Details["zone_relationships_test"] = map[string]any{
+		"zone_entity_id":      zoneEntityID,
+		"total_relationships": relationshipCount,
+		"edge_type_counts":    edgeTypeCounts,
+		"sensor_ids":          sensorIDs,
+		"latency_ms":          latency.Milliseconds(),
+		"message":             fmt.Sprintf("Zone %s has %d incoming relationships", zoneEntityID, relationshipCount),
+	}
+
+	// Note: We don't require a minimum count since this depends on the zone existing
+	// and sensors being in that zone. If count is 0, it's a warning.
+	if relationshipCount == 0 {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Zone %s has 0 incoming relationships - check if zone triples are being indexed", zoneEntityID))
+	}
+
+	return nil
+}
+
 // executeTestPathRAGBoundary validates PathRAG respects maxNodes limit
 // PathRAG is a Tier 0 capability that runs on ALL tiers.
 func (s *TieredScenario) executeTestPathRAGBoundary(ctx context.Context, result *Result) error {

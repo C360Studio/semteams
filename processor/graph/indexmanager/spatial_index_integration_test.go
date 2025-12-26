@@ -150,6 +150,174 @@ func TestIntegration_SpatialIndex_ConfigurablePrecision(t *testing.T) {
 	}
 }
 
+// TestSpatialIndex_RoundTrip verifies that entities stored via HandleCreate can be
+// queried back via QueryBounds. This is the critical test that validates the geohash
+// calculation is consistent between storage and query operations.
+func TestIntegration_SpatialIndex_RoundTrip(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+	ctx := context.Background()
+
+	// Create real KV bucket for spatial index
+	spatialBucket, err := natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "TEST_SPATIAL_ROUNDTRIP",
+		Description: "Test spatial index round-trip",
+		History:     10,
+	})
+	require.NoError(t, err)
+
+	// Create SpatialIndex with real dependencies
+	metrics := &InternalMetrics{}
+	spatialIndex := NewSpatialIndex(spatialBucket, natsClient, metrics, nil, nil)
+
+	// Test coordinates in San Francisco (same as E2E test data)
+	lat, lon := 37.7749, -122.4194
+	entityID := "c360.logistics.environmental.sensor.temperature.roundtrip-001"
+
+	// Create entity with geo triples
+	entity := &gtypes.EntityState{
+		ID: entityID,
+		Triples: []message.Triple{
+			{
+				Subject:   entityID,
+				Predicate: "geo.location.latitude",
+				Object:    lat,
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+			{
+				Subject:   entityID,
+				Predicate: "geo.location.longitude",
+				Object:    lon,
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+		},
+	}
+
+	// Store entity via HandleCreate
+	err = spatialIndex.HandleCreate(ctx, entityID, entity)
+	require.NoError(t, err)
+
+	// Query with bounds containing the entity (small box around the point)
+	bounds := Bounds{
+		North: lat + 0.01, // ~1.1km north
+		South: lat - 0.01, // ~1.1km south
+		East:  lon + 0.01, // ~850m east
+		West:  lon - 0.01, // ~850m west
+	}
+
+	results, err := spatialIndex.QueryBounds(ctx, bounds)
+	require.NoError(t, err)
+
+	// CRITICAL: Entity must be found - this validates geohash consistency
+	assert.Contains(t, results, entityID, "Round-trip query must find stored entity")
+	assert.Len(t, results, 1, "Should find exactly one entity")
+}
+
+// TestIntegration_SpatialIndex_QueryBounds_MultipleEntities tests querying multiple
+// entities within a bounding box.
+func TestIntegration_SpatialIndex_QueryBounds_MultipleEntities(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+	ctx := context.Background()
+
+	// Create real KV bucket for spatial index
+	spatialBucket, err := natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "TEST_SPATIAL_MULTI",
+		Description: "Test spatial index multi-entity",
+		History:     10,
+	})
+	require.NoError(t, err)
+
+	// Create SpatialIndex with real dependencies
+	metrics := &InternalMetrics{}
+	spatialIndex := NewSpatialIndex(spatialBucket, natsClient, metrics, nil, nil)
+
+	// Create multiple entities in a small area (SF downtown)
+	testEntities := []struct {
+		id       string
+		lat, lon float64
+	}{
+		{"sensor-001", 37.7749, -122.4194}, // Union Square
+		{"sensor-002", 37.7751, -122.4185}, // ~100m east
+		{"sensor-003", 37.7745, -122.4200}, // ~100m southwest
+		{"sensor-004", 37.8000, -122.4000}, // ~3km north (outside bounds)
+	}
+
+	// Store all entities
+	for _, te := range testEntities {
+		entity := &gtypes.EntityState{
+			ID: te.id,
+			Triples: []message.Triple{
+				{Subject: te.id, Predicate: "geo.location.latitude", Object: te.lat, Source: "test", Timestamp: time.Now()},
+				{Subject: te.id, Predicate: "geo.location.longitude", Object: te.lon, Source: "test", Timestamp: time.Now()},
+			},
+		}
+		err := spatialIndex.HandleCreate(ctx, te.id, entity)
+		require.NoError(t, err)
+	}
+
+	// Query bounds around Union Square (should include first 3, exclude 4th)
+	bounds := Bounds{
+		North: 37.776,   // ~100m north of center
+		South: 37.774,   // ~100m south of center
+		East:  -122.418, // ~100m east
+		West:  -122.421, // ~100m west
+	}
+
+	results, err := spatialIndex.QueryBounds(ctx, bounds)
+	require.NoError(t, err)
+
+	// Should find 3 entities in bounds, not the 4th
+	assert.Len(t, results, 3, "Should find exactly 3 entities within bounds")
+	assert.Contains(t, results, "sensor-001")
+	assert.Contains(t, results, "sensor-002")
+	assert.Contains(t, results, "sensor-003")
+	assert.NotContains(t, results, "sensor-004", "Entity outside bounds should not be returned")
+}
+
+// TestIntegration_SpatialIndex_QueryBounds_EmptyArea tests querying an area with no entities.
+func TestIntegration_SpatialIndex_QueryBounds_EmptyArea(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+	ctx := context.Background()
+
+	// Create real KV bucket for spatial index
+	spatialBucket, err := natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "TEST_SPATIAL_EMPTY_QUERY",
+		Description: "Test spatial index empty query",
+		History:     10,
+	})
+	require.NoError(t, err)
+
+	// Create SpatialIndex with real dependencies
+	metrics := &InternalMetrics{}
+	spatialIndex := NewSpatialIndex(spatialBucket, natsClient, metrics, nil, nil)
+
+	// Store entity in San Francisco
+	entity := &gtypes.EntityState{
+		ID: "sf-entity",
+		Triples: []message.Triple{
+			{Subject: "sf-entity", Predicate: "geo.location.latitude", Object: 37.7749, Source: "test", Timestamp: time.Now()},
+			{Subject: "sf-entity", Predicate: "geo.location.longitude", Object: -122.4194, Source: "test", Timestamp: time.Now()},
+		},
+	}
+	err = spatialIndex.HandleCreate(ctx, "sf-entity", entity)
+	require.NoError(t, err)
+
+	// Query bounds in New York (no entities there)
+	bounds := Bounds{
+		North: 40.76,
+		South: 40.74,
+		East:  -73.97,
+		West:  -73.99,
+	}
+
+	results, err := spatialIndex.QueryBounds(ctx, bounds)
+	require.NoError(t, err)
+
+	// Should return empty slice, not error
+	assert.Empty(t, results, "Query in empty area should return empty slice")
+}
+
 // Helper function to get all KV entries for testing
 func getAllKVEntries(t *testing.T, bucket jetstream.KeyValue, _ string) []jetstream.KeyValueEntry {
 	ctx := context.Background()

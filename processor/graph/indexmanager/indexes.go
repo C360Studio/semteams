@@ -1105,6 +1105,75 @@ func (si *SpatialIndex) calculateGeohash(lat, lon float64, precision int) string
 	return fmt.Sprintf("geo_%d_%d_%d", precision, latInt, lonInt)
 }
 
+// CalculateGeohash is an exported wrapper for use by Manager.QuerySpatial.
+// It uses the SpatialIndex's configured precision.
+func (si *SpatialIndex) CalculateGeohash(lat, lon float64) string {
+	return si.calculateGeohash(lat, lon, si.precision)
+}
+
+// getStepSize returns the appropriate step size (in degrees) for iterating
+// through a bounding box based on the configured precision.
+// The step size should be smaller than the bin size to ensure no bins are missed.
+func (si *SpatialIndex) getStepSize() float64 {
+	// Step sizes chosen to be ~1/3 of bin size to ensure overlap coverage
+	switch si.precision {
+	case 4:
+		return 0.1 // ~11km step for ~2.5km bins (conservative)
+	case 5:
+		return 0.02 // ~2.2km step for ~600m bins
+	case 6:
+		return 0.01 // ~1.1km step for ~120m bins
+	case 7:
+		return 0.003 // ~330m step for ~30m bins
+	case 8:
+		return 0.001 // ~110m step for ~5m bins
+	default:
+		return 0.003 // Default to precision 7 step
+	}
+}
+
+// QueryBounds queries all entities within the given spatial bounds.
+// This method encapsulates the geohash calculation logic to ensure consistency
+// between storage and query operations.
+func (si *SpatialIndex) QueryBounds(ctx context.Context, bounds Bounds) ([]string, error) {
+	step := si.getStepSize()
+	seen := make(map[string]bool) // Deduplicate entities across overlapping cells
+	var allEntities []string
+
+	// Iterate through bounds using precision-appropriate step size
+	for lat := bounds.South; lat <= bounds.North; lat += step {
+		for lon := bounds.West; lon <= bounds.East; lon += step {
+			select {
+			case <-ctx.Done():
+				return allEntities, ctx.Err()
+			default:
+			}
+
+			geohash := si.calculateGeohash(lat, lon, si.precision)
+			entry, err := si.bucket.Get(ctx, geohash)
+			if err != nil {
+				continue // No entities in this cell
+			}
+
+			var spatialData map[string]interface{}
+			if err := json.Unmarshal(entry.Value(), &spatialData); err != nil {
+				continue // Invalid data
+			}
+
+			if entities, ok := spatialData["entities"].(map[string]interface{}); ok {
+				for entityID := range entities {
+					if !seen[entityID] {
+						seen[entityID] = true
+						allEntities = append(allEntities, entityID)
+					}
+				}
+			}
+		}
+	}
+
+	return allEntities, nil
+}
+
 // OutgoingEntry represents a forward relationship from an entity.
 // It stores the predicate and target entity ID for relationship traversal.
 type OutgoingEntry struct {

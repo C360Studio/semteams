@@ -482,7 +482,6 @@ func (r *Resolver) PathSearch(ctx context.Context, startEntity string,
 // SpatialSearch finds entities within geographic bounds.
 func (r *Resolver) SpatialSearch(ctx context.Context,
 	north, south, east, west float64, limit int) ([]*Entity, error) {
-
 	var entities []*Entity
 	var err error
 
