@@ -49,7 +49,7 @@ type Config struct {
 	Querier *querymanager.Config `json:"querier,omitempty"         schema:"type:object,description:Query manager configuration,category:advanced"`
 
 	// GraphAnalysis configures graph analysis features (community detection, structural indexing, anomaly detection)
-	GraphAnalysis *GraphAnalysisConfig `json:"graph_analysis,omitempty" schema:"type:object,description:Graph analysis configuration,category:advanced"`
+	GraphAnalysis *AnalysisConfig `json:"graph_analysis,omitempty" schema:"type:object,description:Graph analysis configuration,category:advanced"`
 
 	// Gateway configures optional HTTP gateway output ports
 	Gateway *GatewayConfig `json:"gateway,omitempty" schema:"type:object,description:HTTP gateway configuration,category:gateway"`

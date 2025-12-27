@@ -36,7 +36,7 @@ func TestEntityVerifier_GetCriticalEntities(t *testing.T) {
 		variant  string
 		contains string
 	}{
-		{"structural uses sensor entity", "structural", "cold-storage"},
+		{"structural uses sensor entity", "structural", "temp-sensor"},
 		{"statistical uses document entity", "statistical", "doc-ops"},
 		{"semantic uses document entity", "semantic", "doc-ops"},
 		{"unknown uses document entity", "unknown", "doc-ops"},

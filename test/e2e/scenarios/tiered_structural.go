@@ -302,10 +302,10 @@ func (s *TieredScenario) validatePathRAGResultNamed(resp *pathRAGResponse, start
 	return nil
 }
 
-// executeTestEntityIdHierarchy validates the EntityID hierarchy GraphQL queries.
+// executeTestEntityIDHierarchy validates the EntityID hierarchy GraphQL queries.
 // This tests that the 6-part EntityID structure can be navigated via GraphQL.
 // EntityID hierarchy is a Tier 0 capability that runs on ALL tiers.
-func (s *TieredScenario) executeTestEntityIdHierarchy(ctx context.Context, result *Result) error {
+func (s *TieredScenario) executeTestEntityIDHierarchy(ctx context.Context, result *Result) error {
 	gatewayURL := s.config.GraphQLURL
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
@@ -349,7 +349,7 @@ func (s *TieredScenario) executeTestEntityIdHierarchy(ctx context.Context, resul
 
 	var hierarchyResp struct {
 		Data struct {
-			EntityIdHierarchy struct {
+			EntityIDHierarchy struct {
 				Prefix        string `json:"prefix"`
 				TotalEntities int    `json:"totalEntities"`
 				Children      []struct {
@@ -372,7 +372,7 @@ func (s *TieredScenario) executeTestEntityIdHierarchy(ctx context.Context, resul
 		return fmt.Errorf("hierarchy GraphQL error: %s", hierarchyResp.Errors[0].Message)
 	}
 
-	hierarchy := hierarchyResp.Data.EntityIdHierarchy
+	hierarchy := hierarchyResp.Data.EntityIDHierarchy
 
 	result.Metrics["hierarchy_total_entities"] = hierarchy.TotalEntities
 	result.Metrics["hierarchy_children_count"] = len(hierarchy.Children)

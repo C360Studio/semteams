@@ -1994,7 +1994,7 @@ func (p *Processor) initializeStructuralIndexIfEnabled(graphProvider clustering.
 
 // initializeStructuralIndexOnly initializes structural indexing when community detection is disabled.
 // This allows k-core and pivot indexes to be computed without LPA community detection.
-func (p *Processor) initializeStructuralIndexOnly(ctx context.Context, buckets map[string]jetstream.KeyValue, entityReader datamanager.EntityReader) error {
+func (p *Processor) initializeStructuralIndexOnly(_ context.Context, buckets map[string]jetstream.KeyValue, entityReader datamanager.EntityReader) error {
 	if !p.isStructuralIndexEnabled() {
 		p.logger.Debug("Structural index not enabled, skipping initialization")
 		return nil

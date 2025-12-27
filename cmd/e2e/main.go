@@ -53,26 +53,20 @@ func main() {
 		os.Exit(exitCode)
 	}
 
-	// Handle analyze-comparison command
-	if flags.analyzeComparison {
-		exitCode := handleAnalyzeComparisonCommand(logger, flags.outputDir)
-		os.Exit(exitCode)
-	}
-
 	// Handle structured comparison command
 	if flags.compareStructured {
 		if flags.baselineFile != "" && flags.targetFile != "" {
 			// Compare specific files
-			exitCode := handleStructuredCompareCommand(logger, flags.baselineFile, flags.targetFile)
+			exitCode := handleCompareFilesCommand(logger, flags.baselineFile, flags.targetFile)
 			os.Exit(exitCode)
-		} else if flags.baselineVariant != "" && flags.targetVariant != "" {
+		}
+		if flags.baselineVariant != "" && flags.targetVariant != "" {
 			// Auto-find latest files for each variant
 			exitCode := handleAutoCompareCommand(logger, flags.outputDir, flags.baselineVariant, flags.targetVariant)
 			os.Exit(exitCode)
-		} else {
-			logger.Error("compare-structured requires either --baseline/--target or --baseline-variant/--target-variant")
-			os.Exit(1)
 		}
+		logger.Error("compare-structured requires either --baseline/--target or --baseline-variant/--target-variant")
+		os.Exit(1)
 	}
 
 	// Create clients and setup context
@@ -94,12 +88,11 @@ type cliFlags struct {
 	showVersion   bool
 	listScenarios bool
 	// Tiered test variant flags
-	variant           string // "core" or "ml"
-	outputDir         string // Directory for results output
-	compare           bool   // Generate comparison report from existing results
-	compareTiers      bool   // Generate tier comparison report (0 vs 1 vs 2)
-	analyzeComparison bool   // Generate Core vs ML search comparison report
-	metricsURL        string // Prometheus metrics endpoint URL
+	variant      string // "core" or "ml"
+	outputDir    string // Directory for results output
+	compare      bool   // Generate comparison report from existing results
+	compareTiers bool   // Generate tier comparison report (0 vs 1 vs 2)
+	metricsURL   string // Prometheus metrics endpoint URL
 	// Structured comparison flags
 	compareStructured bool   // Compare two structured result files
 	baselineFile      string // Baseline structured result file
@@ -132,8 +125,6 @@ func parseCommandLineFlags() *cliFlags {
 		"Generate comparison report from existing results in output-dir")
 	flag.BoolVar(&flags.compareTiers, "compare-tiers", false,
 		"Generate tier comparison report (Tier 0 vs 1 vs 2) from existing results")
-	flag.BoolVar(&flags.analyzeComparison, "analyze-comparison", false,
-		"Generate Core vs ML search comparison report with Jaccard and correlation metrics")
 	flag.StringVar(&flags.metricsURL, "metrics-url", "http://localhost:9090",
 		"Prometheus metrics endpoint URL")
 	// Structured comparison flags
@@ -628,41 +619,6 @@ func printComparisonSummary(
 	}
 
 	logger.Info("Comparison report written", "file", filepath)
-}
-
-// handleAnalyzeComparisonCommand generates Core vs ML search comparison report
-func handleAnalyzeComparisonCommand(logger *slog.Logger, outputDir string) int {
-	if outputDir == "" {
-		// Use default output directory
-		outputDir = "test/e2e/results"
-	}
-
-	logger.Info("Analyzing Statistical vs Semantic search comparison", "output_dir", outputDir)
-
-	report, err := analyzeComparison(outputDir)
-	if err != nil {
-		logger.Error("Failed to analyze comparison", "error", err)
-		fmt.Printf("\nError: %v\n", err)
-		fmt.Println("\nTo generate comparison files, run:")
-		fmt.Println("  1. Run with Core: ./e2e --scenario tiered --output-dir test/e2e/results")
-		fmt.Println("  2. Run with ML:   ./e2e --scenario tiered --variant ml --output-dir test/e2e/results")
-		fmt.Println("  3. Analyze:       ./e2e --analyze-comparison --output-dir test/e2e/results")
-		return 1
-	}
-
-	// Print the report
-	printAnalysisReport(report)
-
-	// Optionally save report to JSON
-	reportFile := fmt.Sprintf("%s/comparison-report-%s.json", outputDir, time.Now().Format("20060102-150405"))
-	data, err := json.MarshalIndent(report, "", "  ")
-	if err == nil {
-		if err := os.WriteFile(reportFile, data, 0644); err == nil {
-			logger.Info("Report saved", "file", reportFile)
-		}
-	}
-
-	return 0
 }
 
 // handleCompareTiersCommand generates a tier comparison report (Tier 0 vs 1 vs 2)

@@ -327,6 +327,15 @@ func (m *mockQueryManager) GetCacheStats() querymanager.CacheStats {
 func (m *mockQueryManager) GlobalSearchWithOptions(_ context.Context, _ *querymanager.SearchOptions) (*querymanager.GlobalSearchResult, error) {
 	return nil, nil
 }
+func (m *mockQueryManager) GetHierarchyStats(_ context.Context, _ string) (*querymanager.HierarchyStats, error) {
+	return nil, nil
+}
+func (m *mockQueryManager) ListWithPrefix(_ context.Context, _ string) ([]string, error) {
+	return nil, nil
+}
+func (m *mockQueryManager) SearchSimilar(_ context.Context, _ string, _ int) (*querymanager.SimilaritySearchResult, error) {
+	return nil, nil
+}
 
 // TestGetCommunity tests the GetCommunity resolver
 func TestGetCommunity(t *testing.T) {

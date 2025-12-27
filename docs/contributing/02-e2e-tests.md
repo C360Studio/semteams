@@ -21,7 +21,6 @@ task e2e:core        # Platform boots, data flows (~10s)
 task e2e:structural  # Rules + structural inference (~30s)
 task e2e:statistical # BM25 + community detection (~60s)
 task e2e:semantic    # Neural embeddings + LLM (~90s)
-task e2e:gateway     # GraphQL + MCP APIs (~20s)
 
 # Cleanup
 task e2e:clean

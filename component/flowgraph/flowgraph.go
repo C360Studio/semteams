@@ -70,33 +70,6 @@ type EdgeMetadata struct {
 	Keys              []string                     `json:"keys,omitempty"`    // Watch pattern
 }
 
-// FlowAnalysisResult contains the results of connectivity analysis
-type FlowAnalysisResult struct {
-	ConnectedComponents [][]string         `json:"connected_components"`
-	ConnectedEdges      []FlowEdge         `json:"connected_edges"`
-	DisconnectedNodes   []DisconnectedNode `json:"disconnected_nodes"`
-	OrphanedPorts       []OrphanedPort     `json:"orphaned_ports"`
-	ValidationStatus    string             `json:"validation_status"`
-}
-
-// DisconnectedNode represents a component with no connections
-type DisconnectedNode struct {
-	ComponentName string   `json:"component_name"`
-	Issue         string   `json:"issue"`
-	Suggestions   []string `json:"suggestions,omitempty"`
-}
-
-// OrphanedPort represents a port with no connections
-type OrphanedPort struct {
-	ComponentName string              `json:"component_name"`
-	PortName      string              `json:"port_name"`
-	Direction     component.Direction `json:"direction"`
-	ConnectionID  string              `json:"connection_id"`
-	Pattern       InteractionPattern  `json:"pattern"`
-	Issue         string              `json:"issue"`
-	Required      bool                `json:"required"`
-}
-
 // NewFlowGraph creates a new empty FlowGraph
 func NewFlowGraph() *FlowGraph {
 	return &FlowGraph{
@@ -780,16 +753,6 @@ func (g *FlowGraph) isInterfaceAlternativePort(port PortInfo) bool {
 	}
 
 	return false
-}
-
-// StreamRequirementWarning represents a mismatch between JetStream subscriber and NATS publisher
-type StreamRequirementWarning struct {
-	Severity       string   `json:"severity"`
-	SubscriberComp string   `json:"subscriber_component"`
-	SubscriberPort string   `json:"subscriber_port"`
-	Subjects       []string `json:"subjects"`
-	PublisherComps []string `json:"publisher_components"`
-	Issue          string   `json:"issue"`
 }
 
 // ValidateStreamRequirements checks that JetStream subscribers have corresponding

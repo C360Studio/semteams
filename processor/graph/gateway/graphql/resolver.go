@@ -654,9 +654,9 @@ func (r *Resolver) EntitiesByPrefix(ctx context.Context, prefix string, limit in
 	return result, nil
 }
 
-// EntityIdHierarchy retrieves statistics about the EntityID hierarchy.
+// EntityIDHierarchy retrieves statistics about the EntityID hierarchy.
 // This enables understanding the graph structure at each level.
-func (r *Resolver) EntityIdHierarchy(ctx context.Context, prefix string) (*HierarchyStats, error) {
+func (r *Resolver) EntityIDHierarchy(ctx context.Context, prefix string) (*HierarchyStats, error) {
 	var result *HierarchyStats
 	var err error
 

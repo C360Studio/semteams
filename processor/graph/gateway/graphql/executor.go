@@ -465,7 +465,7 @@ func (e *Executor) executeField(ctx context.Context, field *ast.Field, variables
 	case "entitiesByPrefix":
 		return e.resolveEntitiesByPrefix(ctx, args, field.SelectionSet)
 	case "entityIdHierarchy":
-		return e.resolveEntityIdHierarchy(ctx, args, field.SelectionSet)
+		return e.resolveEntityIDHierarchy(ctx, args, field.SelectionSet)
 	default:
 		return nil, fmt.Errorf("unknown field: %s", field.Name)
 	}
@@ -929,13 +929,13 @@ func (e *Executor) resolveEntitiesByPrefix(ctx context.Context, args map[string]
 	return e.formatPrefixQueryResult(result, selections)
 }
 
-func (e *Executor) resolveEntityIdHierarchy(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
+func (e *Executor) resolveEntityIDHierarchy(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {
 	prefix := ""
 	if p, ok := args["prefix"].(string); ok {
 		prefix = p
 	}
 
-	result, err := e.resolver.EntityIdHierarchy(ctx, prefix)
+	result, err := e.resolver.EntityIDHierarchy(ctx, prefix)
 	if err != nil {
 		return nil, err
 	}

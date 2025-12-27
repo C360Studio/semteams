@@ -96,23 +96,6 @@ type TieredConfig struct {
 	MinOnExitFired     int `json:"min_on_exit_fired"`   // Min OnExit transitions
 }
 
-// ComparisonData represents comparison results for Core vs ML analysis
-type ComparisonData struct {
-	Variant           string                       `json:"variant"`
-	EmbeddingProvider string                       `json:"embedding_provider"`
-	Timestamp         time.Time                    `json:"timestamp"`
-	SearchResults     map[string]SearchQueryResult `json:"search_results"`
-}
-
-// SearchQueryResult represents results from a single search query
-type SearchQueryResult struct {
-	Query     string    `json:"query"`
-	Hits      []string  `json:"hits"`
-	Scores    []float64 `json:"scores"`
-	LatencyMs int64     `json:"latency_ms"`
-	HitCount  int       `json:"hit_count"`
-}
-
 // DefaultTieredConfig returns default configuration
 func DefaultTieredConfig() *TieredConfig {
 	return &TieredConfig{
@@ -259,7 +242,7 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		// Document PathRAG runs on all tiers (entity stabilization ensures documents are loaded)
 		{"test-pathrag-document", s.executeTestPathRAGDocument, nil},
 		// EntityID hierarchy navigation (6-part EntityID structure)
-		{"test-entityid-hierarchy", s.executeTestEntityIdHierarchy, nil},
+		{"test-entityid-hierarchy", s.executeTestEntityIDHierarchy, nil},
 		{"test-entities-by-prefix", s.executeTestEntitiesByPrefix, nil},
 		// Spatial/Temporal index queries (all tiers have indexed geo/time data)
 		{"test-spatial-query", s.executeTestSpatialQuery, nil},
@@ -1362,49 +1345,55 @@ func (s *TieredScenario) executeVerifyEntityCount(ctx context.Context, result *R
 		return nil
 	}
 
-	// Get variant-specific minimum entity count
-	// All tiers now use same testdata (74 entities)
-	var minRequired int
+	minRequired := s.getMinRequiredEntities()
+	criticalEntities := s.getCriticalEntities()
+
+	// Poll until entities are loaded
+	actualCount, pollCount, criticalFound, lastErr := s.pollForEntities(ctx, minRequired, criticalEntities)
+	result.Metrics["entity_load_poll_count"] = pollCount
+
+	// Check for failures
+	if err := s.validateEntityLoadResult(actualCount, minRequired, pollCount, criticalFound, criticalEntities, lastErr); err != nil {
+		return err
+	}
+
+	// Record metrics and details
+	s.recordEntityMetrics(result, actualCount)
+	return nil
+}
+
+func (s *TieredScenario) getMinRequiredEntities() int {
 	switch s.config.Variant {
 	case "structural":
-		minRequired = StructuralMinEntities // 50
+		return StructuralMinEntities
 	case "statistical":
-		minRequired = StatisticalMinEntities // 50
+		return StatisticalMinEntities
 	case "semantic":
-		minRequired = SemanticMinEntities // 50
+		return SemanticMinEntities
 	default:
-		minRequired = s.config.MinExpectedEntities // fallback to config
+		return s.config.MinExpectedEntities
 	}
+}
 
-	// Critical entities vary by variant - used to verify data pipeline is working
-	// All tiers now use same testdata (semantic/), so we use consistent entities
-	var criticalEntities []string
+func (s *TieredScenario) getCriticalEntities() []string {
 	switch s.config.Variant {
 	case "structural":
-		// Structural uses sensor entity from testdata/semantic/sensors.jsonl
-		criticalEntities = []string{
-			"c360.logistics.environmental.sensor.temperature.temp-sensor-001",
-		}
+		return []string{"c360.logistics.environmental.sensor.temperature.temp-sensor-001"}
 	case "statistical", "semantic":
-		// Use doc-ops-001 (line 2) instead of doc-safety-001 (line 1) because
-		// the first line may be lost in a race between file input and document processor
-		criticalEntities = []string{
-			"c360.logistics.content.document.operations.doc-ops-001",
-		}
+		return []string{"c360.logistics.content.document.operations.doc-ops-001"}
 	default:
-		// For auto-detected variants, use document entity as default
-		criticalEntities = []string{
-			"c360.logistics.content.document.operations.doc-ops-001",
-		}
+		return []string{"c360.logistics.content.document.operations.doc-ops-001"}
 	}
+}
 
+func (s *TieredScenario) pollForEntities(ctx context.Context, minRequired int, criticalEntities []string) (int, int, bool, error) {
 	var actualCount int
 	var lastErr error
 	var criticalFound bool
 
-	// Poll until entities are loaded AND critical entities exist
-	deadline := time.Now().Add(s.config.ValidationTimeout) // 30s
+	deadline := time.Now().Add(s.config.ValidationTimeout)
 	pollCount := 0
+
 	for time.Now().Before(deadline) {
 		var err error
 		actualCount, err = s.natsClient.CountEntities(ctx)
@@ -1415,30 +1404,29 @@ func (s *TieredScenario) executeVerifyEntityCount(ctx context.Context, result *R
 			continue
 		}
 
-		// Check if we have enough entities
 		if actualCount >= minRequired {
-			// Also verify critical entities exist
-			criticalFound = true
-			for _, entityID := range criticalEntities {
-				_, err := s.natsClient.GetEntity(ctx, entityID)
-				if err != nil {
-					criticalFound = false
-					break
-				}
-			}
+			criticalFound = s.verifyCriticalEntities(ctx, criticalEntities)
 			if criticalFound {
-				break // All requirements met
+				break
 			}
 		}
 
 		time.Sleep(s.config.PollInterval)
 		pollCount++
 	}
+	return actualCount, pollCount, criticalFound, lastErr
+}
 
-	// Record polling stats
-	result.Metrics["entity_load_poll_count"] = pollCount
+func (s *TieredScenario) verifyCriticalEntities(ctx context.Context, criticalEntities []string) bool {
+	for _, entityID := range criticalEntities {
+		if _, err := s.natsClient.GetEntity(ctx, entityID); err != nil {
+			return false
+		}
+	}
+	return true
+}
 
-	// If we still don't have enough entities after timeout, fail with helpful message
+func (s *TieredScenario) validateEntityLoadResult(actualCount, minRequired, pollCount int, criticalFound bool, criticalEntities []string, lastErr error) error {
 	if actualCount < minRequired {
 		if lastErr != nil {
 			return fmt.Errorf("entity loading timeout: got %d, need %d after %d polls (last error: %v)",
@@ -1447,36 +1435,23 @@ func (s *TieredScenario) executeVerifyEntityCount(ctx context.Context, result *R
 		return fmt.Errorf("entity loading timeout: got %d, need %d after %d polls (waited %v)",
 			actualCount, minRequired, pollCount, s.config.ValidationTimeout)
 	}
-
-	// If critical entities still not found, fail
 	if !criticalFound {
 		return fmt.Errorf("critical entities not found after %d polls: %v", pollCount, criticalEntities)
 	}
+	return nil
+}
 
-	// Expected entities from test data files:
-	// All tiers now use testdata/semantic/*.jsonl (74 unique entities):
-	//   - documents.jsonl: 12 entities
-	//   - maintenance.jsonl: 16 entities
-	//   - observations.jsonl: 15 entities
-	//   - sensor_docs.jsonl: 15 entities
-	//   - sensors.jsonl: 16 entities (41 records → 16 unique device_ids)
-	expectedFromTestData := 74 // All tiers use same unified testdata
-
-	// UDP telemetry NOT counted: json_generic processor is disabled in config,
-	// so UDP messages on raw.udp.messages are never converted to entities.
-	// We keep the UDP sending logic for infrastructure testing, but don't expect entities from it.
+func (s *TieredScenario) recordEntityMetrics(result *Result, actualCount int) {
+	// All tiers use testdata/semantic/*.jsonl (74 unique entities)
+	expectedFromTestData := 74
 	expectedFromUDP := 0
-	_ = result.Metrics["telemetry_sent"] // Acknowledge metric exists but don't count it
-
-	// Total expected entities
 	totalExpected := expectedFromTestData + expectedFromUDP
 
-	// Calculate data loss percentage
 	var dataLossPercent float64
 	if totalExpected > 0 {
 		dataLossPercent = 100.0 * float64(totalExpected-actualCount) / float64(totalExpected)
 		if dataLossPercent < 0 {
-			dataLossPercent = 0 // More entities than expected (not data loss)
+			dataLossPercent = 0
 		}
 	}
 
@@ -1487,15 +1462,12 @@ func (s *TieredScenario) executeVerifyEntityCount(ctx context.Context, result *R
 	result.Metrics["min_expected_entities"] = s.config.MinExpectedEntities
 	result.Metrics["data_loss_percent"] = dataLossPercent
 
-	// Warn on data loss threshold (>10%)
 	dataLossThreshold := 10.0
 	if dataLossPercent > dataLossThreshold {
 		result.Warnings = append(result.Warnings,
 			fmt.Sprintf("Data loss detected: %.1f%% (expected %d, got %d)",
 				dataLossPercent, totalExpected, actualCount))
 	}
-
-	// Warn if below minimum threshold
 	if actualCount < s.config.MinExpectedEntities {
 		result.Warnings = append(result.Warnings,
 			fmt.Sprintf("Entity count %d is below minimum expected %d", actualCount, s.config.MinExpectedEntities))
@@ -1513,8 +1485,6 @@ func (s *TieredScenario) executeVerifyEntityCount(ctx context.Context, result *R
 		"data_loss_detected":  dataLossPercent > dataLossThreshold,
 		"message":             fmt.Sprintf("Found %d entities (expected %d, loss: %.1f%%)", actualCount, totalExpected, dataLossPercent),
 	}
-
-	return nil
 }
 
 // executeVerifyEntityRetrieval validates that specific known entities can be retrieved

@@ -10,22 +10,22 @@ import (
 	"time"
 )
 
-// SearchMode determines which GraphQL query to use for search.
-type SearchMode string
+// Mode determines which GraphQL query to use for search.
+type Mode string
 
 const (
-	// SearchModeGlobal uses globalSearch (community-based GraphRAG search).
-	SearchModeGlobal SearchMode = "global"
-	// SearchModeSimilarity uses similaritySearch (embedding similarity search).
+	// ModeGlobal uses globalSearch (community-based GraphRAG search).
+	ModeGlobal Mode = "global"
+	// ModeSimilarity uses similaritySearch (embedding similarity search).
 	// Works on both statistical (BM25) and semantic (neural) tiers.
-	SearchModeSimilarity SearchMode = "similarity"
+	ModeSimilarity Mode = "similarity"
 )
 
 // Executor executes search queries against the GraphQL gateway.
 type Executor struct {
 	httpClient *http.Client
-	graphqlURL string     // GraphQL endpoint (e.g., http://localhost:8084/graphql)
-	mode       SearchMode // Which search query to use
+	graphqlURL string // GraphQL endpoint (e.g., http://localhost:8084/graphql)
+	mode       Mode   // Which search query to use
 }
 
 // NewExecutor creates a new search executor using globalSearch.
@@ -34,7 +34,7 @@ func NewExecutor(graphqlURL string, timeout time.Duration) *Executor {
 	return &Executor{
 		httpClient: &http.Client{Timeout: timeout},
 		graphqlURL: graphqlURL,
-		mode:       SearchModeGlobal,
+		mode:       ModeGlobal,
 	}
 }
 
@@ -45,7 +45,7 @@ func NewSimilarityExecutor(graphqlURL string, timeout time.Duration) *Executor {
 	return &Executor{
 		httpClient: &http.Client{Timeout: timeout},
 		graphqlURL: graphqlURL,
-		mode:       SearchModeSimilarity,
+		mode:       ModeSimilarity,
 	}
 }
 
@@ -114,18 +114,38 @@ func (e *Executor) ExecuteOne(ctx context.Context, q Query) Result {
 		Description: q.Description,
 	}
 
-	// Set defaults
 	limit := q.Limit
 	if limit == 0 {
 		limit = 10
 	}
 
-	// Build GraphQL query based on mode
-	var graphqlQuery map[string]any
-	if e.mode == SearchModeSimilarity {
-		// Use similaritySearch for embedding-based similarity with real scores
-		// Works on both statistical (BM25) and semantic (neural) tiers
-		graphqlQuery = map[string]any{
+	// Build and execute GraphQL query
+	graphqlQuery := e.buildGraphQLQuery(q.Text, limit)
+	bodyBytes, latencyMs, httpStatus, err := e.executeGraphQLRequest(ctx, graphqlQuery)
+	result.LatencyMs = latencyMs
+	if err != nil {
+		result.Error = err.Error()
+		result.HTTPStatus = httpStatus
+		return result
+	}
+
+	// Parse response based on mode
+	hits, err := e.parseGraphQLResponse(bodyBytes)
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
+	result.Hits = hits
+
+	// Validate result
+	result.Validation = e.validate(q, result.Hits)
+	return result
+}
+
+// buildGraphQLQuery constructs the GraphQL query based on executor mode.
+func (e *Executor) buildGraphQLQuery(queryText string, limit int) map[string]any {
+	if e.mode == ModeSimilarity {
+		return map[string]any{
 			"query": `query($query: String!, $limit: Int) {
 				similaritySearch(query: $query, limit: $limit) {
 					id
@@ -134,149 +154,133 @@ func (e *Executor) ExecuteOne(ctx context.Context, q Query) Result {
 				}
 			}`,
 			"variables": map[string]any{
-				"query": q.Text,
+				"query": queryText,
 				"limit": limit,
 			},
 		}
-	} else {
-		// Use globalSearch for community-based GraphRAG search
-		graphqlQuery = map[string]any{
-			"query": `query($query: String!, $level: Int, $maxCommunities: Int) {
-				globalSearch(query: $query, level: $level, maxCommunities: $maxCommunities) {
-					entities { id type }
-					communitySummaries { communityId summary relevance }
-					count
-				}
-			}`,
-			"variables": map[string]any{
-				"query":          q.Text,
-				"level":          0,
-				"maxCommunities": limit,
-			},
-		}
 	}
+	return map[string]any{
+		"query": `query($query: String!, $level: Int, $maxCommunities: Int) {
+			globalSearch(query: $query, level: $level, maxCommunities: $maxCommunities) {
+				entities { id type }
+				communitySummaries { communityId summary relevance }
+				count
+			}
+		}`,
+		"variables": map[string]any{
+			"query":          queryText,
+			"level":          0,
+			"maxCommunities": limit,
+		},
+	}
+}
 
+// executeGraphQLRequest sends the GraphQL query and returns the response body.
+func (e *Executor) executeGraphQLRequest(ctx context.Context, graphqlQuery map[string]any) ([]byte, int64, int, error) {
 	queryJSON, err := json.Marshal(graphqlQuery)
 	if err != nil {
-		result.Error = fmt.Sprintf("marshal error: %v", err)
-		return result
+		return nil, 0, 0, fmt.Errorf("marshal error: %v", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST",
-		e.graphqlURL, strings.NewReader(string(queryJSON)))
+	req, err := http.NewRequestWithContext(ctx, "POST", e.graphqlURL, strings.NewReader(string(queryJSON)))
 	if err != nil {
-		result.Error = fmt.Sprintf("request error: %v", err)
-		return result
+		return nil, 0, 0, fmt.Errorf("request error: %v", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	// Execute with timing
 	start := time.Now()
 	resp, err := e.httpClient.Do(req)
 	elapsed := time.Since(start)
-	result.LatencyMs = elapsed.Milliseconds()
-	if result.LatencyMs == 0 && elapsed > 0 {
-		result.LatencyMs = 1 // Minimum 1ms for non-zero duration
+	latencyMs := elapsed.Milliseconds()
+	if latencyMs == 0 && elapsed > 0 {
+		latencyMs = 1
 	}
 
 	if err != nil {
-		result.Error = fmt.Sprintf("http error: %v", err)
-		return result
+		return nil, latencyMs, 0, fmt.Errorf("http error: %v", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		result.HTTPStatus = resp.StatusCode
-		result.Error = fmt.Sprintf("http status %d", resp.StatusCode)
-		return result
+		return nil, latencyMs, resp.StatusCode, fmt.Errorf("http status %d", resp.StatusCode)
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		result.Error = fmt.Sprintf("read error: %v", err)
-		return result
+		return nil, latencyMs, resp.StatusCode, fmt.Errorf("read error: %v", err)
+	}
+	return bodyBytes, latencyMs, resp.StatusCode, nil
+}
+
+// parseGraphQLResponse parses the response based on executor mode.
+func (e *Executor) parseGraphQLResponse(bodyBytes []byte) ([]Hit, error) {
+	if e.mode == ModeSimilarity {
+		return parseSimilarityResponse(bodyBytes)
+	}
+	return parseGlobalSearchResponse(bodyBytes)
+}
+
+func parseSimilarityResponse(bodyBytes []byte) ([]Hit, error) {
+	var gqlResp struct {
+		Data struct {
+			SimilaritySearch []struct {
+				ID    string  `json:"id"`
+				Type  string  `json:"type"`
+				Score float64 `json:"score"`
+			} `json:"similaritySearch"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
 	}
 
-	// Parse GraphQL response based on mode
-	if e.mode == SearchModeSimilarity {
-		var gqlResp struct {
-			Data struct {
-				SimilaritySearch []struct {
-					ID    string  `json:"id"`
-					Type  string  `json:"type"`
-					Score float64 `json:"score"`
-				} `json:"similaritySearch"`
-			} `json:"data"`
-			Errors []struct {
-				Message string `json:"message"`
-			} `json:"errors"`
-		}
-
-		if err := json.Unmarshal(bodyBytes, &gqlResp); err != nil {
-			result.Error = fmt.Sprintf("parse error: %v", err)
-			return result
-		}
-
-		if len(gqlResp.Errors) > 0 {
-			result.Error = gqlResp.Errors[0].Message
-			return result
-		}
-
-		// Convert similaritySearch results to hits with real scores
-		for _, entity := range gqlResp.Data.SimilaritySearch {
-			result.Hits = append(result.Hits, Hit{
-				EntityID: entity.ID,
-				Score:    entity.Score,
-			})
-		}
-	} else {
-		var gqlResp struct {
-			Data struct {
-				GlobalSearch struct {
-					Entities []struct {
-						ID   string `json:"id"`
-						Type string `json:"type"`
-					} `json:"entities"`
-					CommunitySummaries []struct {
-						CommunityID string  `json:"communityId"`
-						Summary     string  `json:"summary"`
-						Relevance   float64 `json:"relevance"`
-					} `json:"communitySummaries"`
-					Count int `json:"count"`
-				} `json:"globalSearch"`
-			} `json:"data"`
-			Errors []struct {
-				Message string `json:"message"`
-			} `json:"errors"`
-		}
-
-		if err := json.Unmarshal(bodyBytes, &gqlResp); err != nil {
-			result.Error = fmt.Sprintf("parse error: %v", err)
-			return result
-		}
-
-		if len(gqlResp.Errors) > 0 {
-			result.Error = gqlResp.Errors[0].Message
-			return result
-		}
-
-		// Convert entities to hits
-		// GraphQL globalSearch returns entities from matching communities
-		// Use community relevance as score proxy (entities inherit community relevance)
-		for _, entity := range gqlResp.Data.GlobalSearch.Entities {
-			// Default score of 1.0 since globalSearch doesn't return per-entity scores
-			// The relevance is at the community level, not entity level
-			result.Hits = append(result.Hits, Hit{
-				EntityID: entity.ID,
-				Score:    1.0,
-			})
-		}
+	if err := json.Unmarshal(bodyBytes, &gqlResp); err != nil {
+		return nil, fmt.Errorf("parse error: %v", err)
+	}
+	if len(gqlResp.Errors) > 0 {
+		return nil, fmt.Errorf("%s", gqlResp.Errors[0].Message)
 	}
 
-	// Validate result
-	result.Validation = e.validate(q, result.Hits)
+	var hits []Hit
+	for _, entity := range gqlResp.Data.SimilaritySearch {
+		hits = append(hits, Hit{EntityID: entity.ID, Score: entity.Score})
+	}
+	return hits, nil
+}
 
-	return result
+func parseGlobalSearchResponse(bodyBytes []byte) ([]Hit, error) {
+	var gqlResp struct {
+		Data struct {
+			GlobalSearch struct {
+				Entities []struct {
+					ID   string `json:"id"`
+					Type string `json:"type"`
+				} `json:"entities"`
+				CommunitySummaries []struct {
+					CommunityID string  `json:"communityId"`
+					Summary     string  `json:"summary"`
+					Relevance   float64 `json:"relevance"`
+				} `json:"communitySummaries"`
+				Count int `json:"count"`
+			} `json:"globalSearch"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &gqlResp); err != nil {
+		return nil, fmt.Errorf("parse error: %v", err)
+	}
+	if len(gqlResp.Errors) > 0 {
+		return nil, fmt.Errorf("%s", gqlResp.Errors[0].Message)
+	}
+
+	var hits []Hit
+	for _, entity := range gqlResp.Data.GlobalSearch.Entities {
+		hits = append(hits, Hit{EntityID: entity.ID, Score: 1.0})
+	}
+	return hits, nil
 }
 
 // validate checks the hits against query expectations.

@@ -107,10 +107,9 @@ func TestIntegration_ComponentInterface(t *testing.T) {
 	assert.Equal(t, "mutations_api", inputPorts[1].Name)
 
 	outputPorts := processor.OutputPorts()
-	assert.Len(t, outputPorts, 3)
+	assert.Len(t, outputPorts, 2)
 	assert.Equal(t, "entity_states", outputPorts[0].Name)
 	assert.Equal(t, "predicate_index", outputPorts[1].Name)
-	assert.Equal(t, "entities_output", outputPorts[2].Name)
 
 	// Test Health
 	health := processor.Health()
