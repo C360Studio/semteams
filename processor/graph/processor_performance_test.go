@@ -118,22 +118,28 @@ func publishRapidUpdates(ctx context.Context, t *testing.T, natsClient *natsclie
 // verifyFinalEntityState validates that all updates were processed correctly.
 // This is a correctness test - we verify the final state is correct after rapid updates,
 // not the number of KV writes (which varies based on timing and system load).
+// Uses polling to handle async processing without arbitrary waits.
 func verifyFinalEntityState(ctx context.Context, t *testing.T, entityID string, entityBucket jetstream.KeyValue, expectedBatteryLevel float64) {
-	// Verify final state - this is what matters for correctness
-	entry, err := entityBucket.Get(ctx, entityID)
-	require.NoError(t, err, "Entity should exist after updates")
+	require.Eventually(t, func() bool {
+		entry, err := entityBucket.Get(ctx, entityID)
+		if err != nil {
+			return false
+		}
 
-	var entity gtypes.EntityState
-	require.NoError(t, json.Unmarshal(entry.Value(), &entity))
+		var entity gtypes.EntityState
+		if err := json.Unmarshal(entry.Value(), &entity); err != nil {
+			return false
+		}
 
-	properties := gtypes.GetProperties(&entity)
-	t.Logf("Final entity properties: %v", properties)
+		batteryLevel, found := gtypes.GetPropertyValue(&entity, "system:battery_level")
+		if !found {
+			return false
+		}
 
-	batteryLevel, found := gtypes.GetPropertyValue(&entity, "system:battery_level")
-	require.True(t, found, "Final entity should have battery level")
-	require.Equal(t, expectedBatteryLevel, batteryLevel, "Should have last battery value")
+		return batteryLevel == expectedBatteryLevel
+	}, 5*time.Second, 50*time.Millisecond, "Entity should have battery level %.0f", expectedBatteryLevel)
 
-	t.Logf("✅ Final state verified: entity has correct battery level %.0f after rapid updates", expectedBatteryLevel)
+	t.Logf("Final state verified: entity has correct battery level %.0f after rapid updates", expectedBatteryLevel)
 }
 
 // createCacheTestMessage creates a test message for cache testing
@@ -270,10 +276,8 @@ func TestIntegration_GraphProcessorPerformanceFeatures(t *testing.T) {
 		err = processor.dataLifecycle.FlushPendingWrites(ctx)
 		require.NoError(t, err, "Failed to flush buffer after sending messages")
 
-		t.Logf("Waiting for processing to complete...")
-		time.Sleep(200 * time.Millisecond)
-
 		// Verify final state is correct (battery level should be 99 = 80 + 19)
+		// Uses polling internally - no arbitrary sleep needed
 		verifyFinalEntityState(ctx, t, entityID, entityBucket, float64(99))
 	})
 
