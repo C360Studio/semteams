@@ -254,6 +254,9 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"validate-zero-embeddings", s.executeValidateZeroEmbeddings, []string{"structural"}},
 		{"validate-zero-clusters", s.executeValidateZeroClusters, []string{"structural"}},
 		{"validate-rule-transitions", s.executeValidateRuleTransitions, []string{"structural"}},
+		// Structural indexes - work on structural tier via EntityID sibling edges (no ML required)
+		{"validate-kcore-index-structural", s.executeValidateKCoreIndexStructural, []string{"structural"}},
+		{"validate-pivot-index-structural", s.executeValidatePivotIndexStructural, []string{"structural"}},
 
 		// === Tier 1+: Statistical capabilities (statistical + semantic) ===
 		{"verify-search-quality", s.executeVerifySearchQuality, []string{"statistical", "semantic"}},
@@ -267,6 +270,7 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		// === Tier 2: Semantic capabilities (semantic only) ===
 		{"test-graphrag-local", s.executeTestGraphRAGLocal, []string{"semantic"}},
 		{"test-graphrag-global", s.executeTestGraphRAGGlobal, []string{"semantic"}},
+		{"validate-llm-enhancement", s.executeValidateLLMEnhancement, []string{"semantic"}},
 
 		// Wait for rule evaluations to stabilize (semantic tier only)
 		// Semantic tier's neural embeddings are slower, so rule evaluations via KV watch

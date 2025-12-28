@@ -111,6 +111,24 @@ func (d *LPADetector) WithProgressiveSummarization(
 	return d
 }
 
+// WithSummarizer sets the summarizer without requiring an entity provider.
+// Use SetEntityProvider() later to enable summarization once the provider is available.
+// This supports deferred initialization patterns where the entity provider
+// isn't available at detector creation time.
+func (d *LPADetector) WithSummarizer(summarizer CommunitySummarizer) *LPADetector {
+	d.summarizer = summarizer
+	return d
+}
+
+// SetEntityProvider sets the entity provider for fetching entities during summarization.
+// This method supports deferred initialization - call after the entity provider becomes available.
+// Both summarizer and entityProvider must be set for summarization to occur.
+func (d *LPADetector) SetEntityProvider(provider EntityProvider) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.entityProvider = provider
+}
+
 // DetectCommunities runs full community detection across all hierarchical levels
 func (d *LPADetector) DetectCommunities(ctx context.Context) (map[int][]*Community, error) {
 	// Validate dependencies

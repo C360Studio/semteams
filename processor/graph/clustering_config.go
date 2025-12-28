@@ -18,6 +18,12 @@ type AnalysisConfig struct {
 	// AnomalyDetection configures structural anomaly detection (Phase 3 inference)
 	// Detects semantic-structural gaps, core isolation, and transitivity gaps
 	AnomalyDetection *inference.Config `json:"anomaly_detection,omitempty"`
+
+	// EntityIDEdges configures virtual edges based on 6-part EntityID hierarchy
+	// Entities with the same TypePrefix (org.platform.domain.system.type) are siblings
+	// This provides graph structure without ML/embeddings - works on any tier
+	// Note: Can also be configured under community_detection for backwards compatibility
+	EntityIDEdges *EntityIDEdgesConfig `json:"entityid_edges,omitempty"`
 }
 
 // CommunityDetectionConfig configures LPA-based community detection behavior

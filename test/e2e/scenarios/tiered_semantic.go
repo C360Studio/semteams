@@ -255,6 +255,87 @@ func (s *TieredScenario) recordCommunityMetrics(stats communityStats, result *Re
 	result.Metrics["avg_non_singleton_size"] = stats.avgNonSingletonSize
 }
 
+// executeValidateLLMEnhancement validates LLM enhancement of communities for semantic tier.
+// This step waits for LLM enhancement to complete (up to 2 min), analyzes community
+// summary status, and validates that enhancement is working properly.
+func (s *TieredScenario) executeValidateLLMEnhancement(ctx context.Context, result *Result) error {
+	if s.natsClient == nil {
+		result.Warnings = append(result.Warnings, "NATS client not available, skipping LLM enhancement validation")
+		return nil
+	}
+
+	fmt.Println("[LLM ENHANCEMENT] Starting LLM enhancement validation...")
+
+	// Wait for communities to be available
+	communities, err := s.waitForCommunities(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get communities: %v", err))
+		return nil
+	}
+
+	if len(communities) == 0 {
+		result.Warnings = append(result.Warnings, "No communities found for LLM enhancement validation")
+		return nil
+	}
+
+	fmt.Printf("[LLM ENHANCEMENT] Found %d communities, waiting for LLM enhancement...\n", len(communities))
+
+	// Wait for LLM enhancement to complete
+	llmWait := s.waitForLLMEnhancement(ctx, len(communities), result)
+
+	// Re-fetch communities after waiting (they may have been updated)
+	communities, err = s.natsClient.GetAllCommunities(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to re-fetch communities after LLM wait: %v", err))
+		return nil
+	}
+
+	// Analyze communities for summary status
+	stats := s.analyzeCommunities(communities)
+
+	// Record metrics
+	s.recordCommunityMetrics(stats, result)
+
+	// Persist detailed report
+	variant := s.detectCommunityVariant(result)
+	reportFile := s.persistCommunityReport(variant, stats, llmWait, result)
+	if reportFile != "" {
+		fmt.Printf("[LLM ENHANCEMENT] Wrote community report to %s\n", reportFile)
+	}
+
+	// Validate LLM summary quality for enhanced communities
+	issues := s.validateLLMSummaryQuality(communities)
+	if len(issues) > 0 {
+		for _, issue := range issues {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("LLM quality issue in %s: %s", issue.CommunityID, issue.Issue))
+		}
+	}
+
+	// Log summary
+	fmt.Printf("[LLM ENHANCEMENT] Results: llm_enhanced=%d, statistical_only=%d, failed=%d, pending=%d\n",
+		stats.llmEnhancedCount, stats.statisticalOnlyCount, llmWait.failedCount, llmWait.pendingCount)
+
+	// Validate enhancement is working
+	if stats.llmEnhancedCount == 0 {
+		if llmWait.failedCount > 0 {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("LLM enhancement failed for all %d communities - check seminstruct logs", llmWait.failedCount))
+		} else if llmWait.pendingCount > 0 {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("No LLM enhancements completed within timeout (%d still pending) - enhancement may be slow or worker not started", llmWait.pendingCount))
+		} else {
+			result.Warnings = append(result.Warnings,
+				"No communities have LLM enhancement (all show statistical status) - verify enhancement worker is enabled")
+		}
+	} else {
+		fmt.Printf("[LLM ENHANCEMENT] Success: %d/%d communities LLM-enhanced\n",
+			stats.llmEnhancedCount, len(communities))
+	}
+
+	return nil
+}
+
 // NOTE: executeCompareCommunities removed - use CLI compare instead:
 //   ./e2e --compare-structured --baseline results/statistical.json --target results/semantic.json
 // Community data is captured in structured results by executeValidateCommunityStructure.

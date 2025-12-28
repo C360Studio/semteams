@@ -291,12 +291,18 @@ func (p *EntityIDGraphProvider) areSiblings(entityA, entityB string) bool {
 	return prefixA != "" && prefixA == prefixB
 }
 
-// ClearCache clears the type prefix cache. Call this when entities are added/removed.
+// ClearCache clears the type prefix cache and propagates to wrapped providers.
+// Call this when entities are added/removed.
 func (p *EntityIDGraphProvider) ClearCache() {
 	p.typePrefixCacheMu.Lock()
-	defer p.typePrefixCacheMu.Unlock()
 	p.typePrefixCache = make(map[string][]string)
 	p.cacheInitialized.Store(false)
+	p.typePrefixCacheMu.Unlock()
+
+	// Propagate cache clear to wrapped provider
+	if cacheClearer, ok := p.base.(interface{ ClearCache() }); ok {
+		cacheClearer.ClearCache()
+	}
 }
 
 // GetCacheStats returns statistics about the type prefix cache for monitoring.

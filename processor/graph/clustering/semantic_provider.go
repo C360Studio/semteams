@@ -309,12 +309,17 @@ func (p *SemanticGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID 
 	return 0.0, nil
 }
 
-// ClearCache clears the similarity cache. Call this between clustering runs
-// to ensure fresh similarity data.
+// ClearCache clears the similarity cache and propagates to wrapped providers.
+// Call this between clustering runs to ensure fresh similarity data.
 func (p *SemanticGraphProvider) ClearCache() {
 	p.similarityCacheMu.Lock()
-	defer p.similarityCacheMu.Unlock()
 	p.similarityCache = make(map[string]map[string]float64)
+	p.similarityCacheMu.Unlock()
+
+	// Propagate cache clear to wrapped provider
+	if cacheClearer, ok := p.base.(interface{ ClearCache() }); ok {
+		cacheClearer.ClearCache()
+	}
 }
 
 // GetCacheStats returns statistics about the similarity cache for monitoring.

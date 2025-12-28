@@ -972,7 +972,8 @@ func (p *Processor) initializeModules(ctx context.Context) error {
 	}
 
 	// Initialize clustering core BEFORE QueryManager (creates p.communityDetector for DI)
-	if err := p.initializeClusteringCore(ctx, buckets, dataHandler); err != nil {
+	// Pass indexer explicitly since p.indexManager isn't assigned yet
+	if err := p.initializeClusteringCore(ctx, buckets, dataHandler, indexer); err != nil {
 		return err
 	}
 
@@ -984,6 +985,10 @@ func (p *Processor) initializeModules(ctx context.Context) error {
 
 	// Assign all managers atomically
 	p.assignManagers(dataHandler, indexer, querier)
+
+	// Wire up entity provider for community summarization now that queryManager is available.
+	// This completes the deferred initialization started in createCommunityDetector.
+	p.completeCommunityDetectorSetup()
 
 	// Complete clustering setup (requires p.dataManager from assignManagers)
 	if err := p.initializeClusteringCallbacks(); err != nil {
@@ -1714,6 +1719,8 @@ func (p *Processor) recordError(errorMsg string) {
 type processorGraphProvider struct {
 	entityReader datamanager.EntityReader
 	kvBucket     jetstream.KeyValue
+	indexManager indexmanager.Indexer
+	logger       *slog.Logger
 }
 
 // GetAllEntityIDs returns all entity IDs from ENTITY_STATES bucket
@@ -1732,31 +1739,48 @@ func (p *processorGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string,
 
 // GetNeighbors returns entity IDs connected to the given entity
 func (p *processorGraphProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
-	entity, err := p.entityReader.GetEntity(ctx, entityID)
-	if err != nil {
-		return []string{}, nil // Entity not found, return empty
-	}
-
 	neighborSet := make(map[string]bool)
+	var outgoingCount, incomingCount int
 
+	// Outgoing: from entity's triples (entity → neighbors)
 	if direction == "outgoing" || direction == "both" {
-		for _, triple := range entity.Triples {
-			if triple.IsRelationship() {
-				neighborSet[triple.Object.(string)] = true
+		entity, err := p.entityReader.GetEntity(ctx, entityID)
+		if err == nil {
+			for _, triple := range entity.Triples {
+				if triple.IsRelationship() {
+					neighborSet[triple.Object.(string)] = true
+					outgoingCount++
+				}
 			}
 		}
 	}
 
-	// For incoming direction, we'd need INCOMING_INDEX
-	// For now, just return outgoing neighbors
-	if direction == "incoming" {
-		return []string{}, nil
+	// Incoming: from INCOMING_INDEX via indexManager (neighbors → entity)
+	if (direction == "incoming" || direction == "both") && p.indexManager != nil {
+		incomingRels, err := p.indexManager.GetIncomingRelationships(ctx, entityID)
+		if err == nil {
+			for _, rel := range incomingRels {
+				neighborSet[rel.FromEntityID] = true
+				incomingCount++
+			}
+		}
 	}
 
 	neighbors := make([]string, 0, len(neighborSet))
 	for id := range neighborSet {
 		neighbors = append(neighbors, id)
 	}
+
+	// Debug logging for graph traversal diagnostics
+	if p.logger != nil && (outgoingCount > 0 || incomingCount > 0) {
+		p.logger.Debug("GetNeighbors completed",
+			"entity_id", entityID,
+			"direction", direction,
+			"outgoing", outgoingCount,
+			"incoming", incomingCount,
+			"total", len(neighbors))
+	}
+
 	return neighbors, nil
 }
 
@@ -1781,10 +1805,11 @@ func (p *processorGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID
 // initializeClusteringCore sets up core clustering components needed for QueryManager DI.
 // This creates the CommunityDetector but defers callback setup until dataManager is assigned.
 // Must be called BEFORE initializeQueryManager so CommunityDetector is available for injection.
-func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[string]jetstream.KeyValue, entityReader datamanager.EntityReader) error {
+// The indexer parameter is passed explicitly since p.indexManager isn't assigned yet.
+func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[string]jetstream.KeyValue, entityReader datamanager.EntityReader, indexer indexmanager.Indexer) error {
 	if !p.isCommunityDetectionEnabled() {
 		// Even if community detection is disabled, we may still need structural indexing
-		return p.initializeStructuralIndexOnly(ctx, buckets, entityReader)
+		return p.initializeStructuralIndexOnly(ctx, buckets, entityReader, indexer)
 	}
 
 	cfg := p.config.GraphAnalysis.CommunityDetection
@@ -1795,7 +1820,7 @@ func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[st
 
 	p.clusteringBuckets = buckets
 
-	_, graphProvider, err := p.setupGraphProvider(ctx, buckets, cfg, entityReader)
+	_, graphProvider, err := p.setupGraphProvider(ctx, buckets, cfg, entityReader, indexer)
 	if err != nil {
 		return err
 	}
@@ -1820,6 +1845,22 @@ func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[st
 	// AFTER assignManagers, because it requires p.queryManager to be set.
 
 	return nil
+}
+
+// completeCommunityDetectorSetup wires up the entity provider for community summarization.
+// Must be called AFTER assignManagers so p.queryManager is available.
+// This completes the deferred initialization started in createCommunityDetector,
+// which couldn't set the entity provider because queryManager wasn't available yet.
+func (p *Processor) completeCommunityDetectorSetup() {
+	if p.communityDetector == nil || p.queryManager == nil {
+		return
+	}
+
+	// Type assert to LPADetector to call SetEntityProvider
+	if lpa, ok := p.communityDetector.(*clustering.LPADetector); ok {
+		lpa.SetEntityProvider(p.queryManager)
+		p.logger.Debug("Community detector entity provider configured")
+	}
 }
 
 // initializeClusteringCallbacks sets up entity change callbacks for clustering.
@@ -1881,7 +1922,8 @@ func (p *Processor) isCommunityDetectionEnabled() bool {
 }
 
 // setupGraphProvider creates the graph provider and community storage from buckets.
-func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]jetstream.KeyValue, cfg *CommunityDetectionConfig, entityReader datamanager.EntityReader) (jetstream.KeyValue, clustering.GraphProvider, error) {
+// The indexer parameter is passed explicitly since p.indexManager may not be assigned yet.
+func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]jetstream.KeyValue, cfg *CommunityDetectionConfig, entityReader datamanager.EntityReader, indexer indexmanager.Indexer) (jetstream.KeyValue, clustering.GraphProvider, error) {
 	// Check context before bucket operations
 	select {
 	case <-ctx.Done():
@@ -1903,39 +1945,85 @@ func (p *Processor) setupGraphProvider(ctx context.Context, buckets map[string]j
 	}
 
 	baseProvider := &processorGraphProvider{
-		entityReader: entityReader, // Use parameter instead of p.dataManager
+		entityReader: entityReader,
 		kvBucket:     entityBucket,
+		indexManager: indexer,
+		logger:       p.logger,
 	}
 
-	graphProvider := p.wrapWithSemanticProvider(baseProvider, cfg)
+	graphProvider := p.buildGraphProviderChain(baseProvider, cfg)
 	return communityBucket, graphProvider, nil
 }
 
-// wrapWithSemanticProvider wraps base provider with semantic edges if enabled.
-func (p *Processor) wrapWithSemanticProvider(baseProvider clustering.GraphProvider, cfg *CommunityDetectionConfig) clustering.GraphProvider {
-	if !cfg.SemanticEdges.Enabled || p.indexManager == nil {
-		return baseProvider
+// buildGraphProviderChain wraps the base provider with configured edge providers.
+// Each layer adds virtual edges for clustering/structural analysis:
+//   - EntityID edges: siblings based on 6-part ID hierarchy (no ML, zero-cost)
+//   - Semantic edges: similarity based on embeddings (requires ML)
+//
+// Order: base → entityID edges → semantic edges
+func (p *Processor) buildGraphProviderChain(base clustering.GraphProvider, cfg *CommunityDetectionConfig) clustering.GraphProvider {
+	provider := base
+
+	// Layer 1: EntityID sibling edges (hierarchy-based, no ML required)
+	if cfg.EntityIDEdges != nil && cfg.EntityIDEdges.Enabled {
+		entityIDConfig := clustering.EntityIDProviderConfig{
+			SiblingWeight:   cfg.EntityIDEdges.SiblingWeight,
+			MaxSiblings:     cfg.EntityIDEdges.MaxSiblings,
+			IncludeSiblings: cfg.EntityIDEdges.IncludeSiblings,
+		}
+		provider = clustering.NewEntityIDGraphProvider(provider, entityIDConfig, p.logger)
+		p.logger.Info("EntityID sibling edges enabled for graph analysis",
+			"sibling_weight", cfg.EntityIDEdges.SiblingWeight,
+			"max_siblings", cfg.EntityIDEdges.MaxSiblings)
 	}
 
-	threshold := cfg.SemanticEdges.SimilarityThreshold
-	if threshold <= 0 {
-		threshold = DefaultSimilarityThreshold
-	}
-	maxNeighbors := cfg.SemanticEdges.MaxVirtualNeighbors
-	if maxNeighbors <= 0 {
-		maxNeighbors = DefaultMaxVirtualNeighbors
+	// Layer 2: Semantic similarity edges (embedding-based, requires ML)
+	if cfg.SemanticEdges.Enabled && p.indexManager != nil {
+		threshold := cfg.SemanticEdges.SimilarityThreshold
+		if threshold <= 0 {
+			threshold = DefaultSimilarityThreshold
+		}
+		maxNeighbors := cfg.SemanticEdges.MaxVirtualNeighbors
+		if maxNeighbors <= 0 {
+			maxNeighbors = DefaultMaxVirtualNeighbors
+		}
+
+		semanticConfig := clustering.SemanticProviderConfig{
+			SimilarityThreshold: threshold,
+			MaxVirtualNeighbors: maxNeighbors,
+		}
+		provider = clustering.NewSemanticGraphProvider(provider, p.indexManager, semanticConfig, p.logger)
+		p.logger.Info("Semantic similarity edges enabled for graph analysis",
+			"similarity_threshold", threshold,
+			"max_virtual_neighbors", maxNeighbors)
 	}
 
-	semanticConfig := clustering.SemanticProviderConfig{
-		SimilarityThreshold: threshold,
-		MaxVirtualNeighbors: maxNeighbors,
+	return provider
+}
+
+// buildGraphProviderChainForStructural wraps provider with EntityID edges
+// when structural analysis is enabled but community detection is not.
+// This allows k-core/pivot to benefit from the 6-part EntityID hierarchy
+// without requiring ML-based community detection.
+func (p *Processor) buildGraphProviderChainForStructural(base clustering.GraphProvider) clustering.GraphProvider {
+	// Check if EntityID edges should be enabled from graph_analysis config
+	if p.config.GraphAnalysis == nil || p.config.GraphAnalysis.EntityIDEdges == nil {
+		return base
+	}
+	cfg := p.config.GraphAnalysis.EntityIDEdges
+	if !cfg.Enabled {
+		return base
 	}
 
-	p.logger.Info("Semantic edges enabled for clustering",
-		"similarity_threshold", threshold,
-		"max_virtual_neighbors", maxNeighbors)
-
-	return clustering.NewSemanticGraphProvider(baseProvider, p.indexManager, semanticConfig, p.logger)
+	entityIDConfig := clustering.EntityIDProviderConfig{
+		SiblingWeight:   cfg.SiblingWeight,
+		MaxSiblings:     cfg.MaxSiblings,
+		IncludeSiblings: cfg.IncludeSiblings,
+	}
+	p.logger.Info("EntityID sibling edges enabled for structural analysis",
+		"sibling_weight", cfg.SiblingWeight,
+		"max_siblings", cfg.MaxSiblings)
+	return clustering.NewEntityIDGraphProvider(base, entityIDConfig, p.logger)
 }
 
 // createCommunityDetector creates the LPA detector with configuration.
@@ -1953,8 +2041,11 @@ func (p *Processor) createCommunityDetector(graphProvider clustering.GraphProvid
 		WithMaxIterations(maxIterations).
 		WithLevels(levels)
 
+	// Use WithSummarizer instead of WithProgressiveSummarization because
+	// p.queryManager is not available yet (assigned in assignManagers later).
+	// SetEntityProvider is called after assignManagers to complete the setup.
 	summarizer := clustering.NewProgressiveSummarizer()
-	return detector.WithProgressiveSummarization(summarizer, p.queryManager)
+	return detector.WithSummarizer(summarizer)
 }
 
 // initializeInferenceMetrics creates the inference metrics counter.
@@ -1994,7 +2085,8 @@ func (p *Processor) initializeStructuralIndexIfEnabled(graphProvider clustering.
 
 // initializeStructuralIndexOnly initializes structural indexing when community detection is disabled.
 // This allows k-core and pivot indexes to be computed without LPA community detection.
-func (p *Processor) initializeStructuralIndexOnly(_ context.Context, buckets map[string]jetstream.KeyValue, entityReader datamanager.EntityReader) error {
+// The indexer parameter is passed explicitly since p.indexManager may not be assigned yet.
+func (p *Processor) initializeStructuralIndexOnly(_ context.Context, buckets map[string]jetstream.KeyValue, entityReader datamanager.EntityReader, indexer indexmanager.Indexer) error {
 	if !p.isStructuralIndexEnabled() {
 		p.logger.Debug("Structural index not enabled, skipping initialization")
 		return nil
@@ -2010,11 +2102,16 @@ func (p *Processor) initializeStructuralIndexOnly(_ context.Context, buckets map
 			"initializeStructuralIndexOnly", "ENTITY_STATES bucket not found")
 	}
 
-	// Create minimal graph provider for structural indexing
-	graphProvider := &processorGraphProvider{
+	// Create base graph provider for structural indexing
+	baseProvider := &processorGraphProvider{
 		entityReader: entityReader,
 		kvBucket:     entityBucket,
+		indexManager: indexer,
+		logger:       p.logger,
 	}
+
+	// Apply EntityID edges if configured (provides structure from 6-part hierarchy)
+	graphProvider := p.buildGraphProviderChainForStructural(baseProvider)
 
 	// Cache graph provider and initialize structural computer
 	p.graphProvider = graphProvider
@@ -2608,6 +2705,12 @@ func (p *Processor) executeCommunityDetection(ctx context.Context, enhancementWi
 	if p.enhancementWorker != nil {
 		p.enhancementWorker.Pause()
 		defer p.enhancementWorker.Resume()
+	}
+
+	// Clear graph provider caches to ensure fresh data for detection
+	if cacheClearer, ok := p.graphProvider.(interface{ ClearCache() }); ok {
+		cacheClearer.ClearCache()
+		p.logger.Debug("Cleared graph provider cache before detection")
 	}
 
 	communities, err := p.communityDetector.DetectCommunities(ctx)

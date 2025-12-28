@@ -310,6 +310,8 @@ func (s *TieredScenario) executeValidateCommunityStructure(ctx context.Context, 
 	largestSize := 0
 	totalNonSingletonSize := 0
 	communitiesWithKeywords := 0
+	llmEnhancedCount := 0
+	statisticalOnlyCount := 0
 
 	for _, comm := range communities {
 		memberCount := len(comm.Members)
@@ -326,6 +328,13 @@ func (s *TieredScenario) executeValidateCommunityStructure(ctx context.Context, 
 			result.Warnings = append(result.Warnings,
 				fmt.Sprintf("Community %s has no keywords", comm.ID))
 		}
+		// Track summary status for visibility into LLM enhancement
+		switch comm.SummaryStatus {
+		case "llm-enhanced":
+			llmEnhancedCount++
+		case "statistical", "":
+			statisticalOnlyCount++
+		}
 	}
 
 	avgNonSingletonSize := 0.0
@@ -338,6 +347,8 @@ func (s *TieredScenario) executeValidateCommunityStructure(ctx context.Context, 
 	result.Metrics["communities_largest_size"] = largestSize
 	result.Metrics["communities_avg_size"] = avgNonSingletonSize
 	result.Metrics["communities_with_keywords"] = communitiesWithKeywords
+	result.Metrics["communities_llm_enhanced"] = llmEnhancedCount
+	result.Metrics["communities_statistical_only"] = statisticalOnlyCount
 
 	result.Details["community_structure_validation"] = map[string]any{
 		"total_communities":      totalCount,
@@ -345,14 +356,17 @@ func (s *TieredScenario) executeValidateCommunityStructure(ctx context.Context, 
 		"largest_community":      largestSize,
 		"avg_non_singleton_size": avgNonSingletonSize,
 		"with_keywords":          communitiesWithKeywords,
-		"message": fmt.Sprintf("Community structure: %d total, %d non-singleton (avg size: %.1f)",
-			totalCount, nonSingletonCount, avgNonSingletonSize),
+		"llm_enhanced":           llmEnhancedCount,
+		"statistical_only":       statisticalOnlyCount,
+		"message": fmt.Sprintf("Community structure: %d total, %d non-singleton (avg size: %.1f), %d LLM-enhanced",
+			totalCount, nonSingletonCount, avgNonSingletonSize, llmEnhancedCount),
 	}
 
-	// For statistical tier, we expect at least some non-singleton communities
+	// For statistical tier, we require at least some non-singleton communities
+	// to verify that graph connectivity (incoming edges) is working correctly.
+	// Without incoming edges, LPA produces all singletons because nodes appear isolated.
 	if nonSingletonCount == 0 && totalCount > 0 {
-		result.Warnings = append(result.Warnings,
-			"No non-singleton communities found - clustering may not have run")
+		return fmt.Errorf("no non-singleton communities found (%d total) - graph connectivity may be broken", totalCount)
 	}
 
 	return nil

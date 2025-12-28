@@ -512,7 +512,24 @@
             "enabled": false
           },
           "structural_index": {
-            "enabled": false
+            "enabled": true,
+            "kcore": {
+              "enabled": true,
+              "min_core_filter": 0
+            },
+            "pivot": {
+              "enabled": true,
+              "pivot_count": 16,
+              "max_hop_distance": 10
+            },
+            "compute_on_startup": true,
+            "compute_interval": "1h"
+          },
+          "entityid_edges": {
+            "enabled": true,
+            "sibling_weight": 0.7,
+            "max_siblings": 10,
+            "include_siblings": true
           }
         },
         "gateway": {
