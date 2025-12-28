@@ -44,6 +44,25 @@ type Community struct {
 	Metadata           map[string]interface{} `json:"metadata,omitempty"`
 }
 
+// Anomaly represents a structural anomaly detected by the inference system
+type Anomaly struct {
+	ID         string                 `json:"id"`
+	Type       string                 `json:"type"`
+	EntityA    string                 `json:"entity_a"`
+	EntityB    string                 `json:"entity_b,omitempty"`
+	Confidence float64                `json:"confidence"`
+	Status     string                 `json:"status"`
+	Evidence   map[string]interface{} `json:"evidence,omitempty"`
+	DetectedAt string                 `json:"detected_at,omitempty"`
+}
+
+// AnomalyCounts holds counts of anomalies by type and status
+type AnomalyCounts struct {
+	ByType   map[string]int `json:"by_type"`
+	ByStatus map[string]int `json:"by_status"`
+	Total    int            `json:"total"`
+}
+
 // NATSValidationClient wraps natsclient.Client for E2E test validation
 type NATSValidationClient struct {
 	client *natsclient.Client
@@ -513,4 +532,165 @@ func (c *NATSValidationClient) GetStructuralIndexInfo(ctx context.Context) (*Str
 	}
 
 	return info, nil
+}
+
+// GetAnomalyCounts retrieves counts of anomalies by type and status from ANOMALY_INDEX bucket
+func (c *NATSValidationClient) GetAnomalyCounts(ctx context.Context) (*AnomalyCounts, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, fmt.Errorf("client is closed")
+	}
+	c.mu.Unlock()
+
+	js, err := c.client.JetStream()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get JetStream context: %w", err)
+	}
+
+	bucket, err := js.KeyValue(ctx, "ANOMALY_INDEX")
+	if err != nil {
+		// Bucket doesn't exist - return zero counts
+		return &AnomalyCounts{
+			ByType:   make(map[string]int),
+			ByStatus: make(map[string]int),
+			Total:    0,
+		}, nil
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		// No keys - return zero counts
+		return &AnomalyCounts{
+			ByType:   make(map[string]int),
+			ByStatus: make(map[string]int),
+			Total:    0,
+		}, nil
+	}
+
+	counts := &AnomalyCounts{
+		ByType:   make(map[string]int),
+		ByStatus: make(map[string]int),
+		Total:    0,
+	}
+
+	for _, key := range keys {
+		// Skip index keys (they have format anomaly.idx.*)
+		if len(key) > 11 && key[:11] == "anomaly.idx" {
+			continue
+		}
+		// Skip non-anomaly keys
+		if len(key) < 8 || key[:8] != "anomaly." {
+			continue
+		}
+
+		entry, err := bucket.Get(ctx, key)
+		if err != nil {
+			continue
+		}
+
+		var anomaly Anomaly
+		if err := json.Unmarshal(entry.Value(), &anomaly); err != nil {
+			continue
+		}
+
+		counts.Total++
+		counts.ByType[anomaly.Type]++
+		counts.ByStatus[anomaly.Status]++
+	}
+
+	return counts, nil
+}
+
+// GetAnomalies retrieves all anomalies from ANOMALY_INDEX bucket
+func (c *NATSValidationClient) GetAnomalies(ctx context.Context) ([]*Anomaly, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, fmt.Errorf("client is closed")
+	}
+	c.mu.Unlock()
+
+	js, err := c.client.JetStream()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get JetStream context: %w", err)
+	}
+
+	bucket, err := js.KeyValue(ctx, "ANOMALY_INDEX")
+	if err != nil {
+		// Bucket doesn't exist - return empty list
+		return []*Anomaly{}, nil
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		// No keys - return empty list
+		return []*Anomaly{}, nil
+	}
+
+	var anomalies []*Anomaly
+	for _, key := range keys {
+		// Skip index keys (they have format anomaly.idx.*)
+		if len(key) > 11 && key[:11] == "anomaly.idx" {
+			continue
+		}
+		// Skip non-anomaly keys
+		if len(key) < 8 || key[:8] != "anomaly." {
+			continue
+		}
+
+		entry, err := bucket.Get(ctx, key)
+		if err != nil {
+			continue
+		}
+
+		var anomaly Anomaly
+		if err := json.Unmarshal(entry.Value(), &anomaly); err != nil {
+			continue
+		}
+
+		anomalies = append(anomalies, &anomaly)
+	}
+
+	return anomalies, nil
+}
+
+// WaitForAnomalyDetection waits for anomaly detection to complete by polling
+// until the anomaly count stabilizes or timeout is reached.
+// Returns the final total count and any error encountered.
+func (c *NATSValidationClient) WaitForAnomalyDetection(
+	ctx context.Context,
+	timeout time.Duration,
+	pollInterval time.Duration,
+) (total int, err error) {
+	deadline := time.Now().Add(timeout)
+	var lastCount int
+	stableCount := 0
+
+	for time.Now().Before(deadline) {
+		counts, err := c.GetAnomalyCounts(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("failed to get anomaly counts: %w", err)
+		}
+
+		if counts.Total == lastCount {
+			stableCount++
+			// Consider stable after 3 consecutive identical readings
+			if stableCount >= 3 {
+				return counts.Total, nil
+			}
+		} else {
+			stableCount = 0
+			lastCount = counts.Total
+		}
+
+		select {
+		case <-ctx.Done():
+			return lastCount, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+
+	// Timeout reached, return current count without error
+	return lastCount, nil
 }

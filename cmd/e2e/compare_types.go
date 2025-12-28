@@ -22,6 +22,7 @@ type ComparisonDiff struct {
 	Search      SearchDiff     `json:"search"`
 	Rules       RuleDiff       `json:"rules"`
 	Communities *CommunityDiff `json:"communities,omitempty"`
+	Anomalies   *AnomalyDiff   `json:"anomalies,omitempty"`
 	// Tier capability sections
 	PathRAG       *PathRAGDiff         `json:"pathrag,omitempty"`
 	StructuralIdx *StructuralIndexDiff `json:"structural_indexes,omitempty"`

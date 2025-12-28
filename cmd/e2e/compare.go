@@ -120,6 +120,9 @@ func compareResults(baseline, target *scenarios.TieredResults, baselineFile, tar
 		}
 	}
 
+	// Anomaly detection comparison (semantic only - uses k-core and pivot)
+	report.Sections.Anomalies = compareAnomalies(baseline.Anomalies, target.Anomalies)
+
 	// PathRAG comparison (Tier 0 - should be present in all tiers)
 	report.Sections.PathRAG = comparePathRAG(baseline.PathRAGSensor, target.PathRAGSensor)
 
@@ -437,6 +440,37 @@ func compareGraphRAG(baseline, target *scenarios.GraphRAGResults) *GraphRAGDiff 
 	return diff
 }
 
+// compareAnomalies compares structural anomaly detection results
+func compareAnomalies(baseline, target *scenarios.AnomalyResults) *AnomalyDiff {
+	if baseline == nil && target == nil {
+		return nil
+	}
+	diff := &AnomalyDiff{}
+
+	if baseline != nil {
+		diff.BaselineTotal = baseline.Total
+		diff.BaselineSemanticGap = baseline.SemanticGap
+		diff.BaselineCoreIsolation = baseline.CoreIsolation
+		diff.BaselineCoreDemotion = baseline.CoreDemotion
+		diff.BaselineTransitivity = baseline.Transitivity
+	}
+	if target != nil {
+		diff.TargetTotal = target.Total
+		diff.TargetSemanticGap = target.SemanticGap
+		diff.TargetCoreIsolation = target.CoreIsolation
+		diff.TargetCoreDemotion = target.CoreDemotion
+		diff.TargetTransitivity = target.Transitivity
+	}
+
+	diff.TotalDiff = diff.TargetTotal - diff.BaselineTotal
+	diff.SemanticGapDiff = diff.TargetSemanticGap - diff.BaselineSemanticGap
+	diff.CoreIsolationDiff = diff.TargetCoreIsolation - diff.BaselineCoreIsolation
+	diff.CoreDemotionDiff = diff.TargetCoreDemotion - diff.BaselineCoreDemotion
+	diff.TransitivityDiff = diff.TargetTransitivity - diff.BaselineTransitivity
+
+	return diff
+}
+
 // generateSummary generates the comparison summary
 func generateSummary(report *ComparisonReport, baseline, target *scenarios.TieredResults) CompareSummary {
 	summary := CompareSummary{}
@@ -519,6 +553,21 @@ func generateSummary(report *ComparisonReport, baseline, target *scenarios.Tiere
 		}
 	}
 
+	// Anomaly detection insights
+	if report.Sections.Anomalies != nil {
+		if report.Sections.Anomalies.BaselineTotal == 0 && report.Sections.Anomalies.TargetTotal > 0 {
+			summary.Improvements = append(summary.Improvements,
+				fmt.Sprintf("Anomaly detection now active: %d anomalies found", report.Sections.Anomalies.TargetTotal))
+		} else if report.Sections.Anomalies.TotalDiff > 0 {
+			summary.Improvements = append(summary.Improvements,
+				fmt.Sprintf("Anomaly detection: +%d more anomalies detected", report.Sections.Anomalies.TotalDiff))
+		}
+		if report.Sections.Anomalies.TargetSemanticGap > 0 && report.Sections.Anomalies.BaselineSemanticGap == 0 {
+			summary.Improvements = append(summary.Improvements,
+				fmt.Sprintf("Semantic gap detection enabled: %d gaps found (k-core/pivot value)", report.Sections.Anomalies.TargetSemanticGap))
+		}
+	}
+
 	return summary
 }
 
@@ -531,6 +580,7 @@ func printComparisonReport(report *ComparisonReport) {
 	printSearchSection(report)
 	printRulesSection(report)
 	printCommunitiesSection(report)
+	printAnomaliesSection(report)
 	printPathRAGSection(report)
 	printStructuralIdxSection(report)
 	printGraphRAGSection(report)
@@ -643,6 +693,35 @@ func printCommunitiesSection(report *ComparisonReport) {
 	fmt.Printf("  Largest: %d → %d\n",
 		report.Sections.Communities.BaselineLargest,
 		report.Sections.Communities.TargetLargest)
+}
+
+func printAnomaliesSection(report *ComparisonReport) {
+	if report.Sections.Anomalies == nil {
+		return
+	}
+	fmt.Println("\n--- Anomaly Detection ---")
+	fmt.Printf("  Total: %d → %d (diff: %+d)\n",
+		report.Sections.Anomalies.BaselineTotal,
+		report.Sections.Anomalies.TargetTotal,
+		report.Sections.Anomalies.TotalDiff)
+	fmt.Printf("  Semantic Gaps: %d → %d (diff: %+d)\n",
+		report.Sections.Anomalies.BaselineSemanticGap,
+		report.Sections.Anomalies.TargetSemanticGap,
+		report.Sections.Anomalies.SemanticGapDiff)
+	fmt.Printf("  Core Isolation: %d → %d (diff: %+d)\n",
+		report.Sections.Anomalies.BaselineCoreIsolation,
+		report.Sections.Anomalies.TargetCoreIsolation,
+		report.Sections.Anomalies.CoreIsolationDiff)
+	fmt.Printf("  Core Demotion: %d → %d (diff: %+d)\n",
+		report.Sections.Anomalies.BaselineCoreDemotion,
+		report.Sections.Anomalies.TargetCoreDemotion,
+		report.Sections.Anomalies.CoreDemotionDiff)
+	if report.Sections.Anomalies.BaselineTransitivity > 0 || report.Sections.Anomalies.TargetTransitivity > 0 {
+		fmt.Printf("  Transitivity: %d → %d (diff: %+d)\n",
+			report.Sections.Anomalies.BaselineTransitivity,
+			report.Sections.Anomalies.TargetTransitivity,
+			report.Sections.Anomalies.TransitivityDiff)
+	}
 }
 
 func printPathRAGSection(report *ComparisonReport) {

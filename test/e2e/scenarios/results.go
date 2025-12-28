@@ -32,6 +32,9 @@ type TieredResults struct {
 	// Community detection results (statistical/semantic only)
 	Communities *CommunityResults `json:"communities,omitempty"`
 
+	// Anomaly detection results (semantic only - uses k-core and pivot indexes)
+	Anomalies *AnomalyResults `json:"anomalies,omitempty"`
+
 	// === Tier 0: Structural capabilities (all tiers) ===
 
 	// PathRAG graph traversal results (Tier 0 - runs on all tiers)
@@ -171,6 +174,38 @@ type CommunityResults struct {
 	LLMEnhanced int `json:"llm_enhanced,omitempty"`
 }
 
+// AnomalyResults contains structural anomaly detection results.
+type AnomalyResults struct {
+	// Total is the total number of anomalies detected
+	Total int `json:"total"`
+
+	// SemanticGap is count of semantic-structural gap anomalies (entities semantically
+	// similar but structurally distant - detected via pivot distance)
+	SemanticGap int `json:"semantic_gap"`
+
+	// CoreIsolation is count of hub isolation anomalies (high k-core entities with
+	// few connections to other high-core entities)
+	CoreIsolation int `json:"core_isolation"`
+
+	// CoreDemotion is count of core demotion anomalies (entities that dropped
+	// significantly in k-core value between analysis runs)
+	CoreDemotion int `json:"core_demotion"`
+
+	// Transitivity is count of transitivity gap anomalies (missing expected
+	// transitive relationships)
+	Transitivity int `json:"transitivity"`
+
+	// ByStatus contains counts by review status
+	ByStatus AnomalyStatusCounts `json:"by_status"`
+}
+
+// AnomalyStatusCounts contains anomaly counts by review status.
+type AnomalyStatusCounts struct {
+	Pending   int `json:"pending"`
+	Confirmed int `json:"confirmed"`
+	Dismissed int `json:"dismissed"`
+}
+
 // BuildTieredResults creates a TieredResults from legacy Result data and search stats.
 // This provides the bridge between the old flat format and new structured format.
 func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResults {
@@ -239,6 +274,22 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 			LargestSize:       getIntMetric(result, "communities_largest_size"),
 			AverageSize:       float64(getIntMetric(result, "communities_avg_size")),
 			WithKeywords:      getIntMetric(result, "communities_with_keywords"),
+		}
+	}
+
+	// Anomaly detection results (semantic only - uses k-core and pivot indexes)
+	if getIntMetric(result, "anomalies_total") > 0 || getIntMetric(result, "anomalies_semantic_gap") > 0 {
+		tr.Anomalies = &AnomalyResults{
+			Total:         getIntMetric(result, "anomalies_total"),
+			SemanticGap:   getIntMetric(result, "anomalies_semantic_gap"),
+			CoreIsolation: getIntMetric(result, "anomalies_core_isolation"),
+			CoreDemotion:  getIntMetric(result, "anomalies_core_demotion"),
+			Transitivity:  getIntMetric(result, "anomalies_transitivity"),
+			ByStatus: AnomalyStatusCounts{
+				Pending:   getIntMetric(result, "anomalies_pending"),
+				Confirmed: getIntMetric(result, "anomalies_confirmed"),
+				Dismissed: getIntMetric(result, "anomalies_dismissed"),
+			},
 		}
 	}
 

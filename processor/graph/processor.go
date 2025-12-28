@@ -2120,11 +2120,22 @@ func (p *Processor) initializeStructuralIndexOnly(_ context.Context, buckets map
 
 // initializeAnomalyDetectionIfEnabled sets up anomaly detection components if enabled.
 func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, buckets map[string]jetstream.KeyValue) error {
-	if p.config.GraphAnalysis == nil || p.config.GraphAnalysis.AnomalyDetection == nil ||
-		!p.config.GraphAnalysis.AnomalyDetection.Enabled {
+	if p.config.GraphAnalysis == nil {
+		p.logger.Debug("Anomaly detection disabled: no GraphAnalysis config")
+		return nil
+	}
+	if p.config.GraphAnalysis.AnomalyDetection == nil {
+		p.logger.Debug("Anomaly detection disabled: no AnomalyDetection config section")
+		return nil
+	}
+	if !p.config.GraphAnalysis.AnomalyDetection.Enabled {
+		p.logger.Debug("Anomaly detection disabled: enabled=false")
 		return nil
 	}
 	cfg := p.config.GraphAnalysis.AnomalyDetection
+
+	// Apply defaults for any unset values (e.g., DetectionTimeout)
+	cfg.ApplyDefaults()
 
 	p.logger.Info("Initializing anomaly detection")
 
@@ -2279,6 +2290,7 @@ func (p *Processor) computeStructuralIndices(ctx context.Context) error {
 // Called after structural index computation in the clustering loop.
 func (p *Processor) runAnomalyDetection(ctx context.Context) {
 	if p.inferenceOrchestrator == nil {
+		p.logger.Debug("Skipping anomaly detection: orchestrator not initialized")
 		return
 	}
 
@@ -2289,6 +2301,7 @@ func (p *Processor) runAnomalyDetection(ctx context.Context) {
 	p.structuralMu.RUnlock()
 
 	if indices == nil {
+		p.logger.Warn("Skipping anomaly detection: structural indices not available")
 		return
 	}
 

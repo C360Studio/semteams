@@ -336,6 +336,83 @@ func (s *TieredScenario) executeValidateLLMEnhancement(ctx context.Context, resu
 	return nil
 }
 
+// executeValidateAnomalyDetection validates structural anomaly detection results for semantic tier.
+// This step waits for anomaly detection to complete, then retrieves anomaly counts from the
+// ANOMALY_INDEX KV bucket and records metrics for semantic gaps (pivot distance), core anomalies
+// (k-core analysis), and transitivity gaps.
+func (s *TieredScenario) executeValidateAnomalyDetection(ctx context.Context, result *Result) error {
+	if s.natsClient == nil {
+		result.Warnings = append(result.Warnings, "NATS client not available, skipping anomaly detection validation")
+		return nil
+	}
+
+	fmt.Println("[ANOMALY DETECTION] Waiting for anomaly detection to complete...")
+
+	// Wait for anomaly detection to stabilize (30s timeout, 2s poll interval)
+	// Anomaly detection runs asynchronously during community detection, so we need to wait
+	// for it to complete before reading final counts
+	total, waitErr := s.natsClient.WaitForAnomalyDetection(ctx, 30*time.Second, 2*time.Second)
+	if waitErr != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Anomaly detection wait error: %v", waitErr))
+	}
+
+	fmt.Printf("[ANOMALY DETECTION] Detection complete, found %d anomalies\n", total)
+
+	// Get anomaly counts by type and status
+	counts, err := s.natsClient.GetAnomalyCounts(ctx)
+	if err != nil {
+		// Anomaly detection may not have run or bucket may not exist - this is a warning, not error
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get anomaly counts: %v", err))
+		result.Metrics["anomalies_total"] = 0
+		result.Metrics["anomalies_semantic_gap"] = 0
+		result.Metrics["anomalies_core_isolation"] = 0
+		result.Metrics["anomalies_core_demotion"] = 0
+		result.Metrics["anomalies_transitivity"] = 0
+		return nil
+	}
+
+	// Record metrics by anomaly type
+	result.Metrics["anomalies_total"] = counts.Total
+	result.Metrics["anomalies_semantic_gap"] = counts.ByType["semantic_structural_gap"]
+	result.Metrics["anomalies_core_isolation"] = counts.ByType["core_isolation"]
+	result.Metrics["anomalies_core_demotion"] = counts.ByType["core_demotion"]
+	result.Metrics["anomalies_transitivity"] = counts.ByType["transitivity_gap"]
+
+	// Record metrics by status
+	result.Metrics["anomalies_pending"] = counts.ByStatus["pending"]
+	result.Metrics["anomalies_confirmed"] = counts.ByStatus["confirmed"]
+	result.Metrics["anomalies_dismissed"] = counts.ByStatus["dismissed"]
+
+	// Log results
+	fmt.Printf("[ANOMALY DETECTION] Results: total=%d, semantic_gap=%d, core_isolation=%d, core_demotion=%d, transitivity=%d\n",
+		counts.Total,
+		counts.ByType["semantic_structural_gap"],
+		counts.ByType["core_isolation"],
+		counts.ByType["core_demotion"],
+		counts.ByType["transitivity_gap"])
+
+	fmt.Printf("[ANOMALY DETECTION] Status: pending=%d, confirmed=%d, dismissed=%d\n",
+		counts.ByStatus["pending"],
+		counts.ByStatus["confirmed"],
+		counts.ByStatus["dismissed"])
+
+	// Validation: at least some anomalies should be detected for semantic tier
+	if counts.Total == 0 {
+		result.Warnings = append(result.Warnings,
+			"No anomalies detected - verify anomaly detection is enabled and running during community detection")
+	} else {
+		fmt.Printf("[ANOMALY DETECTION] Success: %d total anomalies detected\n", counts.Total)
+	}
+
+	// Semantic gap detector requires embeddings - should have results for semantic tier
+	if counts.ByType["semantic_structural_gap"] == 0 {
+		result.Warnings = append(result.Warnings,
+			"No semantic gap anomalies detected - verify semembed is available and pivot index is built")
+	}
+
+	return nil
+}
+
 // NOTE: executeCompareCommunities removed - use CLI compare instead:
 //   ./e2e --compare-structured --baseline results/statistical.json --target results/semantic.json
 // Community data is captured in structured results by executeValidateCommunityStructure.

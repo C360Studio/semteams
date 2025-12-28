@@ -551,6 +551,35 @@
               "pivot_count": 16,
               "max_hop_distance": 10
             }
+          },
+          "anomaly_detection": {
+            "enabled": true,
+            "run_with_community_detection": true,
+            "max_anomalies_per_run": 50,
+            "semantic_gap": {
+              "enabled": true,
+              "min_semantic_similarity": 0.7,
+              "min_structural_distance": 3,
+              "max_gaps_per_entity": 5,
+              "max_candidates_per_entity": 50
+            },
+            "core_anomaly": {
+              "enabled": true,
+              "min_core_for_hub_analysis": 2,
+              "hub_isolation_threshold": 0.3,
+              "track_core_demotions": true,
+              "min_demotion_delta": 1
+            },
+            "transitivity": {
+              "enabled": false
+            },
+            "review": {
+              "enabled": false
+            },
+            "storage": {
+              "bucket_name": "ANOMALY_INDEX",
+              "retention_days": 1
+            }
           }
         },
         "gateway": {

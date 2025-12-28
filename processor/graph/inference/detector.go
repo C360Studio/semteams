@@ -24,6 +24,10 @@ type Detector interface {
 	// Configure updates the detector configuration.
 	// Called during orchestrator initialization and on config updates.
 	Configure(config interface{}) error
+
+	// SetDependencies updates the detector's shared dependencies.
+	// Called by the orchestrator before running detection.
+	SetDependencies(deps *DetectorDependencies)
 }
 
 // DetectorDependencies provides access to shared resources needed by detectors.
@@ -123,11 +127,16 @@ func NewOrchestrator(cfg OrchestratorConfig) (*Orchestrator, error) {
 }
 
 // SetDependencies sets the shared dependencies for all detectors.
-// Must be called before RunDetection.
+// Must be called before RunDetection. Propagates dependencies to all registered detectors.
 func (o *Orchestrator) SetDependencies(deps *DetectorDependencies) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.deps = deps
+
+	// Propagate dependencies to all registered detectors
+	for _, d := range o.detectors {
+		d.SetDependencies(deps)
+	}
 }
 
 // RegisterDetector adds a detector to the orchestrator.
@@ -163,6 +172,7 @@ func (o *Orchestrator) RunDetection(ctx context.Context) (*Result, error) {
 
 	result := &Result{StartedAt: time.Now(), Anomalies: make([]*StructuralAnomaly, 0)}
 
+	o.logger.Debug("Starting detection with timeout", "timeout", config.DetectionTimeout)
 	ctx, cancel := context.WithTimeout(ctx, config.DetectionTimeout)
 	defer cancel()
 
