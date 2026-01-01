@@ -7,6 +7,14 @@ import (
 // AnalysisConfig configures graph analysis features including community detection,
 // structural indexing, and anomaly detection. Each feature can be enabled independently.
 type AnalysisConfig struct {
+	// HierarchyInference configures automatic edge creation based on 6-part EntityID structure.
+	// When an entity is created, sibling edges are created to other entities with the same
+	// 5-part type prefix (org.platform.domain.system.type).
+	// This creates REAL edges at ingestion time, eliminating redundant work:
+	// - LPA uses real edges directly (no virtual computation)
+	// - Anomaly detector won't flag siblings as semantic gaps
+	HierarchyInference *inference.HierarchyConfig `json:"hierarchy_inference,omitempty"`
+
 	// CommunityDetection configures LPA-based community detection
 	CommunityDetection *CommunityDetectionConfig `json:"community_detection,omitempty"`
 
@@ -23,6 +31,7 @@ type AnalysisConfig struct {
 	// Entities with the same TypePrefix (org.platform.domain.system.type) are siblings
 	// This provides graph structure without ML/embeddings - works on any tier
 	// Note: Can also be configured under community_detection for backwards compatibility
+	// DEPRECATED: Use HierarchyInference for real edges instead of virtual edges
 	EntityIDEdges *EntityIDEdgesConfig `json:"entityid_edges,omitempty"`
 }
 

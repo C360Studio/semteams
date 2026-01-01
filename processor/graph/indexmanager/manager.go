@@ -81,6 +81,9 @@ type Manager struct {
 
 	// Logger
 	logger *slog.Logger
+
+	// Entity creation callback for hierarchy inference
+	onEntityCreated EntityCreatedCallback
 }
 
 // Embedder interface from embedding package (re-declared here to avoid import cycle)
@@ -711,6 +714,16 @@ func (m *Manager) processEntityChange(ctx context.Context, event EntityChange) e
 			if m.promMetrics != nil {
 				m.promMetrics.indexUpdatesTotal.WithLabelValues(indexType, string(event.Operation)).Inc()
 			}
+		}
+	}
+
+	// Invoke entity created callback for hierarchy inference (after indexes are updated)
+	if event.Operation == OperationCreate {
+		m.mu.RLock()
+		callback := m.onEntityCreated
+		m.mu.RUnlock()
+		if callback != nil {
+			callback(ctx, event.Key)
 		}
 	}
 
@@ -1824,4 +1837,28 @@ func (m *Manager) PreWarmVectorCache(ctx context.Context) error {
 		"duration", duration)
 
 	return nil
+}
+
+// SetOnEntityCreatedCallback sets a callback to be invoked when an entity is created.
+// Used by HierarchyInference to create sibling edges at entity creation time.
+func (m *Manager) SetOnEntityCreatedCallback(callback EntityCreatedCallback) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onEntityCreated = callback
+}
+
+// GetAllEntityIDs returns all entity IDs from the ENTITY_STATES bucket.
+// Used by HierarchyInference to discover siblings for new entities.
+func (m *Manager) GetAllEntityIDs(ctx context.Context) ([]string, error) {
+	if m.entityBucket == nil {
+		return nil, errs.WrapTransient(stderrors.New("entity bucket not initialized"),
+			"IndexManager", "GetAllEntityIDs", "bucket nil")
+	}
+
+	keys, err := m.entityBucket.Keys(ctx)
+	if err != nil {
+		return nil, errs.WrapTransient(err, "IndexManager", "GetAllEntityIDs", "failed to list keys")
+	}
+
+	return keys, nil
 }

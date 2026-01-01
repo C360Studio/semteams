@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/pkg/errs"
 )
 
@@ -126,5 +128,76 @@ func (a *NoOpApplier) ApplyRelationship(
 		"predicate", suggestion.Predicate,
 		"to", suggestion.ToEntity,
 		"confidence", suggestion.Confidence)
+	return nil
+}
+
+// TripleAdder defines the interface for adding triples directly to the graph.
+// This interface is satisfied by DataManager.
+type TripleAdder interface {
+	AddTriple(ctx context.Context, triple message.Triple) error
+}
+
+// DirectRelationshipApplier adds triples directly via DataManager.
+// Used for intra-processor mutations, matching the community inference pattern.
+// This avoids NATS roundtrips for operations within the same processor.
+type DirectRelationshipApplier struct {
+	adder  TripleAdder
+	logger *slog.Logger
+}
+
+// NewDirectRelationshipApplier creates an applier that uses DataManager directly.
+func NewDirectRelationshipApplier(adder TripleAdder, logger *slog.Logger) *DirectRelationshipApplier {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &DirectRelationshipApplier{
+		adder:  adder,
+		logger: logger,
+	}
+}
+
+// ApplyRelationship adds a triple directly via DataManager.
+func (a *DirectRelationshipApplier) ApplyRelationship(
+	ctx context.Context,
+	suggestion *RelationshipSuggestion,
+) error {
+	if suggestion == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "DirectRelationshipApplier", "ApplyRelationship",
+			"suggestion is nil")
+	}
+
+	if suggestion.FromEntity == "" || suggestion.ToEntity == "" {
+		return errs.WrapInvalid(errs.ErrInvalidData, "DirectRelationshipApplier", "ApplyRelationship",
+			"from_entity and to_entity are required")
+	}
+
+	if suggestion.Predicate == "" {
+		return errs.WrapInvalid(errs.ErrInvalidData, "DirectRelationshipApplier", "ApplyRelationship",
+			"predicate is required")
+	}
+
+	// Build triple using message.Triple (same pattern as community inference)
+	triple := message.Triple{
+		Subject:    suggestion.FromEntity,
+		Predicate:  suggestion.Predicate,
+		Object:     suggestion.ToEntity,
+		Source:     "inference.structural",
+		Timestamp:  time.Now(),
+		Confidence: suggestion.Confidence,
+		Context:    "auto-applied",
+	}
+
+	if err := a.adder.AddTriple(ctx, triple); err != nil {
+		return errs.WrapTransient(err, "DirectRelationshipApplier", "ApplyRelationship",
+			fmt.Sprintf("failed to add triple: %s -> %s -> %s",
+				suggestion.FromEntity, suggestion.Predicate, suggestion.ToEntity))
+	}
+
+	a.logger.Info("Applied inferred relationship",
+		"from", suggestion.FromEntity,
+		"predicate", suggestion.Predicate,
+		"to", suggestion.ToEntity,
+		"confidence", suggestion.Confidence)
+
 	return nil
 }

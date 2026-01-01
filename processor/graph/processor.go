@@ -115,8 +115,11 @@ type Processor struct {
 	detectionTrigger  chan struct{} // Signal to trigger detection from entity callback
 
 	// Enhancement window state - prevents re-detection from overwriting LLM-enhanced communities
-	enhancementDeadline time.Time             // When the enhancement window expires
-	enhancementMode     EnhancementWindowMode // Mode for enhancement window behavior
+	enhancementDeadline time.Time // When the enhancement window expires
+
+	// Hierarchy inference component (creates sibling edges at entity creation time)
+	hierarchyInference *inference.HierarchyInference
+	enhancementMode    EnhancementWindowMode // Mode for enhancement window behavior
 
 	// Inference metrics
 	inferredTriples prometheus.Counter
@@ -990,10 +993,19 @@ func (p *Processor) initializeModules(ctx context.Context) error {
 	// This completes the deferred initialization started in createCommunityDetector.
 	p.completeCommunityDetectorSetup()
 
+	// Wire up applier for anomaly detection now that dataManager is available.
+	// This completes the deferred initialization started in initializeAnomalyDetectionIfEnabled.
+	if err := p.completeAnomalyDetectorSetup(); err != nil {
+		return err
+	}
+
 	// Complete clustering setup (requires p.dataManager from assignManagers)
 	if err := p.initializeClusteringCallbacks(); err != nil {
 		return err
 	}
+
+	// Initialize hierarchy inference (requires p.dataManager and p.indexManager from assignManagers)
+	p.initializeHierarchyInference()
 
 	// Initialize enhancement worker (requires p.queryManager from assignManagers)
 	if err := p.initializeEnhancementWorkerIfEnabled(ctx); err != nil {
@@ -1875,6 +1887,102 @@ func (p *Processor) initializeClusteringCallbacks() error {
 	return nil
 }
 
+// initializeHierarchyInference sets up hierarchy inference for automatic container membership edges.
+// Must be called AFTER assignManagers so p.dataManager and p.indexManager are available.
+//
+// Hierarchy inference creates membership edges to container entities based on 6-part entity IDs:
+//   - Type container:   entity → hierarchy.type.member → org.platform.domain.system.type.group
+//   - System container: entity → hierarchy.system.member → org.platform.domain.system.group.container
+//   - Domain container: entity → hierarchy.domain.member → org.platform.domain.group.container.level
+//
+// This enables graph traversal between related entities (same type = 2 hops, same system = 4 hops).
+func (p *Processor) initializeHierarchyInference() {
+	// Check if hierarchy inference is configured and enabled
+	if p.config.GraphAnalysis == nil || p.config.GraphAnalysis.HierarchyInference == nil {
+		p.logger.Debug("Hierarchy inference not configured, skipping initialization")
+		return
+	}
+
+	cfg := p.config.GraphAnalysis.HierarchyInference
+	if !cfg.Enabled {
+		p.logger.Debug("Hierarchy inference disabled, skipping initialization")
+		return
+	}
+
+	// Create hierarchy inference component
+	// DataManager implements EntityManager (ExistsEntity, CreateEntity) and TripleAdder
+	p.hierarchyInference = inference.NewHierarchyInference(
+		p.dataManager, // Implements EntityManager (ExistsEntity, CreateEntity)
+		p.dataManager, // Implements TripleAdder (AddTriple)
+		*cfg,
+		p.logger,
+	)
+
+	// Register callback with IndexManager for entity creation events
+	p.indexManager.SetOnEntityCreatedCallback(func(ctx context.Context, entityID string) {
+		if err := p.hierarchyInference.OnEntityCreated(ctx, entityID); err != nil {
+			p.logger.Warn("Hierarchy inference failed for entity",
+				"entity_id", entityID,
+				"error", err)
+		}
+	})
+
+	// Launch backfill in background to process entities that existed before this callback was registered
+	go p.backfillHierarchyEdges()
+
+	p.logger.Info("Hierarchy inference initialized",
+		"create_type_edges", cfg.CreateTypeEdges,
+		"create_system_edges", cfg.CreateSystemEdges,
+		"create_domain_edges", cfg.CreateDomainEdges)
+}
+
+// backfillHierarchyEdges processes entities that existed before hierarchy inference was initialized.
+// This handles the race condition where entities are created by upstream processors before the
+// graph processor's callback is registered.
+func (p *Processor) backfillHierarchyEdges() {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	// Wait a moment for the system to stabilize
+	time.Sleep(2 * time.Second)
+
+	entityIDs, err := p.indexManager.GetAllEntityIDs(ctx)
+	if err != nil {
+		p.logger.Error("Failed to get entity IDs for hierarchy backfill", "error", err)
+		return
+	}
+
+	if len(entityIDs) == 0 {
+		p.logger.Debug("No entities to backfill for hierarchy inference")
+		return
+	}
+
+	p.logger.Info("Starting hierarchy container backfill", "entity_count", len(entityIDs))
+
+	processed := 0
+	for _, entityID := range entityIDs {
+		select {
+		case <-ctx.Done():
+			p.logger.Warn("Hierarchy backfill cancelled", "processed", processed, "total", len(entityIDs))
+			return
+		default:
+		}
+
+		if err := p.hierarchyInference.OnEntityCreated(ctx, entityID); err != nil {
+			p.logger.Debug("Hierarchy backfill skipped entity", "entity_id", entityID, "error", err)
+			continue
+		}
+		processed++
+	}
+
+	containersCreated, edgesCreated, _ := p.hierarchyInference.GetMetrics()
+	p.logger.Info("Hierarchy container backfill complete",
+		"entities_processed", len(entityIDs),
+		"with_memberships", processed,
+		"containers_created", containersCreated,
+		"edges_created", edgesCreated)
+}
+
 // initializeEnhancementWorkerIfEnabled sets up the LLM enhancement worker.
 // Must be called AFTER assignManagers so p.queryManager is available.
 func (p *Processor) initializeEnhancementWorkerIfEnabled(ctx context.Context) error {
@@ -1965,7 +2073,12 @@ func (p *Processor) buildGraphProviderChain(base clustering.GraphProvider, cfg *
 	provider := base
 
 	// Layer 1: EntityID sibling edges (hierarchy-based, no ML required)
-	if cfg.EntityIDEdges != nil && cfg.EntityIDEdges.Enabled {
+	// Skip if hierarchy inference is enabled - real edges are created at ingestion time
+	hierarchyInferenceEnabled := p.config.GraphAnalysis != nil &&
+		p.config.GraphAnalysis.HierarchyInference != nil &&
+		p.config.GraphAnalysis.HierarchyInference.Enabled
+
+	if cfg.EntityIDEdges != nil && cfg.EntityIDEdges.Enabled && !hierarchyInferenceEnabled {
 		entityIDConfig := clustering.EntityIDProviderConfig{
 			SiblingWeight:   cfg.EntityIDEdges.SiblingWeight,
 			MaxSiblings:     cfg.EntityIDEdges.MaxSiblings,
@@ -1975,6 +2088,8 @@ func (p *Processor) buildGraphProviderChain(base clustering.GraphProvider, cfg *
 		p.logger.Info("EntityID sibling edges enabled for graph analysis",
 			"sibling_weight", cfg.EntityIDEdges.SiblingWeight,
 			"max_siblings", cfg.EntityIDEdges.MaxSiblings)
+	} else if hierarchyInferenceEnabled {
+		p.logger.Info("EntityID virtual sibling edges disabled (hierarchy inference creates real edges)")
 	}
 
 	// Layer 2: Semantic similarity edges (embedding-based, requires ML)
@@ -2012,6 +2127,13 @@ func (p *Processor) buildGraphProviderChainForStructural(base clustering.GraphPr
 	}
 	cfg := p.config.GraphAnalysis.EntityIDEdges
 	if !cfg.Enabled {
+		return base
+	}
+
+	// Skip if hierarchy inference is enabled - real edges are created at ingestion time
+	if p.config.GraphAnalysis.HierarchyInference != nil &&
+		p.config.GraphAnalysis.HierarchyInference.Enabled {
+		p.logger.Info("EntityID virtual sibling edges disabled for structural analysis (hierarchy inference creates real edges)")
 		return base
 	}
 
@@ -2167,10 +2289,43 @@ func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, bucke
 	orchestrator.RegisterDetector(inference.NewCoreAnomalyDetector(nil))
 	orchestrator.RegisterDetector(inference.NewTransitivityDetector(nil))
 
+	// NOTE: Applier setup is deferred to completeAnomalyDetectorSetup() because
+	// it requires p.dataManager which isn't available until after assignManagers().
+	// Store config for later use.
+	if cfg.VirtualEdges.AutoApply.Enabled {
+		p.logger.Info("Virtual edge auto-apply enabled (applier will be configured after managers assigned)",
+			"min_similarity", cfg.VirtualEdges.AutoApply.MinSimilarity,
+			"min_structural_distance", cfg.VirtualEdges.AutoApply.MinStructuralDistance,
+			"predicate_template", cfg.VirtualEdges.AutoApply.PredicateTemplate)
+	}
+
 	p.inferenceOrchestrator = orchestrator
 
 	p.logger.Info("Anomaly detection initialized",
 		"detectors", orchestrator.GetRegisteredDetectors())
+
+	// NOTE: Review worker initialization is also deferred to completeAnomalyDetectorSetup()
+	// because it requires p.dataManager for the DirectRelationshipApplier.
+
+	return nil
+}
+
+// completeAnomalyDetectorSetup wires up the applier for the anomaly detection orchestrator.
+// Must be called AFTER assignManagers so p.dataManager is available.
+// This completes the deferred initialization started in initializeAnomalyDetectionIfEnabled.
+func (p *Processor) completeAnomalyDetectorSetup() error {
+	if p.inferenceOrchestrator == nil || p.dataManager == nil {
+		return nil
+	}
+
+	cfg := p.config.GraphAnalysis.AnomalyDetection
+
+	// Set up applier for virtual edge creation
+	if cfg.VirtualEdges.AutoApply.Enabled {
+		applier := inference.NewDirectRelationshipApplier(p.dataManager, p.logger)
+		p.inferenceOrchestrator.SetApplier(applier)
+		p.logger.Debug("Anomaly detector applier configured with DataManager")
+	}
 
 	// Initialize review worker if enabled
 	if cfg.Review.Enabled {
@@ -2180,27 +2335,23 @@ func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, bucke
 			var llmErr error
 			llmClient, llmErr = llm.NewOpenAIClient(cfg.Review.LLM.ToOpenAIConfig())
 			if llmErr != nil {
-				return errs.WrapFatal(llmErr, "Processor", "initializeAnomalyDetectionIfEnabled",
+				return errs.WrapFatal(llmErr, "Processor", "completeAnomalyDetectorSetup",
 					"failed to create LLM client for review worker")
 			}
 		}
 
-		// Get JetStream for applier
-		js, jsErr := p.natsClient.JetStream()
-		if jsErr != nil {
-			return errs.WrapFatal(jsErr, "Processor", "initializeAnomalyDetectionIfEnabled",
-				"failed to get JetStream for review worker applier")
-		}
-
-		// Create applier (publishes to entity stream)
-		applier := inference.NewNATSRelationshipApplier(
-			js,
-			"events.graph.entity.inferred",
-			p.logger,
-		)
+		// Use DirectRelationshipApplier for intra-processor mutations
+		applier := inference.NewDirectRelationshipApplier(p.dataManager, p.logger)
 
 		// Create review metrics if metrics registry is available
 		reviewMetrics := inference.NewReviewMetrics("graph_processor", p.metricsRegistry)
+
+		// Get anomaly bucket from the stored buckets
+		anomalyBucket := p.clusteringBuckets["ANOMALY_INDEX"]
+		if anomalyBucket == nil {
+			p.logger.Warn("ANOMALY_INDEX bucket not found, skipping review worker")
+			return nil
+		}
 
 		reviewWorkerCfg := &inference.ReviewWorkerConfig{
 			AnomalyBucket: anomalyBucket,
@@ -2214,7 +2365,7 @@ func (p *Processor) initializeAnomalyDetectionIfEnabled(_ context.Context, bucke
 
 		reviewWorker, rwErr := inference.NewReviewWorker(reviewWorkerCfg)
 		if rwErr != nil {
-			return errs.WrapFatal(rwErr, "Processor", "initializeAnomalyDetectionIfEnabled",
+			return errs.WrapFatal(rwErr, "Processor", "completeAnomalyDetectorSetup",
 				"failed to create review worker")
 		}
 		p.reviewWorker = reviewWorker
@@ -2320,6 +2471,7 @@ func (p *Processor) runAnomalyDetection(ctx context.Context) {
 		PreviousKCore:       prevKCore,
 		SimilarityFinder:    newSimilarityFinderAdapter(p.indexManager),
 		RelationshipQuerier: newRelationshipQuerierAdapter(p.indexManager),
+		AnomalyStorage:      p.anomalyStorage,
 		Logger:              p.logger,
 	}
 

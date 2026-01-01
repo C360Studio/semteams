@@ -55,6 +55,14 @@ const (
 
 	// StatusApplied indicates the suggested relationship was created in the graph.
 	StatusApplied AnomalyStatus = "applied"
+
+	// StatusDismissed indicates the anomaly was dismissed and should not be re-detected.
+	// This prevents the same entity pair from being flagged repeatedly.
+	StatusDismissed AnomalyStatus = "dismissed"
+
+	// StatusAutoApplied indicates the relationship was automatically applied
+	// because it met the auto-apply threshold (high confidence).
+	StatusAutoApplied AnomalyStatus = "auto_applied"
 )
 
 // StructuralAnomaly represents a detected potential issue in the graph structure.
@@ -153,7 +161,8 @@ type RelationshipSuggestion struct {
 // IsResolved returns true if the anomaly has reached a terminal state.
 func (a *StructuralAnomaly) IsResolved() bool {
 	switch a.Status {
-	case StatusApproved, StatusRejected, StatusApplied, StatusLLMRejected:
+	case StatusApproved, StatusRejected, StatusApplied, StatusLLMRejected,
+		StatusDismissed, StatusAutoApplied:
 		return true
 	default:
 		return false

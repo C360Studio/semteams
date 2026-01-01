@@ -4,6 +4,7 @@ package inference
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/c360/semstreams/pkg/errs"
@@ -28,6 +29,9 @@ type Config struct {
 
 	// Review configuration for LLM-assisted and human review
 	Review ReviewConfig `json:"review"`
+
+	// VirtualEdges configuration for auto-applying high-confidence gaps as edges
+	VirtualEdges VirtualEdgeConfig `json:"virtual_edges"`
 
 	// Storage configuration
 	Storage StorageConfig `json:"storage"`
@@ -117,6 +121,51 @@ type ReviewConfig struct {
 	LLM llm.Config `json:"llm"`
 }
 
+// VirtualEdgeConfig configures automatic edge creation from high-confidence anomalies
+type VirtualEdgeConfig struct {
+	// AutoApply configures automatic edge creation for high-confidence gaps
+	AutoApply AutoApplyConfig `json:"auto_apply"`
+
+	// ReviewQueue configures lower-confidence gaps that need LLM/human review
+	ReviewQueue ReviewQueueConfig `json:"review_queue"`
+}
+
+// AutoApplyConfig configures automatic edge creation for high-confidence semantic gaps
+type AutoApplyConfig struct {
+	// Enabled activates automatic edge creation
+	Enabled bool `json:"enabled"`
+
+	// MinSimilarity is the minimum semantic similarity to auto-apply (0.0-1.0)
+	// Gaps at or above this threshold are automatically converted to edges
+	MinSimilarity float64 `json:"min_similarity"`
+
+	// MinStructuralDistance is the minimum graph distance for auto-apply (hops)
+	// Only gaps with structural distance >= this value are considered
+	MinStructuralDistance int `json:"min_structural_distance"`
+
+	// PredicateTemplate is the predicate format for created edges
+	// Supports {band} placeholder: "inferred.semantic.{band}"
+	// Band values: "high" (>=0.9), "medium" (>=0.85), "related" (else)
+	PredicateTemplate string `json:"predicate_template"`
+}
+
+// ReviewQueueConfig configures gaps that need LLM or human review before edge creation
+type ReviewQueueConfig struct {
+	// Enabled activates the review queue for lower-confidence gaps
+	Enabled bool `json:"enabled"`
+
+	// MinSimilarity is the minimum semantic similarity for review queue (0.0-1.0)
+	// Gaps at or above this but below AutoApply.MinSimilarity go to review
+	MinSimilarity float64 `json:"min_similarity"`
+
+	// MaxSimilarity is the maximum semantic similarity for review queue (0.0-1.0)
+	// Should match AutoApply.MinSimilarity for seamless handoff
+	MaxSimilarity float64 `json:"max_similarity"`
+
+	// RequireLLMClassification requires LLM to suggest relationship type
+	RequireLLMClassification bool `json:"require_llm_classification"`
+}
+
 // StorageConfig configures anomaly storage
 type StorageConfig struct {
 	// BucketName is the NATS KV bucket for storing anomalies
@@ -164,6 +213,20 @@ func DefaultConfig() Config {
 			BatchSize:            10,
 			ReviewTimeout:        30 * time.Second,
 		},
+		VirtualEdges: VirtualEdgeConfig{
+			AutoApply: AutoApplyConfig{
+				Enabled:               false, // Opt-in feature
+				MinSimilarity:         0.85,
+				MinStructuralDistance: 4,
+				PredicateTemplate:     "inferred.semantic.{band}",
+			},
+			ReviewQueue: ReviewQueueConfig{
+				Enabled:                  false, // Requires LLM setup
+				MinSimilarity:            0.7,
+				MaxSimilarity:            0.85,
+				RequireLLMClassification: true,
+			},
+		},
 		Storage: StorageConfig{
 			BucketName:      "ANOMALY_INDEX",
 			RetentionDays:   30,
@@ -196,6 +259,10 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.validateReview(); err != nil {
+		return err
+	}
+
+	if err := c.validateVirtualEdges(); err != nil {
 		return err
 	}
 
@@ -379,6 +446,63 @@ func (c *Config) validateReview() error {
 	return nil
 }
 
+// validateVirtualEdges validates virtual edge configuration
+func (c *Config) validateVirtualEdges() error {
+	// Validate AutoApply config
+	if c.VirtualEdges.AutoApply.Enabled {
+		if c.VirtualEdges.AutoApply.MinSimilarity < 0 || c.VirtualEdges.AutoApply.MinSimilarity > 1 {
+			msg := fmt.Sprintf(
+				"virtual_edges.auto_apply.min_similarity must be between 0 and 1, got %f",
+				c.VirtualEdges.AutoApply.MinSimilarity,
+			)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
+		}
+
+		if c.VirtualEdges.AutoApply.MinStructuralDistance <= 0 {
+			msg := fmt.Sprintf(
+				"virtual_edges.auto_apply.min_structural_distance must be positive, got %d",
+				c.VirtualEdges.AutoApply.MinStructuralDistance,
+			)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
+		}
+
+		if c.VirtualEdges.AutoApply.PredicateTemplate == "" {
+			msg := "virtual_edges.auto_apply.predicate_template cannot be empty"
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
+		}
+	}
+
+	// Validate ReviewQueue config
+	if c.VirtualEdges.ReviewQueue.Enabled {
+		if c.VirtualEdges.ReviewQueue.MinSimilarity < 0 || c.VirtualEdges.ReviewQueue.MinSimilarity > 1 {
+			msg := fmt.Sprintf(
+				"virtual_edges.review_queue.min_similarity must be between 0 and 1, got %f",
+				c.VirtualEdges.ReviewQueue.MinSimilarity,
+			)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
+		}
+
+		if c.VirtualEdges.ReviewQueue.MaxSimilarity < 0 || c.VirtualEdges.ReviewQueue.MaxSimilarity > 1 {
+			msg := fmt.Sprintf(
+				"virtual_edges.review_queue.max_similarity must be between 0 and 1, got %f",
+				c.VirtualEdges.ReviewQueue.MaxSimilarity,
+			)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
+		}
+
+		if c.VirtualEdges.ReviewQueue.MinSimilarity >= c.VirtualEdges.ReviewQueue.MaxSimilarity {
+			msg := fmt.Sprintf(
+				"virtual_edges.review_queue.min_similarity (%f) must be less than max_similarity (%f)",
+				c.VirtualEdges.ReviewQueue.MinSimilarity,
+				c.VirtualEdges.ReviewQueue.MaxSimilarity,
+			)
+			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
+		}
+	}
+
+	return nil
+}
+
 // validateStorage validates storage configuration
 func (c *Config) validateStorage() error {
 	if c.Storage.BucketName == "" {
@@ -416,6 +540,7 @@ func (c *Config) ApplyDefaults() {
 	c.applyCoreAnomalyDefaults(defaults)
 	c.applyTransitivityDefaults(defaults)
 	c.applyReviewDefaults(defaults)
+	c.applyVirtualEdgesDefaults(defaults)
 	c.applyStorageDefaults(defaults)
 }
 
@@ -485,6 +610,27 @@ func (c *Config) applyReviewDefaults(defaults Config) {
 	}
 }
 
+func (c *Config) applyVirtualEdgesDefaults(defaults Config) {
+	// AutoApply defaults
+	if c.VirtualEdges.AutoApply.MinSimilarity == 0 {
+		c.VirtualEdges.AutoApply.MinSimilarity = defaults.VirtualEdges.AutoApply.MinSimilarity
+	}
+	if c.VirtualEdges.AutoApply.MinStructuralDistance == 0 {
+		c.VirtualEdges.AutoApply.MinStructuralDistance = defaults.VirtualEdges.AutoApply.MinStructuralDistance
+	}
+	if c.VirtualEdges.AutoApply.PredicateTemplate == "" {
+		c.VirtualEdges.AutoApply.PredicateTemplate = defaults.VirtualEdges.AutoApply.PredicateTemplate
+	}
+
+	// ReviewQueue defaults
+	if c.VirtualEdges.ReviewQueue.MinSimilarity == 0 {
+		c.VirtualEdges.ReviewQueue.MinSimilarity = defaults.VirtualEdges.ReviewQueue.MinSimilarity
+	}
+	if c.VirtualEdges.ReviewQueue.MaxSimilarity == 0 {
+		c.VirtualEdges.ReviewQueue.MaxSimilarity = defaults.VirtualEdges.ReviewQueue.MaxSimilarity
+	}
+}
+
 func (c *Config) applyStorageDefaults(defaults Config) {
 	if c.Storage.BucketName == "" {
 		c.Storage.BucketName = defaults.Storage.BucketName
@@ -524,4 +670,36 @@ func (c *Config) IsDetectorEnabled(detector string) bool {
 	default:
 		return false
 	}
+}
+
+// BuildPredicate generates the predicate string from the template based on similarity.
+// Template supports {band} placeholder which is replaced with:
+//   - "high" for similarity >= 0.9
+//   - "medium" for similarity >= 0.85
+//   - "related" for lower similarities
+func (c *AutoApplyConfig) BuildPredicate(similarity float64) string {
+	band := "related"
+	if similarity >= 0.9 {
+		band = "high"
+	} else if similarity >= 0.85 {
+		band = "medium"
+	}
+
+	return strings.Replace(c.PredicateTemplate, "{band}", band, 1)
+}
+
+// ShouldAutoApply returns true if the anomaly meets auto-apply criteria.
+func (c *AutoApplyConfig) ShouldAutoApply(similarity float64, structuralDistance int) bool {
+	if !c.Enabled {
+		return false
+	}
+	return similarity >= c.MinSimilarity && structuralDistance >= c.MinStructuralDistance
+}
+
+// ShouldQueue returns true if the anomaly should go to the review queue.
+func (c *ReviewQueueConfig) ShouldQueue(similarity float64) bool {
+	if !c.Enabled {
+		return false
+	}
+	return similarity >= c.MinSimilarity && similarity < c.MaxSimilarity
 }

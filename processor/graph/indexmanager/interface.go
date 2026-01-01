@@ -90,7 +90,20 @@ type Indexer interface {
 	// Uses triangle inequality bounds - may include some unreachable entities (false positives ok).
 	// Returns the input slice unchanged if pivot index is not available.
 	PruneByPivotDistance(source string, candidates []string, maxHops int) []string
+
+	// SetOnEntityCreatedCallback sets a callback to be invoked when an entity is created.
+	// Used by HierarchyInference to create sibling edges at entity creation time.
+	// The callback receives the entity ID of the newly created entity.
+	SetOnEntityCreatedCallback(callback EntityCreatedCallback)
+
+	// GetAllEntityIDs returns all entity IDs from the ENTITY_STATES bucket.
+	// Used by HierarchyInference to discover siblings for new entities.
+	GetAllEntityIDs(ctx context.Context) ([]string, error)
 }
+
+// EntityCreatedCallback is called when a new entity is created.
+// The callback receives the context and entity ID of the new entity.
+type EntityCreatedCallback func(ctx context.Context, entityID string)
 
 // KCoreIndex provides k-core decomposition data for query filtering.
 // This interface abstracts the structural index to avoid import cycles.

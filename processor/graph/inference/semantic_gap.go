@@ -165,6 +165,11 @@ func (d *SemanticGapDetector) detectGapsForEntity(
 		}
 		seen[pairKey] = true
 
+		// Skip pairs that have been previously dismissed or auto-applied
+		if d.isDismissedPair(ctx, entityA, entityB) {
+			continue
+		}
+
 		// Check structural distance
 		lower, upper := pivotIndex.EstimateDistance(entityA, entityB)
 
@@ -279,6 +284,20 @@ func (d *SemanticGapDetector) createAnomaly(gap semanticGap) *StructuralAnomaly 
 		Status:     StatusPending,
 		DetectedAt: now,
 	}
+}
+
+// isDismissedPair checks if an entity pair has been previously dismissed or auto-applied.
+func (d *SemanticGapDetector) isDismissedPair(ctx context.Context, entityA, entityB string) bool {
+	if d.deps == nil || d.deps.AnomalyStorage == nil {
+		return false
+	}
+
+	dismissed, err := d.deps.AnomalyStorage.IsDismissedPair(ctx, entityA, entityB)
+	if err != nil {
+		d.logger.Debug("failed to check dismissed pair", "entityA", entityA, "entityB", entityB, "error", err)
+		return false
+	}
+	return dismissed
 }
 
 // makePairKey creates a canonical key for an entity pair (order-independent).

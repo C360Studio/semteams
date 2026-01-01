@@ -2,6 +2,8 @@ package inference
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
@@ -66,6 +68,10 @@ type Storage interface {
 
 	// Count returns the total number of anomalies by status.
 	Count(ctx context.Context) (map[AnomalyStatus]int, error)
+
+	// IsDismissedPair checks if an entity pair is already tracked (any status including pending).
+	// This prevents re-detecting the same semantic gap repeatedly across detection runs.
+	IsDismissedPair(ctx context.Context, entityA, entityB string) (bool, error)
 }
 
 // NATSAnomalyStorage implements Storage using NATS KV.
@@ -180,6 +186,19 @@ func (s *NATSAnomalyStorage) SaveWithRevision(ctx context.Context, anomaly *Stru
 		typeKey := typeIndexKey(anomaly.Type, anomaly.ID)
 		if _, err := s.kv.Put(ctx, typeKey, []byte{}); err != nil {
 			return errs.WrapTransient(err, "NATSAnomalyStorage", "SaveWithRevision", "put type index")
+		}
+
+		// For semantic gap anomalies, mark the pair as tracked to prevent re-detection
+		// This is done on create only (existingAnomaly == nil)
+		if anomaly.Type == AnomalySemanticStructuralGap && anomaly.EntityA != "" && anomaly.EntityB != "" {
+			pairKey := makeDismissedPairKey(anomaly.EntityA, anomaly.EntityB)
+			if _, err := s.kv.Put(ctx, dismissedPairKey(pairKey), []byte{}); err != nil {
+				// Log but don't fail - this is an optimization
+				s.logger.Warn("failed to mark pair as tracked",
+					"entity_a", anomaly.EntityA,
+					"entity_b", anomaly.EntityB,
+					"error", err)
+			}
 		}
 	}
 
@@ -547,6 +566,87 @@ func (s *NATSAnomalyStorage) Count(ctx context.Context) (map[AnomalyStatus]int, 
 	}
 
 	return counts, nil
+}
+
+// IsDismissedPair checks if an entity pair is already tracked (any status including pending).
+// This prevents re-detecting the same semantic gap repeatedly across detection runs.
+func (s *NATSAnomalyStorage) IsDismissedPair(ctx context.Context, entityA, entityB string) (bool, error) {
+	// Create canonical pair key (order-independent)
+	pairKey := makeDismissedPairKey(entityA, entityB)
+
+	// Use test store if KV is nil
+	if s.kv == nil && s.testStore != nil {
+		s.testStore.mu.RLock()
+		defer s.testStore.mu.RUnlock()
+		// Check all anomalies for this pair - skip if already tracked (any status)
+		for _, a := range s.testStore.anomalies {
+			if a.Type != AnomalySemanticStructuralGap {
+				continue
+			}
+			existingPairKey := makeDismissedPairKey(a.EntityA, a.EntityB)
+			if existingPairKey == pairKey {
+				// Skip any existing anomaly for this pair to prevent re-detection
+				// This includes pending anomalies, not just resolved ones
+				if a.Status == StatusPending || a.Status == StatusHumanReview ||
+					a.Status == StatusDismissed || a.Status == StatusAutoApplied ||
+					a.Status == StatusApplied || a.Status == StatusRejected {
+					return true, nil
+				}
+			}
+		}
+		return false, nil
+	}
+
+	if s.kv == nil {
+		return false, nil
+	}
+
+	// Check the pair index - this is populated for ALL anomalies (pending and resolved)
+	// via markPairTracked() called from SaveWithRevision()
+	_, err := s.kv.Get(ctx, dismissedPairKey(pairKey))
+	if err == nil {
+		return true, nil
+	}
+	if stderrors.Is(err, jetstream.ErrKeyNotFound) {
+		return false, nil
+	}
+
+	return false, errs.WrapTransient(err, "NATSAnomalyStorage", "IsDismissedPair", "check pair index")
+}
+
+// MarkPairDismissed creates an index entry to prevent future re-detection.
+// Called when an anomaly is dismissed, rejected, or auto-applied.
+func (s *NATSAnomalyStorage) MarkPairDismissed(ctx context.Context, entityA, entityB string) error {
+	pairKey := makeDismissedPairKey(entityA, entityB)
+
+	// Use test store if KV is nil - no persistent index needed
+	if s.kv == nil {
+		return nil
+	}
+
+	// Create dismissed pair index entry
+	_, err := s.kv.Put(ctx, dismissedPairKey(pairKey), []byte{})
+	if err != nil {
+		return errs.WrapTransient(err, "NATSAnomalyStorage", "MarkPairDismissed", "put index")
+	}
+	return nil
+}
+
+// makeDismissedPairKey creates a canonical key for an entity pair (order-independent).
+// Uses "::" as separator for internal representation.
+func makeDismissedPairKey(a, b string) string {
+	if a < b {
+		return a + "::" + b
+	}
+	return b + "::" + a
+}
+
+// dismissedPairKey creates a NATS KV key for the dismissed pair index.
+// Uses SHA256 hash to avoid issues with dots in entity IDs (hierarchical notation).
+// Only point lookups are performed on this index, so hashing is safe.
+func dismissedPairKey(pairKey string) string {
+	hash := sha256.Sum256([]byte(pairKey))
+	return fmt.Sprintf("anomaly.idx.dismissed.%s", hex.EncodeToString(hash[:16]))
 }
 
 // Key generation helpers

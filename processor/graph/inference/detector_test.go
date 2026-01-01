@@ -98,6 +98,10 @@ func (s *mockStorage) GetWithRevision(_ context.Context, id string) (*Structural
 	return anomaly, 1, nil // Return revision 1 for test
 }
 
+func (s *mockStorage) IsDismissedPair(_ context.Context, _, _ string) (bool, error) {
+	return false, nil
+}
+
 // mockDetector implements Detector for testing
 type mockDetector struct {
 	name      string
@@ -119,6 +123,10 @@ func (d *mockDetector) Detect(_ context.Context) ([]*StructuralAnomaly, error) {
 
 func (d *mockDetector) Configure(_ interface{}) error {
 	return nil
+}
+
+func (d *mockDetector) SetDependencies(_ *DetectorDependencies) {
+	// No-op for mock
 }
 
 func TestOrchestrator_NewOrchestrator(t *testing.T) {
@@ -316,4 +324,369 @@ func TestResult_Methods(t *testing.T) {
 	byType := result.CountByType()
 	assert.Equal(t, 2, byType[AnomalySemanticStructuralGap])
 	assert.Equal(t, 1, byType[AnomalyCoreIsolation])
+}
+
+// mockRelationshipApplier implements RelationshipApplier for testing
+type mockRelationshipApplier struct {
+	applied []*RelationshipSuggestion
+	err     error
+}
+
+func newMockApplier() *mockRelationshipApplier {
+	return &mockRelationshipApplier{
+		applied: make([]*RelationshipSuggestion, 0),
+	}
+}
+
+func (m *mockRelationshipApplier) ApplyRelationship(_ context.Context, suggestion *RelationshipSuggestion) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.applied = append(m.applied, suggestion)
+	return nil
+}
+
+func (m *mockRelationshipApplier) AppliedCount() int {
+	return len(m.applied)
+}
+
+func TestOrchestrator_ApplyVirtualEdges_HighConfidenceGaps(t *testing.T) {
+	config := DefaultConfig()
+	config.Enabled = true
+	config.VirtualEdges = VirtualEdgeConfig{
+		AutoApply: AutoApplyConfig{
+			Enabled:               true,
+			MinSimilarity:         0.85,
+			MinStructuralDistance: 4,
+			PredicateTemplate:     "inferred.semantic.{band}",
+		},
+	}
+
+	storage := newMockStorage()
+	applier := newMockApplier()
+
+	orch, err := NewOrchestrator(OrchestratorConfig{
+		Config:  config,
+		Storage: storage,
+	})
+	require.NoError(t, err)
+	orch.SetApplier(applier)
+
+	// Create anomalies that meet auto-apply threshold
+	result := &Result{
+		Anomalies: []*StructuralAnomaly{
+			{
+				ID:       "gap-1",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-a",
+				EntityB:  "entity-b",
+				Evidence: Evidence{Similarity: 0.90, StructuralDistance: 5},
+				Status:   StatusPending,
+			},
+		},
+	}
+
+	err = orch.applyVirtualEdges(context.Background(), config, result)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, result.AutoApplied)
+	assert.Equal(t, 0, result.QueuedForReview)
+	assert.Equal(t, 1, applier.AppliedCount())
+
+	// Verify the predicate was built correctly (0.90 = high)
+	assert.Equal(t, "inferred.semantic.high", applier.applied[0].Predicate)
+}
+
+func TestOrchestrator_ApplyVirtualEdges_LowConfidenceGaps(t *testing.T) {
+	config := DefaultConfig()
+	config.Enabled = true
+	config.VirtualEdges = VirtualEdgeConfig{
+		AutoApply: AutoApplyConfig{
+			Enabled:               true,
+			MinSimilarity:         0.85,
+			MinStructuralDistance: 4,
+			PredicateTemplate:     "inferred.semantic.{band}",
+		},
+	}
+
+	storage := newMockStorage()
+	applier := newMockApplier()
+
+	orch, err := NewOrchestrator(OrchestratorConfig{
+		Config:  config,
+		Storage: storage,
+	})
+	require.NoError(t, err)
+	orch.SetApplier(applier)
+
+	// Create anomalies that DON'T meet auto-apply threshold
+	result := &Result{
+		Anomalies: []*StructuralAnomaly{
+			{
+				ID:       "gap-1",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-a",
+				EntityB:  "entity-b",
+				Evidence: Evidence{Similarity: 0.75, StructuralDistance: 5}, // Below 0.85
+				Status:   StatusPending,
+			},
+		},
+	}
+
+	err = orch.applyVirtualEdges(context.Background(), config, result)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, result.AutoApplied)
+	assert.Equal(t, 0, applier.AppliedCount())
+}
+
+func TestOrchestrator_ApplyVirtualEdges_StructuralDistanceTooLow(t *testing.T) {
+	config := DefaultConfig()
+	config.Enabled = true
+	config.VirtualEdges = VirtualEdgeConfig{
+		AutoApply: AutoApplyConfig{
+			Enabled:               true,
+			MinSimilarity:         0.85,
+			MinStructuralDistance: 4,
+			PredicateTemplate:     "inferred.semantic.{band}",
+		},
+	}
+
+	storage := newMockStorage()
+	applier := newMockApplier()
+
+	orch, err := NewOrchestrator(OrchestratorConfig{
+		Config:  config,
+		Storage: storage,
+	})
+	require.NoError(t, err)
+	orch.SetApplier(applier)
+
+	// Create anomaly with high similarity but low structural distance
+	result := &Result{
+		Anomalies: []*StructuralAnomaly{
+			{
+				ID:       "gap-1",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-a",
+				EntityB:  "entity-b",
+				Evidence: Evidence{Similarity: 0.95, StructuralDistance: 3}, // Distance below 4
+				Status:   StatusPending,
+			},
+		},
+	}
+
+	err = orch.applyVirtualEdges(context.Background(), config, result)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, result.AutoApplied)
+	assert.Equal(t, 0, applier.AppliedCount())
+}
+
+func TestOrchestrator_ApplyVirtualEdges_QueueForReview(t *testing.T) {
+	config := DefaultConfig()
+	config.Enabled = true
+	config.VirtualEdges = VirtualEdgeConfig{
+		AutoApply: AutoApplyConfig{
+			Enabled:               true,
+			MinSimilarity:         0.85,
+			MinStructuralDistance: 4,
+			PredicateTemplate:     "inferred.semantic.{band}",
+		},
+		ReviewQueue: ReviewQueueConfig{
+			Enabled:       true,
+			MinSimilarity: 0.70,
+			MaxSimilarity: 0.85,
+		},
+	}
+
+	storage := newMockStorage()
+	applier := newMockApplier()
+
+	orch, err := NewOrchestrator(OrchestratorConfig{
+		Config:  config,
+		Storage: storage,
+	})
+	require.NoError(t, err)
+	orch.SetApplier(applier)
+
+	// Create anomaly that should go to review queue (similarity 0.78 is in range 0.70-0.85)
+	result := &Result{
+		Anomalies: []*StructuralAnomaly{
+			{
+				ID:       "gap-1",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-a",
+				EntityB:  "entity-b",
+				Evidence: Evidence{Similarity: 0.78, StructuralDistance: 5},
+				Status:   StatusPending,
+			},
+		},
+	}
+
+	err = orch.applyVirtualEdges(context.Background(), config, result)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, result.AutoApplied)
+	assert.Equal(t, 1, result.QueuedForReview)
+	assert.Equal(t, 0, applier.AppliedCount())
+
+	// Verify anomaly status was updated
+	assert.Equal(t, StatusHumanReview, result.Anomalies[0].Status)
+}
+
+func TestOrchestrator_ApplyVirtualEdges_MixedAnomalies(t *testing.T) {
+	config := DefaultConfig()
+	config.Enabled = true
+	config.VirtualEdges = VirtualEdgeConfig{
+		AutoApply: AutoApplyConfig{
+			Enabled:               true,
+			MinSimilarity:         0.85,
+			MinStructuralDistance: 4,
+			PredicateTemplate:     "inferred.semantic.{band}",
+		},
+		ReviewQueue: ReviewQueueConfig{
+			Enabled:       true,
+			MinSimilarity: 0.70,
+			MaxSimilarity: 0.85,
+		},
+	}
+
+	storage := newMockStorage()
+	applier := newMockApplier()
+
+	orch, err := NewOrchestrator(OrchestratorConfig{
+		Config:  config,
+		Storage: storage,
+	})
+	require.NoError(t, err)
+	orch.SetApplier(applier)
+
+	// Create mixed anomalies: 2 auto-apply, 1 queue, 1 skip, 1 non-semantic-gap
+	result := &Result{
+		Anomalies: []*StructuralAnomaly{
+			{
+				ID:       "gap-1",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-a",
+				EntityB:  "entity-b",
+				Evidence: Evidence{Similarity: 0.92, StructuralDistance: 6}, // Auto-apply (high)
+				Status:   StatusPending,
+			},
+			{
+				ID:       "gap-2",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-c",
+				EntityB:  "entity-d",
+				Evidence: Evidence{Similarity: 0.87, StructuralDistance: 5}, // Auto-apply (medium)
+				Status:   StatusPending,
+			},
+			{
+				ID:       "gap-3",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-e",
+				EntityB:  "entity-f",
+				Evidence: Evidence{Similarity: 0.78, StructuralDistance: 5}, // Queue for review
+				Status:   StatusPending,
+			},
+			{
+				ID:       "gap-4",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-g",
+				EntityB:  "entity-h",
+				Evidence: Evidence{Similarity: 0.60, StructuralDistance: 5}, // Skip (too low)
+				Status:   StatusPending,
+			},
+			{
+				ID:       "core-1",
+				Type:     AnomalyCoreIsolation, // Non-semantic gap - should be skipped
+				EntityA:  "entity-i",
+				Evidence: Evidence{},
+				Status:   StatusPending,
+			},
+		},
+	}
+
+	err = orch.applyVirtualEdges(context.Background(), config, result)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, result.AutoApplied)
+	assert.Equal(t, 1, result.QueuedForReview)
+	assert.Equal(t, 2, applier.AppliedCount())
+
+	// Verify predicates
+	assert.Equal(t, "inferred.semantic.high", applier.applied[0].Predicate)
+	assert.Equal(t, "inferred.semantic.medium", applier.applied[1].Predicate)
+}
+
+func TestOrchestrator_ApplyVirtualEdges_Disabled(t *testing.T) {
+	config := DefaultConfig()
+	config.Enabled = true
+	config.VirtualEdges = VirtualEdgeConfig{
+		AutoApply: AutoApplyConfig{
+			Enabled: false, // Disabled
+		},
+	}
+
+	storage := newMockStorage()
+	applier := newMockApplier()
+
+	orch, err := NewOrchestrator(OrchestratorConfig{
+		Config:  config,
+		Storage: storage,
+	})
+	require.NoError(t, err)
+	orch.SetApplier(applier)
+
+	result := &Result{
+		Anomalies: []*StructuralAnomaly{
+			{
+				ID:       "gap-1",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-a",
+				EntityB:  "entity-b",
+				Evidence: Evidence{Similarity: 0.95, StructuralDistance: 10},
+				Status:   StatusPending,
+			},
+		},
+	}
+
+	err = orch.applyVirtualEdges(context.Background(), config, result)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, result.AutoApplied)
+	assert.Equal(t, 0, applier.AppliedCount())
+}
+
+func TestOrchestrator_ApplyVirtualEdges_NoApplier(t *testing.T) {
+	config := DefaultConfig()
+	config.Enabled = true
+	config.VirtualEdges = VirtualEdgeConfig{
+		AutoApply: AutoApplyConfig{
+			Enabled:               true,
+			MinSimilarity:         0.85,
+			MinStructuralDistance: 4,
+			PredicateTemplate:     "inferred.semantic.{band}",
+		},
+	}
+
+	storage := newMockStorage()
+
+	orch, err := NewOrchestrator(OrchestratorConfig{
+		Config:  config,
+		Storage: storage,
+	})
+	require.NoError(t, err)
+	// Don't set applier
+
+	result := &Result{
+		Anomalies: []*StructuralAnomaly{
+			{
+				ID:       "gap-1",
+				Type:     AnomalySemanticStructuralGap,
+				EntityA:  "entity-a",
+				EntityB:  "entity-b",
+				Evidence: Evidence{Similarity: 0.95, StructuralDistance: 10},
+				Status:   StatusPending,
+			},
+		},
+	}
+
+	err = orch.applyVirtualEdges(context.Background(), config, result)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, result.AutoApplied)
 }

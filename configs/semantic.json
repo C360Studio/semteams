@@ -493,6 +493,12 @@
           "result_limit": 1000
         },
         "graph_analysis": {
+          "hierarchy_inference": {
+            "enabled": true,
+            "create_type_edges": true,
+            "create_system_edges": true,
+            "create_domain_edges": true
+          },
           "community_detection": {
             "enabled": true,
             "algorithm": {
@@ -558,20 +564,34 @@
             "max_anomalies_per_run": 50,
             "semantic_gap": {
               "enabled": true,
-              "min_semantic_similarity": 0.7,
-              "min_structural_distance": 3,
-              "max_gaps_per_entity": 5,
-              "max_candidates_per_entity": 50
+              "min_semantic_similarity": 0.8,
+              "min_structural_distance": 4,
+              "max_gaps_per_entity": 3,
+              "max_candidates_per_entity": 25
             },
             "core_anomaly": {
               "enabled": true,
-              "min_core_for_hub_analysis": 2,
-              "hub_isolation_threshold": 0.3,
+              "min_core_for_hub_analysis": 3,
+              "hub_isolation_threshold": 0.5,
               "track_core_demotions": true,
-              "min_demotion_delta": 1
+              "min_demotion_delta": 2
             },
             "transitivity": {
               "enabled": false
+            },
+            "virtual_edges": {
+              "auto_apply": {
+                "enabled": true,
+                "min_similarity": 0.8,
+                "min_structural_distance": 4,
+                "predicate_template": "inferred.semantic.{band}"
+              },
+              "review_queue": {
+                "enabled": false,
+                "min_similarity": 0.7,
+                "max_similarity": 0.85,
+                "require_llm_classification": true
+              }
             },
             "review": {
               "enabled": false

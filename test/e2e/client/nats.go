@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -693,4 +694,74 @@ func (c *NATSValidationClient) WaitForAnomalyDetection(
 
 	// Timeout reached, return current count without error
 	return lastCount, nil
+}
+
+// VirtualEdgeCounts holds counts of virtual edges by predicate and status.
+type VirtualEdgeCounts struct {
+	Total       int            // Total virtual edges found
+	ByBand      map[string]int // Counts by similarity band (high, medium, related)
+	AutoApplied int            // Edges that were auto-applied
+}
+
+// CountVirtualEdges counts virtual edges (inferred relationships) by querying the PREDICATE_INDEX.
+// Virtual edges use predicates starting with "inferred." prefix.
+func (c *NATSValidationClient) CountVirtualEdges(ctx context.Context) (*VirtualEdgeCounts, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return nil, fmt.Errorf("client is closed")
+	}
+	c.mu.Unlock()
+
+	js, err := c.client.JetStream()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get JetStream context: %w", err)
+	}
+
+	bucket, err := js.KeyValue(ctx, "PREDICATE_INDEX")
+	if err != nil {
+		// Bucket doesn't exist - return zero counts
+		return &VirtualEdgeCounts{
+			ByBand: make(map[string]int),
+		}, nil
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		// No keys - return zero counts
+		return &VirtualEdgeCounts{
+			ByBand: make(map[string]int),
+		}, nil
+	}
+
+	counts := &VirtualEdgeCounts{
+		ByBand: make(map[string]int),
+	}
+
+	// Count keys with "inferred." prefix
+	for _, key := range keys {
+		if !strings.HasPrefix(key, "inferred.") {
+			continue
+		}
+
+		counts.Total++
+
+		// Parse the band from the predicate (e.g., "inferred.semantic.high" -> "high")
+		parts := strings.Split(key, ".")
+		if len(parts) >= 3 && parts[1] == "semantic" {
+			band := parts[2]
+			counts.ByBand[band]++
+		}
+	}
+
+	return counts, nil
+}
+
+// GetAutoAppliedAnomalyCount returns the count of anomalies with status "auto_applied".
+func (c *NATSValidationClient) GetAutoAppliedAnomalyCount(ctx context.Context) (int, error) {
+	counts, err := c.GetAnomalyCounts(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return counts.ByStatus["auto_applied"], nil
 }

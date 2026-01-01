@@ -234,6 +234,37 @@ const (
 	GraphRelRelatedTo = "graph.rel.related_to"
 )
 
+// Hierarchy Domain Predicates
+// These predicates describe relationships derived from 6-part entity ID structure.
+// Entity IDs follow the pattern: org.platform.domain.system.type.instance
+// Hierarchy inference automatically creates these edges at entity ingestion time.
+
+const (
+	// HierarchyDomainMember indicates entity belongs to a domain (3-part prefix match).
+	// Subject is the entity, object is the domain prefix (e.g., "c360.logistics.sensor").
+	// StandardIRI: skos:broader (entity is narrower than domain)
+	// Example: sensor-temp-001 hierarchy.domain.member c360.logistics.sensor
+	HierarchyDomainMember = "hierarchy.domain.member"
+
+	// HierarchySystemMember indicates entity belongs to a system (4-part prefix match).
+	// Subject is the entity, object is the system prefix (e.g., "c360.logistics.sensor.document").
+	// StandardIRI: skos:broader (entity is narrower than system)
+	// Example: sensor-temp-001 hierarchy.system.member c360.logistics.sensor.document
+	HierarchySystemMember = "hierarchy.system.member"
+
+	// HierarchyTypeSibling indicates entities share the same type (5-part prefix match).
+	// Bidirectional relationship between entities with same type prefix.
+	// StandardIRI: skos:related (symmetric relationship)
+	// Example: sensor-temp-001 hierarchy.type.sibling sensor-temp-002
+	HierarchyTypeSibling = "hierarchy.type.sibling"
+
+	// HierarchyTypeMember indicates entity belongs to a type container (5-part prefix + .group).
+	// Subject is the entity, object is the type container entity ID.
+	// StandardIRI: skos:broader (entity is narrower than type container)
+	// Example: acme.iot.sensors.hvac.temperature.001 hierarchy.type.member acme.iot.sensors.hvac.temperature.group
+	HierarchyTypeMember = "hierarchy.type.member"
+)
+
 // NOTE: The predicates in this file are EXAMPLES for demonstration purposes.
 // SemStreams is a framework - applications should define their own domain-specific
 // vocabulary in their own packages and register predicates using the vocabulary registry.

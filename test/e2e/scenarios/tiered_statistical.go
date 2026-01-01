@@ -298,8 +298,8 @@ func (s *TieredScenario) executeValidateCommunityStructure(ctx context.Context, 
 		return nil
 	}
 
-	// Get communities from NATS KV
-	communities, err := s.natsClient.GetAllCommunities(ctx)
+	// Wait for communities to be available (community detection may still be running)
+	communities, err := s.waitForCommunities(ctx)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get communities: %v", err))
 		return nil

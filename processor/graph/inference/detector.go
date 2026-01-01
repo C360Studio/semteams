@@ -44,6 +44,9 @@ type DetectorDependencies struct {
 	// RelationshipQuerier provides relationship queries for transitivity detection.
 	RelationshipQuerier RelationshipQuerier
 
+	// AnomalyStorage provides access to persisted anomalies (for dismissed pair checks).
+	AnomalyStorage Storage
+
 	// Logger for detector logging.
 	Logger *slog.Logger
 }
@@ -96,6 +99,9 @@ type Orchestrator struct {
 	// Dependencies shared across detectors
 	deps *DetectorDependencies
 
+	// RelationshipApplier for auto-applying virtual edges
+	applier RelationshipApplier
+
 	// Logger
 	logger *slog.Logger
 }
@@ -104,6 +110,7 @@ type Orchestrator struct {
 type OrchestratorConfig struct {
 	Config  Config
 	Storage Storage
+	Applier RelationshipApplier
 	Logger  *slog.Logger
 }
 
@@ -121,6 +128,7 @@ func NewOrchestrator(cfg OrchestratorConfig) (*Orchestrator, error) {
 	return &Orchestrator{
 		config:    cfg.Config,
 		storage:   cfg.Storage,
+		applier:   cfg.Applier,
 		detectors: make([]Detector, 0),
 		logger:    logger,
 	}, nil
@@ -190,6 +198,12 @@ func (o *Orchestrator) RunDetection(ctx context.Context) (*Result, error) {
 			len(detectors), strings.Join(errMsgs, "; "))
 		return result, errs.WrapTransient(aggregated, "Orchestrator", "RunDetection",
 			"all detectors failed")
+	}
+
+	// Apply virtual edges for high-confidence semantic gaps
+	if err := o.applyVirtualEdges(ctx, config, result); err != nil {
+		o.logger.Warn("virtual edge application failed", "error", err)
+		// Don't fail the detection run, just log the warning
 	}
 
 	return result, nil
@@ -340,12 +354,173 @@ func (o *Orchestrator) GetRegisteredDetectors() []string {
 	return names
 }
 
+// SetApplier sets the relationship applier for virtual edge creation.
+// This allows late binding when the applier depends on other components.
+func (o *Orchestrator) SetApplier(applier RelationshipApplier) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.applier = applier
+}
+
+// applyVirtualEdges processes high-confidence semantic gaps and creates virtual edges.
+// Only applies to semantic gap anomalies that meet the auto-apply threshold.
+func (o *Orchestrator) applyVirtualEdges(ctx context.Context, config Config, result *Result) error {
+	if !config.VirtualEdges.AutoApply.Enabled {
+		return nil
+	}
+
+	if o.applier == nil {
+		o.logger.Debug("virtual edge application skipped: no applier configured")
+		return nil
+	}
+
+	var applied, queued int
+	var lastErr error
+
+	// Collect statistics for debugging
+	var evaluated int
+	var belowSimThreshold, belowDistThreshold int
+	var simSum float64
+	var distSum int
+
+	for _, anomaly := range result.Anomalies {
+		// Only process semantic gap anomalies
+		if anomaly.Type != AnomalySemanticStructuralGap {
+			continue
+		}
+
+		similarity := anomaly.Evidence.Similarity
+		structuralDist := anomaly.Evidence.StructuralDistance
+		evaluated++
+		simSum += similarity
+		distSum += structuralDist
+
+		// Log threshold evaluation for debugging
+		meetsSimThreshold := similarity >= config.VirtualEdges.AutoApply.MinSimilarity
+		meetsDistThreshold := structuralDist >= config.VirtualEdges.AutoApply.MinStructuralDistance
+
+		if !meetsSimThreshold {
+			belowSimThreshold++
+		}
+		if !meetsDistThreshold {
+			belowDistThreshold++
+		}
+
+		o.logger.Debug("evaluating anomaly for auto-apply",
+			"entity_a", anomaly.EntityA,
+			"entity_b", anomaly.EntityB,
+			"similarity", similarity,
+			"structural_distance", structuralDist,
+			"min_similarity", config.VirtualEdges.AutoApply.MinSimilarity,
+			"min_structural_distance", config.VirtualEdges.AutoApply.MinStructuralDistance,
+			"meets_similarity", meetsSimThreshold,
+			"meets_distance", meetsDistThreshold,
+		)
+
+		// Check if this should be auto-applied
+		if config.VirtualEdges.AutoApply.ShouldAutoApply(similarity, structuralDist) {
+			if err := o.autoApplyEdge(ctx, config, anomaly); err != nil {
+				o.logger.Error("failed to auto-apply edge",
+					"entity_a", anomaly.EntityA,
+					"entity_b", anomaly.EntityB,
+					"error", err)
+				lastErr = err
+				continue
+			}
+			applied++
+			continue
+		}
+
+		// Check if this should go to review queue
+		if config.VirtualEdges.ReviewQueue.ShouldQueue(similarity) {
+			anomaly.Status = StatusHumanReview
+			if err := o.storage.Save(ctx, anomaly); err != nil {
+				o.logger.Error("failed to queue for review",
+					"id", anomaly.ID,
+					"error", err)
+				lastErr = err
+				continue
+			}
+			queued++
+		}
+	}
+
+	// Calculate averages for diagnostic logging
+	avgSim := 0.0
+	avgDist := 0.0
+	if evaluated > 0 {
+		avgSim = simSum / float64(evaluated)
+		avgDist = float64(distSum) / float64(evaluated)
+	}
+
+	// Always log summary for visibility - including diagnostic info
+	o.logger.Info("virtual edge processing complete",
+		"semantic_gaps_evaluated", evaluated,
+		"auto_applied", applied,
+		"queued_for_review", queued,
+		"below_sim_threshold", belowSimThreshold,
+		"below_dist_threshold", belowDistThreshold,
+		"avg_similarity", avgSim,
+		"avg_structural_distance", avgDist,
+		"min_similarity_threshold", config.VirtualEdges.AutoApply.MinSimilarity,
+		"min_distance_threshold", config.VirtualEdges.AutoApply.MinStructuralDistance)
+
+	// Update result with virtual edge stats
+	result.AutoApplied = applied
+	result.QueuedForReview = queued
+
+	return lastErr
+}
+
+// autoApplyEdge creates a virtual edge from a high-confidence semantic gap.
+func (o *Orchestrator) autoApplyEdge(ctx context.Context, config Config, anomaly *StructuralAnomaly) error {
+	predicate := config.VirtualEdges.AutoApply.BuildPredicate(anomaly.Evidence.Similarity)
+
+	suggestion := &RelationshipSuggestion{
+		FromEntity: anomaly.EntityA,
+		ToEntity:   anomaly.EntityB,
+		Predicate:  predicate,
+		Confidence: anomaly.Confidence,
+		Reasoning: fmt.Sprintf("Auto-applied: semantic similarity %.2f, structural distance %d",
+			anomaly.Evidence.Similarity, anomaly.Evidence.StructuralDistance),
+	}
+
+	if err := o.applier.ApplyRelationship(ctx, suggestion); err != nil {
+		return err
+	}
+
+	// Update anomaly status to auto-applied
+	now := time.Now()
+	anomaly.Status = StatusAutoApplied
+	anomaly.ReviewedAt = &now
+	anomaly.ReviewedBy = "auto"
+	anomaly.Suggestion = suggestion
+
+	if err := o.storage.Save(ctx, anomaly); err != nil {
+		return err
+	}
+
+	// Mark the pair as dismissed to prevent re-detection
+	if natsStorage, ok := o.storage.(*NATSAnomalyStorage); ok {
+		if err := natsStorage.MarkPairDismissed(ctx, anomaly.EntityA, anomaly.EntityB); err != nil {
+			o.logger.Warn("failed to mark pair as dismissed",
+				"entity_a", anomaly.EntityA,
+				"entity_b", anomaly.EntityB,
+				"error", err)
+		}
+	}
+
+	return nil
+}
+
 // Result summarizes an inference detection run.
 type Result struct {
-	StartedAt   time.Time            `json:"started_at"`
-	CompletedAt time.Time            `json:"completed_at"`
-	Anomalies   []*StructuralAnomaly `json:"anomalies"`
-	Truncated   bool                 `json:"truncated"` // Hit max anomalies limit
+	StartedAt       time.Time            `json:"started_at"`
+	CompletedAt     time.Time            `json:"completed_at"`
+	Anomalies       []*StructuralAnomaly `json:"anomalies"`
+	Truncated       bool                 `json:"truncated"`         // Hit max anomalies limit
+	AutoApplied     int                  `json:"auto_applied"`      // Virtual edges auto-applied
+	QueuedForReview int                  `json:"queued_for_review"` // Anomalies sent to review queue
 }
 
 // Duration returns how long the detection run took.

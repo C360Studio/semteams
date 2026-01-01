@@ -32,17 +32,49 @@ func (s *TieredScenario) detectCommunityVariant(result *Result) string {
 	return "statistical"
 }
 
-// waitForCommunities polls until communities are available
+// waitForCommunities polls until communities are available.
+// Community detection requires:
+// 1. min_embedding_coverage (50% of entities have embeddings)
+// 2. initial_delay (2s) + detection_interval (30s) to run
+// So we need to wait at least 60 seconds for the first detection cycle.
 func (s *TieredScenario) waitForCommunities(ctx context.Context) ([]*client.Community, error) {
 	var communities []*client.Community
 	var err error
-	for i := 0; i < 50; i++ { // Max 5 seconds (50 * 100ms)
-		communities, err = s.natsClient.GetAllCommunities(ctx)
-		if err == nil && len(communities) > 0 {
-			return communities, nil
+
+	// First, wait for at least one clustering run to complete
+	// This ensures community detection has actually executed
+	startWait := time.Now()
+	maxWait := 90 * time.Second // Allow time for initial_delay + detection_interval + processing
+	pollInterval := 500 * time.Millisecond
+
+	for time.Since(startWait) < maxWait {
+		// Check if clustering has run
+		clusteringRuns, _ := s.metrics.SumMetricsByName(ctx, "semstreams_clustering_runs_total")
+		if clusteringRuns >= 1 {
+			// Clustering has run, now check for communities
+			communities, err = s.natsClient.GetAllCommunities(ctx)
+			if err == nil && len(communities) > 0 {
+				fmt.Printf("[COMMUNITY WAIT] Found %d communities after %.1fs (clustering_runs=%.0f)\n",
+					len(communities), time.Since(startWait).Seconds(), clusteringRuns)
+				return communities, nil
+			}
 		}
-		time.Sleep(100 * time.Millisecond)
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+		}
 	}
+
+	// Final attempt after timeout
+	communities, err = s.natsClient.GetAllCommunities(ctx)
+	if len(communities) > 0 {
+		fmt.Printf("[COMMUNITY WAIT] Found %d communities after timeout\n", len(communities))
+		return communities, nil
+	}
+
+	fmt.Printf("[COMMUNITY WAIT] No communities found after %.1fs\n", time.Since(startWait).Seconds())
 	return communities, err
 }
 
@@ -408,6 +440,65 @@ func (s *TieredScenario) executeValidateAnomalyDetection(ctx context.Context, re
 	if counts.ByType["semantic_structural_gap"] == 0 {
 		result.Warnings = append(result.Warnings,
 			"No semantic gap anomalies detected - verify semembed is available and pivot index is built")
+	}
+
+	return nil
+}
+
+// executeValidateVirtualEdges validates that high-confidence semantic gaps are auto-applied as virtual edges.
+// This step checks for inferred.semantic.* predicates in the PREDICATE_INDEX and correlates them
+// with auto_applied status anomalies in the ANOMALY_INDEX.
+func (s *TieredScenario) executeValidateVirtualEdges(ctx context.Context, result *Result) error {
+	if s.natsClient == nil {
+		result.Warnings = append(result.Warnings, "NATS client not available, skipping virtual edge validation")
+		return nil
+	}
+
+	fmt.Println("[VIRTUAL EDGES] Validating virtual edge creation from semantic gaps...")
+
+	// Get virtual edge counts from PREDICATE_INDEX
+	edgeCounts, err := s.natsClient.CountVirtualEdges(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to count virtual edges: %v", err))
+		result.Metrics["virtual_edges_total"] = 0
+		return nil
+	}
+
+	// Get auto-applied anomaly count from ANOMALY_INDEX
+	autoApplied, err := s.natsClient.GetAutoAppliedAnomalyCount(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get auto-applied count: %v", err))
+	}
+
+	// Record metrics
+	result.Metrics["virtual_edges_total"] = edgeCounts.Total
+	result.Metrics["virtual_edges_high"] = edgeCounts.ByBand["high"]
+	result.Metrics["virtual_edges_medium"] = edgeCounts.ByBand["medium"]
+	result.Metrics["virtual_edges_related"] = edgeCounts.ByBand["related"]
+	result.Metrics["anomalies_auto_applied"] = autoApplied
+
+	// Log results
+	fmt.Printf("[VIRTUAL EDGES] Results: total=%d, high=%d, medium=%d, related=%d, auto_applied_anomalies=%d\n",
+		edgeCounts.Total,
+		edgeCounts.ByBand["high"],
+		edgeCounts.ByBand["medium"],
+		edgeCounts.ByBand["related"],
+		autoApplied)
+
+	// Validation: check if virtual edges were created when auto-apply is enabled
+	if edgeCounts.Total == 0 && autoApplied == 0 {
+		// This could be expected if no semantic gaps met the auto-apply threshold
+		fmt.Println("[VIRTUAL EDGES] No virtual edges created - this may be expected if no gaps met auto-apply threshold (similarity >= 0.85, distance >= 4)")
+	} else if edgeCounts.Total > 0 {
+		fmt.Printf("[VIRTUAL EDGES] Success: %d virtual edges created from semantic gaps\n", edgeCounts.Total)
+	}
+
+	// Warn if there's a mismatch between auto-applied anomalies and virtual edges
+	// Note: The counts may not match exactly because edges are created in PREDICATE_INDEX
+	// as a side effect of the triple being added, while auto_applied status is on anomalies
+	if autoApplied > 0 && edgeCounts.Total == 0 {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Anomalies marked auto_applied (%d) but no virtual edges found in PREDICATE_INDEX", autoApplied))
 	}
 
 	return nil

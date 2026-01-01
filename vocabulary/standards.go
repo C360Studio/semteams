@@ -50,6 +50,21 @@ const (
 	// SkosNotation provides a notation (code or identifier) within a concept scheme.
 	// Used for: AliasTypeAlternate
 	SkosNotation = "http://www.w3.org/2004/02/skos/core#notation"
+
+	// SkosBroader indicates a hierarchical link to a more general concept.
+	// Used for: hierarchy.*.member predicates (entity → container membership)
+	// Example: sensor-001 skos:broader temperature-group (sensor is narrower than group)
+	SkosBroader = "http://www.w3.org/2004/02/skos/core#broader"
+
+	// SkosNarrower indicates a hierarchical link to a more specific concept.
+	// Inverse of SkosBroader.
+	// Example: temperature-group skos:narrower sensor-001 (group contains sensor)
+	SkosNarrower = "http://www.w3.org/2004/02/skos/core#narrower"
+
+	// SkosRelated indicates an associative (non-hierarchical) link between concepts.
+	// Used for: hierarchy.type.sibling predicates (symmetric relationship)
+	// Example: sensor-001 skos:related sensor-002 (siblings in same type group)
+	SkosRelated = "http://www.w3.org/2004/02/skos/core#related"
 )
 
 // RDF Schema Standard IRIs

@@ -272,6 +272,7 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"test-graphrag-global", s.executeTestGraphRAGGlobal, []string{"semantic"}},
 		{"validate-llm-enhancement", s.executeValidateLLMEnhancement, []string{"semantic"}},
 		{"validate-anomaly-detection", s.executeValidateAnomalyDetection, []string{"semantic"}},
+		{"validate-virtual-edges", s.executeValidateVirtualEdges, []string{"semantic"}},
 
 		// Wait for rule evaluations to stabilize (semantic tier only)
 		// Semantic tier's neural embeddings are slower, so rule evaluations via KV watch
