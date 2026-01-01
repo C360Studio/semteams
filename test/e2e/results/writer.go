@@ -30,7 +30,7 @@ type TestRun struct {
 
 // TestRunConfig captures the configuration for a test run
 type TestRunConfig struct {
-	Variant    string   `json:"variant"` // "core" or "ml"
+	Variant    string   `json:"variant"` // "structural", "statistical", or "semantic"
 	MLEnabled  bool     `json:"ml_enabled"`
 	Scenarios  []string `json:"scenarios"`
 	BaseURL    string   `json:"base_url"`

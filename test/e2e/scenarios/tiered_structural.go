@@ -852,12 +852,14 @@ func (s *TieredScenario) executeTestPathRAGBoundary(ctx context.Context, result 
 	gatewayURL := s.config.GraphQLURL
 
 	// Query with tight bounds to verify maxNodes is respected
+	// Note: maxNodes=5 accounts for hierarchy container edges in statistical/semantic tiers
+	// where temp-sensor-001 → skos:broader → temperature.group.container → skos:narrower → siblings
 	graphqlQuery := map[string]any{
 		"query": `query($startEntity: ID!, $maxDepth: Int, $maxNodes: Int) {
 			pathSearch(startEntity: $startEntity, maxDepth: $maxDepth, maxNodes: $maxNodes) {
 				entities { id type score } paths { from predicate to } truncated
 			}}`,
-		"variables": map[string]any{"startEntity": startEntity, "maxDepth": 2, "maxNodes": 3},
+		"variables": map[string]any{"startEntity": startEntity, "maxDepth": 2, "maxNodes": 5},
 	}
 
 	queryJSON, err := json.Marshal(graphqlQuery)
@@ -901,7 +903,7 @@ func (s *TieredScenario) executeTestPathRAGBoundary(ctx context.Context, result 
 	// Note: maxNodes refers to traversal nodes, but start entity is always included
 	// So total entities = start entity (1) + up to maxNodes traversed nodes
 	entityCount := len(graphqlResp.Data.PathSearch.Entities)
-	maxNodes := 3
+	maxNodes := 5
 	expectedMax := maxNodes + 1 // +1 for start entity which is always included
 
 	result.Metrics["pathrag_boundary_entities"] = entityCount

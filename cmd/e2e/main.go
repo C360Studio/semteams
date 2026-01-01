@@ -88,7 +88,7 @@ type cliFlags struct {
 	showVersion   bool
 	listScenarios bool
 	// Tiered test variant flags
-	variant      string // "core" or "ml"
+	variant      string // "structural", "statistical", or "semantic"
 	outputDir    string // Directory for results output
 	compare      bool   // Generate comparison report from existing results
 	compareTiers bool   // Generate tier comparison report (0 vs 1 vs 2)
@@ -313,13 +313,6 @@ func createScenario(
 				cfg.Variant = flags.scenarioName
 			}
 		}
-		// Map legacy variant names
-		switch cfg.Variant {
-		case "core":
-			cfg.Variant = "statistical"
-		case "ml":
-			cfg.Variant = "semantic"
-		}
 		// Set GraphQL URL based on variant (different ports per docker profile)
 		// Also set longer timeout for semantic tier (neural embeddings are slower)
 		switch cfg.Variant {
@@ -535,10 +528,9 @@ func handleCompareCommand(logger *slog.Logger, outputDir string) int {
 			continue
 		}
 
-		// Support both old (core/ml) and new (statistical/semantic) variant names
-		if (run.Config.Variant == "statistical" || run.Config.Variant == "core") && statisticalRun == nil {
+		if run.Config.Variant == "statistical" && statisticalRun == nil {
 			statisticalRun = run
-		} else if (run.Config.Variant == "semantic" || run.Config.Variant == "ml") && semanticRun == nil {
+		} else if run.Config.Variant == "semantic" && semanticRun == nil {
 			semanticRun = run
 		}
 

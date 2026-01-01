@@ -238,7 +238,10 @@ func (w *Worker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
 
 	if sourceText == "" {
 		w.logger.Debug("No source text found, skipping embedding", "entity_id", entityID)
-		w.markFailed(entityID, "no source text found")
+		// Not a failure - just nothing to embed. Remove pending record.
+		if err := w.storage.DeleteEmbedding(w.ctx, entityID); err != nil {
+			w.logger.Debug("Failed to delete pending record for entity with no text", "entity_id", entityID, "error", err)
+		}
 		return
 	}
 
@@ -371,6 +374,12 @@ func (w *Worker) extractTextFromContent(stored *objectstore.StoredContent, conte
 
 // markFailed marks an embedding as failed
 func (w *Worker) markFailed(entityID, errorMsg string) {
+	// Don't count context cancellation (shutdown) as a failure
+	if strings.Contains(errorMsg, "context canceled") {
+		w.logger.Debug("Skipping failure metric for context cancellation", "entity_id", entityID)
+		return
+	}
+
 	if err := w.storage.SaveFailed(w.ctx, entityID, errorMsg); err != nil {
 		w.logger.Error("Failed to mark embedding as failed", "entity_id", entityID, "error", err)
 	}

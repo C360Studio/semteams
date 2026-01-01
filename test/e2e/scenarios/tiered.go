@@ -2248,16 +2248,6 @@ func (s *TieredScenario) detectVariantAndProvider(result *Result) variantInfo {
 		}
 	}
 
-	// Legacy mapping for backwards compatibility
-	// Map old "core" to "statistical" and "ml" to "semantic"
-	if s.config.Variant == "core" {
-		info.variant = "statistical"
-		result.Details["legacy_variant_mapped"] = "core -> statistical"
-	} else if s.config.Variant == "ml" {
-		info.variant = "semantic"
-		result.Details["legacy_variant_mapped"] = "ml -> semantic"
-	}
-
 	// Cache the result for future calls
 	s.detectedVariant = &info
 

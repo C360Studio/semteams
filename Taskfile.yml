@@ -76,14 +76,14 @@ tasks:
       - 'echo ""'
       - 'echo "=== STATISTICAL (BM25 + LPA) ==="'
       - docker compose -f docker/compose/tiered.yml --profile statistical up -d --wait
-      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant core --output-dir ./test/e2e/results
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant statistical --output-dir ./test/e2e/results
         ignore_error: true
       - docker compose -f docker/compose/tiered.yml --profile statistical down -v --timeout 15
       - sleep 3
       - 'echo ""'
       - 'echo "=== SEMANTIC (Neural + LLM) ==="'
       - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
-      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant ml --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant semantic --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
         ignore_error: true
       - docker compose -f docker/compose/tiered.yml --profile semantic down -v --timeout 15
       - 'echo ""'
