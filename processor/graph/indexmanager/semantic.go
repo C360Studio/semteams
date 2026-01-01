@@ -229,6 +229,11 @@ func (m *Manager) initializeCachesAndStorage(buckets map[string]jetstream.KeyVal
 				}
 			})
 
+		// Wire up embedding worker metrics for observability
+		if metricsAdapter := NewEmbeddingWorkerMetricsAdapter(m.promMetrics); metricsAdapter != nil {
+			m.embeddingWorker.WithMetrics(metricsAdapter)
+		}
+
 		// Configure content store for ContentStorable pattern (if bucket specified)
 		if m.config.Embedding.ContentStoreBucket != "" && m.natsClient != nil {
 			contentStoreCfg := objectstore.Config{

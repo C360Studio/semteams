@@ -13,6 +13,7 @@ import (
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/vocabulary"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // HierarchyInference creates membership edges to container entities based on
@@ -52,6 +53,16 @@ type HierarchyInference struct {
 	containersCreated atomic.Int64
 	edgesCreated      atomic.Int64
 	edgesFailed       atomic.Int64
+
+	// KV Watcher lifecycle (follows ReviewWorker pattern)
+	entityBucket jetstream.KeyValue // ENTITY_STATES bucket
+	watcher      jetstream.KeyWatcher
+	workerCount  int
+	ctx          context.Context
+	cancel       context.CancelFunc
+	wg           sync.WaitGroup
+	mu           sync.RWMutex
+	started      bool
 }
 
 // EntityManager provides entity existence checks and creation.
@@ -94,11 +105,13 @@ func DefaultHierarchyConfig() HierarchyConfig {
 // Parameters:
 //   - entityManager: Component for entity existence checks and creation
 //   - tripleAdder: Component that can add triples (typically DataManager)
+//   - entityBucket: ENTITY_STATES KV bucket to watch for new entities
 //   - config: Configuration for edge creation
 //   - logger: Logger for observability (can be nil)
 func NewHierarchyInference(
 	entityManager EntityManager,
 	tripleAdder TripleAdder,
+	entityBucket jetstream.KeyValue,
 	config HierarchyConfig,
 	logger *slog.Logger,
 ) *HierarchyInference {
@@ -109,9 +122,11 @@ func NewHierarchyInference(
 	return &HierarchyInference{
 		entityManager:  entityManager,
 		tripleAdder:    tripleAdder,
+		entityBucket:   entityBucket,
 		config:         config,
 		logger:         logger,
 		containerCache: make(map[string]bool),
+		workerCount:    2, // Default: 2 workers for hierarchy inference
 	}
 }
 
@@ -298,4 +313,129 @@ func (h *HierarchyInference) GetCacheStats() int {
 	defer h.containerCacheMu.RUnlock()
 
 	return len(h.containerCache)
+}
+
+// Start begins watching ENTITY_STATES for new entities and creating hierarchy edges.
+// Follows the ReviewWorker pattern for independent KV watching.
+func (h *HierarchyInference) Start(ctx context.Context) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if h.started {
+		return nil // Idempotent
+	}
+
+	if !h.config.Enabled {
+		h.logger.Debug("Hierarchy inference disabled, not starting watcher")
+		return nil
+	}
+
+	if h.entityBucket == nil {
+		h.logger.Warn("No entity bucket provided, hierarchy inference cannot start")
+		return nil
+	}
+
+	h.ctx, h.cancel = context.WithCancel(ctx)
+
+	// Create KV watcher on ENTITY_STATES
+	watcher, err := h.entityBucket.WatchAll(h.ctx)
+	if err != nil {
+		h.cancel()
+		return errors.Join(errors.New("failed to create entity watcher"), err)
+	}
+	h.watcher = watcher
+
+	// Start worker goroutines
+	for i := 0; i < h.workerCount; i++ {
+		h.wg.Add(1)
+		go h.processEntities(i)
+	}
+
+	h.started = true
+	h.logger.Info("Hierarchy inference started with KV watcher",
+		"workers", h.workerCount,
+		"create_type_edges", h.config.CreateTypeEdges,
+		"create_system_edges", h.config.CreateSystemEdges,
+		"create_domain_edges", h.config.CreateDomainEdges)
+
+	return nil
+}
+
+// Stop gracefully shuts down the hierarchy inference worker.
+func (h *HierarchyInference) Stop() error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	if !h.started {
+		return nil // Idempotent
+	}
+
+	if h.cancel != nil {
+		h.cancel()
+	}
+
+	if h.watcher != nil {
+		_ = h.watcher.Stop()
+	}
+
+	h.wg.Wait()
+	h.started = false
+
+	containersCreated, edgesCreated, edgesFailed := h.GetMetrics()
+	h.logger.Info("Hierarchy inference stopped",
+		"containers_created", containersCreated,
+		"edges_created", edgesCreated,
+		"edges_failed", edgesFailed)
+
+	return nil
+}
+
+// processEntities is the worker loop that watches for new entities.
+// Follows the ReviewWorker pattern for independent KV watching.
+//
+// On startup, WatchAll() delivers all existing entries first (backfill),
+// then continues with live updates. The container cache ensures idempotency -
+// entities that already have hierarchy edges will be skipped efficiently.
+func (h *HierarchyInference) processEntities(workerID int) {
+	defer h.wg.Done()
+
+	h.logger.Debug("Hierarchy inference worker started", "worker_id", workerID)
+
+	for {
+		select {
+		case <-h.ctx.Done():
+			h.logger.Debug("Hierarchy inference worker stopping", "worker_id", workerID)
+			return
+
+		case entry, ok := <-h.watcher.Updates():
+			if !ok {
+				h.logger.Debug("Hierarchy inference watcher closed", "worker_id", workerID)
+				return
+			}
+
+			// Skip nil entries (initial watcher marker)
+			if entry == nil {
+				continue
+			}
+
+			// Skip deleted entries
+			if entry.Operation() == jetstream.KeyValueDelete {
+				continue
+			}
+
+			entityID := entry.Key()
+
+			// Process entity - the container cache ensures idempotency.
+			// Existing entities will short-circuit if containers already exist.
+			// This handles both:
+			// 1. Initial backfill (existing entities when watcher starts)
+			// 2. Live creates (new entities added after watcher starts)
+			if err := h.OnEntityCreated(h.ctx, entityID); err != nil {
+				h.logger.Debug("Hierarchy inference skipped entity",
+					"worker_id", workerID,
+					"entity_id", entityID,
+					"error", err)
+			}
+		}
+	}
 }

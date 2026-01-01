@@ -508,6 +508,149 @@ func (s *TieredScenario) executeValidateVirtualEdges(ctx context.Context, result
 //   ./e2e --compare-structured --baseline results/statistical.json --target results/semantic.json
 // Community data is captured in structured results by executeValidateCommunityStructure.
 
+// validateEmbeddingQueueHealth validates that the embedding queue has drained and no failures occurred.
+// This function should be called after executeWaitForEmbeddings to verify queue health.
+// Phase 4: Added to ensure embedding pipeline is fully complete before proceeding.
+func (s *TieredScenario) validateEmbeddingQueueHealth(ctx context.Context, result *Result) error {
+	fmt.Println("[EMBEDDING QUEUE] Validating embedding queue health...")
+
+	// Fetch embedding queue metrics from Prometheus using SumMetricsByName
+	// These metrics may not exist yet if the new Prometheus metrics haven't been deployed
+	pending, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_pending")
+	failed, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_failed_total")
+	queued, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_queued_total")
+	dedupHits, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embedding_dedup_hits_total")
+	generated, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_generated_total")
+
+	// Record metrics for structured results
+	result.Metrics["embedding_queued_total"] = int64(queued)
+	result.Metrics["embedding_generated_total"] = int64(generated)
+	result.Metrics["embedding_dedup_hits"] = int64(dedupHits)
+	result.Metrics["embedding_failed_total"] = int64(failed)
+	result.Metrics["embedding_pending_count"] = int64(pending)
+
+	// Log queue stats for observability
+	fmt.Printf("[EMBEDDING QUEUE] Stats: queued=%.0f, generated=%.0f, dedup_hits=%.0f, failed=%.0f, pending=%.0f\n",
+		queued, generated, dedupHits, failed, pending)
+
+	// Validate queue is drained
+	if pending > 0 {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Embedding queue not fully drained: %.0f pending items", pending))
+	}
+
+	// Validate no failures
+	if failed > 0 {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Embedding failures detected: %.0f failed", failed))
+	}
+
+	// Calculate and log dedup efficiency
+	if queued > 0 {
+		dedupRate := dedupHits / queued * 100
+		fmt.Printf("[EMBEDDING QUEUE] Dedup efficiency: %.1f%% (%.0f hits / %.0f queued)\n",
+			dedupRate, dedupHits, queued)
+	}
+
+	result.Details["embedding_queue_health"] = map[string]any{
+		"queued_total":    queued,
+		"generated_total": generated,
+		"dedup_hits":      dedupHits,
+		"failed_total":    failed,
+		"pending_count":   pending,
+		"queue_drained":   pending == 0,
+		"no_failures":     failed == 0,
+	}
+
+	if pending == 0 && failed == 0 {
+		fmt.Println("[EMBEDDING QUEUE] Health check passed: queue drained, no failures")
+	}
+
+	return nil
+}
+
+// validateHierarchyInference validates that hierarchy inference is creating container entities.
+// This validates that the KV watcher pattern (Phase 3 refactor) is working correctly.
+// Phase 4: Added to verify hierarchy container creation from ENTITY_STATES watcher.
+func (s *TieredScenario) validateHierarchyInference(ctx context.Context, result *Result) error {
+	if s.natsClient == nil {
+		result.Warnings = append(result.Warnings, "NATS client not available, skipping hierarchy inference validation")
+		return nil
+	}
+
+	fmt.Println("[HIERARCHY] Validating hierarchy inference container creation...")
+
+	// Get all entity IDs from ENTITY_STATES bucket
+	allIDs, err := s.natsClient.GetAllEntityIDs(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get entity IDs: %v", err))
+		return nil
+	}
+
+	// Count containers and source entities (non-container entities from testdata)
+	containerCount := 0
+	sourceEntityCount := 0
+	containerTypes := make(map[string]int)
+
+	for _, id := range allIDs {
+		if isContainerEntity(id) {
+			containerCount++
+			// Track container types by suffix
+			if strings.HasSuffix(id, ".group.container.level") {
+				containerTypes["level"]++
+			} else if strings.HasSuffix(id, ".group.container") {
+				containerTypes["container"]++
+			} else if strings.HasSuffix(id, ".group") {
+				containerTypes["group"]++
+			}
+		} else {
+			sourceEntityCount++
+		}
+	}
+
+	// Expected minimum containers based on source entities
+	// Rule of thumb: ~40-70% as many containers as source entities due to hierarchical grouping
+	expectedMinContainers := sourceEntityCount * 4 / 10 // 40% minimum
+
+	// Record metrics for structured results
+	result.Metrics["hierarchy_container_count"] = containerCount
+	result.Metrics["hierarchy_source_entity_count"] = sourceEntityCount
+	result.Metrics["hierarchy_expected_min_containers"] = expectedMinContainers
+
+	// Log results
+	fmt.Printf("[HIERARCHY] Found %d containers, %d source entities (expected min containers: %d)\n",
+		containerCount, sourceEntityCount, expectedMinContainers)
+	fmt.Printf("[HIERARCHY] Container types: group=%d, container=%d, level=%d\n",
+		containerTypes["group"], containerTypes["container"], containerTypes["level"])
+
+	// Validation: check if hierarchy inference is working
+	if containerCount < expectedMinContainers {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Hierarchy inference may not be working: only %d containers for %d source entities (expected at least %d)",
+				containerCount, sourceEntityCount, expectedMinContainers))
+	} else {
+		fmt.Printf("[HIERARCHY] Success: hierarchy inference validated (%d containers created)\n", containerCount)
+	}
+
+	result.Details["hierarchy_inference"] = map[string]any{
+		"container_count":         containerCount,
+		"source_entity_count":     sourceEntityCount,
+		"expected_min_containers": expectedMinContainers,
+		"inference_working":       containerCount >= expectedMinContainers,
+		"container_types":         containerTypes,
+	}
+
+	return nil
+}
+
+// isContainerEntity checks if an entity ID represents a hierarchy container.
+// Container entities are auto-created by HierarchyInference and have specific suffixes.
+func isContainerEntity(entityID string) bool {
+	return strings.HasSuffix(entityID, ".group") ||
+		strings.HasSuffix(entityID, ".group.container") ||
+		strings.HasSuffix(entityID, ".group.container.level")
+}
+
 // wordJaccard calculates Jaccard similarity on word sets
 func wordJaccard(a, b string) float64 {
 	wordsA := toWordSet(strings.ToLower(a))

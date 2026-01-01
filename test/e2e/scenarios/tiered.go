@@ -225,6 +225,14 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		// This ensures all entities have completed the embedding pipeline before validation
 		{"wait-for-embeddings", s.executeWaitForEmbeddings, []string{"statistical", "semantic"}},
 
+		// Phase 4: Validate embedding queue health after waiting for embeddings
+		// Ensures queue is drained and no failures occurred before proceeding
+		{"validate-embedding-queue-health", s.validateEmbeddingQueueHealth, []string{"statistical", "semantic"}},
+
+		// Phase 4: Validate hierarchy inference is creating container entities
+		// Verifies the KV watcher pattern from Phase 3 is working correctly
+		{"validate-hierarchy-inference", s.validateHierarchyInference, []string{"statistical", "semantic"}},
+
 		// Wait for entity stabilization (structural tier only)
 		// Structural tier doesn't wait for embeddings, so we need to wait for entity count to stabilize
 		{"wait-for-entity-stabilization", s.executeWaitForEntityStabilization, []string{"structural"}},
@@ -1297,6 +1305,11 @@ func (s *TieredScenario) executeValidateMetrics(_ context.Context, result *Resul
 		"indexengine_embeddings_generated_total", // Embedding generation count
 		"semstreams_json_filter_matched_total",   // JSON filter matched messages
 		"semstreams_json_filter_dropped_total",   // JSON filter dropped messages
+		// Phase 4: Embedding queue observability metrics
+		"indexengine_embeddings_queued_total",    // Total embeddings sent to queue
+		"indexengine_embeddings_pending",         // Current pending embeddings in queue
+		"indexengine_embedding_dedup_hits_total", // Embeddings deduplicated (reused)
+		"indexengine_embeddings_failed_total",    // Failed embedding generations
 	}
 
 	foundRequired := make(map[string]bool)

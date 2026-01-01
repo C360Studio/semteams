@@ -539,6 +539,12 @@
               "pivot_count": 16,
               "max_hop_distance": 10
             }
+          },
+          "hierarchy_inference": {
+            "enabled": true,
+            "create_type_edges": true,
+            "create_system_edges": true,
+            "create_domain_edges": true
           }
         },
         "gateway": {

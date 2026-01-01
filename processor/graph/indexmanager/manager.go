@@ -82,8 +82,8 @@ type Manager struct {
 	// Logger
 	logger *slog.Logger
 
-	// Entity creation callback for hierarchy inference
-	onEntityCreated EntityCreatedCallback
+	// Note: Entity creation callback removed - HierarchyInference now uses its own
+	// KV watcher on ENTITY_STATES for better decoupling.
 }
 
 // Embedder interface from embedding package (re-declared here to avoid import cycle)
@@ -717,15 +717,8 @@ func (m *Manager) processEntityChange(ctx context.Context, event EntityChange) e
 		}
 	}
 
-	// Invoke entity created callback for hierarchy inference (after indexes are updated)
-	if event.Operation == OperationCreate {
-		m.mu.RLock()
-		callback := m.onEntityCreated
-		m.mu.RUnlock()
-		if callback != nil {
-			callback(ctx, event.Key)
-		}
-	}
+	// Note: Entity created callback removed - HierarchyInference now uses its own
+	// KV watcher on ENTITY_STATES for better decoupling and async processing.
 
 	// Queue embeddings asynchronously if storage is available
 	if m.embeddingStorage != nil &&
@@ -798,6 +791,11 @@ func (m *Manager) queueEmbeddingGeneration(ctx context.Context, entityID string,
 		return errs.WrapTransient(err, "IndexManager", "queueEmbeddingGeneration", "failed to queue embedding")
 	}
 
+	// Record queued metric
+	if m.promMetrics != nil {
+		m.promMetrics.embeddingsQueued.Inc()
+	}
+
 	m.logger.Debug("Queued embedding for async generation",
 		"entity_id", entityID,
 		"message_type", state.MessageType,
@@ -828,6 +826,11 @@ func (m *Manager) queueEmbeddingWithStorageRef(ctx context.Context, entityID str
 	// Write pending record with StorageRef - worker will fetch content and generate embedding
 	if err := m.embeddingStorage.SavePendingWithStorageRef(ctx, entityID, contentHash, storageRef, nil); err != nil {
 		return errs.WrapTransient(err, "IndexManager", "queueEmbeddingWithStorageRef", "failed to queue embedding")
+	}
+
+	// Record queued metric
+	if m.promMetrics != nil {
+		m.promMetrics.embeddingsQueued.Inc()
 	}
 
 	m.logger.Debug("Queued embedding with storage reference",
@@ -1839,13 +1842,8 @@ func (m *Manager) PreWarmVectorCache(ctx context.Context) error {
 	return nil
 }
 
-// SetOnEntityCreatedCallback sets a callback to be invoked when an entity is created.
-// Used by HierarchyInference to create sibling edges at entity creation time.
-func (m *Manager) SetOnEntityCreatedCallback(callback EntityCreatedCallback) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.onEntityCreated = callback
-}
+// Note: SetOnEntityCreatedCallback removed - HierarchyInference now uses its own
+// KV watcher on ENTITY_STATES for better decoupling and async processing.
 
 // GetAllEntityIDs returns all entity IDs from the ENTITY_STATES bucket.
 // Used by HierarchyInference to discover siblings for new entities.

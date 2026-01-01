@@ -19,6 +19,17 @@ import (
 // The callback receives the entity ID and the generated embedding vector.
 type GeneratedCallback func(entityID string, embedding []float32)
 
+// WorkerMetrics provides metrics callbacks for embedding worker operations.
+// This allows the worker to report metrics without direct dependency on prometheus.
+type WorkerMetrics interface {
+	// IncDedupHits increments the deduplication hits counter
+	IncDedupHits()
+	// IncFailed increments the failed embeddings counter
+	IncFailed()
+	// SetPending sets the current pending embeddings gauge
+	SetPending(count float64)
+}
+
 // Worker processes pending embedding requests asynchronously
 type Worker struct {
 	mu sync.RWMutex
@@ -36,6 +47,9 @@ type Worker struct {
 
 	// Callbacks
 	onGenerated GeneratedCallback // Called when embedding is generated
+
+	// Metrics
+	metrics WorkerMetrics // Optional metrics reporter
 
 	// State
 	started  bool
@@ -89,6 +103,12 @@ func (w *Worker) WithContentStore(store *objectstore.Store) *Worker {
 // Use this to populate caches or trigger downstream processing.
 func (w *Worker) WithOnGenerated(cb GeneratedCallback) *Worker {
 	w.onGenerated = cb
+	return w
+}
+
+// WithMetrics sets the metrics reporter for observability.
+func (w *Worker) WithMetrics(m WorkerMetrics) *Worker {
+	w.metrics = m
 	return w
 }
 
@@ -236,6 +256,9 @@ func (w *Worker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
 		// Reuse existing embedding
 		w.logger.Debug("Deduplicating embedding", "entity_id", entityID, "content_hash", record.ContentHash)
 		vector = dedupRecord.Vector
+		if w.metrics != nil {
+			w.metrics.IncDedupHits()
+		}
 	} else {
 		// Generate new embedding
 		w.logger.Debug("Generating new embedding", "entity_id", entityID)
@@ -350,5 +373,8 @@ func (w *Worker) extractTextFromContent(stored *objectstore.StoredContent, conte
 func (w *Worker) markFailed(entityID, errorMsg string) {
 	if err := w.storage.SaveFailed(w.ctx, entityID, errorMsg); err != nil {
 		w.logger.Error("Failed to mark embedding as failed", "entity_id", entityID, "error", err)
+	}
+	if w.metrics != nil {
+		w.metrics.IncFailed()
 	}
 }

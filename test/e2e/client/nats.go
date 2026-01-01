@@ -301,6 +301,28 @@ func (c *NATSValidationClient) GetEntitySample(ctx context.Context, limit int) (
 	return entities, nil
 }
 
+// GetAllEntityIDs returns all entity IDs from ENTITY_STATES bucket.
+// Used for hierarchy inference validation in E2E tests (Phase 4).
+func (c *NATSValidationClient) GetAllEntityIDs(ctx context.Context) ([]string, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, BucketEntityStates)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get entity states bucket: %w", err)
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		if isNoKeysError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list entity keys: %w", err)
+	}
+
+	return keys, nil
+}
+
 // IndexBuckets defines the standard index bucket names
 var IndexBuckets = struct {
 	EntityStates  string

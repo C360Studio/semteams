@@ -56,6 +56,12 @@ type PrometheusMetrics struct {
 	embeddingFallbacks       prometheus.Counter // HTTP → BM25 fallback events
 	embeddingsActive         prometheus.Gauge   // Current count in L1 cache
 	embeddingTextExtractions prometheus.Counter // Total text extractions
+
+	// Embedding queue observability metrics
+	embeddingsPending  prometheus.Gauge   // Current pending in queue
+	embeddingsQueued   prometheus.Counter // Total queued
+	embeddingDedupHits prometheus.Counter // Deduplication hits
+	embeddingsFailed   prometheus.Counter // Failed generations
 }
 
 // NewPrometheusMetrics creates a new PrometheusMetrics instance using MetricsRegistry
@@ -103,6 +109,10 @@ func NewPrometheusMetrics(component string, registry *metric.MetricsRegistry) *P
 		embeddingFallbacks:       embeddingMetrics.fallbacks,
 		embeddingsActive:         embeddingMetrics.active,
 		embeddingTextExtractions: embeddingMetrics.textExtractions,
+		embeddingsPending:        embeddingMetrics.pending,
+		embeddingsQueued:         embeddingMetrics.queued,
+		embeddingDedupHits:       embeddingMetrics.dedupHits,
+		embeddingsFailed:         embeddingMetrics.failed,
 	}
 }
 
@@ -346,9 +356,9 @@ func createQueryMetrics(component string, registry *metric.MetricsRegistry) *que
 
 // embeddingMetricsSet holds embedding-related metrics
 type embeddingMetricsSet struct {
-	provider, active                             prometheus.Gauge
+	provider, active, pending                    prometheus.Gauge
 	generated, cacheHits, cacheMisses, fallbacks prometheus.Counter
-	textExtractions                              prometheus.Counter
+	textExtractions, queued, dedupHits, failed   prometheus.Counter
 	latency                                      prometheus.Histogram
 }
 
@@ -411,6 +421,35 @@ func createEmbeddingMetrics(component string, registry *metric.MetricsRegistry) 
 	})
 	registry.RegisterCounter("indexengine", "embedding_text_extractions_total", embeddingTextExtractions)
 
+	// Queue observability metrics
+	embeddingsPending := prometheus.NewGauge(prometheus.GaugeOpts{
+		Name:        "indexengine_embeddings_pending",
+		Help:        "Current number of pending embeddings in queue",
+		ConstLabels: prometheus.Labels{"component": component},
+	})
+	registry.RegisterGauge("indexengine", "embeddings_pending", embeddingsPending)
+
+	embeddingsQueued := prometheus.NewCounter(prometheus.CounterOpts{
+		Name:        "indexengine_embeddings_queued_total",
+		Help:        "Total embeddings sent to queue",
+		ConstLabels: prometheus.Labels{"component": component},
+	})
+	registry.RegisterCounter("indexengine", "embeddings_queued_total", embeddingsQueued)
+
+	embeddingDedupHits := prometheus.NewCounter(prometheus.CounterOpts{
+		Name:        "indexengine_embedding_dedup_hits_total",
+		Help:        "Embeddings deduplicated (reused existing vector)",
+		ConstLabels: prometheus.Labels{"component": component},
+	})
+	registry.RegisterCounter("indexengine", "embedding_dedup_hits_total", embeddingDedupHits)
+
+	embeddingsFailed := prometheus.NewCounter(prometheus.CounterOpts{
+		Name:        "indexengine_embeddings_failed_total",
+		Help:        "Total failed embedding generations",
+		ConstLabels: prometheus.Labels{"component": component},
+	})
+	registry.RegisterCounter("indexengine", "embeddings_failed_total", embeddingsFailed)
+
 	return &embeddingMetricsSet{
 		provider:        embeddingProvider,
 		generated:       embeddingsGenerated,
@@ -420,6 +459,10 @@ func createEmbeddingMetrics(component string, registry *metric.MetricsRegistry) 
 		fallbacks:       embeddingFallbacks,
 		active:          embeddingsActive,
 		textExtractions: embeddingTextExtractions,
+		pending:         embeddingsPending,
+		queued:          embeddingsQueued,
+		dedupHits:       embeddingDedupHits,
+		failed:          embeddingsFailed,
 	}
 }
 
@@ -617,4 +660,40 @@ func (m *InternalMetrics) Reset() {
 	m.lastSuccess = time.Now()
 	m.lastError = time.Time{}
 	m.lastProcessed = time.Time{}
+}
+
+// EmbeddingWorkerMetricsAdapter adapts PrometheusMetrics to the embedding.WorkerMetrics interface.
+// This allows the embedding worker to report metrics without a direct prometheus dependency.
+type EmbeddingWorkerMetricsAdapter struct {
+	prom *PrometheusMetrics
+}
+
+// NewEmbeddingWorkerMetricsAdapter creates a new adapter for embedding worker metrics.
+// Returns nil if promMetrics is nil (metrics disabled).
+func NewEmbeddingWorkerMetricsAdapter(promMetrics *PrometheusMetrics) *EmbeddingWorkerMetricsAdapter {
+	if promMetrics == nil {
+		return nil
+	}
+	return &EmbeddingWorkerMetricsAdapter{prom: promMetrics}
+}
+
+// IncDedupHits increments the deduplication hits counter
+func (a *EmbeddingWorkerMetricsAdapter) IncDedupHits() {
+	if a.prom != nil && a.prom.embeddingDedupHits != nil {
+		a.prom.embeddingDedupHits.Inc()
+	}
+}
+
+// IncFailed increments the failed embeddings counter
+func (a *EmbeddingWorkerMetricsAdapter) IncFailed() {
+	if a.prom != nil && a.prom.embeddingsFailed != nil {
+		a.prom.embeddingsFailed.Inc()
+	}
+}
+
+// SetPending sets the current pending embeddings gauge
+func (a *EmbeddingWorkerMetricsAdapter) SetPending(count float64) {
+	if a.prom != nil && a.prom.embeddingsPending != nil {
+		a.prom.embeddingsPending.Set(count)
+	}
 }

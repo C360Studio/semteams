@@ -565,7 +565,7 @@
             "semantic_gap": {
               "enabled": true,
               "min_semantic_similarity": 0.8,
-              "min_structural_distance": 4,
+              "min_structural_distance": 2,
               "max_gaps_per_entity": 3,
               "max_candidates_per_entity": 25
             },
@@ -583,7 +583,7 @@
               "auto_apply": {
                 "enabled": true,
                 "min_similarity": 0.8,
-                "min_structural_distance": 4,
+                "min_structural_distance": 2,
                 "predicate_template": "inferred.semantic.{band}"
               },
               "review_queue": {

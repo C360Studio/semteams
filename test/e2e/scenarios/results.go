@@ -56,6 +56,12 @@ type TieredResults struct {
 	// Output verification results
 	Outputs OutputResults `json:"outputs"`
 
+	// Embedding queue metrics (Phase 4 - statistical/semantic only)
+	Embeddings *EmbeddingMetrics `json:"embeddings,omitempty"`
+
+	// Hierarchy inference results (Phase 4 - statistical/semantic only)
+	Hierarchy *HierarchyResults `json:"hierarchy,omitempty"`
+
 	// Timing information
 	Timing TimingResults `json:"timing"`
 
@@ -197,6 +203,27 @@ type AnomalyResults struct {
 
 	// ByStatus contains counts by review status
 	ByStatus AnomalyStatusCounts `json:"by_status"`
+
+	// VirtualEdges contains counts of auto-applied semantic edges
+	VirtualEdges *VirtualEdgeResults `json:"virtual_edges,omitempty"`
+}
+
+// VirtualEdgeResults contains virtual edge creation metrics from semantic inference.
+type VirtualEdgeResults struct {
+	// Total is the total number of virtual edges created
+	Total int `json:"total"`
+
+	// High is count of edges with similarity >= 0.9
+	High int `json:"high"`
+
+	// Medium is count of edges with similarity >= 0.85
+	Medium int `json:"medium"`
+
+	// Related is count of edges with similarity >= 0.8
+	Related int `json:"related"`
+
+	// AutoApplied is count of anomalies with auto_applied status
+	AutoApplied int `json:"auto_applied"`
 }
 
 // AnomalyStatusCounts contains anomaly counts by review status.
@@ -204,6 +231,55 @@ type AnomalyStatusCounts struct {
 	Pending   int `json:"pending"`
 	Confirmed int `json:"confirmed"`
 	Dismissed int `json:"dismissed"`
+}
+
+// EmbeddingMetrics contains embedding queue health metrics (Phase 4).
+// These metrics provide visibility into the embedding pipeline flow.
+type EmbeddingMetrics struct {
+	// QueuedTotal is the total number of embeddings sent to the queue
+	QueuedTotal int64 `json:"queued_total"`
+
+	// GeneratedTotal is the total number of embeddings successfully generated
+	GeneratedTotal int64 `json:"generated_total"`
+
+	// DedupHits is the count of embeddings deduplicated (reused from cache)
+	DedupHits int64 `json:"dedup_hits"`
+
+	// FailedTotal is the count of failed embedding generations
+	FailedTotal int64 `json:"failed_total"`
+
+	// PendingCount is the current queue depth (should be 0 at test end)
+	PendingCount int64 `json:"pending_count"`
+
+	// DedupRate is the deduplication efficiency (dedupHits / queuedTotal)
+	DedupRate float64 `json:"dedup_rate,omitempty"`
+
+	// QueueDrained indicates if the queue was empty at validation time
+	QueueDrained bool `json:"queue_drained"`
+
+	// NoFailures indicates if there were zero failures
+	NoFailures bool `json:"no_failures"`
+}
+
+// HierarchyResults contains hierarchy inference validation results (Phase 4).
+// These validate that the KV watcher pattern is creating container entities.
+type HierarchyResults struct {
+	// ContainerCount is the number of hierarchy container entities detected
+	ContainerCount int `json:"container_count"`
+
+	// SourceEntityCount is the number of non-container entities (original testdata entities,
+	// not auto-created by hierarchy inference). Previously called "content entities" but
+	// renamed to avoid confusion with ContentStorable entities that have text for embeddings.
+	SourceEntityCount int `json:"source_entity_count"`
+
+	// ExpectedMinContainers is the minimum expected containers for the entity count
+	ExpectedMinContainers int `json:"expected_min_containers"`
+
+	// InferenceWorking indicates if hierarchy inference is creating containers
+	InferenceWorking bool `json:"inference_working"`
+
+	// ContainerTypes contains counts by container type suffix
+	ContainerTypes map[string]int `json:"container_types,omitempty"`
 }
 
 // BuildTieredResults creates a TieredResults from legacy Result data and search stats.
@@ -278,7 +354,8 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 	}
 
 	// Anomaly detection results (semantic only - uses k-core and pivot indexes)
-	if getIntMetric(result, "anomalies_total") > 0 || getIntMetric(result, "anomalies_semantic_gap") > 0 {
+	if getIntMetric(result, "anomalies_total") > 0 || getIntMetric(result, "anomalies_semantic_gap") > 0 ||
+		getIntMetric(result, "virtual_edges_total") > 0 {
 		tr.Anomalies = &AnomalyResults{
 			Total:         getIntMetric(result, "anomalies_total"),
 			SemanticGap:   getIntMetric(result, "anomalies_semantic_gap"),
@@ -290,6 +367,19 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 				Confirmed: getIntMetric(result, "anomalies_confirmed"),
 				Dismissed: getIntMetric(result, "anomalies_dismissed"),
 			},
+		}
+
+		// Add virtual edge metrics if any were recorded
+		virtualTotal := getIntMetric(result, "virtual_edges_total")
+		autoApplied := getIntMetric(result, "anomalies_auto_applied")
+		if virtualTotal > 0 || autoApplied > 0 {
+			tr.Anomalies.VirtualEdges = &VirtualEdgeResults{
+				Total:       virtualTotal,
+				High:        getIntMetric(result, "virtual_edges_high"),
+				Medium:      getIntMetric(result, "virtual_edges_medium"),
+				Related:     getIntMetric(result, "virtual_edges_related"),
+				AutoApplied: autoApplied,
+			}
 		}
 	}
 
@@ -376,6 +466,43 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 		FoundCount:    getIntMetric(result, "outputs_found"),
 	}
 
+	// Embedding queue metrics (Phase 4 - statistical/semantic only)
+	queuedTotal := getInt64Metric(result, "embedding_queued_total")
+	generatedTotal := getInt64Metric(result, "embedding_generated_total")
+	dedupHits := getInt64Metric(result, "embedding_dedup_hits")
+	failedTotal := getInt64Metric(result, "embedding_failed_total")
+	pendingCount := getInt64Metric(result, "embedding_pending_count")
+
+	if queuedTotal > 0 || generatedTotal > 0 {
+		dedupRate := 0.0
+		if queuedTotal > 0 {
+			dedupRate = float64(dedupHits) / float64(queuedTotal)
+		}
+		tr.Embeddings = &EmbeddingMetrics{
+			QueuedTotal:    queuedTotal,
+			GeneratedTotal: generatedTotal,
+			DedupHits:      dedupHits,
+			FailedTotal:    failedTotal,
+			PendingCount:   pendingCount,
+			DedupRate:      dedupRate,
+			QueueDrained:   pendingCount == 0,
+			NoFailures:     failedTotal == 0,
+		}
+	}
+
+	// Hierarchy inference results (Phase 4 - statistical/semantic only)
+	containerCount := getIntMetric(result, "hierarchy_container_count")
+	sourceEntityCount := getIntMetric(result, "hierarchy_source_entity_count")
+	if containerCount > 0 || sourceEntityCount > 0 {
+		expectedMinContainers := getIntMetric(result, "hierarchy_expected_min_containers")
+		tr.Hierarchy = &HierarchyResults{
+			ContainerCount:        containerCount,
+			SourceEntityCount:     sourceEntityCount,
+			ExpectedMinContainers: expectedMinContainers,
+			InferenceWorking:      containerCount >= expectedMinContainers,
+		}
+	}
+
 	// Extract stage durations from metrics
 	for key, val := range result.Metrics {
 		if len(key) > 12 && key[len(key)-12:] == "_duration_ms" {
@@ -405,6 +532,23 @@ func getIntMetric(r *Result, key string) int {
 			return int(val)
 		case float64:
 			return int(val)
+		}
+	}
+	return 0
+}
+
+func getInt64Metric(r *Result, key string) int64 {
+	if r.Metrics == nil {
+		return 0
+	}
+	if v, ok := r.Metrics[key]; ok {
+		switch val := v.(type) {
+		case int:
+			return int64(val)
+		case int64:
+			return val
+		case float64:
+			return int64(val)
 		}
 	}
 	return 0

@@ -839,6 +839,13 @@ func (p *Processor) startBackgroundModules(ctx context.Context) error {
 			}
 		}
 
+		// Launch hierarchy inference worker if configured (independent of community detection)
+		if p.hierarchyInference != nil {
+			g.Go(func() error {
+				return p.runHierarchyInference(gctx)
+			})
+		}
+
 		// Wait for modules to complete or error
 		err := g.Wait()
 		if err != nil && !stderrors.Is(err, context.Canceled) {
@@ -1909,79 +1916,35 @@ func (p *Processor) initializeHierarchyInference() {
 		return
 	}
 
-	// Create hierarchy inference component
+	// Get ENTITY_STATES bucket for KV watching
+	entityBucket, ok := p.clusteringBuckets["ENTITY_STATES"]
+	if !ok {
+		p.logger.Warn("ENTITY_STATES bucket not found, hierarchy inference cannot watch for entities")
+		entityBucket = nil // Will still create component but Start() will skip watching
+	}
+
+	// Create hierarchy inference component with KV watcher support
 	// DataManager implements EntityManager (ExistsEntity, CreateEntity) and TripleAdder
 	p.hierarchyInference = inference.NewHierarchyInference(
 		p.dataManager, // Implements EntityManager (ExistsEntity, CreateEntity)
 		p.dataManager, // Implements TripleAdder (AddTriple)
+		entityBucket,  // ENTITY_STATES bucket for KV watching
 		*cfg,
 		p.logger,
 	)
 
-	// Register callback with IndexManager for entity creation events
-	p.indexManager.SetOnEntityCreatedCallback(func(ctx context.Context, entityID string) {
-		if err := p.hierarchyInference.OnEntityCreated(ctx, entityID); err != nil {
-			p.logger.Warn("Hierarchy inference failed for entity",
-				"entity_id", entityID,
-				"error", err)
-		}
-	})
+	// Note: Start() is called in startBackgroundModules() after all initialization is complete.
+	// The KV watcher pattern replaces the callback-based approach for better decoupling.
 
-	// Launch backfill in background to process entities that existed before this callback was registered
-	go p.backfillHierarchyEdges()
-
-	p.logger.Info("Hierarchy inference initialized",
+	p.logger.Info("Hierarchy inference initialized (watcher starts in background)",
 		"create_type_edges", cfg.CreateTypeEdges,
 		"create_system_edges", cfg.CreateSystemEdges,
 		"create_domain_edges", cfg.CreateDomainEdges)
 }
 
-// backfillHierarchyEdges processes entities that existed before hierarchy inference was initialized.
-// This handles the race condition where entities are created by upstream processors before the
-// graph processor's callback is registered.
-func (p *Processor) backfillHierarchyEdges() {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-
-	// Wait a moment for the system to stabilize
-	time.Sleep(2 * time.Second)
-
-	entityIDs, err := p.indexManager.GetAllEntityIDs(ctx)
-	if err != nil {
-		p.logger.Error("Failed to get entity IDs for hierarchy backfill", "error", err)
-		return
-	}
-
-	if len(entityIDs) == 0 {
-		p.logger.Debug("No entities to backfill for hierarchy inference")
-		return
-	}
-
-	p.logger.Info("Starting hierarchy container backfill", "entity_count", len(entityIDs))
-
-	processed := 0
-	for _, entityID := range entityIDs {
-		select {
-		case <-ctx.Done():
-			p.logger.Warn("Hierarchy backfill cancelled", "processed", processed, "total", len(entityIDs))
-			return
-		default:
-		}
-
-		if err := p.hierarchyInference.OnEntityCreated(ctx, entityID); err != nil {
-			p.logger.Debug("Hierarchy backfill skipped entity", "entity_id", entityID, "error", err)
-			continue
-		}
-		processed++
-	}
-
-	containersCreated, edgesCreated, _ := p.hierarchyInference.GetMetrics()
-	p.logger.Info("Hierarchy container backfill complete",
-		"entities_processed", len(entityIDs),
-		"with_memberships", processed,
-		"containers_created", containersCreated,
-		"edges_created", edgesCreated)
-}
+// Note: backfillHierarchyEdges removed - HierarchyInference's KV watcher now handles
+// backfill automatically. WatchAll() delivers existing entries first before live updates,
+// and the container cache ensures idempotency.
 
 // initializeEnhancementWorkerIfEnabled sets up the LLM enhancement worker.
 // Must be called AFTER assignManagers so p.queryManager is available.
@@ -2841,13 +2804,26 @@ func (p *Processor) checkEmbeddingCoverage(entityCount int) bool {
 		return true
 	}
 
+	// Get embeddable entity count (excluding hierarchy containers)
+	ctx := context.Background()
+	embeddableCount, err := p.getEmbeddableEntityCount(ctx)
+	if err != nil {
+		p.logger.Warn("Failed to get embeddable entity count, using total", "error", err)
+		embeddableCount = entityCount
+	}
+
+	if embeddableCount == 0 {
+		return true // No embeddable entities yet
+	}
+
 	embeddingCount := p.indexManager.GetEmbeddingCount()
-	coverage := float64(embeddingCount) / float64(entityCount)
+	coverage := float64(embeddingCount) / float64(embeddableCount)
 	minCoverage := p.getMinEmbeddingCoverage()
 
 	if coverage < minCoverage {
 		p.logger.Info("Skipping detection - waiting for embeddings",
-			"entities", entityCount,
+			"total_entities", entityCount,
+			"embeddable_entities", embeddableCount,
 			"embeddings", embeddingCount,
 			"coverage", fmt.Sprintf("%.1f%%", coverage*100),
 			"min_coverage", fmt.Sprintf("%.1f%%", minCoverage*100))
@@ -2855,10 +2831,36 @@ func (p *Processor) checkEmbeddingCoverage(entityCount int) bool {
 	}
 
 	p.logger.Info("Embedding coverage sufficient for semantic clustering",
-		"entities", entityCount,
+		"total_entities", entityCount,
+		"embeddable_entities", embeddableCount,
 		"embeddings", embeddingCount,
 		"coverage", fmt.Sprintf("%.1f%%", coverage*100))
 	return true
+}
+
+// isContainerEntity checks if an entity ID represents a hierarchy container.
+// Container entities have IDs ending in .group, .group.container, or .group.container.level
+func isContainerEntity(entityID string) bool {
+	return strings.HasSuffix(entityID, ".group") ||
+		strings.HasSuffix(entityID, ".group.container") ||
+		strings.HasSuffix(entityID, ".group.container.level")
+}
+
+// getEmbeddableEntityCount returns the count of entities that could have embeddings.
+// Excludes hierarchy container entities which have no text content.
+func (p *Processor) getEmbeddableEntityCount(ctx context.Context) (int, error) {
+	allIDs, err := p.indexManager.GetAllEntityIDs(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, id := range allIDs {
+		if !isContainerEntity(id) {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // executeCommunityDetection runs the detection algorithm and post-processing.
@@ -3044,6 +3046,32 @@ func (p *Processor) runReviewWorker(ctx context.Context) error {
 
 	p.logger.Info("Review worker stopped")
 	return err
+}
+
+// runHierarchyInference runs the hierarchy inference worker that watches ENTITY_STATES
+// and creates container membership edges for new entities.
+func (p *Processor) runHierarchyInference(ctx context.Context) error {
+	if p.hierarchyInference == nil {
+		return nil
+	}
+
+	p.logger.Info("Starting hierarchy inference worker")
+	err := p.hierarchyInference.Start(ctx)
+	if err != nil && err != context.Canceled {
+		p.logger.Error("Hierarchy inference worker error", "error", err)
+		return err
+	}
+
+	// Wait for context cancellation
+	<-ctx.Done()
+
+	// Stop the worker gracefully
+	if stopErr := p.hierarchyInference.Stop(); stopErr != nil {
+		p.logger.Warn("Hierarchy inference worker stop error", "error", stopErr)
+	}
+
+	p.logger.Info("Hierarchy inference worker stopped")
+	return nil
 }
 
 // startGateways starts the GraphQL and MCP gateway servers if configured.
