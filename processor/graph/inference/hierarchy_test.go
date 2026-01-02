@@ -147,21 +147,41 @@ func TestHierarchyInference_OnEntityCreated_TypeEdgeOnly(t *testing.T) {
 	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
 
 	entityID := "c360.logistics.sensor.document.temperature.sensor-001"
+	containerID := "c360.logistics.sensor.document.temperature.group"
 	err := hi.OnEntityCreated(context.Background(), entityID)
 	require.NoError(t, err)
 
-	// Should create 1 container and 1 membership edge
+	// Should create 1 container
 	createdEntities := entityManager.getCreatedEntities()
 	assert.Len(t, createdEntities, 1)
-	assert.Equal(t, "c360.logistics.sensor.document.temperature.group", createdEntities[0].ID)
+	assert.Equal(t, containerID, createdEntities[0].ID)
 
+	// Should create 2 edges: forward (member) + inverse (contains)
 	triples := tripleAdder.getTriples()
-	assert.Len(t, triples, 1)
-	assert.Equal(t, entityID, triples[0].Subject)
-	assert.Equal(t, vocabulary.HierarchyTypeMember, triples[0].Predicate)
-	assert.Equal(t, "c360.logistics.sensor.document.temperature.group", triples[0].Object)
-	assert.Equal(t, "inference.hierarchy", triples[0].Context)
-	assert.Equal(t, 1.0, triples[0].Confidence)
+	assert.Len(t, triples, 2)
+
+	// Find forward and inverse triples
+	var forwardTriple, inverseTriple *message.Triple
+	for i := range triples {
+		if triples[i].Subject == entityID {
+			forwardTriple = &triples[i]
+		} else if triples[i].Subject == containerID {
+			inverseTriple = &triples[i]
+		}
+	}
+
+	// Verify forward edge: entity → member → container
+	require.NotNil(t, forwardTriple, "forward triple not found")
+	assert.Equal(t, vocabulary.HierarchyTypeMember, forwardTriple.Predicate)
+	assert.Equal(t, containerID, forwardTriple.Object)
+	assert.Equal(t, "inference.hierarchy", forwardTriple.Context)
+	assert.Equal(t, 1.0, forwardTriple.Confidence)
+
+	// Verify inverse edge: container → contains → entity
+	require.NotNil(t, inverseTriple, "inverse triple not found")
+	assert.Equal(t, vocabulary.HierarchyTypeContains, inverseTriple.Predicate)
+	assert.Equal(t, entityID, inverseTriple.Object)
+	assert.Equal(t, "inference.hierarchy", inverseTriple.Context)
 }
 
 func TestHierarchyInference_OnEntityCreated_AllLevels(t *testing.T) {
@@ -193,19 +213,33 @@ func TestHierarchyInference_OnEntityCreated_AllLevels(t *testing.T) {
 	assert.True(t, containerIDs["c360.logistics.sensor.document.group.container"])   // System
 	assert.True(t, containerIDs["c360.logistics.sensor.group.container.level"])      // Domain
 
-	// Should create 3 membership edges
+	// Should create 6 edges: 3 forward (member) + 3 inverse (contains)
 	triples := tripleAdder.getTriples()
-	assert.Len(t, triples, 3)
+	assert.Len(t, triples, 6)
 
-	predicates := make(map[string]string) // predicate -> object
+	// Extract forward edges (entity → member → container)
+	forwardPredicates := make(map[string]string) // predicate -> object
 	for _, tr := range triples {
-		assert.Equal(t, entityID, tr.Subject)
-		predicates[tr.Predicate] = tr.Object.(string)
+		if tr.Subject == entityID {
+			forwardPredicates[tr.Predicate] = tr.Object.(string)
+		}
 	}
+	assert.Len(t, forwardPredicates, 3)
+	assert.Equal(t, "c360.logistics.sensor.document.temperature.group", forwardPredicates[vocabulary.HierarchyTypeMember])
+	assert.Equal(t, "c360.logistics.sensor.document.group.container", forwardPredicates[vocabulary.HierarchySystemMember])
+	assert.Equal(t, "c360.logistics.sensor.group.container.level", forwardPredicates[vocabulary.HierarchyDomainMember])
 
-	assert.Equal(t, "c360.logistics.sensor.document.temperature.group", predicates[vocabulary.HierarchyTypeMember])
-	assert.Equal(t, "c360.logistics.sensor.document.group.container", predicates[vocabulary.HierarchySystemMember])
-	assert.Equal(t, "c360.logistics.sensor.group.container.level", predicates[vocabulary.HierarchyDomainMember])
+	// Extract inverse edges (container → contains → entity)
+	inversePredicates := make(map[string]string) // predicate -> subject (container)
+	for _, tr := range triples {
+		if tr.Object == entityID {
+			inversePredicates[tr.Predicate] = tr.Subject
+		}
+	}
+	assert.Len(t, inversePredicates, 3)
+	assert.Equal(t, "c360.logistics.sensor.document.temperature.group", inversePredicates[vocabulary.HierarchyTypeContains])
+	assert.Equal(t, "c360.logistics.sensor.document.group.container", inversePredicates[vocabulary.HierarchySystemContains])
+	assert.Equal(t, "c360.logistics.sensor.group.container.level", inversePredicates[vocabulary.HierarchyDomainContains])
 }
 
 func TestHierarchyInference_ContainerReuse(t *testing.T) {
@@ -233,9 +267,9 @@ func TestHierarchyInference_ContainerReuse(t *testing.T) {
 	createdEntities := entityManager.getCreatedEntities()
 	assert.Len(t, createdEntities, 1)
 
-	// But should have 2 membership edges
+	// Should have 4 edges: 2 forward (member) + 2 inverse (contains)
 	triples := tripleAdder.getTriples()
-	assert.Len(t, triples, 2)
+	assert.Len(t, triples, 4)
 }
 
 func TestHierarchyInference_ContainerExistsInStorage(t *testing.T) {
@@ -261,9 +295,9 @@ func TestHierarchyInference_ContainerExistsInStorage(t *testing.T) {
 	createdEntities := entityManager.getCreatedEntities()
 	assert.Empty(t, createdEntities)
 
-	// But should still create membership edge
+	// Should create 2 edges: forward (member) + inverse (contains)
 	triples := tripleAdder.getTriples()
-	assert.Len(t, triples, 1)
+	assert.Len(t, triples, 2)
 }
 
 func TestHierarchyInference_ContainerEntityProperties(t *testing.T) {
@@ -344,7 +378,7 @@ func TestHierarchyInference_GetMetrics(t *testing.T) {
 
 	containers, edges, failed = hi.GetMetrics()
 	assert.Equal(t, int64(3), containers) // 3 containers created
-	assert.Equal(t, int64(3), edges)      // 3 edges created
+	assert.Equal(t, int64(6), edges)      // 6 edges created (3 forward + 3 inverse)
 	assert.Equal(t, int64(0), failed)
 }
 
@@ -394,10 +428,11 @@ func TestHierarchyInference_RaceConditionOnContainerCreate(t *testing.T) {
 
 	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
 
-	// Even if container exists, edge should still be created
+	// Even if container exists, edges should still be created
 	err := hi.OnEntityCreated(context.Background(), "c360.logistics.sensor.document.temperature.sensor-001")
 	require.NoError(t, err)
 
+	// Should create 2 edges: forward (member) + inverse (contains)
 	triples := tripleAdder.getTriples()
-	assert.Len(t, triples, 1)
+	assert.Len(t, triples, 2)
 }

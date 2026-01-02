@@ -231,7 +231,8 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 
 		// Phase 4: Validate hierarchy inference is creating container entities
 		// Verifies the KV watcher pattern from Phase 3 is working correctly
-		{"validate-hierarchy-inference", s.validateHierarchyInference, []string{"statistical", "semantic"}},
+		// Hierarchy inference is structural (no ML) - runs on all tiers
+		{"validate-hierarchy-inference", s.validateHierarchyInference, []string{"structural", "statistical", "semantic"}},
 
 		// Wait for entity stabilization (structural tier only)
 		// Structural tier doesn't wait for embeddings, so we need to wait for entity count to stabilize
@@ -275,11 +276,19 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"validate-kcore-index", s.executeValidateKCoreIndex, []string{"statistical", "semantic"}},
 		{"validate-pivot-index", s.executeValidatePivotIndex, []string{"statistical", "semantic"}},
 
-		// Phase 5: New index feature verification (statistical + semantic)
+		// Phase 5: New index feature verification (all tiers - hierarchy inference is structural)
 		// Verifies ContextIndex tracks inference provenance (hierarchy, structural contexts)
-		{"validate-context-index-hierarchy", s.validateContextIndexHierarchy, []string{"statistical", "semantic"}},
+		{"validate-context-index-hierarchy", s.validateContextIndexHierarchy, []string{"structural", "statistical", "semantic"}},
 		// Verifies IncomingIndex stores predicates (bidirectional traversal preserves relationship types)
-		{"validate-incoming-index-predicates", s.validateIncomingIndexPredicates, []string{"statistical", "semantic"}},
+		{"validate-incoming-index-predicates", s.validateIncomingIndexPredicates, []string{"structural", "statistical", "semantic"}},
+
+		// Phase 6: Story-telling scenarios that demonstrate feature value (all tiers)
+		// Story: "I can audit which relationships came from inference vs user input"
+		{"validate-context-provenance-audit", s.validateContextProvenanceAudit, []string{"structural", "statistical", "semantic"}},
+		// Story: "I can find who references a container and understand WHY"
+		{"validate-bidirectional-traversal", s.validateBidirectionalTraversal, []string{"structural", "statistical", "semantic"}},
+		// Story: "Containers explicitly know their members via 'contains' edges"
+		{"validate-inverse-edges-materialized", s.validateInverseEdgesMaterialized, []string{"structural", "statistical", "semantic"}},
 
 		// === Tier 2: Semantic capabilities (semantic only) ===
 		{"test-graphrag-local", s.executeTestGraphRAGLocal, []string{"semantic"}},

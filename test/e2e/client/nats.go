@@ -855,3 +855,58 @@ func (c *NATSValidationClient) GetContextEntries(ctx context.Context, contextVal
 	}
 	return entries, nil
 }
+
+// GetAllContexts lists all context values in the CONTEXT_INDEX bucket.
+// Phase 6: Added for provenance audit scenario - demonstrates querying all inference contexts.
+func (c *NATSValidationClient) GetAllContexts(ctx context.Context) ([]string, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, IndexBuckets.Context)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get context bucket: %w", err)
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		if isNoKeysError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list context keys: %w", err)
+	}
+
+	return keys, nil
+}
+
+// OutgoingEntry matches the indexmanager.OutgoingEntry structure.
+// Phase 6: Added to verify inverse edges are materialized in container's outgoing relationships.
+type OutgoingEntry struct {
+	Predicate  string `json:"predicate"`
+	ToEntityID string `json:"to_entity_id"`
+}
+
+// GetOutgoingEntries retrieves outgoing relationship entries for a source entity.
+// Phase 6: Added for inverse edges scenario - verifies containers have outgoing 'contains' edges.
+func (c *NATSValidationClient) GetOutgoingEntries(ctx context.Context, sourceEntityID string) ([]OutgoingEntry, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, IndexBuckets.Outgoing)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get outgoing bucket: %w", err)
+	}
+
+	entry, err := bucket.Get(ctx, sourceEntityID)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return nil, nil // No outgoing relationships
+		}
+		return nil, fmt.Errorf("failed to get outgoing entry: %w", err)
+	}
+
+	var entries []OutgoingEntry
+	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal outgoing entries: %w", err)
+	}
+	return entries, nil
+}

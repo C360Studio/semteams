@@ -202,7 +202,8 @@ func (h *HierarchyInference) buildDomainContainerID(parts []string) string {
 	return strings.Join(parts[:3], ".") + ".group.container.level"
 }
 
-// ensureContainerAndEdge creates the container entity if needed, then creates the membership edge.
+// ensureContainerAndEdge creates the container entity if needed, then creates the membership edge
+// and its inverse (container → contains → entity) for bidirectional graph traversal.
 func (h *HierarchyInference) ensureContainerAndEdge(ctx context.Context, entityID, containerID, predicate string) error {
 	// Ensure container exists (with caching)
 	if err := h.ensureContainerExists(ctx, containerID); err != nil {
@@ -210,8 +211,8 @@ func (h *HierarchyInference) ensureContainerAndEdge(ctx context.Context, entityI
 		return err
 	}
 
-	// Create membership edge: entity → predicate → container
-	triple := message.Triple{
+	// Create forward membership edge: entity → predicate → container
+	forwardTriple := message.Triple{
 		Subject:    entityID,
 		Predicate:  predicate,
 		Object:     containerID, // Real 6-part entity ID - IsRelationship() returns true
@@ -219,12 +220,37 @@ func (h *HierarchyInference) ensureContainerAndEdge(ctx context.Context, entityI
 		Confidence: 1.0, // Structural inference has perfect confidence
 	}
 
-	if err := h.tripleAdder.AddTriple(ctx, triple); err != nil {
+	if err := h.tripleAdder.AddTriple(ctx, forwardTriple); err != nil {
 		h.edgesFailed.Add(1)
 		return err
 	}
 
 	h.edgesCreated.Add(1)
+
+	// Create inverse edge: container → contains → entity
+	// This enables direct traversal from container to its members without using IncomingIndex
+	inversePredicate := vocabulary.GetInversePredicate(predicate)
+	if inversePredicate != "" {
+		inverseTriple := message.Triple{
+			Subject:    containerID,
+			Predicate:  inversePredicate, // e.g., hierarchy.type.contains
+			Object:     entityID,
+			Context:    "inference.hierarchy",
+			Confidence: 1.0,
+		}
+
+		if err := h.tripleAdder.AddTriple(ctx, inverseTriple); err != nil {
+			// Log warning but don't fail - forward edge already created
+			h.logger.Warn("Failed to create inverse edge",
+				"container_id", containerID,
+				"entity_id", entityID,
+				"inverse_predicate", inversePredicate,
+				"error", err)
+		} else {
+			h.edgesCreated.Add(1)
+		}
+	}
+
 	return nil
 }
 
