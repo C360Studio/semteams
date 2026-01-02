@@ -275,6 +275,12 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"validate-kcore-index", s.executeValidateKCoreIndex, []string{"statistical", "semantic"}},
 		{"validate-pivot-index", s.executeValidatePivotIndex, []string{"statistical", "semantic"}},
 
+		// Phase 5: New index feature verification (statistical + semantic)
+		// Verifies ContextIndex tracks inference provenance (hierarchy, structural contexts)
+		{"validate-context-index-hierarchy", s.validateContextIndexHierarchy, []string{"statistical", "semantic"}},
+		// Verifies IncomingIndex stores predicates (bidirectional traversal preserves relationship types)
+		{"validate-incoming-index-predicates", s.validateIncomingIndexPredicates, []string{"statistical", "semantic"}},
+
 		// === Tier 2: Semantic capabilities (semantic only) ===
 		{"test-graphrag-local", s.executeTestGraphRAGLocal, []string{"semantic"}},
 		{"test-graphrag-global", s.executeTestGraphRAGGlobal, []string{"semantic"}},
@@ -1702,6 +1708,7 @@ func (s *TieredScenario) executeVerifyIndexPopulation(ctx context.Context, resul
 		{"alias", client.IndexBuckets.Alias, false},     // May be empty if no aliases
 		{"spatial", client.IndexBuckets.Spatial, false}, // May be empty if no geo data
 		{"temporal", client.IndexBuckets.Temporal, true},
+		{"context", client.IndexBuckets.Context, false}, // Populated when triples have Context field set
 	}
 
 	indexDetails := make(map[string]any)

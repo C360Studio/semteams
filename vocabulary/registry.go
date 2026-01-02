@@ -163,6 +163,47 @@ func WithAlias(aliasType AliasType, priority int) Option {
 	}
 }
 
+// WithInverseOf declares the inverse predicate name.
+// The inverse predicate should also be registered with its own metadata,
+// pointing back to this predicate as its inverse.
+//
+// Example:
+//
+//	Register("hierarchy.type.member",
+//	    WithIRI(SkosBroader),
+//	    WithInverseOf("hierarchy.type.contains"))
+//
+//	Register("hierarchy.type.contains",
+//	    WithIRI(SkosNarrower),
+//	    WithInverseOf("hierarchy.type.member"))
+//
+// Note: The registry stores the inverse relationship but does not auto-generate
+// inverse triples at runtime. Applications can use GetInversePredicate() to
+// look up the inverse name for display or reasoning purposes.
+func WithInverseOf(inversePredicate string) Option {
+	return func(m *PredicateMetadata) {
+		m.InverseOf = inversePredicate
+	}
+}
+
+// WithSymmetric marks the predicate as symmetric (its own inverse).
+// Symmetric predicates imply bidirectional relationships: if A relates to B,
+// then B relates to A with the same predicate.
+//
+// Example:
+//
+//	Register("hierarchy.type.sibling",
+//	    WithIRI(SkosRelated),
+//	    WithSymmetric(true))
+//
+// When IsSymmetric is true, GetInversePredicate() returns the predicate itself.
+// Do not set both WithSymmetric(true) and WithInverseOf() on the same predicate.
+func WithSymmetric(symmetric bool) Option {
+	return func(m *PredicateMetadata) {
+		m.IsSymmetric = symmetric
+	}
+}
+
 // Register registers a predicate with its metadata in the global registry.
 // This should be called during package initialization (init functions) by domain vocabularies.
 //
@@ -294,6 +335,92 @@ func DiscoverAliasPredicates() map[string]int {
 	}
 
 	return aliasPredicates
+}
+
+// GetInversePredicate returns the inverse predicate name, if defined.
+// Returns an empty string if no inverse is defined for the given predicate.
+//
+// For symmetric predicates (IsSymmetric=true), returns the predicate itself
+// since symmetric predicates are their own inverse.
+//
+// Example:
+//
+//	GetInversePredicate("hierarchy.type.member")   // Returns "hierarchy.type.contains"
+//	GetInversePredicate("hierarchy.type.sibling")  // Returns "hierarchy.type.sibling" (symmetric)
+//	GetInversePredicate("sensor.temperature.celsius")  // Returns "" (no inverse)
+func GetInversePredicate(predicate string) string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+
+	meta, exists := predicateRegistry[predicate]
+	if !exists {
+		return ""
+	}
+
+	if meta.IsSymmetric {
+		return predicate
+	}
+	return meta.InverseOf
+}
+
+// IsSymmetricPredicate checks if a predicate is symmetric.
+// Symmetric predicates represent bidirectional relationships where
+// if A relates to B, then B also relates to A with the same predicate.
+//
+// Returns false if the predicate is not registered or is not symmetric.
+func IsSymmetricPredicate(predicate string) bool {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+
+	meta, exists := predicateRegistry[predicate]
+	if !exists {
+		return false
+	}
+	return meta.IsSymmetric
+}
+
+// HasInverse checks if a predicate has an inverse defined (either explicit or symmetric).
+// Returns true if the predicate is symmetric or has an InverseOf set.
+func HasInverse(predicate string) bool {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+
+	meta, exists := predicateRegistry[predicate]
+	if !exists {
+		return false
+	}
+	return meta.IsSymmetric || meta.InverseOf != ""
+}
+
+// DiscoverInversePredicates returns all predicates that have inverses defined.
+// Returns a map where keys are predicate names and values are their inverse predicate names.
+// For symmetric predicates, the value equals the key.
+//
+// This function is useful for:
+//   - Debugging and introspection
+//   - Generating documentation about predicate relationships
+//   - Reasoning systems that need to traverse relationships bidirectionally
+//
+// Example output:
+//
+//	{
+//	    "hierarchy.type.member": "hierarchy.type.contains",
+//	    "hierarchy.type.contains": "hierarchy.type.member",
+//	    "hierarchy.type.sibling": "hierarchy.type.sibling",  // symmetric
+//	}
+func DiscoverInversePredicates() map[string]string {
+	registryMu.RLock()
+	defer registryMu.RUnlock()
+
+	inverses := make(map[string]string)
+	for name, meta := range predicateRegistry {
+		if meta.IsSymmetric {
+			inverses[name] = name
+		} else if meta.InverseOf != "" {
+			inverses[name] = meta.InverseOf
+		}
+	}
+	return inverses
 }
 
 // ClearRegistry clears all registered predicates.

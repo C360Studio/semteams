@@ -78,12 +78,17 @@ func TestIndexManager_EntityDeleteCleanupIntegration(t *testing.T) {
 		outgoingJSON, _ := json.Marshal(outgoingRels)
 		mockBuckets["OUTGOING_INDEX"].data[entityA] = outgoingJSON
 
-		// Create incoming indexes for entity B and C
-		incomingB := []string{entityA, "c360.platform1.robotics.mav1.drone.003"}
+		// Create incoming indexes for entity B and C using IncomingEntry format
+		incomingB := []IncomingEntry{
+			{Predicate: "spatial.proximity.near", FromEntityID: entityA},
+			{Predicate: "spatial.proximity.near", FromEntityID: "c360.platform1.robotics.mav1.drone.003"},
+		}
 		incomingBJSON, _ := json.Marshal(incomingB)
 		mockBuckets["INCOMING_INDEX"].data[entityB] = incomingBJSON
 
-		incomingC := []string{entityA}
+		incomingC := []IncomingEntry{
+			{Predicate: "ops.fleet.member_of", FromEntityID: entityA},
+		}
 		incomingCJSON, _ := json.Marshal(incomingC)
 		mockBuckets["INCOMING_INDEX"].data[entityC] = incomingCJSON
 
@@ -96,12 +101,15 @@ func TestIndexManager_EntityDeleteCleanupIntegration(t *testing.T) {
 		// Entity B should have only drone.003 left
 		incomingBData, exists := mockBuckets["INCOMING_INDEX"].data[entityB]
 		require.True(t, exists, "Entity B incoming index should still exist")
-		var updatedIncomingB []string
+		var updatedIncomingB []IncomingEntry
 		err = json.Unmarshal(incomingBData, &updatedIncomingB)
 		require.NoError(t, err)
 		assert.Len(t, updatedIncomingB, 1, "Entity B should have 1 incoming reference")
-		assert.Equal(t, "c360.platform1.robotics.mav1.drone.003", updatedIncomingB[0])
-		assert.NotContains(t, updatedIncomingB, entityA, "Entity A should be removed from B's incoming index")
+		assert.Equal(t, "c360.platform1.robotics.mav1.drone.003", updatedIncomingB[0].FromEntityID)
+		// Verify entity A is not in the remaining entries
+		for _, entry := range updatedIncomingB {
+			assert.NotEqual(t, entityA, entry.FromEntityID, "Entity A should be removed from B's incoming index")
+		}
 
 		// Entity C should have no incoming index (deleted when empty)
 		_, exists = mockBuckets["INCOMING_INDEX"].data[entityC]
@@ -214,7 +222,9 @@ func TestIndexManager_EntityDeleteCleanupIntegration(t *testing.T) {
 		outgoingJSON, _ := json.Marshal(outgoingRels)
 		mockBuckets["OUTGOING_INDEX"].data[entityA] = outgoingJSON
 
-		incomingB := []string{entityA}
+		incomingB := []IncomingEntry{
+			{Predicate: "spatial.proximity.near", FromEntityID: entityA},
+		}
 		incomingBJSON, _ := json.Marshal(incomingB)
 		mockBuckets["INCOMING_INDEX"].data[entityB] = incomingBJSON
 

@@ -1089,6 +1089,7 @@ func (p *Processor) createIndexBuckets(ctx context.Context, entityBucket jetstre
 		{"OUTGOING_INDEX", "Outgoing edge index for relationship queries"},
 		{"SPATIAL_INDEX", "Spatial index for geospatial queries"},
 		{"TEMPORAL_INDEX", "Temporal index for time-based queries"},
+		{"CONTEXT_INDEX", "Context/provenance index for triple origin tracking"},
 		{"EMBEDDING_INDEX", "Vector embeddings with metadata and status"},
 		{"EMBEDDING_DEDUP", "Content-addressed embedding deduplication"},
 		{"COMMUNITY_INDEX", "Graph community detection and clustering"},

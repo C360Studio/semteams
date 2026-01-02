@@ -120,3 +120,35 @@ type PivotResults struct {
 	// Verified indicates if the index was verified
 	Verified bool `json:"verified"`
 }
+
+// ContextIndexResults contains ContextIndex verification results.
+// Phase 5: Added to verify triple provenance tracking via context values.
+type ContextIndexResults struct {
+	// TotalKeys is the number of unique context values in the index
+	TotalKeys int `json:"total_keys"`
+
+	// HierarchyContextFound indicates if "inference.hierarchy" key exists
+	HierarchyContextFound bool `json:"hierarchy_context_found"`
+
+	// HierarchyEntryCount is the number of entity+predicate pairs for hierarchy inference
+	HierarchyEntryCount int `json:"hierarchy_entry_count,omitempty"`
+
+	// SampleContexts contains sample context keys for debugging
+	SampleContexts []string `json:"sample_contexts,omitempty"`
+}
+
+// IncomingIndexResults contains IncomingIndex verification results.
+// Phase 5: Added to verify bidirectional graph traversal preserves predicates.
+type IncomingIndexResults struct {
+	// EntriesWithPredicates is the count of entries that have predicate info
+	EntriesWithPredicates int `json:"entries_with_predicates"`
+
+	// HierarchyMemberCount is the count of "hierarchy.type.member" predicates
+	HierarchyMemberCount int `json:"hierarchy_member_count"`
+
+	// PredicateValidation indicates if predicates are stored correctly
+	PredicateValidation bool `json:"predicate_validation"`
+
+	// SampleContainerID is the container entity used for validation
+	SampleContainerID string `json:"sample_container_id,omitempty"`
+}

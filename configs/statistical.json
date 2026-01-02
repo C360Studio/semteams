@@ -451,7 +451,8 @@
             "outgoing": true,
             "alias": true,
             "spatial": true,
-            "temporal": true
+            "temporal": true,
+            "context": true
           },
           "buckets": {
             "alias": "ALIAS_INDEX",
@@ -459,7 +460,8 @@
             "incoming": "INCOMING_INDEX",
             "outgoing": "OUTGOING_INDEX",
             "spatial": "SPATIAL_INDEX",
-            "temporal": "TEMPORAL_INDEX"
+            "temporal": "TEMPORAL_INDEX",
+            "context": "CONTEXT_INDEX"
           },
           "batch_processing": {
             "size": 50

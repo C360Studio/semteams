@@ -336,6 +336,7 @@ var IndexBuckets = struct {
 	EmbeddingDedp string
 	Community     string
 	Structural    string
+	Context       string
 }{
 	EntityStates:  "ENTITY_STATES",
 	Predicate:     "PREDICATE_INDEX",
@@ -348,6 +349,7 @@ var IndexBuckets = struct {
 	EmbeddingDedp: "EMBEDDING_DEDUP",
 	Community:     "COMMUNITY_INDEX",
 	Structural:    "STRUCTURAL_INDEX",
+	Context:       "CONTEXT_INDEX",
 }
 
 // GetAllCommunities retrieves all communities from the COMMUNITY_INDEX bucket
@@ -786,4 +788,70 @@ func (c *NATSValidationClient) GetAutoAppliedAnomalyCount(ctx context.Context) (
 		return 0, err
 	}
 	return counts.ByStatus["auto_applied"], nil
+}
+
+// IncomingEntry matches the indexmanager.IncomingEntry structure.
+// Phase 5: Added to verify IncomingIndex predicate storage.
+type IncomingEntry struct {
+	Predicate    string `json:"predicate"`
+	FromEntityID string `json:"from_entity_id"`
+}
+
+// GetIncomingEntries retrieves incoming relationship entries for a target entity.
+// Phase 5: Added to verify IncomingIndex stores predicates (not just entity IDs).
+func (c *NATSValidationClient) GetIncomingEntries(ctx context.Context, targetEntityID string) ([]IncomingEntry, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, IndexBuckets.Incoming)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get incoming bucket: %w", err)
+	}
+
+	entry, err := bucket.Get(ctx, targetEntityID)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return nil, nil // No incoming relationships
+		}
+		return nil, fmt.Errorf("failed to get incoming entry: %w", err)
+	}
+
+	var entries []IncomingEntry
+	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal incoming entries: %w", err)
+	}
+	return entries, nil
+}
+
+// ContextEntry matches the indexmanager.ContextEntry structure.
+// Phase 5: Added to verify ContextIndex stores entity+predicate pairs.
+type ContextEntry struct {
+	EntityID  string `json:"entity_id"`
+	Predicate string `json:"predicate"`
+}
+
+// GetContextEntries retrieves all entries for a specific context value.
+// Phase 5: Added to verify ContextIndex is populated by hierarchy inference.
+func (c *NATSValidationClient) GetContextEntries(ctx context.Context, contextValue string) ([]ContextEntry, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, IndexBuckets.Context)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get context bucket: %w", err)
+	}
+
+	entry, err := bucket.Get(ctx, contextValue)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return nil, nil // No entries for this context
+		}
+		return nil, fmt.Errorf("failed to get context entry: %w", err)
+	}
+
+	var entries []ContextEntry
+	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal context entries: %w", err)
+	}
+	return entries, nil
 }

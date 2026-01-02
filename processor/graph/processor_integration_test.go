@@ -386,16 +386,25 @@ func TestIntegration_EdgeOperations(t *testing.T) {
 		assert.Equal(t, "robotics.component.connects_to", relationshipTriples[0].Predicate)
 	}
 
-	// Test incoming index was updated - now expects direct array format
+	// Test incoming index was updated - now expects IncomingEntry format with predicate
 	incomingBucket, err := natsClient.GetKeyValueBucket(ctx, "INCOMING_INDEX")
 	require.NoError(t, err)
 
 	entry, err := incomingBucket.Get(ctx, entity2ID)
 	if err == nil {
-		var incomingRefs []string
+		var incomingRefs []indexmanager.IncomingEntry
 		err = json.Unmarshal(entry.Value(), &incomingRefs)
 		require.NoError(t, err)
-		assert.Contains(t, incomingRefs, entity1ID)
+		// Check that entity1ID is in the incoming refs
+		found := false
+		for _, ref := range incomingRefs {
+			if ref.FromEntityID == entity1ID {
+				found = true
+				assert.Equal(t, "robotics.component.connects_to", ref.Predicate)
+				break
+			}
+		}
+		assert.True(t, found, "entity1ID should be in incoming refs")
 	}
 
 	// Clean up entities to avoid conflicts with other tests

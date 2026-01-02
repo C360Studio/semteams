@@ -148,7 +148,14 @@ func (m *MockKeyValue) Purge(_ context.Context, _ string, _ ...jetstream.KVDelet
 }
 
 func (m *MockKeyValue) Keys(_ context.Context, _ ...jetstream.WatchOpt) ([]string, error) {
-	return nil, nil
+	if len(m.data) == 0 {
+		return nil, jetstream.ErrNoKeysFound
+	}
+	keys := make([]string, 0, len(m.data))
+	for k := range m.data {
+		keys = append(keys, k)
+	}
+	return keys, nil
 }
 
 func (m *MockKeyValue) ListKeys(_ context.Context, _ ...jetstream.WatchOpt) (jetstream.KeyLister, error) {
@@ -681,9 +688,9 @@ func TestIndexManager_CleanupOrphanedIncomingReferences(t *testing.T) {
 			},
 			setupIncomingIndex: func(mockKV *MockKeyValue) {
 				// Setup incoming index for drone.002 - has references from both 001 and 003
-				drone002Incoming := []string{
-					"c360.platform1.robotics.mav1.drone.001", // This should be removed
-					"c360.platform1.robotics.mav1.drone.003", // This should remain
+				drone002Incoming := []IncomingEntry{
+					{Predicate: "spatial.proximity.near", FromEntityID: "c360.platform1.robotics.mav1.drone.001"}, // This should be removed
+					{Predicate: "spatial.proximity.near", FromEntityID: "c360.platform1.robotics.mav1.drone.003"}, // This should remain
 				}
 				jsonData002, _ := json.Marshal(drone002Incoming)
 				entry002 := &MockKeyValueEntry{
@@ -693,7 +700,9 @@ func TestIndexManager_CleanupOrphanedIncomingReferences(t *testing.T) {
 				mockKV.On("Get", mock.Anything, "c360.platform1.robotics.mav1.drone.002").Return(entry002, nil)
 
 				// Setup incoming index for fleet alpha - only has reference from 001
-				fleetIncoming := []string{"c360.platform1.robotics.mav1.drone.001"}
+				fleetIncoming := []IncomingEntry{
+					{Predicate: "ops.fleet.member_of", FromEntityID: "c360.platform1.robotics.mav1.drone.001"},
+				}
 				jsonDataFleet, _ := json.Marshal(fleetIncoming)
 				entryFleet := &MockKeyValueEntry{
 					key:   "c360.platform1.ops.fleet1.fleet.alpha",
@@ -703,9 +712,9 @@ func TestIndexManager_CleanupOrphanedIncomingReferences(t *testing.T) {
 
 				// Expect Put for drone.002 with updated list (only drone.003)
 				mockKV.On("Put", mock.Anything, "c360.platform1.robotics.mav1.drone.002", mock.MatchedBy(func(data []byte) bool {
-					var refs []string
+					var refs []IncomingEntry
 					json.Unmarshal(data, &refs)
-					return len(refs) == 1 && refs[0] == "c360.platform1.robotics.mav1.drone.003"
+					return len(refs) == 1 && refs[0].FromEntityID == "c360.platform1.robotics.mav1.drone.003"
 				})).Return(uint64(1), nil)
 
 				// Expect Delete for fleet alpha (no more references)

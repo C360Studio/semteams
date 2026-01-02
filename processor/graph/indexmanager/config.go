@@ -89,6 +89,7 @@ type IndexesConfig struct {
 	Alias     bool `json:"alias"     default:"true"`
 	Spatial   bool `json:"spatial"   default:"true"`
 	Temporal  bool `json:"temporal"  default:"true"`
+	Context   bool `json:"context"   default:"true"`
 }
 
 // IndexCachesConfig configures LRU caches for each index
@@ -113,6 +114,7 @@ type BucketsConfig struct {
 	Alias        string `json:"alias"         default:"ALIAS_INDEX"`
 	Spatial      string `json:"spatial"       default:"SPATIAL_INDEX"`
 	Temporal     string `json:"temporal"      default:"TEMPORAL_INDEX"`
+	Context      string `json:"context"       default:"CONTEXT_INDEX"`
 }
 
 // HealthCheckConfig configures health monitoring
@@ -216,6 +218,7 @@ func DefaultConfig() Config {
 			Alias:     true,
 			Spatial:   true,
 			Temporal:  true,
+			Context:   true,
 		},
 		Embedding: EmbeddingConfig{
 			Enabled:         true,   // Enable by default with BM25
@@ -234,6 +237,7 @@ func DefaultConfig() Config {
 			Alias:        "ALIAS_INDEX",
 			Spatial:      "SPATIAL_INDEX",
 			Temporal:     "TEMPORAL_INDEX",
+			Context:      "CONTEXT_INDEX",
 		},
 		HealthCheck: HealthCheckConfig{
 			Interval:   30 * time.Second,
@@ -529,6 +533,9 @@ func (c *Config) applyBucketDefaults(defaults Config) {
 	if c.Buckets.Temporal == "" {
 		c.Buckets.Temporal = defaults.Buckets.Temporal
 	}
+	if c.Buckets.Context == "" {
+		c.Buckets.Context = defaults.Buckets.Context
+	}
 }
 
 // applyEmbeddingAndHealthCheckDefaults applies default values for embedding and health check configuration
@@ -584,6 +591,9 @@ func (c *Config) GetEnabledIndexes() []string {
 	if c.Indexes.Temporal {
 		enabled = append(enabled, "temporal")
 	}
+	if c.Indexes.Context {
+		enabled = append(enabled, "context")
+	}
 	return enabled
 }
 
@@ -602,6 +612,8 @@ func (c *Config) IsIndexEnabled(indexType string) bool {
 		return c.Indexes.Spatial
 	case "temporal":
 		return c.Indexes.Temporal
+	case "context":
+		return c.Indexes.Context
 	default:
 		return false
 	}

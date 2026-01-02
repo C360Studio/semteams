@@ -243,26 +243,51 @@ const (
 	// HierarchyDomainMember indicates entity belongs to a domain (3-part prefix match).
 	// Subject is the entity, object is the domain prefix (e.g., "c360.logistics.sensor").
 	// StandardIRI: skos:broader (entity is narrower than domain)
+	// InverseOf: HierarchyDomainContains
 	// Example: sensor-temp-001 hierarchy.domain.member c360.logistics.sensor
 	HierarchyDomainMember = "hierarchy.domain.member"
+
+	// HierarchyDomainContains indicates domain contains an entity (inverse of HierarchyDomainMember).
+	// Subject is the domain, object is the entity.
+	// StandardIRI: skos:narrower (domain contains narrower entities)
+	// InverseOf: HierarchyDomainMember
+	// Example: c360.logistics.sensor hierarchy.domain.contains sensor-temp-001
+	HierarchyDomainContains = "hierarchy.domain.contains"
 
 	// HierarchySystemMember indicates entity belongs to a system (4-part prefix match).
 	// Subject is the entity, object is the system prefix (e.g., "c360.logistics.sensor.document").
 	// StandardIRI: skos:broader (entity is narrower than system)
+	// InverseOf: HierarchySystemContains
 	// Example: sensor-temp-001 hierarchy.system.member c360.logistics.sensor.document
 	HierarchySystemMember = "hierarchy.system.member"
+
+	// HierarchySystemContains indicates system contains an entity (inverse of HierarchySystemMember).
+	// Subject is the system, object is the entity.
+	// StandardIRI: skos:narrower (system contains narrower entities)
+	// InverseOf: HierarchySystemMember
+	// Example: c360.logistics.sensor.document hierarchy.system.contains sensor-temp-001
+	HierarchySystemContains = "hierarchy.system.contains"
 
 	// HierarchyTypeSibling indicates entities share the same type (5-part prefix match).
 	// Bidirectional relationship between entities with same type prefix.
 	// StandardIRI: skos:related (symmetric relationship)
+	// IsSymmetric: true (if A is sibling of B, B is sibling of A)
 	// Example: sensor-temp-001 hierarchy.type.sibling sensor-temp-002
 	HierarchyTypeSibling = "hierarchy.type.sibling"
 
 	// HierarchyTypeMember indicates entity belongs to a type container (5-part prefix + .group).
 	// Subject is the entity, object is the type container entity ID.
 	// StandardIRI: skos:broader (entity is narrower than type container)
+	// InverseOf: HierarchyTypeContains
 	// Example: acme.iot.sensors.hvac.temperature.001 hierarchy.type.member acme.iot.sensors.hvac.temperature.group
 	HierarchyTypeMember = "hierarchy.type.member"
+
+	// HierarchyTypeContains indicates type container contains an entity (inverse of HierarchyTypeMember).
+	// Subject is the type container, object is the entity.
+	// StandardIRI: skos:narrower (container contains narrower entities)
+	// InverseOf: HierarchyTypeMember
+	// Example: acme.iot.sensors.hvac.temperature.group hierarchy.type.contains acme.iot.sensors.hvac.temperature.001
+	HierarchyTypeContains = "hierarchy.type.contains"
 )
 
 // NOTE: The predicates in this file are EXAMPLES for demonstration purposes.
@@ -315,6 +340,26 @@ type PredicateMetadata struct {
 	// AliasPriority defines conflict resolution order (lower number = higher priority)
 	// Only meaningful when IsAlias is true
 	AliasPriority int
+
+	// InverseOf names the predicate that represents the inverse relationship.
+	// Example: "hierarchy.type.member" has InverseOf = "hierarchy.type.contains"
+	// When entity A → hierarchy.type.member → B, the inverse relationship is
+	// B → hierarchy.type.contains → A.
+	//
+	// Important: Both predicates in an inverse pair should be registered with
+	// their InverseOf pointing to each other. The registry stores relationships;
+	// it does not auto-generate inverse triples at runtime.
+	//
+	// StandardIRI equivalent: owl:inverseOf
+	InverseOf string
+
+	// IsSymmetric indicates the predicate is its own inverse.
+	// Example: "hierarchy.type.sibling" - if A is sibling of B, then B is sibling of A.
+	// Symmetric predicates don't need InverseOf set; GetInversePredicate() returns
+	// the predicate itself for symmetric cases.
+	//
+	// StandardIRI equivalent: owl:SymmetricProperty
+	IsSymmetric bool
 }
 
 // IsValidPredicate checks if a predicate follows the three-level dotted notation

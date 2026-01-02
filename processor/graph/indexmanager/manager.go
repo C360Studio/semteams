@@ -42,6 +42,7 @@ type Manager struct {
 	aliasBucket     jetstream.KeyValue
 	spatialBucket   jetstream.KeyValue
 	temporalBucket  jetstream.KeyValue
+	contextBucket   jetstream.KeyValue
 
 	// Core components
 	watcher     *KVWatcher
@@ -211,6 +212,7 @@ func NewManager(
 		aliasBucket:       buckets[config.Buckets.Alias],
 		spatialBucket:     buckets[config.Buckets.Spatial],
 		temporalBucket:    buckets[config.Buckets.Temporal],
+		contextBucket:     buckets[config.Buckets.Context],
 		watcher:           watcher,
 		eventBuffer:       eventBuffer,
 		workers:           workers,
@@ -454,6 +456,11 @@ func (m *Manager) initializeIndexes() error {
 	if m.config.Indexes.Temporal && m.temporalBucket != nil {
 		index := NewTemporalIndex(m.temporalBucket, m.natsClient, m.metrics, m.promMetrics, m.logger)
 		m.indexes["temporal"] = index
+	}
+
+	if m.config.Indexes.Context && m.contextBucket != nil {
+		index := NewContextIndex(m.contextBucket, m.metrics, m.promMetrics, m.logger)
+		m.indexes["context"] = index
 	}
 
 	m.logger.Info("IndexManager initialized indexes", "count", len(m.indexes), "enabled", m.config.GetEnabledIndexes())
@@ -921,7 +928,7 @@ func (m *Manager) updateIndexes(ctx context.Context, entityState *gtypes.EntityS
 	for _, triple := range entityState.Triples {
 		if triple.IsRelationship() {
 			if toEntityID, ok := triple.Object.(string); ok {
-				if err := m.UpdateIncomingIndex(ctx, toEntityID, entityID); err != nil {
+				if err := m.UpdateIncomingIndex(ctx, toEntityID, entityID, triple.Predicate); err != nil {
 					return errs.WrapTransient(
 						err,
 						"IndexManager",
@@ -1098,7 +1105,7 @@ func (m *Manager) UpdateTemporalIndex(ctx context.Context, entityID string, enti
 }
 
 // UpdateIncomingIndex updates the incoming index for a relationship
-func (m *Manager) UpdateIncomingIndex(ctx context.Context, targetEntityID, sourceEntityID string) error {
+func (m *Manager) UpdateIncomingIndex(ctx context.Context, targetEntityID, sourceEntityID, predicate string) error {
 	if !m.config.Indexes.Incoming {
 		return ErrIndexDisabled
 	}
@@ -1108,10 +1115,10 @@ func (m *Manager) UpdateIncomingIndex(ctx context.Context, targetEntityID, sourc
 		return gtypes.ErrIndexNotFound
 	}
 
-	// The IncomingIndex needs to add a reference from source to target
+	// The IncomingIndex needs to add a reference from source to target with predicate
 	// We'll call its internal method directly since it has special logic
 	if incomingIndex, ok := index.(*IncomingIndex); ok {
-		return incomingIndex.AddIncomingReference(ctx, targetEntityID, sourceEntityID)
+		return incomingIndex.AddIncomingReference(ctx, targetEntityID, sourceEntityID, predicate)
 	}
 
 	return gtypes.ErrIndexNotFound
@@ -1578,8 +1585,8 @@ func (m *Manager) GetIncomingRelationships(ctx context.Context, targetEntityID s
 		)
 	}
 
-	var incomingIDs []string
-	if err := json.Unmarshal(entry.Value(), &incomingIDs); err != nil {
+	var incomingEntries []IncomingEntry
+	if err := json.Unmarshal(entry.Value(), &incomingEntries); err != nil {
 		m.metrics.RecordQuery(true)
 		if m.promMetrics != nil {
 			m.promMetrics.queriesFailed.WithLabelValues("incoming").Inc()
@@ -1592,13 +1599,13 @@ func (m *Manager) GetIncomingRelationships(ctx context.Context, targetEntityID s
 		)
 	}
 
-	// Convert to Relationship objects
-	// For Phase 1, we'll create simple relationships without full edge data
-	relationships := make([]Relationship, len(incomingIDs))
-	for i, fromID := range incomingIDs {
+	// Convert IncomingEntry objects to Relationship objects
+	// Now uses actual predicate from index instead of placeholder
+	relationships := make([]Relationship, len(incomingEntries))
+	for i, entry := range incomingEntries {
 		relationships[i] = Relationship{
-			FromEntityID: fromID,
-			EdgeType:     "references", // Simplified edge type
+			FromEntityID: entry.FromEntityID,
+			EdgeType:     entry.Predicate, // Actual predicate from index
 			Weight:       1.0,
 			Properties:   make(map[string]interface{}),
 			CreatedAt:    time.Now(), // Placeholder timestamp
@@ -1859,4 +1866,142 @@ func (m *Manager) GetAllEntityIDs(ctx context.Context) ([]string, error) {
 	}
 
 	return keys, nil
+}
+
+// GetEntriesByContext returns all entity+predicate pairs for a given context value.
+// This enables provenance queries like "all triples from hierarchy inference".
+func (m *Manager) GetEntriesByContext(ctx context.Context, contextValue string) ([]ContextEntry, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("context").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("context").Inc()
+		}
+	}()
+
+	contextIndex, exists := m.indexes["context"]
+	if !exists {
+		return []ContextEntry{}, nil
+	}
+
+	ctxIdx, ok := contextIndex.(*ContextIndex)
+	if !ok {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("context").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			ErrIndexDisabled,
+			"IndexManager",
+			"GetEntriesByContext",
+			"context index is not of expected type",
+		)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	entries, err := ctxIdx.GetEntriesByContext(queryCtx, contextValue)
+	if err != nil {
+		m.metrics.RecordQuery(false)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("context").Inc()
+		}
+		return nil, err
+	}
+
+	m.metrics.RecordQuery(true)
+	return entries, nil
+}
+
+// GetEntityIDsByContext returns deduplicated entity IDs for a given context value.
+// Convenience method when you only need entity IDs, not the full predicate info.
+func (m *Manager) GetEntityIDsByContext(ctx context.Context, contextValue string) ([]string, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("context_ids").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("context_ids").Inc()
+		}
+	}()
+
+	contextIndex, exists := m.indexes["context"]
+	if !exists {
+		return []string{}, nil
+	}
+
+	ctxIdx, ok := contextIndex.(*ContextIndex)
+	if !ok {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("context_ids").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			ErrIndexDisabled,
+			"IndexManager",
+			"GetEntityIDsByContext",
+			"context index is not of expected type",
+		)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	entityIDs, err := ctxIdx.GetEntityIDsByContext(queryCtx, contextValue)
+	if err != nil {
+		m.metrics.RecordQuery(false)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("context_ids").Inc()
+		}
+		return nil, err
+	}
+
+	m.metrics.RecordQuery(true)
+	return entityIDs, nil
+}
+
+// GetAllContexts returns all context values currently indexed.
+// Useful for discovering what provenance sources exist.
+func (m *Manager) GetAllContexts(ctx context.Context) ([]string, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("all_contexts").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("all_contexts").Inc()
+		}
+	}()
+
+	contextIndex, exists := m.indexes["context"]
+	if !exists {
+		return []string{}, nil
+	}
+
+	ctxIdx, ok := contextIndex.(*ContextIndex)
+	if !ok {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("all_contexts").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			ErrIndexDisabled,
+			"IndexManager",
+			"GetAllContexts",
+			"context index is not of expected type",
+		)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	contexts, err := ctxIdx.GetAllContexts(queryCtx)
+	if err != nil {
+		m.metrics.RecordQuery(false)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("all_contexts").Inc()
+		}
+		return nil, err
+	}
+
+	m.metrics.RecordQuery(true)
+	return contexts, nil
 }

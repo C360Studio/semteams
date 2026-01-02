@@ -402,7 +402,16 @@ func (pi *PredicateIndex) handleCASError(err error, sanitizedKey, predicate, ent
 	return errs.WrapTransient(err, "IndexManager", "updatePredicateIndexInternal", errMsg)
 }
 
-// IncomingIndex handles incoming relationship indexing
+// IncomingEntry represents an incoming relationship to an entity.
+// It stores the predicate and source entity ID, mirroring OutgoingEntry for symmetry.
+type IncomingEntry struct {
+	Predicate    string `json:"predicate"`
+	FromEntityID string `json:"from_entity_id"`
+}
+
+// IncomingIndex handles incoming relationship indexing.
+// Key format: target entity ID
+// Value format: JSON array of IncomingEntry (symmetric with OutgoingIndex)
 type IncomingIndex struct {
 	bucket      jetstream.KeyValue
 	metrics     *InternalMetrics
@@ -436,8 +445,9 @@ func (ii *IncomingIndex) HandleCreate(ctx context.Context, entityID string, enti
 	}
 
 	// Extract relationships from triples (single source of truth)
-	relationships := ii.extractRelationshipsFromTriples(entityID, state.Triples)
-	return ii.updateIncomingIndex(ctx, entityID, relationships)
+	// Returns map of targetEntityID -> []IncomingEntry for that target
+	relationshipsByTarget := ii.extractRelationshipsFromTriples(entityID, state.Triples)
+	return ii.updateIncomingIndex(ctx, relationshipsByTarget)
 }
 
 // HandleUpdate processes entity updates for incoming index
@@ -448,8 +458,8 @@ func (ii *IncomingIndex) HandleUpdate(ctx context.Context, entityID string, enti
 	}
 
 	// Extract relationships from triples (single source of truth)
-	relationships := ii.extractRelationshipsFromTriples(entityID, state.Triples)
-	return ii.updateIncomingIndex(ctx, entityID, relationships)
+	relationshipsByTarget := ii.extractRelationshipsFromTriples(entityID, state.Triples)
+	return ii.updateIncomingIndex(ctx, relationshipsByTarget)
 }
 
 // HandleDelete processes entity deletion for incoming index
@@ -458,63 +468,73 @@ func (ii *IncomingIndex) HandleDelete(ctx context.Context, entityID string) erro
 	return ii.bucket.Delete(ctx, entityID)
 }
 
-// extractRelationshipsFromTriples extracts target entity IDs from relationship triples
-func (ii *IncomingIndex) extractRelationshipsFromTriples(_ string, triples []message.Triple) []string {
-	var targetEntities []string
+// extractRelationshipsFromTriples extracts incoming entries grouped by target entity.
+// Returns a map of targetEntityID -> []IncomingEntry for efficient batch updates.
+func (ii *IncomingIndex) extractRelationshipsFromTriples(fromEntityID string, triples []message.Triple) map[string][]IncomingEntry {
+	byTarget := make(map[string][]IncomingEntry)
 	for _, triple := range triples {
 		if triple.IsRelationship() {
 			// Extract target entity ID from relationship triple object
 			if targetID, ok := triple.Object.(string); ok {
-				targetEntities = append(targetEntities, targetID)
+				entry := IncomingEntry{
+					Predicate:    triple.Predicate,
+					FromEntityID: fromEntityID,
+				}
+				byTarget[targetID] = append(byTarget[targetID], entry)
 			}
 		}
 	}
-	return targetEntities
+	return byTarget
 }
 
 // updateIncomingIndex updates incoming relationships for all target entities
 func (ii *IncomingIndex) updateIncomingIndex(
 	ctx context.Context,
-	fromEntityID string,
-	targetEntityIDs []string,
+	relationshipsByTarget map[string][]IncomingEntry,
 ) error {
-	for _, toEntityID := range targetEntityIDs {
-		if err := ii.AddIncomingReference(ctx, toEntityID, fromEntityID); err != nil {
-			ii.logger.Error(
-				"Failed to update incoming reference",
-				"from", fromEntityID,
-				"to", toEntityID,
-				"error", err,
-			)
+	for toEntityID, entries := range relationshipsByTarget {
+		for _, entry := range entries {
+			if err := ii.AddIncomingReference(ctx, toEntityID, entry.FromEntityID, entry.Predicate); err != nil {
+				ii.logger.Error(
+					"Failed to update incoming reference",
+					"from", entry.FromEntityID,
+					"to", toEntityID,
+					"predicate", entry.Predicate,
+					"error", err,
+				)
+			}
 		}
 	}
 	return nil
 }
 
 // AddIncomingReference adds an incoming reference to a target entity (exported for direct use)
-func (ii *IncomingIndex) AddIncomingReference(ctx context.Context, toEntityID, fromEntityID string) error {
-	// Get existing incoming references - stored as direct array
-	var incomingRefs []string
+func (ii *IncomingIndex) AddIncomingReference(ctx context.Context, toEntityID, fromEntityID, predicate string) error {
+	// Get existing incoming references - stored as []IncomingEntry
+	var incomingRefs []IncomingEntry
 	entry, err := ii.bucket.Get(ctx, toEntityID)
 	if err == nil {
 		if err := json.Unmarshal(entry.Value(), &incomingRefs); err != nil {
 			return errs.WrapInvalid(err, "IncomingIndex", "AddIncomingReference", "unmarshal incoming index data")
 		}
 	} else {
-		incomingRefs = []string{}
+		incomingRefs = []IncomingEntry{}
 	}
 
-	// Check for duplicates
+	// Check for duplicates (same fromEntityID AND predicate)
 	for _, existing := range incomingRefs {
-		if existing == fromEntityID {
+		if existing.FromEntityID == fromEntityID && existing.Predicate == predicate {
 			return nil // Already exists
 		}
 	}
 
 	// Add new reference
-	incomingRefs = append(incomingRefs, fromEntityID)
+	incomingRefs = append(incomingRefs, IncomingEntry{
+		Predicate:    predicate,
+		FromEntityID: fromEntityID,
+	})
 
-	// Store updated index - direct array, no wrapper
+	// Store updated index
 	data, err := json.Marshal(incomingRefs)
 	if err != nil {
 		return errs.WrapInvalid(err, "IncomingIndex", "AddIncomingReference", "marshal incoming index data")
@@ -524,10 +544,12 @@ func (ii *IncomingIndex) AddIncomingReference(ctx context.Context, toEntityID, f
 	return err
 }
 
-// RemoveIncomingReference removes an incoming reference from a target entity
+// RemoveIncomingReference removes an incoming reference from a target entity.
+// If predicate is empty, removes all references from fromEntityID.
+// If predicate is specified, only removes that specific predicate.
 func (ii *IncomingIndex) RemoveIncomingReference(ctx context.Context, toEntityID, fromEntityID string) error {
 	// Get existing incoming references
-	var incomingRefs []string
+	var incomingRefs []IncomingEntry
 	entry, err := ii.bucket.Get(ctx, toEntityID)
 	if err != nil {
 		// If the target entity's index doesn't exist, nothing to remove
@@ -538,11 +560,11 @@ func (ii *IncomingIndex) RemoveIncomingReference(ctx context.Context, toEntityID
 		return errs.WrapInvalid(err, "IncomingIndex", "RemoveIncomingReference", "unmarshal incoming index data")
 	}
 
-	// Find and remove the reference
+	// Find and remove all references from this entity (regardless of predicate)
 	found := false
-	newRefs := make([]string, 0, len(incomingRefs))
+	newRefs := make([]IncomingEntry, 0, len(incomingRefs))
 	for _, ref := range incomingRefs {
-		if ref == fromEntityID {
+		if ref.FromEntityID == fromEntityID {
 			found = true
 			continue
 		}
@@ -566,6 +588,41 @@ func (ii *IncomingIndex) RemoveIncomingReference(ctx context.Context, toEntityID
 
 	_, err = ii.bucket.Put(ctx, toEntityID, data)
 	return err
+}
+
+// GetIncoming retrieves all incoming relationships for an entity
+func (ii *IncomingIndex) GetIncoming(ctx context.Context, entityID string) ([]IncomingEntry, error) {
+	entry, err := ii.bucket.Get(ctx, entityID)
+	if err != nil {
+		if stderrors.Is(err, jetstream.ErrKeyNotFound) {
+			return []IncomingEntry{}, nil
+		}
+		return nil, errs.WrapTransient(err, "IncomingIndex", "GetIncoming", "get incoming entries")
+	}
+
+	var entries []IncomingEntry
+	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+		return nil, errs.WrapInvalid(err, "IncomingIndex", "GetIncoming", "unmarshal incoming entries")
+	}
+
+	return entries, nil
+}
+
+// GetIncomingByPredicate retrieves incoming relationships filtered by predicate
+func (ii *IncomingIndex) GetIncomingByPredicate(ctx context.Context, entityID, predicate string) ([]IncomingEntry, error) {
+	entries, err := ii.GetIncoming(ctx, entityID)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []IncomingEntry
+	for _, e := range entries {
+		if e.Predicate == predicate {
+			filtered = append(filtered, e)
+		}
+	}
+
+	return filtered, nil
 }
 
 // AliasIndex handles entity alias resolution with bidirectional storage.
@@ -1549,4 +1606,282 @@ func (ti *TemporalIndex) updateTemporalIndex(ctx context.Context, entityID strin
 
 	_, err = ti.bucket.Put(ctx, timeKey, data)
 	return err
+}
+
+// ContextEntry represents an entity+predicate pair indexed by context value.
+// This mirrors OutgoingEntry pattern for consistency across indexes.
+type ContextEntry struct {
+	EntityID  string `json:"entity_id"`
+	Predicate string `json:"predicate"`
+}
+
+// ContextIndex tracks which entities have triples with specific context values.
+// This enables provenance queries like "all triples from hierarchy inference".
+// Key format: context value (e.g., "inference.hierarchy")
+// Value format: JSON array of ContextEntry
+type ContextIndex struct {
+	bucket      jetstream.KeyValue
+	metrics     *InternalMetrics
+	promMetrics *PrometheusMetrics
+	logger      *slog.Logger
+}
+
+// NewContextIndex creates a new ContextIndex with the given KV bucket.
+func NewContextIndex(
+	bucket jetstream.KeyValue,
+	metrics *InternalMetrics,
+	promMetrics *PrometheusMetrics,
+	logger *slog.Logger,
+) *ContextIndex {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &ContextIndex{
+		bucket:      bucket,
+		metrics:     metrics,
+		promMetrics: promMetrics,
+		logger:      logger,
+	}
+}
+
+// HandleCreate processes entity creation for context index
+func (ci *ContextIndex) HandleCreate(ctx context.Context, entityID string, entityState interface{}) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	state, ok := entityState.(*gtypes.EntityState)
+	if !ok {
+		return errs.WrapInvalid(errs.ErrInvalidData, "ContextIndex", "HandleCreate", "invalid entity state type")
+	}
+
+	return ci.indexContextEntries(ctx, entityID, state.Triples)
+}
+
+// HandleUpdate processes entity updates for context index
+func (ci *ContextIndex) HandleUpdate(ctx context.Context, entityID string, entityState interface{}) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	state, ok := entityState.(*gtypes.EntityState)
+	if !ok {
+		return errs.WrapInvalid(errs.ErrInvalidData, "ContextIndex", "HandleUpdate", "invalid entity state type")
+	}
+
+	// For updates, we need to remove old entries and add new ones
+	// Since we don't track previous state, we re-index all context entries
+	return ci.indexContextEntries(ctx, entityID, state.Triples)
+}
+
+// HandleDelete processes entity deletion for context index
+func (ci *ContextIndex) HandleDelete(ctx context.Context, entityID string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+	}
+
+	// For deletion, we need to remove this entity from all context keys
+	// This requires scanning all context keys - expensive but necessary for correctness
+	// In practice, deletion is rare compared to create/update
+	keys, err := ci.bucket.Keys(ctx)
+	if err != nil {
+		if stderrors.Is(err, jetstream.ErrNoKeysFound) {
+			return nil // No contexts indexed yet
+		}
+		return errs.WrapTransient(err, "ContextIndex", "HandleDelete", "list context keys")
+	}
+
+	for _, contextKey := range keys {
+		if err := ci.removeEntityFromContext(ctx, contextKey, entityID); err != nil {
+			ci.logger.Warn("Failed to remove entity from context",
+				"context", contextKey, "entity", entityID, "error", err)
+			// Continue with other contexts
+		}
+	}
+
+	return nil
+}
+
+// indexContextEntries extracts context values from triples and indexes them
+func (ci *ContextIndex) indexContextEntries(ctx context.Context, entityID string, triples []message.Triple) error {
+	// Group entries by context value
+	byContext := make(map[string][]ContextEntry)
+
+	for _, t := range triples {
+		if t.Context != "" {
+			entry := ContextEntry{
+				EntityID:  entityID,
+				Predicate: t.Predicate,
+			}
+			byContext[t.Context] = append(byContext[t.Context], entry)
+		}
+	}
+
+	if len(byContext) == 0 {
+		return nil // No context values to index
+	}
+
+	// Update each context key
+	for contextValue, newEntries := range byContext {
+		if err := ci.mergeContextEntries(ctx, contextValue, entityID, newEntries); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// mergeContextEntries merges new entries into existing context index
+func (ci *ContextIndex) mergeContextEntries(ctx context.Context, contextValue, entityID string, newEntries []ContextEntry) error {
+	// Sanitize context value for use as NATS key
+	key := sanitizeNATSKey(contextValue)
+
+	// Get existing entries
+	var existing []ContextEntry
+	entry, err := ci.bucket.Get(ctx, key)
+	if err != nil && !stderrors.Is(err, jetstream.ErrKeyNotFound) {
+		return errs.WrapTransient(err, "ContextIndex", "mergeContextEntries", "get existing entries")
+	}
+	if err == nil {
+		if err := json.Unmarshal(entry.Value(), &existing); err != nil {
+			return errs.WrapInvalid(err, "ContextIndex", "mergeContextEntries", "unmarshal existing entries")
+		}
+	}
+
+	// Remove old entries for this entity (to handle updates)
+	filtered := make([]ContextEntry, 0, len(existing))
+	for _, e := range existing {
+		if e.EntityID != entityID {
+			filtered = append(filtered, e)
+		}
+	}
+
+	// Add new entries
+	filtered = append(filtered, newEntries...)
+
+	// Store updated entries
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return errs.WrapInvalid(err, "ContextIndex", "mergeContextEntries", "marshal entries")
+	}
+
+	_, err = ci.bucket.Put(ctx, key, data)
+	if err != nil {
+		return errs.WrapTransient(err, "ContextIndex", "mergeContextEntries", "put context index")
+	}
+
+	return nil
+}
+
+// removeEntityFromContext removes all entries for an entity from a context key
+func (ci *ContextIndex) removeEntityFromContext(ctx context.Context, contextKey, entityID string) error {
+	entry, err := ci.bucket.Get(ctx, contextKey)
+	if err != nil {
+		if stderrors.Is(err, jetstream.ErrKeyNotFound) {
+			return nil
+		}
+		return err
+	}
+
+	var existing []ContextEntry
+	if err := json.Unmarshal(entry.Value(), &existing); err != nil {
+		return err
+	}
+
+	// Filter out entries for this entity
+	filtered := make([]ContextEntry, 0, len(existing))
+	for _, e := range existing {
+		if e.EntityID != entityID {
+			filtered = append(filtered, e)
+		}
+	}
+
+	if len(filtered) == 0 {
+		// No entries left - delete the key
+		return ci.bucket.Delete(ctx, contextKey)
+	}
+
+	if len(filtered) == len(existing) {
+		// No change
+		return nil
+	}
+
+	// Store filtered entries
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return err
+	}
+
+	_, err = ci.bucket.Put(ctx, contextKey, data)
+	return err
+}
+
+// GetEntriesByContext retrieves all entity+predicate pairs for a given context value
+func (ci *ContextIndex) GetEntriesByContext(ctx context.Context, contextValue string) ([]ContextEntry, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	key := sanitizeNATSKey(contextValue)
+	entry, err := ci.bucket.Get(ctx, key)
+	if err != nil {
+		if stderrors.Is(err, jetstream.ErrKeyNotFound) {
+			return []ContextEntry{}, nil
+		}
+		return nil, errs.WrapTransient(err, "ContextIndex", "GetEntriesByContext", "get context entries")
+	}
+
+	var entries []ContextEntry
+	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+		return nil, errs.WrapInvalid(err, "ContextIndex", "GetEntriesByContext", "unmarshal entries")
+	}
+
+	return entries, nil
+}
+
+// GetEntityIDsByContext retrieves just entity IDs for a given context value (convenience method)
+func (ci *ContextIndex) GetEntityIDsByContext(ctx context.Context, contextValue string) ([]string, error) {
+	entries, err := ci.GetEntriesByContext(ctx, contextValue)
+	if err != nil {
+		return nil, err
+	}
+
+	// Deduplicate entity IDs (an entity may have multiple predicates with same context)
+	seen := make(map[string]bool)
+	var entityIDs []string
+	for _, e := range entries {
+		if !seen[e.EntityID] {
+			seen[e.EntityID] = true
+			entityIDs = append(entityIDs, e.EntityID)
+		}
+	}
+
+	return entityIDs, nil
+}
+
+// GetAllContexts retrieves all context values currently indexed
+func (ci *ContextIndex) GetAllContexts(ctx context.Context) ([]string, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	keys, err := ci.bucket.Keys(ctx)
+	if err != nil {
+		if stderrors.Is(err, jetstream.ErrNoKeysFound) {
+			return []string{}, nil
+		}
+		return nil, errs.WrapTransient(err, "ContextIndex", "GetAllContexts", "list context keys")
+	}
+
+	return keys, nil
 }

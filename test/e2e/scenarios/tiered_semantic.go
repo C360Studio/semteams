@@ -684,3 +684,175 @@ func toWordSet(s string) map[string]bool {
 	}
 	return set
 }
+
+// validateContextIndexHierarchy validates that the ContextIndex is tracking inference provenance.
+// Phase 5: Verifies that hierarchy inference triples are tracked in CONTEXT_INDEX.
+func (s *TieredScenario) validateContextIndexHierarchy(ctx context.Context, result *Result) error {
+	if s.natsClient == nil {
+		result.Warnings = append(result.Warnings, "NATS client unavailable for context index validation")
+		return nil
+	}
+
+	fmt.Println("[CONTEXT INDEX] Validating context index hierarchy tracking...")
+
+	// Count CONTEXT_INDEX keys (each key is a context value like "inference.hierarchy")
+	count, err := s.natsClient.CountBucketKeys(ctx, client.IndexBuckets.Context)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("context index query failed: %v", err))
+		return nil
+	}
+
+	// Sample keys to verify hierarchy inference context exists
+	samples, _ := s.natsClient.GetBucketKeysSample(ctx, client.IndexBuckets.Context, 10)
+
+	// Check if "inference.hierarchy" key exists
+	hierarchyContextFound := false
+	for _, key := range samples {
+		if key == "inference.hierarchy" {
+			hierarchyContextFound = true
+			break
+		}
+	}
+
+	// Get hierarchy context entries to count entity+predicate pairs
+	hierarchyEntryCount := 0
+	if hierarchyContextFound {
+		entries, err := s.natsClient.GetContextEntries(ctx, "inference.hierarchy")
+		if err == nil {
+			hierarchyEntryCount = len(entries)
+		}
+	}
+
+	// Record metrics
+	result.Metrics["context_index_keys"] = count
+	result.Metrics["context_hierarchy_found"] = boolToInt(hierarchyContextFound)
+	result.Metrics["context_hierarchy_entries"] = hierarchyEntryCount
+
+	// Log results
+	fmt.Printf("[CONTEXT INDEX] Results: total_keys=%d, hierarchy_found=%v, hierarchy_entries=%d\n",
+		count, hierarchyContextFound, hierarchyEntryCount)
+	if len(samples) > 0 {
+		fmt.Printf("[CONTEXT INDEX] Sample contexts: %v\n", samples)
+	}
+
+	// Validation warnings
+	if count == 0 {
+		result.Warnings = append(result.Warnings, "CONTEXT_INDEX is empty - hierarchy inference may not be running")
+	} else if !hierarchyContextFound {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("CONTEXT_INDEX has %d keys but 'inference.hierarchy' not found in sample", count))
+	} else {
+		fmt.Printf("[CONTEXT INDEX] Success: hierarchy inference provenance tracked (%d entries)\n", hierarchyEntryCount)
+	}
+
+	result.Details["context_index_validation"] = map[string]any{
+		"total_keys":             count,
+		"hierarchy_found":        hierarchyContextFound,
+		"hierarchy_entry_count":  hierarchyEntryCount,
+		"sample_contexts":        samples,
+		"provenance_tracking_ok": hierarchyContextFound && hierarchyEntryCount > 0,
+	}
+
+	return nil
+}
+
+// validateIncomingIndexPredicates validates that IncomingIndex stores predicate information.
+// Phase 5: Verifies the IncomingIndex asymmetry fix is working (stores []IncomingEntry, not []string).
+func (s *TieredScenario) validateIncomingIndexPredicates(ctx context.Context, result *Result) error {
+	if s.natsClient == nil {
+		result.Warnings = append(result.Warnings, "NATS client unavailable for incoming index validation")
+		return nil
+	}
+
+	fmt.Println("[INCOMING INDEX] Validating incoming index predicate storage...")
+
+	// Get all entity IDs to find a container entity
+	allIDs, err := s.natsClient.GetAllEntityIDs(ctx)
+	if err != nil || len(allIDs) == 0 {
+		result.Warnings = append(result.Warnings, "No entities found for incoming index validation")
+		return nil
+	}
+
+	// Look for a .group entity (created by hierarchy inference, has incoming edges)
+	var containerID string
+	for _, id := range allIDs {
+		if strings.HasSuffix(id, ".group") {
+			containerID = id
+			break
+		}
+	}
+
+	if containerID == "" {
+		// No container entities - may be structural tier (no hierarchy inference)
+		result.Metrics["incoming_predicate_validation"] = 0
+		result.Details["incoming_index_validation"] = map[string]any{
+			"container_found":      false,
+			"message":              "No container entities found (hierarchy inference may not have run)",
+			"predicate_validation": false,
+		}
+		return nil
+	}
+
+	// Get incoming entries for the container
+	entries, err := s.natsClient.GetIncomingEntries(ctx, containerID)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("incoming entries query failed: %v", err))
+		return nil
+	}
+
+	// Verify predicates are stored (not just entity IDs)
+	predicateCount := 0
+	hierarchyMemberCount := 0
+	uniquePredicates := make(map[string]int)
+
+	for _, entry := range entries {
+		if entry.Predicate != "" {
+			predicateCount++
+			uniquePredicates[entry.Predicate]++
+			if entry.Predicate == "hierarchy.type.member" {
+				hierarchyMemberCount++
+			}
+		}
+	}
+
+	// Record metrics
+	result.Metrics["incoming_entries_total"] = len(entries)
+	result.Metrics["incoming_entries_with_predicates"] = predicateCount
+	result.Metrics["incoming_hierarchy_member_count"] = hierarchyMemberCount
+	result.Metrics["incoming_predicate_validation"] = boolToInt(predicateCount > 0)
+
+	// Log results
+	fmt.Printf("[INCOMING INDEX] Results: container=%s, total_entries=%d, with_predicates=%d, hierarchy_member=%d\n",
+		containerID, len(entries), predicateCount, hierarchyMemberCount)
+	if len(uniquePredicates) > 0 {
+		fmt.Printf("[INCOMING INDEX] Unique predicates: %v\n", uniquePredicates)
+	}
+
+	// Validation
+	predicateValidation := predicateCount > 0
+	if len(entries) > 0 && predicateCount == 0 {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("IncomingIndex has %d entries but none have predicates - index may use old []string format", len(entries)))
+	} else if predicateValidation {
+		fmt.Printf("[INCOMING INDEX] Success: bidirectional traversal preserves predicates (%d entries with predicates)\n", predicateCount)
+	}
+
+	result.Details["incoming_index_validation"] = map[string]any{
+		"container_id":            containerID,
+		"total_entries":           len(entries),
+		"entries_with_predicates": predicateCount,
+		"hierarchy_member_count":  hierarchyMemberCount,
+		"unique_predicates":       uniquePredicates,
+		"predicate_validation":    predicateValidation,
+	}
+
+	return nil
+}
+
+// boolToInt converts a boolean to int (1 for true, 0 for false) for metrics.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}

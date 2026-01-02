@@ -29,6 +29,24 @@ const (
 
 	// OwlEquivalentProperty indicates equivalent properties
 	OwlEquivalentProperty = "http://www.w3.org/2002/07/owl#equivalentProperty"
+
+	// OwlInverseOf indicates that two properties are inverse of each other.
+	// Used to link predicates that represent opposite directions of a relationship.
+	// Example: skos:broader owl:inverseOf skos:narrower
+	OwlInverseOf = "http://www.w3.org/2002/07/owl#inverseOf"
+
+	// OwlSymmetricProperty indicates a property where if A relates to B,
+	// then B also relates to A with the same property.
+	// Example: skos:related is symmetric (if A is related to B, B is related to A)
+	OwlSymmetricProperty = "http://www.w3.org/2002/07/owl#SymmetricProperty"
+
+	// OwlTransitiveProperty indicates a property where if A→B and B→C, then A→C.
+	// Example: skos:broaderTransitive
+	OwlTransitiveProperty = "http://www.w3.org/2002/07/owl#TransitiveProperty"
+
+	// OwlReflexiveProperty indicates a property that always applies to itself.
+	// Example: owl:sameAs is reflexive (everything is sameAs itself)
+	OwlReflexiveProperty = "http://www.w3.org/2002/07/owl#ReflexiveProperty"
 )
 
 // SKOS (Simple Knowledge Organization System) Standard IRIs

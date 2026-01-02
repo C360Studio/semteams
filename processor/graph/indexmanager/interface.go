@@ -24,7 +24,7 @@ type Indexer interface {
 	UpdatePredicateIndex(ctx context.Context, entityID string, entityState interface{}) error
 	UpdateSpatialIndex(ctx context.Context, entityID string, position interface{}) error
 	UpdateTemporalIndex(ctx context.Context, entityID string, entityState *gtypes.EntityState) error
-	UpdateIncomingIndex(ctx context.Context, targetEntityID, sourceEntityID string) error
+	UpdateIncomingIndex(ctx context.Context, targetEntityID, sourceEntityID, predicate string) error
 	RemoveFromIncomingIndex(ctx context.Context, targetEntityID, sourceEntityID string) error
 	UpdateAliasIndex(ctx context.Context, alias, entityID string) error
 

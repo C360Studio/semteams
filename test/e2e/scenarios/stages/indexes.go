@@ -30,6 +30,7 @@ func DefaultIndexSpecs() []IndexSpec {
 		{"spatial", client.IndexBuckets.Spatial, false}, // May be empty if no geo data
 		{"temporal", client.IndexBuckets.Temporal, true},
 		{"structural", client.IndexBuckets.Structural, false}, // Only populated for Tier 1+ (statistical/semantic)
+		{"context", client.IndexBuckets.Context, false},       // Populated when triples have Context field set
 	}
 }
 
