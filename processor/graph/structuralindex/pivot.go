@@ -198,13 +198,21 @@ func (c *PivotComputer) selectPivots(ctx context.Context, entityIDs []string, ne
 	}
 
 	// Sort entities by PageRank score (descending)
+	// Only include entities from entityIDs (neighbors may have received scores
+	// but aren't in our entity set and won't have distance vectors)
 	type entityScore struct {
 		id    string
 		score float64
 	}
+	entitySet := make(map[string]bool, n)
+	for _, id := range entityIDs {
+		entitySet[id] = true
+	}
 	sorted := make([]entityScore, 0, n)
 	for id, score := range scores {
-		sorted = append(sorted, entityScore{id: id, score: score})
+		if entitySet[id] {
+			sorted = append(sorted, entityScore{id: id, score: score})
+		}
 	}
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].score > sorted[j].score
@@ -252,12 +260,21 @@ func (c *PivotComputer) computeDistanceVectors(ctx context.Context, entityIDs []
 
 // bfsFromPivot performs BFS from a pivot and updates distance vectors.
 func (c *PivotComputer) bfsFromPivot(pivot string, pivotIdx int, neighbors map[string][]string, distanceVectors map[string][]int) {
+	// Defensive check: ensure pivot has a distance vector
+	pivotVec, exists := distanceVectors[pivot]
+	if !exists || pivotIdx >= len(pivotVec) {
+		c.logger.Warn("pivot missing from distance vectors, skipping BFS",
+			slog.String("pivot", pivot),
+			slog.Int("pivot_idx", pivotIdx))
+		return
+	}
+
 	visited := make(map[string]bool)
 	queue := []string{pivot}
 	distance := 0
 
 	visited[pivot] = true
-	distanceVectors[pivot][pivotIdx] = 0
+	pivotVec[pivotIdx] = 0
 
 	for len(queue) > 0 {
 		// Process all nodes at current distance

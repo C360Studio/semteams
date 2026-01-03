@@ -572,6 +572,7 @@ func (s *TieredScenario) validateEmbeddingQueueHealth(ctx context.Context, resul
 // validateHierarchyInference validates that hierarchy inference is creating container entities.
 // This validates that the KV watcher pattern (Phase 3 refactor) is working correctly.
 // Phase 4: Added to verify hierarchy container creation from ENTITY_STATES watcher.
+// Phase 8: Uses SSE streaming to wait for container groups before counting.
 func (s *TieredScenario) validateHierarchyInference(ctx context.Context, result *Result) error {
 	if s.natsClient == nil {
 		result.Warnings = append(result.Warnings, "NATS client not available, skipping hierarchy inference validation")
@@ -579,6 +580,18 @@ func (s *TieredScenario) validateHierarchyInference(ctx context.Context, result 
 	}
 
 	fmt.Println("[HIERARCHY] Validating hierarchy inference container creation...")
+
+	// Wait for container groups to stabilize using SSE streaming
+	// Expected: ~20+ containers for the 74 entities in testdata/semantic/
+	const expectedMinGroups = 20
+	groupCount, usedSSE, _ := s.natsClient.WaitForContainerGroupsSSE(
+		ctx,
+		expectedMinGroups,
+		s.config.ValidationTimeout,
+		s.sseClient,
+	)
+	result.Details["hierarchy_wait_used_sse"] = usedSSE
+	result.Metrics["hierarchy_groups_found_early"] = groupCount
 
 	// Get all entity IDs from ENTITY_STATES bucket
 	allIDs, err := s.natsClient.GetAllEntityIDs(ctx)

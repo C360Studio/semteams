@@ -39,6 +39,11 @@ type StreamConsumerConfig struct {
 	// Default is 30 seconds.
 	AckWait time.Duration
 
+	// MaxAckPending limits the number of outstanding (unacknowledged) messages
+	// that can be delivered to a consumer. This provides backpressure to prevent
+	// overwhelming the consumer. 0 means unlimited (default NATS behavior).
+	MaxAckPending int
+
 	// AutoCreate enables automatic stream creation if it doesn't exist.
 	AutoCreate bool
 
@@ -260,6 +265,11 @@ func (c *Client) buildConsumerConfig(cfg StreamConsumerConfig) jetstream.Consume
 		consumerCfg.AckWait = cfg.AckWait
 	} else {
 		consumerCfg.AckWait = 30 * time.Second // Default
+	}
+
+	// Set max ack pending for backpressure
+	if cfg.MaxAckPending > 0 {
+		consumerCfg.MaxAckPending = cfg.MaxAckPending
 	}
 
 	return consumerCfg

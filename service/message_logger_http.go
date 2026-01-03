@@ -31,6 +31,11 @@ func (ml *MessageLogger) RegisterHTTPHandlers(prefix string, mux *http.ServeMux)
 	// KV query endpoints (only in development/test mode)
 	mux.HandleFunc(prefix+"kv/", ml.handleKVQuery)
 
+	// KV watch SSE endpoint - streams bucket changes in real-time
+	// Note: More specific pattern must be registered to avoid conflict with handleKVQuery
+	// The handler itself parses the path to extract bucket name
+	mux.HandleFunc("GET "+prefix+"kv/{bucket}/watch", ml.handleKVWatch)
+
 	ml.logger.Info("MessageLogger HTTP handlers registered", "prefix", prefix)
 }
 
@@ -143,6 +148,43 @@ func (ml *MessageLogger) OpenAPISpec() *OpenAPISpec {
 				},
 				"403": {
 					Description: "KV query disabled in production",
+				},
+				"404": {
+					Description: "Bucket not found",
+				},
+			},
+		},
+	}
+
+	// Add /kv/{bucket}/watch SSE endpoint
+	spec.Paths["/kv/{bucket}/watch"] = PathSpec{
+		GET: &OperationSpec{
+			Summary:     "Watch KV bucket changes",
+			Description: "Stream KV bucket changes via Server-Sent Events (SSE). Supports pattern filtering and SSE reconnection with event IDs.",
+			Tags:        []string{"MessageLogger"},
+			Parameters: []ParameterSpec{
+				{
+					Name:        "bucket",
+					In:          "path",
+					Description: "KV bucket name (e.g., ENTITY_STATES, CONTEXT_INDEX)",
+					Required:    true,
+					Schema:      Schema{Type: "string"},
+				},
+				{
+					Name:        "pattern",
+					In:          "query",
+					Description: "Key pattern to watch (e.g., 'entity.*'). Default: '*' (all keys)",
+					Required:    false,
+					Schema:      Schema{Type: "string"},
+				},
+			},
+			Responses: map[string]ResponseSpec{
+				"200": {
+					Description: "SSE stream of KV changes. Events: 'connected' (initial), 'kv_change' (updates), 'error' (failures)",
+					ContentType: "text/event-stream",
+				},
+				"400": {
+					Description: "Invalid bucket name or pattern",
 				},
 				"404": {
 					Description: "Bucket not found",

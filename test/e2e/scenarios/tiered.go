@@ -49,6 +49,10 @@ type TieredScenario struct {
 	msgLogger *client.MessageLoggerClient
 	tracer    *client.FlowTracer
 
+	// SSE client for real-time KV bucket watching (Phase 8)
+	// Falls back to polling if unavailable
+	sseClient *client.SSEClient
+
 	// Pre-send baseline for event-driven validation (captured before sending data)
 	preSendBaseline *client.MetricsBaseline
 
@@ -197,6 +201,15 @@ func (s *TieredScenario) Setup(ctx context.Context) error {
 	}
 	s.natsClient = natsClient
 
+	// Initialize SSE client for real-time KV bucket watching (Phase 8)
+	// Falls back to polling if SSE endpoint is unavailable
+	s.sseClient = client.NewSSEClient(s.config.ServiceManagerURL)
+	if err := s.sseClient.Health(ctx); err != nil {
+		// SSE not available - will fall back to polling
+		// This is expected if message-logger service is not running
+		s.sseClient = nil
+	}
+
 	return nil
 }
 
@@ -229,14 +242,15 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		// Ensures queue is drained and no failures occurred before proceeding
 		{"validate-embedding-queue-health", s.validateEmbeddingQueueHealth, []string{"statistical", "semantic"}},
 
+		// Wait for entity stabilization (all tiers)
+		// MUST run before hierarchy validation to ensure all entities are loaded
+		// SSE-enabled: uses real-time KV watching with polling fallback
+		{"wait-for-entity-stabilization", s.executeWaitForEntityStabilization, nil},
+
 		// Phase 4: Validate hierarchy inference is creating container entities
 		// Verifies the KV watcher pattern from Phase 3 is working correctly
 		// Hierarchy inference is structural (no ML) - runs on all tiers
 		{"validate-hierarchy-inference", s.validateHierarchyInference, []string{"structural", "statistical", "semantic"}},
-
-		// Wait for entity stabilization (structural tier only)
-		// Structural tier doesn't wait for embeddings, so we need to wait for entity count to stabilize
-		{"wait-for-entity-stabilization", s.executeWaitForEntityStabilization, []string{"structural"}},
 
 		{"verify-entity-count", s.executeVerifyEntityCount, nil},
 		{"verify-entity-retrieval", s.executeVerifyEntityRetrieval, nil},
@@ -787,6 +801,7 @@ func (s *TieredScenario) executeWaitForEmbeddings(ctx context.Context, result *R
 			"wait_duration":        time.Since(startWait).String(),
 			"entity_stabilization": stabilization.Stabilized,
 			"final_entity_count":   stabilization.FinalCount,
+			"used_sse":             stabilization.UsedSSE,
 		}
 
 	default:
@@ -804,6 +819,7 @@ func (s *TieredScenario) executeWaitForEmbeddings(ctx context.Context, result *R
 			"entity_stabilization": stabilization.Stabilized,
 			"final_entity_count":   stabilization.FinalCount,
 			"fallback_mode":        true,
+			"used_sse":             stabilization.UsedSSE,
 		}
 	}
 
@@ -816,64 +832,40 @@ type entityStabilizationResult struct {
 	WaitDuration time.Duration
 	Stabilized   bool
 	TimedOut     bool
+	UsedSSE      bool // true if SSE streaming was used, false if fell back to polling
 }
 
-// waitForEntityCountStabilization polls NATS KV until entity count reaches and stabilizes
-// at expectedCount for multiple consecutive checks. This is more reliable than waiting
-// for metrics because the metric may increment before the entity is persisted.
+// waitForEntityCountStabilization waits for entity count to reach expectedCount using SSE
+// streaming for real-time KV bucket watching. Falls back to polling if SSE is unavailable.
 //
 // Returns the stabilization result including final count and whether stabilization succeeded.
 func (s *TieredScenario) waitForEntityCountStabilization(ctx context.Context, expectedCount int) entityStabilizationResult {
-	const stabilizationChecks = 3
-	const checkInterval = 200 * time.Millisecond
-
-	startWait := time.Now()
-	deadline := time.Now().Add(s.config.ValidationTimeout)
-
-	var lastCount int
-	stableCount := 0
-
 	if s.natsClient == nil {
 		return entityStabilizationResult{
 			FinalCount:   0,
 			WaitDuration: 0,
 			Stabilized:   false,
 			TimedOut:     false,
+			UsedSSE:      false,
 		}
 	}
 
-	for time.Now().Before(deadline) {
-		count, err := s.natsClient.CountEntities(ctx)
-		if err != nil {
-			time.Sleep(checkInterval)
-			continue
-		}
+	// Use SSE-enabled wait function that counts SOURCE entities only (excludes containers)
+	// Container entities are created by hierarchy inference and should not be counted
+	// when waiting for testdata to fully load
+	result := s.natsClient.WaitForSourceEntityCountSSE(
+		ctx,
+		expectedCount,
+		s.config.ValidationTimeout,
+		s.sseClient,
+	)
 
-		if count == lastCount && count >= expectedCount {
-			stableCount++
-			if stableCount >= stabilizationChecks {
-				// Entity count has stabilized at or above expected
-				return entityStabilizationResult{
-					FinalCount:   count,
-					WaitDuration: time.Since(startWait),
-					Stabilized:   true,
-					TimedOut:     false,
-				}
-			}
-		} else {
-			stableCount = 0
-		}
-
-		lastCount = count
-		time.Sleep(checkInterval)
-	}
-
-	// Timeout - return what we got
 	return entityStabilizationResult{
-		FinalCount:   lastCount,
-		WaitDuration: time.Since(startWait),
-		Stabilized:   false,
-		TimedOut:     true,
+		FinalCount:   result.FinalCount,
+		WaitDuration: result.WaitDuration,
+		Stabilized:   result.Stabilized,
+		TimedOut:     result.TimedOut,
+		UsedSSE:      result.UsedSSE,
 	}
 }
 
@@ -891,6 +883,7 @@ func (s *TieredScenario) executeWaitForEntityStabilization(ctx context.Context, 
 		"wait_duration": stabilization.WaitDuration.String(),
 		"stabilized":    stabilization.Stabilized,
 		"timed_out":     stabilization.TimedOut,
+		"used_sse":      stabilization.UsedSSE,
 	}
 
 	if stabilization.TimedOut && stabilization.FinalCount < expectedEntities {
@@ -2231,11 +2224,12 @@ func (s *TieredScenario) detectVariantAndProvider(result *Result) variantInfo {
 		return *s.detectedVariant
 	}
 
-	info := variantInfo{variant: "statistical", embeddingProvider: "unknown"} // Default to statistical (BM25)
+	info := variantInfo{variant: "structural", embeddingProvider: "disabled"} // Default to structural (no embeddings)
 
 	// Check semembed availability first
 	if semembedAvailable, ok := result.Details["semembed_available"].(bool); ok && semembedAvailable {
 		info.variant = "semantic"
+		info.embeddingProvider = "http"
 	}
 
 	// Check embedding provider from metrics (overrides semembed detection)
@@ -2248,6 +2242,7 @@ func (s *TieredScenario) detectVariantAndProvider(result *Result) variantInfo {
 
 		// Parse indexengine_embedding_provider metric value using regex
 		// Format: indexengine_embedding_provider{component="..."} <value>
+		// If this metric doesn't exist, embeddings are disabled (structural tier)
 		re := regexp.MustCompile(`indexengine_embedding_provider\{[^}]*\}\s+(\d+(?:\.\d+)?)`)
 		if matches := re.FindStringSubmatch(metricsText); len(matches) > 1 {
 			switch matches[1] {
@@ -2262,6 +2257,9 @@ func (s *TieredScenario) detectVariantAndProvider(result *Result) variantInfo {
 				info.variant = "structural" // No embeddings = structural (rules-only)
 			}
 		}
+		// If metric not found, defaults remain: structural with disabled embeddings
+		// This is correct because structural tier doesn't initialize semantic search,
+		// so the embedding_provider metric is never registered/set
 	}
 
 	// Cache the result for future calls

@@ -910,3 +910,383 @@ func (c *NATSValidationClient) GetOutgoingEntries(ctx context.Context, sourceEnt
 	}
 	return entries, nil
 }
+
+// --- Phase 8: SSE-Enabled Wait Functions ---
+//
+// These functions use SSE streaming for real-time KV bucket watching,
+// with automatic fallback to polling if SSE is unavailable.
+
+// EntityStabilizationResult contains the result of waiting for entity count to stabilize.
+type EntityStabilizationResult struct {
+	FinalCount   int
+	WaitDuration time.Duration
+	Stabilized   bool
+	TimedOut     bool
+	UsedSSE      bool
+}
+
+// WaitForEntityCountSSE waits for entity count to reach target and stabilize using SSE.
+// NATS KV watch sends all existing keys first (initial sync), then streams updates.
+// We use UniqueKeyCountReaches to count unique non-deleted keys for accurate counting.
+// Falls back to polling if SSE is unavailable.
+func (c *NATSValidationClient) WaitForEntityCountSSE(
+	ctx context.Context,
+	expectedCount int,
+	timeout time.Duration,
+	sseClient *SSEClient,
+) EntityStabilizationResult {
+	startWait := time.Now()
+
+	// Try SSE first - NATS KV watch sends all existing keys during initial sync
+	if sseClient != nil {
+		if err := sseClient.Health(ctx); err == nil {
+			opts := KVWatchOpts{
+				Timeout: timeout,
+				Pattern: "*",
+			}
+
+			// Use UniqueKeyCountReaches to count actual entities, not events
+			// This properly handles initial sync (existing keys) + real-time updates
+			events, err := sseClient.WatchKVBucket(ctx, BucketEntityStates, UniqueKeyCountReaches(expectedCount), opts)
+			if err == nil {
+				// Count unique keys from all events (initial + new)
+				uniqueKeys := CountUniqueKeys(events)
+				return EntityStabilizationResult{
+					FinalCount:   uniqueKeys,
+					WaitDuration: time.Since(startWait),
+					Stabilized:   uniqueKeys >= expectedCount,
+					TimedOut:     false,
+					UsedSSE:      true,
+				}
+			}
+			// SSE failed or timed out - check if we got partial results
+			if len(events) > 0 {
+				uniqueKeys := CountUniqueKeys(events)
+				// If we have enough keys despite timeout, consider it a success
+				if uniqueKeys >= expectedCount {
+					return EntityStabilizationResult{
+						FinalCount:   uniqueKeys,
+						WaitDuration: time.Since(startWait),
+						Stabilized:   true,
+						TimedOut:     false,
+						UsedSSE:      true,
+					}
+				}
+			}
+			// SSE failed - fall through to polling
+		}
+	}
+
+	// Fallback to polling
+	result := c.waitForEntityCountPolling(ctx, expectedCount, timeout)
+	result.WaitDuration = time.Since(startWait)
+	result.UsedSSE = false
+	return result
+}
+
+// WaitForSourceEntityCountSSE waits for SOURCE entity count (excluding containers) to reach target.
+// Container entities (ending in .group, .group.container, .group.container.level) are excluded.
+// This is used to wait for testdata to fully load before validation.
+func (c *NATSValidationClient) WaitForSourceEntityCountSSE(
+	ctx context.Context,
+	expectedCount int,
+	timeout time.Duration,
+	sseClient *SSEClient,
+) EntityStabilizationResult {
+	startWait := time.Now()
+
+	// Try SSE first - NATS KV watch sends all existing keys during initial sync
+	if sseClient != nil {
+		if err := sseClient.Health(ctx); err == nil {
+			opts := KVWatchOpts{
+				Timeout: timeout,
+				Pattern: "*",
+			}
+
+			// Use SourceEntityCountReaches to count only source entities (exclude containers)
+			events, err := sseClient.WatchKVBucket(ctx, BucketEntityStates, SourceEntityCountReaches(expectedCount), opts)
+			if err == nil {
+				sourceCount := CountSourceEntities(events)
+				return EntityStabilizationResult{
+					FinalCount:   sourceCount,
+					WaitDuration: time.Since(startWait),
+					Stabilized:   sourceCount >= expectedCount,
+					TimedOut:     false,
+					UsedSSE:      true,
+				}
+			}
+			// SSE failed or timed out - check if we got partial results
+			if len(events) > 0 {
+				sourceCount := CountSourceEntities(events)
+				if sourceCount >= expectedCount {
+					return EntityStabilizationResult{
+						FinalCount:   sourceCount,
+						WaitDuration: time.Since(startWait),
+						Stabilized:   true,
+						TimedOut:     false,
+						UsedSSE:      true,
+					}
+				}
+			}
+			// SSE failed - fall through to polling
+		}
+	}
+
+	// Fallback to polling for source entities
+	result := c.waitForSourceEntityCountPolling(ctx, expectedCount, timeout)
+	result.WaitDuration = time.Since(startWait)
+	result.UsedSSE = false
+	return result
+}
+
+// waitForSourceEntityCountPolling polls NATS KV until source entity count reaches and stabilizes.
+func (c *NATSValidationClient) waitForSourceEntityCountPolling(
+	ctx context.Context,
+	expectedCount int,
+	timeout time.Duration,
+) EntityStabilizationResult {
+	const stabilizationChecks = 3
+	const checkInterval = 200 * time.Millisecond
+
+	deadline := time.Now().Add(timeout)
+
+	var lastCount int
+	stableCount := 0
+
+	for time.Now().Before(deadline) {
+		count, err := c.CountSourceEntities(ctx)
+		if err != nil {
+			time.Sleep(checkInterval)
+			continue
+		}
+
+		if count == lastCount && count >= expectedCount {
+			stableCount++
+			if stableCount >= stabilizationChecks {
+				return EntityStabilizationResult{
+					FinalCount: count,
+					Stabilized: true,
+					TimedOut:   false,
+				}
+			}
+		} else {
+			stableCount = 0
+		}
+
+		lastCount = count
+		time.Sleep(checkInterval)
+	}
+
+	return EntityStabilizationResult{
+		FinalCount: lastCount,
+		Stabilized: false,
+		TimedOut:   true,
+	}
+}
+
+// CountSourceEntities counts non-container entities in ENTITY_STATES bucket.
+func (c *NATSValidationClient) CountSourceEntities(ctx context.Context) (int, error) {
+	allIDs, err := c.GetAllEntityIDs(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, id := range allIDs {
+		if !isContainerEntityID(id) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// isContainerEntityID checks if an entity ID is a container (hierarchy inference).
+func isContainerEntityID(id string) bool {
+	return strings.HasSuffix(id, ".group") ||
+		strings.HasSuffix(id, ".group.container") ||
+		strings.HasSuffix(id, ".group.container.level")
+}
+
+// waitForEntityCountPolling polls NATS KV until entity count reaches and stabilizes.
+func (c *NATSValidationClient) waitForEntityCountPolling(
+	ctx context.Context,
+	expectedCount int,
+	timeout time.Duration,
+) EntityStabilizationResult {
+	const stabilizationChecks = 3
+	const checkInterval = 200 * time.Millisecond
+
+	deadline := time.Now().Add(timeout)
+
+	var lastCount int
+	stableCount := 0
+
+	for time.Now().Before(deadline) {
+		count, err := c.CountEntities(ctx)
+		if err != nil {
+			time.Sleep(checkInterval)
+			continue
+		}
+
+		if count == lastCount && count >= expectedCount {
+			stableCount++
+			if stableCount >= stabilizationChecks {
+				return EntityStabilizationResult{
+					FinalCount: count,
+					Stabilized: true,
+					TimedOut:   false,
+				}
+			}
+		} else {
+			stableCount = 0
+		}
+
+		lastCount = count
+		time.Sleep(checkInterval)
+	}
+
+	return EntityStabilizationResult{
+		FinalCount: lastCount,
+		Stabilized: false,
+		TimedOut:   true,
+	}
+}
+
+// WaitForKeySSE waits for a specific key to appear in a bucket using SSE streaming.
+// Falls back to polling if SSE is unavailable.
+func (c *NATSValidationClient) WaitForKeySSE(
+	ctx context.Context,
+	bucket, key string,
+	timeout time.Duration,
+	sseClient *SSEClient,
+) (found bool, usedSSE bool, err error) {
+	// Try SSE first
+	if sseClient != nil {
+		if err := sseClient.Health(ctx); err == nil {
+			opts := KVWatchOpts{
+				Timeout: timeout,
+				Pattern: "*",
+			}
+
+			events, err := sseClient.WatchKVBucket(ctx, bucket, KeyExists(key), opts)
+			if err == nil {
+				for _, e := range events {
+					if e.Key == key {
+						return true, true, nil
+					}
+				}
+				return false, true, nil
+			}
+			// SSE failed - fall through to polling
+		}
+	}
+
+	// Fallback: poll for key
+	found, err = c.waitForKeyPolling(ctx, bucket, key, timeout)
+	return found, false, err
+}
+
+// waitForKeyPolling polls for a specific key to appear.
+func (c *NATSValidationClient) waitForKeyPolling(
+	ctx context.Context,
+	bucket, key string,
+	timeout time.Duration,
+) (bool, error) {
+	const pollInterval = 200 * time.Millisecond
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		kvBucket, err := c.client.GetKeyValueBucket(ctx, bucket)
+		if err == nil {
+			_, err = kvBucket.Get(ctx, key)
+			if err == nil {
+				return true, nil
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+
+	return false, nil
+}
+
+// WaitForContainerGroupsSSE waits for container groups (keys ending in ".group") using SSE.
+// Falls back to polling if SSE is unavailable.
+func (c *NATSValidationClient) WaitForContainerGroupsSSE(
+	ctx context.Context,
+	expectedCount int,
+	timeout time.Duration,
+	sseClient *SSEClient,
+) (count int, usedSSE bool, err error) {
+	// Try SSE first
+	if sseClient != nil {
+		if err := sseClient.Health(ctx); err == nil {
+			opts := KVWatchOpts{
+				Timeout: timeout,
+				Pattern: "*",
+			}
+
+			events, err := sseClient.WatchKVBucket(ctx, BucketEntityStates, KeySuffixCount(".group", expectedCount), opts)
+			if err == nil {
+				// Count unique .group keys
+				seen := make(map[string]bool)
+				for _, e := range events {
+					if strings.HasSuffix(e.Key, ".group") {
+						seen[e.Key] = true
+					}
+				}
+				return len(seen), true, nil
+			}
+			// SSE failed - fall through to polling
+		}
+	}
+
+	// Fallback: poll for groups
+	count, err = c.waitForContainerGroupsPolling(ctx, expectedCount, timeout)
+	return count, false, err
+}
+
+// waitForContainerGroupsPolling polls for container group entities.
+func (c *NATSValidationClient) waitForContainerGroupsPolling(
+	ctx context.Context,
+	expectedCount int,
+	timeout time.Duration,
+) (int, error) {
+	const pollInterval = 200 * time.Millisecond
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		allIDs, err := c.GetAllEntityIDs(ctx)
+		if err == nil {
+			groupCount := 0
+			for _, id := range allIDs {
+				if strings.HasSuffix(id, ".group") {
+					groupCount++
+				}
+			}
+			if groupCount >= expectedCount {
+				return groupCount, nil
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+
+	// Return final count even on timeout
+	allIDs, _ := c.GetAllEntityIDs(ctx)
+	groupCount := 0
+	for _, id := range allIDs {
+		if strings.HasSuffix(id, ".group") {
+			groupCount++
+		}
+	}
+	return groupCount, nil
+}

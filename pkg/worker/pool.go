@@ -181,6 +181,35 @@ func (p *Pool[T]) Submit(work T) error {
 	}
 }
 
+// SubmitBlocking submits work, blocking until space is available or context cancelled.
+// Unlike Submit, this method will wait for queue space rather than returning ErrQueueFull.
+func (p *Pool[T]) SubmitBlocking(ctx context.Context, work T) error {
+	// Check lifecycle state without holding lock during blocking wait
+	p.lifecycleMu.Lock()
+	if !p.started {
+		p.lifecycleMu.Unlock()
+		return ErrPoolNotStarted
+	}
+	if p.stopped {
+		p.lifecycleMu.Unlock()
+		return ErrPoolStopped
+	}
+	p.lifecycleMu.Unlock()
+
+	// Blocking submit with context cancellation support
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case p.workChan <- work:
+		atomic.AddInt64(&p.submitted, 1)
+		if p.metrics != nil {
+			p.metrics.submitted.Inc()
+			p.metrics.queueDepth.Set(float64(len(p.workChan)))
+		}
+		return nil
+	}
+}
+
 // Start starts the worker pool
 func (p *Pool[T]) Start(ctx context.Context) error {
 	p.lifecycleMu.Lock()

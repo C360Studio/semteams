@@ -165,8 +165,9 @@ func NewManager(
 		entityBucket, config.Buckets.EntityStates, eventChan, metrics, promMetrics, logger)
 
 	// Create worker pool for processing
+	// Queue size is 4x batch size to handle bursts without blocking
 	workers := worker.NewPool[func(context.Context)](
-		config.Workers, config.BatchProcessing.Size*2,
+		config.Workers, config.BatchProcessing.Size*4,
 		func(ctx context.Context, task func(context.Context)) error {
 			task(ctx)
 			return nil
@@ -468,15 +469,11 @@ func (m *Manager) initializeIndexes() error {
 }
 
 // processEvents collects events into batches for processing
-// Returns only fatal errors - transient errors are logged and processing continues
+// Returns only fatal errors - transient errors are handled with blocking submit
 func (m *Manager) processEvents(ctx context.Context) error {
 	batch := make([]EntityChange, 0, m.config.BatchProcessing.Size)
 	ticker := time.NewTicker(m.config.BatchProcessing.Interval)
 	defer ticker.Stop()
-
-	// Track consecutive batch drops to detect systemic issues
-	var consecutiveDrops int
-	const maxConsecutiveDrops = 10
 
 	for {
 		select {
@@ -498,59 +495,47 @@ func (m *Manager) processEvents(ctx context.Context) error {
 
 			// Process batch if full
 			if len(batch) >= m.config.BatchProcessing.Size {
-				if err := m.submitBatch(ctx, batch); err != nil {
+				if err := m.submitBatchBlocking(ctx, batch); err != nil {
 					if errs.IsFatal(err) {
 						return err
 					}
-					// Batch was dropped due to backpressure
-					consecutiveDrops++
-					m.logger.Debug("Batch dropped due to backpressure",
-						"error", err,
-						"consecutive_drops", consecutiveDrops)
-
-					// Too many consecutive drops indicates systemic problem
-					if consecutiveDrops >= maxConsecutiveDrops {
-						return errs.WrapFatal(
-							fmt.Errorf("batch channel persistently full: %d consecutive drops", consecutiveDrops),
-							"IndexManager", "processEvents", "backpressure_failure")
+					// Context cancelled during blocking submit
+					if ctx.Err() != nil {
+						return nil
 					}
-				} else {
-					// Reset counter on success
-					consecutiveDrops = 0
+					m.logger.Debug("Batch submit failed, retrying on next event",
+						"error", err,
+						"batch_size", len(batch))
+					// Don't reset batch - will retry on next event or timer
+					continue
 				}
-				batch = batch[:0] // Reset slice
+				batch = batch[:0] // Reset slice only on success
 			}
 
 		case <-ticker.C:
 			// Process batch on timer
 			if len(batch) > 0 {
-				if err := m.submitBatch(ctx, batch); err != nil {
+				if err := m.submitBatchBlocking(ctx, batch); err != nil {
 					if errs.IsFatal(err) {
 						return err
 					}
-					// Batch was dropped due to backpressure
-					consecutiveDrops++
-					m.logger.Debug("Batch dropped due to backpressure on timer",
-						"error", err,
-						"consecutive_drops", consecutiveDrops)
-
-					// Too many consecutive drops indicates systemic problem
-					if consecutiveDrops >= maxConsecutiveDrops {
-						return errs.WrapFatal(
-							fmt.Errorf("batch channel persistently full: %d consecutive drops", consecutiveDrops),
-							"IndexManager", "processEvents", "backpressure_failure")
+					// Context cancelled during blocking submit
+					if ctx.Err() != nil {
+						return nil
 					}
-				} else {
-					// Reset counter on success
-					consecutiveDrops = 0
+					m.logger.Debug("Timer batch submit failed, will retry",
+						"error", err,
+						"batch_size", len(batch))
+					// Don't reset batch - will retry on next timer tick
+					continue
 				}
-				batch = batch[:0] // Reset slice
+				batch = batch[:0] // Reset slice only on success
 			}
 		}
 	}
 }
 
-// submitBatch submits a batch of events for processing
+// submitBatch submits a batch of events for processing (non-blocking)
 // Returns error if batch cannot be submitted
 func (m *Manager) submitBatch(ctx context.Context, batch []EntityChange) error {
 	// Copy batch to avoid race conditions
@@ -576,12 +561,31 @@ func (m *Manager) submitBatch(ctx context.Context, batch []EntityChange) error {
 	}
 }
 
+// submitBatchBlocking submits a batch of events for processing (blocking)
+// Waits for space in the batch channel rather than dropping
+func (m *Manager) submitBatchBlocking(ctx context.Context, batch []EntityChange) error {
+	// Copy batch to avoid race conditions
+	batchCopy := make([]EntityChange, len(batch))
+	copy(batchCopy, batch)
+
+	select {
+	case m.batchChan <- batchCopy:
+		// Successfully submitted
+		return nil
+	case <-ctx.Done():
+		// Context cancelled, clean shutdown
+		return ctx.Err()
+	}
+}
+
 // processBatches processes batches of events using worker pool
-// Returns only fatal errors - transient errors are logged and processing continues
+// Returns only fatal errors - transient errors are handled with exponential backoff
 func (m *Manager) processBatches(ctx context.Context) error {
-	// Counter for consecutive submit failures
-	var submitFailures int
-	const maxConsecutiveFailures = 10
+	var backoff time.Duration
+	const (
+		initialBackoff = 10 * time.Millisecond
+		maxBackoff     = 1 * time.Second
+	)
 
 	for {
 		select {
@@ -593,38 +597,53 @@ func (m *Manager) processBatches(ctx context.Context) error {
 				return nil // Channel closed
 			}
 
-			// Submit batch to worker pool
-			batchCopy := batch // capture batch for closure
-			err := m.workers.Submit(func(ctx context.Context) {
-				m.processBatch(ctx, batchCopy)
-			})
+			// Keep trying until submitted or context cancelled
+			for {
+				batchCopy := batch // capture batch for closure
+				err := m.workers.Submit(func(ctx context.Context) {
+					m.processBatch(ctx, batchCopy)
+				})
 
-			if err != nil {
-				// Check error type to determine severity
+				if err == nil {
+					backoff = 0 // Reset on success
+					break
+				}
+
+				// Pool stopped is still fatal - no recovery possible
 				if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
-					// Worker pool stopped unexpectedly - this is fatal
-					return errs.WrapFatal(err, "IndexManager", "processBatches", "worker pool no longer running")
+					return errs.WrapFatal(err, "IndexManager", "processBatches",
+						"worker pool no longer running")
 				}
+
+				// Queue full - apply backpressure with exponential backoff
 				if stderrors.Is(err, worker.ErrQueueFull) {
-					// Queue full is transient - log and continue
-					submitFailures++
-					m.logger.Warn("Worker pool queue full, batch dropped",
-						"error", err,
-						"batch_size", len(batch),
-						"consecutive_failures", submitFailures)
+					if backoff == 0 {
+						backoff = initialBackoff
+					} else {
+						backoff = min(backoff*2, maxBackoff)
+					}
+
+					m.logger.Debug("Worker queue full, backing off",
+						"backoff", backoff,
+						"batch_size", len(batch))
+
+					// Record backpressure metric
+					if m.promMetrics != nil {
+						m.promMetrics.backpressureRetries.Inc()
+						m.promMetrics.backpressureDelayMs.Observe(float64(backoff.Milliseconds()))
+					}
+
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-time.After(backoff):
+						continue // Retry submit
+					}
 				}
-				// Too many consecutive failures might indicate a problem
-				if submitFailures >= maxConsecutiveFailures {
-					return errs.WrapFatal(
-						fmt.Errorf("worker pool unresponsive: %d consecutive submit failures", submitFailures),
-						"IndexManager",
-						"processBatches",
-						"queue_stuck",
-					)
-				}
-			} else {
-				// Reset counter on success
-				submitFailures = 0
+
+				// Unknown error - log and break to avoid infinite loop
+				m.logger.Error("Unexpected worker pool error", "error", err)
+				break
 			}
 		}
 	}

@@ -24,6 +24,11 @@ type Config struct {
 
 	QueueSize int `json:"queue_size"    schema:"type:int,description:Worker queue size,default:10000,category:basic"`
 
+	// MaxAckPending limits in-flight messages to prevent overwhelming the processor.
+	// This enables NATS-level backpressure for proper "at least once" delivery semantics.
+	// Default: 20 (2x default workers). Set to 0 for unlimited (not recommended).
+	MaxAckPending int `json:"max_ack_pending,omitempty" schema:"type:int,description:Maximum unacknowledged messages for backpressure,default:20,category:advanced"`
+
 	// Deprecated: Use Ports instead
 	InputSubject string `json:"input_subject,omitempty" schema:"type:string,description:NATS subject to subscribe for input messages (deprecated: use ports),category:basic"`
 

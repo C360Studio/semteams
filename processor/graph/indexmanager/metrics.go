@@ -47,6 +47,10 @@ type PrometheusMetrics struct {
 	watchReconnections prometheus.Counter
 	watchersActive     prometheus.Gauge
 
+	// Backpressure metrics
+	backpressureRetries prometheus.Counter   // Total retries due to queue full
+	backpressureDelayMs prometheus.Histogram // Backoff delay distribution
+
 	// Embedding metrics
 	embeddingProvider        prometheus.Gauge   // 0=disabled, 1=bm25, 2=http
 	embeddingsGenerated      prometheus.Counter // Total embeddings generated
@@ -76,6 +80,7 @@ func NewPrometheusMetrics(component string, registry *metric.MetricsRegistry) *P
 	indexMetrics := createIndexMetrics(component, registry)
 	queryMetrics := createQueryMetrics(component, registry)
 	embeddingMetrics := createEmbeddingMetrics(component, registry)
+	backpressureMetrics := createBackpressureMetrics(component, registry)
 
 	return &PrometheusMetrics{
 		eventsTotal:              eventMetrics.total,
@@ -113,6 +118,8 @@ func NewPrometheusMetrics(component string, registry *metric.MetricsRegistry) *P
 		embeddingsQueued:         embeddingMetrics.queued,
 		embeddingDedupHits:       embeddingMetrics.dedupHits,
 		embeddingsFailed:         embeddingMetrics.failed,
+		backpressureRetries:      backpressureMetrics.retries,
+		backpressureDelayMs:      backpressureMetrics.delayMs,
 	}
 }
 
@@ -351,6 +358,35 @@ func createQueryMetrics(component string, registry *metric.MetricsRegistry) *que
 		total:   queriesTotal,
 		failed:  queriesFailed,
 		latency: queryLatency,
+	}
+}
+
+// backpressureMetricsSet holds backpressure-related metrics
+type backpressureMetricsSet struct {
+	retries prometheus.Counter
+	delayMs prometheus.Histogram
+}
+
+// createBackpressureMetrics creates metrics for backpressure monitoring
+func createBackpressureMetrics(component string, registry *metric.MetricsRegistry) *backpressureMetricsSet {
+	retries := prometheus.NewCounter(prometheus.CounterOpts{
+		Name:        "indexengine_backpressure_retries_total",
+		Help:        "Total number of submit retries due to worker pool backpressure",
+		ConstLabels: prometheus.Labels{"component": component},
+	})
+	registry.RegisterCounter("indexengine", "backpressure_retries_total", retries)
+
+	delayMs := prometheus.NewHistogram(prometheus.HistogramOpts{
+		Name:        "indexengine_backpressure_delay_ms",
+		Help:        "Backpressure backoff delay in milliseconds",
+		ConstLabels: prometheus.Labels{"component": component},
+		Buckets:     []float64{10, 25, 50, 100, 250, 500, 1000},
+	})
+	registry.RegisterHistogram("indexengine", "backpressure_delay_ms", delayMs)
+
+	return &backpressureMetricsSet{
+		retries: retries,
+		delayMs: delayMs,
 	}
 }
 

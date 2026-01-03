@@ -50,6 +50,13 @@ const (
 	DefaultEntityChangeThreshold = 100
 )
 
+// ProcessWork carries message data and the JetStream message for ACK/NAK after processing.
+// This enables proper "at least once" delivery semantics by ACKing only after successful KV write.
+type ProcessWork struct {
+	Data []byte        // Raw message data to process
+	Msg  jetstream.Msg // JetStream message for ACK/NAK (nil for non-JetStream messages)
+}
+
 // schema defines the configuration schema for graph processor component
 // Generated from Config struct tags using reflection
 var schema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
@@ -84,7 +91,7 @@ type Processor struct {
 	aliasCache  cache.Cache[string]
 
 	// Worker management
-	workerPool *worker.Pool[[]byte]
+	workerPool *worker.Pool[*ProcessWork]
 
 	// Background modules management
 	moduleCancel context.CancelFunc
@@ -446,9 +453,10 @@ func (p *Processor) buildOutputPortsFromConfig() []component.Port {
 // DefaultConfig returns default processor configuration
 func DefaultConfig() *Config {
 	return &Config{
-		Workers:      10,
-		QueueSize:    10000,
-		InputSubject: "storage.*.events", // Subscribe to ObjectStore events
+		Workers:       10,
+		QueueSize:     10000,
+		MaxAckPending: 20,                 // 2x workers for NATS-level backpressure
+		InputSubject:  "storage.*.events", // Subscribe to ObjectStore events
 
 		// Enable sophisticated components by default
 		DataManager: func() *datamanager.Config {
@@ -697,12 +705,13 @@ func (p *Processor) Start(ctx context.Context) error {
 // setupWorkerPoolAndHandlers creates worker pool and sets up NATS handlers
 func (p *Processor) setupWorkerPoolAndHandlers(ctx context.Context) error {
 	// Initialize worker pool (always create a fresh instance)
+	// Uses processWorkWithAck to ACK messages only after successful KV write
 	p.logger.Debug("Creating worker pool", "workers", p.config.Workers, "queue_size", p.config.QueueSize)
 	workerPool := worker.NewPool(
 		p.config.Workers,
 		p.config.QueueSize,
-		p.messageManager.ProcessWork,
-		worker.WithMetricsRegistry[[]byte](p.metricsRegistry, "graph_processor"),
+		p.processWorkWithAck,
+		worker.WithMetricsRegistry[*ProcessWork](p.metricsRegistry, "graph_processor"),
 	)
 
 	// Assign with proper locking
@@ -1408,10 +1417,11 @@ func (p *Processor) setupStreamConsumer(ctx context.Context, streamName, filterS
 		StreamName:    streamName,
 		ConsumerName:  consumerName,
 		FilterSubject: filterSubject,
-		DeliverPolicy: "all",      // Process all messages including historical
-		AckPolicy:     "explicit", // Explicit ack required
-		MaxDeliver:    5,          // Retry up to 5 times before giving up
-		AutoCreate:    false,      // Stream should already exist (created by StreamsManager)
+		DeliverPolicy: "all",                  // Process all messages including historical
+		AckPolicy:     "explicit",             // Explicit ack required
+		MaxDeliver:    5,                      // Retry up to 5 times before giving up
+		MaxAckPending: p.config.MaxAckPending, // NATS-level backpressure
+		AutoCreate:    false,                  // Stream should already exist (created by StreamsManager)
 	}
 
 	err := p.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
@@ -1559,10 +1569,11 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, subject string) 
 		StreamName:    p.config.StreamName,
 		ConsumerName:  p.config.ConsumerName,
 		FilterSubject: subject,
-		DeliverPolicy: "all",      // Process all messages including historical
-		AckPolicy:     "explicit", // Explicit ack required
-		MaxDeliver:    5,          // Retry up to 5 times before giving up
-		AutoCreate:    true,       // Auto-create stream if it doesn't exist
+		DeliverPolicy: "all",                  // Process all messages including historical
+		AckPolicy:     "explicit",             // Explicit ack required
+		MaxDeliver:    5,                      // Retry up to 5 times before giving up
+		MaxAckPending: p.config.MaxAckPending, // NATS-level backpressure
+		AutoCreate:    true,                   // Auto-create stream if it doesn't exist
 		AutoCreateConfig: &natsclient.StreamAutoCreateConfig{
 			Subjects:  p.getStreamSubjects(),
 			Storage:   "file",
@@ -1582,8 +1593,8 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, subject string) 
 }
 
 // handleJetStreamMessage processes a JetStream message with explicit acknowledgment.
-// Uses async worker pool for throughput. Messages are ACK'd after successful submission
-// to the worker pool. The write buffer provides durability for in-flight messages.
+// Messages are ACK'd only after successful processing (KV write complete), not on queue submission.
+// This ensures "at least once" delivery semantics - messages are redelivered on failure.
 func (p *Processor) handleJetStreamMessage(ctx context.Context, msg jetstream.Msg) {
 	// Log received message subject for debugging
 	p.logger.Debug("JetStream message received",
@@ -1606,43 +1617,67 @@ func (p *Processor) handleJetStreamMessage(ctx context.Context, msg jetstream.Ms
 		return
 	}
 
-	data := msg.Data()
+	// Create work item with message for ACK/NAK after processing
+	work := &ProcessWork{
+		Data: msg.Data(),
+		Msg:  msg,
+	}
 
-	// Submit to worker pool for async processing
-	if err := p.workerPool.Submit(data); err != nil {
+	// Submit to worker pool - ACK/NAK happens in processWorkWithAck after processing completes
+	if err := p.workerPool.Submit(work); err != nil {
 		// Check error type to determine acknowledgment strategy
 		if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
 			// Worker pool stopped unexpectedly - nak for redelivery
 			p.recordError("Worker pool stopped unexpectedly")
 			p.logger.Error("Worker pool no longer running",
 				"error", err,
-				"data_len", len(data))
+				"data_len", len(work.Data))
 			_ = msg.Nak()
 		} else if stderrors.Is(err, worker.ErrQueueFull) {
 			// Queue full is transient - nak with delay for backpressure
 			p.logger.Debug("Worker queue full, nak-ing message",
-				"data_len", len(data))
+				"data_len", len(work.Data))
 			_ = msg.NakWithDelay(time.Second) // Delay redelivery by 1s
 		} else {
 			// Unknown error - nak for redelivery
 			p.recordError(fmt.Sprintf("Unexpected worker pool error: %v", err))
 			p.logger.Warn("Failed to submit message to worker pool",
-				"data_len", len(data),
+				"data_len", len(work.Data),
 				"error", err)
 			_ = msg.Nak()
 		}
 		return
 	}
-
-	// Successfully submitted to worker pool - acknowledge
-	// Note: Processing happens async. The write buffer provides durability for in-flight data.
-	// If processing fails after ACK, the data is still in the buffer and will be written.
-	if err := msg.Ack(); err != nil {
-		p.logger.Warn("Failed to ack message", "error", err)
-	}
+	// NOTE: Do NOT ACK here - worker will ACK after successful processing in processWorkWithAck
 }
 
 // Message handling - pure orchestration
+
+// processWorkWithAck processes a work item and ACKs/NAKs the JetStream message after completion.
+// This ensures "at least once" delivery semantics by only ACKing after successful KV write.
+func (p *Processor) processWorkWithAck(ctx context.Context, work *ProcessWork) error {
+	// Process the message data through the message manager
+	err := p.messageManager.ProcessWork(ctx, work.Data)
+
+	// ACK or NAK the JetStream message based on processing result
+	if work.Msg != nil {
+		if err != nil {
+			// Processing failed - NAK for redelivery
+			if nakErr := work.Msg.Nak(); nakErr != nil {
+				p.logger.Warn("Failed to NAK message after processing error",
+					"error", nakErr, "processing_error", err)
+			}
+		} else {
+			// Processing succeeded - ACK to confirm delivery
+			if ackErr := work.Msg.Ack(); ackErr != nil {
+				p.logger.Warn("Failed to ACK message after successful processing",
+					"error", ackErr)
+			}
+		}
+	}
+
+	return err
+}
 
 func (p *Processor) handleMessage(ctx context.Context, data []byte) {
 	// Check context before processing
@@ -1659,8 +1694,14 @@ func (p *Processor) handleMessage(ctx context.Context, data []byte) {
 		return
 	}
 
-	// Delegate to worker pool which uses messageProcessor
-	if err := p.workerPool.Submit(data); err != nil {
+	// Create work item without JetStream message (no ACK needed for non-JetStream)
+	work := &ProcessWork{
+		Data: data,
+		Msg:  nil, // No ACK/NAK for non-JetStream messages
+	}
+
+	// Delegate to worker pool which uses processWorkWithAck
+	if err := p.workerPool.Submit(work); err != nil {
 		// Check error type to determine severity
 		if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
 			// Worker pool stopped unexpectedly - this is critical

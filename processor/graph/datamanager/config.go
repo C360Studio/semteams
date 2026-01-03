@@ -41,6 +41,9 @@ type BufferConfig struct {
 	MaxBatchAge     time.Duration `json:"max_batch_age,omitempty" default:"100ms"` // Max age before forced flush
 
 	// Overflow policy when buffer is full
+	// "drop_oldest" (default) - drop oldest items to make room (NATS MaxAckPending provides backpressure)
+	// "drop_newest" - drop incoming items when full
+	// "block" - wait for space (WARNING: can cause IndexManager deadlock, use only with careful tuning)
 	OverflowPolicy string `json:"overflow_policy,omitempty" default:"drop_oldest"` // drop_oldest, drop_newest, block
 }
 
@@ -81,7 +84,7 @@ func DefaultConfig() Config {
 			FlushInterval:   50 * time.Millisecond,
 			MaxBatchSize:    100,
 			MaxBatchAge:     100 * time.Millisecond,
-			OverflowPolicy:  "drop_oldest",
+			OverflowPolicy:  "drop_oldest", // NATS MaxAckPending provides backpressure at source
 		},
 		BucketConfig: BucketConfig{
 			Name:     "ENTITY_STATES",

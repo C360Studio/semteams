@@ -69,7 +69,7 @@
         },
         "path": "/data/testdata/semantic/sensors.jsonl",
         "format": "jsonl",
-        "interval": "100ms",
+        "interval": "10ms",
         "loop": false
       }
     },
