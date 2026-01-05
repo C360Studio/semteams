@@ -374,9 +374,13 @@ func (rp *Processor) Start(ctx context.Context) error {
 	}
 
 	// Initialize entity coalescer for batched rule evaluation
-	rp.entityCoalescer = cache.NewCoalescingSet(ctx, rp.config.DebounceDelayMs, func(entityIDs []string) {
-		rp.evaluateEntitiesInBatch(ctx, entityIDs)
-	})
+	// Only create coalescer if debounce delay is non-zero
+	// When debounce is 0, entities are evaluated immediately without batching
+	if rp.config.DebounceDelayMs > 0 {
+		rp.entityCoalescer = cache.NewCoalescingSet(ctx, rp.config.DebounceDelayMs, func(entityIDs []string) {
+			rp.evaluateEntitiesInBatch(ctx, entityIDs)
+		})
+	}
 
 	// Create shutdown and done channels for coordination
 	rp.shutdown = make(chan struct{})

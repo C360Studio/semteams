@@ -130,6 +130,22 @@ func NewHierarchyInference(
 	}
 }
 
+// isContainerEntity returns true if the entityID represents a container entity.
+// Container entities end with .group, .container, or .level and have exactly 6 parts.
+func isContainerEntity(entityID string) bool {
+	if entityID == "" {
+		return false
+	}
+
+	parts := strings.Split(entityID, ".")
+	if len(parts) != 6 {
+		return false
+	}
+
+	lastPart := parts[5]
+	return lastPart == "group" || lastPart == "container" || lastPart == "level"
+}
+
 // OnEntityCreated is called when a new entity is added to the graph.
 // It creates membership edges to container entities based on the entity's 6-part ID.
 //
@@ -142,6 +158,11 @@ func NewHierarchyInference(
 // container creations (which are idempotent and cached).
 func (h *HierarchyInference) OnEntityCreated(ctx context.Context, entityID string) error {
 	if !h.config.Enabled {
+		return nil
+	}
+
+	// Skip container entities to prevent infinite cascade
+	if isContainerEntity(entityID) {
 		return nil
 	}
 

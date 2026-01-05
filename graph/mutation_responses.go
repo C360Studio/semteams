@@ -15,7 +15,7 @@ type MutationResponse struct {
 	Error      string `json:"error,omitempty"`
 	TraceID    string `json:"trace_id,omitempty"`
 	RequestID  string `json:"request_id,omitempty"`
-	Timestamp  int64  `json:"timestamp"`              // Unix nano timestamp
+	Timestamp  int64  `json:"timestamp"`             // Unix nano timestamp
 	KVRevision uint64 `json:"kv_revision,omitempty"` // KV bucket revision after write
 }
 

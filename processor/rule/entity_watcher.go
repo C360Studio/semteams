@@ -102,15 +102,29 @@ func (rp *Processor) handleEntityUpdates(ctx context.Context, watcher jetstream.
 
 			// Handle deletion by removing from coalescer and evaluating immediately
 			if action == "DELETED" {
-				rp.entityCoalescer.Remove(entityKey)
+				if rp.entityCoalescer != nil {
+					rp.entityCoalescer.Remove(entityKey)
+				}
 				// Still evaluate rules for deletion event
 				rp.evaluateRulesForEntityState(ctx, entityKey, action, nil)
 				continue
 			}
 
-			// Collect entity ID for batched evaluation
-			// The coalescer will fetch current state at evaluation time
-			rp.entityCoalescer.Add(entityKey)
+			// If debounce is disabled (coalescer is nil), evaluate immediately
+			// Otherwise, collect entity ID for batched evaluation
+			if rp.entityCoalescer == nil {
+				// Bypass: unmarshal state and evaluate immediately without batching
+				var state gtypes.EntityState
+				if err := json.Unmarshal(entry.Value(), &state); err != nil {
+					rp.logger.Warn("Failed to unmarshal entity state for immediate evaluation",
+						"entity", entityKey, "error", err)
+					continue
+				}
+				rp.evaluateRulesForEntityState(ctx, entityKey, action, &state)
+			} else {
+				// Batched: the coalescer will fetch current state at evaluation time
+				rp.entityCoalescer.Add(entityKey)
+			}
 		}
 	}
 }
