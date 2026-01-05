@@ -69,17 +69,18 @@ type Processor struct {
 	metricsRegistry *metric.MetricsRegistry
 
 	// Runtime state
-	running           bool          // Tracks if processor is running (protected by mu)
-	shutdown          chan struct{} // Closed to signal shutdown, never set to nil while running
-	done              chan struct{}
-	startTime         time.Time
-	messagesEvaluated int64
-	rulesTriggered    int64
-	eventsPublished   int64 // New metric for event publishing
-	errorCount        int64
-	lastError         string
-	lastActivity      time.Time
-	mu                sync.RWMutex
+	running            bool          // Tracks if processor is running (protected by mu)
+	shutdown           chan struct{} // Closed to signal shutdown, never set to nil while running
+	done               chan struct{}
+	startTime          time.Time
+	messagesEvaluated  int64
+	rulesTriggered     int64
+	eventsPublished    int64 // New metric for event publishing
+	errorCount         int64
+	lastError          string
+	lastActivity       time.Time
+	lastEvaluationTime time.Time // Last time rules were evaluated
+	mu                 sync.RWMutex
 
 	// Active subscriptions flag
 	isSubscribed bool
@@ -90,12 +91,20 @@ type Processor struct {
 	// KV watchers for entity state changes
 	entityWatchers []jetstream.KeyWatcher
 
+	// Entity coalescer for batched rule evaluation
+	entityCoalescer *cache.CoalescingSet
+
 	// Prometheus metrics
 	metrics *Metrics
 
 	// Stateful rule support
 	stateTracker      *StateTracker
 	statefulEvaluator *StatefulEvaluator
+
+	// Revision tracking for feedback loop prevention
+	// Maps entityID to the KV revision we generated via rule actions
+	ownRevisions map[string]uint64
+	revisionMu   sync.RWMutex
 
 	// Logger
 	logger *slog.Logger
@@ -136,6 +145,7 @@ func NewProcessorWithMetrics(natsClient *natsclient.Client, config *Config, metr
 		config:          config,
 		metricsRegistry: metricsRegistry,
 		entityWatchers:  make([]jetstream.KeyWatcher, 0),
+		ownRevisions:    make(map[string]uint64),
 		health: component.HealthStatus{
 			Healthy:    true,
 			LastCheck:  time.Now(),
@@ -155,6 +165,8 @@ func NewProcessorWithMetrics(natsClient *natsclient.Client, config *Config, metr
 
 	// Set up input and output ports
 	rp.setupPorts()
+
+	// Note: entityCoalescer will be initialized in Start() when we have a context
 
 	return rp, nil
 }
@@ -316,8 +328,18 @@ func (rp *Processor) initializeStateTracker(ctx context.Context) error {
 	// Create StateTracker
 	rp.stateTracker = NewStateTracker(bucket, rp.logger)
 
-	// Create ActionExecutor
-	actionExecutor := NewActionExecutor(rp.logger)
+	// Create ActionExecutor with triple mutation support
+	// The tripleMutator uses NATS request/response to persist triples and tracks
+	// KV revisions to prevent feedback loops in rule evaluation
+	var actionExecutor ActionExecutorInterface
+	if rp.natsClient != nil && rp.config.EnableGraphIntegration {
+		mutator := newTripleMutator(rp.natsClient, rp)
+		actionExecutor = NewActionExecutorWithMutator(rp.logger, mutator)
+		rp.logger.Info("ActionExecutor initialized with triple mutation support")
+	} else {
+		actionExecutor = NewActionExecutor(rp.logger)
+		rp.logger.Info("ActionExecutor initialized without triple mutation (graph integration disabled)")
+	}
 
 	// Create StatefulEvaluator
 	rp.statefulEvaluator = NewStatefulEvaluator(rp.stateTracker, actionExecutor, rp.logger)
@@ -350,6 +372,11 @@ func (rp *Processor) Start(ctx context.Context) error {
 		rp.logger.Warn("Failed to initialize state tracker, stateful rules will be disabled", "error", err)
 		// Don't fail - processor can still work with stateless rules
 	}
+
+	// Initialize entity coalescer for batched rule evaluation
+	rp.entityCoalescer = cache.NewCoalescingSet(ctx, rp.config.DebounceDelayMs, func(entityIDs []string) {
+		rp.evaluateEntitiesInBatch(ctx, entityIDs)
+	})
 
 	// Create shutdown and done channels for coordination
 	rp.shutdown = make(chan struct{})
@@ -550,6 +577,13 @@ func (rp *Processor) Stop(_ time.Duration) error {
 	}
 	rp.entityWatchers = nil
 
+	// Close entity coalescer
+	if rp.entityCoalescer != nil {
+		if err := rp.entityCoalescer.Close(); err != nil {
+			rp.logger.Warn("Failed to close entity coalescer", "error", err)
+		}
+	}
+
 	// Clean up all rules
 	rp.rules = nil
 
@@ -609,3 +643,67 @@ func (rp *Processor) GetRuleMetrics() map[string]any {
 // extractConditions, RuntimeConfigWrapper, and related methods) are in runtime_config.go
 
 // Variable substitution functions are in variables.go
+
+// DebugStatus returns extended debug information for the rule processor.
+// Implements component.DebugStatusProvider.
+func (rp *Processor) DebugStatus() any {
+	rp.mu.RLock()
+	defer rp.mu.RUnlock()
+
+	pendingCount := 0
+	if rp.entityCoalescer != nil {
+		pendingCount = rp.entityCoalescer.PendingCount()
+	}
+
+	// Get total evaluations and triggers from atomic counters
+	totalEvaluations := atomic.LoadInt64(&rp.messagesEvaluated)
+	totalTriggers := atomic.LoadInt64(&rp.rulesTriggered)
+
+	// Coalesced count - for now return 0, could track in future if needed
+	coalescedCount := 0
+
+	debounceDelayMs := 0
+	if rp.config != nil && rp.config.DebounceDelayMs > 0 {
+		debounceDelayMs = int(rp.config.DebounceDelayMs.Milliseconds())
+	}
+
+	return RuleStatus{
+		DebounceDelayMs:    debounceDelayMs,
+		PendingEvaluations: pendingCount,
+		TotalEvaluations:   int(totalEvaluations),
+		TotalTriggers:      int(totalTriggers),
+		DebouncedCount:     coalescedCount,
+		RulesLoaded:        len(rp.rules),
+		LastEvaluationTime: rp.lastEvaluationTime,
+	}
+}
+
+// Revision tracking for feedback loop prevention
+
+// trackOwnRevision stores a KV revision that we generated via rule actions.
+// This allows us to skip re-evaluating rules when we see our own writes.
+func (rp *Processor) trackOwnRevision(entityID string, revision uint64) {
+	if entityID == "" || revision == 0 {
+		return
+	}
+	rp.revisionMu.Lock()
+	defer rp.revisionMu.Unlock()
+	rp.ownRevisions[entityID] = revision
+}
+
+// shouldSkipEvaluation checks if the given KV revision was generated by us.
+// Returns true if we should skip rule evaluation for this entity update.
+func (rp *Processor) shouldSkipEvaluation(entityID string, revision uint64) bool {
+	rp.revisionMu.RLock()
+	defer rp.revisionMu.RUnlock()
+	ownRevision, exists := rp.ownRevisions[entityID]
+	return exists && ownRevision == revision
+}
+
+// clearOwnRevision removes a tracked revision after we've skipped it.
+// This ensures we only skip once per generated update.
+func (rp *Processor) clearOwnRevision(entityID string) {
+	rp.revisionMu.Lock()
+	defer rp.revisionMu.Unlock()
+	delete(rp.ownRevisions, entityID)
+}

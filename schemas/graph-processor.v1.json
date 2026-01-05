@@ -38,6 +38,12 @@
       },
       "category": "basic"
     },
+    "max_ack_pending": {
+      "type": "number",
+      "description": "Maximum unacknowledged messages for backpressure",
+      "default": 20,
+      "category": "advanced"
+    },
     "message_handler": {
       "type": "object",
       "description": "Message handler configuration",

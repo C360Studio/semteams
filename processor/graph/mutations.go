@@ -117,6 +117,11 @@ func (p *Processor) handleEntityCreate(msg *nats.Msg) {
 		Entity:           entity,
 	}
 
+	// Include KV revision for feedback loop prevention
+	if err == nil && entity != nil {
+		resp.KVRevision = p.getEntityKVRevision(ctx, entity.ID)
+	}
+
 	// Send response
 	p.respond(msg, resp)
 }
@@ -159,6 +164,11 @@ func (p *Processor) handleEntityUpdate(msg *nats.Msg) {
 	}
 	if entity != nil {
 		resp.Version = int64(entity.Version)
+	}
+
+	// Include KV revision for feedback loop prevention
+	if err == nil && entity != nil {
+		resp.KVRevision = p.getEntityKVRevision(ctx, entity.ID)
 	}
 
 	// Send response
@@ -244,6 +254,11 @@ func (p *Processor) handleEntityCreateWithTriples(msg *nats.Msg) {
 		TriplesAdded:     len(req.Triples),
 	}
 
+	// Include KV revision for feedback loop prevention
+	if err == nil && entity != nil {
+		resp.KVRevision = p.getEntityKVRevision(ctx, entity.ID)
+	}
+
 	// Send response
 	p.respond(msg, resp)
 }
@@ -290,6 +305,11 @@ func (p *Processor) handleEntityUpdateWithTriples(msg *nats.Msg) {
 		resp.Version = int64(entity.Version)
 	}
 
+	// Include KV revision for feedback loop prevention
+	if err == nil && entity != nil {
+		resp.KVRevision = p.getEntityKVRevision(ctx, entity.ID)
+	}
+
 	// Send response
 	p.respond(msg, resp)
 }
@@ -332,6 +352,9 @@ func (p *Processor) handleTripleAdd(msg *nats.Msg) {
 	}
 	if err == nil {
 		resp.Triple = &req.Triple
+		// Include KV revision for feedback loop prevention
+		// Triple.Subject is the entity ID that was modified
+		resp.KVRevision = p.getEntityKVRevision(ctx, req.Triple.Subject)
 	}
 
 	// Send response
@@ -376,6 +399,12 @@ func (p *Processor) handleTripleRemove(msg *nats.Msg) {
 		Removed:          err == nil,
 	}
 
+	// Include KV revision for feedback loop prevention
+	// Subject is the entity ID that was modified
+	if err == nil {
+		resp.KVRevision = p.getEntityKVRevision(ctx, req.Subject)
+	}
+
 	// Send response
 	p.respond(msg, resp)
 }
@@ -414,4 +443,31 @@ func (p *Processor) respond(msg *nats.Msg, response interface{}) {
 func (p *Processor) respondWithError(msg *nats.Msg, err error, traceID, requestID string) {
 	resp := gtypes.NewMutationResponse(false, err, traceID, requestID)
 	p.respond(msg, resp)
+}
+
+// getEntityKVRevision retrieves the current KV revision for an entity.
+// This is used to include the revision in mutation responses, allowing callers
+// to track which KV writes they generated (to break feedback loops).
+func (p *Processor) getEntityKVRevision(ctx context.Context, entityID string) uint64 {
+	if entityID == "" || p.natsClient == nil {
+		return 0
+	}
+
+	kvBucket, err := p.natsClient.GetKeyValueBucket(ctx, "ENTITY_STATES")
+	if err != nil {
+		p.logger.Debug("Failed to get ENTITY_STATES bucket for revision lookup",
+			"error", err,
+			"entity_id", entityID)
+		return 0
+	}
+
+	entry, err := kvBucket.Get(ctx, entityID)
+	if err != nil {
+		p.logger.Debug("Failed to get entity entry for revision lookup",
+			"error", err,
+			"entity_id", entityID)
+		return 0
+	}
+
+	return entry.Revision()
 }

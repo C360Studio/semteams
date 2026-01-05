@@ -69,11 +69,20 @@ func (a Action) ParseTTL() (time.Duration, error) {
 	return duration, nil
 }
 
+// TripleMutator handles triple mutations via NATS request/response.
+// The returned uint64 is the KV revision after the write, used for feedback loop prevention.
+type TripleMutator interface {
+	// AddTriple adds a triple via NATS request/response and returns the KV revision
+	AddTriple(ctx context.Context, triple message.Triple) (uint64, error)
+	// RemoveTriple removes a triple via NATS request/response and returns the KV revision
+	RemoveTriple(ctx context.Context, subject, predicate string) (uint64, error)
+}
+
 // ActionExecutor executes actions for rules.
 // It handles triple mutations, NATS publishing, and other action types.
 type ActionExecutor struct {
-	logger *slog.Logger
-	// Future: Add dependencies for triple mutation API, NATS publisher
+	logger        *slog.Logger
+	tripleMutator TripleMutator // Optional: if nil, triple mutations are logged but not persisted
 }
 
 // NewActionExecutor creates a new ActionExecutor with the given logger.
@@ -84,6 +93,18 @@ func NewActionExecutor(logger *slog.Logger) *ActionExecutor {
 	}
 	return &ActionExecutor{
 		logger: logger,
+	}
+}
+
+// NewActionExecutorWithMutator creates a new ActionExecutor with triple mutation support.
+// The mutator enables actual persistence of triple operations via NATS request/response.
+func NewActionExecutorWithMutator(logger *slog.Logger, mutator TripleMutator) *ActionExecutor {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &ActionExecutor{
+		logger:        logger,
+		tripleMutator: mutator,
 	}
 }
 
@@ -108,7 +129,8 @@ func (e *ActionExecutor) Execute(ctx context.Context, action Action, entityID st
 
 // ExecuteAddTriple executes an add_triple action, creating a new semantic triple.
 // Returns the created triple and any error that occurred.
-func (e *ActionExecutor) ExecuteAddTriple(_ context.Context, action Action, entityID, relatedID string) (message.Triple, error) {
+// If a TripleMutator is configured, the triple is persisted via NATS request/response.
+func (e *ActionExecutor) ExecuteAddTriple(ctx context.Context, action Action, entityID, relatedID string) (message.Triple, error) {
 	// Validate predicate is present
 	if action.Predicate == "" {
 		return message.Triple{}, errors.New("predicate is required for add_triple action")
@@ -136,9 +158,9 @@ func (e *ActionExecutor) ExecuteAddTriple(_ context.Context, action Action, enti
 		Subject:    entityID,
 		Predicate:  predicate,
 		Object:     object,
-		Source:     "rule_engine", // TODO: Make configurable
+		Source:     "rule_engine",
 		Timestamp:  time.Now(),
-		Confidence: 1.0, // TODO: Make configurable
+		Confidence: 1.0,
 		ExpiresAt:  expiresAt,
 	}
 
@@ -151,14 +173,30 @@ func (e *ActionExecutor) ExecuteAddTriple(_ context.Context, action Action, enti
 			"expires_at", expiresAt)
 	}
 
-	// TODO: Call triple mutation API to persist the triple
-	// This will be integrated with the graph processor in a future task
+	// Persist triple via NATS request/response if mutator is configured
+	if e.tripleMutator != nil {
+		revision, err := e.tripleMutator.AddTriple(ctx, triple)
+		if err != nil {
+			return message.Triple{}, fmt.Errorf("persist triple: %w", err)
+		}
+		if e.logger != nil {
+			e.logger.Debug("Triple persisted",
+				"entity_id", entityID,
+				"predicate", predicate,
+				"kv_revision", revision)
+		}
+	} else if e.logger != nil {
+		e.logger.Debug("Triple not persisted (no mutator configured)",
+			"entity_id", entityID,
+			"predicate", predicate)
+	}
 
 	return triple, nil
 }
 
 // ExecuteRemoveTriple executes a remove_triple action, removing a semantic triple.
-func (e *ActionExecutor) ExecuteRemoveTriple(_ context.Context, action Action, entityID, relatedID string) error {
+// If a TripleMutator is configured, the triple is removed via NATS request/response.
+func (e *ActionExecutor) ExecuteRemoveTriple(ctx context.Context, action Action, entityID, relatedID string) error {
 	// Validate predicate is present
 	if action.Predicate == "" {
 		return errors.New("predicate is required for remove_triple action")
@@ -174,8 +212,23 @@ func (e *ActionExecutor) ExecuteRemoveTriple(_ context.Context, action Action, e
 			"object", object)
 	}
 
-	// TODO: Call triple mutation API to remove the triple
-	// This will be integrated with the graph processor in a future task
+	// Remove triple via NATS request/response if mutator is configured
+	if e.tripleMutator != nil {
+		revision, err := e.tripleMutator.RemoveTriple(ctx, entityID, predicate)
+		if err != nil {
+			return fmt.Errorf("remove triple: %w", err)
+		}
+		if e.logger != nil {
+			e.logger.Debug("Triple removed",
+				"entity_id", entityID,
+				"predicate", predicate,
+				"kv_revision", revision)
+		}
+	} else if e.logger != nil {
+		e.logger.Debug("Triple not removed (no mutator configured)",
+			"entity_id", entityID,
+			"predicate", predicate)
+	}
 
 	return nil
 }

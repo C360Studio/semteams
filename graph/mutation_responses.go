@@ -11,11 +11,12 @@ import (
 
 // MutationResponse is the base response for all mutations
 type MutationResponse struct {
-	Success   bool   `json:"success"`
-	Error     string `json:"error,omitempty"`
-	TraceID   string `json:"trace_id,omitempty"`
-	RequestID string `json:"request_id,omitempty"`
-	Timestamp int64  `json:"timestamp"` // Unix nano timestamp
+	Success    bool   `json:"success"`
+	Error      string `json:"error,omitempty"`
+	TraceID    string `json:"trace_id,omitempty"`
+	RequestID  string `json:"request_id,omitempty"`
+	Timestamp  int64  `json:"timestamp"`              // Unix nano timestamp
+	KVRevision uint64 `json:"kv_revision,omitempty"` // KV bucket revision after write
 }
 
 // CreateEntityResponse response for entity creation

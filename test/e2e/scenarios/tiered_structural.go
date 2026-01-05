@@ -108,6 +108,143 @@ func (s *TieredScenario) executeValidateRuleTransitions(ctx context.Context, res
 	return nil
 }
 
+// executeValidateEntityTriples validates that sensor entities have the expected triples
+// This helps diagnose rule trigger issues by showing exactly what triples are in ENTITY_STATES
+func (s *TieredScenario) executeValidateEntityTriples(ctx context.Context, result *Result) error {
+	// Get a sample temperature sensor entity
+	sampleEntityID := "c360.logistics.environmental.sensor.temperature.temp-sensor-001"
+
+	entity, err := s.natsClient.GetEntity(ctx, sampleEntityID)
+	if err != nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Failed to get sample entity %s: %v", sampleEntityID, err))
+		return nil
+	}
+
+	if entity == nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Sample entity %s not found in ENTITY_STATES", sampleEntityID))
+		return nil
+	}
+
+	// Extract and categorize triples
+	tripleDetails := make([]map[string]any, 0, len(entity.Triples))
+	hasFahrenheit := false
+	hasZone := false
+	var fahrenheitValue any
+	var zoneValue any
+
+	for _, triple := range entity.Triples {
+		tripleDetails = append(tripleDetails, map[string]any{
+			"predicate":   triple.Predicate,
+			"object":      triple.Object,
+			"object_type": fmt.Sprintf("%T", triple.Object),
+		})
+
+		if triple.Predicate == "sensor.measurement.fahrenheit" {
+			hasFahrenheit = true
+			fahrenheitValue = triple.Object
+		}
+		if triple.Predicate == "geo.location.zone" {
+			hasZone = true
+			zoneValue = triple.Object
+		}
+	}
+
+	// Check if triples match rule conditions
+	ruleConditionsMet := false
+	if hasFahrenheit && hasZone {
+		if temp, ok := fahrenheitValue.(float64); ok && temp >= 40.0 {
+			if zone, ok := zoneValue.(string); ok && strings.Contains(zone, "cold-storage") {
+				ruleConditionsMet = true
+			}
+		}
+	}
+
+	result.Metrics["entity_triple_count"] = len(entity.Triples)
+	result.Metrics["entity_has_fahrenheit"] = 0
+	result.Metrics["entity_has_zone"] = 0
+	if hasFahrenheit {
+		result.Metrics["entity_has_fahrenheit"] = 1
+	}
+	if hasZone {
+		result.Metrics["entity_has_zone"] = 1
+	}
+
+	result.Details["entity_triples_validation"] = map[string]any{
+		"entity_id":                sampleEntityID,
+		"triple_count":             len(entity.Triples),
+		"has_fahrenheit":           hasFahrenheit,
+		"has_zone":                 hasZone,
+		"fahrenheit_value":         fahrenheitValue,
+		"zone_value":               zoneValue,
+		"rule_conditions_met":      ruleConditionsMet,
+		"triples":                  tripleDetails,
+		"expected_fahrenheit_pred": "sensor.measurement.fahrenheit",
+		"expected_zone_pred":       "geo.location.zone",
+		"message": fmt.Sprintf(
+			"Entity %s: %d triples, fahrenheit=%v (has=%v), zone=%v (has=%v), conditions_met=%v",
+			sampleEntityID, len(entity.Triples),
+			fahrenheitValue, hasFahrenheit,
+			zoneValue, hasZone,
+			ruleConditionsMet,
+		),
+	}
+
+	// Log warning if expected triples are missing
+	if !hasFahrenheit {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("MISSING sensor.measurement.fahrenheit in entity %s - rules cannot evaluate temperature", sampleEntityID))
+	}
+	if !hasZone {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("MISSING geo.location.zone in entity %s - rules cannot evaluate zone", sampleEntityID))
+	}
+
+	// Always print triple details to stdout for debugging
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Entity: %s\n", sampleEntityID)
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Triple count: %d\n", len(entity.Triples))
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Fahrenheit value: %v (type: %T)\n", fahrenheitValue, fahrenheitValue)
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Zone value: %v (type: %T)\n", zoneValue, zoneValue)
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Rule conditions met: %v\n", ruleConditionsMet)
+	for i, t := range entity.Triples {
+		fmt.Printf("[ENTITY TRIPLES DEBUG] Triple[%d]: pred=%s, obj=%v (type=%T)\n", i, t.Predicate, t.Object, t.Object)
+	}
+
+	// Also check humidity entity to debug why humidity rule doesn't trigger
+	humidEntityID := "c360.logistics.environmental.sensor.humidity.humid-sensor-001"
+	humidEntity, humidErr := s.natsClient.GetEntity(ctx, humidEntityID)
+	if humidErr != nil {
+		fmt.Printf("[HUMIDITY DEBUG] Failed to get entity %s: %v\n", humidEntityID, humidErr)
+	} else if humidEntity == nil {
+		fmt.Printf("[HUMIDITY DEBUG] Entity %s NOT FOUND in ENTITY_STATES\n", humidEntityID)
+	} else {
+		fmt.Printf("[HUMIDITY DEBUG] Entity: %s\n", humidEntityID)
+		fmt.Printf("[HUMIDITY DEBUG] Triple count: %d\n", len(humidEntity.Triples))
+		var percentValue any
+		var typeValue any
+		for i, t := range humidEntity.Triples {
+			fmt.Printf("[HUMIDITY DEBUG] Triple[%d]: pred=%s, obj=%v (type=%T)\n", i, t.Predicate, t.Object, t.Object)
+			if t.Predicate == "sensor.measurement.percent" {
+				percentValue = t.Object
+			}
+			if t.Predicate == "sensor.classification.type" {
+				typeValue = t.Object
+			}
+		}
+		// Check if rule conditions would be met
+		conditionsMet := false
+		if pct, ok := percentValue.(float64); ok && pct >= 50.0 {
+			if typ, ok := typeValue.(string); ok && typ == "humidity" {
+				conditionsMet = true
+			}
+		}
+		fmt.Printf("[HUMIDITY DEBUG] percent value: %v, type value: %v, conditions met: %v\n", percentValue, typeValue, conditionsMet)
+	}
+
+	return nil
+}
+
 // pathRAGResponse represents the parsed GraphQL response for PathRAG queries
 type pathRAGResponse struct {
 	Data struct {

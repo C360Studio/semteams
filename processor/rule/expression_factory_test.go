@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
+	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/processor/rule/expression"
@@ -463,6 +464,14 @@ func createTestMessage(data map[string]interface{}) message.Message {
 	return message.NewBaseMessage(msgType, payload, "test")
 }
 
+// createTestEntityState creates an EntityState with the given triples for testing
+func createTestEntityState(entityID string, triples []message.Triple) *gtypes.EntityState {
+	return &gtypes.EntityState{
+		ID:      entityID,
+		Triples: triples,
+	}
+}
+
 func TestCreateRuleProcessor_InlineRulesPassedThrough(t *testing.T) {
 	// This test verifies that inline_rules from config JSON are properly
 	// passed through to the processor config. This was a bug where the
@@ -517,6 +526,122 @@ func TestCreateRuleProcessor_InlineRulesPassedThrough(t *testing.T) {
 				t.Errorf("Expected rule ID 'test-rule-1', got %q", config.InlineRules[0].ID)
 			}
 		}
+	}
+}
+
+// TestExpressionRuleEvaluateEntityState tests the direct EntityState evaluation path
+// used by KV watch. This is the production path for rule triggers in structural tier.
+func TestExpressionRuleEvaluateEntityState(t *testing.T) {
+	tests := []struct {
+		name       string
+		conditions []expression.ConditionExpression
+		logic      string
+		triples    []message.Triple
+		want       bool
+	}{
+		{
+			name: "cold-storage temp alert - should trigger (temp >= 40 AND zone contains cold-storage)",
+			conditions: []expression.ConditionExpression{
+				{Field: "sensor.measurement.fahrenheit", Operator: "gte", Value: 40.0, Required: true},
+				{Field: "geo.location.zone", Operator: "contains", Value: "cold-storage", Required: true},
+			},
+			logic: "and",
+			triples: []message.Triple{
+				{Subject: "test", Predicate: "sensor.measurement.fahrenheit", Object: 41.2},
+				{Subject: "test", Predicate: "geo.location.zone", Object: "c360.logistics.facility.zone.area.cold-storage-1"},
+				{Subject: "test", Predicate: "sensor.classification.type", Object: "temperature"},
+			},
+			want: true,
+		},
+		{
+			name: "cold-storage temp alert - should NOT trigger (temp < 40)",
+			conditions: []expression.ConditionExpression{
+				{Field: "sensor.measurement.fahrenheit", Operator: "gte", Value: 40.0, Required: true},
+				{Field: "geo.location.zone", Operator: "contains", Value: "cold-storage", Required: true},
+			},
+			logic: "and",
+			triples: []message.Triple{
+				{Subject: "test", Predicate: "sensor.measurement.fahrenheit", Object: 38.5},
+				{Subject: "test", Predicate: "geo.location.zone", Object: "c360.logistics.facility.zone.area.cold-storage-1"},
+			},
+			want: false,
+		},
+		{
+			name: "cold-storage temp alert - should NOT trigger (not in cold-storage)",
+			conditions: []expression.ConditionExpression{
+				{Field: "sensor.measurement.fahrenheit", Operator: "gte", Value: 40.0, Required: true},
+				{Field: "geo.location.zone", Operator: "contains", Value: "cold-storage", Required: true},
+			},
+			logic: "and",
+			triples: []message.Triple{
+				{Subject: "test", Predicate: "sensor.measurement.fahrenheit", Object: 45.0},
+				{Subject: "test", Predicate: "geo.location.zone", Object: "c360.logistics.facility.zone.area.dock-1"},
+			},
+			want: false,
+		},
+		{
+			name: "high humidity alert - should trigger (humidity >= 50 AND type == humidity)",
+			conditions: []expression.ConditionExpression{
+				{Field: "sensor.measurement.percent", Operator: "gte", Value: 50.0, Required: true},
+				{Field: "sensor.classification.type", Operator: "eq", Value: "humidity", Required: true},
+			},
+			logic: "and",
+			triples: []message.Triple{
+				{Subject: "test", Predicate: "sensor.measurement.percent", Object: 52.8},
+				{Subject: "test", Predicate: "sensor.classification.type", Object: "humidity"},
+			},
+			want: true,
+		},
+		{
+			name: "low pressure alert - should trigger (pressure < 100 AND type == pressure)",
+			conditions: []expression.ConditionExpression{
+				{Field: "sensor.measurement.psi", Operator: "lt", Value: 100.0, Required: true},
+				{Field: "sensor.classification.type", Operator: "eq", Value: "pressure", Required: true},
+			},
+			logic: "and",
+			triples: []message.Triple{
+				{Subject: "test", Predicate: "sensor.measurement.psi", Object: 88.5},
+				{Subject: "test", Predicate: "sensor.classification.type", Object: "pressure"},
+			},
+			want: true,
+		},
+		{
+			name: "required field missing - should NOT trigger",
+			conditions: []expression.ConditionExpression{
+				{Field: "sensor.measurement.fahrenheit", Operator: "gte", Value: 40.0, Required: true},
+			},
+			triples: []message.Triple{
+				{Subject: "test", Predicate: "sensor.classification.type", Object: "temperature"},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			def := Definition{
+				ID:         "test-rule",
+				Type:       "expression",
+				Name:       "Test",
+				Enabled:    true,
+				Logic:      tt.logic,
+				Conditions: tt.conditions,
+			}
+
+			rule, err := NewExpressionRule(def)
+			if err != nil {
+				t.Fatalf("failed to create rule: %v", err)
+			}
+
+			// Create EntityState with triples - use graph types
+			entityState := createTestEntityState("test.entity.id", tt.triples)
+
+			result := rule.EvaluateEntityState(entityState)
+
+			if result != tt.want {
+				t.Errorf("EvaluateEntityState() = %v, want %v", result, tt.want)
+			}
+		})
 	}
 }
 

@@ -277,6 +277,7 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"validate-zero-embeddings", s.executeValidateZeroEmbeddings, []string{"structural"}},
 		{"validate-zero-clusters", s.executeValidateZeroClusters, []string{"structural"}},
 		{"validate-rule-transitions", s.executeValidateRuleTransitions, []string{"structural"}},
+		{"validate-entity-triples", s.executeValidateEntityTriples, []string{"structural"}},
 		// Structural indexes - work on structural tier via EntityID sibling edges (no ML required)
 		{"validate-kcore-index-structural", s.executeValidateKCoreIndexStructural, []string{"structural"}},
 		{"validate-pivot-index-structural", s.executeValidatePivotIndexStructural, []string{"structural"}},
@@ -311,10 +312,9 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"validate-anomaly-detection", s.executeValidateAnomalyDetection, []string{"semantic"}},
 		{"validate-virtual-edges", s.executeValidateVirtualEdges, []string{"semantic"}},
 
-		// Wait for rule evaluations to stabilize (semantic tier only)
-		// Semantic tier's neural embeddings are slower, so rule evaluations via KV watch
-		// may still be in progress when validate-rules would normally run
-		{"wait-for-rule-stabilization", s.executeWaitForRuleStabilization, []string{"semantic"}},
+		// Wait for rule evaluations to stabilize before validating
+		// With feedback loop prevention, rules should stabilize quickly for all tiers
+		{"wait-for-rule-stabilization", s.executeWaitForRuleStabilization, nil},
 
 		// === Common validation stages (all tiers) ===
 		{"validate-rules", s.executeValidateRules, nil},

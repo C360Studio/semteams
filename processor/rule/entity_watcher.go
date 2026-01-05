@@ -3,6 +3,7 @@ package rule
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -78,28 +79,97 @@ func (rp *Processor) handleEntityUpdates(ctx context.Context, watcher jetstream.
 				continue
 			}
 
+			entityKey := entry.Key()
+			revision := entry.Revision()
+
+			// Check if we generated this revision (feedback loop prevention)
+			// If this update came from our own rule action, skip re-evaluation
+			if rp.shouldSkipEvaluation(entityKey, revision) {
+				rp.clearOwnRevision(entityKey) // One-time skip, clear after use
+				rp.logger.Debug("Skipping self-generated update",
+					"entity", entityKey,
+					"revision", revision)
+				continue
+			}
+
 			// Determine action based on operation and revision
 			action := "UPDATED"
 			if entry.Operation() == jetstream.KeyValueDelete {
 				action = "DELETED"
-			} else if entry.Revision() == 1 {
+			} else if revision == 1 {
 				action = "CREATED"
 			}
 
-			// Unmarshal EntityState from KV
-			var entityState *gtypes.EntityState
-			if entry.Operation() != jetstream.KeyValueDelete {
-				var state gtypes.EntityState
-				if err := json.Unmarshal(entry.Value(), &state); err != nil {
-					rp.recordError(fmt.Sprintf("failed to unmarshal entity state: %v", err))
-					continue
-				}
-				entityState = &state
+			// Handle deletion by removing from coalescer and evaluating immediately
+			if action == "DELETED" {
+				rp.entityCoalescer.Remove(entityKey)
+				// Still evaluate rules for deletion event
+				rp.evaluateRulesForEntityState(ctx, entityKey, action, nil)
+				continue
 			}
 
-			// Process through rules with direct EntityState evaluation
-			// This bypasses the message transformation layer
-			rp.evaluateRulesForEntityState(ctx, entry.Key(), action, entityState)
+			// Collect entity ID for batched evaluation
+			// The coalescer will fetch current state at evaluation time
+			rp.entityCoalescer.Add(entityKey)
 		}
 	}
+}
+
+// evaluateEntitiesInBatch fetches current state and evaluates rules for a batch of entities.
+// Called by CoalescingSet callback after the debounce window expires.
+func (rp *Processor) evaluateEntitiesInBatch(ctx context.Context, entityIDs []string) {
+	if len(entityIDs) == 0 {
+		return
+	}
+
+	// Track metrics
+	if rp.metrics != nil {
+		rp.metrics.debounceDelaysTotal.Add(float64(len(entityIDs)))
+	}
+
+	rp.logger.Debug("Evaluating batched entities", "count", len(entityIDs))
+
+	for _, entityID := range entityIDs {
+		// Fetch current state from KV
+		entityState, action, err := rp.fetchCurrentEntityState(ctx, entityID)
+		if err != nil {
+			rp.logger.Warn("Failed to fetch entity state for rule evaluation",
+				"entityID", entityID, "error", err)
+			continue
+		}
+
+		// Evaluate rules against current state
+		rp.evaluateRulesForEntityState(ctx, entityID, action, entityState)
+	}
+}
+
+// fetchCurrentEntityState retrieves the current state of an entity from KV.
+// Returns the state, action type (CREATED/UPDATED/DELETED), and any error.
+func (rp *Processor) fetchCurrentEntityState(ctx context.Context, entityID string) (*gtypes.EntityState, string, error) {
+	// Get ENTITY_STATES bucket (should already be available from watchEntityStates)
+	entityBucket, err := rp.natsClient.GetKeyValueBucket(ctx, "ENTITY_STATES")
+	if err != nil {
+		return nil, "", fmt.Errorf("get ENTITY_STATES bucket: %w", err)
+	}
+
+	entry, err := entityBucket.Get(ctx, entityID)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrKeyNotFound) {
+			// Entity was deleted between add and evaluation
+			return nil, "DELETED", nil
+		}
+		return nil, "", fmt.Errorf("get entity state: %w", err)
+	}
+
+	var state gtypes.EntityState
+	if err := json.Unmarshal(entry.Value(), &state); err != nil {
+		return nil, "", fmt.Errorf("unmarshal entity state: %w", err)
+	}
+
+	action := "UPDATED"
+	if entry.Revision() == 1 {
+		action = "CREATED"
+	}
+
+	return &state, action, nil
 }

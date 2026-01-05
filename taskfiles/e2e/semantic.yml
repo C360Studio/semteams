@@ -10,7 +10,7 @@ tasks:
     deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
     cmds:
       - echo "[SEMANTIC] Starting semantic tier E2E test (SemEmbed + SemInstruct)..."
-      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
+      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait --build
       - echo "[OK] ML services are healthy (SemEmbed + SemInstruct)"
       - echo "[SEMANTIC] Running semantic tier scenario..."
       # ML app runs on port 8180 (HTTP), 9190 (metrics), 14650 (UDP) to avoid conflict
@@ -24,7 +24,7 @@ tasks:
     deps: [":e2e:clean", ":e2e:check-ports"]
     cmds:
       - echo "[SEMANTIC DEBUG] Starting semantic tier environment..."
-      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
+      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait --build
       - echo "[OK] ML services are healthy (SemEmbed + SemInstruct)"
       - echo ""
       - echo "[SEMANTIC DEBUG] Environment is running. Use the following commands:"
@@ -47,7 +47,7 @@ tasks:
       - docker compose -f docker/compose/tiered.yml --profile statistical down -v --timeout 15
       - echo "[COMPARE] Running semantic variant second..."
       - sleep 5
-      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
+      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait --build
       - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant semantic --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
         ignore_error: true
       - docker compose -f docker/compose/tiered.yml --profile semantic down -v --timeout 15

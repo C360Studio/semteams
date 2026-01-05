@@ -14,6 +14,7 @@ import (
 
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/metric"
+	"github.com/c360/semstreams/processor/graph/embedding"
 )
 
 // MockKeyValue implements jetstream.KeyValue for testing
@@ -29,24 +30,33 @@ func NewMockKeyValue() *MockKeyValue {
 }
 
 func (m *MockKeyValue) Get(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
-	// If no expectations set, use default behavior
-	if len(m.ExpectedCalls) == 0 {
-		if data, ok := m.data[key]; ok {
-			return &MockKeyValueEntry{
-				key:       key,
-				value:     data,
-				revision:  1,
-				operation: jetstream.KeyValuePut,
-			}, nil
+	// Check if this specific method has expectations
+	hasGetExpectation := false
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "Get" {
+			hasGetExpectation = true
+			break
 		}
-		return nil, jetstream.ErrKeyNotFound
 	}
 
-	args := m.Called(ctx, key)
-	if entry := args.Get(0); entry != nil {
-		return entry.(jetstream.KeyValueEntry), args.Error(1)
+	if hasGetExpectation {
+		args := m.Called(ctx, key)
+		if entry := args.Get(0); entry != nil {
+			return entry.(jetstream.KeyValueEntry), args.Error(1)
+		}
+		return nil, args.Error(1)
 	}
-	return nil, args.Error(1)
+
+	// Default behavior: return data from map
+	if data, ok := m.data[key]; ok {
+		return &MockKeyValueEntry{
+			key:       key,
+			value:     data,
+			revision:  1,
+			operation: jetstream.KeyValuePut,
+		}, nil
+	}
+	return nil, jetstream.ErrKeyNotFound
 }
 
 func (m *MockKeyValue) Put(ctx context.Context, key string, value []byte) (uint64, error) {
@@ -158,8 +168,30 @@ func (m *MockKeyValue) Keys(_ context.Context, _ ...jetstream.WatchOpt) ([]strin
 	return keys, nil
 }
 
-func (m *MockKeyValue) ListKeys(_ context.Context, _ ...jetstream.WatchOpt) (jetstream.KeyLister, error) {
-	return nil, nil
+func (m *MockKeyValue) ListKeys(ctx context.Context, _ ...jetstream.WatchOpt) (jetstream.KeyLister, error) {
+	// Check if this specific method has expectations
+	hasListKeysExpectation := false
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "ListKeys" {
+			hasListKeysExpectation = true
+			break
+		}
+	}
+
+	if hasListKeysExpectation {
+		args := m.Called(ctx)
+		if lister := args.Get(0); lister != nil {
+			return lister.(jetstream.KeyLister), args.Error(1)
+		}
+		return nil, args.Error(1)
+	}
+
+	// Default behavior: return all keys from data map
+	keys := make([]string, 0, len(m.data))
+	for k := range m.data {
+		keys = append(keys, k)
+	}
+	return NewMockKeyLister(keys), nil
 }
 
 func (m *MockKeyValue) ListKeysFiltered(_ context.Context, _ ...string) (jetstream.KeyLister, error) {
@@ -291,6 +323,10 @@ func setupTestManager(t *testing.T) (*Manager, map[string]*MockKeyValue) {
 	// Manually register OutgoingIndex for tests (not yet in production config)
 	outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], engineImpl.metrics, engineImpl.promMetrics, engineImpl.logger)
 	engineImpl.indexes["outgoing"] = outgoingIndex
+
+	// Initialize embedding storage for tests (even though embedding generation is disabled)
+	// This allows CountEmbeddingsInKV to work in unit tests
+	engineImpl.embeddingStorage = embedding.NewStorage(mockBuckets["EMBEDDING_INDEX"], mockBuckets["EMBEDDING_DEDUP"])
 
 	return engineImpl, mockBuckets
 }

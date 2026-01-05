@@ -80,12 +80,12 @@ func TestIncomingIndex_HandleCreate(t *testing.T) {
 			entityID: "acme.iot.sensors.hvac.temperature.001",
 			triples: []message.Triple{
 				{
-					Subject:     "acme.iot.sensors.hvac.temperature.001",
-					Predicate:   "hierarchy.type.member",
-					Object:      "acme.iot.sensors.hvac.temperature.group",
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.iot.sensors.hvac.temperature.001",
+					Predicate: "hierarchy.type.member",
+					Object:    "acme.iot.sensors.hvac.temperature.group",
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 			},
 			wantContexts: map[string][]IncomingEntry{
@@ -100,12 +100,12 @@ func TestIncomingIndex_HandleCreate(t *testing.T) {
 			entityID: "acme.iot.sensors.hvac.temperature.001",
 			triples: []message.Triple{
 				{
-					Subject:     "acme.iot.sensors.hvac.temperature.001",
-					Predicate:   "sensor.reading.value",
-					Object:      72.5,
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.iot.sensors.hvac.temperature.001",
+					Predicate: "sensor.reading.value",
+					Object:    72.5,
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 			},
 			wantContexts: map[string][]IncomingEntry{}, // No relationships = no incoming entries
@@ -116,20 +116,20 @@ func TestIncomingIndex_HandleCreate(t *testing.T) {
 			entityID: "acme.drones.fleet.alpha.uav.001",
 			triples: []message.Triple{
 				{
-					Subject:     "acme.drones.fleet.alpha.uav.001",
-					Predicate:   "spatial.proximity.near",
-					Object:      "acme.drones.fleet.alpha.uav.002",
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.drones.fleet.alpha.uav.001",
+					Predicate: "spatial.proximity.near",
+					Object:    "acme.drones.fleet.alpha.uav.002",
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 				{
-					Subject:     "acme.drones.fleet.alpha.uav.001",
-					Predicate:   "ops.fleet.member_of",
-					Object:      "acme.drones.fleet.alpha.fleet.main",
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.drones.fleet.alpha.uav.001",
+					Predicate: "ops.fleet.member_of",
+					Object:    "acme.drones.fleet.alpha.fleet.main",
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 			},
 			wantContexts: map[string][]IncomingEntry{
@@ -147,20 +147,20 @@ func TestIncomingIndex_HandleCreate(t *testing.T) {
 			entityID: "acme.iot.sensors.hvac.temperature.001",
 			triples: []message.Triple{
 				{
-					Subject:     "acme.iot.sensors.hvac.temperature.001",
-					Predicate:   "spatial.proximity.near",
-					Object:      "acme.iot.sensors.hvac.humidity.002",
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.iot.sensors.hvac.temperature.001",
+					Predicate: "spatial.proximity.near",
+					Object:    "acme.iot.sensors.hvac.humidity.002",
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 				{
-					Subject:     "acme.iot.sensors.hvac.temperature.001",
-					Predicate:   "sensor.correlation.strong",
-					Object:      "acme.iot.sensors.hvac.humidity.002",
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.iot.sensors.hvac.temperature.001",
+					Predicate: "sensor.correlation.strong",
+					Object:    "acme.iot.sensors.hvac.humidity.002",
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 			},
 			wantContexts: map[string][]IncomingEntry{
@@ -244,30 +244,30 @@ func TestIncomingIndex_HandleUpdate(t *testing.T) {
 			entityID: "acme.iot.sensors.hvac.temperature.001",
 			initialTriples: []message.Triple{
 				{
-					Subject:     "acme.iot.sensors.hvac.temperature.001",
-					Predicate:   "sensor.reading.value",
-					Object:      72.5,
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.iot.sensors.hvac.temperature.001",
+					Predicate: "sensor.reading.value",
+					Object:    72.5,
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 			},
 			updatedTriples: []message.Triple{
 				{
-					Subject:     "acme.iot.sensors.hvac.temperature.001",
-					Predicate:   "sensor.reading.value",
-					Object:      72.5,
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.iot.sensors.hvac.temperature.001",
+					Predicate: "sensor.reading.value",
+					Object:    72.5,
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 				{
-					Subject:     "acme.iot.sensors.hvac.temperature.001",
-					Predicate:   "hierarchy.type.member",
-					Object:      "acme.iot.sensors.hvac.temperature.group",
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.iot.sensors.hvac.temperature.001",
+					Predicate: "hierarchy.type.member",
+					Object:    "acme.iot.sensors.hvac.temperature.group",
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 			},
 			wantContexts: map[string][]IncomingEntry{
@@ -282,22 +282,22 @@ func TestIncomingIndex_HandleUpdate(t *testing.T) {
 			entityID: "acme.iot.sensors.hvac.temperature.001",
 			initialTriples: []message.Triple{
 				{
-					Subject:     "acme.iot.sensors.hvac.temperature.001",
-					Predicate:   "spatial.proximity.near",
-					Object:      "acme.iot.sensors.hvac.humidity.002",
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.iot.sensors.hvac.temperature.001",
+					Predicate: "spatial.proximity.near",
+					Object:    "acme.iot.sensors.hvac.humidity.002",
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 			},
 			updatedTriples: []message.Triple{
 				{
-					Subject:     "acme.iot.sensors.hvac.temperature.001",
-					Predicate:   "sensor.correlation.strong",
-					Object:      "acme.iot.sensors.hvac.humidity.002",
-					
-					Source:      "test",
-					Timestamp:   time.Now(),
+					Subject:   "acme.iot.sensors.hvac.temperature.001",
+					Predicate: "sensor.correlation.strong",
+					Object:    "acme.iot.sensors.hvac.humidity.002",
+
+					Source:    "test",
+					Timestamp: time.Now(),
 				},
 			},
 			wantContexts: map[string][]IncomingEntry{

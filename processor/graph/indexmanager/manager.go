@@ -1815,6 +1815,51 @@ func (m *Manager) GetEmbeddingCount() int {
 	return m.vectorCache.Size()
 }
 
+// CountEmbeddingsInKV queries the KV bucket to count embeddings with status="generated".
+// This is used as a fallback when the in-memory cache may not reflect the true state
+// (e.g., during async embedding generation).
+// Returns 0 when embedding storage is disabled (nil).
+func (m *Manager) CountEmbeddingsInKV(ctx context.Context) (int, error) {
+	// Check context cancellation first
+	if err := ctx.Err(); err != nil {
+		return 0, errs.WrapTransient(err, "IndexManager", "CountEmbeddingsInKV", "context cancelled")
+	}
+
+	// Return 0 (not an error) when embedding storage is disabled
+	if m.embeddingStorage == nil {
+		return 0, nil
+	}
+
+	// Get all entity IDs from the embedding bucket and filter by status
+	entityIDs, err := m.embeddingStorage.ListGeneratedEntityIDs(ctx)
+	if err != nil {
+		return 0, errs.WrapTransient(err, "IndexManager", "CountEmbeddingsInKV", "failed to list generated entity IDs")
+	}
+
+	// Count only embeddings with status="generated"
+	// We need to fetch each record and check its status
+	count := 0
+	for _, entityID := range entityIDs {
+		// Check context periodically during iteration
+		if err := ctx.Err(); err != nil {
+			return 0, errs.WrapTransient(err, "IndexManager", "CountEmbeddingsInKV", "context cancelled during iteration")
+		}
+
+		record, err := m.embeddingStorage.GetEmbedding(ctx, entityID)
+		if err != nil {
+			// Skip records that can't be fetched (might be deleted)
+			m.logger.Debug("Failed to get embedding record during count", "entity_id", entityID, "error", err)
+			continue
+		}
+
+		if record.Status == embedding.StatusGenerated {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
 // PreWarmVectorCache loads existing embeddings from storage into the in-memory cache.
 // This ensures the vector cache is populated on restart, enabling semantic clustering
 // to work immediately without waiting for embeddings to be regenerated.

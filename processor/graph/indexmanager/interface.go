@@ -73,6 +73,11 @@ type Indexer interface {
 	// Used by the clustering system to check embedding coverage before running LPA with semantic edges.
 	GetEmbeddingCount() int
 
+	// CountEmbeddingsInKV queries the KV bucket to count embeddings with status="generated".
+	// This is used as a fallback when the in-memory cache may not reflect the true state
+	// (e.g., during async embedding generation). Returns 0 when embedding storage is disabled (nil).
+	CountEmbeddingsInKV(ctx context.Context) (int, error)
+
 	// Structural index operations (requires structural index configuration)
 	// GetKCoreIndex returns the current k-core index for filtering queries.
 	// Returns nil if structural indexing is disabled or not yet computed.

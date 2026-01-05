@@ -50,6 +50,15 @@ const (
 	DefaultEntityChangeThreshold = 100
 )
 
+// Health tracking constants
+const (
+	healthyThreshold   = 3 // Failures before degraded
+	unhealthyThreshold = 8 // Failures before unhealthy
+	recoveryThreshold  = 2 // Consecutive successes for full recovery
+	baseBackoffDelay   = 1 * time.Second
+	maxBackoffDelay    = 5 * time.Minute
+)
+
 // ProcessWork carries message data and the JetStream message for ACK/NAK after processing.
 // This enables proper "at least once" delivery semantics by ACKing only after successful KV write.
 type ProcessWork struct {
@@ -128,8 +137,19 @@ type Processor struct {
 	hierarchyInference *inference.HierarchyInference
 	enhancementMode    EnhancementWindowMode // Mode for enhancement window behavior
 
+	// Health tracking fields
+	consecutiveFailures  int       // Count of consecutive detection failures
+	consecutiveSuccesses int       // Count of consecutive detection successes
+	currentHealth        string    // "healthy", "degraded", "unhealthy"
+	lastBackoffUntil     time.Time // Time until which detection should be skipped (backoff)
+
 	// Inference metrics
 	inferredTriples prometheus.Counter
+
+	// Clustering observability metrics (US3)
+	clusteringEmbeddingCoverage prometheus.Gauge   // Current embedding coverage ratio (0-1)
+	clusteringWindowActive      prometheus.Gauge   // 1 if enhancement window is active, 0 otherwise
+	clusteringFailuresTotal     prometheus.Counter // Total detection failures
 
 	// Structural index components (optional, initialized if config.GraphAnalysis.StructuralIndex.Enabled)
 	structuralMu       sync.RWMutex                       // Protects structuralIndices and previousKCore
@@ -174,6 +194,9 @@ func NewProcessor(deps ProcessorDeps) (*Processor, error) {
 			LastCheck:  time.Now(),
 			ErrorCount: 0,
 		},
+		currentHealth:        "healthy",
+		consecutiveFailures:  0,
+		consecutiveSuccesses: 0,
 	}
 
 	// Build ports from config (standard pattern) or use defaults
@@ -1888,6 +1911,7 @@ func (p *Processor) initializeClusteringCore(ctx context.Context, buckets map[st
 
 	p.communityDetector = p.createCommunityDetector(graphProvider, cfg)
 	p.initializeInferenceMetrics()
+	p.initializeClusteringMetrics()
 
 	// Cache graph provider for structural index computation
 	p.graphProvider = graphProvider
@@ -2185,6 +2209,31 @@ func (p *Processor) initializeInferenceMetrics() {
 		Help: "Total inferred relationship triples from community detection",
 	})
 	p.metricsRegistry.RegisterCounter("graph", "semstreams_graph_inferred_triples_total", p.inferredTriples)
+}
+
+// initializeClusteringMetrics creates metrics for clustering observability (US3).
+func (p *Processor) initializeClusteringMetrics() {
+	if p.metricsRegistry == nil {
+		return
+	}
+
+	p.clusteringEmbeddingCoverage = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "semstreams_clustering_embedding_coverage",
+		Help: "Current embedding coverage ratio (0-1) for community detection",
+	})
+	p.metricsRegistry.RegisterGauge("graph", "semstreams_clustering_embedding_coverage", p.clusteringEmbeddingCoverage)
+
+	p.clusteringWindowActive = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "semstreams_clustering_window_active",
+		Help: "Enhancement window state (1=active, 0=inactive)",
+	})
+	p.metricsRegistry.RegisterGauge("graph", "semstreams_clustering_window_active", p.clusteringWindowActive)
+
+	p.clusteringFailuresTotal = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "semstreams_clustering_failures_total",
+		Help: "Total community detection failures",
+	})
+	p.metricsRegistry.RegisterCounter("graph", "semstreams_clustering_failures_total", p.clusteringFailuresTotal)
 }
 
 // isStructuralIndexEnabled checks if structural indexing is configured and enabled.
@@ -2736,7 +2785,7 @@ func (p *Processor) runDetectionIfReady(ctx context.Context, minEntities int, en
 	}
 
 	// Check embedding coverage for semantic clustering
-	if !p.checkEmbeddingCoverage(entityCount) {
+	if !p.checkEmbeddingCoverage(ctx, entityCount) {
 		return
 	}
 
@@ -2764,6 +2813,10 @@ func (p *Processor) shouldProceedWithDetection(ctx context.Context, entityThresh
 		if allTerminal {
 			p.logger.Info("Enhancement window: all communities terminal, allowing detection")
 			p.enhancementDeadline = time.Time{}
+			// Update window active metric (US3)
+			if p.clusteringWindowActive != nil {
+				p.clusteringWindowActive.Set(0)
+			}
 			return true
 		}
 		p.logger.Debug("Enhancement window active, skipping detection",
@@ -2841,13 +2894,12 @@ func (p *Processor) checkEntityCountThreshold(ctx context.Context, minEntities i
 }
 
 // checkEmbeddingCoverage checks if embedding coverage is sufficient for semantic clustering.
-func (p *Processor) checkEmbeddingCoverage(entityCount int) bool {
+func (p *Processor) checkEmbeddingCoverage(ctx context.Context, entityCount int) bool {
 	if !p.isSemanticClusteringEnabled() || p.indexManager == nil || entityCount == 0 {
 		return true
 	}
 
 	// Get embeddable entity count (excluding hierarchy containers)
-	ctx := context.Background()
 	embeddableCount, err := p.getEmbeddableEntityCount(ctx)
 	if err != nil {
 		p.logger.Warn("Failed to get embeddable entity count, using total", "error", err)
@@ -2858,17 +2910,58 @@ func (p *Processor) checkEmbeddingCoverage(entityCount int) bool {
 		return true // No embeddable entities yet
 	}
 
-	embeddingCount := p.indexManager.GetEmbeddingCount()
-	coverage := float64(embeddingCount) / float64(embeddableCount)
+	// First, check cache coverage
+	cacheEmbeddingCount := p.indexManager.GetEmbeddingCount()
+	cacheCoverage := float64(cacheEmbeddingCount) / float64(embeddableCount)
 	minCoverage := p.getMinEmbeddingCoverage()
 
+	coverageSource := "cache"
+	embeddingCount := cacheEmbeddingCount
+	coverage := cacheCoverage
+
+	// If cache coverage is insufficient, fallback to KV query for accurate count
+	if cacheCoverage < minCoverage {
+		p.logger.Debug("Cache coverage below threshold, querying KV for accurate count",
+			"cache_coverage", fmt.Sprintf("%.1f%%", cacheCoverage*100),
+			"min_coverage", fmt.Sprintf("%.1f%%", minCoverage*100))
+
+		kvCount, kvErr := p.indexManager.CountEmbeddingsInKV(ctx)
+		if kvErr != nil {
+			p.logger.Warn("KV embedding count query failed, using cache value",
+				"error", kvErr,
+				"cache_count", cacheEmbeddingCount)
+			// Continue with cache values on error
+		} else {
+			// Use KV count for coverage check
+			embeddingCount = kvCount
+			coverage = float64(kvCount) / float64(embeddableCount)
+			coverageSource = "kv"
+
+			p.logger.Debug("KV query completed",
+				"kv_count", kvCount,
+				"cache_count", cacheEmbeddingCount,
+				"kv_coverage", fmt.Sprintf("%.1f%%", coverage*100))
+		}
+	} else {
+		p.logger.Debug("Cache coverage sufficient, no KV query needed",
+			"cache_coverage", fmt.Sprintf("%.1f%%", cacheCoverage*100),
+			"min_coverage", fmt.Sprintf("%.1f%%", minCoverage*100))
+	}
+
+	// Update coverage metric (US3)
+	if p.clusteringEmbeddingCoverage != nil {
+		p.clusteringEmbeddingCoverage.Set(coverage)
+	}
+
+	// Check final coverage
 	if coverage < minCoverage {
 		p.logger.Info("Skipping detection - waiting for embeddings",
 			"total_entities", entityCount,
 			"embeddable_entities", embeddableCount,
 			"embeddings", embeddingCount,
 			"coverage", fmt.Sprintf("%.1f%%", coverage*100),
-			"min_coverage", fmt.Sprintf("%.1f%%", minCoverage*100))
+			"min_coverage", fmt.Sprintf("%.1f%%", minCoverage*100),
+			"source", coverageSource)
 		return false
 	}
 
@@ -2876,7 +2969,8 @@ func (p *Processor) checkEmbeddingCoverage(entityCount int) bool {
 		"total_entities", entityCount,
 		"embeddable_entities", embeddableCount,
 		"embeddings", embeddingCount,
-		"coverage", fmt.Sprintf("%.1f%%", coverage*100))
+		"coverage", fmt.Sprintf("%.1f%%", coverage*100),
+		"source", coverageSource)
 	return true
 }
 
@@ -2907,6 +3001,13 @@ func (p *Processor) getEmbeddableEntityCount(ctx context.Context) (int, error) {
 
 // executeCommunityDetection runs the detection algorithm and post-processing.
 func (p *Processor) executeCommunityDetection(ctx context.Context, enhancementWindow time.Duration) map[int][]*clustering.Community {
+	// Check backoff first
+	if p.shouldSkipDetection() {
+		p.logger.Debug("Skipping detection due to backoff",
+			"backoff_until", p.lastBackoffUntil)
+		return nil
+	}
+
 	p.logger.Info("Running community detection")
 	startTime := time.Now()
 
@@ -2925,6 +3026,14 @@ func (p *Processor) executeCommunityDetection(ctx context.Context, enhancementWi
 	communities, err := p.communityDetector.DetectCommunities(ctx)
 	if err != nil {
 		p.logger.Error("Community detection failed", "error", err)
+		// Reset enhancement window on detection error to allow retry
+		p.enhancementDeadline = time.Time{}
+		// Update window active metric (US3)
+		if p.clusteringWindowActive != nil {
+			p.clusteringWindowActive.Set(0)
+		}
+		// Record failure for health tracking
+		p.recordDetectionFailure()
 		return nil
 	}
 
@@ -2938,6 +3047,9 @@ func (p *Processor) executeCommunityDetection(ctx context.Context, enhancementWi
 		"duration", time.Since(startTime),
 		"levels", len(communities),
 		"total_communities", totalCommunities)
+
+	// Record success for health tracking
+	p.recordDetectionSuccess()
 
 	// Compute structural indices if enabled (needed for anomaly detection)
 	if p.structuralComputer != nil && p.isStructuralIndexEnabled() {
@@ -2956,6 +3068,10 @@ func (p *Processor) executeCommunityDetection(ctx context.Context, enhancementWi
 	// Set enhancement window deadline if configured
 	if enhancementWindow > 0 && totalCommunities > 0 {
 		p.enhancementDeadline = time.Now().Add(enhancementWindow)
+		// Update window active metric (US3)
+		if p.clusteringWindowActive != nil {
+			p.clusteringWindowActive.Set(1)
+		}
 		p.logger.Info("Enhancement window started",
 			"deadline", p.enhancementDeadline,
 			"duration", enhancementWindow,
@@ -3328,4 +3444,252 @@ func (p *Processor) getMinEmbeddingCoverage() float64 {
 		return p.config.GraphAnalysis.CommunityDetection.Schedule.MinEmbeddingCoverage
 	}
 	return 0.5 // Default: 50% coverage
+}
+
+// DebugStatus returns extended debug information for the graph processor.
+// Implements component.DebugStatusProvider.
+func (p *Processor) DebugStatus() any {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	variant := p.getVariant()
+	embeddingCoverage, coverageSource := p.getEmbeddingCoverage()
+
+	return ClusteringStatus{
+		Variant:             variant,
+		LastRunTime:         time.Time{}, // TODO: Track this
+		LastRunResult:       "",          // TODO: Track this
+		EmbeddingCoverage:   embeddingCoverage,
+		MinCoverage:         p.getMinEmbeddingCoverage(),
+		CoverageSource:      coverageSource,
+		EnhancementWindow:   p.getWindowStatus(),
+		Communities:         0,                     // TODO: Track this
+		ConsecutiveFailures: p.consecutiveFailures, // Now tracked
+		BlockingReason:      p.getBlockingReason(),
+		HealthStatus:        p.getHealthStatusString(),
+	}
+}
+
+// getVariant determines the clustering variant (structural, statistical, semantic)
+// based on configuration.
+func (p *Processor) getVariant() string {
+	if p.config == nil || p.config.GraphAnalysis == nil || p.config.GraphAnalysis.CommunityDetection == nil {
+		return "structural" // Default when clustering not configured
+	}
+
+	if p.config.GraphAnalysis.CommunityDetection.SemanticEdges.Enabled {
+		return "semantic"
+	}
+
+	// If EntityIDEdges is configured but semantic edges are not
+	if p.config.GraphAnalysis.CommunityDetection.EntityIDEdges != nil &&
+		p.config.GraphAnalysis.CommunityDetection.EntityIDEdges.Enabled {
+		return "statistical"
+	}
+
+	return "structural"
+}
+
+// getEmbeddingCoverage returns current embedding coverage and source
+func (p *Processor) getEmbeddingCoverage() (float64, string) {
+	if !p.isSemanticClusteringEnabled() || p.indexManager == nil {
+		return 0.0, ""
+	}
+
+	// Get embedding count from cache
+	embeddingCount := p.indexManager.GetEmbeddingCount()
+
+	// For simplicity, return 0 coverage if we can't determine entity count
+	// This is just for observability; actual coverage checking uses different methods
+	if embeddingCount == 0 {
+		return 0.0, "cache"
+	}
+
+	// Return a placeholder value - we don't have direct access to entity count here
+	// The actual coverage checking in checkEmbeddingCoverage uses getEmbeddableEntityCount
+	return 0.0, "cache"
+}
+
+// getWindowStatus returns the enhancement window state
+func (p *Processor) getWindowStatus() WindowStatus {
+	now := time.Now()
+	active := !p.enhancementDeadline.IsZero() && now.Before(p.enhancementDeadline)
+
+	mode := "none"
+	if p.config != nil && p.config.GraphAnalysis != nil &&
+		p.config.GraphAnalysis.CommunityDetection != nil {
+		mode = string(p.enhancementMode)
+	}
+
+	return WindowStatus{
+		Active:        active,
+		Mode:          mode,
+		Deadline:      p.enhancementDeadline,
+		EntityChanges: int(p.entityChangeCount.Load()),
+		Threshold:     DefaultEntityChangeThreshold,
+		AllTerminal:   false, // TODO: Track this if needed
+	}
+}
+
+// getBlockingReason returns why detection is currently blocked (empty if not blocked)
+func (p *Processor) getBlockingReason() string {
+	// Check if config is nil first
+	if p.config == nil || p.config.GraphAnalysis == nil || p.config.GraphAnalysis.CommunityDetection == nil {
+		return ""
+	}
+
+	if !p.config.GraphAnalysis.CommunityDetection.Enabled {
+		return ""
+	}
+
+	if p.isSemanticClusteringEnabled() {
+		coverage, _ := p.getEmbeddingCoverage()
+		minCoverage := p.getMinEmbeddingCoverage()
+		if coverage < minCoverage {
+			return fmt.Sprintf("embedding coverage %.2f below minimum %.2f", coverage, minCoverage)
+		}
+	}
+
+	// Check if enhancement window is blocking
+	now := time.Now()
+	if !p.enhancementDeadline.IsZero() && now.Before(p.enhancementDeadline) {
+		if p.enhancementMode == WindowModeBlocking {
+			return "enhancement window active (blocking mode)"
+		}
+	}
+
+	return ""
+}
+
+// getHealthStatusString returns the health status as a string
+func (p *Processor) getHealthStatusString() string {
+	// Note: mu is already held by DebugStatus() caller
+	if p.currentHealth == "" {
+		return "healthy" // Default to healthy if not initialized
+	}
+	return p.currentHealth
+}
+
+// recordDetectionFailure increments failure count, resets success count, and updates health status.
+// Updates health based on consecutive failure count following thresholds:
+// - 3 consecutive failures: degraded
+// - 8 consecutive failures: unhealthy
+func (p *Processor) recordDetectionFailure() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.consecutiveFailures++
+	p.consecutiveSuccesses = 0
+
+	// Update health based on failure count
+	if p.consecutiveFailures >= unhealthyThreshold {
+		p.currentHealth = "unhealthy"
+	} else if p.consecutiveFailures >= healthyThreshold {
+		p.currentHealth = "degraded"
+	}
+
+	// Set backoff
+	backoff := p.calculateBackoffDuration()
+	if backoff > 0 {
+		p.lastBackoffUntil = time.Now().Add(backoff)
+	}
+
+	// Update clustering failures metric (US3)
+	if p.clusteringFailuresTotal != nil {
+		p.clusteringFailuresTotal.Inc()
+	}
+
+	// Log health transition
+	p.logger.Warn("Detection failure recorded",
+		"consecutive_failures", p.consecutiveFailures,
+		"health_status", p.currentHealth,
+		"backoff_until", p.lastBackoffUntil)
+}
+
+// recordDetectionSuccess increments success count, resets failure count, and updates health status.
+// Recovery requires consecutive successes:
+// - unhealthy → degraded: after 1 success
+// - degraded → healthy: after 2 consecutive successes
+func (p *Processor) recordDetectionSuccess() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.consecutiveSuccesses++
+	previousHealth := p.currentHealth
+
+	// Clear backoff on success
+	p.lastBackoffUntil = time.Time{}
+	p.consecutiveFailures = 0
+
+	// Update health based on success count
+	if p.consecutiveSuccesses >= recoveryThreshold {
+		p.currentHealth = "healthy"
+	} else if p.consecutiveSuccesses == 1 && p.currentHealth == "unhealthy" {
+		p.currentHealth = "degraded"
+	}
+
+	// Log health transition if changed
+	if previousHealth != p.currentHealth {
+		p.logger.Info("Health status recovered",
+			"previous", previousHealth,
+			"current", p.currentHealth,
+			"consecutive_successes", p.consecutiveSuccesses)
+	}
+}
+
+// getHealthStatus returns current health status.
+// Note: Caller must hold mu if synchronization is needed.
+func (p *Processor) getHealthStatus() string {
+	return p.currentHealth
+}
+
+// calculateBackoffDuration computes exponential backoff based on consecutive failures.
+// Formula: min(baseDelay * 2^(failures-1), maxDelay)
+// Returns 0 if no failures.
+func (p *Processor) calculateBackoffDuration() time.Duration {
+	if p.consecutiveFailures <= 0 {
+		return 0
+	}
+
+	// Cap failures before bit shift to prevent int64 overflow.
+	// At 10 failures (2^9 * 1s = 512s), we exceed maxBackoffDelay (5min = 300s),
+	// so anything above 10 returns maxBackoffDelay directly.
+	failures := p.consecutiveFailures
+	if failures > 10 {
+		return maxBackoffDelay
+	}
+
+	// Calculate 2^(failures-1) * baseDelay, capped at maxDelay
+	multiplier := int64(1) << (failures - 1)
+	backoff := time.Duration(multiplier) * baseBackoffDelay
+	if backoff > maxBackoffDelay {
+		backoff = maxBackoffDelay
+	}
+	return backoff
+}
+
+// getBackoffDuration returns the current backoff duration based on failure count.
+// This is a public method for testing, delegates to calculateBackoffDuration.
+func (p *Processor) getBackoffDuration() time.Duration {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.calculateBackoffDuration()
+}
+
+// shouldSkipDetection returns true if currently in backoff period.
+func (p *Processor) shouldSkipDetection() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.lastBackoffUntil.IsZero() {
+		return false
+	}
+	return time.Now().Before(p.lastBackoffUntil)
+}
+
+// getConsecutiveFailures returns current consecutive failure count.
+func (p *Processor) getConsecutiveFailures() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.consecutiveFailures
 }
