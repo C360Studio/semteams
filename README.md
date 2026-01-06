@@ -1,5 +1,7 @@
 # SemStreams
 
+## WORK IN PROGRESS - Expect breaking changes and large refactors. 
+
 A stream processor that builds semantic knowledge graphs from event data, with automatic community detection and progressive AI enhancement.
 
 ## Overview
