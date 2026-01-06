@@ -405,9 +405,9 @@
         ]
       }
     },
-    "graph": {
+    "graph-ingest": {
       "type": "processor",
-      "name": "graph-processor",
+      "name": "graph-ingest",
       "enabled": true,
       "config": {
         "ports": {
@@ -427,192 +427,241 @@
               "description": "Sensor entity events from IoT processor"
             }
           ],
-          "outputs": []
-        },
-        "workers": 8,
-        "queue_size": 5000,
-        "message_handler": {
-          "processing_timeout": "5s",
-          "max_retries": 5
-        },
-        "data_manager": {
-          "kv_bucket": "ENTITY_STATES",
-          "kv_options": {
-            "max_retries": 15,
-            "timeout": "10s"
-          },
-          "enable_edge_tracking": true,
-          "edge_batch_size": 100
-        },
-        "indexer": {
-          "indexes": {
-            "predicate": true,
-            "incoming": true,
-            "outgoing": true,
-            "alias": true,
-            "spatial": true,
-            "temporal": true,
-            "context": true
-          },
-          "buckets": {
-            "alias": "ALIAS_INDEX",
-            "predicate": "PREDICATE_INDEX",
-            "incoming": "INCOMING_INDEX",
-            "outgoing": "OUTGOING_INDEX",
-            "spatial": "SPATIAL_INDEX",
-            "temporal": "TEMPORAL_INDEX",
-            "context": "CONTEXT_INDEX"
-          },
-          "batch_processing": {
-            "size": 50
-          },
-          "embedding": {
-            "enabled": true,
-            "provider": "http",
-            "http_endpoint": "http://semembed:8081/v1",
-            "http_model": "BAAI/bge-small-en-v1.5",
-            "content_store_bucket": "semstreams_kitchen_sink_store",
-            "text_fields": [
-              "dc.terms.title",
-              "dc.terms.subject",
-              "dc.terms.description",
-              "title",
-              "description",
-              "summary",
-              "name",
-              "body",
-              "content",
-              "text",
-              "observation.text"
-            ]
-          }
-        },
-        "querier": {
-          "cache_enabled": true,
-          "cache_ttl": "15m",
-          "max_cache_size": 5000,
-          "query_timeout": "10s",
-          "result_limit": 1000
-        },
-        "graph_analysis": {
-          "hierarchy_inference": {
-            "enabled": true,
-            "create_type_edges": true,
-            "create_system_edges": true,
-            "create_domain_edges": true
-          },
-          "community_detection": {
-            "enabled": true,
-            "algorithm": {
-              "max_iterations": 100,
-              "levels": 3
-            },
-            "schedule": {
-              "initial_delay": "2s",
-              "detection_interval": "30s",
-              "min_detection_interval": "5s",
-              "entity_change_threshold": 100,
-              "min_entities": 10,
-              "min_embedding_coverage": 0,
-              "enhancement_window": "2m",
-              "enhancement_window_mode": "soft"
-            },
-            "enhancement": {
-              "enabled": true,
-              "workers": 3,
-              "domain": "iot",
-              "llm": {
-                "provider": "openai",
-                "base_url": "http://seminstruct:8083/v1",
-                "model": "qwen2.5-0.5b-instruct-q4-k-m",
-                "timeout_seconds": 60,
-                "max_retries": 3
-              }
-            },
-            "semantic_edges": {
-              "enabled": true,
-              "similarity_threshold": 0.6,
-              "max_virtual_neighbors": 5
-            },
-            "entityid_edges": {
-              "enabled": true,
-              "sibling_weight": 0.7,
-              "max_siblings": 10,
-              "include_siblings": true
-            },
-            "inference": {
-              "enabled": true,
-              "min_community_size": 2,
-              "max_inferred_per_community": 50
+          "outputs": [
+            {
+              "name": "entity_states",
+              "subject": "ENTITY_STATES",
+              "type": "kv",
+              "description": "Entity state KV bucket"
             }
-          },
-          "structural_index": {
-            "enabled": true,
-            "compute_on_startup": true,
-            "compute_interval": "1h",
-            "kcore": {
-              "enabled": true,
-              "min_core_filter": 0
-            },
-            "pivot": {
-              "enabled": true,
-              "pivot_count": 16,
-              "max_hop_distance": 10
-            }
-          },
-          "anomaly_detection": {
-            "enabled": true,
-            "run_with_community_detection": true,
-            "max_anomalies_per_run": 50,
-            "semantic_gap": {
-              "enabled": true,
-              "min_semantic_similarity": 0.8,
-              "min_structural_distance": 2,
-              "max_gaps_per_entity": 3,
-              "max_candidates_per_entity": 25
-            },
-            "core_anomaly": {
-              "enabled": true,
-              "min_core_for_hub_analysis": 3,
-              "hub_isolation_threshold": 0.5,
-              "track_core_demotions": true,
-              "min_demotion_delta": 2
-            },
-            "transitivity": {
-              "enabled": false
-            },
-            "virtual_edges": {
-              "auto_apply": {
-                "enabled": true,
-                "min_similarity": 0.8,
-                "min_structural_distance": 2,
-                "predicate_template": "inferred.semantic.{band}"
-              },
-              "review_queue": {
-                "enabled": false,
-                "min_similarity": 0.7,
-                "max_similarity": 0.85,
-                "require_llm_classification": true
-              }
-            },
-            "review": {
-              "enabled": false
-            },
-            "storage": {
-              "bucket_name": "ANOMALY_INDEX",
-              "retention_days": 1
-            }
-          }
+          ]
         },
-        "gateway": {
-          "graphql": {
-            "enabled": true,
-            "bind_address": ":8084",
-            "path": "/graphql",
-            "enable_playground": true,
-            "timeout": "30s"
-          }
-        }
+        "enable_hierarchy": true
+      }
+    },
+    "graph-index": {
+      "type": "processor",
+      "name": "graph-index",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "outgoing_index",
+              "subject": "OUTGOING_INDEX",
+              "type": "kv",
+              "description": "Outgoing relationship index"
+            },
+            {
+              "name": "incoming_index",
+              "subject": "INCOMING_INDEX",
+              "type": "kv",
+              "description": "Incoming relationship index"
+            },
+            {
+              "name": "alias_index",
+              "subject": "ALIAS_INDEX",
+              "type": "kv",
+              "description": "Entity alias index"
+            },
+            {
+              "name": "predicate_index",
+              "subject": "PREDICATE_INDEX",
+              "type": "kv",
+              "description": "Predicate index"
+            }
+          ]
+        },
+        "workers": 4,
+        "batch_size": 50
+      }
+    },
+    "graph-embedding": {
+      "type": "processor",
+      "name": "graph-embedding",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "embeddings",
+              "subject": "EMBEDDINGS_CACHE",
+              "type": "kv",
+              "description": "Entity embeddings cache"
+            }
+          ]
+        },
+        "embedder_type": "http",
+        "embedder_url": "http://semembed:8081/v1",
+        "batch_size": 50,
+        "cache_ttl": "1h"
+      }
+    },
+    "graph-clustering": {
+      "type": "processor",
+      "name": "graph-clustering",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes for batch trigger"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "communities",
+              "subject": "COMMUNITY_INDEX",
+              "type": "kv",
+              "description": "Community detection results"
+            }
+          ]
+        },
+        "detection_interval": "30s",
+        "batch_size": 100,
+        "enable_llm": true,
+        "llm_endpoint": "http://seminstruct:8083/v1",
+        "min_community_size": 2,
+        "max_iterations": 100
+      }
+    },
+    "graph-index-spatial": {
+      "type": "processor",
+      "name": "graph-index-spatial",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "spatial_index",
+              "subject": "SPATIAL_INDEX",
+              "type": "kv",
+              "description": "Spatial index"
+            }
+          ]
+        },
+        "geohash_precision": 6,
+        "workers": 4,
+        "batch_size": 100
+      }
+    },
+    "graph-index-temporal": {
+      "type": "processor",
+      "name": "graph-index-temporal",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "temporal_index",
+              "subject": "TEMPORAL_INDEX",
+              "type": "kv",
+              "description": "Temporal index"
+            }
+          ]
+        },
+        "time_resolution": "hour",
+        "workers": 4,
+        "batch_size": 100
+      }
+    },
+    "graph-anomalies": {
+      "type": "processor",
+      "name": "graph-anomalies",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "outgoing_watch",
+              "subject": "OUTGOING_INDEX",
+              "type": "kv-watch",
+              "description": "Watch outgoing index changes"
+            },
+            {
+              "name": "incoming_watch",
+              "subject": "INCOMING_INDEX",
+              "type": "kv-watch",
+              "description": "Watch incoming index changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "structural_index",
+              "subject": "STRUCTURAL_INDEX",
+              "type": "kv",
+              "description": "Structural index (k-core, pivot)"
+            }
+          ]
+        },
+        "compute_interval": "1h",
+        "pivot_count": 16,
+        "max_hop_distance": 10,
+        "compute_on_startup": true
+      }
+    },
+    "graph-gateway": {
+      "type": "gateway",
+      "name": "graph-gateway",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "http",
+              "subject": ":8084",
+              "type": "http",
+              "description": "HTTP server for GraphQL and MCP"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "mutations",
+              "subject": "graph.mutation.*",
+              "type": "nats-request",
+              "description": "Graph mutation requests"
+            }
+          ]
+        },
+        "graphql_path": "/graphql",
+        "mcp_path": "/mcp",
+        "bind_address": ":8084",
+        "enable_playground": true
       }
     },
     "file": {

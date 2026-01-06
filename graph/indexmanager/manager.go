@@ -1,0 +1,2071 @@
+// Package indexmanager provides index management for entity state tracking and queries.
+package indexmanager
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	stderrors "errors"
+	"fmt"
+	"log/slog"
+	"sync"
+	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
+
+	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/embedding"
+	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/metric"
+	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/buffer"
+	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/pkg/worker"
+)
+
+// Manager implements the Indexer interface
+type Manager struct {
+	mu sync.RWMutex
+
+	// Configuration
+	config Config
+
+	// NATS Client (for KVStore)
+	natsClient *natsclient.Client
+
+	// KV Buckets
+	entityBucket    jetstream.KeyValue
+	predicateBucket jetstream.KeyValue
+	incomingBucket  jetstream.KeyValue
+	outgoingBucket  jetstream.KeyValue
+	aliasBucket     jetstream.KeyValue
+	spatialBucket   jetstream.KeyValue
+	temporalBucket  jetstream.KeyValue
+	contextBucket   jetstream.KeyValue
+
+	// Core components
+	watcher     *KVWatcher
+	eventBuffer buffer.Buffer[EntityChange]
+	dedupCache  cache.Cache[bool]
+	workers     *worker.Pool[func(context.Context)]
+	indexes     map[string]Index
+
+	// Simple LRU caches to reduce KV hits (one per index)
+	predicateCache cache.Cache[[]string]       // Cache for predicate lookups
+	spatialCache   cache.Cache[[]string]       // Cache for spatial lookups
+	temporalCache  cache.Cache[[]string]       // Cache for temporal lookups
+	incomingCache  cache.Cache[[]Relationship] // Cache for incoming relationships
+	aliasCache     cache.Cache[string]         // Cache for alias resolution
+
+	// Semantic search components (optional - nil when disabled)
+	embedder         Embedder                     // Embedding generator (nil if disabled)
+	vectorCache      cache.Cache[[]float32]       // TTL cache: entityID -> embedding vector (read hot-path)
+	metadataCache    cache.Cache[*EntityMetadata] // TTL cache: entityID -> metadata
+	embeddingStorage *embedding.Storage           // Persistent KV storage for embeddings
+	embeddingWorker  *embedding.Worker            // Async worker for embedding generation
+
+	// Structural index components (optional - nil when disabled)
+	structuralIndices *StructuralIndexHolder // Cached k-core and pivot indices
+
+	// Event processing
+	eventChan chan EntityChange
+	batchChan chan []EntityChange
+
+	// State
+	wg sync.WaitGroup
+
+	// Metrics
+	metrics         *InternalMetrics
+	promMetrics     *PrometheusMetrics
+	metricsRegistry *metric.MetricsRegistry
+
+	// Logger
+	logger *slog.Logger
+
+	// Note: Entity creation callback removed - HierarchyInference now uses its own
+	// KV watcher on ENTITY_STATES for better decoupling.
+}
+
+// Embedder interface from embedding package (re-declared here to avoid import cycle)
+type Embedder interface {
+	Generate(ctx context.Context, texts []string) ([][]float32, error)
+	Dimensions() int
+	Model() string
+	Close() error
+}
+
+// EntityMetadata stores entity information needed for semantic search
+type EntityMetadata struct {
+	EntityID   string
+	EntityType string
+	Properties map[string]interface{}
+	Updated    time.Time
+}
+
+// NewManager creates a new Indexer implementation
+func NewManager(
+	config Config,
+	buckets map[string]jetstream.KeyValue,
+	natsClient *natsclient.Client,
+	metricsRegistry *metric.MetricsRegistry,
+	logger *slog.Logger,
+) (Indexer, error) {
+	// Ensure we have a logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	// Apply defaults and validate config
+	config.ApplyDefaults()
+	if err := config.Validate(); err != nil {
+		return nil, errs.WrapInvalid(err, "IndexManager", "NewManager", "configuration validation failed")
+	}
+
+	// Create metrics
+	metrics := NewInternalMetrics()
+	var promMetrics *PrometheusMetrics
+	if metricsRegistry != nil {
+		promMetrics = NewPrometheusMetrics("indexengine", metricsRegistry)
+	}
+
+	// Create event buffer
+	var eventBuffer buffer.Buffer[EntityChange]
+	var err error
+	if config.EventBuffer.OverflowPolicy == "drop_oldest" {
+		eventBuffer, err = buffer.NewCircularBuffer[EntityChange](
+			config.EventBuffer.Capacity,
+			buffer.WithOverflowPolicy[EntityChange](buffer.DropOldest),
+		)
+	} else if config.EventBuffer.OverflowPolicy == "drop_newest" {
+		eventBuffer, err = buffer.NewCircularBuffer[EntityChange](
+			config.EventBuffer.Capacity,
+			buffer.WithOverflowPolicy[EntityChange](buffer.DropNewest),
+		)
+	} else {
+		eventBuffer, err = buffer.NewCircularBuffer[EntityChange](
+			config.EventBuffer.Capacity,
+			buffer.WithOverflowPolicy[EntityChange](buffer.Block),
+		)
+	}
+	if err != nil {
+		return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "event buffer creation")
+	}
+
+	// Create event channels
+	eventChan := make(chan EntityChange, config.BatchProcessing.Size)
+	batchChan := make(chan []EntityChange, 10) // Small buffer for batches
+
+	// Create KV watcher
+	entityBucket, ok := buckets[config.Buckets.EntityStates]
+	if !ok {
+		msg := fmt.Sprintf("bucket not found: %s", config.Buckets.EntityStates)
+		return nil, errs.WrapInvalid(ErrBucketMissing, "IndexManager", "NewManager", msg)
+	}
+	watcher := NewKVWatcher(
+		entityBucket, config.Buckets.EntityStates, eventChan, metrics, promMetrics, logger)
+
+	// Create worker pool for processing
+	// Queue size is 4x batch size to handle bursts without blocking
+	workers := worker.NewPool[func(context.Context)](
+		config.Workers, config.BatchProcessing.Size*4,
+		func(ctx context.Context, task func(context.Context)) error {
+			task(ctx)
+			return nil
+		})
+
+	// Create LRU caches if enabled
+	var predicateCache cache.Cache[[]string]
+	var spatialCache cache.Cache[[]string]
+	var temporalCache cache.Cache[[]string]
+	var incomingCache cache.Cache[[]Relationship]
+	var aliasCache cache.Cache[string]
+
+	if config.Caches.Enabled {
+		predicateCache, err = cache.NewLRU[[]string](config.Caches.PredicateSize)
+		if err != nil {
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "predicate cache creation")
+		}
+		spatialCache, err = cache.NewLRU[[]string](config.Caches.SpatialSize)
+		if err != nil {
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "spatial cache creation")
+		}
+		temporalCache, err = cache.NewLRU[[]string](config.Caches.TemporalSize)
+		if err != nil {
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "temporal cache creation")
+		}
+		incomingCache, err = cache.NewLRU[[]Relationship](config.Caches.IncomingSize)
+		if err != nil {
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "incoming cache creation")
+		}
+		aliasCache, err = cache.NewLRU[string](config.Caches.AliasSize)
+		if err != nil {
+			return nil, errs.WrapTransient(err, "IndexManager", "NewManager", "alias cache creation")
+		}
+	}
+
+	engine := &Manager{
+		config:            config,
+		natsClient:        natsClient,
+		entityBucket:      entityBucket,
+		predicateBucket:   buckets[config.Buckets.Predicate],
+		incomingBucket:    buckets[config.Buckets.Incoming],
+		outgoingBucket:    buckets[config.Buckets.Outgoing],
+		aliasBucket:       buckets[config.Buckets.Alias],
+		spatialBucket:     buckets[config.Buckets.Spatial],
+		temporalBucket:    buckets[config.Buckets.Temporal],
+		contextBucket:     buckets[config.Buckets.Context],
+		watcher:           watcher,
+		eventBuffer:       eventBuffer,
+		workers:           workers,
+		eventChan:         eventChan,
+		batchChan:         batchChan,
+		predicateCache:    predicateCache,
+		spatialCache:      spatialCache,
+		temporalCache:     temporalCache,
+		incomingCache:     incomingCache,
+		aliasCache:        aliasCache,
+		metrics:           metrics,
+		promMetrics:       promMetrics,
+		metricsRegistry:   metricsRegistry,
+		indexes:           make(map[string]Index),
+		structuralIndices: NewStructuralIndexHolder(),
+		logger:            logger,
+	}
+
+	// Initialize enabled indexes
+	if err := engine.initializeIndexes(); err != nil {
+		return nil, errs.WrapInvalid(err, "IndexManager", "NewManager", "failed to initialize indexes")
+	}
+
+	// Initialize semantic search if enabled
+	if err := engine.initializeSemanticSearch(buckets); err != nil {
+		return nil, errs.WrapInvalid(err, "IndexManager", "NewManager", "failed to initialize semantic search")
+	}
+
+	return engine, nil
+}
+
+// Run starts KV watching and event processing. It blocks until error or context done and returns only fatal errors.
+// If onReady is provided, it is called once initialization completes successfully.
+func (m *Manager) Run(ctx context.Context, onReady func()) error {
+	// Create deduplication cache if enabled
+	if err := m.createDedupCache(ctx); err != nil {
+		return err
+	}
+
+	// Start worker pool - startup failure is fatal
+	if err := m.workers.Start(ctx); err != nil {
+		return errs.WrapFatal(err, "IndexManager", "Run", "worker_pool_start")
+	}
+	defer func() {
+		if err := m.workers.Stop(5 * time.Second); err != nil {
+			m.logger.Error("Failed to stop worker pool", "error", err)
+		}
+	}()
+
+	// Start KV watcher - startup failure is fatal
+	if err := m.watcher.Start(ctx); err != nil {
+		return errs.WrapFatal(err, "IndexManager", "Run", "watcher_start")
+	}
+	defer func() {
+		if err := m.watcher.Stop(); err != nil {
+			m.logger.Warn("Watcher stop error", "error", err)
+		}
+	}()
+
+	// Start embedding worker if configured
+	if m.embeddingWorker != nil {
+		if err := m.embeddingWorker.Start(ctx); err != nil {
+			m.logger.Warn("Embedding worker start failed - continuing without async embeddings", "error", err)
+			// Don't fail - async embeddings are optional
+		} else {
+			defer func() {
+				if err := m.embeddingWorker.Stop(); err != nil {
+					m.logger.Warn("Embedding worker stop error", "error", err)
+				}
+			}()
+			m.logger.Info("Embedding worker started")
+		}
+	}
+
+	// Pre-warm vector cache from persistent storage (for semantic clustering)
+	if err := m.PreWarmVectorCache(ctx); err != nil {
+		m.logger.Warn("Failed to pre-warm vector cache - clustering may be delayed", "error", err)
+		// Don't fail - pre-warm is best-effort
+	}
+
+	// Start event and batch processing goroutines
+	eventErr, batchErr := m.startProcessingGoroutines(ctx)
+
+	m.logger.Info("IndexManager running", "workers", m.config.Workers)
+
+	// Signal ready - watcher established, workers running, processing started
+	if onReady != nil {
+		onReady()
+	}
+
+	// Wait for context cancellation or fatal error
+	if err := m.waitForShutdownSignal(ctx, eventErr, batchErr); err != nil {
+		return err
+	}
+
+	// Perform graceful shutdown
+	m.performGracefulShutdown()
+
+	m.logger.Info("IndexManager stopped")
+	return nil
+}
+
+// createDedupCache creates the deduplication cache if enabled
+func (m *Manager) createDedupCache(ctx context.Context) error {
+	if m.config.Deduplication.Enabled {
+		var err error
+		m.dedupCache, err = cache.NewTTL[bool](
+			ctx,
+			m.config.Deduplication.TTL,
+			m.config.Deduplication.TTL/10,
+		)
+		if err != nil {
+			return errs.WrapTransient(err, "IndexManager", "Run", "dedup cache creation")
+		}
+	}
+	return nil
+}
+
+// startProcessingGoroutines starts event and batch processing goroutines with error handling
+func (m *Manager) startProcessingGoroutines(ctx context.Context) (chan error, chan error) {
+	// Channels for fatal errors from processors
+	eventErr := make(chan error, 1)
+	batchErr := make(chan error, 1)
+
+	// Start event processing goroutines with error handling
+	m.wg.Add(2)
+	go func() {
+		defer m.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				// Panic in event processor is fatal
+				eventErr <- errs.WrapFatal(fmt.Errorf("panic: %v", r), "IndexManager", "Run", "event_processor_panic")
+			}
+			close(eventErr)
+		}()
+		// Send error only if it's fatal
+		if err := m.processEvents(ctx); err != nil {
+			eventErr <- err
+		}
+	}()
+	go func() {
+		defer m.wg.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				// Panic in batch processor is fatal
+				batchErr <- errs.WrapFatal(fmt.Errorf("panic: %v", r), "IndexManager", "Run", "batch_processor_panic")
+			}
+			close(batchErr)
+		}()
+		// Send error only if it's fatal
+		if err := m.processBatches(ctx); err != nil {
+			batchErr <- err
+		}
+	}()
+
+	return eventErr, batchErr
+}
+
+// waitForShutdownSignal waits for context cancellation or fatal error from processors
+func (m *Manager) waitForShutdownSignal(ctx context.Context, eventErr, batchErr chan error) error {
+	select {
+	case <-ctx.Done():
+		// Normal shutdown
+	case err := <-eventErr:
+		if err != nil {
+			m.logger.Error("Fatal error in event processor", "error", err)
+			return err
+		}
+	case err := <-batchErr:
+		if err != nil {
+			m.logger.Error("Fatal error in batch processor", "error", err)
+			return err
+		}
+	}
+	return nil
+}
+
+// performGracefulShutdown stops the watcher, waits for goroutines, and cleans up resources
+func (m *Manager) performGracefulShutdown() {
+	// Stop the watcher first to prevent new events
+	if m.watcher != nil {
+		if err := m.watcher.Stop(); err != nil {
+			m.logger.Warn("KV watcher stop error", "error", err)
+		}
+		m.logger.Info("KV Watcher stopped", "bucket", "ENTITY_STATES")
+	}
+
+	// Wait for goroutines to finish processing BEFORE closing channels
+	done := make(chan struct{})
+	go func() {
+		m.wg.Wait()
+		close(done)
+	}()
+
+	// Wait with timeout
+	select {
+	case <-done:
+		// Goroutines finished, now safe to close channels
+		m.logger.Debug("All goroutines finished, closing channels")
+	case <-time.After(5 * time.Second):
+		m.logger.Warn("Shutdown timeout exceeded, forcing channel closure")
+	}
+
+	// Now safe to close channels - all goroutines have exited
+	close(m.eventChan)
+	close(m.batchChan)
+
+	// Close caches
+	if m.dedupCache != nil {
+		m.dedupCache.Close()
+	}
+}
+
+// initializeIndexes creates and initializes all enabled indexes
+func (m *Manager) initializeIndexes() error {
+	if m.config.Indexes.Predicate && m.predicateBucket != nil {
+		index := NewPredicateIndex(m.predicateBucket, m.natsClient, m.metrics, m.promMetrics, m.logger)
+		m.indexes["predicate"] = index
+	}
+
+	if m.config.Indexes.Incoming && m.incomingBucket != nil {
+		index := NewIncomingIndex(m.incomingBucket, m.metrics, m.promMetrics, m.logger)
+		m.indexes["incoming"] = index
+	}
+
+	if m.config.Indexes.Outgoing && m.outgoingBucket != nil {
+		index := NewOutgoingIndex(m.outgoingBucket, m.metrics, m.promMetrics, m.logger)
+		m.indexes["outgoing"] = index
+	}
+
+	if m.config.Indexes.Alias && m.aliasBucket != nil {
+		index := NewAliasIndex(m.aliasBucket, m.natsClient, m.metrics, m.promMetrics, m.logger)
+		m.indexes["alias"] = index
+	}
+
+	if m.config.Indexes.Spatial && m.spatialBucket != nil {
+		index := NewSpatialIndex(m.spatialBucket, m.natsClient, m.metrics, m.promMetrics, m.logger)
+		m.indexes["spatial"] = index
+	}
+
+	if m.config.Indexes.Temporal && m.temporalBucket != nil {
+		index := NewTemporalIndex(m.temporalBucket, m.natsClient, m.metrics, m.promMetrics, m.logger)
+		m.indexes["temporal"] = index
+	}
+
+	if m.config.Indexes.Context && m.contextBucket != nil {
+		index := NewContextIndex(m.contextBucket, m.metrics, m.promMetrics, m.logger)
+		m.indexes["context"] = index
+	}
+
+	m.logger.Info("IndexManager initialized indexes", "count", len(m.indexes), "enabled", m.config.GetEnabledIndexes())
+	return nil
+}
+
+// processEvents collects events into batches for processing
+// Returns only fatal errors - transient errors are handled with blocking submit
+func (m *Manager) processEvents(ctx context.Context) error {
+	batch := make([]EntityChange, 0, m.config.BatchProcessing.Size)
+	ticker := time.NewTicker(m.config.BatchProcessing.Interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Process any remaining batch
+			if len(batch) > 0 {
+				// Best effort on shutdown, ignore errors
+				_ = m.submitBatch(ctx, batch)
+			}
+			return nil
+
+		case event, ok := <-m.eventChan:
+			if !ok {
+				return nil // Channel closed
+			}
+
+			// Add to batch
+			batch = append(batch, event)
+
+			// Process batch if full
+			if len(batch) >= m.config.BatchProcessing.Size {
+				if err := m.submitBatchBlocking(ctx, batch); err != nil {
+					if errs.IsFatal(err) {
+						return err
+					}
+					// Context cancelled during blocking submit
+					if ctx.Err() != nil {
+						return nil
+					}
+					m.logger.Debug("Batch submit failed, retrying on next event",
+						"error", err,
+						"batch_size", len(batch))
+					// Don't reset batch - will retry on next event or timer
+					continue
+				}
+				batch = batch[:0] // Reset slice only on success
+			}
+
+		case <-ticker.C:
+			// Process batch on timer
+			if len(batch) > 0 {
+				if err := m.submitBatchBlocking(ctx, batch); err != nil {
+					if errs.IsFatal(err) {
+						return err
+					}
+					// Context cancelled during blocking submit
+					if ctx.Err() != nil {
+						return nil
+					}
+					m.logger.Debug("Timer batch submit failed, will retry",
+						"error", err,
+						"batch_size", len(batch))
+					// Don't reset batch - will retry on next timer tick
+					continue
+				}
+				batch = batch[:0] // Reset slice only on success
+			}
+		}
+	}
+}
+
+// submitBatch submits a batch of events for processing (non-blocking)
+// Returns error if batch cannot be submitted
+func (m *Manager) submitBatch(ctx context.Context, batch []EntityChange) error {
+	// Copy batch to avoid race conditions
+	batchCopy := make([]EntityChange, len(batch))
+	copy(batchCopy, batch)
+
+	select {
+	case m.batchChan <- batchCopy:
+		// Successfully submitted
+		return nil
+	case <-ctx.Done():
+		// Context cancelled, clean shutdown
+		return nil
+	default:
+		// Batch channel full - this is a backpressure issue
+		m.logger.Warn("Batch channel full, dropping batch", "events", len(batch))
+		m.metrics.UpdateBacklogSize(m.metrics.backlogSize + len(batch))
+
+		// Return transient error so caller knows the batch was dropped
+		return errs.WrapTransient(
+			fmt.Errorf("batch channel full, dropped %d events", len(batch)),
+			"IndexManager", "submitBatch", "channel_full")
+	}
+}
+
+// submitBatchBlocking submits a batch of events for processing (blocking)
+// Waits for space in the batch channel rather than dropping
+func (m *Manager) submitBatchBlocking(ctx context.Context, batch []EntityChange) error {
+	// Copy batch to avoid race conditions
+	batchCopy := make([]EntityChange, len(batch))
+	copy(batchCopy, batch)
+
+	select {
+	case m.batchChan <- batchCopy:
+		// Successfully submitted
+		return nil
+	case <-ctx.Done():
+		// Context cancelled, clean shutdown
+		return ctx.Err()
+	}
+}
+
+// processBatches processes batches of events using worker pool
+// Returns only fatal errors - transient errors are handled with exponential backoff
+func (m *Manager) processBatches(ctx context.Context) error {
+	var backoff time.Duration
+	const (
+		initialBackoff = 10 * time.Millisecond
+		maxBackoff     = 1 * time.Second
+	)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil // Clean shutdown
+
+		case batch, ok := <-m.batchChan:
+			if !ok {
+				return nil // Channel closed
+			}
+
+			// Keep trying until submitted or context cancelled
+			for {
+				batchCopy := batch // capture batch for closure
+				err := m.workers.Submit(func(ctx context.Context) {
+					m.processBatch(ctx, batchCopy)
+				})
+
+				if err == nil {
+					backoff = 0 // Reset on success
+					break
+				}
+
+				// Pool stopped is still fatal - no recovery possible
+				if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
+					return errs.WrapFatal(err, "IndexManager", "processBatches",
+						"worker pool no longer running")
+				}
+
+				// Queue full - apply backpressure with exponential backoff
+				if stderrors.Is(err, worker.ErrQueueFull) {
+					if backoff == 0 {
+						backoff = initialBackoff
+					} else {
+						backoff = min(backoff*2, maxBackoff)
+					}
+
+					m.logger.Debug("Worker queue full, backing off",
+						"backoff", backoff,
+						"batch_size", len(batch))
+
+					// Record backpressure metric
+					if m.promMetrics != nil {
+						m.promMetrics.backpressureRetries.Inc()
+						m.promMetrics.backpressureDelayMs.Observe(float64(backoff.Milliseconds()))
+					}
+
+					select {
+					case <-ctx.Done():
+						return nil
+					case <-time.After(backoff):
+						continue // Retry submit
+					}
+				}
+
+				// Unknown error - log and break to avoid infinite loop
+				m.logger.Error("Unexpected worker pool error", "error", err)
+				break
+			}
+		}
+	}
+}
+
+// processBatch processes a single batch of events
+func (m *Manager) processBatch(ctx context.Context, batch []EntityChange) {
+	startTime := time.Now()
+	processed := 0
+	failed := 0
+
+	for _, event := range batch {
+		if err := m.processEntityChange(ctx, event); err != nil {
+			m.logger.Error("Event processing failed", "entity", event.Key, "error", err)
+			m.metrics.RecordEventFailed(err)
+			if m.promMetrics != nil {
+				m.promMetrics.eventsFailed.Inc()
+			}
+			failed++
+		} else {
+			m.metrics.RecordEventProcessed()
+			if m.promMetrics != nil {
+				m.promMetrics.eventsProcessed.Inc()
+			}
+			processed++
+		}
+	}
+
+	// Update metrics
+	duration := time.Since(startTime)
+	if m.promMetrics != nil {
+		m.promMetrics.processLatency.Observe(duration.Seconds())
+	}
+	m.metrics.UpdateProcessingLag(duration)
+
+	if processed+failed > 0 {
+		m.logger.Debug("Processed batch", "successful", processed, "failed", failed, "duration", duration)
+	}
+}
+
+// processEntityChange processes a single entity change event
+func (m *Manager) processEntityChange(ctx context.Context, event EntityChange) error {
+	// Deduplication check
+	if m.dedupCache != nil {
+		dedupKey := m.createDedupKey(event)
+		if _, exists := m.dedupCache.Get(dedupKey); exists {
+			m.metrics.RecordDuplicateEvent()
+			if m.promMetrics != nil {
+				m.promMetrics.duplicateEvents.Inc()
+			}
+			return nil // Skip duplicate
+		}
+		m.dedupCache.Set(dedupKey, true)
+	}
+
+	// Validate entity state for create/update operations
+	var entityState interface{}
+	if event.Operation == OperationCreate || event.Operation == OperationUpdate {
+		state, err := m.watcher.ValidateEntityState(event.Value)
+		if err != nil {
+			msg := fmt.Sprintf("failed to process entity: %s", event.Key)
+			return errs.WrapTransient(err, "IndexManager", "processEvent", msg)
+		}
+		entityState = state
+	}
+
+	// Populate metadata cache for semantic search (Feature 007)
+	if m.metadataCache != nil && entityState != nil {
+		if state, ok := entityState.(*gtypes.EntityState); ok {
+			properties := extractPropertiesFromTriples(state.Triples)
+			entityType := state.MessageType.String()
+			if entityType == "" {
+				entityType = "unknown"
+			}
+			m.metadataCache.Set(event.Key, &EntityMetadata{
+				EntityID:   event.Key,
+				EntityType: entityType,
+				Properties: properties,
+				Updated:    time.Now(),
+			})
+			m.logger.Debug("Metadata cache populated", "entity_id", event.Key, "type", entityType, "properties_count", len(properties))
+		}
+	}
+
+	// Update all enabled indexes
+	for indexType, index := range m.indexes {
+		if err := m.updateIndex(ctx, index, indexType, event, entityState); err != nil {
+			// Log error but continue with other indexes
+			m.logger.Error("Index update failed", "index_type", indexType, "entity", event.Key, "error", err)
+			if m.promMetrics != nil {
+				m.promMetrics.indexUpdatesFailed.WithLabelValues(indexType, string(event.Operation)).Inc()
+			}
+		} else {
+			if m.promMetrics != nil {
+				m.promMetrics.indexUpdatesTotal.WithLabelValues(indexType, string(event.Operation)).Inc()
+			}
+		}
+	}
+
+	// Note: Entity created callback removed - HierarchyInference now uses its own
+	// KV watcher on ENTITY_STATES for better decoupling and async processing.
+
+	// Queue embeddings asynchronously if storage is available
+	if m.embeddingStorage != nil &&
+		(event.Operation == OperationCreate || event.Operation == OperationUpdate) {
+		if err := m.queueEmbeddingGeneration(ctx, event.Key, entityState); err != nil {
+			// Log error but don't fail the entire operation
+			m.logger.Error("Failed to queue embedding", "entity_id", event.Key, "error", err)
+		}
+	}
+
+	// Delete embeddings if this is a delete operation
+	if m.vectorCache != nil && m.metadataCache != nil && event.Operation == OperationDelete {
+		m.vectorCache.Delete(event.Key)
+		m.metadataCache.Delete(event.Key)
+	}
+
+	return nil
+}
+
+// queueEmbeddingGeneration queues an entity for async embedding generation
+func (m *Manager) queueEmbeddingGeneration(ctx context.Context, entityID string, entityState interface{}) error {
+	// Cast to EntityState
+	state, ok := entityState.(*gtypes.EntityState)
+	if !ok {
+		return errs.WrapTransient(
+			fmt.Errorf("invalid entity state type: %T", entityState),
+			"IndexManager", "generateEmbedding", "entity state must be *gtypes.EntityState")
+	}
+
+	// Check if this message type should be embedded using shouldEmbed filter
+	// MessageType is now a message.Type struct, check if it has content
+	if state.MessageType.Domain != "" {
+		if !shouldEmbed(state.MessageType, &m.config.Embedding) {
+			m.logger.Debug("Message type filtered out, skipping embedding",
+				"entity_id", entityID, "message_type", state.MessageType.Key())
+			return nil // Filtered out by type
+		}
+	}
+
+	// ContentStorable path: if StorageRef is present, use it instead of extracting from triples
+	// This supports the Feature 008 pattern where large content is stored in ObjectStore
+	if state.StorageRef != nil {
+		return m.queueEmbeddingWithStorageRef(ctx, entityID, state)
+	}
+
+	// Legacy path: Extract text from triples
+	// Build properties map from triples for text extraction
+	properties := make(map[string]interface{})
+	for _, triple := range state.Triples {
+		if !triple.IsRelationship() {
+			properties[triple.Predicate] = triple.Object
+		}
+	}
+	text := m.extractText(properties)
+	if text == "" {
+		m.logger.Debug("No text content found, skipping embedding", "entity_id", entityID)
+		return nil // No text to embed
+	}
+
+	// Record text extraction
+	if m.promMetrics != nil {
+		m.promMetrics.embeddingTextExtractions.Inc()
+	}
+
+	// Calculate content hash for deduplication
+	contentHash := embedding.ContentHash(text)
+
+	// Write pending record to KV - worker will pick it up asynchronously
+	if err := m.embeddingStorage.SavePending(ctx, entityID, contentHash, text); err != nil {
+		return errs.WrapTransient(err, "IndexManager", "queueEmbeddingGeneration", "failed to queue embedding")
+	}
+
+	// Record queued metric
+	if m.promMetrics != nil {
+		m.promMetrics.embeddingsQueued.Inc()
+	}
+
+	m.logger.Debug("Queued embedding for async generation",
+		"entity_id", entityID,
+		"message_type", state.MessageType,
+		"text_length", len(text),
+		"content_hash", contentHash[:8]) // Log first 8 chars of hash
+
+	return nil
+}
+
+// queueEmbeddingWithStorageRef queues an embedding using ContentStorable pattern.
+// The worker will fetch content from ObjectStore using the StorageRef.
+func (m *Manager) queueEmbeddingWithStorageRef(ctx context.Context, entityID string, state *gtypes.EntityState) error {
+	// Create StorageRef for embedding record
+	storageRef := &embedding.StorageRef{
+		StorageInstance: state.StorageRef.StorageInstance,
+		Key:             state.StorageRef.Key,
+	}
+
+	// Calculate content hash from storage key (for deduplication)
+	// This is a simplified hash since we don't have the actual content yet
+	contentHash := embedding.ContentHash(state.StorageRef.Key)
+
+	// Record text extraction
+	if m.promMetrics != nil {
+		m.promMetrics.embeddingTextExtractions.Inc()
+	}
+
+	// Write pending record with StorageRef - worker will fetch content and generate embedding
+	if err := m.embeddingStorage.SavePendingWithStorageRef(ctx, entityID, contentHash, storageRef, nil); err != nil {
+		return errs.WrapTransient(err, "IndexManager", "queueEmbeddingWithStorageRef", "failed to queue embedding")
+	}
+
+	// Record queued metric
+	if m.promMetrics != nil {
+		m.promMetrics.embeddingsQueued.Inc()
+	}
+
+	m.logger.Debug("Queued embedding with storage reference",
+		"entity_id", entityID,
+		"message_type", state.MessageType,
+		"storage_key", state.StorageRef.Key)
+
+	return nil
+}
+
+// updateIndex updates a specific index with an entity change
+func (m *Manager) updateIndex(
+	ctx context.Context, index Index, indexType string,
+	event EntityChange, entityState interface{},
+) error {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.indexUpdateLatency.WithLabelValues(indexType).Observe(duration.Seconds())
+		}
+	}()
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, m.config.ProcessTimeout)
+	defer cancel()
+
+	switch event.Operation {
+	case OperationCreate:
+		return index.HandleCreate(timeoutCtx, event.Key, entityState)
+	case OperationUpdate:
+		return index.HandleUpdate(timeoutCtx, event.Key, entityState)
+	case OperationDelete:
+		// For delete operations, first cleanup orphaned INCOMING_INDEX references
+		// This must happen BEFORE deleting from OUTGOING_INDEX (which has the relationship data)
+		if indexType == "outgoing" {
+			// Cleanup incoming references using the outgoing data before it's deleted
+			if err := m.CleanupOrphanedIncomingReferences(timeoutCtx, event.Key); err != nil {
+				m.logger.Warn("Failed to cleanup orphaned incoming references",
+					"entity_id", event.Key,
+					"error", err)
+				// Continue with delete anyway
+			}
+		}
+		return index.HandleDelete(timeoutCtx, event.Key)
+	default:
+		return errs.WrapTransient(
+			ErrInvalidEvent,
+			"IndexManager",
+			"processEvent",
+			fmt.Sprintf("invalid event for entity: %s", event.Key),
+		)
+	}
+}
+
+// createDedupKey creates a deduplication key for an event
+func (m *Manager) createDedupKey(event EntityChange) string {
+	return fmt.Sprintf("%s.%d.%s", event.Key, event.Revision, event.Operation)
+}
+
+// Update methods implementation
+
+// updateIndexes updates all relevant indexes for an entity using triples (internal use only)
+func (m *Manager) updateIndexes(ctx context.Context, entityState *gtypes.EntityState) error {
+	if entityState == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "IndexManager", "updateIndexes", "entity state cannot be nil")
+	}
+
+	entityID := entityState.ID
+
+	// Update predicate index with full entity state
+	if err := m.UpdatePredicateIndex(ctx, entityID, entityState); err != nil {
+		return errs.WrapTransient(err, "IndexManager", "updateIndexes", "predicate index update failed")
+	}
+
+	// Update spatial index if position data is available
+	if position := extractPositionFromTriples(entityState.Triples); position != nil {
+		if err := m.UpdateSpatialIndex(ctx, entityID, position); err != nil {
+			return errs.WrapTransient(err, "IndexManager", "updateIndexes", "spatial index update failed")
+		}
+	}
+
+	// Update temporal index with full entity state
+	if err := m.UpdateTemporalIndex(ctx, entityID, entityState); err != nil {
+		return errs.WrapTransient(err, "IndexManager", "updateIndexes", "temporal index update failed")
+	}
+
+	// Update incoming index for all relationships (extracted from triples)
+	for _, triple := range entityState.Triples {
+		if triple.IsRelationship() {
+			if toEntityID, ok := triple.Object.(string); ok {
+				if err := m.UpdateIncomingIndex(ctx, toEntityID, entityID, triple.Predicate); err != nil {
+					return errs.WrapTransient(
+						err,
+						"IndexManager",
+						"updateIndexes",
+						fmt.Sprintf("incoming index update failed for relationship to %s", toEntityID),
+					)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// updateIndexesAsync updates indexes asynchronously (internal use only)
+func (m *Manager) updateIndexesAsync(ctx context.Context, entityState *gtypes.EntityState, errorCallback func(error)) {
+	// Check for cancellation before submitting work
+	select {
+	case <-ctx.Done():
+		if errorCallback != nil {
+			errorCallback(ctx.Err())
+		}
+		return
+	default:
+	}
+
+	if m.workers == nil {
+		if errorCallback != nil {
+			errorCallback(fmt.Errorf("worker pool not initialized"))
+		}
+		return
+	}
+
+	if err := m.workers.Submit(func(workerCtx context.Context) {
+		if err := m.updateIndexes(workerCtx, entityState); err != nil {
+			if errorCallback != nil {
+				errorCallback(err)
+			}
+		}
+	}); err != nil {
+		// Check if it's a fatal error (pool stopped)
+		if stderrors.Is(err, worker.ErrPoolStopped) || stderrors.Is(err, worker.ErrPoolNotStarted) {
+			// Pool stopped - this is critical, notify via callback
+			if errorCallback != nil {
+				errorCallback(errs.WrapFatal(err, "IndexManager", "UpdateEntityAsync", "worker pool not running"))
+			}
+			return
+		}
+		// Queue full - log but don't fail the entire operation
+		if stderrors.Is(err, worker.ErrQueueFull) {
+			m.logger.Debug("Worker queue full, update deferred", "entity_id", entityState.ID)
+			if errorCallback != nil {
+				errorCallback(errs.WrapTransient(err, "IndexManager", "UpdateEntityAsync", "queue full"))
+			}
+		}
+	}
+}
+
+// extractPosition extracts position data from entity properties
+func extractPosition(properties map[string]any) interface{} {
+	// Look for common position property patterns
+	if lat, hasLat := properties["latitude"]; hasLat {
+		if lon, hasLon := properties["longitude"]; hasLon {
+			return map[string]interface{}{
+				"latitude":  lat,
+				"longitude": lon,
+			}
+		}
+	}
+
+	if pos, hasPos := properties["position"]; hasPos {
+		return pos
+	}
+
+	if loc, hasLoc := properties["location"]; hasLoc {
+		return loc
+	}
+
+	return nil
+}
+
+// extractPositionFromTriples extracts position data from entity triples using semantic predicates
+func extractPositionFromTriples(triples []message.Triple) interface{} {
+	var latitude, longitude interface{}
+	var hasLat, hasLon bool
+
+	// Look for geo.location.* predicates (standard vocabulary)
+	for _, triple := range triples {
+		switch triple.Predicate {
+		case "geo.location.latitude", "latitude":
+			latitude = triple.Object
+			hasLat = true
+		case "geo.location.longitude", "longitude":
+			longitude = triple.Object
+			hasLon = true
+		case "geo.location.position", "position":
+			return triple.Object
+		case "geo.location.coordinates", "location":
+			return triple.Object
+		}
+	}
+
+	// If we found both lat/lon, combine them
+	if hasLat && hasLon {
+		return map[string]interface{}{
+			"latitude":  latitude,
+			"longitude": longitude,
+		}
+	}
+
+	return nil
+}
+
+// extractPropertiesFromTriples converts triples to a property map for metadata caching.
+// This enables semantic search to return properties in search results.
+func extractPropertiesFromTriples(triples []message.Triple) map[string]interface{} {
+	properties := make(map[string]interface{})
+	for _, triple := range triples {
+		// Skip relationships (values that are entity IDs)
+		if triple.IsRelationship() {
+			continue
+		}
+		properties[triple.Predicate] = triple.Object
+	}
+	return properties
+}
+
+// UpdatePredicateIndex updates the predicate index for an entity
+func (m *Manager) UpdatePredicateIndex(ctx context.Context, entityID string, entityState interface{}) error {
+	if !m.config.Indexes.Predicate {
+		return ErrIndexDisabled
+	}
+
+	index, exists := m.indexes["predicate"]
+	if !exists {
+		return gtypes.ErrIndexNotFound
+	}
+
+	return index.HandleUpdate(ctx, entityID, entityState)
+}
+
+// UpdateSpatialIndex updates the spatial index for an entity
+func (m *Manager) UpdateSpatialIndex(ctx context.Context, entityID string, position interface{}) error {
+	if !m.config.Indexes.Spatial {
+		return ErrIndexDisabled
+	}
+
+	index, exists := m.indexes["spatial"]
+	if !exists {
+		return gtypes.ErrIndexNotFound
+	}
+
+	// Create a minimal entity state with position
+	entityState := map[string]interface{}{
+		"position": position,
+	}
+
+	return index.HandleUpdate(ctx, entityID, entityState)
+}
+
+// UpdateTemporalIndex updates the temporal index for an entity
+func (m *Manager) UpdateTemporalIndex(ctx context.Context, entityID string, entityState *gtypes.EntityState) error {
+	if !m.config.Indexes.Temporal {
+		return ErrIndexDisabled
+	}
+
+	index, exists := m.indexes["temporal"]
+	if !exists {
+		return gtypes.ErrIndexNotFound
+	}
+
+	// Pass the full entity state to the temporal index
+	return index.HandleUpdate(ctx, entityID, entityState)
+}
+
+// UpdateIncomingIndex updates the incoming index for a relationship
+func (m *Manager) UpdateIncomingIndex(ctx context.Context, targetEntityID, sourceEntityID, predicate string) error {
+	if !m.config.Indexes.Incoming {
+		return ErrIndexDisabled
+	}
+
+	index, exists := m.indexes["incoming"]
+	if !exists {
+		return gtypes.ErrIndexNotFound
+	}
+
+	// The IncomingIndex needs to add a reference from source to target with predicate
+	// We'll call its internal method directly since it has special logic
+	if incomingIndex, ok := index.(*IncomingIndex); ok {
+		return incomingIndex.AddIncomingReference(ctx, targetEntityID, sourceEntityID, predicate)
+	}
+
+	return gtypes.ErrIndexNotFound
+}
+
+// UpdateAliasIndex updates the alias index for an entity
+func (m *Manager) UpdateAliasIndex(ctx context.Context, alias, entityID string) error {
+	if !m.config.Indexes.Alias {
+		return ErrIndexDisabled
+	}
+
+	// Store alias in KV bucket with consistent key format
+	// Sanitize alias and add prefix (matches ResolveAlias lookup format)
+	sanitizedAlias := sanitizeNATSKey(alias)
+	key := fmt.Sprintf("alias--%s", sanitizedAlias)
+
+	_, err := m.aliasBucket.PutString(ctx, key, entityID)
+	if err != nil {
+		return errs.WrapTransient(err, "IndexManager", "updateAliases", "alias index update failed")
+	}
+
+	return nil
+}
+
+// DeleteFromIndexes deletes an entity from all indexes
+func (m *Manager) DeleteFromIndexes(ctx context.Context, entityID string) error {
+	var lastErr error
+
+	for indexType, index := range m.indexes {
+		if err := index.HandleDelete(ctx, entityID); err != nil {
+			m.logger.Error("Failed to delete from index", "index", indexType, "entity", entityID, "error", err)
+			lastErr = err
+		}
+	}
+
+	return lastErr
+}
+
+// DeleteFromPredicateIndex deletes an entity from the predicate index
+func (m *Manager) DeleteFromPredicateIndex(ctx context.Context, entityID string) error {
+	if !m.config.Indexes.Predicate {
+		return ErrIndexDisabled
+	}
+
+	index, exists := m.indexes["predicate"]
+	if !exists {
+		return gtypes.ErrIndexNotFound
+	}
+
+	return index.HandleDelete(ctx, entityID)
+}
+
+// DeleteFromSpatialIndex deletes an entity from the spatial index
+func (m *Manager) DeleteFromSpatialIndex(ctx context.Context, entityID string) error {
+	if !m.config.Indexes.Spatial {
+		return ErrIndexDisabled
+	}
+
+	index, exists := m.indexes["spatial"]
+	if !exists {
+		return gtypes.ErrIndexNotFound
+	}
+
+	return index.HandleDelete(ctx, entityID)
+}
+
+// DeleteFromTemporalIndex deletes an entity from the temporal index
+func (m *Manager) DeleteFromTemporalIndex(ctx context.Context, entityID string) error {
+	if !m.config.Indexes.Temporal {
+		return ErrIndexDisabled
+	}
+
+	index, exists := m.indexes["temporal"]
+	if !exists {
+		return gtypes.ErrIndexNotFound
+	}
+
+	return index.HandleDelete(ctx, entityID)
+}
+
+// DeleteFromIncomingIndex deletes an entity from the incoming index
+func (m *Manager) DeleteFromIncomingIndex(ctx context.Context, entityID string) error {
+	if !m.config.Indexes.Incoming {
+		return ErrIndexDisabled
+	}
+
+	index, exists := m.indexes["incoming"]
+	if !exists {
+		return gtypes.ErrIndexNotFound
+	}
+
+	return index.HandleDelete(ctx, entityID)
+}
+
+// RemoveFromIncomingIndex removes a specific incoming relationship reference
+func (m *Manager) RemoveFromIncomingIndex(ctx context.Context, targetEntityID, sourceEntityID string) error {
+	if !m.config.Indexes.Incoming {
+		return ErrIndexDisabled
+	}
+
+	index, exists := m.indexes["incoming"]
+	if !exists {
+		return gtypes.ErrIndexNotFound
+	}
+
+	// Cast to IncomingIndex to access RemoveIncomingReference method
+	incomingIndex, ok := index.(*IncomingIndex)
+	if !ok {
+		return errs.WrapInvalid(nil, "IndexManager", "RemoveFromIncomingIndex", "invalid index type")
+	}
+
+	return incomingIndex.RemoveIncomingReference(ctx, targetEntityID, sourceEntityID)
+}
+
+// CleanupOrphanedIncomingReferences removes all INCOMING_INDEX references to a deleted entity
+// This should be called when an entity is deleted to prevent orphaned references
+func (m *Manager) CleanupOrphanedIncomingReferences(ctx context.Context, deletedEntityID string) error {
+	// Get the outgoing relationships of the deleted entity
+	outgoingIndex, exists := m.indexes["outgoing"]
+	if !exists {
+		return nil // No outgoing index, nothing to clean
+	}
+
+	outIdx, ok := outgoingIndex.(*OutgoingIndex)
+	if !ok {
+		return nil
+	}
+
+	// Get what entities the deleted entity was pointing to
+	outgoing, err := outIdx.GetOutgoing(ctx, deletedEntityID)
+	if err != nil {
+		// If not found, nothing to clean up
+		m.logger.Debug("No outgoing relationships to clean up", "entity_id", deletedEntityID)
+		return nil
+	}
+
+	// Get incoming index for cleanup
+	incomingIndex, exists := m.indexes["incoming"]
+	if !exists {
+		return nil
+	}
+
+	incIdx, ok := incomingIndex.(*IncomingIndex)
+	if !ok {
+		return nil
+	}
+
+	// Remove the deleted entity from each target's INCOMING_INDEX
+	for _, entry := range outgoing {
+		if err := incIdx.RemoveIncomingReference(ctx, entry.ToEntityID, deletedEntityID); err != nil {
+			m.logger.Warn("Failed to remove incoming reference",
+				"deleted_entity", deletedEntityID,
+				"target_entity", entry.ToEntityID,
+				"error", err)
+			// Continue with other cleanups
+		}
+	}
+
+	m.logger.Debug("Cleaned up incoming references for deleted entity",
+		"entity_id", deletedEntityID,
+		"targets_cleaned", len(outgoing))
+
+	return nil
+}
+
+// DeleteFromAliasIndex deletes an alias from the alias index
+func (m *Manager) DeleteFromAliasIndex(ctx context.Context, alias string) error {
+	if !m.config.Indexes.Alias {
+		return ErrIndexDisabled
+	}
+
+	// Delete alias from KV bucket with consistent key format
+	// Sanitize alias and add prefix (matches ResolveAlias lookup format)
+	sanitizedAlias := sanitizeNATSKey(alias)
+	key := fmt.Sprintf("alias--%s", sanitizedAlias)
+
+	err := m.aliasBucket.Delete(ctx, key)
+	if err != nil && err != jetstream.ErrKeyNotFound {
+		return errs.WrapTransient(err, "IndexManager", "removeAliases", "alias index deletion failed")
+	}
+
+	return nil
+}
+
+// Query methods implementation
+
+// GetPredicateIndex gets entity IDs that have a specific predicate (single KV Get)
+func (m *Manager) GetPredicateIndex(ctx context.Context, predicate string) ([]string, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("predicate").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("predicate").Inc()
+		}
+	}()
+
+	if !m.config.Indexes.Predicate {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("predicate").Inc()
+		}
+		return nil, ErrIndexDisabled
+	}
+
+	// Check cache first if enabled
+	if m.predicateCache != nil {
+		if cached, ok := m.predicateCache.Get(predicate); ok {
+			m.metrics.RecordQuery(false)
+			// TODO: Add cache hit metric
+			return cached, nil
+		}
+		// Cache miss - continue to KV lookup
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	entry, err := m.predicateBucket.Get(queryCtx, predicate)
+	if err != nil {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("predicate").Inc()
+		}
+		return []string{}, nil // No entities found
+	}
+
+	// Try simple format first ([]string)
+	var entities []string
+	if err := json.Unmarshal(entry.Value(), &entities); err == nil {
+		m.metrics.RecordQuery(false)
+		// Cache the result if cache is enabled
+		if m.predicateCache != nil {
+			m.predicateCache.Set(predicate, entities)
+		}
+		return entities, nil
+	}
+
+	// Fallback to legacy format for migration compatibility
+	var predicateData map[string]interface{}
+	if err := json.Unmarshal(entry.Value(), &predicateData); err != nil {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("predicate").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			err,
+			"IndexManager",
+			"GetPredicateIndex",
+			fmt.Sprintf("failed to query predicate: %s", predicate),
+		)
+	}
+
+	entitiesInterface, exists := predicateData["entities"]
+	if !exists {
+		m.metrics.RecordQuery(false)
+		return []string{}, nil
+	}
+
+	// Convert interface{} to []string
+	if entitiesArray, ok := entitiesInterface.([]interface{}); ok {
+		entities = make([]string, 0, len(entitiesArray))
+		for _, e := range entitiesArray {
+			if entityStr, ok := e.(string); ok {
+				entities = append(entities, entityStr)
+			}
+		}
+	}
+
+	m.metrics.RecordQuery(false)
+	// Cache the result if cache is enabled
+	if m.predicateCache != nil {
+		m.predicateCache.Set(predicate, entities)
+	}
+	return entities, nil
+}
+
+// QuerySpatial queries entities within spatial bounds
+func (m *Manager) QuerySpatial(ctx context.Context, bounds Bounds) ([]string, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("spatial").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("spatial").Inc()
+		}
+	}()
+
+	if !m.config.Indexes.Spatial {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("spatial").Inc()
+		}
+		return nil, ErrIndexDisabled
+	}
+
+	// Validate bounds
+	if bounds.North < bounds.South || bounds.East < bounds.West {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("spatial").Inc()
+		}
+		return nil, ErrInvalidBounds
+	}
+
+	// Delegate to SpatialIndex which has the correct geohash calculation
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	// Get the SpatialIndex from the indexes map
+	indexInterface, ok := m.indexes["spatial"]
+	if !ok {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("spatial").Inc()
+		}
+		return nil, ErrIndexDisabled
+	}
+
+	spatialIndex, ok := indexInterface.(*SpatialIndex)
+	if !ok {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("spatial").Inc()
+		}
+		return nil, errs.Wrap(ErrIndexDisabled, "IndexManager", "QuerySpatial", "spatial index type assertion failed")
+	}
+
+	entities, err := spatialIndex.QueryBounds(queryCtx, bounds)
+	if err != nil {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("spatial").Inc()
+		}
+		return nil, err
+	}
+
+	m.metrics.RecordQuery(false)
+	return entities, nil
+}
+
+// QueryTemporal queries entities within time range
+func (m *Manager) QueryTemporal(ctx context.Context, start, end time.Time) ([]string, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("temporal").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("temporal").Inc()
+		}
+	}()
+
+	if !m.config.Indexes.Temporal {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("temporal").Inc()
+		}
+		return nil, ErrIndexDisabled
+	}
+
+	// Validate time range
+	if start.After(end) {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("temporal").Inc()
+		}
+		return nil, ErrInvalidTimeRange
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	seen := make(map[string]bool) // Deduplicate entities across events
+	var allEntities []string
+
+	// Query hourly buckets within time range
+	current := start.Truncate(time.Hour)
+	endHour := end.Truncate(time.Hour)
+
+	for current.Before(endHour.Add(time.Hour)) {
+		timeKey := fmt.Sprintf("%04d.%02d.%02d.%02d",
+			current.Year(),
+			current.Month(),
+			current.Day(),
+			current.Hour())
+
+		entry, err := m.temporalBucket.Get(queryCtx, timeKey)
+		if err != nil {
+			current = current.Add(time.Hour)
+			continue // No entities in this hour
+		}
+
+		var temporalData map[string]interface{}
+		if err := json.Unmarshal(entry.Value(), &temporalData); err != nil {
+			current = current.Add(time.Hour)
+			continue // Invalid data
+		}
+
+		if events, ok := temporalData["events"].([]interface{}); ok {
+			for _, event := range events {
+				if eventMap, ok := event.(map[string]interface{}); ok {
+					if entityID, ok := eventMap["entity"].(string); ok {
+						if !seen[entityID] {
+							seen[entityID] = true
+							allEntities = append(allEntities, entityID)
+						}
+					}
+				}
+			}
+		}
+
+		current = current.Add(time.Hour)
+	}
+
+	m.metrics.RecordQuery(false)
+	return allEntities, nil
+}
+
+// GetIncomingRelationships gets incoming relationships for a target entity (single KV Get)
+func (m *Manager) GetIncomingRelationships(ctx context.Context, targetEntityID string) ([]Relationship, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("incoming").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("incoming").Inc()
+		}
+	}()
+
+	if !m.config.Indexes.Incoming {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("incoming").Inc()
+		}
+		return nil, ErrIndexDisabled
+	}
+
+	// Check cache first if enabled
+	if m.incomingCache != nil {
+		if cached, ok := m.incomingCache.Get(targetEntityID); ok {
+			m.metrics.RecordQuery(false)
+			// TODO: Add cache hit metric
+			return cached, nil
+		}
+		// Cache miss - continue to KV lookup
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	entry, err := m.incomingBucket.Get(queryCtx, targetEntityID)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrKeyNotFound) {
+			// Entity not in index = no incoming relationships (not an error)
+			m.metrics.RecordQuery(false)
+			return []Relationship{}, nil
+		}
+		// Actual error - propagate it
+		m.metrics.RecordQuery(false)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("incoming").Inc()
+		}
+		return nil, errs.WrapTransient(
+			err,
+			"IndexManager",
+			"GetIncomingRelationships",
+			fmt.Sprintf("failed to query incoming relationships for: %s", targetEntityID),
+		)
+	}
+
+	var incomingEntries []IncomingEntry
+	if err := json.Unmarshal(entry.Value(), &incomingEntries); err != nil {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("incoming").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			err,
+			"IndexManager",
+			"GetIncomingRelationships",
+			fmt.Sprintf("failed to query incoming relationships for: %s", targetEntityID),
+		)
+	}
+
+	// Convert IncomingEntry objects to Relationship objects
+	// Now uses actual predicate from index instead of placeholder
+	relationships := make([]Relationship, len(incomingEntries))
+	for i, entry := range incomingEntries {
+		relationships[i] = Relationship{
+			FromEntityID: entry.FromEntityID,
+			EdgeType:     entry.Predicate, // Actual predicate from index
+			Weight:       1.0,
+			Properties:   make(map[string]interface{}),
+			CreatedAt:    time.Now(), // Placeholder timestamp
+		}
+	}
+
+	m.metrics.RecordQuery(false)
+	// Cache the result if cache is enabled
+	if m.incomingCache != nil {
+		m.incomingCache.Set(targetEntityID, relationships)
+	}
+	return relationships, nil
+}
+
+// GetOutgoingRelationships returns outgoing relationships from an entity using OUTGOING_INDEX.
+// This provides efficient forward edge traversal without loading full entity state.
+func (m *Manager) GetOutgoingRelationships(ctx context.Context, entityID string) ([]OutgoingRelationship, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("outgoing").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("outgoing").Inc()
+		}
+	}()
+
+	// Get the outgoing index from the indexes map
+	outgoingIndex, exists := m.indexes["outgoing"]
+	if !exists {
+		// Outgoing index not configured, return empty
+		return []OutgoingRelationship{}, nil
+	}
+
+	outIdx, ok := outgoingIndex.(*OutgoingIndex)
+	if !ok {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("outgoing").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			ErrIndexDisabled,
+			"IndexManager",
+			"GetOutgoingRelationships",
+			"outgoing index is not of expected type",
+		)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	entries, err := outIdx.GetOutgoing(queryCtx, entityID)
+	if err != nil {
+		m.metrics.RecordQuery(false)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("outgoing").Inc()
+		}
+		return nil, errs.WrapTransient(
+			err,
+			"IndexManager",
+			"GetOutgoingRelationships",
+			fmt.Sprintf("failed to query outgoing relationships for: %s", entityID),
+		)
+	}
+
+	// Convert OutgoingEntry to OutgoingRelationship
+	relationships := make([]OutgoingRelationship, len(entries))
+	for i, entry := range entries {
+		relationships[i] = OutgoingRelationship{
+			ToEntityID: entry.ToEntityID,
+			EdgeType:   entry.Predicate,
+		}
+	}
+
+	m.metrics.RecordQuery(false)
+	return relationships, nil
+}
+
+// ResolveAlias resolves an alias to an entity ID
+func (m *Manager) ResolveAlias(ctx context.Context, alias string) (string, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("alias").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("alias").Inc()
+		}
+	}()
+
+	if !m.config.Indexes.Alias {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("alias").Inc()
+		}
+		return "", ErrIndexDisabled
+	}
+
+	// Check cache first if enabled
+	if m.aliasCache != nil {
+		if cached, ok := m.aliasCache.Get(alias); ok {
+			m.metrics.RecordQuery(false)
+			// TODO: Add cache hit metric
+			return cached, nil
+		}
+		// Cache miss - continue to KV lookup
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	// Sanitize alias and add prefix (matches AliasIndex storage format)
+	sanitizedAlias := sanitizeNATSKey(alias)
+	key := fmt.Sprintf("alias--%s", sanitizedAlias)
+
+	entry, err := m.aliasBucket.Get(queryCtx, key)
+	if err != nil {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("alias").Inc()
+		}
+		return "", gtypes.ErrAliasNotFound
+	}
+
+	entityID := string(entry.Value())
+	if entityID == "" {
+		m.metrics.RecordQuery(true)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("alias").Inc()
+		}
+		return "", gtypes.ErrAliasNotFound
+	}
+
+	m.metrics.RecordQuery(false)
+	// Cache the result if cache is enabled (cache by original alias, not sanitized key)
+	if m.aliasCache != nil {
+		m.aliasCache.Set(alias, entityID)
+	}
+	return entityID, nil
+}
+
+// Batch query operations
+
+// GetPredicateIndexes performs batch predicate Gets (multiple single KV Gets)
+func (m *Manager) GetPredicateIndexes(ctx context.Context, predicates []string) (map[string][]string, error) {
+	results := make(map[string][]string)
+
+	for _, predicate := range predicates {
+		entities, err := m.GetPredicateIndex(ctx, predicate)
+		if err != nil {
+			return nil, err
+		}
+		results[predicate] = entities
+	}
+
+	return results, nil
+}
+
+// ResolveAliases resolves multiple aliases in a single operation
+func (m *Manager) ResolveAliases(ctx context.Context, aliases []string) (map[string]string, error) {
+	results := make(map[string]string)
+
+	for _, alias := range aliases {
+		entityID, err := m.ResolveAlias(ctx, alias)
+		if err != nil && err != gtypes.ErrAliasNotFound {
+			return nil, err
+		}
+		if err == nil {
+			results[alias] = entityID
+		}
+	}
+
+	return results, nil
+}
+
+// GetBacklog returns the number of pending events in the processing queue.
+func (m *Manager) GetBacklog() int {
+	return len(m.eventChan) + len(m.batchChan)*m.config.BatchProcessing.Size
+}
+
+// GetDeduplicationStats returns the current deduplication statistics.
+func (m *Manager) GetDeduplicationStats() DeduplicationStats {
+	return m.metrics.GetDeduplicationStats()
+}
+
+// GetEmbeddingCount returns the number of entities with embeddings currently in the vector cache.
+// This is used by the clustering system to check embedding coverage before running LPA.
+func (m *Manager) GetEmbeddingCount() int {
+	if m.vectorCache == nil {
+		return 0
+	}
+	return m.vectorCache.Size()
+}
+
+// CountEmbeddingsInKV queries the KV bucket to count embeddings with status="generated".
+// This is used as a fallback when the in-memory cache may not reflect the true state
+// (e.g., during async embedding generation).
+// Returns 0 when embedding storage is disabled (nil).
+func (m *Manager) CountEmbeddingsInKV(ctx context.Context) (int, error) {
+	// Check context cancellation first
+	if err := ctx.Err(); err != nil {
+		return 0, errs.WrapTransient(err, "IndexManager", "CountEmbeddingsInKV", "context cancelled")
+	}
+
+	// Return 0 (not an error) when embedding storage is disabled
+	if m.embeddingStorage == nil {
+		return 0, nil
+	}
+
+	// Get all entity IDs from the embedding bucket and filter by status
+	entityIDs, err := m.embeddingStorage.ListGeneratedEntityIDs(ctx)
+	if err != nil {
+		return 0, errs.WrapTransient(err, "IndexManager", "CountEmbeddingsInKV", "failed to list generated entity IDs")
+	}
+
+	// Count only embeddings with status="generated"
+	// We need to fetch each record and check its status
+	count := 0
+	for _, entityID := range entityIDs {
+		// Check context periodically during iteration
+		if err := ctx.Err(); err != nil {
+			return 0, errs.WrapTransient(err, "IndexManager", "CountEmbeddingsInKV", "context cancelled during iteration")
+		}
+
+		record, err := m.embeddingStorage.GetEmbedding(ctx, entityID)
+		if err != nil {
+			// Skip records that can't be fetched (might be deleted)
+			m.logger.Debug("Failed to get embedding record during count", "entity_id", entityID, "error", err)
+			continue
+		}
+
+		if record.Status == embedding.StatusGenerated {
+			count++
+		}
+	}
+
+	return count, nil
+}
+
+// PreWarmVectorCache loads existing embeddings from storage into the in-memory cache.
+// This ensures the vector cache is populated on restart, enabling semantic clustering
+// to work immediately without waiting for embeddings to be regenerated.
+//
+// This method should be called during startup after embedding storage is initialized.
+func (m *Manager) PreWarmVectorCache(ctx context.Context) error {
+	if m.vectorCache == nil {
+		m.logger.Debug("Vector cache not initialized, skipping pre-warm")
+		return nil
+	}
+	if m.embeddingStorage == nil {
+		m.logger.Debug("Embedding storage not initialized, skipping pre-warm")
+		return nil
+	}
+
+	startTime := time.Now()
+
+	// List all entity IDs with generated embeddings
+	entityIDs, err := m.embeddingStorage.ListGeneratedEntityIDs(ctx)
+	if err != nil {
+		return errs.WrapTransient(err, "IndexManager", "PreWarmVectorCache", "failed to list embeddings")
+	}
+
+	loaded := 0
+	for _, entityID := range entityIDs {
+		// Check context for cancellation
+		if ctx.Err() != nil {
+			break
+		}
+
+		record, err := m.embeddingStorage.GetEmbedding(ctx, entityID)
+		if err != nil || record == nil {
+			continue
+		}
+
+		// Only load generated embeddings with vectors
+		if record.Status != embedding.StatusGenerated || len(record.Vector) == 0 {
+			continue
+		}
+
+		m.vectorCache.Set(entityID, record.Vector)
+		loaded++
+	}
+
+	duration := time.Since(startTime)
+	m.logger.Info("Pre-warmed vector cache",
+		"loaded", loaded,
+		"total_entities", len(entityIDs),
+		"duration", duration)
+
+	return nil
+}
+
+// Note: SetOnEntityCreatedCallback removed - HierarchyInference now uses its own
+// KV watcher on ENTITY_STATES for better decoupling and async processing.
+
+// GetAllEntityIDs returns all entity IDs from the ENTITY_STATES bucket.
+// Used by HierarchyInference to discover siblings for new entities.
+func (m *Manager) GetAllEntityIDs(ctx context.Context) ([]string, error) {
+	if m.entityBucket == nil {
+		return nil, errs.WrapTransient(stderrors.New("entity bucket not initialized"),
+			"IndexManager", "GetAllEntityIDs", "bucket nil")
+	}
+
+	keys, err := m.entityBucket.Keys(ctx)
+	if err != nil {
+		return nil, errs.WrapTransient(err, "IndexManager", "GetAllEntityIDs", "failed to list keys")
+	}
+
+	return keys, nil
+}
+
+// GetEntriesByContext returns all entity+predicate pairs for a given context value.
+// This enables provenance queries like "all triples from hierarchy inference".
+func (m *Manager) GetEntriesByContext(ctx context.Context, contextValue string) ([]ContextEntry, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("context").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("context").Inc()
+		}
+	}()
+
+	contextIndex, exists := m.indexes["context"]
+	if !exists {
+		return []ContextEntry{}, nil
+	}
+
+	ctxIdx, ok := contextIndex.(*ContextIndex)
+	if !ok {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("context").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			ErrIndexDisabled,
+			"IndexManager",
+			"GetEntriesByContext",
+			"context index is not of expected type",
+		)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	entries, err := ctxIdx.GetEntriesByContext(queryCtx, contextValue)
+	if err != nil {
+		m.metrics.RecordQuery(false)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("context").Inc()
+		}
+		return nil, err
+	}
+
+	m.metrics.RecordQuery(true)
+	return entries, nil
+}
+
+// GetEntityIDsByContext returns deduplicated entity IDs for a given context value.
+// Convenience method when you only need entity IDs, not the full predicate info.
+func (m *Manager) GetEntityIDsByContext(ctx context.Context, contextValue string) ([]string, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("context_ids").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("context_ids").Inc()
+		}
+	}()
+
+	contextIndex, exists := m.indexes["context"]
+	if !exists {
+		return []string{}, nil
+	}
+
+	ctxIdx, ok := contextIndex.(*ContextIndex)
+	if !ok {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("context_ids").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			ErrIndexDisabled,
+			"IndexManager",
+			"GetEntityIDsByContext",
+			"context index is not of expected type",
+		)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	entityIDs, err := ctxIdx.GetEntityIDsByContext(queryCtx, contextValue)
+	if err != nil {
+		m.metrics.RecordQuery(false)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("context_ids").Inc()
+		}
+		return nil, err
+	}
+
+	m.metrics.RecordQuery(true)
+	return entityIDs, nil
+}
+
+// GetAllContexts returns all context values currently indexed.
+// Useful for discovering what provenance sources exist.
+func (m *Manager) GetAllContexts(ctx context.Context) ([]string, error) {
+	startTime := time.Now()
+	defer func() {
+		duration := time.Since(startTime)
+		if m.promMetrics != nil {
+			m.promMetrics.queryLatency.WithLabelValues("all_contexts").Observe(duration.Seconds())
+			m.promMetrics.queriesTotal.WithLabelValues("all_contexts").Inc()
+		}
+	}()
+
+	contextIndex, exists := m.indexes["context"]
+	if !exists {
+		return []string{}, nil
+	}
+
+	ctxIdx, ok := contextIndex.(*ContextIndex)
+	if !ok {
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("all_contexts").Inc()
+		}
+		return nil, errs.WrapInvalid(
+			ErrIndexDisabled,
+			"IndexManager",
+			"GetAllContexts",
+			"context index is not of expected type",
+		)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, m.config.QueryTimeout)
+	defer cancel()
+
+	contexts, err := ctxIdx.GetAllContexts(queryCtx)
+	if err != nil {
+		m.metrics.RecordQuery(false)
+		if m.promMetrics != nil {
+			m.promMetrics.queriesFailed.WithLabelValues("all_contexts").Inc()
+		}
+		return nil, err
+	}
+
+	m.metrics.RecordQuery(true)
+	return contexts, nil
+}

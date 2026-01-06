@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "graph-ingest.v1.json",
+  "type": "object",
+  "title": "graph-ingest Configuration",
+  "description": "Entity and triple ingestion processor",
+  "properties": {
+    "enable_hierarchy": {
+      "type": "boolean",
+      "description": "Enable hierarchy inference",
+      "category": "advanced"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "graph-ingest",
+    "type": "processor",
+    "protocol": "nats",
+    "domain": "graph",
+    "version": "1.0.0"
+  }
+}

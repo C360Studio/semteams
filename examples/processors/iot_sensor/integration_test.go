@@ -16,12 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/datamanager"
+	"github.com/c360/semstreams/graph/indexmanager"
+	"github.com/c360/semstreams/graph/messagemanager"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/processor/graph/datamanager"
-	"github.com/c360/semstreams/processor/graph/indexmanager"
-	"github.com/c360/semstreams/processor/graph/messagemanager"
 )
 
 // testBuckets holds all KV buckets needed for integration tests

@@ -8,6 +8,7 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/examples/processors/document"
 	iotsensor "github.com/c360/semstreams/examples/processors/iot_sensor"
+	graphgateway "github.com/c360/semstreams/gateway/graph-gateway"
 	gatewayhttp "github.com/c360/semstreams/gateway/http"
 	fileinput "github.com/c360/semstreams/input/file"
 	"github.com/c360/semstreams/input/udp"
@@ -16,7 +17,13 @@ import (
 	"github.com/c360/semstreams/output/httppost"
 	"github.com/c360/semstreams/output/websocket"
 	pkgerrs "github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/processor/graph"
+	graphanomalies "github.com/c360/semstreams/processor/graph-anomalies"
+	graphclustering "github.com/c360/semstreams/processor/graph-clustering"
+	graphembedding "github.com/c360/semstreams/processor/graph-embedding"
+	graphindex "github.com/c360/semstreams/processor/graph-index"
+	graphindexspatial "github.com/c360/semstreams/processor/graph-index-spatial"
+	graphindextemporal "github.com/c360/semstreams/processor/graph-index-temporal"
+	graphingest "github.com/c360/semstreams/processor/graph-ingest"
 	jsonfilter "github.com/c360/semstreams/processor/json_filter"
 	jsongeneric "github.com/c360/semstreams/processor/json_generic"
 	jsonmap "github.com/c360/semstreams/processor/json_map"
@@ -39,12 +46,30 @@ import (
 //   - WebSocket output (broadcasting)
 //   - HTTP gateway (bidirectional HTTP ↔ NATS request/reply)
 //
-// Semantic Layer (domain agnostic):
-//   - Graph processor (entity graph operations with optional GraphQL/MCP gateway output ports)
+// Semantic Layer - Graph Components (modular architecture):
+//
+//	Core (all tiers):
+//	- graph-ingest (entity/triple CRUD, hierarchy inference)
+//	- graph-index (OUTGOING, INCOMING, ALIAS, PREDICATE indexes)
+//	- graph-gateway (GraphQL + MCP HTTP servers)
+//
+//	Semantic tier:
+//	- graph-embedding (vector embedding generation)
+//	- graph-clustering (community detection, LLM enhancement)
+//
+//	Optional indexes:
+//	- graph-index-spatial (geospatial indexing)
+//	- graph-index-temporal (time-based indexing)
+//
+//	Statistical/Semantic tier:
+//	- graph-anomalies (cluster/community anomaly detection)
+//
+// Semantic Layer - Rule Processing:
 //   - Rule processor (rule-based transformations)
 //
 // Domain Layer (example processors):
 //   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
+//   - Document processor (document processing)
 //
 // Note: Domain-specific components (MAVLink, robotics, etc.) are registered
 // in separate modules like streamkit-robotics.
@@ -117,11 +142,44 @@ func Register(registry *component.Registry) error {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "HTTP gateway component registration")
 	}
 
-	// Semantic Layer - Processors
-	if err := graph.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "Graph processor component registration")
+	// Semantic Layer - Graph Components (modular architecture)
+	// Core components (required for all tiers)
+	if err := graphingest.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-ingest component registration")
 	}
 
+	if err := graphindex.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-index component registration")
+	}
+
+	if err := graphgateway.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-gateway component registration")
+	}
+
+	// Semantic tier components (enabled via config)
+	if err := graphembedding.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-embedding component registration")
+	}
+
+	if err := graphclustering.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-clustering component registration")
+	}
+
+	// Optional index components (enabled via config)
+	if err := graphindexspatial.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-index-spatial component registration")
+	}
+
+	if err := graphindextemporal.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-index-temporal component registration")
+	}
+
+	// Statistical/Semantic tier components (anomaly detection)
+	if err := graphanomalies.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-anomalies component registration")
+	}
+
+	// Rule processor
 	if err := rule.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "Rule processor component registration")
 	}

@@ -1,0 +1,847 @@
+package indexmanager
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+
+	gtypes "github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/embedding"
+	"github.com/c360/semstreams/metric"
+)
+
+// MockKeyValue implements jetstream.KeyValue for testing
+type MockKeyValue struct {
+	mock.Mock
+	data map[string][]byte
+}
+
+func NewMockKeyValue() *MockKeyValue {
+	return &MockKeyValue{
+		data: make(map[string][]byte),
+	}
+}
+
+func (m *MockKeyValue) Get(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
+	// Check if this specific method has expectations
+	hasGetExpectation := false
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "Get" {
+			hasGetExpectation = true
+			break
+		}
+	}
+
+	if hasGetExpectation {
+		args := m.Called(ctx, key)
+		if entry := args.Get(0); entry != nil {
+			return entry.(jetstream.KeyValueEntry), args.Error(1)
+		}
+		return nil, args.Error(1)
+	}
+
+	// Default behavior: return data from map
+	if data, ok := m.data[key]; ok {
+		return &MockKeyValueEntry{
+			key:       key,
+			value:     data,
+			revision:  1,
+			operation: jetstream.KeyValuePut,
+		}, nil
+	}
+	return nil, jetstream.ErrKeyNotFound
+}
+
+func (m *MockKeyValue) Put(ctx context.Context, key string, value []byte) (uint64, error) {
+	// If no expectations set, use default behavior
+	if len(m.ExpectedCalls) == 0 || !m.HasExpectedCalls() {
+		m.data[key] = value
+		return 1, nil
+	}
+
+	args := m.Called(ctx, key, value)
+	m.data[key] = value
+	if rev := args.Get(0); rev != nil {
+		return rev.(uint64), args.Error(1)
+	}
+	return 1, args.Error(1)
+}
+
+// HasExpectedCalls checks if there are any matching expected calls
+func (m *MockKeyValue) HasExpectedCalls() bool {
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "Put" {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *MockKeyValue) Delete(ctx context.Context, key string, _ ...jetstream.KVDeleteOpt) error {
+	// If no expectations set, use default behavior
+	if len(m.ExpectedCalls) == 0 {
+		delete(m.data, key)
+		return nil
+	}
+
+	args := m.Called(ctx, key)
+	delete(m.data, key)
+	return args.Error(0)
+}
+
+func (m *MockKeyValue) WatchAll(ctx context.Context, _ ...jetstream.WatchOpt) (jetstream.KeyWatcher, error) {
+	args := m.Called(ctx)
+	if watcher := args.Get(0); watcher != nil {
+		return watcher.(jetstream.KeyWatcher), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockKeyValue) Watch(
+	ctx context.Context,
+	pattern string,
+	_ ...jetstream.WatchOpt,
+) (jetstream.KeyWatcher, error) {
+	args := m.Called(ctx, pattern)
+	if watcher := args.Get(0); watcher != nil {
+		return watcher.(jetstream.KeyWatcher), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockKeyValue) Bucket() string {
+	return "test-bucket"
+}
+
+// Additional required methods for jetstream.KeyValue interface
+func (m *MockKeyValue) GetRevision(_ context.Context, _ string, _ uint64) (jetstream.KeyValueEntry, error) {
+	return nil, nil
+}
+
+func (m *MockKeyValue) PutString(ctx context.Context, _ string, _ string) (uint64, error) {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	default:
+	}
+	return 0, nil
+}
+
+func (m *MockKeyValue) Create(
+	ctx context.Context,
+	key string,
+	value []byte,
+	_ ...jetstream.KVCreateOpt,
+) (uint64, error) {
+	args := m.Called(ctx, key, value)
+	m.data[key] = value
+	if rev := args.Get(0); rev != nil {
+		return rev.(uint64), args.Error(1)
+	}
+	return 1, args.Error(1)
+}
+
+func (m *MockKeyValue) Update(_ context.Context, _ string, _ []byte, _ uint64) (uint64, error) {
+	return 0, nil
+}
+
+func (m *MockKeyValue) Purge(_ context.Context, _ string, _ ...jetstream.KVDeleteOpt) error {
+	return nil
+}
+
+func (m *MockKeyValue) Keys(_ context.Context, _ ...jetstream.WatchOpt) ([]string, error) {
+	if len(m.data) == 0 {
+		return nil, jetstream.ErrNoKeysFound
+	}
+	keys := make([]string, 0, len(m.data))
+	for k := range m.data {
+		keys = append(keys, k)
+	}
+	return keys, nil
+}
+
+func (m *MockKeyValue) ListKeys(ctx context.Context, _ ...jetstream.WatchOpt) (jetstream.KeyLister, error) {
+	// Check if this specific method has expectations
+	hasListKeysExpectation := false
+	for _, call := range m.ExpectedCalls {
+		if call.Method == "ListKeys" {
+			hasListKeysExpectation = true
+			break
+		}
+	}
+
+	if hasListKeysExpectation {
+		args := m.Called(ctx)
+		if lister := args.Get(0); lister != nil {
+			return lister.(jetstream.KeyLister), args.Error(1)
+		}
+		return nil, args.Error(1)
+	}
+
+	// Default behavior: return all keys from data map
+	keys := make([]string, 0, len(m.data))
+	for k := range m.data {
+		keys = append(keys, k)
+	}
+	return NewMockKeyLister(keys), nil
+}
+
+func (m *MockKeyValue) ListKeysFiltered(_ context.Context, _ ...string) (jetstream.KeyLister, error) {
+	return nil, nil
+}
+
+func (m *MockKeyValue) History(
+	_ context.Context,
+	_ string,
+	_ ...jetstream.WatchOpt,
+) ([]jetstream.KeyValueEntry, error) {
+	return nil, nil
+}
+
+func (m *MockKeyValue) WatchFiltered(
+	_ context.Context,
+	_ []string,
+	_ ...jetstream.WatchOpt,
+) (jetstream.KeyWatcher, error) {
+	return nil, nil
+}
+
+func (m *MockKeyValue) PurgeDeletes(_ context.Context, _ ...jetstream.KVPurgeOpt) error {
+	return nil
+}
+
+func (m *MockKeyValue) Status(ctx context.Context) (jetstream.KeyValueStatus, error) {
+	// Check for cancellation
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	return nil, nil
+}
+
+// MockKeyWatcher implements jetstream.KeyWatcher for testing
+type MockKeyWatcher struct {
+	mock.Mock
+	updates chan jetstream.KeyValueEntry
+}
+
+func NewMockKeyWatcher() *MockKeyWatcher {
+	return &MockKeyWatcher{
+		updates: make(chan jetstream.KeyValueEntry, 100),
+	}
+}
+
+func (m *MockKeyWatcher) Updates() <-chan jetstream.KeyValueEntry {
+	// Simply return the channel directly - it's already the correct type
+	return m.updates
+}
+
+func (m *MockKeyWatcher) Stop() error {
+	args := m.Called()
+	close(m.updates)
+	return args.Error(0)
+}
+
+// MockKeyValueEntry implements jetstream.KeyValueEntry for testing
+type MockKeyValueEntry struct {
+	key       string
+	value     []byte
+	revision  uint64
+	operation jetstream.KeyValueOp
+}
+
+func (m *MockKeyValueEntry) Key() string                     { return m.key }
+func (m *MockKeyValueEntry) Value() []byte                   { return m.value }
+func (m *MockKeyValueEntry) Revision() uint64                { return m.revision }
+func (m *MockKeyValueEntry) Operation() jetstream.KeyValueOp { return m.operation }
+func (m *MockKeyValueEntry) Created() time.Time              { return time.Now() }
+func (m *MockKeyValueEntry) Delta() uint64                   { return 0 }
+func (m *MockKeyValueEntry) Bucket() string                  { return "test-bucket" }
+
+// Test helper functions
+
+func setupTestManager(t *testing.T) (*Manager, map[string]*MockKeyValue) {
+	config := DefaultConfig()
+	config.Workers = 2 // Reduce workers for testing
+	config.EventBuffer.Capacity = 100
+	config.EventBuffer.Metrics = true // Keep metrics enabled to test full behavior
+	config.BatchProcessing.Size = 10
+	config.BatchProcessing.Interval = 10 * time.Millisecond
+	// Disable embedding for unit tests - mock watchers don't support proper shutdown
+	config.Embedding.Enabled = false
+
+	// Create mock buckets including embedding buckets for semantic search
+	mockBuckets := map[string]*MockKeyValue{
+		"ENTITY_STATES":    NewMockKeyValue(),
+		"PREDICATE_INDEX":  NewMockKeyValue(),
+		"INCOMING_INDEX":   NewMockKeyValue(),
+		"OUTGOING_INDEX":   NewMockKeyValue(),
+		"ALIAS_INDEX":      NewMockKeyValue(),
+		"SPATIAL_INDEX":    NewMockKeyValue(),
+		"TEMPORAL_INDEX":   NewMockKeyValue(),
+		"EMBEDDING_INDEX":  NewMockKeyValue(),
+		"EMBEDDING_DEDUP":  NewMockKeyValue(),
+		"EMBEDDINGS_CACHE": NewMockKeyValue(),
+	}
+
+	// Convert to interface map
+	buckets := make(map[string]jetstream.KeyValue)
+	for name, mockBucket := range mockBuckets {
+		buckets[name] = mockBucket
+	}
+
+	// Setup mock expectations for WatchAll on ENTITY_STATES
+	mockWatcher := NewMockKeyWatcher()
+	mockBuckets["ENTITY_STATES"].On("WatchAll", mock.Anything).Return(mockWatcher, nil)
+	mockWatcher.On("Updates").Return(mockWatcher.updates)
+	mockWatcher.On("Stop").Return(nil)
+
+	// Setup mock expectations for WatchAll on EMBEDDING_INDEX (used by embedding worker)
+	embeddingWatcher := NewMockKeyWatcher()
+	mockBuckets["EMBEDDING_INDEX"].On("WatchAll", mock.Anything).Return(embeddingWatcher, nil)
+	embeddingWatcher.On("Updates").Return(embeddingWatcher.updates)
+	embeddingWatcher.On("Stop").Return(nil)
+
+	// Use a test-specific metrics registry to avoid conflicts
+	testRegistry := metric.NewMetricsRegistry()
+	engine, err := NewManager(config, buckets, nil, testRegistry, nil)
+	require.NoError(t, err)
+
+	// Type assert since NewManager returns interface
+	engineImpl, ok := engine.(*Manager)
+	require.True(t, ok, "Failed to cast to *Manager")
+
+	// Manually register OutgoingIndex for tests (not yet in production config)
+	outgoingIndex := NewOutgoingIndex(mockBuckets["OUTGOING_INDEX"], engineImpl.metrics, engineImpl.promMetrics, engineImpl.logger)
+	engineImpl.indexes["outgoing"] = outgoingIndex
+
+	// Initialize embedding storage for tests (even though embedding generation is disabled)
+	// This allows CountEmbeddingsInKV to work in unit tests
+	engineImpl.embeddingStorage = embedding.NewStorage(mockBuckets["EMBEDDING_INDEX"], mockBuckets["EMBEDDING_DEDUP"])
+
+	return engineImpl, mockBuckets
+}
+
+func TestNewManager(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		engine, _ := setupTestManager(t)
+		assert.NotNil(t, engine)
+		assert.Equal(t, 6, len(engine.indexes)) // All indexes enabled by default (including outgoing)
+	})
+
+	t.Run("invalid config", func(t *testing.T) {
+		config := DefaultConfig()
+		config.Workers = 0                // Invalid
+		config.EventBuffer.Metrics = true // Keep metrics enabled to test full behavior
+
+		// Use a test-specific registry instead of the default one
+		testRegistry := metric.NewMetricsRegistry()
+		_, err := NewManager(config, make(map[string]jetstream.KeyValue), nil, testRegistry, nil)
+		assert.Error(t, err)
+	})
+}
+
+func TestIndexManager_Lifecycle(t *testing.T) {
+	t.Run("run and cancel", func(t *testing.T) {
+		engine, _ := setupTestManager(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// Start manager in goroutine
+		errorChan := make(chan error, 1)
+		go func() {
+			errorChan <- engine.Run(ctx, nil)
+		}()
+
+		// Wait for initialization
+		time.Sleep(50 * time.Millisecond)
+
+		// Check for startup errors
+		select {
+		case err := <-errorChan:
+			if err != nil {
+				t.Fatalf("Manager failed to start: %v", err)
+			}
+		default:
+			// No errors yet - manager is running
+		}
+
+		// Cancel context to trigger shutdown
+		cancel()
+
+		// Wait for clean shutdown
+		select {
+		case err := <-errorChan:
+			assert.NoError(t, err, "Manager should shut down cleanly")
+		case <-time.After(5 * time.Second):
+			t.Error("Manager did not shutdown within 5 seconds")
+		}
+	})
+
+	t.Run("context already cancelled", func(t *testing.T) {
+		engine, _ := setupTestManager(t)
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		// Run should return immediately without error
+		err := engine.Run(ctx, nil)
+		assert.NoError(t, err, "Run should return cleanly when context is cancelled")
+	})
+}
+
+func TestIndexManager_GetPredicateIndex(t *testing.T) {
+	engine, mockBuckets := setupTestManager(t)
+	ctx := context.Background()
+
+	t.Run("index disabled", func(t *testing.T) {
+		engine.config.Indexes.Predicate = false
+		_, err := engine.GetPredicateIndex(ctx, "test.predicate")
+		assert.Equal(t, ErrIndexDisabled, err)
+	})
+
+	t.Run("predicate not found", func(t *testing.T) {
+		engine.config.Indexes.Predicate = true
+		mockBuckets["PREDICATE_INDEX"].On("Get", mock.Anything, "test.predicate.missing").
+			Return(nil, jetstream.ErrKeyNotFound)
+
+		result, err := engine.GetPredicateIndex(ctx, "test.predicate.missing")
+		assert.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("predicate found", func(t *testing.T) {
+		engine.config.Indexes.Predicate = true
+
+		// Mock successful response
+		mockEntry := &MockKeyValueEntry{
+			key:   "test.predicate.found",
+			value: []byte(`["entity1","entity2"]`),
+		}
+		mockBuckets["PREDICATE_INDEX"].On("Get", mock.Anything, "test.predicate.found").Return(mockEntry, nil)
+
+		result, err := engine.GetPredicateIndex(ctx, "test.predicate.found")
+		assert.NoError(t, err)
+		assert.Equal(t, []string{"entity1", "entity2"}, result)
+	})
+}
+
+func TestIndexManager_QuerySpatial(t *testing.T) {
+	engine, _ := setupTestManager(t)
+	ctx := context.Background()
+
+	t.Run("index disabled", func(t *testing.T) {
+		engine.config.Indexes.Spatial = false
+		_, err := engine.QuerySpatial(ctx, Bounds{North: 1, South: 0, East: 1, West: 0})
+		assert.Equal(t, ErrIndexDisabled, err)
+	})
+
+	t.Run("invalid bounds", func(t *testing.T) {
+		engine.config.Indexes.Spatial = true
+		// North < South
+		_, err := engine.QuerySpatial(ctx, Bounds{North: 0, South: 1, East: 1, West: 0})
+		assert.Equal(t, ErrInvalidBounds, err)
+	})
+}
+
+func TestIndexManager_QueryTemporal(t *testing.T) {
+	engine, _ := setupTestManager(t)
+	ctx := context.Background()
+
+	t.Run("index disabled", func(t *testing.T) {
+		engine.config.Indexes.Temporal = false
+		_, err := engine.QueryTemporal(ctx, time.Now(), time.Now().Add(time.Hour))
+		assert.Equal(t, ErrIndexDisabled, err)
+	})
+
+	t.Run("invalid time range", func(t *testing.T) {
+		engine.config.Indexes.Temporal = true
+		now := time.Now()
+		// Start after end
+		_, err := engine.QueryTemporal(ctx, now.Add(time.Hour), now)
+		assert.Equal(t, ErrInvalidTimeRange, err)
+	})
+}
+
+func TestIndexManager_ResolveAlias(t *testing.T) {
+	engine, mockBuckets := setupTestManager(t)
+	ctx := context.Background()
+
+	t.Run("index disabled", func(t *testing.T) {
+		engine.config.Indexes.Alias = false
+		_, err := engine.ResolveAlias(ctx, "test-alias")
+		assert.Equal(t, ErrIndexDisabled, err)
+	})
+
+	t.Run("alias not found", func(t *testing.T) {
+		engine.config.Indexes.Alias = true
+		mockBuckets["ALIAS_INDEX"].On("Get", mock.Anything, "alias--test-alias-missing").Return(nil, jetstream.ErrKeyNotFound)
+
+		_, err := engine.ResolveAlias(ctx, "test-alias-missing")
+		assert.Equal(t, gtypes.ErrAliasNotFound, err)
+	})
+
+	t.Run("alias found", func(t *testing.T) {
+		engine.config.Indexes.Alias = true
+
+		// Mock successful response
+		mockEntry := &MockKeyValueEntry{
+			key:   "alias--test-alias-found",
+			value: []byte("entity123"),
+		}
+		mockBuckets["ALIAS_INDEX"].On("Get", mock.Anything, "alias--test-alias-found").Return(mockEntry, nil)
+
+		result, err := engine.ResolveAlias(ctx, "test-alias-found")
+		assert.NoError(t, err)
+		assert.Equal(t, "entity123", result)
+	})
+}
+
+func TestIndexManager_Health(t *testing.T) {
+	engine, _ := setupTestManager(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start manager in goroutine
+	errorChan := make(chan error, 1)
+	go func() {
+		errorChan <- engine.Run(ctx, nil)
+	}()
+
+	// Wait for initialization
+	time.Sleep(50 * time.Millisecond)
+
+	// Check for startup errors
+	select {
+	case err := <-errorChan:
+		if err != nil {
+			t.Fatalf("Manager failed to start: %v", err)
+		}
+	default:
+		// No errors yet - manager is running
+	}
+
+	// Note: Health monitoring methods (IsReady, GetHealthStatus) are not yet implemented
+	// Test the metrics methods that do exist
+
+	// Check backlog
+	backlog := engine.GetBacklog()
+	assert.GreaterOrEqual(t, backlog, 0, "Backlog should be non-negative")
+
+	// Check deduplication stats
+	stats := engine.GetDeduplicationStats()
+	assert.GreaterOrEqual(t, stats.TotalEvents, int64(0), "Total events should be non-negative")
+	assert.GreaterOrEqual(t, stats.ProcessedEvents, int64(0), "Processed events should be non-negative")
+
+	// Cancel context and wait for shutdown
+	cancel()
+	select {
+	case err := <-errorChan:
+		assert.NoError(t, err, "Manager should shut down cleanly")
+	case <-time.After(5 * time.Second):
+		t.Error("Manager did not shutdown within 5 seconds")
+	}
+}
+
+func TestIndexManager_BatchQueries(t *testing.T) {
+	engine, mockBuckets := setupTestManager(t)
+	ctx := context.Background()
+
+	t.Run("batch predicate queries", func(t *testing.T) {
+		// Setup mocks for multiple predicates
+		mockEntry1 := &MockKeyValueEntry{
+			key:   "pred1",
+			value: []byte(`["entity1"]`),
+		}
+		mockEntry2 := &MockKeyValueEntry{
+			key:   "pred2",
+			value: []byte(`["entity2"]`),
+		}
+
+		mockBuckets["PREDICATE_INDEX"].On("Get", mock.Anything, "pred1").Return(mockEntry1, nil)
+		mockBuckets["PREDICATE_INDEX"].On("Get", mock.Anything, "pred2").Return(mockEntry2, nil)
+
+		result, err := engine.GetPredicateIndexes(ctx, []string{"pred1", "pred2"})
+		assert.NoError(t, err)
+		assert.Equal(t, map[string][]string{
+			"pred1": {"entity1"},
+			"pred2": {"entity2"},
+		}, result)
+	})
+
+	t.Run("batch alias resolution", func(t *testing.T) {
+		mockEntry1 := &MockKeyValueEntry{
+			key:   "alias--alias1",
+			value: []byte("entity1"),
+		}
+		mockBuckets["ALIAS_INDEX"].On("Get", mock.Anything, "alias--alias1").Return(mockEntry1, nil)
+		mockBuckets["ALIAS_INDEX"].On("Get", mock.Anything, "alias--alias2").Return(nil, jetstream.ErrKeyNotFound)
+
+		result, err := engine.ResolveAliases(ctx, []string{"alias1", "alias2"})
+		assert.NoError(t, err)
+		assert.Equal(t, map[string]string{
+			"alias1": "entity1",
+			// alias2 not found, so not in result
+		}, result)
+	})
+}
+
+// Benchmark tests
+func BenchmarkIndexManager_GetPredicateIndex(b *testing.B) {
+	// Convert *testing.B to *testing.T for setupTestManager
+	t := &testing.T{}
+	engine, mockBuckets := setupTestManager(t)
+	ctx := context.Background()
+
+	// Setup mock response
+	mockEntry := &MockKeyValueEntry{
+		key:   "test.predicate",
+		value: []byte(`["entity1","entity2","entity3"]`),
+	}
+	mockBuckets["PREDICATE_INDEX"].On("Get", mock.Anything, "test.predicate").Return(mockEntry, nil)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := engine.GetPredicateIndex(ctx, "test.predicate")
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkIndexManager_ResolveAlias_Cold benchmarks cold alias resolution (no cache)
+func BenchmarkIndexManager_ResolveAlias_Cold(b *testing.B) {
+	t := &testing.T{}
+	engine, mockBuckets := setupTestManager(t)
+	ctx := context.Background()
+
+	// Setup mock response for alias lookup
+	mockEntry := &MockKeyValueEntry{
+		key:   "alias--test-alias",
+		value: []byte("resolved-entity-id"),
+	}
+	mockBuckets["ALIAS_INDEX"].On("Get", mock.Anything, "alias--test-alias").Return(mockEntry, nil)
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := engine.ResolveAlias(ctx, "test-alias")
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// BenchmarkIndexManager_ResolveAlias_Parallel benchmarks concurrent alias resolution
+func BenchmarkIndexManager_ResolveAlias_Parallel(b *testing.B) {
+	t := &testing.T{}
+	engine, mockBuckets := setupTestManager(t)
+	ctx := context.Background()
+
+	// Setup mock response
+	mockEntry := &MockKeyValueEntry{
+		key:   "alias--test-alias",
+		value: []byte("resolved-entity-id"),
+	}
+	mockBuckets["ALIAS_INDEX"].On("Get", mock.Anything, "alias--test-alias").Return(mockEntry, nil)
+
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, err := engine.ResolveAlias(ctx, "test-alias")
+			if err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+}
+
+// BenchmarkIndexManager_ResolveAliases_Batch benchmarks batch alias resolution
+func BenchmarkIndexManager_ResolveAliases_Batch(b *testing.B) {
+	t := &testing.T{}
+	engine, mockBuckets := setupTestManager(t)
+	ctx := context.Background()
+
+	// Setup mock responses for multiple aliases
+	aliases := []string{"alias1", "alias2", "alias3", "alias4", "alias5"}
+	for i, alias := range aliases {
+		entityID := fmt.Sprintf("entity-%d", i)
+		mockEntry := &MockKeyValueEntry{
+			key:   fmt.Sprintf("alias--%s", alias),
+			value: []byte(entityID),
+		}
+		mockBuckets["ALIAS_INDEX"].On("Get", mock.Anything, fmt.Sprintf("alias--%s", alias)).Return(mockEntry, nil)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := engine.ResolveAliases(ctx, aliases)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+// T113: Test orphan cleanup on entity delete
+// FR-005a/b/c: When entity deleted, system reads OUTGOING_INDEX to identify targets
+// and removes deleted entity from each target's INCOMING_INDEX entry
+func TestIndexManager_CleanupOrphanedIncomingReferences(t *testing.T) {
+	tests := []struct {
+		name               string
+		deletedEntityID    string
+		outgoingRels       []OutgoingEntry
+		setupIncomingIndex func(*MockKeyValue)
+		setupOutgoingIndex func(*MockKeyValue)
+		verifyCleanupCalls func(*testing.T, *MockKeyValue)
+		wantErr            bool
+	}{
+		{
+			name:            "successful cleanup of multiple targets",
+			deletedEntityID: "c360.platform1.robotics.mav1.drone.001",
+			outgoingRels: []OutgoingEntry{
+				{Predicate: "spatial.proximity.near", ToEntityID: "c360.platform1.robotics.mav1.drone.002"},
+				{Predicate: "ops.fleet.member_of", ToEntityID: "c360.platform1.ops.fleet1.fleet.alpha"},
+			},
+			setupOutgoingIndex: func(mockKV *MockKeyValue) {
+				// Return the outgoing relationships when queried
+				outgoingData := []OutgoingEntry{
+					{Predicate: "spatial.proximity.near", ToEntityID: "c360.platform1.robotics.mav1.drone.002"},
+					{Predicate: "ops.fleet.member_of", ToEntityID: "c360.platform1.ops.fleet1.fleet.alpha"},
+				}
+				jsonData, _ := json.Marshal(outgoingData)
+				entry := &MockKeyValueEntry{
+					key:   "c360.platform1.robotics.mav1.drone.001",
+					value: jsonData,
+				}
+				mockKV.On("Get", mock.Anything, "c360.platform1.robotics.mav1.drone.001").Return(entry, nil)
+			},
+			setupIncomingIndex: func(mockKV *MockKeyValue) {
+				// Setup incoming index for drone.002 - has references from both 001 and 003
+				drone002Incoming := []IncomingEntry{
+					{Predicate: "spatial.proximity.near", FromEntityID: "c360.platform1.robotics.mav1.drone.001"}, // This should be removed
+					{Predicate: "spatial.proximity.near", FromEntityID: "c360.platform1.robotics.mav1.drone.003"}, // This should remain
+				}
+				jsonData002, _ := json.Marshal(drone002Incoming)
+				entry002 := &MockKeyValueEntry{
+					key:   "c360.platform1.robotics.mav1.drone.002",
+					value: jsonData002,
+				}
+				mockKV.On("Get", mock.Anything, "c360.platform1.robotics.mav1.drone.002").Return(entry002, nil)
+
+				// Setup incoming index for fleet alpha - only has reference from 001
+				fleetIncoming := []IncomingEntry{
+					{Predicate: "ops.fleet.member_of", FromEntityID: "c360.platform1.robotics.mav1.drone.001"},
+				}
+				jsonDataFleet, _ := json.Marshal(fleetIncoming)
+				entryFleet := &MockKeyValueEntry{
+					key:   "c360.platform1.ops.fleet1.fleet.alpha",
+					value: jsonDataFleet,
+				}
+				mockKV.On("Get", mock.Anything, "c360.platform1.ops.fleet1.fleet.alpha").Return(entryFleet, nil)
+
+				// Expect Put for drone.002 with updated list (only drone.003)
+				mockKV.On("Put", mock.Anything, "c360.platform1.robotics.mav1.drone.002", mock.MatchedBy(func(data []byte) bool {
+					var refs []IncomingEntry
+					json.Unmarshal(data, &refs)
+					return len(refs) == 1 && refs[0].FromEntityID == "c360.platform1.robotics.mav1.drone.003"
+				})).Return(uint64(1), nil)
+
+				// Expect Delete for fleet alpha (no more references)
+				mockKV.On("Delete", mock.Anything, "c360.platform1.ops.fleet1.fleet.alpha").Return(nil)
+			},
+			verifyCleanupCalls: func(t *testing.T, incomingMock *MockKeyValue) {
+				// Verify Get was called for both targets
+				incomingMock.AssertCalled(t, "Get", mock.Anything, "c360.platform1.robotics.mav1.drone.002")
+				incomingMock.AssertCalled(t, "Get", mock.Anything, "c360.platform1.ops.fleet1.fleet.alpha")
+
+				// Verify Put was called for drone.002 (still has refs)
+				incomingMock.AssertCalled(t, "Put", mock.Anything, "c360.platform1.robotics.mav1.drone.002", mock.Anything)
+
+				// Verify Delete was called for fleet alpha (no more refs)
+				incomingMock.AssertCalled(t, "Delete", mock.Anything, "c360.platform1.ops.fleet1.fleet.alpha")
+			},
+			wantErr: false,
+		},
+		{
+			name:            "cleanup when outgoing index not found",
+			deletedEntityID: "c360.platform1.robotics.mav1.drone.999",
+			setupOutgoingIndex: func(mockKV *MockKeyValue) {
+				// Return error for missing entity
+				mockKV.On("Get", mock.Anything, "c360.platform1.robotics.mav1.drone.999").Return(nil, jetstream.ErrKeyNotFound)
+			},
+			setupIncomingIndex: func(_ *MockKeyValue) {
+				// Should not be called
+			},
+			verifyCleanupCalls: func(t *testing.T, incomingMock *MockKeyValue) {
+				// Verify no incoming index operations occurred
+				incomingMock.AssertNotCalled(t, "Get")
+				incomingMock.AssertNotCalled(t, "Put")
+				incomingMock.AssertNotCalled(t, "Delete")
+			},
+			wantErr: false, // Not an error - just nothing to clean
+		},
+		{
+			name:            "cleanup with no outgoing relationships",
+			deletedEntityID: "c360.platform1.robotics.mav1.sensor.001",
+			setupOutgoingIndex: func(mockKV *MockKeyValue) {
+				// Return empty array
+				jsonData, _ := json.Marshal([]OutgoingEntry{})
+				entry := &MockKeyValueEntry{
+					key:   "c360.platform1.robotics.mav1.sensor.001",
+					value: jsonData,
+				}
+				mockKV.On("Get", mock.Anything, "c360.platform1.robotics.mav1.sensor.001").Return(entry, nil)
+			},
+			setupIncomingIndex: func(_ *MockKeyValue) {
+				// Should not be called
+			},
+			verifyCleanupCalls: func(t *testing.T, incomingMock *MockKeyValue) {
+				// Verify no incoming index operations occurred
+				incomingMock.AssertNotCalled(t, "Get")
+				incomingMock.AssertNotCalled(t, "Put")
+				incomingMock.AssertNotCalled(t, "Delete")
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			engine, mockBuckets := setupTestManager(t)
+			ctx := context.Background()
+
+			// Setup mocks
+			outgoingMock := mockBuckets["OUTGOING_INDEX"]
+			incomingMock := mockBuckets["INCOMING_INDEX"]
+
+			if tt.setupOutgoingIndex != nil {
+				tt.setupOutgoingIndex(outgoingMock)
+			}
+			if tt.setupIncomingIndex != nil {
+				tt.setupIncomingIndex(incomingMock)
+			}
+
+			// Execute cleanup
+			err := engine.CleanupOrphanedIncomingReferences(ctx, tt.deletedEntityID)
+
+			// Verify error expectation
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Verify cleanup calls
+			if tt.verifyCleanupCalls != nil {
+				tt.verifyCleanupCalls(t, incomingMock)
+			}
+		})
+	}
+}
