@@ -1,0 +1,471 @@
+//go:build integration
+
+package graphindex
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/natsclient"
+	"github.com/nats-io/nats.go/jetstream"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestIntegration_KVWatchToIndexFlow tests the full KV watch -> index update flow
+func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
+	// Create test NATS client with KV support
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	// Create component with default config
+	config := DefaultConfig()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphIndex(configJSON, deps)
+	require.NoError(t, err)
+	require.NotNil(t, comp)
+
+	graphIndex := comp.(*Component)
+
+	// Initialize component
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, graphIndex.Initialize())
+
+	// Get JetStream context
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create ENTITY_STATES bucket (input) BEFORE starting component
+	entityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	// Start component (now that input bucket exists)
+	require.NoError(t, graphIndex.Start(ctx))
+	defer graphIndex.Stop(5 * time.Second)
+
+	// Create test entity with relationships
+	entityID := "c360.platform.robotics.mav1.drone.001"
+	targetID := "c360.platform.robotics.mav1.mission.001"
+	alias := "drone-alpha"
+
+	state := graph.EntityState{
+		ID: entityID,
+		Triples: []message.Triple{
+			{
+				Subject:   entityID,
+				Predicate: "robotics.assigned.mission",
+				Object:    targetID, // Relationship to another entity
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+			{
+				Subject:   entityID,
+				Predicate: "robotics.status.armed",
+				Object:    true, // Literal value
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+			{
+				Subject:   entityID,
+				Predicate: "core.identity.alias",
+				Object:    alias,
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+		},
+		MessageType: message.Type{Domain: "test", Category: "entity", Version: "v1"},
+		Version:     1,
+	}
+
+	// Write entity to ENTITY_STATES bucket
+	stateData, err := json.Marshal(state)
+	require.NoError(t, err)
+
+	_, err = entityBucket.Put(ctx, entityID, stateData)
+	require.NoError(t, err)
+
+	// Wait for component to process the update
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify outgoing index was created
+	outgoingEntry, err := graphIndex.outgoingBucket.Get(ctx, entityID)
+	require.NoError(t, err)
+	assert.NotNil(t, outgoingEntry)
+
+	var outgoingData map[string]interface{}
+	err = json.Unmarshal(outgoingEntry.Value(), &outgoingData)
+	require.NoError(t, err)
+
+	targets, ok := outgoingData["targets"].([]interface{})
+	require.True(t, ok, "outgoing index should have targets array")
+	require.Len(t, targets, 1, "should have one relationship")
+
+	target := targets[0].(map[string]interface{})
+	assert.Equal(t, targetID, target["id"])
+	assert.Equal(t, "robotics.assigned.mission", target["predicate"])
+
+	// Verify incoming index was created (on target entity)
+	incomingEntry, err := graphIndex.incomingBucket.Get(ctx, targetID)
+	require.NoError(t, err)
+	assert.NotNil(t, incomingEntry)
+
+	var incomingData map[string]interface{}
+	err = json.Unmarshal(incomingEntry.Value(), &incomingData)
+	require.NoError(t, err)
+
+	assert.Equal(t, entityID, incomingData["from_entity_id"])
+	assert.Equal(t, "robotics.assigned.mission", incomingData["predicate"])
+
+	// Verify alias index was created
+	aliasEntry, err := graphIndex.aliasBucket.Get(ctx, alias)
+	require.NoError(t, err)
+	assert.NotNil(t, aliasEntry)
+	assert.Equal(t, entityID, string(aliasEntry.Value()))
+
+	// Verify predicate indexes were created
+	predicates := []string{"robotics.assigned.mission", "robotics.status.armed", "core.identity.alias"}
+	for _, predicate := range predicates {
+		predicateEntry, err := graphIndex.predicateBucket.Get(ctx, predicate)
+		require.NoError(t, err, "predicate index should exist for %s", predicate)
+
+		var predicateData map[string]interface{}
+		err = json.Unmarshal(predicateEntry.Value(), &predicateData)
+		require.NoError(t, err)
+
+		assert.Equal(t, entityID, predicateData["entity_id"])
+		assert.Equal(t, predicate, predicateData["predicate"])
+	}
+}
+
+// TestIntegration_EntityDeletion tests that entity deletion removes from all indexes
+func TestIntegration_EntityDeletion(t *testing.T) {
+	// Create test NATS client with KV support
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	// Create component
+	config := DefaultConfig()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphIndex(configJSON, deps)
+	require.NoError(t, err)
+
+	graphIndex := comp.(*Component)
+
+	// Initialize component
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, graphIndex.Initialize())
+
+	// Get JetStream context
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create ENTITY_STATES bucket BEFORE starting component
+	entityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	// Start component (now that input bucket exists)
+	require.NoError(t, graphIndex.Start(ctx))
+	defer graphIndex.Stop(5 * time.Second)
+
+	// Create test entity
+	entityID := "c360.platform.robotics.mav1.drone.002"
+	targetID := "c360.platform.robotics.mav1.mission.002"
+
+	state := graph.EntityState{
+		ID: entityID,
+		Triples: []message.Triple{
+			{
+				Subject:   entityID,
+				Predicate: "robotics.assigned.mission",
+				Object:    targetID,
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+		},
+		MessageType: message.Type{Domain: "test", Category: "entity", Version: "v1"},
+		Version:     1,
+	}
+
+	// Write entity
+	stateData, err := json.Marshal(state)
+	require.NoError(t, err)
+
+	_, err = entityBucket.Put(ctx, entityID, stateData)
+	require.NoError(t, err)
+
+	// Wait for indexing
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify indexes exist
+	_, err = graphIndex.outgoingBucket.Get(ctx, entityID)
+	require.NoError(t, err, "outgoing index should exist before deletion")
+
+	// Delete entity from ENTITY_STATES
+	err = entityBucket.Delete(ctx, entityID)
+	require.NoError(t, err)
+
+	// Wait for deletion to process
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify indexes were removed
+	_, err = graphIndex.outgoingBucket.Get(ctx, entityID)
+	assert.ErrorIs(t, err, jetstream.ErrKeyNotFound, "outgoing index should be deleted")
+
+	_, err = graphIndex.incomingBucket.Get(ctx, entityID)
+	assert.ErrorIs(t, err, jetstream.ErrKeyNotFound, "incoming index should be deleted")
+}
+
+// TestIntegration_MultipleRelationships tests indexing entities with multiple relationships
+func TestIntegration_MultipleRelationships(t *testing.T) {
+	// Create test NATS client with KV support
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	// Create component
+	config := DefaultConfig()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphIndex(configJSON, deps)
+	require.NoError(t, err)
+
+	graphIndex := comp.(*Component)
+
+	// Initialize component
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, graphIndex.Initialize())
+
+	// Get JetStream context
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create ENTITY_STATES bucket BEFORE starting component
+	entityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	// Start component (now that input bucket exists)
+	require.NoError(t, graphIndex.Start(ctx))
+	defer graphIndex.Stop(5 * time.Second)
+
+	// Create entity with multiple relationships
+	entityID := "c360.platform.robotics.mav1.drone.003"
+	mission1 := "c360.platform.robotics.mav1.mission.001"
+	mission2 := "c360.platform.robotics.mav1.mission.002"
+	operator := "c360.platform.robotics.mav1.operator.alice"
+
+	state := graph.EntityState{
+		ID: entityID,
+		Triples: []message.Triple{
+			{
+				Subject:   entityID,
+				Predicate: "robotics.assigned.mission",
+				Object:    mission1,
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+			{
+				Subject:   entityID,
+				Predicate: "robotics.backup.mission",
+				Object:    mission2,
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+			{
+				Subject:   entityID,
+				Predicate: "robotics.assigned.operator",
+				Object:    operator,
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+		},
+		MessageType: message.Type{Domain: "test", Category: "entity", Version: "v1"},
+		Version:     1,
+	}
+
+	// Write entity
+	stateData, err := json.Marshal(state)
+	require.NoError(t, err)
+
+	_, err = entityBucket.Put(ctx, entityID, stateData)
+	require.NoError(t, err)
+
+	// Wait for indexing
+	time.Sleep(500 * time.Millisecond)
+
+	// Verify outgoing index has all three relationships
+	outgoingEntry, err := graphIndex.outgoingBucket.Get(ctx, entityID)
+	require.NoError(t, err)
+
+	var outgoingData map[string]interface{}
+	err = json.Unmarshal(outgoingEntry.Value(), &outgoingData)
+	require.NoError(t, err)
+
+	targets, ok := outgoingData["targets"].([]interface{})
+	require.True(t, ok, "outgoing index should have targets array")
+	require.Len(t, targets, 3, "should have three relationships")
+
+	// Verify each target exists
+	targetIDs := make(map[string]bool)
+	for _, target := range targets {
+		targetMap := target.(map[string]interface{})
+		targetIDs[targetMap["id"].(string)] = true
+	}
+
+	assert.True(t, targetIDs[mission1], "should have mission1 relationship")
+	assert.True(t, targetIDs[mission2], "should have mission2 relationship")
+	assert.True(t, targetIDs[operator], "should have operator relationship")
+
+	// Verify incoming indexes on all targets
+	for _, targetID := range []string{mission1, mission2, operator} {
+		incomingEntry, err := graphIndex.incomingBucket.Get(ctx, targetID)
+		require.NoError(t, err, "incoming index should exist for %s", targetID)
+
+		var incomingData map[string]interface{}
+		err = json.Unmarshal(incomingEntry.Value(), &incomingData)
+		require.NoError(t, err)
+
+		assert.Equal(t, entityID, incomingData["from_entity_id"])
+	}
+}
+
+// TestIntegration_ConcurrentUpdates tests concurrent entity updates
+func TestIntegration_ConcurrentUpdates(t *testing.T) {
+	// Create test NATS client with KV support
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	// Create component
+	config := DefaultConfig()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphIndex(configJSON, deps)
+	require.NoError(t, err)
+
+	graphIndex := comp.(*Component)
+
+	// Initialize component
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, graphIndex.Initialize())
+
+	// Get JetStream context
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create ENTITY_STATES bucket BEFORE starting component
+	entityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	// Start component (now that input bucket exists)
+	require.NoError(t, graphIndex.Start(ctx))
+	defer graphIndex.Stop(5 * time.Second)
+
+	// Create multiple entities concurrently
+	const numEntities = 10
+	done := make(chan bool, numEntities)
+
+	for i := 0; i < numEntities; i++ {
+		go func(idx int) {
+			entityID := "c360.platform.robotics.mav1.drone." + string(rune('0'+idx))
+			targetID := "c360.platform.robotics.mav1.mission." + string(rune('0'+idx))
+
+			state := graph.EntityState{
+				ID: entityID,
+				Triples: []message.Triple{
+					{
+						Subject:   entityID,
+						Predicate: "robotics.assigned.mission",
+						Object:    targetID,
+						Source:    "test",
+						Timestamp: time.Now(),
+					},
+				},
+				MessageType: message.Type{Domain: "test", Category: "entity", Version: "v1"},
+				Version:     1,
+			}
+
+			stateData, err := json.Marshal(state)
+			if err != nil {
+				t.Errorf("failed to marshal state: %v", err)
+				done <- false
+				return
+			}
+
+			_, err = entityBucket.Put(ctx, entityID, stateData)
+			if err != nil {
+				t.Errorf("failed to put entity: %v", err)
+				done <- false
+				return
+			}
+
+			done <- true
+		}(i)
+	}
+
+	// Wait for all entities to be written
+	for i := 0; i < numEntities; i++ {
+		success := <-done
+		assert.True(t, success, "entity write should succeed")
+	}
+
+	// Wait for all indexing to complete
+	time.Sleep(1 * time.Second)
+
+	// Verify all entities were indexed
+	for i := 0; i < numEntities; i++ {
+		entityID := "c360.platform.robotics.mav1.drone." + string(rune('0'+i))
+
+		_, err := graphIndex.outgoingBucket.Get(ctx, entityID)
+		assert.NoError(t, err, "outgoing index should exist for entity %d", i)
+	}
+
+	// Check component health
+	health := graphIndex.Health()
+	assert.True(t, health.Healthy, "component should be healthy after concurrent updates")
+	assert.Equal(t, 0, health.ErrorCount, "should have no errors")
+}

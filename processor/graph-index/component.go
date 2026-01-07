@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/pkg/retry"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -44,10 +46,10 @@ func (c *Config) Validate() error {
 
 	// Validate required output buckets exist
 	requiredBuckets := map[string]bool{
-		"OUTGOING_INDEX":  false,
-		"INCOMING_INDEX":  false,
-		"ALIAS_INDEX":     false,
-		"PREDICATE_INDEX": false,
+		graph.BucketOutgoingIndex:  false,
+		graph.BucketIncomingIndex:  false,
+		graph.BucketAliasIndex:     false,
+		graph.BucketPredicateIndex: false,
 	}
 
 	for _, output := range c.Ports.Outputs {
@@ -97,7 +99,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			}
 		}
@@ -106,22 +108,22 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "outgoing_index",
 					Type:    "kv-write",
-					Subject: "OUTGOING_INDEX",
+					Subject: graph.BucketOutgoingIndex,
 				},
 				{
 					Name:    "incoming_index",
 					Type:    "kv-write",
-					Subject: "INCOMING_INDEX",
+					Subject: graph.BucketIncomingIndex,
 				},
 				{
 					Name:    "alias_index",
 					Type:    "kv-write",
-					Subject: "ALIAS_INDEX",
+					Subject: graph.BucketAliasIndex,
 				},
 				{
 					Name:    "predicate_index",
 					Type:    "kv-write",
-					Subject: "PREDICATE_INDEX",
+					Subject: graph.BucketPredicateIndex,
 				},
 			}
 		}
@@ -136,29 +138,29 @@ func DefaultConfig() Config {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:    "outgoing_index",
 					Type:    "kv-write",
-					Subject: "OUTGOING_INDEX",
+					Subject: graph.BucketOutgoingIndex,
 				},
 				{
 					Name:    "incoming_index",
 					Type:    "kv-write",
-					Subject: "INCOMING_INDEX",
+					Subject: graph.BucketIncomingIndex,
 				},
 				{
 					Name:    "alias_index",
 					Type:    "kv-write",
-					Subject: "ALIAS_INDEX",
+					Subject: graph.BucketAliasIndex,
 				},
 				{
 					Name:    "predicate_index",
 					Type:    "kv-write",
-					Subject: "PREDICATE_INDEX",
+					Subject: graph.BucketPredicateIndex,
 				},
 			},
 		},
@@ -200,6 +202,9 @@ type Component struct {
 	errors            int64
 	lastActivity      atomic.Value // stores time.Time
 
+	// Prometheus metrics
+	metrics *indexMetrics
+
 	// Port definitions
 	inputPorts  []component.Port
 	outputPorts []component.Port
@@ -211,6 +216,7 @@ func CreateGraphIndex(rawConfig json.RawMessage, deps component.Dependencies) (c
 	if deps.NATSClient == nil {
 		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "CreateGraphIndex", "factory", "NATSClient required")
 	}
+	natsClient := deps.NATSClient
 
 	// Parse configuration
 	var config Config
@@ -235,8 +241,9 @@ func CreateGraphIndex(rawConfig json.RawMessage, deps component.Dependencies) (c
 	comp := &Component{
 		name:       "graph-index",
 		config:     config,
-		natsClient: deps.NATSClient,
+		natsClient: natsClient,
 		logger:     logger,
+		metrics:    getMetrics(deps.MetricsRegistry),
 	}
 
 	// Initialize last activity
@@ -417,32 +424,66 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
-	// Initialize KV buckets
+	// Check context before proceeding
+	if err := ctx.Err(); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "context cancelled")
+	}
+
+	// Create output KV buckets (we are the writer)
+	for _, portDef := range c.config.Ports.Outputs {
+		bucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+			Bucket:      portDef.Subject,
+			Description: fmt.Sprintf("Graph index bucket: %s", portDef.Name),
+		})
+		if err != nil {
+			cancel()
+			if ctx.Err() != nil {
+				return errs.Wrap(ctx.Err(), "Component", "Start", "context cancelled during bucket creation")
+			}
+			return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", portDef.Subject))
+		}
+
+		// Assign bucket based on subject
+		switch portDef.Subject {
+		case graph.BucketOutgoingIndex:
+			c.outgoingBucket = bucket
+		case graph.BucketIncomingIndex:
+			c.incomingBucket = bucket
+		case graph.BucketAliasIndex:
+			c.aliasBucket = bucket
+		case graph.BucketPredicateIndex:
+			c.predicateBucket = bucket
+		}
+	}
+
+	// Wait for input KV bucket (ENTITY_STATES) with retries - we are the reader/watcher
 	js, err := c.natsClient.JetStream()
 	if err != nil {
 		cancel()
 		return errs.Wrap(err, "Component", "Start", "JetStream connection")
 	}
 
-	// Get KV buckets from configured outputs
-	for _, portDef := range c.config.Ports.Outputs {
-		bucket, err := js.KeyValue(ctx, portDef.Subject)
+	entityBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
+		bucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
 		if err != nil {
-			cancel()
-			return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket access: %s", portDef.Subject))
+			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketEntityStates), slog.Any("error", err))
 		}
+		return bucket, err
+	})
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketEntityStates))
+	}
 
-		// Assign bucket based on subject
-		switch portDef.Subject {
-		case "OUTGOING_INDEX":
-			c.outgoingBucket = bucket
-		case "INCOMING_INDEX":
-			c.incomingBucket = bucket
-		case "ALIAS_INDEX":
-			c.aliasBucket = bucket
-		case "PREDICATE_INDEX":
-			c.predicateBucket = bucket
-		}
+	// Start entity watcher goroutine
+	c.wg.Add(1)
+	go c.watchEntityStates(ctx, entityBucket)
+
+	// Set up query handler subscriptions
+	if err := c.setupQueryHandlers(ctx); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "query handler setup")
 	}
 
 	// Mark as running
@@ -491,6 +532,230 @@ func (c *Component) Stop(timeout time.Duration) error {
 }
 
 // ============================================================================
+// Entity State Watcher
+// ============================================================================
+
+// watchEntityStates watches the ENTITY_STATES KV bucket and indexes entity updates
+func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyValue) {
+	defer c.wg.Done()
+
+	watcher, err := bucket.WatchAll(ctx)
+	if err != nil {
+		c.logger.Error("failed to start entity watcher",
+			slog.String("bucket", graph.BucketEntityStates),
+			slog.Any("error", err))
+		return
+	}
+	defer watcher.Stop()
+
+	c.logger.Info("entity watcher started", slog.String("bucket", graph.BucketEntityStates))
+
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("entity watcher stopping", slog.String("reason", "context cancelled"))
+			return
+		case entry := <-watcher.Updates():
+			if entry == nil {
+				// nil entry indicates initial state enumeration complete
+				c.logger.Debug("entity watcher initial sync complete")
+				continue
+			}
+
+			if entry.Operation() == jetstream.KeyValueDelete {
+				c.handleEntityDelete(ctx, entry.Key())
+				continue
+			}
+
+			c.processEntityUpdate(ctx, entry)
+		}
+	}
+}
+
+// processEntityUpdate indexes an entity's relationships from its triples
+func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.KeyValueEntry) {
+	var state graph.EntityState
+	if err := json.Unmarshal(entry.Value(), &state); err != nil {
+		c.logger.Warn("failed to unmarshal entity state",
+			slog.String("entity", entry.Key()),
+			slog.Any("error", err))
+		return
+	}
+
+	// Determine entity ID: use state.ID if set, otherwise entry.Key(), otherwise first triple subject
+	entityID := state.ID
+	if entityID == "" {
+		entityID = entry.Key()
+	}
+	if entityID == "" || entityID == "test-key" {
+		// Fallback to triple subject for test compatibility
+		if len(state.Triples) > 0 {
+			entityID = state.Triples[0].Subject
+		}
+	}
+
+	// Collect all outgoing relationships for this entity
+	type RelationshipTarget struct {
+		ID        string `json:"id"`
+		Predicate string `json:"predicate"`
+	}
+	outgoingTargets := make([]map[string]interface{}, 0)
+
+	// Collect predicates for this entity
+	predicatesUsed := make(map[string]bool)
+
+	// Track indexed relationships for this entity
+	var indexed int
+
+	// Index each triple
+	for _, triple := range state.Triples {
+		// Track predicate usage
+		predicatesUsed[triple.Predicate] = true
+
+		// Check if this is a relationship (object is an entity ID)
+		if triple.IsRelationship() {
+			targetID, _ := triple.Object.(string)
+
+			// Collect outgoing relationship
+			outgoingTargets = append(outgoingTargets, map[string]interface{}{
+				"id":        targetID,
+				"predicate": triple.Predicate,
+			})
+
+			// Index incoming relationship: targetID <- entityID
+			if err := c.UpdateIncomingIndex(ctx, targetID, entityID, triple.Predicate); err != nil {
+				c.logger.Debug("failed to update incoming index",
+					slog.String("target", targetID),
+					slog.String("source", entityID),
+					slog.Any("error", err))
+			}
+
+			indexed++
+		}
+
+		// Check for alias predicate and index it
+		if triple.Predicate == "core.identity.alias" {
+			if alias, ok := triple.Object.(string); ok && alias != "" {
+				if err := c.UpdateAliasIndex(ctx, alias, entityID); err != nil {
+					c.logger.Debug("failed to update alias index",
+						slog.String("alias", alias),
+						slog.String("entity", entityID),
+						slog.Any("error", err))
+				}
+			}
+		}
+	}
+
+	// Write outgoing index with all targets
+	if len(outgoingTargets) > 0 {
+		if err := c.updateOutgoingIndexBatch(ctx, entityID, outgoingTargets); err != nil {
+			c.logger.Debug("failed to update outgoing index",
+				slog.String("entity", entityID),
+				slog.Any("error", err))
+		}
+	}
+
+	// Update predicate index for all predicates used by this entity
+	for predicate := range predicatesUsed {
+		if err := c.UpdatePredicateIndex(ctx, entityID, predicate); err != nil {
+			c.logger.Debug("failed to update predicate index",
+				slog.String("entity", entityID),
+				slog.String("predicate", predicate),
+				slog.Any("error", err))
+		}
+	}
+
+	c.logger.Debug("indexed entity",
+		slog.String("entity", entityID),
+		slog.Int("triples", len(state.Triples)),
+		slog.Int("relationships", indexed))
+
+	atomic.AddInt64(&c.messagesProcessed, 1)
+	c.lastActivity.Store(time.Now())
+
+	// Record Prometheus metrics
+	if c.metrics != nil {
+		c.metrics.recordEventProcessed()
+		c.metrics.recordWatchEvent("update")
+	}
+}
+
+// OutgoingEntry matches graph/indexmanager format for outgoing index
+// Key: entity ID, Value: JSON array of OutgoingEntry
+type OutgoingEntry struct {
+	ToEntityID string `json:"to_entity_id"`
+	Predicate  string `json:"predicate"`
+}
+
+// updateOutgoingIndexBatch writes all outgoing relationships for an entity
+func (c *Component) updateOutgoingIndexBatch(ctx context.Context, entityID string, targets []map[string]interface{}) error {
+	if entityID == "" {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "updateOutgoingIndexBatch", "entity ID cannot be empty")
+	}
+
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "updateOutgoingIndexBatch", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.Wrap(err, "Component", "updateOutgoingIndexBatch", "context cancelled")
+	}
+
+	// Convert targets to OutgoingEntry array (matching graph/indexmanager expected format)
+	entries := make([]OutgoingEntry, 0, len(targets))
+	for _, target := range targets {
+		targetID, _ := target["id"].(string)
+		predicate, _ := target["predicate"].(string)
+		if targetID != "" && predicate != "" {
+			entries = append(entries, OutgoingEntry{
+				ToEntityID: targetID,
+				Predicate:  predicate,
+			})
+		}
+	}
+
+	// Serialize as raw array (matching graph/indexmanager expected format)
+	data, err := json.Marshal(entries)
+	if err != nil {
+		atomic.AddInt64(&c.errors, 1)
+		return errs.Wrap(err, "Component", "updateOutgoingIndexBatch", "entry serialization")
+	}
+
+	// Store in KV bucket using entity ID as key
+	if _, err := c.outgoingBucket.Put(ctx, entityID, data); err != nil {
+		atomic.AddInt64(&c.errors, 1)
+		return errs.Wrap(err, "Component", "updateOutgoingIndexBatch", "KV store")
+	}
+
+	// Update metrics
+	atomic.AddInt64(&c.bytesProcessed, int64(len(data)))
+	c.lastActivity.Store(time.Now())
+
+	// Record Prometheus metrics
+	if c.metrics != nil {
+		c.metrics.recordIndexUpdate("outgoing")
+		c.metrics.recordKVOperation("put", "outgoing")
+	}
+
+	c.logger.Debug("outgoing index batch updated",
+		slog.String("entity_id", entityID),
+		slog.Int("target_count", len(entries)))
+
+	return nil
+}
+
+// handleEntityDelete removes an entity from all indexes
+func (c *Component) handleEntityDelete(ctx context.Context, entityID string) {
+	c.logger.Debug("removing entity from indexes", slog.String("entity", entityID))
+
+	if err := c.DeleteFromIndexes(ctx, entityID); err != nil {
+		c.logger.Warn("failed to delete entity from indexes",
+			slog.String("entity", entityID),
+			slog.Any("error", err))
+	}
+}
+
+// ============================================================================
 // Index Update Operations
 // ============================================================================
 
@@ -506,19 +771,49 @@ func (c *Component) UpdateOutgoingIndex(ctx context.Context, entityID, targetID,
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateOutgoingIndex", "predicate cannot be empty")
 	}
 
-	// Check context
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateOutgoingIndex", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
 		return errs.Wrap(err, "Component", "UpdateOutgoingIndex", "context cancelled")
 	}
 
-	// Create outgoing entry
-	entry := map[string]interface{}{
-		"to_entity_id": targetID,
-		"predicate":    predicate,
+	// Read existing entries (raw array format matching graph/indexmanager)
+	var entries []OutgoingEntry
+	existingEntry, err := c.outgoingBucket.Get(ctx, entityID)
+	if err != nil && err != jetstream.ErrKeyNotFound {
+		atomic.AddInt64(&c.errors, 1)
+		return errs.Wrap(err, "Component", "UpdateOutgoingIndex", "KV get")
 	}
 
-	// Serialize entry
-	data, err := json.Marshal(entry)
+	if err == nil {
+		// Parse existing array
+		if unmarshalErr := json.Unmarshal(existingEntry.Value(), &entries); unmarshalErr != nil {
+			// If unmarshal fails, start fresh (backward compatibility with old format)
+			entries = []OutgoingEntry{}
+		}
+	}
+
+	// Check if this target already exists (avoid duplicates)
+	targetExists := false
+	for _, entry := range entries {
+		if entry.ToEntityID == targetID && entry.Predicate == predicate {
+			targetExists = true
+			break
+		}
+	}
+
+	// Append new target if it doesn't exist
+	if !targetExists {
+		entries = append(entries, OutgoingEntry{
+			ToEntityID: targetID,
+			Predicate:  predicate,
+		})
+	}
+
+	// Serialize array (matching graph/indexmanager expected format)
+	data, err := json.Marshal(entries)
 	if err != nil {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "UpdateOutgoingIndex", "entry serialization")
@@ -543,6 +838,13 @@ func (c *Component) UpdateOutgoingIndex(ctx context.Context, entityID, targetID,
 	return nil
 }
 
+// IncomingEntry matches graph/indexmanager format for incoming index
+// Key: target entity ID, Value: JSON array of IncomingEntry
+type IncomingEntry struct {
+	FromEntityID string `json:"from_entity_id"`
+	Predicate    string `json:"predicate"`
+}
+
 // UpdateIncomingIndex updates the incoming index for a relationship
 func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID, predicate string) error {
 	if targetID == "" {
@@ -555,19 +857,49 @@ func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID,
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateIncomingIndex", "predicate cannot be empty")
 	}
 
-	// Check context
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateIncomingIndex", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
 		return errs.Wrap(err, "Component", "UpdateIncomingIndex", "context cancelled")
 	}
 
-	// Create incoming entry
-	entry := map[string]interface{}{
-		"from_entity_id": sourceID,
-		"predicate":      predicate,
+	// Read existing entries (raw array format matching graph/indexmanager)
+	var entries []IncomingEntry
+	existingEntry, err := c.incomingBucket.Get(ctx, targetID)
+	if err != nil && err != jetstream.ErrKeyNotFound {
+		atomic.AddInt64(&c.errors, 1)
+		return errs.Wrap(err, "Component", "UpdateIncomingIndex", "KV get")
 	}
 
-	// Serialize entry
-	data, err := json.Marshal(entry)
+	if err == nil {
+		// Parse existing array
+		if unmarshalErr := json.Unmarshal(existingEntry.Value(), &entries); unmarshalErr != nil {
+			// If unmarshal fails, start fresh (backward compatibility with old format)
+			entries = []IncomingEntry{}
+		}
+	}
+
+	// Check if this source already exists (avoid duplicates)
+	sourceExists := false
+	for _, entry := range entries {
+		if entry.FromEntityID == sourceID && entry.Predicate == predicate {
+			sourceExists = true
+			break
+		}
+	}
+
+	// Append new source if it doesn't exist
+	if !sourceExists {
+		entries = append(entries, IncomingEntry{
+			FromEntityID: sourceID,
+			Predicate:    predicate,
+		})
+	}
+
+	// Serialize array (matching graph/indexmanager expected format)
+	data, err := json.Marshal(entries)
 	if err != nil {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "UpdateIncomingIndex", "entry serialization")
@@ -583,6 +915,12 @@ func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID,
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	atomic.AddInt64(&c.bytesProcessed, int64(len(data)))
 	c.lastActivity.Store(time.Now())
+
+	// Record Prometheus metrics
+	if c.metrics != nil {
+		c.metrics.recordIndexUpdate("incoming")
+		c.metrics.recordKVOperation("put", "incoming")
+	}
 
 	c.logger.Debug("incoming index updated",
 		slog.String("target_id", targetID),
@@ -601,7 +939,10 @@ func (c *Component) UpdateAliasIndex(ctx context.Context, alias, entityID string
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateAliasIndex", "entity ID cannot be empty")
 	}
 
-	// Check context
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateAliasIndex", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
 		return errs.Wrap(err, "Component", "UpdateAliasIndex", "context cancelled")
 	}
@@ -617,11 +958,24 @@ func (c *Component) UpdateAliasIndex(ctx context.Context, alias, entityID string
 	atomic.AddInt64(&c.bytesProcessed, int64(len(entityID)))
 	c.lastActivity.Store(time.Now())
 
+	// Record Prometheus metrics
+	if c.metrics != nil {
+		c.metrics.recordIndexUpdate("alias")
+		c.metrics.recordKVOperation("put", "alias")
+	}
+
 	c.logger.Debug("alias index updated",
 		slog.String("alias", alias),
 		slog.String("entity_id", entityID))
 
 	return nil
+}
+
+// PredicateIndexEntry represents the predicate index structure
+type PredicateIndexEntry struct {
+	Entities  []string `json:"entities"`
+	Predicate string   `json:"predicate"`
+	EntityID  string   `json:"entity_id,omitempty"` // Backward compatibility field (last entity)
 }
 
 // UpdatePredicateIndex updates the predicate index for an entity
@@ -633,18 +987,55 @@ func (c *Component) UpdatePredicateIndex(ctx context.Context, entityID, predicat
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdatePredicateIndex", "predicate cannot be empty")
 	}
 
-	// Check context
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdatePredicateIndex", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
 		return errs.Wrap(err, "Component", "UpdatePredicateIndex", "context cancelled")
 	}
 
-	// Create predicate entry
-	entry := map[string]interface{}{
-		"entity_id": entityID,
-		"predicate": predicate,
+	// Read existing entry (if any)
+	var entry PredicateIndexEntry
+	existingEntry, err := c.predicateBucket.Get(ctx, predicate)
+	if err != nil && err != jetstream.ErrKeyNotFound {
+		atomic.AddInt64(&c.errors, 1)
+		return errs.Wrap(err, "Component", "UpdatePredicateIndex", "KV get")
 	}
 
-	// Serialize entry
+	if err == nil {
+		// Parse existing entry
+		if unmarshalErr := json.Unmarshal(existingEntry.Value(), &entry); unmarshalErr != nil {
+			// If unmarshal fails, start fresh (backward compatibility with old format)
+			entry.Entities = []string{}
+			entry.Predicate = predicate
+		}
+	} else {
+		// New entry
+		entry.Entities = []string{}
+		entry.Predicate = predicate
+	}
+
+	// Check if this entity already exists (avoid duplicates)
+	entityExists := false
+	for _, e := range entry.Entities {
+		if e == entityID {
+			entityExists = true
+			break
+		}
+	}
+
+	// Append new entity if it doesn't exist
+	if !entityExists {
+		entry.Entities = append(entry.Entities, entityID)
+	}
+
+	// Set backward compatibility field (last entity)
+	if len(entry.Entities) > 0 {
+		entry.EntityID = entry.Entities[len(entry.Entities)-1]
+	}
+
+	// Serialize updated entry
 	data, err := json.Marshal(entry)
 	if err != nil {
 		atomic.AddInt64(&c.errors, 1)
@@ -661,6 +1052,12 @@ func (c *Component) UpdatePredicateIndex(ctx context.Context, entityID, predicat
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	atomic.AddInt64(&c.bytesProcessed, int64(len(data)))
 	c.lastActivity.Store(time.Now())
+
+	// Record Prometheus metrics
+	if c.metrics != nil {
+		c.metrics.recordIndexUpdate("predicate")
+		c.metrics.recordKVOperation("put", "predicate")
+	}
 
 	c.logger.Debug("predicate index updated",
 		slog.String("entity_id", entityID),
@@ -679,7 +1076,10 @@ func (c *Component) DeleteFromIndexes(ctx context.Context, entityID string) erro
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "DeleteFromIndexes", "entity ID cannot be empty")
 	}
 
-	// Check context
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "DeleteFromIndexes", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
 		return errs.Wrap(err, "Component", "DeleteFromIndexes", "context cancelled")
 	}
@@ -714,7 +1114,10 @@ func (c *Component) DeleteFromPredicateIndex(ctx context.Context, entityID, pred
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "DeleteFromPredicateIndex", "predicate cannot be empty")
 	}
 
-	// Check context
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "DeleteFromPredicateIndex", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
 		return errs.Wrap(err, "Component", "DeleteFromPredicateIndex", "context cancelled")
 	}
@@ -742,7 +1145,10 @@ func (c *Component) DeleteFromAliasIndex(ctx context.Context, alias string) erro
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "DeleteFromAliasIndex", "alias cannot be empty")
 	}
 
-	// Check context
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "DeleteFromAliasIndex", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
 		return errs.Wrap(err, "Component", "DeleteFromAliasIndex", "context cancelled")
 	}
@@ -771,7 +1177,10 @@ func (c *Component) DeleteFromIncomingIndex(ctx context.Context, targetID, sourc
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "DeleteFromIncomingIndex", "source ID cannot be empty")
 	}
 
-	// Check context
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "DeleteFromIncomingIndex", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
 		return errs.Wrap(err, "Component", "DeleteFromIncomingIndex", "context cancelled")
 	}

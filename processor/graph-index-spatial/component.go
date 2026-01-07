@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
@@ -46,13 +47,13 @@ func (c *Config) Validate() error {
 	// Validate SPATIAL_INDEX output exists
 	hasSpatialIndex := false
 	for _, output := range c.Ports.Outputs {
-		if output.Subject == "SPATIAL_INDEX" {
+		if output.Subject == graph.BucketSpatialIndex {
 			hasSpatialIndex = true
 			break
 		}
 	}
 	if !hasSpatialIndex {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "SPATIAL_INDEX output required")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", fmt.Sprintf("%s output required", graph.BucketSpatialIndex))
 	}
 
 	// Validate geohash precision
@@ -95,7 +96,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			}
 		}
@@ -104,7 +105,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "spatial_index",
 					Type:    "kv-write",
-					Subject: "SPATIAL_INDEX",
+					Subject: graph.BucketSpatialIndex,
 				},
 			}
 		}
@@ -119,14 +120,14 @@ func DefaultConfig() Config {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:    "spatial_index",
 					Type:    "kv-write",
-					Subject: "SPATIAL_INDEX",
+					Subject: graph.BucketSpatialIndex,
 				},
 			},
 		},
@@ -177,6 +178,7 @@ func CreateGraphIndexSpatial(rawConfig json.RawMessage, deps component.Dependenc
 	if deps.NATSClient == nil {
 		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "CreateGraphIndexSpatial", "factory", "NATSClient required")
 	}
+	natsClient := deps.NATSClient
 
 	// Parse configuration
 	var config Config
@@ -201,7 +203,7 @@ func CreateGraphIndexSpatial(rawConfig json.RawMessage, deps component.Dependenc
 	comp := &Component{
 		name:       "graph-index-spatial",
 		config:     config,
-		natsClient: deps.NATSClient,
+		natsClient: natsClient,
 		logger:     logger,
 	}
 
@@ -383,20 +385,31 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
-	// Initialize JetStream
-	js, err := c.natsClient.JetStream()
-	if err != nil {
+	// Check context before proceeding
+	if err := ctx.Err(); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+		return errs.Wrap(err, "Component", "Start", "context cancelled")
 	}
 
-	// Get SPATIAL_INDEX bucket
-	spatialBucket, err := js.KeyValue(ctx, "SPATIAL_INDEX")
+	// Create SPATIAL_INDEX bucket (we are the WRITER)
+	spatialBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketSpatialIndex,
+		Description: "Spatial index for geospatial queries",
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access: SPATIAL_INDEX")
+		if ctx.Err() != nil {
+			return errs.Wrap(ctx.Err(), "Component", "Start", "context cancelled during bucket creation")
+		}
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketSpatialIndex))
 	}
 	c.spatialBucket = spatialBucket
+
+	// Set up query handlers
+	if err := c.setupQueryHandlers(ctx); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "setup query handlers")
+	}
 
 	// Mark as running
 	c.running = true

@@ -363,12 +363,16 @@ func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
 
 	// Get filtered stages for this variant
 	stages := s.getStagesForVariant(variant)
+	totalStages := len(stages)
 
-	// Execute each stage
-	for _, stage := range stages {
+	// Execute each stage with progress logging
+	for i, stage := range stages {
+		fmt.Printf("\n[%d/%d] %s starting...\n", i+1, totalStages, stage.name)
 		stageStart := time.Now()
 
 		if err := stage.fn(ctx, result); err != nil {
+			duration := time.Since(stageStart)
+			fmt.Printf("[%d/%d] %s FAILED after %v: %v\n", i+1, totalStages, stage.name, duration, err)
 			result.Success = false
 			result.Error = fmt.Sprintf("%s failed: %v", stage.name, err)
 			result.EndTime = time.Now()
@@ -376,7 +380,23 @@ func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
 			return result, nil // Return result even on failure
 		}
 
-		result.Metrics[fmt.Sprintf("%s_duration_ms", stage.name)] = time.Since(stageStart).Milliseconds()
+		duration := time.Since(stageStart)
+		fmt.Printf("[%d/%d] %s completed in %v\n", i+1, totalStages, stage.name, duration)
+		result.Metrics[fmt.Sprintf("%s_duration_ms", stage.name)] = duration.Milliseconds()
+
+		// Print key metrics after data-affecting stages
+		if strings.Contains(stage.name, "send") || strings.Contains(stage.name, "validate") || strings.Contains(stage.name, "verify") {
+			if snapshot, err := s.metrics.FetchSnapshot(ctx); err == nil {
+				var entities, rules float64
+				if m, ok := snapshot.Metrics["semstreams_datamanager_entities_updated_total"]; ok {
+					entities = m.Value
+				}
+				if m, ok := snapshot.Metrics["semstreams_rule_evaluations_total"]; ok {
+					rules = m.Value
+				}
+				fmt.Printf("  Metrics: entities=%.0f, rules=%.0f\n", entities, rules)
+			}
+		}
 	}
 
 	// Capture final metrics baseline for regression detection
@@ -460,20 +480,21 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 	// Structural tier uses minimal structural.json config
 	if s.config.Variant == "structural" {
 		// Minimal components for structural/rules-only testing
-		allRequired = []string{"udp", "iot_sensor", "rule", "graph", "file"}
+		// Graph components are now modular: graph-ingest, graph-index, graph-gateway
+		allRequired = []string{"udp", "iot_sensor", "rule", "graph-ingest", "graph-index", "graph-gateway", "file"}
 	} else {
 		// Full components for statistical/semantic tiers
 		// Input components
 		inputComponents := []string{"udp"}
 		// Domain processors (document_processor, iot_sensor handle domain-specific data)
 		domainProcessors := []string{"document_processor", "iot_sensor"}
-		// Semantic components (rule processor + graph processor)
-		semanticComponents := []string{"rule", "graph"}
+		// Graph components (modular: ingest, index, gateway + optional embedding/clustering)
+		graphComponents := []string{"rule", "graph-ingest", "graph-index", "graph-gateway"}
 		// Output/storage components
 		outputComponents := []string{"file", "objectstore"}
 
 		allRequired = append(inputComponents, domainProcessors...)
-		allRequired = append(allRequired, semanticComponents...)
+		allRequired = append(allRequired, graphComponents...)
 		allRequired = append(allRequired, outputComponents...)
 	}
 
@@ -505,9 +526,12 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 	return nil
 }
 
-// executeSendMixedData sends mixed test data (entities + regular messages)
+// executeSendMixedData captures baseline metrics before data processing.
+// Test data is loaded at container startup via file_input components
+// (configs/structural.json defines file_sensors, file_documents, etc.)
+// which read from testdata/semantic/*.jsonl files.
 func (s *TieredScenario) executeSendMixedData(ctx context.Context, result *Result) error {
-	// Capture baseline BEFORE sending data
+	// Capture baseline BEFORE data is processed
 	// This allows executeValidateProcessing to wait for the delta
 	baseline, err := s.metrics.CaptureBaseline(ctx)
 	if err != nil {
@@ -516,81 +540,8 @@ func (s *TieredScenario) executeSendMixedData(ctx context.Context, result *Resul
 		s.preSendBaseline = baseline
 	}
 
-	conn, err := net.Dial("udp", s.udpAddr)
-	if err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("Failed to connect to UDP: %v", err))
-		return fmt.Errorf("UDP connection failed: %w", err)
-	}
-	defer conn.Close()
-
-	messagesSent := 0
-	telemetryCount := 0
-	regularCount := 0
-
-	for i := 0; i < s.config.MessageCount; i++ {
-		var testMsg map[string]any
-
-		// Alternate between telemetry (entities) and regular messages
-		if i%2 == 0 {
-			// Telemetry message (will be processed by graph)
-			testMsg = map[string]any{
-				"type":        "telemetry",
-				"entity_id":   fmt.Sprintf("device-%d", i/2),
-				"entity_type": "sensor",
-				"timestamp":   time.Now().Unix(),
-				"data": map[string]any{
-					"temperature": 20.0 + float64(i),
-					"humidity":    50.0 + float64(i*2),
-					"pressure":    1013.0 + float64(i)*0.5,
-					"location": map[string]any{
-						"lat": 37.7749 + float64(i)*0.001,
-						"lon": -122.4194 + float64(i)*0.001,
-					},
-				},
-				"value": i * 5,
-			}
-			telemetryCount++
-		} else {
-			// Regular message (will be filtered out of entity stream)
-			testMsg = map[string]any{
-				"type":      "regular",
-				"value":     i * 10,
-				"timestamp": time.Now().Unix(),
-				"metadata": map[string]any{
-					"source":   "test",
-					"sequence": i,
-				},
-			}
-			regularCount++
-		}
-
-		msgBytes, err := json.Marshal(testMsg)
-		if err != nil {
-			continue
-		}
-
-		_, err = conn.Write(msgBytes)
-		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to send message %d: %v", i, err))
-			continue
-		}
-
-		messagesSent++
-
-		// Wait between messages
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(s.config.MessageInterval):
-		}
-	}
-
-	result.Metrics["messages_sent"] = messagesSent
-	result.Metrics["telemetry_sent"] = telemetryCount
-	result.Metrics["regular_sent"] = regularCount
-	result.Details["data_sent"] = fmt.Sprintf(
-		"Sent %d messages: %d telemetry (entities), %d regular",
-		messagesSent, telemetryCount, regularCount)
+	result.Details["data_source"] = "file_input components (testdata/semantic/*.jsonl)"
+	result.Metrics["messages_sent"] = 0 // Data loaded via file_input, not UDP
 
 	return nil
 }
@@ -650,31 +601,47 @@ func (s *TieredScenario) executeValidateProcessing(ctx context.Context, result *
 		return fmt.Errorf("component query failed: %w", err)
 	}
 
-	// Find graph processor and verify it's healthy
-	var graphFound bool
+	// Find graph components (modular architecture) and verify they're healthy
+	// Required components: graph-ingest, graph-index, graph-gateway
+	graphComponents := map[string]bool{
+		"graph-ingest":  false,
+		"graph-index":   false,
+		"graph-gateway": false,
+	}
+	graphStatus := make(map[string]map[string]any)
+
 	for _, comp := range components {
-		if comp.Name == "graph" {
-			graphFound = true
+		if _, isGraphComp := graphComponents[comp.Name]; isGraphComp {
+			graphComponents[comp.Name] = true
 			if !comp.Healthy {
 				result.Warnings = append(
 					result.Warnings,
-					fmt.Sprintf("Graph processor not healthy: state=%s", comp.State),
+					fmt.Sprintf("Graph component %s not healthy: state=%s", comp.Name, comp.State),
 				)
 			}
-			result.Details["graph_processor_status"] = map[string]any{
+			graphStatus[comp.Name] = map[string]any{
 				"name":    comp.Name,
 				"type":    comp.Type,
 				"healthy": comp.Healthy,
 				"state":   comp.State,
 			}
-			break
 		}
 	}
 
-	if !graphFound {
-		result.Errors = append(result.Errors, "Graph processor not found")
-		return fmt.Errorf("graph processor not found")
+	// Check all required graph components are present
+	var missingGraph []string
+	for name, found := range graphComponents {
+		if !found {
+			missingGraph = append(missingGraph, name)
+		}
 	}
+
+	if len(missingGraph) > 0 {
+		result.Errors = append(result.Errors, fmt.Sprintf("Graph components not found: %v", missingGraph))
+		return fmt.Errorf("graph components not found: %v", missingGraph)
+	}
+
+	result.Details["graph_processor_status"] = graphStatus
 
 	result.Metrics["component_count"] = len(components)
 	result.Details["processing_validation"] = fmt.Sprintf(
@@ -1073,29 +1040,29 @@ func (s *TieredScenario) executeTestEmbeddingFallback(ctx context.Context, resul
 		return fmt.Errorf("component query failed: %w", err)
 	}
 
-	// Find graph processor and check its health
-	var graphHealthy bool
+	// Find graph-embedding component and check its health (for fallback validation)
+	var graphEmbeddingHealthy bool
 	for _, comp := range components {
-		if comp.Name == "graph" {
-			graphHealthy = comp.Healthy
+		if comp.Name == "graph-embedding" {
+			graphEmbeddingHealthy = comp.Healthy
 			break
 		}
 	}
 
-	// The key insight: if semembed is unavailable, graph should still be healthy (using BM25)
+	// The key insight: if semembed is unavailable, graph-embedding should still be healthy (using BM25)
 	// If semembed is available, we verify hybrid mode is working
 	result.Details["embedding_fallback_test"] = map[string]any{
-		"semembed_available": semembedAvailable,
-		"graph_healthy":      graphHealthy,
-		"fallback_mode":      !semembedAvailable,
-		"message":            "Graph processor operational regardless of semembed availability",
+		"semembed_available":      semembedAvailable,
+		"graph_embedding_healthy": graphEmbeddingHealthy,
+		"fallback_mode":           !semembedAvailable,
+		"message":                 "Graph embedding operational regardless of semembed availability",
 	}
 
-	// If semembed was unavailable but graph is healthy, BM25 fallback is working
-	if !semembedAvailable && graphHealthy {
+	// If semembed was unavailable but graph-embedding is healthy, BM25 fallback is working
+	if !semembedAvailable && graphEmbeddingHealthy {
 		result.Metrics["fallback_verified"] = 1
-		result.Details["fallback_validation"] = "BM25 fallback active - graph healthy without semembed"
-	} else if semembedAvailable && graphHealthy {
+		result.Details["fallback_validation"] = "BM25 fallback active - graph-embedding healthy without semembed"
+	} else if semembedAvailable && graphEmbeddingHealthy {
 		result.Metrics["hybrid_mode_verified"] = 1
 		result.Details["fallback_validation"] = "Hybrid mode active - semembed + BM25 available"
 	}

@@ -4,17 +4,64 @@ SemStreams processes event streams into a semantic knowledge graph stored in NAT
 
 ## System Overview
 
-```text
-Input → Domain Processor → Storage → Graph → Output/Gateway
-  │           │               │        │           │
- UDP      iot_sensor     ObjectStore  KV+      File, HTTP,
- File     document       (raw docs)   Indexes  WebSocket,
-                                               API Gateway
+SemStreams uses a distributed component architecture where specialized processors watch and react to entity changes
+in NATS KV buckets:
+
+```mermaid
+flowchart LR
+    subgraph Input
+        JS[JetStream<br/>entity.>]
+    end
+
+    subgraph Core
+        GI[graph-ingest]
+        ES[(ENTITY_STATES)]
+    end
+
+    subgraph Indexing
+        GX[graph-index]
+        OI[(Relationship<br/>Indexes)]
+    end
+
+    subgraph Analysis
+        GA[graph-anomalies]
+        GC[graph-clustering]
+        GE[graph-embedding]
+        GIS[graph-index-spatial]
+        GIT[graph-index-temporal]
+    end
+
+    subgraph Gateway
+        GW[graph-gateway]
+        API[HTTP/GraphQL/MCP]
+    end
+
+    JS --> GI
+    GI -->|writes| ES
+    ES -.->|watches| GX
+    GX -->|writes| OI
+    ES -.->|watches| GA & GC & GE & GIS & GIT
+    OI -.->|watches| GA
+    ES & OI -.->|reads| GW
+    GW --> API
+
+    style GI fill:#e1f5ff
+    style GX fill:#fff4e1
+    style GA fill:#ffe1f5
+    style GC fill:#ffe1f5
+    style GE fill:#ffe1f5
+    style GIS fill:#fff4e1
+    style GIT fill:#fff4e1
+    style GW fill:#e1ffe1
 ```
+
+Solid arrows represent writes, dashed arrows represent watches/reads.
 
 ## Components
 
-SemStreams uses a component-based architecture. Components are self-describing units that connect via NATS:
+SemStreams uses a component-based architecture. Components are self-describing units that connect via NATS.
+
+### General Component Types
 
 | Type | Examples | Role |
 |------|----------|------|
@@ -23,6 +70,25 @@ SemStreams uses a component-based architecture. Components are self-describing u
 | Output | File, HTTPPost, WebSocket | Export data to external systems |
 | Storage | ObjectStore | Persist data to NATS JetStream |
 | Gateway | HTTP, GraphQL, MCP | Expose APIs for queries and mutations |
+
+### Graph Processing Components
+
+The graph system decomposes into 8 specialized components with clear responsibilities:
+
+| Component | Purpose | Writes To | Watches |
+|-----------|---------|-----------|---------|
+| **graph-ingest** | Entity ingestion from event streams | ENTITY_STATES | - |
+| **graph-index** | Relationship indexing | OUTGOING_INDEX, INCOMING_INDEX, ALIAS_INDEX, PREDICATE_INDEX | ENTITY_STATES |
+| **graph-anomalies** | Structural analysis (k-core, pivots) | STRUCTURAL_INDEX | OUTGOING_INDEX, INCOMING_INDEX |
+| **graph-clustering** | Community detection via LPA | COMMUNITY_INDEX | ENTITY_STATES |
+| **graph-embedding** | Vector embeddings (BM25 or HTTP) | EMBEDDING_INDEX, EMBEDDINGS_CACHE | ENTITY_STATES |
+| **graph-index-spatial** | Geospatial indexing (geohash) | SPATIAL_INDEX | ENTITY_STATES |
+| **graph-index-temporal** | Time-based indexing | TEMPORAL_INDEX | ENTITY_STATES |
+| **graph-gateway** | HTTP/GraphQL/MCP query API | - | All indexes (reads only) |
+
+Each component owns exactly one set of output buckets and watches specific input buckets, enabling independent
+scaling and clear data ownership. See [Graph Components Reference](../architecture/graph-components.md) for
+detailed configuration and deployment information.
 
 ### GraphQL Access Patterns
 
@@ -39,23 +105,24 @@ The generic executor works immediately with any domain—no configuration needed
 
 ### Flow-Based Design
 
-Components connect through NATS subjects rather than direct calls:
+Components connect through NATS subjects and KV bucket watches rather than direct calls:
 
-- **Loose coupling**: Components don't know about each other—they publish/subscribe to subjects
-- **Hook points**: Add components at any point by subscribing to existing subjects
+- **Loose coupling**: Components react to bucket changes via watchers—no direct dependencies
+- **Hook points**: Add components at any point by watching existing buckets or subjects
 - **Configuration-driven**: Flows are JSON configs declaring which components to use and how to connect them
+- **Single ownership**: Each KV bucket has exactly one writer component, preventing races
 
-The Graph processor is central to semantic processing, but it's one component among many. You can build flows with just protocol-layer components (UDP → JSONMap → File) or add semantic processing (UDP → Graph → GraphQL).
+The graph processing components work together to build a semantic knowledge graph, but you can build simpler flows
+with just protocol-layer components (UDP → JSONMap → File) or add semantic processing with the graph suite.
 
 ## Processing Flow
 
+The component-based architecture processes entities through multiple stages:
+
 ### 1. Message Arrival
 
-Messages arrive via NATS JetStream. Each message contains a payload that your processor understands.
-
-### 2. Transformation (Your Code)
-
-Your processor implements the `Graphable` interface to transform incoming data:
+Messages arrive via NATS JetStream on the `entity.>` subject. Each message contains a payload implementing the
+`Graphable` interface:
 
 ```go
 type Graphable interface {
@@ -64,11 +131,18 @@ type Graphable interface {
 }
 ```
 
-This is where domain knowledge lives. Generic processors cannot make semantic decisions about your data.
+Your domain processor transforms raw data into this format—this is where domain knowledge lives.
 
-### 3. Entity Storage
+### 2. Entity Ingestion (graph-ingest)
 
-Entities are stored in `ENTITY_STATES` with version tracking:
+The `graph-ingest` component:
+
+- Consumes messages from the `entity.>` JetStream subject
+- Validates entity IDs against the 6-part format
+- Optionally infers hierarchical relationships (if `enable_hierarchy: true`)
+- Stores entities in `ENTITY_STATES` with version tracking
+
+Example entity state:
 
 ```json
 {
@@ -83,28 +157,30 @@ Entities are stored in `ENTITY_STATES` with version tracking:
 
 Updates use compare-and-swap with version numbers (optimistic concurrency).
 
-### 4. Index Maintenance
+### 3. Relationship Indexing (graph-index)
 
-Core indexes are maintained automatically via KV watchers:
+The `graph-index` component watches `ENTITY_STATES` and maintains relationship indexes:
 
-| Index | Question Answered |
-|-------|-------------------|
-| `PREDICATE_INDEX` | "All entities with this property" |
-| `INCOMING_INDEX` | "Who references this entity?" |
-| `OUTGOING_INDEX` | "What does this entity reference?" |
-| `ALIAS_INDEX` | "Resolve friendly name to entity ID" |
-| `SPATIAL_INDEX` | "Entities near this location" |
-| `TEMPORAL_INDEX` | "Entities in this time range" |
+| Index | Question Answered | Updated By |
+|-------|-------------------|------------|
+| `OUTGOING_INDEX` | "What does this entity reference?" | graph-index |
+| `INCOMING_INDEX` | "Who references this entity?" | graph-index |
+| `PREDICATE_INDEX` | "All entities with this property" | graph-index |
+| `ALIAS_INDEX` | "Resolve friendly name to entity ID" | graph-index |
 
-Optional indexes (enabled via configuration):
+Indexes update asynchronously after entity saves. There's a brief window (milliseconds) where an entity exists but
+isn't fully indexed.
 
-| Index | Question Answered | Requirements |
-|-------|-------------------|--------------|
-| `STRUCTURAL_INDEX` | "Core connectivity and distance estimation" | Tier 0 (Structural) |
-| `EMBEDDING_INDEX` | "Semantically similar entities" | Tier 1+ (Statistical/Semantic) |
-| `COMMUNITY_INDEX` | "What community does this entity belong to?" | Tier 1+ (Statistical/Semantic) |
+### 4. Specialized Indexing (Optional)
 
-Indexes update asynchronously after entity saves. There's a brief window where an entity exists but isn't fully indexed.
+Additional indexing components run independently:
+
+| Index | Question Answered | Updated By | Input |
+|-------|-------------------|------------|-------|
+| `SPATIAL_INDEX` | "Entities near this location" | graph-index-spatial | ENTITY_STATES |
+| `TEMPORAL_INDEX` | "Entities in this time range" | graph-index-temporal | ENTITY_STATES |
+
+These components watch `ENTITY_STATES` and maintain their indexes in parallel with relationship indexing.
 
 ### 5. Rules Evaluation
 
@@ -126,119 +202,188 @@ Stateful rules evaluate conditions against entity state:
 
 Rules can add/remove triples and publish messages, creating derived facts dynamically.
 
-### 6. Structural Indexing (Optional)
+### 6. Structural Analysis (graph-anomalies)
 
-When enabled, structural indexing computes graph-theoretic properties:
+The `graph-anomalies` component watches `OUTGOING_INDEX` and `INCOMING_INDEX` to compute graph-theoretic properties:
 
-- **K-core decomposition**: Identifies the dense backbone of the graph. Each entity gets a core number indicating how central and well-connected it is. Higher core = more central.
-- **Pivot-based distances**: Pre-computes distances to landmark nodes for O(1) distance estimation between any two entities.
+- **K-core decomposition**: Identifies the dense backbone of the graph. Each entity gets a core number indicating
+  how central and well-connected it is. Higher core = more central.
+- **Pivot-based distances**: Pre-computes distances to landmark nodes for O(1) distance estimation between any two
+  entities.
 
-These indices enable:
+These computations run periodically (default: 1 hour) and store results in `STRUCTURAL_INDEX`.
+
+Structural analysis enables:
+
 - Filtering noise (exclude peripheral entities from search results)
 - Path query optimization (prune unreachable candidates early)
 - Anomaly detection (core demotion, isolation detection)
 
-Structural indexing requires only NATS—no external services.
+Structural analysis requires only NATS—no external services.
 
-### 7. Community Detection (Optional)
+### 7. Community Detection (graph-clustering)
 
-Entities that reference each other cluster into communities. Detection runs:
+The `graph-clustering` component watches `ENTITY_STATES` and groups entities into communities using the Label
+Propagation Algorithm (LPA). Detection runs:
 
 - After a threshold of entity changes (e.g., 100)
 - At configured intervals (e.g., 30s)
-- Using Label Propagation Algorithm (LPA)
 
-Communities enable GraphRAG-style queries at different granularity levels.
+Communities are stored in `COMMUNITY_INDEX` and enable GraphRAG-style queries at different granularity levels.
 
-### 8. Anomaly Detection (Optional)
+### 8. Embedding Generation (graph-embedding)
 
-With structural indexing enabled, SemStreams can detect structural anomalies:
+The `graph-embedding` component watches `ENTITY_STATES` and generates vector embeddings for semantic similarity:
 
-- **Core isolation**: Entities disconnected from their expected peer group
-- **Core demotion**: Entities losing connectivity over time (core number decreasing)
+- **BM25 embedder**: Statistical text similarity (384 dimensions, no external dependencies)
+- **HTTP embedder**: Neural embeddings via external service (e.g., all-MiniLM-L6-v2)
 
-With embeddings also enabled (Tier 1+):
-
-- **Semantic-structural gaps**: Entities that are semantically similar but lack graph connections—potential missing relationships
+Embeddings are stored in `EMBEDDING_INDEX` with caching in `EMBEDDINGS_CACHE`. This enables semantic search and
+detection of semantic-structural gaps (entities that are semantically similar but lack graph connections).
 
 ## State: NATS KV Buckets
 
-All state lives in NATS JetStream KV buckets.
+All state lives in NATS JetStream KV buckets. Each bucket has exactly one writer component to prevent races.
 
-**Core buckets** (always created):
+**Core buckets** (required for basic graph operations):
 
-| Bucket | Contents |
-|--------|----------|
-| `ENTITY_STATES` | Entity records with triples and version |
-| `PREDICATE_INDEX` | Predicate → entity IDs |
-| `INCOMING_INDEX` | Entity ID → referencing entities |
-| `OUTGOING_INDEX` | Entity ID → referenced entities |
-| `ALIAS_INDEX` | Alias → entity ID |
-| `SPATIAL_INDEX` | Geohash → entity IDs |
-| `TEMPORAL_INDEX` | Time bucket → entity IDs |
-| `RULE_STATE` | Rule evaluation state per entity |
+| Bucket | Writer Component | Contents |
+|--------|------------------|----------|
+| `ENTITY_STATES` | graph-ingest | Entity records with triples and version |
+| `OUTGOING_INDEX` | graph-index | Entity ID → referenced entities |
+| `INCOMING_INDEX` | graph-index | Entity ID → referencing entities |
+| `PREDICATE_INDEX` | graph-index | Predicate → entity IDs |
+| `ALIAS_INDEX` | graph-index | Alias → entity ID |
 
-**Optional buckets** (created when features enabled):
+**Optional buckets** (created when specific components are deployed):
 
-| Bucket | Contents | Feature |
-|--------|----------|---------|
-| `STRUCTURAL_INDEX` | K-core levels and pivot distances | Tier 0 (Structural) |
-| `EMBEDDING_INDEX` | Entity ID → embedding vector | Tier 1+ (Statistical/Semantic) |
-| `COMMUNITY_INDEX` | Community records with members and summaries | Tier 1+ (Statistical/Semantic) |
+| Bucket | Writer Component | Contents | Required For |
+|--------|------------------|----------|--------------|
+| `SPATIAL_INDEX` | graph-index-spatial | Geohash → entity IDs | Location queries |
+| `TEMPORAL_INDEX` | graph-index-temporal | Time bucket → entity IDs | Time-range queries |
+| `STRUCTURAL_INDEX` | graph-anomalies | K-core levels and pivot distances | Structural analysis |
+| `COMMUNITY_INDEX` | graph-clustering | Community records with members | Community detection |
+| `EMBEDDING_INDEX` | graph-embedding | Entity ID → embedding vector | Semantic similarity |
+| `EMBEDDINGS_CACHE` | graph-embedding | Cached entity embeddings | Embedding performance |
+| `EMBEDDING_DEDUP` | graph-embedding | Deduplication tracking | Embedding efficiency |
+
+See [Graph Components Reference](../architecture/graph-components.md#kv-bucket-ownership-table) for complete
+ownership details and reader/writer relationships.
 
 ## Data Flow Example
 
-A sensor reading arrives:
+A sensor reading flows through the component architecture:
 
-```text
-1. NATS message: {"device_id": "sensor-042", "reading": 23.5, ...}
-                              │
-2. Processor transforms:      ▼
-   EntityID: "acme.logistics.environmental.sensor.temperature.sensor-042"
-   Triples: [sensor.measurement.celsius: 23.5, geo.location.zone: zone-id]
-                              │
-3. DataManager stores:        ▼
-   ENTITY_STATES["acme.logistics..."] = {triples, version: 6}
-                              │
-4. IndexManager updates:      ▼
-   PREDICATE_INDEX["sensor.measurement.celsius"] += entity_id
-   INCOMING_INDEX[zone-id] += entity_id
-   OUTGOING_INDEX[entity_id] += zone-id
-                              │
-5. RuleProcessor evaluates:   ▼
-   No rules matched (or matched → add_triple/publish)
-                              │
-6. Entity change count: 99 → 100, threshold reached
-                              │
-7. (If enabled) Structural indexing:
-   K-core recomputed → core numbers updated
-   Pivot distances recalculated
-                              │
-8. (If enabled) Community detection:
-   LPA groups entities → communities updated
-   Statistical summaries generated
-   LLM summaries queued (if Tier 2)
-                              │
-9. (If enabled) Anomaly detection:
-   Check for core isolation/demotion
-   Check for semantic-structural gaps (Tier 1+)
+```mermaid
+sequenceDiagram
+    participant JS as JetStream
+    participant Ingest as graph-ingest
+    participant ES as ENTITY_STATES
+    participant Index as graph-index
+    participant Idx as Index Buckets
+    participant Analysis as graph-anomalies
+    participant Gateway as graph-gateway
+
+    Note over JS: Message arrives:<br/>{"device_id": "sensor-042", "reading": 23.5}
+
+    JS->>Ingest: entity.sensor.temperature
+    Ingest->>Ingest: Transform to EntityState
+    Ingest->>ES: PUT entity (v6)
+    Note over ES: KV watch triggers
+
+    ES-->>Index: Watch notification
+    Index->>Index: Extract relationships
+    Index->>Idx: Update OUTGOING_INDEX
+    Index->>Idx: Update INCOMING_INDEX
+    Index->>Idx: Update PREDICATE_INDEX
+    Note over Idx: KV watch triggers
+
+    Idx-->>Analysis: Watch notification
+    Analysis->>Analysis: Queue for next batch
+    Note over Analysis: Runs every 1h (configurable)
+
+    Gateway->>ES: Query entity
+    Gateway->>Idx: Query relationships
+    Gateway->>Analysis: Query structural data
+    Gateway-->>Gateway: Compose response
 ```
+
+Step-by-step breakdown:
+
+1. **Message arrives**: JetStream receives entity message on `entity.sensor.temperature`
+2. **graph-ingest**: Transforms message into EntityState, validates ID format
+3. **ENTITY_STATES**: Entity stored with version 6 (optimistic concurrency)
+4. **graph-index**: Watches ENTITY_STATES, extracts triples, updates relationship indexes
+5. **graph-anomalies**: Watches index buckets, queues entity for next structural analysis batch
+6. **graph-gateway**: Reads from all buckets to compose query responses
+
+All components operate asynchronously—entity queries return immediately, while index updates complete within
+milliseconds.
 
 ## Consistency Model
 
-| Operation | Consistency |
-|-----------|-------------|
-| Entity by ID | Immediate |
-| Index queries | Eventually consistent (milliseconds) |
-| Structural indices | Batch (configurable interval, default 1h) |
-| Community membership | Batch (seconds to minutes) |
-| Community summaries | Async (depends on LLM) |
-| Anomaly detection | Batch (runs after structural/community updates) |
+Different components provide different consistency guarantees based on their processing model:
+
+| Component | Consistency Level | Latency |
+|-----------|------------------|---------|
+| graph-ingest (ENTITY_STATES) | Immediate | <1ms |
+| graph-index (relationship indexes) | Eventually consistent | <10ms |
+| graph-index-spatial/temporal | Eventually consistent | <10ms |
+| graph-anomalies (structural analysis) | Batch | Configurable (default: 1h) |
+| graph-clustering (communities) | Batch | Configurable (default: 30s) |
+| graph-embedding (embeddings) | Eventually consistent | <100ms (BM25), varies (HTTP) |
+
+Queries through `graph-gateway` read current bucket state, so they may see entities before their indexes are
+complete. This trade-off prioritizes write throughput and component independence.
+
+## Component Deployment Patterns
+
+The component architecture supports flexible deployment strategies:
+
+### Minimal Deployment (Core Graph Only)
+
+Deploy just the essential components for basic graph operations:
+
+- `graph-ingest` - Entity ingestion
+- `graph-index` - Relationship indexing
+- `graph-gateway` - Query API
+
+This provides entity storage, relationship traversal, and GraphQL queries without advanced features.
+
+### Tiered Deployment
+
+Add components incrementally based on capability requirements:
+
+**Tier 0 (Structural)**:
+
+- Add `graph-anomalies` for k-core analysis and structural properties
+
+**Tier 1 (Statistical)**:
+
+- Add `graph-clustering` for community detection
+- Add `graph-embedding` with BM25 for statistical similarity
+
+**Tier 2 (Semantic)**:
+
+- Configure `graph-embedding` with HTTP embedder for neural embeddings
+- Enable LLM summarization in `graph-clustering`
+
+### Specialized Deployments
+
+Add optional indexing components based on query patterns:
+
+- `graph-index-spatial` for geolocation queries
+- `graph-index-temporal` for time-range queries
+
+See [Configuration](06-configuration.md) for complete deployment examples and [Graph Components
+Reference](../architecture/graph-components.md) for detailed component specifications.
 
 ## What SemStreams Is Not
 
-- **Not a database replacement**: No arbitrary SQL or ACID transactions—but dotted notation with NATS subject/KV wildcards provides SQL-like query basics (prefix matching, pattern queries)
-- **Hybrid streaming/batch**: Entity updates flow continuously, but community detection and summarization run periodically (configurable intervals)
+- **Not a database replacement**: No arbitrary SQL or ACID transactions—but dotted notation with NATS subject/KV
+  wildcards provides SQL-like query basics (prefix matching, pattern queries)
+- **Hybrid streaming/batch**: Entity updates flow continuously, but analysis components (anomalies, clustering) run
+  periodically (configurable intervals)
 - **Not a time-series DB**: Use InfluxDB/Prometheus for metrics
 - **Not full-text search**: Use Elasticsearch for document search
 
@@ -257,3 +402,5 @@ New to knowledge graphs or event-driven systems? See [Concepts](../concepts/) fo
 - [Graphable Interface](03-graphable-interface.md) - Implement entity transformation
 - [Vocabulary](04-vocabulary.md) - Design your predicates
 - [Configuration](06-configuration.md) - Choose your capability level
+- [Graph Components Reference](../architecture/graph-components.md) - Detailed component specifications and
+  deployment guidance

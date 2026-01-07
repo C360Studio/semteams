@@ -16,6 +16,7 @@ import (
 	"github.com/c360/semstreams/config"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -38,10 +39,11 @@ type Component struct {
 	started      bool
 
 	// core dependencies
-	store      *Store
-	natsClient *natsclient.Client
-	config     Config
-	logger     *slog.Logger
+	store           *Store
+	natsClient      *natsclient.Client
+	metricsRegistry *metric.MetricsRegistry
+	config          Config
+	logger          *slog.Logger
 
 	// NATS subscriptions
 	apiSub   *nats.Subscription
@@ -124,11 +126,12 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	instanceName := "objectstore"
 
 	return &Component{
-		instanceName: instanceName,
-		enabled:      true,
-		config:       cfg,
-		natsClient:   deps.NATSClient,
-		logger:       deps.GetLogger(),
+		instanceName:    instanceName,
+		enabled:         true,
+		config:          cfg,
+		natsClient:      deps.NATSClient,
+		metricsRegistry: deps.MetricsRegistry,
+		logger:          deps.GetLogger(),
 	}, nil
 }
 
@@ -141,8 +144,8 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.logger.Debug("Creating ObjectStore", "name", c.instanceName, "bucket", c.config.BucketName)
 
-	// Create the underlying ObjectStore
-	store, err := NewStoreWithConfig(ctx, c.natsClient, c.config)
+	// Create the underlying ObjectStore with metrics support
+	store, err := NewStoreWithConfigAndMetrics(ctx, c.natsClient, c.config, c.metricsRegistry)
 	if err != nil {
 		c.logger.Error(
 			"Failed to create ObjectStore",

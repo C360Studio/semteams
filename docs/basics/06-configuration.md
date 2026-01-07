@@ -12,18 +12,131 @@ These are typical configuration presets. Mix and match features based on your ne
 | **Native** | Tier 1 | + BM25 search, statistical communities | Same as above |
 | **LLM** | Tier 2 | + Neural embeddings, LLM summaries | + semembed + LLM service |
 
-> **Default**: Native configuration. The Graph processor enables BM25 embeddings by default. For Rules-Only (no search), explicitly disable embeddings in your config.
+> **Default**: Native configuration. The Graph processor enables BM25 embeddings by default. For Rules-Only
+(no search), explicitly disable embeddings in your config.
+
+## Component-Based Deployment
+
+SemStreams uses a component-based architecture where capabilities are provided by specialized components
+rather than a monolithic processor. Each tier requires a specific set of components.
+
+### Component to Tier Mapping
+
+| Component | Tier | Purpose | Output Buckets |
+|-----------|------|---------|----------------|
+| **graph-ingest** | Core (All) | Entity ingestion | `ENTITY_STATES` |
+| **graph-index** | Core (All) | Relationship indexing | `OUTGOING_INDEX`, `INCOMING_INDEX`, `ALIAS_INDEX`, `PREDICATE_INDEX` |
+| **graph-gateway** | Core (All) | Query gateway | N/A (read-only) |
+| **graph-anomalies** | Structural (Tier 0+) | K-core analysis | `STRUCTURAL_INDEX` |
+| **graph-clustering** | Statistical (Tier 1+) | Community detection | `COMMUNITY_INDEX` |
+| **graph-embedding** | Statistical/Semantic (Tier 1+) | Vector embeddings | `EMBEDDING_INDEX`, `EMBEDDINGS_CACHE`, `EMBEDDING_DEDUP` |
+| **graph-index-spatial** | Semantic (Tier 2) | Geospatial indexing | `SPATIAL_INDEX` |
+| **graph-index-temporal** | Semantic (Tier 2) | Temporal indexing | `TEMPORAL_INDEX` |
+
+### Deployment Configurations by Tier
+
+**Rules-Only (Tier 0)**:
+
+```text
+graph-ingest → graph-index → graph-gateway
+              ↓
+         graph-anomalies
+```
+
+**Statistical (Tier 1)**:
+
+```text
+graph-ingest → graph-index → graph-gateway
+              ↓            ↓
+         graph-anomalies  graph-clustering
+              ↓
+         graph-embedding (BM25)
+```
+
+**Semantic (Tier 2)**:
+
+```text
+graph-ingest → graph-index → graph-gateway
+              ↓            ↓
+         graph-anomalies  graph-clustering
+              ↓
+         graph-embedding (HTTP)
+              ↓
+     graph-index-spatial
+              ↓
+     graph-index-temporal
+```
+
+### Component Dependencies
+
+Components must start in the correct order based on their bucket dependencies:
+
+| Component | Depends On | Reason |
+|-----------|------------|--------|
+| graph-ingest | None | Creates `ENTITY_STATES` |
+| graph-index | graph-ingest | Watches `ENTITY_STATES` |
+| graph-gateway | All others | Reads all buckets |
+| graph-anomalies | graph-index | Watches `OUTGOING_INDEX`, `INCOMING_INDEX` |
+| graph-clustering | graph-ingest | Watches `ENTITY_STATES` |
+| graph-embedding | graph-ingest | Watches `ENTITY_STATES` |
+| graph-index-spatial | graph-ingest | Watches `ENTITY_STATES` |
+| graph-index-temporal | graph-ingest | Watches `ENTITY_STATES` |
+
+**Recommended Startup Order**:
+
+1. graph-ingest
+2. graph-index
+3. graph-anomalies, graph-clustering, graph-embedding, graph-index-spatial, graph-index-temporal (parallel)
+4. graph-gateway (last)
+
+### Port Configuration
+
+Each component exposes query capabilities via NATS request-reply on configurable ports:
+
+```json
+{
+  "type": "graph-ingest",
+  "config": {
+    "ports": {
+      "nats_request_port": "graph.ingest.query",
+      "inputs": [
+        {"name": "entity_stream", "type": "jetstream", "subject": "entity.>"}
+      ],
+      "outputs": [
+        {"name": "entity_states", "type": "kv-write", "subject": "ENTITY_STATES"}
+      ]
+    }
+  }
+}
+```
+
+**Default Query Ports**:
+
+| Component | Query Subject | Operations |
+|-----------|---------------|------------|
+| graph-ingest | `graph.ingest.query.*` | `getEntity`, `getBatch` |
+| graph-index | `graph.index.query.*` | `getOutgoing`, `getIncoming`, `getAlias`, `getPredicate` |
+
+For full component details, see [Graph Components Reference](../architecture/graph-components.md).
 
 ## Rules-Only Configuration
 
-Deterministic processing with stateful rules. No search, no external services. **Requires explicit configuration** to disable default BM25 embeddings.
+Deterministic processing with stateful rules. No search, no external services.
+
+### Required Components
+
+- **graph-ingest** - Entity ingestion
+- **graph-index** - Relationship indexing
+- **graph-anomalies** - K-core structural analysis
+- **graph-gateway** - Query interface
 
 ### Capabilities
 
 - Stateful rules (OnEnter/OnExit/WhileTrue)
 - Graph actions: `add_triple`, `remove_triple`, `publish`
-- Index queries: predicate, alias, spatial, temporal
+- Index queries: predicate, alias, outgoing, incoming
 - PathRAG: Traverse explicit edges
+- K-core decomposition for anomaly detection
 
 ### Not Available
 
@@ -32,14 +145,23 @@ Deterministic processing with stateful rules. No search, no external services. *
 - Semantic search
 - GraphRAG
 
-### Configuration
+### Example Configuration
+
+**graph-embedding component** (disabled or not deployed):
 
 ```json
 {
-  "clustering": { "enabled": false },
-  "indexer": {
-    "embedding": { "enabled": false }
-  }
+  "type": "graph-embedding",
+  "enabled": false
+}
+```
+
+**graph-clustering component** (disabled or not deployed):
+
+```json
+{
+  "type": "graph-clustering",
+  "enabled": false
 }
 ```
 
@@ -53,6 +175,13 @@ Deterministic processing with stateful rules. No search, no external services. *
 ## Native Inference Configuration
 
 Statistical capabilities that run locally. No external services required.
+
+### Required Components
+
+All Rules-Only components, plus:
+
+- **graph-clustering** - Label Propagation Algorithm (LPA) community detection
+- **graph-embedding** - BM25 statistical embeddings
 
 ### Native Capabilities
 
@@ -68,13 +197,53 @@ Everything in Rules-Only, plus:
 
 - Neural embeddings
 - LLM summaries
+- Spatial indexing
+- Temporal indexing
 
-### Configuration
+### Example Configuration
+
+**graph-embedding component**:
 
 ```json
 {
-  "embedding": { "provider": "bm25" },
-  "clustering": { "enabled": true }
+  "type": "graph-embedding",
+  "config": {
+    "embedder_type": "bm25",
+    "batch_size": 50,
+    "cache_ttl": "15m",
+    "ports": {
+      "inputs": [
+        {"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"}
+      ],
+      "outputs": [
+        {"name": "embeddings", "type": "kv-write", "subject": "EMBEDDINGS_CACHE"},
+        {"name": "embedding_index", "type": "kv-write", "subject": "EMBEDDING_INDEX"},
+        {"name": "embedding_dedup", "type": "kv-write", "subject": "EMBEDDING_DEDUP"}
+      ]
+    }
+  }
+}
+```
+
+**graph-clustering component**:
+
+```json
+{
+  "type": "graph-clustering",
+  "config": {
+    "detection_interval": "30s",
+    "min_community_size": 3,
+    "max_iterations": 100,
+    "enable_llm": false,
+    "ports": {
+      "inputs": [
+        {"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"}
+      ],
+      "outputs": [
+        {"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"}
+      ]
+    }
+  }
 }
 ```
 
@@ -89,6 +258,18 @@ Everything in Rules-Only, plus:
 
 Full semantic capabilities with external ML services.
 
+### Required Components
+
+All Native components, plus:
+
+- **graph-embedding** - HTTP-based neural embeddings (not BM25)
+- **graph-index-spatial** - Geospatial indexing
+- **graph-index-temporal** - Temporal indexing
+
+**Updated components**:
+
+- **graph-clustering** - With LLM summarization enabled
+
 ### Capabilities
 
 Everything in Native, plus:
@@ -97,30 +278,105 @@ Everything in Native, plus:
 - LLM summaries (semantic community descriptions)
 - Hybrid search (neural + BM25 + filters)
 - GraphRAG with LLM-enhanced summaries
+- Geospatial queries (geohash-based)
+- Temporal queries (time-bucketed)
 
-### Configuration
+### Example Configuration
+
+**graph-embedding component** (HTTP mode):
 
 ```json
 {
-  "embedding": {
-    "provider": "http",
-    "http_endpoint": "http://semembed:8081/v1",
-    "http_model": "BAAI/bge-small-en-v1.5"
-  },
-  "clustering": {
-    "llm": {
-      "base_url": "http://seminstruct:8083/v1",
-      "model": "default"
+  "type": "graph-embedding",
+  "config": {
+    "embedder_type": "http",
+    "embedder_url": "http://semembed:8081/v1",
+    "batch_size": 50,
+    "cache_ttl": "15m",
+    "ports": {
+      "inputs": [
+        {"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"}
+      ],
+      "outputs": [
+        {"name": "embeddings", "type": "kv-write", "subject": "EMBEDDINGS_CACHE"},
+        {"name": "embedding_index", "type": "kv-write", "subject": "EMBEDDING_INDEX"},
+        {"name": "embedding_dedup", "type": "kv-write", "subject": "EMBEDDING_DEDUP"}
+      ]
     }
   }
 }
 ```
 
-### Services Required
+**graph-clustering component** (with LLM):
+
+```json
+{
+  "type": "graph-clustering",
+  "config": {
+    "detection_interval": "30s",
+    "min_community_size": 3,
+    "max_iterations": 100,
+    "enable_llm": true,
+    "llm_endpoint": "http://seminstruct:8083/v1",
+    "ports": {
+      "inputs": [
+        {"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"}
+      ],
+      "outputs": [
+        {"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"}
+      ]
+    }
+  }
+}
+```
+
+**graph-index-spatial component**:
+
+```json
+{
+  "type": "graph-index-spatial",
+  "config": {
+    "geohash_precision": 6,
+    "workers": 4,
+    "batch_size": 100,
+    "ports": {
+      "inputs": [
+        {"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"}
+      ],
+      "outputs": [
+        {"name": "spatial_index", "type": "kv-write", "subject": "SPATIAL_INDEX"}
+      ]
+    }
+  }
+}
+```
+
+**graph-index-temporal component**:
+
+```json
+{
+  "type": "graph-index-temporal",
+  "config": {
+    "time_resolution": "hour",
+    "workers": 4,
+    "batch_size": 100,
+    "ports": {
+      "inputs": [
+        {"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"}
+      ],
+      "outputs": [
+        {"name": "temporal_index", "type": "kv-write", "subject": "TEMPORAL_INDEX"}
+      ]
+    }
+  }
+}
+```
+
+### External Services Required
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| semembed | 8081 | Neural embedding generation |
+| semembed | 8081 | Neural embedding generation (BAAI/bge-small-en-v1.5) |
 | semshimmy | 8080 | LLM inference backend |
 | seminstruct | 8083 | OpenAI-compatible proxy |
 
@@ -129,6 +385,7 @@ Everything in Native, plus:
 - Production with full semantic capabilities
 - Dense vector search required for your domain
 - LLM-enhanced summaries for knowledge graph enrichment
+- Geospatial or temporal queries needed
 
 ## Processing: Hotpath vs Async
 

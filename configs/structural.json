@@ -463,7 +463,7 @@
             {
               "name": "entity_states",
               "subject": "ENTITY_STATES",
-              "type": "kv",
+              "type": "kv-write",
               "description": "Entity state KV bucket"
             }
           ]
@@ -514,6 +514,83 @@
         },
         "workers": 4,
         "batch_size": 50
+      }
+    },
+    "graph-index-spatial": {
+      "type": "processor",
+      "name": "graph-index-spatial",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes for spatial indexing"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "spatial_index",
+              "subject": "SPATIAL_INDEX",
+              "type": "kv",
+              "description": "Spatial index (geohash to entities)"
+            }
+          ]
+        },
+        "geohash_precision": 6,
+        "workers": 2,
+        "batch_size": 50
+      }
+    },
+    "graph-index-temporal": {
+      "type": "processor",
+      "name": "graph-index-temporal",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes for temporal indexing"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "temporal_index",
+              "subject": "TEMPORAL_INDEX",
+              "type": "kv",
+              "description": "Temporal index (time buckets to entities)"
+            }
+          ]
+        },
+        "time_resolution": "hour",
+        "workers": 2,
+        "batch_size": 50
+      }
+    },
+    "graph-query": {
+      "type": "processor",
+      "name": "graph-query",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "query_requests",
+              "subject": "graph.query.>",
+              "type": "nats-request",
+              "description": "Query requests from gateway"
+            }
+          ],
+          "outputs": []
+        },
+        "request_timeout": "30s",
+        "max_traversal_depth": 5,
+        "max_traversal_nodes": 100
       }
     },
     "graph-gateway": {

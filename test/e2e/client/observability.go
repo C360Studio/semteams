@@ -363,12 +363,16 @@ func (c *ObservabilityClient) CheckFlowHealth(ctx context.Context) error {
 }
 
 // isExpectedDisconnectedComponent returns true for components that are expected
-// to not have stream connections (e.g., gateways that use request/response patterns)
+// to not have stream connections (e.g., gateways and coordinators that use request/response patterns)
 func isExpectedDisconnectedComponent(name string) bool {
 	// HTTP gateway components query via NATS request/response, not stream subscriptions
 	// They appear "disconnected" in the flow graph but this is expected behavior
 	// Note: GraphQL/MCP gateways are now output ports of graph-processor, not standalone components
 	if len(name) > 8 && name[len(name)-8:] == "-gateway" {
+		return true
+	}
+	// Query coordinator uses request/reply to other components, not stream subscriptions
+	if name == "graph-query" {
 		return true
 	}
 	return false

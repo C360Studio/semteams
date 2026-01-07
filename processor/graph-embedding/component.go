@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/graph/embedding"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
@@ -48,13 +49,13 @@ func (c *Config) Validate() error {
 	// Validate EMBEDDINGS_CACHE output exists
 	hasEmbeddingsCache := false
 	for _, output := range c.Ports.Outputs {
-		if output.Subject == "EMBEDDINGS_CACHE" {
+		if output.Subject == graph.BucketEmbeddingsCache {
 			hasEmbeddingsCache = true
 			break
 		}
 	}
 	if !hasEmbeddingsCache {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "EMBEDDINGS_CACHE output required")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", fmt.Sprintf("%s output required", graph.BucketEmbeddingsCache))
 	}
 
 	// Validate embedder type
@@ -105,7 +106,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			}
 		}
@@ -114,7 +115,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "embeddings",
 					Type:    "kv-write",
-					Subject: "EMBEDDINGS_CACHE",
+					Subject: graph.BucketEmbeddingsCache,
 				},
 			}
 		}
@@ -129,14 +130,14 @@ func DefaultConfig() Config {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:    "embeddings",
 					Type:    "kv-write",
-					Subject: "EMBEDDINGS_CACHE",
+					Subject: graph.BucketEmbeddingsCache,
 				},
 			},
 		},
@@ -190,6 +191,7 @@ func CreateGraphEmbedding(rawConfig json.RawMessage, deps component.Dependencies
 	if deps.NATSClient == nil {
 		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "CreateGraphEmbedding", "factory", "NATSClient required")
 	}
+	natsClient := deps.NATSClient
 
 	// Parse configuration
 	var config Config
@@ -214,7 +216,7 @@ func CreateGraphEmbedding(rawConfig json.RawMessage, deps component.Dependencies
 	comp := &Component{
 		name:       "graph-embedding",
 		config:     config,
-		natsClient: deps.NATSClient,
+		natsClient: natsClient,
 		logger:     logger,
 	}
 
@@ -396,18 +398,23 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
-	// Initialize JetStream
-	js, err := c.natsClient.JetStream()
-	if err != nil {
+	// Check context before proceeding
+	if err := ctx.Err(); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+		return errs.Wrap(err, "Component", "Start", "context cancelled")
 	}
 
-	// Get embedding bucket
-	embeddingBucket, err := js.KeyValue(ctx, "EMBEDDINGS_CACHE")
+	// Create embedding bucket (we are the WRITER)
+	embeddingBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEmbeddingsCache,
+		Description: "Entity embedding cache",
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access: EMBEDDINGS_CACHE")
+		if ctx.Err() != nil {
+			return errs.Wrap(ctx.Err(), "Component", "Start", "context cancelled during bucket creation")
+		}
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketEmbeddingsCache))
 	}
 	c.embeddingBucket = embeddingBucket
 
@@ -440,17 +447,24 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "Start", fmt.Sprintf("unknown embedder type: %s", c.config.EmbedderType))
 	}
 
-	// Get EMBEDDING_INDEX bucket for storage (for dedup bucket, use simplified approach)
-	embeddingIndexBucket, err := js.KeyValue(ctx, "EMBEDDING_INDEX")
+	// Create EMBEDDING_INDEX bucket for storage (we are the WRITER)
+	embeddingIndexBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEmbeddingIndex,
+		Description: "Entity embedding index",
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access: EMBEDDING_INDEX")
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketEmbeddingIndex))
 	}
 
-	embeddingDedupBucket, err := js.KeyValue(ctx, "EMBEDDING_DEDUP")
+	// Create EMBEDDING_DEDUP bucket (we are the WRITER)
+	embeddingDedupBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEmbeddingDedup,
+		Description: "Entity embedding deduplication",
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access: EMBEDDING_DEDUP")
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketEmbeddingDedup))
 	}
 
 	// Create storage
@@ -464,6 +478,12 @@ func (c *Component) Start(ctx context.Context) error {
 	if err := c.worker.Start(ctx); err != nil {
 		cancel()
 		return errs.Wrap(err, "Component", "Start", "worker start")
+	}
+
+	// Set up query handlers
+	if err := c.setupQueryHandlers(ctx); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "setup query handlers")
 	}
 
 	// Mark as running

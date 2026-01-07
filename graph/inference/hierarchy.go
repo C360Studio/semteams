@@ -49,6 +49,11 @@ type HierarchyInference struct {
 	containerCache   map[string]bool
 	containerCacheMu sync.RWMutex
 
+	// Cache of entities already processed for hierarchy inference
+	// Prevents duplicate edge creation when watching entities
+	processedCache   map[string]bool
+	processedCacheMu sync.RWMutex
+
 	// Metrics
 	containersCreated atomic.Int64
 	edgesCreated      atomic.Int64
@@ -126,6 +131,7 @@ func NewHierarchyInference(
 		config:         config,
 		logger:         logger,
 		containerCache: make(map[string]bool),
+		processedCache: make(map[string]bool),
 		workerCount:    2, // Default: 2 workers for hierarchy inference
 	}
 }
@@ -341,12 +347,15 @@ func (h *HierarchyInference) ensureContainerExists(ctx context.Context, containe
 	return nil
 }
 
-// ClearCache resets the container cache. Call when containers might be deleted.
+// ClearCache resets the container and processed caches. Call when containers might be deleted.
 func (h *HierarchyInference) ClearCache() {
 	h.containerCacheMu.Lock()
-	defer h.containerCacheMu.Unlock()
-
 	h.containerCache = make(map[string]bool)
+	h.containerCacheMu.Unlock()
+
+	h.processedCacheMu.Lock()
+	h.processedCache = make(map[string]bool)
+	h.processedCacheMu.Unlock()
 }
 
 // GetMetrics returns metrics for hierarchy inference operations.
@@ -441,7 +450,7 @@ func (h *HierarchyInference) Stop() error {
 // Follows the ReviewWorker pattern for independent KV watching.
 //
 // On startup, WatchAll() delivers all existing entries first (backfill),
-// then continues with live updates. The container cache ensures idempotency -
+// then continues with live updates. The processed cache ensures idempotency -
 // entities that already have hierarchy edges will be skipped efficiently.
 func (h *HierarchyInference) processEntities(workerID int) {
 	defer h.wg.Done()
@@ -472,8 +481,28 @@ func (h *HierarchyInference) processEntities(workerID int) {
 
 			entityID := entry.Key()
 
-			// Process entity - the container cache ensures idempotency.
-			// Existing entities will short-circuit if containers already exist.
+			// Check if already processed (idempotency for backfill + live updates)
+			// This prevents reprocessing when we add membership edges to entities
+			h.processedCacheMu.RLock()
+			alreadyProcessed := h.processedCache[entityID]
+			h.processedCacheMu.RUnlock()
+
+			if alreadyProcessed {
+				continue
+			}
+
+			// Mark as processed before actually processing to prevent
+			// concurrent workers from processing the same entity
+			h.processedCacheMu.Lock()
+			// Double-check after acquiring write lock
+			if h.processedCache[entityID] {
+				h.processedCacheMu.Unlock()
+				continue
+			}
+			h.processedCache[entityID] = true
+			h.processedCacheMu.Unlock()
+
+			// Process entity - creates hierarchy edges
 			// This handles both:
 			// 1. Initial backfill (existing entities when watcher starts)
 			// 2. Live creates (new entities added after watcher starts)

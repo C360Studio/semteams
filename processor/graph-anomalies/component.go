@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/graph/structuralindex"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/pkg/retry"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -49,30 +51,30 @@ func (c *Config) Validate() error {
 	hasOutgoingIndex := false
 	hasIncomingIndex := false
 	for _, input := range c.Ports.Inputs {
-		if input.Subject == "OUTGOING_INDEX" {
+		if input.Subject == graph.BucketOutgoingIndex {
 			hasOutgoingIndex = true
 		}
-		if input.Subject == "INCOMING_INDEX" {
+		if input.Subject == graph.BucketIncomingIndex {
 			hasIncomingIndex = true
 		}
 	}
 	if !hasOutgoingIndex {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "OUTGOING_INDEX input required")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", fmt.Sprintf("%s input required", graph.BucketOutgoingIndex))
 	}
 	if !hasIncomingIndex {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "INCOMING_INDEX input required")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", fmt.Sprintf("%s input required", graph.BucketIncomingIndex))
 	}
 
 	// Validate STRUCTURAL_INDEX output exists
 	hasStructuralIndex := false
 	for _, output := range c.Ports.Outputs {
-		if output.Subject == "STRUCTURAL_INDEX" {
+		if output.Subject == graph.BucketStructuralIndex {
 			hasStructuralIndex = true
 			break
 		}
 	}
 	if !hasStructuralIndex {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "STRUCTURAL_INDEX output required")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", fmt.Sprintf("%s output required", graph.BucketStructuralIndex))
 	}
 
 	// Validate compute interval
@@ -123,12 +125,12 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "outgoing_watch",
 					Type:    "kv-watch",
-					Subject: "OUTGOING_INDEX",
+					Subject: graph.BucketOutgoingIndex,
 				},
 				{
 					Name:    "incoming_watch",
 					Type:    "kv-watch",
-					Subject: "INCOMING_INDEX",
+					Subject: graph.BucketIncomingIndex,
 				},
 			}
 		}
@@ -137,7 +139,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "structural_index",
 					Type:    "kv-write",
-					Subject: "STRUCTURAL_INDEX",
+					Subject: graph.BucketStructuralIndex,
 				},
 			}
 		}
@@ -152,19 +154,19 @@ func DefaultConfig() Config {
 				{
 					Name:    "outgoing_watch",
 					Type:    "kv-watch",
-					Subject: "OUTGOING_INDEX",
+					Subject: graph.BucketOutgoingIndex,
 				},
 				{
 					Name:    "incoming_watch",
 					Type:    "kv-watch",
-					Subject: "INCOMING_INDEX",
+					Subject: graph.BucketIncomingIndex,
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:    "structural_index",
 					Type:    "kv-write",
-					Subject: "STRUCTURAL_INDEX",
+					Subject: graph.BucketStructuralIndex,
 				},
 			},
 		},
@@ -220,6 +222,7 @@ func CreateGraphAnomalies(rawConfig json.RawMessage, deps component.Dependencies
 	if deps.NATSClient == nil {
 		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "CreateGraphAnomalies", "factory", "NATSClient required")
 	}
+	natsClient := deps.NATSClient
 
 	// Parse configuration
 	var config Config
@@ -262,7 +265,7 @@ func CreateGraphAnomalies(rawConfig json.RawMessage, deps component.Dependencies
 	comp := &Component{
 		name:       "graph-anomalies",
 		config:     config,
-		natsClient: deps.NATSClient,
+		natsClient: natsClient,
 		logger:     logger,
 	}
 
@@ -444,35 +447,51 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
-	// Initialize JetStream
+	// Initialize JetStream for input bucket retries
 	js, err := c.natsClient.JetStream()
 	if err != nil {
 		cancel()
 		return errs.Wrap(err, "Component", "Start", "JetStream connection")
 	}
 
-	// Get STRUCTURAL_INDEX bucket
-	structuralBucket, err := js.KeyValue(ctx, "STRUCTURAL_INDEX")
+	// Create STRUCTURAL_INDEX bucket (we are the WRITER)
+	structuralBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketStructuralIndex,
+		Description: "Structural index for anomaly detection",
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access: STRUCTURAL_INDEX")
+		return errs.Wrap(err, "Component", "Start", "create output bucket: "+graph.BucketStructuralIndex)
 	}
 	c.structuralBucket = structuralBucket
 
 	// Create storage
 	c.storage = structuralindex.NewNATSStructuralIndexStorage(structuralBucket)
 
-	// Get OUTGOING_INDEX and INCOMING_INDEX buckets for graph provider
-	outgoingBucket, err := js.KeyValue(ctx, "OUTGOING_INDEX")
+	// Wait for OUTGOING_INDEX bucket with retries (we are the READER)
+	outgoingBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
+		bucket, err := js.KeyValue(ctx, graph.BucketOutgoingIndex)
+		if err != nil {
+			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketOutgoingIndex), slog.Any("error", err))
+		}
+		return bucket, err
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access: OUTGOING_INDEX")
+		return errs.Wrap(err, "Component", "Start", "input bucket not available: "+graph.BucketOutgoingIndex)
 	}
 
-	incomingBucket, err := js.KeyValue(ctx, "INCOMING_INDEX")
+	// Wait for INCOMING_INDEX bucket with retries (we are the READER)
+	incomingBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
+		bucket, err := js.KeyValue(ctx, graph.BucketIncomingIndex)
+		if err != nil {
+			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketIncomingIndex), slog.Any("error", err))
+		}
+		return bucket, err
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access: INCOMING_INDEX")
+		return errs.Wrap(err, "Component", "Start", "input bucket not available: "+graph.BucketIncomingIndex)
 	}
 
 	// Create graph provider
@@ -481,6 +500,12 @@ func (c *Component) Start(ctx context.Context) error {
 	// Create computers
 	c.kcoreComputer = structuralindex.NewKCoreComputer(c.graphProvider, c.logger)
 	c.pivotComputer = structuralindex.NewPivotComputer(c.graphProvider, c.config.PivotCount, c.logger)
+
+	// Set up query handlers
+	if err := c.setupQueryHandlers(ctx); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "setup query handlers")
+	}
 
 	// Mark as running
 	c.running = true

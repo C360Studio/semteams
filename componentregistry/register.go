@@ -24,6 +24,7 @@ import (
 	graphindexspatial "github.com/c360/semstreams/processor/graph-index-spatial"
 	graphindextemporal "github.com/c360/semstreams/processor/graph-index-temporal"
 	graphingest "github.com/c360/semstreams/processor/graph-ingest"
+	graphquery "github.com/c360/semstreams/processor/graph-query"
 	jsonfilter "github.com/c360/semstreams/processor/json_filter"
 	jsongeneric "github.com/c360/semstreams/processor/json_generic"
 	jsonmap "github.com/c360/semstreams/processor/json_map"
@@ -154,6 +155,11 @@ func Register(registry *component.Registry) error {
 
 	if err := graphgateway.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-gateway component registration")
+	}
+
+	// Query coordinator (orchestrates queries across components)
+	if err := graphquery.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-query component registration")
 	}
 
 	// Semantic tier components (enabled via config)

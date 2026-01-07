@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
@@ -46,13 +47,13 @@ func (c *Config) Validate() error {
 	// Validate TEMPORAL_INDEX output exists
 	hasTemporalIndex := false
 	for _, output := range c.Ports.Outputs {
-		if output.Subject == "TEMPORAL_INDEX" {
+		if output.Subject == graph.BucketTemporalIndex {
 			hasTemporalIndex = true
 			break
 		}
 	}
 	if !hasTemporalIndex {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "TEMPORAL_INDEX output required")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", fmt.Sprintf("%s output required", graph.BucketTemporalIndex))
 	}
 
 	// Validate time resolution
@@ -98,7 +99,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			}
 		}
@@ -107,7 +108,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "temporal_index",
 					Type:    "kv-write",
-					Subject: "TEMPORAL_INDEX",
+					Subject: graph.BucketTemporalIndex,
 				},
 			}
 		}
@@ -122,14 +123,14 @@ func DefaultConfig() Config {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:    "temporal_index",
 					Type:    "kv-write",
-					Subject: "TEMPORAL_INDEX",
+					Subject: graph.BucketTemporalIndex,
 				},
 			},
 		},
@@ -180,6 +181,7 @@ func CreateGraphIndexTemporal(rawConfig json.RawMessage, deps component.Dependen
 	if deps.NATSClient == nil {
 		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "CreateGraphIndexTemporal", "factory", "NATSClient required")
 	}
+	natsClient := deps.NATSClient
 
 	// Parse configuration
 	var config Config
@@ -204,7 +206,7 @@ func CreateGraphIndexTemporal(rawConfig json.RawMessage, deps component.Dependen
 	comp := &Component{
 		name:       "graph-index-temporal",
 		config:     config,
-		natsClient: deps.NATSClient,
+		natsClient: natsClient,
 		logger:     logger,
 	}
 
@@ -386,20 +388,31 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
-	// Initialize JetStream
-	js, err := c.natsClient.JetStream()
-	if err != nil {
+	// Check context before proceeding
+	if err := ctx.Err(); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+		return errs.Wrap(err, "Component", "Start", "context cancelled")
 	}
 
-	// Get TEMPORAL_INDEX bucket
-	temporalBucket, err := js.KeyValue(ctx, "TEMPORAL_INDEX")
+	// Create TEMPORAL_INDEX bucket (we are the WRITER)
+	temporalBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketTemporalIndex,
+		Description: "Temporal index for time-based queries",
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access: TEMPORAL_INDEX")
+		if ctx.Err() != nil {
+			return errs.Wrap(ctx.Err(), "Component", "Start", "context cancelled during bucket creation")
+		}
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketTemporalIndex))
 	}
 	c.temporalBucket = temporalBucket
+
+	// Set up query handlers
+	if err := c.setupQueryHandlers(ctx); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "setup query handlers")
+	}
 
 	// Mark as running
 	c.running = true

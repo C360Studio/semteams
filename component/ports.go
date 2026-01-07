@@ -92,7 +92,7 @@ func BuildPortFromDefinition(def PortDefinition, direction Direction) Port {
 		port.Config = KVWatchPort{
 			Bucket: def.Subject, // Subject holds bucket name
 		}
-	case "kv-write", "kvwrite":
+	case "kv", "kv-write", "kvwrite":
 		// Parse KV write config
 		var iface *InterfaceContract
 		if def.Interface != "" {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
@@ -49,13 +50,13 @@ func (c *Config) Validate() error {
 	// Validate COMMUNITY_INDEX output exists
 	hasCommunityIndex := false
 	for _, output := range c.Ports.Outputs {
-		if output.Subject == "COMMUNITY_INDEX" {
+		if output.Subject == graph.BucketCommunityIndex {
 			hasCommunityIndex = true
 			break
 		}
 	}
 	if !hasCommunityIndex {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "COMMUNITY_INDEX output required")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", fmt.Sprintf("%s output required", graph.BucketCommunityIndex))
 	}
 
 	// Validate detection interval
@@ -107,7 +108,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			}
 		}
@@ -116,7 +117,7 @@ func (c *Config) ApplyDefaults() {
 				{
 					Name:    "communities",
 					Type:    "kv-write",
-					Subject: "COMMUNITY_INDEX",
+					Subject: graph.BucketCommunityIndex,
 				},
 			}
 		}
@@ -131,14 +132,14 @@ func DefaultConfig() Config {
 				{
 					Name:    "entity_watch",
 					Type:    "kv-watch",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			},
 			Outputs: []component.PortDefinition{
 				{
 					Name:    "communities",
 					Type:    "kv-write",
-					Subject: "COMMUNITY_INDEX",
+					Subject: graph.BucketCommunityIndex,
 				},
 			},
 		},
@@ -191,6 +192,7 @@ func CreateGraphClustering(rawConfig json.RawMessage, deps component.Dependencie
 	if deps.NATSClient == nil {
 		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "CreateGraphClustering", "factory", "NATSClient required")
 	}
+	natsClient := deps.NATSClient
 
 	// Parse configuration
 	var config Config
@@ -215,7 +217,7 @@ func CreateGraphClustering(rawConfig json.RawMessage, deps component.Dependencie
 	comp := &Component{
 		name:       "graph-clustering",
 		config:     config,
-		natsClient: deps.NATSClient,
+		natsClient: natsClient,
 		logger:     logger,
 	}
 
@@ -397,20 +399,31 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
-	// Initialize JetStream
-	js, err := c.natsClient.JetStream()
-	if err != nil {
+	// Check context before proceeding
+	if err := ctx.Err(); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+		return errs.Wrap(err, "Component", "Start", "context cancelled")
 	}
 
-	// Get COMMUNITY_INDEX bucket
-	communityBucket, err := js.KeyValue(ctx, "COMMUNITY_INDEX")
+	// Create COMMUNITY_INDEX bucket (we are the WRITER)
+	communityBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketCommunityIndex,
+		Description: "Community detection index",
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access: COMMUNITY_INDEX")
+		if ctx.Err() != nil {
+			return errs.Wrap(ctx.Err(), "Component", "Start", "context cancelled during bucket creation")
+		}
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketCommunityIndex))
 	}
 	c.communityBucket = communityBucket
+
+	// Set up query handlers
+	if err := c.setupQueryHandlers(ctx); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "setup query handlers")
+	}
 
 	// Mark as running
 	c.running = true

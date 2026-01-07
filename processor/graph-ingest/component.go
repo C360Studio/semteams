@@ -7,16 +7,21 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/inference"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // Ensure Component implements required interfaces
@@ -24,6 +29,37 @@ var (
 	_ component.Discoverable       = (*Component)(nil)
 	_ component.LifecycleComponent = (*Component)(nil)
 )
+
+// Package-level prometheus metric (registered once to avoid duplicate registration errors)
+var (
+	metricsOnce         sync.Once
+	entitiesUpdatedOnce prometheus.Counter
+)
+
+// entityIDRegex validates entity ID format: org.platform.domain.system.type.instance
+// Example: c360.ops.robotics.gcs.drone.001 or c360.logistics.environmental.sensor.humidity.humid-sensor-001
+// Each part must start with alphanumeric and can contain alphanumeric, hyphens, or underscores
+var entityIDRegex = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]*\.[a-zA-Z0-9][a-zA-Z0-9_-]*\.[a-zA-Z0-9][a-zA-Z0-9_-]*\.[a-zA-Z0-9][a-zA-Z0-9_-]*\.[a-zA-Z0-9][a-zA-Z0-9_-]*\.[a-zA-Z0-9][a-zA-Z0-9_-]*$`)
+
+func getEntitiesUpdatedMetric(registry *metric.MetricsRegistry) prometheus.Counter {
+	metricsOnce.Do(func() {
+		entitiesUpdatedOnce = prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "datamanager",
+			Name:      "entities_updated_total",
+			Help:      "Total entities updated",
+		})
+		// Register with the metrics registry if available
+		if registry != nil {
+			_ = registry.RegisterCounter("graph-ingest", "entities_updated_total", entitiesUpdatedOnce)
+		} else {
+			// Fallback to default prometheus registry for testing
+			// Ignore error if already registered (can happen across tests)
+			_ = prometheus.DefaultRegisterer.Register(entitiesUpdatedOnce)
+		}
+	})
+	return entitiesUpdatedOnce
+}
 
 // Config holds configuration for graph-ingest component
 type Config struct {
@@ -68,7 +104,7 @@ func DefaultConfig() Config {
 				{
 					Name:    "entity_states",
 					Type:    "kv-write",
-					Subject: "ENTITY_STATES",
+					Subject: graph.BucketEntityStates,
 				},
 			},
 		},
@@ -78,6 +114,39 @@ func DefaultConfig() Config {
 
 // schema defines the configuration schema for graph-ingest component
 var schema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
+
+// entityManagerAdapter adapts Component to implement inference.EntityManager interface
+type entityManagerAdapter struct {
+	component *Component
+}
+
+func (a *entityManagerAdapter) ExistsEntity(ctx context.Context, id string) (bool, error) {
+	entry, err := a.component.entityBucket.Get(ctx, id)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return false, nil
+		}
+		return false, err
+	}
+	return entry != nil, nil
+}
+
+func (a *entityManagerAdapter) CreateEntity(ctx context.Context, entity *graph.EntityState) (*graph.EntityState, error) {
+	err := a.component.CreateEntity(ctx, entity)
+	if err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+// tripleAdderAdapter adapts Component to implement inference.TripleAdder interface
+type tripleAdderAdapter struct {
+	component *Component
+}
+
+func (a *tripleAdderAdapter) AddTriple(ctx context.Context, triple message.Triple) error {
+	return a.component.AddTriple(ctx, triple)
+}
 
 // Component implements the graph-ingest processor
 type Component struct {
@@ -91,6 +160,9 @@ type Component struct {
 
 	// Domain resources
 	entityBucket jetstream.KeyValue
+
+	// Inference components
+	hierarchyInference *inference.HierarchyInference
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -106,6 +178,9 @@ type Component struct {
 	errors            int64
 	lastActivity      atomic.Value // stores time.Time
 
+	// Prometheus metrics (for e2e test compatibility with datamanager metrics)
+	entitiesUpdated prometheus.Counter
+
 	// Port definitions
 	inputPorts  []component.Port
 	outputPorts []component.Port
@@ -117,6 +192,7 @@ func CreateGraphIngest(rawConfig json.RawMessage, deps component.Dependencies) (
 	if deps.NATSClient == nil {
 		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "CreateGraphIngest", "factory", "NATSClient required")
 	}
+	natsClient := deps.NATSClient
 
 	// Parse configuration
 	var config Config
@@ -139,10 +215,11 @@ func CreateGraphIngest(rawConfig json.RawMessage, deps component.Dependencies) (
 
 	// Create component
 	comp := &Component{
-		name:       "graph-ingest",
-		config:     config,
-		natsClient: deps.NATSClient,
-		logger:     logger,
+		name:            "graph-ingest",
+		config:          config,
+		natsClient:      natsClient,
+		logger:          logger,
+		entitiesUpdated: getEntitiesUpdatedMetric(deps.MetricsRegistry),
 	}
 
 	// Initialize last activity
@@ -323,19 +400,76 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
-	// Initialize KV bucket
-	js, err := c.natsClient.JetStream()
-	if err != nil {
+	// Check context before proceeding
+	if err := ctx.Err(); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+		return errs.Wrap(err, "Component", "Start", "context cancelled")
 	}
 
-	bucket, err := js.KeyValue(ctx, "ENTITY_STATES")
+	// Ensure NATS client is connected
+	if c.natsClient.Status() != natsclient.StatusConnected {
+		if err := c.natsClient.Connect(ctx); err != nil {
+			cancel()
+			// Check if this is a context-related error
+			if ctx.Err() != nil {
+				return errs.Wrap(ctx.Err(), "Component", "Start", "context cancelled during NATS connection")
+			}
+			return errs.Wrap(err, "Component", "Start", "NATS connection failed")
+		}
+		if err := c.natsClient.WaitForConnection(ctx); err != nil {
+			cancel()
+			if ctx.Err() != nil {
+				return errs.Wrap(ctx.Err(), "Component", "Start", "context cancelled waiting for NATS")
+			}
+			return errs.Wrap(err, "Component", "Start", "wait for NATS connection")
+		}
+	}
+
+	// Initialize KV bucket (create if not exists) - we are the WRITER
+	bucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Entity state storage for graph-ingest",
+	})
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket access")
+		return errs.Wrap(err, "Component", "Start", "KV bucket creation")
 	}
 	c.entityBucket = bucket
+
+	// Initialize hierarchy inference if enabled
+	if c.config.EnableHierarchy {
+		hierarchyConfig := inference.HierarchyConfig{
+			Enabled:           true,
+			CreateTypeEdges:   true,
+			CreateSystemEdges: true,
+			CreateDomainEdges: true,
+		}
+
+		c.hierarchyInference = inference.NewHierarchyInference(
+			&entityManagerAdapter{component: c},
+			&tripleAdderAdapter{component: c},
+			c.entityBucket,
+			hierarchyConfig,
+			c.logger,
+		)
+
+		if err := c.hierarchyInference.Start(ctx); err != nil {
+			cancel()
+			return errs.Wrap(err, "Component", "Start", "hierarchy inference start")
+		}
+	}
+
+	// Set up subscriptions for input ports
+	if err := c.setupSubscriptions(ctx); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "subscription setup")
+	}
+
+	// Set up query handler subscriptions
+	if err := c.setupQueryHandlers(ctx); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "query handler setup")
+	}
 
 	// Mark as running
 	c.running = true
@@ -355,6 +489,13 @@ func (c *Component) Stop(timeout time.Duration) error {
 	if !c.running {
 		c.mu.Unlock()
 		return nil // Already stopped
+	}
+
+	// Stop hierarchy inference if active
+	if c.hierarchyInference != nil {
+		if err := c.hierarchyInference.Stop(); err != nil {
+			c.logger.Warn("error stopping hierarchy inference", slog.Any("error", err))
+		}
 	}
 
 	// Cancel context
@@ -383,16 +524,250 @@ func (c *Component) Stop(timeout time.Duration) error {
 }
 
 // ============================================================================
+// Subscription Management
+// ============================================================================
+
+// setupSubscriptions sets up JetStream consumers for input ports
+func (c *Component) setupSubscriptions(ctx context.Context) error {
+	for _, port := range c.config.Ports.Inputs {
+		if port.Type != "jetstream" {
+			c.logger.Debug("skipping non-jetstream port", slog.String("port", port.Name), slog.String("type", port.Type))
+			continue
+		}
+
+		if err := c.setupJetStreamConsumer(ctx, port); err != nil {
+			return errs.Wrap(err, "Component", "setupSubscriptions",
+				fmt.Sprintf("JetStream consumer for %s", port.Subject))
+		}
+	}
+	return nil
+}
+
+// setupJetStreamConsumer creates a JetStream consumer for an input port
+func (c *Component) setupJetStreamConsumer(ctx context.Context, port component.PortDefinition) error {
+	// Derive stream name from subject
+	streamName := port.StreamName
+	if streamName == "" {
+		streamName = c.deriveStreamName(port.Subject)
+	}
+	if streamName == "" {
+		return fmt.Errorf("could not derive stream name for subject %s", port.Subject)
+	}
+
+	// Wait for stream to be available
+	if err := c.waitForStream(ctx, streamName); err != nil {
+		return fmt.Errorf("stream %s not available: %w", streamName, err)
+	}
+
+	// Generate unique consumer name
+	sanitizedSubject := strings.ReplaceAll(port.Subject, ".", "-")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, "*", "all")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
+	consumerName := fmt.Sprintf("graph-ingest-%s", sanitizedSubject)
+
+	c.logger.Info("Setting up JetStream consumer",
+		slog.String("stream", streamName),
+		slog.String("consumer", consumerName),
+		slog.String("filter_subject", port.Subject))
+
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    streamName,
+		ConsumerName:  consumerName,
+		FilterSubject: port.Subject,
+		DeliverPolicy: "all",
+		AckPolicy:     "explicit",
+		MaxDeliver:    5,
+		AutoCreate:    false,
+	}
+
+	subject := port.Subject // capture for closure
+	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		c.handleMessage(msgCtx, subject, msg.Data())
+		if ackErr := msg.Ack(); ackErr != nil {
+			c.logger.Error("Failed to ack JetStream message", slog.Any("error", ackErr))
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+	}
+
+	c.logger.Info("graph-ingest subscribed (JetStream)",
+		slog.String("subject", subject),
+		slog.String("stream", streamName))
+	return nil
+}
+
+// deriveStreamName derives a stream name from a subject pattern
+func (c *Component) deriveStreamName(subject string) string {
+	// Common mappings based on subject prefix
+	prefixToStream := map[string]string{
+		"sensor.":      "SENSOR",
+		"objectstore.": "OBJECTSTORE",
+		"entity.":      "ENTITY",
+		"events.":      "EVENTS",
+	}
+
+	for prefix, stream := range prefixToStream {
+		if strings.HasPrefix(subject, prefix) {
+			return stream
+		}
+	}
+
+	// Default: use first segment uppercased
+	parts := strings.Split(subject, ".")
+	if len(parts) > 0 {
+		return strings.ToUpper(parts[0])
+	}
+	return ""
+}
+
+// waitForStream waits for a JetStream stream to be available
+func (c *Component) waitForStream(ctx context.Context, streamName string) error {
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return fmt.Errorf("failed to get JetStream context: %w", err)
+	}
+
+	maxRetries := 30
+	retryInterval := 100 * time.Millisecond
+	maxInterval := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		_, err := js.Stream(ctx, streamName)
+		if err == nil {
+			c.logger.Debug("Stream available", slog.String("stream", streamName))
+			return nil
+		}
+
+		// Exponential backoff
+		c.logger.Debug("Waiting for stream",
+			slog.String("stream", streamName),
+			slog.Int("attempt", i+1),
+			slog.Duration("interval", retryInterval))
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(retryInterval):
+			retryInterval = time.Duration(float64(retryInterval) * 1.5)
+			if retryInterval > maxInterval {
+				retryInterval = maxInterval
+			}
+		}
+	}
+
+	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+}
+
+// handleMessage processes an incoming message and creates/updates entity state
+func (c *Component) handleMessage(ctx context.Context, subject string, data []byte) {
+	c.logger.Debug("Received message",
+		slog.String("subject", subject),
+		slog.Int("size", len(data)))
+
+	// Try to unmarshal as a BaseMessage containing a Graphable payload
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Warn("Failed to unmarshal base message",
+			slog.String("subject", subject),
+			slog.Any("error", err))
+		atomic.AddInt64(&c.errors, 1)
+		return
+	}
+
+	// Extract entity from BaseMessage payload
+	entity, err := c.extractEntityFromMessage(&baseMsg)
+	if err != nil {
+		c.logger.Warn("Failed to extract entity from message",
+			slog.String("subject", subject),
+			slog.Any("error", err))
+		atomic.AddInt64(&c.errors, 1)
+		return
+	}
+
+	// Store entity in KV bucket
+	if err := c.CreateEntity(ctx, entity); err != nil {
+		c.logger.Error("Failed to create entity",
+			slog.String("entity_id", entity.ID),
+			slog.Any("error", err))
+		return
+	}
+
+	c.logger.Debug("Entity ingested",
+		slog.String("entity_id", entity.ID),
+		slog.Int("triples", len(entity.Triples)))
+}
+
+// extractEntityFromMessage extracts an EntityState from a BaseMessage
+func (c *Component) extractEntityFromMessage(msg *message.BaseMessage) (*graph.EntityState, error) {
+	if msg == nil {
+		return nil, fmt.Errorf("nil message")
+	}
+
+	payload := msg.Payload()
+	if payload == nil {
+		return nil, fmt.Errorf("message has no payload")
+	}
+
+	// Check if payload implements Graphable
+	graphable, ok := payload.(graph.Graphable)
+	if !ok {
+		return nil, fmt.Errorf("payload does not implement Graphable interface")
+	}
+
+	// Get entity ID and triples from Graphable
+	entityID := graphable.EntityID()
+	if entityID == "" {
+		return nil, fmt.Errorf("graphable payload returned empty entity ID")
+	}
+
+	triples := graphable.Triples()
+
+	// Build EntityState
+	entity := &graph.EntityState{
+		ID:          entityID,
+		Triples:     triples,
+		MessageType: msg.Type(),
+		Version:     1,
+	}
+
+	return entity, nil
+}
+
+// ============================================================================
 // Entity Operations
 // ============================================================================
+
+// validateEntityID validates that an entity ID follows the expected format
+func validateEntityID(id string) error {
+	if id == "" {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "validateEntityID", "entity ID cannot be empty")
+	}
+
+	if len(id) > 255 {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "validateEntityID", "entity ID too long (max 255 chars)")
+	}
+
+	if !entityIDRegex.MatchString(id) {
+		parts := strings.Split(id, ".")
+		msg := fmt.Sprintf(
+			"invalid entity ID format: expected 6 ASCII alphanumeric parts (org.platform.domain.system.type.instance), got %d parts or non-ASCII characters",
+			len(parts))
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "validateEntityID", msg)
+	}
+
+	return nil
+}
 
 // CreateEntity creates a new entity in the graph
 func (c *Component) CreateEntity(ctx context.Context, entity *graph.EntityState) error {
 	if entity == nil {
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "CreateEntity", "entity cannot be nil")
 	}
-	if entity.ID == "" {
-		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "CreateEntity", "entity ID cannot be empty")
+
+	// Validate entity ID format
+	if err := validateEntityID(entity.ID); err != nil {
+		return err
 	}
 
 	// Check context
@@ -417,6 +792,7 @@ func (c *Component) CreateEntity(ctx context.Context, entity *graph.EntityState)
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	atomic.AddInt64(&c.bytesProcessed, int64(len(data)))
 	c.lastActivity.Store(time.Now())
+	c.entitiesUpdated.Inc()
 
 	c.logger.Debug("entity created",
 		slog.String("entity_id", entity.ID),
@@ -430,8 +806,10 @@ func (c *Component) UpdateEntity(ctx context.Context, entity *graph.EntityState)
 	if entity == nil {
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateEntity", "entity cannot be nil")
 	}
-	if entity.ID == "" {
-		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateEntity", "entity ID cannot be empty")
+
+	// Validate entity ID format
+	if err := validateEntityID(entity.ID); err != nil {
+		return err
 	}
 
 	// Check context
@@ -456,6 +834,7 @@ func (c *Component) UpdateEntity(ctx context.Context, entity *graph.EntityState)
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	atomic.AddInt64(&c.bytesProcessed, int64(len(data)))
 	c.lastActivity.Store(time.Now())
+	c.entitiesUpdated.Inc()
 
 	c.logger.Debug("entity updated",
 		slog.String("entity_id", entity.ID),
@@ -466,8 +845,9 @@ func (c *Component) UpdateEntity(ctx context.Context, entity *graph.EntityState)
 
 // DeleteEntity removes an entity from the graph
 func (c *Component) DeleteEntity(ctx context.Context, entityID string) error {
-	if entityID == "" {
-		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "DeleteEntity", "entity ID cannot be empty")
+	// Validate entity ID format
+	if err := validateEntityID(entityID); err != nil {
+		return err
 	}
 
 	// Check context

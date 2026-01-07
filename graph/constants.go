@@ -18,6 +18,8 @@ const (
 
 	// Semantic tier buckets
 	BucketEmbeddingsCache = "EMBEDDINGS_CACHE"
+	BucketEmbeddingIndex  = "EMBEDDING_INDEX"
+	BucketEmbeddingDedup  = "EMBEDDING_DEDUP"
 	BucketCommunityIndex  = "COMMUNITY_INDEX"
 	BucketAnomalyIndex    = "ANOMALY_INDEX"
 

@@ -16,7 +16,15 @@ import (
 	"github.com/c360/semstreams/gateway"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"strings"
 )
+
+// natsRequester is a local interface for NATS request/reply operations.
+// *natsclient.Client satisfies this interface, and tests can provide mocks.
+type natsRequester interface {
+	Request(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error)
+	Status() natsclient.ConnectionStatus
+}
 
 // Ensure Component implements required interfaces
 var (
@@ -32,6 +40,7 @@ type Config struct {
 	MCPPath          string                `json:"mcp_path" schema:"type:string,description:MCP endpoint path,category:basic"`
 	BindAddress      string                `json:"bind_address" schema:"type:string,description:HTTP server bind address,category:basic"`
 	EnablePlayground bool                  `json:"enable_playground" schema:"type:bool,description:Enable GraphQL playground,category:basic"`
+	QueryTimeout     time.Duration         `json:"query_timeout" schema:"type:duration,description:Query timeout duration,category:basic"`
 }
 
 // Validate implements component.Validatable interface
@@ -67,6 +76,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.BindAddress == "" {
 		c.BindAddress = "localhost:8080"
+	}
+	if c.QueryTimeout == 0 {
+		c.QueryTimeout = 30 * time.Second
 	}
 	if c.Ports == nil {
 		// Apply full default port config
@@ -118,6 +130,7 @@ func DefaultConfig() Config {
 		MCPPath:          "/mcp",
 		BindAddress:      "localhost:8080",
 		EnablePlayground: false,
+		QueryTimeout:     30 * time.Second,
 	}
 }
 
@@ -131,8 +144,13 @@ type Component struct {
 	config Config
 
 	// Dependencies
-	natsClient *natsclient.Client
-	logger     *slog.Logger
+	natsClient    *natsclient.Client
+	natsRequester natsRequester // Interface for NATS request/reply (mockable)
+	logger        *slog.Logger
+
+	// HTTP server for GraphQL endpoint
+	httpServer *http.Server
+	httpMux    *http.ServeMux
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -159,6 +177,7 @@ func CreateGraphGateway(rawConfig json.RawMessage, deps component.Dependencies) 
 	if deps.NATSClient == nil {
 		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "CreateGraphGateway", "factory", "NATSClient required")
 	}
+	natsClient := deps.NATSClient
 
 	// Parse configuration
 	var config Config
@@ -181,10 +200,11 @@ func CreateGraphGateway(rawConfig json.RawMessage, deps component.Dependencies) 
 
 	// Create component
 	comp := &Component{
-		name:       "graph-gateway",
-		config:     config,
-		natsClient: deps.NATSClient,
-		logger:     logger,
+		name:          "graph-gateway",
+		config:        config,
+		natsClient:    natsClient,
+		natsRequester: natsClient, // Assign to interface field for mockability
+		logger:        logger,
 	}
 
 	// Initialize last activity
@@ -365,12 +385,36 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
+	// Create HTTP server mux and register handlers
+	c.httpMux = http.NewServeMux()
+	c.RegisterHTTPHandlers("", c.httpMux)
+
+	// Create HTTP server
+	c.httpServer = &http.Server{
+		Addr:    c.config.BindAddress,
+		Handler: c.httpMux,
+	}
+
+	// Start HTTP server in background
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		c.logger.Info("starting HTTP server",
+			slog.String("bind_address", c.config.BindAddress))
+
+		if err := c.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			c.logger.Error("HTTP server error",
+				slog.Any("error", err))
+		}
+	}()
+
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
 
 	c.logger.Info("component started",
 		slog.String("component", "graph-gateway"),
+		slog.String("bind_address", c.config.BindAddress),
 		slog.Time("start_time", c.startTime))
 
 	return nil
@@ -383,6 +427,17 @@ func (c *Component) Stop(timeout time.Duration) error {
 	if !c.running {
 		c.mu.Unlock()
 		return nil // Already stopped
+	}
+
+	// Shutdown HTTP server gracefully
+	if c.httpServer != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), timeout)
+		defer shutdownCancel()
+
+		c.logger.Info("shutting down HTTP server")
+		if err := c.httpServer.Shutdown(shutdownCtx); err != nil {
+			c.logger.Warn("HTTP server shutdown error", slog.Any("error", err))
+		}
 	}
 
 	// Cancel context
@@ -472,20 +527,294 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 // HTTP Handlers
 // ============================================================================
 
+// mapGraphQLQueryToNATSSubject maps a GraphQL query to a NATS subject
+func (c *Component) mapGraphQLQueryToNATSSubject(query string) string {
+	query = strings.ToLower(query)
+
+	// IMPORTANT: Check specific patterns BEFORE generic ones
+	// "entityidhierarchy" contains "entity" - must check first
+
+	// Most specific patterns first
+	if strings.Contains(query, "entityidhierarchy") {
+		return "graph.query.hierarchyStats"
+	}
+	if strings.Contains(query, "entitiesbyprefix") {
+		return "graph.query.prefix"
+	}
+	if strings.Contains(query, "pathsearch") {
+		return "graph.query.pathSearch"
+	}
+	if strings.Contains(query, "spatialsearch") {
+		return "graph.query.spatial"
+	}
+	if strings.Contains(query, "temporalsearch") {
+		return "graph.query.temporal"
+	}
+	if strings.Contains(query, "relationships") {
+		return "graph.query.relationships"
+	}
+	if strings.Contains(query, "capabilities") {
+		return "graph.query.capabilities"
+	}
+
+	// Generic "entity" check MUST come last
+	if strings.Contains(query, "entity") {
+		return "graph.query.entity"
+	}
+
+	return "graph.query.unknown"
+}
+
+// subjectToGraphQLField maps a NATS subject to the GraphQL response field name
+func (c *Component) subjectToGraphQLField(subject string) string {
+	switch subject {
+	case "graph.query.pathSearch":
+		return "pathSearch"
+	case "graph.query.entity":
+		return "entity"
+	case "graph.query.relationships":
+		return "relationships"
+	case "graph.query.capabilities":
+		return "capabilities"
+	case "graph.query.hierarchyStats":
+		return "entityIdHierarchy"
+	case "graph.query.prefix":
+		return "entitiesByPrefix"
+	case "graph.query.spatial":
+		return "spatialSearch"
+	case "graph.query.temporal":
+		return "temporalSearch"
+	default:
+		return ""
+	}
+}
+
+// transformVariablesToNATSPayload transforms GraphQL variables to NATS payload format
+func (c *Component) transformVariablesToNATSPayload(variables map[string]interface{}, subject string) map[string]interface{} {
+	if variables == nil {
+		return map[string]interface{}{}
+	}
+
+	payload := make(map[string]interface{})
+
+	// Transform based on query type
+	switch subject {
+	case "graph.query.pathSearch":
+		// Transform GraphQL variable names to NATS format
+		if start, ok := variables["start"]; ok {
+			payload["start_entity"] = start
+		}
+		if startEntity, ok := variables["startEntity"]; ok {
+			payload["start_entity"] = startEntity
+		}
+		if startEntityVal, ok := variables["start_entity"]; ok {
+			payload["start_entity"] = startEntityVal
+		}
+
+		if depth, ok := variables["depth"]; ok {
+			payload["max_depth"] = depth
+		}
+		if maxDepth, ok := variables["maxDepth"]; ok {
+			payload["max_depth"] = maxDepth
+		}
+		if maxDepthVal, ok := variables["max_depth"]; ok {
+			payload["max_depth"] = maxDepthVal
+		}
+
+	case "graph.query.entity":
+		// Pass through id field
+		if id, ok := variables["id"]; ok {
+			payload["id"] = id
+		}
+
+	case "graph.query.relationships":
+		// Pass through entity_id field
+		if entityID, ok := variables["entityId"]; ok {
+			payload["entity_id"] = entityID
+		}
+		if entityIDVal, ok := variables["entity_id"]; ok {
+			payload["entity_id"] = entityIDVal
+		}
+
+	case "graph.query.hierarchyStats", "graph.query.prefix":
+		// Pass through prefix field
+		if prefix, ok := variables["prefix"]; ok {
+			payload["prefix"] = prefix
+		}
+		if limit, ok := variables["limit"]; ok {
+			payload["limit"] = limit
+		}
+
+	case "graph.query.spatial":
+		// Pass through bounding box parameters
+		if north, ok := variables["north"]; ok {
+			payload["north"] = north
+		}
+		if south, ok := variables["south"]; ok {
+			payload["south"] = south
+		}
+		if east, ok := variables["east"]; ok {
+			payload["east"] = east
+		}
+		if west, ok := variables["west"]; ok {
+			payload["west"] = west
+		}
+		if limit, ok := variables["limit"]; ok {
+			payload["limit"] = limit
+		}
+
+	case "graph.query.temporal":
+		// Pass through time range parameters
+		if startTime, ok := variables["startTime"]; ok {
+			payload["startTime"] = startTime
+		}
+		if endTime, ok := variables["endTime"]; ok {
+			payload["endTime"] = endTime
+		}
+		if limit, ok := variables["limit"]; ok {
+			payload["limit"] = limit
+		}
+
+	default:
+		// For unknown subjects, pass through as-is
+		return variables
+	}
+
+	return payload
+}
+
 // handleGraphQL handles GraphQL requests
-func (c *Component) handleGraphQL(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 	// Update metrics
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	c.lastActivity.Store(time.Now())
 
-	// For now, return a simple response
-	// In real implementation, this would handle GraphQL queries
+	// Check HTTP method - only POST allowed
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		response := map[string]interface{}{
+			"errors": []map[string]interface{}{
+				{"message": "method not allowed"},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Use request context with timeout
+	ctx, cancel := context.WithTimeout(r.Context(), c.config.QueryTimeout)
+	defer cancel()
+
+	// Parse GraphQL request
+	var gqlReq struct {
+		Query     string                 `json:"query"`
+		Variables map[string]interface{} `json:"variables"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&gqlReq); err != nil {
+		atomic.AddInt64(&c.errors, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		response := map[string]interface{}{
+			"errors": []map[string]interface{}{
+				{"message": "invalid request"},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Validate query field
+	if gqlReq.Query == "" {
+		atomic.AddInt64(&c.errors, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		response := map[string]interface{}{
+			"errors": []map[string]interface{}{
+				{"message": "invalid request"},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Map to NATS subject
+	subject := c.mapGraphQLQueryToNATSSubject(gqlReq.Query)
+
+	// Transform variables to NATS payload format
+	payload := c.transformVariablesToNATSPayload(gqlReq.Variables, subject)
+	payloadBytes, _ := json.Marshal(payload)
+	resp, err := c.natsRequester.Request(ctx, subject, payloadBytes, c.config.QueryTimeout)
+	if err != nil {
+		atomic.AddInt64(&c.errors, 1)
+		w.Header().Set("Content-Type", "application/json")
+
+		// Check if error is due to timeout or context cancellation
+		if err == context.DeadlineExceeded || ctx.Err() == context.DeadlineExceeded || ctx.Err() == context.Canceled {
+			w.WriteHeader(http.StatusGatewayTimeout)
+			response := map[string]interface{}{
+				"errors": []map[string]interface{}{
+					{"message": "request timeout"},
+				},
+			}
+			json.NewEncoder(w).Encode(response)
+			return
+		}
+
+		// Other errors (e.g., component unavailable)
+		w.WriteHeader(http.StatusInternalServerError)
+		response := map[string]interface{}{
+			"errors": []map[string]interface{}{
+				{"message": "query failed"},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Check if response is a plain-text error from NATS handler (format: "error: <message>")
+	respStr := string(resp)
+	if strings.HasPrefix(respStr, "error:") {
+		atomic.AddInt64(&c.errors, 1)
+		errorMsg := strings.TrimPrefix(respStr, "error: ")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK) // GraphQL convention: 200 with errors
+		response := map[string]interface{}{
+			"errors": []map[string]interface{}{
+				{"message": strings.TrimSpace(errorMsg)},
+			},
+		}
+		json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	// Check if response contains GraphQL errors
+	var respData map[string]interface{}
+	if err := json.Unmarshal(resp, &respData); err == nil {
+		if errors, ok := respData["errors"]; ok && errors != nil {
+			// Response contains GraphQL errors - return 200 with errors (GraphQL convention)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(respData)
+			return
+		}
+	}
+
+	// Success - wrap in GraphQL format with field name from subject
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
+
+	// Wrap response with GraphQL field name based on subject
+	fieldName := c.subjectToGraphQLField(subject)
+	var dataPayload interface{}
+	if fieldName != "" {
+		dataPayload = map[string]json.RawMessage{
+			fieldName: resp,
+		}
+	} else {
+		dataPayload = json.RawMessage(resp)
+	}
 	response := map[string]interface{}{
-		"data": map[string]interface{}{
-			"message": "GraphQL endpoint",
-		},
+		"data": dataPayload,
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		atomic.AddInt64(&c.errors, 1)

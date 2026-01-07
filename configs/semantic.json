@@ -635,6 +635,27 @@
         "compute_on_startup": true
       }
     },
+    "graph-query": {
+      "type": "processor",
+      "name": "graph-query",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "query_requests",
+              "subject": "graph.query.>",
+              "type": "nats-request",
+              "description": "Query requests from gateway"
+            }
+          ],
+          "outputs": []
+        },
+        "request_timeout": "30s",
+        "max_traversal_depth": 5,
+        "max_traversal_nodes": 100
+      }
+    },
     "graph-gateway": {
       "type": "gateway",
       "name": "graph-gateway",

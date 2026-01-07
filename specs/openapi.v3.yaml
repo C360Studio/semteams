@@ -122,6 +122,7 @@ components:
                         - $ref: ../schemas/graph-index-temporal.v1.json
                         - $ref: ../schemas/graph-index.v1.json
                         - $ref: ../schemas/graph-ingest.v1.json
+                        - $ref: ../schemas/graph-query.v1.json
                         - $ref: ../schemas/http.v1.json
                         - $ref: ../schemas/httppost.v1.json
                         - $ref: ../schemas/iot_sensor.v1.json

@@ -1,0 +1,31 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "graph-query.v1.json",
+  "type": "object",
+  "title": "graph-query Configuration",
+  "description": "Query coordinator for graph subsystem",
+  "properties": {
+    "max_depth": {
+      "type": "string",
+      "description": "Maximum traversal depth for path search queries"
+    },
+    "ports": {
+      "type": "object",
+      "description": "Port configuration for input and output connections"
+    },
+    "query_timeout": {
+      "type": "string",
+      "description": "Timeout for query operations (e.g., '5s', '10s')"
+    }
+  },
+  "required": [
+    "ports"
+  ],
+  "x-component-metadata": {
+    "name": "graph-query",
+    "type": "processor",
+    "protocol": "nats",
+    "domain": "graph",
+    "version": "1.0.0"
+  }
+}
