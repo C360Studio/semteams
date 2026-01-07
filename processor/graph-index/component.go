@@ -14,6 +14,7 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/vocabulary"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
 	"github.com/nats-io/nats.go/jetstream"
@@ -208,6 +209,9 @@ type Component struct {
 	// Port definitions
 	inputPorts  []component.Port
 	outputPorts []component.Port
+
+	// Alias predicates from vocabulary (cached at startup for performance)
+	aliasPredicates map[string]int
 }
 
 // CreateGraphIndex is the factory function for creating graph-index components
@@ -424,6 +428,10 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
+	// Cache alias predicates from vocabulary for fast lookup during indexing
+	c.aliasPredicates = vocabulary.DiscoverAliasPredicates()
+	c.logger.Debug("cached alias predicates from vocabulary", slog.Int("count", len(c.aliasPredicates)))
+
 	// Check context before proceeding
 	if err := ctx.Err(); err != nil {
 		cancel()
@@ -634,12 +642,16 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 		}
 
 		// Check for alias predicate and index it
-		if triple.Predicate == "core.identity.alias" {
+		// Supports both the canonical core.identity.alias predicate AND vocabulary-registered alias predicates
+		_, isVocabAlias := c.aliasPredicates[triple.Predicate]
+		isCoreAlias := triple.Predicate == "core.identity.alias"
+		if isVocabAlias || isCoreAlias {
 			if alias, ok := triple.Object.(string); ok && alias != "" {
 				if err := c.UpdateAliasIndex(ctx, alias, entityID); err != nil {
 					c.logger.Debug("failed to update alias index",
 						slog.String("alias", alias),
 						slog.String("entity", entityID),
+						slog.String("predicate", triple.Predicate),
 						slog.Any("error", err))
 				}
 			}

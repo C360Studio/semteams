@@ -20,6 +20,11 @@ func (c *Component) setupQueryHandlers() error {
 		return fmt.Errorf("subscribe to entity query: %w", err)
 	}
 
+	// Subscribe to entity by alias query (resolves alias then fetches entity)
+	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.entityByAlias", c.handleQueryEntityByAlias); err != nil {
+		return fmt.Errorf("subscribe to entityByAlias query: %w", err)
+	}
+
 	// Subscribe to relationships query passthrough
 	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.relationships", c.handleQueryRelationships); err != nil {
 		return fmt.Errorf("subscribe to relationships query: %w", err)
@@ -55,8 +60,18 @@ func (c *Component) setupQueryHandlers() error {
 		return fmt.Errorf("subscribe to temporal query: %w", err)
 	}
 
+	// Subscribe to semantic search (passthrough to graph-embedding)
+	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.semantic", c.handleQuerySemantic); err != nil {
+		return fmt.Errorf("subscribe to semantic query: %w", err)
+	}
+
+	// Subscribe to similar entity search (passthrough to graph-embedding)
+	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.similar", c.handleQuerySimilar); err != nil {
+		return fmt.Errorf("subscribe to similar query: %w", err)
+	}
+
 	c.logger.Info("query handlers registered",
-		"subjects", []string{"graph.query.entity", "graph.query.relationships", "graph.query.pathSearch", "graph.query.hierarchyStats", "graph.query.prefix", "graph.query.capabilities", "graph.query.spatial", "graph.query.temporal"})
+		"subjects", []string{"graph.query.entity", "graph.query.entityByAlias", "graph.query.relationships", "graph.query.pathSearch", "graph.query.hierarchyStats", "graph.query.prefix", "graph.query.capabilities", "graph.query.spatial", "graph.query.temporal", "graph.query.semantic", "graph.query.similar"})
 
 	return nil
 }
@@ -75,6 +90,58 @@ func (c *Component) handleQueryEntity(ctx context.Context, data []byte) ([]byte,
 
 	// Forward to graph-ingest
 	response, err := c.natsClient.Request(ctx, "graph.ingest.query.entity", data, c.config.QueryTimeout)
+	if err != nil {
+		c.recordError(err)
+		if errors.Is(err, nats.ErrTimeout) {
+			return nil, fmt.Errorf("timeout: %w", err)
+		}
+		return nil, fmt.Errorf("query entity failed: %w", err)
+	}
+
+	c.recordSuccess(len(data), len(response))
+	return response, nil
+}
+
+// handleQueryEntityByAlias resolves an alias to an entity ID, then fetches the entity.
+// It first tries to resolve aliasOrID via graph-index alias lookup.
+// If found, it fetches the entity using the canonical ID.
+// If not found as alias, it tries aliasOrID as a direct entity ID.
+func (c *Component) handleQueryEntityByAlias(ctx context.Context, data []byte) ([]byte, error) {
+	// Parse request
+	var req struct {
+		AliasOrID string `json:"aliasOrID"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if req.AliasOrID == "" {
+		return nil, errors.New("invalid request: empty aliasOrID")
+	}
+
+	entityID := req.AliasOrID // Default to using input as entity ID
+
+	// Try to resolve as alias first via graph-index
+	aliasReq := map[string]string{"alias": req.AliasOrID}
+	aliasReqData, _ := json.Marshal(aliasReq)
+
+	aliasResp, err := c.natsClient.Request(ctx, "graph.index.query.alias", aliasReqData, c.config.QueryTimeout)
+	if err == nil {
+		// Check if response contains a canonical_id
+		var aliasResult struct {
+			CanonicalID string `json:"canonical_id"`
+		}
+		if json.Unmarshal(aliasResp, &aliasResult) == nil && aliasResult.CanonicalID != "" {
+			entityID = aliasResult.CanonicalID
+		}
+	}
+	// If alias lookup failed, we'll try aliasOrID as a direct entity ID
+
+	// Now fetch the entity using the resolved (or original) ID
+	entityReq := map[string]string{"id": entityID}
+	entityReqData, _ := json.Marshal(entityReq)
+
+	response, err := c.natsClient.Request(ctx, "graph.ingest.query.entity", entityReqData, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
@@ -368,6 +435,38 @@ func (c *Component) handleQueryTemporal(ctx context.Context, data []byte) ([]byt
 			return nil, fmt.Errorf("timeout: %w", err)
 		}
 		return nil, fmt.Errorf("query temporal failed: %w", err)
+	}
+
+	c.recordSuccess(len(data), len(response))
+	return response, nil
+}
+
+// handleQuerySemantic handles semantic search requests (passthrough to graph-embedding)
+func (c *Component) handleQuerySemantic(ctx context.Context, data []byte) ([]byte, error) {
+	// Forward to graph-embedding's search handler
+	response, err := c.natsClient.Request(ctx, "graph.embedding.query.search", data, c.config.QueryTimeout)
+	if err != nil {
+		c.recordError(err)
+		if errors.Is(err, nats.ErrTimeout) {
+			return nil, fmt.Errorf("timeout: %w", err)
+		}
+		return nil, fmt.Errorf("query semantic failed: %w", err)
+	}
+
+	c.recordSuccess(len(data), len(response))
+	return response, nil
+}
+
+// handleQuerySimilar handles similar entity requests (passthrough to graph-embedding)
+func (c *Component) handleQuerySimilar(ctx context.Context, data []byte) ([]byte, error) {
+	// Forward to graph-embedding's similar handler
+	response, err := c.natsClient.Request(ctx, "graph.embedding.query.similar", data, c.config.QueryTimeout)
+	if err != nil {
+		c.recordError(err)
+		if errors.Is(err, nats.ErrTimeout) {
+			return nil, fmt.Errorf("timeout: %w", err)
+		}
+		return nil, fmt.Errorf("query similar failed: %w", err)
 	}
 
 	c.recordSuccess(len(data), len(response))

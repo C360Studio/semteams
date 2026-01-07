@@ -532,11 +532,14 @@ func (c *Component) mapGraphQLQueryToNATSSubject(query string) string {
 	query = strings.ToLower(query)
 
 	// IMPORTANT: Check specific patterns BEFORE generic ones
-	// "entityidhierarchy" contains "entity" - must check first
+	// "entityidhierarchy" and "entitybyalias" contain "entity" - must check first
 
 	// Most specific patterns first
 	if strings.Contains(query, "entityidhierarchy") {
 		return "graph.query.hierarchyStats"
+	}
+	if strings.Contains(query, "entitybyalias") {
+		return "graph.query.entityByAlias"
 	}
 	if strings.Contains(query, "entitiesbyprefix") {
 		return "graph.query.prefix"
@@ -549,6 +552,12 @@ func (c *Component) mapGraphQLQueryToNATSSubject(query string) string {
 	}
 	if strings.Contains(query, "temporalsearch") {
 		return "graph.query.temporal"
+	}
+	if strings.Contains(query, "semanticsearch") || strings.Contains(query, "textsearch") || strings.Contains(query, "similaritysearch") {
+		return "graph.query.semantic"
+	}
+	if strings.Contains(query, "findsimilar") || strings.Contains(query, "similarentities") {
+		return "graph.query.similar"
 	}
 	if strings.Contains(query, "relationships") {
 		return "graph.query.relationships"
@@ -572,6 +581,8 @@ func (c *Component) subjectToGraphQLField(subject string) string {
 		return "pathSearch"
 	case "graph.query.entity":
 		return "entity"
+	case "graph.query.entityByAlias":
+		return "entityByAlias"
 	case "graph.query.relationships":
 		return "relationships"
 	case "graph.query.capabilities":
@@ -584,6 +595,10 @@ func (c *Component) subjectToGraphQLField(subject string) string {
 		return "spatialSearch"
 	case "graph.query.temporal":
 		return "temporalSearch"
+	case "graph.query.semantic":
+		return "similaritySearch"
+	case "graph.query.similar":
+		return "findSimilar"
 	default:
 		return ""
 	}
@@ -670,6 +685,27 @@ func (c *Component) transformVariablesToNATSPayload(variables map[string]interfa
 		}
 		if endTime, ok := variables["endTime"]; ok {
 			payload["endTime"] = endTime
+		}
+		if limit, ok := variables["limit"]; ok {
+			payload["limit"] = limit
+		}
+
+	case "graph.query.semantic":
+		// Pass through semantic search parameters
+		if query, ok := variables["query"]; ok {
+			payload["query"] = query
+		}
+		if limit, ok := variables["limit"]; ok {
+			payload["limit"] = limit
+		}
+
+	case "graph.query.similar":
+		// Pass through similar entity search parameters
+		if entityID, ok := variables["entityId"]; ok {
+			payload["entity_id"] = entityID
+		}
+		if entityIDVal, ok := variables["entity_id"]; ok {
+			payload["entity_id"] = entityIDVal
 		}
 		if limit, ok := variables["limit"]; ok {
 			payload["limit"] = limit

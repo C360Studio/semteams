@@ -1060,6 +1060,131 @@ func (s *TieredScenario) executeTestPathRAGBoundary(ctx context.Context, result 
 	return nil
 }
 
+// executeTestEntityByAlias validates the entityByAlias GraphQL query.
+// This tests REAL alias resolution via graph-index's ALIAS_INDEX using sensor serial numbers.
+//
+// The IoT sensor processor creates triples with predicate "iot.sensor.serial" which is
+// registered as an alias predicate in the vocabulary system. graph-index uses
+// vocabulary.DiscoverAliasPredicates() to detect these and index them in ALIAS_INDEX.
+//
+// Test data sensors.jsonl has sensors with serial numbers like "SN-TEMP-2024-001".
+// This test queries by serial number and verifies it resolves to the correct entity.
+//
+// This is a Tier 0 capability that runs on ALL tiers (alias lookup is structural).
+func (s *TieredScenario) executeTestEntityByAlias(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
+	// Test REAL alias resolution using sensor serial number
+	// From testdata/semantic/sensors.jsonl: temp-sensor-001 has serial "SN-TEMP-2024-001"
+	// Expected entity ID: c360.logistics.environmental.sensor.temperature.temp-sensor-001
+	serialNumber := "SN-TEMP-2024-001"
+	expectedEntityID := "c360.logistics.environmental.sensor.temperature.temp-sensor-001"
+
+	aliasQuery := map[string]any{
+		"query": `query($aliasOrID: String!) {
+			entityByAlias(aliasOrID: $aliasOrID) {
+				id
+				type
+				properties
+			}
+		}`,
+		"variables": map[string]any{"aliasOrID": serialNumber},
+	}
+
+	queryJSON, err := json.Marshal(aliasQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal entityByAlias query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create entityByAlias request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := httpClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("entityByAlias request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("entityByAlias returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read entityByAlias response: %w", err)
+	}
+
+	var aliasResp struct {
+		Data struct {
+			EntityByAlias *struct {
+				ID         string         `json:"id"`
+				Type       string         `json:"type"`
+				Properties map[string]any `json:"properties"`
+			} `json:"entityByAlias"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &aliasResp); err != nil {
+		return fmt.Errorf("failed to parse entityByAlias response: %w", err)
+	}
+
+	if len(aliasResp.Errors) > 0 {
+		return fmt.Errorf("entityByAlias GraphQL error: %s", aliasResp.Errors[0].Message)
+	}
+
+	entity := aliasResp.Data.EntityByAlias
+
+	result.Metrics["entity_by_alias_latency_ms"] = latency.Milliseconds()
+
+	if entity == nil {
+		// Alias not resolved - this is a HARD failure since we're testing real alias resolution
+		result.Details["entity_by_alias_validation"] = map[string]any{
+			"success":            false,
+			"serial_number":      serialNumber,
+			"expected_entity_id": expectedEntityID,
+			"latency_ms":         latency.Milliseconds(),
+			"message":            fmt.Sprintf("Alias resolution FAILED: serial number %s not found in ALIAS_INDEX", serialNumber),
+		}
+		return fmt.Errorf("entityByAlias failed to resolve serial number %s - alias not indexed (check iot.sensor.serial predicate indexing)", serialNumber)
+	}
+
+	// Validate the returned entity matches expected
+	if entity.ID != expectedEntityID {
+		result.Details["entity_by_alias_validation"] = map[string]any{
+			"success":            false,
+			"serial_number":      serialNumber,
+			"expected_entity_id": expectedEntityID,
+			"actual_entity_id":   entity.ID,
+			"latency_ms":         latency.Milliseconds(),
+			"message":            fmt.Sprintf("Alias resolved to wrong entity: expected %s, got %s", expectedEntityID, entity.ID),
+		}
+		return fmt.Errorf("entityByAlias resolved to wrong entity: expected %s, got %s", expectedEntityID, entity.ID)
+	}
+
+	result.Details["entity_by_alias_validation"] = map[string]any{
+		"success":            true,
+		"serial_number":      serialNumber,
+		"expected_entity_id": expectedEntityID,
+		"actual_entity_id":   entity.ID,
+		"entity_type":        entity.Type,
+		"latency_ms":         latency.Milliseconds(),
+		"alias_resolved":     true, // Real alias resolution worked!
+		"message":            fmt.Sprintf("Alias resolution SUCCESS: %s → %s", serialNumber, entity.ID),
+	}
+
+	return nil
+}
+
 // executeValidateKCoreIndexStructural validates k-core decomposition for the structural tier.
 // Unlike statistical/semantic tiers which rely on community detection edges, structural tier
 // uses EntityID sibling edges (6-part hierarchy) to create graph structure for k-core.
