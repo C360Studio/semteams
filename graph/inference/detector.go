@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/graph/structuralindex"
+	"github.com/c360/semstreams/graph/structural"
 	"github.com/c360/semstreams/pkg/errs"
 )
 
@@ -33,10 +33,10 @@ type Detector interface {
 // DetectorDependencies provides access to shared resources needed by detectors.
 type DetectorDependencies struct {
 	// StructuralIndices provides access to k-core and pivot indices.
-	StructuralIndices *structuralindex.StructuralIndices
+	StructuralIndices *structural.StructuralIndices
 
 	// PreviousKCore is the k-core index from the previous computation (for demotion detection).
-	PreviousKCore *structuralindex.KCoreIndex
+	PreviousKCore *structural.KCoreIndex
 
 	// SimilarityFinder provides semantic similarity queries.
 	SimilarityFinder SimilarityFinder

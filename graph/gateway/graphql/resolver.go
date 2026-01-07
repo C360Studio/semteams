@@ -13,7 +13,6 @@ import (
 
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/graph/clustering"
-	"github.com/c360/semstreams/graph/querymanager"
 	"github.com/c360/semstreams/message"
 )
 
@@ -87,12 +86,12 @@ func (r *DefaultMetricsRecorder) Stats() (total, success, failed uint64, lastAct
 // Resolver provides resolver methods for GraphQL queries.
 // It uses the QueryManager directly for in-process access to graph data.
 type Resolver struct {
-	queryManager    querymanager.Querier
+	queryManager    Querier
 	metricsRecorder MetricsRecorder
 }
 
 // NewResolver creates a new resolver with direct QueryManager access.
-func NewResolver(queryManager querymanager.Querier, metricsRecorder MetricsRecorder) *Resolver {
+func NewResolver(queryManager Querier, metricsRecorder MetricsRecorder) *Resolver {
 	return &Resolver{
 		queryManager:    queryManager,
 		metricsRecorder: metricsRecorder,
@@ -225,12 +224,12 @@ func (r *Resolver) QueryRelationships(ctx context.Context, filters RelationshipF
 	var err error
 
 	queryFn := func() error {
-		direction := querymanager.DirectionOutgoing
+		direction := DirectionOutgoing
 		switch filters.Direction {
 		case "incoming":
-			direction = querymanager.DirectionIncoming
+			direction = DirectionIncoming
 		case "both":
-			direction = querymanager.DirectionBoth
+			direction = DirectionBoth
 		}
 
 		rels, qErr := r.queryManager.QueryRelationships(ctx, filters.EntityID, direction)
@@ -440,15 +439,15 @@ func (r *Resolver) PathSearch(ctx context.Context, startEntity string,
 	var err error
 
 	queryFn := func() error {
-		dir := querymanager.DirectionOutgoing
+		dir := DirectionOutgoing
 		switch strings.ToUpper(direction) {
 		case "INCOMING":
-			dir = querymanager.DirectionIncoming
+			dir = DirectionIncoming
 		case "BOTH":
-			dir = querymanager.DirectionBoth
+			dir = DirectionBoth
 		}
 
-		pattern := querymanager.PathPattern{
+		pattern := PathPattern{
 			MaxDepth:        maxDepth,
 			MaxNodes:        maxNodes,
 			Direction:       dir,
@@ -486,7 +485,7 @@ func (r *Resolver) SpatialSearch(ctx context.Context,
 	var err error
 
 	queryFn := func() error {
-		bounds := querymanager.SpatialBounds{
+		bounds := SpatialBounds{
 			North: north,
 			South: south,
 			East:  east,
@@ -571,13 +570,13 @@ func (r *Resolver) GraphSnapshot(ctx context.Context,
 	var err error
 
 	queryFn := func() error {
-		bounds := querymanager.QueryBounds{
+		bounds := QueryBounds{
 			EntityTypes: entityTypes,
 			MaxEntities: maxEntities,
 		}
 
 		if north != nil && south != nil && east != nil && west != nil {
-			bounds.Spatial = &querymanager.SpatialBounds{
+			bounds.Spatial = &SpatialBounds{
 				North: *north,
 				South: *south,
 				East:  *east,
@@ -586,7 +585,7 @@ func (r *Resolver) GraphSnapshot(ctx context.Context,
 		}
 
 		if startTime != nil && endTime != nil {
-			bounds.Temporal = &querymanager.TemporalBounds{
+			bounds.Temporal = &TemporalBounds{
 				Start: *startTime,
 				End:   *endTime,
 			}
@@ -758,7 +757,7 @@ func convertCommunityToGraphQL(comm *clustering.Community) *Community {
 	}
 }
 
-func convertPathResultToGraphQL(qmResult *querymanager.QueryResult) *PathSearchResult {
+func convertPathResultToGraphQL(qmResult *QueryResult) *PathSearchResult {
 	if qmResult == nil {
 		return nil
 	}
@@ -822,7 +821,7 @@ func convertPathResultToGraphQL(qmResult *querymanager.QueryResult) *PathSearchR
 	}
 }
 
-func convertSnapshotToGraphQL(qmSnapshot *querymanager.GraphSnapshot) *GraphSnapshot {
+func convertSnapshotToGraphQL(qmSnapshot *QMGraphSnapshot) *GraphSnapshot {
 	if qmSnapshot == nil {
 		return nil
 	}

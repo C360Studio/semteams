@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/graph/structuralindex"
+	"github.com/c360/semstreams/graph/structural"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -243,11 +243,11 @@ func TestOrchestrator_RunDetection_WithDetectors(t *testing.T) {
 
 	// Set minimal dependencies
 	deps := &DetectorDependencies{
-		StructuralIndices: &structuralindex.StructuralIndices{
-			KCore: &structuralindex.KCoreIndex{
+		StructuralIndices: &structural.StructuralIndices{
+			KCore: &structural.KCoreIndex{
 				CoreNumbers: map[string]int{"entity-a": 2, "entity-b": 3},
 			},
-			Pivot: &structuralindex.PivotIndex{
+			Pivot: &structural.PivotIndex{
 				DistanceVectors: map[string][]int{"entity-a": {1, 2}, "entity-b": {2, 1}},
 			},
 		},
@@ -293,9 +293,9 @@ func TestOrchestrator_RunDetection_MaxAnomaliesLimit(t *testing.T) {
 	orch.RegisterDetector(detector)
 
 	deps := &DetectorDependencies{
-		StructuralIndices: &structuralindex.StructuralIndices{
-			KCore: &structuralindex.KCoreIndex{CoreNumbers: map[string]int{}},
-			Pivot: &structuralindex.PivotIndex{DistanceVectors: map[string][]int{}},
+		StructuralIndices: &structural.StructuralIndices{
+			KCore: &structural.KCoreIndex{CoreNumbers: map[string]int{}},
+			Pivot: &structural.PivotIndex{DistanceVectors: map[string][]int{}},
 		},
 	}
 	orch.SetDependencies(deps)

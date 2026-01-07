@@ -12,7 +12,7 @@
     },
     "cache_ttl": {
       "type": "string",
-      "description": "Cache TTL for embeddings",
+      "description": "Cache TTL for embeddings (e.g. 15m or 1h)",
       "category": "advanced"
     },
     "embedder_type": {

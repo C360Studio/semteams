@@ -1,4 +1,4 @@
-package structuralindex
+package structural
 
 import (
 	"testing"

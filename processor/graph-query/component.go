@@ -13,10 +13,17 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/pkg/resource"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
-// natsRequester is a local interface for NATS request/reply operations.
+// Note: jetstream import is used for KV types (jetstream.KeyValue, jetstream.KeyWatcher).
+// This is the standard pattern across all processor components.
+// natsclient wraps NATS operations but doesn't abstract jetstream types.
+
+// natsRequester is a local interface for NATS request/reply and KV operations.
 // *natsclient.Client satisfies this interface, and tests can provide mocks.
 type natsRequester interface {
 	Request(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error)
@@ -24,6 +31,8 @@ type natsRequester interface {
 	Status() natsclient.ConnectionStatus
 	Connect(ctx context.Context) error
 	WaitForConnection(ctx context.Context) error
+	JetStream() (jetstream.JetStream, error)
+	GetKeyValueBucket(ctx context.Context, name string) (jetstream.KeyValue, error)
 }
 
 // Config defines the configuration for the graph-query coordinator component
@@ -75,8 +84,13 @@ type Component struct {
 	pathSearcher *PathSearcher
 	logger       *slog.Logger
 
+	// Community cache for GraphRAG (consumer-owned, KV watch based)
+	communityCache   *CommunityCache
+	communityWatcher *resource.Watcher
+
 	// Lifecycle state
 	mu          sync.RWMutex
+	wg          sync.WaitGroup
 	initialized bool
 	started     bool
 	ctx         context.Context
@@ -289,27 +303,142 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("subscribe to queries: %w", err)
 	}
 
+	// Initialize community cache for GraphRAG
+	c.communityCache = NewCommunityCache(c.logger)
+
+	// Set up resource watcher for COMMUNITY_INDEX bucket
+	// This handles graceful startup and recovery if the bucket appears later
+	watcherCfg := resource.DefaultConfig()
+	watcherCfg.Logger = c.logger
+	watcherCfg.OnAvailable = func() {
+		c.enableGraphRAG()
+	}
+	watcherCfg.OnLost = func() {
+		c.disableGraphRAG()
+	}
+
+	c.communityWatcher = resource.NewWatcher(
+		"COMMUNITY_INDEX",
+		func(ctx context.Context) error {
+			_, err := c.natsClient.GetKeyValueBucket(ctx, graph.BucketCommunityIndex)
+			return err
+		},
+		watcherCfg,
+	)
+
+	// Try to get bucket during startup
+	if c.communityWatcher.WaitForStartup(c.ctx) {
+		// Bucket available - enable GraphRAG immediately
+		if err := c.startGraphRAGWatcher(); err != nil {
+			return fmt.Errorf("start GraphRAG watcher: %w", err)
+		}
+	} else {
+		// Bucket not available - start background checking
+		c.logger.Info("COMMUNITY_INDEX bucket not available at startup, GraphRAG disabled (will retry)")
+		c.communityWatcher.StartBackgroundCheck(c.ctx)
+	}
+
 	c.started = true
 	c.logger.Info("graph-query coordinator started")
 	return nil
 }
 
 // Stop stops the component
-func (c *Component) Stop(_ time.Duration) error {
+func (c *Component) Stop(timeout time.Duration) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-
 	if !c.started {
+		c.mu.Unlock()
 		return nil // Not started - safe to stop
 	}
 
 	if c.cancel != nil {
 		c.cancel()
 	}
+	c.mu.Unlock()
 
+	// Wait for background goroutines with timeout
+	done := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Clean shutdown
+	case <-time.After(timeout):
+		c.logger.Warn("stop timeout waiting for goroutines")
+	}
+
+	// Stop community watcher (background check goroutine)
+	if c.communityWatcher != nil {
+		c.communityWatcher.Stop()
+	}
+
+	// Stop community cache watcher
+	if c.communityCache != nil {
+		c.communityCache.Stop()
+	}
+
+	c.mu.Lock()
 	c.started = false
+	c.mu.Unlock()
+
 	c.logger.Info("graph-query coordinator stopped")
 	return nil
+}
+
+// startGraphRAGWatcher initializes and starts the community cache KV watcher.
+// Called when COMMUNITY_INDEX bucket is available at startup.
+func (c *Component) startGraphRAGWatcher() error {
+	communityBucket, err := c.natsClient.GetKeyValueBucket(c.ctx, graph.BucketCommunityIndex)
+	if err != nil {
+		return fmt.Errorf("get COMMUNITY_INDEX bucket: %w", err)
+	}
+
+	// Start community cache watcher in background
+	c.wg.Add(1)
+	go func() {
+		defer c.wg.Done()
+		if err := c.communityCache.WatchAndSync(c.ctx, communityBucket); err != nil {
+			if c.ctx.Err() == nil {
+				c.logger.Error("community cache watcher failed", "error", err)
+			}
+		}
+	}()
+
+	// Register GraphRAG handlers
+	if err := c.setupGraphRAGHandlers(); err != nil {
+		return fmt.Errorf("setup GraphRAG handlers: %w", err)
+	}
+
+	c.logger.Info("GraphRAG enabled")
+	return nil
+}
+
+// enableGraphRAG is called when COMMUNITY_INDEX bucket becomes available after being unavailable.
+// This is the OnAvailable callback for the resource watcher.
+func (c *Component) enableGraphRAG() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if c.ctx == nil || c.ctx.Err() != nil {
+		return // Component shutting down
+	}
+
+	if err := c.startGraphRAGWatcher(); err != nil {
+		c.logger.Error("failed to enable GraphRAG after bucket became available", "error", err)
+	}
+}
+
+// disableGraphRAG is called when COMMUNITY_INDEX bucket is lost.
+// This is the OnLost callback for the resource watcher.
+func (c *Component) disableGraphRAG() {
+	c.logger.Warn("COMMUNITY_INDEX bucket lost, GraphRAG queries will fail until recovered")
+	// Note: We don't stop the community cache watcher here because:
+	// 1. The watcher will handle the bucket disappearing gracefully
+	// 2. When bucket returns, we'll get the OnAvailable callback
+	// The communityCache.IsAvailable() check in handlers will prevent queries
 }
 
 // recordSuccess records successful query metrics

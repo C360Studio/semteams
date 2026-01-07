@@ -13,7 +13,6 @@ import (
 
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/graph/clustering"
-	"github.com/c360/semstreams/graph/querymanager"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -244,7 +243,7 @@ func (m *mockMetricsRecorder) RecordMetrics(_ context.Context, operation string,
 	return fn()
 }
 
-// mockQueryManager implements querymanager.Querier for testing
+// mockQueryManager implements Querier for testing
 type mockQueryManager struct {
 	communities      map[string]*clustering.Community
 	entityCommunity  map[string]map[int]*clustering.Community
@@ -261,19 +260,19 @@ func (m *mockQueryManager) GetEntities(_ context.Context, _ []string) ([]*graph.
 func (m *mockQueryManager) GetEntityByAlias(_ context.Context, _ string) (*graph.EntityState, error) {
 	return nil, nil
 }
-func (m *mockQueryManager) ExecutePath(_ context.Context, _ string, _ querymanager.PathPattern) (*querymanager.QueryResult, error) {
+func (m *mockQueryManager) ExecutePath(_ context.Context, _ string, _ PathPattern) (*QueryResult, error) {
 	return nil, nil
 }
-func (m *mockQueryManager) GetGraphSnapshot(_ context.Context, _ querymanager.QueryBounds) (*querymanager.GraphSnapshot, error) {
+func (m *mockQueryManager) GetGraphSnapshot(_ context.Context, _ QueryBounds) (*QMGraphSnapshot, error) {
 	return nil, nil
 }
-func (m *mockQueryManager) QueryRelationships(_ context.Context, _ string, _ querymanager.Direction) ([]*querymanager.Relationship, error) {
+func (m *mockQueryManager) QueryRelationships(_ context.Context, _ string, _ Direction) ([]*QMRelationship, error) {
 	return nil, nil
 }
-func (m *mockQueryManager) LocalSearch(_ context.Context, _ string, _ string, _ int) (*querymanager.LocalSearchResult, error) {
+func (m *mockQueryManager) LocalSearch(_ context.Context, _ string, _ string, _ int) (*QMLocalSearchResult, error) {
 	return nil, nil
 }
-func (m *mockQueryManager) GlobalSearch(_ context.Context, _ string, _ int, _ int) (*querymanager.GlobalSearchResult, error) {
+func (m *mockQueryManager) GlobalSearch(_ context.Context, _ string, _ int, _ int) (*QMGlobalSearchResult, error) {
 	return nil, nil
 }
 func (m *mockQueryManager) GetCommunity(_ context.Context, communityID string) (*clustering.Community, error) {
@@ -309,7 +308,7 @@ func (m *mockQueryManager) GetCommunitiesByLevel(_ context.Context, _ int) ([]*c
 func (m *mockQueryManager) QueryByPredicate(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
-func (m *mockQueryManager) QuerySpatial(_ context.Context, _ querymanager.SpatialBounds) ([]string, error) {
+func (m *mockQueryManager) QuerySpatial(_ context.Context, _ SpatialBounds) ([]string, error) {
 	return nil, nil
 }
 func (m *mockQueryManager) QueryTemporal(_ context.Context, _ time.Time, _ time.Time) ([]string, error) {
@@ -321,19 +320,19 @@ func (m *mockQueryManager) InvalidateEntity(_ string) error {
 func (m *mockQueryManager) WarmCache(_ context.Context, _ []string) error {
 	return nil
 }
-func (m *mockQueryManager) GetCacheStats() querymanager.CacheStats {
-	return querymanager.CacheStats{}
+func (m *mockQueryManager) GetCacheStats() CacheStats {
+	return CacheStats{}
 }
-func (m *mockQueryManager) GlobalSearchWithOptions(_ context.Context, _ *querymanager.SearchOptions) (*querymanager.GlobalSearchResult, error) {
+func (m *mockQueryManager) GlobalSearchWithOptions(_ context.Context, _ *SearchOptions) (*QMGlobalSearchResult, error) {
 	return nil, nil
 }
-func (m *mockQueryManager) GetHierarchyStats(_ context.Context, _ string) (*querymanager.HierarchyStats, error) {
+func (m *mockQueryManager) GetHierarchyStats(_ context.Context, _ string) (*HierarchyStats, error) {
 	return nil, nil
 }
 func (m *mockQueryManager) ListWithPrefix(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
-func (m *mockQueryManager) SearchSimilar(_ context.Context, _ string, _ int) (*querymanager.SimilaritySearchResult, error) {
+func (m *mockQueryManager) SearchSimilar(_ context.Context, _ string, _ int) (*QMSimilaritySearchResult, error) {
 	return nil, nil
 }
 

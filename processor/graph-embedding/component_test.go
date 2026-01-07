@@ -189,13 +189,14 @@ func TestConfig_Validate_ValidConfig(t *testing.T) {
 				EmbedderType: "http",
 				EmbedderURL:  "http://localhost:8080/embeddings",
 				BatchSize:    100,
-				CacheTTL:     30 * time.Minute,
+				CacheTTLStr:  "30m",
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.config.ApplyDefaults()
 			err := tt.config.Validate()
 			assert.NoError(t, err)
 		})
@@ -351,7 +352,7 @@ func TestConfig_Validate_InvalidEmbedderType(t *testing.T) {
 					},
 				},
 				EmbedderType: "bm25",
-				CacheTTL:     -5 * time.Minute,
+				CacheTTLStr:  "-5m",
 			},
 			wantErr: true,
 		},
@@ -359,6 +360,10 @@ func TestConfig_Validate_InvalidEmbedderType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Only apply defaults for tests that need string parsing
+			if tt.name == "negative cache TTL" {
+				tt.config.ApplyDefaults()
+			}
 			err := tt.config.Validate()
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -387,7 +392,7 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	// Verify defaults are applied
 	assert.Equal(t, "bm25", config.EmbedderType, "EmbedderType should remain bm25")
 	assert.Equal(t, 50, config.BatchSize, "BatchSize should default to 50")
-	assert.Equal(t, 15*time.Minute, config.CacheTTL, "CacheTTL should default to 15 minutes")
+	assert.Equal(t, 15*time.Minute, config.CacheTTL(), "CacheTTL should default to 15 minutes")
 }
 
 func TestDefaultConfig_ReturnsValidConfig(t *testing.T) {
@@ -403,7 +408,7 @@ func TestDefaultConfig_ReturnsValidConfig(t *testing.T) {
 	assert.NotEmpty(t, config.Ports.Outputs)
 	assert.Equal(t, "bm25", config.EmbedderType)
 	assert.Equal(t, 50, config.BatchSize)
-	assert.Equal(t, 15*time.Minute, config.CacheTTL)
+	assert.Equal(t, 15*time.Minute, config.CacheTTL())
 
 	// Verify required buckets
 	inputs := config.Ports.Inputs
@@ -769,7 +774,7 @@ func TestCreateGraphEmbedding_HTTPEmbedderConfig(t *testing.T) {
 		EmbedderType: "http",
 		EmbedderURL:  "http://localhost:8080/embeddings",
 		BatchSize:    100,
-		CacheTTL:     30 * time.Minute,
+		CacheTTLStr:  "30m",
 	}
 
 	configJSON, err := json.Marshal(config)
@@ -792,7 +797,7 @@ func TestCreateGraphEmbedding_HTTPEmbedderConfig(t *testing.T) {
 	assert.Equal(t, "http", component.config.EmbedderType)
 	assert.Equal(t, "http://localhost:8080/embeddings", component.config.EmbedderURL)
 	assert.Equal(t, 100, component.config.BatchSize)
-	assert.Equal(t, 30*time.Minute, component.config.CacheTTL)
+	assert.Equal(t, 30*time.Minute, component.config.CacheTTL())
 }
 
 func TestRegister_AddsToRegistry(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/c360/semstreams/graph/structuralindex"
+	"github.com/c360/semstreams/graph/structural"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/google/uuid"
 )
@@ -112,7 +112,7 @@ func (d *CoreAnomalyDetector) validateDependencies() error {
 // detectCoreIsolation finds high-core entities with low peer connectivity.
 func (d *CoreAnomalyDetector) detectCoreIsolation(
 	ctx context.Context,
-	kcore *structuralindex.KCoreIndex,
+	kcore *structural.KCoreIndex,
 ) ([]*StructuralAnomaly, error) {
 	anomalies := make([]*StructuralAnomaly, 0)
 
@@ -156,7 +156,7 @@ func (d *CoreAnomalyDetector) countSameCorePeers(
 	ctx context.Context,
 	entityID string,
 	coreLevel int,
-	kcore *structuralindex.KCoreIndex,
+	kcore *structural.KCoreIndex,
 ) (actual, expected int) {
 	// If relationship querier is available, use it for accurate count
 	if d.deps.RelationshipQuerier != nil {
@@ -229,7 +229,7 @@ func (d *CoreAnomalyDetector) createIsolationAnomaly(
 // detectCoreDemotion finds entities that dropped k-core level.
 func (d *CoreAnomalyDetector) detectCoreDemotion(
 	ctx context.Context,
-	current, previous *structuralindex.KCoreIndex,
+	current, previous *structural.KCoreIndex,
 ) ([]*StructuralAnomaly, error) {
 	anomalies := make([]*StructuralAnomaly, 0)
 

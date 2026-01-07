@@ -11,10 +11,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"math"
+
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/pkg/retry"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -411,6 +415,29 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "setup query handlers")
 	}
 
+	// Wait for input KV bucket (ENTITY_STATES) with retries - we are the reader/watcher
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+	}
+
+	entityBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
+		bucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
+		if err != nil {
+			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketEntityStates), slog.Any("error", err))
+		}
+		return bucket, err
+	})
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketEntityStates))
+	}
+
+	// Start entity watcher goroutine
+	c.wg.Add(1)
+	go c.watchEntityStates(ctx, entityBucket)
+
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
@@ -457,4 +484,214 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-index-spatial"))
 		return fmt.Errorf("stop timeout after %v", timeout)
 	}
+}
+
+// ============================================================================
+// Entity State Watcher
+// ============================================================================
+
+// watchEntityStates watches the ENTITY_STATES KV bucket and indexes entities with spatial data
+func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyValue) {
+	defer c.wg.Done()
+
+	watcher, err := bucket.WatchAll(ctx)
+	if err != nil {
+		c.logger.Error("failed to start entity watcher",
+			slog.String("bucket", graph.BucketEntityStates),
+			slog.Any("error", err))
+		return
+	}
+	defer watcher.Stop()
+
+	c.logger.Info("entity watcher started", slog.String("bucket", graph.BucketEntityStates))
+
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("entity watcher stopping", slog.String("reason", "context cancelled"))
+			return
+		case entry := <-watcher.Updates():
+			if entry == nil {
+				// nil entry indicates initial state enumeration complete
+				c.logger.Debug("entity watcher initial sync complete")
+				continue
+			}
+
+			if entry.Operation() == jetstream.KeyValueDelete {
+				c.handleEntityDelete(ctx, entry.Key())
+				continue
+			}
+
+			c.processEntityUpdate(ctx, entry)
+		}
+	}
+}
+
+// processEntityUpdate indexes an entity's spatial data if it has coordinates
+func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.KeyValueEntry) {
+	var state graph.EntityState
+	if err := json.Unmarshal(entry.Value(), &state); err != nil {
+		c.logger.Warn("failed to unmarshal entity state",
+			slog.String("entity", entry.Key()),
+			slog.Any("error", err))
+		return
+	}
+
+	// Determine entity ID
+	entityID := state.ID
+	if entityID == "" {
+		entityID = entry.Key()
+	}
+	if entityID == "" && len(state.Triples) > 0 {
+		entityID = state.Triples[0].Subject
+	}
+
+	// Extract coordinates from triples
+	lat, lon, alt := c.extractGeoCoordinates(state.Triples)
+
+	// Skip if no coordinates found
+	if lat == nil || lon == nil {
+		return
+	}
+
+	// Calculate geohash
+	geohashStr := c.calculateGeohash(*lat, *lon, c.config.GeohashPrecision)
+
+	// Update spatial index
+	altValue := 0.0
+	if alt != nil {
+		altValue = *alt
+	}
+
+	if err := c.updateSpatialIndex(ctx, geohashStr, entityID, *lat, *lon, altValue); err != nil {
+		c.logger.Warn("failed to update spatial index",
+			slog.String("entity", entityID),
+			slog.String("geohash", geohashStr),
+			slog.Any("error", err))
+		atomic.AddInt64(&c.errors, 1)
+		return
+	}
+
+	c.logger.Debug("indexed entity spatial data",
+		slog.String("entity", entityID),
+		slog.String("geohash", geohashStr),
+		slog.Float64("lat", *lat),
+		slog.Float64("lon", *lon))
+
+	atomic.AddInt64(&c.messagesProcessed, 1)
+	c.lastActivity.Store(time.Now())
+}
+
+// extractGeoCoordinates extracts latitude, longitude, and altitude from entity triples
+func (c *Component) extractGeoCoordinates(triples []message.Triple) (lat, lon, alt *float64) {
+	for _, triple := range triples {
+		switch triple.Predicate {
+		case "geo.location.latitude", "latitude":
+			if latVal, ok := triple.Object.(float64); ok {
+				lat = &latVal
+			}
+		case "geo.location.longitude", "longitude":
+			if lonVal, ok := triple.Object.(float64); ok {
+				lon = &lonVal
+			}
+		case "geo.location.altitude", "altitude":
+			if altVal, ok := triple.Object.(float64); ok {
+				alt = &altVal
+			}
+		}
+	}
+	return lat, lon, alt
+}
+
+// updateSpatialIndex updates the spatial index bucket for a geohash cell
+func (c *Component) updateSpatialIndex(ctx context.Context, geohashStr, entityID string, lat, lon, alt float64) error {
+	// Get current data for this geohash cell
+	entry, err := c.spatialBucket.Get(ctx, geohashStr)
+
+	var spatialData map[string]interface{}
+	if err == nil {
+		if err := json.Unmarshal(entry.Value(), &spatialData); err != nil {
+			spatialData = map[string]interface{}{
+				"entities":    map[string]interface{}{},
+				"last_update": time.Now().Unix(),
+			}
+		}
+	} else {
+		spatialData = map[string]interface{}{
+			"entities":    map[string]interface{}{},
+			"last_update": time.Now().Unix(),
+		}
+	}
+
+	// Get or create entities map
+	entities, ok := spatialData["entities"].(map[string]interface{})
+	if !ok {
+		entities = map[string]interface{}{}
+	}
+
+	// Add/update entity position
+	entities[entityID] = map[string]interface{}{
+		"lat":     lat,
+		"lon":     lon,
+		"alt":     alt,
+		"updated": time.Now().Unix(),
+	}
+	spatialData["entities"] = entities
+	spatialData["last_update"] = time.Now().Unix()
+
+	// Serialize and write
+	data, err := json.Marshal(spatialData)
+	if err != nil {
+		return errs.Wrap(err, "Component", "updateSpatialIndex", "marshal spatial data")
+	}
+
+	if entry != nil {
+		_, err = c.spatialBucket.Update(ctx, geohashStr, data, entry.Revision())
+	} else {
+		_, err = c.spatialBucket.Create(ctx, geohashStr, data)
+	}
+
+	if err != nil {
+		return errs.Wrap(err, "Component", "updateSpatialIndex", "write spatial data")
+	}
+
+	return nil
+}
+
+// handleEntityDelete handles entity deletion from the spatial index
+func (c *Component) handleEntityDelete(_ context.Context, entityID string) {
+	c.logger.Debug("entity deleted - spatial cleanup not fully implemented",
+		slog.String("entity", entityID))
+}
+
+// calculateGeohash calculates a configurable-precision geohash for spatial indexing
+// This matches the algorithm used in graph/indexmanager/indexes.go
+func (c *Component) calculateGeohash(lat, lon float64, precision int) string {
+	// Configurable spatial binning based on precision:
+	// precision=4: ~2.5km bins  (multiplier=10)
+	// precision=5: ~600m bins   (multiplier=50)
+	// precision=6: ~120m bins   (multiplier=100)
+	// precision=7: ~30m bins    (multiplier=300)  <- Default
+	// precision=8: ~5m bins     (multiplier=1000)
+
+	var multiplier float64
+	switch precision {
+	case 4:
+		multiplier = 10.0 // ~2.5km resolution
+	case 5:
+		multiplier = 50.0 // ~600m resolution
+	case 6:
+		multiplier = 100.0 // ~120m resolution
+	case 7:
+		multiplier = 300.0 // ~30m resolution (default)
+	case 8:
+		multiplier = 1000.0 // ~5m resolution
+	default:
+		multiplier = 300.0 // Default to precision 7
+	}
+
+	// Normalize coordinates to positive integers with precision-based binning
+	latInt := int(math.Floor((lat + 90.0) * multiplier))
+	lonInt := int(math.Floor((lon + 180.0) * multiplier))
+	return fmt.Sprintf("geo_%d_%d_%d", precision, latInt, lonInt)
 }

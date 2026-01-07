@@ -2,6 +2,8 @@ package clustering
 
 import (
 	"context"
+
+	gtypes "github.com/c360/semstreams/graph"
 )
 
 // Community represents a detected community/cluster in the graph
@@ -68,19 +70,9 @@ type CommunityDetector interface {
 	InferRelationshipsFromCommunities(ctx context.Context, level int, config InferenceConfig) ([]InferredTriple, error)
 }
 
-// GraphProvider abstracts the graph data source for community detection
-type GraphProvider interface {
-	// GetAllEntityIDs returns all entity IDs in the graph
-	GetAllEntityIDs(ctx context.Context) ([]string, error)
-
-	// GetNeighbors returns the entity IDs connected to the given entity
-	// direction: "outgoing", "incoming", or "both"
-	GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error)
-
-	// GetEdgeWeight returns the weight of the edge between two entities
-	// Returns 1.0 if edge exists but has no weight, 0.0 if no edge exists
-	GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error)
-}
+// GraphProvider is an alias to the shared interface in graph package.
+// Abstracts the graph data source for community detection.
+type GraphProvider = gtypes.GraphProvider
 
 // CommunityStorage abstracts persistence layer for communities
 type CommunityStorage interface {

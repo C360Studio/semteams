@@ -1,4 +1,4 @@
-package structuralindex
+package structural
 
 import (
 	"context"
@@ -6,23 +6,13 @@ import (
 	"sort"
 	"time"
 
+	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/pkg/errs"
 )
 
-// GraphProvider abstracts the graph data source for structural index computation.
-// This interface matches clustering.GraphProvider but is defined here to avoid import cycles.
-type GraphProvider interface {
-	// GetAllEntityIDs returns all entity IDs in the graph.
-	GetAllEntityIDs(ctx context.Context) ([]string, error)
-
-	// GetNeighbors returns the entity IDs connected to the given entity.
-	// direction: "outgoing", "incoming", or "both"
-	GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error)
-
-	// GetEdgeWeight returns the weight of the edge between two entities.
-	// Returns 1.0 if edge exists but has no weight, 0.0 if no edge exists.
-	GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error)
-}
+// GraphProvider is an alias to the shared interface in graph package.
+// Abstracts the graph data source for structural index computation.
+type GraphProvider = gtypes.GraphProvider
 
 // KCoreComputer computes k-core decomposition of a graph.
 //

@@ -271,6 +271,8 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"test-spatial-query", s.executeTestSpatialQuery, nil},
 		{"test-temporal-query", s.executeTestTemporalQuery, nil},
 		{"test-zone-relationships", s.executeTestZoneRelationships, nil},
+		// Alias resolution via ALIAS_INDEX (structural - no ML)
+		{"test-entity-by-alias", s.executeTestEntityByAlias, nil},
 
 		// === Tier 0 ONLY: Zero-ML constraint validation ===
 		// These verify structural tier has NO ML inference
@@ -451,6 +453,22 @@ func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
 
 	// Build structured results (dual-write for backward compatibility)
 	result.Structured = BuildTieredResults(result, s.searchStats)
+
+	// Validate semantic tier requirements BEFORE marking success
+	// This ensures semantic E2E fails if ML features aren't working
+	if err := s.validateSemanticRequirements(result); err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("semantic tier validation failed: %v", err)
+		return result, nil
+	}
+
+	// Validate fallback behavior for semantic-fallback variant
+	// This ensures fallback test validates graceful degradation
+	if err := s.validateFallbackBehavior(result); err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("fallback validation failed: %v", err)
+		return result, nil
+	}
 
 	return result, nil
 }
@@ -2177,6 +2195,87 @@ func extractScores(hits []search.Hit) []float64 {
 
 // executeCompareCoreMl captures search results for Core vs ML comparison
 // and persists results to JSON for later analysis
+// validateFallbackBehavior checks that the system degrades gracefully without ML services.
+// Returns error if fallback test and core features aren't working.
+func (s *TieredScenario) validateFallbackBehavior(result *Result) error {
+	// Only validate if this is a fallback test
+	if s.config.Variant != "semantic-fallback" {
+		return nil
+	}
+
+	// Verify ML services are NOT available (as expected for fallback)
+	if avail, ok := result.Details["semembed_available"].(bool); ok && avail {
+		return fmt.Errorf("fallback test: semembed should be unavailable but was available")
+	}
+
+	// Verify core features still work
+	if result.Structured != nil {
+		// Check entities were ingested
+		if result.Structured.Entities.ActualCount == 0 {
+			return fmt.Errorf("fallback: entity ingestion failed (0 entities)")
+		}
+
+		// Check hierarchy was created
+		if result.Structured.Hierarchy != nil && result.Structured.Hierarchy.ContainerCount == 0 {
+			return fmt.Errorf("fallback: hierarchy inference failed (0 containers)")
+		}
+
+		// Check PathRAG works (sensor test)
+		if result.Structured.PathRAGSensor != nil && result.Structured.PathRAGSensor.EntitiesFound == 0 {
+			return fmt.Errorf("fallback: PathRAG failed (0 entities found)")
+		}
+	}
+
+	return nil
+}
+
+// validateSemanticRequirements checks that semantic tier features are actually working.
+// Returns error if this is a semantic tier test but semantic features aren't functional.
+func (s *TieredScenario) validateSemanticRequirements(result *Result) error {
+	// Skip validation for fallback tests (they have their own validation)
+	if s.config.Variant == "semantic-fallback" {
+		return nil
+	}
+
+	// Check if this is a semantic tier test
+	// Use CONFIGURED variant if set, otherwise use detected variant
+	isSemanticTest := false
+	if s.config.Variant == "semantic" {
+		isSemanticTest = true
+	} else if s.config.Variant == "" {
+		variant := s.detectVariantAndProvider(result)
+		isSemanticTest = variant.variant == "semantic"
+	}
+
+	// Only validate semantic tier
+	if !isSemanticTest {
+		return nil
+	}
+
+	// Check semembed availability
+	if avail, ok := result.Details["semembed_available"].(bool); !ok || !avail {
+		return fmt.Errorf("semantic tier requires semembed: semembed_available=%v", avail)
+	}
+
+	// Check search functionality (known answer tests must pass)
+	if result.Structured != nil {
+		if stats := result.Structured.Search.Stats; stats != nil {
+			passed := stats.KnownAnswerTestsPassed
+			total := stats.KnownAnswerTestsTotal
+			if total > 0 && passed == 0 {
+				return fmt.Errorf("semantic tier: 0/%d known answer tests passed (search not working)", total)
+			}
+		}
+
+		// Check embeddings were generated via variant info
+		if !result.Structured.Variant.SemembedAvailable {
+			return fmt.Errorf("semantic tier: semembed not available in structured results")
+		}
+	}
+
+	return nil
+}
+
 // variantInfo holds detected variant and embedding provider information
 type variantInfo struct {
 	variant           string
@@ -2207,11 +2306,19 @@ func (s *TieredScenario) detectVariantAndProvider(result *Result) variantInfo {
 		body, _ := io.ReadAll(resp.Body)
 		metricsText := string(body)
 
-		// Parse indexengine_embedding_provider metric value using regex
-		// Format: indexengine_embedding_provider{component="..."} <value>
-		// If this metric doesn't exist, embeddings are disabled (structural tier)
-		re := regexp.MustCompile(`indexengine_embedding_provider\{[^}]*\}\s+(\d+(?:\.\d+)?)`)
-		if matches := re.FindStringSubmatch(metricsText); len(matches) > 1 {
+		// Try new metric first: semstreams_graph_embedding_embedder_type
+		// Format: semstreams_graph_embedding_embedder_type <value>
+		// 0=disabled, 1=bm25, 2=http
+		re := regexp.MustCompile(`semstreams_graph_embedding_embedder_type\s+(\d+(?:\.\d+)?)`)
+		matches := re.FindStringSubmatch(metricsText)
+
+		// Fall back to legacy metric: indexengine_embedding_provider
+		if len(matches) <= 1 {
+			re = regexp.MustCompile(`indexengine_embedding_provider\{[^}]*\}\s+(\d+(?:\.\d+)?)`)
+			matches = re.FindStringSubmatch(metricsText)
+		}
+
+		if len(matches) > 1 {
 			switch matches[1] {
 			case "2", "2.0":
 				info.embeddingProvider = "http"

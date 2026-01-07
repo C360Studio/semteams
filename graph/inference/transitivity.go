@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/c360/semstreams/graph/structuralindex"
+	"github.com/c360/semstreams/graph/structural"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/google/uuid"
 )
@@ -122,7 +122,7 @@ func (d *TransitivityDetector) validateDependencies() error {
 func (d *TransitivityDetector) detectGapsForPredicate(
 	ctx context.Context,
 	predicate string,
-	pivotIndex *structuralindex.PivotIndex,
+	pivotIndex *structural.PivotIndex,
 	seen map[string]bool,
 ) ([]*StructuralAnomaly, error) {
 	anomalies := make([]*StructuralAnomaly, 0)
@@ -165,7 +165,7 @@ func (d *TransitivityDetector) detectGapsForPredicate(
 }
 
 // getEntitiesFromIndex extracts entity IDs from the pivot index.
-func (d *TransitivityDetector) getEntitiesFromIndex(pivotIndex *structuralindex.PivotIndex) []string {
+func (d *TransitivityDetector) getEntitiesFromIndex(pivotIndex *structural.PivotIndex) []string {
 	entities := make([]string, 0, len(pivotIndex.DistanceVectors))
 	for entityID := range pivotIndex.DistanceVectors {
 		entities = append(entities, entityID)

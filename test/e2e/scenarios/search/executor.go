@@ -221,12 +221,17 @@ func (e *Executor) parseGraphQLResponse(bodyBytes []byte) ([]Hit, error) {
 }
 
 func parseSimilarityResponse(bodyBytes []byte) ([]Hit, error) {
+	// Response format from graph-embedding via graph-gateway:
+	// {"data": {"similaritySearch": {"query": "...", "results": [{"entity_id": "...", "similarity": 0.85}]}}}
 	var gqlResp struct {
 		Data struct {
-			SimilaritySearch []struct {
-				ID    string  `json:"id"`
-				Type  string  `json:"type"`
-				Score float64 `json:"score"`
+			SimilaritySearch struct {
+				Query   string `json:"query"`
+				Results []struct {
+					EntityID   string  `json:"entity_id"`
+					Similarity float64 `json:"similarity"`
+				} `json:"results"`
+				Duration string `json:"duration"`
 			} `json:"similaritySearch"`
 		} `json:"data"`
 		Errors []struct {
@@ -242,8 +247,8 @@ func parseSimilarityResponse(bodyBytes []byte) ([]Hit, error) {
 	}
 
 	var hits []Hit
-	for _, entity := range gqlResp.Data.SimilaritySearch {
-		hits = append(hits, Hit{EntityID: entity.ID, Score: entity.Score})
+	for _, result := range gqlResp.Data.SimilaritySearch.Results {
+		hits = append(hits, Hit{EntityID: result.EntityID, Score: result.Similarity})
 	}
 	return hits, nil
 }

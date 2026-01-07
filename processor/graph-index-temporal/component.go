@@ -13,8 +13,10 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/pkg/retry"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -414,6 +416,29 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "setup query handlers")
 	}
 
+	// Wait for input KV bucket (ENTITY_STATES) with retries - we are the reader/watcher
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+	}
+
+	entityBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
+		bucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
+		if err != nil {
+			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketEntityStates), slog.Any("error", err))
+		}
+		return bucket, err
+	})
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketEntityStates))
+	}
+
+	// Start entity watcher goroutine
+	c.wg.Add(1)
+	go c.watchEntityStates(ctx, entityBucket)
+
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
@@ -459,4 +484,220 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-index-temporal"))
 		return fmt.Errorf("stop timeout after %v", timeout)
 	}
+}
+
+// ============================================================================
+// Entity State Watcher
+// ============================================================================
+
+// watchEntityStates watches the ENTITY_STATES KV bucket and indexes entities with temporal data
+func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyValue) {
+	defer c.wg.Done()
+
+	watcher, err := bucket.WatchAll(ctx)
+	if err != nil {
+		c.logger.Error("failed to start entity watcher",
+			slog.String("bucket", graph.BucketEntityStates),
+			slog.Any("error", err))
+		return
+	}
+	defer watcher.Stop()
+
+	c.logger.Info("entity watcher started", slog.String("bucket", graph.BucketEntityStates))
+
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("entity watcher stopping", slog.String("reason", "context cancelled"))
+			return
+		case entry := <-watcher.Updates():
+			if entry == nil {
+				// nil entry indicates initial state enumeration complete
+				c.logger.Debug("entity watcher initial sync complete")
+				continue
+			}
+
+			if entry.Operation() == jetstream.KeyValueDelete {
+				c.handleEntityDelete(ctx, entry.Key())
+				continue
+			}
+
+			c.processEntityUpdate(ctx, entry)
+		}
+	}
+}
+
+// processEntityUpdate indexes an entity's temporal data if it has timestamps
+func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.KeyValueEntry) {
+	var state graph.EntityState
+	if err := json.Unmarshal(entry.Value(), &state); err != nil {
+		c.logger.Warn("failed to unmarshal entity state",
+			slog.String("entity", entry.Key()),
+			slog.Any("error", err))
+		return
+	}
+
+	// Determine entity ID
+	entityID := state.ID
+	if entityID == "" {
+		entityID = entry.Key()
+	}
+	if entityID == "" && len(state.Triples) > 0 {
+		entityID = state.Triples[0].Subject
+	}
+
+	// Use entity's UpdatedAt timestamp (matching indexmanager/indexes.go pattern)
+	// The UpdatedAt field is always set when the entity is stored, providing
+	// consistent temporal indexing without relying on triple predicates
+	ts := state.UpdatedAt
+	if ts.IsZero() {
+		// Fallback to triple-based extraction if UpdatedAt is not set
+		if extracted := c.extractTimestamp(state.Triples); extracted != nil {
+			ts = *extracted
+		} else {
+			// Skip if no timestamp available
+			return
+		}
+	}
+
+	// Calculate time bucket based on resolution
+	timeBucket := c.calculateTimeBucket(ts)
+
+	// Update temporal index
+	if err := c.updateTemporalIndex(ctx, timeBucket, entityID, ts); err != nil {
+		c.logger.Warn("failed to update temporal index",
+			slog.String("entity", entityID),
+			slog.String("bucket", timeBucket),
+			slog.Any("error", err))
+		atomic.AddInt64(&c.errors, 1)
+		return
+	}
+
+	c.logger.Debug("indexed entity temporal data",
+		slog.String("entity", entityID),
+		slog.String("bucket", timeBucket),
+		slog.Time("timestamp", ts))
+
+	atomic.AddInt64(&c.messagesProcessed, 1)
+	c.lastActivity.Store(time.Now())
+}
+
+// extractTimestamp extracts a timestamp from entity triples
+func (c *Component) extractTimestamp(triples []message.Triple) *time.Time {
+	for _, triple := range triples {
+		switch triple.Predicate {
+		case "core.time.timestamp", "timestamp", "time.timestamp", "time.observation.recorded", "created_at", "updated_at":
+			// Try to parse the object as various time formats
+			switch v := triple.Object.(type) {
+			case time.Time:
+				return &v
+			case string:
+				// Try RFC3339 first
+				if t, err := time.Parse(time.RFC3339, v); err == nil {
+					return &t
+				}
+				// Try RFC3339Nano
+				if t, err := time.Parse(time.RFC3339Nano, v); err == nil {
+					return &t
+				}
+				// Try common ISO format
+				if t, err := time.Parse("2006-01-02T15:04:05Z", v); err == nil {
+					return &t
+				}
+			case float64:
+				// Unix timestamp
+				t := time.Unix(int64(v), 0)
+				return &t
+			case int64:
+				t := time.Unix(v, 0)
+				return &t
+			}
+		}
+	}
+	return nil
+}
+
+// calculateTimeBucket calculates the time bucket key based on configured resolution
+// Uses dot-separated format to match indexmanager/manager.go:1518 QueryTemporal expectations
+func (c *Component) calculateTimeBucket(ts time.Time) string {
+	t := ts.UTC()
+	switch c.config.TimeResolution {
+	case "minute":
+		return fmt.Sprintf("%04d.%02d.%02d.%02d.%02d", t.Year(), t.Month(), t.Day(), t.Hour(), t.Minute())
+	case "hour":
+		return fmt.Sprintf("%04d.%02d.%02d.%02d", t.Year(), t.Month(), t.Day(), t.Hour())
+	case "day":
+		return fmt.Sprintf("%04d.%02d.%02d", t.Year(), t.Month(), t.Day())
+	default:
+		return fmt.Sprintf("%04d.%02d.%02d.%02d", t.Year(), t.Month(), t.Day(), t.Hour()) // Default to hour
+	}
+}
+
+// updateTemporalIndex updates the temporal index bucket for a time bucket
+// Uses events array format to match indexmanager/indexes.go:1520-1552 and QueryTemporal expectations
+func (c *Component) updateTemporalIndex(ctx context.Context, timeBucket, entityID string, ts time.Time) error {
+	// Get current data for this time bucket
+	entry, err := c.temporalBucket.Get(ctx, timeBucket)
+
+	var temporalData map[string]interface{}
+	if err == nil {
+		if err := json.Unmarshal(entry.Value(), &temporalData); err != nil {
+			temporalData = map[string]interface{}{
+				"events":       []interface{}{},
+				"entity_count": 0,
+			}
+		}
+	} else {
+		temporalData = map[string]interface{}{
+			"events":       []interface{}{},
+			"entity_count": 0,
+		}
+	}
+
+	// Get or create events array
+	events, _ := temporalData["events"].([]interface{})
+
+	// Append new event (accumulate all events, matching indexmanager pattern)
+	newEvent := map[string]interface{}{
+		"entity":    entityID,
+		"type":      "update",
+		"timestamp": ts.Format(time.RFC3339),
+	}
+	events = append(events, newEvent)
+	temporalData["events"] = events
+
+	// Track unique entity count
+	uniqueEntities := make(map[string]bool)
+	for _, evt := range events {
+		if eventMap, ok := evt.(map[string]interface{}); ok {
+			if entity, ok := eventMap["entity"].(string); ok {
+				uniqueEntities[entity] = true
+			}
+		}
+	}
+	temporalData["entity_count"] = len(uniqueEntities)
+
+	// Serialize and write
+	data, err := json.Marshal(temporalData)
+	if err != nil {
+		return errs.Wrap(err, "Component", "updateTemporalIndex", "marshal temporal data")
+	}
+
+	if entry != nil {
+		_, err = c.temporalBucket.Update(ctx, timeBucket, data, entry.Revision())
+	} else {
+		_, err = c.temporalBucket.Create(ctx, timeBucket, data)
+	}
+
+	if err != nil {
+		return errs.Wrap(err, "Component", "updateTemporalIndex", "write temporal data")
+	}
+
+	return nil
+}
+
+// handleEntityDelete handles entity deletion from the temporal index
+func (c *Component) handleEntityDelete(_ context.Context, entityID string) {
+	c.logger.Debug("entity deleted - temporal cleanup not fully implemented",
+		slog.String("entity", entityID))
 }

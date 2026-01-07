@@ -12,7 +12,7 @@
     },
     "detection_interval": {
       "type": "string",
-      "description": "Interval between community detection runs",
+      "description": "Interval between community detection runs (e.g. 30s or 5m)",
       "category": "basic"
     },
     "enable_llm": {

@@ -13,7 +13,7 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/graph/structuralindex"
+	"github.com/c360/semstreams/graph/structural"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
@@ -205,10 +205,10 @@ type Component struct {
 	logger     *slog.Logger
 
 	// Domain resources
-	storage          structuralindex.Storage
-	kcoreComputer    *structuralindex.KCoreComputer
-	pivotComputer    *structuralindex.PivotComputer
-	graphProvider    structuralindex.GraphProvider
+	storage          structural.Storage
+	kcoreComputer    *structural.KCoreComputer
+	pivotComputer    *structural.PivotComputer
+	graphProvider    structural.GraphProvider
 	structuralBucket jetstream.KeyValue
 
 	// Lifecycle state
@@ -480,7 +480,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.structuralBucket = structuralBucket
 
 	// Create storage
-	c.storage = structuralindex.NewNATSStructuralIndexStorage(structuralBucket)
+	c.storage = structural.NewNATSStructuralIndexStorage(structuralBucket)
 
 	// Wait for OUTGOING_INDEX bucket with retries (we are the READER)
 	outgoingBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
@@ -512,8 +512,8 @@ func (c *Component) Start(ctx context.Context) error {
 	c.graphProvider = newKVGraphProvider(outgoingBucket, incomingBucket, c.logger)
 
 	// Create computers
-	c.kcoreComputer = structuralindex.NewKCoreComputer(c.graphProvider, c.logger)
-	c.pivotComputer = structuralindex.NewPivotComputer(c.graphProvider, c.config.PivotCount, c.logger)
+	c.kcoreComputer = structural.NewKCoreComputer(c.graphProvider, c.logger)
+	c.pivotComputer = structural.NewPivotComputer(c.graphProvider, c.config.PivotCount, c.logger)
 
 	// Set up query handlers
 	if err := c.setupQueryHandlers(ctx); err != nil {
@@ -587,7 +587,7 @@ func (c *Component) Stop(timeout time.Duration) error {
 // Graph Provider Implementation
 // ============================================================================
 
-// kvGraphProvider implements structuralindex.GraphProvider using NATS KV buckets
+// kvGraphProvider implements structural.GraphProvider using NATS KV buckets
 type kvGraphProvider struct {
 	outgoingBucket jetstream.KeyValue
 	incomingBucket jetstream.KeyValue

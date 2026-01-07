@@ -2,6 +2,7 @@
 package graph
 
 import (
+	"context"
 	"time"
 
 	"github.com/c360/semstreams/message"
@@ -74,6 +75,34 @@ func (es *EntityState) GetPropertyValue(predicate string) (any, bool) {
 	}
 
 	return nil, false
+}
+
+// GraphProvider abstracts the graph data source for algorithms.
+// Used by clustering, structural indexing, and other graph operations.
+type GraphProvider interface {
+	// GetAllEntityIDs returns all entity IDs in the graph.
+	GetAllEntityIDs(ctx context.Context) ([]string, error)
+
+	// GetNeighbors returns the entity IDs connected to the given entity.
+	// direction: "outgoing", "incoming", or "both"
+	GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error)
+
+	// GetEdgeWeight returns the weight of the edge between two entities.
+	// Returns 1.0 if edge exists but has no weight, 0.0 if no edge exists.
+	GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error)
+}
+
+// SimilarityHit represents an entity similarity match.
+// Used by semantic search and clustering operations.
+type SimilarityHit struct {
+	// EntityID is the unique identifier of the matched entity
+	EntityID string `json:"entity_id"`
+
+	// Similarity is the cosine similarity score (0.0-1.0, higher is more similar)
+	Similarity float64 `json:"similarity"`
+
+	// EntityType is the type of the entity (optional, for type-batched filtering)
+	EntityType string `json:"entity_type,omitempty"`
 }
 
 // Clone returns a deep copy of the EntityState.

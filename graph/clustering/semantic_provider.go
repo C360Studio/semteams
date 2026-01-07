@@ -7,7 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/c360/semstreams/graph/indexmanager"
+	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/pkg/errs"
 )
 
@@ -18,7 +18,7 @@ type SimilarityFinder interface {
 	// FindSimilarEntities returns entities similar to the given entity.
 	// threshold: minimum cosine similarity (0.0-1.0)
 	// limit: maximum results to return
-	FindSimilarEntities(ctx context.Context, entityID string, threshold float64, limit int) ([]indexmanager.SimilarityHit, error)
+	FindSimilarEntities(ctx context.Context, entityID string, threshold float64, limit int) ([]gtypes.SimilarityHit, error)
 }
 
 // SemanticGraphProvider wraps a base GraphProvider and adds virtual edges

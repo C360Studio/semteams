@@ -4,23 +4,23 @@ import (
 	"context"
 	"testing"
 
-	"github.com/c360/semstreams/graph/indexmanager"
+	gtypes "github.com/c360/semstreams/graph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // mockSimilarityFinder implements SimilarityFinder for testing
 type mockSimilarityFinder struct {
-	similarities map[string][]indexmanager.SimilarityHit
+	similarities map[string][]gtypes.SimilarityHit
 }
 
 func newMockSimilarityFinder() *mockSimilarityFinder {
 	return &mockSimilarityFinder{
-		similarities: make(map[string][]indexmanager.SimilarityHit),
+		similarities: make(map[string][]gtypes.SimilarityHit),
 	}
 }
 
-func (m *mockSimilarityFinder) addSimilarity(entityID string, hits []indexmanager.SimilarityHit) {
+func (m *mockSimilarityFinder) addSimilarity(entityID string, hits []gtypes.SimilarityHit) {
 	m.similarities[entityID] = hits
 }
 
@@ -29,10 +29,10 @@ func (m *mockSimilarityFinder) FindSimilarEntities(
 	entityID string,
 	threshold float64,
 	limit int,
-) ([]indexmanager.SimilarityHit, error) {
+) ([]gtypes.SimilarityHit, error) {
 	hits := m.similarities[entityID]
 	// Apply threshold filter
-	var filtered []indexmanager.SimilarityHit
+	var filtered []gtypes.SimilarityHit
 	for _, hit := range hits {
 		if hit.Similarity >= threshold {
 			filtered = append(filtered, hit)
@@ -59,7 +59,7 @@ func TestSemanticGraphProvider_GetNeighbors_CombinesExplicitAndVirtual(t *testin
 
 	// Create similarity finder with virtual edges
 	finder := newMockSimilarityFinder()
-	finder.addSimilarity("A", []indexmanager.SimilarityHit{
+	finder.addSimilarity("A", []gtypes.SimilarityHit{
 		{EntityID: "C", Similarity: 0.8}, // Virtual neighbor via similarity
 		{EntityID: "D", Similarity: 0.7}, // Virtual neighbor via similarity
 		{EntityID: "B", Similarity: 0.9}, // Already explicit neighbor
@@ -96,7 +96,7 @@ func TestSemanticGraphProvider_GetEdgeWeight_ExplicitTakesPrecedence(t *testing.
 
 	// Create similarity finder that would return 0.7 for the same pair
 	finder := newMockSimilarityFinder()
-	finder.addSimilarity("A", []indexmanager.SimilarityHit{
+	finder.addSimilarity("A", []gtypes.SimilarityHit{
 		{EntityID: "B", Similarity: 0.7}, // Would be 0.7 if virtual
 	})
 
@@ -124,7 +124,7 @@ func TestSemanticGraphProvider_GetEdgeWeight_ReturnsVirtualIfNoExplicit(t *testi
 
 	// Create similarity finder with virtual similarity
 	finder := newMockSimilarityFinder()
-	finder.addSimilarity("A", []indexmanager.SimilarityHit{
+	finder.addSimilarity("A", []gtypes.SimilarityHit{
 		{EntityID: "B", Similarity: 0.75},
 	})
 
@@ -153,7 +153,7 @@ func TestSemanticGraphProvider_GetNeighbors_RespectsThreshold(t *testing.T) {
 	baseProvider.AddEntity("C")
 
 	finder := newMockSimilarityFinder()
-	finder.addSimilarity("A", []indexmanager.SimilarityHit{
+	finder.addSimilarity("A", []gtypes.SimilarityHit{
 		{EntityID: "B", Similarity: 0.8}, // Above threshold
 		{EntityID: "C", Similarity: 0.4}, // Below threshold
 	})
@@ -185,9 +185,9 @@ func TestSemanticGraphProvider_GetNeighbors_RespectsLimit(t *testing.T) {
 
 	// Add 10 similar entities
 	finder := newMockSimilarityFinder()
-	var hits []indexmanager.SimilarityHit
+	var hits []gtypes.SimilarityHit
 	for i := 0; i < 10; i++ {
-		hits = append(hits, indexmanager.SimilarityHit{
+		hits = append(hits, gtypes.SimilarityHit{
 			EntityID:   string(rune('B' + i)),
 			Similarity: 0.9 - float64(i)*0.01,
 		})
@@ -216,7 +216,7 @@ func TestSemanticGraphProvider_ClearCache(t *testing.T) {
 	baseProvider.AddEntity("B")
 
 	finder := newMockSimilarityFinder()
-	finder.addSimilarity("A", []indexmanager.SimilarityHit{
+	finder.addSimilarity("A", []gtypes.SimilarityHit{
 		{EntityID: "B", Similarity: 0.8},
 	})
 

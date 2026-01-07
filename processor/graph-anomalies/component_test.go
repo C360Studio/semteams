@@ -173,10 +173,10 @@ func TestConfig_Validate_ValidConfig(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       16,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         16,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
 			},
 		},
 		{
@@ -191,16 +191,17 @@ func TestConfig_Validate_ValidConfig(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  30 * time.Minute,
-				PivotCount:       20,
-				MaxHopDistance:   15,
-				ComputeOnStartup: false,
+				ComputeIntervalStr: "30m",
+				PivotCount:         20,
+				MaxHopDistance:     15,
+				ComputeOnStartup:   false,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.config.ApplyDefaults()
 			err := tt.config.Validate()
 			assert.NoError(t, err)
 		})
@@ -216,11 +217,11 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 		{
 			name: "missing ports config",
 			config: Config{
-				Ports:            nil,
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       16,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				Ports:              nil,
+				ComputeIntervalStr: "1h",
+				PivotCount:         16,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
 			},
 			wantErr: true,
 		},
@@ -233,10 +234,10 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       16,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         16,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
 			},
 			wantErr: true,
 		},
@@ -251,10 +252,10 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       16,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         16,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
 			},
 			wantErr: true,
 		},
@@ -269,10 +270,10 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       16,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         16,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
 			},
 			wantErr: true,
 		},
@@ -288,10 +289,10 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 						{Name: "other", Type: "kv-write", Subject: "OTHER_BUCKET"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       16,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         16,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
 			},
 			wantErr: true,
 		},
@@ -311,24 +312,24 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 
 func TestConfig_Validate_InvalidInterval(t *testing.T) {
 	tests := []struct {
-		name     string
-		interval time.Duration
-		wantErr  bool
+		name        string
+		intervalStr string
+		wantErr     bool
 	}{
 		{
-			name:     "zero interval",
-			interval: 0,
-			wantErr:  true,
+			name:        "zero interval (empty string)",
+			intervalStr: "",
+			wantErr:     true,
 		},
 		{
-			name:     "negative interval",
-			interval: -1 * time.Hour,
-			wantErr:  true,
+			name:        "negative interval",
+			intervalStr: "-1h",
+			wantErr:     true,
 		},
 		{
-			name:     "valid interval",
-			interval: 1 * time.Hour,
-			wantErr:  false,
+			name:        "valid interval",
+			intervalStr: "1h",
+			wantErr:     false,
 		},
 	}
 
@@ -344,10 +345,14 @@ func TestConfig_Validate_InvalidInterval(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  tt.interval,
-				PivotCount:       16,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: tt.intervalStr,
+				PivotCount:         16,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
+			}
+			// Only apply defaults for non-error cases that need duration parsing
+			if !tt.wantErr {
+				config.ApplyDefaults()
 			}
 
 			err := config.Validate()
@@ -395,10 +400,14 @@ func TestConfig_Validate_InvalidPivotCount(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       tt.pivotCount,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         tt.pivotCount,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
+			}
+			// Only apply defaults for non-error cases that need duration parsing
+			if !tt.wantErr {
+				config.ApplyDefaults()
 			}
 
 			err := config.Validate()
@@ -446,10 +455,14 @@ func TestConfig_Validate_InvalidMaxHopDistance(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       16,
-				MaxHopDistance:   tt.maxHopDistance,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         16,
+				MaxHopDistance:     tt.maxHopDistance,
+				ComputeOnStartup:   true,
+			}
+			// Only apply defaults for non-error cases that need duration parsing
+			if !tt.wantErr {
+				config.ApplyDefaults()
 			}
 
 			err := config.Validate()
@@ -478,7 +491,7 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	config.ApplyDefaults()
 
 	// Verify defaults are applied
-	assert.Equal(t, 1*time.Hour, config.ComputeInterval, "ComputeInterval should default to 1 hour")
+	assert.Equal(t, 1*time.Hour, config.ComputeInterval(), "ComputeInterval should default to 1 hour")
 	assert.Equal(t, 16, config.PivotCount, "PivotCount should default to 16")
 	assert.Equal(t, 10, config.MaxHopDistance, "MaxHopDistance should default to 10")
 	assert.Equal(t, true, config.ComputeOnStartup, "ComputeOnStartup should default to true")
@@ -495,7 +508,7 @@ func TestDefaultConfig_ReturnsValidConfig(t *testing.T) {
 	assert.NotNil(t, config.Ports)
 	assert.Equal(t, 2, len(config.Ports.Inputs), "should have 2 input ports")
 	assert.Equal(t, 1, len(config.Ports.Outputs), "should have 1 output port")
-	assert.Equal(t, 1*time.Hour, config.ComputeInterval)
+	assert.Equal(t, 1*time.Hour, config.ComputeInterval())
 	assert.Equal(t, 16, config.PivotCount)
 	assert.Equal(t, 10, config.MaxHopDistance)
 	assert.Equal(t, true, config.ComputeOnStartup)
@@ -678,11 +691,11 @@ func TestComponent_Initialize_InvalidConfig(t *testing.T) {
 
 	comp := &Component{
 		config: Config{
-			Ports:            nil, // Invalid - missing ports
-			ComputeInterval:  1 * time.Hour,
-			PivotCount:       16,
-			MaxHopDistance:   10,
-			ComputeOnStartup: true,
+			Ports:              nil, // Invalid - missing ports
+			ComputeIntervalStr: "1h",
+			PivotCount:         16,
+			MaxHopDistance:     10,
+			ComputeOnStartup:   true,
 		},
 		natsClient: natsClient,
 	}
@@ -863,10 +876,10 @@ func TestCreateGraphAnomalies_CustomConfig(t *testing.T) {
 				{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 			},
 		},
-		ComputeInterval:  30 * time.Minute,
-		PivotCount:       20,
-		MaxHopDistance:   15,
-		ComputeOnStartup: false,
+		ComputeIntervalStr: "30m",
+		PivotCount:         20,
+		MaxHopDistance:     15,
+		ComputeOnStartup:   false,
 	}
 
 	configJSON, err := json.Marshal(config)
@@ -886,7 +899,7 @@ func TestCreateGraphAnomalies_CustomConfig(t *testing.T) {
 
 	// Verify custom configuration
 	component := comp.(*Component)
-	assert.Equal(t, 30*time.Minute, component.config.ComputeInterval)
+	assert.Equal(t, 30*time.Minute, component.config.ComputeInterval())
 	assert.Equal(t, 20, component.config.PivotCount)
 	assert.Equal(t, 15, component.config.MaxHopDistance)
 	assert.Equal(t, false, component.config.ComputeOnStartup)
@@ -1010,11 +1023,11 @@ func TestComponent_InitializeError_InvalidConfig(t *testing.T) {
 
 	comp := &Component{
 		config: Config{
-			Ports:            nil, // Invalid
-			ComputeInterval:  1 * time.Hour,
-			PivotCount:       16,
-			MaxHopDistance:   10,
-			ComputeOnStartup: true,
+			Ports:              nil, // Invalid
+			ComputeIntervalStr: "1h",
+			PivotCount:         16,
+			MaxHopDistance:     10,
+			ComputeOnStartup:   true,
 		},
 		natsClient: natsClient,
 	}
@@ -1043,10 +1056,10 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       16,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         16,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
 			},
 			shouldErr: false,
 		},
@@ -1062,10 +1075,10 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  0,
-				PivotCount:       16,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "", // empty string = zero interval after parsing
+				PivotCount:         16,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
 			},
 			shouldErr: true,
 		},
@@ -1081,10 +1094,10 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       0,
-				MaxHopDistance:   10,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         0,
+				MaxHopDistance:     10,
+				ComputeOnStartup:   true,
 			},
 			shouldErr: true,
 		},
@@ -1100,10 +1113,10 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 						{Name: "structural_index", Type: "kv-write", Subject: "STRUCTURAL_INDEX"},
 					},
 				},
-				ComputeInterval:  1 * time.Hour,
-				PivotCount:       16,
-				MaxHopDistance:   0,
-				ComputeOnStartup: true,
+				ComputeIntervalStr: "1h",
+				PivotCount:         16,
+				MaxHopDistance:     0,
+				ComputeOnStartup:   true,
 			},
 			shouldErr: true,
 		},
@@ -1111,6 +1124,10 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Only apply defaults for non-error cases that need duration parsing
+			if !tt.shouldErr {
+				tt.config.ApplyDefaults()
+			}
 			err := tt.config.Validate()
 			if tt.shouldErr {
 				assert.Error(t, err)

@@ -7,7 +7,7 @@
   "properties": {
     "compute_interval": {
       "type": "string",
-      "description": "Interval between structural index computations",
+      "description": "Interval between structural index computations (e.g. 1h or 30m)",
       "category": "basic"
     },
     "compute_on_startup": {

@@ -15,6 +15,7 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -64,6 +65,14 @@ func (m *mockNATSClient) WaitForConnection(ctx context.Context) error {
 		return errors.New("not connected")
 	}
 	return nil
+}
+
+func (m *mockNATSClient) JetStream() (jetstream.JetStream, error) {
+	return nil, errors.New("mock: JetStream not implemented")
+}
+
+func (m *mockNATSClient) GetKeyValueBucket(ctx context.Context, name string) (jetstream.KeyValue, error) {
+	return nil, errors.New("mock: bucket not available")
 }
 
 // ====================================================================================

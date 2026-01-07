@@ -172,9 +172,9 @@ func TestConfig_Validate_ValidConfig(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
-				MinCommunitySize:  3,
-				MaxIterations:     100,
+				DetectionIntervalStr: "30s",
+				MinCommunitySize:     3,
+				MaxIterations:        100,
 			},
 		},
 		{
@@ -188,11 +188,11 @@ func TestConfig_Validate_ValidConfig(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 60 * time.Second,
-				EnableLLM:         true,
-				LLMEndpoint:       "http://localhost:8080/llm",
-				MinCommunitySize:  5,
-				MaxIterations:     200,
+				DetectionIntervalStr: "60s",
+				EnableLLM:            true,
+				LLMEndpoint:          "http://localhost:8080/llm",
+				MinCommunitySize:     5,
+				MaxIterations:        200,
 			},
 		},
 		{
@@ -207,15 +207,16 @@ func TestConfig_Validate_ValidConfig(t *testing.T) {
 						{Name: "inferred_edges", Type: "nats-request", Subject: "graph.mutation.triple.add"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
-				MinCommunitySize:  3,
-				MaxIterations:     100,
+				DetectionIntervalStr: "30s",
+				MinCommunitySize:     3,
+				MaxIterations:        100,
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.config.ApplyDefaults()
 			err := tt.config.Validate()
 			assert.NoError(t, err)
 		})
@@ -231,8 +232,8 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 		{
 			name: "missing ports config",
 			config: Config{
-				Ports:             nil,
-				DetectionInterval: 30 * time.Second,
+				Ports:                nil,
+				DetectionIntervalStr: "30s",
 			},
 			wantErr: true,
 		},
@@ -245,7 +246,7 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
+				DetectionIntervalStr: "30s",
 			},
 			wantErr: true,
 		},
@@ -258,7 +259,7 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 					},
 					Outputs: []component.PortDefinition{},
 				},
-				DetectionInterval: 30 * time.Second,
+				DetectionIntervalStr: "30s",
 			},
 			wantErr: true,
 		},
@@ -273,7 +274,7 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 						{Name: "other", Type: "kv-write", Subject: "OTHER_BUCKET"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
+				DetectionIntervalStr: "30s",
 			},
 			wantErr: true,
 		},
@@ -293,24 +294,24 @@ func TestConfig_Validate_MissingPorts(t *testing.T) {
 
 func TestConfig_Validate_InvalidInterval(t *testing.T) {
 	tests := []struct {
-		name     string
-		interval time.Duration
-		wantErr  bool
+		name        string
+		intervalStr string
+		wantErr     bool
 	}{
 		{
-			name:     "zero interval",
-			interval: 0,
-			wantErr:  true,
+			name:        "zero interval (empty string)",
+			intervalStr: "",
+			wantErr:     true, // defaults to 0 before ApplyDefaults
 		},
 		{
-			name:     "negative interval",
-			interval: -10 * time.Second,
-			wantErr:  true,
+			name:        "negative interval",
+			intervalStr: "-10s",
+			wantErr:     true,
 		},
 		{
-			name:     "valid interval",
-			interval: 30 * time.Second,
-			wantErr:  false,
+			name:        "valid interval",
+			intervalStr: "30s",
+			wantErr:     false,
 		},
 	}
 
@@ -325,9 +326,14 @@ func TestConfig_Validate_InvalidInterval(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: tt.interval,
-				MinCommunitySize:  3,
-				MaxIterations:     100,
+				DetectionIntervalStr: tt.intervalStr,
+				MinCommunitySize:     3,
+				MaxIterations:        100,
+			}
+
+			// Parse the string duration
+			if tt.intervalStr != "" {
+				config.ApplyDefaults()
 			}
 
 			err := config.Validate()
@@ -384,13 +390,14 @@ func TestConfig_Validate_LLMRequiresEndpoint(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
-				EnableLLM:         tt.enableLLM,
-				LLMEndpoint:       tt.llmEndpoint,
-				MinCommunitySize:  3,
-				MaxIterations:     100,
+				DetectionIntervalStr: "30s",
+				EnableLLM:            tt.enableLLM,
+				LLMEndpoint:          tt.llmEndpoint,
+				MinCommunitySize:     3,
+				MaxIterations:        100,
 			}
 
+			config.ApplyDefaults()
 			err := config.Validate()
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -435,10 +442,13 @@ func TestConfig_Validate_InvalidMinCommunitySize(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
-				MinCommunitySize:  tt.minCommunitySize,
-				MaxIterations:     100,
+				DetectionIntervalStr: "30s",
+				MinCommunitySize:     tt.minCommunitySize,
+				MaxIterations:        100,
 			}
+			config.ApplyDefaults()
+			// Override with test value after defaults (since ApplyDefaults would fix 0 to 3)
+			config.MinCommunitySize = tt.minCommunitySize
 
 			err := config.Validate()
 			if tt.wantErr {
@@ -484,10 +494,13 @@ func TestConfig_Validate_InvalidMaxIterations(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
-				MinCommunitySize:  3,
-				MaxIterations:     tt.maxIterations,
+				DetectionIntervalStr: "30s",
+				MinCommunitySize:     3,
+				MaxIterations:        tt.maxIterations,
 			}
+			config.ApplyDefaults()
+			// Override with test value after defaults (since ApplyDefaults would fix 0 to 100)
+			config.MaxIterations = tt.maxIterations
 
 			err := config.Validate()
 			if tt.wantErr {
@@ -514,7 +527,7 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	config.ApplyDefaults()
 
 	// Verify defaults are applied
-	assert.Equal(t, 30*time.Second, config.DetectionInterval, "DetectionInterval should default to 30s")
+	assert.Equal(t, 30*time.Second, config.DetectionInterval(), "DetectionInterval should default to 30s")
 	assert.Equal(t, false, config.EnableLLM, "EnableLLM should default to false")
 	assert.Equal(t, 3, config.MinCommunitySize, "MinCommunitySize should default to 3")
 	assert.Equal(t, 100, config.MaxIterations, "MaxIterations should default to 100")
@@ -531,7 +544,7 @@ func TestDefaultConfig_ReturnsValidConfig(t *testing.T) {
 	assert.NotNil(t, config.Ports)
 	assert.NotEmpty(t, config.Ports.Inputs)
 	assert.NotEmpty(t, config.Ports.Outputs)
-	assert.Equal(t, 30*time.Second, config.DetectionInterval)
+	assert.Equal(t, 30*time.Second, config.DetectionInterval())
 	assert.Equal(t, false, config.EnableLLM)
 	assert.Equal(t, 3, config.MinCommunitySize)
 	assert.Equal(t, 100, config.MaxIterations)
@@ -725,8 +738,8 @@ func TestComponent_Initialize_InvalidConfig(t *testing.T) {
 
 	comp := &Component{
 		config: Config{
-			Ports:             nil, // Invalid - missing ports
-			DetectionInterval: 30 * time.Second,
+			Ports:                nil, // Invalid - missing ports
+			DetectionIntervalStr: "30s",
 		},
 		natsClient: natsClient,
 	}
@@ -906,11 +919,11 @@ func TestCreateGraphClustering_LLMConfig(t *testing.T) {
 				{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 			},
 		},
-		DetectionInterval: 60 * time.Second,
-		EnableLLM:         true,
-		LLMEndpoint:       "http://localhost:8080/llm",
-		MinCommunitySize:  5,
-		MaxIterations:     200,
+		DetectionIntervalStr: "60s",
+		EnableLLM:            true,
+		LLMEndpoint:          "http://localhost:8080/llm",
+		MinCommunitySize:     5,
+		MaxIterations:        200,
 	}
 
 	configJSON, err := json.Marshal(config)
@@ -932,7 +945,7 @@ func TestCreateGraphClustering_LLMConfig(t *testing.T) {
 	component := comp.(*Component)
 	assert.Equal(t, true, component.config.EnableLLM)
 	assert.Equal(t, "http://localhost:8080/llm", component.config.LLMEndpoint)
-	assert.Equal(t, 60*time.Second, component.config.DetectionInterval)
+	assert.Equal(t, 60*time.Second, component.config.DetectionInterval())
 	assert.Equal(t, 5, component.config.MinCommunitySize)
 	assert.Equal(t, 200, component.config.MaxIterations)
 }
@@ -1055,8 +1068,8 @@ func TestComponent_InitializeError_InvalidConfig(t *testing.T) {
 
 	comp := &Component{
 		config: Config{
-			Ports:             nil, // Invalid
-			DetectionInterval: 30 * time.Second,
+			Ports:                nil, // Invalid
+			DetectionIntervalStr: "30s",
 		},
 		natsClient: natsClient,
 	}
@@ -1084,9 +1097,9 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
-				MinCommunitySize:  3,
-				MaxIterations:     100,
+				DetectionIntervalStr: "30s",
+				MinCommunitySize:     3,
+				MaxIterations:        100,
 			},
 			shouldErr: false,
 		},
@@ -1101,11 +1114,11 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
-				EnableLLM:         true,
-				LLMEndpoint:       "http://localhost:8080",
-				MinCommunitySize:  3,
-				MaxIterations:     100,
+				DetectionIntervalStr: "30s",
+				EnableLLM:            true,
+				LLMEndpoint:          "http://localhost:8080",
+				MinCommunitySize:     3,
+				MaxIterations:        100,
 			},
 			shouldErr: false,
 		},
@@ -1120,10 +1133,10 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 30 * time.Second,
-				EnableLLM:         true,
-				MinCommunitySize:  3,
-				MaxIterations:     100,
+				DetectionIntervalStr: "30s",
+				EnableLLM:            true,
+				MinCommunitySize:     3,
+				MaxIterations:        100,
 			},
 			shouldErr: true,
 		},
@@ -1138,9 +1151,9 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
 					},
 				},
-				DetectionInterval: 0,
-				MinCommunitySize:  3,
-				MaxIterations:     100,
+				DetectionIntervalStr: "", // empty string results in zero duration
+				MinCommunitySize:     3,
+				MaxIterations:        100,
 			},
 			shouldErr: true,
 		},
@@ -1148,6 +1161,10 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Apply defaults to parse duration strings (except for zero interval test)
+			if tt.config.DetectionIntervalStr != "" {
+				tt.config.ApplyDefaults()
+			}
 			err := tt.config.Validate()
 			if tt.shouldErr {
 				assert.Error(t, err)

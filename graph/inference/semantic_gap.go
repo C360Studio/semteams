@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/c360/semstreams/graph/structuralindex"
+	"github.com/c360/semstreams/graph/structural"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/google/uuid"
 )
@@ -120,7 +120,7 @@ func (d *SemanticGapDetector) validateDependencies() error {
 }
 
 // getEntitiesFromIndex extracts entity IDs from the pivot index.
-func (d *SemanticGapDetector) getEntitiesFromIndex(pivotIndex *structuralindex.PivotIndex) []string {
+func (d *SemanticGapDetector) getEntitiesFromIndex(pivotIndex *structural.PivotIndex) []string {
 	entities := make([]string, 0, len(pivotIndex.DistanceVectors))
 	for entityID := range pivotIndex.DistanceVectors {
 		entities = append(entities, entityID)
@@ -132,7 +132,7 @@ func (d *SemanticGapDetector) getEntitiesFromIndex(pivotIndex *structuralindex.P
 func (d *SemanticGapDetector) detectGapsForEntity(
 	ctx context.Context,
 	entityA string,
-	pivotIndex *structuralindex.PivotIndex,
+	pivotIndex *structural.PivotIndex,
 	seen map[string]bool,
 ) []*StructuralAnomaly {
 	// Find semantically similar entities

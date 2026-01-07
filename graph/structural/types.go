@@ -7,7 +7,7 @@
 //
 // These indices support both query optimization (filtering noise, pruning traversals)
 // and structural inference (detecting anomalies like semantic-structural gaps).
-package structuralindex
+package structural
 
 import (
 	"time"

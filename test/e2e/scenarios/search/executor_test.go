@@ -10,14 +10,18 @@ import (
 )
 
 func TestExecutor_ExecuteOne_Success(t *testing.T) {
-	// Mock server returning GraphQL search results (similaritySearch format)
+	// Mock server returning GraphQL search results (similaritySearch format from graph-embedding)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// Return GraphQL similaritySearch response format
+		// Return GraphQL similaritySearch response format matching graph-embedding output
 		resp := map[string]any{
 			"data": map[string]any{
-				"similaritySearch": []map[string]any{
-					{"id": "sensor-temp-001", "type": "sensor", "score": 0.85},
-					{"id": "sensor-temp-002", "type": "sensor", "score": 0.72},
+				"similaritySearch": map[string]any{
+					"query": "temperature sensors",
+					"results": []map[string]any{
+						{"entity_id": "sensor-temp-001", "similarity": 0.85},
+						{"entity_id": "sensor-temp-002", "similarity": 0.72},
+					},
+					"duration": "15ms",
 				},
 			},
 		}
@@ -65,7 +69,11 @@ func TestExecutor_ExecuteOne_NoHits(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"data": map[string]any{
-				"similaritySearch": []map[string]any{},
+				"similaritySearch": map[string]any{
+					"query":    "nonexistent",
+					"results":  []map[string]any{},
+					"duration": "10ms",
+				},
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -116,8 +124,12 @@ func TestExecutor_ExecuteOne_MustIncludeFails(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"data": map[string]any{
-				"similaritySearch": []map[string]any{
-					{"id": "sensor-humid-001", "type": "sensor", "score": 0.9},
+				"similaritySearch": map[string]any{
+					"query": "temperature",
+					"results": []map[string]any{
+						{"entity_id": "sensor-humid-001", "similarity": 0.9},
+					},
+					"duration": "12ms",
 				},
 			},
 		}
@@ -146,9 +158,13 @@ func TestExecutor_ExecuteOne_MustExcludeWarning(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"data": map[string]any{
-				"similaritySearch": []map[string]any{
-					{"id": "sensor-temp-001", "type": "sensor", "score": 0.9},
-					{"id": "doc-hr-001", "type": "document", "score": 0.5}, // Should be excluded
+				"similaritySearch": map[string]any{
+					"query": "temperature",
+					"results": []map[string]any{
+						{"entity_id": "sensor-temp-001", "similarity": 0.9},
+						{"entity_id": "doc-hr-001", "similarity": 0.5}, // Should be excluded
+					},
+					"duration": "14ms",
 				},
 			},
 		}
@@ -183,16 +199,24 @@ func TestExecutor_ExecuteAll_Stats(t *testing.T) {
 		if callCount == 1 {
 			resp = map[string]any{
 				"data": map[string]any{
-					"similaritySearch": []map[string]any{
-						{"id": "hit-1", "type": "entity", "score": 0.8},
-						{"id": "hit-2", "type": "entity", "score": 0.6},
+					"similaritySearch": map[string]any{
+						"query": "query1",
+						"results": []map[string]any{
+							{"entity_id": "hit-1", "similarity": 0.8},
+							{"entity_id": "hit-2", "similarity": 0.6},
+						},
+						"duration": "20ms",
 					},
 				},
 			}
 		} else {
 			resp = map[string]any{
 				"data": map[string]any{
-					"similaritySearch": []map[string]any{},
+					"similaritySearch": map[string]any{
+						"query":    "query2",
+						"results":  []map[string]any{},
+						"duration": "10ms",
+					},
 				},
 			}
 		}
@@ -231,8 +255,12 @@ func TestExecutor_ExecuteAll_KnownAnswerTracking(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"data": map[string]any{
-				"similaritySearch": []map[string]any{
-					{"id": "sensor-temp-001", "type": "sensor", "score": 0.8},
+				"similaritySearch": map[string]any{
+					"query": "test",
+					"results": []map[string]any{
+						{"entity_id": "sensor-temp-001", "similarity": 0.8},
+					},
+					"duration": "15ms",
 				},
 			},
 		}
@@ -265,10 +293,14 @@ func TestValidation_AvgScore(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"data": map[string]any{
-				"similaritySearch": []map[string]any{
-					{"id": "a", "type": "entity", "score": 0.9},
-					{"id": "b", "type": "entity", "score": 0.7},
-					{"id": "c", "type": "entity", "score": 0.5},
+				"similaritySearch": map[string]any{
+					"query": "test",
+					"results": []map[string]any{
+						{"entity_id": "a", "similarity": 0.9},
+						{"entity_id": "b", "similarity": 0.7},
+						{"entity_id": "c", "similarity": 0.5},
+					},
+					"duration": "18ms",
 				},
 			},
 		}
@@ -290,10 +322,14 @@ func TestValidation_HitsAboveMinScore(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := map[string]any{
 			"data": map[string]any{
-				"similaritySearch": []map[string]any{
-					{"id": "a", "type": "entity", "score": 0.9},
-					{"id": "b", "type": "entity", "score": 0.4}, // Below 0.5
-					{"id": "c", "type": "entity", "score": 0.6},
+				"similaritySearch": map[string]any{
+					"query": "test",
+					"results": []map[string]any{
+						{"entity_id": "a", "similarity": 0.9},
+						{"entity_id": "b", "similarity": 0.4}, // Below 0.5
+						{"entity_id": "c", "similarity": 0.6},
+					},
+					"duration": "22ms",
 				},
 			},
 		}
