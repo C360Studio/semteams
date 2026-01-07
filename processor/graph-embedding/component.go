@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/c360/semstreams/graph/embedding"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/pkg/retry"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -31,7 +33,10 @@ type Config struct {
 	EmbedderType string                `json:"embedder_type" schema:"type:string,description:Embedder type (bm25 or http),category:basic"`
 	EmbedderURL  string                `json:"embedder_url" schema:"type:string,description:URL for HTTP embedder (required if embedder_type is http),category:basic"`
 	BatchSize    int                   `json:"batch_size" schema:"type:int,description:Batch size for embedding generation,category:advanced"`
-	CacheTTL     time.Duration         `json:"cache_ttl" schema:"type:string,description:Cache TTL for embeddings,category:advanced"`
+	CacheTTLStr  string                `json:"cache_ttl" schema:"type:string,description:Cache TTL for embeddings (e.g. 15m or 1h),category:advanced"`
+
+	// Parsed duration (set by ApplyDefaults)
+	cacheTTL time.Duration
 }
 
 // Validate implements component.Validatable interface
@@ -76,12 +81,17 @@ func (c *Config) Validate() error {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "batch_size cannot be negative")
 	}
 
-	// Validate cache TTL
-	if c.CacheTTL < 0 {
+	// Validate cache TTL (parsed duration must be positive)
+	if c.cacheTTL < 0 {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "cache_ttl cannot be negative")
 	}
 
 	return nil
+}
+
+// CacheTTL returns the parsed cache TTL duration
+func (c *Config) CacheTTL() time.Duration {
+	return c.cacheTTL
 }
 
 // ApplyDefaults sets default values for configuration
@@ -92,9 +102,17 @@ func (c *Config) ApplyDefaults() {
 	if c.BatchSize == 0 {
 		c.BatchSize = 50
 	}
-	if c.CacheTTL == 0 {
-		c.CacheTTL = 15 * time.Minute
+
+	// Parse cache TTL from string
+	if c.CacheTTLStr != "" {
+		if d, err := time.ParseDuration(c.CacheTTLStr); err == nil {
+			c.cacheTTL = d
+		}
 	}
+	if c.cacheTTL == 0 {
+		c.cacheTTL = 15 * time.Minute
+	}
+
 	if c.Ports == nil {
 		// Apply full default port config
 		defaultConf := DefaultConfig()
@@ -143,7 +161,7 @@ func DefaultConfig() Config {
 		},
 		EmbedderType: "bm25",
 		BatchSize:    50,
-		CacheTTL:     15 * time.Minute,
+		cacheTTL:     15 * time.Minute,
 	}
 }
 
@@ -174,11 +192,14 @@ type Component struct {
 	wg          sync.WaitGroup
 	cancel      context.CancelFunc
 
-	// Metrics (atomic)
+	// Metrics (atomic for internal tracking)
 	messagesProcessed int64
 	bytesProcessed    int64
 	errors            int64
 	lastActivity      atomic.Value // stores time.Time
+
+	// Prometheus metrics
+	metrics *embeddingMetrics
 
 	// Port definitions
 	inputPorts  []component.Port
@@ -218,6 +239,7 @@ func CreateGraphEmbedding(rawConfig json.RawMessage, deps component.Dependencies
 		config:     config,
 		natsClient: natsClient,
 		logger:     logger,
+		metrics:    getMetrics(deps.MetricsRegistry),
 	}
 
 	// Initialize last activity
@@ -447,6 +469,11 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "Start", fmt.Sprintf("unknown embedder type: %s", c.config.EmbedderType))
 	}
 
+	// Set embedder type metric for E2E detection
+	if c.metrics != nil {
+		c.metrics.setEmbedderType(c.config.EmbedderType)
+	}
+
 	// Create EMBEDDING_INDEX bucket for storage (we are the WRITER)
 	embeddingIndexBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
 		Bucket:      graph.BucketEmbeddingIndex,
@@ -479,6 +506,29 @@ func (c *Component) Start(ctx context.Context) error {
 		cancel()
 		return errs.Wrap(err, "Component", "Start", "worker start")
 	}
+
+	// Wait for input KV bucket (ENTITY_STATES) with retries - we are the reader/watcher
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+	}
+
+	entityBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
+		bucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
+		if err != nil {
+			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketEntityStates), slog.Any("error", err))
+		}
+		return bucket, err
+	})
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketEntityStates))
+	}
+
+	// Start entity watcher goroutine to queue entities for embedding
+	c.wg.Add(1)
+	go c.watchEntityStates(ctx, entityBucket)
 
 	// Set up query handlers
 	if err := c.setupQueryHandlers(ctx); err != nil {
@@ -544,4 +594,138 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-embedding"))
 		return fmt.Errorf("stop timeout after %v", timeout)
 	}
+}
+
+// ============================================================================
+// Entity State Watcher
+// ============================================================================
+
+// watchEntityStates watches the ENTITY_STATES KV bucket and queues entities for embedding
+func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyValue) {
+	defer c.wg.Done()
+
+	watcher, err := bucket.WatchAll(ctx)
+	if err != nil {
+		c.logger.Error("failed to start entity watcher",
+			slog.String("bucket", graph.BucketEntityStates),
+			slog.Any("error", err))
+		return
+	}
+	defer watcher.Stop()
+
+	c.logger.Info("entity watcher started", slog.String("bucket", graph.BucketEntityStates))
+
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("entity watcher stopping", slog.String("reason", "context cancelled"))
+			return
+		case entry := <-watcher.Updates():
+			if entry == nil {
+				// nil entry indicates initial state enumeration complete
+				c.logger.Debug("entity watcher initial sync complete")
+				continue
+			}
+
+			if entry.Operation() == jetstream.KeyValueDelete {
+				// Skip deleted entities
+				continue
+			}
+
+			c.queueEntityForEmbedding(ctx, entry.Key(), entry.Value())
+		}
+	}
+}
+
+// queueEntityForEmbedding queues an entity for async embedding generation
+func (c *Component) queueEntityForEmbedding(ctx context.Context, entityID string, data []byte) {
+	// Parse entity state
+	var entityState graph.EntityState
+	if err := json.Unmarshal(data, &entityState); err != nil {
+		c.logger.Warn("failed to unmarshal entity state",
+			slog.String("entity", entityID),
+			slog.Any("error", err))
+		return
+	}
+
+	// ContentStorable path: if StorageRef is present, use it
+	if entityState.StorageRef != nil {
+		c.queueEmbeddingWithStorageRef(ctx, entityID, &entityState)
+		return
+	}
+
+	// Legacy path: Extract text from triples
+	text := c.extractTextForEmbedding(&entityState)
+	if text == "" {
+		c.logger.Debug("no text content found, skipping embedding", slog.String("entity", entityID))
+		return
+	}
+
+	// Calculate content hash for deduplication
+	contentHash := embedding.ContentHash(text)
+
+	// Queue for embedding generation
+	if err := c.storage.SavePending(ctx, entityID, contentHash, text); err != nil {
+		c.logger.Error("failed to queue embedding",
+			slog.String("entity", entityID),
+			slog.Any("error", err))
+		return
+	}
+
+	c.logger.Debug("queued embedding for generation",
+		slog.String("entity", entityID),
+		slog.Int("text_length", len(text)))
+}
+
+// queueEmbeddingWithStorageRef queues an embedding using ContentStorable pattern
+func (c *Component) queueEmbeddingWithStorageRef(ctx context.Context, entityID string, state *graph.EntityState) {
+	// Create StorageRef for embedding record
+	storageRef := &embedding.StorageRef{
+		StorageInstance: state.StorageRef.StorageInstance,
+		Key:             state.StorageRef.Key,
+	}
+
+	// Calculate content hash from storage key (for deduplication)
+	contentHash := embedding.ContentHash(state.StorageRef.Key)
+
+	// Queue for embedding generation with storage reference
+	if err := c.storage.SavePendingWithStorageRef(ctx, entityID, contentHash, storageRef, nil); err != nil {
+		c.logger.Error("failed to queue embedding with storage ref",
+			slog.String("entity", entityID),
+			slog.Any("error", err))
+		return
+	}
+
+	c.logger.Debug("queued embedding with storage reference",
+		slog.String("entity", entityID),
+		slog.String("storage_key", state.StorageRef.Key))
+}
+
+// extractTextForEmbedding extracts text from entity state for embedding generation
+func (c *Component) extractTextForEmbedding(state *graph.EntityState) string {
+	var parts []string
+
+	// Suffixes to look for in predicates (e.g., dc.terms.title matches ".title")
+	textSuffixes := []string{".title", ".content", ".description", ".summary", ".text", ".name", ".body", ".abstract", ".subject"}
+
+	// Look through all triples for text-like predicates
+	for _, triple := range state.Triples {
+		if triple.IsRelationship() {
+			continue
+		}
+
+		predicate := strings.ToLower(triple.Predicate)
+
+		// Check if predicate ends with any text suffix
+		for _, suffix := range textSuffixes {
+			if strings.HasSuffix(predicate, suffix) {
+				if str, ok := triple.Object.(string); ok && str != "" {
+					parts = append(parts, str)
+				}
+				break
+			}
+		}
+	}
+
+	return strings.Join(parts, " ")
 }

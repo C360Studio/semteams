@@ -28,11 +28,19 @@ var (
 
 // Config holds configuration for graph-anomalies component
 type Config struct {
-	Ports            *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
-	ComputeInterval  time.Duration         `json:"compute_interval" schema:"type:string,description:Interval between structural index computations,category:basic"`
-	PivotCount       int                   `json:"pivot_count" schema:"type:int,description:Number of pivot nodes for distance indexing,category:basic"`
-	MaxHopDistance   int                   `json:"max_hop_distance" schema:"type:int,description:Maximum hop distance for BFS traversal,category:basic"`
-	ComputeOnStartup bool                  `json:"compute_on_startup" schema:"type:bool,description:Compute indices immediately on startup,category:basic"`
+	Ports              *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
+	ComputeIntervalStr string                `json:"compute_interval" schema:"type:string,description:Interval between structural index computations (e.g. 1h or 30m),category:basic"`
+	PivotCount         int                   `json:"pivot_count" schema:"type:int,description:Number of pivot nodes for distance indexing,category:basic"`
+	MaxHopDistance     int                   `json:"max_hop_distance" schema:"type:int,description:Maximum hop distance for BFS traversal,category:basic"`
+	ComputeOnStartup   bool                  `json:"compute_on_startup" schema:"type:bool,description:Compute indices immediately on startup,category:basic"`
+
+	// Parsed duration (set by ApplyDefaults)
+	computeInterval time.Duration
+}
+
+// ComputeInterval returns the parsed compute interval duration
+func (c *Config) ComputeInterval() time.Duration {
+	return c.computeInterval
 }
 
 // Validate implements component.Validatable interface
@@ -77,8 +85,8 @@ func (c *Config) Validate() error {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", fmt.Sprintf("%s output required", graph.BucketStructuralIndex))
 	}
 
-	// Validate compute interval
-	if c.ComputeInterval <= 0 {
+	// Validate compute interval (parsed duration must be positive)
+	if c.computeInterval <= 0 {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "compute_interval must be greater than 0")
 	}
 
@@ -97,8 +105,14 @@ func (c *Config) Validate() error {
 
 // ApplyDefaults sets default values for configuration
 func (c *Config) ApplyDefaults() {
-	if c.ComputeInterval == 0 {
-		c.ComputeInterval = 1 * time.Hour
+	// Parse compute interval from string
+	if c.ComputeIntervalStr != "" {
+		if d, err := time.ParseDuration(c.ComputeIntervalStr); err == nil {
+			c.computeInterval = d
+		}
+	}
+	if c.computeInterval == 0 {
+		c.computeInterval = 1 * time.Hour
 	}
 	if c.PivotCount == 0 {
 		c.PivotCount = 16
@@ -170,7 +184,7 @@ func DefaultConfig() Config {
 				},
 			},
 		},
-		ComputeInterval:  1 * time.Hour,
+		computeInterval:  1 * time.Hour,
 		PivotCount:       16,
 		MaxHopDistance:   10,
 		ComputeOnStartup: true,
@@ -511,10 +525,23 @@ func (c *Component) Start(ctx context.Context) error {
 	c.running = true
 	c.startTime = time.Now()
 
+	// Start compute loop goroutine
+	c.wg.Add(1)
+	go c.runComputeLoop(ctx)
+
+	// Compute on startup if configured
+	if c.config.ComputeOnStartup {
+		go func() {
+			// Small delay to allow other components to start
+			time.Sleep(5 * time.Second)
+			c.computeStructuralIndices(ctx)
+		}()
+	}
+
 	c.logger.Info("component started",
 		slog.String("component", "graph-anomalies"),
 		slog.Time("start_time", c.startTime),
-		slog.Duration("compute_interval", c.config.ComputeInterval),
+		slog.Duration("compute_interval", c.config.ComputeInterval()),
 		slog.Int("pivot_count", c.config.PivotCount),
 		slog.Int("max_hop_distance", c.config.MaxHopDistance),
 		slog.Bool("compute_on_startup", c.config.ComputeOnStartup))
@@ -674,4 +701,85 @@ func (p *kvGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID string
 	}
 
 	return 0.0, nil
+}
+
+// ============================================================================
+// Compute Loop
+// ============================================================================
+
+// runComputeLoop runs structural index computations on a timer
+func (c *Component) runComputeLoop(ctx context.Context) {
+	defer c.wg.Done()
+
+	ticker := time.NewTicker(c.config.ComputeInterval())
+	defer ticker.Stop()
+
+	c.logger.Info("compute loop started",
+		slog.Duration("interval", c.config.ComputeInterval()))
+
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("compute loop stopping")
+			return
+		case <-ticker.C:
+			c.computeStructuralIndices(ctx)
+		}
+	}
+}
+
+// computeStructuralIndices runs k-core and pivot distance computations
+func (c *Component) computeStructuralIndices(ctx context.Context) {
+	c.logger.Info("computing structural indices")
+	start := time.Now()
+
+	// Track total entities processed
+	totalEntities := 0
+
+	// Compute k-core decomposition
+	kcoreIndex, err := c.kcoreComputer.Compute(ctx)
+	if err != nil {
+		c.logger.Error("k-core computation failed", slog.Any("error", err))
+		atomic.AddInt64(&c.errors, 1)
+	} else if kcoreIndex != nil {
+		// Store k-core index
+		if err := c.storage.SaveKCoreIndex(ctx, kcoreIndex); err != nil {
+			c.logger.Error("failed to save k-core index", slog.Any("error", err))
+			atomic.AddInt64(&c.errors, 1)
+		} else {
+			totalEntities = kcoreIndex.EntityCount
+			c.logger.Info("k-core computation complete",
+				slog.Int("entities", kcoreIndex.EntityCount),
+				slog.Int("max_core", kcoreIndex.MaxCore))
+		}
+	}
+
+	// Compute pivot distances
+	pivotIndex, err := c.pivotComputer.Compute(ctx)
+	if err != nil {
+		c.logger.Error("pivot computation failed", slog.Any("error", err))
+		atomic.AddInt64(&c.errors, 1)
+	} else if pivotIndex != nil {
+		// Store pivot index
+		if err := c.storage.SavePivotIndex(ctx, pivotIndex); err != nil {
+			c.logger.Error("failed to save pivot index", slog.Any("error", err))
+			atomic.AddInt64(&c.errors, 1)
+		} else {
+			if pivotIndex.EntityCount > totalEntities {
+				totalEntities = pivotIndex.EntityCount
+			}
+			c.logger.Info("pivot computation complete",
+				slog.Int("entities", pivotIndex.EntityCount),
+				slog.Int("pivots", len(pivotIndex.Pivots)))
+		}
+	}
+
+	if totalEntities > 0 {
+		atomic.AddInt64(&c.messagesProcessed, int64(totalEntities))
+		c.lastActivity.Store(time.Now())
+	}
+
+	c.logger.Info("structural indices computed",
+		slog.Int("entities_processed", totalEntities),
+		slog.Duration("duration", time.Since(start)))
 }

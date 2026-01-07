@@ -13,8 +13,10 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/clustering"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/pkg/retry"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -26,13 +28,16 @@ var (
 
 // Config holds configuration for graph-clustering component
 type Config struct {
-	Ports             *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
-	DetectionInterval time.Duration         `json:"detection_interval" schema:"type:string,description:Interval between community detection runs,category:basic"`
-	BatchSize         int                   `json:"batch_size" schema:"type:int,description:Event count threshold for triggering detection,category:basic"`
-	EnableLLM         bool                  `json:"enable_llm" schema:"type:bool,description:Enable LLM-based community summarization,category:advanced"`
-	LLMEndpoint       string                `json:"llm_endpoint" schema:"type:string,description:URL for LLM endpoint (required if enable_llm is true),category:advanced"`
-	MinCommunitySize  int                   `json:"min_community_size" schema:"type:int,description:Minimum number of entities to form a community,category:advanced"`
-	MaxIterations     int                   `json:"max_iterations" schema:"type:int,description:Maximum iterations for LPA algorithm,category:advanced"`
+	Ports                *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
+	DetectionIntervalStr string                `json:"detection_interval" schema:"type:string,description:Interval between community detection runs (e.g. 30s or 5m),category:basic"`
+	BatchSize            int                   `json:"batch_size" schema:"type:int,description:Event count threshold for triggering detection,category:basic"`
+	EnableLLM            bool                  `json:"enable_llm" schema:"type:bool,description:Enable LLM-based community summarization,category:advanced"`
+	LLMEndpoint          string                `json:"llm_endpoint" schema:"type:string,description:URL for LLM endpoint (required if enable_llm is true),category:advanced"`
+	MinCommunitySize     int                   `json:"min_community_size" schema:"type:int,description:Minimum number of entities to form a community,category:advanced"`
+	MaxIterations        int                   `json:"max_iterations" schema:"type:int,description:Maximum iterations for LPA algorithm,category:advanced"`
+
+	// Parsed duration (set by ApplyDefaults)
+	detectionInterval time.Duration
 }
 
 // Validate implements component.Validatable interface
@@ -59,8 +64,8 @@ func (c *Config) Validate() error {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", fmt.Sprintf("%s output required", graph.BucketCommunityIndex))
 	}
 
-	// Validate detection interval
-	if c.DetectionInterval <= 0 {
+	// Validate detection interval (parsed duration must be positive)
+	if c.detectionInterval <= 0 {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "detection_interval must be greater than 0")
 	}
 
@@ -82,11 +87,23 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// DetectionInterval returns the parsed detection interval duration
+func (c *Config) DetectionInterval() time.Duration {
+	return c.detectionInterval
+}
+
 // ApplyDefaults sets default values for configuration
 func (c *Config) ApplyDefaults() {
-	if c.DetectionInterval == 0 {
-		c.DetectionInterval = 30 * time.Second
+	// Parse detection interval from string
+	if c.DetectionIntervalStr != "" {
+		if d, err := time.ParseDuration(c.DetectionIntervalStr); err == nil {
+			c.detectionInterval = d
+		}
 	}
+	if c.detectionInterval == 0 {
+		c.detectionInterval = 30 * time.Second
+	}
+
 	if c.BatchSize == 0 {
 		c.BatchSize = 100
 	}
@@ -143,7 +160,7 @@ func DefaultConfig() Config {
 				},
 			},
 		},
-		DetectionInterval: 30 * time.Second,
+		detectionInterval: 30 * time.Second,
 		BatchSize:         100,
 		EnableLLM:         false,
 		MinCommunitySize:  3,
@@ -166,6 +183,13 @@ type Component struct {
 
 	// Domain resources
 	communityBucket jetstream.KeyValue
+	entityBucket    jetstream.KeyValue
+	outgoingBucket  jetstream.KeyValue
+	incomingBucket  jetstream.KeyValue
+
+	// Community detection
+	detector clustering.CommunityDetector
+	storage  *clustering.NATSCommunityStorage
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -419,20 +443,89 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.communityBucket = communityBucket
 
+	// Create community storage for the detector
+	c.storage = clustering.NewNATSCommunityStorage(communityBucket)
+
 	// Set up query handlers
 	if err := c.setupQueryHandlers(ctx); err != nil {
 		cancel()
 		return errs.Wrap(err, "Component", "Start", "setup query handlers")
 	}
 
+	// Get JetStream for bucket access
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+	}
+
+	// Wait for input buckets with retries (we are the READER)
+	entityBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
+		bucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
+		if err != nil {
+			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketEntityStates), slog.Any("error", err))
+		}
+		return bucket, err
+	})
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketEntityStates))
+	}
+	c.entityBucket = entityBucket
+
+	outgoingBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
+		bucket, err := js.KeyValue(ctx, graph.BucketOutgoingIndex)
+		if err != nil {
+			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketOutgoingIndex), slog.Any("error", err))
+		}
+		return bucket, err
+	})
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketOutgoingIndex))
+	}
+	c.outgoingBucket = outgoingBucket
+
+	incomingBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
+		bucket, err := js.KeyValue(ctx, graph.BucketIncomingIndex)
+		if err != nil {
+			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketIncomingIndex), slog.Any("error", err))
+		}
+		return bucket, err
+	})
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketIncomingIndex))
+	}
+	c.incomingBucket = incomingBucket
+
+	// Create graph provider and detector
+	provider := newKVGraphProvider(c.entityBucket, c.outgoingBucket, c.incomingBucket, c.logger)
+
+	// Optionally wrap with EntityID-based sibling edges for better clustering
+	entityIDProvider := clustering.NewEntityIDGraphProvider(
+		provider,
+		clustering.DefaultEntityIDProviderConfig(),
+		c.logger,
+	)
+
+	c.detector = clustering.NewLPADetector(entityIDProvider, c.storage).
+		WithLogger(c.logger).
+		WithMaxIterations(c.config.MaxIterations).
+		WithLevels(3)
+
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
 
+	// Start detection loop goroutine
+	c.wg.Add(1)
+	go c.runDetectionLoop(ctx)
+
 	c.logger.Info("component started",
 		slog.String("component", "graph-clustering"),
 		slog.Time("start_time", c.startTime),
-		slog.Duration("detection_interval", c.config.DetectionInterval),
+		slog.Duration("detection_interval", c.config.DetectionInterval()),
 		slog.Bool("enable_llm", c.config.EnableLLM))
 
 	return nil
@@ -470,4 +563,171 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-clustering"))
 		return fmt.Errorf("stop timeout after %v", timeout)
 	}
+}
+
+// runDetectionLoop runs community detection on a timer
+func (c *Component) runDetectionLoop(ctx context.Context) {
+	defer c.wg.Done()
+
+	ticker := time.NewTicker(c.config.DetectionInterval())
+	defer ticker.Stop()
+
+	c.logger.Info("detection loop started",
+		slog.Duration("interval", c.config.DetectionInterval()))
+
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("detection loop stopping")
+			return
+		case <-ticker.C:
+			c.runCommunityDetection(ctx)
+		}
+	}
+}
+
+// runCommunityDetection executes the community detection algorithm
+func (c *Component) runCommunityDetection(ctx context.Context) {
+	c.logger.Info("running community detection")
+	start := time.Now()
+
+	communities, err := c.detector.DetectCommunities(ctx)
+	if err != nil {
+		c.logger.Error("community detection failed", slog.Any("error", err))
+		atomic.AddInt64(&c.errors, 1)
+		return
+	}
+
+	// Count total communities across all levels
+	totalCommunities := 0
+	for _, levelCommunities := range communities {
+		totalCommunities += len(levelCommunities)
+	}
+
+	atomic.AddInt64(&c.messagesProcessed, int64(totalCommunities))
+	c.lastActivity.Store(time.Now())
+
+	c.logger.Info("community detection complete",
+		slog.Int("communities_found", totalCommunities),
+		slog.Int("levels", len(communities)),
+		slog.Duration("duration", time.Since(start)))
+}
+
+// ============================================================================
+// KV-based Graph Provider for Community Detection
+// ============================================================================
+
+// kvGraphProvider implements clustering.GraphProvider using NATS KV buckets
+type kvGraphProvider struct {
+	entityBucket   jetstream.KeyValue
+	outgoingBucket jetstream.KeyValue
+	incomingBucket jetstream.KeyValue
+	logger         *slog.Logger
+}
+
+// newKVGraphProvider creates a graph provider that reads from KV buckets
+func newKVGraphProvider(
+	entityBucket jetstream.KeyValue,
+	outgoingBucket jetstream.KeyValue,
+	incomingBucket jetstream.KeyValue,
+	logger *slog.Logger,
+) *kvGraphProvider {
+	return &kvGraphProvider{
+		entityBucket:   entityBucket,
+		outgoingBucket: outgoingBucket,
+		incomingBucket: incomingBucket,
+		logger:         logger,
+	}
+}
+
+// GetAllEntityIDs returns all entity IDs from the ENTITY_STATES bucket
+func (p *kvGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
+	keys, err := p.entityBucket.Keys(ctx)
+	if err != nil {
+		// Empty bucket returns an error in some cases
+		if err == jetstream.ErrNoKeysFound {
+			return nil, nil
+		}
+		return nil, errs.WrapTransient(err, "kvGraphProvider", "GetAllEntityIDs", "list keys")
+	}
+	return keys, nil
+}
+
+// GetNeighbors returns entity IDs connected to the given entity
+func (p *kvGraphProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
+	if entityID == "" {
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "kvGraphProvider", "GetNeighbors", "entityID is empty")
+	}
+
+	neighbors := make(map[string]bool)
+
+	// Get outgoing neighbors
+	if direction == "outgoing" || direction == "both" {
+		outgoing, err := p.getNeighborsFromBucket(ctx, p.outgoingBucket, entityID)
+		if err != nil {
+			p.logger.Debug("failed to get outgoing neighbors", slog.String("entity", entityID), slog.Any("error", err))
+		}
+		for _, n := range outgoing {
+			neighbors[n] = true
+		}
+	}
+
+	// Get incoming neighbors
+	if direction == "incoming" || direction == "both" {
+		incoming, err := p.getNeighborsFromBucket(ctx, p.incomingBucket, entityID)
+		if err != nil {
+			p.logger.Debug("failed to get incoming neighbors", slog.String("entity", entityID), slog.Any("error", err))
+		}
+		for _, n := range incoming {
+			neighbors[n] = true
+		}
+	}
+
+	result := make([]string, 0, len(neighbors))
+	for n := range neighbors {
+		result = append(result, n)
+	}
+	return result, nil
+}
+
+// relationshipEntry represents a relationship in the index buckets
+type relationshipEntry struct {
+	Predicate    string `json:"predicate"`
+	ToEntityID   string `json:"to_entity_id,omitempty"`   // For OUTGOING_INDEX
+	FromEntityID string `json:"from_entity_id,omitempty"` // For INCOMING_INDEX
+}
+
+// getNeighborsFromBucket reads neighbor entity IDs from a relationship index bucket
+func (p *kvGraphProvider) getNeighborsFromBucket(ctx context.Context, bucket jetstream.KeyValue, entityID string) ([]string, error) {
+	entry, err := bucket.Get(ctx, entityID)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return nil, nil // No neighbors found
+		}
+		return nil, err
+	}
+
+	// Parse the index entry - format is a list of relationship entries
+	var relationships []relationshipEntry
+	if err := json.Unmarshal(entry.Value(), &relationships); err != nil {
+		return nil, err
+	}
+
+	neighbors := make([]string, 0, len(relationships))
+	for _, rel := range relationships {
+		// Use whichever ID field is populated
+		if rel.ToEntityID != "" {
+			neighbors = append(neighbors, rel.ToEntityID)
+		} else if rel.FromEntityID != "" {
+			neighbors = append(neighbors, rel.FromEntityID)
+		}
+	}
+	return neighbors, nil
+}
+
+// GetEdgeWeight returns the weight of the edge between two entities
+func (p *kvGraphProvider) GetEdgeWeight(_ context.Context, _, _ string) (float64, error) {
+	// For now, return 1.0 for all edges (equal weight)
+	// Could be enhanced to read confidence from the relationship data
+	return 1.0, nil
 }
