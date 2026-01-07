@@ -1,0 +1,15 @@
+
+sequenceDiagram
+    participant C as Client
+    participant GQ as graph-query
+    participant GI as graph-ingest
+    participant GX as graph-index
+
+    C->>GQ: NATS Request: graph.query.pathSearch
+    GQ->>GI: graph.ingest.query.entity
+    GI->>GQ: Entity data
+    GQ->>GX: graph.index.query.outgoing
+    GX->>GQ: Relationships
+    GQ->>GQ: PathSearcher traversal logic
+    GQ->>C: NATS Reply: path results
+

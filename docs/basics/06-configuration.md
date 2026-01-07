@@ -26,6 +26,7 @@ rather than a monolithic processor. Each tier requires a specific set of compone
 |-----------|------|---------|----------------|
 | **graph-ingest** | Core (All) | Entity ingestion | `ENTITY_STATES` |
 | **graph-index** | Core (All) | Relationship indexing | `OUTGOING_INDEX`, `INCOMING_INDEX`, `ALIAS_INDEX`, `PREDICATE_INDEX` |
+| **graph-query** | Core (All) | Query coordinator | N/A (read-only) |
 | **graph-gateway** | Core (All) | Query gateway | N/A (read-only) |
 | **graph-anomalies** | Structural (Tier 0+) | K-core analysis | `STRUCTURAL_INDEX` |
 | **graph-clustering** | Statistical (Tier 1+) | Community detection | `COMMUNITY_INDEX` |
@@ -38,7 +39,7 @@ rather than a monolithic processor. Each tier requires a specific set of compone
 **Rules-Only (Tier 0)**:
 
 ```text
-graph-ingest → graph-index → graph-gateway
+graph-ingest → graph-index → graph-query → graph-gateway
               ↓
          graph-anomalies
 ```
@@ -46,7 +47,7 @@ graph-ingest → graph-index → graph-gateway
 **Statistical (Tier 1)**:
 
 ```text
-graph-ingest → graph-index → graph-gateway
+graph-ingest → graph-index → graph-query → graph-gateway
               ↓            ↓
          graph-anomalies  graph-clustering
               ↓
@@ -56,7 +57,7 @@ graph-ingest → graph-index → graph-gateway
 **Semantic (Tier 2)**:
 
 ```text
-graph-ingest → graph-index → graph-gateway
+graph-ingest → graph-index → graph-query → graph-gateway
               ↓            ↓
          graph-anomalies  graph-clustering
               ↓
@@ -75,6 +76,7 @@ Components must start in the correct order based on their bucket dependencies:
 |-----------|------------|--------|
 | graph-ingest | None | Creates `ENTITY_STATES` |
 | graph-index | graph-ingest | Watches `ENTITY_STATES` |
+| graph-query | graph-ingest, graph-index | Routes queries to all components |
 | graph-gateway | All others | Reads all buckets |
 | graph-anomalies | graph-index | Watches `OUTGOING_INDEX`, `INCOMING_INDEX` |
 | graph-clustering | graph-ingest | Watches `ENTITY_STATES` |
@@ -87,7 +89,8 @@ Components must start in the correct order based on their bucket dependencies:
 1. graph-ingest
 2. graph-index
 3. graph-anomalies, graph-clustering, graph-embedding, graph-index-spatial, graph-index-temporal (parallel)
-4. graph-gateway (last)
+4. graph-query (after all processors)
+5. graph-gateway (last)
 
 ### Port Configuration
 
@@ -116,8 +119,37 @@ Each component exposes query capabilities via NATS request-reply on configurable
 |-----------|---------------|------------|
 | graph-ingest | `graph.ingest.query.*` | `getEntity`, `getBatch` |
 | graph-index | `graph.index.query.*` | `getOutgoing`, `getIncoming`, `getAlias`, `getPredicate` |
+| graph-query | `graph.query.*` | `entity`, `relationships`, `pathSearch`, `capabilities` |
 
-For full component details, see [Graph Components Reference](../architecture/graph-components.md).
+### graph-query Component
+
+The graph-query component provides unified query routing and orchestration across all graph components:
+
+- **Unified Query Routing**: Routes queries to appropriate components (graph-ingest, graph-index, etc.)
+- **PathRAG Traversal**: Orchestrates multi-hop graph traversal for path-based retrieval
+- **Capability Aggregation**: Collects and exposes capabilities from all available components
+
+**Example Configuration**:
+
+```json
+{
+  "type": "graph-query",
+  "config": {
+    "query_timeout": "5s",
+    "max_depth": 10,
+    "ports": {
+      "inputs": [
+        {"name": "query_entity", "type": "nats-request", "subject": "graph.query.entity"},
+        {"name": "query_relationships", "type": "nats-request", "subject": "graph.query.relationships"},
+        {"name": "query_path_search", "type": "nats-request", "subject": "graph.query.pathSearch"},
+        {"name": "query_capabilities", "type": "nats-request", "subject": "graph.query.capabilities"}
+      ]
+    }
+  }
+}
+```
+
+For full component details, see [Graph Components Reference](../advanced/07-graph-components.md).
 
 ## Rules-Only Configuration
 
@@ -128,6 +160,7 @@ Deterministic processing with stateful rules. No search, no external services.
 - **graph-ingest** - Entity ingestion
 - **graph-index** - Relationship indexing
 - **graph-anomalies** - K-core structural analysis
+- **graph-query** - Query coordinator
 - **graph-gateway** - Query interface
 
 ### Capabilities
