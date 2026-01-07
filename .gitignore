@@ -44,3 +44,7 @@ coverage/
 *.tmp
 .cache/
 .temp/
+
+# Go binaries
+*.test
+cmd/e2e/e2e
