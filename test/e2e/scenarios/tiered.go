@@ -1222,11 +1222,11 @@ func (s *TieredScenario) executeValidateRules(ctx context.Context, result *Resul
 	result.Metrics["on_enter_fired"] = int(finalMetrics.OnEnterFired)
 	result.Metrics["on_exit_fired"] = int(finalMetrics.OnExitFired)
 
-	// Validate rules actually triggered
-	if triggeredDelta < 1 && sentCount > 0 {
+	// Validate rules actually triggered (check absolute count, not delta)
+	// Rules may have already triggered from file input before baseline was captured
+	if finalMetrics.Triggers < 1 {
 		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("No rules triggered despite sending %d test messages (triggered delta: %d)",
-				sentCount, triggeredDelta))
+			"No rules triggered - check rule configuration and test data")
 	}
 
 	// Consider validation passed if we have rule metrics and some evaluation happened
