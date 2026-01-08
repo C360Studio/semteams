@@ -263,7 +263,11 @@ func (c *Component) loadEntities(ctx context.Context, entityIDs []string) ([]*gt
 	}
 
 	// Request entities from graph-ingest
-	respData, err := c.natsClient.Request(ctx, c.router.Route(component.IntentTagBatch), reqData, c.config.QueryTimeout)
+	respData, err := c.natsClient.Request(ctx, c.router.Route(component.QueryIntent{
+		Type:     component.IntentTypeEntity,
+		Strategy: component.StrategyBatch,
+		Scope:    component.ScopeSet,
+	}), reqData, c.config.QueryTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("request entities: %w", err)
 	}

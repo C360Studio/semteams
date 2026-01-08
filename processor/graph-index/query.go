@@ -199,6 +199,11 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.index.query.outgoing",
 				Operation:   "getOutgoing",
 				Description: "Get outgoing relationships for an entity",
+				Intent: component.QueryIntent{
+					Type:     component.IntentTypeRelationship,
+					Strategy: component.StrategyDirect,
+					Scope:    component.ScopeSet,
+				},
 				IntentTags:  []string{component.IntentTagRelationship},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
@@ -230,6 +235,11 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.index.query.incoming",
 				Operation:   "getIncoming",
 				Description: "Get incoming relationships for an entity",
+				Intent: component.QueryIntent{
+					Type:     component.IntentTypeRelationship,
+					Strategy: component.StrategyDirect,
+					Scope:    component.ScopeSet,
+				},
 				IntentTags:  []string{component.IntentTagRelationship},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
@@ -261,6 +271,11 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.index.query.alias",
 				Operation:   "getAlias",
 				Description: "Resolve alias to canonical entity ID",
+				Intent: component.QueryIntent{
+					Type:     component.IntentTypeRelationship,
+					Strategy: component.StrategyDirect,
+					Scope:    component.ScopeSingle,
+				},
 				IntentTags:  []string{component.IntentTagEntity},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
@@ -286,6 +301,11 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.index.query.predicate",
 				Operation:   "getPredicate",
 				Description: "Get entities with a specific predicate",
+				Intent: component.QueryIntent{
+					Type:     component.IntentTypeRelationship,
+					Strategy: component.StrategyDirect,
+					Scope:    component.ScopeSet,
+				},
 				IntentTags:  []string{component.IntentTagRelationship, component.IntentTagAggregate},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{

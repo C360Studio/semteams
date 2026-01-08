@@ -1,8 +1,51 @@
 // Package component defines the QueryCapabilityProvider interface and related types
 package component
 
-// Standard intent tags for query capability classification.
-// Use these constants when declaring IntentTags on QueryCapability.
+// IntentType classifies what kind of data the query targets.
+type IntentType string
+
+// Intent type constants define the primary classification of query operations.
+const (
+	IntentTypeEntity       IntentType = "entity"       // Entity CRUD operations
+	IntentTypeRelationship IntentType = "relationship" // Graph traversal and relationship queries
+	IntentTypeSpatial      IntentType = "spatial"      // Location/geo-based queries
+	IntentTypeTemporal     IntentType = "temporal"     // Time-based queries
+	IntentTypeSemantic     IntentType = "semantic"     // Similarity/embedding-based queries
+	IntentTypeAggregate    IntentType = "aggregate"    // Aggregation and statistics
+	IntentTypeAnomaly      IntentType = "anomaly"      // Anomaly detection queries
+)
+
+// IntentStrategy classifies the query execution approach.
+type IntentStrategy string
+
+// Intent strategy constants define how a query should be executed.
+const (
+	StrategyDirect IntentStrategy = "direct" // Single direct lookup
+	StrategyBatch  IntentStrategy = "batch"  // Multiple independent lookups
+	StrategyLocal  IntentStrategy = "local"  // Community-scoped search
+	StrategyGlobal IntentStrategy = "global" // Cross-community search
+	StrategyPath   IntentStrategy = "path"   // Graph traversal/pathfinding
+)
+
+// IntentScope classifies the result cardinality.
+type IntentScope string
+
+// Intent scope constants define the expected result cardinality.
+const (
+	ScopeSingle IntentScope = "single" // Returns 0-1 result
+	ScopeSet    IntentScope = "set"    // Returns bounded collection
+	ScopeStream IntentScope = "stream" // Returns unbounded/continuous results
+)
+
+// QueryIntent provides typed multi-dimensional query classification.
+type QueryIntent struct {
+	Type     IntentType     `json:"type"`
+	Strategy IntentStrategy `json:"strategy"`
+	Scope    IntentScope    `json:"scope"`
+}
+
+// Legacy intent tag constants - deprecated, use QueryIntent instead.
+// Kept temporarily for backward compatibility during migration.
 const (
 	// IntentTagSpatial indicates location/geo queries (bounds, near, within).
 	IntentTagSpatial = "spatial"
@@ -95,7 +138,12 @@ type QueryCapability struct {
 	// Can be a map[string]any or any JSON-serializable schema structure.
 	ResponseSchema any `json:"response_schema"`
 
+	// Intent provides typed multi-dimensional query classification.
+	// Replaces IntentTags with compile-time safe type system.
+	Intent QueryIntent `json:"intent"`
+
 	// IntentTags are semantic tags for intent-based routing.
+	// DEPRECATED: Use Intent field instead. Kept for backward compatibility.
 	// Standard tags: spatial, temporal, semantic, entity, relationship, aggregate.
 	// Components use these to declare what KIND of queries they handle.
 	// Omitted from JSON when empty.

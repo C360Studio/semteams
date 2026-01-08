@@ -616,3 +616,470 @@ func (m *mockQueryProvider) QueryCapabilities() QueryCapabilities {
 
 // mockNonQueryProvider does not implement QueryCapabilityProvider
 type mockNonQueryProvider struct{}
+
+// =============================================================================
+// QueryIntent Type System Tests (Typed Intent Routing)
+// =============================================================================
+
+// TestIntentType_Constants verifies all IntentType constants have correct string values
+func TestIntentType_Constants(t *testing.T) {
+	tests := []struct {
+		name     string
+		constant IntentType
+		expected string
+	}{
+		{name: "entity type", constant: IntentTypeEntity, expected: "entity"},
+		{name: "relationship type", constant: IntentTypeRelationship, expected: "relationship"},
+		{name: "spatial type", constant: IntentTypeSpatial, expected: "spatial"},
+		{name: "temporal type", constant: IntentTypeTemporal, expected: "temporal"},
+		{name: "semantic type", constant: IntentTypeSemantic, expected: "semantic"},
+		{name: "aggregate type", constant: IntentTypeAggregate, expected: "aggregate"},
+		{name: "anomaly type", constant: IntentTypeAnomaly, expected: "anomaly"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if string(tt.constant) != tt.expected {
+				t.Errorf("IntentType constant: expected %q, got %q", tt.expected, string(tt.constant))
+			}
+		})
+	}
+}
+
+// TestIntentStrategy_Constants verifies all IntentStrategy constants have correct string values
+func TestIntentStrategy_Constants(t *testing.T) {
+	tests := []struct {
+		name     string
+		constant IntentStrategy
+		expected string
+	}{
+		{name: "direct strategy", constant: StrategyDirect, expected: "direct"},
+		{name: "batch strategy", constant: StrategyBatch, expected: "batch"},
+		{name: "local strategy", constant: StrategyLocal, expected: "local"},
+		{name: "global strategy", constant: StrategyGlobal, expected: "global"},
+		{name: "path strategy", constant: StrategyPath, expected: "path"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if string(tt.constant) != tt.expected {
+				t.Errorf("IntentStrategy constant: expected %q, got %q", tt.expected, string(tt.constant))
+			}
+		})
+	}
+}
+
+// TestIntentScope_Constants verifies all IntentScope constants have correct string values
+func TestIntentScope_Constants(t *testing.T) {
+	tests := []struct {
+		name     string
+		constant IntentScope
+		expected string
+	}{
+		{name: "single scope", constant: ScopeSingle, expected: "single"},
+		{name: "set scope", constant: ScopeSet, expected: "set"},
+		{name: "stream scope", constant: ScopeStream, expected: "stream"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if string(tt.constant) != tt.expected {
+				t.Errorf("IntentScope constant: expected %q, got %q", tt.expected, string(tt.constant))
+			}
+		})
+	}
+}
+
+// TestQueryIntent_JSONMarshaling verifies QueryIntent marshals to correct JSON structure
+func TestQueryIntent_JSONMarshaling(t *testing.T) {
+	tests := []struct {
+		name         string
+		intent       QueryIntent
+		expectedJSON string
+	}{
+		{
+			name: "entity direct single",
+			intent: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSingle,
+			},
+			expectedJSON: `{"type":"entity","strategy":"direct","scope":"single"}`,
+		},
+		{
+			name: "entity batch set",
+			intent: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyBatch,
+				Scope:    ScopeSet,
+			},
+			expectedJSON: `{"type":"entity","strategy":"batch","scope":"set"}`,
+		},
+		{
+			name: "semantic local set",
+			intent: QueryIntent{
+				Type:     IntentTypeSemantic,
+				Strategy: StrategyLocal,
+				Scope:    ScopeSet,
+			},
+			expectedJSON: `{"type":"semantic","strategy":"local","scope":"set"}`,
+		},
+		{
+			name: "semantic global set",
+			intent: QueryIntent{
+				Type:     IntentTypeSemantic,
+				Strategy: StrategyGlobal,
+				Scope:    ScopeSet,
+			},
+			expectedJSON: `{"type":"semantic","strategy":"global","scope":"set"}`,
+		},
+		{
+			name: "relationship direct set",
+			intent: QueryIntent{
+				Type:     IntentTypeRelationship,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSet,
+			},
+			expectedJSON: `{"type":"relationship","strategy":"direct","scope":"set"}`,
+		},
+		{
+			name: "relationship path set",
+			intent: QueryIntent{
+				Type:     IntentTypeRelationship,
+				Strategy: StrategyPath,
+				Scope:    ScopeSet,
+			},
+			expectedJSON: `{"type":"relationship","strategy":"path","scope":"set"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jsonBytes, err := json.Marshal(tt.intent)
+			if err != nil {
+				t.Fatalf("Failed to marshal QueryIntent: %v", err)
+			}
+
+			if string(jsonBytes) != tt.expectedJSON {
+				t.Errorf("JSON mismatch:\n  expected: %s\n  got:      %s", tt.expectedJSON, string(jsonBytes))
+			}
+		})
+	}
+}
+
+// TestQueryIntent_JSONUnmarshaling verifies QueryIntent unmarshals from JSON correctly
+func TestQueryIntent_JSONUnmarshaling(t *testing.T) {
+	tests := []struct {
+		name           string
+		inputJSON      string
+		expectedIntent QueryIntent
+		expectError    bool
+	}{
+		{
+			name:      "valid entity direct single",
+			inputJSON: `{"type":"entity","strategy":"direct","scope":"single"}`,
+			expectedIntent: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSingle,
+			},
+			expectError: false,
+		},
+		{
+			name:      "valid semantic local set",
+			inputJSON: `{"type":"semantic","strategy":"local","scope":"set"}`,
+			expectedIntent: QueryIntent{
+				Type:     IntentTypeSemantic,
+				Strategy: StrategyLocal,
+				Scope:    ScopeSet,
+			},
+			expectError: false,
+		},
+		{
+			name:      "field order independent",
+			inputJSON: `{"scope":"set","type":"relationship","strategy":"path"}`,
+			expectedIntent: QueryIntent{
+				Type:     IntentTypeRelationship,
+				Strategy: StrategyPath,
+				Scope:    ScopeSet,
+			},
+			expectError: false,
+		},
+		{
+			name:        "invalid JSON",
+			inputJSON:   `{type:"entity"}`,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var intent QueryIntent
+			err := json.Unmarshal([]byte(tt.inputJSON), &intent)
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error unmarshaling invalid JSON, got nil")
+				}
+			} else {
+				if err != nil {
+					t.Fatalf("Failed to unmarshal QueryIntent: %v", err)
+				}
+				if intent != tt.expectedIntent {
+					t.Errorf("Intent mismatch:\n  expected: %+v\n  got:      %+v", tt.expectedIntent, intent)
+				}
+			}
+		})
+	}
+}
+
+// TestQueryIntent_RoundTrip verifies QueryIntent survives marshal/unmarshal cycle
+func TestQueryIntent_RoundTrip(t *testing.T) {
+	tests := []struct {
+		name   string
+		intent QueryIntent
+	}{
+		{
+			name: "entity direct single",
+			intent: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSingle,
+			},
+		},
+		{
+			name: "semantic global set",
+			intent: QueryIntent{
+				Type:     IntentTypeSemantic,
+				Strategy: StrategyGlobal,
+				Scope:    ScopeSet,
+			},
+		},
+		{
+			name: "relationship path stream",
+			intent: QueryIntent{
+				Type:     IntentTypeRelationship,
+				Strategy: StrategyPath,
+				Scope:    ScopeStream,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jsonBytes, err := json.Marshal(tt.intent)
+			if err != nil {
+				t.Fatalf("Marshal failed: %v", err)
+			}
+
+			var roundTripped QueryIntent
+			err = json.Unmarshal(jsonBytes, &roundTripped)
+			if err != nil {
+				t.Fatalf("Unmarshal failed: %v", err)
+			}
+
+			if roundTripped != tt.intent {
+				t.Errorf("Round-trip failed:\n  original: %+v\n  result:   %+v", tt.intent, roundTripped)
+			}
+		})
+	}
+}
+
+// TestQueryIntent_AsMapKey verifies QueryIntent can be used as map key
+func TestQueryIntent_AsMapKey(t *testing.T) {
+	routes := make(map[QueryIntent]string)
+
+	intent1 := QueryIntent{
+		Type:     IntentTypeEntity,
+		Strategy: StrategyDirect,
+		Scope:    ScopeSingle,
+	}
+	intent2 := QueryIntent{
+		Type:     IntentTypeSemantic,
+		Strategy: StrategyLocal,
+		Scope:    ScopeSet,
+	}
+
+	routes[intent1] = "graph.ingest.query.entity"
+	routes[intent2] = "graph.query.localSearch"
+
+	if routes[intent1] != "graph.ingest.query.entity" {
+		t.Errorf("Map lookup failed for intent1")
+	}
+	if routes[intent2] != "graph.query.localSearch" {
+		t.Errorf("Map lookup failed for intent2")
+	}
+
+	intent1Copy := QueryIntent{
+		Type:     IntentTypeEntity,
+		Strategy: StrategyDirect,
+		Scope:    ScopeSingle,
+	}
+	if routes[intent1Copy] != routes[intent1] {
+		t.Error("Identical QueryIntent should work as same map key")
+	}
+}
+
+// TestQueryIntent_Equality verifies QueryIntent equality comparison
+func TestQueryIntent_Equality(t *testing.T) {
+	tests := []struct {
+		name     string
+		intent1  QueryIntent
+		intent2  QueryIntent
+		areEqual bool
+	}{
+		{
+			name: "identical intents",
+			intent1: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSingle,
+			},
+			intent2: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSingle,
+			},
+			areEqual: true,
+		},
+		{
+			name: "different type",
+			intent1: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSingle,
+			},
+			intent2: QueryIntent{
+				Type:     IntentTypeRelationship,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSingle,
+			},
+			areEqual: false,
+		},
+		{
+			name: "different strategy",
+			intent1: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSingle,
+			},
+			intent2: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyBatch,
+				Scope:    ScopeSingle,
+			},
+			areEqual: false,
+		},
+		{
+			name: "different scope",
+			intent1: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSingle,
+			},
+			intent2: QueryIntent{
+				Type:     IntentTypeEntity,
+				Strategy: StrategyDirect,
+				Scope:    ScopeSet,
+			},
+			areEqual: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if (tt.intent1 == tt.intent2) != tt.areEqual {
+				t.Errorf("Equality check failed: expected %v, got %v", tt.areEqual, tt.intent1 == tt.intent2)
+			}
+		})
+	}
+}
+
+// TestQueryCapability_WithTypedIntent verifies QueryCapability works with new Intent field
+func TestQueryCapability_WithTypedIntent(t *testing.T) {
+	tests := []struct {
+		name       string
+		capability QueryCapability
+		wantJSON   string
+	}{
+		{
+			name: "entity direct single capability",
+			capability: QueryCapability{
+				Subject:     "graph.ingest.query.entity",
+				Operation:   "getEntity",
+				Description: "Get single entity by ID",
+				Intent: QueryIntent{
+					Type:     IntentTypeEntity,
+					Strategy: StrategyDirect,
+					Scope:    ScopeSingle,
+				},
+				RequestSchema:  map[string]any{"type": "object"},
+				ResponseSchema: map[string]any{"type": "object"},
+			},
+			wantJSON: `{
+				"subject": "graph.ingest.query.entity",
+				"operation": "getEntity",
+				"description": "Get single entity by ID",
+				"request_schema": {"type": "object"},
+				"response_schema": {"type": "object"},
+				"intent": {
+					"type": "entity",
+					"strategy": "direct",
+					"scope": "single"
+				}
+			}`,
+		},
+		{
+			name: "semantic local set capability",
+			capability: QueryCapability{
+				Subject:   "graph.query.localSearch",
+				Operation: "localSearch",
+				Intent: QueryIntent{
+					Type:     IntentTypeSemantic,
+					Strategy: StrategyLocal,
+					Scope:    ScopeSet,
+				},
+				RequestSchema:  map[string]any{"type": "object"},
+				ResponseSchema: map[string]any{"type": "array"},
+			},
+			wantJSON: `{
+				"subject": "graph.query.localSearch",
+				"operation": "localSearch",
+				"request_schema": {"type": "object"},
+				"response_schema": {"type": "array"},
+				"intent": {
+					"type": "semantic",
+					"strategy": "local",
+					"scope": "set"
+				}
+			}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jsonBytes, err := json.Marshal(tt.capability)
+			if err != nil {
+				t.Fatalf("Failed to marshal QueryCapability: %v", err)
+			}
+
+			var raw1, raw2 map[string]any
+			if err := json.Unmarshal([]byte(tt.wantJSON), &raw1); err != nil {
+				t.Fatalf("Failed to unmarshal expected JSON: %v", err)
+			}
+			if err := json.Unmarshal(jsonBytes, &raw2); err != nil {
+				t.Fatalf("Failed to unmarshal actual JSON: %v", err)
+			}
+
+			var roundTripped QueryCapability
+			if err := json.Unmarshal(jsonBytes, &roundTripped); err != nil {
+				t.Fatalf("Failed to unmarshal QueryCapability: %v", err)
+			}
+
+			if roundTripped.Intent != tt.capability.Intent {
+				t.Errorf("Intent mismatch after round-trip:\n  expected: %+v\n  got:      %+v",
+					tt.capability.Intent, roundTripped.Intent)
+			}
+		})
+	}
+}

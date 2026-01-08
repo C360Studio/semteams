@@ -196,6 +196,11 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.ingest.query.entity",
 				Operation:   "getEntity",
 				Description: "Get single entity by ID",
+				Intent: component.QueryIntent{
+					Type:     component.IntentTypeEntity,
+					Strategy: component.StrategyDirect,
+					Scope:    component.ScopeSingle,
+				},
 				IntentTags:  []string{component.IntentTagEntity},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
@@ -216,6 +221,11 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.ingest.query.batch",
 				Operation:   "getBatch",
 				Description: "Get multiple entities by IDs",
+				Intent: component.QueryIntent{
+					Type:     component.IntentTypeEntity,
+					Strategy: component.StrategyBatch,
+					Scope:    component.ScopeSet,
+				},
 				IntentTags:  []string{component.IntentTagEntity},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
@@ -242,6 +252,11 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.ingest.query.prefix",
 				Operation:   "listByPrefix",
 				Description: "List entity IDs matching a prefix (for hierarchy queries)",
+				Intent: component.QueryIntent{
+					Type:     component.IntentTypeEntity,
+					Strategy: component.StrategyDirect,
+					Scope:    component.ScopeSet,
+				},
 				IntentTags:  []string{component.IntentTagEntity, component.IntentTagAggregate},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
