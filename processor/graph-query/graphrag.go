@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360/semstreams/component"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/graph/clustering"
 	"github.com/c360/semstreams/message"
@@ -262,7 +263,7 @@ func (c *Component) loadEntities(ctx context.Context, entityIDs []string) ([]*gt
 	}
 
 	// Request entities from graph-ingest
-	respData, err := c.natsClient.Request(ctx, "graph.ingest.query.entities", reqData, c.config.QueryTimeout)
+	respData, err := c.natsClient.Request(ctx, c.router.Route(component.IntentTagBatch), reqData, c.config.QueryTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("request entities: %w", err)
 	}

@@ -88,8 +88,9 @@ func (c *Component) handleQueryEntity(ctx context.Context, data []byte) ([]byte,
 		return nil, errors.New("invalid request: empty id")
 	}
 
-	// Forward to graph-ingest
-	response, err := c.natsClient.Request(ctx, "graph.ingest.query.entity", data, c.config.QueryTimeout)
+	// Route via intent tag (discovered or fallback)
+	subject := c.router.Route(component.IntentTagEntity)
+	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
@@ -125,7 +126,7 @@ func (c *Component) handleQueryEntityByAlias(ctx context.Context, data []byte) (
 	aliasReq := map[string]string{"alias": req.AliasOrID}
 	aliasReqData, _ := json.Marshal(aliasReq)
 
-	aliasResp, err := c.natsClient.Request(ctx, "graph.index.query.alias", aliasReqData, c.config.QueryTimeout)
+	aliasResp, err := c.natsClient.Request(ctx, c.router.Route(component.IntentTagAlias), aliasReqData, c.config.QueryTimeout)
 	if err == nil {
 		// Check if response contains a canonical_id
 		var aliasResult struct {
@@ -141,7 +142,7 @@ func (c *Component) handleQueryEntityByAlias(ctx context.Context, data []byte) (
 	entityReq := map[string]string{"id": entityID}
 	entityReqData, _ := json.Marshal(entityReq)
 
-	response, err := c.natsClient.Request(ctx, "graph.ingest.query.entity", entityReqData, c.config.QueryTimeout)
+	response, err := c.natsClient.Request(ctx, c.router.Route(component.IntentTagEntity), entityReqData, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
@@ -157,7 +158,7 @@ func (c *Component) handleQueryEntityByAlias(ctx context.Context, data []byte) (
 // handleQueryPrefix handles prefix query requests (passthrough to graph-ingest)
 func (c *Component) handleQueryPrefix(ctx context.Context, data []byte) ([]byte, error) {
 	// Forward to graph-ingest
-	response, err := c.natsClient.Request(ctx, "graph.ingest.query.prefix", data, c.config.QueryTimeout)
+	response, err := c.natsClient.Request(ctx, c.router.Route(component.IntentTagPrefix), data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
@@ -182,8 +183,9 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 		return nil, errors.New("invalid request: empty entity_id")
 	}
 
-	// Forward to graph-index
-	response, err := c.natsClient.Request(ctx, "graph.index.query.outgoing", data, c.config.QueryTimeout)
+	// Route via intent tag (discovered or fallback)
+	subject := c.router.Route(component.IntentTagRelationship)
+	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		return nil, fmt.Errorf("query relationships failed: %w", err)
@@ -292,7 +294,7 @@ func (c *Component) handleQueryHierarchyStats(ctx context.Context, data []byte) 
 		return nil, fmt.Errorf("marshal prefix request: %w", err)
 	}
 
-	response, err := c.natsClient.Request(ctx, "graph.ingest.query.prefix", prefixReq, c.config.QueryTimeout)
+	response, err := c.natsClient.Request(ctx, c.router.Route(component.IntentTagPrefix), prefixReq, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
@@ -411,8 +413,9 @@ func buildSortedChildren(childCounts map[string]int) []HierarchyChild {
 
 // handleQuerySpatial handles spatial query requests (passthrough to graph-index-spatial)
 func (c *Component) handleQuerySpatial(ctx context.Context, data []byte) ([]byte, error) {
-	// Forward to graph-index-spatial
-	response, err := c.natsClient.Request(ctx, "graph.spatial.query.bounds", data, c.config.QueryTimeout)
+	// Route via intent tag (discovered or fallback)
+	subject := c.router.Route(component.IntentTagSpatial)
+	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
@@ -427,8 +430,9 @@ func (c *Component) handleQuerySpatial(ctx context.Context, data []byte) ([]byte
 
 // handleQueryTemporal handles temporal query requests (passthrough to graph-index-temporal)
 func (c *Component) handleQueryTemporal(ctx context.Context, data []byte) ([]byte, error) {
-	// Forward to graph-index-temporal
-	response, err := c.natsClient.Request(ctx, "graph.temporal.query.range", data, c.config.QueryTimeout)
+	// Route via intent tag (discovered or fallback)
+	subject := c.router.Route(component.IntentTagTemporal)
+	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
@@ -443,8 +447,9 @@ func (c *Component) handleQueryTemporal(ctx context.Context, data []byte) ([]byt
 
 // handleQuerySemantic handles semantic search requests (passthrough to graph-embedding)
 func (c *Component) handleQuerySemantic(ctx context.Context, data []byte) ([]byte, error) {
-	// Forward to graph-embedding's search handler
-	response, err := c.natsClient.Request(ctx, "graph.embedding.query.search", data, c.config.QueryTimeout)
+	// Route via intent tag (discovered or fallback)
+	subject := c.router.Route(component.IntentTagSemantic)
+	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
@@ -460,7 +465,7 @@ func (c *Component) handleQuerySemantic(ctx context.Context, data []byte) ([]byt
 // handleQuerySimilar handles similar entity requests (passthrough to graph-embedding)
 func (c *Component) handleQuerySimilar(ctx context.Context, data []byte) ([]byte, error) {
 	// Forward to graph-embedding's similar handler
-	response, err := c.natsClient.Request(ctx, "graph.embedding.query.similar", data, c.config.QueryTimeout)
+	response, err := c.natsClient.Request(ctx, c.router.Route(component.IntentTagSemantic), data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {

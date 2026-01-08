@@ -24,6 +24,15 @@ const (
 
 	// IntentTagAnomaly indicates anomaly detection queries (outliers, k-core).
 	IntentTagAnomaly = "anomaly"
+
+	// IntentTagAlias indicates alias resolution queries (resolveAlias).
+	IntentTagAlias = "alias"
+
+	// IntentTagPrefix indicates prefix/hierarchy queries (listByPrefix, hierarchyStats).
+	IntentTagPrefix = "prefix"
+
+	// IntentTagBatch indicates batch retrieval operations (getBatch, getMultiple).
+	IntentTagBatch = "batch"
 )
 
 // QueryCapabilityProvider is an optional interface for components that

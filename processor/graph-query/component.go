@@ -82,6 +82,7 @@ type Component struct {
 	config       Config
 	natsClient   natsRequester
 	pathSearcher *PathSearcher
+	router       *IntentRouter
 	logger       *slog.Logger
 
 	// Community cache for GraphRAG (consumer-owned, KV watch based)
@@ -296,6 +297,12 @@ func (c *Component) Start(ctx context.Context) error {
 	// Wait for NATS connection
 	if err := c.natsClient.WaitForConnection(c.ctx); err != nil {
 		return fmt.Errorf("wait for NATS connection: %w", err)
+	}
+
+	// Discover capabilities for intent-based routing
+	c.router = NewIntentRouter(c.natsClient, c.logger)
+	if err := c.router.DiscoverCapabilities(c.ctx, 2*time.Second); err != nil {
+		c.logger.Warn("capability discovery failed, using fallback routes", "error", err)
 	}
 
 	// Subscribe to query subjects

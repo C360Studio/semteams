@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -436,6 +437,12 @@ func TestComponent_QueryEntity_PassthroughSuccess(t *testing.T) {
 	// Mock response from graph-ingest
 	entityResponse := []byte(`{"id":"test.entity.001","triples":[]}`)
 	mockClient.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		// Handle capability discovery requests during Start()
+		if strings.HasSuffix(subject, ".capabilities") {
+			return nil, nats.ErrTimeout // Component not available
+		}
+
+		// Actual query should go to graph-ingest
 		assert.Equal(t, "graph.ingest.query.entity", subject, "should forward to graph-ingest")
 
 		var req map[string]string
@@ -507,6 +514,12 @@ func TestComponent_QueryRelationships_PassthroughSuccess(t *testing.T) {
 	// Mock response from graph-index
 	relsResponse := []byte(`[{"from":"test.entity.001","to":"test.entity.002","predicate":"test.relationship"}]`)
 	mockClient.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		// Handle capability discovery requests during Start()
+		if strings.HasSuffix(subject, ".capabilities") {
+			return nil, nats.ErrTimeout // Component not available
+		}
+
+		// Actual query should go to graph-index
 		assert.Equal(t, "graph.index.query.outgoing", subject, "should forward to graph-index")
 
 		var req map[string]string
