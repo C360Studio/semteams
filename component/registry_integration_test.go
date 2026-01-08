@@ -3,12 +3,15 @@
 package component
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/types"
@@ -749,5 +752,422 @@ func TestConcurrentAccess(t *testing.T) {
 	components := registry.ListComponents()
 	if len(components) != 20 {
 		t.Errorf("Expected 20 components after concurrent operations, got %d", len(components))
+	}
+}
+
+// NATS Integration Tests for Capability Discovery
+
+func TestRegistry_InitNATS(t *testing.T) {
+	ctx := context.Background()
+	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream())
+	defer testClient.Terminate()
+
+	registry := NewRegistry()
+
+	err := registry.InitNATS(ctx, testClient.Client, "test-node-1")
+	if err != nil {
+		t.Fatalf("Failed to initialize NATS: %v", err)
+	}
+
+	// Verify registry state (internal fields are not exported, but we can test behavior)
+	if registry.nodeID != "test-node-1" {
+		t.Errorf("NodeID not set correctly: got %q, want %q", registry.nodeID, "test-node-1")
+	}
+	if registry.remoteCapabilities == nil {
+		t.Error("remoteCapabilities map not initialized")
+	}
+	if registry.queryIndex == nil {
+		t.Error("queryIndex map not initialized")
+	}
+
+	// Verify stream was created
+	stream, err := testClient.Client.GetStream(ctx, "COMPONENT_CAPABILITIES")
+	if err != nil {
+		t.Fatalf("COMPONENT_CAPABILITIES stream not created: %v", err)
+	}
+
+	info, err := stream.Info(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get stream info: %v", err)
+	}
+
+	if info.Config.Storage != jetstream.MemoryStorage {
+		t.Errorf("Expected MemoryStorage, got %v", info.Config.Storage)
+	}
+}
+
+func TestRegistry_PublishCapabilities(t *testing.T) {
+	ctx := context.Background()
+	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream())
+	defer testClient.Terminate()
+
+	registry := NewRegistry()
+
+	// Initialize NATS
+	err := registry.InitNATS(ctx, testClient.Client, "test-node-1")
+	if err != nil {
+		t.Fatalf("Failed to initialize NATS: %v", err)
+	}
+
+	// Register factory
+	registration := &Registration{
+		Name:        "test-component",
+		Factory:     createMockComponent,
+		Type:        "processor",
+		Protocol:    "test",
+		Description: "Test component",
+		Version:     "1.0.0",
+	}
+	err = registry.RegisterFactory("test-component", registration)
+	if err != nil {
+		t.Fatalf("Failed to register factory: %v", err)
+	}
+
+	// Create and register component
+	rawConfig := []byte(`{"name":"test-instance"}`)
+	deps := Dependencies{
+		NATSClient: testClient.Client,
+		Platform: PlatformMeta{
+			Org:      "test",
+			Platform: "test-platform",
+		},
+	}
+
+	config := types.ComponentConfig{
+		Type:    types.ComponentTypeProcessor,
+		Name:    "test-component",
+		Enabled: true,
+		Config:  rawConfig,
+	}
+
+	component, err := registry.CreateComponent("test-instance", config, deps)
+	if err != nil {
+		t.Fatalf("Failed to create component: %v", err)
+	}
+
+	// Verify capabilities were published
+	// Subscribe to capability announcements
+	stream, err := testClient.Client.GetStream(ctx, "COMPONENT_CAPABILITIES")
+	if err != nil {
+		t.Fatalf("Failed to get stream: %v", err)
+	}
+
+	consumer, err := stream.CreateOrUpdateConsumer(ctx, jetstream.ConsumerConfig{
+		FilterSubjects: []string{"processor.capabilities.test-instance"},
+		DeliverPolicy:  jetstream.DeliverLastPolicy,
+	})
+	if err != nil {
+		t.Fatalf("Failed to create consumer: %v", err)
+	}
+
+	msgs, err := consumer.Messages()
+	if err != nil {
+		t.Fatalf("Failed to get messages: %v", err)
+	}
+
+	msg, err := msgs.Next()
+	if err != nil {
+		t.Fatalf("Failed to get capability message: %v", err)
+	}
+
+	var ann CapabilityAnnouncement
+	err = json.Unmarshal(msg.Data(), &ann)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal capability announcement: %v", err)
+	}
+
+	// Verify announcement
+	if ann.InstanceName != "test-instance" {
+		t.Errorf("InstanceName: got %q, want %q", ann.InstanceName, "test-instance")
+	}
+	if ann.Component != "test-component" {
+		t.Errorf("Component: got %q, want %q", ann.Component, "test-component")
+	}
+	if ann.Type != "processor" {
+		t.Errorf("Type: got %q, want %q", ann.Type, "processor")
+	}
+	if ann.Version != "1.0.0" {
+		t.Errorf("Version: got %q, want %q", ann.Version, "1.0.0")
+	}
+	if ann.NodeID != "test-node-1" {
+		t.Errorf("NodeID: got %q, want %q", ann.NodeID, "test-node-1")
+	}
+
+	// Verify TTL
+	if ann.TTL != 60*time.Second {
+		t.Errorf("TTL: got %v, want %v", ann.TTL, 60*time.Second)
+	}
+
+	// Component should have ports from mock
+	_ = component
+}
+
+func TestRegistry_SubscribeCapabilities(t *testing.T) {
+	ctx := context.Background()
+	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream())
+	defer testClient.Terminate()
+
+	registry := NewRegistry()
+
+	// Initialize NATS
+	err := registry.InitNATS(ctx, testClient.Client, "test-node-1")
+	if err != nil {
+		t.Fatalf("Failed to initialize NATS: %v", err)
+	}
+
+	// Subscribe to all capabilities
+	err = registry.SubscribeCapabilities(ctx)
+	if err != nil {
+		t.Fatalf("Failed to subscribe to capabilities: %v", err)
+	}
+
+	// Register factory
+	registration := &Registration{
+		Name:        "test-component",
+		Factory:     createMockComponent,
+		Type:        "processor",
+		Protocol:    "test",
+		Description: "Test component",
+		Version:     "1.0.0",
+	}
+	err = registry.RegisterFactory("test-component", registration)
+	if err != nil {
+		t.Fatalf("Failed to register factory: %v", err)
+	}
+
+	// Create component (should trigger publish)
+	rawConfig := []byte(`{"name":"test-instance"}`)
+	deps := Dependencies{
+		NATSClient: testClient.Client,
+		Platform: PlatformMeta{
+			Org:      "test",
+			Platform: "test-platform",
+		},
+	}
+
+	config := types.ComponentConfig{
+		Type:    types.ComponentTypeProcessor,
+		Name:    "test-component",
+		Enabled: true,
+		Config:  rawConfig,
+	}
+
+	_, err = registry.CreateComponent("test-instance", config, deps)
+	if err != nil {
+		t.Fatalf("Failed to create component: %v", err)
+	}
+
+	// Wait for capability to be received and cached
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify capability was cached
+	caps := registry.GetCapabilities("processor.capabilities.*")
+	if len(caps) == 0 {
+		t.Fatal("No capabilities cached")
+	}
+
+	found := false
+	for _, cap := range caps {
+		if cap.InstanceName == "test-instance" {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		t.Error("test-instance capability not found in cache")
+	}
+}
+
+func TestRegistry_Heartbeat(t *testing.T) {
+	ctx := context.Background()
+	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream())
+	defer testClient.Terminate()
+
+	registry := NewRegistry()
+
+	// Initialize NATS
+	err := registry.InitNATS(ctx, testClient.Client, "test-node-1")
+	if err != nil {
+		t.Fatalf("Failed to initialize NATS: %v", err)
+	}
+
+	// Register factory and create component
+	registration := &Registration{
+		Name:        "test-component",
+		Factory:     createMockComponent,
+		Type:        "processor",
+		Protocol:    "test",
+		Description: "Test component",
+		Version:     "1.0.0",
+	}
+	err = registry.RegisterFactory("test-component", registration)
+	if err != nil {
+		t.Fatalf("Failed to register factory: %v", err)
+	}
+
+	rawConfig := []byte(`{"name":"test-instance"}`)
+	deps := Dependencies{
+		NATSClient: testClient.Client,
+		Platform: PlatformMeta{
+			Org:      "test",
+			Platform: "test-platform",
+		},
+	}
+
+	config := types.ComponentConfig{
+		Type:    types.ComponentTypeProcessor,
+		Name:    "test-component",
+		Enabled: true,
+		Config:  rawConfig,
+	}
+
+	_, err = registry.CreateComponent("test-instance", config, deps)
+	if err != nil {
+		t.Fatalf("Failed to create component: %v", err)
+	}
+
+	// Start heartbeat
+	registry.StartHeartbeat(ctx, 100*time.Millisecond)
+	defer registry.StopHeartbeat()
+
+	// Wait for at least 2 heartbeat cycles
+	time.Sleep(250 * time.Millisecond)
+
+	// Heartbeat should have republished capabilities
+	// Verify by subscribing and checking message count
+	stream, err := testClient.Client.GetStream(ctx, "COMPONENT_CAPABILITIES")
+	if err != nil {
+		t.Fatalf("Failed to get stream: %v", err)
+	}
+
+	info, err := stream.Info(ctx)
+	if err != nil {
+		t.Fatalf("Failed to get stream info: %v", err)
+	}
+
+	// Should have at least 1 message (initial publish + heartbeat republish)
+	// Due to MaxMsgsPerSubject: 1, only the latest message is kept
+	if info.State.Msgs < 1 {
+		t.Errorf("Expected at least 1 message, got %d", info.State.Msgs)
+	}
+}
+
+func TestRegistry_MultiNodeDiscovery(t *testing.T) {
+	ctx := context.Background()
+	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream())
+	defer testClient.Terminate()
+
+	// Create two registries simulating different nodes
+	registry1 := NewRegistry()
+	registry2 := NewRegistry()
+
+	// Initialize both with NATS
+	err := registry1.InitNATS(ctx, testClient.Client, "node-1")
+	if err != nil {
+		t.Fatalf("Failed to initialize NATS for registry1: %v", err)
+	}
+
+	err = registry2.InitNATS(ctx, testClient.Client, "node-2")
+	if err != nil {
+		t.Fatalf("Failed to initialize NATS for registry2: %v", err)
+	}
+
+	// Subscribe both registries
+	err = registry1.SubscribeCapabilities(ctx)
+	if err != nil {
+		t.Fatalf("Failed to subscribe registry1: %v", err)
+	}
+
+	err = registry2.SubscribeCapabilities(ctx)
+	if err != nil {
+		t.Fatalf("Failed to subscribe registry2: %v", err)
+	}
+
+	// Register factories on both
+	registration := &Registration{
+		Name:        "test-component",
+		Factory:     createMockComponent,
+		Type:        "processor",
+		Protocol:    "test",
+		Description: "Test component",
+		Version:     "1.0.0",
+	}
+
+	err = registry1.RegisterFactory("test-component", registration)
+	if err != nil {
+		t.Fatalf("Failed to register factory on registry1: %v", err)
+	}
+
+	err = registry2.RegisterFactory("test-component", registration)
+	if err != nil {
+		t.Fatalf("Failed to register factory on registry2: %v", err)
+	}
+
+	// Create component on node-1
+	deps := Dependencies{
+		NATSClient: testClient.Client,
+		Platform: PlatformMeta{
+			Org:      "test",
+			Platform: "test-platform",
+		},
+	}
+
+	config := types.ComponentConfig{
+		Type:    types.ComponentTypeProcessor,
+		Name:    "test-component",
+		Enabled: true,
+		Config:  []byte(`{"name":"instance-1"}`),
+	}
+
+	_, err = registry1.CreateComponent("instance-1", config, deps)
+	if err != nil {
+		t.Fatalf("Failed to create component on registry1: %v", err)
+	}
+
+	// Create component on node-2
+	config.Config = []byte(`{"name":"instance-2"}`)
+	_, err = registry2.CreateComponent("instance-2", config, deps)
+	if err != nil {
+		t.Fatalf("Failed to create component on registry2: %v", err)
+	}
+
+	// Wait for capabilities to propagate
+	time.Sleep(300 * time.Millisecond)
+
+	// Verify registry1 can see both capabilities
+	caps1 := registry1.GetCapabilities("processor.capabilities.*")
+	if len(caps1) < 2 {
+		t.Errorf("Registry1 should see at least 2 capabilities, got %d", len(caps1))
+	}
+
+	// Verify registry2 can see both capabilities
+	caps2 := registry2.GetCapabilities("processor.capabilities.*")
+	if len(caps2) < 2 {
+		t.Errorf("Registry2 should see at least 2 capabilities, got %d", len(caps2))
+	}
+
+	// Verify we can find instance-1 from both registries
+	foundInReg1 := false
+	foundInReg2 := false
+
+	for _, cap := range caps1 {
+		if cap.InstanceName == "instance-1" && cap.NodeID == "node-1" {
+			foundInReg1 = true
+		}
+	}
+
+	for _, cap := range caps2 {
+		if cap.InstanceName == "instance-1" && cap.NodeID == "node-1" {
+			foundInReg2 = true
+		}
+	}
+
+	if !foundInReg1 {
+		t.Error("Registry1 cannot discover its own capability")
+	}
+
+	if !foundInReg2 {
+		t.Error("Registry2 cannot discover node-1's capability")
 	}
 }

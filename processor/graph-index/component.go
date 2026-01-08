@@ -14,9 +14,9 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/vocabulary"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
+	"github.com/c360/semstreams/vocabulary"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

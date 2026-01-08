@@ -275,6 +275,22 @@ func (cm *ComponentManager) Start(ctx context.Context) error {
 
 	cm.startOrder = make([]string, 0)
 
+	// Initialize NATS-backed capability discovery if NATS client is available
+	if cm.natsClient != nil {
+		nodeID := fmt.Sprintf("%s.%s", cm.platform.Org, cm.platform.Platform)
+		if nodeID == "." {
+			nodeID = "default-node"
+		}
+		if err := cm.registry.InitNATS(workingCtx, cm.natsClient, nodeID); err != nil {
+			cm.logger.Warn("Failed to initialize capability discovery, continuing without it",
+				"error", err)
+		} else {
+			cm.logger.Info("Capability discovery initialized", "node_id", nodeID)
+			// Start heartbeat for TTL renewal (30 second interval)
+			cm.registry.StartHeartbeat(workingCtx, 30*time.Second)
+		}
+	}
+
 	// Start each initialized component with proper thread safety
 	cm.mu.Lock()
 	// Create a copy of components to start to avoid holding the lock during goroutine operations
@@ -366,6 +382,9 @@ func (cm *ComponentManager) Stop(timeout time.Duration) error {
 	default:
 		close(cm.shutdown)
 	}
+
+	// Stop capability discovery heartbeat
+	cm.registry.StopHeartbeat()
 
 	// Config watching is now handled by Manager, no need to stop it here
 
