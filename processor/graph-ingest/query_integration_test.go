@@ -14,45 +14,18 @@ import (
 	"github.com/c360/semstreams/natsclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 // TestIntegration_QueryHandlers tests query handlers with real NATS JetStream
 func TestIntegration_QueryHandlers(t *testing.T) {
 	ctx := context.Background()
 
-	// Start NATS container
-	natsContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "nats:2.10-alpine",
-			ExposedPorts: []string{"4222/tcp"},
-			WaitingFor:   wait.ForLog("Server is ready"),
-			Cmd:          []string{"-js"},
-		},
-		Started: true,
-	})
-	require.NoError(t, err)
-	defer func() {
-		_ = natsContainer.Terminate(ctx)
-	}()
-
-	// Get NATS connection details
-	host, err := natsContainer.Host(ctx)
-	require.NoError(t, err)
-	port, err := natsContainer.MappedPort(ctx, "4222")
-	require.NoError(t, err)
-
-	natsURL := "nats://" + host + ":" + port.Port()
-
-	// Create NATS client
-	natsClient, err := natsclient.NewClient(natsURL)
-	require.NoError(t, err)
-	require.NoError(t, natsClient.Connect(ctx))
-	defer func() {
-		_ = natsClient.Close(ctx)
-	}()
-	require.NoError(t, natsClient.WaitForConnection(ctx))
+	// Create NATS test client with required streams
+	streams := []natsclient.TestStreamConfig{
+		{Name: "ENTITY", Subjects: []string{"entity.>"}},
+	}
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV(), natsclient.WithStreams(streams...))
+	natsClient := testClient.Client
 
 	// Create component
 	config := DefaultConfig()
