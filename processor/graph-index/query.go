@@ -199,6 +199,8 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.index.query.outgoing",
 				Operation:   "getOutgoing",
 				Description: "Get outgoing relationships for an entity",
+				IntentTags:  []string{component.IntentTagRelationship},
+				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -228,6 +230,8 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.index.query.incoming",
 				Operation:   "getIncoming",
 				Description: "Get incoming relationships for an entity",
+				IntentTags:  []string{component.IntentTagRelationship},
+				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -257,6 +261,8 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.index.query.alias",
 				Operation:   "getAlias",
 				Description: "Resolve alias to canonical entity ID",
+				IntentTags:  []string{component.IntentTagEntity},
+				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -280,6 +286,8 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.index.query.predicate",
 				Operation:   "getPredicate",
 				Description: "Get entities with a specific predicate",
+				IntentTags:  []string{component.IntentTagRelationship, component.IntentTagAggregate},
+				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{

@@ -1,6 +1,31 @@
 // Package component defines the QueryCapabilityProvider interface and related types
 package component
 
+// Standard intent tags for query capability classification.
+// Use these constants when declaring IntentTags on QueryCapability.
+const (
+	// IntentTagSpatial indicates location/geo queries (bounds, near, within).
+	IntentTagSpatial = "spatial"
+
+	// IntentTagTemporal indicates time-based queries (range, before, after).
+	IntentTagTemporal = "temporal"
+
+	// IntentTagSemantic indicates similarity/embedding queries (search, similar).
+	IntentTagSemantic = "semantic"
+
+	// IntentTagEntity indicates entity CRUD operations (get, list, batch).
+	IntentTagEntity = "entity"
+
+	// IntentTagRelationship indicates graph traversal queries (outgoing, incoming).
+	IntentTagRelationship = "relationship"
+
+	// IntentTagAggregate indicates aggregation/stats queries (count, hierarchy).
+	IntentTagAggregate = "aggregate"
+
+	// IntentTagAnomaly indicates anomaly detection queries (outliers, k-core).
+	IntentTagAnomaly = "anomaly"
+)
+
 // QueryCapabilityProvider is an optional interface for components that
 // expose query capabilities. Components implement this to provide rich
 // schema information for query discovery.
@@ -60,4 +85,15 @@ type QueryCapability struct {
 	// ResponseSchema is the JSON Schema for the response payload.
 	// Can be a map[string]any or any JSON-serializable schema structure.
 	ResponseSchema any `json:"response_schema"`
+
+	// IntentTags are semantic tags for intent-based routing.
+	// Standard tags: spatial, temporal, semantic, entity, relationship, aggregate.
+	// Components use these to declare what KIND of queries they handle.
+	// Omitted from JSON when empty.
+	IntentTags []string `json:"intent_tags,omitempty"`
+
+	// EntityTypes lists entity types this query operates on.
+	// Use "*" for queries that handle all entity types.
+	// Omitted from JSON when empty.
+	EntityTypes []string `json:"entity_types,omitempty"`
 }

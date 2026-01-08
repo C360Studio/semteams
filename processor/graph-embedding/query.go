@@ -282,6 +282,8 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.embedding.query.similar",
 				Operation:   "findSimilar",
 				Description: "Find entities similar to a given entity by embedding similarity",
+				IntentTags:  []string{component.IntentTagSemantic},
+				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -318,6 +320,8 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.embedding.query.search",
 				Operation:   "search",
 				Description: "Search for entities by text query using embedding similarity",
+				IntentTags:  []string{component.IntentTagSemantic},
+				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{

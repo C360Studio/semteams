@@ -349,6 +349,8 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.anomalies.query.kcore",
 				Operation:   "getKCore",
 				Description: "Get k-core decomposition information for an entity or filtered by core number",
+				IntentTags:  []string{component.IntentTagAnomaly, component.IntentTagAggregate},
+				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -377,6 +379,8 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.anomalies.query.pivot",
 				Operation:   "getPivotDistances",
 				Description: "Get pivot distances for an entity or list all pivots",
+				IntentTags:  []string{component.IntentTagAnomaly},
+				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -400,6 +404,8 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.anomalies.query.outliers",
 				Operation:   "findOutliers",
 				Description: "Find structural outliers based on k-core and pivot distances",
+				IntentTags:  []string{component.IntentTagAnomaly},
+				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
 					"properties": map[string]any{
