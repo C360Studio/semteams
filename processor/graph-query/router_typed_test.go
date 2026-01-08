@@ -102,7 +102,7 @@ func TestIntentRouter_Route_ExactMatch(t *testing.T) {
 				},
 			}
 
-			subject := router.Route(tt.intent)
+			subject := router.Route(t.Context(), tt.intent)
 
 			if subject != tt.expectedSubject {
 				t.Errorf("Route() mismatch:\n  expected: %s\n  got:      %s", tt.expectedSubject, subject)
@@ -192,7 +192,7 @@ func TestIntentRouter_Route_FallbackToType(t *testing.T) {
 				},
 			}
 
-			subject := router.Route(tt.intent)
+			subject := router.Route(t.Context(), tt.intent)
 
 			if subject != tt.expectedSubject {
 				t.Errorf("Route() fallback mismatch:\n  expected: %s\n  got:      %s", tt.expectedSubject, subject)
@@ -245,7 +245,7 @@ func TestIntentRouter_Route_UnknownType(t *testing.T) {
 				},
 			}
 
-			subject := router.Route(tt.intent)
+			subject := router.Route(t.Context(), tt.intent)
 
 			if subject != "" {
 				t.Errorf("Route() should return empty string for unknown type, got: %s", subject)
@@ -296,7 +296,7 @@ func TestIntentRouter_Route_Concurrent(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < iterations; j++ {
 				for _, intent := range intents {
-					subject := router.Route(intent)
+					subject := router.Route(t.Context(), intent)
 					if subject == "" {
 						t.Errorf("Route() returned empty string for valid intent: %+v", intent)
 					}
@@ -323,7 +323,7 @@ func TestIntentRouter_Discovery_UpdatesRoutes(t *testing.T) {
 		Strategy: component.StrategyDirect,
 		Scope:    component.ScopeSingle,
 	}
-	subject := router.Route(intent)
+	subject := router.Route(t.Context(), intent)
 	if subject != "graph.ingest.query.entity" {
 		t.Errorf("Before discovery should use fallback, got: %s", subject)
 	}
@@ -334,7 +334,7 @@ func TestIntentRouter_Discovery_UpdatesRoutes(t *testing.T) {
 	router.mu.Unlock()
 
 	// Verify exact match after discovery
-	subject = router.Route(intent)
+	subject = router.Route(t.Context(), intent)
 	if subject != "graph.ingest.query.entity.v2" {
 		t.Errorf("After discovery should use discovered route, got: %s", subject)
 	}
@@ -357,7 +357,7 @@ func TestIntentRouter_ExactMatchPreferredOverFallback(t *testing.T) {
 		},
 	}
 
-	subject := router.Route(intent)
+	subject := router.Route(t.Context(), intent)
 
 	if subject != "graph.ingest.query.entity.exact" {
 		t.Errorf("Exact match should take precedence over fallback:\n  expected: graph.ingest.query.entity.exact\n  got:      %s", subject)
@@ -442,7 +442,7 @@ func TestIntentRouter_AllRoutingTableEntries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			subject := router.Route(tt.intent)
+			subject := router.Route(t.Context(), tt.intent)
 
 			if subject != tt.expectedSubject {
 				t.Errorf("%s routing failed:\n  expected: %s\n  got:      %s", tt.description, tt.expectedSubject, subject)
@@ -488,7 +488,7 @@ func TestIntentRouter_FallbackMap(t *testing.T) {
 				Scope:    component.ScopeSet,
 			}
 
-			subject := router.Route(intent)
+			subject := router.Route(t.Context(), intent)
 
 			if subject != tt.expectedSubject {
 				t.Errorf("Fallback routing failed:\n  expected: %s\n  got:      %s", tt.expectedSubject, subject)

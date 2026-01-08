@@ -299,11 +299,8 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("wait for NATS connection: %w", err)
 	}
 
-	// Discover capabilities for intent-based routing
+	// Create router for intent-based routing (routes discovered lazily on first use)
 	c.router = NewIntentRouter(c.natsClient, c.logger)
-	if err := c.router.DiscoverCapabilities(c.ctx, 2*time.Second); err != nil {
-		c.logger.Warn("capability discovery failed, using fallback routes", "error", err)
-	}
 
 	// Subscribe to query subjects
 	if err := c.setupQueryHandlers(); err != nil {

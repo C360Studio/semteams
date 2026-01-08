@@ -10,12 +10,15 @@ import (
 	"github.com/c360/semstreams/component"
 )
 
+// discoveryTimeout is the timeout for on-demand capability discovery.
+const discoveryTimeout = 2 * time.Second
+
 // IntentRouter discovers query capabilities via NATS and routes by typed QueryIntent.
-// It queries known capability endpoints at startup to build a routing table,
-// falling back to type-only subjects when no exact match is found.
+// Routes are discovered lazily on first use and cached for subsequent requests.
+// Falls back to type-only subjects when no exact match is found.
 type IntentRouter struct {
 	natsClient natsRequester
-	routes     map[component.QueryIntent]string // exact intent -> subject
+	routes     map[component.QueryIntent]string // exact intent -> subject (cache)
 	fallback   map[component.IntentType]string  // type-only fallback
 	logger     *slog.Logger
 	mu         sync.RWMutex
@@ -52,20 +55,45 @@ func capabilityEndpoints() []string {
 	}
 }
 
-// DiscoverCapabilities queries all known capability endpoints and builds the routing table.
-// Components that don't respond are skipped; their intents will use fallback subjects.
-func (r *IntentRouter) DiscoverCapabilities(ctx context.Context, timeout time.Duration) error {
+// Route returns the NATS subject for a given QueryIntent.
+// Uses cached route if available, otherwise discovers on-demand.
+// Falls back to type-only match if discovery fails.
+func (r *IntentRouter) Route(ctx context.Context, intent component.QueryIntent) string {
+	// Check cache first (fast path)
+	r.mu.RLock()
+	if subject, ok := r.routes[intent]; ok {
+		r.mu.RUnlock()
+		return subject
+	}
+	r.mu.RUnlock()
+
+	// Not in cache - try to discover
+	subject := r.discoverForIntent(ctx, intent)
+	if subject != "" {
+		return subject
+	}
+
+	// Fallback to type-only
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.fallback[intent.Type]
+}
+
+// discoverForIntent queries capability endpoints to find a route for the given intent.
+// Caches all discovered routes for future use.
+func (r *IntentRouter) discoverForIntent(ctx context.Context, intent component.QueryIntent) string {
+	// Skip discovery if no NATS client (unit test scenario)
+	if r.natsClient == nil {
+		return ""
+	}
+
 	endpoints := capabilityEndpoints()
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	discovered := 0
 	for _, endpoint := range endpoints {
-		resp, err := r.natsClient.Request(ctx, endpoint, []byte{}, timeout)
+		resp, err := r.natsClient.Request(ctx, endpoint, []byte{}, discoveryTimeout)
 		if err != nil {
 			r.logger.Debug("capability endpoint unavailable", "endpoint", endpoint, "error", err)
-			continue // Component not available - skip
+			continue
 		}
 
 		var caps component.QueryCapabilities
@@ -74,38 +102,27 @@ func (r *IntentRouter) DiscoverCapabilities(ctx context.Context, timeout time.Du
 			continue
 		}
 
-		// Index routes by typed QueryIntent
+		// Cache all discovered routes
+		r.mu.Lock()
 		for _, q := range caps.Queries {
 			r.routes[q.Intent] = q.Subject
-			discovered++
 		}
-	}
+		r.mu.Unlock()
 
-	r.logger.Info("capability discovery complete", "routes", len(r.routes), "discovered", discovered)
-	return nil
-}
-
-// Route returns the NATS subject for a given QueryIntent.
-// Returns exact match if available, otherwise falls back to type-only match.
-// Returns empty string if type is unknown.
-func (r *IntentRouter) Route(intent component.QueryIntent) string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	// Exact match first
-	if subject, ok := r.routes[intent]; ok {
-		return subject
-	}
-
-	// Fallback to type-only
-	if subject, ok := r.fallback[intent.Type]; ok {
-		return subject
+		// Check if we found our target
+		r.mu.RLock()
+		if subject, ok := r.routes[intent]; ok {
+			r.mu.RUnlock()
+			r.logger.Debug("discovered route for intent", "intent", intent, "subject", subject)
+			return subject
+		}
+		r.mu.RUnlock()
 	}
 
 	return ""
 }
 
-// RouteCount returns the number of discovered routes.
+// RouteCount returns the number of cached routes.
 func (r *IntentRouter) RouteCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
