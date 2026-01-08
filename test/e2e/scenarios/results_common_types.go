@@ -56,6 +56,12 @@ type TestMetadata struct {
 	// WarningCount is the number of warnings
 	WarningCount int `json:"warning_count"`
 
+	// Errors contains the actual error messages
+	Errors []string `json:"errors,omitempty"`
+
+	// Warnings contains the actual warning messages
+	Warnings []string `json:"warnings,omitempty"`
+
 	// Version information
 	Version string `json:"version,omitempty"`
 }

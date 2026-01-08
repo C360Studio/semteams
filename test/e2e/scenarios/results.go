@@ -297,6 +297,8 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 			Success:      result.Success,
 			ErrorCount:   len(result.Errors),
 			WarningCount: len(result.Warnings),
+			Errors:       result.Errors,
+			Warnings:     result.Warnings,
 		},
 	}
 
