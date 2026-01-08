@@ -204,7 +204,6 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 					Strategy: component.StrategyDirect,
 					Scope:    component.ScopeSet,
 				},
-				IntentTags:  []string{component.IntentTagRelationship},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
@@ -240,7 +239,6 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 					Strategy: component.StrategyDirect,
 					Scope:    component.ScopeSet,
 				},
-				IntentTags:  []string{component.IntentTagRelationship},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
@@ -276,7 +274,6 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 					Strategy: component.StrategyDirect,
 					Scope:    component.ScopeSingle,
 				},
-				IntentTags:  []string{component.IntentTagEntity},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
@@ -306,7 +303,6 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 					Strategy: component.StrategyDirect,
 					Scope:    component.ScopeSet,
 				},
-				IntentTags:  []string{component.IntentTagRelationship, component.IntentTagAggregate},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",

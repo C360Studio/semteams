@@ -344,7 +344,7 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.clustering.query.community",
 				Operation:   "getCommunity",
 				Description: "Get a community by ID",
-				IntentTags:  []string{component.IntentTagAggregate},
+				Intent:      component.QueryIntent{Type: component.IntentTypeAggregate, Strategy: component.StrategyDirect, Scope: component.ScopeSingle},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
@@ -367,7 +367,7 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.clustering.query.members",
 				Operation:   "getMembers",
 				Description: "Get members of a community",
-				IntentTags:  []string{component.IntentTagAggregate},
+				Intent:      component.QueryIntent{Type: component.IntentTypeAggregate, Strategy: component.StrategyDirect, Scope: component.ScopeSet},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
@@ -392,7 +392,7 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.clustering.query.entity",
 				Operation:   "getEntityCommunity",
 				Description: "Get the community for an entity at a specific level",
-				IntentTags:  []string{component.IntentTagAggregate, component.IntentTagEntity},
+				Intent:      component.QueryIntent{Type: component.IntentTypeAggregate, Strategy: component.StrategyDirect, Scope: component.ScopeSingle},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",
@@ -421,7 +421,7 @@ func (c *Component) QueryCapabilities() component.QueryCapabilities {
 				Subject:     "graph.clustering.query.level",
 				Operation:   "getCommunitiesByLevel",
 				Description: "Get all communities at a specific hierarchy level",
-				IntentTags:  []string{component.IntentTagAggregate},
+				Intent:      component.QueryIntent{Type: component.IntentTypeAggregate, Strategy: component.StrategyDirect, Scope: component.ScopeSet},
 				EntityTypes: []string{"*"},
 				RequestSchema: map[string]any{
 					"type": "object",

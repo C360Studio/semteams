@@ -44,40 +44,6 @@ type QueryIntent struct {
 	Scope    IntentScope    `json:"scope"`
 }
 
-// Legacy intent tag constants - deprecated, use QueryIntent instead.
-// Kept temporarily for backward compatibility during migration.
-const (
-	// IntentTagSpatial indicates location/geo queries (bounds, near, within).
-	IntentTagSpatial = "spatial"
-
-	// IntentTagTemporal indicates time-based queries (range, before, after).
-	IntentTagTemporal = "temporal"
-
-	// IntentTagSemantic indicates similarity/embedding queries (search, similar).
-	IntentTagSemantic = "semantic"
-
-	// IntentTagEntity indicates entity CRUD operations (get, list, batch).
-	IntentTagEntity = "entity"
-
-	// IntentTagRelationship indicates graph traversal queries (outgoing, incoming).
-	IntentTagRelationship = "relationship"
-
-	// IntentTagAggregate indicates aggregation/stats queries (count, hierarchy).
-	IntentTagAggregate = "aggregate"
-
-	// IntentTagAnomaly indicates anomaly detection queries (outliers, k-core).
-	IntentTagAnomaly = "anomaly"
-
-	// IntentTagAlias indicates alias resolution queries (resolveAlias).
-	IntentTagAlias = "alias"
-
-	// IntentTagPrefix indicates prefix/hierarchy queries (listByPrefix, hierarchyStats).
-	IntentTagPrefix = "prefix"
-
-	// IntentTagBatch indicates batch retrieval operations (getBatch, getMultiple).
-	IntentTagBatch = "batch"
-)
-
 // QueryCapabilityProvider is an optional interface for components that
 // expose query capabilities. Components implement this to provide rich
 // schema information for query discovery.
@@ -139,15 +105,7 @@ type QueryCapability struct {
 	ResponseSchema any `json:"response_schema"`
 
 	// Intent provides typed multi-dimensional query classification.
-	// Replaces IntentTags with compile-time safe type system.
 	Intent QueryIntent `json:"intent"`
-
-	// IntentTags are semantic tags for intent-based routing.
-	// DEPRECATED: Use Intent field instead. Kept for backward compatibility.
-	// Standard tags: spatial, temporal, semantic, entity, relationship, aggregate.
-	// Components use these to declare what KIND of queries they handle.
-	// Omitted from JSON when empty.
-	IntentTags []string `json:"intent_tags,omitempty"`
 
 	// EntityTypes lists entity types this query operates on.
 	// Use "*" for queries that handle all entity types.

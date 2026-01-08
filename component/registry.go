@@ -835,30 +835,21 @@ func (r *Registry) GetCapabilities(subjectPattern string) []*CapabilityAnnouncem
 	return result
 }
 
-// FindByIntentTags returns query capabilities matching ANY of the given intent tags.
+// FindByIntent returns query capabilities matching the given QueryIntent exactly.
 // Searches both local and remote capabilities.
 // Returns empty slice (not nil) when no matches found.
 // Thread-safe for concurrent access.
-func (r *Registry) FindByIntentTags(tags []string) []*QueryCapability {
+func (r *Registry) FindByIntent(intent QueryIntent) []*QueryCapability {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	result := []*QueryCapability{}
-	if len(tags) == 0 {
-		return result
-	}
-
-	// Build tag set for O(1) lookup
-	tagSet := make(map[string]struct{}, len(tags))
-	for _, tag := range tags {
-		tagSet[tag] = struct{}{}
-	}
 
 	// Search remote capabilities
 	for _, ann := range r.remoteCapabilities {
 		for i := range ann.Queries {
 			q := &ann.Queries[i]
-			if r.hasMatchingTag(q.IntentTags, tagSet) {
+			if q.Intent == intent {
 				result = append(result, q)
 			}
 		}
@@ -870,7 +861,43 @@ func (r *Registry) FindByIntentTags(tags []string) []*QueryCapability {
 			caps := qcp.QueryCapabilities()
 			for i := range caps.Queries {
 				q := &caps.Queries[i]
-				if r.hasMatchingTag(q.IntentTags, tagSet) {
+				if q.Intent == intent {
+					result = append(result, q)
+				}
+			}
+		}
+	}
+
+	return result
+}
+
+// FindByIntentType returns query capabilities matching the given IntentType.
+// Searches both local and remote capabilities.
+// Returns empty slice (not nil) when no matches found.
+// Thread-safe for concurrent access.
+func (r *Registry) FindByIntentType(intentType IntentType) []*QueryCapability {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := []*QueryCapability{}
+
+	// Search remote capabilities
+	for _, ann := range r.remoteCapabilities {
+		for i := range ann.Queries {
+			q := &ann.Queries[i]
+			if q.Intent.Type == intentType {
+				result = append(result, q)
+			}
+		}
+	}
+
+	// Search local capabilities (components implementing QueryCapabilityProvider)
+	for _, component := range r.instances {
+		if qcp, ok := component.(QueryCapabilityProvider); ok {
+			caps := qcp.QueryCapabilities()
+			for i := range caps.Queries {
+				q := &caps.Queries[i]
+				if q.Intent.Type == intentType {
 					result = append(result, q)
 				}
 			}
@@ -918,16 +945,6 @@ func (r *Registry) FindByEntityType(entityType string) []*QueryCapability {
 	}
 
 	return result
-}
-
-// hasMatchingTag returns true if any tag in queryTags is in tagSet.
-func (r *Registry) hasMatchingTag(queryTags []string, tagSet map[string]struct{}) bool {
-	for _, tag := range queryTags {
-		if _, exists := tagSet[tag]; exists {
-			return true
-		}
-	}
-	return false
 }
 
 // matchesEntityType returns true if entityTypes contains the type or "*".

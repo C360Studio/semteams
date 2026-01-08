@@ -836,20 +836,22 @@ func mapKeys(m map[string]*CapabilityAnnouncement) []string {
 	return keys
 }
 
-// TestFindByIntentTags_SingleTag verifies single tag matching
-func TestFindByIntentTags_SingleTag(t *testing.T) {
+// TestFindByIntent_ExactMatch verifies exact intent matching
+func TestFindByIntent_ExactMatch(t *testing.T) {
 	r := NewRegistry()
 	r.remoteCapabilities = make(map[string]*CapabilityAnnouncement)
 
-	// Add capabilities with different intent tags
+	entityIntent := QueryIntent{Type: IntentTypeEntity, Strategy: StrategyDirect, Scope: ScopeSingle}
+	semanticIntent := QueryIntent{Type: IntentTypeSemantic, Strategy: StrategyDirect, Scope: ScopeSet}
+
 	r.remoteCapabilities["processor.graph-ingest"] = &CapabilityAnnouncement{
 		InstanceName: "graph-ingest",
 		Type:         "processor",
 		Queries: []QueryCapability{
 			{
-				Subject:    "graph.ingest.query.entity",
-				Operation:  "getEntity",
-				IntentTags: []string{IntentTagEntity},
+				Subject:   "graph.ingest.query.entity",
+				Operation: "getEntity",
+				Intent:    entityIntent,
 			},
 		},
 	}
@@ -858,25 +860,25 @@ func TestFindByIntentTags_SingleTag(t *testing.T) {
 		Type:         "processor",
 		Queries: []QueryCapability{
 			{
-				Subject:    "graph.embedding.query.search",
-				Operation:  "search",
-				IntentTags: []string{IntentTagSemantic},
+				Subject:   "graph.embedding.query.search",
+				Operation: "search",
+				Intent:    semanticIntent,
 			},
 		},
 	}
 
-	// Find by entity tag
-	caps := r.FindByIntentTags([]string{IntentTagEntity})
+	// Find by exact entity intent
+	caps := r.FindByIntent(entityIntent)
 	if len(caps) != 1 {
-		t.Fatalf("FindByIntentTags(entity) = %d items, want 1", len(caps))
+		t.Fatalf("FindByIntent(entity) = %d items, want 1", len(caps))
 	}
 	if caps[0].Operation != "getEntity" {
 		t.Errorf("got operation %q, want %q", caps[0].Operation, "getEntity")
 	}
 }
 
-// TestFindByIntentTags_MultipleTags verifies OR matching with multiple tags
-func TestFindByIntentTags_MultipleTags(t *testing.T) {
+// TestFindByIntentType_MatchesType verifies type-only matching
+func TestFindByIntentType_MatchesType(t *testing.T) {
 	r := NewRegistry()
 	r.remoteCapabilities = make(map[string]*CapabilityAnnouncement)
 
@@ -885,9 +887,14 @@ func TestFindByIntentTags_MultipleTags(t *testing.T) {
 		Type:         "processor",
 		Queries: []QueryCapability{
 			{
-				Subject:    "graph.ingest.query.entity",
-				Operation:  "getEntity",
-				IntentTags: []string{IntentTagEntity},
+				Subject:   "graph.ingest.query.entity",
+				Operation: "getEntity",
+				Intent:    QueryIntent{Type: IntentTypeEntity, Strategy: StrategyDirect, Scope: ScopeSingle},
+			},
+			{
+				Subject:   "graph.ingest.query.batch",
+				Operation: "getBatch",
+				Intent:    QueryIntent{Type: IntentTypeEntity, Strategy: StrategyBatch, Scope: ScopeSet},
 			},
 		},
 	}
@@ -896,63 +903,28 @@ func TestFindByIntentTags_MultipleTags(t *testing.T) {
 		Type:         "processor",
 		Queries: []QueryCapability{
 			{
-				Subject:    "graph.embedding.query.search",
-				Operation:  "search",
-				IntentTags: []string{IntentTagSemantic},
-			},
-		},
-	}
-	r.remoteCapabilities["processor.graph-anomalies"] = &CapabilityAnnouncement{
-		InstanceName: "graph-anomalies",
-		Type:         "processor",
-		Queries: []QueryCapability{
-			{
-				Subject:    "graph.anomalies.query.outliers",
-				Operation:  "findOutliers",
-				IntentTags: []string{IntentTagAnomaly},
+				Subject:   "graph.embedding.query.search",
+				Operation: "search",
+				Intent:    QueryIntent{Type: IntentTypeSemantic, Strategy: StrategyDirect, Scope: ScopeSet},
 			},
 		},
 	}
 
-	// Find by entity OR semantic (should match 2)
-	caps := r.FindByIntentTags([]string{IntentTagEntity, IntentTagSemantic})
+	// Find by entity type (should match 2 - both entity operations)
+	caps := r.FindByIntentType(IntentTypeEntity)
 	if len(caps) != 2 {
-		t.Fatalf("FindByIntentTags(entity, semantic) = %d items, want 2", len(caps))
+		t.Fatalf("FindByIntentType(entity) = %d items, want 2", len(caps))
+	}
+
+	// Find by semantic type (should match 1)
+	caps = r.FindByIntentType(IntentTypeSemantic)
+	if len(caps) != 1 {
+		t.Fatalf("FindByIntentType(semantic) = %d items, want 1", len(caps))
 	}
 }
 
-// TestFindByIntentTags_QueryWithMultipleTags verifies matching against query with multiple tags
-func TestFindByIntentTags_QueryWithMultipleTags(t *testing.T) {
-	r := NewRegistry()
-	r.remoteCapabilities = make(map[string]*CapabilityAnnouncement)
-
-	r.remoteCapabilities["processor.graph-index"] = &CapabilityAnnouncement{
-		InstanceName: "graph-index",
-		Type:         "processor",
-		Queries: []QueryCapability{
-			{
-				Subject:    "graph.index.query.predicate",
-				Operation:  "getPredicate",
-				IntentTags: []string{IntentTagRelationship, IntentTagAggregate}, // Has both
-			},
-		},
-	}
-
-	// Should match when searching for relationship
-	caps := r.FindByIntentTags([]string{IntentTagRelationship})
-	if len(caps) != 1 {
-		t.Fatalf("FindByIntentTags(relationship) = %d items, want 1", len(caps))
-	}
-
-	// Should also match when searching for aggregate
-	caps = r.FindByIntentTags([]string{IntentTagAggregate})
-	if len(caps) != 1 {
-		t.Fatalf("FindByIntentTags(aggregate) = %d items, want 1", len(caps))
-	}
-}
-
-// TestFindByIntentTags_EmptyInput verifies empty input returns empty slice
-func TestFindByIntentTags_EmptyInput(t *testing.T) {
+// TestFindByIntent_NoMatches verifies no matches returns empty slice
+func TestFindByIntent_NoMatches(t *testing.T) {
 	r := NewRegistry()
 	r.remoteCapabilities = make(map[string]*CapabilityAnnouncement)
 
@@ -961,26 +933,21 @@ func TestFindByIntentTags_EmptyInput(t *testing.T) {
 		Type:         "processor",
 		Queries: []QueryCapability{
 			{
-				Subject:    "graph.ingest.query.entity",
-				IntentTags: []string{IntentTagEntity},
+				Subject: "graph.ingest.query.entity",
+				Intent:  QueryIntent{Type: IntentTypeEntity, Strategy: StrategyDirect, Scope: ScopeSingle},
 			},
 		},
 	}
 
-	// Empty tags should return empty result
-	caps := r.FindByIntentTags([]string{})
+	// Search for intent that doesn't exist
+	caps := r.FindByIntent(QueryIntent{Type: IntentTypeTemporal, Strategy: StrategyDirect, Scope: ScopeSet})
 	if len(caps) != 0 {
-		t.Errorf("FindByIntentTags([]) = %d items, want 0", len(caps))
-	}
-
-	caps = r.FindByIntentTags(nil)
-	if len(caps) != 0 {
-		t.Errorf("FindByIntentTags(nil) = %d items, want 0", len(caps))
+		t.Errorf("FindByIntent(temporal) = %d items, want 0", len(caps))
 	}
 }
 
-// TestFindByIntentTags_NoMatches verifies no matches returns empty slice
-func TestFindByIntentTags_NoMatches(t *testing.T) {
+// TestFindByIntentType_NoMatches verifies no matches returns empty slice
+func TestFindByIntentType_NoMatches(t *testing.T) {
 	r := NewRegistry()
 	r.remoteCapabilities = make(map[string]*CapabilityAnnouncement)
 
@@ -989,16 +956,16 @@ func TestFindByIntentTags_NoMatches(t *testing.T) {
 		Type:         "processor",
 		Queries: []QueryCapability{
 			{
-				Subject:    "graph.ingest.query.entity",
-				IntentTags: []string{IntentTagEntity},
+				Subject: "graph.ingest.query.entity",
+				Intent:  QueryIntent{Type: IntentTypeEntity, Strategy: StrategyDirect, Scope: ScopeSingle},
 			},
 		},
 	}
 
-	// Search for tag that doesn't exist
-	caps := r.FindByIntentTags([]string{IntentTagTemporal})
+	// Search for type that doesn't exist
+	caps := r.FindByIntentType(IntentTypeTemporal)
 	if len(caps) != 0 {
-		t.Errorf("FindByIntentTags(temporal) = %d items, want 0", len(caps))
+		t.Errorf("FindByIntentType(temporal) = %d items, want 0", len(caps))
 	}
 }
 

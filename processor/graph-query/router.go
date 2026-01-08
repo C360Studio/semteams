@@ -17,13 +17,8 @@ type IntentRouter struct {
 	natsClient natsRequester
 	routes     map[component.QueryIntent]string // exact intent -> subject
 	fallback   map[component.IntentType]string  // type-only fallback
-
-	// Legacy string-based routing (deprecated, for backward compatibility)
-	legacyRoutes   map[string]string // intent tag -> subject
-	legacyFallback map[string]string // hardcoded fallback subjects
-
-	logger *slog.Logger
-	mu     sync.RWMutex
+	logger     *slog.Logger
+	mu         sync.RWMutex
 }
 
 // NewIntentRouter creates a router with hardcoded fallback subjects.
@@ -39,19 +34,6 @@ func NewIntentRouter(natsClient natsRequester, logger *slog.Logger) *IntentRoute
 			component.IntentTypeSemantic:     "graph.embedding.query.search",
 			component.IntentTypeAggregate:    "graph.clustering.query.community",
 			component.IntentTypeAnomaly:      "graph.anomalies.query.detect",
-		},
-		legacyRoutes: make(map[string]string),
-		legacyFallback: map[string]string{
-			component.IntentTagEntity:       "graph.ingest.query.entity",
-			component.IntentTagRelationship: "graph.index.query.outgoing",
-			component.IntentTagSpatial:      "graph.spatial.query.bounds",
-			component.IntentTagTemporal:     "graph.temporal.query.range",
-			component.IntentTagSemantic:     "graph.embedding.query.search",
-			component.IntentTagAggregate:    "graph.clustering.query.community",
-			component.IntentTagAnomaly:      "graph.anomalies.query.detect",
-			component.IntentTagAlias:        "graph.index.query.alias",
-			component.IntentTagPrefix:       "graph.ingest.query.prefix",
-			component.IntentTagBatch:        "graph.ingest.query.batch",
 		},
 		logger: logger,
 	}
@@ -96,11 +78,6 @@ func (r *IntentRouter) DiscoverCapabilities(ctx context.Context, timeout time.Du
 		for _, q := range caps.Queries {
 			r.routes[q.Intent] = q.Subject
 			discovered++
-
-			// Also populate legacy routes for backward compatibility
-			for _, tag := range q.IntentTags {
-				r.legacyRoutes[tag] = q.Subject
-			}
 		}
 	}
 
@@ -108,66 +85,27 @@ func (r *IntentRouter) DiscoverCapabilities(ctx context.Context, timeout time.Du
 	return nil
 }
 
-// Route returns the NATS subject for a given intent.
-// Accepts either component.QueryIntent (new API) or string (legacy API).
-// For QueryIntent: returns exact match if available, otherwise falls back to type-only match.
-// For string: returns discovered subject or fallback.
-// Returns empty string if type/tag is unknown.
-func (r *IntentRouter) Route(intent interface{}) string {
+// Route returns the NATS subject for a given QueryIntent.
+// Returns exact match if available, otherwise falls back to type-only match.
+// Returns empty string if type is unknown.
+func (r *IntentRouter) Route(intent component.QueryIntent) string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Handle typed QueryIntent (new API)
-	if qi, ok := intent.(component.QueryIntent); ok {
-		// Exact match first
-		if subject, ok := r.routes[qi]; ok {
-			return subject
-		}
-
-		// Fallback to type-only
-		if subject, ok := r.fallback[qi.Type]; ok {
-			return subject
-		}
-
-		return ""
+	// Exact match first
+	if subject, ok := r.routes[intent]; ok {
+		return subject
 	}
 
-	// Handle legacy string-based intent tags
-	if tag, ok := intent.(string); ok {
-		if subject, ok := r.legacyRoutes[tag]; ok {
-			return subject
-		}
-		return r.legacyFallback[tag]
+	// Fallback to type-only
+	if subject, ok := r.fallback[intent.Type]; ok {
+		return subject
 	}
 
-	// Unknown type
 	return ""
 }
 
-// RouteByTag returns the NATS subject for an intent tag string (legacy API).
-// DEPRECATED: Use Route(QueryIntent) instead.
-// Returns discovered subject if available, otherwise falls back to hardcoded subject.
-func (r *IntentRouter) RouteByTag(intentTag string) string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	if subject, ok := r.legacyRoutes[intentTag]; ok {
-		return subject
-	}
-	return r.legacyFallback[intentTag]
-}
-
-// HasDiscoveredRoute returns true if a discovered route exists for the intent tag (legacy API).
-// DEPRECATED: Exists only for backward compatibility with old tests.
-func (r *IntentRouter) HasDiscoveredRoute(intentTag string) bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	_, ok := r.legacyRoutes[intentTag]
-	return ok
-}
-
-// RouteCount returns the number of discovered routes (legacy API).
-// DEPRECATED: Exists only for backward compatibility with old tests.
+// RouteCount returns the number of discovered routes.
 func (r *IntentRouter) RouteCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
