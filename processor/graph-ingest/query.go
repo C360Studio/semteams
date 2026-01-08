@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -30,13 +29,8 @@ func (c *Component) setupQueryHandlers(ctx context.Context) error {
 		return fmt.Errorf("subscribe prefix query: %w", err)
 	}
 
-	// Subscribe to capabilities discovery
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.ingest.capabilities", c.handleCapabilitiesNATS); err != nil {
-		return fmt.Errorf("subscribe capabilities: %w", err)
-	}
-
 	c.logger.Info("query handlers registered",
-		"subjects", []string{"graph.ingest.query.entity", "graph.ingest.query.batch", "graph.ingest.query.prefix", "graph.ingest.capabilities"})
+		"subjects", []string{"graph.ingest.query.entity", "graph.ingest.query.batch", "graph.ingest.query.prefix"})
 
 	return nil
 }
@@ -170,140 +164,11 @@ func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byt
 	return json.Marshal(response)
 }
 
-// handleCapabilitiesNATS handles capability discovery requests via NATS request/reply
-func (c *Component) handleCapabilitiesNATS(_ context.Context, _ []byte) ([]byte, error) {
-	caps := c.QueryCapabilities()
-	return json.Marshal(caps)
-}
-
-// Ensure Component implements QueryCapabilityProvider
-var _ component.QueryCapabilityProvider = (*Component)(nil)
-
 // queryMsg is an interface for query request messages.
 // This accommodates both real NATS messages and test mocks.
 type queryMsg interface {
 	Data() []byte
 	Respond(data []byte) error
-}
-
-// QueryCapabilities implements QueryCapabilityProvider interface
-func (c *Component) QueryCapabilities() component.QueryCapabilities {
-	return component.QueryCapabilities{
-		Component: "graph-ingest",
-		Version:   "1.0.0",
-		Queries: []component.QueryCapability{
-			{
-				Subject:     "graph.ingest.query.entity",
-				Operation:   "getEntity",
-				Description: "Get single entity by ID",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeEntity,
-					Strategy: component.StrategyDirect,
-					Scope:    component.ScopeSingle,
-				},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"id": map[string]any{
-							"type":        "string",
-							"description": "Entity ID to retrieve",
-						},
-					},
-					"required": []string{"id"},
-				},
-				ResponseSchema: map[string]any{
-					"$ref": "#/definitions/EntityState",
-				},
-			},
-			{
-				Subject:     "graph.ingest.query.batch",
-				Operation:   "getBatch",
-				Description: "Get multiple entities by IDs",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeEntity,
-					Strategy: component.StrategyBatch,
-					Scope:    component.ScopeSet,
-				},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"ids": map[string]any{
-							"type":        "array",
-							"description": "Array of entity IDs to retrieve",
-							"items": map[string]any{
-								"type": "string",
-							},
-						},
-					},
-					"required": []string{"ids"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "array",
-					"items": map[string]any{
-						"$ref": "#/definitions/EntityState",
-					},
-				},
-			},
-			{
-				Subject:     "graph.ingest.query.prefix",
-				Operation:   "listByPrefix",
-				Description: "List entity IDs matching a prefix (for hierarchy queries)",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeEntity,
-					Strategy: component.StrategyDirect,
-					Scope:    component.ScopeSet,
-				},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"prefix": map[string]any{
-							"type":        "string",
-							"description": "Entity ID prefix to match (empty for all entities)",
-						},
-						"limit": map[string]any{
-							"type":        "integer",
-							"description": "Maximum number of IDs to return (default 1000)",
-						},
-					},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"ids": map[string]any{
-							"type":  "array",
-							"items": map[string]any{"type": "string"},
-						},
-						"total": map[string]any{
-							"type": "integer",
-						},
-					},
-				},
-			},
-		},
-		Definitions: map[string]any{
-			"EntityState": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"id": map[string]any{
-						"type": "string",
-					},
-					"triples": map[string]any{
-						"type": "array",
-					},
-					"version": map[string]any{
-						"type": "integer",
-					},
-					"updated_at": map[string]any{
-						"type":   "string",
-						"format": "date-time",
-					},
-				},
-			},
-		},
-	}
 }
 
 // handleQueryEntity handles single entity query requests
@@ -403,12 +268,6 @@ func (c *Component) handleQueryBatch(msg queryMsg) {
 
 	// Respond with entities array
 	c.respondJSON(msg, entities)
-}
-
-// handleCapabilities handles capability discovery requests
-func (c *Component) handleCapabilities(msg queryMsg) {
-	caps := c.QueryCapabilities()
-	c.respondJSON(msg, caps)
 }
 
 // respondError sends an error response

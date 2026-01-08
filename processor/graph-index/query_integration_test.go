@@ -116,12 +116,6 @@ func setupIntegrationTest(t *testing.T) (*Component, *natsclient.Client, func())
 	})
 	require.NoError(t, err)
 
-	// Subscribe to capabilities query requests
-	_, err = nc.Subscribe("graph.index.query.capabilities", func(msg *nats.Msg) {
-		component.handleCapabilities(&natsMsg{Msg: msg})
-	})
-	require.NoError(t, err)
-
 	// Wait for subscriptions to be established
 	nc.Flush()
 	time.Sleep(100 * time.Millisecond)
@@ -387,41 +381,6 @@ func TestQueryPredicate_Integration(t *testing.T) {
 	for _, expected := range entities {
 		assert.True(t, entityMap[expected], "entity %s should be in response", expected)
 	}
-}
-
-// TestQueryCapabilities_Integration tests capability discovery with real NATS
-func TestQueryCapabilities_Integration(t *testing.T) {
-	_, natsClient, cleanup := setupIntegrationTest(t)
-	defer cleanup()
-
-	// Create query request
-	nc := natsClient.GetConnection()
-	request := []byte(`{}`)
-
-	// Send capabilities query request
-	msg, err := nc.Request("graph.index.query.capabilities", request, 2*time.Second)
-	require.NoError(t, err)
-
-	// Parse response
-	var response component.QueryCapabilities
-	err = json.Unmarshal(msg.Data, &response)
-	require.NoError(t, err)
-
-	// Verify response
-	assert.Equal(t, "graph-index", response.Component)
-	assert.NotEmpty(t, response.Version)
-	assert.NotEmpty(t, response.Queries)
-
-	// Verify all expected operations exist
-	operations := make(map[string]bool)
-	for _, q := range response.Queries {
-		operations[q.Operation] = true
-	}
-
-	assert.True(t, operations["getOutgoing"])
-	assert.True(t, operations["getIncoming"])
-	assert.True(t, operations["getAlias"])
-	assert.True(t, operations["getPredicate"])
 }
 
 // TestContextTimeout_Integration tests context timeout behavior

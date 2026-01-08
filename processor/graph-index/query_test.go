@@ -10,93 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// ====================================================================================
-// QueryCapabilityProvider Interface Tests
-// ====================================================================================
-
-func TestComponent_ImplementsQueryCapabilityProvider(t *testing.T) {
-	comp := createTestComponent(t)
-
-	// Verify component implements QueryCapabilityProvider interface
-	var _ component.QueryCapabilityProvider = comp
-}
-
-func TestComponent_QueryCapabilities_ReturnsValidCapabilities(t *testing.T) {
-	comp := createTestComponent(t)
-
-	caps := comp.QueryCapabilities()
-
-	// Verify basic structure
-	assert.Equal(t, "graph-index", caps.Component, "component name should be graph-index")
-	assert.NotEmpty(t, caps.Version, "version should not be empty")
-	assert.NotEmpty(t, caps.Queries, "should have at least one query capability")
-
-	// Verify required query operations exist
-	operations := make(map[string]component.QueryCapability)
-	for _, q := range caps.Queries {
-		operations[q.Operation] = q
-	}
-
-	// Check for outgoing query
-	outgoingQuery, hasOutgoing := operations["getOutgoing"]
-	assert.True(t, hasOutgoing, "should have getOutgoing operation")
-	if hasOutgoing {
-		assert.Equal(t, "graph.index.query.outgoing", outgoingQuery.Subject, "outgoing query should use correct subject")
-		assert.NotNil(t, outgoingQuery.RequestSchema, "request schema should be defined")
-		assert.NotNil(t, outgoingQuery.ResponseSchema, "response schema should be defined")
-	}
-
-	// Check for incoming query
-	incomingQuery, hasIncoming := operations["getIncoming"]
-	assert.True(t, hasIncoming, "should have getIncoming operation")
-	if hasIncoming {
-		assert.Equal(t, "graph.index.query.incoming", incomingQuery.Subject, "incoming query should use correct subject")
-		assert.NotNil(t, incomingQuery.RequestSchema, "request schema should be defined")
-		assert.NotNil(t, incomingQuery.ResponseSchema, "response schema should be defined")
-	}
-
-	// Check for alias query
-	aliasQuery, hasAlias := operations["getAlias"]
-	assert.True(t, hasAlias, "should have getAlias operation")
-	if hasAlias {
-		assert.Equal(t, "graph.index.query.alias", aliasQuery.Subject, "alias query should use correct subject")
-		assert.NotNil(t, aliasQuery.RequestSchema, "request schema should be defined")
-		assert.NotNil(t, aliasQuery.ResponseSchema, "response schema should be defined")
-	}
-
-	// Check for predicate query
-	predicateQuery, hasPredicate := operations["getPredicate"]
-	assert.True(t, hasPredicate, "should have getPredicate operation")
-	if hasPredicate {
-		assert.Equal(t, "graph.index.query.predicate", predicateQuery.Subject, "predicate query should use correct subject")
-		assert.NotNil(t, predicateQuery.RequestSchema, "request schema should be defined")
-		assert.NotNil(t, predicateQuery.ResponseSchema, "response schema should be defined")
-	}
-}
-
-func TestComponent_QueryCapabilities_SchemasAreValid(t *testing.T) {
-	comp := createTestComponent(t)
-
-	caps := comp.QueryCapabilities()
-
-	for _, q := range caps.Queries {
-		// Verify schemas can be marshaled to JSON
-		requestJSON, err := json.Marshal(q.RequestSchema)
-		assert.NoError(t, err, "request schema for %s should be valid JSON", q.Operation)
-		assert.NotEmpty(t, requestJSON, "request schema should not be empty")
-
-		responseJSON, err := json.Marshal(q.ResponseSchema)
-		assert.NoError(t, err, "response schema for %s should be valid JSON", q.Operation)
-		assert.NotEmpty(t, responseJSON, "response schema should not be empty")
-	}
-}
 
 // ====================================================================================
 // Query Handler: handleQueryOutgoing Tests
@@ -764,119 +682,6 @@ func TestComponent_HandleQueryPredicate_InvalidRequest(t *testing.T) {
 }
 
 // ====================================================================================
-// Query Handler: handleCapabilities Tests
-// ====================================================================================
-
-func TestComponent_HandleCapabilities_ReturnsValidJSON(t *testing.T) {
-	comp := createTestComponentWithMockKV(t)
-
-	msg := &mockNATSMsg{
-		data: []byte(`{}`),
-	}
-
-	// Handle capabilities query
-	comp.handleCapabilities(msg)
-
-	// Verify response
-	require.NotNil(t, msg.response, "should have response")
-
-	var caps component.QueryCapabilities
-	err := json.Unmarshal(msg.response, &caps)
-	require.NoError(t, err, "response should be valid QueryCapabilities JSON")
-
-	assert.Equal(t, "graph-index", caps.Component)
-	assert.NotEmpty(t, caps.Version)
-	assert.NotEmpty(t, caps.Queries)
-}
-
-func TestComponent_HandleCapabilities_EmptyRequest(t *testing.T) {
-	comp := createTestComponentWithMockKV(t)
-
-	msg := &mockNATSMsg{
-		data: []byte(``), // Empty request
-	}
-
-	// Handle capabilities query
-	comp.handleCapabilities(msg)
-
-	// Verify response (should still work with empty request)
-	require.NotNil(t, msg.response, "should have response")
-
-	var caps component.QueryCapabilities
-	err := json.Unmarshal(msg.response, &caps)
-	require.NoError(t, err, "response should be valid QueryCapabilities JSON")
-
-	assert.Equal(t, "graph-index", caps.Component)
-}
-
-func TestComponent_HandleCapabilities_ReturnsAllQueryOperations(t *testing.T) {
-	comp := createTestComponentWithMockKV(t)
-
-	msg := &mockNATSMsg{
-		data: []byte(`{}`),
-	}
-
-	// Handle capabilities query
-	comp.handleCapabilities(msg)
-
-	// Verify response
-	require.NotNil(t, msg.response, "should have response")
-
-	var caps component.QueryCapabilities
-	err := json.Unmarshal(msg.response, &caps)
-	require.NoError(t, err, "response should be valid QueryCapabilities JSON")
-
-	// Should have all query operations
-	operations := make(map[string]bool)
-	for _, q := range caps.Queries {
-		operations[q.Operation] = true
-	}
-
-	assert.True(t, operations["getOutgoing"], "should have getOutgoing operation")
-	assert.True(t, operations["getIncoming"], "should have getIncoming operation")
-	assert.True(t, operations["getAlias"], "should have getAlias operation")
-	assert.True(t, operations["getPredicate"], "should have getPredicate operation")
-}
-
-func TestComponent_HandleCapabilities_SchemasMatchActualBehavior(t *testing.T) {
-	comp := createTestComponentWithMockKV(t)
-
-	msg := &mockNATSMsg{
-		data: []byte(`{}`),
-	}
-
-	// Handle capabilities query
-	comp.handleCapabilities(msg)
-
-	// Verify response
-	require.NotNil(t, msg.response, "should have response")
-
-	var caps component.QueryCapabilities
-	err := json.Unmarshal(msg.response, &caps)
-	require.NoError(t, err, "response should be valid QueryCapabilities JSON")
-
-	// Verify each query capability
-	for _, q := range caps.Queries {
-		t.Run(q.Operation, func(t *testing.T) {
-			// Subject should be graph.index.query.*
-			assert.True(t, len(q.Subject) > 0, "subject should not be empty")
-			assert.Contains(t, q.Subject, "graph.index.query", "subject should start with graph.index.query")
-
-			// Request and response schemas should be defined
-			assert.NotNil(t, q.RequestSchema, "request schema should be defined")
-			assert.NotNil(t, q.ResponseSchema, "response schema should be defined")
-
-			// Schemas should be valid JSON
-			_, err := json.Marshal(q.RequestSchema)
-			assert.NoError(t, err, "request schema should be valid JSON")
-
-			_, err = json.Marshal(q.ResponseSchema)
-			assert.NoError(t, err, "response schema should be valid JSON")
-		})
-	}
-}
-
-// ====================================================================================
 // Context Handling in Query Handlers
 // ====================================================================================
 
@@ -983,9 +788,8 @@ func TestComponent_QueryHandlers_UseContextWithTimeout(t *testing.T) {
 // 3. handleQueryIncoming with real KV bucket operations
 // 4. handleQueryAlias with real KV bucket operations
 // 5. handleQueryPredicate with real KV bucket operations
-// 6. handleCapabilities over real NATS request/reply
-// 7. Context timeout behavior with actual network operations
-// 8. Concurrent query requests
+// 6. Context timeout behavior with actual network operations
+// 7. Concurrent query requests
 // ====================================================================================
 
 // ====================================================================================

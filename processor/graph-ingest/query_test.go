@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/nats-io/nats.go"
@@ -19,69 +18,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// ====================================================================================
-// QueryCapabilityProvider Interface Tests
-// ====================================================================================
-
-func TestComponent_ImplementsQueryCapabilityProvider(t *testing.T) {
-	comp := createTestComponent(t)
-
-	// Verify component implements QueryCapabilityProvider interface
-	var _ component.QueryCapabilityProvider = comp
-}
-
-func TestComponent_QueryCapabilities_ReturnsValidCapabilities(t *testing.T) {
-	comp := createTestComponent(t)
-
-	caps := comp.QueryCapabilities()
-
-	// Verify basic structure
-	assert.Equal(t, "graph-ingest", caps.Component, "component name should be graph-ingest")
-	assert.NotEmpty(t, caps.Version, "version should not be empty")
-	assert.NotEmpty(t, caps.Queries, "should have at least one query capability")
-
-	// Verify required query operations exist
-	operations := make(map[string]component.QueryCapability)
-	for _, q := range caps.Queries {
-		operations[q.Operation] = q
-	}
-
-	// Check for entity query
-	entityQuery, hasEntity := operations["getEntity"]
-	assert.True(t, hasEntity, "should have getEntity operation")
-	if hasEntity {
-		assert.Equal(t, "graph.ingest.query.entity", entityQuery.Subject, "entity query should use correct subject")
-		assert.NotNil(t, entityQuery.RequestSchema, "request schema should be defined")
-		assert.NotNil(t, entityQuery.ResponseSchema, "response schema should be defined")
-	}
-
-	// Check for batch query
-	batchQuery, hasBatch := operations["getBatch"]
-	assert.True(t, hasBatch, "should have getBatch operation")
-	if hasBatch {
-		assert.Equal(t, "graph.ingest.query.batch", batchQuery.Subject, "batch query should use correct subject")
-		assert.NotNil(t, batchQuery.RequestSchema, "request schema should be defined")
-		assert.NotNil(t, batchQuery.ResponseSchema, "response schema should be defined")
-	}
-}
-
-func TestComponent_QueryCapabilities_SchemasAreValid(t *testing.T) {
-	comp := createTestComponent(t)
-
-	caps := comp.QueryCapabilities()
-
-	for _, q := range caps.Queries {
-		// Verify schemas can be marshaled to JSON
-		requestJSON, err := json.Marshal(q.RequestSchema)
-		assert.NoError(t, err, "request schema for %s should be valid JSON", q.Operation)
-		assert.NotEmpty(t, requestJSON, "request schema should not be empty")
-
-		responseJSON, err := json.Marshal(q.ResponseSchema)
-		assert.NoError(t, err, "response schema for %s should be valid JSON", q.Operation)
-		assert.NotEmpty(t, responseJSON, "response schema should not be empty")
-	}
-}
 
 // ====================================================================================
 // Query Handler: handleQueryEntity Tests
@@ -583,126 +519,14 @@ func TestComponent_HandleQueryBatch_LargeNumberOfEntities(t *testing.T) {
 }
 
 // ====================================================================================
-// Query Handler: handleCapabilities Tests
-// ====================================================================================
-
-func TestComponent_HandleCapabilities_ReturnsValidJSON(t *testing.T) {
-	comp := createTestComponentWithMockKV(t)
-
-	msg := &mockNATSMsg{
-		data: []byte(`{}`),
-	}
-
-	// Handle capabilities query
-	comp.handleCapabilities(msg)
-
-	// Verify response
-	require.NotNil(t, msg.response, "should have response")
-
-	var caps component.QueryCapabilities
-	err := json.Unmarshal(msg.response, &caps)
-	require.NoError(t, err, "response should be valid QueryCapabilities JSON")
-
-	assert.Equal(t, "graph-ingest", caps.Component)
-	assert.NotEmpty(t, caps.Version)
-	assert.NotEmpty(t, caps.Queries)
-}
-
-func TestComponent_HandleCapabilities_EmptyRequest(t *testing.T) {
-	comp := createTestComponentWithMockKV(t)
-
-	msg := &mockNATSMsg{
-		data: []byte(``), // Empty request
-	}
-
-	// Handle capabilities query
-	comp.handleCapabilities(msg)
-
-	// Verify response (should still work with empty request)
-	require.NotNil(t, msg.response, "should have response")
-
-	var caps component.QueryCapabilities
-	err := json.Unmarshal(msg.response, &caps)
-	require.NoError(t, err, "response should be valid QueryCapabilities JSON")
-
-	assert.Equal(t, "graph-ingest", caps.Component)
-}
-
-func TestComponent_HandleCapabilities_ReturnsAllQueryOperations(t *testing.T) {
-	comp := createTestComponentWithMockKV(t)
-
-	msg := &mockNATSMsg{
-		data: []byte(`{}`),
-	}
-
-	// Handle capabilities query
-	comp.handleCapabilities(msg)
-
-	// Verify response
-	require.NotNil(t, msg.response, "should have response")
-
-	var caps component.QueryCapabilities
-	err := json.Unmarshal(msg.response, &caps)
-	require.NoError(t, err, "response should be valid QueryCapabilities JSON")
-
-	// Should have at least entity and batch queries
-	operations := make(map[string]bool)
-	for _, q := range caps.Queries {
-		operations[q.Operation] = true
-	}
-
-	assert.True(t, operations["getEntity"], "should have getEntity operation")
-	assert.True(t, operations["getBatch"], "should have getBatch operation")
-}
-
-func TestComponent_HandleCapabilities_SchemasMatchActualBehavior(t *testing.T) {
-	comp := createTestComponentWithMockKV(t)
-
-	msg := &mockNATSMsg{
-		data: []byte(`{}`),
-	}
-
-	// Handle capabilities query
-	comp.handleCapabilities(msg)
-
-	// Verify response
-	require.NotNil(t, msg.response, "should have response")
-
-	var caps component.QueryCapabilities
-	err := json.Unmarshal(msg.response, &caps)
-	require.NoError(t, err, "response should be valid QueryCapabilities JSON")
-
-	// Verify each query capability
-	for _, q := range caps.Queries {
-		t.Run(q.Operation, func(t *testing.T) {
-			// Subject should be graph.ingest.query.*
-			assert.True(t, len(q.Subject) > 0, "subject should not be empty")
-			assert.Contains(t, q.Subject, "graph.ingest.query", "subject should start with graph.ingest.query")
-
-			// Request and response schemas should be defined
-			assert.NotNil(t, q.RequestSchema, "request schema should be defined")
-			assert.NotNil(t, q.ResponseSchema, "response schema should be defined")
-
-			// Schemas should be valid JSON
-			_, err := json.Marshal(q.RequestSchema)
-			assert.NoError(t, err, "request schema should be valid JSON")
-
-			_, err = json.Marshal(q.ResponseSchema)
-			assert.NoError(t, err, "response schema should be valid JSON")
-		})
-	}
-}
-
-// ====================================================================================
 // Integration Test Requirements (for Builder)
 // ====================================================================================
 // Builder must create integration tests covering:
 // 1. Query handlers with real NATS JetStream connection
 // 2. handleQueryEntity with real KV bucket operations
 // 3. handleQueryBatch with real KV bucket operations
-// 4. handleCapabilities over real NATS request/reply
-// 5. Context timeout behavior with actual network operations
-// 6. Concurrent query requests
+// 4. Context timeout behavior with actual network operations
+// 5. Concurrent query requests
 // ====================================================================================
 
 // ====================================================================================

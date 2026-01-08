@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"time"
-
-	"github.com/c360/semstreams/component"
 )
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
@@ -28,17 +26,11 @@ func (c *Component) setupQueryHandlers(ctx context.Context) error {
 		return fmt.Errorf("subscribe outliers query: %w", err)
 	}
 
-	// Subscribe to capabilities discovery
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.anomalies.capabilities", c.handleCapabilitiesNATS); err != nil {
-		return fmt.Errorf("subscribe capabilities: %w", err)
-	}
-
 	c.logger.Info("query handlers registered",
 		"subjects", []string{
 			"graph.anomalies.query.kcore",
 			"graph.anomalies.query.pivot",
 			"graph.anomalies.query.outliers",
-			"graph.anomalies.capabilities",
 		})
 
 	return nil
@@ -328,120 +320,4 @@ func calculateAverageDistance(distVec []int, maxHop int) float64 {
 	}
 
 	return float64(sum) / float64(count)
-}
-
-// handleCapabilitiesNATS handles capability discovery requests via NATS request/reply
-func (c *Component) handleCapabilitiesNATS(_ context.Context, _ []byte) ([]byte, error) {
-	caps := c.QueryCapabilities()
-	return json.Marshal(caps)
-}
-
-// Ensure Component implements QueryCapabilityProvider
-var _ component.QueryCapabilityProvider = (*Component)(nil)
-
-// QueryCapabilities implements QueryCapabilityProvider interface
-func (c *Component) QueryCapabilities() component.QueryCapabilities {
-	return component.QueryCapabilities{
-		Component: "graph-anomalies",
-		Version:   "1.0.0",
-		Queries: []component.QueryCapability{
-			{
-				Subject:     "graph.anomalies.query.kcore",
-				Operation:   "getKCore",
-				Description: "Get k-core decomposition information for an entity or filtered by core number",
-				Intent:      component.QueryIntent{Type: component.IntentTypeAnomaly, Strategy: component.StrategyDirect, Scope: component.ScopeSet},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id": map[string]any{
-							"type":        "string",
-							"description": "Entity ID to get k-core for (optional)",
-						},
-						"min_core": map[string]any{
-							"type":        "integer",
-							"description": "Filter entities with core number >= this value",
-						},
-					},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id":    map[string]any{"type": "string"},
-						"core_number":  map[string]any{"type": "integer"},
-						"max_core":     map[string]any{"type": "integer"},
-						"core_buckets": map[string]any{"type": "object"},
-						"entities":     map[string]any{"type": "array"},
-					},
-				},
-			},
-			{
-				Subject:     "graph.anomalies.query.pivot",
-				Operation:   "getPivotDistances",
-				Description: "Get pivot distances for an entity or list all pivots",
-				Intent:      component.QueryIntent{Type: component.IntentTypeAnomaly, Strategy: component.StrategyDirect, Scope: component.ScopeSet},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id": map[string]any{
-							"type":        "string",
-							"description": "Entity ID to get pivot distances for (optional)",
-						},
-					},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id":        map[string]any{"type": "string"},
-						"pivots":           map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-						"distance_vector":  map[string]any{"type": "array", "items": map[string]any{"type": "integer"}},
-						"average_distance": map[string]any{"type": "number"},
-					},
-				},
-			},
-			{
-				Subject:     "graph.anomalies.query.outliers",
-				Operation:   "findOutliers",
-				Description: "Find structural outliers based on k-core and pivot distances",
-				Intent:      component.QueryIntent{Type: component.IntentTypeAnomaly, Strategy: component.StrategyGlobal, Scope: component.ScopeSet},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"max_kcore": map[string]any{
-							"type":        "integer",
-							"description": "Include entities with core number <= this (default 2)",
-						},
-						"min_avg_distance": map[string]any{
-							"type":        "integer",
-							"description": "Include entities with average pivot distance >= this",
-						},
-						"limit": map[string]any{
-							"type":        "integer",
-							"description": "Maximum outliers to return (default 20, max 100)",
-						},
-					},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"outliers": map[string]any{
-							"type": "array",
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"entity_id":        map[string]any{"type": "string"},
-									"core_number":      map[string]any{"type": "integer"},
-									"average_distance": map[string]any{"type": "number"},
-									"score":            map[string]any{"type": "number"},
-								},
-							},
-						},
-						"count": map[string]any{"type": "integer"},
-					},
-				},
-			},
-		},
-	}
 }

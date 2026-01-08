@@ -32,16 +32,16 @@ func TestCircuitBreaker_OpensAfterFailures(t *testing.T) {
 	manager, err := NewClient("nats://invalid:4222")
 	assert.NoError(t, err)
 
-	// Record 4 failures - should not open
-	for i := 0; i < 4; i++ {
+	// Record 14 failures - should not open
+	for i := 0; i < 14; i++ {
 		manager.recordFailure()
 	}
 	assert.NotEqual(t, StatusCircuitOpen, manager.Status())
 
-	// 5th failure should open circuit
+	// 15th failure should open circuit
 	manager.recordFailure()
 	assert.Equal(t, StatusCircuitOpen, manager.Status())
-	assert.Equal(t, int32(5), manager.Failures())
+	assert.Equal(t, int32(15), manager.Failures())
 }
 
 // Test circuit breaker reset
@@ -49,8 +49,8 @@ func TestCircuitBreaker_Reset(t *testing.T) {
 	manager, err := NewClient("nats://localhost:4222")
 	assert.NoError(t, err)
 
-	// Record failures to open circuit
-	for i := 0; i < 5; i++ {
+	// Record failures to open circuit (threshold is 15)
+	for i := 0; i < 15; i++ {
 		manager.recordFailure()
 	}
 	assert.Equal(t, StatusCircuitOpen, manager.Status())
@@ -69,21 +69,21 @@ func TestCircuitBreaker_ExponentialBackoff(t *testing.T) {
 	// Initial backoff should be 1 second
 	assert.Equal(t, time.Second, manager.Backoff())
 
-	// Record failures and check backoff increases
-	for i := 0; i < 5; i++ {
+	// Record failures and check backoff increases (threshold is 15)
+	for i := 0; i < 15; i++ {
 		manager.recordFailure()
 	}
 	assert.Equal(t, 2*time.Second, manager.Backoff())
 
 	// Another round of failures
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 15; i++ {
 		manager.recordFailure()
 	}
 	assert.Equal(t, 4*time.Second, manager.Backoff())
 
 	// Backoff should cap at max (1 minute)
 	for i := 0; i < 20; i++ {
-		for j := 0; j < 5; j++ {
+		for j := 0; j < 15; j++ {
 			manager.recordFailure()
 		}
 	}
@@ -126,7 +126,7 @@ func TestStatus_Transitions(t *testing.T) {
 			name:          "any to circuit open",
 			initialStatus: StatusConnected,
 			action: func(m *Client) {
-				for i := 0; i < 5; i++ {
+				for i := 0; i < 15; i++ {
 					m.recordFailure()
 				}
 			},
@@ -306,8 +306,8 @@ func TestKeyValueBuckets(t *testing.T) {
 		client, err := NewClient("nats://localhost:4222")
 		assert.NoError(t, err)
 
-		// Open circuit
-		for i := 0; i < 5; i++ {
+		// Open circuit (threshold is 15)
+		for i := 0; i < 15; i++ {
 			client.recordFailure()
 		}
 		assert.Equal(t, StatusCircuitOpen, client.Status())
@@ -641,14 +641,14 @@ func TestManagerScenarios(t *testing.T) {
 				m.setStatus(StatusConnecting)
 			},
 			action: func(m *Client) {
-				for i := 0; i < 5; i++ {
+				for i := 0; i < 15; i++ {
 					m.recordFailure()
 				}
 			},
 			validate: func(t *testing.T, m *Client) {
 				assert.Equal(t, StatusCircuitOpen, m.Status())
 				assert.False(t, m.IsHealthy())
-				assert.Equal(t, int32(5), m.Failures())
+				assert.Equal(t, int32(15), m.Failures())
 			},
 		},
 		{

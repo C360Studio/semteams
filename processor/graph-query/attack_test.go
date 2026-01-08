@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/natsclient"
-	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -441,40 +440,6 @@ func TestAttack_HealthCheckWithDisconnectedNATS(t *testing.T) {
 	assert.False(t, health.Healthy, "component should be unhealthy with disconnected NATS")
 
 	comp.Stop(1 * time.Second)
-}
-
-// ====================================================================================
-// Attack Vector: Capability Discovery Timeout
-// ====================================================================================
-
-func TestAttack_CapabilitiesAllComponentsTimeout(t *testing.T) {
-	mockClient := newMockNATSClient()
-
-	// All capability queries timeout
-	mockClient.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
-		return nil, nats.ErrTimeout
-	}
-
-	comp := createTestComponentWithMockClient(t, mockClient)
-	require.NoError(t, comp.Initialize())
-	require.NoError(t, comp.Start(context.Background()))
-	defer comp.Stop(1 * time.Second)
-
-	ctx := context.Background()
-
-	// Should return empty list, not error (graceful degradation)
-	response, err := comp.handleQueryCapabilities(ctx, []byte{})
-
-	assert.NoError(t, err, "capability discovery should gracefully handle all timeouts")
-	assert.NotNil(t, response)
-
-	var result map[string]interface{}
-	err = json.Unmarshal(response, &result)
-	require.NoError(t, err)
-
-	components, ok := result["components"].([]interface{})
-	assert.True(t, ok)
-	assert.Empty(t, components, "should return empty list when all components timeout")
 }
 
 // ====================================================================================

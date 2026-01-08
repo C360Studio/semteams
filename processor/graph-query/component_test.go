@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	"strings"
 	"testing"
 	"time"
 
@@ -104,7 +103,6 @@ func TestConfig_Validate_ValidConfig(t *testing.T) {
 						{Name: "query_entity", Type: "nats-request", Subject: "graph.query.entity"},
 						{Name: "query_relationships", Type: "nats-request", Subject: "graph.query.relationships"},
 						{Name: "query_path_search", Type: "nats-request", Subject: "graph.query.pathSearch"},
-						{Name: "query_capabilities", Type: "nats-request", Subject: "graph.query.capabilities"},
 					},
 					Outputs: []component.PortDefinition{},
 				},
@@ -437,11 +435,6 @@ func TestComponent_QueryEntity_PassthroughSuccess(t *testing.T) {
 	// Mock response from graph-ingest
 	entityResponse := []byte(`{"id":"test.entity.001","triples":[]}`)
 	mockClient.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
-		// Handle capability discovery requests during Start()
-		if strings.HasSuffix(subject, ".capabilities") {
-			return nil, nats.ErrTimeout // Component not available
-		}
-
 		// Actual query should go to graph-ingest
 		assert.Equal(t, "graph.ingest.query.entity", subject, "should forward to graph-ingest")
 
@@ -514,11 +507,6 @@ func TestComponent_QueryRelationships_PassthroughSuccess(t *testing.T) {
 	// Mock response from graph-index
 	relsResponse := []byte(`[{"from":"test.entity.001","to":"test.entity.002","predicate":"test.relationship"}]`)
 	mockClient.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
-		// Handle capability discovery requests during Start()
-		if strings.HasSuffix(subject, ".capabilities") {
-			return nil, nats.ErrTimeout // Component not available
-		}
-
 		// Actual query should go to graph-index
 		assert.Equal(t, "graph.index.query.outgoing", subject, "should forward to graph-index")
 
@@ -777,50 +765,6 @@ func TestComponent_PathSearch_CyclicGraph(t *testing.T) {
 	entities, ok := result["entities"].([]interface{})
 	assert.True(t, ok)
 	assert.LessOrEqual(t, len(entities), 3, "should not revisit entities in cycle")
-}
-
-// ====================================================================================
-// Capability Discovery Tests
-// ====================================================================================
-
-func TestComponent_QueryCapabilities_ReturnsAggregated(t *testing.T) {
-	mockClient := newMockNATSClient()
-
-	// Mock responses from multiple components
-	mockClient.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
-		switch subject {
-		case "graph.ingest.capabilities":
-			return []byte(`{"component":"graph-ingest","version":"1.0.0","queries":[{"subject":"graph.ingest.query.entity","operation":"getEntity"}]}`), nil
-
-		case "graph.index.capabilities":
-			return []byte(`{"component":"graph-index","version":"1.0.0","queries":[{"subject":"graph.index.query.outgoing","operation":"getOutgoing"}]}`), nil
-
-		default:
-			return nil, nats.ErrTimeout // Component not available
-		}
-	}
-
-	comp := createTestComponentWithMockClient(t, mockClient)
-	require.NoError(t, comp.Initialize())
-	require.NoError(t, comp.Start(context.Background()))
-	defer comp.Stop(1 * time.Second)
-
-	ctx := context.Background()
-
-	response, err := comp.handleQueryCapabilities(ctx, nil)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, response)
-
-	// Parse response
-	var capabilities map[string]interface{}
-	err = json.Unmarshal(response, &capabilities)
-	require.NoError(t, err)
-
-	// Should aggregate capabilities from multiple components
-	components, ok := capabilities["components"].([]interface{})
-	assert.True(t, ok)
-	assert.GreaterOrEqual(t, len(components), 1, "should discover at least one component")
 }
 
 // ====================================================================================

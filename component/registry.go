@@ -62,16 +62,15 @@ type RegistrationConfig struct {
 
 // CapabilityAnnouncement is published to NATS when components register.
 type CapabilityAnnouncement struct {
-	InstanceName string            `json:"instance_name"`
-	Component    string            `json:"component"`
-	Type         string            `json:"type"`
-	Version      string            `json:"version"`
-	Queries      []QueryCapability `json:"queries,omitempty"`
-	InputPorts   []PortCapability  `json:"input_ports,omitempty"`
-	OutputPorts  []PortCapability  `json:"output_ports,omitempty"`
-	Timestamp    time.Time         `json:"timestamp"`
-	TTL          time.Duration     `json:"ttl"`
-	NodeID       string            `json:"node_id"`
+	InstanceName string           `json:"instance_name"`
+	Component    string           `json:"component"`
+	Type         string           `json:"type"`
+	Version      string           `json:"version"`
+	InputPorts   []PortCapability `json:"input_ports,omitempty"`
+	OutputPorts  []PortCapability `json:"output_ports,omitempty"`
+	Timestamp    time.Time        `json:"timestamp"`
+	TTL          time.Duration    `json:"ttl"`
+	NodeID       string           `json:"node_id"`
 }
 
 // PortCapability describes an input or output port for discovery.
@@ -95,7 +94,6 @@ type Registry struct {
 
 	// NATS-backed capability discovery (new)
 	remoteCapabilities map[string]*CapabilityAnnouncement
-	queryIndex         map[string]string // operation → subject
 	nodeID             string
 	natsClient         *natsclient.Client // NATS client for capability operations
 	heartbeatCancel    context.CancelFunc // Cancel heartbeat goroutine
@@ -835,128 +833,6 @@ func (r *Registry) GetCapabilities(subjectPattern string) []*CapabilityAnnouncem
 	return result
 }
 
-// FindByIntent returns query capabilities matching the given QueryIntent exactly.
-// Searches both local and remote capabilities.
-// Returns empty slice (not nil) when no matches found.
-// Thread-safe for concurrent access.
-func (r *Registry) FindByIntent(intent QueryIntent) []*QueryCapability {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	result := []*QueryCapability{}
-
-	// Search remote capabilities
-	for _, ann := range r.remoteCapabilities {
-		for i := range ann.Queries {
-			q := &ann.Queries[i]
-			if q.Intent == intent {
-				result = append(result, q)
-			}
-		}
-	}
-
-	// Search local capabilities (components implementing QueryCapabilityProvider)
-	for _, component := range r.instances {
-		if qcp, ok := component.(QueryCapabilityProvider); ok {
-			caps := qcp.QueryCapabilities()
-			for i := range caps.Queries {
-				q := &caps.Queries[i]
-				if q.Intent == intent {
-					result = append(result, q)
-				}
-			}
-		}
-	}
-
-	return result
-}
-
-// FindByIntentType returns query capabilities matching the given IntentType.
-// Searches both local and remote capabilities.
-// Returns empty slice (not nil) when no matches found.
-// Thread-safe for concurrent access.
-func (r *Registry) FindByIntentType(intentType IntentType) []*QueryCapability {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	result := []*QueryCapability{}
-
-	// Search remote capabilities
-	for _, ann := range r.remoteCapabilities {
-		for i := range ann.Queries {
-			q := &ann.Queries[i]
-			if q.Intent.Type == intentType {
-				result = append(result, q)
-			}
-		}
-	}
-
-	// Search local capabilities (components implementing QueryCapabilityProvider)
-	for _, component := range r.instances {
-		if qcp, ok := component.(QueryCapabilityProvider); ok {
-			caps := qcp.QueryCapabilities()
-			for i := range caps.Queries {
-				q := &caps.Queries[i]
-				if q.Intent.Type == intentType {
-					result = append(result, q)
-				}
-			}
-		}
-	}
-
-	return result
-}
-
-// FindByEntityType returns query capabilities that handle the given entity type.
-// Matches capabilities with either the specific type or "*" (wildcard).
-// Searches both local and remote capabilities.
-// Returns empty slice (not nil) when no matches found.
-// Thread-safe for concurrent access.
-func (r *Registry) FindByEntityType(entityType string) []*QueryCapability {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	result := []*QueryCapability{}
-	if entityType == "" {
-		return result
-	}
-
-	// Search remote capabilities
-	for _, ann := range r.remoteCapabilities {
-		for i := range ann.Queries {
-			q := &ann.Queries[i]
-			if r.matchesEntityType(q.EntityTypes, entityType) {
-				result = append(result, q)
-			}
-		}
-	}
-
-	// Search local capabilities
-	for _, component := range r.instances {
-		if qcp, ok := component.(QueryCapabilityProvider); ok {
-			caps := qcp.QueryCapabilities()
-			for i := range caps.Queries {
-				q := &caps.Queries[i]
-				if r.matchesEntityType(q.EntityTypes, entityType) {
-					result = append(result, q)
-				}
-			}
-		}
-	}
-
-	return result
-}
-
-// matchesEntityType returns true if entityTypes contains the type or "*".
-func (r *Registry) matchesEntityType(entityTypes []string, entityType string) bool {
-	for _, et := range entityTypes {
-		if et == entityType || et == "*" {
-			return true
-		}
-	}
-	return false
-}
-
 // WaitForCapabilities waits until minimum capabilities matching pattern are discovered.
 // Returns immediately if len(GetCapabilities(pattern)) >= minCount.
 // Returns ctx.Err() on context cancellation.
@@ -989,7 +865,6 @@ func (r *Registry) WaitForCapabilities(ctx context.Context, pattern string, minC
 // updateCapabilityCache updates the capability cache with a new announcement.
 // Thread-safe for concurrent updates.
 // Cache key format: "type.instance" (e.g., "processor.graph-ingest").
-// Updates queryIndex for each operation in ann.Queries.
 func (r *Registry) updateCapabilityCache(ann *CapabilityAnnouncement) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -997,11 +872,6 @@ func (r *Registry) updateCapabilityCache(ann *CapabilityAnnouncement) {
 	// Build cache key: "type.instance"
 	key := ann.Type + "." + ann.InstanceName
 	r.remoteCapabilities[key] = ann
-
-	// Update query index: operation → subject
-	for _, q := range ann.Queries {
-		r.queryIndex[q.Operation] = q.Subject
-	}
 }
 
 // InitNATS initializes NATS JetStream capability discovery using natsclient.Client.
@@ -1011,7 +881,6 @@ func (r *Registry) InitNATS(ctx context.Context, client *natsclient.Client, node
 	r.natsClient = client
 	r.nodeID = nodeID
 	r.remoteCapabilities = make(map[string]*CapabilityAnnouncement)
-	r.queryIndex = make(map[string]string)
 	r.mu.Unlock()
 
 	// Create COMPONENT_CAPABILITIES stream using natsclient
@@ -1069,11 +938,6 @@ func (r *Registry) publishCapabilities(ctx context.Context, instanceName string,
 		Timestamp:    time.Now(),
 		TTL:          60 * time.Second,
 		NodeID:       nodeID,
-	}
-
-	// If component implements QueryCapabilityProvider, include queries
-	if qcp, ok := component.(QueryCapabilityProvider); ok {
-		announcement.Queries = qcp.QueryCapabilities().Queries
 	}
 
 	// Publish to subject: {type}.capabilities.{instanceName}

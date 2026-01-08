@@ -326,11 +326,10 @@ func TestIntegration_PathSearch_Structure(t *testing.T) {
 	assert.Contains(t, err.Error(), "entity")
 }
 
-// TestIntegration_LazyDiscoveryFromIngest verifies that graph-query lazily discovers
-// routes from graph-ingest when queries are made (not at startup).
-// This tests the fix for the startup race condition where graph-query
-// was trying to discover capabilities before graph-ingest had registered handlers.
-func TestIntegration_LazyDiscoveryFromIngest(t *testing.T) {
+// TestIntegration_StaticRouting verifies that static routing works correctly.
+// This test replaces the previous dynamic discovery tests since we now use
+// static routing based on query type strings.
+func TestIntegration_StaticRouting(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}
@@ -338,113 +337,6 @@ func TestIntegration_LazyDiscoveryFromIngest(t *testing.T) {
 	ctx := context.Background()
 	natsClient, cleanup := setupTestNATS(t)
 	defer cleanup()
-
-	// Step 1: Start a capability handler that simulates graph-ingest
-	// This registers the capabilities BEFORE graph-query starts
-	ingestCaps := component.QueryCapabilities{
-		Component: "graph-ingest",
-		Version:   "1.0.0",
-		Queries: []component.QueryCapability{
-			{
-				Subject:   "graph.ingest.query.entity",
-				Operation: "getEntity",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeEntity,
-					Strategy: component.StrategyDirect,
-					Scope:    component.ScopeSingle,
-				},
-			},
-			{
-				Subject:   "graph.ingest.query.batch",
-				Operation: "getBatch",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeEntity,
-					Strategy: component.StrategyBatch,
-					Scope:    component.ScopeSet,
-				},
-			},
-			{
-				Subject:   "graph.ingest.query.prefix",
-				Operation: "listByPrefix",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeEntity,
-					Strategy: component.StrategyDirect,
-					Scope:    component.ScopeSet,
-				},
-			},
-		},
-	}
-
-	err := natsClient.SubscribeForRequests(ctx, "graph.ingest.capabilities", func(_ context.Context, _ []byte) ([]byte, error) {
-		return json.Marshal(ingestCaps)
-	})
-	require.NoError(t, err, "should subscribe for capabilities")
-
-	// Small delay to ensure subscription is active
-	time.Sleep(100 * time.Millisecond)
-
-	// Step 2: Create and start graph-query
-	config := DefaultConfig()
-	configJSON, err := json.Marshal(config)
-	require.NoError(t, err)
-
-	deps := component.Dependencies{
-		NATSClient: natsClient,
-	}
-
-	comp, err := CreateGraphQuery(configJSON, deps)
-	require.NoError(t, err)
-
-	graphQuery := comp.(*Component)
-	require.NoError(t, graphQuery.Initialize())
-	require.NoError(t, graphQuery.Start(ctx))
-	defer graphQuery.Stop(1 * time.Second)
-
-	// Step 3: Verify router cache is empty at startup (lazy discovery)
-	initialRouteCount := graphQuery.router.RouteCount()
-	assert.Equal(t, 0, initialRouteCount, "router cache should be empty at startup (lazy discovery)")
-
-	// Step 4: Trigger discovery by calling Route() with an uncached intent
-	intent := component.QueryIntent{
-		Type:     component.IntentTypeEntity,
-		Strategy: component.StrategyDirect,
-		Scope:    component.ScopeSingle,
-	}
-	subject := graphQuery.router.Route(ctx, intent)
-
-	// Step 5: Verify discovery occurred
-	assert.Equal(t, "graph.ingest.query.entity", subject, "should discover route from graph-ingest")
-
-	// Step 6: Verify routes are cached (all 3 routes from ingest should be cached)
-	finalRouteCount := graphQuery.router.RouteCount()
-	assert.Equal(t, 3, finalRouteCount, "should cache all routes from discovery response")
-
-	// Step 7: Verify subsequent queries use cached routes (no additional discovery)
-	// Query for another intent that was in the same capability response
-	intent2 := component.QueryIntent{
-		Type:     component.IntentTypeEntity,
-		Strategy: component.StrategyBatch,
-		Scope:    component.ScopeSet,
-	}
-	subject2 := graphQuery.router.Route(ctx, intent2)
-	assert.Equal(t, "graph.ingest.query.batch", subject2, "should return cached route")
-
-	// Route count should still be 3 (no new discovery needed)
-	assert.Equal(t, 3, graphQuery.router.RouteCount(), "route count should remain unchanged")
-}
-
-// TestIntegration_LazyDiscoveryFallback verifies fallback behavior when
-// discovery fails (no capability handlers available).
-func TestIntegration_LazyDiscoveryFallback(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
-	ctx := context.Background()
-	natsClient, cleanup := setupTestNATS(t)
-	defer cleanup()
-
-	// DO NOT register any capability handlers - simulate no components available
 
 	// Create and start graph-query
 	config := DefaultConfig()
@@ -463,20 +355,14 @@ func TestIntegration_LazyDiscoveryFallback(t *testing.T) {
 	require.NoError(t, graphQuery.Start(ctx))
 	defer graphQuery.Stop(1 * time.Second)
 
-	// Verify router cache is empty at startup
-	assert.Equal(t, 0, graphQuery.router.RouteCount(), "router cache should be empty at startup")
+	// Verify static routing works for known query types
+	subject := graphQuery.router.Route("entity")
+	assert.Equal(t, "graph.ingest.query.entity", subject, "should route entity queries to graph-ingest")
 
-	// Trigger discovery by calling Route() - should fall back to hardcoded routes
-	intent := component.QueryIntent{
-		Type:     component.IntentTypeEntity,
-		Strategy: component.StrategyDirect,
-		Scope:    component.ScopeSingle,
-	}
-	subject := graphQuery.router.Route(ctx, intent)
+	subject = graphQuery.router.Route("outgoing")
+	assert.Equal(t, "graph.index.query.outgoing", subject, "should route outgoing queries to graph-index")
 
-	// Should return fallback subject (from hardcoded fallback map)
-	assert.Equal(t, "graph.ingest.query.entity", subject, "should use fallback when discovery fails")
-
-	// Cache should still be empty (discovery failed, fallback used)
-	assert.Equal(t, 0, graphQuery.router.RouteCount(), "cache should be empty when discovery fails")
+	// Verify unknown query types return empty string
+	subject = graphQuery.router.Route("unknown")
+	assert.Equal(t, "", subject, "should return empty string for unknown query type")
 }

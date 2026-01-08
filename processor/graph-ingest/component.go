@@ -471,6 +471,12 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "query handler setup")
 	}
 
+	// Set up mutation handler subscriptions (for rule processor actions)
+	if err := c.setupMutationHandlers(ctx); err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", "mutation handler setup")
+	}
+
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()

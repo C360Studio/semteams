@@ -8,7 +8,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph/embedding"
 )
 
@@ -24,13 +23,8 @@ func (c *Component) setupQueryHandlers(ctx context.Context) error {
 		return fmt.Errorf("subscribe search query: %w", err)
 	}
 
-	// Subscribe to capabilities discovery
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.embedding.capabilities", c.handleCapabilitiesNATS); err != nil {
-		return fmt.Errorf("subscribe capabilities: %w", err)
-	}
-
 	c.logger.Info("query handlers registered",
-		"subjects", []string{"graph.embedding.query.similar", "graph.embedding.query.search", "graph.embedding.capabilities"})
+		"subjects", []string{"graph.embedding.query.similar", "graph.embedding.query.search"})
 
 	return nil
 }
@@ -261,99 +255,4 @@ func (c *Component) findSimilarEntities(ctx context.Context, excludeID string, q
 	}
 
 	return results, nil
-}
-
-// handleCapabilitiesNATS handles capability discovery requests via NATS request/reply
-func (c *Component) handleCapabilitiesNATS(_ context.Context, _ []byte) ([]byte, error) {
-	caps := c.QueryCapabilities()
-	return json.Marshal(caps)
-}
-
-// Ensure Component implements QueryCapabilityProvider
-var _ component.QueryCapabilityProvider = (*Component)(nil)
-
-// QueryCapabilities implements QueryCapabilityProvider interface
-func (c *Component) QueryCapabilities() component.QueryCapabilities {
-	return component.QueryCapabilities{
-		Component: "graph-embedding",
-		Version:   "1.0.0",
-		Queries: []component.QueryCapability{
-			{
-				Subject:     "graph.embedding.query.similar",
-				Operation:   "findSimilar",
-				Description: "Find entities similar to a given entity by embedding similarity",
-				Intent:      component.QueryIntent{Type: component.IntentTypeSemantic, Strategy: component.StrategyDirect, Scope: component.ScopeSet},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id": map[string]any{
-							"type":        "string",
-							"description": "Source entity ID to find similar entities for",
-						},
-						"limit": map[string]any{
-							"type":        "integer",
-							"description": "Maximum number of similar entities to return (default 10, max 100)",
-						},
-					},
-					"required": []string{"entity_id"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id": map[string]any{"type": "string"},
-						"similar": map[string]any{
-							"type": "array",
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"entity_id":  map[string]any{"type": "string"},
-									"similarity": map[string]any{"type": "number"},
-								},
-							},
-						},
-						"duration": map[string]any{"type": "string"},
-					},
-				},
-			},
-			{
-				Subject:     "graph.embedding.query.search",
-				Operation:   "search",
-				Description: "Search for entities by text query using embedding similarity",
-				Intent:      component.QueryIntent{Type: component.IntentTypeSemantic, Strategy: component.StrategyDirect, Scope: component.ScopeSet},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"query": map[string]any{
-							"type":        "string",
-							"description": "Text query to search for",
-						},
-						"limit": map[string]any{
-							"type":        "integer",
-							"description": "Maximum number of results to return (default 10, max 100)",
-						},
-					},
-					"required": []string{"query"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"query": map[string]any{"type": "string"},
-						"results": map[string]any{
-							"type": "array",
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"entity_id":  map[string]any{"type": "string"},
-									"similarity": map[string]any{"type": "number"},
-								},
-							},
-						},
-						"duration": map[string]any{"type": "string"},
-					},
-				},
-			},
-		},
-	}
 }

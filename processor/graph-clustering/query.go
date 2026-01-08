@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph/clustering"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -34,18 +33,12 @@ func (c *Component) setupQueryHandlers(ctx context.Context) error {
 		return fmt.Errorf("subscribe level query: %w", err)
 	}
 
-	// Subscribe to capabilities discovery
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.capabilities", c.handleCapabilitiesNATS); err != nil {
-		return fmt.Errorf("subscribe capabilities: %w", err)
-	}
-
 	c.logger.Info("query handlers registered",
 		"subjects", []string{
 			"graph.clustering.query.community",
 			"graph.clustering.query.members",
 			"graph.clustering.query.entity",
 			"graph.clustering.query.level",
-			"graph.clustering.capabilities",
 		})
 
 	return nil
@@ -323,140 +316,4 @@ func (c *Component) getCommunitiesByLevel(ctx context.Context, level int) ([]*cl
 	}
 
 	return communities, nil
-}
-
-// handleCapabilitiesNATS handles capability discovery requests via NATS request/reply
-func (c *Component) handleCapabilitiesNATS(_ context.Context, _ []byte) ([]byte, error) {
-	caps := c.QueryCapabilities()
-	return json.Marshal(caps)
-}
-
-// Ensure Component implements QueryCapabilityProvider
-var _ component.QueryCapabilityProvider = (*Component)(nil)
-
-// QueryCapabilities implements QueryCapabilityProvider interface
-func (c *Component) QueryCapabilities() component.QueryCapabilities {
-	return component.QueryCapabilities{
-		Component: "graph-clustering",
-		Version:   "1.0.0",
-		Queries: []component.QueryCapability{
-			{
-				Subject:     "graph.clustering.query.community",
-				Operation:   "getCommunity",
-				Description: "Get a community by ID",
-				Intent:      component.QueryIntent{Type: component.IntentTypeAggregate, Strategy: component.StrategyDirect, Scope: component.ScopeSingle},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"id": map[string]any{
-							"type":        "string",
-							"description": "Community ID to retrieve",
-						},
-					},
-					"required": []string{"id"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"community": map[string]any{"$ref": "#/definitions/Community"},
-					},
-				},
-			},
-			{
-				Subject:     "graph.clustering.query.members",
-				Operation:   "getMembers",
-				Description: "Get members of a community",
-				Intent:      component.QueryIntent{Type: component.IntentTypeAggregate, Strategy: component.StrategyDirect, Scope: component.ScopeSet},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"community_id": map[string]any{
-							"type":        "string",
-							"description": "Community ID to get members for",
-						},
-					},
-					"required": []string{"community_id"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"community_id": map[string]any{"type": "string"},
-						"members":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-						"count":        map[string]any{"type": "integer"},
-					},
-				},
-			},
-			{
-				Subject:     "graph.clustering.query.entity",
-				Operation:   "getEntityCommunity",
-				Description: "Get the community for an entity at a specific level",
-				Intent:      component.QueryIntent{Type: component.IntentTypeAggregate, Strategy: component.StrategyDirect, Scope: component.ScopeSingle},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id": map[string]any{
-							"type":        "string",
-							"description": "Entity ID to find community for",
-						},
-						"level": map[string]any{
-							"type":        "integer",
-							"description": "Hierarchy level (0=bottom, 1=mid, 2=top)",
-						},
-					},
-					"required": []string{"entity_id"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id": map[string]any{"type": "string"},
-						"level":     map[string]any{"type": "integer"},
-						"community": map[string]any{"$ref": "#/definitions/Community"},
-					},
-				},
-			},
-			{
-				Subject:     "graph.clustering.query.level",
-				Operation:   "getCommunitiesByLevel",
-				Description: "Get all communities at a specific hierarchy level",
-				Intent:      component.QueryIntent{Type: component.IntentTypeAggregate, Strategy: component.StrategyDirect, Scope: component.ScopeSet},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"level": map[string]any{
-							"type":        "integer",
-							"description": "Hierarchy level (0=bottom, 1=mid, 2=top)",
-						},
-					},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"level":       map[string]any{"type": "integer"},
-						"communities": map[string]any{"type": "array", "items": map[string]any{"$ref": "#/definitions/Community"}},
-						"count":       map[string]any{"type": "integer"},
-					},
-				},
-			},
-		},
-		Definitions: map[string]any{
-			"Community": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"id":      map[string]any{"type": "string"},
-					"level":   map[string]any{"type": "integer"},
-					"members": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-					"parent_id": map[string]any{
-						"type":     "string",
-						"nullable": true,
-					},
-					"summary":  map[string]any{"type": "string"},
-					"keywords": map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
-				},
-			},
-		},
-	}
 }

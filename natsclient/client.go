@@ -141,7 +141,7 @@ func NewClient(urls string, opts ...ClientOption) (*Client, error) {
 		reconnectWait:    2 * time.Second,
 		pingInterval:     30 * time.Second,
 		healthInterval:   10 * time.Second,
-		circuitThreshold: 5,
+		circuitThreshold: 15, // Increased from 5 for resilience to transient failures
 		maxBackoff:       time.Minute,
 		timeout:          5 * time.Second,
 		drainTimeout:     30 * time.Second,

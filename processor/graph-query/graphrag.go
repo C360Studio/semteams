@@ -4,12 +4,12 @@ package graphquery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/component"
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/graph/clustering"
 	"github.com/c360/semstreams/message"
@@ -263,11 +263,11 @@ func (c *Component) loadEntities(ctx context.Context, entityIDs []string) ([]*gt
 	}
 
 	// Request entities from graph-ingest
-	respData, err := c.natsClient.Request(ctx, c.router.Route(ctx, component.QueryIntent{
-		Type:     component.IntentTypeEntity,
-		Strategy: component.StrategyBatch,
-		Scope:    component.ScopeSet,
-	}), reqData, c.config.QueryTimeout)
+	subject := c.router.Route("entityBatch")
+	if subject == "" {
+		return nil, errors.New("entityBatch query routing not available")
+	}
+	respData, err := c.natsClient.Request(ctx, subject, reqData, c.config.QueryTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("request entities: %w", err)
 	}

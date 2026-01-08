@@ -143,29 +143,6 @@ func TestIntegration_QueryHandlers(t *testing.T) {
 		assert.Equal(t, 2, len(responseEntities))
 	})
 
-	t.Run("capabilities query over real NATS", func(t *testing.T) {
-		// Subscribe to handle capabilities requests
-		capSubject := "graph.ingest.capabilities"
-		err := natsClient.SubscribeForRequests(ctx, capSubject, func(reqCtx context.Context, data []byte) ([]byte, error) {
-			mockMsg := &mockNATSMsg{data: data}
-			component.handleCapabilities(mockMsg)
-			return mockMsg.response, nil
-		})
-		require.NoError(t, err)
-
-		// Send capabilities query
-		responseData, err := natsClient.Request(ctx, capSubject, []byte(`{}`), 5*time.Second)
-		require.NoError(t, err)
-
-		// Verify response
-		var caps QueryCapabilitiesResponse
-		err = json.Unmarshal(responseData, &caps)
-		require.NoError(t, err)
-
-		assert.Equal(t, "graph-ingest", caps.Component)
-		assert.NotEmpty(t, caps.Queries)
-	})
-
 	t.Run("concurrent query requests", func(t *testing.T) {
 		querySubject := "graph.ingest.query.concurrent"
 		err := natsClient.SubscribeForRequests(ctx, querySubject, func(reqCtx context.Context, data []byte) ([]byte, error) {
@@ -223,13 +200,6 @@ func TestIntegration_QueryHandlers(t *testing.T) {
 		err = json.Unmarshal(responseData, &responseEntity)
 		require.NoError(t, err)
 	})
-}
-
-// QueryCapabilitiesResponse is a helper type for unmarshaling capabilities responses
-type QueryCapabilitiesResponse struct {
-	Component string                      `json:"component"`
-	Version   string                      `json:"version"`
-	Queries   []component.QueryCapability `json:"queries"`
 }
 
 // mockNATSMsg is reused from the unit tests for integration testing

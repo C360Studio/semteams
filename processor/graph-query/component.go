@@ -68,7 +68,6 @@ func DefaultConfig() Config {
 				{Name: "query_entity", Type: "nats-request", Subject: "graph.query.entity"},
 				{Name: "query_relationships", Type: "nats-request", Subject: "graph.query.relationships"},
 				{Name: "query_path_search", Type: "nats-request", Subject: "graph.query.pathSearch"},
-				{Name: "query_capabilities", Type: "nats-request", Subject: "graph.query.capabilities"},
 			},
 			Outputs: []component.PortDefinition{},
 		},
@@ -82,7 +81,7 @@ type Component struct {
 	config       Config
 	natsClient   natsRequester
 	pathSearcher *PathSearcher
-	router       *IntentRouter
+	router       *StaticRouter
 	logger       *slog.Logger
 
 	// Community cache for GraphRAG (consumer-owned, KV watch based)
@@ -299,8 +298,8 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("wait for NATS connection: %w", err)
 	}
 
-	// Create router for intent-based routing (routes discovered lazily on first use)
-	c.router = NewIntentRouter(c.natsClient, c.logger)
+	// Create router for static routing
+	c.router = NewStaticRouter(c.logger)
 
 	// Subscribe to query subjects
 	if err := c.setupQueryHandlers(); err != nil {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/component"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -33,13 +32,8 @@ func (c *Component) setupQueryHandlers(ctx context.Context) error {
 		return fmt.Errorf("subscribe predicate query: %w", err)
 	}
 
-	// Subscribe to capabilities discovery
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.index.capabilities", c.handleCapabilitiesNATS); err != nil {
-		return fmt.Errorf("subscribe capabilities: %w", err)
-	}
-
 	c.logger.Info("query handlers registered",
-		"subjects", []string{"graph.index.query.outgoing", "graph.index.query.incoming", "graph.index.query.alias", "graph.index.query.predicate", "graph.index.capabilities"})
+		"subjects", []string{"graph.index.query.outgoing", "graph.index.query.incoming", "graph.index.query.alias", "graph.index.query.predicate"})
 
 	return nil
 }
@@ -173,161 +167,11 @@ func (c *Component) handleQueryPredicateNATS(_ context.Context, data []byte) ([]
 	return json.Marshal(response)
 }
 
-// handleCapabilitiesNATS handles capability discovery requests via NATS request/reply
-func (c *Component) handleCapabilitiesNATS(_ context.Context, _ []byte) ([]byte, error) {
-	caps := c.QueryCapabilities()
-	return json.Marshal(caps)
-}
-
-// Ensure Component implements QueryCapabilityProvider
-var _ component.QueryCapabilityProvider = (*Component)(nil)
-
 // queryMsg is an interface for query request messages.
 // This accommodates both real NATS messages and test mocks.
 type queryMsg interface {
 	Data() []byte
 	Respond(data []byte) error
-}
-
-// QueryCapabilities implements QueryCapabilityProvider interface
-func (c *Component) QueryCapabilities() component.QueryCapabilities {
-	return component.QueryCapabilities{
-		Component: "graph-index",
-		Version:   "1.0.0",
-		Queries: []component.QueryCapability{
-			{
-				Subject:     "graph.index.query.outgoing",
-				Operation:   "getOutgoing",
-				Description: "Get outgoing relationships for an entity",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeRelationship,
-					Strategy: component.StrategyDirect,
-					Scope:    component.ScopeSet,
-				},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id": map[string]any{
-							"type":        "string",
-							"description": "Entity ID to get outgoing relationships for",
-						},
-					},
-					"required": []string{"entity_id"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "array",
-					"items": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"to_entity_id": map[string]any{
-								"type": "string",
-							},
-							"predicate": map[string]any{
-								"type": "string",
-							},
-						},
-					},
-				},
-			},
-			{
-				Subject:     "graph.index.query.incoming",
-				Operation:   "getIncoming",
-				Description: "Get incoming relationships for an entity",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeRelationship,
-					Strategy: component.StrategyDirect,
-					Scope:    component.ScopeSet,
-				},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entity_id": map[string]any{
-							"type":        "string",
-							"description": "Entity ID to get incoming relationships for",
-						},
-					},
-					"required": []string{"entity_id"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "array",
-					"items": map[string]any{
-						"type": "object",
-						"properties": map[string]any{
-							"from_entity_id": map[string]any{
-								"type": "string",
-							},
-							"predicate": map[string]any{
-								"type": "string",
-							},
-						},
-					},
-				},
-			},
-			{
-				Subject:     "graph.index.query.alias",
-				Operation:   "getAlias",
-				Description: "Resolve alias to canonical entity ID",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeRelationship,
-					Strategy: component.StrategyDirect,
-					Scope:    component.ScopeSingle,
-				},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"alias": map[string]any{
-							"type":        "string",
-							"description": "Alias to resolve",
-						},
-					},
-					"required": []string{"alias"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"canonical_id": map[string]any{
-							"type": "string",
-						},
-					},
-				},
-			},
-			{
-				Subject:     "graph.index.query.predicate",
-				Operation:   "getPredicate",
-				Description: "Get entities with a specific predicate",
-				Intent: component.QueryIntent{
-					Type:     component.IntentTypeRelationship,
-					Strategy: component.StrategyDirect,
-					Scope:    component.ScopeSet,
-				},
-				EntityTypes: []string{"*"},
-				RequestSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"predicate": map[string]any{
-							"type":        "string",
-							"description": "Predicate to search for",
-						},
-					},
-					"required": []string{"predicate"},
-				},
-				ResponseSchema: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"entities": map[string]any{
-							"type": "array",
-							"items": map[string]any{
-								"type": "string",
-							},
-						},
-					},
-				},
-			},
-		},
-	}
 }
 
 // handleQueryOutgoing handles outgoing relationship query requests
@@ -504,12 +348,6 @@ func (c *Component) handleQueryPredicate(msg queryMsg) {
 		"entities": indexEntry.Entities,
 	}
 	c.respondJSON(msg, response)
-}
-
-// handleCapabilities handles capability discovery requests
-func (c *Component) handleCapabilities(msg queryMsg) {
-	caps := c.QueryCapabilities()
-	c.respondJSON(msg, caps)
 }
 
 // respondError sends an error response
