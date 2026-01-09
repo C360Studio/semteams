@@ -84,6 +84,10 @@ func TestEntityWatcher_RuleTriggerDebouncing(t *testing.T) {
 	processor, err := rule.NewProcessorWithMetrics(natsClient, &config, nil)
 	require.NoError(t, err)
 
+	// Initialize processor (loads rules)
+	err = processor.Initialize()
+	require.NoError(t, err)
+
 	// Start processor
 	err = processor.Start(ctx)
 	require.NoError(t, err)
@@ -335,6 +339,10 @@ func TestEntityWatcher_BoundedEvaluations(t *testing.T) {
 	config.InlineRules = rules
 
 	processor, err := rule.NewProcessorWithMetrics(natsClient, &config, nil)
+	require.NoError(t, err)
+
+	// Initialize processor (loads rules)
+	err = processor.Initialize()
 	require.NoError(t, err)
 
 	// Start processor
