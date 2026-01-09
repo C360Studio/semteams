@@ -631,7 +631,8 @@
         "compute_interval": "1h",
         "pivot_count": 16,
         "max_hop_distance": 10,
-        "compute_on_startup": true
+        "compute_on_startup": true,
+        "enable_detection": true
       }
     },
     "graph-query": {

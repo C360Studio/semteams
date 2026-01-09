@@ -572,6 +572,41 @@
         "batch_size": 50
       }
     },
+    "graph-anomalies": {
+      "type": "processor",
+      "name": "graph-anomalies",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "outgoing_watch",
+              "subject": "OUTGOING_INDEX",
+              "type": "kv-watch",
+              "description": "Watch outgoing index changes"
+            },
+            {
+              "name": "incoming_watch",
+              "subject": "INCOMING_INDEX",
+              "type": "kv-watch",
+              "description": "Watch incoming index changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "structural_index",
+              "subject": "STRUCTURAL_INDEX",
+              "type": "kv",
+              "description": "Structural index (k-core, pivot)"
+            }
+          ]
+        },
+        "compute_interval": "1h",
+        "pivot_count": 16,
+        "max_hop_distance": 10,
+        "compute_on_startup": true
+      }
+    },
     "graph-query": {
       "type": "processor",
       "name": "graph-query",
