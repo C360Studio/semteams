@@ -21,6 +21,8 @@ type embeddingMetrics struct {
 	// Component-specific metrics
 	embeddingsGenerated prometheus.Counter
 	embeddingErrors     prometheus.Counter
+	embeddingDedupHits  prometheus.Counter
+	embeddingPending    prometheus.Gauge
 	kvOperations        *prometheus.CounterVec
 }
 
@@ -74,6 +76,22 @@ func getMetrics(registry *metric.MetricsRegistry) *embeddingMetrics {
 				Name:      "kv_operations_total",
 				Help:      "Total KV bucket operations",
 			}, []string{"operation", "bucket"}),
+
+			// Worker metrics: semstreams_graph_embedding_dedup_hits_total
+			embeddingDedupHits: prometheus.NewCounter(prometheus.CounterOpts{
+				Namespace: "semstreams",
+				Subsystem: "graph_embedding",
+				Name:      "dedup_hits_total",
+				Help:      "Total embedding deduplication cache hits",
+			}),
+
+			// Worker metrics: semstreams_graph_embedding_pending
+			embeddingPending: prometheus.NewGauge(prometheus.GaugeOpts{
+				Namespace: "semstreams",
+				Subsystem: "graph_embedding",
+				Name:      "pending",
+				Help:      "Current number of pending embeddings",
+			}),
 		}
 
 		// Register metrics with the metrics registry if available
@@ -83,6 +101,8 @@ func getMetrics(registry *metric.MetricsRegistry) *embeddingMetrics {
 			_ = registry.RegisterCounter("graph-embedding", "embeddings_generated_total", metrics.embeddingsGenerated)
 			_ = registry.RegisterCounter("graph-embedding", "errors_total", metrics.embeddingErrors)
 			_ = registry.RegisterCounterVec("graph-embedding", "kv_operations_total", metrics.kvOperations)
+			_ = registry.RegisterCounter("graph-embedding", "dedup_hits_total", metrics.embeddingDedupHits)
+			_ = registry.RegisterGauge("graph-embedding", "pending", metrics.embeddingPending)
 
 			// Legacy metric (backward compatibility)
 			_ = registry.RegisterGauge("graph-embedding", "embedding_provider_legacy", metrics.legacyEmbeddingProvider)
@@ -94,6 +114,8 @@ func getMetrics(registry *metric.MetricsRegistry) *embeddingMetrics {
 			_ = prometheus.DefaultRegisterer.Register(metrics.embeddingsGenerated)
 			_ = prometheus.DefaultRegisterer.Register(metrics.embeddingErrors)
 			_ = prometheus.DefaultRegisterer.Register(metrics.kvOperations)
+			_ = prometheus.DefaultRegisterer.Register(metrics.embeddingDedupHits)
+			_ = prometheus.DefaultRegisterer.Register(metrics.embeddingPending)
 		}
 	})
 	return metrics
@@ -128,4 +150,46 @@ func (m *embeddingMetrics) recordEmbeddingError() {
 // recordKVOperation records a KV operation for the given operation type and bucket.
 func (m *embeddingMetrics) recordKVOperation(operation, bucket string) {
 	m.kvOperations.WithLabelValues(operation, bucket).Inc()
+}
+
+// recordDedupHit increments the deduplication hits counter.
+func (m *embeddingMetrics) recordDedupHit() {
+	m.embeddingDedupHits.Inc()
+}
+
+// setPending sets the pending embeddings gauge.
+func (m *embeddingMetrics) setPending(count float64) {
+	m.embeddingPending.Set(count)
+}
+
+// workerMetricsAdapter adapts embeddingMetrics to the embedding.WorkerMetrics interface.
+// This allows the Worker to report metrics without direct dependency on prometheus.
+type workerMetricsAdapter struct {
+	metrics *embeddingMetrics
+}
+
+// IncDedupHits implements embedding.WorkerMetrics.
+func (a *workerMetricsAdapter) IncDedupHits() {
+	if a.metrics != nil {
+		a.metrics.recordDedupHit()
+	}
+}
+
+// IncFailed implements embedding.WorkerMetrics.
+func (a *workerMetricsAdapter) IncFailed() {
+	if a.metrics != nil {
+		a.metrics.recordEmbeddingError()
+	}
+}
+
+// SetPending implements embedding.WorkerMetrics.
+func (a *workerMetricsAdapter) SetPending(count float64) {
+	if a.metrics != nil {
+		a.metrics.setPending(count)
+	}
+}
+
+// newWorkerMetricsAdapter creates an adapter for the embedding.WorkerMetrics interface.
+func newWorkerMetricsAdapter(m *embeddingMetrics) *workerMetricsAdapter {
+	return &workerMetricsAdapter{metrics: m}
 }

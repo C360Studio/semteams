@@ -497,9 +497,17 @@ func (c *Component) Start(ctx context.Context) error {
 	// Create storage
 	c.storage = embedding.NewStorage(embeddingIndexBucket, embeddingDedupBucket)
 
-	// Create worker
+	// Create worker with metrics and generation callback
 	c.worker = embedding.NewWorker(c.storage, c.embedder, embeddingIndexBucket, c.logger).
-		WithWorkers(c.config.BatchSize / 10) // Scale workers based on batch size
+		WithWorkers(c.config.BatchSize / 10). // Scale workers based on batch size
+		WithMetrics(newWorkerMetricsAdapter(c.metrics)).
+		WithOnGenerated(func(entityID string, _ []float32) {
+			// Record successful embedding generation
+			if c.metrics != nil {
+				c.metrics.recordEmbeddingGenerated()
+			}
+			c.logger.Debug("embedding generated", "entity_id", entityID)
+		})
 
 	// Start worker
 	if err := c.worker.Start(ctx); err != nil {
