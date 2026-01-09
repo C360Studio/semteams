@@ -49,3 +49,4 @@ coverage/
 *.test
 cmd/e2e/e2e
 cmd/semstreams/semstreams
+bin/
