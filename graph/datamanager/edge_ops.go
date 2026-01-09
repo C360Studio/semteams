@@ -43,17 +43,30 @@ func (m *Manager) AddTriple(ctx context.Context, triple message.Triple) error {
 	}
 
 	// Add or update triple
-	found := false
+	// For relationships, allow multiple objects with the same predicate (e.g., siblings)
+	// For properties, replace existing value
+	isRelationship := triple.IsRelationship()
+
 	for i := range entity.Triples {
 		if entity.Triples[i].Predicate == triple.Predicate {
-			entity.Triples[i] = triple
-			found = true
-			break
+			if isRelationship {
+				// For relationships, check if exact triple already exists (same object)
+				if entity.Triples[i].Object == triple.Object {
+					// Already exists, skip (idempotent)
+					return nil
+				}
+				// Different object - continue searching, will append at end
+			} else {
+				// For properties, replace existing value
+				entity.Triples[i] = triple
+				_, err = m.UpdateEntity(ctx, entity)
+				return err
+			}
 		}
 	}
-	if !found {
-		entity.Triples = append(entity.Triples, triple)
-	}
+
+	// Append new triple (either new predicate or relationship with new object)
+	entity.Triples = append(entity.Triples, triple)
 
 	// Update entity
 	_, err = m.UpdateEntity(ctx, entity)
