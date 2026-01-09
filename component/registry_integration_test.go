@@ -776,9 +776,6 @@ func TestRegistry_InitNATS(t *testing.T) {
 	if registry.remoteCapabilities == nil {
 		t.Error("remoteCapabilities map not initialized")
 	}
-	if registry.queryIndex == nil {
-		t.Error("queryIndex map not initialized")
-	}
 
 	// Verify stream was created
 	stream, err := testClient.Client.GetStream(ctx, "COMPONENT_CAPABILITIES")
