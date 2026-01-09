@@ -566,6 +566,14 @@ func (c *Component) mapGraphQLQueryToNATSSubject(query string) string {
 		return "graph.query.capabilities"
 	}
 
+	// GraphRAG search patterns - must come before generic "entity" check
+	if strings.Contains(query, "localsearch") {
+		return "graph.query.localSearch"
+	}
+	if strings.Contains(query, "globalsearch") {
+		return "graph.query.globalSearch"
+	}
+
 	// Generic "entity" check MUST come last
 	if strings.Contains(query, "entity") {
 		return "graph.query.entity"
@@ -599,6 +607,10 @@ func (c *Component) subjectToGraphQLField(subject string) string {
 		return "similaritySearch"
 	case "graph.query.similar":
 		return "findSimilar"
+	case "graph.query.localSearch":
+		return "localSearch"
+	case "graph.query.globalSearch":
+		return "globalSearch"
 	default:
 		return ""
 	}
@@ -720,6 +732,30 @@ func (c *Component) transformVariablesToNATSPayload(variables map[string]interfa
 		}
 		if limit, ok := variables["limit"]; ok {
 			payload["limit"] = limit
+		}
+
+	case "graph.query.localSearch":
+		// GraphRAG local search - transform camelCase to snake_case
+		if entityID, ok := variables["entityId"]; ok {
+			payload["entity_id"] = entityID
+		}
+		if query, ok := variables["query"]; ok {
+			payload["query"] = query
+		}
+		if level, ok := variables["level"]; ok {
+			payload["level"] = level
+		}
+
+	case "graph.query.globalSearch":
+		// GraphRAG global search - transform camelCase to snake_case
+		if query, ok := variables["query"]; ok {
+			payload["query"] = query
+		}
+		if level, ok := variables["level"]; ok {
+			payload["level"] = level
+		}
+		if maxCommunities, ok := variables["maxCommunities"]; ok {
+			payload["max_communities"] = maxCommunities
 		}
 
 	default:
