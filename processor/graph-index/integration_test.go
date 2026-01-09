@@ -20,6 +20,7 @@ import (
 // TestIntegration_KVWatchToIndexFlow tests the full KV watch -> index update flow
 func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
 	// Create test NATS client with KV support
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
 	nc := testClient.Client
 
@@ -156,6 +157,7 @@ func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
 // TestIntegration_EntityDeletion tests that entity deletion removes from all indexes
 func TestIntegration_EntityDeletion(t *testing.T) {
 	// Create test NATS client with KV support
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
 	nc := testClient.Client
 
@@ -245,6 +247,7 @@ func TestIntegration_EntityDeletion(t *testing.T) {
 // TestIntegration_MultipleRelationships tests indexing entities with multiple relationships
 func TestIntegration_MultipleRelationships(t *testing.T) {
 	// Create test NATS client with KV support
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
 	nc := testClient.Client
 
@@ -364,6 +367,7 @@ func TestIntegration_MultipleRelationships(t *testing.T) {
 // TestIntegration_ConcurrentUpdates tests concurrent entity updates
 func TestIntegration_ConcurrentUpdates(t *testing.T) {
 	// Create test NATS client with KV support
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
 	nc := testClient.Client
 

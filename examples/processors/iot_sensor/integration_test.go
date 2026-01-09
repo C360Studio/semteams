@@ -171,6 +171,7 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 	}
 
 	// Create test NATS client with JetStream and KV
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
 	ctx := context.Background()
 
@@ -402,6 +403,7 @@ func TestZone_ProcessedByMessageManager_ProducesEntityState(t *testing.T) {
 	}
 
 	// Create test NATS client with JetStream and KV
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
 	ctx := context.Background()
 
@@ -478,6 +480,7 @@ func TestMultipleSensorReadings_SameDevice_ConsistentEntityID(t *testing.T) {
 	}
 
 	// Create test NATS client with JetStream and KV
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
 	ctx := context.Background()
 

@@ -17,6 +17,7 @@ import (
 )
 
 // setupIntegrationTest creates a real NATS container and component using natsclient.TestClient
+// Each test gets its own NATS container, so bucket isolation is automatic.
 func setupIntegrationTest(t *testing.T) (*Component, *natsclient.Client, func()) {
 	t.Helper()
 
