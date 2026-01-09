@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/c360/semstreams/graph"
 	"github.com/nats-io/nats.go"
 )
 
@@ -129,12 +130,10 @@ func (c *Component) handleQueryEntityByAlias(ctx context.Context, data []byte) (
 	}
 	aliasResp, err := c.natsClient.Request(ctx, aliasSubject, aliasReqData, c.config.QueryTimeout)
 	if err == nil {
-		// Check if response contains a canonical_id
-		var aliasResult struct {
-			CanonicalID string `json:"canonical_id"`
-		}
-		if json.Unmarshal(aliasResp, &aliasResult) == nil && aliasResult.CanonicalID != "" {
-			entityID = aliasResult.CanonicalID
+		// Parse alias response from envelope format
+		var aliasResult graph.AliasQueryResponse
+		if json.Unmarshal(aliasResp, &aliasResult) == nil && aliasResult.Error == nil && aliasResult.Data.CanonicalID != nil {
+			entityID = *aliasResult.Data.CanonicalID
 		}
 	}
 	// If alias lookup failed, we'll try aliasOrID as a direct entity ID
@@ -211,23 +210,22 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 		return nil, fmt.Errorf("query relationships failed: %w", err)
 	}
 
-	// Transform raw index entries to normalized relationship format
-	// graph-index returns: [{from_entity_id, predicate}] for incoming
-	//                   or [{to_entity_id, predicate}] for outgoing
+	// Transform envelope response to normalized relationship format
+	// graph-index returns QueryResponse envelope with relationships array
 	// We need to return: {relationships: [{from_entity_id, to_entity_id, edge_type}]}
 	var relationships []map[string]any
 
 	if isIncoming {
-		// Incoming: entries have from_entity_id + predicate
-		var entries []struct {
-			FromEntityID string `json:"from_entity_id"`
-			Predicate    string `json:"predicate"`
-		}
-		if err := json.Unmarshal(response, &entries); err != nil {
+		// Parse incoming relationships from envelope
+		var envelope graph.IncomingQueryResponse
+		if err := json.Unmarshal(response, &envelope); err != nil {
 			return nil, fmt.Errorf("parse incoming entries: %w", err)
 		}
-		relationships = make([]map[string]any, len(entries))
-		for i, e := range entries {
+		if envelope.Error != nil {
+			return nil, fmt.Errorf("incoming query error: %s", *envelope.Error)
+		}
+		relationships = make([]map[string]any, len(envelope.Data.Relationships))
+		for i, e := range envelope.Data.Relationships {
 			relationships[i] = map[string]any{
 				"from_entity_id": e.FromEntityID,
 				"to_entity_id":   req.EntityID,
@@ -235,16 +233,16 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 			}
 		}
 	} else {
-		// Outgoing: entries have to_entity_id + predicate
-		var entries []struct {
-			ToEntityID string `json:"to_entity_id"`
-			Predicate  string `json:"predicate"`
-		}
-		if err := json.Unmarshal(response, &entries); err != nil {
+		// Parse outgoing relationships from envelope
+		var envelope graph.OutgoingQueryResponse
+		if err := json.Unmarshal(response, &envelope); err != nil {
 			return nil, fmt.Errorf("parse outgoing entries: %w", err)
 		}
-		relationships = make([]map[string]any, len(entries))
-		for i, e := range entries {
+		if envelope.Error != nil {
+			return nil, fmt.Errorf("outgoing query error: %s", *envelope.Error)
+		}
+		relationships = make([]map[string]any, len(envelope.Data.Relationships))
+		for i, e := range envelope.Data.Relationships {
 			relationships[i] = map[string]any{
 				"from_entity_id": req.EntityID,
 				"to_entity_id":   e.ToEntityID,
