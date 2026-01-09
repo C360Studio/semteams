@@ -10,6 +10,11 @@
       "description": "Enable hierarchy inference",
       "category": "advanced"
     },
+    "enable_type_siblings": {
+      "type": "boolean",
+      "description": "Enable sibling edges between same-type entities (default true when hierarchy enabled)",
+      "category": "advanced"
+    },
     "ports": {
       "type": "string",
       "description": "Port configuration",

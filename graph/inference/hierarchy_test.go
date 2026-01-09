@@ -3,6 +3,7 @@ package inference
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -76,6 +77,23 @@ func (m *mockEntityManager) CreateEntity(_ context.Context, entity *gtypes.Entit
 	m.entities[entity.ID] = true
 	m.created = append(m.created, entity)
 	return entity, nil
+}
+
+func (m *mockEntityManager) ListWithPrefix(_ context.Context, prefix string) ([]string, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var matched []string
+	prefixDot := prefix + "."
+	for id := range m.entities {
+		if strings.HasPrefix(id, prefixDot) {
+			matched = append(matched, id)
+		}
+	}
+	return matched, nil
 }
 
 func (m *mockEntityManager) getCreatedEntities() []*gtypes.EntityState {

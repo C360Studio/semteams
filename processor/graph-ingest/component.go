@@ -63,8 +63,9 @@ func getEntitiesUpdatedMetric(registry *metric.MetricsRegistry) prometheus.Count
 
 // Config holds configuration for graph-ingest component
 type Config struct {
-	Ports           *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
-	EnableHierarchy bool                  `json:"enable_hierarchy" schema:"type:bool,description:Enable hierarchy inference,category:advanced"`
+	Ports              *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
+	EnableHierarchy    bool                  `json:"enable_hierarchy" schema:"type:bool,description:Enable hierarchy inference,category:advanced"`
+	EnableTypeSiblings *bool                 `json:"enable_type_siblings" schema:"type:bool,description:Enable sibling edges between same-type entities (default true when hierarchy enabled),category:advanced"`
 }
 
 // Validate implements component.Validatable interface
@@ -137,6 +138,29 @@ func (a *entityManagerAdapter) CreateEntity(ctx context.Context, entity *graph.E
 		return nil, err
 	}
 	return entity, nil
+}
+
+func (a *entityManagerAdapter) ListWithPrefix(ctx context.Context, prefix string) ([]string, error) {
+	// Get all keys from KV bucket
+	keys, err := a.component.entityBucket.Keys(ctx)
+	if err != nil {
+		if err == jetstream.ErrNoKeysFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	// Filter by prefix (prefix + "." to ensure we match the exact level)
+	var matched []string
+	prefixDot := prefix + "."
+
+	for _, key := range keys {
+		if strings.HasPrefix(key, prefixDot) {
+			matched = append(matched, key)
+		}
+	}
+
+	return matched, nil
 }
 
 // tripleAdderAdapter adapts Component to implement inference.TripleAdder interface
@@ -438,11 +462,18 @@ func (c *Component) Start(ctx context.Context) error {
 
 	// Initialize hierarchy inference if enabled (synchronous - no Start/Stop)
 	if c.config.EnableHierarchy {
+		// Enable sibling edges by default, can be disabled via config
+		enableTypeSiblings := true
+		if c.config.EnableTypeSiblings != nil {
+			enableTypeSiblings = *c.config.EnableTypeSiblings
+		}
+
 		hierarchyConfig := inference.HierarchyConfig{
-			Enabled:           true,
-			CreateTypeEdges:   true,
-			CreateSystemEdges: true,
-			CreateDomainEdges: true,
+			Enabled:            true,
+			CreateTypeEdges:    true,
+			CreateSystemEdges:  true,
+			CreateDomainEdges:  true,
+			CreateTypeSiblings: enableTypeSiblings,
 		}
 
 		c.hierarchyInference = inference.NewHierarchyInference(

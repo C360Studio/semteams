@@ -61,6 +61,8 @@ type HierarchyInference struct {
 type EntityManager interface {
 	ExistsEntity(ctx context.Context, id string) (bool, error)
 	CreateEntity(ctx context.Context, entity *gtypes.EntityState) (*gtypes.EntityState, error)
+	// ListWithPrefix returns entity IDs matching a prefix (for sibling discovery)
+	ListWithPrefix(ctx context.Context, prefix string) ([]string, error)
 }
 
 // HierarchyConfig configures hierarchy container inference.
@@ -79,6 +81,11 @@ type HierarchyConfig struct {
 	// CreateDomainEdges enables domain membership edges (3-part prefix → domain container)
 	// StandardIRI: skos:broader
 	CreateDomainEdges bool `json:"create_domain_edges"`
+
+	// CreateTypeSiblings enables sibling edges between entities with the same type (5-part prefix)
+	// When enabled, creates bidirectional hierarchy.type.sibling edges
+	// Cost: O(N) per new entity where N is existing sibling count
+	CreateTypeSiblings bool `json:"create_type_siblings"`
 }
 
 // DefaultHierarchyConfig returns sensible defaults for hierarchy inference.
@@ -175,6 +182,19 @@ func (h *HierarchyInference) GetHierarchyTriples(ctx context.Context, entityID s
 		}
 	}
 
+	// Create sibling edges to entities with same type (5-part prefix)
+	if h.config.CreateTypeSiblings {
+		siblingTriples, err := h.createSiblingEdges(ctx, entityID, parts)
+		if err != nil {
+			// Log but don't fail - sibling edges are supplementary
+			h.logger.Warn("Failed to create sibling edges",
+				"entity_id", entityID,
+				"error", err)
+		} else {
+			triples = append(triples, siblingTriples...)
+		}
+	}
+
 	// Create system membership: entity → system.group.container
 	if h.config.CreateSystemEdges {
 		systemContainerID := h.buildSystemContainerID(parts)
@@ -243,6 +263,72 @@ func (h *HierarchyInference) buildSystemContainerID(parts []string) string {
 // Output: org.platform.domain.group.container.level
 func (h *HierarchyInference) buildDomainContainerID(parts []string) string {
 	return strings.Join(parts[:3], ".") + ".group.container.level"
+}
+
+// createSiblingEdges creates bidirectional sibling edges between the new entity
+// and all existing entities with the same type (5-part prefix).
+//
+// For each existing sibling:
+//   - Returns a forward edge: newEntity → hierarchy.type.sibling → existingSibling
+//   - Adds inverse edge directly: existingSibling → hierarchy.type.sibling → newEntity
+//
+// Cost: O(N) per new entity where N is existing sibling count.
+func (h *HierarchyInference) createSiblingEdges(ctx context.Context, entityID string, parts []string) ([]message.Triple, error) {
+	// Build 5-part prefix for sibling lookup (excludes instance part)
+	prefix := strings.Join(parts[:5], ".")
+
+	// Find existing members with same prefix
+	existingMembers, err := h.entityManager.ListWithPrefix(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	var triples []message.Triple
+	for _, siblingID := range existingMembers {
+		// Skip self and container entities
+		if siblingID == entityID || isContainerEntity(siblingID) {
+			continue
+		}
+
+		// Forward edge: new entity → sibling → existing
+		triples = append(triples, message.Triple{
+			Subject:    entityID,
+			Predicate:  vocabulary.HierarchyTypeSibling,
+			Object:     siblingID,
+			Context:    "inference.hierarchy",
+			Confidence: 1.0, // Structural inference has perfect confidence
+		})
+		h.edgesCreated.Add(1)
+
+		// Inverse edge: existing → sibling → new entity (update existing entity)
+		// Since HierarchyTypeSibling is symmetric, both directions use same predicate
+		inverseTriple := message.Triple{
+			Subject:    siblingID,
+			Predicate:  vocabulary.HierarchyTypeSibling,
+			Object:     entityID,
+			Context:    "inference.hierarchy",
+			Confidence: 1.0,
+		}
+
+		if err := h.tripleAdder.AddTriple(ctx, inverseTriple); err != nil {
+			// Log warning but don't fail - forward edge will still be returned
+			h.logger.Warn("Failed to add inverse sibling edge",
+				"sibling_id", siblingID,
+				"new_entity_id", entityID,
+				"error", err)
+			h.edgesFailed.Add(1)
+		} else {
+			h.edgesCreated.Add(1)
+		}
+	}
+
+	if len(triples) > 0 {
+		h.logger.Debug("Created sibling edges",
+			"entity_id", entityID,
+			"sibling_count", len(triples))
+	}
+
+	return triples, nil
 }
 
 // ensureContainerAndReturnEdge creates the container entity if needed, then returns
