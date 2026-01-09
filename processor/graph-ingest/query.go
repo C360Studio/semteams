@@ -80,9 +80,9 @@ func (c *Component) handleQueryBatchNATS(_ context.Context, data []byte) ([]byte
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	// Handle empty IDs (return empty array)
+	// Handle empty IDs (return empty entities)
 	if len(req.IDs) == 0 {
-		return []byte("[]"), nil
+		return []byte(`{"entities":[]}`), nil
 	}
 
 	// Fetch entities
@@ -107,8 +107,10 @@ func (c *Component) handleQueryBatchNATS(_ context.Context, data []byte) ([]byte
 		entities = append(entities, entity)
 	}
 
-	// Return entities array
-	return json.Marshal(entities)
+	// Return entities wrapped in a struct for consistency with loadEntities expectations
+	return json.Marshal(map[string]any{
+		"entities": entities,
+	})
 }
 
 // handleQueryPrefixNATS handles prefix-based entity listing for hierarchy queries

@@ -1,0 +1,210 @@
+{
+  "variant": {
+    "name": "structural",
+    "embedding_provider": "",
+    "semembed_available": false
+  },
+  "entities": {
+    "expected_count": 74,
+    "actual_count": 123,
+    "missing_count": 0,
+    "data_loss_percent": 0,
+    "sampled_count": 5,
+    "validated_count": 5,
+    "retrieved_count": 5
+  },
+  "indexes": {
+    "expected_indexes": 8,
+    "populated_indexes": 8
+  },
+  "search": {
+    "stats": null,
+    "weak_results_threshold": 0,
+    "is_weak": false
+  },
+  "rules": {
+    "evaluated_count": 2310,
+    "triggered_count": 3,
+    "validation_passed": true,
+    "on_enter_fired": 3,
+    "on_exit_fired": 3
+  },
+  "pathrag_sensor": {
+    "start_entity": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+    "entities_found": 11,
+    "paths_found": 11,
+    "entities": [
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+        "score": 1
+      },
+      {
+        "id": "c360.logistics.facility.zone.area.cold-storage-1",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.group",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.group.container",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.group.container.level",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.facility.zone.area.office-area",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.facility.zone.area.break-room",
+        "score": 0.6400000000000001
+      }
+    ],
+    "scores_valid": true,
+    "truncated": true,
+    "latency_ms": 3,
+    "boundary_test": {
+      "max_nodes_limit": 5,
+      "entities_returned": 6,
+      "respected_limit": true
+    }
+  },
+  "pathrag_document": {
+    "start_entity": "c360.logistics.maintenance.work.completed.maint-001",
+    "entities_found": 11,
+    "paths_found": 11,
+    "entities": [
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-001",
+        "score": 1
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.group",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.group.container",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.group.container.level",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-002",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-003",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-004",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-005",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-006",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-007",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-008",
+        "score": 0.8
+      }
+    ],
+    "scores_valid": true,
+    "truncated": true,
+    "latency_ms": 1
+  },
+  "components": {
+    "expected_count": 18,
+    "found_count": 18
+  },
+  "outputs": {
+    "expected_count": 2,
+    "found_count": 2
+  },
+  "hierarchy": {
+    "container_count": 49,
+    "source_entity_count": 74,
+    "expected_min_containers": 29,
+    "inference_working": true
+  },
+  "timing": {
+    "total_duration_ms": 385,
+    "stage_durations": {
+      "send-mixed-data": 4,
+      "test-entities-by-prefix": 2,
+      "test-entity-by-alias": 1,
+      "test-entityid-hierarchy": 1,
+      "test-pathrag-boundary": 1,
+      "test-pathrag-document": 1,
+      "test-pathrag-sensor": 3,
+      "test-spatial-query": 1,
+      "test-temporal-query": 1,
+      "test-zone-relationships": 0,
+      "validate-bidirectional-traversal": 2,
+      "validate-context-index-hierarchy": 2,
+      "validate-context-provenance-audit": 1,
+      "validate-entity-structure": 3,
+      "validate-entity-triples": 1,
+      "validate-hierarchy-inference": 8,
+      "validate-incoming-index-predicates": 1,
+      "validate-inverse-edges-materialized": 2,
+      "validate-kcore-index-structural": 3,
+      "validate-metrics": 2,
+      "validate-pivot-index-structural": 2,
+      "validate-processing": 6,
+      "validate-rule-transitions": 4,
+      "validate-rules": 19,
+      "validate-zero-clusters": 1,
+      "validate-zero-embeddings": 1,
+      "verify-components": 2,
+      "verify-entity-count": 2,
+      "verify-entity-retrieval": 2,
+      "verify-index-population": 18,
+      "verify-outputs": 2,
+      "wait-for-entity-stabilization": 11,
+      "wait-for-rule-stabilization": 214
+    }
+  },
+  "metadata": {
+    "variant": "structural",
+    "started_at": "2026-01-09T13:38:53.246155-06:00",
+    "completed_at": "2026-01-09T13:38:53.631591-06:00",
+    "success": true,
+    "error_count": 0,
+    "warning_count": 3,
+    "warnings": [
+      "Zone c360.logistics.facility.zone.area.cold-storage-1 has 0 incoming relationships - check if zone triples are being indexed",
+      "K-core MaxCore is 0 - EntityID sibling edges may not be generating structure. Check that entityid_edges.enabled=true and test data has entities with shared type prefixes.",
+      "CONTEXT_INDEX has 1 keys but 'inference.hierarchy' not found in sample"
+    ]
+  }
+}
