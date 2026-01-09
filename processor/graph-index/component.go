@@ -722,7 +722,6 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 	}
 }
 
-
 // updateOutgoingIndexBatch writes all outgoing relationships for an entity
 func (c *Component) updateOutgoingIndexBatch(ctx context.Context, entityID string, targets []map[string]interface{}) error {
 	if entityID == "" {
@@ -874,7 +873,6 @@ func (c *Component) UpdateOutgoingIndex(ctx context.Context, entityID, targetID,
 	return nil
 }
 
-
 // UpdateIncomingIndex updates the incoming index for a relationship
 func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID, predicate string) error {
 	if targetID == "" {
@@ -1000,7 +998,6 @@ func (c *Component) UpdateAliasIndex(ctx context.Context, alias, entityID string
 
 	return nil
 }
-
 
 // UpdatePredicateIndex updates the predicate index for an entity
 func (c *Component) UpdatePredicateIndex(ctx context.Context, entityID, predicate string) error {

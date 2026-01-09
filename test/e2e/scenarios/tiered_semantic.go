@@ -519,8 +519,10 @@ func (s *TieredScenario) validateEmbeddingQueueHealth(ctx context.Context, resul
 	failed, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_errors_total")
 	dedupHits, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_dedup_hits_total")
 	generated, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_embeddings_generated_total")
+	queued, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_queued_total")
 
 	// Record metrics for structured results
+	result.Metrics["embedding_queued_total"] = int64(queued)
 	result.Metrics["embedding_generated_total"] = int64(generated)
 	result.Metrics["embedding_dedup_hits"] = int64(dedupHits)
 	result.Metrics["embedding_failed_total"] = int64(failed)

@@ -179,7 +179,6 @@ func (c *Component) handleQueryPredicateNATS(_ context.Context, data []byte) ([]
 	}))
 }
 
-
 // queryMsg is an interface for query request messages.
 // This accommodates both real NATS messages and test mocks.
 type queryMsg interface {

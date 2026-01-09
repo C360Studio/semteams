@@ -318,7 +318,7 @@ func TestIntegration_GraphRAGLifecycle(t *testing.T) {
 
 	// Create component with short recheck interval for testing
 	config := DefaultConfig()
-	config.StartupAttempts = 1                    // Fail fast on startup
+	config.StartupAttempts = 1 // Fail fast on startup
 	config.StartupInterval = 10 * time.Millisecond
 	config.RecheckInterval = 100 * time.Millisecond // Fast recheck for test
 	configJSON, err := json.Marshal(config)

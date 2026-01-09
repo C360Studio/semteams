@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -272,7 +274,7 @@ func runScenarios(
 	}
 
 	logger.Info("Running scenario", "name", flags.scenarioName)
-	return runScenario(ctx, logger, scenario, flags.outputDir)
+	return runScenario(ctx, logger, scenario, flags)
 }
 
 // createScenario creates a specific scenario by name.
@@ -330,7 +332,7 @@ func createScenario(
 }
 
 // runScenario executes a single scenario
-func runScenario(ctx context.Context, logger *slog.Logger, scenario scenarios.Scenario, outputDir string) int {
+func runScenario(ctx context.Context, logger *slog.Logger, scenario scenarios.Scenario, flags *cliFlags) int {
 	logger.Info("Setting up scenario", "name", scenario.Name())
 
 	if err := scenario.Setup(ctx); err != nil {
@@ -364,16 +366,51 @@ func runScenario(ctx context.Context, logger *slog.Logger, scenario scenarios.Sc
 		"metrics", result.Metrics)
 
 	// Save structured results if output directory is specified and results exist
-	if outputDir != "" && result.Structured != nil {
-		filepath, err := scenarios.SaveStructuredResults(result.Structured, outputDir)
+	if flags.outputDir != "" && result.Structured != nil {
+		filepath, err := scenarios.SaveStructuredResults(result.Structured, flags.outputDir)
 		if err != nil {
 			logger.Warn("Failed to save structured results", "error", err)
 		} else {
 			logger.Info("Saved structured results", "file", filepath)
 		}
+
+		// Also save raw Prometheus metrics dump
+		variant := flags.variant
+		if variant == "" {
+			variant = flags.scenarioName
+		}
+		metricsPath, err := saveMetricsDump(logger, flags.metricsURL, variant, flags.outputDir)
+		if err != nil {
+			logger.Warn("Failed to save metrics dump", "error", err)
+		} else {
+			logger.Info("Saved metrics dump", "file", metricsPath)
+		}
 	}
 
 	return 0
+}
+
+// saveMetricsDump fetches raw Prometheus metrics and saves them to a file
+func saveMetricsDump(logger *slog.Logger, metricsURL, variant, outputDir string) (string, error) {
+	// Fetch metrics from Prometheus endpoint
+	metricsEndpoint := metricsURL + "/metrics"
+	resp, err := http.Get(metricsEndpoint)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch metrics from %s: %w", metricsEndpoint, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("metrics endpoint returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read metrics response: %w", err)
+	}
+
+	// Save using the scenarios helper
+	return scenarios.SaveMetricsDump(string(body), variant, outputDir)
 }
 
 // runAllScenarios executes all core scenarios
@@ -393,7 +430,7 @@ func runAllScenarios(
 
 	for _, scenario := range tests {
 		logger.Info("Running scenario", "name", scenario.Name())
-		exitCode := runScenario(ctx, logger, scenario, "")
+		exitCode := runScenario(ctx, logger, scenario, &cliFlags{})
 
 		if exitCode == 0 {
 			passed++
@@ -433,7 +470,7 @@ func runSemanticScenarios(
 
 	for _, scenario := range tests {
 		logger.Info("Running semantic scenario", "name", scenario.Name())
-		exitCode := runScenario(ctx, logger, scenario, "")
+		exitCode := runScenario(ctx, logger, scenario, &cliFlags{})
 
 		if exitCode == 0 {
 			passed++
@@ -474,7 +511,7 @@ func runRulesScenarios(
 
 	for _, scenario := range tests {
 		logger.Info("Running structural tier scenario", "name", scenario.Name())
-		exitCode := runScenario(ctx, logger, scenario, "")
+		exitCode := runScenario(ctx, logger, scenario, &cliFlags{})
 
 		if exitCode == 0 {
 			passed++

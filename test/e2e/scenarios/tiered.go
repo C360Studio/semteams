@@ -1311,14 +1311,14 @@ func (s *TieredScenario) executeValidateMetrics(_ context.Context, result *Resul
 
 	// Optional metrics (present only when certain features active)
 	optionalMetrics := []string{
-		"indexengine_events_total",                                    // Total events received
-		"indexengine_events_failed_total",                             // Processing failures
-		"semstreams_graph_embedding_embeddings_generated_total",       // Embedding generation count
-		"semstreams_json_filter_matched_total",                        // JSON filter matched messages
-		"semstreams_json_filter_dropped_total",                        // JSON filter dropped messages
-		"semstreams_graph_embedding_pending",                          // Current pending embeddings
-		"semstreams_graph_embedding_dedup_hits_total",                 // Embeddings deduplicated (reused)
-		"semstreams_graph_embedding_errors_total",                     // Failed embedding generations
+		"indexengine_events_total",                              // Total events received
+		"indexengine_events_failed_total",                       // Processing failures
+		"semstreams_graph_embedding_embeddings_generated_total", // Embedding generation count
+		"semstreams_json_filter_matched_total",                  // JSON filter matched messages
+		"semstreams_json_filter_dropped_total",                  // JSON filter dropped messages
+		"semstreams_graph_embedding_pending",                    // Current pending embeddings
+		"semstreams_graph_embedding_dedup_hits_total",           // Embeddings deduplicated (reused)
+		"semstreams_graph_embedding_errors_total",               // Failed embedding generations
 	}
 
 	foundRequired := make(map[string]bool)
