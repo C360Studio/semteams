@@ -210,6 +210,19 @@ func (c *CommunityCache) GetCommunitiesByLevel(level int) []*clustering.Communit
 	return result
 }
 
+// GetAllCommunities retrieves all communities regardless of level.
+// Returns empty slice if no communities exist.
+func (c *CommunityCache) GetAllCommunities() []*clustering.Community {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	result := make([]*clustering.Community, 0, len(c.communities))
+	for _, comm := range c.communities {
+		result = append(result, comm)
+	}
+	return result
+}
+
 // IsReady returns true if the initial sync from KV is complete.
 func (c *CommunityCache) IsReady() bool {
 	c.mu.RLock()

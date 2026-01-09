@@ -141,6 +141,7 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 }
 
 // handleGlobalSearch handles global search requests via NATS request/reply
+// Uses a tiered search approach: semantic search first, then text fallback.
 func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte, error) {
 	startTime := time.Now()
 
@@ -165,6 +166,57 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 		return nil, fmt.Errorf("community cache not available")
 	}
 
+	// Tier 1: Try semantic search first (via graph-embedding)
+	semanticHits, err := c.searchEntitiesSemantic(ctx, req.Query, 100)
+	if err == nil && len(semanticHits) > 0 {
+		c.logger.Debug("using semantic search results",
+			"query", req.Query,
+			"hits", len(semanticHits))
+
+		// Extract entity IDs from semantic hits
+		entityIDs := make([]string, len(semanticHits))
+		for i, hit := range semanticHits {
+			entityIDs[i] = hit.EntityID
+		}
+
+		// Find communities containing these entities
+		communityMatches := c.findCommunitiesForEntities(entityIDs)
+
+		// Limit to requested number of communities
+		if len(communityMatches) > req.MaxCommunities {
+			communityMatches = communityMatches[:req.MaxCommunities]
+		}
+
+		// Load full entity data for the semantic hits
+		entities, loadErr := c.loadEntities(ctx, entityIDs)
+		if loadErr != nil {
+			c.logger.Warn("failed to load semantic search entities, falling back to text",
+				"error", loadErr)
+			// Fall through to text-based search
+		} else {
+			// Build response with semantic results
+			response := GlobalSearchResponse{
+				Entities:           entities,
+				CommunitySummaries: communityMatches,
+				Count:              len(entities),
+				DurationMs:         time.Since(startTime).Milliseconds(),
+			}
+
+			c.recordSuccess(len(data), 0)
+			return json.Marshal(response)
+		}
+	} else if err != nil {
+		c.logger.Debug("semantic search unavailable, using text fallback",
+			"error", err)
+	}
+
+	// Tier 2: Fall back to text-based community scoring (existing behavior)
+	return c.globalSearchTextBased(ctx, req, startTime, len(data))
+}
+
+// globalSearchTextBased performs text-based global search using community summaries.
+// This is the fallback when semantic search is unavailable.
+func (c *Component) globalSearchTextBased(ctx context.Context, req GlobalSearchRequest, startTime time.Time, requestSize int) ([]byte, error) {
 	// Get all communities at the specified level from cache
 	communities := c.communityCache.GetCommunitiesByLevel(req.Level)
 	if len(communities) == 0 {
@@ -244,7 +296,7 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 		DurationMs:         time.Since(startTime).Milliseconds(),
 	}
 
-	c.recordSuccess(len(data), 0)
+	c.recordSuccess(requestSize, 0)
 	return json.Marshal(response)
 }
 
@@ -281,6 +333,101 @@ func (c *Component) loadEntities(ctx context.Context, entityIDs []string) ([]*gt
 	}
 
 	return resp.Entities, nil
+}
+
+// searchEntitiesSemantic calls graph-embedding's semantic search to find entities
+// that are semantically similar to the query text using embeddings.
+// This provides better results than text matching for semantic queries.
+func (c *Component) searchEntitiesSemantic(ctx context.Context, query string, limit int) ([]SemanticHit, error) {
+	req := map[string]any{
+		"query": query,
+		"limit": limit,
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal request: %w", err)
+	}
+
+	resp, err := c.natsClient.Request(ctx, "graph.embedding.query.search", data, 30*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("semantic search request failed: %w", err)
+	}
+
+	// Response format from graph-embedding/query.go:SearchResponse
+	var result struct {
+		Query   string `json:"query"`
+		Results []struct {
+			EntityID   string  `json:"entity_id"`
+			Similarity float64 `json:"similarity"`
+		} `json:"results"`
+		Duration string `json:"duration"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal search response: %w", err)
+	}
+
+	hits := make([]SemanticHit, len(result.Results))
+	for i, r := range result.Results {
+		hits[i] = SemanticHit{EntityID: r.EntityID, Score: r.Similarity}
+	}
+	return hits, nil
+}
+
+// SemanticHit represents a search result with semantic similarity score
+type SemanticHit struct {
+	EntityID string  `json:"entity_id"`
+	Score    float64 `json:"score"`
+}
+
+// findCommunitiesForEntities returns communities that contain the given entities,
+// sorted by the number of matching entities (most relevant first).
+func (c *Component) findCommunitiesForEntities(entityIDs []string) []CommunitySummary {
+	if c.communityCache == nil {
+		return nil
+	}
+
+	entitySet := make(map[string]bool)
+	for _, id := range entityIDs {
+		entitySet[id] = true
+	}
+
+	var summaries []CommunitySummary
+	communities := c.communityCache.GetAllCommunities()
+
+	for _, comm := range communities {
+		matchCount := 0
+		for _, member := range comm.Members {
+			if entitySet[member] {
+				matchCount++
+			}
+		}
+		if matchCount > 0 {
+			// Prefer LLM summary if available
+			summary := comm.LLMSummary
+			if summary == "" {
+				summary = comm.StatisticalSummary
+			}
+
+			// Calculate relevance based on match ratio
+			relevance := float64(matchCount) / float64(len(comm.Members))
+
+			summaries = append(summaries, CommunitySummary{
+				CommunityID: comm.ID,
+				Summary:     summary,
+				Keywords:    comm.Keywords,
+				Level:       comm.Level,
+				Relevance:   relevance,
+			})
+		}
+	}
+
+	// Sort by relevance descending (communities with more matched entities first)
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].Relevance > summaries[j].Relevance
+	})
+
+	return summaries
 }
 
 // filterEntitiesByQuery filters entities based on simple text matching
