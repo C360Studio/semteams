@@ -103,34 +103,31 @@ func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
 	// Wait for component to process the update
 	time.Sleep(500 * time.Millisecond)
 
-	// Verify outgoing index was created
+	// Verify outgoing index was created (array format: [{to_entity_id, predicate}])
 	outgoingEntry, err := graphIndex.outgoingBucket.Get(ctx, entityID)
 	require.NoError(t, err)
 	assert.NotNil(t, outgoingEntry)
 
-	var outgoingData map[string]interface{}
+	var outgoingData []map[string]interface{}
 	err = json.Unmarshal(outgoingEntry.Value(), &outgoingData)
 	require.NoError(t, err)
+	require.Len(t, outgoingData, 1, "should have one relationship")
 
-	targets, ok := outgoingData["targets"].([]interface{})
-	require.True(t, ok, "outgoing index should have targets array")
-	require.Len(t, targets, 1, "should have one relationship")
+	assert.Equal(t, targetID, outgoingData[0]["to_entity_id"])
+	assert.Equal(t, "robotics.assigned.mission", outgoingData[0]["predicate"])
 
-	target := targets[0].(map[string]interface{})
-	assert.Equal(t, targetID, target["id"])
-	assert.Equal(t, "robotics.assigned.mission", target["predicate"])
-
-	// Verify incoming index was created (on target entity)
+	// Verify incoming index was created (array format: [{from_entity_id, predicate}])
 	incomingEntry, err := graphIndex.incomingBucket.Get(ctx, targetID)
 	require.NoError(t, err)
 	assert.NotNil(t, incomingEntry)
 
-	var incomingData map[string]interface{}
+	var incomingData []map[string]interface{}
 	err = json.Unmarshal(incomingEntry.Value(), &incomingData)
 	require.NoError(t, err)
+	require.Len(t, incomingData, 1, "should have one incoming relationship")
 
-	assert.Equal(t, entityID, incomingData["from_entity_id"])
-	assert.Equal(t, "robotics.assigned.mission", incomingData["predicate"])
+	assert.Equal(t, entityID, incomingData[0]["from_entity_id"])
+	assert.Equal(t, "robotics.assigned.mission", incomingData[0]["predicate"])
 
 	// Verify alias index was created
 	aliasEntry, err := graphIndex.aliasBucket.Get(ctx, alias)
@@ -138,7 +135,7 @@ func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
 	assert.NotNil(t, aliasEntry)
 	assert.Equal(t, entityID, string(aliasEntry.Value()))
 
-	// Verify predicate indexes were created
+	// Verify predicate indexes were created (format: {entities: [...], predicate, entity_id})
 	predicates := []string{"robotics.assigned.mission", "robotics.status.armed", "core.identity.alias"}
 	for _, predicate := range predicates {
 		predicateEntry, err := graphIndex.predicateBucket.Get(ctx, predicate)
@@ -148,7 +145,10 @@ func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
 		err = json.Unmarshal(predicateEntry.Value(), &predicateData)
 		require.NoError(t, err)
 
-		assert.Equal(t, entityID, predicateData["entity_id"])
+		// Check entities array contains our entity
+		entities, ok := predicateData["entities"].([]interface{})
+		require.True(t, ok, "predicate index should have entities array")
+		require.Contains(t, entities, entityID, "entities should contain the entity ID")
 		assert.Equal(t, predicate, predicateData["predicate"])
 	}
 }
@@ -328,39 +328,36 @@ func TestIntegration_MultipleRelationships(t *testing.T) {
 	// Wait for indexing
 	time.Sleep(500 * time.Millisecond)
 
-	// Verify outgoing index has all three relationships
+	// Verify outgoing index has all three relationships (array format)
 	outgoingEntry, err := graphIndex.outgoingBucket.Get(ctx, entityID)
 	require.NoError(t, err)
 
-	var outgoingData map[string]interface{}
+	var outgoingData []map[string]interface{}
 	err = json.Unmarshal(outgoingEntry.Value(), &outgoingData)
 	require.NoError(t, err)
-
-	targets, ok := outgoingData["targets"].([]interface{})
-	require.True(t, ok, "outgoing index should have targets array")
-	require.Len(t, targets, 3, "should have three relationships")
+	require.Len(t, outgoingData, 3, "should have three relationships")
 
 	// Verify each target exists
 	targetIDs := make(map[string]bool)
-	for _, target := range targets {
-		targetMap := target.(map[string]interface{})
-		targetIDs[targetMap["id"].(string)] = true
+	for _, entry := range outgoingData {
+		targetIDs[entry["to_entity_id"].(string)] = true
 	}
 
 	assert.True(t, targetIDs[mission1], "should have mission1 relationship")
 	assert.True(t, targetIDs[mission2], "should have mission2 relationship")
 	assert.True(t, targetIDs[operator], "should have operator relationship")
 
-	// Verify incoming indexes on all targets
+	// Verify incoming indexes on all targets (array format)
 	for _, targetID := range []string{mission1, mission2, operator} {
 		incomingEntry, err := graphIndex.incomingBucket.Get(ctx, targetID)
 		require.NoError(t, err, "incoming index should exist for %s", targetID)
 
-		var incomingData map[string]interface{}
+		var incomingData []map[string]interface{}
 		err = json.Unmarshal(incomingEntry.Value(), &incomingData)
 		require.NoError(t, err)
+		require.NotEmpty(t, incomingData, "should have at least one incoming relationship")
 
-		assert.Equal(t, entityID, incomingData["from_entity_id"])
+		assert.Equal(t, entityID, incomingData[0]["from_entity_id"])
 	}
 }
 
