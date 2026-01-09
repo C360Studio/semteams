@@ -40,6 +40,18 @@ type Config struct {
 	Ports        *component.PortConfig `json:"ports,omitempty"`
 	QueryTimeout time.Duration         `json:"query_timeout,omitempty"`
 	MaxDepth     int                   `json:"max_depth,omitempty"`
+
+	// Resource startup settings for optional KV bucket dependencies (e.g., COMMUNITY_INDEX).
+	// These control how long Start() waits for optional features to become available.
+	// Production: use defaults (10 attempts × 500ms = 5s total).
+	// Tests: use 1 attempt with 1ms interval for instant failure on missing buckets.
+	StartupAttempts int           `json:"startup_attempts,omitempty"`
+	StartupInterval time.Duration `json:"startup_interval,omitempty"`
+
+	// RecheckInterval controls how often to check for bucket availability after startup timeout.
+	// If bucket doesn't exist at startup, the component will recheck at this interval.
+	// Default: 5s (allows recovery within reasonable time for distributed startup).
+	RecheckInterval time.Duration `json:"recheck_interval,omitempty"`
 }
 
 // Validate validates the configuration
@@ -57,6 +69,17 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.MaxDepth == 0 {
 		c.MaxDepth = 10
+	}
+	// Resource startup defaults match resource.DefaultConfig()
+	if c.StartupAttempts == 0 {
+		c.StartupAttempts = 10
+	}
+	if c.StartupInterval == 0 {
+		c.StartupInterval = 500 * time.Millisecond
+	}
+	// Use shorter recheck interval than resource.DefaultConfig (60s) for faster recovery
+	if c.RecheckInterval == 0 {
+		c.RecheckInterval = 5 * time.Second
 	}
 }
 
@@ -312,6 +335,9 @@ func (c *Component) Start(ctx context.Context) error {
 	// Set up resource watcher for COMMUNITY_INDEX bucket
 	// This handles graceful startup and recovery if the bucket appears later
 	watcherCfg := resource.DefaultConfig()
+	watcherCfg.StartupAttempts = c.config.StartupAttempts
+	watcherCfg.StartupInterval = c.config.StartupInterval
+	watcherCfg.RecheckInterval = c.config.RecheckInterval
 	watcherCfg.Logger = c.logger
 	watcherCfg.OnAvailable = func() {
 		c.enableGraphRAG()

@@ -29,6 +29,10 @@ type mockNATSClient struct {
 	subscribed  map[string]bool
 	connected   bool
 	status      natsclient.ConnectionStatus
+	// buckets allows tests to configure which KV buckets exist.
+	// If a bucket name is in this map, GetKeyValueBucket returns it.
+	// If not, GetKeyValueBucket returns error immediately (no retry delay).
+	buckets map[string]jetstream.KeyValue
 }
 
 func newMockNATSClient() *mockNATSClient {
@@ -36,6 +40,7 @@ func newMockNATSClient() *mockNATSClient {
 		subscribed: make(map[string]bool),
 		connected:  true,
 		status:     natsclient.StatusConnected,
+		buckets:    make(map[string]jetstream.KeyValue),
 	}
 }
 
@@ -72,6 +77,11 @@ func (m *mockNATSClient) JetStream() (jetstream.JetStream, error) {
 }
 
 func (m *mockNATSClient) GetKeyValueBucket(ctx context.Context, name string) (jetstream.KeyValue, error) {
+	if bucket, ok := m.buckets[name]; ok {
+		return bucket, nil
+	}
+	// Return error immediately - no bucket configured means instant "not found"
+	// This prevents 5s retry delays in tests
 	return nil, errors.New("mock: bucket not available")
 }
 
@@ -501,11 +511,11 @@ func TestComponent_QueryEntity_InvalidRequest(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid", "should report invalid request")
 }
 
-func TestComponent_QueryRelationships_PassthroughSuccess(t *testing.T) {
+func TestComponent_QueryRelationships_TransformSuccess(t *testing.T) {
 	mockClient := newMockNATSClient()
 
-	// Mock response from graph-index
-	relsResponse := []byte(`[{"from":"test.entity.001","to":"test.entity.002","predicate":"test.relationship"}]`)
+	// Mock response from graph-index (OutgoingEntry format: to_entity_id + predicate)
+	indexResponse := []byte(`[{"to_entity_id":"test.entity.002","predicate":"test.relationship"}]`)
 	mockClient.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
 		// Actual query should go to graph-index
 		assert.Equal(t, "graph.index.query.outgoing", subject, "should forward to graph-index")
@@ -515,7 +525,7 @@ func TestComponent_QueryRelationships_PassthroughSuccess(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "test.entity.001", req["entity_id"])
 
-		return relsResponse, nil
+		return indexResponse, nil
 	}
 
 	comp := createTestComponentWithMockClient(t, mockClient)
@@ -529,7 +539,9 @@ func TestComponent_QueryRelationships_PassthroughSuccess(t *testing.T) {
 	response, err := comp.handleQueryRelationships(ctx, queryData)
 
 	assert.NoError(t, err)
-	assert.Equal(t, relsResponse, response)
+	// Handler transforms graph-index format to normalized API format
+	expectedResponse := `[{"edge_type":"test.relationship","from_entity_id":"test.entity.001","to_entity_id":"test.entity.002"}]`
+	assert.JSONEq(t, expectedResponse, string(response))
 }
 
 // ====================================================================================
@@ -828,6 +840,12 @@ func createTestComponentWithMockClient(t *testing.T, mockClient *mockNATSClient)
 
 	config := DefaultConfig()
 	config.ApplyDefaults()
+
+	// Use fast startup settings for tests - 1 attempt with minimal delay
+	// This prevents 5s+ waits per Start() when testing without real NATS
+	config.StartupAttempts = 1
+	config.StartupInterval = time.Millisecond
+	config.RecheckInterval = time.Hour // Disable background recheck in tests
 
 	// Construct directly, bypassing CreateGraphQuery to inject mock
 	return &Component{
