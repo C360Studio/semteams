@@ -235,14 +235,9 @@ func (cm *Manager) Stop(timeout time.Duration) error {
 		close(cm.shutdownCh)
 	}
 
-	// Stop all watchers
-	for _, watcher := range cm.watchers {
-		if watcher != nil {
-			_ = watcher.Stop() // Ignore errors during shutdown
-		}
-	}
-
-	// Wait for goroutines to finish with timeout
+	// Wait for goroutines to finish with timeout BEFORE stopping watchers.
+	// This avoids a race condition in nats.go where Stop() can race with the
+	// internal message handler goroutine if workers are still reading.
 	done := make(chan struct{})
 	go func() {
 		cm.wg.Wait()
@@ -254,6 +249,13 @@ func (cm *Manager) Stop(timeout time.Duration) error {
 		// Clean shutdown
 	case <-time.After(timeout):
 		cm.logger.Warn("Manager shutdown timeout", "timeout", timeout)
+	}
+
+	// Stop all watchers after goroutines have exited
+	for _, watcher := range cm.watchers {
+		if watcher != nil {
+			_ = watcher.Stop() // Ignore errors during shutdown
+		}
 	}
 
 	// Now close all subscriber channels (after watchers stopped)

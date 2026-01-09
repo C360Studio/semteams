@@ -62,16 +62,22 @@ func (rp *Processor) handleEntityUpdates(ctx context.Context, watcher jetstream.
 			rp.logger.Error("Panic in handleEntityUpdates", "error", r)
 		}
 	}()
+	// NOTE: watcher.Stop() is called explicitly before each return, not via defer.
+	// This avoids a race condition in nats.go where Stop() can race with the
+	// internal message handler goroutine when using defer or calling from another goroutine.
 
 	for {
 		select {
 		case <-ctx.Done():
+			watcher.Stop()
 			return
 		case <-rp.shutdown:
+			watcher.Stop()
 			return
 		case entry, ok := <-watcher.Updates():
 			if !ok {
-				// Channel closed, watcher stopped
+				// Channel closed, watcher stopped externally
+				watcher.Stop()
 				return
 			}
 			if entry == nil {

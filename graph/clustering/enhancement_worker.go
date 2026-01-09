@@ -385,15 +385,17 @@ func (w *EnhancementWorker) Stop() error {
 		w.cancel()
 	}
 
-	// Stop the watcher
+	// Wait for all goroutines to finish BEFORE stopping watcher.
+	// This avoids a race condition in nats.go where Stop() can race with the
+	// internal message handler goroutine if workers are still reading.
+	w.wg.Wait()
+
+	// Stop the watcher after workers have exited
 	if w.watcher != nil {
 		if err := w.watcher.Stop(); err != nil {
 			w.logger.Warn("KV watcher stop error", "error", err)
 		}
 	}
-
-	// Wait for all goroutines to finish
-	w.wg.Wait()
 
 	w.started = false
 	w.logger.Info("Enhancement worker stopped")

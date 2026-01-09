@@ -501,7 +501,9 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 			slog.Any("error", err))
 		return
 	}
-	defer watcher.Stop()
+	// NOTE: watcher.Stop() is called explicitly before each return, not via defer.
+	// This avoids a race condition in nats.go where Stop() can race with the
+	// internal message handler goroutine when using defer.
 
 	c.logger.Info("entity watcher started", slog.String("bucket", graph.BucketEntityStates))
 
@@ -509,8 +511,14 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 		select {
 		case <-ctx.Done():
 			c.logger.Info("entity watcher stopping", slog.String("reason", "context cancelled"))
+			watcher.Stop()
 			return
-		case entry := <-watcher.Updates():
+		case entry, ok := <-watcher.Updates():
+			if !ok {
+				// Channel closed, watcher stopped externally
+				watcher.Stop()
+				return
+			}
 			if entry == nil {
 				// nil entry indicates initial state enumeration complete
 				c.logger.Debug("entity watcher initial sync complete")

@@ -125,6 +125,11 @@ func TestAttack_NoGoroutineLeakOnStart(t *testing.T) {
 	if testing.Short() {
 		t.Skip("requires NATS - run with integration tests")
 	}
+	// Skip with race detector - triggers race in nats.go v1.47.0 WatchFiltered()
+	// during rapid start/stop cycles. The race is internal to the NATS library.
+	if raceEnabled {
+		t.Skip("skipping: triggers NATS library internal race in WatchFiltered()")
+	}
 
 	before := runtime.NumGoroutine()
 
