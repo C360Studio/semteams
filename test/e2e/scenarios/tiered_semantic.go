@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360/semstreams/graph/clustering"
 	"github.com/c360/semstreams/test/e2e/client"
 )
 
@@ -37,8 +38,8 @@ func (s *TieredScenario) detectCommunityVariant(result *Result) string {
 // 1. min_embedding_coverage (50% of entities have embeddings)
 // 2. initial_delay (2s) + detection_interval (30s) to run
 // So we need to wait at least 60 seconds for the first detection cycle.
-func (s *TieredScenario) waitForCommunities(ctx context.Context) ([]*client.Community, error) {
-	var communities []*client.Community
+func (s *TieredScenario) waitForCommunities(ctx context.Context) ([]*clustering.Community, error) {
+	var communities []*clustering.Community
 	var err error
 
 	// First, wait for at least one clustering run to complete
@@ -115,7 +116,7 @@ func (s *TieredScenario) waitForLLMEnhancement(
 }
 
 // analyzeCommunities computes statistics and comparisons for communities
-func (s *TieredScenario) analyzeCommunities(communities []*client.Community) communityStats {
+func (s *TieredScenario) analyzeCommunities(communities []*clustering.Community) communityStats {
 	stats := communityStats{comparisons: make([]CommunityComparison, 0, len(communities))}
 	var totalLengthRatio, totalWordOverlap float64
 	var ratioCount, totalNonSingletonMembers int
@@ -154,7 +155,7 @@ func (s *TieredScenario) analyzeCommunities(communities []*client.Community) com
 
 // buildCommunityComparison creates a comparison record for a single community
 func (s *TieredScenario) buildCommunityComparison(
-	comm *client.Community,
+	comm *clustering.Community,
 	totalLengthRatio, totalWordOverlap *float64,
 	ratioCount *int,
 ) CommunityComparison {
@@ -186,7 +187,7 @@ type llmQualityIssue struct {
 }
 
 // validateLLMSummaryQuality validates quality of LLM-enhanced community summaries
-func (s *TieredScenario) validateLLMSummaryQuality(communities []*client.Community) []llmQualityIssue {
+func (s *TieredScenario) validateLLMSummaryQuality(communities []*clustering.Community) []llmQualityIssue {
 	var issues []llmQualityIssue
 
 	for _, comm := range communities {

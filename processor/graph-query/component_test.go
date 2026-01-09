@@ -514,8 +514,8 @@ func TestComponent_QueryEntity_InvalidRequest(t *testing.T) {
 func TestComponent_QueryRelationships_TransformSuccess(t *testing.T) {
 	mockClient := newMockNATSClient()
 
-	// Mock response from graph-index (OutgoingEntry format: to_entity_id + predicate)
-	indexResponse := []byte(`[{"to_entity_id":"test.entity.002","predicate":"test.relationship"}]`)
+	// Mock response from graph-index (QueryResponse envelope with OutgoingRelationshipsData)
+	indexResponse := []byte(`{"data":{"relationships":[{"to_entity_id":"test.entity.002","predicate":"test.relationship"}]},"timestamp":"2026-01-09T00:00:00Z"}`)
 	mockClient.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
 		// Actual query should go to graph-index
 		assert.Equal(t, "graph.index.query.outgoing", subject, "should forward to graph-index")
@@ -562,14 +562,14 @@ func TestComponent_PathSearch_SimpleTraversal(t *testing.T) {
 			return []byte(`{"id":"test.entity.001","triples":[]}`), nil
 
 		case "graph.index.query.outgoing":
-			// Return relationships (1 hop)
+			// Return relationships (1 hop) in QueryResponse envelope format
 			var req map[string]string
 			json.Unmarshal(data, &req)
 
 			if req["entity_id"] == "test.entity.001" {
-				return []byte(`[{"to_entity_id":"test.entity.002","predicate":"relates_to"}]`), nil
+				return []byte(`{"data":{"relationships":[{"to_entity_id":"test.entity.002","predicate":"relates_to"}]},"timestamp":"2026-01-09T00:00:00Z"}`), nil
 			}
-			return []byte(`[]`), nil
+			return []byte(`{"data":{"relationships":[]},"timestamp":"2026-01-09T00:00:00Z"}`), nil
 
 		default:
 			return nil, errors.New("unexpected subject")
@@ -614,11 +614,11 @@ func TestComponent_PathSearch_MaxDepthEnforced(t *testing.T) {
 			return []byte(`{"id":"test.entity.001","triples":[]}`), nil
 
 		case "graph.index.query.outgoing":
-			// Always return next entity (infinite graph simulation)
+			// Always return next entity (infinite graph simulation) in QueryResponse envelope format
 			var req map[string]string
 			json.Unmarshal(data, &req)
 			nextID := req["entity_id"] + ".next"
-			return []byte(`[{"to_entity_id":"` + nextID + `","predicate":"relates_to"}]`), nil
+			return []byte(`{"data":{"relationships":[{"to_entity_id":"` + nextID + `","predicate":"relates_to"}]},"timestamp":"2026-01-09T00:00:00Z"}`), nil
 
 		default:
 			return nil, errors.New("unexpected subject")
@@ -737,16 +737,16 @@ func TestComponent_PathSearch_CyclicGraph(t *testing.T) {
 			var req map[string]string
 			json.Unmarshal(data, &req)
 
-			// Create cycle: 001 -> 002 -> 003 -> 001
+			// Create cycle: 001 -> 002 -> 003 -> 001 (using QueryResponse envelope format)
 			switch req["entity_id"] {
 			case "test.entity.001":
-				return []byte(`[{"to_entity_id":"test.entity.002","predicate":"relates_to"}]`), nil
+				return []byte(`{"data":{"relationships":[{"to_entity_id":"test.entity.002","predicate":"relates_to"}]},"timestamp":"2026-01-09T00:00:00Z"}`), nil
 			case "test.entity.002":
-				return []byte(`[{"to_entity_id":"test.entity.003","predicate":"relates_to"}]`), nil
+				return []byte(`{"data":{"relationships":[{"to_entity_id":"test.entity.003","predicate":"relates_to"}]},"timestamp":"2026-01-09T00:00:00Z"}`), nil
 			case "test.entity.003":
-				return []byte(`[{"to_entity_id":"test.entity.001","predicate":"relates_to"}]`), nil
+				return []byte(`{"data":{"relationships":[{"to_entity_id":"test.entity.001","predicate":"relates_to"}]},"timestamp":"2026-01-09T00:00:00Z"}`), nil
 			default:
-				return []byte(`[]`), nil
+				return []byte(`{"data":{"relationships":[]},"timestamp":"2026-01-09T00:00:00Z"}`), nil
 			}
 
 		default:

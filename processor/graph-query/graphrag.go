@@ -113,10 +113,31 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 		return nil, fmt.Errorf("community cache not available")
 	}
 
-	// Find the entity's community from cache
-	community := c.communityCache.GetEntityCommunity(req.EntityID, req.Level)
+	// Tiered community lookup with fallback
+	community := c.findCommunityWithFallback(req.EntityID, req.Level)
 	if community == nil {
-		return nil, fmt.Errorf("entity %s not in any community at level %d", req.EntityID, req.Level)
+		// Tier 3: Fall back to semantic search if available
+		semanticHits, err := c.searchEntitiesSemantic(ctx, req.Query, 50)
+		if err == nil && len(semanticHits) > 0 {
+			// Extract entity IDs and load them
+			entityIDs := make([]string, len(semanticHits))
+			for i, hit := range semanticHits {
+				entityIDs[i] = hit.EntityID
+			}
+			entities, loadErr := c.loadEntities(ctx, entityIDs)
+			if loadErr == nil {
+				matchedEntities := filterEntitiesByQuery(entities, req.Query)
+				response := LocalSearchResponse{
+					Entities:    matchedEntities,
+					CommunityID: "semantic-fallback",
+					Count:       len(matchedEntities),
+					DurationMs:  time.Since(startTime).Milliseconds(),
+				}
+				c.recordSuccess(len(data), 0)
+				return json.Marshal(response)
+			}
+		}
+		return nil, fmt.Errorf("entity %s not in any community (tried levels %d-0)", req.EntityID, req.Level)
 	}
 
 	// Load entities from community via graph-ingest
@@ -428,6 +449,33 @@ func (c *Component) findCommunitiesForEntities(entityIDs []string) []CommunitySu
 	})
 
 	return summaries
+}
+
+// findCommunityWithFallback looks up an entity's community with level fallback.
+// Tier 1: Try the requested level
+// Tier 2: Try lower levels down to 0 (level 0 is most inclusive)
+// Returns nil if entity is not in any community at any level.
+func (c *Component) findCommunityWithFallback(entityID string, requestedLevel int) *clustering.Community {
+	// Tier 1: Try requested level
+	community := c.communityCache.GetEntityCommunity(entityID, requestedLevel)
+	if community != nil {
+		return community
+	}
+
+	// Tier 2: Try lower levels (level 0 is most inclusive)
+	for level := requestedLevel - 1; level >= 0; level-- {
+		community = c.communityCache.GetEntityCommunity(entityID, level)
+		if community != nil {
+			c.logger.Debug("community fallback to lower level",
+				"entity_id", entityID,
+				"requested_level", requestedLevel,
+				"found_level", level,
+				"community_id", community.ID)
+			return community
+		}
+	}
+
+	return nil
 }
 
 // filterEntitiesByQuery filters entities based on simple text matching

@@ -9,16 +9,16 @@ import (
 // Community represents a detected community/cluster in the graph
 type Community struct {
 	// ID is the unique identifier for this community
-	ID string
+	ID string `json:"id"`
 
 	// Level indicates the hierarchy level (0=bottom, 1=mid, 2=top)
-	Level int
+	Level int `json:"level"`
 
 	// Members contains the entity IDs belonging to this community
-	Members []string
+	Members []string `json:"members"`
 
 	// ParentID references the parent community at the next level up (nil for top level)
-	ParentID *string
+	ParentID *string `json:"parent_id,omitempty"`
 
 	// StatisticalSummary is the fast statistical baseline summary (always present)
 	// Generated using TF-IDF keyword extraction and template-based summarization
@@ -41,7 +41,7 @@ type Community struct {
 	SummaryStatus string `json:"summary_status,omitempty"`
 
 	// Metadata stores additional community properties
-	Metadata map[string]interface{}
+	Metadata map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // CommunityDetector performs community detection on a graph

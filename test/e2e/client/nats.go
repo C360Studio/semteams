@@ -11,6 +11,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/c360/semstreams/graph/clustering"
 	"github.com/c360/semstreams/natsclient"
 )
 
@@ -29,20 +30,6 @@ type Triple struct {
 	Subject   string `json:"subject"`
 	Predicate string `json:"predicate"`
 	Object    any    `json:"object"`
-}
-
-// Community represents a detected community/cluster for E2E testing
-type Community struct {
-	ID                 string                 `json:"id"`
-	Level              int                    `json:"level"`
-	Members            []string               `json:"members"`
-	ParentID           *string                `json:"parent_id,omitempty"`
-	StatisticalSummary string                 `json:"statistical_summary,omitempty"`
-	LLMSummary         string                 `json:"llm_summary,omitempty"`
-	Keywords           []string               `json:"keywords,omitempty"`
-	RepEntities        []string               `json:"rep_entities,omitempty"`
-	SummaryStatus      string                 `json:"summary_status,omitempty"`
-	Metadata           map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // Anomaly represents a structural anomaly detected by the inference system
@@ -354,7 +341,7 @@ var IndexBuckets = struct {
 
 // GetAllCommunities retrieves all communities from the COMMUNITY_INDEX bucket
 // Used for comparing statistical vs LLM-enhanced summaries in E2E tests
-func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*Community, error) {
+func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*clustering.Community, error) {
 	bucket, err := c.client.GetKeyValueBucket(ctx, IndexBuckets.Community)
 	if err != nil {
 		if isBucketNotFoundError(err) {
@@ -371,7 +358,7 @@ func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*Commun
 		return nil, fmt.Errorf("failed to list community keys: %w", err)
 	}
 
-	var communities []*Community
+	var communities []*clustering.Community
 	for _, key := range keys {
 		// Skip entity-to-community index entries (they have different structure)
 		// Community keys have format: "graph.community.L{level}.{id}"
@@ -386,7 +373,7 @@ func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*Commun
 			continue
 		}
 
-		var comm Community
+		var comm clustering.Community
 		if err := json.Unmarshal(entry.Value(), &comm); err != nil {
 			// Skip entries that can't be unmarshaled as communities
 			continue

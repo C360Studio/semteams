@@ -61,7 +61,7 @@ func TestAttack_ZeroMaxDepth(t *testing.T) {
 		case "graph.ingest.query.entity":
 			return []byte(`{"id":"test.entity.001","triples":[]}`), nil
 		case "graph.index.query.outgoing":
-			return []byte(`[]`), nil
+			return []byte(`{"data":{"relationships":[]},"timestamp":"2026-01-09T00:00:00Z"}`), nil
 		default:
 			return nil, errors.New("unexpected subject")
 		}
@@ -356,8 +356,8 @@ func TestAttack_PathSearchExcessiveMaxDepth(t *testing.T) {
 		case "graph.ingest.query.entity":
 			return []byte(`{"id":"test.entity.001","triples":[]}`), nil
 		case "graph.index.query.outgoing":
-			// Always return next node (infinite graph)
-			return []byte(`[{"to_entity_id":"next","predicate":"p"}]`), nil
+			// Always return next node (infinite graph) in QueryResponse envelope format
+			return []byte(`{"data":{"relationships":[{"to_entity_id":"next","predicate":"p"}]},"timestamp":"2026-01-09T00:00:00Z"}`), nil
 		default:
 			return nil, errors.New("unexpected subject")
 		}
