@@ -57,7 +57,7 @@ type graphRAGGlobalResponse struct {
 func (s *TieredScenario) executeTestGraphRAGLocal(ctx context.Context, result *Result) error {
 	// Use a known entity from test data
 	startEntity := "c360.logistics.sensor.document.temperature.sensor-temp-001"
-	gatewayURL := s.config.GatewayURL + "/graphql"
+	gatewayURL := s.config.GraphQLURL // Use GraphQL gateway URL, not api-gateway
 	searchQuery := "temperature sensor monitoring"
 
 	resp, latency, err := s.sendGraphRAGLocalRequest(ctx, startEntity, searchQuery, gatewayURL)
@@ -166,7 +166,7 @@ func (s *TieredScenario) validateGraphRAGLocalResult(resp *graphRAGLocalResponse
 
 // executeTestGraphRAGGlobal validates GraphRAG global search (across community summaries)
 func (s *TieredScenario) executeTestGraphRAGGlobal(ctx context.Context, result *Result) error {
-	gatewayURL := s.config.GatewayURL + "/graphql"
+	gatewayURL := s.config.GraphQLURL // Use GraphQL gateway URL, not api-gateway
 	searchQuery := "logistics warehouse operations"
 
 	resp, latency, err := s.sendGraphRAGGlobalRequest(ctx, searchQuery, gatewayURL)
