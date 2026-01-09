@@ -5,7 +5,6 @@ package graphindex
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -13,65 +12,26 @@ import (
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
-	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// startNATSContainer starts a NATS container with JetStream enabled
-func startNATSContainer(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
-	t.Helper()
-
-	req := testcontainers.ContainerRequest{
-		Image:        "nats:2.10",
-		ExposedPorts: []string{"4222/tcp", "8222/tcp"},
-		WaitingFor:   wait.ForListeningPort("4222/tcp"),
-		Cmd:          []string{"-js", "-m", "8222"}, // Enable JetStream and monitoring
-	}
-
-	natsContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	require.NoError(t, err)
-
-	host, err := natsContainer.Host(ctx)
-	require.NoError(t, err)
-
-	port, err := natsContainer.MappedPort(ctx, "4222")
-	require.NoError(t, err)
-
-	natsURL := fmt.Sprintf("nats://%s:%s", host, port.Port())
-
-	// Wait for NATS to be fully ready
-	time.Sleep(200 * time.Millisecond)
-
-	return natsContainer, natsURL
-}
-
-// setupIntegrationTest creates a real NATS container and component
+// setupIntegrationTest creates a real NATS container and component using natsclient.TestClient
 func setupIntegrationTest(t *testing.T) (*Component, *natsclient.Client, func()) {
 	t.Helper()
 
 	ctx := context.Background()
 
-	// Start NATS container
-	natsContainer, natsURL := startNATSContainer(ctx, t)
-	require.NotNil(t, natsContainer)
-
-	// Create NATS client
-	natsClient, err := natsclient.NewClient(natsURL)
-	require.NoError(t, err)
-
-	// Wait for NATS to be ready
-	time.Sleep(100 * time.Millisecond)
+	// Use natsclient.NewTestClient with pre-created ENTITY_STATES bucket
+	// The component waits for this bucket in Start() with retry.Persistent()
+	testClient := natsclient.NewTestClient(t,
+		natsclient.WithKVBuckets(graph.BucketEntityStates),
+	)
 
 	// Create component
 	config := DefaultConfig()
 	deps := component.Dependencies{
-		NATSClient: natsClient,
+		NATSClient: testClient.Client,
 	}
 
 	configJSON, err := json.Marshal(config)
@@ -80,54 +40,22 @@ func setupIntegrationTest(t *testing.T) (*Component, *natsclient.Client, func())
 	comp, err := CreateGraphIndex(configJSON, deps)
 	require.NoError(t, err)
 
-	component := comp.(*Component)
+	graphIndexComp := comp.(*Component)
 
-	// Initialize and start component
-	require.NoError(t, component.Initialize())
-	require.NoError(t, component.Start(ctx))
+	// Initialize and start component (ENTITY_STATES bucket already exists)
+	// Component.Start() calls setupQueryHandlers() which registers NATS subscriptions
+	require.NoError(t, graphIndexComp.Initialize())
+	require.NoError(t, graphIndexComp.Start(ctx))
 
-	// Wait for component to be ready
+	// Wait for component and its query handlers to be ready
 	time.Sleep(200 * time.Millisecond)
 
-	// Set up query request handlers using NATS request/reply
-	nc := natsClient.GetConnection()
-
-	// Subscribe to outgoing query requests
-	_, err = nc.Subscribe("graph.index.query.outgoing", func(msg *nats.Msg) {
-		component.handleQueryOutgoing(&natsMsg{Msg: msg})
-	})
-	require.NoError(t, err)
-
-	// Subscribe to incoming query requests
-	_, err = nc.Subscribe("graph.index.query.incoming", func(msg *nats.Msg) {
-		component.handleQueryIncoming(&natsMsg{Msg: msg})
-	})
-	require.NoError(t, err)
-
-	// Subscribe to alias query requests
-	_, err = nc.Subscribe("graph.index.query.alias", func(msg *nats.Msg) {
-		component.handleQueryAlias(&natsMsg{Msg: msg})
-	})
-	require.NoError(t, err)
-
-	// Subscribe to predicate query requests
-	_, err = nc.Subscribe("graph.index.query.predicate", func(msg *nats.Msg) {
-		component.handleQueryPredicate(&natsMsg{Msg: msg})
-	})
-	require.NoError(t, err)
-
-	// Wait for subscriptions to be established
-	nc.Flush()
-	time.Sleep(100 * time.Millisecond)
-
-	// Cleanup function
+	// Cleanup function - testClient.Terminate() is called by t.Cleanup automatically
 	cleanup := func() {
-		component.Stop(5 * time.Second)
-		natsClient.Close(ctx)
-		natsContainer.Terminate(ctx)
+		graphIndexComp.Stop(5 * time.Second)
 	}
 
-	return component, natsClient, cleanup
+	return graphIndexComp, testClient.Client, cleanup
 }
 
 // TestQueryOutgoing_Integration tests outgoing query with real NATS
@@ -179,16 +107,17 @@ func TestQueryOutgoing_Integration(t *testing.T) {
 	msg, err := nc.Request("graph.index.query.outgoing", requestJSON, 2*time.Second)
 	require.NoError(t, err)
 
-	// Parse response
-	var response []OutgoingEntry
+	// Parse response (envelope: {"data": {"relationships": [...]}, ...})
+	var response graph.OutgoingQueryResponse
 	err = json.Unmarshal(msg.Data, &response)
 	require.NoError(t, err)
+	require.Nil(t, response.Error, "should not have error")
 
 	// Verify response
-	assert.Len(t, response, 1, "should have one outgoing relationship")
-	if len(response) > 0 {
-		assert.Equal(t, targetID, response[0].ToEntityID)
-		assert.Equal(t, predicate, response[0].Predicate)
+	assert.Len(t, response.Data.Relationships, 1, "should have one outgoing relationship")
+	if len(response.Data.Relationships) > 0 {
+		assert.Equal(t, targetID, response.Data.Relationships[0].ToEntityID)
+		assert.Equal(t, predicate, response.Data.Relationships[0].Predicate)
 	}
 }
 
@@ -241,16 +170,17 @@ func TestQueryIncoming_Integration(t *testing.T) {
 	msg, err := nc.Request("graph.index.query.incoming", requestJSON, 2*time.Second)
 	require.NoError(t, err)
 
-	// Parse response
-	var response []IncomingEntry
+	// Parse response (envelope: {"data": {"relationships": [...]}, ...})
+	var response graph.IncomingQueryResponse
 	err = json.Unmarshal(msg.Data, &response)
 	require.NoError(t, err)
+	require.Nil(t, response.Error, "should not have error")
 
 	// Verify response
-	assert.Len(t, response, 1, "should have one incoming relationship")
-	if len(response) > 0 {
-		assert.Equal(t, sourceID, response[0].FromEntityID)
-		assert.Equal(t, predicate, response[0].Predicate)
+	assert.Len(t, response.Data.Relationships, 1, "should have one incoming relationship")
+	if len(response.Data.Relationships) > 0 {
+		assert.Equal(t, sourceID, response.Data.Relationships[0].FromEntityID)
+		assert.Equal(t, predicate, response.Data.Relationships[0].Predicate)
 	}
 }
 
@@ -302,13 +232,15 @@ func TestQueryAlias_Integration(t *testing.T) {
 	msg, err := nc.Request("graph.index.query.alias", requestJSON, 2*time.Second)
 	require.NoError(t, err)
 
-	// Parse response
-	var response map[string]string
+	// Parse response (envelope: {"data": {"canonical_id": "..."}, ...})
+	var response graph.AliasQueryResponse
 	err = json.Unmarshal(msg.Data, &response)
 	require.NoError(t, err)
+	require.Nil(t, response.Error, "should not have error")
 
 	// Verify response
-	assert.Equal(t, entityID, response["canonical_id"])
+	require.NotNil(t, response.Data.CanonicalID, "canonical_id should not be nil")
+	assert.Equal(t, entityID, *response.Data.CanonicalID)
 }
 
 // TestQueryPredicate_Integration tests predicate query with real NATS
@@ -364,17 +296,18 @@ func TestQueryPredicate_Integration(t *testing.T) {
 	msg, err := nc.Request("graph.index.query.predicate", requestJSON, 2*time.Second)
 	require.NoError(t, err)
 
-	// Parse response
-	var response map[string][]string
+	// Parse response (envelope: {"data": {"entities": [...]}, ...})
+	var response graph.PredicateQueryResponse
 	err = json.Unmarshal(msg.Data, &response)
 	require.NoError(t, err)
+	require.Nil(t, response.Error, "should not have error")
 
 	// Verify response
-	assert.Len(t, response["entities"], 2, "should have two entities with predicate")
+	assert.Len(t, response.Data.Entities, 2, "should have two entities with predicate")
 
 	// Verify all expected entities are present
 	entityMap := make(map[string]bool)
-	for _, id := range response["entities"] {
+	for _, id := range response.Data.Entities {
 		entityMap[id] = true
 	}
 
@@ -404,10 +337,11 @@ func TestContextTimeout_Integration(t *testing.T) {
 	msg, err := nc.Request("graph.index.query.outgoing", requestJSON, 2*time.Second)
 	require.NoError(t, err)
 
-	// Verify we got a response
-	var response []OutgoingEntry
+	// Verify we got a response (envelope format)
+	var response graph.OutgoingQueryResponse
 	err = json.Unmarshal(msg.Data, &response)
 	require.NoError(t, err)
+	require.Nil(t, response.Error, "should not have error")
 }
 
 // TestConcurrentQueries_Integration tests concurrent query requests
@@ -438,9 +372,10 @@ func TestConcurrentQueries_Integration(t *testing.T) {
 			assert.NoError(t, err)
 
 			if err == nil {
-				var response []OutgoingEntry
+				var response graph.OutgoingQueryResponse
 				err = json.Unmarshal(msg.Data, &response)
 				assert.NoError(t, err)
+				assert.Nil(t, response.Error, "should not have error")
 			}
 
 			done <- true
@@ -465,56 +400,65 @@ func TestQueryNotFound_Integration(t *testing.T) {
 
 	nc := natsClient.GetConnection()
 
-	tests := []struct {
-		name    string
-		subject string
-		request any
-	}{
-		{
-			name:    "outgoing not found",
-			subject: "graph.index.query.outgoing",
-			request: map[string]string{"entity_id": "non.existent.entity"},
-		},
-		{
-			name:    "incoming not found",
-			subject: "graph.index.query.incoming",
-			request: map[string]string{"entity_id": "non.existent.entity"},
-		},
-		{
-			name:    "alias not found",
-			subject: "graph.index.query.alias",
-			request: map[string]string{"alias": "non-existent-alias"},
-		},
-		{
-			name:    "predicate not found",
-			subject: "graph.index.query.predicate",
-			request: map[string]string{"predicate": "non.existent.predicate"},
-		},
-	}
+	t.Run("outgoing not found", func(t *testing.T) {
+		request := map[string]string{"entity_id": "non.existent.entity"}
+		requestJSON, err := json.Marshal(request)
+		require.NoError(t, err)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			requestJSON, err := json.Marshal(tt.request)
-			require.NoError(t, err)
+		msg, err := nc.Request("graph.index.query.outgoing", requestJSON, 2*time.Second)
+		require.NoError(t, err)
 
-			// Send query request
-			msg, err := nc.Request(tt.subject, requestJSON, 2*time.Second)
-			require.NoError(t, err)
+		var response graph.OutgoingQueryResponse
+		err = json.Unmarshal(msg.Data, &response)
+		require.NoError(t, err)
+		require.Nil(t, response.Error, "should not have error for not found")
+		assert.Empty(t, response.Data.Relationships, "relationships should be empty for not found")
+	})
 
-			// Should get either empty array or error
-			var responseMap map[string]any
-			err = json.Unmarshal(msg.Data, &responseMap)
-			require.NoError(t, err)
+	t.Run("incoming not found", func(t *testing.T) {
+		request := map[string]string{"entity_id": "non.existent.entity"}
+		requestJSON, err := json.Marshal(request)
+		require.NoError(t, err)
 
-			// Either has error field or empty entities/results
-			if errorMsg, hasError := responseMap["error"]; hasError {
-				assert.NotEmpty(t, errorMsg)
-			} else {
-				// Should have empty array response
-				t.Logf("Response: %v", responseMap)
-			}
-		})
-	}
+		msg, err := nc.Request("graph.index.query.incoming", requestJSON, 2*time.Second)
+		require.NoError(t, err)
+
+		var response graph.IncomingQueryResponse
+		err = json.Unmarshal(msg.Data, &response)
+		require.NoError(t, err)
+		require.Nil(t, response.Error, "should not have error for not found")
+		assert.Empty(t, response.Data.Relationships, "relationships should be empty for not found")
+	})
+
+	t.Run("alias not found", func(t *testing.T) {
+		request := map[string]string{"alias": "non-existent-alias"}
+		requestJSON, err := json.Marshal(request)
+		require.NoError(t, err)
+
+		msg, err := nc.Request("graph.index.query.alias", requestJSON, 2*time.Second)
+		require.NoError(t, err)
+
+		var response graph.AliasQueryResponse
+		err = json.Unmarshal(msg.Data, &response)
+		require.NoError(t, err)
+		require.Nil(t, response.Error, "should not have error for not found")
+		assert.Nil(t, response.Data.CanonicalID, "canonical_id should be nil for not found")
+	})
+
+	t.Run("predicate not found", func(t *testing.T) {
+		request := map[string]string{"predicate": "non.existent.predicate"}
+		requestJSON, err := json.Marshal(request)
+		require.NoError(t, err)
+
+		msg, err := nc.Request("graph.index.query.predicate", requestJSON, 2*time.Second)
+		require.NoError(t, err)
+
+		var response graph.PredicateQueryResponse
+		err = json.Unmarshal(msg.Data, &response)
+		require.NoError(t, err)
+		require.Nil(t, response.Error, "should not have error for not found")
+		assert.Empty(t, response.Data.Entities, "entities should be empty for not found")
+	})
 }
 
 // TestQueryInvalidRequest_Integration tests invalid request handling
@@ -562,26 +506,15 @@ func TestQueryInvalidRequest_Integration(t *testing.T) {
 			msg, err := nc.Request(tt.subject, tt.request, 2*time.Second)
 			require.NoError(t, err)
 
-			// Should get error response
-			var response map[string]string
+			// Should get error response in envelope format
+			var response struct {
+				Error *string `json:"error"`
+			}
 			err = json.Unmarshal(msg.Data, &response)
 			require.NoError(t, err)
 
-			assert.Contains(t, response, "error")
-			assert.NotEmpty(t, response["error"])
+			require.NotNil(t, response.Error, "should have error field")
+			assert.NotEmpty(t, *response.Error, "error message should not be empty")
 		})
 	}
-}
-
-// natsMsg wraps nats.Msg to implement queryMsg interface
-type natsMsg struct {
-	*nats.Msg
-}
-
-func (n *natsMsg) Data() []byte {
-	return n.Msg.Data
-}
-
-func (n *natsMsg) Respond(data []byte) error {
-	return n.Msg.Respond(data)
 }

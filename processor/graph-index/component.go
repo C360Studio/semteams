@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
@@ -188,6 +190,7 @@ type Component struct {
 	incomingBucket  jetstream.KeyValue
 	aliasBucket     jetstream.KeyValue
 	predicateBucket jetstream.KeyValue
+	contextBucket   jetstream.KeyValue
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -465,6 +468,18 @@ func (c *Component) Start(ctx context.Context) error {
 		}
 	}
 
+	// Create CONTEXT_INDEX bucket for triple provenance tracking
+	// This tracks which entities have triples with specific context values (e.g., "inference.hierarchy")
+	contextBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketContextIndex,
+		Description: "Triple context provenance index",
+	})
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketContextIndex))
+	}
+	c.contextBucket = contextBucket
+
 	// Wait for input KV bucket (ENTITY_STATES) with retries - we are the reader/watcher
 	js, err := c.natsClient.JetStream()
 	if err != nil {
@@ -677,6 +692,13 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 		}
 	}
 
+	// Update context index for triples with provenance (e.g., "inference.hierarchy")
+	if err := c.UpdateContextIndex(ctx, entityID, state.Triples); err != nil {
+		c.logger.Debug("failed to update context index",
+			slog.String("entity", entityID),
+			slog.Any("error", err))
+	}
+
 	c.logger.Debug("indexed entity",
 		slog.String("entity", entityID),
 		slog.Int("triples", len(state.Triples)),
@@ -692,12 +714,6 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 	}
 }
 
-// OutgoingEntry matches graph/indexmanager format for outgoing index
-// Key: entity ID, Value: JSON array of OutgoingEntry
-type OutgoingEntry struct {
-	ToEntityID string `json:"to_entity_id"`
-	Predicate  string `json:"predicate"`
-}
 
 // updateOutgoingIndexBatch writes all outgoing relationships for an entity
 func (c *Component) updateOutgoingIndexBatch(ctx context.Context, entityID string, targets []map[string]interface{}) error {
@@ -713,13 +729,13 @@ func (c *Component) updateOutgoingIndexBatch(ctx context.Context, entityID strin
 		return errs.Wrap(err, "Component", "updateOutgoingIndexBatch", "context cancelled")
 	}
 
-	// Convert targets to OutgoingEntry array (matching graph/indexmanager expected format)
-	entries := make([]OutgoingEntry, 0, len(targets))
+	// Convert targets to graph.OutgoingEntry array (matching graph/indexmanager expected format)
+	entries := make([]graph.OutgoingEntry, 0, len(targets))
 	for _, target := range targets {
 		targetID, _ := target["id"].(string)
 		predicate, _ := target["predicate"].(string)
 		if targetID != "" && predicate != "" {
-			entries = append(entries, OutgoingEntry{
+			entries = append(entries, graph.OutgoingEntry{
 				ToEntityID: targetID,
 				Predicate:  predicate,
 			})
@@ -792,7 +808,7 @@ func (c *Component) UpdateOutgoingIndex(ctx context.Context, entityID, targetID,
 	}
 
 	// Read existing entries (raw array format matching graph/indexmanager)
-	var entries []OutgoingEntry
+	var entries []graph.OutgoingEntry
 	existingEntry, err := c.outgoingBucket.Get(ctx, entityID)
 	if err != nil && err != jetstream.ErrKeyNotFound {
 		atomic.AddInt64(&c.errors, 1)
@@ -803,7 +819,7 @@ func (c *Component) UpdateOutgoingIndex(ctx context.Context, entityID, targetID,
 		// Parse existing array
 		if unmarshalErr := json.Unmarshal(existingEntry.Value(), &entries); unmarshalErr != nil {
 			// If unmarshal fails, start fresh (backward compatibility with old format)
-			entries = []OutgoingEntry{}
+			entries = []graph.OutgoingEntry{}
 		}
 	}
 
@@ -818,7 +834,7 @@ func (c *Component) UpdateOutgoingIndex(ctx context.Context, entityID, targetID,
 
 	// Append new target if it doesn't exist
 	if !targetExists {
-		entries = append(entries, OutgoingEntry{
+		entries = append(entries, graph.OutgoingEntry{
 			ToEntityID: targetID,
 			Predicate:  predicate,
 		})
@@ -850,12 +866,6 @@ func (c *Component) UpdateOutgoingIndex(ctx context.Context, entityID, targetID,
 	return nil
 }
 
-// IncomingEntry matches graph/indexmanager format for incoming index
-// Key: target entity ID, Value: JSON array of IncomingEntry
-type IncomingEntry struct {
-	FromEntityID string `json:"from_entity_id"`
-	Predicate    string `json:"predicate"`
-}
 
 // UpdateIncomingIndex updates the incoming index for a relationship
 func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID, predicate string) error {
@@ -878,7 +888,7 @@ func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID,
 	}
 
 	// Read existing entries (raw array format matching graph/indexmanager)
-	var entries []IncomingEntry
+	var entries []graph.IncomingEntry
 	existingEntry, err := c.incomingBucket.Get(ctx, targetID)
 	if err != nil && err != jetstream.ErrKeyNotFound {
 		atomic.AddInt64(&c.errors, 1)
@@ -889,7 +899,7 @@ func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID,
 		// Parse existing array
 		if unmarshalErr := json.Unmarshal(existingEntry.Value(), &entries); unmarshalErr != nil {
 			// If unmarshal fails, start fresh (backward compatibility with old format)
-			entries = []IncomingEntry{}
+			entries = []graph.IncomingEntry{}
 		}
 	}
 
@@ -904,7 +914,7 @@ func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID,
 
 	// Append new source if it doesn't exist
 	if !sourceExists {
-		entries = append(entries, IncomingEntry{
+		entries = append(entries, graph.IncomingEntry{
 			FromEntityID: sourceID,
 			Predicate:    predicate,
 		})
@@ -983,12 +993,6 @@ func (c *Component) UpdateAliasIndex(ctx context.Context, alias, entityID string
 	return nil
 }
 
-// PredicateIndexEntry represents the predicate index structure
-type PredicateIndexEntry struct {
-	Entities  []string `json:"entities"`
-	Predicate string   `json:"predicate"`
-	EntityID  string   `json:"entity_id,omitempty"` // Backward compatibility field (last entity)
-}
 
 // UpdatePredicateIndex updates the predicate index for an entity
 func (c *Component) UpdatePredicateIndex(ctx context.Context, entityID, predicate string) error {
@@ -1008,7 +1012,7 @@ func (c *Component) UpdatePredicateIndex(ctx context.Context, entityID, predicat
 	}
 
 	// Read existing entry (if any)
-	var entry PredicateIndexEntry
+	var entry graph.PredicateIndexEntry
 	existingEntry, err := c.predicateBucket.Get(ctx, predicate)
 	if err != nil && err != jetstream.ErrKeyNotFound {
 		atomic.AddInt64(&c.errors, 1)
@@ -1212,4 +1216,111 @@ func (c *Component) DeleteFromIncomingIndex(ctx context.Context, targetID, sourc
 		slog.String("source_id", sourceID))
 
 	return nil
+}
+
+// ============================================================================
+// Context Index Operations (Triple Provenance Tracking)
+// ============================================================================
+
+// ContextEntry represents an entry in the context index.
+// Each entry tracks which entity+predicate pair has a triple with a specific context value.
+type ContextEntry struct {
+	EntityID  string `json:"entity_id"`
+	Predicate string `json:"predicate"`
+}
+
+// UpdateContextIndex updates the context index for triples with a context value.
+// This enables provenance queries like "all triples from hierarchy inference".
+// The operation is idempotent - replaying the same update has no effect.
+func (c *Component) UpdateContextIndex(ctx context.Context, entityID string, triples []message.Triple) error {
+	if entityID == "" {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateContextIndex", "entity ID cannot be empty")
+	}
+
+	// Check context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateContextIndex", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.Wrap(err, "Component", "UpdateContextIndex", "context cancelled")
+	}
+
+	// Group entries by context value
+	byContext := make(map[string][]ContextEntry)
+	for _, t := range triples {
+		if t.Context != "" {
+			entry := ContextEntry{
+				EntityID:  entityID,
+				Predicate: t.Predicate,
+			}
+			byContext[t.Context] = append(byContext[t.Context], entry)
+		}
+	}
+
+	if len(byContext) == 0 {
+		return nil // No context values to index
+	}
+
+	// Update each context key
+	for contextValue, newEntries := range byContext {
+		if err := c.mergeContextEntries(ctx, contextValue, entityID, newEntries); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// mergeContextEntries merges new entries into existing context index.
+// Uses set semantics: removes old entries for the entity, adds new ones.
+func (c *Component) mergeContextEntries(ctx context.Context, contextValue, entityID string, newEntries []ContextEntry) error {
+	// Sanitize context value for use as NATS key (replace dots with underscores)
+	key := sanitizeNATSKey(contextValue)
+
+	// Get existing entries
+	var existing []ContextEntry
+	entry, err := c.contextBucket.Get(ctx, key)
+	if err != nil && err != jetstream.ErrKeyNotFound {
+		return errs.WrapTransient(err, "Component", "mergeContextEntries", "get existing entries")
+	}
+	if err == nil {
+		if err := json.Unmarshal(entry.Value(), &existing); err != nil {
+			return errs.WrapInvalid(err, "Component", "mergeContextEntries", "unmarshal existing entries")
+		}
+	}
+
+	// Remove old entries for this entity (idempotent update)
+	filtered := make([]ContextEntry, 0, len(existing))
+	for _, e := range existing {
+		if e.EntityID != entityID {
+			filtered = append(filtered, e)
+		}
+	}
+
+	// Add new entries
+	filtered = append(filtered, newEntries...)
+
+	// Serialize and save
+	data, err := json.Marshal(filtered)
+	if err != nil {
+		return errs.Wrap(err, "Component", "mergeContextEntries", "marshal entries")
+	}
+
+	if _, err := c.contextBucket.Put(ctx, key, data); err != nil {
+		return errs.WrapTransient(err, "Component", "mergeContextEntries", "put entries")
+	}
+
+	c.logger.Debug("context index updated",
+		slog.String("context", contextValue),
+		slog.String("entity_id", entityID),
+		slog.Int("entry_count", len(newEntries)))
+
+	return nil
+}
+
+// sanitizeNATSKey replaces characters that may cause issues with NATS KV keys.
+func sanitizeNATSKey(s string) string {
+	// NATS KV keys can contain most characters, but dots have special meaning
+	// in subject hierarchies. Replace dots with underscores for safety.
+	return strings.ReplaceAll(s, ".", "_")
 }

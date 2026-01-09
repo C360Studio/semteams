@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360/semstreams/graph"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
@@ -24,12 +25,12 @@ func TestComponent_HandleQueryOutgoing_Success(t *testing.T) {
 	tests := []struct {
 		name     string
 		entityID string
-		targets  []OutgoingEntry
+		targets  []graph.OutgoingEntry
 	}{
 		{
 			name:     "single relationship",
 			entityID: "c360.platform.robotics.mav1.drone.001",
-			targets: []OutgoingEntry{
+			targets: []graph.OutgoingEntry{
 				{
 					ToEntityID: "c360.platform.robotics.mav1.mission.001",
 					Predicate:  "robotics.assigned.mission",
@@ -39,7 +40,7 @@ func TestComponent_HandleQueryOutgoing_Success(t *testing.T) {
 		{
 			name:     "multiple relationships",
 			entityID: "c360.platform.robotics.mav1.drone.002",
-			targets: []OutgoingEntry{
+			targets: []graph.OutgoingEntry{
 				{
 					ToEntityID: "c360.platform.robotics.mav1.mission.001",
 					Predicate:  "robotics.assigned.mission",
@@ -53,7 +54,7 @@ func TestComponent_HandleQueryOutgoing_Success(t *testing.T) {
 		{
 			name:     "complex entity ID",
 			entityID: "acme.ops.logistics.warehouse.robot.robot-007",
-			targets: []OutgoingEntry{
+			targets: []graph.OutgoingEntry{
 				{
 					ToEntityID: "acme.ops.logistics.warehouse.zone.A-12",
 					Predicate:  "location.assigned.zone",
@@ -88,14 +89,14 @@ func TestComponent_HandleQueryOutgoing_Success(t *testing.T) {
 			// Verify response
 			require.NotNil(t, msg.response, "should have response")
 
-			var responseRels []OutgoingEntry
+			var responseRels []graph.OutgoingEntry
 			err = json.Unmarshal(msg.response, &responseRels)
-			require.NoError(t, err, "response should be valid OutgoingEntry array JSON")
+			require.NoError(t, err, "response should be valid graph.OutgoingEntry array JSON")
 
 			assert.Equal(t, len(tt.targets), len(responseRels), "relationship count should match")
 
 			// Verify each relationship
-			relMap := make(map[string]OutgoingEntry)
+			relMap := make(map[string]graph.OutgoingEntry)
 			for _, rel := range responseRels {
 				relMap[rel.ToEntityID] = rel
 			}
@@ -130,7 +131,7 @@ func TestComponent_HandleQueryOutgoing_NotFound(t *testing.T) {
 	require.NotNil(t, msg.response, "should have response")
 
 	// Try to unmarshal as array
-	var responseRels []OutgoingEntry
+	var responseRels []graph.OutgoingEntry
 	err = json.Unmarshal(msg.response, &responseRels)
 
 	if err == nil {
@@ -240,12 +241,12 @@ func TestComponent_HandleQueryIncoming_Success(t *testing.T) {
 	tests := []struct {
 		name     string
 		entityID string
-		sources  []IncomingEntry
+		sources  []graph.IncomingEntry
 	}{
 		{
 			name:     "single incoming relationship",
 			entityID: "c360.platform.robotics.mav1.mission.001",
-			sources: []IncomingEntry{
+			sources: []graph.IncomingEntry{
 				{
 					FromEntityID: "c360.platform.robotics.mav1.drone.001",
 					Predicate:    "robotics.assigned.mission",
@@ -255,7 +256,7 @@ func TestComponent_HandleQueryIncoming_Success(t *testing.T) {
 		{
 			name:     "multiple incoming relationships",
 			entityID: "c360.platform.robotics.mav1.mission.002",
-			sources: []IncomingEntry{
+			sources: []graph.IncomingEntry{
 				{
 					FromEntityID: "c360.platform.robotics.mav1.drone.001",
 					Predicate:    "robotics.assigned.mission",
@@ -293,14 +294,14 @@ func TestComponent_HandleQueryIncoming_Success(t *testing.T) {
 			// Verify response
 			require.NotNil(t, msg.response, "should have response")
 
-			var responseRels []IncomingEntry
+			var responseRels []graph.IncomingEntry
 			err = json.Unmarshal(msg.response, &responseRels)
-			require.NoError(t, err, "response should be valid IncomingEntry array JSON")
+			require.NoError(t, err, "response should be valid graph.IncomingEntry array JSON")
 
 			assert.Equal(t, len(tt.sources), len(responseRels), "relationship count should match")
 
 			// Verify each relationship
-			relMap := make(map[string]IncomingEntry)
+			relMap := make(map[string]graph.IncomingEntry)
 			for _, rel := range responseRels {
 				relMap[rel.FromEntityID] = rel
 			}
@@ -335,7 +336,7 @@ func TestComponent_HandleQueryIncoming_NotFound(t *testing.T) {
 	require.NotNil(t, msg.response, "should have response")
 
 	// Try to unmarshal as array
-	var responseRels []IncomingEntry
+	var responseRels []graph.IncomingEntry
 	err = json.Unmarshal(msg.response, &responseRels)
 
 	if err == nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/c360/semstreams/graph"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -47,27 +48,31 @@ func (c *Component) handleQueryOutgoingNATS(_ context.Context, data []byte) ([]b
 		EntityID string `json:"entity_id"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.OutgoingRelationshipsData]("invalid request"))
 	}
 
 	if req.EntityID == "" {
-		return nil, fmt.Errorf("invalid request: empty entity_id")
+		return json.Marshal(graph.NewQueryError[graph.OutgoingRelationshipsData]("invalid request: empty entity_id"))
 	}
 
 	entry, err := c.outgoingBucket.Get(ctx, req.EntityID)
 	if err != nil {
 		if err == jetstream.ErrKeyNotFound {
-			return []byte("[]"), nil // Return empty array for not found
+			return json.Marshal(graph.NewQueryResponse(graph.OutgoingRelationshipsData{
+				Relationships: []graph.OutgoingEntry{},
+			}))
 		}
-		return nil, fmt.Errorf("internal error: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.OutgoingRelationshipsData]("internal error"))
 	}
 
-	var entries []OutgoingEntry
+	var entries []graph.OutgoingEntry
 	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
-		return nil, fmt.Errorf("internal error: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.OutgoingRelationshipsData]("internal error"))
 	}
 
-	return json.Marshal(entries)
+	return json.Marshal(graph.NewQueryResponse(graph.OutgoingRelationshipsData{
+		Relationships: entries,
+	}))
 }
 
 // handleQueryIncomingNATS handles incoming relationship query requests via NATS request/reply
@@ -79,27 +84,31 @@ func (c *Component) handleQueryIncomingNATS(_ context.Context, data []byte) ([]b
 		EntityID string `json:"entity_id"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.IncomingRelationshipsData]("invalid request"))
 	}
 
 	if req.EntityID == "" {
-		return nil, fmt.Errorf("invalid request: empty entity_id")
+		return json.Marshal(graph.NewQueryError[graph.IncomingRelationshipsData]("invalid request: empty entity_id"))
 	}
 
 	entry, err := c.incomingBucket.Get(ctx, req.EntityID)
 	if err != nil {
 		if err == jetstream.ErrKeyNotFound {
-			return []byte("[]"), nil // Return empty array for not found
+			return json.Marshal(graph.NewQueryResponse(graph.IncomingRelationshipsData{
+				Relationships: []graph.IncomingEntry{},
+			}))
 		}
-		return nil, fmt.Errorf("internal error: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.IncomingRelationshipsData]("internal error"))
 	}
 
-	var entries []IncomingEntry
+	var entries []graph.IncomingEntry
 	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
-		return nil, fmt.Errorf("internal error: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.IncomingRelationshipsData]("internal error"))
 	}
 
-	return json.Marshal(entries)
+	return json.Marshal(graph.NewQueryResponse(graph.IncomingRelationshipsData{
+		Relationships: entries,
+	}))
 }
 
 // handleQueryAliasNATS handles alias resolution query requests via NATS request/reply
@@ -111,25 +120,27 @@ func (c *Component) handleQueryAliasNATS(_ context.Context, data []byte) ([]byte
 		Alias string `json:"alias"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.AliasData]("invalid request"))
 	}
 
 	if req.Alias == "" {
-		return nil, fmt.Errorf("invalid request: empty alias")
+		return json.Marshal(graph.NewQueryError[graph.AliasData]("invalid request: empty alias"))
 	}
 
 	entry, err := c.aliasBucket.Get(ctx, req.Alias)
 	if err != nil {
 		if err == jetstream.ErrKeyNotFound {
-			return nil, fmt.Errorf("not found: %s", req.Alias)
+			return json.Marshal(graph.NewQueryResponse(graph.AliasData{
+				CanonicalID: nil,
+			}))
 		}
-		return nil, fmt.Errorf("internal error: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.AliasData]("internal error"))
 	}
 
-	response := map[string]string{
-		"canonical_id": string(entry.Value()),
-	}
-	return json.Marshal(response)
+	canonicalID := string(entry.Value())
+	return json.Marshal(graph.NewQueryResponse(graph.AliasData{
+		CanonicalID: &canonicalID,
+	}))
 }
 
 // handleQueryPredicateNATS handles predicate entity query requests via NATS request/reply
@@ -141,31 +152,33 @@ func (c *Component) handleQueryPredicateNATS(_ context.Context, data []byte) ([]
 		Predicate string `json:"predicate"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.PredicateData]("invalid request"))
 	}
 
 	if req.Predicate == "" {
-		return nil, fmt.Errorf("invalid request: empty predicate")
+		return json.Marshal(graph.NewQueryError[graph.PredicateData]("invalid request: empty predicate"))
 	}
 
 	entry, err := c.predicateBucket.Get(ctx, req.Predicate)
 	if err != nil {
 		if err == jetstream.ErrKeyNotFound {
-			return json.Marshal(map[string][]string{"entities": {}})
+			return json.Marshal(graph.NewQueryResponse(graph.PredicateData{
+				Entities: []string{},
+			}))
 		}
-		return nil, fmt.Errorf("internal error: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.PredicateData]("internal error"))
 	}
 
-	var indexEntry PredicateIndexEntry
+	var indexEntry graph.PredicateIndexEntry
 	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
-		return nil, fmt.Errorf("internal error: %w", err)
+		return json.Marshal(graph.NewQueryError[graph.PredicateData]("internal error"))
 	}
 
-	response := map[string][]string{
-		"entities": indexEntry.Entities,
-	}
-	return json.Marshal(response)
+	return json.Marshal(graph.NewQueryResponse(graph.PredicateData{
+		Entities: indexEntry.Entities,
+	}))
 }
+
 
 // queryMsg is an interface for query request messages.
 // This accommodates both real NATS messages and test mocks.
@@ -200,7 +213,7 @@ func (c *Component) handleQueryOutgoing(msg queryMsg) {
 	if err != nil {
 		if err == jetstream.ErrKeyNotFound {
 			// Return empty array for not found
-			c.respondJSON(msg, []OutgoingEntry{})
+			c.respondJSON(msg, []graph.OutgoingEntry{})
 			return
 		}
 		c.respondError(msg, "internal error")
@@ -208,7 +221,7 @@ func (c *Component) handleQueryOutgoing(msg queryMsg) {
 	}
 
 	// Parse outgoing entries
-	var entries []OutgoingEntry
+	var entries []graph.OutgoingEntry
 	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
 		c.respondError(msg, "internal error")
 		return
@@ -244,7 +257,7 @@ func (c *Component) handleQueryIncoming(msg queryMsg) {
 	if err != nil {
 		if err == jetstream.ErrKeyNotFound {
 			// Return empty array for not found
-			c.respondJSON(msg, []IncomingEntry{})
+			c.respondJSON(msg, []graph.IncomingEntry{})
 			return
 		}
 		c.respondError(msg, "internal error")
@@ -252,7 +265,7 @@ func (c *Component) handleQueryIncoming(msg queryMsg) {
 	}
 
 	// Parse incoming entries
-	var entries []IncomingEntry
+	var entries []graph.IncomingEntry
 	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
 		c.respondError(msg, "internal error")
 		return
@@ -337,7 +350,7 @@ func (c *Component) handleQueryPredicate(msg queryMsg) {
 	}
 
 	// Parse predicate index entry
-	var indexEntry PredicateIndexEntry
+	var indexEntry graph.PredicateIndexEntry
 	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
 		c.respondError(msg, "internal error")
 		return
