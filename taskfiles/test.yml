@@ -13,6 +13,12 @@ tasks:
 
   integration:
     desc: Run integration tests (uses testcontainers for Docker infra)
+    env:
+      # Disable Ryuk (testcontainers resource reaper) to avoid known bugs:
+      # - Race condition with session IDs (#2445)
+      # - Container removed before starting (#2596)
+      # Container cleanup is handled by t.Cleanup() and defer container.Terminate()
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     cmds:
       - echo "[INTEGRATION] Running integration tests with real NATS (via testcontainers)..."
       - go test -race -tags=integration ./...
@@ -20,6 +26,8 @@ tasks:
 
   integration:iot:
     desc: Run IoT sensor integration tests only
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     cmds:
       - echo "[INTEGRATION] Running IoT sensor integration tests..."
       - go test -race -tags=integration -v ./examples/processors/iot_sensor/...
@@ -27,6 +35,8 @@ tasks:
 
   integration:graph:
     desc: Run graph processor integration tests
+    env:
+      TESTCONTAINERS_RYUK_DISABLED: "true"
     cmds:
       - echo "[INTEGRATION] Running graph processor integration tests..."
       - go test -race -tags=integration -v ./processor/graph/...
