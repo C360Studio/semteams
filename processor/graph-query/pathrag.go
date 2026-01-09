@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/c360/semstreams/graph"
 )
 
 // PathSearchRequest defines the request schema for path search queries
@@ -145,10 +147,22 @@ func (p *PathSearcher) Search(ctx context.Context, req PathSearchRequest) (*Path
 			continue
 		}
 
-		// Parse relationships
-		var rels []RelationshipEntry
-		if err := json.Unmarshal(relsResponse, &rels); err != nil {
+		// Parse relationships from envelope response
+		var envelope graph.OutgoingQueryResponse
+		if err := json.Unmarshal(relsResponse, &envelope); err != nil {
 			continue
+		}
+		if envelope.Error != nil {
+			continue
+		}
+
+		// Convert to local type
+		rels := make([]RelationshipEntry, len(envelope.Data.Relationships))
+		for i, r := range envelope.Data.Relationships {
+			rels[i] = RelationshipEntry{
+				ToEntityID: r.ToEntityID,
+				Predicate:  r.Predicate,
+			}
 		}
 
 		// Add neighbors to queue and entities

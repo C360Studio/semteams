@@ -99,16 +99,14 @@ func (q *NATSQuerier) GetEntities(ctx context.Context, ids []string) ([]*graph.E
 // If not found as alias, tries it as a direct entity ID via graph-ingest.
 func (q *NATSQuerier) GetEntityByAlias(ctx context.Context, aliasOrID string) (*graph.EntityState, error) {
 	// Try to resolve as alias first via graph-index
-	var aliasResp struct {
-		CanonicalID string `json:"canonical_id"`
-	}
+	var aliasResp graph.AliasQueryResponse
 
 	entityID := aliasOrID // Default to using input as entity ID
 
 	err := q.request(ctx, "graph.index.query.alias", map[string]string{"alias": aliasOrID}, &aliasResp)
-	if err == nil && aliasResp.CanonicalID != "" {
+	if err == nil && aliasResp.Error == nil && aliasResp.Data.CanonicalID != nil {
 		// Alias resolved - use canonical ID
-		entityID = aliasResp.CanonicalID
+		entityID = *aliasResp.Data.CanonicalID
 	}
 	// If alias lookup failed, we'll try aliasOrID as a direct entity ID
 
