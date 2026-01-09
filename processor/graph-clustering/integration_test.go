@@ -702,8 +702,8 @@ func TestIntegration_LLMEnhancementWorkerStarts(t *testing.T) {
 		DetectionIntervalStr: "1s",
 		MinCommunitySize:     2,
 		MaxIterations:        10,
-		EnableLLM:            true,                  // Enable LLM enhancement
-		LLMEndpoint:          mockLLM.URL + "/v1",   // Point to mock server
+		EnableLLM:            true,                // Enable LLM enhancement
+		LLMEndpoint:          mockLLM.URL + "/v1", // Point to mock server
 	}
 
 	config.ApplyDefaults()

@@ -216,10 +216,10 @@ type Component struct {
 	structuralBucket jetstream.KeyValue
 
 	// Anomaly detection (optional)
-	orchestrator      *inference.Orchestrator
-	anomalyStorage    *inference.NATSAnomalyStorage
-	anomalyBucket     jetstream.KeyValue
-	previousKCore     *structural.KCoreIndex // For tracking core demotions
+	orchestrator   *inference.Orchestrator
+	anomalyStorage *inference.NATSAnomalyStorage
+	anomalyBucket  jetstream.KeyValue
+	previousKCore  *structural.KCoreIndex // For tracking core demotions
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -839,8 +839,8 @@ func (c *Component) initializeAnomalyDetection(ctx context.Context) error {
 	inferenceConfig := inference.DefaultConfig()
 	inferenceConfig.Enabled = true
 	inferenceConfig.CoreAnomaly.Enabled = true
-	inferenceConfig.SemanticGap.Enabled = false   // Requires embeddings
-	inferenceConfig.Transitivity.Enabled = false  // Requires relationship querier
+	inferenceConfig.SemanticGap.Enabled = false  // Requires embeddings
+	inferenceConfig.Transitivity.Enabled = false // Requires relationship querier
 
 	orchestrator, err := inference.NewOrchestrator(inference.OrchestratorConfig{
 		Config:  inferenceConfig,
