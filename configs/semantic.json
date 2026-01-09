@@ -540,6 +540,7 @@
         "batch_size": 100,
         "enable_llm": true,
         "llm_endpoint": "http://seminstruct:8083/v1",
+        "llm_model": "qwen2.5-0.5b-instruct-q4-k-m",
         "min_community_size": 2,
         "max_iterations": 100
       }
@@ -632,7 +633,8 @@
         "compute_interval": "1h",
         "pivot_count": 16,
         "max_hop_distance": 10,
-        "compute_on_startup": true
+        "compute_on_startup": true,
+        "enable_detection": true
       }
     },
     "graph-query": {

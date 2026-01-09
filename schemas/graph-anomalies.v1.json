@@ -15,6 +15,11 @@
       "description": "Compute indices immediately on startup",
       "category": "basic"
     },
+    "enable_detection": {
+      "type": "boolean",
+      "description": "Enable structural anomaly detection after computing indices",
+      "category": "advanced"
+    },
     "max_hop_distance": {
       "type": "number",
       "description": "Maximum hop distance for BFS traversal",

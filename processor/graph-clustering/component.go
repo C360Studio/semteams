@@ -14,6 +14,7 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/graph/clustering"
+	"github.com/c360/semstreams/graph/llm"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
@@ -33,6 +34,7 @@ type Config struct {
 	BatchSize            int                   `json:"batch_size" schema:"type:int,description:Event count threshold for triggering detection,category:basic"`
 	EnableLLM            bool                  `json:"enable_llm" schema:"type:bool,description:Enable LLM-based community summarization,category:advanced"`
 	LLMEndpoint          string                `json:"llm_endpoint" schema:"type:string,description:URL for LLM endpoint (required if enable_llm is true),category:advanced"`
+	LLMModel             string                `json:"llm_model" schema:"type:string,description:Model name for LLM service (e.g. mistral-7b-instruct),category:advanced"`
 	MinCommunitySize     int                   `json:"min_community_size" schema:"type:int,description:Minimum number of entities to form a community,category:advanced"`
 	MaxIterations        int                   `json:"max_iterations" schema:"type:int,description:Maximum iterations for LPA algorithm,category:advanced"`
 
@@ -69,7 +71,7 @@ func (c *Config) Validate() error {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "detection_interval must be greater than 0")
 	}
 
-	// If LLM is enabled, endpoint is required
+	// If LLM is enabled, endpoint is required (model defaults to service default)
 	if c.EnableLLM && c.LLMEndpoint == "" {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "llm_endpoint required when enable_llm is true")
 	}
@@ -190,6 +192,10 @@ type Component struct {
 	// Community detection
 	detector clustering.CommunityDetector
 	storage  *clustering.NATSCommunityStorage
+
+	// LLM enhancement (optional)
+	enhancementWorker *clustering.EnhancementWorker
+	llmClient         llm.Client
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -509,10 +515,31 @@ func (c *Component) Start(ctx context.Context) error {
 		c.logger,
 	)
 
-	c.detector = clustering.NewLPADetector(entityIDProvider, c.storage).
+	// Create entity querier for summarization and enhancement
+	entityQuerier := &kvEntityQuerier{entityBucket: c.entityBucket, logger: c.logger}
+
+	// Create statistical summarizer for immediate summaries
+	// This sets SummaryStatus="statistical" which triggers EnhancementWorker
+	summarizer := clustering.NewStatisticalSummarizer()
+
+	// Create LPA detector with summarizer and entity provider
+	detector := clustering.NewLPADetector(entityIDProvider, c.storage).
 		WithLogger(c.logger).
 		WithMaxIterations(c.config.MaxIterations).
-		WithLevels(3)
+		WithLevels(3).
+		WithSummarizer(summarizer)
+
+	// Set entity provider for summarization (must be called on concrete type)
+	detector.SetEntityProvider(entityQuerier)
+	c.detector = detector
+
+	// Start LLM enhancement worker if enabled
+	if c.config.EnableLLM {
+		if err := c.startEnhancementWorker(ctx, provider); err != nil {
+			c.logger.Warn("failed to start enhancement worker, continuing without LLM",
+				slog.Any("error", err))
+		}
+	}
 
 	// Mark as running
 	c.running = true
@@ -538,6 +565,20 @@ func (c *Component) Stop(timeout time.Duration) error {
 	if !c.running {
 		c.mu.Unlock()
 		return nil // Already stopped
+	}
+
+	// Stop enhancement worker if running
+	if c.enhancementWorker != nil {
+		if err := c.enhancementWorker.Stop(); err != nil {
+			c.logger.Warn("enhancement worker stop error", slog.Any("error", err))
+		}
+	}
+
+	// Close LLM client if present
+	if c.llmClient != nil {
+		if err := c.llmClient.Close(); err != nil {
+			c.logger.Warn("LLM client close error", slog.Any("error", err))
+		}
 	}
 
 	// Cancel context
@@ -730,4 +771,118 @@ func (p *kvGraphProvider) GetEdgeWeight(_ context.Context, _, _ string) (float64
 	// For now, return 1.0 for all edges (equal weight)
 	// Could be enhanced to read confidence from the relationship data
 	return 1.0, nil
+}
+
+// ============================================================================
+// LLM Enhancement Support
+// ============================================================================
+
+// startEnhancementWorker initializes and starts the LLM enhancement worker
+func (c *Component) startEnhancementWorker(ctx context.Context, provider clustering.GraphProvider) error {
+	// Use default model if not specified (LLM service provides its own default)
+	model := c.config.LLMModel
+	if model == "" {
+		model = "default" // LLM service will use its configured default
+	}
+
+	// Create LLM client
+	llmClient, err := llm.NewOpenAIClient(llm.OpenAIConfig{
+		BaseURL: c.config.LLMEndpoint,
+		Model:   model,
+		Logger:  c.logger,
+	})
+	if err != nil {
+		return errs.Wrap(err, "Component", "startEnhancementWorker", "create LLM client")
+	}
+	c.llmClient = llmClient
+
+	// Create LLM summarizer
+	llmSummarizer, err := clustering.NewLLMSummarizer(clustering.LLMSummarizerConfig{
+		Client:    llmClient,
+		MaxTokens: 200,
+	})
+	if err != nil {
+		llmClient.Close()
+		return errs.Wrap(err, "Component", "startEnhancementWorker", "create LLM summarizer")
+	}
+
+	// Create entity querier from entity bucket
+	querier := newKVEntityQuerier(c.entityBucket, c.logger)
+
+	// Create enhancement worker
+	worker, err := clustering.NewEnhancementWorker(&clustering.EnhancementWorkerConfig{
+		LLMSummarizer:   llmSummarizer,
+		Storage:         c.storage,
+		GraphProvider:   provider,
+		Querier:         querier,
+		CommunityBucket: c.communityBucket,
+		Logger:          c.logger,
+	})
+	if err != nil {
+		llmClient.Close()
+		return errs.Wrap(err, "Component", "startEnhancementWorker", "create enhancement worker")
+	}
+
+	// Start the worker
+	if err := worker.Start(ctx); err != nil {
+		llmClient.Close()
+		return errs.Wrap(err, "Component", "startEnhancementWorker", "start enhancement worker")
+	}
+
+	c.enhancementWorker = worker
+	c.logger.Info("LLM enhancement worker started",
+		slog.String("endpoint", c.config.LLMEndpoint),
+		slog.String("model", c.config.LLMModel))
+
+	return nil
+}
+
+// ============================================================================
+// KV-based Entity Querier for Enhancement Worker
+// ============================================================================
+
+// kvEntityQuerier implements clustering.EntityQuerier using NATS KV
+type kvEntityQuerier struct {
+	entityBucket jetstream.KeyValue
+	logger       *slog.Logger
+}
+
+// newKVEntityQuerier creates an entity querier that reads from ENTITY_STATES
+func newKVEntityQuerier(entityBucket jetstream.KeyValue, logger *slog.Logger) *kvEntityQuerier {
+	return &kvEntityQuerier{
+		entityBucket: entityBucket,
+		logger:       logger,
+	}
+}
+
+// GetEntities retrieves entities by their IDs from ENTITY_STATES bucket
+func (q *kvEntityQuerier) GetEntities(ctx context.Context, ids []string) ([]*graph.EntityState, error) {
+	entities := make([]*graph.EntityState, 0, len(ids))
+
+	for _, id := range ids {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		entry, err := q.entityBucket.Get(ctx, id)
+		if err != nil {
+			if err == jetstream.ErrKeyNotFound {
+				q.logger.Debug("entity not found", slog.String("id", id))
+				continue
+			}
+			return nil, errs.WrapTransient(err, "kvEntityQuerier", "GetEntities", "get entity")
+		}
+
+		var entity graph.EntityState
+		if err := json.Unmarshal(entry.Value(), &entity); err != nil {
+			q.logger.Warn("failed to unmarshal entity", slog.String("id", id), slog.Any("error", err))
+			continue
+		}
+
+		entities = append(entities, &entity)
+	}
+
+	return entities, nil
 }

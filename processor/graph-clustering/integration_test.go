@@ -5,6 +5,8 @@ package graphclustering
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -670,4 +672,163 @@ func TestIntegration_ClusteringMetrics(t *testing.T) {
 
 	t.Logf("Component metrics - Messages/sec: %.2f, LastActivity: %v",
 		metrics.MessagesPerSecond, metrics.LastActivity)
+}
+
+// TestIntegration_LLMEnhancementWorkerStarts verifies that when EnableLLM=true,
+// the enhancement worker is initialized and ready to process communities.
+// This test caught a missing wiring bug during the monolith refactor.
+func TestIntegration_LLMEnhancementWorkerStarts(t *testing.T) {
+	// Create mock LLM server
+	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Return a minimal OpenAI-compatible response
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"choices":[{"message":{"content":"Test summary"}}]}`))
+	}))
+	defer mockLLM.Close()
+
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	config := Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "entity_watch", Type: "kv-watch", Subject: graph.BucketEntityStates},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "communities", Type: "kv-write", Subject: graph.BucketCommunityIndex},
+			},
+		},
+		DetectionIntervalStr: "1s",
+		MinCommunitySize:     2,
+		MaxIterations:        10,
+		EnableLLM:            true,                  // Enable LLM enhancement
+		LLMEndpoint:          mockLLM.URL + "/v1",   // Point to mock server
+	}
+
+	config.ApplyDefaults()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphClustering(configJSON, deps)
+	require.NoError(t, err)
+
+	clusteringComp := comp.(*Component)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, clusteringComp.Initialize())
+
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create required buckets
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketOutgoingIndex,
+		Description: "Test outgoing edges",
+	})
+	require.NoError(t, err)
+
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketIncomingIndex,
+		Description: "Test incoming edges",
+	})
+	require.NoError(t, err)
+
+	// Start component - this should initialize the enhancement worker
+	require.NoError(t, clusteringComp.Start(ctx))
+	defer clusteringComp.Stop(5 * time.Second)
+
+	// Verify enhancement worker was initialized
+	// This is the key assertion that would have caught the wiring bug
+	assert.NotNil(t, clusteringComp.enhancementWorker,
+		"EnhancementWorker should be initialized when EnableLLM=true")
+	assert.NotNil(t, clusteringComp.llmClient,
+		"LLM client should be initialized when EnableLLM=true")
+
+	t.Log("LLM enhancement worker successfully initialized")
+}
+
+// TestIntegration_LLMEnhancementDisabled verifies that when EnableLLM=false,
+// no LLM resources are allocated.
+func TestIntegration_LLMEnhancementDisabled(t *testing.T) {
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	config := Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "entity_watch", Type: "kv-watch", Subject: graph.BucketEntityStates},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "communities", Type: "kv-write", Subject: graph.BucketCommunityIndex},
+			},
+		},
+		DetectionIntervalStr: "1s",
+		MinCommunitySize:     2,
+		MaxIterations:        10,
+		EnableLLM:            false, // LLM disabled
+	}
+
+	config.ApplyDefaults()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphClustering(configJSON, deps)
+	require.NoError(t, err)
+
+	clusteringComp := comp.(*Component)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, clusteringComp.Initialize())
+
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create required buckets
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketOutgoingIndex,
+		Description: "Test outgoing edges",
+	})
+	require.NoError(t, err)
+
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketIncomingIndex,
+		Description: "Test incoming edges",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, clusteringComp.Start(ctx))
+	defer clusteringComp.Stop(5 * time.Second)
+
+	// Verify no LLM resources allocated
+	assert.Nil(t, clusteringComp.enhancementWorker,
+		"EnhancementWorker should be nil when EnableLLM=false")
+	assert.Nil(t, clusteringComp.llmClient,
+		"LLM client should be nil when EnableLLM=false")
+
+	t.Log("No LLM resources allocated when disabled - correct behavior")
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/inference"
 	"github.com/c360/semstreams/graph/structural"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
@@ -33,6 +34,9 @@ type Config struct {
 	PivotCount         int                   `json:"pivot_count" schema:"type:int,description:Number of pivot nodes for distance indexing,category:basic"`
 	MaxHopDistance     int                   `json:"max_hop_distance" schema:"type:int,description:Maximum hop distance for BFS traversal,category:basic"`
 	ComputeOnStartup   bool                  `json:"compute_on_startup" schema:"type:bool,description:Compute indices immediately on startup,category:basic"`
+
+	// Anomaly detection configuration
+	EnableDetection bool `json:"enable_detection" schema:"type:bool,description:Enable structural anomaly detection after computing indices,category:advanced"`
 
 	// Parsed duration (set by ApplyDefaults)
 	computeInterval time.Duration
@@ -210,6 +214,12 @@ type Component struct {
 	pivotComputer    *structural.PivotComputer
 	graphProvider    structural.GraphProvider
 	structuralBucket jetstream.KeyValue
+
+	// Anomaly detection (optional)
+	orchestrator      *inference.Orchestrator
+	anomalyStorage    *inference.NATSAnomalyStorage
+	anomalyBucket     jetstream.KeyValue
+	previousKCore     *structural.KCoreIndex // For tracking core demotions
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -521,6 +531,14 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "setup query handlers")
 	}
 
+	// Initialize anomaly detection if enabled
+	if c.config.EnableDetection {
+		if err := c.initializeAnomalyDetection(ctx); err != nil {
+			c.logger.Warn("failed to initialize anomaly detection, continuing without it",
+				slog.Any("error", err))
+		}
+	}
+
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
@@ -779,7 +797,106 @@ func (c *Component) computeStructuralIndices(ctx context.Context) {
 		c.lastActivity.Store(time.Now())
 	}
 
+	// Run anomaly detection if enabled and orchestrator is initialized
+	if c.orchestrator != nil && kcoreIndex != nil {
+		c.runAnomalyDetection(ctx, kcoreIndex, pivotIndex)
+	}
+
 	c.logger.Info("structural indices computed",
 		slog.Int("entities_processed", totalEntities),
 		slog.Duration("duration", time.Since(start)))
+}
+
+// ============================================================================
+// Anomaly Detection
+// ============================================================================
+
+// initializeAnomalyDetection sets up the anomaly detection system
+func (c *Component) initializeAnomalyDetection(ctx context.Context) error {
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return errs.Wrap(err, "Component", "initializeAnomalyDetection", "JetStream connection")
+	}
+
+	// Create ANOMALY_INDEX bucket
+	anomalyBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      inference.DefaultAnomalyBucket,
+		Description: "Structural anomaly index",
+	})
+	if err != nil {
+		// Try to get existing bucket
+		anomalyBucket, err = js.KeyValue(ctx, inference.DefaultAnomalyBucket)
+		if err != nil {
+			return errs.Wrap(err, "Component", "initializeAnomalyDetection", "create anomaly bucket")
+		}
+	}
+	c.anomalyBucket = anomalyBucket
+
+	// Create anomaly storage
+	c.anomalyStorage = inference.NewNATSAnomalyStorage(anomalyBucket, c.logger)
+
+	// Create orchestrator with default config
+	inferenceConfig := inference.DefaultConfig()
+	inferenceConfig.Enabled = true
+	inferenceConfig.CoreAnomaly.Enabled = true
+	inferenceConfig.SemanticGap.Enabled = false   // Requires embeddings
+	inferenceConfig.Transitivity.Enabled = false  // Requires relationship querier
+
+	orchestrator, err := inference.NewOrchestrator(inference.OrchestratorConfig{
+		Config:  inferenceConfig,
+		Storage: c.anomalyStorage,
+		Logger:  c.logger,
+	})
+	if err != nil {
+		return errs.Wrap(err, "Component", "initializeAnomalyDetection", "create orchestrator")
+	}
+
+	// Create and register CoreAnomalyDetector
+	coreDetector := inference.NewCoreAnomalyDetector(nil)
+	orchestrator.RegisterDetector(coreDetector)
+
+	c.orchestrator = orchestrator
+	c.logger.Info("anomaly detection initialized",
+		slog.String("bucket", inference.DefaultAnomalyBucket))
+
+	return nil
+}
+
+// runAnomalyDetection runs the anomaly detection after structural indices are computed
+func (c *Component) runAnomalyDetection(ctx context.Context, kcoreIndex *structural.KCoreIndex, pivotIndex *structural.PivotIndex) {
+	c.logger.Info("running anomaly detection")
+	start := time.Now()
+
+	// Build structural indices
+	indices := &structural.StructuralIndices{
+		KCore: kcoreIndex,
+		Pivot: pivotIndex,
+	}
+
+	// Create dependencies for detectors
+	deps := &inference.DetectorDependencies{
+		StructuralIndices: indices,
+		PreviousKCore:     c.previousKCore, // May be nil on first run
+		AnomalyStorage:    c.anomalyStorage,
+		Logger:            c.logger,
+	}
+
+	// Update orchestrator dependencies
+	c.orchestrator.SetDependencies(deps)
+
+	// Run detection
+	result, err := c.orchestrator.RunDetection(ctx)
+	if err != nil {
+		c.logger.Error("anomaly detection failed", slog.Any("error", err))
+		atomic.AddInt64(&c.errors, 1)
+		return
+	}
+
+	// Store current k-core for next run's demotion tracking
+	c.previousKCore = kcoreIndex
+
+	c.logger.Info("anomaly detection complete",
+		slog.Int("anomalies_detected", result.AnomalyCount()),
+		slog.Duration("duration", result.Duration()),
+		slog.Duration("total_duration", time.Since(start)))
 }

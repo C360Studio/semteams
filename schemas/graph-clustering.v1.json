@@ -25,6 +25,11 @@
       "description": "URL for LLM endpoint (required if enable_llm is true)",
       "category": "advanced"
     },
+    "llm_model": {
+      "type": "string",
+      "description": "Model name for LLM service (e.g. mistral-7b-instruct)",
+      "category": "advanced"
+    },
     "max_iterations": {
       "type": "number",
       "description": "Maximum iterations for LPA algorithm",

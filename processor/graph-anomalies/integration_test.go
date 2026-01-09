@@ -474,3 +474,179 @@ func TestIntegration_AnomaliesPivotComputation(t *testing.T) {
 	t.Logf("Pivot computation successful: %d pivots, %d distance vectors",
 		len(pivots), distanceVectorsFound)
 }
+
+// TestIntegration_AnomalyDetectionRuns verifies that when EnableDetection=true,
+// the anomaly detection orchestrator is initialized and runs after structural computation.
+// This test caught a missing wiring bug during the monolith refactor.
+func TestIntegration_AnomalyDetectionRuns(t *testing.T) {
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	config := Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "outgoing_watch", Type: "kv-watch", Subject: graph.BucketOutgoingIndex},
+				{Name: "incoming_watch", Type: "kv-watch", Subject: graph.BucketIncomingIndex},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "structural_index", Type: "kv-write", Subject: graph.BucketStructuralIndex},
+			},
+		},
+		ComputeIntervalStr: "1s",
+		PivotCount:         4,
+		MaxHopDistance:     5,
+		ComputeOnStartup:   true,
+		EnableDetection:    true, // Enable anomaly detection
+	}
+
+	config.ApplyDefaults()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphAnomalies(configJSON, deps)
+	require.NoError(t, err)
+
+	anomaliesComp := comp.(*Component)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	require.NoError(t, anomaliesComp.Initialize())
+
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create input buckets
+	outgoingBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketOutgoingIndex,
+		Description: "Test outgoing edges",
+	})
+	require.NoError(t, err)
+
+	incomingBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketIncomingIndex,
+		Description: "Test incoming edges",
+	})
+	require.NoError(t, err)
+
+	// Create a simple graph
+	entityIDs := []string{
+		"c360.test.detection.node.a",
+		"c360.test.detection.node.b",
+		"c360.test.detection.node.c",
+	}
+
+	edges := []struct{ from, to string }{
+		{entityIDs[0], entityIDs[1]},
+		{entityIDs[1], entityIDs[2]},
+		{entityIDs[1], entityIDs[0]},
+		{entityIDs[2], entityIDs[1]},
+	}
+
+	outgoingNeighbors := make(map[string][]string)
+	incomingNeighbors := make(map[string][]string)
+
+	for _, edge := range edges {
+		outgoingNeighbors[edge.from] = append(outgoingNeighbors[edge.from], edge.to)
+		incomingNeighbors[edge.to] = append(incomingNeighbors[edge.to], edge.from)
+	}
+
+	for entityID, neighbors := range outgoingNeighbors {
+		outgoingJSON, _ := json.Marshal(neighbors)
+		outgoingBucket.Put(ctx, entityID, outgoingJSON)
+	}
+	for entityID, neighbors := range incomingNeighbors {
+		incomingJSON, _ := json.Marshal(neighbors)
+		incomingBucket.Put(ctx, entityID, incomingJSON)
+	}
+
+	// Start component - this should initialize the orchestrator
+	require.NoError(t, anomaliesComp.Start(ctx))
+	defer anomaliesComp.Stop(5 * time.Second)
+
+	// Verify orchestrator was initialized
+	// This is the key assertion that would have caught the wiring bug
+	assert.NotNil(t, anomaliesComp.orchestrator,
+		"Orchestrator should be initialized when EnableDetection=true")
+	assert.NotNil(t, anomaliesComp.anomalyStorage,
+		"Anomaly storage should be initialized when EnableDetection=true")
+	assert.NotNil(t, anomaliesComp.anomalyBucket,
+		"Anomaly bucket should be created when EnableDetection=true")
+
+	t.Log("Anomaly detection orchestrator successfully initialized")
+}
+
+// TestIntegration_AnomalyDetectionDisabled verifies that when EnableDetection=false,
+// no anomaly detection resources are allocated.
+func TestIntegration_AnomalyDetectionDisabled(t *testing.T) {
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	config := Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "outgoing_watch", Type: "kv-watch", Subject: graph.BucketOutgoingIndex},
+				{Name: "incoming_watch", Type: "kv-watch", Subject: graph.BucketIncomingIndex},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "structural_index", Type: "kv-write", Subject: graph.BucketStructuralIndex},
+			},
+		},
+		ComputeIntervalStr: "1s",
+		PivotCount:         4,
+		MaxHopDistance:     5,
+		ComputeOnStartup:   true,
+		EnableDetection:    false, // Detection disabled (default)
+	}
+
+	config.ApplyDefaults()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphAnomalies(configJSON, deps)
+	require.NoError(t, err)
+
+	anomaliesComp := comp.(*Component)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	require.NoError(t, anomaliesComp.Initialize())
+
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create input buckets
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketOutgoingIndex,
+		Description: "Test outgoing edges",
+	})
+	require.NoError(t, err)
+
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketIncomingIndex,
+		Description: "Test incoming edges",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, anomaliesComp.Start(ctx))
+	defer anomaliesComp.Stop(5 * time.Second)
+
+	// Verify no detection resources allocated
+	assert.Nil(t, anomaliesComp.orchestrator,
+		"Orchestrator should be nil when EnableDetection=false")
+	assert.Nil(t, anomaliesComp.anomalyStorage,
+		"Anomaly storage should be nil when EnableDetection=false")
+	assert.Nil(t, anomaliesComp.anomalyBucket,
+		"Anomaly bucket should be nil when EnableDetection=false")
+
+	t.Log("No anomaly detection resources allocated when disabled - correct behavior")
+}
