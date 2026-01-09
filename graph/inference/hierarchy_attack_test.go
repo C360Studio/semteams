@@ -77,7 +77,7 @@ func TestAttack_OnEntityCreated_Concurrent(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	entities := []string{
 		// Real entities
@@ -145,7 +145,7 @@ func TestAttack_CancelledContext(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
@@ -196,7 +196,7 @@ func TestAttack_EdgeCaseInputs(t *testing.T) {
 			tripleAdder := &hierarchyMockTripleAdder{}
 			entityManager := newMockEntityManager()
 			config := HierarchyConfig{Enabled: true, CreateTypeEdges: true}
-			hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+			hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 			require.NotPanics(t, func() {
 				_ = hi.OnEntityCreated(context.Background(), tc.entityID)
@@ -218,7 +218,7 @@ func TestAttack_ContainerCacheConcurrency(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Create same entity from multiple goroutines
 	// This stresses the container cache with concurrent reads/writes
@@ -268,7 +268,7 @@ func TestAttack_ClearCacheDuringOperations(t *testing.T) {
 		CreateDomainEdges: false,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -346,7 +346,7 @@ func TestAttack_MetricsConcurrency(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -404,7 +404,7 @@ func TestAttack_NilConfig(t *testing.T) {
 	config := HierarchyConfig{}
 
 	require.NotPanics(t, func() {
-		hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+		hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 		_ = hi.OnEntityCreated(context.Background(), "c360.logistics.environmental.sensor.temperature.temp-001")
 	}, "Should handle zero-value config")
 }
@@ -474,7 +474,7 @@ func TestAttack_LargeEntityBurst(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	const entityCount = 1000
 	var wg sync.WaitGroup
@@ -523,7 +523,7 @@ func TestAttack_MemoryUsage(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Create 10,000 entities with different types
 	const entityCount = 10000
@@ -557,7 +557,7 @@ func TestAttack_GoroutineCount(t *testing.T) {
 
 	before := runtime.NumGoroutine()
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Create 100 entities
 	for i := 0; i < 100; i++ {

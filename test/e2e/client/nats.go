@@ -1045,24 +1045,41 @@ func (c *NATSValidationClient) waitForSourceEntityCountPolling(
 	expectedCount int,
 	timeout time.Duration,
 ) EntityStabilizationResult {
-	const stabilizationChecks = 3
-	const checkInterval = 200 * time.Millisecond
+	const stabilizationChecks = 2
+	const checkInterval = 50 * time.Millisecond
+	const progressInterval = 1 * time.Second
 
 	deadline := time.Now().Add(timeout)
+	lastProgress := time.Now()
 
 	var lastCount int
 	stableCount := 0
+	pollCount := 0
 
 	for time.Now().Before(deadline) {
 		count, err := c.CountSourceEntities(ctx)
+		pollCount++
 		if err != nil {
+			// Log progress with error
+			if time.Since(lastProgress) >= progressInterval {
+				fmt.Printf("    [poll %d] error counting entities: %v\n", pollCount, err)
+				lastProgress = time.Now()
+			}
 			time.Sleep(checkInterval)
 			continue
+		}
+
+		// Log progress every second
+		if time.Since(lastProgress) >= progressInterval {
+			fmt.Printf("    [poll %d] entities: %d/%d (stable: %d/%d)\n",
+				pollCount, count, expectedCount, stableCount, stabilizationChecks)
+			lastProgress = time.Now()
 		}
 
 		if count == lastCount && count >= expectedCount {
 			stableCount++
 			if stableCount >= stabilizationChecks {
+				fmt.Printf("    [poll %d] stabilized at %d entities\n", pollCount, count)
 				return EntityStabilizationResult{
 					FinalCount: count,
 					Stabilized: true,
@@ -1077,6 +1094,7 @@ func (c *NATSValidationClient) waitForSourceEntityCountPolling(
 		time.Sleep(checkInterval)
 	}
 
+	fmt.Printf("    [poll %d] TIMEOUT - got %d/%d entities\n", pollCount, lastCount, expectedCount)
 	return EntityStabilizationResult{
 		FinalCount: lastCount,
 		Stabilized: false,
@@ -1113,8 +1131,8 @@ func (c *NATSValidationClient) waitForEntityCountPolling(
 	expectedCount int,
 	timeout time.Duration,
 ) EntityStabilizationResult {
-	const stabilizationChecks = 3
-	const checkInterval = 200 * time.Millisecond
+	const stabilizationChecks = 2
+	const checkInterval = 50 * time.Millisecond
 
 	deadline := time.Now().Add(timeout)
 

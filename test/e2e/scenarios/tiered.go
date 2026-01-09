@@ -107,8 +107,9 @@ func DefaultTieredConfig() *TieredConfig {
 		MessageCount:    20,
 		MessageInterval: 50 * time.Millisecond,
 		// Event-driven validation timeouts
-		// 60s default allows time for testdata files to load + entity processing
-		ValidationTimeout:    60 * time.Second,
+		// 10s default - structural tier should complete quickly
+		// Semantic tier may need to override this for ML processing
+		ValidationTimeout:    10 * time.Second,
 		PollInterval:         100 * time.Millisecond, // Fast polling for responsiveness
 		MinProcessed:         10,                     // At least 50% should make it through
 		MinExpectedEntities:  50,                     // Test data has 74 entities, expect at least 50 indexed
@@ -859,6 +860,23 @@ func (s *TieredScenario) waitForEntityCountStabilization(ctx context.Context, ex
 // be processing when we start validation.
 func (s *TieredScenario) executeWaitForEntityStabilization(ctx context.Context, result *Result) error {
 	const expectedEntities = 74 // All tiers expect 74 entities from testdata/semantic/
+
+	// Retry SSE initialization if it failed at startup.
+	// ENTITY_STATES bucket is created by graph-ingest after data flows,
+	// so SSE health check at test start fails. Now that data has been sent,
+	// the bucket should exist and SSE can work.
+	if s.sseClient == nil {
+		fmt.Printf("  SSE client not available, retrying...\n")
+		s.sseClient = client.NewSSEClient(s.config.ServiceManagerURL)
+		if err := s.sseClient.Health(ctx); err != nil {
+			fmt.Printf("  SSE retry failed: %v (falling back to polling)\n", err)
+			s.sseClient = nil // Still not available, will use polling
+		} else {
+			fmt.Printf("  SSE retry succeeded\n")
+		}
+	} else {
+		fmt.Printf("  SSE client available\n")
+	}
 
 	stabilization := s.waitForEntityCountStabilization(ctx, expectedEntities)
 

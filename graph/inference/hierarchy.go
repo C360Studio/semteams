@@ -13,12 +13,11 @@ import (
 	gtypes "github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/vocabulary"
-	"github.com/nats-io/nats.go/jetstream"
 )
 
 // HierarchyInference creates membership edges to container entities based on
-// the 6-part entity ID structure. When an entity is created, it automatically
-// creates edges to type, system, and domain container entities.
+// the 6-part entity ID structure. It operates synchronously - hierarchy triples
+// are computed and returned before the entity is written to storage.
 //
 // Entity ID format: org.platform.domain.system.type.instance
 // Example: acme.iot.sensors.hvac.temperature.001
@@ -32,11 +31,13 @@ import (
 //   - Same type siblings: 2 hops (entity → type.group ← entity)
 //   - Same system, different type: 4 hops
 //   - Same domain, different system: 6 hops
+//
+// This is a stateless utility - no lifecycle methods (Start/Stop).
 type HierarchyInference struct {
 	// entityManager handles entity existence checks and creation
 	entityManager EntityManager
 
-	// tripleAdder adds triples to entities
+	// tripleAdder adds triples to entities (used for inverse edges on containers)
 	tripleAdder TripleAdder
 
 	// Configuration
@@ -49,25 +50,10 @@ type HierarchyInference struct {
 	containerCache   map[string]bool
 	containerCacheMu sync.RWMutex
 
-	// Cache of entities already processed for hierarchy inference
-	// Prevents duplicate edge creation when watching entities
-	processedCache   map[string]bool
-	processedCacheMu sync.RWMutex
-
 	// Metrics
 	containersCreated atomic.Int64
 	edgesCreated      atomic.Int64
 	edgesFailed       atomic.Int64
-
-	// KV Watcher lifecycle (follows ReviewWorker pattern)
-	entityBucket jetstream.KeyValue // ENTITY_STATES bucket
-	watcher      jetstream.KeyWatcher
-	workerCount  int
-	ctx          context.Context
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
-	mu           sync.RWMutex
-	started      bool
 }
 
 // EntityManager provides entity existence checks and creation.
@@ -109,14 +95,12 @@ func DefaultHierarchyConfig() HierarchyConfig {
 //
 // Parameters:
 //   - entityManager: Component for entity existence checks and creation
-//   - tripleAdder: Component that can add triples (typically DataManager)
-//   - entityBucket: ENTITY_STATES KV bucket to watch for new entities
+//   - tripleAdder: Component that can add triples (for inverse edges on containers)
 //   - config: Configuration for edge creation
 //   - logger: Logger for observability (can be nil)
 func NewHierarchyInference(
 	entityManager EntityManager,
 	tripleAdder TripleAdder,
-	entityBucket jetstream.KeyValue,
 	config HierarchyConfig,
 	logger *slog.Logger,
 ) *HierarchyInference {
@@ -127,12 +111,9 @@ func NewHierarchyInference(
 	return &HierarchyInference{
 		entityManager:  entityManager,
 		tripleAdder:    tripleAdder,
-		entityBucket:   entityBucket,
 		config:         config,
 		logger:         logger,
 		containerCache: make(map[string]bool),
-		processedCache: make(map[string]bool),
-		workerCount:    2, // Default: 2 workers for hierarchy inference
 	}
 }
 
@@ -152,55 +133,90 @@ func isContainerEntity(entityID string) bool {
 	return lastPart == "group" || lastPart == "container" || lastPart == "level"
 }
 
-// OnEntityCreated is called when a new entity is added to the graph.
-// It creates membership edges to container entities based on the entity's 6-part ID.
+// GetHierarchyTriples returns hierarchy membership triples for the given entity ID.
+// This method has NO side effects - it only computes triples, it doesn't write them.
+// The caller must include these triples in the entity before writing to storage.
 //
 // For each enabled level (type, system, domain), it:
 // 1. Computes the container entity ID
-// 2. Auto-creates the container if it doesn't exist
-// 3. Creates a membership edge from entity to container
+// 2. Auto-creates the container if it doesn't exist (side effect on containers only)
+// 3. Returns a membership triple from entity to container
+// 4. Adds inverse edge to container (container → contains → entity)
 //
-// This is O(1) per entity - only the new entity is modified, plus up to 3
-// container creations (which are idempotent and cached).
-func (h *HierarchyInference) OnEntityCreated(ctx context.Context, entityID string) error {
+// Returns empty slice if hierarchy is disabled or entity ID is invalid.
+func (h *HierarchyInference) GetHierarchyTriples(ctx context.Context, entityID string) ([]message.Triple, error) {
 	if !h.config.Enabled {
-		return nil
+		return nil, nil
 	}
 
 	// Skip container entities to prevent infinite cascade
 	if isContainerEntity(entityID) {
-		return nil
+		return nil, nil
 	}
 
 	// Parse entity ID to validate 6-part structure
 	parts := strings.Split(entityID, ".")
 	if len(parts) != 6 {
 		// Not a valid 6-part EntityID, skip silently
-		return nil
+		return nil, nil
 	}
 
+	var triples []message.Triple
 	var errs []error
 
 	// Create type membership: entity → type.group
 	if h.config.CreateTypeEdges {
 		typeContainerID := h.buildTypeContainerID(parts)
-		if err := h.ensureContainerAndEdge(ctx, entityID, typeContainerID, vocabulary.HierarchyTypeMember); err != nil {
+		triple, err := h.ensureContainerAndReturnEdge(ctx, entityID, typeContainerID, vocabulary.HierarchyTypeMember)
+		if err != nil {
 			errs = append(errs, err)
+		} else if triple != nil {
+			triples = append(triples, *triple)
 		}
 	}
 
 	// Create system membership: entity → system.group.container
 	if h.config.CreateSystemEdges {
 		systemContainerID := h.buildSystemContainerID(parts)
-		if err := h.ensureContainerAndEdge(ctx, entityID, systemContainerID, vocabulary.HierarchySystemMember); err != nil {
+		triple, err := h.ensureContainerAndReturnEdge(ctx, entityID, systemContainerID, vocabulary.HierarchySystemMember)
+		if err != nil {
 			errs = append(errs, err)
+		} else if triple != nil {
+			triples = append(triples, *triple)
 		}
 	}
 
 	// Create domain membership: entity → domain.group.container.level
 	if h.config.CreateDomainEdges {
 		domainContainerID := h.buildDomainContainerID(parts)
-		if err := h.ensureContainerAndEdge(ctx, entityID, domainContainerID, vocabulary.HierarchyDomainMember); err != nil {
+		triple, err := h.ensureContainerAndReturnEdge(ctx, entityID, domainContainerID, vocabulary.HierarchyDomainMember)
+		if err != nil {
+			errs = append(errs, err)
+		} else if triple != nil {
+			triples = append(triples, *triple)
+		}
+	}
+
+	if len(errs) > 0 {
+		return triples, errors.Join(errs...)
+	}
+
+	return triples, nil
+}
+
+// OnEntityCreated is the legacy method kept for backwards compatibility.
+// It calls GetHierarchyTriples and adds them using tripleAdder.
+// New code should use GetHierarchyTriples directly to avoid cascading writes.
+func (h *HierarchyInference) OnEntityCreated(ctx context.Context, entityID string) error {
+	triples, err := h.GetHierarchyTriples(ctx, entityID)
+	if err != nil {
+		return err
+	}
+
+	// Add triples using tripleAdder (legacy behavior - causes cascade)
+	var errs []error
+	for _, triple := range triples {
+		if err := h.tripleAdder.AddTriple(ctx, triple); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -229,13 +245,14 @@ func (h *HierarchyInference) buildDomainContainerID(parts []string) string {
 	return strings.Join(parts[:3], ".") + ".group.container.level"
 }
 
-// ensureContainerAndEdge creates the container entity if needed, then creates the membership edge
-// and its inverse (container → contains → entity) for bidirectional graph traversal.
-func (h *HierarchyInference) ensureContainerAndEdge(ctx context.Context, entityID, containerID, predicate string) error {
+// ensureContainerAndReturnEdge creates the container entity if needed, then returns
+// the membership edge triple WITHOUT adding it to the entity (caller must do that).
+// Also adds inverse edge to container (container → contains → entity) for bidirectional traversal.
+func (h *HierarchyInference) ensureContainerAndReturnEdge(ctx context.Context, entityID, containerID, predicate string) (*message.Triple, error) {
 	// Ensure container exists (with caching)
 	if err := h.ensureContainerExists(ctx, containerID); err != nil {
 		h.edgesFailed.Add(1)
-		return err
+		return nil, err
 	}
 
 	// Create forward membership edge: entity → predicate → container
@@ -247,15 +264,11 @@ func (h *HierarchyInference) ensureContainerAndEdge(ctx context.Context, entityI
 		Confidence: 1.0, // Structural inference has perfect confidence
 	}
 
-	if err := h.tripleAdder.AddTriple(ctx, forwardTriple); err != nil {
-		h.edgesFailed.Add(1)
-		return err
-	}
-
 	h.edgesCreated.Add(1)
 
 	// Create inverse edge: container → contains → entity
 	// This enables direct traversal from container to its members without using IncomingIndex
+	// NOTE: This IS a side effect - we're updating the container entity
 	inversePredicate := vocabulary.GetInversePredicate(predicate)
 	if inversePredicate != "" {
 		inverseTriple := message.Triple{
@@ -267,7 +280,7 @@ func (h *HierarchyInference) ensureContainerAndEdge(ctx context.Context, entityI
 		}
 
 		if err := h.tripleAdder.AddTriple(ctx, inverseTriple); err != nil {
-			// Log warning but don't fail - forward edge already created
+			// Log warning but don't fail - forward edge will still be returned
 			h.logger.Warn("Failed to create inverse edge",
 				"container_id", containerID,
 				"entity_id", entityID,
@@ -278,7 +291,7 @@ func (h *HierarchyInference) ensureContainerAndEdge(ctx context.Context, entityI
 		}
 	}
 
-	return nil
+	return &forwardTriple, nil
 }
 
 // ensureContainerExists creates a minimal container entity if it doesn't exist.
@@ -347,15 +360,11 @@ func (h *HierarchyInference) ensureContainerExists(ctx context.Context, containe
 	return nil
 }
 
-// ClearCache resets the container and processed caches. Call when containers might be deleted.
+// ClearCache resets the container cache. Call when containers might be deleted.
 func (h *HierarchyInference) ClearCache() {
 	h.containerCacheMu.Lock()
 	h.containerCache = make(map[string]bool)
 	h.containerCacheMu.Unlock()
-
-	h.processedCacheMu.Lock()
-	h.processedCache = make(map[string]bool)
-	h.processedCacheMu.Unlock()
 }
 
 // GetMetrics returns metrics for hierarchy inference operations.
@@ -369,149 +378,4 @@ func (h *HierarchyInference) GetCacheStats() int {
 	defer h.containerCacheMu.RUnlock()
 
 	return len(h.containerCache)
-}
-
-// Start begins watching ENTITY_STATES for new entities and creating hierarchy edges.
-// Follows the ReviewWorker pattern for independent KV watching.
-func (h *HierarchyInference) Start(ctx context.Context) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if h.started {
-		return nil // Idempotent
-	}
-
-	if !h.config.Enabled {
-		h.logger.Debug("Hierarchy inference disabled, not starting watcher")
-		return nil
-	}
-
-	if h.entityBucket == nil {
-		h.logger.Warn("No entity bucket provided, hierarchy inference cannot start")
-		return nil
-	}
-
-	h.ctx, h.cancel = context.WithCancel(ctx)
-
-	// Create KV watcher on ENTITY_STATES
-	watcher, err := h.entityBucket.WatchAll(h.ctx)
-	if err != nil {
-		h.cancel()
-		return errors.Join(errors.New("failed to create entity watcher"), err)
-	}
-	h.watcher = watcher
-
-	// Start worker goroutines
-	for i := 0; i < h.workerCount; i++ {
-		h.wg.Add(1)
-		go h.processEntities(i)
-	}
-
-	h.started = true
-	h.logger.Info("Hierarchy inference started with KV watcher",
-		"workers", h.workerCount,
-		"create_type_edges", h.config.CreateTypeEdges,
-		"create_system_edges", h.config.CreateSystemEdges,
-		"create_domain_edges", h.config.CreateDomainEdges)
-
-	return nil
-}
-
-// Stop gracefully shuts down the hierarchy inference worker.
-func (h *HierarchyInference) Stop() error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if !h.started {
-		return nil // Idempotent
-	}
-
-	if h.cancel != nil {
-		h.cancel()
-	}
-
-	if h.watcher != nil {
-		_ = h.watcher.Stop()
-	}
-
-	h.wg.Wait()
-	h.started = false
-
-	containersCreated, edgesCreated, edgesFailed := h.GetMetrics()
-	h.logger.Info("Hierarchy inference stopped",
-		"containers_created", containersCreated,
-		"edges_created", edgesCreated,
-		"edges_failed", edgesFailed)
-
-	return nil
-}
-
-// processEntities is the worker loop that watches for new entities.
-// Follows the ReviewWorker pattern for independent KV watching.
-//
-// On startup, WatchAll() delivers all existing entries first (backfill),
-// then continues with live updates. The processed cache ensures idempotency -
-// entities that already have hierarchy edges will be skipped efficiently.
-func (h *HierarchyInference) processEntities(workerID int) {
-	defer h.wg.Done()
-
-	h.logger.Debug("Hierarchy inference worker started", "worker_id", workerID)
-
-	for {
-		select {
-		case <-h.ctx.Done():
-			h.logger.Debug("Hierarchy inference worker stopping", "worker_id", workerID)
-			return
-
-		case entry, ok := <-h.watcher.Updates():
-			if !ok {
-				h.logger.Debug("Hierarchy inference watcher closed", "worker_id", workerID)
-				return
-			}
-
-			// Skip nil entries (initial watcher marker)
-			if entry == nil {
-				continue
-			}
-
-			// Skip deleted entries
-			if entry.Operation() == jetstream.KeyValueDelete {
-				continue
-			}
-
-			entityID := entry.Key()
-
-			// Check if already processed (idempotency for backfill + live updates)
-			// This prevents reprocessing when we add membership edges to entities
-			h.processedCacheMu.RLock()
-			alreadyProcessed := h.processedCache[entityID]
-			h.processedCacheMu.RUnlock()
-
-			if alreadyProcessed {
-				continue
-			}
-
-			// Mark as processed before actually processing to prevent
-			// concurrent workers from processing the same entity
-			h.processedCacheMu.Lock()
-			// Double-check after acquiring write lock
-			if h.processedCache[entityID] {
-				h.processedCacheMu.Unlock()
-				continue
-			}
-			h.processedCache[entityID] = true
-			h.processedCacheMu.Unlock()
-
-			// Process entity - creates hierarchy edges
-			// This handles both:
-			// 1. Initial backfill (existing entities when watcher starts)
-			// 2. Live creates (new entities added after watcher starts)
-			if err := h.OnEntityCreated(h.ctx, entityID); err != nil {
-				h.logger.Debug("Hierarchy inference skipped entity",
-					"worker_id", workerID,
-					"entity_id", entityID,
-					"error", err)
-			}
-		}
-	}
 }

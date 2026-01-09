@@ -636,6 +636,17 @@ func (c *Component) transformVariablesToNATSPayload(variables map[string]interfa
 			payload["max_depth"] = maxDepthVal
 		}
 
+		// maxNodes parameter for limiting traversal
+		if nodes, ok := variables["nodes"]; ok {
+			payload["max_nodes"] = nodes
+		}
+		if maxNodes, ok := variables["maxNodes"]; ok {
+			payload["max_nodes"] = maxNodes
+		}
+		if maxNodesVal, ok := variables["max_nodes"]; ok {
+			payload["max_nodes"] = maxNodesVal
+		}
+
 	case "graph.query.entity":
 		// Pass through id field
 		if id, ok := variables["id"]; ok {

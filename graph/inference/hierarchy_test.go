@@ -101,7 +101,7 @@ func TestHierarchyInference_OnEntityCreated_Disabled(t *testing.T) {
 		CreateTypeEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	err := hi.OnEntityCreated(context.Background(), "c360.logistics.sensor.document.temperature.sensor-001")
 	require.NoError(t, err)
@@ -120,7 +120,7 @@ func TestHierarchyInference_OnEntityCreated_InvalidEntityID(t *testing.T) {
 		CreateTypeEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// 5-part entity ID should be skipped
 	err := hi.OnEntityCreated(context.Background(), "c360.logistics.sensor.document.temperature")
@@ -144,7 +144,7 @@ func TestHierarchyInference_OnEntityCreated_TypeEdgeOnly(t *testing.T) {
 		CreateDomainEdges: false,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	entityID := "c360.logistics.sensor.document.temperature.sensor-001"
 	containerID := "c360.logistics.sensor.document.temperature.group"
@@ -195,7 +195,7 @@ func TestHierarchyInference_OnEntityCreated_AllLevels(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	entityID := "c360.logistics.sensor.document.temperature.sensor-001"
 	err := hi.OnEntityCreated(context.Background(), entityID)
@@ -253,7 +253,7 @@ func TestHierarchyInference_ContainerReuse(t *testing.T) {
 		CreateDomainEdges: false,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Create first entity
 	err := hi.OnEntityCreated(context.Background(), "c360.logistics.sensor.document.temperature.sensor-001")
@@ -286,7 +286,7 @@ func TestHierarchyInference_ContainerExistsInStorage(t *testing.T) {
 		CreateDomainEdges: false,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	err := hi.OnEntityCreated(context.Background(), "c360.logistics.sensor.document.temperature.sensor-001")
 	require.NoError(t, err)
@@ -311,7 +311,7 @@ func TestHierarchyInference_ContainerEntityProperties(t *testing.T) {
 		CreateDomainEdges: false,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	err := hi.OnEntityCreated(context.Background(), "c360.logistics.sensor.document.temperature.sensor-001")
 	require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestHierarchyInference_ClearCache(t *testing.T) {
 		CreateTypeEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Create entity to populate cache
 	err := hi.OnEntityCreated(context.Background(), "c360.logistics.sensor.document.temperature.sensor-001")
@@ -364,7 +364,7 @@ func TestHierarchyInference_GetMetrics(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Initial metrics
 	containers, edges, failed := hi.GetMetrics()
@@ -395,7 +395,7 @@ func TestBuildContainerIDs(t *testing.T) {
 	tripleAdder := &hierarchyMockTripleAdder{}
 	entityManager := newMockEntityManager()
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, DefaultHierarchyConfig(), nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, DefaultHierarchyConfig(), nil)
 
 	parts := []string{"org", "platform", "domain", "system", "type", "instance"}
 
@@ -426,7 +426,7 @@ func TestHierarchyInference_RaceConditionOnContainerCreate(t *testing.T) {
 		CreateDomainEdges: false,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Even if container exists, edges should still be created
 	err := hi.OnEntityCreated(context.Background(), "c360.logistics.sensor.document.temperature.sensor-001")

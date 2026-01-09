@@ -191,7 +191,7 @@ func TestHierarchyInference_SkipContainerEntities(t *testing.T) {
 				CreateDomainEdges: true,
 			}
 
-			hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+			hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 			err := hi.OnEntityCreated(context.Background(), tt.entityID)
 			require.NoError(t, err)
@@ -226,7 +226,7 @@ func TestHierarchyInference_NoCascade(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Create a real entity
 	entityID := "c360.logistics.environmental.sensor.temperature.temp-001"
@@ -296,7 +296,7 @@ func TestHierarchyInference_MultipleEntitiesSameType(t *testing.T) {
 		CreateDomainEdges: true,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Create 10 entities of the same type
 	baseID := "c360.logistics.environmental.sensor.temperature"
@@ -355,7 +355,7 @@ func TestHierarchyInference_ContainerEntityWithNonStandardSuffix(t *testing.T) {
 		CreateDomainEdges: false,
 	}
 
-	hi := NewHierarchyInference(entityManager, tripleAdder, nil, config, nil)
+	hi := NewHierarchyInference(entityManager, tripleAdder, config, nil)
 
 	// Entity that contains "group" but doesn't end with it
 	entityID := "c360.logistics.group.sensor.temperature.temp-001"

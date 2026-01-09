@@ -196,8 +196,9 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 	}
 
 	// Route based on direction
+	isIncoming := req.Direction == "incoming"
 	queryType := "outgoing"
-	if req.Direction == "incoming" {
+	if isIncoming {
 		queryType = "incoming"
 	}
 	subject := c.router.Route(queryType)
@@ -210,8 +211,56 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 		return nil, fmt.Errorf("query relationships failed: %w", err)
 	}
 
-	c.recordSuccess(len(data), len(response))
-	return response, nil
+	// Transform raw index entries to normalized relationship format
+	// graph-index returns: [{from_entity_id, predicate}] for incoming
+	//                   or [{to_entity_id, predicate}] for outgoing
+	// We need to return: {relationships: [{from_entity_id, to_entity_id, edge_type}]}
+	var relationships []map[string]any
+
+	if isIncoming {
+		// Incoming: entries have from_entity_id + predicate
+		var entries []struct {
+			FromEntityID string `json:"from_entity_id"`
+			Predicate    string `json:"predicate"`
+		}
+		if err := json.Unmarshal(response, &entries); err != nil {
+			return nil, fmt.Errorf("parse incoming entries: %w", err)
+		}
+		relationships = make([]map[string]any, len(entries))
+		for i, e := range entries {
+			relationships[i] = map[string]any{
+				"from_entity_id": e.FromEntityID,
+				"to_entity_id":   req.EntityID,
+				"edge_type":      e.Predicate,
+			}
+		}
+	} else {
+		// Outgoing: entries have to_entity_id + predicate
+		var entries []struct {
+			ToEntityID string `json:"to_entity_id"`
+			Predicate  string `json:"predicate"`
+		}
+		if err := json.Unmarshal(response, &entries); err != nil {
+			return nil, fmt.Errorf("parse outgoing entries: %w", err)
+		}
+		relationships = make([]map[string]any, len(entries))
+		for i, e := range entries {
+			relationships[i] = map[string]any{
+				"from_entity_id": req.EntityID,
+				"to_entity_id":   e.ToEntityID,
+				"edge_type":      e.Predicate,
+			}
+		}
+	}
+
+	// Return just the array - gateway will wrap in {"data": {"relationships": ...}}
+	responseData, err := json.Marshal(relationships)
+	if err != nil {
+		return nil, fmt.Errorf("marshal response: %w", err)
+	}
+
+	c.recordSuccess(len(data), len(responseData))
+	return responseData, nil
 }
 
 // handlePathSearch handles PathRAG traversal queries

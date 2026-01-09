@@ -436,7 +436,7 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.entityBucket = bucket
 
-	// Initialize hierarchy inference if enabled
+	// Initialize hierarchy inference if enabled (synchronous - no Start/Stop)
 	if c.config.EnableHierarchy {
 		hierarchyConfig := inference.HierarchyConfig{
 			Enabled:           true,
@@ -448,15 +448,9 @@ func (c *Component) Start(ctx context.Context) error {
 		c.hierarchyInference = inference.NewHierarchyInference(
 			&entityManagerAdapter{component: c},
 			&tripleAdderAdapter{component: c},
-			c.entityBucket,
 			hierarchyConfig,
 			c.logger,
 		)
-
-		if err := c.hierarchyInference.Start(ctx); err != nil {
-			cancel()
-			return errs.Wrap(err, "Component", "Start", "hierarchy inference start")
-		}
 	}
 
 	// Set up subscriptions for input ports
@@ -495,13 +489,6 @@ func (c *Component) Stop(timeout time.Duration) error {
 	if !c.running {
 		c.mu.Unlock()
 		return nil // Already stopped
-	}
-
-	// Stop hierarchy inference if active
-	if c.hierarchyInference != nil {
-		if err := c.hierarchyInference.Stop(); err != nil {
-			c.logger.Warn("error stopping hierarchy inference", slog.Any("error", err))
-		}
 	}
 
 	// Cancel context
@@ -781,14 +768,30 @@ func (c *Component) CreateEntity(ctx context.Context, entity *graph.EntityState)
 		return errs.Wrap(err, "Component", "CreateEntity", "context cancelled")
 	}
 
-	// Serialize entity
+	// SYNCHRONOUS HIERARCHY INFERENCE:
+	// Get hierarchy triples BEFORE writing entity to storage
+	// This ensures entity is written once with all triples included (no cascade)
+	if c.config.EnableHierarchy && c.hierarchyInference != nil {
+		hierarchyTriples, err := c.hierarchyInference.GetHierarchyTriples(ctx, entity.ID)
+		if err != nil {
+			c.logger.Warn("Failed to get hierarchy triples",
+				slog.String("entity_id", entity.ID),
+				slog.Any("error", err))
+			// Don't fail entity creation if hierarchy fails - just log warning
+		} else if len(hierarchyTriples) > 0 {
+			// Add hierarchy triples to entity before writing
+			entity.Triples = append(entity.Triples, hierarchyTriples...)
+		}
+	}
+
+	// Serialize entity (now includes hierarchy triples if enabled)
 	data, err := json.Marshal(entity)
 	if err != nil {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "CreateEntity", "entity serialization")
 	}
 
-	// Store in KV bucket
+	// Store in KV bucket (single write with all triples)
 	if _, err := c.entityBucket.Put(ctx, entity.ID, data); err != nil {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "CreateEntity", "KV store")
