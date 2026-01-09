@@ -16,7 +16,7 @@ import (
 
 // executeValidateZeroEmbeddings validates that NO embeddings were generated (structural tier constraint)
 func (s *TieredScenario) executeValidateZeroEmbeddings(ctx context.Context, result *Result) error {
-	embeddingCount, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_generated_total")
+	embeddingCount, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_embeddings_generated_total")
 
 	result.Metrics["embeddings_generated"] = int(embeddingCount)
 
