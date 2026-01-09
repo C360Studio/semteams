@@ -20,6 +20,11 @@
       "description": "Enable LLM-based community summarization",
       "category": "advanced"
     },
+    "enhancement_workers": {
+      "type": "number",
+      "description": "Number of parallel workers for LLM enhancement (default 5)",
+      "category": "advanced"
+    },
     "llm_endpoint": {
       "type": "string",
       "description": "URL for LLM endpoint (required if enable_llm is true)",

@@ -309,8 +309,10 @@ func (w *EnhancementWorker) handleKVEntry(entry jetstream.KeyValueEntry, workerI
 		return
 	}
 
-	// Generate LLM summary (content fetching happens internally via ContentFetcher)
-	enhanced, err := w.llm.SummarizeCommunity(w.ctx, &community, entities)
+	// Generate LLM summary with per-request timeout (content fetching happens internally via ContentFetcher)
+	llmCtx, llmCancel := context.WithTimeout(w.ctx, 60*time.Second)
+	enhanced, err := w.llm.SummarizeCommunity(llmCtx, &community, entities)
+	llmCancel()
 	if err != nil {
 		latency := time.Since(startTime).Seconds()
 		w.metrics.RecordEnhancementFailed(latency)

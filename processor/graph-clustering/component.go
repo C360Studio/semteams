@@ -35,6 +35,7 @@ type Config struct {
 	EnableLLM            bool                  `json:"enable_llm" schema:"type:bool,description:Enable LLM-based community summarization,category:advanced"`
 	LLMEndpoint          string                `json:"llm_endpoint" schema:"type:string,description:URL for LLM endpoint (required if enable_llm is true),category:advanced"`
 	LLMModel             string                `json:"llm_model" schema:"type:string,description:Model name for LLM service (e.g. mistral-7b-instruct),category:advanced"`
+	EnhancementWorkers   int                   `json:"enhancement_workers" schema:"type:int,description:Number of parallel workers for LLM enhancement (default 5),category:advanced"`
 	MinCommunitySize     int                   `json:"min_community_size" schema:"type:int,description:Minimum number of entities to form a community,category:advanced"`
 	MaxIterations        int                   `json:"max_iterations" schema:"type:int,description:Maximum iterations for LPA algorithm,category:advanced"`
 
@@ -115,6 +116,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.MaxIterations == 0 {
 		c.MaxIterations = 100
+	}
+	if c.EnhancementWorkers == 0 {
+		c.EnhancementWorkers = 5 // Increased from default 3 for better parallelism
 	}
 	if c.Ports == nil {
 		// Apply full default port config
@@ -823,6 +827,9 @@ func (c *Component) startEnhancementWorker(ctx context.Context, provider cluster
 		return errs.Wrap(err, "Component", "startEnhancementWorker", "create enhancement worker")
 	}
 
+	// Configure worker parallelism
+	worker.WithWorkers(c.config.EnhancementWorkers)
+
 	// Start the worker
 	if err := worker.Start(ctx); err != nil {
 		llmClient.Close()
@@ -832,7 +839,8 @@ func (c *Component) startEnhancementWorker(ctx context.Context, provider cluster
 	c.enhancementWorker = worker
 	c.logger.Info("LLM enhancement worker started",
 		slog.String("endpoint", c.config.LLMEndpoint),
-		slog.String("model", c.config.LLMModel))
+		slog.String("model", c.config.LLMModel),
+		slog.Int("workers", c.config.EnhancementWorkers))
 
 	return nil
 }
