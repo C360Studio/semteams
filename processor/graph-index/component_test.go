@@ -1105,11 +1105,13 @@ func createTestComponentWithMockKV(t *testing.T) *Component {
 	require.NoError(t, err)
 
 	// Initialize with mock buckets (bypass actual NATS connection)
-	component := comp.(*Component)
-	component.outgoingBucket = newMockKVBucket()
-	component.incomingBucket = newMockKVBucket()
-	component.aliasBucket = newMockKVBucket()
-	component.predicateBucket = newMockKVBucket()
+	graphIndexComp := comp.(*Component)
+	graphIndexComp.outgoingBucket = newMockKVBucket()
+	graphIndexComp.incomingBucket = newMockKVBucket()
+	graphIndexComp.aliasBucket = newMockKVBucket()
+	graphIndexComp.predicateBucket = newMockKVBucket()
+	// Initialize lifecycle reporter (normally done in Start())
+	graphIndexComp.lifecycleReporter = component.NewNoOpLifecycleReporter()
 
-	return component
+	return graphIndexComp
 }

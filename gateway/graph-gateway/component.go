@@ -390,21 +390,25 @@ func (c *Component) Start(ctx context.Context) error {
 	c.cancel = cancel
 
 	// Initialize lifecycle reporter (throttled for high-throughput serving)
-	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      "COMPONENT_STATUS",
-		Description: "Component lifecycle status tracking",
-	})
-	if err != nil {
-		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
-			slog.Any("error", err))
+	if c.natsClient == nil {
 		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
 	} else {
-		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
-			KV:               statusBucket,
-			ComponentName:    "graph-gateway",
-			Logger:           c.logger,
-			EnableThrottling: true,
+		statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+			Bucket:      "COMPONENT_STATUS",
+			Description: "Component lifecycle status tracking",
 		})
+		if err != nil {
+			c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+				slog.Any("error", err))
+			c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		} else {
+			c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+				KV:               statusBucket,
+				ComponentName:    "graph-gateway",
+				Logger:           c.logger,
+				EnableThrottling: true,
+			})
+		}
 	}
 
 	// Create HTTP server mux and register handlers
