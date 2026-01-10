@@ -44,7 +44,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "read_operations_total",
 			Help:        "Total number of read operations",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 		}, []string{"operation"}), // operation: get, get_metadata
 
 		writeOps: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -52,7 +52,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "write_operations_total",
 			Help:        "Total number of write operations",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 		}, []string{"operation"}), // operation: put, store
 
 		deleteOps: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -60,7 +60,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "delete_operations_total",
 			Help:        "Total number of delete operations",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 		}, []string{}),
 
 		listOps: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -68,7 +68,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "list_operations_total",
 			Help:        "Total number of list operations",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 		}, []string{}),
 
 		// Operation latency histograms
@@ -77,7 +77,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "read_duration_seconds",
 			Help:        "Read operation duration in seconds",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 			Buckets:     []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0},
 		}, []string{"operation"}),
 
@@ -86,7 +86,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "write_duration_seconds",
 			Help:        "Write operation duration in seconds",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 			Buckets:     []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0},
 		}, []string{"operation"}),
 
@@ -95,7 +95,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "delete_duration_seconds",
 			Help:        "Delete operation duration in seconds",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 			Buckets:     []float64{0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 2.0},
 		}, []string{}),
 
@@ -104,7 +104,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "list_duration_seconds",
 			Help:        "List operation duration in seconds",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 			Buckets:     []float64{0.01, 0.05, 0.1, 0.5, 1.0, 2.0, 5.0},
 		}, []string{}),
 
@@ -114,7 +114,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "operation_errors_total",
 			Help:        "Total number of operation errors",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 		}, []string{"operation"}), // operation: get, put, store, delete, list, get_metadata
 
 		// State gauges
@@ -123,7 +123,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "object_count",
 			Help:        "Current number of objects in store",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 		}, []string{}),
 
 		storageBytes: prometheus.NewGaugeVec(prometheus.GaugeOpts{
@@ -131,7 +131,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "storage_bytes",
 			Help:        "Storage bytes used",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 		}, []string{}),
 
 		// Cache performance
@@ -140,7 +140,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "cache_hits_total",
 			Help:        "Total number of cache hits",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 		}, []string{}),
 
 		cacheMisses: prometheus.NewCounterVec(prometheus.CounterOpts{
@@ -148,7 +148,7 @@ func newStoreMetrics(registry *metric.MetricsRegistry, bucket string) (*storeMet
 			Subsystem:   "objectstore",
 			Name:        "cache_misses_total",
 			Help:        "Total number of cache misses",
-			ConstLabels: prometheus.Labels{"bucket": bucket},
+			ConstLabels: prometheus.Labels{"kv_bucket": bucket},
 		}, []string{}),
 	}
 

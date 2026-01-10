@@ -113,8 +113,8 @@ func NewMetrics() *Metrics {
 			prometheus.GaugeOpts{
 				Namespace: "semstreams",
 				Subsystem: "nats",
-				Name:      "rtt_milliseconds",
-				Help:      "NATS round-trip time in milliseconds",
+				Name:      "rtt_seconds",
+				Help:      "NATS round-trip time in seconds",
 			},
 		),
 
@@ -188,7 +188,7 @@ func (c *Metrics) RecordNATSStatus(connected bool) {
 
 // RecordNATSRTT updates NATS round-trip time
 func (c *Metrics) RecordNATSRTT(rtt time.Duration) {
-	c.NATSRTT.Set(float64(rtt.Milliseconds()))
+	c.NATSRTT.Set(rtt.Seconds())
 }
 
 // RecordNATSReconnect increments reconnection counter

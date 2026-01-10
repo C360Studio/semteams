@@ -9,15 +9,11 @@ import (
 )
 
 // indexMetrics holds Prometheus metrics for the graph-index component.
-// Includes backward-compatible indexengine_* metrics for E2E test compatibility.
 type indexMetrics struct {
-	// Backward-compatible metrics (indexengine_* prefix for E2E tests)
 	eventsProcessed prometheus.Counter
 	indexUpdates    *prometheus.CounterVec
-
-	// Component-specific metrics
-	kvOperations *prometheus.CounterVec
-	watchEvents  *prometheus.CounterVec
+	kvOperations    *prometheus.CounterVec
+	watchEvents     *prometheus.CounterVec
 }
 
 // Package-level metrics (registered once to avoid duplicate registration errors)
@@ -30,31 +26,27 @@ var (
 func getMetrics(registry *metric.MetricsRegistry) *indexMetrics {
 	metricsOnce.Do(func() {
 		metrics = &indexMetrics{
-			// Backward-compatible: indexengine_events_processed_total
-			// This metric is checked by E2E test executeValidateMetrics
 			eventsProcessed: prometheus.NewCounter(prometheus.CounterOpts{
-				Namespace: "indexengine",
+				Namespace: "semstreams",
+				Subsystem: "graph_index",
 				Name:      "events_processed_total",
-				Help:      "Total events processed by index engine",
+				Help:      "Total events processed by graph index",
 			}),
 
-			// Backward-compatible: indexengine_index_updates_total
-			// This metric is checked by E2E test executeValidateMetrics
 			indexUpdates: prometheus.NewCounterVec(prometheus.CounterOpts{
-				Namespace: "indexengine",
-				Name:      "index_updates_total",
+				Namespace: "semstreams",
+				Subsystem: "graph_index",
+				Name:      "updates_total",
 				Help:      "Total index update operations by index type",
 			}, []string{"index_type"}),
 
-			// Component-specific: semstreams_graph_index_kv_operations_total
 			kvOperations: prometheus.NewCounterVec(prometheus.CounterOpts{
 				Namespace: "semstreams",
 				Subsystem: "graph_index",
 				Name:      "kv_operations_total",
 				Help:      "Total KV bucket operations",
-			}, []string{"operation", "bucket"}),
+			}, []string{"operation", "kv_bucket"}),
 
-			// Component-specific: semstreams_graph_index_watch_events_total
 			watchEvents: prometheus.NewCounterVec(prometheus.CounterOpts{
 				Namespace: "semstreams",
 				Subsystem: "graph_index",
@@ -65,16 +57,12 @@ func getMetrics(registry *metric.MetricsRegistry) *indexMetrics {
 
 		// Register metrics with the metrics registry if available
 		if registry != nil {
-			// Backward-compatible metrics
 			_ = registry.RegisterCounter("graph-index", "events_processed_total", metrics.eventsProcessed)
-			_ = registry.RegisterCounterVec("graph-index", "index_updates_total", metrics.indexUpdates)
-
-			// Component-specific metrics
+			_ = registry.RegisterCounterVec("graph-index", "updates_total", metrics.indexUpdates)
 			_ = registry.RegisterCounterVec("graph-index", "kv_operations_total", metrics.kvOperations)
 			_ = registry.RegisterCounterVec("graph-index", "watch_events_total", metrics.watchEvents)
 		} else {
 			// Fallback to default prometheus registry for testing
-			// Ignore errors if already registered (can happen across tests)
 			_ = prometheus.DefaultRegisterer.Register(metrics.eventsProcessed)
 			_ = prometheus.DefaultRegisterer.Register(metrics.indexUpdates)
 			_ = prometheus.DefaultRegisterer.Register(metrics.kvOperations)

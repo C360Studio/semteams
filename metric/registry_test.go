@@ -255,7 +255,7 @@ func TestMetricsRegistry_CoreMetricsInitialization(t *testing.T) {
 		"semstreams_errors_total",
 		"semstreams_health_status",
 		"semstreams_nats_connected",
-		"semstreams_nats_rtt_milliseconds",
+		"semstreams_nats_rtt_seconds",
 		"semstreams_nats_reconnects_total",
 		"semstreams_nats_circuit_breaker",
 	}

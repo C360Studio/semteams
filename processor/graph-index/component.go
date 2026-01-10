@@ -1322,4 +1322,3 @@ func (c *Component) mergeContextEntries(ctx context.Context, contextValue, entit
 
 	return nil
 }
-

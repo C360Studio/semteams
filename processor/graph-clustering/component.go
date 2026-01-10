@@ -291,12 +291,13 @@ type Component struct {
 	llmClient         llm.Client
 
 	// Lifecycle state
-	mu          sync.RWMutex
-	running     bool
-	initialized bool
-	startTime   time.Time
-	wg          sync.WaitGroup
-	cancel      context.CancelFunc
+	mu                sync.RWMutex
+	running           bool
+	initialized       bool
+	startTime         time.Time
+	wg                sync.WaitGroup
+	cancel            context.CancelFunc
+	lifecycleReporter component.LifecycleReporter
 
 	// Metrics (atomic)
 	messagesProcessed int64
@@ -653,6 +654,19 @@ func (c *Component) Start(ctx context.Context) error {
 		}
 	}
 
+	// Initialize lifecycle reporter for ADR-003 observability
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketComponentStatus,
+		Description: "Component lifecycle status",
+	})
+	if err != nil {
+		c.logger.Warn("failed to create status bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		c.lifecycleReporter = component.NewKVLifecycleReporter(statusBucket, "graph-clustering", c.logger)
+	}
+
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
@@ -720,12 +734,27 @@ func (c *Component) Stop(timeout time.Duration) error {
 	}
 }
 
+// reportStage safely reports a lifecycle stage change.
+// Errors are logged but do not interrupt processing.
+func (c *Component) reportStage(ctx context.Context, stage string) {
+	if c.lifecycleReporter != nil {
+		if err := c.lifecycleReporter.ReportStage(ctx, stage); err != nil {
+			c.logger.Debug("failed to report lifecycle stage",
+				slog.String("stage", stage),
+				slog.Any("error", err))
+		}
+	}
+}
+
 // runDetectionLoop runs community detection on a timer
 func (c *Component) runDetectionLoop(ctx context.Context) {
 	defer c.wg.Done()
 
 	ticker := time.NewTicker(c.config.DetectionInterval())
 	defer ticker.Stop()
+
+	// Report initial idle state
+	c.reportStage(ctx, "idle")
 
 	c.logger.Info("detection loop started",
 		slog.Duration("interval", c.config.DetectionInterval()))
@@ -755,8 +784,16 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 		return
 	}
 
+	// Report cycle start
+	if c.lifecycleReporter != nil {
+		_ = c.lifecycleReporter.ReportCycleStart(ctx)
+	}
+
 	c.logger.Info("running community detection")
 	start := time.Now()
+
+	// Report community detection stage
+	c.reportStage(ctx, "community_detection")
 
 	communities, err := c.detector.DetectCommunities(ctx)
 	if err != nil {
@@ -767,6 +804,9 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 		}
 		c.logger.Error("community detection failed", slog.Any("error", err))
 		atomic.AddInt64(&c.errors, 1)
+		if c.lifecycleReporter != nil {
+			_ = c.lifecycleReporter.ReportCycleError(ctx, err)
+		}
 		return
 	}
 
@@ -790,6 +830,10 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 			c.logger.Debug("skipping structural computation - shutdown in progress")
 			return
 		}
+
+		// Report structural computation stage
+		c.reportStage(ctx, "structural_computation")
+
 		kcoreIndex, pivotIndex, err := c.runStructuralComputation(ctx)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
@@ -798,6 +842,9 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 			}
 			c.logger.Error("structural computation failed", slog.Any("error", err))
 			atomic.AddInt64(&c.errors, 1)
+			if c.lifecycleReporter != nil {
+				_ = c.lifecycleReporter.ReportCycleError(ctx, err)
+			}
 			return // Cannot continue to anomaly detection without structural indices
 		}
 
@@ -807,6 +854,10 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 				c.logger.Debug("skipping anomaly detection - shutdown in progress")
 				return
 			}
+
+			// Report anomaly detection stage
+			c.reportStage(ctx, "anomaly_detection")
+
 			if err := c.runAnomalyDetection(ctx, kcoreIndex, pivotIndex); err != nil {
 				if errors.Is(err, context.Canceled) {
 					c.logger.Info("anomaly detection interrupted by shutdown")
@@ -814,8 +865,17 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 				}
 				c.logger.Error("anomaly detection failed", slog.Any("error", err))
 				atomic.AddInt64(&c.errors, 1)
+				if c.lifecycleReporter != nil {
+					_ = c.lifecycleReporter.ReportCycleError(ctx, err)
+				}
+				return
 			}
 		}
+	}
+
+	// Report successful cycle completion and return to idle
+	if c.lifecycleReporter != nil {
+		_ = c.lifecycleReporter.ReportCycleComplete(ctx)
 	}
 }
 

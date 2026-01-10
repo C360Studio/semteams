@@ -1300,19 +1300,19 @@ func (s *TieredScenario) executeValidateMetrics(_ context.Context, result *Resul
 	metricsText := string(body)
 
 	// Define key metrics to validate (presence only, not values)
-	// Metrics list curated from processor/graph/indexmanager/metrics.go, pkg/cache/metrics.go,
-	// and processor/json_filter/metrics.go - updated 2025-11-30
+	// Metrics list curated from processor/graph-index/metrics.go, pkg/cache/metrics.go,
+	// and processor/json_filter/metrics.go - updated 2026-01-10
 	requiredMetrics := []string{
-		"indexengine_events_processed_total", // IndexEngine events successfully processed
-		"indexengine_index_updates_total",    // Per-index update counts
-		"semstreams_cache_hits_total",        // DataManager L1/L2 cache hits
-		"semstreams_cache_misses_total",      // DataManager cache misses
+		"semstreams_graph_index_events_processed_total", // graph-index events successfully processed
+		"semstreams_graph_index_updates_total",          // Per-index update counts
+		"semstreams_cache_hits_total",                   // DataManager L1/L2 cache hits
+		"semstreams_cache_misses_total",                 // DataManager cache misses
 	}
 
 	// Optional metrics (present only when certain features active)
 	optionalMetrics := []string{
-		"indexengine_events_total",                              // Total events received
-		"indexengine_events_failed_total",                       // Processing failures
+		"semstreams_graph_index_events_total",                   // Total events received
+		"semstreams_graph_index_events_failed_total",            // Processing failures
 		"semstreams_graph_embedding_embeddings_generated_total", // Embedding generation count
 		"semstreams_json_filter_matched_total",                  // JSON filter matched messages
 		"semstreams_json_filter_dropped_total",                  // JSON filter dropped messages

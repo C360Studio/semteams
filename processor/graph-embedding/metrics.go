@@ -10,15 +10,7 @@ import (
 
 // embeddingMetrics holds Prometheus metrics for the graph-embedding component.
 type embeddingMetrics struct {
-	// Embedder type: 0=disabled, 1=bm25, 2=http
-	// This metric is checked by E2E test detectVariantAndProvider
-	embedderType prometheus.Gauge
-
-	// Backward-compatible: indexengine_embedding_provider
-	// This metric is checked by legacy E2E test detectVariantAndProvider
-	legacyEmbeddingProvider prometheus.Gauge
-
-	// Component-specific metrics
+	embedderType        prometheus.Gauge // 0=disabled, 1=bm25, 2=http
 	embeddingsGenerated prometheus.Counter
 	embeddingErrors     prometheus.Counter
 	embeddingDedupHits  prometheus.Counter
@@ -36,8 +28,6 @@ var (
 func getMetrics(registry *metric.MetricsRegistry) *embeddingMetrics {
 	metricsOnce.Do(func() {
 		metrics = &embeddingMetrics{
-			// New metric: semstreams_graph_embedding_embedder_type
-			// 0=disabled, 1=bm25, 2=http
 			embedderType: prometheus.NewGauge(prometheus.GaugeOpts{
 				Namespace: "semstreams",
 				Subsystem: "graph_embedding",
@@ -45,15 +35,6 @@ func getMetrics(registry *metric.MetricsRegistry) *embeddingMetrics {
 				Help:      "Embedder type: 0=disabled, 1=bm25, 2=http",
 			}),
 
-			// Backward-compatible: indexengine_embedding_provider
-			// This is checked by legacy E2E tests
-			legacyEmbeddingProvider: prometheus.NewGauge(prometheus.GaugeOpts{
-				Namespace: "indexengine",
-				Name:      "embedding_provider",
-				Help:      "Embedding provider type: 0=disabled, 1=bm25, 2=http (legacy metric)",
-			}),
-
-			// Component-specific: semstreams_graph_embedding_embeddings_generated_total
 			embeddingsGenerated: prometheus.NewCounter(prometheus.CounterOpts{
 				Namespace: "semstreams",
 				Subsystem: "graph_embedding",
@@ -61,7 +42,6 @@ func getMetrics(registry *metric.MetricsRegistry) *embeddingMetrics {
 				Help:      "Total embeddings generated",
 			}),
 
-			// Component-specific: semstreams_graph_embedding_errors_total
 			embeddingErrors: prometheus.NewCounter(prometheus.CounterOpts{
 				Namespace: "semstreams",
 				Subsystem: "graph_embedding",
@@ -69,15 +49,13 @@ func getMetrics(registry *metric.MetricsRegistry) *embeddingMetrics {
 				Help:      "Total embedding generation errors",
 			}),
 
-			// Component-specific: semstreams_graph_embedding_kv_operations_total
 			kvOperations: prometheus.NewCounterVec(prometheus.CounterOpts{
 				Namespace: "semstreams",
 				Subsystem: "graph_embedding",
 				Name:      "kv_operations_total",
 				Help:      "Total KV bucket operations",
-			}, []string{"operation", "bucket"}),
+			}, []string{"operation", "kv_bucket"}),
 
-			// Worker metrics: semstreams_graph_embedding_dedup_hits_total
 			embeddingDedupHits: prometheus.NewCounter(prometheus.CounterOpts{
 				Namespace: "semstreams",
 				Subsystem: "graph_embedding",
@@ -85,7 +63,6 @@ func getMetrics(registry *metric.MetricsRegistry) *embeddingMetrics {
 				Help:      "Total embedding deduplication cache hits",
 			}),
 
-			// Worker metrics: semstreams_graph_embedding_pending
 			embeddingPending: prometheus.NewGauge(prometheus.GaugeOpts{
 				Namespace: "semstreams",
 				Subsystem: "graph_embedding",
@@ -96,21 +73,15 @@ func getMetrics(registry *metric.MetricsRegistry) *embeddingMetrics {
 
 		// Register metrics with the metrics registry if available
 		if registry != nil {
-			// New metrics
 			_ = registry.RegisterGauge("graph-embedding", "embedder_type", metrics.embedderType)
 			_ = registry.RegisterCounter("graph-embedding", "embeddings_generated_total", metrics.embeddingsGenerated)
 			_ = registry.RegisterCounter("graph-embedding", "errors_total", metrics.embeddingErrors)
 			_ = registry.RegisterCounterVec("graph-embedding", "kv_operations_total", metrics.kvOperations)
 			_ = registry.RegisterCounter("graph-embedding", "dedup_hits_total", metrics.embeddingDedupHits)
 			_ = registry.RegisterGauge("graph-embedding", "pending", metrics.embeddingPending)
-
-			// Legacy metric (backward compatibility)
-			_ = registry.RegisterGauge("graph-embedding", "embedding_provider_legacy", metrics.legacyEmbeddingProvider)
 		} else {
 			// Fallback to default prometheus registry for testing
-			// Ignore errors if already registered (can happen across tests)
 			_ = prometheus.DefaultRegisterer.Register(metrics.embedderType)
-			_ = prometheus.DefaultRegisterer.Register(metrics.legacyEmbeddingProvider)
 			_ = prometheus.DefaultRegisterer.Register(metrics.embeddingsGenerated)
 			_ = prometheus.DefaultRegisterer.Register(metrics.embeddingErrors)
 			_ = prometheus.DefaultRegisterer.Register(metrics.kvOperations)
@@ -134,7 +105,6 @@ func (m *embeddingMetrics) setEmbedderType(embedderType string) {
 		value = 0
 	}
 	m.embedderType.Set(value)
-	m.legacyEmbeddingProvider.Set(value) // Also set legacy metric for backward compatibility
 }
 
 // recordEmbeddingGenerated increments the embeddings generated counter.

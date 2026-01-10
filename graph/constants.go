@@ -25,4 +25,7 @@ const (
 
 	// Structural tier buckets
 	BucketStructuralIndex = "STRUCTURAL_INDEX"
+
+	// Operational buckets
+	BucketComponentStatus = "COMPONENT_STATUS"
 )

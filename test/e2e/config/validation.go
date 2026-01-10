@@ -54,8 +54,8 @@ func DefaultValidationConfig() *ValidationConfig {
 			"TEMPORAL_INDEX",
 		},
 		RequiredMetrics: []string{
-			"indexengine_events_processed_total",
-			"indexengine_index_updates_total",
+			"semstreams_graph_index_events_processed_total",
+			"semstreams_graph_index_updates_total",
 			"semstreams_cache_hits_total",
 			"semstreams_cache_misses_total",
 		},
