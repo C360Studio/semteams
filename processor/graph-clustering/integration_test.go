@@ -184,36 +184,36 @@ func TestIntegration_ClusteringFlow(t *testing.T) {
 			return false
 		}
 
-		// Look for community data keys (format: graph.community.{level}.{communityID})
-		// These keys start with "graph.community." followed by a digit (level)
+		// Look for community data keys (format: {level}.{communityID})
+		// Entity mapping keys have format: entity.{level}.{entityID}
 		for _, key := range keys {
-			// Check if this is a community data key (not entity mapping)
-			// Entity mapping keys have format: graph.community.entity.{level}.{entityID}
-			// Community data keys have format: graph.community.{level}.comm-{level}-{label}
-			if len(key) > 16 && key[:16] == "graph.community." {
-				// Skip entity mapping keys (they have "entity." right after "graph.community.")
-				if len(key) > 23 && key[16:23] == "entity." {
-					continue
-				}
+			// Skip entity mapping keys
+			if len(key) > 7 && key[:7] == "entity." {
+				continue
+			}
 
-				// This should be a community data key - verify it has valid JSON
-				entry, err := communityBucket.Get(ctx, key)
-				if err != nil {
-					continue
-				}
+			// Community keys start with a digit (level)
+			if len(key) == 0 || key[0] < '0' || key[0] > '9' {
+				continue
+			}
 
-				var communityData map[string]interface{}
-				if err := json.Unmarshal(entry.Value(), &communityData); err != nil {
-					continue
-				}
+			// This should be a community data key - verify it has valid JSON
+			entry, err := communityBucket.Get(ctx, key)
+			if err != nil {
+				continue
+			}
 
-				// Check for Members array (capital M - no JSON tags on Community struct)
-				if members, ok := communityData["Members"].([]interface{}); ok {
-					if len(members) >= 2 {
-						t.Logf("Found valid community %s with %d members", key, len(members))
-						foundCommunityWithMembers = true
-						return true
-					}
+			var communityData map[string]interface{}
+			if err := json.Unmarshal(entry.Value(), &communityData); err != nil {
+				continue
+			}
+
+			// Check for members array (lowercase - Community struct has json tags)
+			if members, ok := communityData["members"].([]interface{}); ok {
+				if len(members) >= 2 {
+					t.Logf("Found valid community %s with %d members", key, len(members))
+					foundCommunityWithMembers = true
+					return true
 				}
 			}
 		}
@@ -384,12 +384,13 @@ func TestIntegration_ClusteringHierarchy(t *testing.T) {
 
 		level0Communities := 0
 		for _, key := range keys {
-			// Check for level 0 community keys (format: graph.community.0.{id})
-			if len(key) > 17 && key[:17] == "graph.community.0" {
-				// Exclude entity mapping keys (they have "entity." after "graph.community.")
-				if len(key) > 23 && key[16:23] == "entity." {
-					continue
-				}
+			// Skip entity mapping keys (format: entity.{level}.{entityID})
+			if len(key) > 7 && key[:7] == "entity." {
+				continue
+			}
+
+			// Check for level 0 community keys (format: 0.{communityID})
+			if len(key) > 2 && key[:2] == "0." {
 				level0Communities++
 				t.Logf("Found level 0 community: %s", key)
 			}
@@ -542,11 +543,12 @@ func TestIntegration_ClusteringMinSize(t *testing.T) {
 	communityCount := 0
 	if keys != nil {
 		for _, key := range keys {
-			if len(key) > 16 && key[:16] == "graph.community." {
-				// Exclude entity mapping keys (they have "entity." right after "graph.community.")
-				if len(key) > 23 && key[16:23] == "entity." {
-					continue
-				}
+			// Skip entity mapping keys (format: entity.{level}.{entityID})
+			if len(key) > 7 && key[:7] == "entity." {
+				continue
+			}
+			// Community keys start with a digit (level)
+			if len(key) > 0 && key[0] >= '0' && key[0] <= '9' {
 				communityCount++
 			}
 		}

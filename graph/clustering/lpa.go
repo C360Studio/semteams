@@ -2,7 +2,6 @@ package clustering
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"math/rand"
 	"sync"
@@ -378,10 +377,10 @@ func (d *LPADetector) buildCommunities(
 	// Create communities
 	communities := make([]*Community, 0, len(labelToMembers))
 	for label, members := range labelToMembers {
-		communityID := fmt.Sprintf("comm-%d-%s", level, label)
-
+		// Community ID is just the seed entity ID (label) - level is stored in Level field
+		// and used in KV key format: {level}.{community_id}
 		community := &Community{
-			ID:       communityID,
+			ID:       label,
 			Level:    level,
 			Members:  members,
 			ParentID: parentID,

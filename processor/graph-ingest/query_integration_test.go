@@ -113,14 +113,8 @@ func TestIntegration_QueryHandlers(t *testing.T) {
 	})
 
 	t.Run("batch query with real NATS", func(t *testing.T) {
-		// Subscribe to handle batch query requests
+		// Use the component's built-in batch query handler (registered during Start)
 		batchSubject := "graph.ingest.query.batch"
-		err := natsClient.SubscribeForRequests(ctx, batchSubject, func(reqCtx context.Context, data []byte) ([]byte, error) {
-			mockMsg := &mockNATSMsg{data: data}
-			component.handleQueryBatch(mockMsg)
-			return mockMsg.response, nil
-		})
-		require.NoError(t, err)
 
 		// Send batch query request
 		request := map[string][]string{
@@ -135,12 +129,14 @@ func TestIntegration_QueryHandlers(t *testing.T) {
 		responseData, err := natsClient.Request(ctx, batchSubject, requestJSON, 5*time.Second)
 		require.NoError(t, err)
 
-		// Verify response
-		var responseEntities []graph.EntityState
-		err = json.Unmarshal(responseData, &responseEntities)
+		// Verify response - batch query returns {"entities": [...]} format
+		var response struct {
+			Entities []graph.EntityState `json:"entities"`
+		}
+		err = json.Unmarshal(responseData, &response)
 		require.NoError(t, err)
 
-		assert.Equal(t, 2, len(responseEntities))
+		assert.Equal(t, 2, len(response.Entities))
 	})
 
 	t.Run("concurrent query requests", func(t *testing.T) {

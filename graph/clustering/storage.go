@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	stderrors "errors"
 	"fmt"
-	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,14 +17,12 @@ const (
 	// CommunityBucket is the NATS KV bucket for storing communities
 	CommunityBucket = "COMMUNITY_INDEX"
 
-	// Key patterns:
-	// - graph.community.{level}.{id} - Community data
-	// - graph.community.entity.{level}.{entityID} - Entity -> Community mapping
-)
+	// Key patterns (COMMUNITY_INDEX is a dedicated bucket, no prefix needed):
+	// - {level}.{community_id} - Community data
+	// - entity.{level}.{entity_id} - Entity -> Community mapping
 
-var (
-	// communityIDPattern matches community ID format: comm-{level}-{label}
-	communityIDPattern = regexp.MustCompile(`^comm-(\d+)-(.+)$`)
+	// MaxCommunityLevels is the maximum hierarchy depth for scanning
+	MaxCommunityLevels = 10
 )
 
 // CommunityStorageConfig configures community storage behavior
@@ -155,7 +151,8 @@ func (s *NATSCommunityStorage) GetCreatedTriples() []message.Triple {
 	return s.createdTriples
 }
 
-// GetCommunity retrieves a community by ID
+// GetCommunity retrieves a community by ID.
+// Since community IDs no longer embed the level, this scans all levels to find the community.
 func (s *NATSCommunityStorage) GetCommunity(ctx context.Context, id string) (*Community, error) {
 	if id == "" {
 		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "NATSCommunityStorage", "GetCommunity", "id is empty")
@@ -175,37 +172,32 @@ func (s *NATSCommunityStorage) GetCommunity(ctx context.Context, id string) (*Co
 		return nil, nil
 	}
 
-	// Extract level from community ID using regex
-	level, err := extractLevelFromID(id)
-	if err != nil {
-		return nil, errs.WrapInvalid(err, "NATSCommunityStorage", "GetCommunity", "parse community ID")
-	}
-
-	// Fetch community data
-	key := communityKey(level, id)
-	entry, err := s.kv.Get(ctx, key)
-	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
-			// Not found is not an error - return nil
-			return nil, nil
+	// Scan all levels to find the community (typically levels 0-2)
+	for level := 0; level < MaxCommunityLevels; level++ {
+		key := communityKey(level, id)
+		entry, err := s.kv.Get(ctx, key)
+		if err != nil {
+			if err == jetstream.ErrKeyNotFound {
+				continue // Try next level
+			}
+			return nil, errs.WrapTransient(err, "NATSCommunityStorage", "GetCommunity", "get community")
 		}
-		return nil, errs.WrapTransient(err, "NATSCommunityStorage", "GetCommunity", "get community")
+
+		// Deserialize
+		var community Community
+		if err := json.Unmarshal(entry.Value(), &community); err != nil {
+			return nil, errs.WrapInvalid(err, "NATSCommunityStorage", "GetCommunity", "unmarshal community")
+		}
+
+		return &community, nil
 	}
 
-	// Deserialize
-	var community Community
-	if err := json.Unmarshal(entry.Value(), &community); err != nil {
-		return nil, errs.WrapInvalid(err, "NATSCommunityStorage", "GetCommunity", "unmarshal community")
-	}
-
-	return &community, nil
+	// Not found in any level
+	return nil, nil
 }
 
 // GetCommunitiesByLevel retrieves all communities at a level
 func (s *NATSCommunityStorage) GetCommunitiesByLevel(ctx context.Context, level int) ([]*Community, error) {
-	// NATS KV doesn't support prefix scans in all implementations
-	// We'll use Watch with prefix filter
-
 	prefix := communityPrefix(level)
 	communities := make([]*Community, 0)
 
@@ -224,8 +216,8 @@ func (s *NATSCommunityStorage) GetCommunitiesByLevel(ctx context.Context, level 
 			continue
 		}
 
-		// Skip entity mapping keys
-		if strings.Contains(key, ".entity.") {
+		// Skip entity mapping keys (format: entity.{level}.{entityID})
+		if strings.HasPrefix(key, "entity.") {
 			continue
 		}
 
@@ -268,18 +260,17 @@ func (s *NATSCommunityStorage) GetAllCommunities(ctx context.Context) ([]*Commun
 		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
 			return nil, nil
 		}
+		// Context cancellation during shutdown - return empty (archival is best-effort)
+		if stderrors.Is(err, context.Canceled) {
+			return nil, nil
+		}
 		return nil, errs.WrapTransient(err, "NATSCommunityStorage", "GetAllCommunities", "list keys")
 	}
 
 	var communities []*Community
 	for _, key := range keys {
-		// Skip non-community keys
-		if !strings.HasPrefix(key, "graph.community.") {
-			continue
-		}
-
-		// Skip entity mapping keys (format: graph.community.entity.{level}.{entityID})
-		if strings.Contains(key, ".entity.") {
+		// Skip entity mapping keys (format: entity.{level}.{entityID})
+		if strings.HasPrefix(key, "entity.") {
 			continue
 		}
 
@@ -367,29 +358,36 @@ func (s *NATSCommunityStorage) DeleteCommunity(ctx context.Context, id string) e
 	return nil
 }
 
-// Clear removes all communities
+// Clear removes all communities and entity mappings.
+// This is a best-effort operation - context cancellation during cleanup is ignored
+// since partial cleanup is acceptable during shutdown.
 func (s *NATSCommunityStorage) Clear(ctx context.Context) error {
-	// Purge all keys with community prefix
 	keys, err := s.kv.Keys(ctx)
 	if err != nil {
 		// Empty bucket returns ErrKeyNotFound or "no keys found" error
 		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
 			return nil
 		}
+		// Context cancellation during shutdown is acceptable
+		if stderrors.Is(err, context.Canceled) {
+			return nil
+		}
 		return errs.WrapTransient(err, "NATSCommunityStorage", "Clear", "list keys")
 	}
 
-	// Delete all community keys - accumulate errors
+	// Delete all keys in the bucket (dedicated COMMUNITY_INDEX bucket)
 	var deleteErrs []error
 	for _, key := range keys {
-		if strings.HasPrefix(key, "graph.community.") {
-			if err := s.kv.Delete(ctx, key); err != nil {
-				deleteErrs = append(deleteErrs, fmt.Errorf("failed to delete %s: %w", key, err))
+		if err := s.kv.Delete(ctx, key); err != nil {
+			// Skip context cancellation errors during shutdown
+			if stderrors.Is(err, context.Canceled) {
+				continue
 			}
+			deleteErrs = append(deleteErrs, fmt.Errorf("failed to delete %s: %w", key, err))
 		}
 	}
 
-	// Return combined error if any occurred
+	// Return combined error if any occurred (excluding context cancellation)
 	if len(deleteErrs) > 0 {
 		return errs.WrapTransient(
 			fmt.Errorf("%d deletion errors: %v", len(deleteErrs), deleteErrs),
@@ -403,35 +401,17 @@ func (s *NATSCommunityStorage) Clear(ctx context.Context) error {
 }
 
 // Key generation helpers
+// COMMUNITY_INDEX is a dedicated bucket, so no "graph.community." prefix needed.
+// Format: {level}.{community_id} for communities, entity.{level}.{entity_id} for mappings
 
 func communityKey(level int, communityID string) string {
-	return fmt.Sprintf("graph.community.%d.%s", level, communityID)
+	return fmt.Sprintf("%d.%s", level, communityID)
 }
 
 func communityPrefix(level int) string {
-	return fmt.Sprintf("graph.community.%d.", level)
+	return fmt.Sprintf("%d.", level)
 }
 
 func entityCommunityKey(level int, entityID string) string {
-	return fmt.Sprintf("graph.community.entity.%d.%s", level, entityID)
-}
-
-// extractLevelFromID parses the level from a community ID using regex
-func extractLevelFromID(id string) (int, error) {
-	matches := communityIDPattern.FindStringSubmatch(id)
-	if len(matches) != 3 {
-		return 0, fmt.Errorf("invalid community ID format: %s (expected comm-{level}-{label})", id)
-	}
-
-	level, err := strconv.Atoi(matches[1])
-	if err != nil {
-		return 0, fmt.Errorf("invalid level in ID: %w", err)
-	}
-
-	// Sanity check on level range
-	if level < 0 || level >= 100 {
-		return 0, fmt.Errorf("level out of range: %d (must be 0-99)", level)
-	}
-
-	return level, nil
+	return fmt.Sprintf("entity.%d.%s", level, entityID)
 }

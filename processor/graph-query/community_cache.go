@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/c360/semstreams/graph/clustering"
@@ -95,12 +96,14 @@ func (c *CommunityCache) handleUpdate(key string, data []byte) {
 	defer c.mu.Unlock()
 
 	// Remove old membership mappings if this community existed
-	if old, exists := c.communities[key]; exists {
+	// Use community.ID for consistent lookup (not KV key)
+	if old, exists := c.communities[community.ID]; exists {
 		c.removeMembershipMappings(old)
 	}
 
-	// Store the community
-	c.communities[key] = &community
+	// Store the community using community.ID as key (not KV key)
+	// This ensures consistent lookups via GetEntityCommunity
+	c.communities[community.ID] = &community
 
 	// Update entity→community mappings
 	for _, entityID := range community.Members {
@@ -121,10 +124,16 @@ func (c *CommunityCache) handleUpdate(key string, data []byte) {
 
 // handleDelete processes a community deletion from KV watch.
 func (c *CommunityCache) handleDelete(key string) {
+	// Extract community ID from KV key (format: graph.community.{level}.{id})
+	communityID := extractCommunityIDFromKey(key)
+	if communityID == "" {
+		return // Not a community key (e.g., entity mapping key)
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	community, exists := c.communities[key]
+	community, exists := c.communities[communityID]
 	if !exists {
 		return
 	}
@@ -133,12 +142,29 @@ func (c *CommunityCache) handleDelete(key string) {
 	c.removeMembershipMappings(community)
 
 	// Remove from communities map
-	delete(c.communities, key)
+	delete(c.communities, communityID)
 
 	// Rebuild byLevel index for this level
 	c.rebuildLevelIndex(community.Level)
 
-	c.logger.Debug("community cache deleted", "id", key)
+	c.logger.Debug("community cache deleted", "id", communityID)
+}
+
+// extractCommunityIDFromKey extracts the community ID from a KV key.
+// Key format: {level}.{communityID}
+// Returns empty string if not a valid community key.
+func extractCommunityIDFromKey(key string) string {
+	// Skip entity mapping keys (format: entity.{level}.{entityID})
+	if strings.HasPrefix(key, "entity.") {
+		return ""
+	}
+	// Key format is {level}.{communityID}
+	// Find first dot to skip level number
+	dotIdx := strings.Index(key, ".")
+	if dotIdx == -1 {
+		return ""
+	}
+	return key[dotIdx+1:]
 }
 
 // removeMembershipMappings removes entity→community mappings for a community.
