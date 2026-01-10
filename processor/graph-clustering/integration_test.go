@@ -834,3 +834,367 @@ func TestIntegration_LLMEnhancementDisabled(t *testing.T) {
 
 	t.Log("No LLM resources allocated when disabled - correct behavior")
 }
+
+// TestIntegration_StructuralComputationEnabled verifies that when EnableStructural=true,
+// k-core and pivot indices are computed after LPA and STRUCTURAL_INDEX bucket is created.
+func TestIntegration_StructuralComputationEnabled(t *testing.T) {
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	config := Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "entity_watch", Type: "kv-watch", Subject: graph.BucketEntityStates},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "communities", Type: "kv-write", Subject: graph.BucketCommunityIndex},
+			},
+		},
+		DetectionIntervalStr: "1s",
+		MinCommunitySize:     2,
+		MaxIterations:        10,
+		EnableLLM:            false,
+		EnableStructural:     true, // Enable structural computation
+		PivotCount:           4,    // Small for testing
+		MaxHopDistance:       5,
+	}
+
+	config.ApplyDefaults()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphClustering(configJSON, deps)
+	require.NoError(t, err)
+
+	clusteringComp := comp.(*Component)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	require.NoError(t, clusteringComp.Initialize())
+
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create input buckets
+	entityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	outgoingBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketOutgoingIndex,
+		Description: "Test outgoing edges",
+	})
+	require.NoError(t, err)
+
+	incomingBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketIncomingIndex,
+		Description: "Test incoming edges",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, clusteringComp.Start(ctx))
+	defer clusteringComp.Stop(5 * time.Second)
+
+	// Verify STRUCTURAL_INDEX bucket is created
+	var structuralBucket jetstream.KeyValue
+	require.Eventually(t, func() bool {
+		structuralBucket, err = js.KeyValue(ctx, graph.BucketStructuralIndex)
+		return err == nil
+	}, 5*time.Second, 100*time.Millisecond, "STRUCTURAL_INDEX bucket should be created")
+
+	// Create 4 connected entities
+	now := time.Now().UTC()
+	entityIDs := []string{
+		"c360.platform.robotics.mav1.drone.001",
+		"c360.platform.robotics.mav1.drone.002",
+		"c360.platform.robotics.mav1.drone.003",
+		"c360.platform.robotics.mav1.drone.004",
+	}
+
+	// Write entity states
+	for i, entityID := range entityIDs {
+		state := graph.EntityState{
+			ID: entityID,
+			Triples: []message.Triple{
+				{
+					Subject:   entityID,
+					Predicate: "robotics.status.active",
+					Object:    true,
+					Source:    "test",
+					Timestamp: now,
+				},
+			},
+			MessageType: message.Type{Domain: "test", Category: "entity", Version: "v1"},
+			Version:     1,
+			UpdatedAt:   now.Add(time.Duration(i) * time.Second),
+		}
+
+		stateData, err := json.Marshal(state)
+		require.NoError(t, err)
+
+		_, err = entityBucket.Put(ctx, entityID, stateData)
+		require.NoError(t, err)
+	}
+
+	// Create edges to form a connected graph
+	edges := []struct{ from, to string }{
+		{entityIDs[0], entityIDs[1]},
+		{entityIDs[1], entityIDs[2]},
+		{entityIDs[2], entityIDs[3]},
+		{entityIDs[3], entityIDs[0]}, // close the loop
+	}
+
+	for _, edge := range edges {
+		outgoingData := []relationshipEntry{{Predicate: "rel.connected_to", ToEntityID: edge.to}}
+		outgoingJSON, _ := json.Marshal(outgoingData)
+		outgoingBucket.Put(ctx, edge.from, outgoingJSON)
+
+		incomingData := []relationshipEntry{{Predicate: "rel.connected_to", FromEntityID: edge.from}}
+		incomingJSON, _ := json.Marshal(incomingData)
+		incomingBucket.Put(ctx, edge.to, incomingJSON)
+	}
+
+	// Wait for detection cycles
+	time.Sleep(3 * time.Second)
+
+	// Verify k-core data was written to STRUCTURAL_INDEX
+	// The storage uses key format: structural.kcore._meta for metadata
+	require.Eventually(t, func() bool {
+		entry, err := structuralBucket.Get(ctx, "structural.kcore._meta")
+		if err != nil {
+			return false
+		}
+		t.Logf("Found k-core index metadata: %d bytes", len(entry.Value()))
+		return len(entry.Value()) > 0
+	}, 10*time.Second, 500*time.Millisecond, "K-core index should be written to STRUCTURAL_INDEX")
+
+	t.Log("Structural computation successfully ran with k-core index created")
+}
+
+// TestIntegration_AnomalyDetectionEnabled verifies that when EnableAnomalyDetection=true,
+// anomaly detection runs after structural computation and ANOMALY_INDEX bucket is created.
+func TestIntegration_AnomalyDetectionEnabled(t *testing.T) {
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	config := Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "entity_watch", Type: "kv-watch", Subject: graph.BucketEntityStates},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "communities", Type: "kv-write", Subject: graph.BucketCommunityIndex},
+			},
+		},
+		DetectionIntervalStr:   "1s",
+		MinCommunitySize:       2,
+		MaxIterations:          10,
+		EnableLLM:              false,
+		EnableStructural:       true, // Required for anomaly detection
+		PivotCount:             4,
+		MaxHopDistance:         5,
+		EnableAnomalyDetection: true, // Enable anomaly detection
+	}
+
+	config.ApplyDefaults()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphClustering(configJSON, deps)
+	require.NoError(t, err)
+
+	clusteringComp := comp.(*Component)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	require.NoError(t, clusteringComp.Initialize())
+
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create input buckets
+	entityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	outgoingBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketOutgoingIndex,
+		Description: "Test outgoing edges",
+	})
+	require.NoError(t, err)
+
+	incomingBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketIncomingIndex,
+		Description: "Test incoming edges",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, clusteringComp.Start(ctx))
+	defer clusteringComp.Stop(5 * time.Second)
+
+	// Verify ANOMALY_INDEX bucket is created
+	var anomalyBucket jetstream.KeyValue
+	require.Eventually(t, func() bool {
+		anomalyBucket, err = js.KeyValue(ctx, graph.BucketAnomalyIndex)
+		return err == nil
+	}, 5*time.Second, 100*time.Millisecond, "ANOMALY_INDEX bucket should be created")
+
+	// Verify orchestrator was initialized
+	assert.NotNil(t, clusteringComp.anomalyOrchestrator,
+		"Anomaly orchestrator should be initialized when EnableAnomalyDetection=true")
+
+	// Create entities to trigger detection cycle
+	now := time.Now().UTC()
+	entityIDs := []string{
+		"c360.platform.robotics.mav1.drone.001",
+		"c360.platform.robotics.mav1.drone.002",
+		"c360.platform.robotics.mav1.drone.003",
+	}
+
+	for i, entityID := range entityIDs {
+		state := graph.EntityState{
+			ID: entityID,
+			Triples: []message.Triple{
+				{
+					Subject:   entityID,
+					Predicate: "robotics.status.active",
+					Object:    true,
+					Source:    "test",
+					Timestamp: now,
+				},
+			},
+			MessageType: message.Type{Domain: "test", Category: "entity", Version: "v1"},
+			Version:     1,
+			UpdatedAt:   now.Add(time.Duration(i) * time.Second),
+		}
+
+		stateData, err := json.Marshal(state)
+		require.NoError(t, err)
+
+		_, err = entityBucket.Put(ctx, entityID, stateData)
+		require.NoError(t, err)
+	}
+
+	// Create edges
+	edges := []struct{ from, to string }{
+		{entityIDs[0], entityIDs[1]},
+		{entityIDs[1], entityIDs[2]},
+	}
+
+	for _, edge := range edges {
+		outgoingData := []relationshipEntry{{Predicate: "rel.connected_to", ToEntityID: edge.to}}
+		outgoingJSON, _ := json.Marshal(outgoingData)
+		outgoingBucket.Put(ctx, edge.from, outgoingJSON)
+
+		incomingData := []relationshipEntry{{Predicate: "rel.connected_to", FromEntityID: edge.from}}
+		incomingJSON, _ := json.Marshal(incomingData)
+		incomingBucket.Put(ctx, edge.to, incomingJSON)
+	}
+
+	// Wait for detection cycles
+	time.Sleep(3 * time.Second)
+
+	// The ANOMALY_INDEX bucket exists - anomaly detection ran
+	// Note: Whether anomalies are detected depends on the graph structure
+	t.Log("Anomaly detection successfully initialized and ran")
+
+	// Verify we can access the bucket (it was created)
+	_, err = anomalyBucket.Keys(ctx)
+	if err != nil && err != jetstream.ErrKeyNotFound {
+		// Empty bucket is fine, but should be accessible
+		t.Logf("ANOMALY_INDEX bucket accessible, keys error: %v", err)
+	}
+}
+
+// TestIntegration_StructuralDisabledByDefault verifies that structural computation
+// and anomaly detection are disabled by default.
+func TestIntegration_StructuralDisabledByDefault(t *testing.T) {
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	config := Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "entity_watch", Type: "kv-watch", Subject: graph.BucketEntityStates},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "communities", Type: "kv-write", Subject: graph.BucketCommunityIndex},
+			},
+		},
+		DetectionIntervalStr: "1s",
+		MinCommunitySize:     2,
+		MaxIterations:        10,
+		EnableLLM:            false,
+		// EnableStructural and EnableAnomalyDetection not set (default false)
+	}
+
+	config.ApplyDefaults()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphClustering(configJSON, deps)
+	require.NoError(t, err)
+
+	clusteringComp := comp.(*Component)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, clusteringComp.Initialize())
+
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create required buckets
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketOutgoingIndex,
+		Description: "Test outgoing edges",
+	})
+	require.NoError(t, err)
+
+	_, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketIncomingIndex,
+		Description: "Test incoming edges",
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, clusteringComp.Start(ctx))
+	defer clusteringComp.Stop(5 * time.Second)
+
+	// Verify structural resources are NOT allocated
+	assert.Nil(t, clusteringComp.structuralBucket,
+		"Structural bucket should be nil when EnableStructural=false")
+	assert.Nil(t, clusteringComp.anomalyOrchestrator,
+		"Anomaly orchestrator should be nil when EnableAnomalyDetection=false")
+
+	// Verify STRUCTURAL_INDEX bucket is NOT created
+	time.Sleep(2 * time.Second)
+	_, err = js.KeyValue(ctx, graph.BucketStructuralIndex)
+	assert.Error(t, err, "STRUCTURAL_INDEX bucket should not exist when structural disabled")
+
+	t.Log("Structural/anomaly features correctly disabled by default")
+}

@@ -15,7 +15,9 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/graph/clustering"
+	"github.com/c360/semstreams/graph/inference"
 	"github.com/c360/semstreams/graph/llm"
+	"github.com/c360/semstreams/graph/structural"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
@@ -39,6 +41,15 @@ type Config struct {
 	EnhancementWorkers   int                   `json:"enhancement_workers" schema:"type:int,description:Number of parallel workers for LLM enhancement (default 5),category:advanced"`
 	MinCommunitySize     int                   `json:"min_community_size" schema:"type:int,description:Minimum number of entities to form a community,category:advanced"`
 	MaxIterations        int                   `json:"max_iterations" schema:"type:int,description:Maximum iterations for LPA algorithm,category:advanced"`
+
+	// Structural analysis (optional, enables anomaly detection)
+	EnableStructural bool `json:"enable_structural" schema:"type:bool,description:Enable structural index computation (k-core and pivot distance),category:advanced"`
+	PivotCount       int  `json:"pivot_count" schema:"type:int,description:Number of pivot nodes for distance indexing (default 16),category:advanced"`
+	MaxHopDistance   int  `json:"max_hop_distance" schema:"type:int,description:Maximum BFS traversal depth (default 10),category:advanced"`
+
+	// Anomaly detection (optional, requires EnableStructural)
+	EnableAnomalyDetection bool             `json:"enable_anomaly_detection" schema:"type:bool,description:Enable anomaly detection after structural computation,category:advanced"`
+	AnomalyConfig          inference.Config `json:"anomaly_config" schema:"type:object,description:Configuration for anomaly detection,category:advanced"`
 
 	// Parsed duration (set by ApplyDefaults)
 	detectionInterval time.Duration
@@ -88,6 +99,18 @@ func (c *Config) Validate() error {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "max_iterations must be greater than 0")
 	}
 
+	// Anomaly detection requires structural analysis
+	if c.EnableAnomalyDetection && !c.EnableStructural {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "enable_anomaly_detection requires enable_structural to be true")
+	}
+
+	// Validate anomaly config if anomaly detection is enabled
+	if c.EnableAnomalyDetection && c.AnomalyConfig.Enabled {
+		if err := c.AnomalyConfig.Validate(); err != nil {
+			return errs.Wrap(err, "Config", "Validate", "anomaly_config")
+		}
+	}
+
 	return nil
 }
 
@@ -121,6 +144,59 @@ func (c *Config) ApplyDefaults() {
 	if c.EnhancementWorkers == 0 {
 		c.EnhancementWorkers = 5 // Increased from default 3 for better parallelism
 	}
+	// Structural analysis defaults
+	if c.EnableStructural {
+		if c.PivotCount == 0 {
+			c.PivotCount = 16 // Default from structural package
+		}
+		if c.MaxHopDistance == 0 {
+			c.MaxHopDistance = 10 // Default maximum BFS depth
+		}
+	}
+	// Anomaly detection defaults
+	if c.EnableAnomalyDetection {
+		c.AnomalyConfig.ApplyDefaults()
+	}
+
+	// Add optional output ports based on enabled features
+	if c.Ports != nil {
+		// Add STRUCTURAL_INDEX output when structural analysis is enabled
+		if c.EnableStructural {
+			hasStructural := false
+			for _, o := range c.Ports.Outputs {
+				if o.Subject == graph.BucketStructuralIndex {
+					hasStructural = true
+					break
+				}
+			}
+			if !hasStructural {
+				c.Ports.Outputs = append(c.Ports.Outputs, component.PortDefinition{
+					Name:    "structural_index",
+					Type:    "kv-write",
+					Subject: graph.BucketStructuralIndex,
+				})
+			}
+		}
+
+		// Add ANOMALY_INDEX output when anomaly detection is enabled
+		if c.EnableAnomalyDetection {
+			hasAnomaly := false
+			for _, o := range c.Ports.Outputs {
+				if o.Subject == graph.BucketAnomalyIndex {
+					hasAnomaly = true
+					break
+				}
+			}
+			if !hasAnomaly {
+				c.Ports.Outputs = append(c.Ports.Outputs, component.PortDefinition{
+					Name:    "anomaly_index",
+					Type:    "kv-write",
+					Subject: graph.BucketAnomalyIndex,
+				})
+			}
+		}
+	}
+
 	if c.Ports == nil {
 		// Apply full default port config
 		defaultConf := DefaultConfig()
@@ -197,6 +273,18 @@ type Component struct {
 	// Community detection
 	detector clustering.CommunityDetector
 	storage  *clustering.NATSCommunityStorage
+
+	// Structural analysis (optional)
+	structuralBucket  jetstream.KeyValue
+	structuralStorage *structural.NATSStructuralIndexStorage
+	graphProvider     clustering.GraphProvider // shared with detector
+	previousKCore     *structural.KCoreIndex   // for demotion detection
+
+	// Anomaly detection (optional, requires structural)
+	anomalyBucket       jetstream.KeyValue
+	anomalyStorage      inference.Storage
+	anomalyOrchestrator *inference.Orchestrator
+	similarityFinder    inference.SimilarityFinder // for semantic gap detection
 
 	// LLM enhancement (optional)
 	enhancementWorker *clustering.EnhancementWorker
@@ -538,6 +626,25 @@ func (c *Component) Start(ctx context.Context) error {
 	detector.SetEntityProvider(entityQuerier)
 	c.detector = detector
 
+	// Store graph provider for structural computation
+	c.graphProvider = entityIDProvider
+
+	// Initialize structural analysis if enabled
+	if c.config.EnableStructural {
+		if err := c.initStructural(ctx); err != nil {
+			c.logger.Warn("failed to initialize structural analysis, continuing without it",
+				slog.Any("error", err))
+		}
+	}
+
+	// Initialize anomaly detection if enabled (requires structural)
+	if c.config.EnableAnomalyDetection && c.structuralStorage != nil {
+		if err := c.initAnomalyDetection(ctx); err != nil {
+			c.logger.Warn("failed to initialize anomaly detection, continuing without it",
+				slog.Any("error", err))
+		}
+	}
+
 	// Start LLM enhancement worker if enabled
 	if c.config.EnableLLM {
 		if err := c.startEnhancementWorker(ctx, provider); err != nil {
@@ -558,7 +665,9 @@ func (c *Component) Start(ctx context.Context) error {
 		slog.String("component", "graph-clustering"),
 		slog.Time("start_time", c.startTime),
 		slog.Duration("detection_interval", c.config.DetectionInterval()),
-		slog.Bool("enable_llm", c.config.EnableLLM))
+		slog.Bool("enable_llm", c.config.EnableLLM),
+		slog.Bool("enable_structural", c.config.EnableStructural),
+		slog.Bool("enable_anomaly_detection", c.config.EnableAnomalyDetection))
 
 	return nil
 }
@@ -674,6 +783,40 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 		slog.Int("communities_found", totalCommunities),
 		slog.Int("levels", len(communities)),
 		slog.Duration("duration", time.Since(start)))
+
+	// Run structural computation if enabled (after community detection)
+	if c.config.EnableStructural {
+		if ctx.Err() != nil {
+			c.logger.Debug("skipping structural computation - shutdown in progress")
+			return
+		}
+		kcoreIndex, pivotIndex, err := c.runStructuralComputation(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				c.logger.Info("structural computation interrupted by shutdown")
+				return
+			}
+			c.logger.Error("structural computation failed", slog.Any("error", err))
+			atomic.AddInt64(&c.errors, 1)
+			return // Cannot continue to anomaly detection without structural indices
+		}
+
+		// Run anomaly detection if enabled (after structural computation)
+		if c.config.EnableAnomalyDetection && kcoreIndex != nil {
+			if ctx.Err() != nil {
+				c.logger.Debug("skipping anomaly detection - shutdown in progress")
+				return
+			}
+			if err := c.runAnomalyDetection(ctx, kcoreIndex, pivotIndex); err != nil {
+				if errors.Is(err, context.Canceled) {
+					c.logger.Info("anomaly detection interrupted by shutdown")
+					return
+				}
+				c.logger.Error("anomaly detection failed", slog.Any("error", err))
+				atomic.AddInt64(&c.errors, 1)
+			}
+		}
+	}
 }
 
 // ============================================================================

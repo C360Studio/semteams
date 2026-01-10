@@ -1,5 +1,7 @@
 # graph-anomalies
 
+> **⚠️ DEPRECATED**: This component is deprecated. Use `graph-clustering` with `enable_structural: true` and `enable_anomaly_detection: true` instead. The functionality has been merged into graph-clustering to eliminate race conditions and enable within-community anomaly scoping.
+
 Graph cluster/community anomaly detection component using k-core decomposition and pivot-based distance indexing.
 
 ## Tier
@@ -127,3 +129,64 @@ Same as Statistical, with HTTP embedder and LLM enhancement enabled.
 ### NOT in Structural Tier (Tier 0)
 
 The graph-anomalies component requires clustering results and is not used in the Structural tier.
+
+## Migration Guide
+
+This component is deprecated. To migrate to the merged graph-clustering component:
+
+### Before (separate components)
+
+```json
+{
+  "graph-clustering": {
+    "config": {
+      "detection_interval": "30s",
+      "min_community_size": 2
+    }
+  },
+  "graph-anomalies": {
+    "config": {
+      "compute_interval": "1h",
+      "pivot_count": 16,
+      "max_hop_distance": 10,
+      "enable_detection": true
+    }
+  }
+}
+```
+
+### After (merged)
+
+```json
+{
+  "graph-clustering": {
+    "config": {
+      "detection_interval": "30s",
+      "min_community_size": 2,
+      "enable_structural": true,
+      "pivot_count": 16,
+      "max_hop_distance": 10,
+      "enable_anomaly_detection": true,
+      "anomaly_config": {
+        "enabled": true,
+        "max_anomalies_per_run": 100,
+        "core_anomaly": {
+          "enabled": true,
+          "min_core_level": 2
+        },
+        "semantic_gap": {
+          "enabled": true,
+          "similarity_threshold": 0.7
+        }
+      }
+    }
+  }
+}
+```
+
+### Benefits of Migration
+
+1. **Guaranteed ordering**: Structural computation happens after LPA completes
+2. **Within-community scoping**: Core isolation detection is scoped to communities
+3. **Simplified coordination**: Single component manages the full pipeline
+4. **Semantic gap detection**: Uses embedding similarity when available

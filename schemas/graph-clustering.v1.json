@@ -5,6 +5,11 @@
   "title": "graph-clustering Configuration",
   "description": "Graph community detection and clustering processor",
   "properties": {
+    "anomaly_config": {
+      "type": "object",
+      "description": "Configuration for anomaly detection",
+      "category": "advanced"
+    },
     "batch_size": {
       "type": "number",
       "description": "Event count threshold for triggering detection",
@@ -15,9 +20,19 @@
       "description": "Interval between community detection runs (e.g. 30s or 5m)",
       "category": "basic"
     },
+    "enable_anomaly_detection": {
+      "type": "boolean",
+      "description": "Enable anomaly detection after structural computation",
+      "category": "advanced"
+    },
     "enable_llm": {
       "type": "boolean",
       "description": "Enable LLM-based community summarization",
+      "category": "advanced"
+    },
+    "enable_structural": {
+      "type": "boolean",
+      "description": "Enable structural index computation (k-core and pivot distance)",
       "category": "advanced"
     },
     "enhancement_workers": {
@@ -35,6 +50,11 @@
       "description": "Model name for LLM service (e.g. mistral-7b-instruct)",
       "category": "advanced"
     },
+    "max_hop_distance": {
+      "type": "number",
+      "description": "Maximum BFS traversal depth (default 10)",
+      "category": "advanced"
+    },
     "max_iterations": {
       "type": "number",
       "description": "Maximum iterations for LPA algorithm",
@@ -43,6 +63,11 @@
     "min_community_size": {
       "type": "number",
       "description": "Minimum number of entities to form a community",
+      "category": "advanced"
+    },
+    "pivot_count": {
+      "type": "number",
+      "description": "Number of pivot nodes for distance indexing (default 16)",
       "category": "advanced"
     },
     "ports": {

@@ -596,43 +596,22 @@
         "batch_size": 100,
         "enable_llm": false,
         "min_community_size": 2,
-        "max_iterations": 100
-      }
-    },
-    "graph-anomalies": {
-      "type": "processor",
-      "name": "graph-anomalies",
-      "enabled": true,
-      "config": {
-        "ports": {
-          "inputs": [
-            {
-              "name": "outgoing_watch",
-              "subject": "OUTGOING_INDEX",
-              "type": "kv-watch",
-              "description": "Watch outgoing index changes"
-            },
-            {
-              "name": "incoming_watch",
-              "subject": "INCOMING_INDEX",
-              "type": "kv-watch",
-              "description": "Watch incoming index changes"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "structural_index",
-              "subject": "STRUCTURAL_INDEX",
-              "type": "kv",
-              "description": "Structural index (k-core, pivot)"
-            }
-          ]
-        },
-        "compute_interval": "1h",
+        "max_iterations": 100,
+        "enable_structural": true,
         "pivot_count": 16,
         "max_hop_distance": 10,
-        "compute_on_startup": true,
-        "enable_detection": true
+        "enable_anomaly_detection": true,
+        "anomaly_config": {
+          "enabled": true,
+          "max_anomalies_per_run": 100,
+          "core_anomaly": {
+            "enabled": true,
+            "min_core_level": 2
+          },
+          "semantic_gap": {
+            "enabled": false
+          }
+        }
       }
     },
     "graph-query": {

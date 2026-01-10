@@ -20,8 +20,7 @@ SemStreams supports a 3-tier deployment model with progressively more capable co
 | `graph-index` | Required | Required | Required | Core relationship indexes |
 | `graph-gateway` | Required | Required | Required | HTTP API (GraphQL/MCP) |
 | `graph-embedding` | - | BM25 | HTTP | Vector embeddings |
-| `graph-clustering` | - | Statistical | + LLM | Community detection |
-| `graph-anomalies` | - | Required | Required | Cluster/community anomaly detection |
+| `graph-clustering` | - | + Structural | + LLM + Semantic | Community detection, structural analysis, anomaly detection |
 | `graph-index-spatial` | Optional | Optional | Optional | Geospatial queries |
 | `graph-index-temporal` | Optional | Optional | Optional | Time-based queries |
 
@@ -41,8 +40,7 @@ Adds statistical algorithms for embeddings and clustering without external ML se
 
 **Additional Components:**
 - `graph-embedding` (BM25) - Statistical term-frequency embeddings
-- `graph-clustering` (no LLM) - Statistical community detection
-- `graph-anomalies` - Cluster/community anomaly detection via k-core and pivot analysis
+- `graph-clustering` - Community detection with structural analysis and core anomaly detection
 
 ### Tier 2: Semantic (`semantic.json`)
 
@@ -50,8 +48,7 @@ Full-featured deployment with external ML services for embeddings and LLM enhanc
 
 **Enhanced Components:**
 - `graph-embedding` (HTTP) - ML-based vector embeddings via external service
-- `graph-clustering` (+ LLM) - Community detection with LLM-based summarization
-- `graph-anomalies` - Full anomaly detection capabilities
+- `graph-clustering` (+ LLM) - Community detection with LLM summarization, structural analysis, and semantic gap detection
 - `graph-index-spatial` - Geospatial indexing
 - `graph-index-temporal` - Time-based indexing
 
@@ -72,13 +69,6 @@ Entity Streams ──► graph-ingest ──► ENTITY_STATES KV
                     ┌─────────────────────┼─────────────────────┐
                     ▼                     ▼                     ▼
              OUTGOING_INDEX        INCOMING_INDEX        ALIAS_INDEX
-                    │                     │
-                    └─────────┬───────────┘
-                              ▼
-                       graph-anomalies
-                              │
-                              ▼
-                       STRUCTURAL_INDEX
 
 Tier 1+ Only:
         ENTITY_STATES
@@ -87,7 +77,9 @@ Tier 1+ Only:
         graph-embedding ──► EMBEDDINGS_CACHE
               │
               ▼ (reads KV)
-        graph-clustering ──► COMMUNITY_INDEX
+        graph-clustering ──┬──► COMMUNITY_INDEX
+                          ├──► STRUCTURAL_INDEX (k-core, pivot)
+                          └──► ANOMALY_INDEX
 ```
 
 ## Graph Component Configuration
@@ -174,9 +166,9 @@ For Semantic tier, use `"embedder_type": "http"` with `"embedder_url": "http://s
 
 ### graph-clustering
 
-Performs community detection with optional LLM enhancement.
+Performs community detection with optional structural analysis, anomaly detection, and LLM enhancement.
 
-**Tier:** Statistical (no LLM), Semantic (with LLM)
+**Tier:** Statistical, Semantic
 
 ```json
 {
@@ -193,38 +185,51 @@ Performs community detection with optional LLM enhancement.
     },
     "detection_interval": "30s",
     "batch_size": 100,
+    "min_community_size": 2,
     "enable_llm": false,
-    "min_community_size": 2
+    "enable_structural": true,
+    "pivot_count": 16,
+    "max_hop_distance": 10,
+    "enable_anomaly_detection": true,
+    "anomaly_config": {
+      "enabled": true,
+      "max_anomalies_per_run": 100,
+      "core_anomaly": {
+        "enabled": true,
+        "min_core_level": 2
+      },
+      "semantic_gap": {
+        "enabled": false
+      }
+    }
   }
 }
 ```
 
-For Semantic tier, use `"enable_llm": true` with `"llm_endpoint": "http://seminstruct:8083/v1"`.
+**Configuration Options:**
 
-### graph-anomalies
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enable_llm` | bool | `false` | Enable LLM-based community summarization |
+| `llm_endpoint` | string | - | LLM service endpoint (required if enable_llm=true) |
+| `enable_structural` | bool | `false` | Enable k-core and pivot distance computation |
+| `pivot_count` | int | `16` | Number of pivot nodes for distance indexing |
+| `max_hop_distance` | int | `10` | Maximum BFS traversal depth |
+| `enable_anomaly_detection` | bool | `false` | Enable anomaly detection (requires enable_structural) |
+| `anomaly_config.core_anomaly.enabled` | bool | `true` | Detect core isolation anomalies |
+| `anomaly_config.semantic_gap.enabled` | bool | `false` | Detect semantic-structural gaps (requires embeddings) |
 
-Detects cluster/community anomalies via k-core decomposition and pivot distance analysis.
-
-**Tier:** Statistical, Semantic
-
+For Semantic tier, enable LLM and semantic gap detection:
 ```json
 {
-  "type": "processor",
-  "name": "graph-anomalies",
-  "config": {
-    "ports": {
-      "inputs": [
-        {"name": "outgoing_watch", "subject": "OUTGOING_INDEX", "type": "kv-watch"},
-        {"name": "incoming_watch", "subject": "INCOMING_INDEX", "type": "kv-watch"}
-      ],
-      "outputs": [
-        {"name": "structural_index", "subject": "STRUCTURAL_INDEX", "type": "kv"}
-      ]
-    },
-    "compute_interval": "1h",
-    "pivot_count": 16,
-    "max_hop_distance": 10,
-    "compute_on_startup": true
+  "enable_llm": true,
+  "llm_endpoint": "http://seminstruct:8083/v1",
+  "anomaly_config": {
+    "semantic_gap": {
+      "enabled": true,
+      "similarity_threshold": 0.7,
+      "min_structural_distance": 3
+    }
   }
 }
 ```
@@ -311,13 +316,14 @@ HTTP gateway for GraphQL and MCP access.
 | Bucket | Written By | Watched By | Tier |
 |--------|------------|------------|------|
 | `ENTITY_STATES` | graph-ingest | graph-index, graph-embedding, graph-clustering | All |
-| `OUTGOING_INDEX` | graph-index | graph-anomalies | All |
-| `INCOMING_INDEX` | graph-index | graph-anomalies | All |
+| `OUTGOING_INDEX` | graph-index | graph-clustering | All |
+| `INCOMING_INDEX` | graph-index | graph-clustering | All |
 | `ALIAS_INDEX` | graph-index | - | All |
 | `PREDICATE_INDEX` | graph-index | - | All |
 | `EMBEDDINGS_CACHE` | graph-embedding | graph-clustering | 1+ |
 | `COMMUNITY_INDEX` | graph-clustering | - | 1+ |
-| `STRUCTURAL_INDEX` | graph-anomalies | - | 1+ |
+| `STRUCTURAL_INDEX` | graph-clustering | - | 1+ |
+| `ANOMALY_INDEX` | graph-clustering | - | 1+ |
 | `SPATIAL_INDEX` | graph-index-spatial | - | Optional |
 | `TEMPORAL_INDEX` | graph-index-temporal | - | Optional |
 

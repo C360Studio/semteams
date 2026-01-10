@@ -127,6 +127,7 @@ type Evidence struct {
 	PeerCount         int     `json:"peer_count,omitempty"`          // Number of same-core neighbors
 	ExpectedPeerCount int     `json:"expected_peer_count,omitempty"` // Expected based on core level
 	PeerConnectivity  float64 `json:"peer_connectivity,omitempty"`   // Ratio of actual/expected peers
+	CommunityID       string  `json:"community_id,omitempty"`        // Community where isolation detected
 
 	// Core Demotion evidence
 	PreviousCoreLevel int `json:"previous_core_level,omitempty"` // Core level before demotion

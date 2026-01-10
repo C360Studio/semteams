@@ -38,6 +38,10 @@ type DetectorDependencies struct {
 	// PreviousKCore is the k-core index from the previous computation (for demotion detection).
 	PreviousKCore *structural.KCoreIndex
 
+	// Communities provides community membership for scoped detection.
+	// Core isolation is analyzed within each community rather than globally.
+	Communities []CommunityInfo
+
 	// SimilarityFinder provides semantic similarity queries.
 	SimilarityFinder SimilarityFinder
 
@@ -49,6 +53,17 @@ type DetectorDependencies struct {
 
 	// Logger for detector logging.
 	Logger *slog.Logger
+}
+
+// CommunityInfo provides community membership information for detectors.
+// This is a simple interface to avoid circular imports with the clustering package.
+type CommunityInfo struct {
+	// ID is the community identifier
+	ID string
+	// Members is the list of entity IDs in this community
+	Members []string
+	// Level is the hierarchy level (0 = base communities)
+	Level int
 }
 
 // SimilarityFinder provides semantic similarity search functionality.

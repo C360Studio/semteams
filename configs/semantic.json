@@ -542,7 +542,24 @@
         "llm_endpoint": "http://seminstruct:8083/v1",
         "llm_model": "qwen2.5-0.5b-instruct-q4-k-m",
         "min_community_size": 2,
-        "max_iterations": 100
+        "max_iterations": 100,
+        "enable_structural": true,
+        "pivot_count": 16,
+        "max_hop_distance": 10,
+        "enable_anomaly_detection": true,
+        "anomaly_config": {
+          "enabled": true,
+          "max_anomalies_per_run": 100,
+          "core_anomaly": {
+            "enabled": true,
+            "min_core_level": 2
+          },
+          "semantic_gap": {
+            "enabled": true,
+            "similarity_threshold": 0.7,
+            "min_structural_distance": 3
+          }
+        }
       }
     },
     "graph-index-spatial": {
@@ -599,42 +616,6 @@
         "time_resolution": "hour",
         "workers": 4,
         "batch_size": 100
-      }
-    },
-    "graph-anomalies": {
-      "type": "processor",
-      "name": "graph-anomalies",
-      "enabled": true,
-      "config": {
-        "ports": {
-          "inputs": [
-            {
-              "name": "outgoing_watch",
-              "subject": "OUTGOING_INDEX",
-              "type": "kv-watch",
-              "description": "Watch outgoing index changes"
-            },
-            {
-              "name": "incoming_watch",
-              "subject": "INCOMING_INDEX",
-              "type": "kv-watch",
-              "description": "Watch incoming index changes"
-            }
-          ],
-          "outputs": [
-            {
-              "name": "structural_index",
-              "subject": "STRUCTURAL_INDEX",
-              "type": "kv",
-              "description": "Structural index (k-core, pivot)"
-            }
-          ]
-        },
-        "compute_interval": "1h",
-        "pivot_count": 16,
-        "max_hop_distance": 10,
-        "compute_on_startup": true,
-        "enable_detection": true
       }
     },
     "graph-query": {

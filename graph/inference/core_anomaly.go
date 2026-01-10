@@ -110,45 +110,156 @@ func (d *CoreAnomalyDetector) validateDependencies() error {
 }
 
 // detectCoreIsolation finds high-core entities with low peer connectivity.
+// If communities are available, isolation is analyzed within each community.
+// Otherwise, falls back to global analysis.
 func (d *CoreAnomalyDetector) detectCoreIsolation(
 	ctx context.Context,
 	kcore *structural.KCoreIndex,
 ) ([]*StructuralAnomaly, error) {
 	anomalies := make([]*StructuralAnomaly, 0)
-
-	// Get entities in cores >= minCoreForHubAnalysis
 	minCore := d.config.MinCoreForHubAnalysis
-	highCoreEntities := kcore.GetEntitiesAboveCore(minCore)
 
-	d.logger.Debug("analyzing high-core entities for isolation",
-		"min_core", minCore, "count", len(highCoreEntities))
+	// If communities are available, analyze within each community
+	if len(d.deps.Communities) > 0 {
+		d.logger.Debug("analyzing core isolation within communities",
+			"min_core", minCore, "community_count", len(d.deps.Communities))
 
-	for _, entityID := range highCoreEntities {
+		for _, community := range d.deps.Communities {
+			// Only analyze base-level communities (level 0)
+			if community.Level != 0 {
+				continue
+			}
+
+			select {
+			case <-ctx.Done():
+				return anomalies, ctx.Err()
+			default:
+			}
+
+			communityAnomalies := d.detectIsolationInCommunity(ctx, kcore, community, minCore)
+			anomalies = append(anomalies, communityAnomalies...)
+		}
+	} else {
+		// Fall back to global analysis if no communities
+		d.logger.Debug("analyzing core isolation globally (no communities)",
+			"min_core", minCore)
+
+		highCoreEntities := kcore.GetEntitiesAboveCore(minCore)
+		d.logger.Debug("found high-core entities", "count", len(highCoreEntities))
+
+		for _, entityID := range highCoreEntities {
+			select {
+			case <-ctx.Done():
+				return anomalies, ctx.Err()
+			default:
+			}
+
+			coreLevel := kcore.GetCore(entityID)
+			peerCount, expectedPeers := d.countSameCorePeers(ctx, entityID, coreLevel, kcore)
+
+			connectivity := 0.0
+			if expectedPeers > 0 {
+				connectivity = float64(peerCount) / float64(expectedPeers)
+			}
+
+			if connectivity < d.config.HubIsolationThreshold {
+				anomaly := d.createIsolationAnomaly(entityID, coreLevel, peerCount, expectedPeers, connectivity)
+				anomalies = append(anomalies, anomaly)
+			}
+		}
+	}
+
+	return anomalies, nil
+}
+
+// detectIsolationInCommunity analyzes core isolation within a single community.
+func (d *CoreAnomalyDetector) detectIsolationInCommunity(
+	ctx context.Context,
+	kcore *structural.KCoreIndex,
+	community CommunityInfo,
+	minCore int,
+) []*StructuralAnomaly {
+	anomalies := make([]*StructuralAnomaly, 0)
+
+	// Build set of community members for efficient lookup
+	memberSet := make(map[string]bool, len(community.Members))
+	for _, m := range community.Members {
+		memberSet[m] = true
+	}
+
+	// Find high-core entities within this community
+	for _, entityID := range community.Members {
+		coreLevel := kcore.GetCore(entityID)
+		if coreLevel < minCore {
+			continue
+		}
+
 		select {
 		case <-ctx.Done():
-			return anomalies, ctx.Err()
+			return anomalies
 		default:
 		}
 
-		coreLevel := kcore.GetCore(entityID)
+		// Count same-core peers WITHIN the community
+		peerCount := d.countSameCorePeersInCommunity(ctx, entityID, coreLevel, kcore, memberSet)
 
-		// Count same-core peers
-		peerCount, expectedPeers := d.countSameCorePeers(ctx, entityID, coreLevel, kcore)
+		// Expected: at least one same-core peer in the same community
+		// (relaxed from k-core definition since we're community-scoped)
+		expectedPeers := 1
+		if coreLevel > 2 {
+			expectedPeers = 2 // Higher-core entities should have more community peers
+		}
 
-		// Calculate peer connectivity ratio
 		connectivity := 0.0
 		if expectedPeers > 0 {
 			connectivity = float64(peerCount) / float64(expectedPeers)
 		}
 
-		// Check if isolated (below threshold)
 		if connectivity < d.config.HubIsolationThreshold {
 			anomaly := d.createIsolationAnomaly(entityID, coreLevel, peerCount, expectedPeers, connectivity)
+			anomaly.Evidence.CommunityID = community.ID
 			anomalies = append(anomalies, anomaly)
 		}
 	}
 
-	return anomalies, nil
+	return anomalies
+}
+
+// countSameCorePeersInCommunity counts same-core peers within a specific community.
+func (d *CoreAnomalyDetector) countSameCorePeersInCommunity(
+	ctx context.Context,
+	entityID string,
+	coreLevel int,
+	kcore *structural.KCoreIndex,
+	communityMembers map[string]bool,
+) int {
+	if d.deps.RelationshipQuerier == nil {
+		return 0
+	}
+
+	peers := make(map[string]bool)
+
+	outgoing, err := d.deps.RelationshipQuerier.GetOutgoingRelationships(ctx, entityID)
+	if err == nil {
+		for _, rel := range outgoing {
+			// Only count if neighbor is in the same community and same core
+			if communityMembers[rel.ToEntityID] && kcore.GetCore(rel.ToEntityID) >= coreLevel {
+				peers[rel.ToEntityID] = true
+			}
+		}
+	}
+
+	incoming, err := d.deps.RelationshipQuerier.GetIncomingRelationships(ctx, entityID)
+	if err == nil {
+		for _, rel := range incoming {
+			// Only count if neighbor is in the same community and same core
+			if communityMembers[rel.FromEntityID] && kcore.GetCore(rel.FromEntityID) >= coreLevel {
+				peers[rel.FromEntityID] = true
+			}
+		}
+	}
+
+	return len(peers)
 }
 
 // countSameCorePeers counts how many unique same-core neighbors an entity has.
