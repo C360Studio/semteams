@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1279,8 +1278,9 @@ func (c *Component) UpdateContextIndex(ctx context.Context, entityID string, tri
 // mergeContextEntries merges new entries into existing context index.
 // Uses set semantics: removes old entries for the entity, adds new ones.
 func (c *Component) mergeContextEntries(ctx context.Context, contextValue, entityID string, newEntries []ContextEntry) error {
-	// Sanitize context value for use as NATS key (replace dots with underscores)
-	key := sanitizeNATSKey(contextValue)
+	// Use context value directly as key - dotted keys enable wildcard filtering
+	// (e.g., Watch("inference.>") to observe all inference-related contexts)
+	key := contextValue
 
 	// Get existing entries
 	var existing []ContextEntry
@@ -1323,9 +1323,3 @@ func (c *Component) mergeContextEntries(ctx context.Context, contextValue, entit
 	return nil
 }
 
-// sanitizeNATSKey replaces characters that may cause issues with NATS KV keys.
-func sanitizeNATSKey(s string) string {
-	// NATS KV keys can contain most characters, but dots have special meaning
-	// in subject hierarchies. Replace dots with underscores for safety.
-	return strings.ReplaceAll(s, ".", "_")
-}

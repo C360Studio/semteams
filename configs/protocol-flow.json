@@ -35,6 +35,11 @@
         "enable_kv_query": true,
         "log_level": "INFO"
       }
+    },
+    "flow-builder": {
+      "name": "flow-builder",
+      "enabled": true,
+      "config": {}
     }
   },
   "components": {

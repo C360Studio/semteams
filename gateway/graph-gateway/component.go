@@ -673,6 +673,10 @@ func (c *Component) transformVariablesToNATSPayload(variables map[string]interfa
 		if entityIDVal, ok := variables["entity_id"]; ok {
 			payload["entity_id"] = entityIDVal
 		}
+		// Pass through direction field (convert GraphQL enum INCOMING/OUTGOING to lowercase)
+		if direction, ok := variables["direction"].(string); ok {
+			payload["direction"] = strings.ToLower(direction)
+		}
 
 	case "graph.query.hierarchyStats", "graph.query.prefix":
 		// Pass through prefix field
