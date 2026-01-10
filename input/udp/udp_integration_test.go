@@ -19,7 +19,10 @@ func TestUDPSchemaRegistration(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	if err != nil {
+		t.Fatalf("NewInput failed: %v", err)
+	}
 
 	// Get schema
 	schema := udp.ConfigSchema()

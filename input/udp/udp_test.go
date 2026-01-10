@@ -56,7 +56,8 @@ func TestNewUDPInput(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	// Test that component extracts configuration from Ports
 	assert.Equal(t, 14550, udp.port)
@@ -75,7 +76,8 @@ func TestUDPInput_Meta(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	meta := udp.Meta()
 
@@ -94,7 +96,8 @@ func TestUDPInput_Ports(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	inputPorts := udp.InputPorts()
 	assert.Len(t, inputPorts, 1)
@@ -129,7 +132,8 @@ func TestUDPInput_ConfigSchema(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	schema := udp.ConfigSchema()
 
@@ -197,9 +201,10 @@ func TestUDPInput_Initialize(t *testing.T) {
 				MetricsRegistry: nil,
 				Logger:          nil,
 			}
-			udp := NewInput(deps)
+			udp, err := NewInput(deps)
+			require.NoError(t, err)
 
-			err := udp.Initialize()
+			err = udp.Initialize()
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -219,7 +224,8 @@ func TestUDPInput_Health(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	health := udp.Health()
 
@@ -236,7 +242,8 @@ func TestUDPInput_DataFlow(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	flow := udp.DataFlow()
 
@@ -256,10 +263,11 @@ func TestUDPInput_StartStop(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	// Initialize first
-	err := udp.Initialize()
+	err = udp.Initialize()
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
@@ -309,7 +317,8 @@ func TestUDPInput_RetryOnBindFailure(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	// Ensure UDP input is cleaned up even on test failure
 	t.Cleanup(func() {
@@ -338,7 +347,8 @@ func TestUDPInput_BufferIntegration(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	// Check buffer is initialized
 	assert.NotNil(t, udp.buffer)
@@ -348,7 +358,7 @@ func TestUDPInput_BufferIntegration(t *testing.T) {
 
 	// Test buffer write functionality
 	testData := []byte("test message")
-	err := udp.buffer.Write(testData)
+	err = udp.buffer.Write(testData)
 	assert.NoError(t, err)
 	assert.Equal(t, 1, udp.buffer.Size())
 
@@ -575,7 +585,7 @@ func TestUDPInput_Lifecycle_StartStop(t *testing.T) {
 	require.False(t, health.Healthy, "Component should be unhealthy after stop")
 }
 
-func TestUDPInput_Interfaces(_ *testing.T) {
+func TestUDPInput_Interfaces(t *testing.T) {
 	mockClient := &natsclient.Client{}
 	deps := InputDeps{
 		Config:          testUDPConfig(14550, "127.0.0.1", "test.subject"),
@@ -583,7 +593,8 @@ func TestUDPInput_Interfaces(_ *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udp := NewInput(deps)
+	udp, err := NewInput(deps)
+	require.NoError(t, err)
 
 	// Verify interface implementations
 	var _ component.Discoverable = udp
@@ -812,7 +823,8 @@ func TestUDPInput_NoRaceCondition(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input := NewInput(deps)
+	input, err := NewInput(deps)
+	require.NoError(t, err)
 
 	// Test concurrent access to metrics
 	var wg sync.WaitGroup
@@ -875,7 +887,8 @@ func TestUDPInput_NoGoroutineLeak(t *testing.T) {
 			MetricsRegistry: nil,
 			Logger:          nil,
 		}
-		input := NewInput(deps)
+		input, err := NewInput(deps)
+		require.NoError(t, err)
 
 		require.NoError(t, input.Initialize())
 
@@ -926,7 +939,8 @@ func TestUDPInput_NoPanic(t *testing.T) {
 			MetricsRegistry: nil,
 			Logger:          nil,
 		}
-		input := NewInput(deps)
+		input, err := NewInput(deps)
+		require.NoError(t, err)
 		require.NoError(t, input.Initialize())
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -945,7 +959,8 @@ func TestUDPInput_NoPanic(t *testing.T) {
 			MetricsRegistry: nil,
 			Logger:          nil,
 		}
-		input := NewInput(deps)
+		input, err := NewInput(deps)
+		require.NoError(t, err)
 		require.NoError(t, input.Initialize())
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -970,7 +985,8 @@ func TestUDPInput_NoPanic(t *testing.T) {
 			MetricsRegistry: nil,
 			Logger:          nil,
 		}
-		input := NewInput(deps)
+		input, err := NewInput(deps)
+		require.NoError(t, err)
 		require.NoError(t, input.Initialize())
 
 		ctx, cancel := context.WithCancel(context.Background())
@@ -993,7 +1009,8 @@ func TestUDPInput_CleanShutdown(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input := NewInput(deps)
+	input, err := NewInput(deps)
+	require.NoError(t, err)
 
 	require.NoError(t, input.Initialize())
 
@@ -1018,7 +1035,7 @@ func TestUDPInput_CleanShutdown(t *testing.T) {
 
 	// Stop should complete within reasonable time (much less than 5 second timeout)
 	start := time.Now()
-	err := input.Stop(5 * time.Second)
+	err = input.Stop(5 * time.Second)
 	duration := time.Since(start)
 
 	require.NoError(t, err, "Stop should not return error")
@@ -1043,7 +1060,8 @@ func TestUDPInput_StopTimeout(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input := NewInput(deps)
+	input, err := NewInput(deps)
+	require.NoError(t, err)
 
 	require.NoError(t, input.Initialize())
 
@@ -1065,7 +1083,7 @@ func TestUDPInput_StopTimeout(t *testing.T) {
 	input.mu.Unlock()
 
 	start := time.Now()
-	err := input.Stop(5 * time.Second)
+	err = input.Stop(5 * time.Second)
 	duration := time.Since(start)
 
 	// Should timeout and return error
@@ -1089,7 +1107,8 @@ func TestUDPInput_MetricsThreadSafety(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input := NewInput(deps)
+	input, err := NewInput(deps)
+	require.NoError(t, err)
 
 	// Test atomic operations work correctly
 	const numGoroutines = 50
@@ -1153,8 +1172,9 @@ func TestUDPInput_ErrorHandling(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input := NewInput(deps)
-	err := input.Initialize()
+	input, err := NewInput(deps)
+	require.NoError(t, err)
+	err = input.Initialize()
 	require.Error(t, err, "should error on invalid port")
 	assert.True(t, errs.IsInvalid(err), "invalid port should be classified as invalid")
 
@@ -1165,7 +1185,8 @@ func TestUDPInput_ErrorHandling(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input = NewInput(deps)
+	input, err = NewInput(deps)
+	require.NoError(t, err)
 	err = input.Initialize()
 	require.Error(t, err, "should error on empty subject")
 	assert.True(t, errs.IsInvalid(err), "empty subject should be classified as invalid")
@@ -1177,7 +1198,8 @@ func TestUDPInput_ErrorHandling(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input = NewInput(deps)
+	input, err = NewInput(deps)
+	require.NoError(t, err)
 	err = input.Initialize()
 	require.Error(t, err, "should error on nil NATS client")
 	assert.True(t, errs.IsInvalid(err), "nil NATS client should be classified as invalid")
@@ -1190,7 +1212,8 @@ func TestUDPInput_ErrorHandling(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input = NewInput(deps)
+	input, err = NewInput(deps)
+	require.NoError(t, err)
 	require.NoError(t, input.Initialize())
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -1210,7 +1233,8 @@ func TestUDPInput_ErrorHandling(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input2 := NewInput(deps2)
+	input2, err := NewInput(deps2)
+	require.NoError(t, err)
 	err = input2.Stop(5 * time.Second)
 	assert.NoError(t, err, "stopping not running input should not error")
 }
@@ -1224,7 +1248,8 @@ func TestUDPInput_BufferOverflow(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input := NewInput(deps)
+	input, err := NewInput(deps)
+	require.NoError(t, err)
 
 	// Fill buffer to capacity
 	capacity := input.buffer.Capacity()
@@ -1239,7 +1264,7 @@ func TestUDPInput_BufferOverflow(t *testing.T) {
 	assert.True(t, input.buffer.IsFull(), "buffer should be full")
 
 	// Additional writes should handle overflow according to policy
-	err := input.buffer.Write(testData)
+	err = input.buffer.Write(testData)
 	// Behavior depends on overflow policy - could drop oldest/newest or block
 	// The test verifies the operation doesn't panic and buffer handles it gracefully
 	_ = err // May or may not error depending on policy
@@ -1254,7 +1279,8 @@ func TestUDPInput_RetryIntegration(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	input := NewInput(deps)
+	input, err := NewInput(deps)
+	require.NoError(t, err)
 
 	// Test that retry configuration is properly initialized
 	assert.NotNil(t, input.retryConfig, "retry config should be initialized")
@@ -1270,7 +1296,7 @@ func TestUDPInput_RetryIntegration(t *testing.T) {
 		return errs.WrapTransient(fmt.Errorf("network timeout"), "udp-input", "test", "simulated timeout")
 	}
 
-	err := retry.Do(ctx, input.retryConfig, testOperation)
+	err = retry.Do(ctx, input.retryConfig, testOperation)
 	assert.Error(t, err, "should fail after retries")
 	assert.True(t, errs.IsTransient(err) || strings.Contains(err.Error(), "failed after"),
 		"should be transient error or retry exhausted message")

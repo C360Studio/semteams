@@ -62,25 +62,26 @@ func (r *MetricsRegistry) CoreMetrics() *Metrics {
 	return r.Metrics
 }
 
-// RegisterCounter registers a counter metric for a service
+// RegisterCounter registers a counter metric for a service.
+// Idempotent: returns success if metric already registered with same key.
 func (r *MetricsRegistry) RegisterCounter(serviceName, metricName string, counter prometheus.Counter) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
+	// Idempotent: if already registered with same key, return success
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errs.WrapInvalid(
-			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
-			"MetricsRegistry", "RegisterCounter", "duplicate metric registration")
+		return nil
 	}
 
 	if err := r.prometheusRegistry.Register(counter); err != nil {
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterCounter",
-				fmt.Sprintf("prometheus conflict for metric %s", metricName))
+			// Prometheus already has this metric - treat as success for idempotency
+			r.registeredMetrics[key] = counter
+			return nil
 		}
 		return errs.WrapFatal(err, "MetricsRegistry", "RegisterCounter",
 			"failed to register counter with prometheus")
@@ -90,25 +91,26 @@ func (r *MetricsRegistry) RegisterCounter(serviceName, metricName string, counte
 	return nil
 }
 
-// RegisterGauge registers a gauge metric for a service
+// RegisterGauge registers a gauge metric for a service.
+// Idempotent: returns success if metric already registered with same key.
 func (r *MetricsRegistry) RegisterGauge(serviceName, metricName string, gauge prometheus.Gauge) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
+	// Idempotent: if already registered with same key, return success
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errs.WrapInvalid(
-			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
-			"MetricsRegistry", "RegisterGauge", "duplicate metric registration")
+		return nil
 	}
 
 	if err := r.prometheusRegistry.Register(gauge); err != nil {
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterGauge",
-				fmt.Sprintf("prometheus conflict for metric %s", metricName))
+			// Prometheus already has this metric - treat as success for idempotency
+			r.registeredMetrics[key] = gauge
+			return nil
 		}
 		return errs.WrapFatal(err, "MetricsRegistry", "RegisterGauge",
 			"failed to register gauge with prometheus")
@@ -118,25 +120,26 @@ func (r *MetricsRegistry) RegisterGauge(serviceName, metricName string, gauge pr
 	return nil
 }
 
-// RegisterHistogram registers a histogram metric for a service
+// RegisterHistogram registers a histogram metric for a service.
+// Idempotent: returns success if metric already registered with same key.
 func (r *MetricsRegistry) RegisterHistogram(serviceName, metricName string, histogram prometheus.Histogram) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
+	// Idempotent: if already registered with same key, return success
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errs.WrapInvalid(
-			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
-			"MetricsRegistry", "RegisterHistogram", "duplicate metric registration")
+		return nil
 	}
 
 	if err := r.prometheusRegistry.Register(histogram); err != nil {
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterHistogram",
-				fmt.Sprintf("prometheus conflict for metric %s", metricName))
+			// Prometheus already has this metric - treat as success for idempotency
+			r.registeredMetrics[key] = histogram
+			return nil
 		}
 		return errs.WrapFatal(err, "MetricsRegistry", "RegisterHistogram",
 			"failed to register histogram with prometheus")
@@ -146,25 +149,26 @@ func (r *MetricsRegistry) RegisterHistogram(serviceName, metricName string, hist
 	return nil
 }
 
-// RegisterCounterVec registers a counter vector metric for a service
+// RegisterCounterVec registers a counter vector metric for a service.
+// Idempotent: returns success if metric already registered with same key.
 func (r *MetricsRegistry) RegisterCounterVec(serviceName, metricName string, counterVec *prometheus.CounterVec) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
+	// Idempotent: if already registered with same key, return success
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errs.WrapInvalid(
-			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
-			"MetricsRegistry", "RegisterCounterVec", "duplicate metric registration")
+		return nil
 	}
 
 	if err := r.prometheusRegistry.Register(counterVec); err != nil {
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterCounterVec",
-				fmt.Sprintf("prometheus conflict for metric %s", metricName))
+			// Prometheus already has this metric - treat as success for idempotency
+			r.registeredMetrics[key] = counterVec
+			return nil
 		}
 		return errs.WrapFatal(err, "MetricsRegistry", "RegisterCounterVec",
 			"failed to register counter vector with prometheus")
@@ -174,25 +178,26 @@ func (r *MetricsRegistry) RegisterCounterVec(serviceName, metricName string, cou
 	return nil
 }
 
-// RegisterGaugeVec registers a gauge vector metric for a service
+// RegisterGaugeVec registers a gauge vector metric for a service.
+// Idempotent: returns success if metric already registered with same key.
 func (r *MetricsRegistry) RegisterGaugeVec(serviceName, metricName string, gaugeVec *prometheus.GaugeVec) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
+	// Idempotent: if already registered with same key, return success
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errs.WrapInvalid(
-			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
-			"MetricsRegistry", "RegisterGaugeVec", "duplicate metric registration")
+		return nil
 	}
 
 	if err := r.prometheusRegistry.Register(gaugeVec); err != nil {
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterGaugeVec",
-				fmt.Sprintf("prometheus conflict for metric %s", metricName))
+			// Prometheus already has this metric - treat as success for idempotency
+			r.registeredMetrics[key] = gaugeVec
+			return nil
 		}
 		return errs.WrapFatal(err, "MetricsRegistry", "RegisterGaugeVec",
 			"failed to register gauge vector with prometheus")
@@ -202,7 +207,8 @@ func (r *MetricsRegistry) RegisterGaugeVec(serviceName, metricName string, gauge
 	return nil
 }
 
-// RegisterHistogramVec registers a histogram vector metric for a service
+// RegisterHistogramVec registers a histogram vector metric for a service.
+// Idempotent: returns success if metric already registered with same key.
 func (r *MetricsRegistry) RegisterHistogramVec(
 	serviceName, metricName string, histogramVec *prometheus.HistogramVec) error {
 	r.mu.Lock()
@@ -210,18 +216,18 @@ func (r *MetricsRegistry) RegisterHistogramVec(
 
 	key := fmt.Sprintf("%s.%s", serviceName, metricName)
 
+	// Idempotent: if already registered with same key, return success
 	if _, exists := r.registeredMetrics[key]; exists {
-		return errs.WrapInvalid(
-			fmt.Errorf("metric %s already registered for service %s", metricName, serviceName),
-			"MetricsRegistry", "RegisterHistogramVec", "duplicate metric registration")
+		return nil
 	}
 
 	if err := r.prometheusRegistry.Register(histogramVec); err != nil {
 		// Check if it's a duplicate registration error from Prometheus
 		var alreadyRegErr prometheus.AlreadyRegisteredError
 		if stderrors.As(err, &alreadyRegErr) {
-			return errs.WrapInvalid(err, "MetricsRegistry", "RegisterHistogramVec",
-				fmt.Sprintf("prometheus conflict for metric %s", metricName))
+			// Prometheus already has this metric - treat as success for idempotency
+			r.registeredMetrics[key] = histogramVec
+			return nil
 		}
 		return errs.WrapFatal(err, "MetricsRegistry", "RegisterHistogramVec",
 			"failed to register histogram vector with prometheus")

@@ -103,7 +103,7 @@ func TestMetricsRegistry_RegisterHistogram(t *testing.T) {
 	assert.True(t, found, "Histogram should be registered in Prometheus registry")
 }
 
-func TestMetricsRegistry_PreventDuplicateRegistration(t *testing.T) {
+func TestMetricsRegistry_IdempotentDuplicateRegistration(t *testing.T) {
 	registry := NewMetricsRegistry()
 
 	counter1 := prometheus.NewCounter(prometheus.CounterOpts{
@@ -120,10 +120,10 @@ func TestMetricsRegistry_PreventDuplicateRegistration(t *testing.T) {
 	err := registry.RegisterCounter("service1", "duplicate_counter", counter1)
 	require.NoError(t, err)
 
-	// Second registration with same name should fail with our custom tracking
+	// Second registration with same Prometheus metric name should succeed (idempotent)
+	// This is necessary for component recreation from stale KV data
 	err = registry.RegisterCounter("service2", "duplicate_counter", counter2)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "prometheus conflict")
+	assert.NoError(t, err, "duplicate registration should be idempotent")
 }
 
 func TestMetricsRegistry_UnregisterMetric(t *testing.T) {

@@ -87,10 +87,10 @@ func TestMetricsIntegration_ServiceRegistration(t *testing.T) {
 		"Custom queue_depth metric should be registered")
 }
 
-func TestMetricsIntegration_NoDuplicateRegistration(t *testing.T) {
+func TestMetricsIntegration_IdempotentRegistration(t *testing.T) {
 	registry := NewMetricsRegistry()
 
-	// Create two services with the same name (this shouldn't happen in real usage)
+	// Create two services with the same name (this can happen when components restart)
 	service1 := NewMockService("duplicate-service")
 	service2 := NewMockService("duplicate-service")
 
@@ -98,10 +98,10 @@ func TestMetricsIntegration_NoDuplicateRegistration(t *testing.T) {
 	err := service1.RegisterMetrics(registry)
 	require.NoError(t, err)
 
-	// Try to register second service's metrics - should fail
+	// Register second service's metrics - should succeed (idempotent)
+	// This is the expected behavior when components are recreated from stale KV data
 	err = service2.RegisterMetrics(registry)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "already registered")
+	assert.NoError(t, err, "duplicate registration should be idempotent")
 }
 
 func TestMetricsIntegration_CoreAndServiceMetricsSeparate(t *testing.T) {
@@ -193,7 +193,7 @@ func TestMetricsIntegration_MetricsUnregistration(t *testing.T) {
 func TestMetricsIntegration_MultipleServicesWithUniqueMetrics(t *testing.T) {
 	registry := NewMetricsRegistry()
 
-	// Create multiple services - they need different metric names to coexist
+	// Create multiple services - they use the same underlying Prometheus metric names
 	service1 := NewMockService("ocean-analyzer")
 	service2 := NewMockService("data-processor")
 
@@ -201,18 +201,17 @@ func TestMetricsIntegration_MultipleServicesWithUniqueMetrics(t *testing.T) {
 	err := service1.RegisterMetrics(registry)
 	require.NoError(t, err)
 
-	// The second service will fail because it tries to register the same Prometheus metric names
-	// This demonstrates that our registry correctly prevents Prometheus-level conflicts
+	// The second service will succeed due to idempotent registration
+	// This is necessary for component recreation from stale KV data
 	err = service2.RegisterMetrics(registry)
-	assert.Error(t, err, "Second service should fail due to Prometheus metric name conflict")
-	assert.Contains(t, err.Error(), "prometheus conflict")
+	assert.NoError(t, err, "Second service should succeed due to idempotent Prometheus registration")
 }
 
 func TestMetricsIntegration_MultipleServicesSameNames(t *testing.T) {
 	registry := NewMetricsRegistry()
 
 	// Create services with identical names - this simulates trying to register
-	// the same service twice, which should be prevented
+	// the same service twice (e.g., component restart with stale KV data)
 	service1 := NewMockService("identical-service")
 	service2 := NewMockService("identical-service")
 
@@ -220,8 +219,8 @@ func TestMetricsIntegration_MultipleServicesSameNames(t *testing.T) {
 	err := service1.RegisterMetrics(registry)
 	require.NoError(t, err)
 
-	// Second service with same name should fail at our registry level
+	// Second service with same name should succeed due to idempotent registration
+	// This is the expected behavior when components are recreated
 	err = service2.RegisterMetrics(registry)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "already registered")
+	assert.NoError(t, err, "Second registration should succeed (idempotent)")
 }

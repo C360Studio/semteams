@@ -197,6 +197,12 @@ func (r *Registry) CreateComponent(
 		return nil, errs.Wrap(err, "Registry", "CreateComponent", "factory execution")
 	}
 
+	// Defensive check: factory should never return (nil, nil)
+	if component == nil {
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "Registry", "CreateComponent",
+			"factory returned nil component without error")
+	}
+
 	// Track which factory created this instance
 	r.mu.Lock()
 	r.instanceFactories[instanceName] = config.Name

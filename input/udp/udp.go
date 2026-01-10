@@ -299,8 +299,9 @@ type InputDeps struct {
 	Logger          *slog.Logger            // Runtime dependency
 }
 
-// NewInput creates a new UDP input component using idiomatic Go constructor pattern
-func NewInput(deps InputDeps) *Input {
+// NewInput creates a new UDP input component using idiomatic Go constructor pattern.
+// Returns an error if buffer creation fails.
+func NewInput(deps InputDeps) (*Input, error) {
 	// Create buffer with high-capacity settings for concurrent message handling using functional options
 	var bufferOpts []buffer.Option[[]byte]
 	bufferOpts = append(bufferOpts, buffer.WithOverflowPolicy[[]byte](buffer.DropOldest))
@@ -328,8 +329,7 @@ func NewInput(deps InputDeps) *Input {
 	// Create buffer with error handling for the new API
 	messageBuffer, err := buffer.NewCircularBuffer(5000, bufferOpts...) // 5000 capacity for concurrent load
 	if err != nil {
-		logger.Error("Failed to create message buffer", "error", err)
-		return nil
+		return nil, errs.Wrap(err, "udp-input", "NewInput", "create message buffer")
 	}
 
 	u := &Input{
@@ -346,7 +346,7 @@ func NewInput(deps InputDeps) *Input {
 		metrics:     metrics,
 	}
 	u.lastActivity.Store(time.Time{})
-	return u
+	return u, nil
 }
 
 // Meta returns the component metadata
@@ -866,7 +866,11 @@ func CreateInput(rawConfig json.RawMessage, deps component.Dependencies) (compon
 		Logger:          deps.GetLoggerWithComponent("udp-input"),
 	}
 
-	return NewInput(inputDeps), nil
+	input, err := NewInput(inputDeps)
+	if err != nil {
+		return nil, errs.Wrap(err, "udp-input-factory", "create", "component construction")
+	}
+	return input, nil
 }
 
 // Register registers the UDP input component with the given registry

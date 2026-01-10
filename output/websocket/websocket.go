@@ -20,8 +20,8 @@ import (
 	"github.com/c360/semstreams/pkg/security"
 	"github.com/c360/semstreams/pkg/tlsutil"
 	"github.com/gorilla/websocket"
-	"github.com/nats-io/nats.go/jetstream"
 	natspkg "github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

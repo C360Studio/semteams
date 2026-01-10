@@ -68,7 +68,10 @@ func TestUDPInput_MetricsIntegration(t *testing.T) {
 		MetricsRegistry: registry,
 		Logger:          nil,
 	}
-	udpInput := NewInput(deps)
+	udpInput, err := NewInput(deps)
+	if err != nil {
+		t.Fatalf("NewInput failed: %v", err)
+	}
 
 	// Verify metrics were wired up
 	if udpInput.metrics == nil {
@@ -94,7 +97,10 @@ func TestUDPInput_NoMetrics(t *testing.T) {
 		MetricsRegistry: nil,
 		Logger:          nil,
 	}
-	udpInput := NewInput(deps)
+	udpInput, err := NewInput(deps)
+	if err != nil {
+		t.Fatalf("NewInput failed: %v", err)
+	}
 
 	// Verify no metrics were created
 	if udpInput.metrics != nil {
