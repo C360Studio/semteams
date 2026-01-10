@@ -208,6 +208,9 @@ type Component struct {
 	// Prometheus metrics
 	metrics *indexMetrics
 
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
+
 	// Port definitions
 	inputPorts  []component.Port
 	outputPorts []component.Port
@@ -479,6 +482,24 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.contextBucket = contextBucket
 
+	// Initialize lifecycle reporter (throttled for high-throughput indexing)
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    "graph-index",
+			Logger:           c.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	// Wait for input KV bucket (ENTITY_STATES) with retries - we are the reader/watcher
 	js, err := c.natsClient.JetStream()
 	if err != nil {
@@ -511,6 +532,9 @@ func (c *Component) Start(ctx context.Context) error {
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
+
+	// Report initial idle state
+	_ = c.lifecycleReporter.ReportStage(ctx, "idle")
 
 	c.logger.Info("component started",
 		slog.String("component", "graph-index"),
@@ -604,6 +628,9 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 
 // processEntityUpdate indexes an entity's relationships from its triples
 func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.KeyValueEntry) {
+	// Report indexing stage (throttled to avoid KV spam)
+	_ = c.lifecycleReporter.ReportStage(ctx, "indexing")
+
 	var state graph.EntityState
 	if err := json.Unmarshal(entry.Value(), &state); err != nil {
 		c.logger.Warn("failed to unmarshal entity state",

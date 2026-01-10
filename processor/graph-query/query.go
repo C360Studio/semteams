@@ -73,6 +73,9 @@ func (c *Component) setupQueryHandlers() error {
 
 // handleQueryEntity handles entity query requests (passthrough to graph-ingest)
 func (c *Component) handleQueryEntity(ctx context.Context, data []byte) ([]byte, error) {
+	// Report querying stage (throttled to avoid KV spam)
+	c.reportQuerying(ctx)
+
 	// Parse and validate request
 	var req map[string]string
 	if err := json.Unmarshal(data, &req); err != nil {
@@ -181,6 +184,9 @@ func (c *Component) handleQueryPrefix(ctx context.Context, data []byte) ([]byte,
 
 // handleQueryRelationships handles relationship query requests (passthrough to graph-index)
 func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) ([]byte, error) {
+	// Report querying stage (throttled to avoid KV spam)
+	c.reportQuerying(ctx)
+
 	// Parse and validate request
 	var req struct {
 		EntityID  string `json:"entity_id"`
@@ -263,6 +269,9 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 
 // handlePathSearch handles PathRAG traversal queries
 func (c *Component) handlePathSearch(ctx context.Context, data []byte) ([]byte, error) {
+	// Report querying stage (throttled to avoid KV spam)
+	c.reportQuerying(ctx)
+
 	var req PathSearchRequest
 	if err := json.Unmarshal(data, &req); err != nil {
 		return nil, fmt.Errorf("invalid request: %w", err)

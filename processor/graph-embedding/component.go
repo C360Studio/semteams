@@ -201,6 +201,9 @@ type Component struct {
 	// Prometheus metrics
 	metrics *embeddingMetrics
 
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
+
 	// Port definitions
 	inputPorts  []component.Port
 	outputPorts []component.Port
@@ -494,6 +497,24 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketEmbeddingDedup))
 	}
 
+	// Initialize lifecycle reporter (throttled for high-throughput embedding)
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    "graph-embedding",
+			Logger:           c.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	// Create storage
 	c.storage = embedding.NewStorage(embeddingIndexBucket, embeddingDedupBucket)
 
@@ -547,6 +568,9 @@ func (c *Component) Start(ctx context.Context) error {
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
+
+	// Report initial idle state
+	_ = c.lifecycleReporter.ReportStage(ctx, "idle")
 
 	c.logger.Info("component started",
 		slog.String("component", "graph-embedding"),
@@ -655,6 +679,9 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 
 // queueEntityForEmbedding queues an entity for async embedding generation
 func (c *Component) queueEntityForEmbedding(ctx context.Context, entityID string, data []byte) {
+	// Report embedding stage (throttled to avoid KV spam)
+	_ = c.lifecycleReporter.ReportStage(ctx, "embedding")
+
 	// Parse entity state
 	var entityState graph.EntityState
 	if err := json.Unmarshal(data, &entityState); err != nil {

@@ -130,6 +130,9 @@ type Component struct {
 	bytesProcessed    int64
 	errors            int64
 	lastMetricsReset  time.Time
+
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
 }
 
 // Ensure Component implements required interfaces
@@ -321,6 +324,30 @@ func (c *Component) Start(ctx context.Context) error {
 		return fmt.Errorf("wait for NATS connection: %w", err)
 	}
 
+	// Initialize lifecycle reporter (throttled for high-throughput queries)
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		c.logger.Warn("Failed to get JetStream, lifecycle reporting disabled", slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		statusBucket, err := js.CreateOrUpdateKeyValue(c.ctx, jetstream.KeyValueConfig{
+			Bucket:      "COMPONENT_STATUS",
+			Description: "Component lifecycle status tracking",
+		})
+		if err != nil {
+			c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+				slog.Any("error", err))
+			c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		} else {
+			c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+				KV:               statusBucket,
+				ComponentName:    "graph-query",
+				Logger:           c.logger,
+				EnableThrottling: true,
+			})
+		}
+	}
+
 	// Create router for static routing
 	c.router = NewStaticRouter(c.logger)
 
@@ -368,6 +395,10 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 
 	c.started = true
+
+	// Report initial idle state
+	_ = c.lifecycleReporter.ReportStage(c.ctx, "idle")
+
 	c.logger.Info("graph-query coordinator started")
 	return nil
 }
@@ -468,6 +499,13 @@ func (c *Component) disableGraphRAG() {
 	// 1. The watcher will handle the bucket disappearing gracefully
 	// 2. When bucket returns, we'll get the OnAvailable callback
 	// The communityCache.IsAvailable() check in handlers will prevent queries
+}
+
+// reportQuerying reports the querying stage (throttled to avoid KV spam)
+func (c *Component) reportQuerying(ctx context.Context) {
+	if c.lifecycleReporter != nil {
+		_ = c.lifecycleReporter.ReportStage(ctx, "querying")
+	}
 }
 
 // recordSuccess records successful query metrics

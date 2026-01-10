@@ -143,3 +143,197 @@ func (r *NoOpLifecycleReporter) ReportCycleComplete(ctx context.Context) error {
 func (r *NoOpLifecycleReporter) ReportCycleError(ctx context.Context, err error) error {
 	return nil
 }
+
+// ============================================================================
+// ThrottledLifecycleReporter - Rate-limited wrapper
+// ============================================================================
+
+// ThrottledLifecycleReporter wraps any LifecycleReporter to enforce minimum intervals
+// between KV writes. Important events (CycleComplete, CycleError) are never throttled.
+type ThrottledLifecycleReporter struct {
+	delegate    LifecycleReporter
+	minInterval time.Duration
+
+	mu              sync.Mutex
+	lastWriteTime   time.Time
+	pendingStage    string
+	hasPendingStage bool
+	logger          *slog.Logger
+}
+
+// NewThrottledLifecycleReporter creates a throttled wrapper around any LifecycleReporter.
+// minInterval is the minimum time between writes (default 1 second if zero).
+func NewThrottledLifecycleReporter(delegate LifecycleReporter, minInterval time.Duration, logger *slog.Logger) *ThrottledLifecycleReporter {
+	if minInterval == 0 {
+		minInterval = 1 * time.Second
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &ThrottledLifecycleReporter{
+		delegate:    delegate,
+		minInterval: minInterval,
+		logger:      logger,
+	}
+}
+
+// ReportStage updates the component's current processing stage.
+// Throttled: if within minInterval, queues stage for next write window.
+func (r *ThrottledLifecycleReporter) ReportStage(ctx context.Context, stage string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	timeSinceLastWrite := now.Sub(r.lastWriteTime)
+
+	if timeSinceLastWrite >= r.minInterval {
+		// Outside throttle window - write immediately
+		r.hasPendingStage = false
+		r.pendingStage = ""
+		r.lastWriteTime = now
+		return r.delegate.ReportStage(ctx, stage)
+	}
+
+	// Within throttle window - queue for later
+	r.pendingStage = stage
+	r.hasPendingStage = true
+
+	r.logger.Debug("stage throttled, queued for next window",
+		slog.String("stage", stage),
+		slog.Duration("time_until_window", r.minInterval-timeSinceLastWrite))
+
+	return nil
+}
+
+// ReportCycleStart marks the beginning of a new processing cycle.
+// Throttled: queued if within minInterval window.
+func (r *ThrottledLifecycleReporter) ReportCycleStart(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	now := time.Now()
+	timeSinceLastWrite := now.Sub(r.lastWriteTime)
+
+	if timeSinceLastWrite >= r.minInterval {
+		// Outside throttle window - write immediately
+		r.lastWriteTime = now
+		return r.delegate.ReportCycleStart(ctx)
+	}
+
+	// Within throttle window - skip (cycle start is less critical)
+	r.logger.Debug("cycle start throttled",
+		slog.Duration("time_until_window", r.minInterval-timeSinceLastWrite))
+
+	return nil
+}
+
+// ReportCycleComplete marks successful cycle completion.
+// NEVER throttled - always written immediately. Also flushes any pending stage.
+func (r *ThrottledLifecycleReporter) ReportCycleComplete(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Clear pending state - cycle is complete
+	r.hasPendingStage = false
+	r.pendingStage = ""
+	r.lastWriteTime = time.Now()
+
+	return r.delegate.ReportCycleComplete(ctx)
+}
+
+// ReportCycleError marks cycle failure with error details.
+// NEVER throttled - always written immediately. Also flushes any pending stage.
+func (r *ThrottledLifecycleReporter) ReportCycleError(ctx context.Context, err error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Clear pending state - cycle has errored
+	r.hasPendingStage = false
+	r.pendingStage = ""
+	r.lastWriteTime = time.Now()
+
+	return r.delegate.ReportCycleError(ctx, err)
+}
+
+// FlushPending writes any pending stage to storage immediately.
+// Call this before component shutdown or when immediate status update is needed.
+func (r *ThrottledLifecycleReporter) FlushPending(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if !r.hasPendingStage {
+		return nil
+	}
+
+	r.lastWriteTime = time.Now()
+	stage := r.pendingStage
+	r.hasPendingStage = false
+	r.pendingStage = ""
+
+	return r.delegate.ReportStage(ctx, stage)
+}
+
+// ============================================================================
+// LifecycleReporterConfig - Factory for creating reporters
+// ============================================================================
+
+// LifecycleReporterConfig holds configuration for creating lifecycle reporters.
+type LifecycleReporterConfig struct {
+	// KV is the NATS KV bucket for status storage. Required for KV reporter.
+	KV jetstream.KeyValue
+
+	// ComponentName is the name of the component. Required.
+	ComponentName string
+
+	// Logger for the reporter. Optional.
+	Logger *slog.Logger
+
+	// EnableThrottling enables throttled writes. Default: true.
+	EnableThrottling bool
+
+	// ThrottleInterval is the minimum interval between writes.
+	// Only used if EnableThrottling is true. Default: 1 second.
+	ThrottleInterval time.Duration
+
+	// Disabled returns a no-op reporter if true.
+	Disabled bool
+}
+
+// DefaultLifecycleReporterConfig returns configuration with sensible defaults.
+// EnableThrottling is true with 1 second interval.
+func DefaultLifecycleReporterConfig(componentName string) LifecycleReporterConfig {
+	return LifecycleReporterConfig{
+		ComponentName:    componentName,
+		EnableThrottling: true,
+		ThrottleInterval: 1 * time.Second,
+		Disabled:         false,
+	}
+}
+
+// NewLifecycleReporterFromConfig creates a lifecycle reporter based on configuration.
+// Returns either a throttled KV reporter, plain KV reporter, or no-op reporter.
+func NewLifecycleReporterFromConfig(cfg LifecycleReporterConfig) LifecycleReporter {
+	// Return no-op if disabled
+	if cfg.Disabled {
+		return NewNoOpLifecycleReporter()
+	}
+
+	// Return no-op if no KV bucket provided
+	if cfg.KV == nil {
+		return NewNoOpLifecycleReporter()
+	}
+
+	// Create base KV reporter
+	baseReporter := NewKVLifecycleReporter(cfg.KV, cfg.ComponentName, cfg.Logger)
+
+	// Wrap with throttling if enabled
+	if cfg.EnableThrottling {
+		interval := cfg.ThrottleInterval
+		if interval == 0 {
+			interval = 1 * time.Second
+		}
+		return NewThrottledLifecycleReporter(baseReporter, interval, cfg.Logger)
+	}
+
+	return baseReporter
+}

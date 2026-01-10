@@ -205,6 +205,9 @@ type Component struct {
 	// Prometheus metrics (for e2e test compatibility with datamanager metrics)
 	entitiesUpdated prometheus.Counter
 
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
+
 	// Port definitions
 	inputPorts  []component.Port
 	outputPorts []component.Port
@@ -460,6 +463,24 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.entityBucket = bucket
 
+	// Initialize lifecycle reporter (throttled for high-throughput ingestion)
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    "graph-ingest",
+			Logger:           c.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	// Initialize hierarchy inference if enabled (synchronous - no Start/Stop)
 	if c.config.EnableHierarchy {
 		// Enable sibling edges by default, can be disabled via config
@@ -505,6 +526,9 @@ func (c *Component) Start(ctx context.Context) error {
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
+
+	// Report initial idle state
+	_ = c.lifecycleReporter.ReportStage(ctx, "idle")
 
 	c.logger.Info("component started",
 		slog.String("component", "graph-ingest"),
@@ -685,6 +709,9 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 
 // handleMessage processes an incoming message and creates/updates entity state
 func (c *Component) handleMessage(ctx context.Context, subject string, data []byte) {
+	// Report processing stage (throttled to avoid KV spam)
+	_ = c.lifecycleReporter.ReportStage(ctx, "processing")
+
 	c.logger.Debug("Received message",
 		slog.String("subject", subject),
 		slog.Int("size", len(data)))
