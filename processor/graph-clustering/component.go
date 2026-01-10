@@ -4,6 +4,7 @@ package graphclustering
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -626,6 +627,12 @@ func (c *Component) runDetectionLoop(ctx context.Context) {
 			c.logger.Info("detection loop stopping")
 			return
 		case <-ticker.C:
+			// Double-check context before starting new detection
+			// This prevents starting a new cycle if shutdown just began
+			if ctx.Err() != nil {
+				c.logger.Info("detection loop stopping - context cancelled")
+				return
+			}
 			c.runCommunityDetection(ctx)
 		}
 	}
@@ -633,11 +640,22 @@ func (c *Component) runDetectionLoop(ctx context.Context) {
 
 // runCommunityDetection executes the community detection algorithm
 func (c *Component) runCommunityDetection(ctx context.Context) {
+	// Check if context is already cancelled (shutdown in progress)
+	if ctx.Err() != nil {
+		c.logger.Debug("skipping detection - shutdown in progress")
+		return
+	}
+
 	c.logger.Info("running community detection")
 	start := time.Now()
 
 	communities, err := c.detector.DetectCommunities(ctx)
 	if err != nil {
+		// Context cancellation during shutdown is expected, not an error
+		if errors.Is(err, context.Canceled) {
+			c.logger.Info("detection interrupted by shutdown")
+			return
+		}
 		c.logger.Error("community detection failed", slog.Any("error", err))
 		atomic.AddInt64(&c.errors, 1)
 		return
