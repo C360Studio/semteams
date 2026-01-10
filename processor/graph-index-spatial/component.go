@@ -18,7 +18,7 @@ import (
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/pkg/retry"
+	"github.com/c360/semstreams/pkg/resource"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -34,6 +34,10 @@ type Config struct {
 	GeohashPrecision int                   `json:"geohash_precision" schema:"type:int,description:Geohash precision (1-12),category:basic"`
 	Workers          int                   `json:"workers" schema:"type:int,description:Number of worker goroutines,category:basic"`
 	BatchSize        int                   `json:"batch_size" schema:"type:int,description:Event batch size,category:basic"`
+
+	// Dependency startup configuration
+	StartupAttempts int `json:"startup_attempts,omitempty" schema:"type:int,description:Max attempts to wait for dependencies at startup,category:advanced"`
+	StartupInterval int `json:"startup_interval_ms,omitempty" schema:"type:int,description:Interval between startup attempts in milliseconds,category:advanced"`
 }
 
 // Validate implements component.Validatable interface
@@ -89,6 +93,15 @@ func (c *Config) ApplyDefaults() {
 	if c.BatchSize == 0 {
 		c.BatchSize = 100
 	}
+
+	// Dependency startup defaults
+	if c.StartupAttempts == 0 {
+		c.StartupAttempts = 30 // ~15 seconds with 500ms interval
+	}
+	if c.StartupInterval == 0 {
+		c.StartupInterval = 500 // milliseconds
+	}
+
 	if c.Ports == nil {
 		// Apply full default port config
 		defaultConf := DefaultConfig()
@@ -412,9 +425,9 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.spatialBucket = spatialBucket
 
-	// Initialize lifecycle reporter (throttled for high-throughput indexing)
+	// Initialize lifecycle reporter early for dependency waiting visibility
 	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      "COMPONENT_STATUS",
+		Bucket:      graph.BucketComponentStatus,
 		Description: "Component lifecycle status tracking",
 	})
 	if err != nil {
@@ -436,23 +449,45 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "setup query handlers")
 	}
 
-	// Wait for input KV bucket (ENTITY_STATES) with retries - we are the reader/watcher
+	// Get JetStream for bucket access
 	js, err := c.natsClient.JetStream()
 	if err != nil {
 		cancel()
 		return errs.Wrap(err, "Component", "Start", "JetStream connection")
 	}
 
-	entityBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
-		bucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
-		if err != nil {
-			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketEntityStates), slog.Any("error", err))
-		}
-		return bucket, err
-	})
+	// Report waiting stage before dependency check
+	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketEntityStates); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketEntityStates), slog.Any("error", err))
+	}
+
+	// Configure resource watcher for bounded startup attempts
+	watcherCfg := resource.DefaultConfig()
+	watcherCfg.StartupAttempts = c.config.StartupAttempts
+	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
+	watcherCfg.Logger = c.logger
+
+	entityWatcher := resource.NewWatcher(
+		graph.BucketEntityStates,
+		func(checkCtx context.Context) error {
+			_, err := js.KeyValue(checkCtx, graph.BucketEntityStates)
+			return err
+		},
+		watcherCfg,
+	)
+
+	if !entityWatcher.WaitForStartup(ctx) {
+		cancel()
+		return errs.WrapTransient(
+			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
+			"Component", "Start", "dependency not available",
+		)
+	}
+
+	entityBucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketEntityStates))
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("get %s bucket", graph.BucketEntityStates))
 	}
 
 	// Start entity watcher goroutine

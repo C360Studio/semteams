@@ -368,9 +368,17 @@ func (c *Component) Start(ctx context.Context) error {
 	watcherCfg.Logger = c.logger
 	watcherCfg.OnAvailable = func() {
 		c.enableGraphRAG()
+		// Report recovery from degraded state
+		if err := c.lifecycleReporter.ReportStage(c.ctx, "idle"); err != nil {
+			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+		}
 	}
 	watcherCfg.OnLost = func() {
 		c.disableGraphRAG()
+		// Report degraded state due to missing dependency
+		if err := c.lifecycleReporter.ReportStage(c.ctx, "degraded_missing_"+graph.BucketCommunityIndex); err != nil {
+			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "degraded_missing_"+graph.BucketCommunityIndex), slog.Any("error", err))
+		}
 	}
 
 	c.communityWatcher = resource.NewWatcher(
@@ -382,6 +390,11 @@ func (c *Component) Start(ctx context.Context) error {
 		watcherCfg,
 	)
 
+	// Report waiting stage before dependency check (COMMUNITY_INDEX is optional but we report waiting)
+	if err := c.lifecycleReporter.ReportStage(c.ctx, "waiting_for_"+graph.BucketCommunityIndex); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketCommunityIndex), slog.Any("error", err))
+	}
+
 	// Try to get bucket during startup
 	if c.communityWatcher.WaitForStartup(c.ctx) {
 		// Bucket available - enable GraphRAG immediately
@@ -392,6 +405,10 @@ func (c *Component) Start(ctx context.Context) error {
 		// Bucket not available - start background checking
 		c.logger.Info("COMMUNITY_INDEX bucket not available at startup, GraphRAG disabled (will retry)")
 		c.communityWatcher.StartBackgroundCheck(c.ctx)
+		// Report degraded state due to missing optional dependency
+		if err := c.lifecycleReporter.ReportStage(c.ctx, "degraded_missing_"+graph.BucketCommunityIndex); err != nil {
+			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "degraded_missing_"+graph.BucketCommunityIndex), slog.Any("error", err))
+		}
 	}
 
 	c.started = true

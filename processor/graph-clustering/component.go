@@ -20,7 +20,7 @@ import (
 	"github.com/c360/semstreams/graph/structural"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/pkg/retry"
+	"github.com/c360/semstreams/pkg/resource"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -50,6 +50,10 @@ type Config struct {
 	// Anomaly detection (optional, requires EnableStructural)
 	EnableAnomalyDetection bool             `json:"enable_anomaly_detection" schema:"type:bool,description:Enable anomaly detection after structural computation,category:advanced"`
 	AnomalyConfig          inference.Config `json:"anomaly_config" schema:"type:object,description:Configuration for anomaly detection,category:advanced"`
+
+	// Dependency startup configuration
+	StartupAttempts int `json:"startup_attempts,omitempty" schema:"type:int,description:Max attempts to wait for dependencies at startup,category:advanced"`
+	StartupInterval int `json:"startup_interval_ms,omitempty" schema:"type:int,description:Interval between startup attempts in milliseconds,category:advanced"`
 
 	// Parsed duration (set by ApplyDefaults)
 	detectionInterval time.Duration
@@ -156,6 +160,14 @@ func (c *Config) ApplyDefaults() {
 	// Anomaly detection defaults
 	if c.EnableAnomalyDetection {
 		c.AnomalyConfig.ApplyDefaults()
+	}
+
+	// Dependency startup defaults
+	if c.StartupAttempts == 0 {
+		c.StartupAttempts = 30 // ~15 seconds with 500ms interval
+	}
+	if c.StartupInterval == 0 {
+		c.StartupInterval = 500 // milliseconds
 	}
 
 	// Add optional output ports based on enabled features
@@ -559,43 +571,106 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "JetStream connection")
 	}
 
-	// Wait for input buckets with retries (we are the READER)
-	entityBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
-		bucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
-		if err != nil {
-			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketEntityStates), slog.Any("error", err))
-		}
-		return bucket, err
+	// Initialize lifecycle reporter early for dependency waiting visibility
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketComponentStatus,
+		Description: "Component lifecycle status",
 	})
 	if err != nil {
+		c.logger.Warn("failed to create status bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		c.lifecycleReporter = component.NewKVLifecycleReporter(statusBucket, "graph-clustering", c.logger)
+	}
+
+	// Configure resource watcher for bounded startup attempts
+	watcherCfg := resource.DefaultConfig()
+	watcherCfg.StartupAttempts = c.config.StartupAttempts
+	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
+	watcherCfg.Logger = c.logger
+
+	// Wait for ENTITY_STATES bucket (we are the READER)
+	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketEntityStates); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketEntityStates), slog.Any("error", err))
+	}
+
+	entityWatcher := resource.NewWatcher(
+		graph.BucketEntityStates,
+		func(checkCtx context.Context) error {
+			_, err := js.KeyValue(checkCtx, graph.BucketEntityStates)
+			return err
+		},
+		watcherCfg,
+	)
+
+	if !entityWatcher.WaitForStartup(ctx) {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketEntityStates))
+		return errs.WrapTransient(
+			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
+			"Component", "Start", "dependency not available",
+		)
+	}
+	entityBucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
+	if err != nil {
+		cancel()
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("get %s bucket", graph.BucketEntityStates))
 	}
 	c.entityBucket = entityBucket
 
-	outgoingBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
-		bucket, err := js.KeyValue(ctx, graph.BucketOutgoingIndex)
-		if err != nil {
-			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketOutgoingIndex), slog.Any("error", err))
-		}
-		return bucket, err
-	})
+	// Wait for OUTGOING_INDEX bucket
+	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketOutgoingIndex); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketOutgoingIndex), slog.Any("error", err))
+	}
+
+	outgoingWatcher := resource.NewWatcher(
+		graph.BucketOutgoingIndex,
+		func(checkCtx context.Context) error {
+			_, err := js.KeyValue(checkCtx, graph.BucketOutgoingIndex)
+			return err
+		},
+		watcherCfg,
+	)
+
+	if !outgoingWatcher.WaitForStartup(ctx) {
+		cancel()
+		return errs.WrapTransient(
+			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketOutgoingIndex, c.config.StartupAttempts),
+			"Component", "Start", "dependency not available",
+		)
+	}
+	outgoingBucket, err := js.KeyValue(ctx, graph.BucketOutgoingIndex)
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketOutgoingIndex))
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("get %s bucket", graph.BucketOutgoingIndex))
 	}
 	c.outgoingBucket = outgoingBucket
 
-	incomingBucket, err := retry.DoWithResult(ctx, retry.Persistent(), func() (jetstream.KeyValue, error) {
-		bucket, err := js.KeyValue(ctx, graph.BucketIncomingIndex)
-		if err != nil {
-			c.logger.Debug("waiting for input bucket", slog.String("bucket", graph.BucketIncomingIndex), slog.Any("error", err))
-		}
-		return bucket, err
-	})
+	// Wait for INCOMING_INDEX bucket
+	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketIncomingIndex); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketIncomingIndex), slog.Any("error", err))
+	}
+
+	incomingWatcher := resource.NewWatcher(
+		graph.BucketIncomingIndex,
+		func(checkCtx context.Context) error {
+			_, err := js.KeyValue(checkCtx, graph.BucketIncomingIndex)
+			return err
+		},
+		watcherCfg,
+	)
+
+	if !incomingWatcher.WaitForStartup(ctx) {
+		cancel()
+		return errs.WrapTransient(
+			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketIncomingIndex, c.config.StartupAttempts),
+			"Component", "Start", "dependency not available",
+		)
+	}
+	incomingBucket, err := js.KeyValue(ctx, graph.BucketIncomingIndex)
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("%s bucket not available after retries", graph.BucketIncomingIndex))
+		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("get %s bucket", graph.BucketIncomingIndex))
 	}
 	c.incomingBucket = incomingBucket
 
@@ -652,19 +727,6 @@ func (c *Component) Start(ctx context.Context) error {
 			c.logger.Warn("failed to start enhancement worker, continuing without LLM",
 				slog.Any("error", err))
 		}
-	}
-
-	// Initialize lifecycle reporter for ADR-003 observability
-	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      graph.BucketComponentStatus,
-		Description: "Component lifecycle status",
-	})
-	if err != nil {
-		c.logger.Warn("failed to create status bucket, lifecycle reporting disabled",
-			slog.Any("error", err))
-		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
-	} else {
-		c.lifecycleReporter = component.NewKVLifecycleReporter(statusBucket, "graph-clustering", c.logger)
 	}
 
 	// Mark as running
