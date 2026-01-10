@@ -528,7 +528,9 @@ func (c *Component) Start(ctx context.Context) error {
 	c.startTime = time.Now()
 
 	// Report initial idle state
-	_ = c.lifecycleReporter.ReportStage(ctx, "idle")
+	if err := c.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+	}
 
 	c.logger.Info("component started",
 		slog.String("component", "graph-ingest"),
@@ -710,7 +712,9 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 // handleMessage processes an incoming message and creates/updates entity state
 func (c *Component) handleMessage(ctx context.Context, subject string, data []byte) {
 	// Report processing stage (throttled to avoid KV spam)
-	_ = c.lifecycleReporter.ReportStage(ctx, "processing")
+	if err := c.lifecycleReporter.ReportStage(ctx, "processing"); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "processing"), slog.Any("error", err))
+	}
 
 	c.logger.Debug("Received message",
 		slog.String("subject", subject),

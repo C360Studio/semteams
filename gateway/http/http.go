@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/c360/semstreams/gateway"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // httpGatewaySchema defines the configuration schema for HTTP gateway component
@@ -48,6 +50,10 @@ type Gateway struct {
 	config     gateway.Config
 	routes     []gateway.RouteMapping
 	natsClient *natsclient.Client
+	logger     *slog.Logger
+
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
 
 	// Lifecycle state (atomic operations)
 	running atomic.Bool
@@ -82,11 +88,15 @@ func NewGateway(rawConfig json.RawMessage, deps component.Dependencies) (compone
 			"NATS client is required")
 	}
 
+	// Create logger with component context
+	logger := deps.GetLoggerWithComponent("http-gateway")
+
 	return &Gateway{
 		name:       "http-gateway",
 		config:     config,
 		routes:     config.Routes,
 		natsClient: deps.NATSClient,
+		logger:     logger,
 	}, nil
 }
 
@@ -96,16 +106,41 @@ func (g *Gateway) Initialize() error {
 }
 
 // Start begins the HTTP gateway operation
-func (g *Gateway) Start(_ context.Context) error {
+func (g *Gateway) Start(ctx context.Context) error {
 	if g.running.Load() {
 		return errs.WrapFatal(errs.ErrAlreadyStarted, "Gateway", "Start",
 			"gateway already running")
+	}
+
+	// Initialize lifecycle reporter (throttled for high-throughput serving)
+	statusBucket, err := g.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		g.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		g.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		g.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    "http-gateway",
+			Logger:           g.logger,
+			EnableThrottling: true,
+		})
 	}
 
 	g.mu.Lock()
 	g.running.Store(true)
 	g.startTime = time.Now()
 	g.mu.Unlock()
+
+	// Report initial idle state
+	if g.lifecycleReporter != nil {
+		if err := g.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+			g.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+		}
+	}
 
 	return nil
 }
@@ -152,6 +187,9 @@ func (g *Gateway) createRouteHandler(route gateway.RouteMapping) http.HandlerFun
 		g.mu.Lock()
 		g.lastActivity = time.Now()
 		g.mu.Unlock()
+
+		// Report serving stage (throttled)
+		g.reportServing(r.Context())
 
 		// Check HTTP method
 		if r.Method != route.Method {
@@ -456,4 +494,13 @@ func Register(registry *component.Registry) error {
 		Description: "HTTP gateway for bidirectional NATS request/reply",
 		Version:     "0.1.0",
 	})
+}
+
+// reportServing reports the serving stage (throttled to avoid KV spam)
+func (g *Gateway) reportServing(ctx context.Context) {
+	if g.lifecycleReporter != nil {
+		if err := g.lifecycleReporter.ReportStage(ctx, "serving"); err != nil {
+			g.logger.Debug("failed to report lifecycle stage", slog.String("stage", "serving"), slog.Any("error", err))
+		}
+	}
 }

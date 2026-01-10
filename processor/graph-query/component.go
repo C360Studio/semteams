@@ -397,7 +397,9 @@ func (c *Component) Start(ctx context.Context) error {
 	c.started = true
 
 	// Report initial idle state
-	_ = c.lifecycleReporter.ReportStage(c.ctx, "idle")
+	if err := c.lifecycleReporter.ReportStage(c.ctx, "idle"); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+	}
 
 	c.logger.Info("graph-query coordinator started")
 	return nil
@@ -504,7 +506,9 @@ func (c *Component) disableGraphRAG() {
 // reportQuerying reports the querying stage (throttled to avoid KV spam)
 func (c *Component) reportQuerying(ctx context.Context) {
 	if c.lifecycleReporter != nil {
-		_ = c.lifecycleReporter.ReportStage(ctx, "querying")
+		if err := c.lifecycleReporter.ReportStage(ctx, "querying"); err != nil {
+			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "querying"), slog.Any("error", err))
+		}
 	}
 }
 

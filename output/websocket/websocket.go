@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"reflect"
 	"sync"
@@ -19,6 +20,7 @@ import (
 	"github.com/c360/semstreams/pkg/security"
 	"github.com/c360/semstreams/pkg/tlsutil"
 	"github.com/gorilla/websocket"
+	"github.com/nats-io/nats.go/jetstream"
 	natspkg "github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -51,6 +53,7 @@ type ConstructorConfig struct {
 	Subjects        []string                // NATS subjects to subscribe to
 	NATSClient      *natsclient.Client      // NATS client for messaging
 	MetricsRegistry *metric.MetricsRegistry // Optional Prometheus metrics registry
+	Logger          *slog.Logger            // Optional logger (nil = use default)
 	Security        security.Config         // Security configuration
 	DeliveryMode    DeliveryMode            // Reliability semantics
 	AckTimeout      time.Duration           // Acknowledgment timeout for at-least-once
@@ -152,6 +155,10 @@ type Output struct {
 
 	// Prometheus metrics
 	metrics *Metrics
+
+	// Logging and lifecycle
+	logger            *slog.Logger
+	lifecycleReporter component.LifecycleReporter
 }
 
 // MessageEnvelope wraps all WebSocket messages with type discrimination
@@ -333,6 +340,12 @@ func NewOutputFromConfig(cfg ConstructorConfig) *Output {
 		WriteBufferSize: 1024,
 	}
 
+	// Use provided logger or default
+	logger := cfg.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+
 	return &Output{
 		name:         cfg.Name,
 		port:         cfg.Port,
@@ -346,6 +359,7 @@ func NewOutputFromConfig(cfg ConstructorConfig) *Output {
 		clients:      make(map[*websocket.Conn]*clientInfo),
 		startTime:    time.Now(),
 		metrics:      newMetrics(cfg.MetricsRegistry, cfg.Name),
+		logger:       logger,
 	}
 }
 
@@ -532,10 +546,39 @@ func (w *Output) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Output", "Start", fmt.Sprintf("subscribe to NATS subjects %v", w.subjects))
 	}
 
+	// Initialize lifecycle reporter for observability
+	if w.natsClient != nil {
+		statusBucket, err := w.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+			Bucket:      "COMPONENT_STATUS",
+			Description: "Component lifecycle status tracking",
+		})
+		if err != nil {
+			w.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+				slog.Any("error", err))
+			w.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		} else {
+			w.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+				KV:               statusBucket,
+				ComponentName:    w.Meta().Name,
+				Logger:           w.logger,
+				EnableThrottling: true,
+			})
+		}
+	} else {
+		w.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	}
+
 	// Mark as running and start background goroutines
 	w.running = true
 	w.startTime = time.Now()
 	w.startBackgroundGoroutines(ctx)
+
+	// Report idle state after startup
+	if w.lifecycleReporter != nil {
+		if err := w.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+			w.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+		}
+	}
 
 	return nil
 }
@@ -793,6 +836,15 @@ func (w *Output) closeAllClients() {
 	w.clientsMu.Unlock()
 }
 
+// reportSending reports the sending stage (throttled to avoid KV spam)
+func (w *Output) reportSending(ctx context.Context) {
+	if w.lifecycleReporter != nil {
+		if err := w.lifecycleReporter.ReportStage(ctx, "sending"); err != nil {
+			w.logger.Debug("failed to report lifecycle stage", slog.String("stage", "sending"), slog.Any("error", err))
+		}
+	}
+}
+
 // handleNATSMessageData processes incoming message data from NATS and broadcasts to WebSocket clients
 func (w *Output) handleNATSMessageData(ctx context.Context, data []byte, subject string) {
 	// Check for context cancellation or shutdown signal
@@ -810,6 +862,9 @@ func (w *Output) handleNATSMessageData(ctx context.Context, data []byte, subject
 		return
 	}
 	w.mu.RUnlock()
+
+	// Report sending stage for lifecycle observability
+	w.reportSending(ctx)
 
 	// Update activity timestamp
 	w.mu.Lock()

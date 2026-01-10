@@ -117,6 +117,9 @@ type Output struct {
 	messagesRetried int64
 	errors          int64
 	lastActivity    time.Time
+
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
 }
 
 // NewOutput creates a new HTTP POST output from configuration
@@ -243,10 +246,35 @@ func (h *Output) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Initialize lifecycle reporter for observability
+	statusBucket, err := h.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		h.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		h.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		h.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    h.name,
+			Logger:           h.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	h.mu.Lock()
 	h.running = true
 	h.startTime = time.Now()
 	h.mu.Unlock()
+
+	// Report idle state after startup
+	if h.lifecycleReporter != nil {
+		if err := h.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+			h.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+		}
+	}
 
 	return nil
 }
@@ -413,8 +441,20 @@ func (h *Output) Stop(timeout time.Duration) error {
 	return nil
 }
 
+// reportPosting reports the posting stage (throttled to avoid KV spam)
+func (h *Output) reportPosting(ctx context.Context) {
+	if h.lifecycleReporter != nil {
+		if err := h.lifecycleReporter.ReportStage(ctx, "posting"); err != nil {
+			h.logger.Debug("failed to report lifecycle stage", slog.String("stage", "posting"), slog.Any("error", err))
+		}
+	}
+}
+
 // handleMessage processes incoming messages
 func (h *Output) handleMessage(ctx context.Context, msgData []byte) {
+	// Report posting stage for lifecycle observability
+	h.reportPosting(ctx)
+
 	h.mu.Lock()
 	h.lastActivity = time.Now()
 	h.mu.Unlock()

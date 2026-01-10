@@ -108,6 +108,9 @@ type Processor struct {
 
 	// Logger
 	logger *slog.Logger
+
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
 }
 
 // NewProcessor creates a new rule processor
@@ -382,6 +385,28 @@ func (rp *Processor) Start(ctx context.Context) error {
 		})
 	}
 
+	// Initialize lifecycle reporter for observability
+	if rp.natsClient != nil {
+		statusBucket, err := rp.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+			Bucket:      "COMPONENT_STATUS",
+			Description: "Component lifecycle status tracking",
+		})
+		if err != nil {
+			rp.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+				slog.Any("error", err))
+			rp.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		} else {
+			rp.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+				KV:               statusBucket,
+				ComponentName:    rp.metadata.Name,
+				Logger:           rp.logger,
+				EnableThrottling: true,
+			})
+		}
+	} else {
+		rp.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	}
+
 	// Create shutdown and done channels for coordination
 	rp.shutdown = make(chan struct{})
 	rp.done = make(chan struct{})
@@ -399,6 +424,13 @@ func (rp *Processor) Start(ctx context.Context) error {
 	for _, port := range rp.config.Ports.Inputs {
 		if (port.Type == "nats" || port.Type == "jetstream") && port.Subject != "" {
 			subjectCount++
+		}
+	}
+
+	// Report idle state after startup
+	if rp.lifecycleReporter != nil {
+		if err := rp.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+			rp.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
 		}
 	}
 

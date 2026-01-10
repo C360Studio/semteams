@@ -18,6 +18,7 @@ import (
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -97,6 +98,9 @@ type Input struct {
 	config     Config // Store full config for port type checking
 	natsClient *natsclient.Client
 	logger     *slog.Logger
+
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
 
 	// Lifecycle management - use separate mutex for lifecycle operations
 	lifecycleMu sync.Mutex // Protects start/stop operations
@@ -376,6 +380,24 @@ func (f *Input) Start(ctx context.Context) error {
 		return nil // Already running
 	}
 
+	// Initialize lifecycle reporter (throttled for high-throughput reading)
+	statusBucket, err := f.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		f.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		f.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		f.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    "file-input",
+			Logger:           f.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	// Create channels before starting goroutine
 	f.shutdown = make(chan struct{})
 	f.done = make(chan struct{})
@@ -383,6 +405,13 @@ func (f *Input) Start(ctx context.Context) error {
 	// Set running state and add to waitgroup before spawning goroutine
 	f.wg.Add(1)
 	f.running.Store(true)
+
+	// Report initial idle state
+	if f.lifecycleReporter != nil {
+		if err := f.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+			f.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+		}
+	}
 
 	// Spawn goroutine outside of any data mutex
 	go f.readLoop(ctx)
@@ -494,6 +523,9 @@ func (f *Input) processFile(ctx context.Context, filePath string) error {
 		return fmt.Errorf("open file: %w", err)
 	}
 	defer file.Close()
+
+	// Report reading stage (throttled)
+	f.reportReading(ctx)
 
 	scanner := bufio.NewScanner(file)
 
@@ -679,4 +711,13 @@ func Register(registry *component.Registry) error {
 		Description: "File input component for reading JSONL/JSON files and publishing to NATS",
 		Version:     "1.0.0",
 	})
+}
+
+// reportReading reports the reading stage (throttled to avoid KV spam)
+func (f *Input) reportReading(ctx context.Context) {
+	if f.lifecycleReporter != nil {
+		if err := f.lifecycleReporter.ReportStage(ctx, "reading"); err != nil {
+			f.logger.Debug("failed to report lifecycle stage", slog.String("stage", "reading"), slog.Any("error", err))
+		}
+	}
 }

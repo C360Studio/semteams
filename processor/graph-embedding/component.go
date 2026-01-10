@@ -570,7 +570,9 @@ func (c *Component) Start(ctx context.Context) error {
 	c.startTime = time.Now()
 
 	// Report initial idle state
-	_ = c.lifecycleReporter.ReportStage(ctx, "idle")
+	if err := c.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+	}
 
 	c.logger.Info("component started",
 		slog.String("component", "graph-embedding"),
@@ -680,7 +682,9 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 // queueEntityForEmbedding queues an entity for async embedding generation
 func (c *Component) queueEntityForEmbedding(ctx context.Context, entityID string, data []byte) {
 	// Report embedding stage (throttled to avoid KV spam)
-	_ = c.lifecycleReporter.ReportStage(ctx, "embedding")
+	if err := c.lifecycleReporter.ReportStage(ctx, "embedding"); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "embedding"), slog.Any("error", err))
+	}
 
 	// Parse entity state
 	var entityState graph.EntityState

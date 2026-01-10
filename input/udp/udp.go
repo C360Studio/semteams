@@ -19,6 +19,7 @@ import (
 	"github.com/c360/semstreams/pkg/buffer"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/pkg/retry"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -125,6 +126,9 @@ type Input struct {
 
 	// Retry configuration
 	retryConfig retry.Config
+
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
 
 	// Lifecycle management
 	shutdown  chan struct{}
@@ -493,8 +497,33 @@ func (u *Input) Start(ctx context.Context) error {
 		return errs.WrapTransient(err, "udp-input", "Start", "socket binding")
 	}
 
+	// Initialize lifecycle reporter (throttled for high-throughput receiving)
+	statusBucket, err := u.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		u.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		u.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		u.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    "udp-input",
+			Logger:           u.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	u.running.Store(true)
 	u.startTime = time.Now()
+
+	// Report initial idle state
+	if u.lifecycleReporter != nil {
+		if err := u.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+			u.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+		}
+	}
 
 	// Start the read loop in a goroutine with WaitGroup
 	u.wg.Add(1)
@@ -686,6 +715,9 @@ func (u *Input) readLoop(ctx context.Context) {
 			u.metrics.lastActivity.Set(float64(now.Unix()))
 		}
 
+		// Report receiving stage (throttled)
+		u.reportReceiving(ctx)
+
 		// Create a copy of the received data
 		data := make([]byte, n)
 		copy(data, udpBuffer[:n])
@@ -849,4 +881,13 @@ func Register(registry *component.Registry) error {
 		Description: "UDP input component for receiving MAVLink and other UDP data",
 		Version:     "1.0.0",
 	})
+}
+
+// reportReceiving reports the receiving stage (throttled to avoid KV spam)
+func (u *Input) reportReceiving(ctx context.Context) {
+	if u.lifecycleReporter != nil {
+		if err := u.lifecycleReporter.ReportStage(ctx, "receiving"); err != nil {
+			u.logger.Debug("failed to report lifecycle stage", slog.String("stage", "receiving"), slog.Any("error", err))
+		}
+	}
 }

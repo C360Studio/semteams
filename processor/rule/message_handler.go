@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -12,8 +13,20 @@ import (
 	"github.com/c360/semstreams/message"
 )
 
+// reportEvaluating reports the evaluating stage (throttled to avoid KV spam)
+func (rp *Processor) reportEvaluating(ctx context.Context) {
+	if rp.lifecycleReporter != nil {
+		if err := rp.lifecycleReporter.ReportStage(ctx, "evaluating"); err != nil {
+			rp.logger.Debug("failed to report lifecycle stage", slog.String("stage", "evaluating"), slog.Any("error", err))
+		}
+	}
+}
+
 // handleMessage processes incoming NATS messages with dual-format support
 func (rp *Processor) handleMessage(ctx context.Context, subject string, data []byte) {
+	// Report evaluating stage for lifecycle observability
+	rp.reportEvaluating(ctx)
+
 	// Update metrics for received messages
 	if rp.metrics != nil {
 		rp.metrics.messagesReceived.WithLabelValues(subject).Inc()

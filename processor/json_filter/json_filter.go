@@ -96,6 +96,9 @@ type Processor struct {
 
 	// Prometheus metrics
 	metrics *filterMetrics
+
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
 }
 
 // NewProcessor creates a new JSON filter processor from configuration
@@ -179,10 +182,35 @@ func (f *Processor) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Initialize lifecycle reporter for observability
+	statusBucket, err := f.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		f.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		f.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		f.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    f.name,
+			Logger:           f.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	f.mu.Lock()
 	f.running = true
 	f.startTime = time.Now()
 	f.mu.Unlock()
+
+	// Report idle state after startup
+	if f.lifecycleReporter != nil {
+		if err := f.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+			f.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+		}
+	}
 
 	f.logger.Info("JSON filter processor started",
 		"component", f.name,
@@ -384,8 +412,20 @@ func (f *Processor) isJetStreamPortBySubject(subject string) bool {
 	return false
 }
 
+// reportFiltering reports the filtering stage (throttled to avoid KV spam)
+func (f *Processor) reportFiltering(ctx context.Context) {
+	if f.lifecycleReporter != nil {
+		if err := f.lifecycleReporter.ReportStage(ctx, "filtering"); err != nil {
+			f.logger.Debug("failed to report lifecycle stage", slog.String("stage", "filtering"), slog.Any("error", err))
+		}
+	}
+}
+
 // handleMessage processes incoming GenericJSON messages
 func (f *Processor) handleMessage(ctx context.Context, msgData []byte) {
+	// Report filtering stage for lifecycle observability
+	f.reportFiltering(ctx)
+
 	atomic.AddInt64(&f.messagesProcessed, 1)
 	f.mu.Lock()
 	f.lastActivity = time.Now()

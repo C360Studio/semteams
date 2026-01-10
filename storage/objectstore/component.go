@@ -45,6 +45,9 @@ type Component struct {
 	config          Config
 	logger          *slog.Logger
 
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
+
 	// NATS subscriptions
 	apiSub   *nats.Subscription
 	writeSub *nats.Subscription
@@ -162,6 +165,24 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.logger.Debug("ObjectStore created successfully", "name", c.instanceName, "bucket", c.config.BucketName)
 
+	// Initialize lifecycle reporter (throttled for high-throughput storing)
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    "objectstore",
+			Logger:           c.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	// Get raw NATS connection for subscriptions
 	nc := c.natsClient.GetConnection()
 
@@ -220,6 +241,14 @@ func (c *Component) Start(ctx context.Context) error {
 	c.started = true
 	c.lastActivity.Store(time.Now())
 	c.logger.Debug("ObjectStore component fully started", "name", c.instanceName)
+
+	// Report initial idle state
+	if c.lifecycleReporter != nil {
+		if err := c.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+		}
+	}
+
 	return nil
 }
 
@@ -294,6 +323,9 @@ func (c *Component) handleAPIRequest(msg *nats.Msg) {
 			c.respondWithError(msg, fmt.Errorf("invalid data: %w", err))
 			return
 		}
+
+		// Report storing stage (throttled)
+		c.reportStoring(ctx)
 
 		key, err := c.store.Store(ctx, msgData)
 		if err != nil {
@@ -691,6 +723,9 @@ func (c *Component) handleJetStreamWriteRequest(ctx context.Context, msg jetstre
 // processWriteMessage contains the shared logic for processing write messages
 // Used by both core NATS and JetStream handlers
 func (c *Component) processWriteMessage(ctx context.Context, data []byte) {
+	// Report storing stage (throttled)
+	c.reportStoring(ctx)
+
 	// Try to parse as BaseMessage to check for ContentStorable payload
 	var baseMsg message.BaseMessage
 	if err := baseMsg.UnmarshalJSON(data); err == nil {
@@ -854,5 +889,14 @@ func (c *Component) DataFlow() component.FlowMetrics {
 		BytesPerSecond:    0, // Would need byte tracking
 		ErrorRate:         0, // Would need error tracking
 		LastActivity:      lastAct,
+	}
+}
+
+// reportStoring reports the storing stage (throttled to avoid KV spam)
+func (c *Component) reportStoring(ctx context.Context) {
+	if c.lifecycleReporter != nil {
+		if err := c.lifecycleReporter.ReportStage(ctx, "storing"); err != nil {
+			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "storing"), slog.Any("error", err))
+		}
 	}
 }

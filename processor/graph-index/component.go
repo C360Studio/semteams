@@ -534,7 +534,9 @@ func (c *Component) Start(ctx context.Context) error {
 	c.startTime = time.Now()
 
 	// Report initial idle state
-	_ = c.lifecycleReporter.ReportStage(ctx, "idle")
+	if err := c.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+	}
 
 	c.logger.Info("component started",
 		slog.String("component", "graph-index"),
@@ -629,7 +631,9 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 // processEntityUpdate indexes an entity's relationships from its triples
 func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.KeyValueEntry) {
 	// Report indexing stage (throttled to avoid KV spam)
-	_ = c.lifecycleReporter.ReportStage(ctx, "indexing")
+	if err := c.lifecycleReporter.ReportStage(ctx, "indexing"); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "indexing"), slog.Any("error", err))
+	}
 
 	var state graph.EntityState
 	if err := json.Unmarshal(entry.Value(), &state); err != nil {

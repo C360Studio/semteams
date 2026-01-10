@@ -171,6 +171,9 @@ type Component struct {
 	errors            int64
 	lastActivity      atomic.Value // stores time.Time
 
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
+
 	// Port definitions
 	inputPorts  []component.Port
 	outputPorts []component.Port
@@ -409,6 +412,24 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 	c.spatialBucket = spatialBucket
 
+	// Initialize lifecycle reporter (throttled for high-throughput indexing)
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    "graph-index-spatial",
+			Logger:           c.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	// Set up query handlers
 	if err := c.setupQueryHandlers(ctx); err != nil {
 		cancel()
@@ -441,6 +462,11 @@ func (c *Component) Start(ctx context.Context) error {
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
+
+	// Report initial idle state
+	if err := c.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+	}
 
 	c.logger.Info("component started",
 		slog.String("component", "graph-index-spatial"),
@@ -537,6 +563,11 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 
 // processEntityUpdate indexes an entity's spatial data if it has coordinates
 func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.KeyValueEntry) {
+	// Report indexing stage (throttled to avoid KV spam)
+	if err := c.lifecycleReporter.ReportStage(ctx, "indexing"); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "indexing"), slog.Any("error", err))
+	}
+
 	var state graph.EntityState
 	if err := json.Unmarshal(entry.Value(), &state); err != nil {
 		c.logger.Warn("failed to unmarshal entity state",

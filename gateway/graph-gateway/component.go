@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -16,7 +17,7 @@ import (
 	"github.com/c360/semstreams/gateway"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
-	"strings"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // natsRequester is a local interface for NATS request/reply operations.
@@ -147,6 +148,9 @@ type Component struct {
 	natsClient    *natsclient.Client
 	natsRequester natsRequester // Interface for NATS request/reply (mockable)
 	logger        *slog.Logger
+
+	// Lifecycle reporting
+	lifecycleReporter component.LifecycleReporter
 
 	// HTTP server for GraphQL endpoint
 	httpServer *http.Server
@@ -385,6 +389,24 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
+	// Initialize lifecycle reporter (throttled for high-throughput serving)
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+	} else {
+		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+			KV:               statusBucket,
+			ComponentName:    "graph-gateway",
+			Logger:           c.logger,
+			EnableThrottling: true,
+		})
+	}
+
 	// Create HTTP server mux and register handlers
 	c.httpMux = http.NewServeMux()
 	c.RegisterHTTPHandlers("", c.httpMux)
@@ -416,6 +438,13 @@ func (c *Component) Start(ctx context.Context) error {
 		slog.String("component", "graph-gateway"),
 		slog.String("bind_address", c.config.BindAddress),
 		slog.Time("start_time", c.startTime))
+
+	// Report initial idle state
+	if c.lifecycleReporter != nil {
+		if err := c.lifecycleReporter.ReportStage(ctx, "idle"); err != nil {
+			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
+		}
+	}
 
 	return nil
 }
@@ -776,6 +805,9 @@ func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	c.lastActivity.Store(time.Now())
 
+	// Report serving stage (throttled)
+	c.reportServing(r.Context())
+
 	// Check HTTP method - only POST allowed
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -910,10 +942,13 @@ func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleMCP handles MCP requests
-func (c *Component) handleMCP(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) handleMCP(w http.ResponseWriter, r *http.Request) {
 	// Update metrics
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	c.lastActivity.Store(time.Now())
+
+	// Report serving stage (throttled)
+	c.reportServing(r.Context())
 
 	// For now, return a simple response
 	// In real implementation, this would handle MCP protocol
@@ -929,10 +964,13 @@ func (c *Component) handleMCP(w http.ResponseWriter, _ *http.Request) {
 }
 
 // handlePlayground handles GraphQL playground requests
-func (c *Component) handlePlayground(w http.ResponseWriter, _ *http.Request) {
+func (c *Component) handlePlayground(w http.ResponseWriter, r *http.Request) {
 	// Update metrics
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	c.lastActivity.Store(time.Now())
+
+	// Report serving stage (throttled)
+	c.reportServing(r.Context())
 
 	// Return simple HTML playground
 	w.Header().Set("Content-Type", "text/html")
@@ -950,5 +988,14 @@ func (c *Component) handlePlayground(w http.ResponseWriter, _ *http.Request) {
 	if _, err := w.Write([]byte(html)); err != nil {
 		atomic.AddInt64(&c.errors, 1)
 		c.logger.Error("failed to write playground response", slog.Any("error", err))
+	}
+}
+
+// reportServing reports the serving stage (throttled to avoid KV spam)
+func (c *Component) reportServing(ctx context.Context) {
+	if c.lifecycleReporter != nil {
+		if err := c.lifecycleReporter.ReportStage(ctx, "serving"); err != nil {
+			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "serving"), slog.Any("error", err))
+		}
 	}
 }
