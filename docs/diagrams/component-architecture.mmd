@@ -1,0 +1,54 @@
+
+flowchart LR
+    subgraph Input
+        JS[JetStream<br/>entity.>]
+    end
+
+    subgraph Core
+        GI[graph-ingest]
+        ES[(ENTITY_STATES)]
+    end
+
+    subgraph Indexing
+        GX[graph-index]
+        OI[(Relationship<br/>Indexes)]
+    end
+
+    subgraph Analysis
+        GA[graph-anomalies]
+        GC[graph-clustering]
+        GE[graph-embedding]
+        GIS[graph-index-spatial]
+        GIT[graph-index-temporal]
+    end
+
+    subgraph Query
+        GQ[graph-query]
+    end
+
+    subgraph Gateway
+        GW[graph-gateway]
+        API[HTTP/GraphQL/MCP]
+    end
+
+    JS --> GI
+    GI -->|writes| ES
+    ES -.->|watches| GX
+    GX -->|writes| OI
+    ES -.->|watches| GA & GC & GE & GIS & GIT
+    OI -.->|watches| GA
+    ES & OI -.->|reads| GQ
+    GQ <-.->|coordinates| GA & GC & GE & GX
+    ES & OI -.->|reads| GW
+    GW --> API
+    API -.->|queries| GQ
+
+    style GI fill:#e1f5ff
+    style GX fill:#fff4e1
+    style GQ fill:#ffe1e1
+    style GA fill:#ffe1f5
+    style GC fill:#ffe1f5
+    style GE fill:#ffe1f5
+    style GIS fill:#fff4e1
+    style GIT fill:#fff4e1
+    style GW fill:#e1ffe1

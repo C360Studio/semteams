@@ -9,6 +9,50 @@ type NATSPort struct {
 	Interface *InterfaceContract `json:"interface,omitempty"`
 }
 
+// NATSStreamPortConfig represents a NATS streaming port configuration
+// Used for stream-based message delivery patterns
+type NATSStreamPortConfig struct {
+	Subject  string `json:"subject"`
+	Consumer string `json:"consumer,omitempty"`
+}
+
+// ResourceID returns unique identifier for NATS stream ports
+func (n NATSStreamPortConfig) ResourceID() string {
+	return fmt.Sprintf("nats-stream:%s", n.Subject)
+}
+
+// IsExclusive returns false as multiple components can subscribe
+func (n NATSStreamPortConfig) IsExclusive() bool {
+	return false
+}
+
+// Type returns the port type identifier
+func (n NATSStreamPortConfig) Type() string {
+	return "stream"
+}
+
+// NATSRequestPortConfig represents a NATS request/reply port configuration
+// Type alias for NATSRequestPort for test compatibility
+type NATSRequestPortConfig struct {
+	Subject string `json:"subject"`
+	Timeout string `json:"timeout,omitempty"`
+}
+
+// ResourceID returns unique identifier for NATS request ports
+func (n NATSRequestPortConfig) ResourceID() string {
+	return fmt.Sprintf("nats-request:%s", n.Subject)
+}
+
+// IsExclusive returns false as multiple components can handle requests
+func (n NATSRequestPortConfig) IsExclusive() bool {
+	return false
+}
+
+// Type returns the port type identifier
+func (n NATSRequestPortConfig) Type() string {
+	return "request"
+}
+
 // ResourceID returns unique identifier for NATS ports
 func (n NATSPort) ResourceID() string {
 	return fmt.Sprintf("nats:%s", n.Subject)

@@ -3,7 +3,7 @@
 package robotapi
 
 import (
-	"github.com/c360/semstreams/processor/graph/gateway/graphql"
+	"github.com/c360/semstreams/graph/gateway/graphql"
 )
 
 // entityRobot converts Entity to GraphQL Robot

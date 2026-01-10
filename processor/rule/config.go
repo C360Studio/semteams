@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/c360/semstreams/component"
@@ -31,6 +32,11 @@ type Config struct {
 	// NATS KV patterns to watch for entity changes (e.g., 'telemetry.robotics.>')
 	EntityWatchPatterns []string `json:"entity_watch_patterns" schema:"type:array,description:NATS KV patterns to watch for entity changes (e.g. 'telemetry.robotics.>'),category:advanced"`
 
+	// Debounce delay for rule evaluation (settling time for entity state)
+	// Default is 0 (disabled) to ensure rules evaluate against each state change.
+	// Set to a positive value (e.g., 100) to batch rapid updates and evaluate final state only.
+	DebounceDelayMs time.Duration `json:"debounce_delay_ms" schema:"type:int,description:Debounce delay in milliseconds for rule evaluation (0=disabled),default:0,category:advanced"`
+
 	// JetStream consumer configuration (not exposed in schema - internal config)
 	Consumer struct {
 		Enabled        bool   `json:"enabled"`          // Enable JetStream consumer
@@ -38,6 +44,34 @@ type Config struct {
 		MaxDeliver     int    `json:"max_deliver"`      // Max delivery attempts
 		ReplayPolicy   string `json:"replay_policy"`    // "instant" or "original"
 	} `json:"consumer"`
+}
+
+// MarshalJSON implements custom JSON marshaling for Config
+func (c Config) MarshalJSON() ([]byte, error) {
+	type Alias Config
+	return json.Marshal(&struct {
+		DebounceDelayMs int `json:"debounce_delay_ms"`
+		*Alias
+	}{
+		DebounceDelayMs: int(c.DebounceDelayMs / time.Millisecond),
+		Alias:           (*Alias)(&c),
+	})
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for Config
+func (c *Config) UnmarshalJSON(data []byte) error {
+	type Alias Config
+	aux := &struct {
+		DebounceDelayMs int `json:"debounce_delay_ms"`
+		*Alias
+	}{
+		Alias: (*Alias)(c),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	c.DebounceDelayMs = time.Duration(aux.DebounceDelayMs) * time.Millisecond
+	return nil
 }
 
 // DefaultConfig returns sensible defaults
@@ -79,6 +113,7 @@ func DefaultConfig() Config {
 		BufferWindowSize:       "10m",
 		AlertCooldownPeriod:    "2m",
 		EnableGraphIntegration: true,
+		DebounceDelayMs:        0, // Disabled by default for real-time rule evaluation
 		Consumer: struct {
 			Enabled        bool   `json:"enabled"`
 			AckWaitSeconds int    `json:"ack_wait_seconds"`

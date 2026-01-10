@@ -114,7 +114,15 @@ components:
                         - $ref: ../schemas/document_processor.v1.json
                         - $ref: ../schemas/file.v1.json
                         - $ref: ../schemas/file_input.v1.json
-                        - $ref: ../schemas/graph-processor.v1.json
+                        - $ref: ../schemas/graph-anomalies.v1.json
+                        - $ref: ../schemas/graph-clustering.v1.json
+                        - $ref: ../schemas/graph-embedding.v1.json
+                        - $ref: ../schemas/graph-gateway.v1.json
+                        - $ref: ../schemas/graph-index-spatial.v1.json
+                        - $ref: ../schemas/graph-index-temporal.v1.json
+                        - $ref: ../schemas/graph-index.v1.json
+                        - $ref: ../schemas/graph-ingest.v1.json
+                        - $ref: ../schemas/graph-query.v1.json
                         - $ref: ../schemas/http.v1.json
                         - $ref: ../schemas/httppost.v1.json
                         - $ref: ../schemas/iot_sensor.v1.json

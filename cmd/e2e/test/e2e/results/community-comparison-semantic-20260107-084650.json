@@ -1,0 +1,168 @@
+{
+  "variant": "semantic",
+  "timestamp": "2026-01-07T08:46:50.236965-06:00",
+  "communities_total": 19,
+  "llm_enhanced_count": 0,
+  "statistical_only_count": 19,
+  "llm_pending_count": 19,
+  "llm_wait_duration_ms": 121525,
+  "avg_summary_length_ratio": 0,
+  "avg_word_overlap": 0,
+  "non_singleton_count": 19,
+  "largest_community_size": 30,
+  "avg_non_singleton_size": 19.42105263157895,
+  "communities": [
+    {
+      "community_id": "comm-0-c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+      "level": 0,
+      "member_count": 27,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.high.obs-010",
+      "level": 0,
+      "member_count": 6,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-0-c360.logistics.sensor.document.temperature.sensor-temp-003",
+      "level": 0,
+      "member_count": 30,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-0-c360.logistics.maintenance.work.completed.maint-001",
+      "level": 0,
+      "member_count": 20,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-0-c360.logistics.observation.record.group.container",
+      "level": 0,
+      "member_count": 15,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-0-c360.logistics.content.document.group.container",
+      "level": 0,
+      "member_count": 25,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.group.container.level",
+      "level": 1,
+      "member_count": 6,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-1-c360.logistics.observation.record.medium.obs-002",
+      "level": 1,
+      "member_count": 15,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-1-c360.logistics.content.group.container.level",
+      "level": 1,
+      "member_count": 25,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-1-c360.logistics.environmental.sensor.group.container",
+      "level": 1,
+      "member_count": 27,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-1-c360.logistics.maintenance.work.completed.maint-009",
+      "level": 1,
+      "member_count": 20,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-1-c360.logistics.sensor.document.temperature.sensor-temp-001",
+      "level": 1,
+      "member_count": 30,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.group.container.level",
+      "level": 2,
+      "member_count": 6,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-2-c360.logistics.maintenance.work.completed.maint-010",
+      "level": 2,
+      "member_count": 20,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-2-c360.logistics.sensor.document.temperature.sensor-temp-001",
+      "level": 2,
+      "member_count": 30,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-2-c360.logistics.observation.record.medium.obs-007",
+      "level": 2,
+      "member_count": 15,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-2-c360.logistics.content.document.group.container",
+      "level": 2,
+      "member_count": 25,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.humidity.group",
+      "level": 2,
+      "member_count": 4,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    },
+    {
+      "community_id": "comm-2-c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+      "level": 2,
+      "member_count": 23,
+      "statistical_summary": "",
+      "summary_status": "",
+      "keywords": null
+    }
+  ]
+}

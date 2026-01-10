@@ -1,0 +1,200 @@
+{
+  "variant": {
+    "name": "structural",
+    "embedding_provider": "",
+    "semembed_available": false
+  },
+  "entities": {
+    "expected_count": 74,
+    "actual_count": 123,
+    "missing_count": 0,
+    "data_loss_percent": 0,
+    "sampled_count": 5,
+    "validated_count": 5,
+    "retrieved_count": 5
+  },
+  "indexes": {
+    "expected_indexes": 8,
+    "populated_indexes": 4
+  },
+  "search": {
+    "stats": null,
+    "weak_results_threshold": 0,
+    "is_weak": false
+  },
+  "rules": {
+    "evaluated_count": 2073,
+    "triggered_count": 3,
+    "validation_passed": true,
+    "on_enter_fired": 3,
+    "on_exit_fired": 3
+  },
+  "pathrag_sensor": {
+    "start_entity": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+    "entities_found": 2,
+    "paths_found": 2,
+    "entities": [
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+        "score": 1
+      },
+      {
+        "id": "c360.logistics.facility.zone.area.cold-storage-1",
+        "score": 0.8
+      }
+    ],
+    "scores_valid": true,
+    "truncated": false,
+    "latency_ms": 2,
+    "boundary_test": {
+      "max_nodes_limit": 5,
+      "entities_returned": 2,
+      "respected_limit": true
+    }
+  },
+  "pathrag_document": {
+    "start_entity": "c360.logistics.maintenance.work.completed.maint-001",
+    "entities_found": 19,
+    "paths_found": 19,
+    "entities": [
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-001",
+        "score": 1
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.group",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.group.container",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.group.container.level",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-002",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-003",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-004",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-005",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-006",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-007",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-008",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-009",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-010",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-011",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-012",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-013",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-014",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-015",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.in_progress.maint-016",
+        "score": 0.6400000000000001
+      }
+    ],
+    "scores_valid": true,
+    "truncated": false,
+    "latency_ms": 2
+  },
+  "components": {
+    "expected_count": 17,
+    "found_count": 17
+  },
+  "outputs": {
+    "expected_count": 2,
+    "found_count": 2
+  },
+  "hierarchy": {
+    "container_count": 49,
+    "source_entity_count": 74,
+    "expected_min_containers": 29,
+    "inference_working": true
+  },
+  "timing": {
+    "total_duration_ms": 61047,
+    "stage_durations": {
+      "send-mixed-data": 5,
+      "test-entities-by-prefix": 2,
+      "test-entityid-hierarchy": 1,
+      "test-pathrag-boundary": 1,
+      "test-pathrag-document": 2,
+      "test-pathrag-sensor": 2,
+      "test-spatial-query": 1,
+      "test-temporal-query": 0,
+      "test-zone-relationships": 0,
+      "validate-bidirectional-traversal": 2,
+      "validate-context-index-hierarchy": 0,
+      "validate-context-provenance-audit": 0,
+      "validate-entity-structure": 4,
+      "validate-entity-triples": 1,
+      "validate-hierarchy-inference": 20,
+      "validate-incoming-index-predicates": 2,
+      "validate-inverse-edges-materialized": 2,
+      "validate-kcore-index-structural": 0,
+      "validate-metrics": 2,
+      "validate-pivot-index-structural": 0,
+      "validate-processing": 8,
+      "validate-rule-transitions": 6,
+      "validate-rules": 26,
+      "validate-zero-clusters": 1,
+      "validate-zero-embeddings": 1,
+      "verify-components": 3,
+      "verify-entity-count": 4,
+      "verify-entity-retrieval": 4,
+      "verify-index-population": 21,
+      "verify-outputs": 2,
+      "wait-for-entity-stabilization": 60633,
+      "wait-for-rule-stabilization": 225
+    }
+  },
+  "metadata": {
+    "variant": "structural",
+    "started_at": "2026-01-06T19:03:10.514908-06:00",
+    "completed_at": "2026-01-06T19:04:11.56223-06:00",
+    "success": true,
+    "error_count": 0,
+    "warning_count": 8
+  }
+}

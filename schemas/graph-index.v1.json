@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "graph-index.v1.json",
+  "type": "object",
+  "title": "graph-index Configuration",
+  "description": "Graph relationship index maintenance processor",
+  "properties": {
+    "batch_size": {
+      "type": "number",
+      "description": "Batch size for index updates",
+      "category": "advanced"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    },
+    "workers": {
+      "type": "number",
+      "description": "Number of worker goroutines",
+      "category": "advanced"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "graph-index",
+    "type": "processor",
+    "protocol": "nats",
+    "domain": "graph",
+    "version": "1.0.0"
+  }
+}

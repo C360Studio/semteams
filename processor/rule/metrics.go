@@ -18,6 +18,7 @@ type Metrics struct {
 	errorsTotal           *prometheus.CounterVec
 	activeRules           prometheus.Gauge
 	stateTransitionsTotal *prometheus.CounterVec // OnEnter/OnExit transitions
+	debounceDelaysTotal   prometheus.Counter     // Coalesced updates due to debouncing
 }
 
 // newRuleMetrics creates and registers RuleProcessor metrics
@@ -105,6 +106,13 @@ func newRuleMetrics(registry *metric.MetricsRegistry, _ string) *Metrics {
 			Name:      "state_transitions_total",
 			Help:      "Total rule state transitions (OnEnter/OnExit)",
 		}, []string{"rule_name", "transition"}),
+
+		debounceDelaysTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Namespace: "semstreams",
+			Subsystem: "rule",
+			Name:      "debounce_delays_total",
+			Help:      "Total number of debounced rule evaluations (coalesced updates)",
+		}),
 	}
 
 	// Register metrics with Prometheus registry
@@ -120,6 +128,7 @@ func newRuleMetrics(registry *metric.MetricsRegistry, _ string) *Metrics {
 		metrics.errorsTotal,
 		metrics.activeRules,
 		metrics.stateTransitionsTotal,
+		metrics.debounceDelaysTotal,
 	)
 
 	return metrics

@@ -15,10 +15,11 @@ import (
 
 // TestClient provides testcontainers-based NATS for testing
 type TestClient struct {
-	container testcontainers.Container
-	Client    *Client // Drop-in replacement for existing natsclient.Client
-	URL       string
-	cleanup   func()
+	container    testcontainers.Container
+	Client       *Client // Drop-in replacement for existing natsclient.Client
+	URL          string
+	BucketPrefix string // Prefix applied to all KV bucket names for test isolation
+	cleanup      func()
 }
 
 // testConfig holds configuration for test client
@@ -30,6 +31,7 @@ type testConfig struct {
 	natsVersion  string
 	timeout      time.Duration
 	startTimeout time.Duration
+	bucketPrefix string // Prefix for KV bucket names to enable test isolation
 }
 
 // TestStreamConfig defines a stream to pre-create for testing
@@ -91,6 +93,15 @@ func WithTestTimeout(timeout time.Duration) TestOption {
 func WithStartTimeout(timeout time.Duration) TestOption {
 	return func(cfg *testConfig) {
 		cfg.startTimeout = timeout
+	}
+}
+
+// WithBucketPrefix sets a prefix for all KV bucket names to enable test isolation.
+// When tests run in parallel, each test can use a unique prefix (e.g., test name)
+// to avoid bucket name collisions.
+func WithBucketPrefix(prefix string) TestOption {
+	return func(cfg *testConfig) {
+		cfg.bucketPrefix = prefix
 	}
 }
 
@@ -185,9 +196,10 @@ func NewSharedTestClient(opts ...TestOption) (*TestClient, error) {
 	}
 
 	testClient := &TestClient{
-		container: container,
-		Client:    client,
-		URL:       url,
+		container:    container,
+		Client:       client,
+		URL:          url,
+		BucketPrefix: cfg.bucketPrefix,
 		cleanup: func() {
 			// Use timeout context for drain to prevent hanging, then terminate container
 			closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -309,9 +321,10 @@ func NewTestClient(t testing.TB, opts ...TestOption) *TestClient {
 	}
 
 	testClient := &TestClient{
-		container: container,
-		Client:    client,
-		URL:       url,
+		container:    container,
+		Client:       client,
+		URL:          url,
+		BucketPrefix: cfg.bucketPrefix,
 		cleanup: func() {
 			// Use timeout context for drain to prevent hanging, then terminate container
 			closeCtx, closeCancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -346,13 +359,15 @@ func NewTestClient(t testing.TB, opts ...TestOption) *TestClient {
 // setupKVBuckets creates the requested KV buckets
 func (tc *TestClient) setupKVBuckets(ctx context.Context, buckets []string) error {
 	for _, bucketName := range buckets {
+		// Apply bucket prefix for test isolation
+		fullName := tc.BucketPrefix + bucketName
 		cfg := jetstream.KeyValueConfig{
-			Bucket: bucketName,
+			Bucket: fullName,
 		}
 
 		_, err := tc.Client.CreateKeyValueBucket(ctx, cfg)
 		if err != nil {
-			return fmt.Errorf("failed to create KV bucket %s: %w", bucketName, err)
+			return fmt.Errorf("failed to create KV bucket %s: %w", fullName, err)
 		}
 	}
 	return nil
@@ -393,17 +408,27 @@ func (tc *TestClient) GetNativeConnection() *gonats.Conn {
 	return tc.Client.GetConnection()
 }
 
-// CreateKVBucket is a helper for creating KV buckets during tests
+// CreateKVBucket is a helper for creating KV buckets during tests.
+// The bucket prefix is automatically applied if configured.
 func (tc *TestClient) CreateKVBucket(ctx context.Context, name string) (jetstream.KeyValue, error) {
+	fullName := tc.BucketPrefix + name
 	cfg := jetstream.KeyValueConfig{
-		Bucket: name,
+		Bucket: fullName,
 	}
 	return tc.Client.CreateKeyValueBucket(ctx, cfg)
 }
 
-// GetKVBucket is a helper for getting existing KV buckets during tests
+// GetKVBucket is a helper for getting existing KV buckets during tests.
+// The bucket prefix is automatically applied if configured.
 func (tc *TestClient) GetKVBucket(ctx context.Context, name string) (jetstream.KeyValue, error) {
-	return tc.Client.GetKeyValueBucket(ctx, name)
+	fullName := tc.BucketPrefix + name
+	return tc.Client.GetKeyValueBucket(ctx, fullName)
+}
+
+// PrefixedBucketName returns the full bucket name with prefix applied.
+// Use this when you need to pass bucket names to components that create their own buckets.
+func (tc *TestClient) PrefixedBucketName(name string) string {
+	return tc.BucketPrefix + name
 }
 
 // CreateStream is a helper for creating JetStream streams during tests

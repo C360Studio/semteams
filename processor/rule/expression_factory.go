@@ -99,7 +99,7 @@ func (r *ExpressionRule) Evaluate(messages []message.Message) bool {
 		data = genericPayload.Data
 	}
 
-	if data == nil || len(data) == 0 {
+	if len(data) == 0 {
 		return false
 	}
 

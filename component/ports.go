@@ -60,6 +60,19 @@ func BuildPortFromDefinition(def PortDefinition, direction Direction) Port {
 
 	// Create appropriate port type based on config
 	switch def.Type {
+	case "timer":
+		// Timer port for periodic triggers
+		var iface *InterfaceContract
+		if def.Interface != "" {
+			iface = &InterfaceContract{
+				Type:    def.Interface,
+				Version: "v1",
+			}
+		}
+		port.Config = TimerPort{
+			Interval:  def.Subject, // Subject holds interval duration
+			Interface: iface,
+		}
 	case "jetstream":
 		port.Config = JetStreamPort{
 			StreamName: def.StreamName,
@@ -79,7 +92,7 @@ func BuildPortFromDefinition(def PortDefinition, direction Direction) Port {
 		port.Config = KVWatchPort{
 			Bucket: def.Subject, // Subject holds bucket name
 		}
-	case "kv-write", "kvwrite":
+	case "kv", "kv-write", "kvwrite":
 		// Parse KV write config
 		var iface *InterfaceContract
 		if def.Interface != "" {

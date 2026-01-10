@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/component/flowgraph"
 	"github.com/c360/semstreams/health"
 )
@@ -443,6 +444,10 @@ func (cm *ComponentManager) handleComponentStatus(w http.ResponseWriter, r *http
 		return
 	}
 
+	// Check for debug parameter
+	debugParam := r.URL.Query().Get("debug")
+	includeDebug := debugParam == "true"
+
 	cm.mu.RLock()
 	mc, exists := cm.components[componentName]
 	defer cm.mu.RUnlock()
@@ -480,6 +485,13 @@ func (cm *ComponentManager) handleComponentStatus(w http.ResponseWriter, r *http
 	// Add last error if present (avoid duplicate if already set from health)
 	if mc.LastError != nil && healthStatus.LastError == "" {
 		status["lifecycle_error"] = mc.LastError.Error()
+	}
+
+	// Add debug information if requested and component supports it
+	if includeDebug {
+		if debugProvider, ok := mc.Component.(component.DebugStatusProvider); ok {
+			status["debug"] = debugProvider.DebugStatus()
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

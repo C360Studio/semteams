@@ -2,9 +2,7 @@ package stages
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net"
 	"strings"
 	"time"
 
@@ -68,27 +66,13 @@ func (v *RulesValidator) ValidateRules(ctx context.Context) (*RulesValidationRes
 		}
 	}
 
-	// Send test messages that should trigger rules
-	sentCount, sendWarnings := v.sendRuleTestMessages(ctx)
-	result.TestMessagesSent = sentCount
-	result.Warnings = append(result.Warnings, sendWarnings...)
+	// Rules should be triggered by baseline test data loaded from files
+	// No UDP test message injection - E2E validates baseline data only
+	result.TestMessagesSent = 0
 
 	// Check if rules already evaluated from pre-loaded test data
 	if baselineMetrics.Evaluations >= 100 {
 		result.AlreadyEvaluated = true
-	} else if sentCount > 0 {
-		// Wait for rules to process
-		waitOpts := client.WaitOpts{
-			Timeout:      v.ValidationTimeout,
-			PollInterval: v.PollInterval,
-			Comparator:   ">=",
-		}
-
-		expectedEvaluations := baselineMetrics.Evaluations + float64(sentCount)
-		if err := v.Metrics.WaitForMetric(ctx, "semstreams_rule_evaluations_total", expectedEvaluations, waitOpts); err != nil {
-			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("Rule evaluation wait: %v", err))
-		}
 	}
 
 	// Get final metrics
@@ -109,63 +93,12 @@ func (v *RulesValidator) ValidateRules(ctx context.Context) (*RulesValidationRes
 	result.OnEnterFired = int(finalMetrics.OnEnterFired)
 	result.OnExitFired = int(finalMetrics.OnExitFired)
 
-	// Validate
-	if result.TriggeredDelta < 1 && sentCount > 0 {
-		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("No rules triggered despite sending %d test messages", sentCount))
-	}
+	// Validate - rules should trigger from baseline test data
+	// OnEnter/OnExit should fire based on threshold crossings in sensors.jsonl
 
 	result.ValidationPassed = result.MetricsFoundCount >= 2 && finalMetrics.Evaluations > 0
 
 	return result, nil
-}
-
-// sendRuleTestMessages sends messages designed to trigger specific rules
-func (v *RulesValidator) sendRuleTestMessages(ctx context.Context) (int, []string) {
-	var warnings []string
-
-	conn, err := net.Dial("udp", v.UDPAddr)
-	if err != nil {
-		warnings = append(warnings, fmt.Sprintf("Failed to connect for rule test: %v", err))
-		return 0, warnings
-	}
-	defer conn.Close()
-
-	ruleTestMessages := []map[string]any{
-		// Should trigger low-battery-alert
-		{
-			"type":      "telemetry",
-			"entity_id": "battery-test-device",
-			"battery":   map[string]any{"level": 15.0},
-			"timestamp": time.Now().Unix(),
-		},
-		// Should trigger high-temperature-alert
-		{
-			"type":      "telemetry",
-			"entity_id": "temp-test-device",
-			"data":      map[string]any{"temperature": 55.0},
-			"timestamp": time.Now().Unix(),
-		},
-	}
-
-	sentCount := 0
-	for _, msg := range ruleTestMessages {
-		select {
-		case <-ctx.Done():
-			return sentCount, warnings
-		default:
-		}
-
-		msgBytes, err := json.Marshal(msg)
-		if err != nil {
-			continue
-		}
-		if _, err := conn.Write(msgBytes); err == nil {
-			sentCount++
-		}
-	}
-
-	return sentCount, warnings
 }
 
 // StructuralRulesResult contains results for structural tier rule validation

@@ -101,20 +101,20 @@ func TestIntegration_CircuitBreakerWithRealConnection(t *testing.T) {
 	manager, err := NewClient("nats://invalid-host:4222")
 	require.NoError(t, err)
 
-	// Try 4 times - should not open circuit
-	for i := 0; i < 4; i++ {
+	// Try 14 times - should not open circuit (threshold is 15)
+	for i := 0; i < 14; i++ {
 		err = manager.Connect(ctx)
 		assert.Error(t, err)
 		assert.NotEqual(t, StatusCircuitOpen, manager.Status())
 	}
 
-	// 5th attempt should trigger circuit breaker
+	// 15th attempt should trigger circuit breaker
 	err = manager.Connect(ctx)
 	assert.Error(t, err)
 
-	// After 5 failures, circuit should be open
+	// After 15 failures, circuit should be open
 	assert.Equal(t, StatusCircuitOpen, manager.Status())
-	assert.Equal(t, int32(5), manager.Failures())
+	assert.Equal(t, int32(15), manager.Failures())
 
 	// Further attempts should fail immediately with circuit open error
 	start := time.Now()

@@ -1,0 +1,28 @@
+
+flowchart TD
+    Client[Query Client]
+    Coordinator[graph-query<br/>Coordinator]
+
+    Client -->|Discover| Coordinator
+    Coordinator -->|Query Capabilities| GI[graph-ingest]
+    Coordinator -->|Query Capabilities| GX[graph-index]
+    Coordinator -->|Query Capabilities| GC[graph-clustering]
+    Coordinator -->|Query Capabilities| GA[graph-anomalies]
+    Coordinator -->|Query Capabilities| GE[graph-embedding]
+
+    Coordinator -->|Aggregate| Client
+
+    Client -->|Execute Query| Coordinator
+    Coordinator -->|Route| GI
+    Coordinator -->|Route| GX
+    Coordinator -->|Orchestrate| GI
+    Coordinator -->|Orchestrate| GX
+
+    style Client fill:#e1f5ff
+    style Coordinator fill:#ffe1e1
+    style GI fill:#f0f0f0
+    style GX fill:#f0f0f0
+    style GC fill:#f0f0f0
+    style GA fill:#f0f0f0
+    style GE fill:#f0f0f0
+

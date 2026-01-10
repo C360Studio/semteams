@@ -107,8 +107,9 @@ func DefaultTieredConfig() *TieredConfig {
 		MessageCount:    20,
 		MessageInterval: 50 * time.Millisecond,
 		// Event-driven validation timeouts
-		// 60s default allows time for testdata files to load + entity processing
-		ValidationTimeout:    60 * time.Second,
+		// 10s default - structural tier should complete quickly
+		// Semantic tier may need to override this for ML processing
+		ValidationTimeout:    10 * time.Second,
 		PollInterval:         100 * time.Millisecond, // Fast polling for responsiveness
 		MinProcessed:         10,                     // At least 50% should make it through
 		MinExpectedEntities:  50,                     // Test data has 74 entities, expect at least 50 indexed
@@ -271,12 +272,15 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"test-spatial-query", s.executeTestSpatialQuery, nil},
 		{"test-temporal-query", s.executeTestTemporalQuery, nil},
 		{"test-zone-relationships", s.executeTestZoneRelationships, nil},
+		// Alias resolution via ALIAS_INDEX (structural - no ML)
+		{"test-entity-by-alias", s.executeTestEntityByAlias, nil},
 
 		// === Tier 0 ONLY: Zero-ML constraint validation ===
 		// These verify structural tier has NO ML inference
 		{"validate-zero-embeddings", s.executeValidateZeroEmbeddings, []string{"structural"}},
 		{"validate-zero-clusters", s.executeValidateZeroClusters, []string{"structural"}},
 		{"validate-rule-transitions", s.executeValidateRuleTransitions, []string{"structural"}},
+		{"validate-entity-triples", s.executeValidateEntityTriples, []string{"structural"}},
 		// Structural indexes - work on structural tier via EntityID sibling edges (no ML required)
 		{"validate-kcore-index-structural", s.executeValidateKCoreIndexStructural, []string{"structural"}},
 		{"validate-pivot-index-structural", s.executeValidatePivotIndexStructural, []string{"structural"}},
@@ -311,10 +315,9 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"validate-anomaly-detection", s.executeValidateAnomalyDetection, []string{"semantic"}},
 		{"validate-virtual-edges", s.executeValidateVirtualEdges, []string{"semantic"}},
 
-		// Wait for rule evaluations to stabilize (semantic tier only)
-		// Semantic tier's neural embeddings are slower, so rule evaluations via KV watch
-		// may still be in progress when validate-rules would normally run
-		{"wait-for-rule-stabilization", s.executeWaitForRuleStabilization, []string{"semantic"}},
+		// Wait for rule evaluations to stabilize before validating
+		// With feedback loop prevention, rules should stabilize quickly for all tiers
+		{"wait-for-rule-stabilization", s.executeWaitForRuleStabilization, nil},
 
 		// === Common validation stages (all tiers) ===
 		{"validate-rules", s.executeValidateRules, nil},
@@ -363,12 +366,16 @@ func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
 
 	// Get filtered stages for this variant
 	stages := s.getStagesForVariant(variant)
+	totalStages := len(stages)
 
-	// Execute each stage
-	for _, stage := range stages {
+	// Execute each stage with progress logging
+	for i, stage := range stages {
+		fmt.Printf("\n[%d/%d] %s starting...\n", i+1, totalStages, stage.name)
 		stageStart := time.Now()
 
 		if err := stage.fn(ctx, result); err != nil {
+			duration := time.Since(stageStart)
+			fmt.Printf("[%d/%d] %s FAILED after %v: %v\n", i+1, totalStages, stage.name, duration, err)
 			result.Success = false
 			result.Error = fmt.Sprintf("%s failed: %v", stage.name, err)
 			result.EndTime = time.Now()
@@ -376,7 +383,23 @@ func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
 			return result, nil // Return result even on failure
 		}
 
-		result.Metrics[fmt.Sprintf("%s_duration_ms", stage.name)] = time.Since(stageStart).Milliseconds()
+		duration := time.Since(stageStart)
+		fmt.Printf("[%d/%d] %s completed in %v\n", i+1, totalStages, stage.name, duration)
+		result.Metrics[fmt.Sprintf("%s_duration_ms", stage.name)] = duration.Milliseconds()
+
+		// Print key metrics after data-affecting stages
+		if strings.Contains(stage.name, "send") || strings.Contains(stage.name, "validate") || strings.Contains(stage.name, "verify") {
+			if snapshot, err := s.metrics.FetchSnapshot(ctx); err == nil {
+				var entities, rules float64
+				if m, ok := snapshot.Metrics["semstreams_datamanager_entities_updated_total"]; ok {
+					entities = m.Value
+				}
+				if m, ok := snapshot.Metrics["semstreams_rule_evaluations_total"]; ok {
+					rules = m.Value
+				}
+				fmt.Printf("  Metrics: entities=%.0f, rules=%.0f\n", entities, rules)
+			}
+		}
 	}
 
 	// Capture final metrics baseline for regression detection
@@ -432,6 +455,22 @@ func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
 	// Build structured results (dual-write for backward compatibility)
 	result.Structured = BuildTieredResults(result, s.searchStats)
 
+	// Validate semantic tier requirements BEFORE marking success
+	// This ensures semantic E2E fails if ML features aren't working
+	if err := s.validateSemanticRequirements(result); err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("semantic tier validation failed: %v", err)
+		return result, nil
+	}
+
+	// Validate fallback behavior for semantic-fallback variant
+	// This ensures fallback test validates graceful degradation
+	if err := s.validateFallbackBehavior(result); err != nil {
+		result.Success = false
+		result.Error = fmt.Sprintf("fallback validation failed: %v", err)
+		return result, nil
+	}
+
 	return result, nil
 }
 
@@ -460,20 +499,21 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 	// Structural tier uses minimal structural.json config
 	if s.config.Variant == "structural" {
 		// Minimal components for structural/rules-only testing
-		allRequired = []string{"udp", "iot_sensor", "rule", "graph", "file"}
+		// Graph components are now modular: graph-ingest, graph-index, graph-gateway
+		allRequired = []string{"udp", "iot_sensor", "rule", "graph-ingest", "graph-index", "graph-gateway", "file"}
 	} else {
 		// Full components for statistical/semantic tiers
 		// Input components
 		inputComponents := []string{"udp"}
 		// Domain processors (document_processor, iot_sensor handle domain-specific data)
 		domainProcessors := []string{"document_processor", "iot_sensor"}
-		// Semantic components (rule processor + graph processor)
-		semanticComponents := []string{"rule", "graph"}
+		// Graph components (modular: ingest, index, gateway + optional embedding/clustering)
+		graphComponents := []string{"rule", "graph-ingest", "graph-index", "graph-gateway"}
 		// Output/storage components
 		outputComponents := []string{"file", "objectstore"}
 
 		allRequired = append(inputComponents, domainProcessors...)
-		allRequired = append(allRequired, semanticComponents...)
+		allRequired = append(allRequired, graphComponents...)
 		allRequired = append(allRequired, outputComponents...)
 	}
 
@@ -505,9 +545,12 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 	return nil
 }
 
-// executeSendMixedData sends mixed test data (entities + regular messages)
+// executeSendMixedData captures baseline metrics before data processing.
+// Test data is loaded at container startup via file_input components
+// (configs/structural.json defines file_sensors, file_documents, etc.)
+// which read from testdata/semantic/*.jsonl files.
 func (s *TieredScenario) executeSendMixedData(ctx context.Context, result *Result) error {
-	// Capture baseline BEFORE sending data
+	// Capture baseline BEFORE data is processed
 	// This allows executeValidateProcessing to wait for the delta
 	baseline, err := s.metrics.CaptureBaseline(ctx)
 	if err != nil {
@@ -516,81 +559,8 @@ func (s *TieredScenario) executeSendMixedData(ctx context.Context, result *Resul
 		s.preSendBaseline = baseline
 	}
 
-	conn, err := net.Dial("udp", s.udpAddr)
-	if err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("Failed to connect to UDP: %v", err))
-		return fmt.Errorf("UDP connection failed: %w", err)
-	}
-	defer conn.Close()
-
-	messagesSent := 0
-	telemetryCount := 0
-	regularCount := 0
-
-	for i := 0; i < s.config.MessageCount; i++ {
-		var testMsg map[string]any
-
-		// Alternate between telemetry (entities) and regular messages
-		if i%2 == 0 {
-			// Telemetry message (will be processed by graph)
-			testMsg = map[string]any{
-				"type":        "telemetry",
-				"entity_id":   fmt.Sprintf("device-%d", i/2),
-				"entity_type": "sensor",
-				"timestamp":   time.Now().Unix(),
-				"data": map[string]any{
-					"temperature": 20.0 + float64(i),
-					"humidity":    50.0 + float64(i*2),
-					"pressure":    1013.0 + float64(i)*0.5,
-					"location": map[string]any{
-						"lat": 37.7749 + float64(i)*0.001,
-						"lon": -122.4194 + float64(i)*0.001,
-					},
-				},
-				"value": i * 5,
-			}
-			telemetryCount++
-		} else {
-			// Regular message (will be filtered out of entity stream)
-			testMsg = map[string]any{
-				"type":      "regular",
-				"value":     i * 10,
-				"timestamp": time.Now().Unix(),
-				"metadata": map[string]any{
-					"source":   "test",
-					"sequence": i,
-				},
-			}
-			regularCount++
-		}
-
-		msgBytes, err := json.Marshal(testMsg)
-		if err != nil {
-			continue
-		}
-
-		_, err = conn.Write(msgBytes)
-		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to send message %d: %v", i, err))
-			continue
-		}
-
-		messagesSent++
-
-		// Wait between messages
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(s.config.MessageInterval):
-		}
-	}
-
-	result.Metrics["messages_sent"] = messagesSent
-	result.Metrics["telemetry_sent"] = telemetryCount
-	result.Metrics["regular_sent"] = regularCount
-	result.Details["data_sent"] = fmt.Sprintf(
-		"Sent %d messages: %d telemetry (entities), %d regular",
-		messagesSent, telemetryCount, regularCount)
+	result.Details["data_source"] = "file_input components (testdata/semantic/*.jsonl)"
+	result.Metrics["messages_sent"] = 0 // Data loaded via file_input, not UDP
 
 	return nil
 }
@@ -650,31 +620,47 @@ func (s *TieredScenario) executeValidateProcessing(ctx context.Context, result *
 		return fmt.Errorf("component query failed: %w", err)
 	}
 
-	// Find graph processor and verify it's healthy
-	var graphFound bool
+	// Find graph components (modular architecture) and verify they're healthy
+	// Required components: graph-ingest, graph-index, graph-gateway
+	graphComponents := map[string]bool{
+		"graph-ingest":  false,
+		"graph-index":   false,
+		"graph-gateway": false,
+	}
+	graphStatus := make(map[string]map[string]any)
+
 	for _, comp := range components {
-		if comp.Name == "graph" {
-			graphFound = true
+		if _, isGraphComp := graphComponents[comp.Name]; isGraphComp {
+			graphComponents[comp.Name] = true
 			if !comp.Healthy {
 				result.Warnings = append(
 					result.Warnings,
-					fmt.Sprintf("Graph processor not healthy: state=%s", comp.State),
+					fmt.Sprintf("Graph component %s not healthy: state=%s", comp.Name, comp.State),
 				)
 			}
-			result.Details["graph_processor_status"] = map[string]any{
+			graphStatus[comp.Name] = map[string]any{
 				"name":    comp.Name,
 				"type":    comp.Type,
 				"healthy": comp.Healthy,
 				"state":   comp.State,
 			}
-			break
 		}
 	}
 
-	if !graphFound {
-		result.Errors = append(result.Errors, "Graph processor not found")
-		return fmt.Errorf("graph processor not found")
+	// Check all required graph components are present
+	var missingGraph []string
+	for name, found := range graphComponents {
+		if !found {
+			missingGraph = append(missingGraph, name)
+		}
 	}
+
+	if len(missingGraph) > 0 {
+		result.Errors = append(result.Errors, fmt.Sprintf("Graph components not found: %v", missingGraph))
+		return fmt.Errorf("graph components not found: %v", missingGraph)
+	}
+
+	result.Details["graph_processor_status"] = graphStatus
 
 	result.Metrics["component_count"] = len(components)
 	result.Details["processing_validation"] = fmt.Sprintf(
@@ -782,7 +768,7 @@ func (s *TieredScenario) executeWaitForEmbeddings(ctx context.Context, result *R
 		// Wait for TOTAL embeddings generated (not baseline + delta)
 		startWait := time.Now()
 		if err := s.metrics.WaitForMetric(ctx,
-			"indexengine_embeddings_generated_total",
+			"semstreams_graph_embedding_embeddings_generated_total",
 			float64(entityCount),
 			waitOpts); err != nil {
 			result.Warnings = append(result.Warnings,
@@ -874,6 +860,23 @@ func (s *TieredScenario) waitForEntityCountStabilization(ctx context.Context, ex
 // be processing when we start validation.
 func (s *TieredScenario) executeWaitForEntityStabilization(ctx context.Context, result *Result) error {
 	const expectedEntities = 74 // All tiers expect 74 entities from testdata/semantic/
+
+	// Retry SSE initialization if it failed at startup.
+	// ENTITY_STATES bucket is created by graph-ingest after data flows,
+	// so SSE health check at test start fails. Now that data has been sent,
+	// the bucket should exist and SSE can work.
+	if s.sseClient == nil {
+		fmt.Printf("  SSE client not available, retrying...\n")
+		s.sseClient = client.NewSSEClient(s.config.ServiceManagerURL)
+		if err := s.sseClient.Health(ctx); err != nil {
+			fmt.Printf("  SSE retry failed: %v (falling back to polling)\n", err)
+			s.sseClient = nil // Still not available, will use polling
+		} else {
+			fmt.Printf("  SSE retry succeeded\n")
+		}
+	} else {
+		fmt.Printf("  SSE client available\n")
+	}
 
 	stabilization := s.waitForEntityCountStabilization(ctx, expectedEntities)
 
@@ -1073,29 +1076,29 @@ func (s *TieredScenario) executeTestEmbeddingFallback(ctx context.Context, resul
 		return fmt.Errorf("component query failed: %w", err)
 	}
 
-	// Find graph processor and check its health
-	var graphHealthy bool
+	// Find graph-embedding component and check its health (for fallback validation)
+	var graphEmbeddingHealthy bool
 	for _, comp := range components {
-		if comp.Name == "graph" {
-			graphHealthy = comp.Healthy
+		if comp.Name == "graph-embedding" {
+			graphEmbeddingHealthy = comp.Healthy
 			break
 		}
 	}
 
-	// The key insight: if semembed is unavailable, graph should still be healthy (using BM25)
+	// The key insight: if semembed is unavailable, graph-embedding should still be healthy (using BM25)
 	// If semembed is available, we verify hybrid mode is working
 	result.Details["embedding_fallback_test"] = map[string]any{
-		"semembed_available": semembedAvailable,
-		"graph_healthy":      graphHealthy,
-		"fallback_mode":      !semembedAvailable,
-		"message":            "Graph processor operational regardless of semembed availability",
+		"semembed_available":      semembedAvailable,
+		"graph_embedding_healthy": graphEmbeddingHealthy,
+		"fallback_mode":           !semembedAvailable,
+		"message":                 "Graph embedding operational regardless of semembed availability",
 	}
 
-	// If semembed was unavailable but graph is healthy, BM25 fallback is working
-	if !semembedAvailable && graphHealthy {
+	// If semembed was unavailable but graph-embedding is healthy, BM25 fallback is working
+	if !semembedAvailable && graphEmbeddingHealthy {
 		result.Metrics["fallback_verified"] = 1
-		result.Details["fallback_validation"] = "BM25 fallback active - graph healthy without semembed"
-	} else if semembedAvailable && graphHealthy {
+		result.Details["fallback_validation"] = "BM25 fallback active - graph-embedding healthy without semembed"
+	} else if semembedAvailable && graphEmbeddingHealthy {
 		result.Metrics["hybrid_mode_verified"] = 1
 		result.Details["fallback_validation"] = "Hybrid mode active - semembed + BM25 available"
 	}
@@ -1237,11 +1240,11 @@ func (s *TieredScenario) executeValidateRules(ctx context.Context, result *Resul
 	result.Metrics["on_enter_fired"] = int(finalMetrics.OnEnterFired)
 	result.Metrics["on_exit_fired"] = int(finalMetrics.OnExitFired)
 
-	// Validate rules actually triggered
-	if triggeredDelta < 1 && sentCount > 0 {
+	// Validate rules actually triggered (check absolute count, not delta)
+	// Rules may have already triggered from file input before baseline was captured
+	if finalMetrics.Triggers < 1 {
 		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("No rules triggered despite sending %d test messages (triggered delta: %d)",
-				sentCount, triggeredDelta))
+			"No rules triggered - check rule configuration and test data")
 	}
 
 	// Consider validation passed if we have rule metrics and some evaluation happened
@@ -1308,16 +1311,14 @@ func (s *TieredScenario) executeValidateMetrics(_ context.Context, result *Resul
 
 	// Optional metrics (present only when certain features active)
 	optionalMetrics := []string{
-		"indexengine_events_total",               // Total events received
-		"indexengine_events_failed_total",        // Processing failures
-		"indexengine_embeddings_generated_total", // Embedding generation count
-		"semstreams_json_filter_matched_total",   // JSON filter matched messages
-		"semstreams_json_filter_dropped_total",   // JSON filter dropped messages
-		// Phase 4: Embedding queue observability metrics
-		"indexengine_embeddings_queued_total",    // Total embeddings sent to queue
-		"indexengine_embeddings_pending",         // Current pending embeddings in queue
-		"indexengine_embedding_dedup_hits_total", // Embeddings deduplicated (reused)
-		"indexengine_embeddings_failed_total",    // Failed embedding generations
+		"indexengine_events_total",                              // Total events received
+		"indexengine_events_failed_total",                       // Processing failures
+		"semstreams_graph_embedding_embeddings_generated_total", // Embedding generation count
+		"semstreams_json_filter_matched_total",                  // JSON filter matched messages
+		"semstreams_json_filter_dropped_total",                  // JSON filter dropped messages
+		"semstreams_graph_embedding_pending",                    // Current pending embeddings
+		"semstreams_graph_embedding_dedup_hits_total",           // Embeddings deduplicated (reused)
+		"semstreams_graph_embedding_errors_total",               // Failed embedding generations
 	}
 
 	foundRequired := make(map[string]bool)
@@ -2210,6 +2211,87 @@ func extractScores(hits []search.Hit) []float64 {
 
 // executeCompareCoreMl captures search results for Core vs ML comparison
 // and persists results to JSON for later analysis
+// validateFallbackBehavior checks that the system degrades gracefully without ML services.
+// Returns error if fallback test and core features aren't working.
+func (s *TieredScenario) validateFallbackBehavior(result *Result) error {
+	// Only validate if this is a fallback test
+	if s.config.Variant != "semantic-fallback" {
+		return nil
+	}
+
+	// Verify ML services are NOT available (as expected for fallback)
+	if avail, ok := result.Details["semembed_available"].(bool); ok && avail {
+		return fmt.Errorf("fallback test: semembed should be unavailable but was available")
+	}
+
+	// Verify core features still work
+	if result.Structured != nil {
+		// Check entities were ingested
+		if result.Structured.Entities.ActualCount == 0 {
+			return fmt.Errorf("fallback: entity ingestion failed (0 entities)")
+		}
+
+		// Check hierarchy was created
+		if result.Structured.Hierarchy != nil && result.Structured.Hierarchy.ContainerCount == 0 {
+			return fmt.Errorf("fallback: hierarchy inference failed (0 containers)")
+		}
+
+		// Check PathRAG works (sensor test)
+		if result.Structured.PathRAGSensor != nil && result.Structured.PathRAGSensor.EntitiesFound == 0 {
+			return fmt.Errorf("fallback: PathRAG failed (0 entities found)")
+		}
+	}
+
+	return nil
+}
+
+// validateSemanticRequirements checks that semantic tier features are actually working.
+// Returns error if this is a semantic tier test but semantic features aren't functional.
+func (s *TieredScenario) validateSemanticRequirements(result *Result) error {
+	// Skip validation for fallback tests (they have their own validation)
+	if s.config.Variant == "semantic-fallback" {
+		return nil
+	}
+
+	// Check if this is a semantic tier test
+	// Use CONFIGURED variant if set, otherwise use detected variant
+	isSemanticTest := false
+	if s.config.Variant == "semantic" {
+		isSemanticTest = true
+	} else if s.config.Variant == "" {
+		variant := s.detectVariantAndProvider(result)
+		isSemanticTest = variant.variant == "semantic"
+	}
+
+	// Only validate semantic tier
+	if !isSemanticTest {
+		return nil
+	}
+
+	// Check semembed availability
+	if avail, ok := result.Details["semembed_available"].(bool); !ok || !avail {
+		return fmt.Errorf("semantic tier requires semembed: semembed_available=%v", avail)
+	}
+
+	// Check search functionality (known answer tests must pass)
+	if result.Structured != nil {
+		if stats := result.Structured.Search.Stats; stats != nil {
+			passed := stats.KnownAnswerTestsPassed
+			total := stats.KnownAnswerTestsTotal
+			if total > 0 && passed == 0 {
+				return fmt.Errorf("semantic tier: 0/%d known answer tests passed (search not working)", total)
+			}
+		}
+
+		// Check embeddings were generated via variant info
+		if !result.Structured.Variant.SemembedAvailable {
+			return fmt.Errorf("semantic tier: semembed not available in structured results")
+		}
+	}
+
+	return nil
+}
+
 // variantInfo holds detected variant and embedding provider information
 type variantInfo struct {
 	variant           string
@@ -2240,11 +2322,19 @@ func (s *TieredScenario) detectVariantAndProvider(result *Result) variantInfo {
 		body, _ := io.ReadAll(resp.Body)
 		metricsText := string(body)
 
-		// Parse indexengine_embedding_provider metric value using regex
-		// Format: indexengine_embedding_provider{component="..."} <value>
-		// If this metric doesn't exist, embeddings are disabled (structural tier)
-		re := regexp.MustCompile(`indexengine_embedding_provider\{[^}]*\}\s+(\d+(?:\.\d+)?)`)
-		if matches := re.FindStringSubmatch(metricsText); len(matches) > 1 {
+		// Try new metric first: semstreams_graph_embedding_embedder_type
+		// Format: semstreams_graph_embedding_embedder_type <value>
+		// 0=disabled, 1=bm25, 2=http
+		re := regexp.MustCompile(`semstreams_graph_embedding_embedder_type\s+(\d+(?:\.\d+)?)`)
+		matches := re.FindStringSubmatch(metricsText)
+
+		// Fall back to legacy metric: indexengine_embedding_provider
+		if len(matches) <= 1 {
+			re = regexp.MustCompile(`indexengine_embedding_provider\{[^}]*\}\s+(\d+(?:\.\d+)?)`)
+			matches = re.FindStringSubmatch(metricsText)
+		}
+
+		if len(matches) > 1 {
 			switch matches[1] {
 			case "2", "2.0":
 				info.embeddingProvider = "http"

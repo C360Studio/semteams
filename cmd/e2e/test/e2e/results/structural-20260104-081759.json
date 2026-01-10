@@ -1,0 +1,216 @@
+{
+  "variant": {
+    "name": "structural",
+    "embedding_provider": "",
+    "semembed_available": false
+  },
+  "entities": {
+    "expected_count": 74,
+    "actual_count": 123,
+    "missing_count": 0,
+    "data_loss_percent": 0,
+    "sampled_count": 5,
+    "validated_count": 5,
+    "retrieved_count": 5
+  },
+  "indexes": {
+    "expected_indexes": 8,
+    "populated_indexes": 8
+  },
+  "search": {
+    "stats": null,
+    "weak_results_threshold": 0,
+    "is_weak": false
+  },
+  "rules": {
+    "evaluated_count": 27446,
+    "triggered_count": 0,
+    "validation_passed": true
+  },
+  "pathrag_sensor": {
+    "start_entity": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+    "entities_found": 8,
+    "paths_found": 8,
+    "entities": [
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+        "score": 1
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.group",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-005",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.environmental.group.container.level",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.group.container",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-003",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.environmental.sensor.temperature.temp-sensor-004",
+        "score": 0.5120000000000001
+      }
+    ],
+    "scores_valid": true,
+    "truncated": false,
+    "latency_ms": 4,
+    "boundary_test": {
+      "max_nodes_limit": 5,
+      "entities_returned": 5,
+      "respected_limit": true
+    }
+  },
+  "pathrag_document": {
+    "start_entity": "c360.logistics.maintenance.work.completed.maint-001",
+    "entities_found": 18,
+    "paths_found": 18,
+    "entities": [
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-001",
+        "score": 1
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.group",
+        "score": 0.8
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-012",
+        "score": 0.6400000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.group.container.level",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-002",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-003",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-004",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-005",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-006",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-007",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-008",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-009",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-010",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-011",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-013",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-014",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.completed.maint-015",
+        "score": 0.5120000000000001
+      },
+      {
+        "id": "c360.logistics.maintenance.work.group.container",
+        "score": 0.5120000000000001
+      }
+    ],
+    "scores_valid": true,
+    "truncated": false,
+    "latency_ms": 3
+  },
+  "components": {
+    "expected_count": 12,
+    "found_count": 12
+  },
+  "outputs": {
+    "expected_count": 2,
+    "found_count": 2
+  },
+  "hierarchy": {
+    "container_count": 53,
+    "source_entity_count": 74,
+    "expected_min_containers": 29,
+    "inference_working": true
+  },
+  "timing": {
+    "total_duration_ms": 1167,
+    "stage_durations": {
+      "send-mixed-data": 1022,
+      "test-entities-by-prefix": 1,
+      "test-entityid-hierarchy": 6,
+      "test-pathrag-boundary": 0,
+      "test-pathrag-document": 3,
+      "test-pathrag-sensor": 4,
+      "test-spatial-query": 5,
+      "test-temporal-query": 3,
+      "test-zone-relationships": 0,
+      "validate-bidirectional-traversal": 5,
+      "validate-context-index-hierarchy": 2,
+      "validate-context-provenance-audit": 2,
+      "validate-entity-structure": 2,
+      "validate-hierarchy-inference": 12,
+      "validate-incoming-index-predicates": 2,
+      "validate-inverse-edges-materialized": 2,
+      "validate-kcore-index-structural": 0,
+      "validate-metrics": 3,
+      "validate-pivot-index-structural": 0,
+      "validate-processing": 6,
+      "validate-rule-transitions": 9,
+      "validate-rules": 22,
+      "validate-zero-clusters": 3,
+      "validate-zero-embeddings": 5,
+      "verify-components": 0,
+      "verify-entity-count": 2,
+      "verify-entity-retrieval": 2,
+      "verify-index-population": 16,
+      "verify-outputs": 1,
+      "wait-for-entity-stabilization": 11
+    }
+  },
+  "metadata": {
+    "variant": "structural",
+    "started_at": "2026-01-04T08:17:58.700827-06:00",
+    "completed_at": "2026-01-04T08:17:59.868356-06:00",
+    "success": true,
+    "error_count": 0,
+    "warning_count": 4
+  }
+}

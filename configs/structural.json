@@ -284,7 +284,7 @@
           "outputs": [
             {
               "name": "rule_out",
-              "subject": "events.rule.triggered",
+              "subject": "rule.triggered.alert",
               "type": "jetstream"
             }
           ]
@@ -437,9 +437,9 @@
         ]
       }
     },
-    "graph": {
+    "graph-ingest": {
       "type": "processor",
-      "name": "graph-processor",
+      "name": "graph-ingest",
       "enabled": true,
       "config": {
         "ports": {
@@ -459,96 +459,202 @@
               "description": "Sensor entity events from IoT processor"
             }
           ],
-          "outputs": []
+          "outputs": [
+            {
+              "name": "entity_states",
+              "subject": "ENTITY_STATES",
+              "type": "kv-write",
+              "description": "Entity state KV bucket"
+            }
+          ]
+        },
+        "enable_hierarchy": true
+      }
+    },
+    "graph-index": {
+      "type": "processor",
+      "name": "graph-index",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "outgoing_index",
+              "subject": "OUTGOING_INDEX",
+              "type": "kv",
+              "description": "Outgoing relationship index"
+            },
+            {
+              "name": "incoming_index",
+              "subject": "INCOMING_INDEX",
+              "type": "kv",
+              "description": "Incoming relationship index"
+            },
+            {
+              "name": "alias_index",
+              "subject": "ALIAS_INDEX",
+              "type": "kv",
+              "description": "Entity alias index"
+            },
+            {
+              "name": "predicate_index",
+              "subject": "PREDICATE_INDEX",
+              "type": "kv",
+              "description": "Predicate index"
+            }
+          ]
         },
         "workers": 4,
-        "queue_size": 1000,
-        "message_handler": {
-          "processing_timeout": "5s",
-          "max_retries": 3
+        "batch_size": 50
+      }
+    },
+    "graph-index-spatial": {
+      "type": "processor",
+      "name": "graph-index-spatial",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes for spatial indexing"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "spatial_index",
+              "subject": "SPATIAL_INDEX",
+              "type": "kv",
+              "description": "Spatial index (geohash to entities)"
+            }
+          ]
         },
-        "data_manager": {
-          "kv_bucket": "ENTITY_STATES",
-          "kv_options": {
-            "max_retries": 5,
-            "timeout": "5s"
-          },
-          "enable_edge_tracking": true,
-          "edge_batch_size": 50
+        "geohash_precision": 6,
+        "workers": 2,
+        "batch_size": 50
+      }
+    },
+    "graph-index-temporal": {
+      "type": "processor",
+      "name": "graph-index-temporal",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch",
+              "description": "Watch entity state changes for temporal indexing"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "temporal_index",
+              "subject": "TEMPORAL_INDEX",
+              "type": "kv",
+              "description": "Temporal index (time buckets to entities)"
+            }
+          ]
         },
-        "indexer": {
-          "indexes": {
-            "predicate": true,
-            "incoming": true,
-            "outgoing": true,
-            "alias": true,
-            "spatial": true,
-            "temporal": true,
-            "context": true
-          },
-          "buckets": {
-            "alias": "ALIAS_INDEX",
-            "predicate": "PREDICATE_INDEX",
-            "incoming": "INCOMING_INDEX",
-            "outgoing": "OUTGOING_INDEX",
-            "spatial": "SPATIAL_INDEX",
-            "temporal": "TEMPORAL_INDEX",
-            "context": "CONTEXT_INDEX"
-          },
-          "batch_processing": {
-            "size": 50
-          },
-          "embedding": {
-            "enabled": false
-          }
-        },
-        "querier": {
-          "cache_enabled": true,
-          "cache_ttl": "5m",
-          "max_cache_size": 1000,
-          "query_timeout": "5s",
-          "result_limit": 500
-        },
-        "graph_analysis": {
-          "community_detection": {
-            "enabled": false
-          },
-          "structural_index": {
-            "enabled": true,
-            "kcore": {
-              "enabled": true,
-              "min_core_filter": 0
+        "time_resolution": "hour",
+        "workers": 2,
+        "batch_size": 50
+      }
+    },
+    "graph-anomalies": {
+      "type": "processor",
+      "name": "graph-anomalies",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "outgoing_watch",
+              "subject": "OUTGOING_INDEX",
+              "type": "kv-watch",
+              "description": "Watch outgoing index changes"
             },
-            "pivot": {
-              "enabled": true,
-              "pivot_count": 16,
-              "max_hop_distance": 10
-            },
-            "compute_on_startup": true,
-            "compute_interval": "1h"
-          },
-          "entityid_edges": {
-            "enabled": true,
-            "sibling_weight": 0.7,
-            "max_siblings": 10,
-            "include_siblings": true
-          },
-          "hierarchy_inference": {
-            "enabled": true,
-            "create_type_edges": true,
-            "create_system_edges": true,
-            "create_domain_edges": true
-          }
+            {
+              "name": "incoming_watch",
+              "subject": "INCOMING_INDEX",
+              "type": "kv-watch",
+              "description": "Watch incoming index changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "structural_index",
+              "subject": "STRUCTURAL_INDEX",
+              "type": "kv",
+              "description": "Structural index (k-core, pivot)"
+            }
+          ]
         },
-        "gateway": {
-          "graphql": {
-            "enabled": true,
-            "bind_address": ":8082",
-            "path": "/graphql",
-            "enable_playground": true,
-            "timeout": "30s"
-          }
-        }
+        "compute_interval": "1h",
+        "pivot_count": 16,
+        "max_hop_distance": 10,
+        "compute_on_startup": true
+      }
+    },
+    "graph-query": {
+      "type": "processor",
+      "name": "graph-query",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "query_requests",
+              "subject": "graph.query.>",
+              "type": "nats-request",
+              "description": "Query requests from gateway"
+            }
+          ],
+          "outputs": []
+        },
+        "request_timeout": "30s",
+        "max_traversal_depth": 5,
+        "max_traversal_nodes": 100
+      }
+    },
+    "graph-gateway": {
+      "type": "gateway",
+      "name": "graph-gateway",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "http",
+              "subject": ":8082",
+              "type": "http",
+              "description": "HTTP server for GraphQL and MCP"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "mutations",
+              "subject": "graph.mutation.*",
+              "type": "nats-request",
+              "description": "Graph mutation requests"
+            }
+          ]
+        },
+        "graphql_path": "/graphql",
+        "mcp_path": "/mcp",
+        "bind_address": ":8082",
+        "enable_playground": true
       }
     },
     "file": {

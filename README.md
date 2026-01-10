@@ -25,8 +25,35 @@ Events → Graphable Interface → Knowledge Graph → Queries
 # Build
 task build
 
+# Run tests
+task test
+
 # Run with a flow configuration
-./bin/semstreams --config configs/semantic-flow.json
+./bin/semstreams --config configs/protocol-flow.json
+```
+
+## Development
+
+Run `task --list` to see all available commands.
+
+```bash
+# Testing
+task test               # Unit tests
+task test:integration   # Integration tests (uses testcontainers)
+task test:race          # Tests with race detector
+task check              # Lint + test
+
+# E2E Tests (requires Docker)
+task e2e:core           # Health + dataflow
+task e2e:structural     # Rules + structural inference
+task e2e:statistical    # BM25 + community detection
+task e2e:semantic       # Neural embeddings + LLM
+task e2e:all            # All tiers sequentially
+
+# Other
+task lint               # Run linters
+task schema:generate    # Generate component schemas
+task services:start:all # Start optional services
 ```
 
 ## The Graphable Interface
@@ -137,9 +164,11 @@ All state lives in NATS JetStream KV buckets:
 |--------|---------|
 | [docs/basics/](docs/basics/) | Getting started, core interfaces |
 | [docs/concepts/](docs/concepts/) | Background knowledge, algorithms |
+| [docs/architecture/](docs/architecture/) | System design, component diagrams |
 | [docs/advanced/](docs/advanced/) | Clustering, LLM, performance tuning |
 | [docs/operations/](docs/operations/) | Local monitoring, deployment |
 | [docs/contributing/](docs/contributing/) | Development, testing, CI |
+| [docs/agents/](docs/agents/) | Go patterns for agent workflows |
 
 ## Requirements
 

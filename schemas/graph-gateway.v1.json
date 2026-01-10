@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "graph-gateway.v1.json",
+  "type": "object",
+  "title": "graph-gateway Configuration",
+  "description": "Graph operations HTTP gateway",
+  "properties": {
+    "bind_address": {
+      "type": "string",
+      "description": "HTTP server bind address",
+      "category": "basic"
+    },
+    "enable_playground": {
+      "type": "boolean",
+      "description": "Enable GraphQL playground",
+      "category": "basic"
+    },
+    "graphql_path": {
+      "type": "string",
+      "description": "GraphQL endpoint path",
+      "category": "basic"
+    },
+    "mcp_path": {
+      "type": "string",
+      "description": "MCP endpoint path",
+      "category": "basic"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "graph-gateway",
+    "type": "gateway",
+    "protocol": "http",
+    "domain": "graph",
+    "version": "1.0.0"
+  }
+}

@@ -48,7 +48,7 @@ The `tiered --variant structural` scenario validates rules-only processing with 
 ### Correct
 
 1. **Zero-embeddings constraint** (`tiered_structural.go:12-30`)
-   - Correctly validates `indexengine_embeddings_generated_total = 0`
+   - Correctly validates `semstreams_graph_embedding_embeddings_generated_total = 0`
    - Warns if structural tier constraint violated
 
 2. **Zero-clusters constraint** (`tiered_structural.go:33-51`)

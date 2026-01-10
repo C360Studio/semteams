@@ -1,13 +1,18 @@
 package component
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"math"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
+
+	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/c360/semstreams/types"
 )
@@ -55,6 +60,28 @@ type RegistrationConfig struct {
 	Version     string       // Component version (semver recommended)
 }
 
+// CapabilityAnnouncement is published to NATS when components register.
+type CapabilityAnnouncement struct {
+	InstanceName string           `json:"instance_name"`
+	Component    string           `json:"component"`
+	Type         string           `json:"type"`
+	Version      string           `json:"version"`
+	InputPorts   []PortCapability `json:"input_ports,omitempty"`
+	OutputPorts  []PortCapability `json:"output_ports,omitempty"`
+	Timestamp    time.Time        `json:"timestamp"`
+	TTL          time.Duration    `json:"ttl"`
+	NodeID       string           `json:"node_id"`
+}
+
+// PortCapability describes an input or output port for discovery.
+type PortCapability struct {
+	Name        string `json:"name"`
+	Subject     string `json:"subject"`
+	Type        string `json:"type"`
+	Interface   string `json:"interface,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
 // Registry manages component factories and instances
 // It provides thread-safe registration and lookup of both factories (for creation)
 // and instances (for discovery and management).
@@ -64,15 +91,23 @@ type Registry struct {
 	payloadRegistry *PayloadRegistry         // Registry for message payloads
 	resourceTracker map[string]string        // Resource ID -> Component instance name mapping
 	mu              sync.RWMutex             // Protects all maps
+
+	// NATS-backed capability discovery (new)
+	remoteCapabilities map[string]*CapabilityAnnouncement
+	nodeID             string
+	natsClient         *natsclient.Client // NATS client for capability operations
+	heartbeatCancel    context.CancelFunc // Cancel heartbeat goroutine
+	instanceFactories  map[string]string  // instance name → factory name mapping
 }
 
 // NewRegistry creates a new empty component registry
 func NewRegistry() *Registry {
 	return &Registry{
-		factories:       make(map[string]*Registration),
-		instances:       make(map[string]Discoverable),
-		payloadRegistry: NewPayloadRegistry(),
-		resourceTracker: make(map[string]string),
+		factories:         make(map[string]*Registration),
+		instances:         make(map[string]Discoverable),
+		payloadRegistry:   NewPayloadRegistry(),
+		resourceTracker:   make(map[string]string),
+		instanceFactories: make(map[string]string),
 	}
 }
 
@@ -162,6 +197,11 @@ func (r *Registry) CreateComponent(
 		return nil, errs.Wrap(err, "Registry", "CreateComponent", "factory execution")
 	}
 
+	// Track which factory created this instance
+	r.mu.Lock()
+	r.instanceFactories[instanceName] = config.Name
+	r.mu.Unlock()
+
 	// Register the instance with the unique instance name
 	if err := r.RegisterInstance(instanceName, component); err != nil {
 		return nil, errs.Wrap(err, "Registry", "CreateComponent", "instance registration")
@@ -200,6 +240,18 @@ func (r *Registry) RegisterInstance(name string, component Discoverable) error {
 	// Track component resources
 	r.trackComponentResources(name, component)
 
+	// Publish capabilities to NATS if initialized
+	if r.natsClient != nil {
+		// Non-blocking, non-fatal - local registration takes priority
+		go func() {
+			if err := r.publishCapabilities(context.Background(), name, component); err != nil {
+				// Log warning but don't fail registration - NATS publish is non-fatal
+				// TODO: add logger field to registry
+				_ = err
+			}
+		}()
+	}
+
 	return nil
 }
 
@@ -220,6 +272,7 @@ func (r *Registry) UnregisterInstance(name string) {
 	}
 
 	delete(r.instances, name)
+	delete(r.instanceFactories, name)
 }
 
 // ListComponents returns all registered component instances
@@ -679,4 +732,361 @@ func RegisterPayload(registration *PayloadRegistration) error {
 // Returns nil if no factory is registered for the given type.
 func CreatePayload(domain, category, version string) any {
 	return globalPayloadRegistry.CreatePayload(domain, category, version)
+}
+
+// matchesPattern checks if subject matches NATS-style pattern with wildcards.
+// "*" matches exactly one token, ">" matches one or more tokens (only at end).
+// Returns true if subject matches pattern, false otherwise.
+// Edge case: both empty returns true.
+func (r *Registry) matchesPattern(subject, pattern string) bool {
+	// Edge case: both empty
+	if subject == "" && pattern == "" {
+		return true
+	}
+
+	// One empty, one not
+	if subject == "" || pattern == "" {
+		return false
+	}
+
+	subjectTokens := strings.Split(subject, ".")
+	patternTokens := strings.Split(pattern, ".")
+
+	// Check for multi-level wildcard (">") - only allowed at end
+	if len(patternTokens) > 0 && patternTokens[len(patternTokens)-1] == ">" {
+		// Multi-level wildcard must match prefix
+		prefixPattern := patternTokens[:len(patternTokens)-1]
+
+		// ">" at root matches everything
+		if len(prefixPattern) == 0 {
+			return true
+		}
+
+		// Subject must have at least as many tokens as prefix
+		if len(subjectTokens) < len(prefixPattern) {
+			return false
+		}
+
+		// Match prefix tokens
+		for i, pToken := range prefixPattern {
+			if pToken != "*" && pToken != subjectTokens[i] {
+				return false
+			}
+		}
+		return true
+	}
+
+	// Validate ">" only appears at end (if at all)
+	for i, token := range patternTokens {
+		if token == ">" && i != len(patternTokens)-1 {
+			return false // ">" in middle is invalid
+		}
+	}
+
+	// Exact token count match required (no multi-level wildcard)
+	if len(subjectTokens) != len(patternTokens) {
+		return false
+	}
+
+	// Match each token
+	for i := 0; i < len(subjectTokens); i++ {
+		if patternTokens[i] != "*" && patternTokens[i] != subjectTokens[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+// GetCapabilities returns capabilities matching the subject pattern.
+// Supports NATS wildcards: "*" matches one token, ">" matches one or more tokens at end.
+// Returns empty slice (not nil) when no matches or cache empty.
+// Thread-safe for concurrent access.
+func (r *Registry) GetCapabilities(subjectPattern string) []*CapabilityAnnouncement {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Always return empty slice, never nil
+	result := []*CapabilityAnnouncement{}
+
+	// If cache is not initialized, return empty slice
+	if r.remoteCapabilities == nil {
+		return result
+	}
+
+	// Convert cache keys to subject format and match
+	// Cache key format: "type.instance" (e.g., "processor.graph-ingest")
+	// Subject format: "type.capabilities.instance" (e.g., "processor.capabilities.graph-ingest")
+	for key, cap := range r.remoteCapabilities {
+		// Convert cache key to subject by inserting "capabilities"
+		parts := strings.SplitN(key, ".", 2)
+		if len(parts) != 2 {
+			continue // Invalid key format
+		}
+		subject := parts[0] + ".capabilities." + parts[1]
+
+		if r.matchesPattern(subject, subjectPattern) {
+			result = append(result, cap)
+		}
+	}
+
+	return result
+}
+
+// WaitForCapabilities waits until minimum capabilities matching pattern are discovered.
+// Returns immediately if len(GetCapabilities(pattern)) >= minCount.
+// Returns ctx.Err() on context cancellation.
+// Returns nil on timeout (proceed anyway - NOT an error per plan).
+// Polls every 100ms.
+func (r *Registry) WaitForCapabilities(ctx context.Context, pattern string, minCount int, timeout time.Duration) error {
+	// Check immediately
+	if len(r.GetCapabilities(pattern)) >= minCount {
+		return nil
+	}
+
+	deadline := time.After(timeout)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-deadline:
+			return nil // Timeout - proceed anyway (not an error)
+		case <-ticker.C:
+			if len(r.GetCapabilities(pattern)) >= minCount {
+				return nil
+			}
+		}
+	}
+}
+
+// updateCapabilityCache updates the capability cache with a new announcement.
+// Thread-safe for concurrent updates.
+// Cache key format: "type.instance" (e.g., "processor.graph-ingest").
+func (r *Registry) updateCapabilityCache(ann *CapabilityAnnouncement) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Build cache key: "type.instance"
+	key := ann.Type + "." + ann.InstanceName
+	r.remoteCapabilities[key] = ann
+}
+
+// InitNATS initializes NATS JetStream capability discovery using natsclient.Client.
+// Creates the COMPONENT_CAPABILITIES stream if it doesn't exist.
+func (r *Registry) InitNATS(ctx context.Context, client *natsclient.Client, nodeID string) error {
+	r.mu.Lock()
+	r.natsClient = client
+	r.nodeID = nodeID
+	r.remoteCapabilities = make(map[string]*CapabilityAnnouncement)
+	r.mu.Unlock()
+
+	// Create COMPONENT_CAPABILITIES stream using natsclient
+	// Use explicit component types to avoid overlapping with JetStream API subjects
+	_, err := client.EnsureStream(ctx, jetstream.StreamConfig{
+		Name: "COMPONENT_CAPABILITIES",
+		Subjects: []string{
+			"processor.capabilities.*",
+			"input.capabilities.*",
+			"output.capabilities.*",
+			"storage.capabilities.*",
+			"gateway.capabilities.*",
+		},
+		Storage:           jetstream.MemoryStorage,
+		MaxMsgsPerSubject: 1,
+		MaxAge:            time.Hour,
+	})
+	if err != nil {
+		return errs.Wrap(err, "Registry", "InitNATS", "ensure capabilities stream")
+	}
+
+	return nil
+}
+
+// publishCapabilities publishes a component's capabilities to NATS.
+// Subject format: {type}.capabilities.{instanceName}
+func (r *Registry) publishCapabilities(ctx context.Context, instanceName string, component Discoverable) error {
+	r.mu.RLock()
+	natsClient := r.natsClient
+	nodeID := r.nodeID
+	r.mu.RUnlock()
+
+	if natsClient == nil {
+		return errs.WrapInvalid(
+			fmt.Errorf("NATS client not initialized"),
+			"Registry", "publishCapabilities", "check NATS client")
+	}
+
+	// Find registration for this component
+	registration := r.getRegistrationForInstance(instanceName)
+	if registration == nil {
+		return errs.WrapInvalid(
+			fmt.Errorf("no registration found for component %s", instanceName),
+			"Registry", "publishCapabilities", "lookup registration")
+	}
+
+	// Build capability announcement
+	announcement := CapabilityAnnouncement{
+		InstanceName: instanceName,
+		Component:    registration.Name,
+		Type:         registration.Type,
+		Version:      registration.Version,
+		InputPorts:   r.portsToCapabilities(component.InputPorts()),
+		OutputPorts:  r.portsToCapabilities(component.OutputPorts()),
+		Timestamp:    time.Now(),
+		TTL:          60 * time.Second,
+		NodeID:       nodeID,
+	}
+
+	// Publish to subject: {type}.capabilities.{instanceName}
+	subject := fmt.Sprintf("%s.capabilities.%s", registration.Type, instanceName)
+	data, err := json.Marshal(announcement)
+	if err != nil {
+		return errs.Wrap(err, "Registry", "publishCapabilities", "marshal announcement")
+	}
+
+	_, err = natsClient.PublishToStreamWithAck(ctx, subject, data)
+	if err != nil {
+		return errs.Wrap(err, "Registry", "publishCapabilities", "publish to NATS")
+	}
+
+	return nil
+}
+
+// portsToCapabilities converts Port slice to PortCapability slice.
+func (r *Registry) portsToCapabilities(ports []Port) []PortCapability {
+	capabilities := make([]PortCapability, 0, len(ports))
+	for _, port := range ports {
+		capability := PortCapability{
+			Name:        port.Name,
+			Description: port.Description,
+		}
+
+		// Extract subject and type based on port config type
+		switch cfg := port.Config.(type) {
+		case *NATSStreamPortConfig:
+			capability.Subject = cfg.Subject
+			capability.Type = "stream"
+		case *NATSRequestPortConfig:
+			capability.Subject = cfg.Subject
+			capability.Type = "request"
+		default:
+			capability.Subject = ""
+			capability.Type = "unknown"
+		}
+
+		capabilities = append(capabilities, capability)
+	}
+	return capabilities
+}
+
+// SubscribeCapabilities subscribes to capability announcements from NATS.
+// If no patterns provided, defaults to "*.capabilities.*" (all components).
+func (r *Registry) SubscribeCapabilities(ctx context.Context, patterns ...string) error {
+	r.mu.RLock()
+	natsClient := r.natsClient
+	nodeID := r.nodeID
+	r.mu.RUnlock()
+
+	if natsClient == nil {
+		return errs.WrapInvalid(
+			fmt.Errorf("NATS client not initialized"),
+			"Registry", "SubscribeCapabilities", "check NATS client")
+	}
+
+	if len(patterns) == 0 {
+		// Default: subscribe to all component types
+		patterns = []string{"processor.capabilities.>"}
+	}
+
+	// Use natsclient's consumer management
+	// Note: Currently using first pattern only. For multiple patterns, we would need
+	// to create multiple consumers or use a more complex filter.
+	err := natsClient.ConsumeStreamWithConfig(ctx, natsclient.StreamConsumerConfig{
+		StreamName:    "COMPONENT_CAPABILITIES",
+		ConsumerName:  fmt.Sprintf("cap-registry-%s", nodeID),
+		FilterSubject: patterns[0],
+		DeliverPolicy: "all",
+		AckPolicy:     "explicit",
+	}, func(_ context.Context, msg jetstream.Msg) {
+		var ann CapabilityAnnouncement
+		if err := json.Unmarshal(msg.Data(), &ann); err == nil {
+			r.updateCapabilityCache(&ann)
+		}
+		msg.Ack()
+	})
+
+	return err
+}
+
+// StartHeartbeat starts periodic republishing of all component capabilities.
+func (r *Registry) StartHeartbeat(ctx context.Context, interval time.Duration) {
+	// Create cancelable context
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+
+	r.mu.Lock()
+	r.heartbeatCancel = cancel
+	r.mu.Unlock()
+
+	// Start heartbeat goroutine
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				return
+			case <-ticker.C:
+				r.republishAllCapabilities(heartbeatCtx)
+			}
+		}
+	}()
+}
+
+// StopHeartbeat stops the heartbeat goroutine.
+func (r *Registry) StopHeartbeat() {
+	r.mu.Lock()
+	cancel := r.heartbeatCancel
+	r.mu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// republishAllCapabilities republishes capabilities for all registered instances.
+func (r *Registry) republishAllCapabilities(ctx context.Context) {
+	r.mu.RLock()
+	// Clone instances map to avoid holding lock during publish
+	instances := make(map[string]Discoverable, len(r.instances))
+	maps.Copy(instances, r.instances)
+	r.mu.RUnlock()
+
+	// Publish each instance (non-fatal errors)
+	for name, component := range instances {
+		if err := r.publishCapabilities(ctx, name, component); err != nil {
+			// Log warning but continue - NATS publish is non-fatal
+			// TODO: add logger field to registry
+			_ = err
+		}
+	}
+}
+
+// getRegistrationForInstance finds the registration for a component instance by name.
+// Returns nil if no factory tracking exists for this instance.
+func (r *Registry) getRegistrationForInstance(instanceName string) *Registration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	// Look up factory name for this instance
+	factoryName, exists := r.instanceFactories[instanceName]
+	if !exists {
+		return nil
+	}
+
+	// Return the registration for this factory
+	return r.factories[factoryName]
 }

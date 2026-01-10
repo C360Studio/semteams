@@ -16,12 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/datamanager"
+	"github.com/c360/semstreams/graph/messagemanager"
 	"github.com/c360/semstreams/message"
 	"github.com/c360/semstreams/metric"
 	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/processor/graph/datamanager"
-	"github.com/c360/semstreams/processor/graph/indexmanager"
-	"github.com/c360/semstreams/processor/graph/messagemanager"
 )
 
 // testBuckets holds all KV buckets needed for integration tests
@@ -95,50 +94,30 @@ func setupDataManager(
 	return dataManager, dataErrors
 }
 
-// setupIndexManager creates and starts the index manager
-func setupIndexManager(
-	ctx context.Context,
-	t *testing.T,
-	buckets testBuckets,
-	client *natsclient.Client,
-	wg *sync.WaitGroup,
-) (indexmanager.Indexer, chan error) {
-	t.Helper()
+// mockIndexManager implements messagemanager.IndexManager for testing.
+// Returns aliasOrID unchanged, which is correct behavior when no alias mapping exists.
+// This is appropriate for this test because:
+// 1. Test entities use direct entity IDs, not aliases
+// 2. Real alias resolution via graph.index.query.alias would return the same result
+// 3. This test focuses on payload processing, not alias resolution
+// For alias-specific testing, see E2E tests in test/e2e/scenarios/
+type mockIndexManager struct{}
 
-	indexConfig := indexmanager.DefaultConfig()
-	indexBuckets := map[string]jetstream.KeyValue{
-		"ENTITY_STATES":   buckets.entity,
-		"PREDICATE_INDEX": buckets.predicate,
-		"INCOMING_INDEX":  buckets.incoming,
-		"ALIAS_INDEX":     buckets.alias,
-		"SPATIAL_INDEX":   buckets.spatial,
-		"TEMPORAL_INDEX":  buckets.temporal,
-	}
-	indexManager, err := indexmanager.NewManager(indexConfig, indexBuckets, client, nil, nil)
-	require.NoError(t, err, "Failed to create index manager")
-
-	indexErrors := make(chan error, 1)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		indexErrors <- indexManager.Run(ctx, func() {})
-	}()
-
-	return indexManager, indexErrors
+func (m *mockIndexManager) ResolveAlias(_ context.Context, aliasOrID string) (string, error) {
+	return aliasOrID, nil
 }
 
 // setupMessageManager creates the message manager (stateless)
 func setupMessageManager(
 	t *testing.T,
 	dataManager *datamanager.Manager,
-	indexManager indexmanager.Indexer,
 ) messagemanager.MessageHandler {
 	t.Helper()
 
 	config := messagemanager.DefaultConfig()
 	deps := messagemanager.Dependencies{
 		EntityManager: dataManager,
-		IndexManager:  indexManager,
+		IndexManager:  &mockIndexManager{},
 		Logger:        slog.Default(),
 	}
 
@@ -146,7 +125,7 @@ func setupMessageManager(
 }
 
 // checkStartupErrors waits for initialization and checks for startup errors
-func checkStartupErrors(t *testing.T, dataErrors, indexErrors chan error) {
+func checkStartupErrors(t *testing.T, dataErrors chan error) {
 	t.Helper()
 
 	time.Sleep(100 * time.Millisecond)
@@ -155,10 +134,6 @@ func checkStartupErrors(t *testing.T, dataErrors, indexErrors chan error) {
 	case err := <-dataErrors:
 		if err != nil {
 			t.Fatalf("DataManager failed to start: %v", err)
-		}
-	case err := <-indexErrors:
-		if err != nil {
-			t.Fatalf("IndexManager failed to start: %v", err)
 		}
 	default:
 		// No errors yet - services are starting up
@@ -196,6 +171,7 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 	}
 
 	// Create test NATS client with JetStream and KV
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
 	ctx := context.Background()
 
@@ -207,11 +183,10 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 	// Setup managers
 	var wg sync.WaitGroup
 	dataManager, dataErrors := setupDataManager(ctx, t, buckets.entity, &wg)
-	indexManager, indexErrors := setupIndexManager(ctx, t, buckets, testClient.Client, &wg)
-	messageManager := setupMessageManager(t, dataManager, indexManager)
+	messageManager := setupMessageManager(t, dataManager)
 
 	// Verify startup
-	checkStartupErrors(t, dataErrors, indexErrors)
+	checkStartupErrors(t, dataErrors)
 
 	// Ensure clean shutdown
 	defer func() {
@@ -225,6 +200,7 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 		wantEntityParts         int
 		wantTriples             int
 		wantRelationshipTriples int // relationship triples (triples where Object is an entity ID)
+		wantSerialNumber        string
 	}{
 		{
 			name: "temperature sensor with zone reference",
@@ -257,6 +233,24 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 			wantEntityParts:         6,
 			wantTriples:             4, // measurement, type, zone reference, timestamp
 			wantRelationshipTriples: 1, // zone relationship triple
+		},
+		{
+			name: "temperature sensor with serial number (alias predicate)",
+			reading: SensorReading{
+				DeviceID:     "temp-sensor-001",
+				SensorType:   "temperature",
+				Value:        36.5,
+				Unit:         "fahrenheit",
+				ZoneEntityID: "c360.logistics.facility.zone.area.cold-storage-1",
+				ObservedAt:   time.Date(2024, 11, 15, 8, 0, 0, 0, time.UTC),
+				OrgID:        "c360",
+				Platform:     "logistics",
+				SerialNumber: "SN-TEMP-2024-001", // Alias triple via iot.sensor.serial predicate
+			},
+			wantEntityParts:         6,
+			wantTriples:             5, // measurement, type, zone reference, timestamp, serial
+			wantRelationshipTriples: 1, // zone relationship triple
+			wantSerialNumber:        "SN-TEMP-2024-001",
 		},
 	}
 
@@ -375,6 +369,28 @@ func TestSensorReading_ProcessedByMessageManager_ProducesEntityState(t *testing.
 			if !foundZoneTriple {
 				t.Error("EntityState missing geo.location.zone triple")
 			}
+
+			// T044: Verify serial number triple is generated (alias predicate for ALIAS_INDEX)
+			// This validates the iot.sensor.serial vocabulary predicate which enables alias resolution
+			if tt.wantSerialNumber != "" {
+				var foundSerialTriple bool
+				for _, triple := range state.Triples {
+					if triple.Predicate == PredicateSensorSerial {
+						foundSerialTriple = true
+						serial, ok := triple.Object.(string)
+						if !ok {
+							t.Errorf("iot.sensor.serial Object is not a string: %T", triple.Object)
+							continue
+						}
+						if serial != tt.wantSerialNumber {
+							t.Errorf("Serial number = %q, want %q", serial, tt.wantSerialNumber)
+						}
+					}
+				}
+				if !foundSerialTriple {
+					t.Errorf("EntityState missing %s triple for serial number alias", PredicateSensorSerial)
+				}
+			}
 		})
 	}
 }
@@ -387,6 +403,7 @@ func TestZone_ProcessedByMessageManager_ProducesEntityState(t *testing.T) {
 	}
 
 	// Create test NATS client with JetStream and KV
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
 	ctx := context.Background()
 
@@ -398,11 +415,10 @@ func TestZone_ProcessedByMessageManager_ProducesEntityState(t *testing.T) {
 	// Setup managers
 	var wg sync.WaitGroup
 	dataManager, dataErrors := setupDataManager(ctx, t, buckets.entity, &wg)
-	indexManager, indexErrors := setupIndexManager(ctx, t, buckets, testClient.Client, &wg)
-	messageManager := setupMessageManager(t, dataManager, indexManager)
+	messageManager := setupMessageManager(t, dataManager)
 
 	// Verify startup
-	checkStartupErrors(t, dataErrors, indexErrors)
+	checkStartupErrors(t, dataErrors)
 
 	// Ensure clean shutdown
 	defer func() {
@@ -464,6 +480,7 @@ func TestMultipleSensorReadings_SameDevice_ConsistentEntityID(t *testing.T) {
 	}
 
 	// Create test NATS client with JetStream and KV
+	// Each test gets its own NATS container, so bucket isolation is automatic
 	testClient := natsclient.NewTestClient(t, natsclient.WithJetStream(), natsclient.WithKV())
 	ctx := context.Background()
 
@@ -475,11 +492,10 @@ func TestMultipleSensorReadings_SameDevice_ConsistentEntityID(t *testing.T) {
 	// Setup managers
 	var wg sync.WaitGroup
 	dataManager, dataErrors := setupDataManager(ctx, t, buckets.entity, &wg)
-	indexManager, indexErrors := setupIndexManager(ctx, t, buckets, testClient.Client, &wg)
-	messageManager := setupMessageManager(t, dataManager, indexManager)
+	messageManager := setupMessageManager(t, dataManager)
 
 	// Verify startup
-	checkStartupErrors(t, dataErrors, indexErrors)
+	checkStartupErrors(t, dataErrors)
 
 	// Ensure clean shutdown
 	defer func() {

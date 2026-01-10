@@ -1,0 +1,363 @@
+# HELP go_gc_duration_seconds A summary of the wall-time pause (stop-the-world) duration in garbage collection cycles.
+# TYPE go_gc_duration_seconds summary
+go_gc_duration_seconds{quantile="0"} 1.1833e-05
+go_gc_duration_seconds{quantile="0.25"} 4.2708e-05
+go_gc_duration_seconds{quantile="0.5"} 0.00010275
+go_gc_duration_seconds{quantile="0.75"} 0.000623625
+go_gc_duration_seconds{quantile="1"} 0.00282525
+go_gc_duration_seconds_sum 0.082979448
+go_gc_duration_seconds_count 205
+# HELP go_gc_gogc_percent Heap size target percentage configured by the user, otherwise 100. This value is set by the GOGC environment variable, and the runtime/debug.SetGCPercent function. Sourced from /gc/gogc:percent.
+# TYPE go_gc_gogc_percent gauge
+go_gc_gogc_percent 100
+# HELP go_gc_gomemlimit_bytes Go runtime memory limit configured by the user, otherwise math.MaxInt64. This value is set by the GOMEMLIMIT environment variable, and the runtime/debug.SetMemoryLimit function. Sourced from /gc/gomemlimit:bytes.
+# TYPE go_gc_gomemlimit_bytes gauge
+go_gc_gomemlimit_bytes 9.223372036854776e+18
+# HELP go_goroutines Number of goroutines that currently exist.
+# TYPE go_goroutines gauge
+go_goroutines 141
+# HELP go_info Information about the Go environment.
+# TYPE go_info gauge
+go_info{version="go1.25.5"} 1
+# HELP go_memstats_alloc_bytes Number of bytes allocated in heap and currently in use. Equals to /memory/classes/heap/objects:bytes.
+# TYPE go_memstats_alloc_bytes gauge
+go_memstats_alloc_bytes 1.4700904e+07
+# HELP go_memstats_alloc_bytes_total Total number of bytes allocated in heap until now, even if released already. Equals to /gc/heap/allocs:bytes.
+# TYPE go_memstats_alloc_bytes_total counter
+go_memstats_alloc_bytes_total 1.095835432e+09
+# HELP go_memstats_buck_hash_sys_bytes Number of bytes used by the profiling bucket hash table. Equals to /memory/classes/profiling/buckets:bytes.
+# TYPE go_memstats_buck_hash_sys_bytes gauge
+go_memstats_buck_hash_sys_bytes 1.445361e+06
+# HELP go_memstats_frees_total Total number of heap objects frees. Equals to /gc/heap/frees:objects + /gc/heap/tiny/allocs:objects.
+# TYPE go_memstats_frees_total counter
+go_memstats_frees_total 1.0073339e+07
+# HELP go_memstats_gc_sys_bytes Number of bytes used for garbage collection system metadata. Equals to /memory/classes/metadata/other:bytes.
+# TYPE go_memstats_gc_sys_bytes gauge
+go_memstats_gc_sys_bytes 3.961616e+06
+# HELP go_memstats_heap_alloc_bytes Number of heap bytes allocated and currently in use, same as go_memstats_alloc_bytes. Equals to /memory/classes/heap/objects:bytes.
+# TYPE go_memstats_heap_alloc_bytes gauge
+go_memstats_heap_alloc_bytes 1.4700904e+07
+# HELP go_memstats_heap_idle_bytes Number of heap bytes waiting to be used. Equals to /memory/classes/heap/released:bytes + /memory/classes/heap/free:bytes.
+# TYPE go_memstats_heap_idle_bytes gauge
+go_memstats_heap_idle_bytes 1.0100736e+07
+# HELP go_memstats_heap_inuse_bytes Number of heap bytes that are in use. Equals to /memory/classes/heap/objects:bytes + /memory/classes/heap/unused:bytes
+# TYPE go_memstats_heap_inuse_bytes gauge
+go_memstats_heap_inuse_bytes 2.1356544e+07
+# HELP go_memstats_heap_objects Number of currently allocated objects. Equals to /gc/heap/objects:objects.
+# TYPE go_memstats_heap_objects gauge
+go_memstats_heap_objects 79163
+# HELP go_memstats_heap_released_bytes Number of heap bytes released to OS. Equals to /memory/classes/heap/released:bytes.
+# TYPE go_memstats_heap_released_bytes gauge
+go_memstats_heap_released_bytes 8.052736e+06
+# HELP go_memstats_heap_sys_bytes Number of heap bytes obtained from system. Equals to /memory/classes/heap/objects:bytes + /memory/classes/heap/unused:bytes + /memory/classes/heap/released:bytes + /memory/classes/heap/free:bytes.
+# TYPE go_memstats_heap_sys_bytes gauge
+go_memstats_heap_sys_bytes 3.145728e+07
+# HELP go_memstats_last_gc_time_seconds Number of seconds since 1970 of last garbage collection.
+# TYPE go_memstats_last_gc_time_seconds gauge
+go_memstats_last_gc_time_seconds 1.767992484501698e+09
+# HELP go_memstats_mallocs_total Total number of heap objects allocated, both live and gc-ed. Semantically a counter version for go_memstats_heap_objects gauge. Equals to /gc/heap/allocs:objects + /gc/heap/tiny/allocs:objects.
+# TYPE go_memstats_mallocs_total counter
+go_memstats_mallocs_total 1.0152502e+07
+# HELP go_memstats_mcache_inuse_bytes Number of bytes in use by mcache structures. Equals to /memory/classes/metadata/mcache/inuse:bytes.
+# TYPE go_memstats_mcache_inuse_bytes gauge
+go_memstats_mcache_inuse_bytes 14496
+# HELP go_memstats_mcache_sys_bytes Number of bytes used for mcache structures obtained from system. Equals to /memory/classes/metadata/mcache/inuse:bytes + /memory/classes/metadata/mcache/free:bytes.
+# TYPE go_memstats_mcache_sys_bytes gauge
+go_memstats_mcache_sys_bytes 15704
+# HELP go_memstats_mspan_inuse_bytes Number of bytes in use by mspan structures. Equals to /memory/classes/metadata/mspan/inuse:bytes.
+# TYPE go_memstats_mspan_inuse_bytes gauge
+go_memstats_mspan_inuse_bytes 380640
+# HELP go_memstats_mspan_sys_bytes Number of bytes used for mspan structures obtained from system. Equals to /memory/classes/metadata/mspan/inuse:bytes + /memory/classes/metadata/mspan/free:bytes.
+# TYPE go_memstats_mspan_sys_bytes gauge
+go_memstats_mspan_sys_bytes 424320
+# HELP go_memstats_next_gc_bytes Number of heap bytes when next garbage collection will take place. Equals to /gc/heap/goal:bytes.
+# TYPE go_memstats_next_gc_bytes gauge
+go_memstats_next_gc_bytes 2.7054538e+07
+# HELP go_memstats_other_sys_bytes Number of bytes used for other system allocations. Equals to /memory/classes/other:bytes.
+# TYPE go_memstats_other_sys_bytes gauge
+go_memstats_other_sys_bytes 2.105647e+06
+# HELP go_memstats_stack_inuse_bytes Number of bytes obtained from system for stack allocator in non-CGO environments. Equals to /memory/classes/heap/stacks:bytes.
+# TYPE go_memstats_stack_inuse_bytes gauge
+go_memstats_stack_inuse_bytes 2.097152e+06
+# HELP go_memstats_stack_sys_bytes Number of bytes obtained from system for stack allocator. Equals to /memory/classes/heap/stacks:bytes + /memory/classes/os-stacks:bytes.
+# TYPE go_memstats_stack_sys_bytes gauge
+go_memstats_stack_sys_bytes 2.097152e+06
+# HELP go_memstats_sys_bytes Number of bytes obtained from system. Equals to /memory/classes/total:byte.
+# TYPE go_memstats_sys_bytes gauge
+go_memstats_sys_bytes 4.150708e+07
+# HELP go_sched_gomaxprocs_threads The current runtime.GOMAXPROCS setting, or the number of operating system threads that can execute user-level Go code simultaneously. Sourced from /sched/gomaxprocs:threads.
+# TYPE go_sched_gomaxprocs_threads gauge
+go_sched_gomaxprocs_threads 12
+# HELP go_threads Number of OS threads created.
+# TYPE go_threads gauge
+go_threads 16
+# HELP indexengine_embedding_provider Embedding provider type: 0=disabled, 1=bm25, 2=http (legacy metric)
+# TYPE indexengine_embedding_provider gauge
+indexengine_embedding_provider 2
+# HELP indexengine_events_processed_total Total events processed by index engine
+# TYPE indexengine_events_processed_total counter
+indexengine_events_processed_total 629
+# HELP indexengine_index_updates_total Total index update operations by index type
+# TYPE indexengine_index_updates_total counter
+indexengine_index_updates_total{index_type="alias"} 131
+indexengine_index_updates_total{index_type="incoming"} 5758
+indexengine_index_updates_total{index_type="outgoing"} 589
+indexengine_index_updates_total{index_type="predicate"} 3896
+# HELP process_cpu_seconds_total Total user and system CPU time spent in seconds.
+# TYPE process_cpu_seconds_total counter
+process_cpu_seconds_total 7.27
+# HELP process_max_fds Maximum number of open file descriptors.
+# TYPE process_max_fds gauge
+process_max_fds 1.048576e+06
+# HELP process_network_receive_bytes_total Number of bytes received by the process over the network.
+# TYPE process_network_receive_bytes_total counter
+process_network_receive_bytes_total 1.53852205e+08
+# HELP process_network_transmit_bytes_total Number of bytes sent by the process over the network.
+# TYPE process_network_transmit_bytes_total counter
+process_network_transmit_bytes_total 8.425325e+07
+# HELP process_open_fds Number of open file descriptors.
+# TYPE process_open_fds gauge
+process_open_fds 19
+# HELP process_resident_memory_bytes Resident memory size in bytes.
+# TYPE process_resident_memory_bytes gauge
+process_resident_memory_bytes 4.6215168e+07
+# HELP process_start_time_seconds Start time of the process since unix epoch in seconds.
+# TYPE process_start_time_seconds gauge
+process_start_time_seconds 1.7679921397e+09
+# HELP process_virtual_memory_bytes Virtual memory size in bytes.
+# TYPE process_virtual_memory_bytes gauge
+process_virtual_memory_bytes 1.278824448e+09
+# HELP process_virtual_memory_max_bytes Maximum amount of virtual memory available in bytes.
+# TYPE process_virtual_memory_max_bytes gauge
+process_virtual_memory_max_bytes 1.8446744073709552e+19
+# HELP semstreams_buffer_drops_total Total number of items dropped due to overflow
+# TYPE semstreams_buffer_drops_total counter
+semstreams_buffer_drops_total{component="udp_input"} 0
+# HELP semstreams_buffer_overflows_total Total number of buffer overflow events
+# TYPE semstreams_buffer_overflows_total counter
+semstreams_buffer_overflows_total{component="udp_input"} 0
+# HELP semstreams_buffer_peeks_total Total number of buffer peek operations
+# TYPE semstreams_buffer_peeks_total counter
+semstreams_buffer_peeks_total{component="udp_input"} 0
+# HELP semstreams_buffer_reads_total Total number of buffer read operations
+# TYPE semstreams_buffer_reads_total counter
+semstreams_buffer_reads_total{component="udp_input"} 0
+# HELP semstreams_buffer_size Current number of items in buffer
+# TYPE semstreams_buffer_size gauge
+semstreams_buffer_size{component="udp_input"} 0
+# HELP semstreams_buffer_utilization Buffer utilization as a percentage (0.0 to 1.0)
+# TYPE semstreams_buffer_utilization gauge
+semstreams_buffer_utilization{component="udp_input"} 0
+# HELP semstreams_buffer_writes_total Total number of buffer write operations
+# TYPE semstreams_buffer_writes_total counter
+semstreams_buffer_writes_total{component="udp_input"} 3
+# HELP semstreams_cache_deletes_total Total number of cache delete operations
+# TYPE semstreams_cache_deletes_total counter
+semstreams_cache_deletes_total{component="objectstore"} 0
+# HELP semstreams_cache_evictions_total Total number of cache evictions
+# TYPE semstreams_cache_evictions_total counter
+semstreams_cache_evictions_total{component="objectstore"} 0
+# HELP semstreams_cache_hits_total Total number of cache hits
+# TYPE semstreams_cache_hits_total counter
+semstreams_cache_hits_total{component="objectstore"} 0
+# HELP semstreams_cache_misses_total Total number of cache misses
+# TYPE semstreams_cache_misses_total counter
+semstreams_cache_misses_total{component="objectstore"} 0
+# HELP semstreams_cache_sets_total Total number of cache set operations
+# TYPE semstreams_cache_sets_total counter
+semstreams_cache_sets_total{component="objectstore"} 58
+# HELP semstreams_cache_size Current number of entries in cache
+# TYPE semstreams_cache_size gauge
+semstreams_cache_size{component="objectstore"} 58
+# HELP semstreams_datamanager_entities_updated_total Total entities updated
+# TYPE semstreams_datamanager_entities_updated_total counter
+semstreams_datamanager_entities_updated_total 671
+# HELP semstreams_file_input_bytes_read_total Total bytes read from files
+# TYPE semstreams_file_input_bytes_read_total counter
+semstreams_file_input_bytes_read_total 10060
+# HELP semstreams_file_input_files_processed_total Total files processed
+# TYPE semstreams_file_input_files_processed_total counter
+semstreams_file_input_files_processed_total 1
+# HELP semstreams_file_input_lines_published_total Total lines published to NATS
+# TYPE semstreams_file_input_lines_published_total counter
+semstreams_file_input_lines_published_total 15
+# HELP semstreams_file_input_lines_read_total Total lines read from files
+# TYPE semstreams_file_input_lines_read_total counter
+semstreams_file_input_lines_read_total 15
+# HELP semstreams_file_input_parse_errors_total Total JSON parse errors
+# TYPE semstreams_file_input_parse_errors_total counter
+semstreams_file_input_parse_errors_total 0
+# HELP semstreams_graph_embedding_dedup_hits_total Total embedding deduplication cache hits
+# TYPE semstreams_graph_embedding_dedup_hits_total counter
+semstreams_graph_embedding_dedup_hits_total 136
+# HELP semstreams_graph_embedding_embedder_type Embedder type: 0=disabled, 1=bm25, 2=http
+# TYPE semstreams_graph_embedding_embedder_type gauge
+semstreams_graph_embedding_embedder_type 2
+# HELP semstreams_graph_embedding_embeddings_generated_total Total embeddings generated
+# TYPE semstreams_graph_embedding_embeddings_generated_total counter
+semstreams_graph_embedding_embeddings_generated_total 194
+# HELP semstreams_graph_embedding_errors_total Total embedding generation errors
+# TYPE semstreams_graph_embedding_errors_total counter
+semstreams_graph_embedding_errors_total 0
+# HELP semstreams_graph_embedding_pending Current number of pending embeddings
+# TYPE semstreams_graph_embedding_pending gauge
+semstreams_graph_embedding_pending 0
+# HELP semstreams_graph_index_kv_operations_total Total KV bucket operations
+# TYPE semstreams_graph_index_kv_operations_total counter
+semstreams_graph_index_kv_operations_total{bucket="alias",operation="put"} 131
+semstreams_graph_index_kv_operations_total{bucket="incoming",operation="put"} 5758
+semstreams_graph_index_kv_operations_total{bucket="outgoing",operation="put"} 589
+semstreams_graph_index_kv_operations_total{bucket="predicate",operation="put"} 3896
+# HELP semstreams_graph_index_watch_events_total Total watch events received
+# TYPE semstreams_graph_index_watch_events_total counter
+semstreams_graph_index_watch_events_total{event_type="update"} 629
+# HELP semstreams_nats_circuit_breaker NATS circuit breaker status (0=closed, 1=open, 2=half-open)
+# TYPE semstreams_nats_circuit_breaker gauge
+semstreams_nats_circuit_breaker 0
+# HELP semstreams_nats_connected NATS connection status (0=disconnected, 1=connected)
+# TYPE semstreams_nats_connected gauge
+semstreams_nats_connected 0
+# HELP semstreams_nats_reconnects_total Total number of NATS reconnections
+# TYPE semstreams_nats_reconnects_total counter
+semstreams_nats_reconnects_total 0
+# HELP semstreams_nats_rtt_milliseconds NATS round-trip time in milliseconds
+# TYPE semstreams_nats_rtt_milliseconds gauge
+semstreams_nats_rtt_milliseconds 0
+# HELP semstreams_objectstore_write_duration_seconds Write operation duration in seconds
+# TYPE semstreams_objectstore_write_duration_seconds histogram
+semstreams_objectstore_write_duration_seconds_bucket{bucket="semstreams_kitchen_sink_store",operation="store_content",le="0.001"} 27
+semstreams_objectstore_write_duration_seconds_bucket{bucket="semstreams_kitchen_sink_store",operation="store_content",le="0.005"} 56
+semstreams_objectstore_write_duration_seconds_bucket{bucket="semstreams_kitchen_sink_store",operation="store_content",le="0.01"} 58
+semstreams_objectstore_write_duration_seconds_bucket{bucket="semstreams_kitchen_sink_store",operation="store_content",le="0.05"} 58
+semstreams_objectstore_write_duration_seconds_bucket{bucket="semstreams_kitchen_sink_store",operation="store_content",le="0.1"} 58
+semstreams_objectstore_write_duration_seconds_bucket{bucket="semstreams_kitchen_sink_store",operation="store_content",le="0.5"} 58
+semstreams_objectstore_write_duration_seconds_bucket{bucket="semstreams_kitchen_sink_store",operation="store_content",le="1"} 58
+semstreams_objectstore_write_duration_seconds_bucket{bucket="semstreams_kitchen_sink_store",operation="store_content",le="2"} 58
+semstreams_objectstore_write_duration_seconds_bucket{bucket="semstreams_kitchen_sink_store",operation="store_content",le="+Inf"} 58
+semstreams_objectstore_write_duration_seconds_sum{bucket="semstreams_kitchen_sink_store",operation="store_content"} 0.081451412
+semstreams_objectstore_write_duration_seconds_count{bucket="semstreams_kitchen_sink_store",operation="store_content"} 58
+# HELP semstreams_objectstore_write_operations_total Total number of write operations
+# TYPE semstreams_objectstore_write_operations_total counter
+semstreams_objectstore_write_operations_total{bucket="semstreams_kitchen_sink_store",operation="store_content"} 58
+# HELP semstreams_rule_active_rules Number of active rules loaded
+# TYPE semstreams_rule_active_rules gauge
+semstreams_rule_active_rules 3
+# HELP semstreams_rule_debounce_delays_total Total number of debounced rule evaluations (coalesced updates)
+# TYPE semstreams_rule_debounce_delays_total counter
+semstreams_rule_debounce_delays_total 0
+# HELP semstreams_rule_evaluation_duration_seconds Time spent evaluating individual rules
+# TYPE semstreams_rule_evaluation_duration_seconds histogram
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="0.001"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="0.005"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="0.01"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="0.025"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="0.05"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="0.1"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="0.25"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="0.5"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="1"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="cold-storage-temp-alert",le="+Inf"} 769
+semstreams_rule_evaluation_duration_seconds_sum{rule_name="cold-storage-temp-alert"} 0.0025799149999999565
+semstreams_rule_evaluation_duration_seconds_count{rule_name="cold-storage-temp-alert"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="0.001"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="0.005"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="0.01"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="0.025"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="0.05"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="0.1"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="0.25"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="0.5"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="1"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="high-humidity-alert",le="+Inf"} 769
+semstreams_rule_evaluation_duration_seconds_sum{rule_name="high-humidity-alert"} 0.00335366699999997
+semstreams_rule_evaluation_duration_seconds_count{rule_name="high-humidity-alert"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="0.001"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="0.005"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="0.01"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="0.025"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="0.05"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="0.1"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="0.25"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="0.5"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="1"} 769
+semstreams_rule_evaluation_duration_seconds_bucket{rule_name="low-pressure-alert",le="+Inf"} 769
+semstreams_rule_evaluation_duration_seconds_sum{rule_name="low-pressure-alert"} 0.003327033999999976
+semstreams_rule_evaluation_duration_seconds_count{rule_name="low-pressure-alert"} 769
+# HELP semstreams_rule_evaluations_total Total rule evaluations performed
+# TYPE semstreams_rule_evaluations_total counter
+semstreams_rule_evaluations_total{result="not_triggered",rule_name="cold-storage-temp-alert"} 768
+semstreams_rule_evaluations_total{result="not_triggered",rule_name="high-humidity-alert"} 768
+semstreams_rule_evaluations_total{result="not_triggered",rule_name="low-pressure-alert"} 768
+semstreams_rule_evaluations_total{result="triggered",rule_name="cold-storage-temp-alert"} 1
+semstreams_rule_evaluations_total{result="triggered",rule_name="high-humidity-alert"} 1
+semstreams_rule_evaluations_total{result="triggered",rule_name="low-pressure-alert"} 1
+# HELP semstreams_rule_events_published_total Rule events published to NATS
+# TYPE semstreams_rule_events_published_total counter
+semstreams_rule_events_published_total{event_type="entity_update",subject="graph.events.entity.update"} 3
+semstreams_rule_events_published_total{event_type="triggered",subject="events.rule.triggered"} 3
+# HELP semstreams_rule_messages_received_total Total messages received for rule evaluation
+# TYPE semstreams_rule_messages_received_total counter
+semstreams_rule_messages_received_total{subject="objectstore.stored.entity"} 58
+semstreams_rule_messages_received_total{subject="sensor.processed.entity"} 41
+# HELP semstreams_rule_state_transitions_total Total rule state transitions (OnEnter/OnExit)
+# TYPE semstreams_rule_state_transitions_total counter
+semstreams_rule_state_transitions_total{rule_name="cold-storage-temp-alert",transition="entered"} 1
+semstreams_rule_state_transitions_total{rule_name="cold-storage-temp-alert",transition="exited"} 1
+semstreams_rule_state_transitions_total{rule_name="high-humidity-alert",transition="entered"} 1
+semstreams_rule_state_transitions_total{rule_name="high-humidity-alert",transition="exited"} 1
+semstreams_rule_state_transitions_total{rule_name="low-pressure-alert",transition="entered"} 1
+semstreams_rule_state_transitions_total{rule_name="low-pressure-alert",transition="exited"} 1
+# HELP semstreams_rule_triggers_total Total rule triggers (successful evaluations)
+# TYPE semstreams_rule_triggers_total counter
+semstreams_rule_triggers_total{rule_name="cold-storage-temp-alert",severity="info"} 1
+semstreams_rule_triggers_total{rule_name="high-humidity-alert",severity="info"} 1
+semstreams_rule_triggers_total{rule_name="low-pressure-alert",severity="info"} 1
+# HELP semstreams_service_status Service status (0=stopped, 1=starting, 2=running, 3=stopping, 4=failed)
+# TYPE semstreams_service_status gauge
+semstreams_service_status{service="component-manager"} 2
+semstreams_service_status{service="message-logger"} 2
+semstreams_service_status{service="metrics"} 2
+# HELP semstreams_udp_batch_size Distribution of processing batch sizes
+# TYPE semstreams_udp_batch_size histogram
+semstreams_udp_batch_size_bucket{le="1"} 3
+semstreams_udp_batch_size_bucket{le="5"} 3
+semstreams_udp_batch_size_bucket{le="10"} 3
+semstreams_udp_batch_size_bucket{le="20"} 3
+semstreams_udp_batch_size_bucket{le="50"} 3
+semstreams_udp_batch_size_bucket{le="100"} 3
+semstreams_udp_batch_size_bucket{le="200"} 3
+semstreams_udp_batch_size_bucket{le="500"} 3
+semstreams_udp_batch_size_bucket{le="+Inf"} 3
+semstreams_udp_batch_size_sum 3
+semstreams_udp_batch_size_count 3
+# HELP semstreams_udp_buffer_utilization_ratio Buffer usage (0-1) showing backpressure
+# TYPE semstreams_udp_buffer_utilization_ratio gauge
+semstreams_udp_buffer_utilization_ratio 0.5
+# HELP semstreams_udp_bytes_received_total Total bytes received from UDP
+# TYPE semstreams_udp_bytes_received_total counter
+semstreams_udp_bytes_received_total 394
+# HELP semstreams_udp_last_activity_timestamp Unix timestamp of last received packet
+# TYPE semstreams_udp_last_activity_timestamp gauge
+semstreams_udp_last_activity_timestamp 1.767992484e+09
+# HELP semstreams_udp_packets_dropped_total Packets dropped due to buffer full
+# TYPE semstreams_udp_packets_dropped_total counter
+semstreams_udp_packets_dropped_total 0
+# HELP semstreams_udp_packets_received_total Total UDP packets received
+# TYPE semstreams_udp_packets_received_total counter
+semstreams_udp_packets_received_total 3
+# HELP semstreams_udp_publish_duration_seconds Time to publish batches to NATS
+# TYPE semstreams_udp_publish_duration_seconds histogram
+semstreams_udp_publish_duration_seconds_bucket{le="0.001"} 2
+semstreams_udp_publish_duration_seconds_bucket{le="0.005"} 3
+semstreams_udp_publish_duration_seconds_bucket{le="0.01"} 3
+semstreams_udp_publish_duration_seconds_bucket{le="0.025"} 3
+semstreams_udp_publish_duration_seconds_bucket{le="0.05"} 3
+semstreams_udp_publish_duration_seconds_bucket{le="0.1"} 3
+semstreams_udp_publish_duration_seconds_bucket{le="0.25"} 3
+semstreams_udp_publish_duration_seconds_bucket{le="0.5"} 3
+semstreams_udp_publish_duration_seconds_bucket{le="+Inf"} 3
+semstreams_udp_publish_duration_seconds_sum 0.002724709
+semstreams_udp_publish_duration_seconds_count 3
+# HELP semstreams_udp_socket_errors_total Socket read errors encountered
+# TYPE semstreams_udp_socket_errors_total counter
+semstreams_udp_socket_errors_total 0

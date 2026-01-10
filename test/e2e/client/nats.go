@@ -11,6 +11,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/c360/semstreams/graph/clustering"
 	"github.com/c360/semstreams/natsclient"
 )
 
@@ -29,20 +30,6 @@ type Triple struct {
 	Subject   string `json:"subject"`
 	Predicate string `json:"predicate"`
 	Object    any    `json:"object"`
-}
-
-// Community represents a detected community/cluster for E2E testing
-type Community struct {
-	ID                 string                 `json:"id"`
-	Level              int                    `json:"level"`
-	Members            []string               `json:"members"`
-	ParentID           *string                `json:"parent_id,omitempty"`
-	StatisticalSummary string                 `json:"statistical_summary,omitempty"`
-	LLMSummary         string                 `json:"llm_summary,omitempty"`
-	Keywords           []string               `json:"keywords,omitempty"`
-	RepEntities        []string               `json:"rep_entities,omitempty"`
-	SummaryStatus      string                 `json:"summary_status,omitempty"`
-	Metadata           map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // Anomaly represents a structural anomaly detected by the inference system
@@ -354,7 +341,7 @@ var IndexBuckets = struct {
 
 // GetAllCommunities retrieves all communities from the COMMUNITY_INDEX bucket
 // Used for comparing statistical vs LLM-enhanced summaries in E2E tests
-func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*Community, error) {
+func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*clustering.Community, error) {
 	bucket, err := c.client.GetKeyValueBucket(ctx, IndexBuckets.Community)
 	if err != nil {
 		if isBucketNotFoundError(err) {
@@ -371,7 +358,7 @@ func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*Commun
 		return nil, fmt.Errorf("failed to list community keys: %w", err)
 	}
 
-	var communities []*Community
+	var communities []*clustering.Community
 	for _, key := range keys {
 		// Skip entity-to-community index entries (they have different structure)
 		// Community keys have format: "graph.community.L{level}.{id}"
@@ -386,7 +373,7 @@ func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*Commun
 			continue
 		}
 
-		var comm Community
+		var comm clustering.Community
 		if err := json.Unmarshal(entry.Value(), &comm); err != nil {
 			// Skip entries that can't be unmarshaled as communities
 			continue
@@ -1045,24 +1032,41 @@ func (c *NATSValidationClient) waitForSourceEntityCountPolling(
 	expectedCount int,
 	timeout time.Duration,
 ) EntityStabilizationResult {
-	const stabilizationChecks = 3
-	const checkInterval = 200 * time.Millisecond
+	const stabilizationChecks = 2
+	const checkInterval = 50 * time.Millisecond
+	const progressInterval = 1 * time.Second
 
 	deadline := time.Now().Add(timeout)
+	lastProgress := time.Now()
 
 	var lastCount int
 	stableCount := 0
+	pollCount := 0
 
 	for time.Now().Before(deadline) {
 		count, err := c.CountSourceEntities(ctx)
+		pollCount++
 		if err != nil {
+			// Log progress with error
+			if time.Since(lastProgress) >= progressInterval {
+				fmt.Printf("    [poll %d] error counting entities: %v\n", pollCount, err)
+				lastProgress = time.Now()
+			}
 			time.Sleep(checkInterval)
 			continue
+		}
+
+		// Log progress every second
+		if time.Since(lastProgress) >= progressInterval {
+			fmt.Printf("    [poll %d] entities: %d/%d (stable: %d/%d)\n",
+				pollCount, count, expectedCount, stableCount, stabilizationChecks)
+			lastProgress = time.Now()
 		}
 
 		if count == lastCount && count >= expectedCount {
 			stableCount++
 			if stableCount >= stabilizationChecks {
+				fmt.Printf("    [poll %d] stabilized at %d entities\n", pollCount, count)
 				return EntityStabilizationResult{
 					FinalCount: count,
 					Stabilized: true,
@@ -1077,6 +1081,7 @@ func (c *NATSValidationClient) waitForSourceEntityCountPolling(
 		time.Sleep(checkInterval)
 	}
 
+	fmt.Printf("    [poll %d] TIMEOUT - got %d/%d entities\n", pollCount, lastCount, expectedCount)
 	return EntityStabilizationResult{
 		FinalCount: lastCount,
 		Stabilized: false,
@@ -1113,8 +1118,8 @@ func (c *NATSValidationClient) waitForEntityCountPolling(
 	expectedCount int,
 	timeout time.Duration,
 ) EntityStabilizationResult {
-	const stabilizationChecks = 3
-	const checkInterval = 200 * time.Millisecond
+	const stabilizationChecks = 2
+	const checkInterval = 50 * time.Millisecond
 
 	deadline := time.Now().Add(timeout)
 

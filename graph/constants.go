@@ -14,4 +14,15 @@ const (
 	BucketAliasIndex    = "ALIAS_INDEX"
 	BucketSpatialIndex  = "SPATIAL_INDEX"
 	BucketTemporalIndex = "TEMPORAL_INDEX"
+	BucketContextIndex  = "CONTEXT_INDEX"
+
+	// Semantic tier buckets
+	BucketEmbeddingsCache = "EMBEDDINGS_CACHE"
+	BucketEmbeddingIndex  = "EMBEDDING_INDEX"
+	BucketEmbeddingDedup  = "EMBEDDING_DEDUP"
+	BucketCommunityIndex  = "COMMUNITY_INDEX"
+	BucketAnomalyIndex    = "ANOMALY_INDEX"
+
+	// Structural tier buckets
+	BucketStructuralIndex = "STRUCTURAL_INDEX"
 )

@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "graph-anomalies.v1.json",
+  "type": "object",
+  "title": "graph-anomalies Configuration",
+  "description": "Graph cluster/community anomaly detection processor",
+  "properties": {
+    "compute_interval": {
+      "type": "string",
+      "description": "Interval between structural index computations (e.g. 1h or 30m)",
+      "category": "basic"
+    },
+    "compute_on_startup": {
+      "type": "boolean",
+      "description": "Compute indices immediately on startup",
+      "category": "basic"
+    },
+    "enable_detection": {
+      "type": "boolean",
+      "description": "Enable structural anomaly detection after computing indices",
+      "category": "advanced"
+    },
+    "max_hop_distance": {
+      "type": "number",
+      "description": "Maximum hop distance for BFS traversal",
+      "category": "basic"
+    },
+    "pivot_count": {
+      "type": "number",
+      "description": "Number of pivot nodes for distance indexing",
+      "category": "basic"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "graph-anomalies",
+    "type": "processor",
+    "protocol": "nats",
+    "domain": "graph",
+    "version": "1.0.0"
+  }
+}

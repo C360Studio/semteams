@@ -68,6 +68,15 @@ type HealthStatus struct {
 	ErrorCount int           `json:"error_count"`
 	LastError  string        `json:"last_error,omitempty"`
 	Uptime     time.Duration `json:"uptime"`
+	Status     string        `json:"status"`
+}
+
+// DebugStatusProvider is an optional interface for components that can provide
+// extended debug information beyond basic health status.
+type DebugStatusProvider interface {
+	// DebugStatus returns extended debug information for the component.
+	// The returned value should be JSON-serializable.
+	DebugStatus() any
 }
 
 // FlowMetrics describes the current data flow through a component

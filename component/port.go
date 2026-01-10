@@ -104,6 +104,12 @@ func (p *Port) UnmarshalJSON(data []byte) error {
 
 		// Create the appropriate config type based on the type field
 		switch configWrapper.Type {
+		case "timer":
+			var timerConfig TimerPort
+			if err := json.Unmarshal(configWrapper.Data, &timerConfig); err != nil {
+				return errs.Wrap(err, "Port", "UnmarshalJSON", "timer config unmarshaling")
+			}
+			p.Config = timerConfig
 		case "network":
 			var netConfig NetworkPort
 			if err := json.Unmarshal(configWrapper.Data, &netConfig); err != nil {

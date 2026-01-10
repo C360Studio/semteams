@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360/semstreams/graph/clustering"
 	"github.com/c360/semstreams/test/e2e/client"
 )
 
@@ -37,8 +38,8 @@ func (s *TieredScenario) detectCommunityVariant(result *Result) string {
 // 1. min_embedding_coverage (50% of entities have embeddings)
 // 2. initial_delay (2s) + detection_interval (30s) to run
 // So we need to wait at least 60 seconds for the first detection cycle.
-func (s *TieredScenario) waitForCommunities(ctx context.Context) ([]*client.Community, error) {
-	var communities []*client.Community
+func (s *TieredScenario) waitForCommunities(ctx context.Context) ([]*clustering.Community, error) {
+	var communities []*clustering.Community
 	var err error
 
 	// First, wait for at least one clustering run to complete
@@ -115,7 +116,7 @@ func (s *TieredScenario) waitForLLMEnhancement(
 }
 
 // analyzeCommunities computes statistics and comparisons for communities
-func (s *TieredScenario) analyzeCommunities(communities []*client.Community) communityStats {
+func (s *TieredScenario) analyzeCommunities(communities []*clustering.Community) communityStats {
 	stats := communityStats{comparisons: make([]CommunityComparison, 0, len(communities))}
 	var totalLengthRatio, totalWordOverlap float64
 	var ratioCount, totalNonSingletonMembers int
@@ -154,7 +155,7 @@ func (s *TieredScenario) analyzeCommunities(communities []*client.Community) com
 
 // buildCommunityComparison creates a comparison record for a single community
 func (s *TieredScenario) buildCommunityComparison(
-	comm *client.Community,
+	comm *clustering.Community,
 	totalLengthRatio, totalWordOverlap *float64,
 	ratioCount *int,
 ) CommunityComparison {
@@ -186,7 +187,7 @@ type llmQualityIssue struct {
 }
 
 // validateLLMSummaryQuality validates quality of LLM-enhanced community summaries
-func (s *TieredScenario) validateLLMSummaryQuality(communities []*client.Community) []llmQualityIssue {
+func (s *TieredScenario) validateLLMSummaryQuality(communities []*clustering.Community) []llmQualityIssue {
 	var issues []llmQualityIssue
 
 	for _, comm := range communities {
@@ -515,12 +516,11 @@ func (s *TieredScenario) validateEmbeddingQueueHealth(ctx context.Context, resul
 	fmt.Println("[EMBEDDING QUEUE] Validating embedding queue health...")
 
 	// Fetch embedding queue metrics from Prometheus using SumMetricsByName
-	// These metrics may not exist yet if the new Prometheus metrics haven't been deployed
-	pending, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_pending")
-	failed, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_failed_total")
-	queued, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_queued_total")
-	dedupHits, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embedding_dedup_hits_total")
-	generated, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_generated_total")
+	pending, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_pending")
+	failed, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_errors_total")
+	dedupHits, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_dedup_hits_total")
+	generated, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_embeddings_generated_total")
+	queued, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_queued_total")
 
 	// Record metrics for structured results
 	result.Metrics["embedding_queued_total"] = int64(queued)
@@ -530,8 +530,8 @@ func (s *TieredScenario) validateEmbeddingQueueHealth(ctx context.Context, resul
 	result.Metrics["embedding_pending_count"] = int64(pending)
 
 	// Log queue stats for observability
-	fmt.Printf("[EMBEDDING QUEUE] Stats: queued=%.0f, generated=%.0f, dedup_hits=%.0f, failed=%.0f, pending=%.0f\n",
-		queued, generated, dedupHits, failed, pending)
+	fmt.Printf("[EMBEDDING QUEUE] Stats: generated=%.0f, dedup_hits=%.0f, failed=%.0f, pending=%.0f\n",
+		generated, dedupHits, failed, pending)
 
 	// Validate queue is drained
 	if pending > 0 {

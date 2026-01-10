@@ -17,6 +17,12 @@
       "default": "10m",
       "category": "advanced"
     },
+    "debounce_delay_ms": {
+      "type": "number",
+      "description": "Debounce delay in milliseconds for rule evaluation (0=disabled)",
+      "default": 0,
+      "category": "advanced"
+    },
     "enable_graph_integration": {
       "type": "boolean",
       "description": "Enable graph entity creation from rules",

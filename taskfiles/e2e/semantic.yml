@@ -10,7 +10,7 @@ tasks:
     deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
     cmds:
       - echo "[SEMANTIC] Starting semantic tier E2E test (SemEmbed + SemInstruct)..."
-      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
+      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait --build
       - echo "[OK] ML services are healthy (SemEmbed + SemInstruct)"
       - echo "[SEMANTIC] Running semantic tier scenario..."
       # ML app runs on port 8180 (HTTP), 9190 (metrics), 14650 (UDP) to avoid conflict
@@ -24,7 +24,7 @@ tasks:
     deps: [":e2e:clean", ":e2e:check-ports"]
     cmds:
       - echo "[SEMANTIC DEBUG] Starting semantic tier environment..."
-      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
+      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait --build
       - echo "[OK] ML services are healthy (SemEmbed + SemInstruct)"
       - echo ""
       - echo "[SEMANTIC DEBUG] Environment is running. Use the following commands:"
@@ -34,6 +34,22 @@ tasks:
       - echo "  docker logs -f semstreams-tiered-nats         (Follow NATS logs)"
       - echo "  curl http://localhost:8180/health             (Test health endpoint)"
       - echo "  task e2e:clean                                (Clean up when done)"
+
+  fallback:
+    desc: "Test graceful degradation: semantic config WITHOUT ML services"
+    silent: false
+    deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
+    cmds:
+      - echo "[SEMANTIC-FALLBACK] Testing semantic config graceful degradation (no ML services)..."
+      - echo "[SEMANTIC-FALLBACK] Starting NATS only (no semembed/seminstruct)..."
+      # Use statistical profile (just NATS + app) but with semantic config
+      - docker compose -f docker/compose/tiered.yml --profile statistical up -d --wait --build
+      - echo "[OK] Services started without ML services"
+      - echo "[SEMANTIC-FALLBACK] Running fallback scenario..."
+      # Run with semantic-fallback variant to trigger fallback validation
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant semantic-fallback --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker/compose/tiered.yml --profile statistical down -v --timeout 15
 
   compare:
     desc: Run statistical vs semantic and generate comparison report
@@ -47,7 +63,7 @@ tasks:
       - docker compose -f docker/compose/tiered.yml --profile statistical down -v --timeout 15
       - echo "[COMPARE] Running semantic variant second..."
       - sleep 5
-      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait
+      - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait --build
       - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant semantic --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
         ignore_error: true
       - docker compose -f docker/compose/tiered.yml --profile semantic down -v --timeout 15

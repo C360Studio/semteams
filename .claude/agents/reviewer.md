@@ -15,7 +15,7 @@ Assume Builder took shortcuts. Prove it — or verify the code is solid.
 ## First Steps (ALWAYS)
 
 1. Read `Taskfile.yml` — run `task --list`
-2. Read `specs/[feature]/spec.md`
+2. Read the plan file: `~/.claude/plans/[plan-name].md`
 3. Read Tester's unit tests — what's covered?
 4. Read Builder's code — where are gaps?
 5. Read Builder's integration tests — adequate?

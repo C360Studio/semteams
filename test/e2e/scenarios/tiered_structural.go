@@ -16,7 +16,7 @@ import (
 
 // executeValidateZeroEmbeddings validates that NO embeddings were generated (structural tier constraint)
 func (s *TieredScenario) executeValidateZeroEmbeddings(ctx context.Context, result *Result) error {
-	embeddingCount, _ := s.metrics.SumMetricsByName(ctx, "indexengine_embeddings_generated_total")
+	embeddingCount, _ := s.metrics.SumMetricsByName(ctx, "semstreams_graph_embedding_embeddings_generated_total")
 
 	result.Metrics["embeddings_generated"] = int(embeddingCount)
 
@@ -103,6 +103,143 @@ func (s *TieredScenario) executeValidateRuleTransitions(ctx context.Context, res
 	if len(violations) > 0 {
 		result.Warnings = append(result.Warnings,
 			fmt.Sprintf("Rule transition validation issues: %v", violations))
+	}
+
+	return nil
+}
+
+// executeValidateEntityTriples validates that sensor entities have the expected triples
+// This helps diagnose rule trigger issues by showing exactly what triples are in ENTITY_STATES
+func (s *TieredScenario) executeValidateEntityTriples(ctx context.Context, result *Result) error {
+	// Get a sample temperature sensor entity
+	sampleEntityID := "c360.logistics.environmental.sensor.temperature.temp-sensor-001"
+
+	entity, err := s.natsClient.GetEntity(ctx, sampleEntityID)
+	if err != nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Failed to get sample entity %s: %v", sampleEntityID, err))
+		return nil
+	}
+
+	if entity == nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Sample entity %s not found in ENTITY_STATES", sampleEntityID))
+		return nil
+	}
+
+	// Extract and categorize triples
+	tripleDetails := make([]map[string]any, 0, len(entity.Triples))
+	hasFahrenheit := false
+	hasZone := false
+	var fahrenheitValue any
+	var zoneValue any
+
+	for _, triple := range entity.Triples {
+		tripleDetails = append(tripleDetails, map[string]any{
+			"predicate":   triple.Predicate,
+			"object":      triple.Object,
+			"object_type": fmt.Sprintf("%T", triple.Object),
+		})
+
+		if triple.Predicate == "sensor.measurement.fahrenheit" {
+			hasFahrenheit = true
+			fahrenheitValue = triple.Object
+		}
+		if triple.Predicate == "geo.location.zone" {
+			hasZone = true
+			zoneValue = triple.Object
+		}
+	}
+
+	// Check if triples match rule conditions
+	ruleConditionsMet := false
+	if hasFahrenheit && hasZone {
+		if temp, ok := fahrenheitValue.(float64); ok && temp >= 40.0 {
+			if zone, ok := zoneValue.(string); ok && strings.Contains(zone, "cold-storage") {
+				ruleConditionsMet = true
+			}
+		}
+	}
+
+	result.Metrics["entity_triple_count"] = len(entity.Triples)
+	result.Metrics["entity_has_fahrenheit"] = 0
+	result.Metrics["entity_has_zone"] = 0
+	if hasFahrenheit {
+		result.Metrics["entity_has_fahrenheit"] = 1
+	}
+	if hasZone {
+		result.Metrics["entity_has_zone"] = 1
+	}
+
+	result.Details["entity_triples_validation"] = map[string]any{
+		"entity_id":                sampleEntityID,
+		"triple_count":             len(entity.Triples),
+		"has_fahrenheit":           hasFahrenheit,
+		"has_zone":                 hasZone,
+		"fahrenheit_value":         fahrenheitValue,
+		"zone_value":               zoneValue,
+		"rule_conditions_met":      ruleConditionsMet,
+		"triples":                  tripleDetails,
+		"expected_fahrenheit_pred": "sensor.measurement.fahrenheit",
+		"expected_zone_pred":       "geo.location.zone",
+		"message": fmt.Sprintf(
+			"Entity %s: %d triples, fahrenheit=%v (has=%v), zone=%v (has=%v), conditions_met=%v",
+			sampleEntityID, len(entity.Triples),
+			fahrenheitValue, hasFahrenheit,
+			zoneValue, hasZone,
+			ruleConditionsMet,
+		),
+	}
+
+	// Log warning if expected triples are missing
+	if !hasFahrenheit {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("MISSING sensor.measurement.fahrenheit in entity %s - rules cannot evaluate temperature", sampleEntityID))
+	}
+	if !hasZone {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("MISSING geo.location.zone in entity %s - rules cannot evaluate zone", sampleEntityID))
+	}
+
+	// Always print triple details to stdout for debugging
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Entity: %s\n", sampleEntityID)
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Triple count: %d\n", len(entity.Triples))
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Fahrenheit value: %v (type: %T)\n", fahrenheitValue, fahrenheitValue)
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Zone value: %v (type: %T)\n", zoneValue, zoneValue)
+	fmt.Printf("[ENTITY TRIPLES DEBUG] Rule conditions met: %v\n", ruleConditionsMet)
+	for i, t := range entity.Triples {
+		fmt.Printf("[ENTITY TRIPLES DEBUG] Triple[%d]: pred=%s, obj=%v (type=%T)\n", i, t.Predicate, t.Object, t.Object)
+	}
+
+	// Also check humidity entity to debug why humidity rule doesn't trigger
+	humidEntityID := "c360.logistics.environmental.sensor.humidity.humid-sensor-001"
+	humidEntity, humidErr := s.natsClient.GetEntity(ctx, humidEntityID)
+	if humidErr != nil {
+		fmt.Printf("[HUMIDITY DEBUG] Failed to get entity %s: %v\n", humidEntityID, humidErr)
+	} else if humidEntity == nil {
+		fmt.Printf("[HUMIDITY DEBUG] Entity %s NOT FOUND in ENTITY_STATES\n", humidEntityID)
+	} else {
+		fmt.Printf("[HUMIDITY DEBUG] Entity: %s\n", humidEntityID)
+		fmt.Printf("[HUMIDITY DEBUG] Triple count: %d\n", len(humidEntity.Triples))
+		var percentValue any
+		var typeValue any
+		for i, t := range humidEntity.Triples {
+			fmt.Printf("[HUMIDITY DEBUG] Triple[%d]: pred=%s, obj=%v (type=%T)\n", i, t.Predicate, t.Object, t.Object)
+			if t.Predicate == "sensor.measurement.percent" {
+				percentValue = t.Object
+			}
+			if t.Predicate == "sensor.classification.type" {
+				typeValue = t.Object
+			}
+		}
+		// Check if rule conditions would be met
+		conditionsMet := false
+		if pct, ok := percentValue.(float64); ok && pct >= 50.0 {
+			if typ, ok := typeValue.(string); ok && typ == "humidity" {
+				conditionsMet = true
+			}
+		}
+		fmt.Printf("[HUMIDITY DEBUG] percent value: %v, type value: %v, conditions met: %v\n", percentValue, typeValue, conditionsMet)
 	}
 
 	return nil
@@ -918,6 +1055,131 @@ func (s *TieredScenario) executeTestPathRAGBoundary(ctx context.Context, result 
 
 	if entityCount > expectedMax {
 		return fmt.Errorf("PathRAG maxNodes violated: got %d entities, expected <= %d (maxNodes=%d + start entity)", entityCount, expectedMax, maxNodes)
+	}
+
+	return nil
+}
+
+// executeTestEntityByAlias validates the entityByAlias GraphQL query.
+// This tests REAL alias resolution via graph-index's ALIAS_INDEX using sensor serial numbers.
+//
+// The IoT sensor processor creates triples with predicate "iot.sensor.serial" which is
+// registered as an alias predicate in the vocabulary system. graph-index uses
+// vocabulary.DiscoverAliasPredicates() to detect these and index them in ALIAS_INDEX.
+//
+// Test data sensors.jsonl has sensors with serial numbers like "SN-TEMP-2024-001".
+// This test queries by serial number and verifies it resolves to the correct entity.
+//
+// This is a Tier 0 capability that runs on ALL tiers (alias lookup is structural).
+func (s *TieredScenario) executeTestEntityByAlias(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
+	// Test REAL alias resolution using sensor serial number
+	// From testdata/semantic/sensors.jsonl: temp-sensor-001 has serial "SN-TEMP-2024-001"
+	// Expected entity ID: c360.logistics.environmental.sensor.temperature.temp-sensor-001
+	serialNumber := "SN-TEMP-2024-001"
+	expectedEntityID := "c360.logistics.environmental.sensor.temperature.temp-sensor-001"
+
+	aliasQuery := map[string]any{
+		"query": `query($aliasOrID: String!) {
+			entityByAlias(aliasOrID: $aliasOrID) {
+				id
+				type
+				properties
+			}
+		}`,
+		"variables": map[string]any{"aliasOrID": serialNumber},
+	}
+
+	queryJSON, err := json.Marshal(aliasQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal entityByAlias query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create entityByAlias request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := httpClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("entityByAlias request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("entityByAlias returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read entityByAlias response: %w", err)
+	}
+
+	var aliasResp struct {
+		Data struct {
+			EntityByAlias *struct {
+				ID         string         `json:"id"`
+				Type       string         `json:"type"`
+				Properties map[string]any `json:"properties"`
+			} `json:"entityByAlias"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+
+	if err := json.Unmarshal(bodyBytes, &aliasResp); err != nil {
+		return fmt.Errorf("failed to parse entityByAlias response: %w", err)
+	}
+
+	if len(aliasResp.Errors) > 0 {
+		return fmt.Errorf("entityByAlias GraphQL error: %s", aliasResp.Errors[0].Message)
+	}
+
+	entity := aliasResp.Data.EntityByAlias
+
+	result.Metrics["entity_by_alias_latency_ms"] = latency.Milliseconds()
+
+	if entity == nil {
+		// Alias not resolved - this is a HARD failure since we're testing real alias resolution
+		result.Details["entity_by_alias_validation"] = map[string]any{
+			"success":            false,
+			"serial_number":      serialNumber,
+			"expected_entity_id": expectedEntityID,
+			"latency_ms":         latency.Milliseconds(),
+			"message":            fmt.Sprintf("Alias resolution FAILED: serial number %s not found in ALIAS_INDEX", serialNumber),
+		}
+		return fmt.Errorf("entityByAlias failed to resolve serial number %s - alias not indexed (check iot.sensor.serial predicate indexing)", serialNumber)
+	}
+
+	// Validate the returned entity matches expected
+	if entity.ID != expectedEntityID {
+		result.Details["entity_by_alias_validation"] = map[string]any{
+			"success":            false,
+			"serial_number":      serialNumber,
+			"expected_entity_id": expectedEntityID,
+			"actual_entity_id":   entity.ID,
+			"latency_ms":         latency.Milliseconds(),
+			"message":            fmt.Sprintf("Alias resolved to wrong entity: expected %s, got %s", expectedEntityID, entity.ID),
+		}
+		return fmt.Errorf("entityByAlias resolved to wrong entity: expected %s, got %s", expectedEntityID, entity.ID)
+	}
+
+	result.Details["entity_by_alias_validation"] = map[string]any{
+		"success":            true,
+		"serial_number":      serialNumber,
+		"expected_entity_id": expectedEntityID,
+		"actual_entity_id":   entity.ID,
+		"entity_type":        entity.Type,
+		"latency_ms":         latency.Milliseconds(),
+		"alias_resolved":     true, // Real alias resolution worked!
+		"message":            fmt.Sprintf("Alias resolution SUCCESS: %s → %s", serialNumber, entity.ID),
 	}
 
 	return nil

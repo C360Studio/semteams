@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/c360/semstreams/test/e2e/scenarios/search"
 	"github.com/c360/semstreams/test/e2e/scenarios/stages"
@@ -297,6 +298,8 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 			Success:      result.Success,
 			ErrorCount:   len(result.Errors),
 			WarningCount: len(result.Warnings),
+			Errors:       result.Errors,
+			Warnings:     result.Warnings,
 		},
 	}
 
@@ -697,8 +700,8 @@ func SaveStructuredResults(tr *TieredResults, outputDir string) (string, error) 
 }
 
 // LoadStructuredResults reads structured results from a JSON file.
-func LoadStructuredResults(filepath string) (*TieredResults, error) {
-	data, err := os.ReadFile(filepath)
+func LoadStructuredResults(path string) (*TieredResults, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
@@ -709,4 +712,32 @@ func LoadStructuredResults(filepath string) (*TieredResults, error) {
 	}
 
 	return &tr, nil
+}
+
+// SaveMetricsDump saves the raw Prometheus metrics to a text file.
+// The filename follows the pattern: {variant}-{timestamp}-metrics.txt
+func SaveMetricsDump(metricsData string, variant string, outputDir string) (string, error) {
+	if metricsData == "" {
+		return "", fmt.Errorf("no metrics data to save")
+	}
+
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	filename := fmt.Sprintf("%s-%s-metrics.txt",
+		variant,
+		formatTimestamp())
+	path := filepath.Join(outputDir, filename)
+
+	if err := os.WriteFile(path, []byte(metricsData), 0644); err != nil {
+		return "", fmt.Errorf("failed to write metrics: %w", err)
+	}
+
+	return path, nil
+}
+
+// formatTimestamp returns current time formatted for filenames
+func formatTimestamp() string {
+	return fmt.Sprintf("%s", time.Now().Format("20060102-150405"))
 }

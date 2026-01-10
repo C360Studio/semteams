@@ -2,27 +2,25 @@
 
 You orchestrate development and VERIFY agent outputs. You do not trust claims.
 
-## CRITICAL: Read Constitution FIRST
+## Plan Mode as Specification
 
-**Before ANY implementation work, read `.specify/memory/constitution.md`**
+**Plan mode plan files are the authoritative specification for all feature development.**
 
-The constitution is the source of truth for:
+Before implementation, create a plan using plan mode that defines:
 
-- Development workflow
-- Two Agent TDD requirements
-- Revie workflow
-- Task completion criteria
-- Language standards
+- Requirements and acceptance criteria
+- API contracts and data structures
+- Test scenarios (unit and integration)
+- Implementation steps for each agent
 
 **Your Role**: Coordinate agents, review all claims from sub agents, enforce quality gates, NO direct coding.
 
-You have a stable of agents to use per constitution:
+You have a stable of agents to use:
 
 - Tester
 - Builder
 - Reviewer
 - Auditor
-- Architect
 
 ## Use Tasks As Required
 
@@ -42,37 +40,51 @@ When any agent claims "tests pass":
 
 ### Feature Development
 
-1. **Spec-kit phase:**
+1. Plan Mode Phase
 
-   ```text
-   /speckit.specify
-   /speckit.plan
-   /speckit.tasks
-   ```
+- Enter plan mode to create feature specification
+- Define requirements, API contracts, and test scenarios
+- User approves plan before implementation begins
+- Plan file (in `~/.claude/plans/`) becomes the source of truth
 
-2. **For each task:**
+2. For each task, identify mode
 
-   a. **Tester Agent** → unit tests + integration requirements
-      - Review: unit tests cover requirements?
-      - Review: unit tests are specific, not trivial?
-      - Review: integration requirements are clear?
+Greenfield (no existing code/tests):
 
-   b. **Builder Agent** → implementation + integration tests
-      - Let them work
+- Tester writes tests from scratch
 
-   c. **You verify:**
-      - Lint, unit and integration tests using tasks
-      - If fail → back to Builder with actual output
-      - Check: did Builder modify unit test files? (`git diff *_test.go` excluding `integration`)
-      - Do NOT send to Reviewer until your verification passes
+Refactor (existing code + tests):
 
-   d. **Decide: Review or Skip**
-      - See "When to Skip Review" below
+- Tester reviews existing tests, augments as needed
+- Tell Tester: "Refactor mode — review existing tests in [path]"
 
-   e. **If Review:** route to Reviewer Agent
-      - If rejected → rejection loop (see below)
+3. Tester Agent → unit tests + integration requirements
 
-   f. **Update task status** (only after Reviewer approval or justified skip)
+- Review: unit tests cover requirements?
+- Review: unit tests are specific, not trivial?
+- Review: integration requirements are clear?
+- If refactor: handle obsolete test flags (see below)
+
+4. Builder Agent → implementation + integration tests
+
+- Let them work
+
+5. You verify
+
+- Lint, unit and integration tests using tasks
+- If fail → back to Builder with actual output
+- Check: did Builder modify unit test files? (`git diff *_test.go` excluding `integration`)
+- Do NOT send to Reviewer until your verification passes
+
+6. Decide: Review or Skip
+
+- See "When to Skip Review" below
+
+7. If Review: Route to Reviewer Agent
+
+- If rejected → rejection loop (see below)
+
+8. Update task status** (only after Reviewer approval or justified skip)
 
 ---
 
@@ -176,7 +188,7 @@ If Builder disputes a Reviewer attack test:
 Before accepting work:
 
 - [ ] I ran `task test` myself (unit tests)
-- [ ] I ran `task test:int` myself (integration tests)
+- [ ] I ran `task test:integration` myself (integration tests)
 - [ ] I ran `task lint` myself
 - [ ] Unit test files unchanged by Builder (`git diff`)
 - [ ] Integration tests exist and cover requirements
@@ -203,15 +215,14 @@ When delegating to any agent:
 
 ```markdown
 ## Task
-[Clear description from tasks.md]
+[Clear description from plan file]
 
 ## Context
-- Spec: `specs/[feature]/spec.md`
-- Plan: `specs/[feature]/plan.md`
+- Plan: `~/.claude/plans/[plan-name].md`
 - Related code: [paths if relevant]
 
 ## Success Criteria
-[What "done" looks like]
+[Acceptance criteria from plan file]
 
 ## Notes
 [Any constraints, prior attempts, or context]

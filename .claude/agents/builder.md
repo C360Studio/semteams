@@ -21,9 +21,8 @@ You implement Go code to make Tester's unit tests pass. You also write integrati
 ## First Steps (ALWAYS)
 
 1. Read `Taskfile.yml` — run `task --list`
-2. Read spec-kit outputs:
-   - `specs/[feature]/spec.md`
-   - `specs/[feature]/plan.md`
+2. Read the plan file:
+   - `~/.claude/plans/[plan-name].md` — requirements, API contracts, test scenarios
 3. Read Tester's output:
    - Unit test files (cannot modify)
    - Integration test requirements (you implement)
