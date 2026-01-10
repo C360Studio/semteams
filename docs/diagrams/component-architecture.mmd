@@ -15,7 +15,6 @@ flowchart LR
     end
 
     subgraph Analysis
-        GA[graph-anomalies]
         GC[graph-clustering]
         GE[graph-embedding]
         GIS[graph-index-spatial]
@@ -35,10 +34,10 @@ flowchart LR
     GI -->|writes| ES
     ES -.->|watches| GX
     GX -->|writes| OI
-    ES -.->|watches| GA & GC & GE & GIS & GIT
-    OI -.->|watches| GA
+    ES -.->|watches| GC & GE & GIS & GIT
+    OI -.->|reads| GC
     ES & OI -.->|reads| GQ
-    GQ <-.->|coordinates| GA & GC & GE & GX
+    GQ <-.->|coordinates| GC & GE & GX
     ES & OI -.->|reads| GW
     GW --> API
     API -.->|queries| GQ
@@ -46,7 +45,6 @@ flowchart LR
     style GI fill:#e1f5ff
     style GX fill:#fff4e1
     style GQ fill:#ffe1e1
-    style GA fill:#ffe1f5
     style GC fill:#ffe1f5
     style GE fill:#ffe1f5
     style GIS fill:#fff4e1

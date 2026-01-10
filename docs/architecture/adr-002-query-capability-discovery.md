@@ -6,9 +6,9 @@ Accepted
 
 ## Context
 
-The SemStreams graph system was decomposed from a monolithic processor into 9 specialized components:
+The SemStreams graph system was decomposed from a monolithic processor into 8 specialized components:
 
-- graph-ingest, graph-index, graph-anomalies, graph-clustering
+- graph-ingest, graph-index, graph-clustering
 - graph-embedding, graph-index-spatial, graph-index-temporal
 - graph-gateway, graph-query
 
@@ -97,8 +97,7 @@ func (c *Component) handleQueryEntity(ctx context.Context, data []byte) ([]byte,
 |-----------|---------|-------------------|
 | graph-ingest | getEntity, getBatch, prefix | graph.ingest.capabilities |
 | graph-index | getOutgoing, getIncoming, getAlias, getPredicate | graph.index.capabilities |
-| graph-anomalies | getKCore, getPivotDistances, findOutliers | graph.anomalies.capabilities |
-| graph-clustering | getCommunity, getMembers, getEntityCommunity, getCommunitiesByLevel | graph.clustering.capabilities |
+| graph-clustering | getCommunity, getMembers, getEntityCommunity, getCommunitiesByLevel, getKCore, getAnomalies | graph.clustering.capabilities |
 | graph-embedding | findSimilar, search | graph.embedding.capabilities |
 
 ## Key Files

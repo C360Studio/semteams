@@ -1,10 +1,12 @@
-// Package graphclustering provides the graph-clustering component for community detection.
+// Package graphclustering provides the graph-clustering component for community detection,
+// structural analysis, and anomaly detection.
 //
 // # Overview
 //
 // The graph-clustering component performs community detection on the entity graph
-// using Label Propagation Algorithm (LPA). It identifies clusters of related entities
-// and optionally enhances community descriptions using LLM.
+// using Label Propagation Algorithm (LPA), computes structural indices (k-core, pivot
+// distances), and detects anomalies within community contexts. Optionally enhances
+// community descriptions using LLM.
 //
 // # Tier
 //
@@ -19,20 +21,23 @@
 //	                    ┌───────────────────┐
 //	ENTITY_STATES ─────►│                   │
 //	   (KV watch)       │  graph-clustering ├──► COMMUNITY_INDEX (KV)
-//	                    │                   │
+//	                    │                   ├──► STRUCTURAL_INDEX (KV)
+//	                    │                   ├──► ANOMALY_INDEX (KV)
 //	                    └─────────┬─────────┘
 //	                              │ (reads)
 //	              ┌───────────────┼───────────────┐
 //	              ▼               ▼               ▼
-//	       OUTGOING_INDEX  INCOMING_INDEX  EMBEDDINGS_CACHE
+//	       OUTGOING_INDEX  INCOMING_INDEX  graph-embedding
+//	                                       (query path)
 //
 // # Features
 //
 //   - Label Propagation Algorithm (LPA) for community detection
 //   - Configurable detection interval and batch thresholds
 //   - Optional LLM-based community summarization
-//   - Semantic edge generation based on embedding similarity
-//   - Inferred relationship creation within communities
+//   - Structural index computation (k-core decomposition, pivot distances)
+//   - Anomaly detection within community contexts
+//   - Semantic gap detection via graph-embedding query path
 //
 // # Configuration
 //
@@ -44,7 +49,9 @@
 //	      {"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}
 //	    ],
 //	    "outputs": [
-//	      {"name": "communities", "subject": "COMMUNITY_INDEX", "type": "kv"}
+//	      {"name": "communities", "subject": "COMMUNITY_INDEX", "type": "kv"},
+//	      {"name": "structural", "subject": "STRUCTURAL_INDEX", "type": "kv"},
+//	      {"name": "anomalies", "subject": "ANOMALY_INDEX", "type": "kv"}
 //	    ]
 //	  },
 //	  "detection_interval": "30s",
@@ -52,8 +59,25 @@
 //	  "enable_llm": true,
 //	  "llm_endpoint": "http://seminstruct:8083/v1",
 //	  "min_community_size": 2,
-//	  "max_iterations": 100
+//	  "max_iterations": 100,
+//	  "enable_structural": true,
+//	  "pivot_count": 16,
+//	  "max_hop_distance": 10,
+//	  "enable_anomaly_detection": true,
+//	  "anomaly_config": {
+//	    "enabled": true,
+//	    "core_anomaly": {"enabled": true, "min_core_level": 2},
+//	    "semantic_gap": {"enabled": true, "similarity_threshold": 0.7}
+//	  }
 //	}
+//
+// # Detection Cycle
+//
+// When triggered, the component runs through these phases:
+//
+//  1. Community Detection (LPA) → COMMUNITY_INDEX
+//  2. Structural Computation (if enabled) → STRUCTURAL_INDEX
+//  3. Anomaly Detection (if enabled) → ANOMALY_INDEX
 //
 // # Scheduling
 //
@@ -70,6 +94,8 @@
 //
 // Outputs:
 //   - KV bucket: COMMUNITY_INDEX - stores detected communities
+//   - KV bucket: STRUCTURAL_INDEX - stores k-core levels and pivot distances
+//   - KV bucket: ANOMALY_INDEX - stores detected anomalies
 //
 // # Usage
 //
@@ -86,8 +112,8 @@
 // Upstream (reads during detection):
 //   - graph-ingest: watches ENTITY_STATES for change events
 //   - graph-index: reads OUTGOING_INDEX and INCOMING_INDEX for graph structure
-//   - graph-embedding: reads EMBEDDINGS_CACHE for semantic similarity
+//   - graph-embedding: queries for similar entities via NATS request/reply
 //
 // Downstream:
-//   - graph-gateway: reads COMMUNITY_INDEX for community queries
+//   - graph-gateway: reads COMMUNITY_INDEX, STRUCTURAL_INDEX, ANOMALY_INDEX for queries
 package graphclustering

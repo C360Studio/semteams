@@ -17,7 +17,6 @@ import (
 	"github.com/c360/semstreams/output/httppost"
 	"github.com/c360/semstreams/output/websocket"
 	pkgerrs "github.com/c360/semstreams/pkg/errs"
-	graphanomalies "github.com/c360/semstreams/processor/graph-anomalies"
 	graphclustering "github.com/c360/semstreams/processor/graph-clustering"
 	graphembedding "github.com/c360/semstreams/processor/graph-embedding"
 	graphindex "github.com/c360/semstreams/processor/graph-index"
@@ -54,16 +53,13 @@ import (
 //	- graph-index (OUTGOING, INCOMING, ALIAS, PREDICATE indexes)
 //	- graph-gateway (GraphQL + MCP HTTP servers)
 //
-//	Semantic tier:
+//	Statistical/Semantic tier:
 //	- graph-embedding (vector embedding generation)
-//	- graph-clustering (community detection, LLM enhancement)
+//	- graph-clustering (community detection, structural analysis, anomaly detection, LLM enhancement)
 //
 //	Optional indexes:
 //	- graph-index-spatial (geospatial indexing)
 //	- graph-index-temporal (time-based indexing)
-//
-//	Statistical/Semantic tier:
-//	- graph-anomalies (cluster/community anomaly detection)
 //
 // Semantic Layer - Rule Processing:
 //   - Rule processor (rule-based transformations)
@@ -162,7 +158,7 @@ func Register(registry *component.Registry) error {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-query component registration")
 	}
 
-	// Semantic tier components (enabled via config)
+	// Statistical/Semantic tier components (enabled via config)
 	if err := graphembedding.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-embedding component registration")
 	}
@@ -178,11 +174,6 @@ func Register(registry *component.Registry) error {
 
 	if err := graphindextemporal.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-index-temporal component registration")
-	}
-
-	// Statistical/Semantic tier components (anomaly detection)
-	if err := graphanomalies.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-anomalies component registration")
 	}
 
 	// Rule processor

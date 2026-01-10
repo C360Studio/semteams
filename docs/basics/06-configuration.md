@@ -28,8 +28,7 @@ rather than a monolithic processor. Each tier requires a specific set of compone
 | **graph-index** | Core (All) | Relationship indexing | `OUTGOING_INDEX`, `INCOMING_INDEX`, `ALIAS_INDEX`, `PREDICATE_INDEX` |
 | **graph-query** | Core (All) | Query coordinator | N/A (read-only) |
 | **graph-gateway** | Core (All) | Query gateway | N/A (read-only) |
-| **graph-anomalies** | Structural (Tier 0+) | K-core analysis | `STRUCTURAL_INDEX` |
-| **graph-clustering** | Statistical (Tier 1+) | Community detection | `COMMUNITY_INDEX` |
+| **graph-clustering** | Statistical (Tier 1+) | Community detection, structural analysis, anomaly detection | `COMMUNITY_INDEX`, `STRUCTURAL_INDEX`, `ANOMALY_INDEX` |
 | **graph-embedding** | Statistical/Semantic (Tier 1+) | Vector embeddings | `EMBEDDING_INDEX`, `EMBEDDINGS_CACHE`, `EMBEDDING_DEDUP` |
 | **graph-index-spatial** | Semantic (Tier 2) | Geospatial indexing | `SPATIAL_INDEX` |
 | **graph-index-temporal** | Semantic (Tier 2) | Temporal indexing | `TEMPORAL_INDEX` |
@@ -40,8 +39,6 @@ rather than a monolithic processor. Each tier requires a specific set of compone
 
 ```text
 graph-ingest → graph-index → graph-query → graph-gateway
-              ↓
-         graph-anomalies
 ```
 
 **Statistical (Tier 1)**:
@@ -49,23 +46,17 @@ graph-ingest → graph-index → graph-query → graph-gateway
 ```text
 graph-ingest → graph-index → graph-query → graph-gateway
               ↓            ↓
-         graph-anomalies  graph-clustering
-              ↓
-         graph-embedding (BM25)
+         graph-clustering  graph-embedding (BM25)
 ```
 
 **Semantic (Tier 2)**:
 
 ```text
 graph-ingest → graph-index → graph-query → graph-gateway
-              ↓            ↓
-         graph-anomalies  graph-clustering
+              ↓            ↓            ↓
+         graph-clustering  graph-embedding (HTTP)
               ↓
-         graph-embedding (HTTP)
-              ↓
-     graph-index-spatial
-              ↓
-     graph-index-temporal
+     graph-index-spatial, graph-index-temporal
 ```
 
 ### Component Dependencies
@@ -78,8 +69,7 @@ Components must start in the correct order based on their bucket dependencies:
 | graph-index | graph-ingest | Watches `ENTITY_STATES` |
 | graph-query | graph-ingest, graph-index | Routes queries to all components |
 | graph-gateway | All others | Reads all buckets |
-| graph-anomalies | graph-index | Watches `OUTGOING_INDEX`, `INCOMING_INDEX` |
-| graph-clustering | graph-ingest | Watches `ENTITY_STATES` |
+| graph-clustering | graph-ingest, graph-index | Watches `ENTITY_STATES`, reads indexes |
 | graph-embedding | graph-ingest | Watches `ENTITY_STATES` |
 | graph-index-spatial | graph-ingest | Watches `ENTITY_STATES` |
 | graph-index-temporal | graph-ingest | Watches `ENTITY_STATES` |
@@ -88,7 +78,7 @@ Components must start in the correct order based on their bucket dependencies:
 
 1. graph-ingest
 2. graph-index
-3. graph-anomalies, graph-clustering, graph-embedding, graph-index-spatial, graph-index-temporal (parallel)
+3. graph-clustering, graph-embedding, graph-index-spatial, graph-index-temporal (parallel)
 4. graph-query (after all processors)
 5. graph-gateway (last)
 
@@ -159,7 +149,6 @@ Deterministic processing with stateful rules. No search, no external services.
 
 - **graph-ingest** - Entity ingestion
 - **graph-index** - Relationship indexing
-- **graph-anomalies** - K-core structural analysis
 - **graph-query** - Query coordinator
 - **graph-gateway** - Query interface
 
@@ -169,12 +158,13 @@ Deterministic processing with stateful rules. No search, no external services.
 - Graph actions: `add_triple`, `remove_triple`, `publish`
 - Index queries: predicate, alias, outgoing, incoming
 - PathRAG: Traverse explicit edges
-- K-core decomposition for anomaly detection
 
 ### Not Available
 
 - Embeddings (no vectors)
 - Community detection
+- Structural analysis (k-core, pivots)
+- Anomaly detection
 - Semantic search
 - GraphRAG
 
@@ -268,12 +258,23 @@ Everything in Rules-Only, plus:
     "min_community_size": 3,
     "max_iterations": 100,
     "enable_llm": false,
+    "enable_structural": true,
+    "pivot_count": 16,
+    "max_hop_distance": 10,
+    "enable_anomaly_detection": true,
+    "anomaly_config": {
+      "enabled": true,
+      "core_anomaly": {"enabled": true, "min_core_level": 2},
+      "semantic_gap": {"enabled": false}
+    },
     "ports": {
       "inputs": [
         {"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"}
       ],
       "outputs": [
-        {"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"}
+        {"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"},
+        {"name": "structural", "type": "kv-write", "subject": "STRUCTURAL_INDEX"},
+        {"name": "anomalies", "type": "kv-write", "subject": "ANOMALY_INDEX"}
       ]
     }
   }
@@ -340,7 +341,7 @@ Everything in Native, plus:
 }
 ```
 
-**graph-clustering component** (with LLM):
+**graph-clustering component** (with LLM and semantic gap detection):
 
 ```json
 {
@@ -351,12 +352,23 @@ Everything in Native, plus:
     "max_iterations": 100,
     "enable_llm": true,
     "llm_endpoint": "http://seminstruct:8083/v1",
+    "enable_structural": true,
+    "pivot_count": 16,
+    "max_hop_distance": 10,
+    "enable_anomaly_detection": true,
+    "anomaly_config": {
+      "enabled": true,
+      "core_anomaly": {"enabled": true, "min_core_level": 2},
+      "semantic_gap": {"enabled": true, "similarity_threshold": 0.7, "min_structural_distance": 3}
+    },
     "ports": {
       "inputs": [
         {"name": "entity_watch", "type": "kv-watch", "subject": "ENTITY_STATES"}
       ],
       "outputs": [
-        {"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"}
+        {"name": "communities", "type": "kv-write", "subject": "COMMUNITY_INDEX"},
+        {"name": "structural", "type": "kv-write", "subject": "STRUCTURAL_INDEX"},
+        {"name": "anomalies", "type": "kv-write", "subject": "ANOMALY_INDEX"}
       ]
     }
   }

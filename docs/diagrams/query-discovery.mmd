@@ -7,7 +7,6 @@ flowchart TD
     Coordinator -->|Query Capabilities| GI[graph-ingest]
     Coordinator -->|Query Capabilities| GX[graph-index]
     Coordinator -->|Query Capabilities| GC[graph-clustering]
-    Coordinator -->|Query Capabilities| GA[graph-anomalies]
     Coordinator -->|Query Capabilities| GE[graph-embedding]
 
     Coordinator -->|Aggregate| Client
@@ -23,6 +22,5 @@ flowchart TD
     style GI fill:#f0f0f0
     style GX fill:#f0f0f0
     style GC fill:#f0f0f0
-    style GA fill:#f0f0f0
     style GE fill:#f0f0f0
 

@@ -5,7 +5,7 @@ sequenceDiagram
     participant ES as ENTITY_STATES
     participant Index as graph-index
     participant Idx as Index Buckets
-    participant Analysis as graph-anomalies
+    participant Clustering as graph-clustering
     participant Gateway as graph-gateway
 
     Note over JS: Message arrives:<br/>{"device_id": "sensor-042", "reading": 23.5}
@@ -20,14 +20,13 @@ sequenceDiagram
     Index->>Idx: Update OUTGOING_INDEX
     Index->>Idx: Update INCOMING_INDEX
     Index->>Idx: Update PREDICATE_INDEX
-    Note over Idx: KV watch triggers
 
-    Idx-->>Analysis: Watch notification
-    Analysis->>Analysis: Queue for next batch
-    Note over Analysis: Runs every 1h (configurable)
+    ES-->>Clustering: Watch notification
+    Clustering->>Clustering: Queue for next detection cycle
+    Note over Clustering: Runs every 30s (configurable)
 
     Gateway->>ES: Query entity
     Gateway->>Idx: Query relationships
-    Gateway->>Analysis: Query structural data
+    Gateway->>Clustering: Query communities, structural, anomalies
     Gateway-->>Gateway: Compose response
 

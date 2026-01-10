@@ -133,41 +133,9 @@ Response:
 ]
 ```
 
-### graph-anomalies Queries
-
-Structural anomaly detection and k-core analysis.
-
-| Subject | Operation | Description |
-|---------|-----------|-------------|
-| `graph.anomalies.query.kcore` | getKCore | Get k-core decomposition info for entities |
-| `graph.anomalies.query.pivot` | getPivotDistances | Get pivot-based distance metrics |
-| `graph.anomalies.query.outliers` | findOutliers | Find structural outliers in the graph |
-
-**Example: Find Structural Outliers**
-
-```bash
-nats req graph.anomalies.query.outliers '{"max_kcore":2,"limit":10}'
-```
-
-Response:
-
-```json
-{
-  "outliers": [
-    {
-      "entity_id": "acme.ops.sensor.042",
-      "core_number": 1,
-      "average_distance": 8.5,
-      "score": 0.92
-    }
-  ],
-  "count": 10
-}
-```
-
 ### graph-clustering Queries
 
-Community detection and hierarchical clustering operations.
+Community detection, structural analysis, and anomaly detection operations.
 
 | Subject | Operation | Description |
 |---------|-----------|-------------|
@@ -175,6 +143,8 @@ Community detection and hierarchical clustering operations.
 | `graph.clustering.query.members` | getMembers | Get members of a community |
 | `graph.clustering.query.entity` | getEntityCommunity | Get community for an entity at a level |
 | `graph.clustering.query.level` | getCommunitiesByLevel | Get all communities at a hierarchy level |
+| `graph.clustering.query.kcore` | getKCore | Get k-core decomposition info for entities |
+| `graph.clustering.query.anomalies` | getAnomalies | Get detected anomalies |
 
 **Example: Get Entity Community**
 
@@ -440,7 +410,7 @@ Examples:
 
 - `graph.ingest.query.entity` - Get entity from graph-ingest
 - `graph.index.query.outgoing` - Get outgoing relationships from graph-index
-- `graph.anomalies.query.kcore` - Get k-core data from graph-anomalies
+- `graph.clustering.query.kcore` - Get k-core data from graph-clustering
 
 Capabilities discovery uses:
 
@@ -475,7 +445,7 @@ Standard error messages:
 Query each component's capabilities endpoint to discover what operations are available:
 
 ```bash
-for component in ingest index clustering anomalies embedding; do
+for component in ingest index clustering embedding; do
     echo "=== graph-$component ==="
     nats req graph.$component.capabilities '' 2>/dev/null || echo "Not available"
 done
@@ -524,7 +494,7 @@ The query discovery system follows a federated pattern:
         ┌────────┬───────────┼───────────┬────────┐
         ▼        ▼           ▼           ▼        ▼
    ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐
-   │ ingest │ │ index  │ │cluster │ │anomaly │ │embed   │
+   │ ingest │ │ index  │ │cluster │ │spatial │ │embed   │
    └────────┘ └────────┘ └────────┘ └────────┘ └────────┘
 ```
 
@@ -546,7 +516,7 @@ Generate API documentation from discovered capabilities:
 
 ```bash
 # List all available query operations
-for comp in ingest index clustering anomalies embedding; do
+for comp in ingest index clustering embedding; do
     nats req graph.$comp.capabilities '' | jq -r '.queries[].subject'
 done
 ```

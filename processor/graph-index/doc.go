@@ -78,6 +78,6 @@
 //   - graph-ingest: produces ENTITY_STATES that this component watches
 //
 // Downstream:
-//   - graph-anomalies: watches OUTGOING_INDEX and INCOMING_INDEX for anomaly detection
+//   - graph-clustering: reads OUTGOING_INDEX and INCOMING_INDEX for structural analysis
 //   - graph-gateway: reads indexes for query resolution
 package graphindex
