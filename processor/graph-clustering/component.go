@@ -786,7 +786,9 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 
 	// Report cycle start
 	if c.lifecycleReporter != nil {
-		_ = c.lifecycleReporter.ReportCycleStart(ctx)
+		if err := c.lifecycleReporter.ReportCycleStart(ctx); err != nil {
+			c.logger.Debug("failed to report cycle start", slog.Any("error", err))
+		}
 	}
 
 	c.logger.Info("running community detection")
@@ -805,7 +807,9 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 		c.logger.Error("community detection failed", slog.Any("error", err))
 		atomic.AddInt64(&c.errors, 1)
 		if c.lifecycleReporter != nil {
-			_ = c.lifecycleReporter.ReportCycleError(ctx, err)
+			if repErr := c.lifecycleReporter.ReportCycleError(ctx, err); repErr != nil {
+				c.logger.Debug("failed to report cycle error", slog.Any("error", repErr))
+			}
 		}
 		return
 	}
@@ -843,7 +847,9 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 			c.logger.Error("structural computation failed", slog.Any("error", err))
 			atomic.AddInt64(&c.errors, 1)
 			if c.lifecycleReporter != nil {
-				_ = c.lifecycleReporter.ReportCycleError(ctx, err)
+				if repErr := c.lifecycleReporter.ReportCycleError(ctx, err); repErr != nil {
+					c.logger.Debug("failed to report cycle error", slog.Any("error", repErr))
+				}
 			}
 			return // Cannot continue to anomaly detection without structural indices
 		}
@@ -866,7 +872,9 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 				c.logger.Error("anomaly detection failed", slog.Any("error", err))
 				atomic.AddInt64(&c.errors, 1)
 				if c.lifecycleReporter != nil {
-					_ = c.lifecycleReporter.ReportCycleError(ctx, err)
+					if repErr := c.lifecycleReporter.ReportCycleError(ctx, err); repErr != nil {
+						c.logger.Debug("failed to report cycle error", slog.Any("error", repErr))
+					}
 				}
 				return
 			}
@@ -875,7 +883,9 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 
 	// Report successful cycle completion and return to idle
 	if c.lifecycleReporter != nil {
-		_ = c.lifecycleReporter.ReportCycleComplete(ctx)
+		if err := c.lifecycleReporter.ReportCycleComplete(ctx); err != nil {
+			c.logger.Debug("failed to report cycle complete", slog.Any("error", err))
+		}
 	}
 }
 
