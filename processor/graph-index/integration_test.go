@@ -470,3 +470,173 @@ func TestIntegration_ConcurrentUpdates(t *testing.T) {
 	assert.True(t, health.Healthy, "component should be healthy after concurrent updates")
 	assert.Equal(t, 0, health.ErrorCount, "should have no errors")
 }
+
+// TestIntegration_HierarchyEdgeIndexing tests that hierarchy edges are properly indexed.
+// This is critical: entities with hierarchy triples MUST have those edges indexed
+// for community detection to work correctly.
+func TestIntegration_HierarchyEdgeIndexing(t *testing.T) {
+	// Create test NATS client with KV support
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	// Create component
+	config := DefaultConfig()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphIndex(configJSON, deps)
+	require.NoError(t, err)
+
+	graphIndex := comp.(*Component)
+
+	// Initialize component
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	require.NoError(t, graphIndex.Initialize())
+
+	// Get JetStream context
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create ENTITY_STATES bucket BEFORE starting component
+	entityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entity states",
+	})
+	require.NoError(t, err)
+
+	// Start component
+	require.NoError(t, graphIndex.Start(ctx))
+	defer graphIndex.Stop(5 * time.Second)
+
+	// Create entity with hierarchy edges - mimics what graph-ingest produces
+	// Entity ID follows 6-part format: org.platform.domain.system.type.instance
+	entityID := "c360.logistics.sensor.document.temperature.sensor-temp-001"
+
+	// Container IDs also follow 6-part format (created by hierarchy inference)
+	typeContainer := "c360.logistics.sensor.document.temperature.group"
+	systemContainer := "c360.logistics.sensor.document.group.container"
+	domainContainer := "c360.logistics.sensor.group.container.level"
+
+	state := graph.EntityState{
+		ID: entityID,
+		Triples: []message.Triple{
+			// Type triple (not a relationship)
+			{
+				Subject:   entityID,
+				Predicate: "entity.type.class",
+				Object:    "sensor.temperature",
+				Source:    "test",
+				Timestamp: time.Now(),
+			},
+			// Hierarchy edges - these MUST be indexed as relationships
+			{
+				Subject:   entityID,
+				Predicate: "hierarchy.type.member",
+				Object:    typeContainer, // 6-part entity ID → IsRelationship() should return true
+				Context:   "inference.hierarchy",
+				Source:    "hierarchy",
+				Timestamp: time.Now(),
+			},
+			{
+				Subject:   entityID,
+				Predicate: "hierarchy.system.member",
+				Object:    systemContainer,
+				Context:   "inference.hierarchy",
+				Source:    "hierarchy",
+				Timestamp: time.Now(),
+			},
+			{
+				Subject:   entityID,
+				Predicate: "hierarchy.domain.member",
+				Object:    domainContainer,
+				Context:   "inference.hierarchy",
+				Source:    "hierarchy",
+				Timestamp: time.Now(),
+			},
+		},
+		MessageType: message.Type{Domain: "logistics", Category: "sensor", Version: "v1"},
+		Version:     1,
+	}
+
+	// Write entity to ENTITY_STATES bucket
+	stateData, err := json.Marshal(state)
+	require.NoError(t, err)
+
+	_, err = entityBucket.Put(ctx, entityID, stateData)
+	require.NoError(t, err)
+
+	// Wait for component to process the update
+	time.Sleep(500 * time.Millisecond)
+
+	// CRITICAL TEST: Verify outgoing index contains ALL hierarchy edges
+	outgoingEntry, err := graphIndex.outgoingBucket.Get(ctx, entityID)
+	require.NoError(t, err, "outgoing index should exist for entity")
+	assert.NotNil(t, outgoingEntry)
+
+	var outgoingData []map[string]interface{}
+	err = json.Unmarshal(outgoingEntry.Value(), &outgoingData)
+	require.NoError(t, err)
+
+	// Should have exactly 3 hierarchy relationships
+	require.Len(t, outgoingData, 3, "entity should have 3 hierarchy relationships indexed")
+
+	// Verify each container is in outgoing index
+	targetIDs := make(map[string]string) // target → predicate
+	for _, entry := range outgoingData {
+		targetIDs[entry["to_entity_id"].(string)] = entry["predicate"].(string)
+	}
+
+	assert.Equal(t, "hierarchy.type.member", targetIDs[typeContainer],
+		"type container should be in outgoing index with hierarchy.type.member predicate")
+	assert.Equal(t, "hierarchy.system.member", targetIDs[systemContainer],
+		"system container should be in outgoing index with hierarchy.system.member predicate")
+	assert.Equal(t, "hierarchy.domain.member", targetIDs[domainContainer],
+		"domain container should be in outgoing index with hierarchy.domain.member predicate")
+
+	// CRITICAL TEST: Verify incoming indexes on containers
+	// This is how community detection finds connections
+	for _, containerID := range []string{typeContainer, systemContainer, domainContainer} {
+		incomingEntry, err := graphIndex.incomingBucket.Get(ctx, containerID)
+		require.NoError(t, err, "incoming index should exist for container %s", containerID)
+
+		var incomingData []map[string]interface{}
+		err = json.Unmarshal(incomingEntry.Value(), &incomingData)
+		require.NoError(t, err)
+		require.NotEmpty(t, incomingData, "container %s should have incoming edges", containerID)
+
+		// Verify entity is in incoming index
+		found := false
+		for _, entry := range incomingData {
+			if entry["from_entity_id"].(string) == entityID {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "entity should be in incoming index for container %s", containerID)
+	}
+
+	// Verify context index tracks hierarchy inference provenance
+	contextEntry, err := graphIndex.contextBucket.Get(ctx, "inference.hierarchy")
+	require.NoError(t, err, "context index should exist for inference.hierarchy")
+
+	// Context index stores []ContextEntry (entity_id, predicate pairs)
+	var contextData []map[string]interface{}
+	err = json.Unmarshal(contextEntry.Value(), &contextData)
+	require.NoError(t, err)
+
+	// Verify entity is in context index
+	foundEntity := false
+	for _, entry := range contextData {
+		if entry["entity_id"].(string) == entityID {
+			foundEntity = true
+			break
+		}
+	}
+	assert.True(t, foundEntity, "entity should be in inference.hierarchy context")
+}

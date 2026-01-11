@@ -1198,3 +1198,210 @@ func TestIntegration_StructuralDisabledByDefault(t *testing.T) {
 
 	t.Log("Structural/anomaly features correctly disabled by default")
 }
+
+// TestIntegration_EntityCommunityLookup verifies that specific entities can be looked up
+// from their communities after community detection runs.
+// This is critical: the e2e test failed because entities weren't in communities.
+func TestIntegration_EntityCommunityLookup(t *testing.T) {
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	nc := testClient.Client
+
+	config := Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{Name: "entity_watch", Type: "kv-watch", Subject: graph.BucketEntityStates},
+			},
+			Outputs: []component.PortDefinition{
+				{Name: "communities", Type: "kv-write", Subject: graph.BucketCommunityIndex},
+			},
+		},
+		DetectionIntervalStr: "1s",
+		MinCommunitySize:     2,
+		MaxIterations:        10,
+		EnableLLM:            false,
+	}
+
+	config.ApplyDefaults()
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: nc,
+	}
+
+	comp, err := CreateGraphClustering(configJSON, deps)
+	require.NoError(t, err)
+
+	clusteringComp := comp.(*Component)
+	require.NoError(t, clusteringComp.Initialize())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Get JetStream for bucket setup
+	js, err := nc.JetStream()
+	require.NoError(t, err)
+
+	// Create required buckets
+	entityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Test entities",
+	})
+	require.NoError(t, err)
+
+	outgoingBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketOutgoingIndex,
+		Description: "Test outgoing edges",
+	})
+	require.NoError(t, err)
+
+	incomingBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketIncomingIndex,
+		Description: "Test incoming edges",
+	})
+	require.NoError(t, err)
+
+	// Start the component
+	require.NoError(t, clusteringComp.Start(ctx))
+	defer clusteringComp.Stop(5 * time.Second)
+
+	// Create test entities - 4 sensors connected to the same container
+	// This mimics hierarchy inference where sensors are connected via shared containers
+	entityIDs := []string{
+		"c360.logistics.sensor.temperature.zone1.sensor-001",
+		"c360.logistics.sensor.temperature.zone1.sensor-002",
+		"c360.logistics.sensor.temperature.zone1.sensor-003",
+		"c360.logistics.sensor.temperature.zone1.sensor-004",
+	}
+	containerID := "c360.logistics.sensor.temperature.zone1.group"
+
+	// Create entity states
+	for _, entityID := range entityIDs {
+		state := graph.EntityState{
+			ID: entityID,
+			Triples: []message.Triple{
+				{Subject: entityID, Predicate: "entity.type", Object: "sensor.temperature"},
+			},
+			MessageType: message.Type{Domain: "test", Category: "sensor", Version: "v1"},
+			Version:     1,
+		}
+		stateJSON, err := json.Marshal(state)
+		require.NoError(t, err)
+		_, err = entityBucket.Put(ctx, entityID, stateJSON)
+		require.NoError(t, err)
+	}
+
+	// Create container entity
+	containerState := graph.EntityState{
+		ID: containerID,
+		Triples: []message.Triple{
+			{Subject: containerID, Predicate: "entity.type", Object: "hierarchy.container"},
+		},
+		MessageType: message.Type{Domain: "test", Category: "container", Version: "v1"},
+		Version:     1,
+	}
+	containerJSON, err := json.Marshal(containerState)
+	require.NoError(t, err)
+	_, err = entityBucket.Put(ctx, containerID, containerJSON)
+	require.NoError(t, err)
+
+	// Create edges: each entity → container (hierarchy-like edges)
+	for _, entityID := range entityIDs {
+		outgoingData := []relationshipEntry{
+			{Predicate: "hierarchy.type.member", ToEntityID: containerID},
+		}
+		outgoingJSON, err := json.Marshal(outgoingData)
+		require.NoError(t, err)
+		_, err = outgoingBucket.Put(ctx, entityID, outgoingJSON)
+		require.NoError(t, err)
+	}
+
+	// Create incoming edges on container from all entities
+	var incomingData []relationshipEntry
+	for _, entityID := range entityIDs {
+		incomingData = append(incomingData, relationshipEntry{
+			Predicate:    "hierarchy.type.member",
+			FromEntityID: entityID,
+		})
+	}
+	incomingJSON, err := json.Marshal(incomingData)
+	require.NoError(t, err)
+	_, err = incomingBucket.Put(ctx, containerID, incomingJSON)
+	require.NoError(t, err)
+
+	// Wait for community detection to run
+	time.Sleep(3 * time.Second)
+
+	// Get the community bucket for verification
+	communityBucket, err := js.KeyValue(ctx, graph.BucketCommunityIndex)
+	require.NoError(t, err, "COMMUNITY_INDEX bucket should exist")
+
+	// CRITICAL TEST: Verify each entity has an entity→community mapping
+	// This is what failed in e2e - entities weren't in communities
+	entitiesFoundInCommunity := make(map[string]bool)
+
+	require.Eventually(t, func() bool {
+		// Check entity mappings (format: entity.{level}.{entityID})
+		for _, entityID := range entityIDs {
+			key := "entity.0." + entityID // Level 0
+			entry, err := communityBucket.Get(ctx, key)
+			if err == nil && entry != nil {
+				communityID := string(entry.Value())
+				t.Logf("Entity %s → community %s", entityID, communityID)
+				entitiesFoundInCommunity[entityID] = true
+			}
+		}
+		// At least 2 entities should be in a community (MinCommunitySize=2)
+		count := 0
+		for _, found := range entitiesFoundInCommunity {
+			if found {
+				count++
+			}
+		}
+		return count >= 2
+	}, 15*time.Second, 500*time.Millisecond, "At least 2 entities should have community mappings")
+
+	// Log which entities were found
+	for _, entityID := range entityIDs {
+		if entitiesFoundInCommunity[entityID] {
+			t.Logf("✓ Entity %s is in a community", entityID)
+		} else {
+			t.Logf("✗ Entity %s is NOT in a community", entityID)
+		}
+	}
+
+	// Verify community data exists and has members
+	keys, err := communityBucket.Keys(ctx)
+	require.NoError(t, err)
+
+	communityCount := 0
+	for _, key := range keys {
+		// Skip entity mapping keys
+		if len(key) > 7 && key[:7] == "entity." {
+			continue
+		}
+		// Community keys start with a digit (level)
+		if len(key) == 0 || key[0] < '0' || key[0] > '9' {
+			continue
+		}
+
+		entry, err := communityBucket.Get(ctx, key)
+		if err != nil {
+			continue
+		}
+
+		var community map[string]interface{}
+		if err := json.Unmarshal(entry.Value(), &community); err != nil {
+			continue
+		}
+
+		if members, ok := community["members"].([]interface{}); ok {
+			t.Logf("Community %s has %d members: %v", key, len(members), members)
+			communityCount++
+		}
+	}
+
+	assert.GreaterOrEqual(t, communityCount, 1, "At least one community should exist")
+	assert.GreaterOrEqual(t, len(entitiesFoundInCommunity), 2,
+		"At least 2 of the 4 test entities should be in a community")
+}
