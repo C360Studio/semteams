@@ -124,7 +124,7 @@ func (c *CommunityCache) handleUpdate(key string, data []byte) {
 
 // handleDelete processes a community deletion from KV watch.
 func (c *CommunityCache) handleDelete(key string) {
-	// Extract community ID from KV key (format: graph.community.{level}.{id})
+	// Extract community ID from KV key (format: {level}.{communityID})
 	communityID := extractCommunityIDFromKey(key)
 	if communityID == "" {
 		return // Not a community key (e.g., entity mapping key)

@@ -344,6 +344,88 @@ func TestIntegration_EmptyMembersCommunity(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestIntegration_KeyFormatConsumerCompatibility verifies that storage writes keys
+// in the format that consumers (enhancement_worker, community_cache) expect.
+// This test catches key format drift bugs where storage is refactored but consumers
+// still use stale format (e.g., the "graph.community." prefix removal bug).
+func TestIntegration_KeyFormatConsumerCompatibility(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+	ctx := context.Background()
+
+	kv, err := natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket: CommunityBucket,
+	})
+	require.NoError(t, err)
+
+	defer func() {
+		keys, _ := kv.Keys(ctx)
+		for _, key := range keys {
+			kv.Delete(ctx, key)
+		}
+	}()
+
+	storage := NewNATSCommunityStorage(kv)
+
+	// Create test communities
+	community := &Community{
+		ID:      "test-community-123",
+		Level:   0,
+		Members: []string{"entity-a", "entity-b", "entity-c"},
+	}
+	err = storage.SaveCommunity(ctx, community)
+	require.NoError(t, err)
+
+	// Get all keys from bucket
+	keys, err := kv.Keys(ctx)
+	require.NoError(t, err)
+
+	// Verify key formats match what consumers expect:
+	// - Community data key: "{level}.{communityID}" (e.g., "0.test-community-123")
+	// - Entity mapping key: "entity.{level}.{entityID}" (e.g., "entity.0.entity-a")
+	foundCommunityKey := false
+	foundEntityMappingKeys := 0
+
+	expectedCommunityKey := "0.test-community-123"
+	expectedEntityKeyPrefix := "entity.0."
+
+	for _, key := range keys {
+		t.Logf("Found key: %s", key)
+
+		// Check community data key format
+		if key == expectedCommunityKey {
+			foundCommunityKey = true
+		}
+
+		// Check entity mapping key format
+		// enhancement_worker.go and community_cache.go use: strings.HasPrefix(key, "entity.")
+		if len(key) > 9 && key[:9] == expectedEntityKeyPrefix {
+			foundEntityMappingKeys++
+		}
+	}
+
+	// Verify community key format: "{level}.{communityID}" (NOT "graph.community.{level}.{id}")
+	assert.True(t, foundCommunityKey,
+		"Community key should have format '{level}.{communityID}', expected '%s' in keys %v",
+		expectedCommunityKey, keys)
+
+	// Verify entity mapping key format: "entity.{level}.{entityID}" (NOT "graph.community.entity.{entityID}")
+	assert.Equal(t, 3, foundEntityMappingKeys,
+		"Should have 3 entity mapping keys with format 'entity.{level}.{entityID}', found %d in keys %v",
+		foundEntityMappingKeys, keys)
+
+	// Verify consumers can use the same filter patterns that storage writes:
+	// enhancement_worker.go line 272: strings.HasPrefix(key, "entity.")
+	// community_cache.go line 158: strings.HasPrefix(key, "entity.")
+	for _, key := range keys {
+		isEntityMapping := len(key) > 7 && key[:7] == "entity."
+		isCommunityData := !isEntityMapping && len(key) > 0 && key[0] >= '0' && key[0] <= '9'
+
+		// Every key should be classified as one or the other
+		assert.True(t, isEntityMapping || isCommunityData,
+			"Key '%s' should match either entity mapping or community data pattern", key)
+	}
+}
+
 // TestIntegration_CommunitySummaryFields tests the new summary fields
 func TestIntegration_CommunitySummaryFields(t *testing.T) {
 	natsClient := getSharedNATSClient(t)

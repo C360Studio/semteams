@@ -41,9 +41,9 @@ type LocalSearchRequest struct {
 // LocalSearchResponse is the response format for local search
 type LocalSearchResponse struct {
 	Entities    []*gtypes.EntityState `json:"entities"`
-	CommunityID string                `json:"community_id"`
+	CommunityID string                `json:"communityId"`
 	Count       int                   `json:"count"`
-	DurationMs  int64                 `json:"duration_ms"`
+	DurationMs  int64                 `json:"durationMs"`
 }
 
 // GlobalSearchRequest is the request format for global search
@@ -114,7 +114,7 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 	}
 
 	// Tiered community lookup with fallback
-	community := c.findCommunityWithFallback(req.EntityID, req.Level)
+	community := c.findCommunityWithFallback(ctx, req.EntityID, req.Level)
 	if community == nil {
 		// Tier 3: Fall back to semantic search if available
 		semanticHits, err := c.searchEntitiesSemantic(ctx, req.Query, 50)
@@ -137,7 +137,7 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 				return json.Marshal(response)
 			}
 		}
-		return nil, fmt.Errorf("entity %s not in any community (tried levels %d-0)", req.EntityID, req.Level)
+		return nil, fmt.Errorf("entity %s not in a community at level %d", req.EntityID, req.Level)
 	}
 
 	// Load entities from community via graph-ingest
@@ -451,28 +451,99 @@ func (c *Component) findCommunitiesForEntities(entityIDs []string) []CommunitySu
 	return summaries
 }
 
-// findCommunityWithFallback looks up an entity's community with level fallback.
-// Tier 1: Try the requested level
-// Tier 2: Try lower levels down to 0 (level 0 is most inclusive)
-// Returns nil if entity is not in any community at any level.
-func (c *Component) findCommunityWithFallback(entityID string, requestedLevel int) *clustering.Community {
-	// Tier 1: Try requested level
+// findCommunityWithFallback looks up an entity's community at the exact requested level.
+// Tier 1: Try the cache at requested level
+// Tier 2: Query storage directly via NATS (handles cache sync delays)
+// Returns nil if entity is not in a community at the requested level.
+func (c *Component) findCommunityWithFallback(ctx context.Context, entityID string, requestedLevel int) *clustering.Community {
+	// Tier 1: Try requested level from cache
 	community := c.communityCache.GetEntityCommunity(entityID, requestedLevel)
 	if community != nil {
+		if c.promMetrics != nil {
+			c.promMetrics.recordCacheHit()
+		}
 		return community
 	}
 
-	// Tier 2: Try lower levels (level 0 is most inclusive)
-	for level := requestedLevel - 1; level >= 0; level-- {
-		community = c.communityCache.GetEntityCommunity(entityID, level)
-		if community != nil {
-			c.logger.Debug("community fallback to lower level",
-				"entity_id", entityID,
-				"requested_level", requestedLevel,
-				"found_level", level,
-				"community_id", community.ID)
-			return community
+	// Cache miss - record metric before trying storage fallback
+	if c.promMetrics != nil {
+		c.promMetrics.recordCacheMiss()
+	}
+
+	// Tier 2: Query storage directly via NATS (handles cache sync delays)
+	// This bypasses the async cache and queries graph-clustering's KV directly
+	community = c.fetchEntityCommunityFromStorage(ctx, entityID, requestedLevel)
+	if community != nil {
+		c.logger.Debug("community found via storage query",
+			"entity_id", entityID,
+			"level", requestedLevel,
+			"community_id", community.ID)
+		if c.promMetrics != nil {
+			c.promMetrics.recordStorageHit()
 		}
+		return community
+	}
+
+	// Entity not in a community at requested level
+	if c.promMetrics != nil {
+		c.promMetrics.recordStorageMiss()
+	}
+	c.logger.Debug("entity not in community at level",
+		"entity_id", entityID,
+		"level", requestedLevel)
+
+	return nil
+}
+
+// fetchEntityCommunityFromStorage queries graph-clustering directly via NATS request.
+// This bypasses the cache and reads from KV storage, handling cache sync delays.
+func (c *Component) fetchEntityCommunityFromStorage(ctx context.Context, entityID string, level int) *clustering.Community {
+	req := map[string]any{
+		"entity_id": entityID,
+		"level":     level,
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		c.logger.Debug("storage query marshal failed",
+			"entity_id", entityID,
+			"level", level,
+			"error", err)
+		return nil
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	resp, err := c.natsClient.Request(queryCtx, "graph.clustering.query.entity", data, 5*time.Second)
+	cancel()
+
+	if err != nil {
+		c.logger.Debug("storage query request failed",
+			"entity_id", entityID,
+			"level", level,
+			"error", err)
+		return nil
+	}
+
+	var result struct {
+		EntityID  string                `json:"entity_id"`
+		Level     int                   `json:"level"`
+		Community *clustering.Community `json:"community"`
+	}
+	if err := json.Unmarshal(resp, &result); err != nil {
+		c.logger.Debug("storage query unmarshal failed",
+			"entity_id", entityID,
+			"level", level,
+			"error", err,
+			"response", string(resp))
+		return nil
+	}
+
+	if result.Community != nil {
+		c.logger.Debug("storage query found community",
+			"entity_id", entityID,
+			"level", level,
+			"community_id", result.Community.ID,
+			"member_count", len(result.Community.Members))
+		return result.Community
 	}
 
 	return nil

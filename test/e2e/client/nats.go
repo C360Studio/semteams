@@ -361,9 +361,9 @@ func (c *NATSValidationClient) GetAllCommunities(ctx context.Context) ([]*cluste
 	var communities []*clustering.Community
 	for _, key := range keys {
 		// Skip entity-to-community index entries (they have different structure)
-		// Community keys have format: "graph.community.L{level}.{id}"
-		// Entity index keys have format: "graph.community.entity.{entityID}"
-		if len(key) > 22 && key[:22] == "graph.community.entity" {
+		// Community keys have format: "{level}.{communityID}"
+		// Entity index keys have format: "entity.{level}.{entityID}"
+		if strings.HasPrefix(key, "entity.") {
 			continue
 		}
 

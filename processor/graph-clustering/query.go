@@ -247,42 +247,40 @@ func (c *Component) getCommunity(ctx context.Context, id string) (*clustering.Co
 }
 
 // getEntityCommunity finds the community containing the given entity at the specified level
+// Uses the indexed entity mapping (entity.{level}.{entity_id} -> community_id) for O(1) lookup
 func (c *Component) getEntityCommunity(ctx context.Context, entityID string, level int) (*clustering.Community, error) {
 	if c.communityBucket == nil {
 		return nil, fmt.Errorf("community bucket not initialized")
 	}
 
-	// List all keys and scan for the entity
-	keys, err := c.communityBucket.Keys(ctx)
+	// Use indexed entity -> community mapping for O(1) lookup
+	entityKey := fmt.Sprintf("entity.%d.%s", level, entityID)
+	entry, err := c.communityBucket.Get(ctx, entityKey)
 	if err != nil {
-		return nil, fmt.Errorf("list keys: %w", err)
+		if err == jetstream.ErrKeyNotFound {
+			return nil, nil // Entity not in any community at this level
+		}
+		return nil, fmt.Errorf("get entity mapping: %w", err)
 	}
 
-	for _, key := range keys {
-		entry, err := c.communityBucket.Get(ctx, key)
-		if err != nil {
-			continue
-		}
+	communityID := string(entry.Value())
 
-		var community clustering.Community
-		if err := json.Unmarshal(entry.Value(), &community); err != nil {
-			continue
+	// Fetch the community data
+	communityKey := fmt.Sprintf("%d.%s", level, communityID)
+	communityEntry, err := c.communityBucket.Get(ctx, communityKey)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return nil, nil // Mapping exists but community was deleted
 		}
-
-		// Check if this community is at the right level
-		if community.Level != level {
-			continue
-		}
-
-		// Check if entity is a member
-		for _, member := range community.Members {
-			if member == entityID {
-				return &community, nil
-			}
-		}
+		return nil, fmt.Errorf("get community: %w", err)
 	}
 
-	return nil, nil // Not found is not an error, just return nil
+	var community clustering.Community
+	if err := json.Unmarshal(communityEntry.Value(), &community); err != nil {
+		return nil, fmt.Errorf("unmarshal community: %w", err)
+	}
+
+	return &community, nil
 }
 
 // getCommunitiesByLevel retrieves all communities at a given level

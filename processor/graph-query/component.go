@@ -131,6 +131,9 @@ type Component struct {
 	errors            int64
 	lastMetricsReset  time.Time
 
+	// Prometheus metrics for observability
+	promMetrics *queryMetrics
+
 	// Lifecycle reporting
 	lifecycleReporter component.LifecycleReporter
 }
@@ -172,6 +175,7 @@ func CreateGraphQuery(rawConfig json.RawMessage, deps component.Dependencies) (c
 		pathSearcher:     NewPathSearcher(deps.NATSClient, config.QueryTimeout, config.MaxDepth, logger),
 		logger:           logger,
 		lastMetricsReset: time.Now(),
+		promMetrics:      getMetrics(deps.MetricsRegistry),
 	}
 
 	return comp, nil

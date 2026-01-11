@@ -268,8 +268,8 @@ func (w *EnhancementWorker) waitForResume() bool {
 
 // handleKVEntry processes a KV entry to check if it needs LLM enhancement
 func (w *EnhancementWorker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
-	// Skip entity mapping keys (graph.community.entity.*)
-	if strings.HasPrefix(entry.Key(), "graph.community.entity.") {
+	// Skip entity mapping keys (format: entity.{level}.{entityID})
+	if strings.HasPrefix(entry.Key(), "entity.") {
 		return
 	}
 
