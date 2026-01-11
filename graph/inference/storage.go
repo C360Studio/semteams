@@ -72,6 +72,10 @@ type Storage interface {
 	// IsDismissedPair checks if an entity pair is already tracked (any status including pending).
 	// This prevents re-detecting the same semantic gap repeatedly across detection runs.
 	IsDismissedPair(ctx context.Context, entityA, entityB string) (bool, error)
+
+	// HasEntityAnomaly checks if an anomaly already exists for an entity+type combination.
+	// This prevents re-detecting the same core isolation/demotion across detection runs.
+	HasEntityAnomaly(ctx context.Context, entityID string, anomalyType AnomalyType) (bool, error)
 }
 
 // NATSAnomalyStorage implements Storage using NATS KV.
@@ -197,6 +201,18 @@ func (s *NATSAnomalyStorage) SaveWithRevision(ctx context.Context, anomaly *Stru
 				s.logger.Warn("failed to mark pair as tracked",
 					"entity_a", anomaly.EntityA,
 					"entity_b", anomaly.EntityB,
+					"error", err)
+			}
+		}
+
+		// For core isolation/demotion anomalies, mark the entity as tracked
+		if (anomaly.Type == AnomalyCoreIsolation || anomaly.Type == AnomalyCoreDemotion) && anomaly.EntityA != "" {
+			entityKey := entityAnomalyKey(anomaly.Type, anomaly.EntityA)
+			if _, err := s.kv.Put(ctx, entityKey, []byte{}); err != nil {
+				// Log but don't fail - this is an optimization
+				s.logger.Warn("failed to mark entity as tracked",
+					"entity", anomaly.EntityA,
+					"type", anomaly.Type,
 					"error", err)
 			}
 		}
@@ -614,6 +630,38 @@ func (s *NATSAnomalyStorage) IsDismissedPair(ctx context.Context, entityA, entit
 	return false, errs.WrapTransient(err, "NATSAnomalyStorage", "IsDismissedPair", "check pair index")
 }
 
+// HasEntityAnomaly checks if an anomaly already exists for an entity+type combination.
+// This prevents re-detecting the same core isolation/demotion across detection runs.
+func (s *NATSAnomalyStorage) HasEntityAnomaly(ctx context.Context, entityID string, anomalyType AnomalyType) (bool, error) {
+	// Use test store if KV is nil
+	if s.kv == nil && s.testStore != nil {
+		s.testStore.mu.RLock()
+		defer s.testStore.mu.RUnlock()
+		for _, a := range s.testStore.anomalies {
+			if a.Type == anomalyType && a.EntityA == entityID {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+
+	if s.kv == nil {
+		return false, nil
+	}
+
+	// Check the entity index
+	key := entityAnomalyKey(anomalyType, entityID)
+	_, err := s.kv.Get(ctx, key)
+	if err == nil {
+		return true, nil
+	}
+	if stderrors.Is(err, jetstream.ErrKeyNotFound) {
+		return false, nil
+	}
+
+	return false, errs.WrapTransient(err, "NATSAnomalyStorage", "HasEntityAnomaly", "check entity index")
+}
+
 // MarkPairDismissed creates an index entry to prevent future re-detection.
 // Called when an anomaly is dismissed, rejected, or auto-applied.
 func (s *NATSAnomalyStorage) MarkPairDismissed(ctx context.Context, entityA, entityB string) error {
@@ -669,6 +717,14 @@ func typeIndexKey(anomalyType AnomalyType, id string) string {
 
 func typeIndexPrefix(anomalyType AnomalyType) string {
 	return fmt.Sprintf("anomaly.idx.type.%s.", anomalyType)
+}
+
+// entityAnomalyKey creates a NATS KV key for the entity anomaly index.
+// Uses SHA256 hash to avoid issues with dots in entity IDs (hierarchical notation).
+func entityAnomalyKey(anomalyType AnomalyType, entityID string) string {
+	key := string(anomalyType) + "::" + entityID
+	hash := sha256.Sum256([]byte(key))
+	return fmt.Sprintf("anomaly.idx.entity.%s", hex.EncodeToString(hash[:16]))
 }
 
 // extractIDFromIndexKey extracts the anomaly ID from an index key.

@@ -102,6 +102,15 @@ func (s *mockStorage) IsDismissedPair(_ context.Context, _, _ string) (bool, err
 	return false, nil
 }
 
+func (s *mockStorage) HasEntityAnomaly(_ context.Context, entityID string, anomalyType AnomalyType) (bool, error) {
+	for _, a := range s.anomalies {
+		if a.Type == anomalyType && a.EntityA == entityID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // mockDetector implements Detector for testing
 type mockDetector struct {
 	name      string

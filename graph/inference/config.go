@@ -193,10 +193,10 @@ func DefaultConfig() Config {
 		},
 		CoreAnomaly: CoreAnomalyConfig{
 			Enabled:               true,
-			MinCoreForHubAnalysis: 2,
-			HubIsolationThreshold: 0.3,
+			MinCoreForHubAnalysis: 3,
+			HubIsolationThreshold: 0.5,
 			TrackCoreDemotions:    true,
-			MinDemotionDelta:      1,
+			MinDemotionDelta:      2,
 		},
 		Transitivity: TransitivityConfig{
 			Enabled:                 true,
