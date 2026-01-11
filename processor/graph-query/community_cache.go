@@ -84,6 +84,12 @@ func (c *CommunityCache) WatchAndSync(ctx context.Context, bucket jetstream.KeyV
 
 // handleUpdate processes a community create/update from KV watch.
 func (c *CommunityCache) handleUpdate(key string, data []byte) {
+	// Skip entity mapping keys (format: entity.{level}.{entityID})
+	// These contain plain string community IDs, not JSON Community objects
+	if strings.HasPrefix(key, "entity.") {
+		return
+	}
+
 	var community clustering.Community
 	if err := json.Unmarshal(data, &community); err != nil {
 		c.logger.Warn("failed to unmarshal community",
