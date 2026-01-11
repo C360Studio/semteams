@@ -23,7 +23,7 @@
       "queries_with_results": 7,
       "queries_meeting_min_score": 6,
       "queries_meeting_min_hits": 7,
-      "overall_avg_score": 0.2133871559265091,
+      "overall_avg_score": 0.2137679275958786,
       "known_answer_tests_passed": 6,
       "known_answer_tests_total": 6,
       "results": [
@@ -36,24 +36,24 @@
               "score": 0.25609025549911546
             },
             {
-              "entity_id": "c360.logistics.maintenance.work.completed.maint-001",
-              "score": 0.22905408786852466
+              "entity_id": "c360.logistics.observation.record.medium.obs-002",
+              "score": 0.25605816031281714
             },
             {
-              "entity_id": "c360.logistics.observation.record.medium.obs-002",
-              "score": 0.22285679175363063
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-001",
+              "score": 0.22905408786852463
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-008",
-              "score": 0.20421087705981664
+              "score": 0.20518315205365598
             },
             {
               "entity_id": "c360.logistics.content.document.safety.doc-safety-001",
-              "score": 0.1794152195782928
+              "score": 0.17590088207881543
             },
             {
               "entity_id": "c360.logistics.sensor.document.gas.sensor-gas-001",
-              "score": 0.1330779489816975
+              "score": 0.1326080768182404
             },
             {
               "entity_id": "c360.logistics.observation.record.high.obs-001",
@@ -61,24 +61,24 @@
             },
             {
               "entity_id": "c360.logistics.observation.record.critical.obs-004",
-              "score": 0.09555565092998683
-            },
-            {
-              "entity_id": "c360.logistics.observation.record.high.obs-005",
-              "score": 0.06182281892308568
+              "score": 0.10697867294415009
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-005",
+              "score": 0.06182281892308568
+            },
+            {
+              "entity_id": "c360.logistics.observation.record.high.obs-005",
               "score": 0.05489641931054943
             }
           ],
-          "latency_ms": 7,
+          "latency_ms": 8,
           "validation": {
             "matches_pattern": false,
             "meets_min_score": false,
             "meets_min_hits": true,
             "hits_above_min_score": 0,
-            "avg_score": 0.15632098636782948,
+            "avg_score": 0.16048223195825495,
             "known_answer_passed": true
           }
         },
@@ -92,23 +92,23 @@
             },
             {
               "entity_id": "c360.logistics.observation.record.medium.obs-015",
-              "score": 0.29910935261179544
+              "score": 0.2989105053403894
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-011",
-              "score": 0.28117630699327095
+              "score": 0.2814601293234965
             },
             {
               "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-002",
-              "score": 0.2749643754045336
+              "score": 0.27393257143534794
             },
             {
               "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-001",
-              "score": 0.25656066354607254
+              "score": 0.25339397524035195
             },
             {
               "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-003",
-              "score": 0.2071038688755812
+              "score": 0.20198207692760747
             },
             {
               "entity_id": "c360.logistics.sensor.document.weight.sensor-weight-001",
@@ -116,24 +116,24 @@
             },
             {
               "entity_id": "c360.logistics.observation.record.high.obs-013",
-              "score": 0.1594767844725521
+              "score": 0.16000633199827557
             },
             {
               "entity_id": "c360.logistics.content.document.safety.doc-safety-001",
-              "score": 0.12803693351469284
+              "score": 0.12552898018817799
             },
             {
               "entity_id": "c360.logistics.observation.record.high.obs-001",
               "score": 0.09008196601688194
             }
           ],
-          "latency_ms": 6,
+          "latency_ms": 7,
           "validation": {
             "matches_pattern": true,
             "meets_min_score": true,
             "meets_min_hits": true,
             "hits_above_min_score": 1,
-            "avg_score": 0.22119430117699573,
+            "avg_score": 0.22007292968051048,
             "known_answer_passed": true
           }
         },
@@ -143,19 +143,19 @@
           "hits": [
             {
               "entity_id": "c360.logistics.observation.record.high.obs-013",
-              "score": 0.5483350614554594
+              "score": 0.5475397147244494
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-008",
-              "score": 0.44596419299358114
+              "score": 0.44585229862015885
             },
             {
               "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-001",
-              "score": 0.43906576695143135
+              "score": 0.4420507071100124
             },
             {
               "entity_id": "c360.logistics.content.document.maintenance.doc-maint-001",
-              "score": 0.3859713953336833
+              "score": 0.3856315706173921
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-002",
@@ -163,32 +163,32 @@
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-001",
-              "score": 0.14145730238977064
+              "score": 0.1414573023897706
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-011",
-              "score": 0.11899854598680382
-            },
-            {
-              "entity_id": "c360.logistics.maintenance.work.completed.maint-003",
-              "score": 0.09549331140293109
-            },
-            {
-              "entity_id": "c360.logistics.maintenance.work.completed.maint-012",
-              "score": 0.09291936178551952
+              "score": 0.11826736451361601
             },
             {
               "entity_id": "c360.logistics.observation.record.medium.obs-009",
               "score": 0.09261850707816943
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-012",
+              "score": 0.09227717475446896
+            },
+            {
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-003",
+              "score": 0.09001276892272621
             }
           ],
-          "latency_ms": 6,
+          "latency_ms": 7,
           "validation": {
             "matches_pattern": false,
             "meets_min_score": true,
             "meets_min_hits": true,
             "hits_above_min_score": 4,
-            "avg_score": 0.25022807477671205,
+            "avg_score": 0.24971647111205347,
             "known_answer_passed": true
           }
         },
@@ -198,23 +198,23 @@
           "hits": [
             {
               "entity_id": "c360.logistics.sensor.document.level.sensor-level-001",
-              "score": 0.44530936093288065
+              "score": 0.4448958489688388
             },
             {
               "entity_id": "c360.logistics.sensor.document.humidity.sensor-humid-001",
-              "score": 0.1861624173050841
+              "score": 0.18625171110952535
             },
             {
               "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-003",
-              "score": 0.18379567459393895
+              "score": 0.18515338305900017
             },
             {
               "entity_id": "c360.logistics.sensor.document.door.sensor-door-001",
-              "score": 0.14213575407125073
+              "score": 0.1408436460321297
             },
             {
               "entity_id": "c360.logistics.sensor.document.light.sensor-light-001",
-              "score": 0.1112387759430736
+              "score": 0.1106989377708437
             },
             {
               "entity_id": "c360.logistics.sensor.document.pressure.sensor-pressure-001",
@@ -222,28 +222,28 @@
             },
             {
               "entity_id": "c360.logistics.sensor.document.air_quality.sensor-air-001",
-              "score": 0.10569534968056177
+              "score": 0.10470853461640676
             },
             {
               "entity_id": "c360.logistics.sensor.document.water.sensor-water-001",
-              "score": 0.10207272882909467
+              "score": 0.10271451734121066
             },
             {
               "entity_id": "c360.logistics.sensor.document.vibration.sensor-vibration-001",
-              "score": 0.09432739514477416
+              "score": 0.09430613744913542
             },
             {
-              "entity_id": "c360.logistics.observation.record.high.obs-008",
+              "entity_id": "c360.logistics.observation.record.high.obs-005",
               "score": 0
             }
           ],
-          "latency_ms": 8,
+          "latency_ms": 7,
           "validation": {
             "matches_pattern": false,
             "meets_min_score": true,
             "meets_min_hits": true,
             "hits_above_min_score": 1,
-            "avg_score": 0.14796783369976124,
+            "avg_score": 0.1478513596844045,
             "known_answer_passed": true
           }
         },
@@ -253,7 +253,7 @@
           "hits": [
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-008",
-              "score": 0.4873487853671537
+              "score": 0.48791142601446147
             },
             {
               "entity_id": "c360.logistics.content.document.operations.doc-ops-001",
@@ -261,7 +261,7 @@
             },
             {
               "entity_id": "c360.logistics.content.document.maintenance.doc-maint-001",
-              "score": 0.30351734442164097
+              "score": 0.3032501155629626
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-006",
@@ -276,29 +276,29 @@
               "score": 0.11750440839597485
             },
             {
-              "entity_id": "c360.logistics.maintenance.work.completed.maint-011",
-              "score": 0.09884858193910923
+              "entity_id": "c360.logistics.observation.record.medium.obs-002",
+              "score": 0.11008365180984798
             },
             {
-              "entity_id": "c360.logistics.observation.record.medium.obs-002",
-              "score": 0.09580983256653691
+              "entity_id": "c360.logistics.maintenance.work.completed.maint-011",
+              "score": 0.09824121105768031
             },
             {
               "entity_id": "c360.logistics.sensor.document.gas.sensor-gas-001",
-              "score": 0.08541306881891579
+              "score": 0.08511149200817782
             },
             {
-              "entity_id": "c360.logistics.maintenance.work.completed.maint-003",
-              "score": 0.079323476926317
+              "entity_id": "c360.logistics.observation.record.medium.obs-009",
+              "score": 0.07693546177454683
             }
           ],
-          "latency_ms": 7,
+          "latency_ms": 6,
           "validation": {
             "matches_pattern": true,
             "meets_min_score": true,
             "meets_min_hits": true,
             "hits_above_min_score": 3,
-            "avg_score": 0.2261181855637048,
+            "avg_score": 0.2272454123825051,
             "known_answer_passed": true
           }
         },
@@ -308,38 +308,38 @@
           "hits": [
             {
               "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-001",
-              "score": 0.7308098152218628
+              "score": 0.7316934220085265
             },
             {
               "entity_id": "c360.logistics.observation.record.high.obs-013",
-              "score": 0.5634327935844614
+              "score": 0.5632484115027483
             },
             {
               "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-002",
-              "score": 0.41945165157673464
+              "score": 0.41909022727062206
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-011",
-              "score": 0.23387367650736973
+              "score": 0.23410975106341803
             },
             {
               "entity_id": "c360.logistics.sensor.document.temperature.sensor-temp-003",
-              "score": 0.17226253431798416
+              "score": 0.16800238762928357
             },
             {
               "entity_id": "c360.logistics.sensor.document.power.sensor-power-001",
-              "score": 0.16397297216657636
+              "score": 0.16372148252632035
             },
             {
               "entity_id": "c360.logistics.sensor.document.weight.sensor-weight-001",
-              "score": 0.14573347227725225
+              "score": 0.14573347227725222
             },
             {
-              "entity_id": "c360.logistics.observation.record.high.obs-008",
+              "entity_id": "c360.logistics.observation.record.high.obs-005",
               "score": 0
             },
             {
-              "entity_id": "c360.logistics.observation.record.low.obs-006",
+              "entity_id": "c360.logistics.sensor.document.vibration.sensor-vibration-001",
               "score": 0
             },
             {
@@ -353,7 +353,7 @@
             "meets_min_score": true,
             "meets_min_hits": true,
             "hits_above_min_score": 3,
-            "avg_score": 0.24295369156522412,
+            "avg_score": 0.24255991542781713,
             "known_answer_passed": true
           }
         },
@@ -367,19 +367,19 @@
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-008",
-              "score": 0.34408005940477426
+              "score": 0.3440399401263127
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-003",
-              "score": 0.2949128651733456
+              "score": 0.29160245036637994
             },
             {
               "entity_id": "c360.logistics.content.document.maintenance.doc-maint-001",
-              "score": 0.28981324947473663
+              "score": 0.2895580862515786
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-010",
-              "score": 0.2610626883552292
+              "score": 0.26069207499007413
             },
             {
               "entity_id": "c360.logistics.content.document.technology.doc-it-001",
@@ -387,11 +387,11 @@
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-013",
-              "score": 0.1883792875320669
+              "score": 0.1882586259660266
             },
             {
               "entity_id": "c360.logistics.sensor.document.level.sensor-level-001",
-              "score": 0.1553123403088984
+              "score": 0.15521333489676348
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-002",
@@ -399,7 +399,7 @@
             },
             {
               "entity_id": "c360.logistics.maintenance.work.completed.maint-011",
-              "score": 0.09805202076647057
+              "score": 0.09744954432107752
             }
           ],
           "latency_ms": 7,
@@ -408,13 +408,13 @@
             "meets_min_score": true,
             "meets_min_hits": true,
             "hits_above_min_score": 2,
-            "avg_score": 0.24892701833533604,
+            "avg_score": 0.2484471729256052,
             "known_answer_passed": true
           }
         }
       ],
-      "executed_at": "2026-01-10T09:28:37.517405-06:00",
-      "total_latency_ms": 48
+      "executed_at": "2026-01-11T09:43:14.448294-06:00",
+      "total_latency_ms": 49
     },
     "weak_results_threshold": 0.5,
     "is_weak": true
@@ -427,11 +427,11 @@
     "on_exit_fired": 3
   },
   "communities": {
-    "total_communities": 21,
-    "non_singleton_count": 21,
+    "total_communities": 23,
+    "non_singleton_count": 23,
     "largest_size": 30,
-    "average_size": 17,
-    "with_keywords": 21
+    "average_size": 16,
+    "with_keywords": 23
   },
   "pathrag_sensor": {
     "start_entity": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
@@ -485,7 +485,7 @@
     ],
     "scores_valid": true,
     "truncated": true,
-    "latency_ms": 3,
+    "latency_ms": 5,
     "boundary_test": {
       "max_nodes_limit": 5,
       "entities_returned": 6,
@@ -544,7 +544,7 @@
     ],
     "scores_valid": true,
     "truncated": true,
-    "latency_ms": 0
+    "latency_ms": 1
   },
   "components": {
     "expected_count": 19,
@@ -570,56 +570,54 @@
     "inference_working": true
   },
   "timing": {
-    "total_duration_ms": 90878,
+    "total_duration_ms": 101054,
     "stage_durations": {
-      "send-mixed-data": 3,
-      "test-embedding-fallback": 1,
+      "send-mixed-data": 2,
+      "test-embedding-fallback": 2,
       "test-entities-by-prefix": 1,
       "test-entity-by-alias": 1,
-      "test-entityid-hierarchy": 1,
-      "test-http-gateway": 22,
-      "test-pathrag-boundary": 0,
-      "test-pathrag-document": 0,
-      "test-pathrag-sensor": 3,
+      "test-entityid-hierarchy": 3,
+      "test-http-gateway": 23,
+      "test-pathrag-boundary": 1,
+      "test-pathrag-document": 1,
+      "test-pathrag-sensor": 5,
       "test-spatial-query": 1,
-      "test-temporal-query": 1,
-      "test-zone-relationships": 0,
-      "validate-bidirectional-traversal": 1,
-      "validate-community-structure": 90274,
-      "validate-context-index-hierarchy": 3,
+      "test-temporal-query": 4,
+      "test-zone-relationships": 1,
+      "validate-bidirectional-traversal": 2,
+      "validate-community-structure": 90291,
+      "validate-context-index-hierarchy": 5,
       "validate-context-provenance-audit": 1,
-      "validate-embedding-queue-health": 11,
-      "validate-entity-structure": 3,
-      "validate-hierarchy-inference": 9,
-      "validate-incoming-index-predicates": 3,
+      "validate-embedding-queue-health": 13,
+      "validate-entity-structure": 4,
+      "validate-hierarchy-inference": 21,
+      "validate-incoming-index-predicates": 2,
       "validate-inverse-edges-materialized": 1,
-      "validate-kcore-index": 6,
+      "validate-kcore-index": 3,
       "validate-metrics": 2,
       "validate-pivot-index": 3,
-      "validate-processing": 7,
-      "validate-rules": 20,
+      "validate-processing": 8,
+      "validate-rules": 24,
       "verify-components": 1,
-      "verify-entity-count": 2,
-      "verify-entity-retrieval": 3,
-      "verify-index-population": 17,
-      "verify-outputs": 1,
-      "verify-search-quality": 51,
-      "wait-for-embeddings": 135,
-      "wait-for-entity-stabilization": 10,
-      "wait-for-rule-stabilization": 213
+      "verify-entity-count": 4,
+      "verify-entity-retrieval": 4,
+      "verify-index-population": 30,
+      "verify-outputs": 2,
+      "verify-search-quality": 52,
+      "wait-for-embeddings": 122,
+      "wait-for-entity-stabilization": 10123,
+      "wait-for-rule-stabilization": 220
     }
   },
   "metadata": {
     "variant": "statistical",
-    "started_at": "2026-01-10T09:28:37.274487-06:00",
-    "completed_at": "2026-01-10T09:30:08.152948-06:00",
+    "started_at": "2026-01-11T09:43:04.062931-06:00",
+    "completed_at": "2026-01-11T09:44:45.116811-06:00",
     "success": true,
     "error_count": 0,
-    "warning_count": 3,
+    "warning_count": 1,
     "warnings": [
-      "Zone c360.logistics.facility.zone.area.cold-storage-1 has 0 incoming relationships - check if zone triples are being indexed",
-      "Weak search results: average score 0.21 is below 0.50 threshold",
-      "CONTEXT_INDEX has 1 keys but 'inference.hierarchy' not found in sample"
+      "Weak search results: average score 0.21 is below 0.50 threshold"
     ]
   }
 }

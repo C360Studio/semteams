@@ -81,7 +81,7 @@
     ],
     "scores_valid": true,
     "truncated": true,
-    "latency_ms": 3,
+    "latency_ms": 4,
     "boundary_test": {
       "max_nodes_limit": 5,
       "entities_returned": 6,
@@ -143,8 +143,8 @@
     "latency_ms": 1
   },
   "components": {
-    "expected_count": 18,
-    "found_count": 18
+    "expected_count": 17,
+    "found_count": 17
   },
   "outputs": {
     "expected_count": 2,
@@ -157,54 +157,53 @@
     "inference_working": true
   },
   "timing": {
-    "total_duration_ms": 10543,
+    "total_duration_ms": 386,
     "stage_durations": {
-      "send-mixed-data": 3,
+      "send-mixed-data": 4,
       "test-entities-by-prefix": 1,
       "test-entity-by-alias": 1,
       "test-entityid-hierarchy": 1,
       "test-pathrag-boundary": 1,
       "test-pathrag-document": 1,
-      "test-pathrag-sensor": 3,
+      "test-pathrag-sensor": 4,
       "test-spatial-query": 1,
-      "test-temporal-query": 1,
+      "test-temporal-query": 2,
       "test-zone-relationships": 0,
       "validate-bidirectional-traversal": 2,
-      "validate-context-index-hierarchy": 1,
-      "validate-context-provenance-audit": 1,
-      "validate-entity-structure": 4,
+      "validate-context-index-hierarchy": 2,
+      "validate-context-provenance-audit": 2,
+      "validate-entity-structure": 3,
       "validate-entity-triples": 1,
-      "validate-hierarchy-inference": 22,
+      "validate-hierarchy-inference": 9,
       "validate-incoming-index-predicates": 1,
-      "validate-inverse-edges-materialized": 2,
-      "validate-kcore-index-structural": 3,
+      "validate-inverse-edges-materialized": 1,
+      "validate-kcore-index-structural": 0,
       "validate-metrics": 2,
-      "validate-pivot-index-structural": 2,
+      "validate-pivot-index-structural": 0,
       "validate-processing": 7,
       "validate-rule-transitions": 4,
-      "validate-rules": 28,
+      "validate-rules": 22,
       "validate-zero-clusters": 1,
       "validate-zero-embeddings": 1,
       "verify-components": 1,
-      "verify-entity-count": 4,
-      "verify-entity-retrieval": 4,
-      "verify-index-population": 27,
+      "verify-entity-count": 2,
+      "verify-entity-retrieval": 3,
+      "verify-index-population": 18,
       "verify-outputs": 2,
-      "wait-for-entity-stabilization": 10127,
+      "wait-for-entity-stabilization": 10,
       "wait-for-rule-stabilization": 217
     }
   },
   "metadata": {
     "variant": "structural",
-    "started_at": "2026-01-09T14:06:50.857106-06:00",
-    "completed_at": "2026-01-09T14:07:01.400236-06:00",
+    "started_at": "2026-01-11T07:03:56.291302-06:00",
+    "completed_at": "2026-01-11T07:03:56.677794-06:00",
     "success": true,
     "error_count": 0,
-    "warning_count": 3,
+    "warning_count": 2,
     "warnings": [
-      "Zone c360.logistics.facility.zone.area.cold-storage-1 has 0 incoming relationships - check if zone triples are being indexed",
-      "K-core MaxCore is 0 - EntityID sibling edges may not be generating structure. Check that entityid_edges.enabled=true and test data has entities with shared type prefixes.",
-      "CONTEXT_INDEX has 1 keys but 'inference.hierarchy' not found in sample"
+      "STRUCTURAL_INDEX bucket does not exist - check if structural_index.enabled=true",
+      "STRUCTURAL_INDEX bucket does not exist"
     ]
   }
 }

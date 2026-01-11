@@ -72,7 +72,7 @@
               "score": 0.6572414530489207
             }
           ],
-          "latency_ms": 19,
+          "latency_ms": 15,
           "validation": {
             "matches_pattern": false,
             "meets_min_score": true,
@@ -127,7 +127,7 @@
               "score": 0.6607840293675514
             }
           ],
-          "latency_ms": 19,
+          "latency_ms": 13,
           "validation": {
             "matches_pattern": true,
             "meets_min_score": true,
@@ -182,7 +182,7 @@
               "score": 0.6411331827249271
             }
           ],
-          "latency_ms": 19,
+          "latency_ms": 13,
           "validation": {
             "matches_pattern": false,
             "meets_min_score": true,
@@ -237,7 +237,7 @@
               "score": 0.6420379403517512
             }
           ],
-          "latency_ms": 17,
+          "latency_ms": 14,
           "validation": {
             "matches_pattern": false,
             "meets_min_score": true,
@@ -292,7 +292,7 @@
               "score": 0.7100052872755916
             }
           ],
-          "latency_ms": 15,
+          "latency_ms": 12,
           "validation": {
             "matches_pattern": true,
             "meets_min_score": true,
@@ -347,7 +347,7 @@
               "score": 0.64015207760133
             }
           ],
-          "latency_ms": 15,
+          "latency_ms": 16,
           "validation": {
             "matches_pattern": true,
             "meets_min_score": true,
@@ -402,7 +402,7 @@
               "score": 0.6747038116564675
             }
           ],
-          "latency_ms": 15,
+          "latency_ms": 13,
           "validation": {
             "matches_pattern": true,
             "meets_min_score": true,
@@ -413,8 +413,8 @@
           }
         }
       ],
-      "executed_at": "2026-01-09T14:23:33.736978-06:00",
-      "total_latency_ms": 119
+      "executed_at": "2026-01-11T11:31:53.445231-06:00",
+      "total_latency_ms": 96
     },
     "weak_results_threshold": 0.5,
     "is_weak": false
@@ -430,8 +430,20 @@
     "total_communities": 22,
     "non_singleton_count": 22,
     "largest_size": 30,
-    "average_size": 18,
-    "with_keywords": 20
+    "average_size": 16,
+    "with_keywords": 23
+  },
+  "anomalies": {
+    "total": 985,
+    "semantic_gap": 45,
+    "core_isolation": 940,
+    "core_demotion": 0,
+    "transitivity": 0,
+    "by_status": {
+      "pending": 985,
+      "confirmed": 0,
+      "dismissed": 0
+    }
   },
   "pathrag_sensor": {
     "start_entity": "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
@@ -485,7 +497,7 @@
     ],
     "scores_valid": true,
     "truncated": true,
-    "latency_ms": 3,
+    "latency_ms": 4,
     "boundary_test": {
       "max_nodes_limit": 5,
       "entities_returned": 6,
@@ -544,20 +556,27 @@
     ],
     "scores_valid": true,
     "truncated": true,
-    "latency_ms": 0
+    "latency_ms": 1
   },
   "graphrag": {
+    "local_query": {
+      "query": "temperature sensor monitoring",
+      "entities_used": 4,
+      "communities_used": 1,
+      "latency_ms": 7,
+      "success": true
+    },
     "global_query": {
       "query": "logistics warehouse operations",
-      "entities_used": 0,
+      "entities_used": 58,
       "communities_used": 0,
-      "latency_ms": 0,
-      "success": false
+      "latency_ms": 40,
+      "success": true
     }
   },
   "components": {
-    "expected_count": 20,
-    "found_count": 20
+    "expected_count": 19,
+    "found_count": 19
   },
   "outputs": {
     "expected_count": 2,
@@ -566,7 +585,7 @@
   "embeddings": {
     "queued_total": 0,
     "generated_total": 194,
-    "dedup_hits": 136,
+    "dedup_hits": 135,
     "failed_total": 0,
     "pending_count": 0,
     "queue_drained": true,
@@ -579,68 +598,62 @@
     "inference_working": true
   },
   "timing": {
-    "total_duration_ms": 308134,
+    "total_duration_ms": 311550,
     "stage_durations": {
-      "send-mixed-data": 4,
+      "send-mixed-data": 3,
       "test-embedding-fallback": 0,
       "test-entities-by-prefix": 1,
-      "test-entity-by-alias": 0,
+      "test-entity-by-alias": 1,
       "test-entityid-hierarchy": 1,
-      "test-graphrag-global": 0,
-      "test-graphrag-local": 1,
-      "test-http-gateway": 0,
+      "test-graphrag-global": 46,
+      "test-graphrag-local": 19,
+      "test-http-gateway": 31,
       "test-pathrag-boundary": 1,
       "test-pathrag-document": 1,
       "test-pathrag-sensor": 4,
       "test-spatial-query": 1,
       "test-temporal-query": 1,
       "test-zone-relationships": 0,
-      "validate-anomaly-detection": 4084,
-      "validate-bidirectional-traversal": 11,
-      "validate-community-structure": 90520,
-      "validate-context-index-hierarchy": 10,
-      "validate-context-provenance-audit": 3,
-      "validate-embedding-queue-health": 21,
+      "validate-anomaly-detection": 8078,
+      "validate-bidirectional-traversal": 6,
+      "validate-community-structure": 90258,
+      "validate-context-index-hierarchy": 6,
+      "validate-context-provenance-audit": 4,
+      "validate-embedding-queue-health": 15,
       "validate-entity-structure": 4,
-      "validate-hierarchy-inference": 8,
-      "validate-incoming-index-predicates": 14,
-      "validate-inverse-edges-materialized": 3,
-      "validate-kcore-index": 21,
-      "validate-llm-enhancement": 212412,
-      "validate-metrics": 9,
-      "validate-pivot-index": 5,
-      "validate-processing": 8,
-      "validate-rules": 52,
-      "validate-virtual-edges": 32,
+      "validate-hierarchy-inference": 7,
+      "validate-incoming-index-predicates": 7,
+      "validate-inverse-edges-materialized": 4,
+      "validate-kcore-index": 9,
+      "validate-llm-enhancement": 211588,
+      "validate-metrics": 14,
+      "validate-pivot-index": 10,
+      "validate-processing": 9,
+      "validate-rules": 57,
+      "validate-virtual-edges": 536,
       "verify-components": 0,
       "verify-entity-count": 5,
       "verify-entity-retrieval": 5,
       "verify-index-population": 22,
-      "verify-outputs": 13,
-      "verify-search-quality": 122,
-      "wait-for-embeddings": 234,
-      "wait-for-entity-stabilization": 121,
-      "wait-for-rule-stabilization": 229
+      "verify-outputs": 1,
+      "verify-search-quality": 99,
+      "wait-for-embeddings": 227,
+      "wait-for-entity-stabilization": 122,
+      "wait-for-rule-stabilization": 235
     }
   },
   "metadata": {
     "variant": "semantic",
-    "started_at": "2026-01-09T14:23:33.255449-06:00",
-    "completed_at": "2026-01-09T14:28:43.243305-06:00",
+    "started_at": "2026-01-11T11:31:52.975367-06:00",
+    "completed_at": "2026-01-11T11:37:04.525684-06:00",
     "success": true,
     "error_count": 0,
-    "warning_count": 10,
+    "warning_count": 4,
     "warnings": [
-      "Zone c360.logistics.facility.zone.area.cold-storage-1 has 0 incoming relationships - check if zone triples are being indexed",
-      "GraphQL Gateway returned status 500: {\"errors\":[{\"message\":\"query failed\"}]}\n",
-      "K-core MaxCore is 0 - graph may lack sufficient edge density",
-      "CONTEXT_INDEX has 1 keys but 'inference.hierarchy' not found in sample",
-      "GraphRAG local search failed: GraphQL error: invalid request: empty id",
-      "GraphRAG global search failed: returned status 500: {\"errors\":[{\"message\":\"query failed\"}]}\n",
-      "LLM quality issue in comm-0-c360.logistics.content.group.container.level: LLM summary contains no keywords (keywords: [content.classification.tag container hierarchy entity.type.class dc.terms.subject dc.terms.type document dc.terms.title safety training])",
-      "LLM quality issue in comm-0-c360.logistics.content.group.container.level: LLM summary (129 chars) not longer than statistical (173 chars)",
-      "No anomalies detected - verify anomaly detection is enabled and running during community detection",
-      "No semantic gap anomalies detected - verify semembed is available and pivot index is built"
+      "GraphRAG global search returned only 0 communities for broad query \"logistics warehouse operations\", expected \u003e= 2",
+      "LLM quality issue in c360.logistics.maintenance.work.group.container: LLM summary (111 chars) not longer than statistical (175 chars)",
+      "LLM quality issue in c360.logistics.content.document.safety.doc-emergency-001: LLM summary contains no keywords (keywords: [content.classification.tag container hierarchy entity.type.class document dc.terms.subject dc.terms.type dc.terms.title safety training])",
+      "LLM quality issue in c360.logistics.content.document.safety.doc-emergency-001: LLM summary (153 chars) not longer than statistical (163 chars)"
     ]
   }
 }
