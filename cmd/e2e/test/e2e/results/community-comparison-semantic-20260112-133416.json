@@ -1,0 +1,386 @@
+{
+  "variant": "semantic",
+  "timestamp": "2026-01-12T13:34:16.496325-06:00",
+  "communities_total": 19,
+  "llm_enhanced_count": 3,
+  "statistical_only_count": 16,
+  "llm_pending_count": 16,
+  "llm_wait_duration_ms": 120068,
+  "avg_summary_length_ratio": 1.0718083086504138,
+  "avg_word_overlap": 0.12261904761904763,
+  "non_singleton_count": 19,
+  "largest_community_size": 30,
+  "avg_non_singleton_size": 19.42105263157895,
+  "communities": [
+    {
+      "community_id": "c360.logistics.maintenance.work.completed.maint-003",
+      "level": 0,
+      "member_count": 20,
+      "statistical_summary": "Community of 20 entities including 16 completeds, 2 in_progresss, 1 group. Key themes: content.classification.tag, completed, maintenance, dc.terms.type, dc.terms.creator.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "maintenance",
+        "dc.terms.type",
+        "dc.terms.creator",
+        "maintenance.work.status",
+        "dc.terms.subject",
+        "dc.terms.title",
+        "00z",
+        "2024"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.observation.record.high.obs-010",
+      "level": 0,
+      "member_count": 21,
+      "statistical_summary": "Community of 21 entities including 7 mediums, 6 highs, 3 criticals. Key themes: content.classification.tag, dc.terms.title, observation.record.severity, dc.terms.subject, 2024.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "dc.terms.title",
+        "observation.record.severity",
+        "dc.terms.subject",
+        "2024",
+        "observation",
+        "dc.terms.creator",
+        "dc.terms.date",
+        "00z",
+        "dc.terms.type"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.environmental.sensor.humidity.humid-sensor-001",
+      "level": 0,
+      "member_count": 4,
+      "statistical_summary": "Community of 4 entities including 4 humiditys. Key themes: humidity, 2024, time.observation.recorded, hum, geo.location.latitude.",
+      "summary_status": "statistical",
+      "keywords": [
+        "humidity",
+        "2024",
+        "time.observation.recorded",
+        "hum",
+        "geo.location.latitude",
+        "sensor.classification.type",
+        "sensor.measurement.percent",
+        "iot.sensor.serial",
+        "geo.location.longitude",
+        "00z"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.maintenance.work.completed.maint-003",
+      "level": 1,
+      "member_count": 20,
+      "statistical_summary": "Community of 20 entities including 16 completeds, 2 in_progresss, 1 container. Key themes: content.classification.tag, completed, maintenance, dc.terms.subject, dc.terms.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "maintenance",
+        "dc.terms.subject",
+        "dc.terms.type",
+        "maintenance.work.status",
+        "dc.terms.creator",
+        "dc.terms.title",
+        "dc.terms.date",
+        "00z"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.observation.record.medium.obs-003",
+      "level": 1,
+      "member_count": 15,
+      "statistical_summary": "Community of 15 entities including 7 mediums, 3 criticals, 3 lows. Key themes: content.classification.tag, medium, dc.terms.type, dc.terms.creator, dc.terms.title.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "medium",
+        "dc.terms.type",
+        "dc.terms.creator",
+        "dc.terms.title",
+        "2024",
+        "observation.record.severity",
+        "00z",
+        "dc.terms.subject",
+        "dc.terms.date"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.observation.record.high.obs-010",
+      "level": 1,
+      "member_count": 6,
+      "statistical_summary": "Community of 6 entities including 6 highs. Key themes: content.classification.tag, high, dc.terms.creator, dc.terms.title, observation.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "high",
+        "dc.terms.creator",
+        "dc.terms.title",
+        "observation",
+        "safety",
+        "dc.terms.type",
+        "dc.terms.date",
+        "00z",
+        "dc.terms.subject"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.environmental.sensor.temperature.group",
+      "level": 1,
+      "member_count": 6,
+      "statistical_summary": "Community of 6 entities including 6 temperatures. Key themes: temperature, 2024, time.observation.recorded, sensor.classification.type, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "2024",
+        "time.observation.recorded",
+        "sensor.classification.type",
+        "iot.sensor.serial",
+        "geo.location.latitude",
+        "sensor.measurement.fahrenheit",
+        "00z",
+        "geo.location.longitude",
+        "temp"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.sensor.document.group.container",
+      "level": 1,
+      "member_count": 30,
+      "statistical_summary": "Community of 30 entities including 4 temperatures, 2 waters, 2 weights. Key themes: content.classification.tag, sensor, container, entity.type.class, sensor.document.location.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "sensor",
+        "container",
+        "entity.type.class",
+        "sensor.document.location",
+        "dc.terms.subject",
+        "sensor.document.unit",
+        "hierarchy",
+        "dc.terms.title",
+        "doc"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.content.group.container.level",
+      "level": 1,
+      "member_count": 25,
+      "statistical_summary": "Community of 25 entities including 3 safetys, 2 inventorys, 2 technologys. Key themes: content.classification.tag, container, entity.type.class, hierarchy, dc.terms.type.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "container",
+        "entity.type.class",
+        "hierarchy",
+        "dc.terms.type",
+        "dc.terms.title",
+        "dc.terms.subject",
+        "document",
+        "safety",
+        "training"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.environmental.sensor.combustible_gas.gas-sensor-001",
+      "level": 1,
+      "member_count": 21,
+      "statistical_summary": "Community of 21 entities including 4 humiditys, 3 vibrations, 2 levels. Key themes: 2024, sensor.classification.type, 00z, geo.location.latitude, container.",
+      "summary_status": "statistical",
+      "keywords": [
+        "2024",
+        "sensor.classification.type",
+        "00z",
+        "geo.location.latitude",
+        "container",
+        "iot.sensor.serial",
+        "time.observation.recorded",
+        "geo.location.longitude",
+        "hierarchy",
+        "entity.type.class"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.maintenance.work.completed.maint-015",
+      "level": 2,
+      "member_count": 20,
+      "statistical_summary": "Community of 20 entities including 16 completeds, 2 in_progresss, 1 group. Key themes: content.classification.tag, completed, maintenance, dc.terms.creator, maintenance.work.status.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "completed",
+        "maintenance",
+        "dc.terms.creator",
+        "maintenance.work.status",
+        "dc.terms.title",
+        "dc.terms.subject",
+        "dc.terms.type",
+        "dc.terms.date",
+        "00z"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.observation.record.group.container",
+      "level": 2,
+      "member_count": 21,
+      "statistical_summary": "Community of 21 entities including 7 mediums, 6 highs, 3 criticals. Key themes: content.classification.tag, dc.terms.title, dc.terms.creator, dc.terms.date, observation.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "dc.terms.title",
+        "dc.terms.creator",
+        "dc.terms.date",
+        "observation",
+        "2024",
+        "00z",
+        "dc.terms.subject",
+        "dc.terms.type",
+        "observation.record.severity"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.content.document.compliance.doc-audit-001",
+      "level": 2,
+      "member_count": 25,
+      "statistical_summary": "Community of 25 entities including 3 safetys, 2 maintenances, 2 compliances. Key themes: content.classification.tag, container, hierarchy, entity.type.class, dc.terms.subject.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "container",
+        "hierarchy",
+        "entity.type.class",
+        "dc.terms.subject",
+        "dc.terms.type",
+        "document",
+        "dc.terms.title",
+        "safety",
+        "training"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.environmental.group.container.level",
+      "level": 2,
+      "member_count": 27,
+      "statistical_summary": "Community of 27 entities including 6 temperatures, 4 humiditys, 3 vibrations. Key themes: 2024, time.observation.recorded, sensor.classification.type, 00z, iot.sensor.serial.",
+      "summary_status": "statistical",
+      "keywords": [
+        "2024",
+        "time.observation.recorded",
+        "sensor.classification.type",
+        "00z",
+        "iot.sensor.serial",
+        "geo.location.longitude",
+        "geo.location.latitude",
+        "15t08",
+        "container",
+        "entity.type.class"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.sensor.group.container.level",
+      "level": 2,
+      "member_count": 26,
+      "statistical_summary": "Community of 26 entities including 2 motions, 2 pressures, 2 doors. Key themes: content.classification.tag, sensor, container, entity.type.class, hierarchy.",
+      "summary_status": "statistical",
+      "keywords": [
+        "content.classification.tag",
+        "sensor",
+        "container",
+        "entity.type.class",
+        "hierarchy",
+        "doc",
+        "sensor.document.location",
+        "dc.terms.title",
+        "dc.terms.subject",
+        "dc.terms.type"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.sensor.document.temperature.group",
+      "level": 2,
+      "member_count": 4,
+      "statistical_summary": "Community of 4 entities including 4 temperatures. Key themes: temperature, content.classification.tag, sensor, doc, sensor.document.reading.",
+      "summary_status": "statistical",
+      "keywords": [
+        "temperature",
+        "content.classification.tag",
+        "sensor",
+        "doc",
+        "sensor.document.reading",
+        "dc.terms.title",
+        "cold",
+        "freezer",
+        "sensor.document.unit",
+        "height"
+      ]
+    },
+    {
+      "community_id": "c360.logistics.sensor.document.temperature.sensor-temp-001",
+      "level": 0,
+      "member_count": 30,
+      "statistical_summary": "Community of 30 entities including 4 temperatures, 2 doors, 2 powers. Key themes: content.classification.tag, sensor, container, dc.terms.subject, entity.type.class.",
+      "llm_summary": "This community represents a 30-member organization within a logistics platform, focusing on sensors, with a particular emphasis on content classification, sensor, container, and entity type.",
+      "summary_status": "llm-enhanced",
+      "keywords": [
+        "content.classification.tag",
+        "sensor",
+        "container",
+        "dc.terms.subject",
+        "entity.type.class",
+        "sensor.document.location",
+        "dc.terms.title",
+        "doc",
+        "dc.terms.type",
+        "sensor.document.unit"
+      ],
+      "summary_length_ratio": 1.1515151515151516,
+      "word_overlap": 0.1
+    },
+    {
+      "community_id": "c360.logistics.content.document.group.container",
+      "level": 0,
+      "member_count": 25,
+      "statistical_summary": "Community of 25 entities including 3 safetys, 2 inventorys, 2 trainings. Key themes: content.classification.tag, container, entity.type.class, hierarchy, dc.terms.subject.",
+      "llm_summary": "This community represents 25 entities within a content domain, focusing on content, themes, and entities within a content system.",
+      "summary_status": "llm-enhanced",
+      "keywords": [
+        "content.classification.tag",
+        "container",
+        "entity.type.class",
+        "hierarchy",
+        "dc.terms.subject",
+        "dc.terms.type",
+        "dc.terms.title",
+        "document",
+        "safety",
+        "training"
+      ],
+      "summary_length_ratio": 0.7543859649122807,
+      "word_overlap": 0.14285714285714285
+    },
+    {
+      "community_id": "c360.logistics.environmental.group.container.level",
+      "level": 0,
+      "member_count": 23,
+      "statistical_summary": "Community of 23 entities including 6 temperatures, 3 vibrations, 2 powers. Key themes: 2024, 00z, sensor.classification.type, geo.location.longitude, iot.sensor.serial.",
+      "llm_summary": "This community represents 20 entities within a 360. logistics platform, focusing on environmental monitoring, with a particular emphasis on monitoring scope, measurements, and a focus on 2024, 00z, and IoT sensor serial.",
+      "summary_status": "llm-enhanced",
+      "keywords": [
+        "2024",
+        "00z",
+        "sensor.classification.type",
+        "geo.location.longitude",
+        "iot.sensor.serial",
+        "time.observation.recorded",
+        "geo.location.latitude",
+        "15t08",
+        "container",
+        "temperature"
+      ],
+      "summary_length_ratio": 1.3095238095238095,
+      "word_overlap": 0.125
+    }
+  ]
+}
