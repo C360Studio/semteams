@@ -9,6 +9,9 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/c360/semstreams/graph/clustering"
+	"github.com/c360/semstreams/test/e2e/scenarios/community"
 )
 
 // Statistical variant validation functions (GraphRAG, community validation)
@@ -427,7 +430,49 @@ func (s *TieredScenario) executeValidateCommunityStructure(ctx context.Context, 
 		return fmt.Errorf("no non-singleton communities found (%d total) - graph connectivity may be broken", totalCount)
 	}
 
+	// Run community ground truth validation (semantic coherence checks)
+	groundTruthResult := s.validateCommunityGroundTruth(communities, result)
+	if groundTruthResult != nil && !groundTruthResult.Passed() {
+		// Record violations as warnings (don't fail the test, just report)
+		for _, v := range groundTruthResult.Violations {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("Community ground truth violation [%s]: %s - %s",
+					v.Type, v.ExpectationName, v.Details))
+		}
+	}
+
 	return nil
+}
+
+// validateCommunityGroundTruth runs semantic coherence validation against expected groupings.
+func (s *TieredScenario) validateCommunityGroundTruth(communities []*clustering.Community, result *Result) *community.ValidationResult {
+	validator := community.NewDefaultValidator()
+	groundTruthResult := validator.Validate(communities)
+
+	// Record metrics
+	result.Metrics["community_ground_truth_total"] = groundTruthResult.ExpectationsTotal
+	result.Metrics["community_ground_truth_passed"] = groundTruthResult.ExpectationsPassed
+
+	// Record detailed results
+	violationDetails := make([]map[string]any, 0, len(groundTruthResult.Violations))
+	for _, v := range groundTruthResult.Violations {
+		violationDetails = append(violationDetails, map[string]any{
+			"expectation": v.ExpectationName,
+			"type":        string(v.Type),
+			"details":     v.Details,
+			"entities":    v.Entities,
+			"communities": v.CommunityIDs,
+		})
+	}
+
+	result.Details["community_ground_truth"] = map[string]any{
+		"expectations_total":  groundTruthResult.ExpectationsTotal,
+		"expectations_passed": groundTruthResult.ExpectationsPassed,
+		"passed":              groundTruthResult.Passed(),
+		"violations":          violationDetails,
+	}
+
+	return groundTruthResult
 }
 
 // executeValidateKCoreIndex validates k-core decomposition index for statistical/semantic tiers

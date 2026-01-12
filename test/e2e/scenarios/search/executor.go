@@ -88,6 +88,34 @@ func (e *Executor) ExecuteAll(ctx context.Context, queries []Query) *Stats {
 			}
 		}
 
+		// Track position validation results
+		if len(q.MustIncludeInTopN) > 0 {
+			stats.PositionTestsTotal++
+			if result.Validation.PositionValidationPassed() {
+				stats.PositionTestsPassed++
+			} else {
+				for _, pv := range result.Validation.PositionViolations {
+					stats.PositionTestFailures = append(stats.PositionTestFailures,
+						fmt.Sprintf("query %q: %s not in top %d (actual rank: %d) - %s",
+							q.Text, pv.Pattern, pv.RequiredTopN, pv.ActualRank, q.Description))
+				}
+			}
+		}
+
+		// Track ranking validation results
+		if len(q.MustRankHigherThan) > 0 {
+			stats.RankingTestsTotal++
+			if result.Validation.RankingValidationPassed() {
+				stats.RankingTestsPassed++
+			} else {
+				for _, rv := range result.Validation.RankingViolations {
+					stats.RankingTestFailures = append(stats.RankingTestFailures,
+						fmt.Sprintf("query %q: %s (rank %d) should rank above %s (rank %d) - %s",
+							q.Text, rv.Higher, rv.HigherRank, rv.Lower, rv.LowerRank, q.Description))
+				}
+			}
+		}
+
 		// Collect all scores for overall average
 		for _, hit := range result.Hits {
 			allScores = append(allScores, hit.Score)
@@ -288,6 +316,16 @@ func parseGlobalSearchResponse(bodyBytes []byte) ([]Hit, error) {
 	return hits, nil
 }
 
+// findRank returns the 1-indexed rank of the first hit matching the pattern, or -1 if not found.
+func findRank(hits []Hit, pattern string) int {
+	for i, hit := range hits {
+		if strings.Contains(strings.ToLower(hit.EntityID), strings.ToLower(pattern)) {
+			return i + 1 // 1-indexed
+		}
+	}
+	return -1 // not found
+}
+
 // validate checks the hits against query expectations.
 func (e *Executor) validate(q Query, hits []Hit) ValidationResult {
 	v := ValidationResult{
@@ -335,6 +373,49 @@ func (e *Executor) validate(q Query, hits []Hit) ValidationResult {
 			if strings.Contains(strings.ToLower(hit.EntityID), strings.ToLower(forbidden)) {
 				v.UnexpectedFound = append(v.UnexpectedFound, hit.EntityID)
 				break
+			}
+		}
+	}
+
+	// Check MustIncludeInTopN - patterns that must appear in top N positions
+	for topN, patterns := range q.MustIncludeInTopN {
+		for _, pattern := range patterns {
+			rank := findRank(hits, pattern)
+			if rank == -1 || rank > topN {
+				v.PositionViolations = append(v.PositionViolations, PositionViolation{
+					Pattern:      pattern,
+					RequiredTopN: topN,
+					ActualRank:   rank,
+				})
+			}
+		}
+	}
+
+	// Check MustRankHigherThan - relative ranking constraints
+	for higherPattern, lowerPatterns := range q.MustRankHigherThan {
+		higherRank := findRank(hits, higherPattern)
+		for _, lowerPattern := range lowerPatterns {
+			lowerRank := findRank(hits, lowerPattern)
+
+			// Determine if constraint is violated
+			violated := false
+			if higherRank == -1 && lowerRank != -1 {
+				// Higher absent, lower present: FAIL (absent loses to present)
+				violated = true
+			} else if higherRank != -1 && lowerRank != -1 && higherRank > lowerRank {
+				// Both present but higher ranks below lower: FAIL
+				violated = true
+			}
+			// Higher present, lower absent: PASS (present beats absent)
+			// Both absent: PASS (no constraint violated)
+
+			if violated {
+				v.RankingViolations = append(v.RankingViolations, RankingViolation{
+					Higher:     higherPattern,
+					Lower:      lowerPattern,
+					HigherRank: higherRank,
+					LowerRank:  lowerRank,
+				})
 			}
 		}
 	}

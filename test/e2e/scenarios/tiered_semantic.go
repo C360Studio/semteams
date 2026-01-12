@@ -12,6 +12,7 @@ import (
 
 	"github.com/c360/semstreams/graph/clustering"
 	"github.com/c360/semstreams/test/e2e/client"
+	"github.com/c360/semstreams/test/e2e/scenarios/anomaly"
 )
 
 // Semantic tier validation functions (community comparison, LLM enhancement)
@@ -443,7 +444,73 @@ func (s *TieredScenario) executeValidateAnomalyDetection(ctx context.Context, re
 			"No semantic gap anomalies detected - verify semembed is available and pivot index is built")
 	}
 
+	// Run anomaly ground truth validation (false positive detection)
+	groundTruthResult := s.validateAnomalyGroundTruth(ctx, result)
+	if groundTruthResult != nil && !groundTruthResult.Passed() {
+		// Record violations as warnings (don't fail the test, just report)
+		for _, v := range groundTruthResult.Violations {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("Anomaly ground truth violation [%s]: %s",
+					v.Type, v.Details))
+		}
+	}
+
 	return nil
+}
+
+// validateAnomalyGroundTruth runs false positive detection against known related entity pairs.
+func (s *TieredScenario) validateAnomalyGroundTruth(ctx context.Context, result *Result) *anomaly.ValidationResult {
+	// Get actual anomalies for ground truth validation
+	anomalies, err := s.natsClient.GetAnomalies(ctx)
+	if err != nil {
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("Failed to get anomalies for ground truth validation: %v", err))
+		return nil
+	}
+
+	validator := anomaly.NewDefaultValidator()
+	groundTruthResult := validator.Validate(anomalies)
+
+	// Record metrics
+	result.Metrics["anomaly_ground_truth_expected"] = groundTruthResult.ExpectedTotal
+	result.Metrics["anomaly_ground_truth_found"] = groundTruthResult.ExpectedFound
+	result.Metrics["anomaly_false_positives"] = groundTruthResult.FalsePositiveTotal
+
+	// Calculate and record false positive rate
+	falsePositiveRate := 0.0
+	if groundTruthResult.DetectedTotal > 0 {
+		falsePositiveRate = float64(groundTruthResult.FalsePositiveTotal) / float64(groundTruthResult.DetectedTotal)
+	}
+	result.Metrics["anomaly_false_positive_rate"] = falsePositiveRate
+
+	// Record detailed results
+	violationDetails := make([]map[string]any, 0, len(groundTruthResult.Violations))
+	for _, v := range groundTruthResult.Violations {
+		vDetail := map[string]any{
+			"type":    string(v.Type),
+			"details": v.Details,
+		}
+		if v.EntityPair != nil {
+			vDetail["entity_a"] = v.EntityPair.EntityA
+			vDetail["entity_b"] = v.EntityPair.EntityB
+		}
+		if v.AnomalyID != "" {
+			vDetail["anomaly_id"] = v.AnomalyID
+		}
+		violationDetails = append(violationDetails, vDetail)
+	}
+
+	result.Details["anomaly_ground_truth"] = map[string]any{
+		"expected_total":       groundTruthResult.ExpectedTotal,
+		"expected_found":       groundTruthResult.ExpectedFound,
+		"false_positive_total": groundTruthResult.FalsePositiveTotal,
+		"detected_total":       groundTruthResult.DetectedTotal,
+		"false_positive_rate":  falsePositiveRate,
+		"passed":               groundTruthResult.Passed(),
+		"violations":           violationDetails,
+	}
+
+	return groundTruthResult
 }
 
 // executeValidateVirtualEdges validates that high-confidence semantic gaps are auto-applied as virtual edges.

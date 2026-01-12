@@ -1,10 +1,10 @@
 package search
 
 // DefaultQueries returns the standard search quality test queries.
-// These cover natural language searches and known-answer validation.
+// These cover natural language searches, known-answer validation, and ranking validation.
 func DefaultQueries() []Query {
 	return []Query{
-		// Natural language tests
+		// Natural language tests with ranking validation
 		{
 			Text:            "What documents mention forklift safety?",
 			ExpectedPattern: "forklift",
@@ -13,6 +13,10 @@ func DefaultQueries() []Query {
 			MinHits:         1,
 			MustInclude:     []string{"doc-ops-001"}, // Forklift Operation Manual
 			MustExclude:     []string{"sensor-temp"}, // Temperature sensors irrelevant
+			// Ranking: doc-ops-001 should be in top 3 (observed at rank 2)
+			MustIncludeInTopN: map[int][]string{
+				3: {"doc-ops-001"},
+			},
 		},
 		{
 			Text:            "Are there safety observations related to temperature?",
@@ -21,6 +25,10 @@ func DefaultQueries() []Query {
 			MinScore:        0.3,
 			MinHits:         1,
 			MustInclude:     []string{"sensor-temp"}, // Temperature sensors
+			// Ranking: temperature sensors should appear in top 5
+			MustIncludeInTopN: map[int][]string{
+				5: {"sensor-temp"},
+			},
 		},
 		{
 			Text:            "What maintenance was done on cold storage equipment?",
@@ -37,7 +45,7 @@ func DefaultQueries() []Query {
 			MinScore:        0.3,
 			MinHits:         1,
 		},
-		// Known-answer tests derived from testdata/semantic/
+		// Known-answer tests with ranking validation
 		{
 			Text:            "forklift operation inspection equipment maintenance",
 			ExpectedPattern: "ops",
@@ -46,6 +54,10 @@ func DefaultQueries() []Query {
 			MinHits:         1,
 			MustInclude:     []string{"doc-ops"},                       // doc-ops-001 (Forklift Operation Manual)
 			MustExclude:     []string{"sensor-humid", "sensor-motion"}, // Humidity/motion sensors irrelevant
+			// Ranking: doc-ops should be in top 3 (observed at rank 2)
+			MustIncludeInTopN: map[int][]string{
+				3: {"doc-ops"},
+			},
 		},
 		{
 			Text:            "cold storage temperature monitoring refrigeration",
@@ -55,6 +67,14 @@ func DefaultQueries() []Query {
 			MinHits:         1,
 			MustInclude:     []string{"sensor-temp"},         // sensor-temp-001, sensor-temp-002, etc.
 			MustExclude:     []string{"doc-hr", "doc-audit"}, // HR and audit docs irrelevant
+			// Ranking: temperature sensors should dominate top 5 (observed at ranks 2,3,4)
+			MustIncludeInTopN: map[int][]string{
+				5: {"sensor-temp"},
+			},
+			// Relative ranking: sensor-temp should rank higher than doc-hr
+			MustRankHigherThan: map[string][]string{
+				"sensor-temp": {"doc-hr", "doc-audit"},
+			},
 		},
 		{
 			Text:            "hydraulic fluid maintenance equipment repair",
@@ -63,6 +83,10 @@ func DefaultQueries() []Query {
 			MinScore:        0.3,
 			MinHits:         1,
 			MustInclude:     []string{"maint-"}, // maint-001 (hydraulic maintenance)
+			// Ranking: maintenance records should be in top 3
+			MustIncludeInTopN: map[int][]string{
+				3: {"maint-"},
+			},
 		},
 	}
 }

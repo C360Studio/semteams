@@ -345,3 +345,416 @@ func TestValidation_HitsAboveMinScore(t *testing.T) {
 		t.Errorf("expected 2 hits above min score, got %d", result.Validation.HitsAboveMinScore)
 	}
 }
+
+// TestValidate_MustIncludeInTopN tests position-based validation.
+func TestValidate_MustIncludeInTopN(t *testing.T) {
+	tests := []struct {
+		name              string
+		hits              []Hit
+		mustIncludeInTopN map[int][]string
+		wantViolations    []PositionViolation
+		wantPass          bool
+	}{
+		{
+			name: "entity_found_in_top_3",
+			hits: []Hit{
+				{EntityID: "doc-ops-001", Score: 0.9},
+				{EntityID: "doc-ops-002", Score: 0.8},
+				{EntityID: "doc-ops-003", Score: 0.7},
+				{EntityID: "doc-hr-001", Score: 0.6},
+			},
+			mustIncludeInTopN: map[int][]string{
+				3: {"doc-ops-001"},
+			},
+			wantViolations: nil,
+			wantPass:       true,
+		},
+		{
+			name: "entity_found_but_not_in_top_3",
+			hits: []Hit{
+				{EntityID: "doc-hr-001", Score: 0.9},
+				{EntityID: "doc-hr-002", Score: 0.8},
+				{EntityID: "doc-hr-003", Score: 0.7},
+				{EntityID: "doc-ops-001", Score: 0.6}, // Rank 4, not in top 3
+			},
+			mustIncludeInTopN: map[int][]string{
+				3: {"doc-ops-001"},
+			},
+			wantViolations: []PositionViolation{
+				{
+					Pattern:      "doc-ops-001",
+					RequiredTopN: 3,
+					ActualRank:   4,
+				},
+			},
+			wantPass: false,
+		},
+		{
+			name: "entity_not_found_at_all",
+			hits: []Hit{
+				{EntityID: "doc-hr-001", Score: 0.9},
+				{EntityID: "doc-hr-002", Score: 0.8},
+				{EntityID: "doc-hr-003", Score: 0.7},
+			},
+			mustIncludeInTopN: map[int][]string{
+				3: {"doc-ops-001"},
+			},
+			wantViolations: []PositionViolation{
+				{
+					Pattern:      "doc-ops-001",
+					RequiredTopN: 3,
+					ActualRank:   -1,
+				},
+			},
+			wantPass: false,
+		},
+		{
+			name: "multiple_positions_top_3_and_top_5",
+			hits: []Hit{
+				{EntityID: "doc-ops-001", Score: 0.95},
+				{EntityID: "doc-ops-002", Score: 0.90},
+				{EntityID: "doc-ops-003", Score: 0.85},
+				{EntityID: "doc-ops-004", Score: 0.80},
+				{EntityID: "sensor-temp-001", Score: 0.75},
+				{EntityID: "doc-ops-005", Score: 0.70},
+			},
+			mustIncludeInTopN: map[int][]string{
+				3: {"doc-ops-001"},
+				5: {"sensor-temp"},
+			},
+			wantViolations: nil,
+			wantPass:       true,
+		},
+		{
+			name:              "empty_hits_with_position_constraint",
+			hits:              []Hit{},
+			mustIncludeInTopN: map[int][]string{3: {"doc-ops-001"}},
+			wantViolations: []PositionViolation{
+				{
+					Pattern:      "doc-ops-001",
+					RequiredTopN: 3,
+					ActualRank:   -1,
+				},
+			},
+			wantPass: false,
+		},
+		{
+			name: "pattern_matches_multiple_but_first_in_top_n",
+			hits: []Hit{
+				{EntityID: "doc-ops-001", Score: 0.9},
+				{EntityID: "doc-ops-002", Score: 0.8},
+				{EntityID: "doc-hr-001", Score: 0.7},
+				{EntityID: "doc-ops-003", Score: 0.6},
+			},
+			mustIncludeInTopN: map[int][]string{
+				2: {"doc-ops"}, // Matches doc-ops-001 at rank 1
+			},
+			wantViolations: nil,
+			wantPass:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				results := make([]map[string]any, len(tt.hits))
+				for i, hit := range tt.hits {
+					results[i] = map[string]any{
+						"entity_id":  hit.EntityID,
+						"similarity": hit.Score,
+					}
+				}
+
+				resp := map[string]any{
+					"data": map[string]any{
+						"similaritySearch": map[string]any{
+							"query":    "test",
+							"results":  results,
+							"duration": "10ms",
+						},
+					},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(resp)
+			}))
+			defer server.Close()
+
+			executor := NewSimilarityExecutor(server.URL, 5*time.Second)
+			query := Query{
+				Text:              "test",
+				MustIncludeInTopN: tt.mustIncludeInTopN,
+			}
+
+			result := executor.ExecuteOne(context.Background(), query)
+
+			// Check position violations
+			if len(result.Validation.PositionViolations) != len(tt.wantViolations) {
+				t.Errorf("expected %d position violations, got %d",
+					len(tt.wantViolations), len(result.Validation.PositionViolations))
+			}
+
+			for i, wantViol := range tt.wantViolations {
+				if i >= len(result.Validation.PositionViolations) {
+					break
+				}
+				gotViol := result.Validation.PositionViolations[i]
+				if gotViol.Pattern != wantViol.Pattern ||
+					gotViol.RequiredTopN != wantViol.RequiredTopN ||
+					gotViol.ActualRank != wantViol.ActualRank {
+					t.Errorf("violation %d mismatch:\ngot  %+v\nwant %+v",
+						i, gotViol, wantViol)
+				}
+			}
+
+			// Overall pass/fail
+			gotPass := len(result.Validation.PositionViolations) == 0
+			if gotPass != tt.wantPass {
+				t.Errorf("expected position validation pass=%v, got %v", tt.wantPass, gotPass)
+			}
+		})
+	}
+}
+
+// TestValidate_MustRankHigherThan tests relative ranking validation.
+func TestValidate_MustRankHigherThan(t *testing.T) {
+	tests := []struct {
+		name               string
+		hits               []Hit
+		mustRankHigherThan map[string][]string
+		wantViolations     []RankingViolation
+		wantPass           bool
+	}{
+		{
+			name: "entity_a_ranks_higher_than_b",
+			hits: []Hit{
+				{EntityID: "doc-ops-001", Score: 0.9},
+				{EntityID: "doc-ops-002", Score: 0.8},
+				{EntityID: "doc-hr-001", Score: 0.7},
+			},
+			mustRankHigherThan: map[string][]string{
+				"doc-ops-001": {"doc-hr-001"},
+			},
+			wantViolations: nil,
+			wantPass:       true,
+		},
+		{
+			name: "entity_a_ranks_lower_than_b",
+			hits: []Hit{
+				{EntityID: "doc-hr-001", Score: 0.9},
+				{EntityID: "doc-ops-001", Score: 0.8},
+			},
+			mustRankHigherThan: map[string][]string{
+				"doc-ops-001": {"doc-hr-001"},
+			},
+			wantViolations: []RankingViolation{
+				{
+					Higher:     "doc-ops-001",
+					Lower:      "doc-hr-001",
+					HigherRank: 2,
+					LowerRank:  1,
+				},
+			},
+			wantPass: false,
+		},
+		{
+			name: "entity_a_present_b_not_present",
+			hits: []Hit{
+				{EntityID: "doc-ops-001", Score: 0.9},
+				{EntityID: "doc-ops-002", Score: 0.8},
+			},
+			mustRankHigherThan: map[string][]string{
+				"doc-ops-001": {"doc-hr-001"},
+			},
+			wantViolations: nil, // A present beats absent B
+			wantPass:       true,
+		},
+		{
+			name: "entity_a_not_present_b_present",
+			hits: []Hit{
+				{EntityID: "doc-hr-001", Score: 0.9},
+				{EntityID: "doc-hr-002", Score: 0.8},
+			},
+			mustRankHigherThan: map[string][]string{
+				"doc-ops-001": {"doc-hr-001"},
+			},
+			wantViolations: []RankingViolation{
+				{
+					Higher:     "doc-ops-001",
+					Lower:      "doc-hr-001",
+					HigherRank: -1,
+					LowerRank:  1,
+				},
+			},
+			wantPass: false,
+		},
+		{
+			name: "neither_present",
+			hits: []Hit{
+				{EntityID: "doc-finance-001", Score: 0.9},
+			},
+			mustRankHigherThan: map[string][]string{
+				"doc-ops-001": {"doc-hr-001"},
+			},
+			wantViolations: nil, // No ranking constraint violated
+			wantPass:       true,
+		},
+		{
+			name: "multiple_ranking_constraints",
+			hits: []Hit{
+				{EntityID: "doc-ops-001", Score: 0.95},
+				{EntityID: "doc-ops-002", Score: 0.90},
+				{EntityID: "doc-hr-001", Score: 0.85},
+				{EntityID: "doc-finance-001", Score: 0.80},
+			},
+			mustRankHigherThan: map[string][]string{
+				"doc-ops-001": {"doc-hr-001", "doc-finance-001"},
+				"doc-ops-002": {"doc-hr-001"},
+			},
+			wantViolations: nil,
+			wantPass:       true,
+		},
+		{
+			name: "one_constraint_passes_one_fails",
+			hits: []Hit{
+				{EntityID: "doc-ops-001", Score: 0.95},
+				{EntityID: "doc-hr-001", Score: 0.90},
+				{EntityID: "doc-ops-002", Score: 0.85},
+			},
+			mustRankHigherThan: map[string][]string{
+				"doc-ops-001": {"doc-hr-001"}, // Pass: rank 1 > rank 2
+				"doc-ops-002": {"doc-hr-001"}, // Fail: rank 3 < rank 2
+			},
+			wantViolations: []RankingViolation{
+				{
+					Higher:     "doc-ops-002",
+					Lower:      "doc-hr-001",
+					HigherRank: 3,
+					LowerRank:  2,
+				},
+			},
+			wantPass: false,
+		},
+		{
+			name: "pattern_matching_first_occurrence",
+			hits: []Hit{
+				{EntityID: "doc-ops-001", Score: 0.9},
+				{EntityID: "doc-ops-002", Score: 0.8},
+				{EntityID: "doc-hr-001", Score: 0.7},
+				{EntityID: "doc-hr-002", Score: 0.6},
+			},
+			mustRankHigherThan: map[string][]string{
+				"doc-ops": {"doc-hr"}, // First doc-ops (rank 1) vs first doc-hr (rank 3)
+			},
+			wantViolations: nil,
+			wantPass:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				results := make([]map[string]any, len(tt.hits))
+				for i, hit := range tt.hits {
+					results[i] = map[string]any{
+						"entity_id":  hit.EntityID,
+						"similarity": hit.Score,
+					}
+				}
+
+				resp := map[string]any{
+					"data": map[string]any{
+						"similaritySearch": map[string]any{
+							"query":    "test",
+							"results":  results,
+							"duration": "10ms",
+						},
+					},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(resp)
+			}))
+			defer server.Close()
+
+			executor := NewSimilarityExecutor(server.URL, 5*time.Second)
+			query := Query{
+				Text:               "test",
+				MustRankHigherThan: tt.mustRankHigherThan,
+			}
+
+			result := executor.ExecuteOne(context.Background(), query)
+
+			// Check ranking violations
+			if len(result.Validation.RankingViolations) != len(tt.wantViolations) {
+				t.Errorf("expected %d ranking violations, got %d",
+					len(tt.wantViolations), len(result.Validation.RankingViolations))
+			}
+
+			for i, wantViol := range tt.wantViolations {
+				if i >= len(result.Validation.RankingViolations) {
+					break
+				}
+				gotViol := result.Validation.RankingViolations[i]
+				if gotViol.Higher != wantViol.Higher ||
+					gotViol.Lower != wantViol.Lower ||
+					gotViol.HigherRank != wantViol.HigherRank ||
+					gotViol.LowerRank != wantViol.LowerRank {
+					t.Errorf("violation %d mismatch:\ngot  %+v\nwant %+v",
+						i, gotViol, wantViol)
+				}
+			}
+
+			// Overall pass/fail
+			gotPass := len(result.Validation.RankingViolations) == 0
+			if gotPass != tt.wantPass {
+				t.Errorf("expected ranking validation pass=%v, got %v", tt.wantPass, gotPass)
+			}
+		})
+	}
+}
+
+// TestValidate_CombinedPositionAndRanking tests both position and ranking constraints together.
+func TestValidate_CombinedPositionAndRanking(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		resp := map[string]any{
+			"data": map[string]any{
+				"similaritySearch": map[string]any{
+					"query": "test",
+					"results": []map[string]any{
+						{"entity_id": "doc-ops-001", "similarity": 0.9},
+						{"entity_id": "doc-ops-002", "similarity": 0.8},
+						{"entity_id": "doc-hr-001", "similarity": 0.7},
+						{"entity_id": "sensor-temp-001", "similarity": 0.6},
+						{"entity_id": "doc-finance-001", "similarity": 0.5},
+					},
+					"duration": "15ms",
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+
+	executor := NewSimilarityExecutor(server.URL, 5*time.Second)
+	query := Query{
+		Text: "test",
+		MustIncludeInTopN: map[int][]string{
+			3: {"doc-ops-001"},
+			5: {"sensor-temp"},
+		},
+		MustRankHigherThan: map[string][]string{
+			"doc-ops-001": {"doc-hr-001"},
+			"doc-ops-002": {"sensor-temp"},
+		},
+	}
+
+	result := executor.ExecuteOne(context.Background(), query)
+
+	// Both position and ranking constraints should pass
+	if len(result.Validation.PositionViolations) != 0 {
+		t.Errorf("expected no position violations, got %d", len(result.Validation.PositionViolations))
+	}
+	if len(result.Validation.RankingViolations) != 0 {
+		t.Errorf("expected no ranking violations, got %d", len(result.Validation.RankingViolations))
+	}
+}
