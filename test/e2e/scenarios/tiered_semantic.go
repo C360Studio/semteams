@@ -468,6 +468,21 @@ func (s *TieredScenario) validateAnomalyGroundTruth(ctx context.Context, result 
 		return nil
 	}
 
+	// Store actual anomalies for auditability - this is critical for verifying
+	// false positive detection is working correctly
+	anomalyList := make([]map[string]any, 0, len(anomalies))
+	for _, a := range anomalies {
+		anomalyList = append(anomalyList, map[string]any{
+			"id":         a.ID,
+			"type":       a.Type,
+			"entity_a":   a.EntityA,
+			"entity_b":   a.EntityB,
+			"confidence": a.Confidence,
+			"status":     a.Status,
+		})
+	}
+	result.Details["anomaly_list"] = anomalyList
+
 	validator := anomaly.NewDefaultValidator()
 	groundTruthResult := validator.Validate(anomalies)
 

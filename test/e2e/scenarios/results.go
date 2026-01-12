@@ -207,6 +207,33 @@ type AnomalyResults struct {
 
 	// VirtualEdges contains counts of auto-applied semantic edges
 	VirtualEdges *VirtualEdgeResults `json:"virtual_edges,omitempty"`
+
+	// List contains the actual anomaly details for auditability
+	List []AnomalyDetail `json:"list,omitempty"`
+
+	// GroundTruth contains the results of ground truth validation
+	GroundTruth *AnomalyGroundTruthResults `json:"ground_truth,omitempty"`
+}
+
+// AnomalyDetail contains the details of a single anomaly for auditability.
+type AnomalyDetail struct {
+	ID         string  `json:"id"`
+	Type       string  `json:"type"`
+	EntityA    string  `json:"entity_a"`
+	EntityB    string  `json:"entity_b,omitempty"`
+	Confidence float64 `json:"confidence"`
+	Status     string  `json:"status"`
+}
+
+// AnomalyGroundTruthResults contains the results of ground truth validation.
+type AnomalyGroundTruthResults struct {
+	ExpectedTotal      int                    `json:"expected_total"`
+	ExpectedFound      int                    `json:"expected_found"`
+	FalsePositiveTotal int                    `json:"false_positive_total"`
+	DetectedTotal      int                    `json:"detected_total"`
+	FalsePositiveRate  float64                `json:"false_positive_rate"`
+	Passed             bool                   `json:"passed"`
+	Violations         []map[string]any       `json:"violations,omitempty"`
 }
 
 // VirtualEdgeResults contains virtual edge creation metrics from semantic inference.
@@ -382,6 +409,38 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 				Medium:      getIntMetric(result, "virtual_edges_medium"),
 				Related:     getIntMetric(result, "virtual_edges_related"),
 				AutoApplied: autoApplied,
+			}
+		}
+
+		// Add actual anomaly list for auditability
+		if anomalyList, ok := result.Details["anomaly_list"].([]map[string]any); ok {
+			for _, a := range anomalyList {
+				detail := AnomalyDetail{
+					ID:      getMapString(a, "id"),
+					Type:    getMapString(a, "type"),
+					EntityA: getMapString(a, "entity_a"),
+					EntityB: getMapString(a, "entity_b"),
+					Status:  getMapString(a, "status"),
+				}
+				if conf, ok := a["confidence"].(float64); ok {
+					detail.Confidence = conf
+				}
+				tr.Anomalies.List = append(tr.Anomalies.List, detail)
+			}
+		}
+
+		// Add ground truth validation results
+		if gt, ok := result.Details["anomaly_ground_truth"].(map[string]any); ok {
+			tr.Anomalies.GroundTruth = &AnomalyGroundTruthResults{
+				ExpectedTotal:      getMapInt(gt, "expected_total"),
+				ExpectedFound:      getMapInt(gt, "expected_found"),
+				FalsePositiveTotal: getMapInt(gt, "false_positive_total"),
+				DetectedTotal:      getMapInt(gt, "detected_total"),
+				FalsePositiveRate:  getMapFloat(gt, "false_positive_rate"),
+				Passed:             getMapBool(gt, "passed"),
+			}
+			if violations, ok := gt["violations"].([]map[string]any); ok {
+				tr.Anomalies.GroundTruth.Violations = violations
 			}
 		}
 	}
@@ -669,6 +728,20 @@ func getMapBool(m map[string]any, key string) bool {
 		}
 	}
 	return false
+}
+
+func getMapFloat(m map[string]any, key string) float64 {
+	if v, ok := m[key]; ok {
+		switch val := v.(type) {
+		case float64:
+			return val
+		case int:
+			return float64(val)
+		case int64:
+			return float64(val)
+		}
+	}
+	return 0
 }
 
 // SaveStructuredResults writes the structured results to a JSON file.
