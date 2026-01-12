@@ -7,11 +7,48 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/clustering"
 	"github.com/c360/semstreams/graph/inference"
 	"github.com/c360/semstreams/graph/structural"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+// graphProviderAdapter wraps GraphProvider to implement inference.RelationshipQuerier.
+// This allows core anomaly detection to query graph relationships for peer counting.
+type graphProviderAdapter struct {
+	provider clustering.GraphProvider
+}
+
+func (a *graphProviderAdapter) GetOutgoingRelationships(ctx context.Context, entityID string) ([]inference.RelationshipInfo, error) {
+	neighbors, err := a.provider.GetNeighbors(ctx, entityID, "outgoing")
+	if err != nil {
+		return nil, err
+	}
+	result := make([]inference.RelationshipInfo, len(neighbors))
+	for i, n := range neighbors {
+		result[i] = inference.RelationshipInfo{
+			FromEntityID: entityID,
+			ToEntityID:   n,
+		}
+	}
+	return result, nil
+}
+
+func (a *graphProviderAdapter) GetIncomingRelationships(ctx context.Context, entityID string) ([]inference.RelationshipInfo, error) {
+	neighbors, err := a.provider.GetNeighbors(ctx, entityID, "incoming")
+	if err != nil {
+		return nil, err
+	}
+	result := make([]inference.RelationshipInfo, len(neighbors))
+	for i, n := range neighbors {
+		result[i] = inference.RelationshipInfo{
+			FromEntityID: n,
+			ToEntityID:   entityID,
+		}
+	}
+	return result, nil
+}
 
 // initAnomalyDetection initializes anomaly detection resources.
 // Called during Start() when EnableAnomalyDetection is true and structural is initialized.
@@ -125,12 +162,13 @@ func (c *Component) runAnomalyDetection(ctx context.Context, kcoreIndex *structu
 
 	// Set dependencies for detectors
 	deps := &inference.DetectorDependencies{
-		StructuralIndices: indices,
-		PreviousKCore:     c.previousKCore, // May be nil on first run
-		Communities:       communities,
-		SimilarityFinder:  c.similarityFinder,
-		AnomalyStorage:    c.anomalyStorage,
-		Logger:            c.logger,
+		StructuralIndices:   indices,
+		PreviousKCore:       c.previousKCore, // May be nil on first run
+		Communities:         communities,
+		SimilarityFinder:    c.similarityFinder,
+		RelationshipQuerier: &graphProviderAdapter{provider: c.graphProvider},
+		AnomalyStorage:      c.anomalyStorage,
+		Logger:              c.logger,
 	}
 	c.anomalyOrchestrator.SetDependencies(deps)
 

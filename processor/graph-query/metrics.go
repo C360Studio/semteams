@@ -10,13 +10,13 @@ import (
 
 // queryMetrics holds Prometheus metrics for the graph-query component.
 type queryMetrics struct {
-	communityCacheHits    prometheus.Counter
-	communityCacheMisses  prometheus.Counter
-	communityStorageHits  prometheus.Counter
+	communityCacheHits     prometheus.Counter
+	communityCacheMisses   prometheus.Counter
+	communityStorageHits   prometheus.Counter
 	communityStorageMisses prometheus.Counter
-	communityLookups      *prometheus.CounterVec
-	localSearchRequests   prometheus.Counter
-	globalSearchRequests  prometheus.Counter
+	communityLookups       *prometheus.CounterVec
+	localSearchRequests    prometheus.Counter
+	globalSearchRequests   prometheus.Counter
 }
 
 // Package-level metrics (registered once to avoid duplicate registration errors)
