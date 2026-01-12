@@ -308,7 +308,7 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"test-graphrag-local", s.executeTestGraphRAGLocal, []string{"semantic"}},
 		{"test-graphrag-global", s.executeTestGraphRAGGlobal, []string{"semantic"}},
 		{"validate-llm-enhancement", s.executeValidateLLMEnhancement, []string{"semantic"}},
-		{"validate-anomaly-detection", s.executeValidateAnomalyDetection, []string{"semantic"}},
+		{"validate-anomaly-detection", s.executeValidateAnomalyDetection, []string{"statistical", "semantic"}},
 		{"validate-virtual-edges", s.executeValidateVirtualEdges, []string{"semantic"}},
 
 		// Wait for rule evaluations to stabilize before validating
