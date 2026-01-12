@@ -89,10 +89,23 @@ func (r *ValidationResult) Passed() bool {
 // These expectations are based on the semantic relationships in testdata/semantic/.
 func DefaultExpectation() *Expectation {
 	return &Expectation{
-		// We expect high similarity entities without direct graph connection to be flagged
-		// Currently not defining specific expected gaps because this depends on
-		// the actual similarity computations which vary
-		ExpectedGaps: []EntityPair{},
+		// Expected anomalies - these SHOULD be detected
+		// Safety documents are core_isolation anomalies because they represent
+		// governance/policy domain rather than operational data. They don't
+		// reference specific sensors, equipment, or zones that would create
+		// semantic similarity with other entities.
+		ExpectedGaps: []EntityPair{
+			{
+				EntityA: "doc-safety-001",
+				Type:    "core_isolation",
+				Reason:  "Safety guidelines are generic policy - isolated from operational data",
+			},
+			{
+				EntityA: "doc-emergency-001",
+				Type:    "core_isolation",
+				Reason:  "Emergency response plan is generic policy - isolated from operational data",
+			},
+		},
 
 		// Related entities that should NOT be flagged as gaps
 		// (false positive detection)

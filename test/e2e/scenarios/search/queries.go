@@ -88,6 +88,18 @@ func DefaultQueries() []Query {
 				3: {"maint-"},
 			},
 		},
+		// Safety policy search - validates safety documents are discoverable
+		// Note: BM25 (statistical tier) may rank observations higher due to term frequency
+		// The semantic tier will rank these better with neural embeddings
+		{
+			Text:            "warehouse safety guidelines emergency evacuation fire",
+			ExpectedPattern: "document.safety", // Matches both doc-safety-001 and doc-emergency-001
+			Description:     "Safety policy query should return safety documents",
+			MinScore:        0.1,
+			MinHits:         1,
+			// At least one safety document should appear in results
+			MustInclude: []string{"document.safety"},
+		},
 	}
 }
 
