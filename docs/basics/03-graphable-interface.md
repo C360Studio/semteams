@@ -227,8 +227,6 @@ Graphable is the foundation of a composable interface hierarchy:
 
 Implement only what you need. Services discover capabilities at runtime via type assertions.
 
-See [Message Interfaces](../reference/message-interfaces.md) for complete details.
-
 ## Common Patterns
 
 ### Multiple Entity Types

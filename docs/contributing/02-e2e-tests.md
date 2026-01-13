@@ -338,4 +338,3 @@ OpenAI-compatible LLM proxy for summarization.
 ## Related Documentation
 
 - [Testing Patterns](01-testing.md) - Unit and integration test patterns
-- [Configuration](../reference/configuration.md) - Test environment configuration

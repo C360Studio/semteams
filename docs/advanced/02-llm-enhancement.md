@@ -466,7 +466,7 @@ More workers help when LLM is fast. Too many workers with slow LLM just builds b
 
 - [Clustering](01-clustering.md) - Community detection
 - [Performance](03-performance.md) - Optimization strategies
-- [KV Buckets Reference](../reference/kv-buckets.md) - Storage bucket details
+- [Index and Bucket Reference](05-index-reference.md) - Storage bucket details
 
 ### Background Concepts
 

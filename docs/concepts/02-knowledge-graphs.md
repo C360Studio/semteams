@@ -304,7 +304,7 @@ Three query patterns enabled by indexes:
 | By predicate | PREDICATE_INDEX | "All entities with temperature readings" |
 | By relationship | INCOMING_INDEX | "All sensors in zone-A" |
 
-See [Query API](../reference/query-api.md) for implementation details.
+See [Query Capabilities](../contributing/06-query-capabilities.md) for implementation details.
 
 ## Graph vs Relational
 
@@ -340,7 +340,7 @@ No need to create explicit reverse triples—the INCOMING_INDEX handles reverse 
 
 Every triple carries a timestamp, enabling time-range queries. For explicit temporal data, the TEMPORAL_INDEX allows queries like "all readings between 10:00 and 11:00."
 
-See [Temporal Index](../reference/kv-buckets.md#temporal-index) for details.
+See [Temporal Index](../advanced/05-index-reference.md#temporal_index) for details.
 
 ### Hierarchical Entities
 
@@ -361,8 +361,8 @@ Query with wildcards: `acme.logistics.facility.zone.area.warehouse-7.*`
 - [Vocabulary](../basics/05-vocabulary.md) - Predicate design patterns
 
 **Reference (API details):**
-- [KV Buckets](../reference/kv-buckets.md) - Index storage schema
-- [Query API](../reference/query-api.md) - Querying entities
+- [Index and Bucket Reference](../advanced/05-index-reference.md) - Index storage schema
+- [Query Capabilities](../contributing/06-query-capabilities.md) - Querying entities
 
 **Concepts (mental models):**
 - [Community Detection](05-community-detection.md) - Clustering from edges

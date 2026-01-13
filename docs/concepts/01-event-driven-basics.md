@@ -178,7 +178,7 @@ The Graph processors manage entity state in NATS KV buckets:
 
 Additional indexes (spatial, temporal, embedding, community, structural, anomaly) are created by their respective processors at higher tiers.
 
-See [KV Bucket Reference](../reference/kv-buckets.md) for complete bucket documentation.
+See [Index and Bucket Reference](../advanced/05-index-reference.md#kv-bucket-reference) for complete bucket documentation.
 
 KV buckets are **not** separate components—they're internal state managed by the graph processors.
 
@@ -322,8 +322,7 @@ See [Configuration](../basics/06-configuration.md) for setup details.
 - [Configuration](../basics/06-configuration.md) - Component setup
 
 **Reference (API details):**
-- [Subject Convention](../reference/subject-convention.md) - Naming patterns
-- [KV Buckets](../reference/kv-buckets.md) - Storage schema
+- [Index and Bucket Reference](../advanced/05-index-reference.md) - Storage and index schema
 
 **Concepts (mental models):**
 - [Real-Time Inference](00-real-time-inference.md) - Tiers and inference modes
