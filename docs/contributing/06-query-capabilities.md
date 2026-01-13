@@ -498,8 +498,6 @@ The query discovery system follows a federated pattern:
    └────────┘ └────────┘ └────────┘ └────────┘ └────────┘
 ```
 
-> See [Full Diagram](../diagrams/query-discovery.mmd) for complete flow.
-
 Key design principles:
 
 - **Single-owner pattern** - Each component queries only the data it writes

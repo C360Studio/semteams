@@ -29,7 +29,6 @@ The SemStreams graph subsystem decomposes into 8 specialized components with cle
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-> See [Full Diagram](../diagrams/component-architecture.mmd) for detailed data flows.
 
 Each component:
 
@@ -524,7 +523,6 @@ JetStream    graph-ingest   ENTITY_STATES   graph-index   Index Buckets
     │             │              │               ├─ update ────►│
 ```
 
-> See [Full Diagram](../diagrams/write-path-sequence.mmd) for complete write flow.
 
 ### Read Path (Direct Query)
 
@@ -537,7 +535,6 @@ Client           graph-ingest        ENTITY_STATES
   │◄─ entity JSON ────┤                    │
 ```
 
-> See [Full Diagram](../diagrams/read-path-direct.mmd) for complete flow.
 
 ### Read Path (Coordinated Query via graph-query)
 
@@ -552,7 +549,6 @@ Client     graph-query   graph-ingest   graph-index
   │◄─ paths ───┤              │              │
 ```
 
-> See [Full Diagram](../diagrams/read-path-coordinated.mmd) for complete flow.
 
 ---
 

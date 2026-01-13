@@ -30,8 +30,6 @@ in NATS KV buckets:
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-> See [Full Diagram](../diagrams/component-architecture.mmd) for detailed data flows.
-
 Solid arrows represent writes, dashed arrows represent watches/reads.
 
 ## Components
@@ -269,8 +267,6 @@ JetStream    graph-ingest   ENTITY_STATES   graph-index   Index Buckets   gatewa
     │             │              │               │              ├── reads ──►│
     │             │              │               │              │            │
 ```
-
-> See [Full Diagram](../diagrams/data-flow-sequence.mmd) for complete sequence.
 
 Step-by-step breakdown:
 
