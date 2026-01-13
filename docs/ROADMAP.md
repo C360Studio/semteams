@@ -54,6 +54,20 @@ Auto-generate abstracts/summaries for content using LLM agents.
 
 ---
 
+### Community Detection
+
+#### Content-Aware Keyword Extraction
+**Priority:** Medium | **Complexity:** Medium | **ADR:** [ADR-007](architecture/adr-007-content-aware-keywords.md)
+
+Enhance keyword extraction to use ContentStorable document content.
+
+- **Current state:** Keywords from entity types and triple metadata only
+- **Gap:** ContentStorable content (body, abstract, title) is used for embeddings but ignored for keywords
+- **Proposed:** Hybrid extraction with weighted combination of metadata and content terms
+- **Benefit:** Richer, more descriptive community keywords
+
+---
+
 ### Embeddings & Retrieval
 
 #### Multimodal Video Embeddings

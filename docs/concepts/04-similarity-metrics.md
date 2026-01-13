@@ -69,43 +69,41 @@ Jaccard = |Intersection| / |Union| = 3/7 ≈ 0.43
 
 This balances summary freshness against LLM cost. Higher thresholds regenerate summaries more often (fresher but more expensive), while lower thresholds preserve summaries longer (cheaper but potentially stale).
 
-## TF-IDF (Term Frequency-Inverse Document Frequency)
+## Term Frequency Scoring (Keyword Extraction)
 
-Extracts keywords that characterize a community by finding terms common within the community but rare across all communities.
+Extracts keywords that characterize a community by finding frequently occurring terms within the community's entities.
 
 ### How It Works
 
 ```text
-TF (Term Frequency):
-  How often a term appears in this community's entities.
-  
-IDF (Inverse Document Frequency):
-  How rare the term is across all communities.
-  Rare terms get higher weight.
+For each entity in community:
+  1. Extract terms from entity type
+  2. Extract terms from property predicates
+  3. Extract terms from string property values
 
-TF-IDF = TF × IDF
+Score each term:
+  TF = occurrences / total_entities
+  Score = TF × log(1 + occurrences)
 ```
+
+Terms that appear frequently across many entities score highest.
 
 ### Example
 
 ```text
-Community A (warehouse sensors):
-  Terms: "temperature", "warehouse", "sensor", "zone-A", "humidity"
+Community (warehouse sensors, 50 entities):
+  "temperature" appears 45 times → Score: 0.90 × log(46) = 3.4
+  "sensor" appears 50 times → Score: 1.0 × log(51) = 3.9
+  "zone-a" appears 12 times → Score: 0.24 × log(13) = 0.6
 
-Community B (fleet drones):
-  Terms: "drone", "battery", "fleet", "sensor", "altitude"
-
-For Community A:
-  "temperature" → High TF (appears often), High IDF (rare globally) → HIGH SCORE
-  "sensor" → High TF, Low IDF (appears everywhere) → MEDIUM SCORE
-  "the" → Low TF, Low IDF (common word) → LOW SCORE (filtered)
+Top keywords: ["sensor", "temperature", "zone-a"]
 ```
 
 ### SemStreams Usage
 
-**Statistical community summaries:** Keywords are TF-IDF extracted from entity text content (via the `ContentStorable` interface). Each community summary includes these extracted keywords alongside representative entities.
+**Statistical community summaries:** Keywords are extracted from entity types and triple properties. Each community summary includes these keywords alongside representative entities.
 
-The system automatically filters common stopwords. Keyword quality depends on the text content stored with entities—domain-specific terms in entity content produce more meaningful keywords. See [Embeddings](03-embeddings.md) for how `ContentStorable` works.
+The system filters common stopwords and short terms. Keyword quality depends on meaningful property values—domain-specific terms in triples produce more distinctive keywords.
 
 ## PageRank (Representative Selection)
 
@@ -145,7 +143,7 @@ Entity Updates
       ▼
 ┌─────────────────────────────────────────┐
 │ Summary Generation                       │
-│  ├─ TF-IDF → keywords                   │
+│  ├─ Term frequency → keywords           │
 │  ├─ PageRank → representatives          │
 │  └─ Jaccard → preserve or regenerate    │
 └─────────────────────────────────────────┘

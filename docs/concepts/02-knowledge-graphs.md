@@ -194,10 +194,10 @@ SemStreams provides mappings to established vocabularies:
 
 | SemStreams Predicate | Standard Equivalent |
 |----------------------|---------------------|
-| meta.created | dc:created |
-| meta.title | dc:title |
-| geo.location.lat | schema:latitude |
-| entity.type | rdf:type |
+| `meta.timestamp.created` | dc:created |
+| `meta.content.title` | dc:title |
+| `geo.location.lat` | schema:latitude |
+| `entity.class.type` | rdf:type |
 
 Use standard mappings when interoperability matters.
 
