@@ -34,6 +34,33 @@ Add explicit mutation tests beyond rule-driven coverage:
 
 Current state: Mutations only tested indirectly via rules engine.
 
+### Transitivity Detector Wiring
+**Status:** Needs Wiring | **ADR:** [ADR-008](architecture/adr-008-transitivity-detector.md)
+
+Wire the transitivity gap detector into the anomaly detection pipeline:
+- Implement RelationshipQuerier adapter for graph provider
+- Register transitivity detector with anomaly orchestrator
+- Enable detection of missing edges in transitive predicate chains
+
+Current state: Detector code exists but is intentionally skipped at runtime pending RelationshipQuerier integration.
+
+### Query Pattern Enhancements
+**Status:** Partial Implementation | **ADR:** [ADR-009](architecture/adr-009-pathrag-enhancements.md)
+
+Complete PathRAG and GraphRAG with missing documented features:
+
+**PathRAG:**
+- Direction control (incoming, outgoing, both) - enables "what depends on X" queries
+- Predicate filtering - focus traversal on specific relationship types
+- Timeout and path limits - SLA enforcement and memory protection
+
+**GraphRAG:**
+- Relationships in response - show connections between returned entities
+- Source attribution - link answers to specific entities/communities for explainability
+- Response control parameters (include_summaries, include_relationships)
+
+Current state: PathRAG only supports outgoing traversal. GraphRAG doesn't include relationships or source attribution.
+
 ---
 
 ## Future Enhancements

@@ -142,5 +142,5 @@ For each anomaly type, define the suggested relationship:
 ## References
 
 - [Community Detection Concepts](../concepts/05-community-detection.md)
-- [Structural Analysis Concepts](../concepts/06-structural-analysis.md)
+- [Anomaly Detection Concepts](../concepts/06-anomaly-detection.md)
 - [ADR-001: Pragmatic Semantic Web](./adr-001-pragmatic-semantic-web.md)

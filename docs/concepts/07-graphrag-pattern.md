@@ -126,8 +126,8 @@ GraphRAG requires clustering to be enabled. Configure detection interval and ent
 |-----------|---------|-------------|
 | `max_communities` | 5 | Maximum communities to return per query |
 | `max_entities_per_community` | 20 | Entity limit per community in results |
-| `include_summaries` | true | Include community summaries in response |
-| `include_relationships` | true | Include entity relationships |
+
+> **Note**: Additional parameters (`include_summaries`, `include_relationships`) are planned. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
 
 ### LLM Integration (Tier 2)
 
@@ -148,8 +148,8 @@ GraphRAG is accessible via the MCP (Model Context Protocol) gateway using GraphQ
 | `answer` | LLM-generated response (Q&A mode only) |
 | `communities` | List of matched communities with summaries |
 | `entities` | Key entities from matched communities |
-| `relationships` | Connections between returned entities |
-| `sources` | Attribution linking answer to specific communities/entities |
+
+> **Note**: Additional response fields (`relationships`, `sources` for attribution) are planned. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
 
 ## How Context Flows to the LLM
 

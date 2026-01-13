@@ -131,7 +131,7 @@ BM25 embeddings for entities with text content—pure Go, no external services.
 - TF-IDF keyword extraction from text fields
 - Hybrid clustering: explicit edges + virtual edges (for text entities)
 - Telemetry entities still cluster via explicit relationships only
-- **Anomaly detection**: Topology analysis suggests missing relationships (see [Anomaly Detection](06-structural-analysis.md))
+- **Anomaly detection**: Topology analysis suggests missing relationships (see [Anomaly Detection](06-anomaly-detection.md))
 
 Tier 1 also enables structural analysis after community detection:
 - **K-core decomposition**: Identifies graph backbone vs periphery
@@ -233,6 +233,6 @@ Rules provide real-time responsiveness. Embeddings enable similarity. Clustering
 - [Event-Driven Basics](01-event-driven-basics.md) - How events flow through the system
 - [Similarity Metrics](04-similarity-metrics.md) - Cosine, Jaccard, TF-IDF fundamentals
 - [Community Detection](05-community-detection.md) - How clustering works
-- [Anomaly Detection](06-structural-analysis.md) - Tier 1+ topology analysis and gap detection
+- [Anomaly Detection](06-anomaly-detection.md) - Tier 1+ topology analysis and gap detection
 - [GraphRAG Pattern](07-graphrag-pattern.md) - How communities enable RAG
 - [PathRAG Pattern](08-pathrag-pattern.md) - Structural traversal queries

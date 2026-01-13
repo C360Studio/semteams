@@ -279,7 +279,7 @@ Many single-entity communities.
 **Concepts**
 - [Knowledge Graphs](02-knowledge-graphs.md) - Defining relationships that create explicit edges
 - [Embeddings](03-embeddings.md) - How virtual edges are computed from content similarity
-- [Structural Analysis](06-structural-analysis.md) - K-core decomposition complements community clustering
+- [Anomaly Detection](06-anomaly-detection.md) - K-core decomposition complements community clustering
 - [GraphRAG Pattern](07-graphrag-pattern.md) - How communities enable retrieval-augmented generation
 - [Similarity Metrics](04-similarity-metrics.md) - TF-IDF and threshold tuning
 

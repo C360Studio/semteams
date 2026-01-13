@@ -45,9 +45,9 @@ Unlike GraphRAG (semantic search), PathRAG follows the actual structure of your 
 
 ## How It Works
 
-### Bounded Depth-First Search
+### Bounded Graph Traversal
 
-PathRAG performs DFS with resource limits:
+PathRAG performs breadth-first traversal with resource limits:
 
 ```text
 config-db ──depends_on──► service-auth ──uses──► cache-redis
@@ -80,14 +80,14 @@ score = decay_factor ^ depth
 
 PathRAG guarantees bounded execution:
 
-| Limit | Purpose | Typical Value |
-|-------|---------|---------------|
-| `max_depth` | Prevents infinite loops | 2-5 hops |
-| `max_nodes` | Bounds memory | 50-500 nodes |
-| `max_time` | Ensures latency SLA | 50-500ms |
-| `max_paths` | Limits path explosion | 10-100 paths |
+| Limit | Purpose | Default |
+|-------|---------|---------|
+| `max_depth` | Prevents infinite loops | 10 hops |
+| `max_nodes` | Bounds memory | 100 nodes |
 
 If any limit is hit, results are marked `truncated: true`.
+
+> **Note**: Additional bounds (`max_time`, `max_paths`) are planned. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
 
 ## Configuration
 
@@ -98,22 +98,25 @@ A PathRAG query requires a starting entity and accepts optional bounds. Key para
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `start_entity` | (required) | Entity ID to start traversal from |
-| `max_depth` | 3 | Maximum hops from start entity |
+| `max_depth` | 10 | Maximum hops from start entity |
 | `max_nodes` | 100 | Maximum entities to return |
-| `max_time` | 500ms | Timeout for traversal |
 | `decay_factor` | 0.8 | Score reduction per hop (see Decay Function) |
 
-### Predicate Filtering
+### Predicate Filtering (Planned)
 
-Limit traversal to specific relationship types by providing a predicate filter. For example, filtering to only `depends_on` and `uses` predicates ignores relationships like `located_in` or `owned_by` that aren't relevant to dependency analysis.
+> **Note**: Predicate filtering is not yet implemented. Currently all relationship types are traversed. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
 
-This dramatically reduces traversal time in graphs with many relationship types.
+When implemented, you'll be able to limit traversal to specific relationship types. For example, filtering to only `depends_on` and `uses` predicates will ignore relationships like `located_in` or `owned_by` that aren't relevant to dependency analysis.
 
-### Direction Control
+### Direction Control (Planned)
+
+> **Note**: Direction control is not yet implemented. Currently only outgoing edges are traversed. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
+
+When implemented:
 
 | Direction | Follows | Use Case |
 |-----------|---------|----------|
-| `outgoing` | Entity → references | "What does this depend on?" |
+| `outgoing` | Entity → references | "What does this depend on?" (current behavior) |
 | `incoming` | References → entity | "What depends on this?" |
 | `both` | Bidirectional | "What's connected either way?" |
 
@@ -222,7 +225,7 @@ These indexes maintain entity-to-entity relationships for efficient traversal. T
 - [GraphRAG Pattern](07-graphrag-pattern.md) - Semantic search alternative for topic-based queries
 - [Knowledge Graphs](02-knowledge-graphs.md) - How triples create the relationships PathRAG traverses
 - [Community Detection](05-community-detection.md) - How communities differ from structural paths
-- [Anomaly Detection](06-structural-analysis.md) - Background topology analysis (Tier 1+ feature)
+- [Anomaly Detection](06-anomaly-detection.md) - Background topology analysis (Tier 1+ feature)
 
 **Configuration**
 - [Configuration Guide](../basics/06-configuration.md) - Index and traversal settings
