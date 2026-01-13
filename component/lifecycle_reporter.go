@@ -16,7 +16,7 @@ import (
 type KVLifecycleReporter struct {
 	kv            jetstream.KeyValue
 	componentName string
-	status        *ComponentStatus
+	status        *Status
 	mu            sync.Mutex
 	logger        *slog.Logger
 }
@@ -29,7 +29,7 @@ func NewKVLifecycleReporter(kv jetstream.KeyValue, componentName string, logger 
 	return &KVLifecycleReporter{
 		kv:            kv,
 		componentName: componentName,
-		status: &ComponentStatus{
+		status: &Status{
 			Component:      componentName,
 			Stage:          "idle",
 			StageStartedAt: time.Now(),
@@ -125,22 +125,22 @@ func NewNoOpLifecycleReporter() *NoOpLifecycleReporter {
 }
 
 // ReportStage is a no-op.
-func (r *NoOpLifecycleReporter) ReportStage(ctx context.Context, stage string) error {
+func (r *NoOpLifecycleReporter) ReportStage(_ context.Context, _ string) error {
 	return nil
 }
 
 // ReportCycleStart is a no-op.
-func (r *NoOpLifecycleReporter) ReportCycleStart(ctx context.Context) error {
+func (r *NoOpLifecycleReporter) ReportCycleStart(_ context.Context) error {
 	return nil
 }
 
 // ReportCycleComplete is a no-op.
-func (r *NoOpLifecycleReporter) ReportCycleComplete(ctx context.Context) error {
+func (r *NoOpLifecycleReporter) ReportCycleComplete(_ context.Context) error {
 	return nil
 }
 
 // ReportCycleError is a no-op.
-func (r *NoOpLifecycleReporter) ReportCycleError(ctx context.Context, err error) error {
+func (r *NoOpLifecycleReporter) ReportCycleError(_ context.Context, _ error) error {
 	return nil
 }
 

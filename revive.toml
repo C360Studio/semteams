@@ -41,3 +41,5 @@ warningCode = 0
 
 [rule.max-public-structs]
   arguments = [10]
+  # E2E test infrastructure has many DTOs for structured results
+  exclude = ["**/test/e2e/**"]

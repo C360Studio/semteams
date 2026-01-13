@@ -164,8 +164,8 @@ func (s *StatisticalSummarizer) extractKeywords(entities []*gtypes.EntityState) 
 // findRepresentativeEntities identifies entities that best represent the community
 // Uses PageRank algorithm for graph centrality with fallback to degree centrality
 func (s *StatisticalSummarizer) findRepresentativeEntities(ctx context.Context, entities []*gtypes.EntityState) []string {
-	// Create GraphProvider adapter from entity list
-	provider := newEntityGraphProvider(entities)
+	// Create Provider adapter from entity list
+	provider := newEntityProvider(entities)
 
 	// Extract community member IDs
 	memberIDs := make([]string, len(entities))
@@ -241,21 +241,21 @@ func (s *StatisticalSummarizer) findRepresentativeEntitiesFallback(entities []*g
 	return repEntities
 }
 
-// entityGraphProvider implements GraphProvider interface for in-memory entity list
-type entityGraphProvider struct {
+// entityProvider implements Provider interface for in-memory entity list
+type entityProvider struct {
 	entities map[string]*gtypes.EntityState
 }
 
-// newEntityGraphProvider creates a GraphProvider from entity list
-func newEntityGraphProvider(entities []*gtypes.EntityState) *entityGraphProvider {
+// newEntityProvider creates a Provider from entity list
+func newEntityProvider(entities []*gtypes.EntityState) *entityProvider {
 	entitiesMap := make(map[string]*gtypes.EntityState, len(entities))
 	for _, entity := range entities {
 		entitiesMap[entity.ID] = entity
 	}
-	return &entityGraphProvider{entities: entitiesMap}
+	return &entityProvider{entities: entitiesMap}
 }
 
-func (p *entityGraphProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
+func (p *entityProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
 	ids := make([]string, 0, len(p.entities))
 	for id := range p.entities {
 		ids = append(ids, id)
@@ -263,7 +263,7 @@ func (p *entityGraphProvider) GetAllEntityIDs(_ context.Context) ([]string, erro
 	return ids, nil
 }
 
-func (p *entityGraphProvider) GetNeighbors(_ context.Context, entityID string, direction string) ([]string, error) {
+func (p *entityProvider) GetNeighbors(_ context.Context, entityID string, direction string) ([]string, error) {
 	entity, ok := p.entities[entityID]
 	if !ok {
 		return []string{}, nil
@@ -303,7 +303,7 @@ func (p *entityGraphProvider) GetNeighbors(_ context.Context, entityID string, d
 	return neighbors, nil
 }
 
-func (p *entityGraphProvider) GetEdgeWeight(_ context.Context, fromID, toID string) (float64, error) {
+func (p *entityProvider) GetEdgeWeight(_ context.Context, fromID, toID string) (float64, error) {
 	entity, ok := p.entities[fromID]
 	if !ok {
 		return 0.0, nil

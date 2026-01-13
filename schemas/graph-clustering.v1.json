@@ -74,6 +74,16 @@
       "type": "string",
       "description": "Port configuration",
       "category": "basic"
+    },
+    "startup_attempts": {
+      "type": "number",
+      "description": "Max attempts to wait for dependencies at startup",
+      "category": "advanced"
+    },
+    "startup_interval_ms": {
+      "type": "number",
+      "description": "Interval between startup attempts in milliseconds",
+      "category": "advanced"
     }
   },
   "required": [],

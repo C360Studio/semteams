@@ -115,7 +115,7 @@ func TestLPADetector_ProviderGetNeighborsError(t *testing.T) {
 
 // Test storage failures
 func TestLPADetector_StorageClearError(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	provider.AddEntity("A")
 	provider.AddEntity("B")
 
@@ -133,7 +133,7 @@ func TestLPADetector_StorageClearError(t *testing.T) {
 }
 
 func TestLPADetector_StorageSaveError(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	provider.AddEntity("A")
 	provider.AddEntity("B")
 	provider.AddEdge("A", "B", 1.0)
@@ -153,7 +153,7 @@ func TestLPADetector_StorageSaveError(t *testing.T) {
 
 // Test context cancellation
 func TestLPADetector_ContextCancellation(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Create large graph to ensure multiple iterations
@@ -186,7 +186,7 @@ func TestLPADetector_NilProvider(t *testing.T) {
 }
 
 func TestLPADetector_NilStorage(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	provider.AddEntity("A")
 
 	detector := NewLPADetector(provider, nil)
@@ -199,7 +199,7 @@ func TestLPADetector_NilStorage(t *testing.T) {
 
 // Test input validation
 func TestLPADetector_WithMaxIterations_Validation(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	detector := NewLPADetector(provider, storage)
@@ -222,7 +222,7 @@ func TestLPADetector_WithMaxIterations_Validation(t *testing.T) {
 }
 
 func TestLPADetector_WithLevels_Validation(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	detector := NewLPADetector(provider, storage)

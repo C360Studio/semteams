@@ -8,7 +8,7 @@ import (
 
 // Benchmark small graph (10 nodes, 2 communities)
 func BenchmarkLPADetector_SmallGraph(b *testing.B) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Community 1: 5 nodes fully connected
@@ -48,7 +48,7 @@ func BenchmarkLPADetector_SmallGraph(b *testing.B) {
 
 // Benchmark medium graph (50 nodes, 5 communities)
 func BenchmarkLPADetector_MediumGraph(b *testing.B) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Create 5 communities of 10 nodes each
@@ -93,7 +93,7 @@ func BenchmarkLPADetector_MediumGraph(b *testing.B) {
 
 // Benchmark large graph (200 nodes, 10 communities)
 func BenchmarkLPADetector_LargeGraph(b *testing.B) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Create 10 communities of 20 nodes each
@@ -140,7 +140,7 @@ func BenchmarkLPADetector_LargeGraph(b *testing.B) {
 
 // Benchmark entity community lookup
 func BenchmarkLPADetector_GetEntityCommunity(b *testing.B) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Create simple graph
@@ -173,7 +173,7 @@ func BenchmarkLPADetector_GetEntityCommunity(b *testing.B) {
 
 // Benchmark parallel entity lookups
 func BenchmarkLPADetector_GetEntityCommunity_Parallel(b *testing.B) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Create simple graph
@@ -209,7 +209,7 @@ func BenchmarkLPADetector_GetEntityCommunity_Parallel(b *testing.B) {
 
 // Benchmark incremental updates
 func BenchmarkLPADetector_UpdateCommunities(b *testing.B) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Create initial graph

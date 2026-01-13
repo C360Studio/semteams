@@ -8,26 +8,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// MockGraphProvider implements GraphProvider for testing
-type MockGraphProvider struct {
+// MockProvider implements Provider for testing
+type MockProvider struct {
 	entities  []string
 	neighbors map[string][]string
 	weights   map[string]map[string]float64
 }
 
-func NewMockGraphProvider() *MockGraphProvider {
-	return &MockGraphProvider{
+func NewMockProvider() *MockProvider {
+	return &MockProvider{
 		entities:  make([]string, 0),
 		neighbors: make(map[string][]string),
 		weights:   make(map[string]map[string]float64),
 	}
 }
 
-func (m *MockGraphProvider) AddEntity(id string) {
+func (m *MockProvider) AddEntity(id string) {
 	m.entities = append(m.entities, id)
 }
 
-func (m *MockGraphProvider) AddEdge(fromID, toID string, weight float64) {
+func (m *MockProvider) AddEdge(fromID, toID string, weight float64) {
 	// Add bidirectional edge
 	m.neighbors[fromID] = append(m.neighbors[fromID], toID)
 	m.neighbors[toID] = append(m.neighbors[toID], fromID)
@@ -43,15 +43,15 @@ func (m *MockGraphProvider) AddEdge(fromID, toID string, weight float64) {
 	m.weights[toID][fromID] = weight
 }
 
-func (m *MockGraphProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
+func (m *MockProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
 	return m.entities, nil
 }
 
-func (m *MockGraphProvider) GetNeighbors(_ context.Context, entityID string, _ string) ([]string, error) {
+func (m *MockProvider) GetNeighbors(_ context.Context, entityID string, _ string) ([]string, error) {
 	return m.neighbors[entityID], nil
 }
 
-func (m *MockGraphProvider) GetEdgeWeight(_ context.Context, fromID, toID string) (float64, error) {
+func (m *MockProvider) GetEdgeWeight(_ context.Context, fromID, toID string) (float64, error) {
 	if weights, ok := m.weights[fromID]; ok {
 		if weight, ok := weights[toID]; ok {
 			return weight, nil
@@ -140,7 +140,7 @@ func TestLPADetector_SimpleGraph(t *testing.T) {
 	// Community 2: D-E-F (triangle)
 	// Bridge: C-D (weak connection)
 
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Community 1
@@ -185,7 +185,7 @@ func TestLPADetector_SimpleGraph(t *testing.T) {
 }
 
 func TestLPADetector_IsolatedNodes(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Three isolated nodes
@@ -209,7 +209,7 @@ func TestLPADetector_IsolatedNodes(t *testing.T) {
 }
 
 func TestLPADetector_FullyConnected(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Create a complete graph K5 (fully connected 5 nodes)
@@ -239,7 +239,7 @@ func TestLPADetector_FullyConnected(t *testing.T) {
 }
 
 func TestLPADetector_HierarchicalLevels(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Create a larger graph with clear community structure
@@ -286,7 +286,7 @@ func TestLPADetector_HierarchicalLevels(t *testing.T) {
 }
 
 func TestLPADetector_GetEntityCommunity(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	// Simple triangle
@@ -319,7 +319,7 @@ func TestLPADetector_GetEntityCommunity(t *testing.T) {
 }
 
 func TestLPADetector_EmptyGraph(t *testing.T) {
-	provider := NewMockGraphProvider()
+	provider := NewMockProvider()
 	storage := NewMockCommunityStorage()
 
 	detector := NewLPADetector(provider, storage)

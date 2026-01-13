@@ -44,13 +44,13 @@ func (m *mockSimilarityFinder) FindSimilarEntities(
 	return filtered, nil
 }
 
-// TestSemanticGraphProvider_GetNeighbors_CombinesExplicitAndVirtual tests that
+// TestSemanticProvider_GetNeighbors_CombinesExplicitAndVirtual tests that
 // GetNeighbors returns both explicit neighbors and virtual semantic neighbors.
-func TestSemanticGraphProvider_GetNeighbors_CombinesExplicitAndVirtual(t *testing.T) {
+func TestSemanticProvider_GetNeighbors_CombinesExplicitAndVirtual(t *testing.T) {
 	ctx := context.Background()
 
 	// Create base provider with explicit edges
-	baseProvider := NewMockGraphProvider()
+	baseProvider := NewMockProvider()
 	baseProvider.AddEntity("A")
 	baseProvider.AddEntity("B")
 	baseProvider.AddEntity("C")
@@ -70,7 +70,7 @@ func TestSemanticGraphProvider_GetNeighbors_CombinesExplicitAndVirtual(t *testin
 		SimilarityThreshold: 0.6,
 		MaxVirtualNeighbors: 5,
 	}
-	provider := NewSemanticGraphProvider(baseProvider, finder, config, nil)
+	provider := NewSemanticProvider(baseProvider, finder, config, nil)
 
 	// Get neighbors
 	neighbors, err := provider.GetNeighbors(ctx, "A", "both")
@@ -83,13 +83,13 @@ func TestSemanticGraphProvider_GetNeighbors_CombinesExplicitAndVirtual(t *testin
 	assert.Contains(t, neighbors, "D") // Virtual
 }
 
-// TestSemanticGraphProvider_GetEdgeWeight_ExplicitTakesPrecedence tests that
+// TestSemanticProvider_GetEdgeWeight_ExplicitTakesPrecedence tests that
 // explicit edges have priority over virtual edges.
-func TestSemanticGraphProvider_GetEdgeWeight_ExplicitTakesPrecedence(t *testing.T) {
+func TestSemanticProvider_GetEdgeWeight_ExplicitTakesPrecedence(t *testing.T) {
 	ctx := context.Background()
 
 	// Create base provider with explicit edge
-	baseProvider := NewMockGraphProvider()
+	baseProvider := NewMockProvider()
 	baseProvider.AddEntity("A")
 	baseProvider.AddEntity("B")
 	baseProvider.AddEdge("A", "B", 0.9) // Explicit edge with 0.9 weight
@@ -101,7 +101,7 @@ func TestSemanticGraphProvider_GetEdgeWeight_ExplicitTakesPrecedence(t *testing.
 	})
 
 	config := DefaultSemanticProviderConfig()
-	provider := NewSemanticGraphProvider(baseProvider, finder, config, nil)
+	provider := NewSemanticProvider(baseProvider, finder, config, nil)
 
 	// Get edge weight
 	weight, err := provider.GetEdgeWeight(ctx, "A", "B")
@@ -111,13 +111,13 @@ func TestSemanticGraphProvider_GetEdgeWeight_ExplicitTakesPrecedence(t *testing.
 	assert.Equal(t, 0.9, weight)
 }
 
-// TestSemanticGraphProvider_GetEdgeWeight_ReturnsVirtualIfNoExplicit tests that
+// TestSemanticProvider_GetEdgeWeight_ReturnsVirtualIfNoExplicit tests that
 // virtual similarity is used when no explicit edge exists.
-func TestSemanticGraphProvider_GetEdgeWeight_ReturnsVirtualIfNoExplicit(t *testing.T) {
+func TestSemanticProvider_GetEdgeWeight_ReturnsVirtualIfNoExplicit(t *testing.T) {
 	ctx := context.Background()
 
 	// Create base provider WITHOUT edge
-	baseProvider := NewMockGraphProvider()
+	baseProvider := NewMockProvider()
 	baseProvider.AddEntity("A")
 	baseProvider.AddEntity("B")
 	// No edge between A and B
@@ -129,7 +129,7 @@ func TestSemanticGraphProvider_GetEdgeWeight_ReturnsVirtualIfNoExplicit(t *testi
 	})
 
 	config := DefaultSemanticProviderConfig()
-	provider := NewSemanticGraphProvider(baseProvider, finder, config, nil)
+	provider := NewSemanticProvider(baseProvider, finder, config, nil)
 
 	// First call GetNeighbors to populate cache
 	_, _ = provider.GetNeighbors(ctx, "A", "both")
@@ -142,12 +142,12 @@ func TestSemanticGraphProvider_GetEdgeWeight_ReturnsVirtualIfNoExplicit(t *testi
 	assert.InDelta(t, 0.75, weight, 0.01)
 }
 
-// TestSemanticGraphProvider_GetNeighbors_RespectsThreshold tests that
+// TestSemanticProvider_GetNeighbors_RespectsThreshold tests that
 // similarity threshold is applied to virtual neighbors.
-func TestSemanticGraphProvider_GetNeighbors_RespectsThreshold(t *testing.T) {
+func TestSemanticProvider_GetNeighbors_RespectsThreshold(t *testing.T) {
 	ctx := context.Background()
 
-	baseProvider := NewMockGraphProvider()
+	baseProvider := NewMockProvider()
 	baseProvider.AddEntity("A")
 	baseProvider.AddEntity("B")
 	baseProvider.AddEntity("C")
@@ -162,7 +162,7 @@ func TestSemanticGraphProvider_GetNeighbors_RespectsThreshold(t *testing.T) {
 		SimilarityThreshold: 0.6, // Set threshold at 0.6
 		MaxVirtualNeighbors: 5,
 	}
-	provider := NewSemanticGraphProvider(baseProvider, finder, config, nil)
+	provider := NewSemanticProvider(baseProvider, finder, config, nil)
 
 	neighbors, err := provider.GetNeighbors(ctx, "A", "both")
 	require.NoError(t, err)
@@ -172,12 +172,12 @@ func TestSemanticGraphProvider_GetNeighbors_RespectsThreshold(t *testing.T) {
 	assert.Contains(t, neighbors, "B")
 }
 
-// TestSemanticGraphProvider_GetNeighbors_RespectsLimit tests that
+// TestSemanticProvider_GetNeighbors_RespectsLimit tests that
 // max virtual neighbors limit is applied.
-func TestSemanticGraphProvider_GetNeighbors_RespectsLimit(t *testing.T) {
+func TestSemanticProvider_GetNeighbors_RespectsLimit(t *testing.T) {
 	ctx := context.Background()
 
-	baseProvider := NewMockGraphProvider()
+	baseProvider := NewMockProvider()
 	baseProvider.AddEntity("A")
 	for i := 0; i < 10; i++ {
 		baseProvider.AddEntity(string(rune('B' + i)))
@@ -198,7 +198,7 @@ func TestSemanticGraphProvider_GetNeighbors_RespectsLimit(t *testing.T) {
 		SimilarityThreshold: 0.6,
 		MaxVirtualNeighbors: 3, // Limit to 3
 	}
-	provider := NewSemanticGraphProvider(baseProvider, finder, config, nil)
+	provider := NewSemanticProvider(baseProvider, finder, config, nil)
 
 	neighbors, err := provider.GetNeighbors(ctx, "A", "both")
 	require.NoError(t, err)
@@ -207,11 +207,11 @@ func TestSemanticGraphProvider_GetNeighbors_RespectsLimit(t *testing.T) {
 	assert.Len(t, neighbors, 3)
 }
 
-// TestSemanticGraphProvider_ClearCache tests cache clearing
-func TestSemanticGraphProvider_ClearCache(t *testing.T) {
+// TestSemanticProvider_ClearCache tests cache clearing
+func TestSemanticProvider_ClearCache(t *testing.T) {
 	ctx := context.Background()
 
-	baseProvider := NewMockGraphProvider()
+	baseProvider := NewMockProvider()
 	baseProvider.AddEntity("A")
 	baseProvider.AddEntity("B")
 
@@ -221,7 +221,7 @@ func TestSemanticGraphProvider_ClearCache(t *testing.T) {
 	})
 
 	config := DefaultSemanticProviderConfig()
-	provider := NewSemanticGraphProvider(baseProvider, finder, config, nil)
+	provider := NewSemanticProvider(baseProvider, finder, config, nil)
 
 	// Populate cache
 	_, _ = provider.GetNeighbors(ctx, "A", "both")
@@ -238,18 +238,18 @@ func TestSemanticGraphProvider_ClearCache(t *testing.T) {
 	assert.Equal(t, 0, edges)
 }
 
-// TestSemanticGraphProvider_NilFinder tests graceful degradation with nil finder
-func TestSemanticGraphProvider_NilFinder(t *testing.T) {
+// TestSemanticProvider_NilFinder tests graceful degradation with nil finder
+func TestSemanticProvider_NilFinder(t *testing.T) {
 	ctx := context.Background()
 
-	baseProvider := NewMockGraphProvider()
+	baseProvider := NewMockProvider()
 	baseProvider.AddEntity("A")
 	baseProvider.AddEntity("B")
 	baseProvider.AddEdge("A", "B", 1.0)
 
 	// Create provider with nil finder
 	config := DefaultSemanticProviderConfig()
-	provider := NewSemanticGraphProvider(baseProvider, nil, config, nil)
+	provider := NewSemanticProvider(baseProvider, nil, config, nil)
 
 	// Should still work, returning only explicit neighbors
 	neighbors, err := provider.GetNeighbors(ctx, "A", "both")

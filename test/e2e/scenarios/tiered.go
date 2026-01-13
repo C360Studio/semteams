@@ -338,33 +338,9 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 	return stages
 }
 
-// Execute runs the tiered semantic test scenario
-func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
-	result := &Result{
-		ScenarioName: s.name,
-		StartTime:    time.Now(),
-		Success:      false,
-		Metrics:      make(map[string]any),
-		Details:      make(map[string]any),
-		Errors:       []string{},
-		Warnings:     []string{},
-	}
-
-	// Detect variant if not explicitly set
-	variant := s.config.Variant
-	if variant == "" {
-		info := s.detectVariantAndProvider(result)
-		variant = info.variant
-		result.Details["detected_variant"] = variant
-		result.Details["detected_embedding_provider"] = info.embeddingProvider
-	}
-	result.Metrics["variant"] = variant
-
-	// Get filtered stages for this variant
-	stages := s.getStagesForVariant(variant)
+// executeStages runs all stages with progress logging.
+func (s *TieredScenario) executeStages(ctx context.Context, result *Result, stages []stage) bool {
 	totalStages := len(stages)
-
-	// Execute each stage with progress logging
 	for i, stage := range stages {
 		fmt.Printf("\n[%d/%d] %s starting...\n", i+1, totalStages, stage.name)
 		stageStart := time.Now()
@@ -376,91 +352,120 @@ func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
 			result.Error = fmt.Sprintf("%s failed: %v", stage.name, err)
 			result.EndTime = time.Now()
 			result.Duration = result.EndTime.Sub(result.StartTime)
-			return result, nil // Return result even on failure
+			return false
 		}
 
 		duration := time.Since(stageStart)
 		fmt.Printf("[%d/%d] %s completed in %v\n", i+1, totalStages, stage.name, duration)
 		result.Metrics[fmt.Sprintf("%s_duration_ms", stage.name)] = duration.Milliseconds()
-
-		// Print key metrics after data-affecting stages
-		if strings.Contains(stage.name, "send") || strings.Contains(stage.name, "validate") || strings.Contains(stage.name, "verify") {
-			if snapshot, err := s.metrics.FetchSnapshot(ctx); err == nil {
-				var entities, rules float64
-				if m, ok := snapshot.Metrics["semstreams_datamanager_entities_updated_total"]; ok {
-					entities = m.Value
-				}
-				if m, ok := snapshot.Metrics["semstreams_rule_evaluations_total"]; ok {
-					rules = m.Value
-				}
-				fmt.Printf("  Metrics: entities=%.0f, rules=%.0f\n", entities, rules)
-			}
-		}
+		s.printMetricsIfApplicable(ctx, stage.name)
 	}
+	return true
+}
 
-	// Capture final metrics baseline for regression detection
+// printMetricsIfApplicable prints key metrics after data-affecting stages.
+func (s *TieredScenario) printMetricsIfApplicable(ctx context.Context, stageName string) {
+	if !strings.Contains(stageName, "send") && !strings.Contains(stageName, "validate") && !strings.Contains(stageName, "verify") {
+		return
+	}
+	snapshot, err := s.metrics.FetchSnapshot(ctx)
+	if err != nil {
+		return
+	}
+	var entities, rules float64
+	if m, ok := snapshot.Metrics["semstreams_datamanager_entities_updated_total"]; ok {
+		entities = m.Value
+	}
+	if m, ok := snapshot.Metrics["semstreams_rule_evaluations_total"]; ok {
+		rules = m.Value
+	}
+	fmt.Printf("  Metrics: entities=%.0f, rules=%.0f\n", entities, rules)
+}
+
+// captureAndCompareBaseline captures final metrics and compares against baseline file if configured.
+func (s *TieredScenario) captureAndCompareBaseline(ctx context.Context, result *Result) {
 	endBaseline, err := s.metrics.CaptureBaseline(ctx)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture end baseline: %v", err))
-	} else {
-		// Store current run metrics for potential baseline capture
-		currentSnapshot := map[string]any{
-			"timestamp":   time.Now(),
-			"duration_ms": time.Since(result.StartTime).Milliseconds(),
-			"metrics":     endBaseline.Metrics,
-		}
-		result.Details["baseline_snapshot"] = currentSnapshot
+		return
+	}
 
-		// Compare to baseline file if configured
-		if s.config.BaselineFile != "" {
-			baselineData, err := os.ReadFile(s.config.BaselineFile)
-			if err == nil {
-				var loadedBaseline struct {
-					Metrics map[string]float64 `json:"metrics"`
-				}
-				if json.Unmarshal(baselineData, &loadedBaseline) == nil {
-					regressions := []string{}
-					for metric, baselineValue := range loadedBaseline.Metrics {
-						if currentValue, ok := endBaseline.Metrics[metric]; ok {
-							if baselineValue > 0 {
-								percentChange := ((currentValue - baselineValue) / baselineValue) * 100
-								// Check for performance regressions (lower is worse for some metrics)
-								if percentChange < -s.config.MaxRegressionPercent {
-									regressions = append(regressions, fmt.Sprintf("%s: %.1f%% regression", metric, -percentChange))
-								}
-							}
-						}
-					}
-					if len(regressions) > 0 {
-						result.Warnings = append(result.Warnings, fmt.Sprintf("Performance regressions detected: %v", regressions))
-					}
-					result.Details["baseline_comparison"] = map[string]any{
-						"baseline_file": s.config.BaselineFile,
-						"regressions":   regressions,
-					}
-				}
+	result.Details["baseline_snapshot"] = map[string]any{
+		"timestamp":   time.Now(),
+		"duration_ms": time.Since(result.StartTime).Milliseconds(),
+		"metrics":     endBaseline.Metrics,
+	}
+
+	if s.config.BaselineFile == "" {
+		return
+	}
+	baselineData, err := os.ReadFile(s.config.BaselineFile)
+	if err != nil {
+		return
+	}
+	var loadedBaseline struct {
+		Metrics map[string]float64 `json:"metrics"`
+	}
+	if json.Unmarshal(baselineData, &loadedBaseline) != nil {
+		return
+	}
+
+	regressions := s.detectRegressions(endBaseline.Metrics, loadedBaseline.Metrics)
+	if len(regressions) > 0 {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Performance regressions detected: %v", regressions))
+	}
+	result.Details["baseline_comparison"] = map[string]any{"baseline_file": s.config.BaselineFile, "regressions": regressions}
+}
+
+// detectRegressions compares current metrics against baseline and returns regression descriptions.
+func (s *TieredScenario) detectRegressions(current, baseline map[string]float64) []string {
+	var regressions []string
+	for metric, baselineValue := range baseline {
+		if currentValue, ok := current[metric]; ok && baselineValue > 0 {
+			percentChange := ((currentValue - baselineValue) / baselineValue) * 100
+			if percentChange < -s.config.MaxRegressionPercent {
+				regressions = append(regressions, fmt.Sprintf("%s: %.1f%% regression", metric, -percentChange))
 			}
 		}
 	}
+	return regressions
+}
 
-	// Overall success
+// Execute runs the tiered semantic test scenario
+func (s *TieredScenario) Execute(ctx context.Context) (*Result, error) {
+	result := &Result{
+		ScenarioName: s.name, StartTime: time.Now(), Success: false,
+		Metrics: make(map[string]any), Details: make(map[string]any),
+		Errors: []string{}, Warnings: []string{},
+	}
+
+	variant := s.config.Variant
+	if variant == "" {
+		info := s.detectVariantAndProvider(result)
+		variant = info.variant
+		result.Details["detected_variant"] = variant
+		result.Details["detected_embedding_provider"] = info.embeddingProvider
+	}
+	result.Metrics["variant"] = variant
+
+	stages := s.getStagesForVariant(variant)
+	if !s.executeStages(ctx, result, stages) {
+		return result, nil
+	}
+
+	s.captureAndCompareBaseline(ctx, result)
+
 	result.Success = true
 	result.EndTime = time.Now()
 	result.Duration = result.EndTime.Sub(result.StartTime)
-
-	// Build structured results (dual-write for backward compatibility)
 	result.Structured = BuildTieredResults(result, s.searchStats)
 
-	// Validate semantic tier requirements BEFORE marking success
-	// This ensures semantic E2E fails if ML features aren't working
 	if err := s.validateSemanticRequirements(result); err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("semantic tier validation failed: %v", err)
 		return result, nil
 	}
 
-	// Validate fallback behavior for semantic-fallback variant
-	// This ensures fallback test validates graceful degradation
 	if err := s.validateFallbackBehavior(result); err != nil {
 		result.Success = false
 		result.Error = fmt.Sprintf("fallback validation failed: %v", err)

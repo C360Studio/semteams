@@ -252,7 +252,7 @@ func TestOrchestrator_RunDetection_WithDetectors(t *testing.T) {
 
 	// Set minimal dependencies
 	deps := &DetectorDependencies{
-		StructuralIndices: &structural.StructuralIndices{
+		StructuralIndices: &structural.Indices{
 			KCore: &structural.KCoreIndex{
 				CoreNumbers: map[string]int{"entity-a": 2, "entity-b": 3},
 			},
@@ -302,7 +302,7 @@ func TestOrchestrator_RunDetection_MaxAnomaliesLimit(t *testing.T) {
 	orch.RegisterDetector(detector)
 
 	deps := &DetectorDependencies{
-		StructuralIndices: &structural.StructuralIndices{
+		StructuralIndices: &structural.Indices{
 			KCore: &structural.KCoreIndex{CoreNumbers: map[string]int{}},
 			Pivot: &structural.PivotIndex{DistanceVectors: map[string][]int{}},
 		},

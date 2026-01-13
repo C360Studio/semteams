@@ -25,28 +25,28 @@ func TestRuleProcessor_ImplementsDebugStatusProvider(t *testing.T) {
 	require.NotNil(t, provider, "DebugStatusProvider interface should not be nil")
 }
 
-// TestRuleProcessor_DebugStatus_ReturnsRuleStatus verifies DebugStatus
-// returns RuleStatus type
-func TestRuleProcessor_DebugStatus_ReturnsRuleStatus(t *testing.T) {
+// TestRuleProcessor_DebugStatus_ReturnsStatus verifies DebugStatus
+// returns Status type
+func TestRuleProcessor_DebugStatus_ReturnsStatus(t *testing.T) {
 	p := setupTestRuleProcessor(t)
 
 	result := p.DebugStatus()
 	require.NotNil(t, result, "DebugStatus should return non-nil value")
 
-	// Should return RuleStatus type
-	status, ok := result.(RuleStatus)
-	require.True(t, ok, "DebugStatus should return RuleStatus type, got %T", result)
-	require.NotNil(t, status, "RuleStatus should not be nil")
+	// Should return Status type
+	status, ok := result.(Status)
+	require.True(t, ok, "DebugStatus should return Status type, got %T", result)
+	require.NotNil(t, status, "Status should not be nil")
 }
 
 // TestRuleProcessor_DebugStatus_FieldsPopulated verifies all fields
-// in RuleStatus are populated correctly
+// in Status are populated correctly
 func TestRuleProcessor_DebugStatus_FieldsPopulated(t *testing.T) {
 	p := setupTestRuleProcessor(t)
 
 	result := p.DebugStatus()
-	status, ok := result.(RuleStatus)
-	require.True(t, ok, "Should return RuleStatus")
+	status, ok := result.(Status)
+	require.True(t, ok, "Should return Status")
 
 	t.Run("debounce_delay_ms field", func(t *testing.T) {
 		assert.GreaterOrEqual(t, status.DebounceDelayMs, 0,
@@ -82,7 +82,7 @@ func TestRuleProcessor_DebugStatus_DebouncedCount(t *testing.T) {
 	p := setupTestRuleProcessor(t)
 
 	result := p.DebugStatus()
-	status, ok := result.(RuleStatus)
+	status, ok := result.(Status)
 	require.True(t, ok)
 
 	t.Run("debounced count represents coalesced updates", func(t *testing.T) {
@@ -118,7 +118,7 @@ func TestRuleProcessor_DebugStatus_EvaluationMetrics(t *testing.T) {
 	p := setupTestRuleProcessor(t)
 
 	result := p.DebugStatus()
-	status, ok := result.(RuleStatus)
+	status, ok := result.(Status)
 	require.True(t, ok)
 
 	t.Run("triggers should not exceed evaluations", func(t *testing.T) {
@@ -154,7 +154,7 @@ func TestRuleProcessor_DebugStatus_DebounceConfiguration(t *testing.T) {
 			p := setupTestRuleProcessor(t)
 
 			result := p.DebugStatus()
-			status, ok := result.(RuleStatus)
+			status, ok := result.(Status)
 			require.True(t, ok)
 
 			assert.GreaterOrEqual(t, status.DebounceDelayMs, tc.expectedDelayRange.min,
@@ -172,8 +172,8 @@ func TestRuleProcessor_DebugStatus_ReflectsCurrentState(t *testing.T) {
 		p1 := setupTestRuleProcessor(t)
 		p2 := setupTestRuleProcessor(t)
 
-		status1 := p1.DebugStatus().(RuleStatus)
-		status2 := p2.DebugStatus().(RuleStatus)
+		status1 := p1.DebugStatus().(Status)
+		status2 := p2.DebugStatus().(Status)
 
 		// Both should have valid structure
 		assert.GreaterOrEqual(t, status1.DebounceDelayMs, 0)
@@ -182,7 +182,7 @@ func TestRuleProcessor_DebugStatus_ReflectsCurrentState(t *testing.T) {
 
 	t.Run("status is JSON-serializable", func(t *testing.T) {
 		p := setupTestRuleProcessor(t)
-		status := p.DebugStatus().(RuleStatus)
+		status := p.DebugStatus().(Status)
 
 		// Should be able to marshal to JSON (tested implicitly by struct tags)
 		assert.NotNil(t, status)
@@ -203,8 +203,8 @@ func TestRuleProcessor_DebugStatus_ZeroState(t *testing.T) {
 	result := p.DebugStatus()
 	require.NotNil(t, result, "DebugStatus should work on zero-state processor")
 
-	status, ok := result.(RuleStatus)
-	require.True(t, ok, "Should return RuleStatus even for new processor")
+	status, ok := result.(Status)
+	require.True(t, ok, "Should return Status even for new processor")
 
 	// Zero state should have sensible defaults
 	assert.GreaterOrEqual(t, status.DebounceDelayMs, 0,
@@ -225,7 +225,7 @@ func TestRuleProcessor_DebugStatus_HighLoadScenarios(t *testing.T) {
 	p := setupTestRuleProcessor(t)
 
 	result := p.DebugStatus()
-	status, ok := result.(RuleStatus)
+	status, ok := result.(Status)
 	require.True(t, ok)
 
 	t.Run("large counter values are handled", func(t *testing.T) {
@@ -254,7 +254,7 @@ func TestRuleProcessor_DebugStatus_DebouncingEffectiveness(t *testing.T) {
 	p := setupTestRuleProcessor(t)
 
 	result := p.DebugStatus()
-	status, ok := result.(RuleStatus)
+	status, ok := result.(Status)
 	require.True(t, ok)
 
 	t.Run("provides observability for FR-012", func(t *testing.T) {

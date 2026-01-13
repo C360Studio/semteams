@@ -655,258 +655,165 @@ func (c *Component) transformVariablesToNATSPayload(variables map[string]interfa
 		return map[string]interface{}{}
 	}
 
-	payload := make(map[string]interface{})
-
-	// Transform based on query type
 	switch subject {
 	case "graph.query.pathSearch":
-		// Transform GraphQL variable names to NATS format
-		if start, ok := variables["start"]; ok {
-			payload["start_entity"] = start
-		}
-		if startEntity, ok := variables["startEntity"]; ok {
-			payload["start_entity"] = startEntity
-		}
-		if startEntityVal, ok := variables["start_entity"]; ok {
-			payload["start_entity"] = startEntityVal
-		}
-
-		if depth, ok := variables["depth"]; ok {
-			payload["max_depth"] = depth
-		}
-		if maxDepth, ok := variables["maxDepth"]; ok {
-			payload["max_depth"] = maxDepth
-		}
-		if maxDepthVal, ok := variables["max_depth"]; ok {
-			payload["max_depth"] = maxDepthVal
-		}
-
-		// maxNodes parameter for limiting traversal
-		if nodes, ok := variables["nodes"]; ok {
-			payload["max_nodes"] = nodes
-		}
-		if maxNodes, ok := variables["maxNodes"]; ok {
-			payload["max_nodes"] = maxNodes
-		}
-		if maxNodesVal, ok := variables["max_nodes"]; ok {
-			payload["max_nodes"] = maxNodesVal
-		}
-
+		return c.transformPathSearchVars(variables)
 	case "graph.query.entity":
-		// Pass through id field
-		if id, ok := variables["id"]; ok {
-			payload["id"] = id
-		}
-
+		return extractVars(variables, "id")
 	case "graph.query.relationships":
-		// Pass through entity_id field
-		if entityID, ok := variables["entityId"]; ok {
-			payload["entity_id"] = entityID
-		}
-		if entityIDVal, ok := variables["entity_id"]; ok {
-			payload["entity_id"] = entityIDVal
-		}
-		// Pass through direction field (convert GraphQL enum INCOMING/OUTGOING to lowercase)
-		if direction, ok := variables["direction"].(string); ok {
-			payload["direction"] = strings.ToLower(direction)
-		}
-
+		return c.transformRelationshipVars(variables)
 	case "graph.query.hierarchyStats", "graph.query.prefix":
-		// Pass through prefix field
-		if prefix, ok := variables["prefix"]; ok {
-			payload["prefix"] = prefix
-		}
-		if limit, ok := variables["limit"]; ok {
-			payload["limit"] = limit
-		}
-
+		return extractVars(variables, "prefix", "limit")
 	case "graph.query.spatial":
-		// Pass through bounding box parameters
-		if north, ok := variables["north"]; ok {
-			payload["north"] = north
-		}
-		if south, ok := variables["south"]; ok {
-			payload["south"] = south
-		}
-		if east, ok := variables["east"]; ok {
-			payload["east"] = east
-		}
-		if west, ok := variables["west"]; ok {
-			payload["west"] = west
-		}
-		if limit, ok := variables["limit"]; ok {
-			payload["limit"] = limit
-		}
-
+		return extractVars(variables, "north", "south", "east", "west", "limit")
 	case "graph.query.temporal":
-		// Pass through time range parameters
-		if startTime, ok := variables["startTime"]; ok {
-			payload["startTime"] = startTime
-		}
-		if endTime, ok := variables["endTime"]; ok {
-			payload["endTime"] = endTime
-		}
-		if limit, ok := variables["limit"]; ok {
-			payload["limit"] = limit
-		}
-
+		return extractVars(variables, "startTime", "endTime", "limit")
 	case "graph.query.semantic":
-		// Pass through semantic search parameters
-		if query, ok := variables["query"]; ok {
-			payload["query"] = query
-		}
-		if limit, ok := variables["limit"]; ok {
-			payload["limit"] = limit
-		}
-
+		return extractVars(variables, "query", "limit")
 	case "graph.query.similar":
-		// Pass through similar entity search parameters
-		if entityID, ok := variables["entityId"]; ok {
-			payload["entity_id"] = entityID
-		}
-		if entityIDVal, ok := variables["entity_id"]; ok {
-			payload["entity_id"] = entityIDVal
-		}
-		if limit, ok := variables["limit"]; ok {
-			payload["limit"] = limit
-		}
-
+		return c.transformSimilarVars(variables)
 	case "graph.query.localSearch":
-		// GraphRAG local search - transform camelCase to snake_case
-		if entityID, ok := variables["entityId"]; ok {
-			payload["entity_id"] = entityID
-		}
-		if query, ok := variables["query"]; ok {
-			payload["query"] = query
-		}
-		if level, ok := variables["level"]; ok {
-			payload["level"] = level
-		}
-
+		return c.transformLocalSearchVars(variables)
 	case "graph.query.globalSearch":
-		// GraphRAG global search - transform camelCase to snake_case
-		if query, ok := variables["query"]; ok {
-			payload["query"] = query
-		}
-		if level, ok := variables["level"]; ok {
-			payload["level"] = level
-		}
-		if maxCommunities, ok := variables["maxCommunities"]; ok {
-			payload["max_communities"] = maxCommunities
-		}
-
+		return c.transformGlobalSearchVars(variables)
 	default:
-		// For unknown subjects, pass through as-is
 		return variables
 	}
+}
 
+// extractVars extracts specified keys from variables into a new map.
+func extractVars(variables map[string]interface{}, keys ...string) map[string]interface{} {
+	payload := make(map[string]interface{})
+	for _, key := range keys {
+		if val, ok := variables[key]; ok {
+			payload[key] = val
+		}
+	}
 	return payload
 }
 
-// handleGraphQL handles GraphQL requests
-func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
-	// Update metrics
-	atomic.AddInt64(&c.messagesProcessed, 1)
-	c.lastActivity.Store(time.Now())
-
-	// Report serving stage (throttled)
-	c.reportServing(r.Context())
-
-	// Check HTTP method - only POST allowed
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		response := map[string]interface{}{
-			"errors": []map[string]interface{}{
-				{"message": "method not allowed"},
-			},
+// transformPathSearchVars transforms path search variables.
+func (c *Component) transformPathSearchVars(variables map[string]interface{}) map[string]interface{} {
+	payload := make(map[string]interface{})
+	// Handle multiple possible names for start_entity
+	for _, key := range []string{"start", "startEntity", "start_entity"} {
+		if val, ok := variables[key]; ok {
+			payload["start_entity"] = val
 		}
-		json.NewEncoder(w).Encode(response)
-		return
+	}
+	// Handle multiple possible names for max_depth
+	for _, key := range []string{"depth", "maxDepth", "max_depth"} {
+		if val, ok := variables[key]; ok {
+			payload["max_depth"] = val
+		}
+	}
+	// Handle multiple possible names for max_nodes
+	for _, key := range []string{"nodes", "maxNodes", "max_nodes"} {
+		if val, ok := variables[key]; ok {
+			payload["max_nodes"] = val
+		}
+	}
+	return payload
+}
+
+// transformRelationshipVars transforms relationship query variables.
+func (c *Component) transformRelationshipVars(variables map[string]interface{}) map[string]interface{} {
+	payload := make(map[string]interface{})
+	for _, key := range []string{"entityId", "entity_id"} {
+		if val, ok := variables[key]; ok {
+			payload["entity_id"] = val
+		}
+	}
+	if direction, ok := variables["direction"].(string); ok {
+		payload["direction"] = strings.ToLower(direction)
+	}
+	return payload
+}
+
+// transformSimilarVars transforms similar entity search variables.
+func (c *Component) transformSimilarVars(variables map[string]interface{}) map[string]interface{} {
+	payload := make(map[string]interface{})
+	for _, key := range []string{"entityId", "entity_id"} {
+		if val, ok := variables[key]; ok {
+			payload["entity_id"] = val
+		}
+	}
+	if limit, ok := variables["limit"]; ok {
+		payload["limit"] = limit
+	}
+	return payload
+}
+
+// transformLocalSearchVars transforms GraphRAG local search variables.
+func (c *Component) transformLocalSearchVars(variables map[string]interface{}) map[string]interface{} {
+	payload := make(map[string]interface{})
+	if entityID, ok := variables["entityId"]; ok {
+		payload["entity_id"] = entityID
+	}
+	if query, ok := variables["query"]; ok {
+		payload["query"] = query
+	}
+	if level, ok := variables["level"]; ok {
+		payload["level"] = level
+	}
+	return payload
+}
+
+// transformGlobalSearchVars transforms GraphRAG global search variables.
+func (c *Component) transformGlobalSearchVars(variables map[string]interface{}) map[string]interface{} {
+	payload := make(map[string]interface{})
+	if query, ok := variables["query"]; ok {
+		payload["query"] = query
+	}
+	if level, ok := variables["level"]; ok {
+		payload["level"] = level
+	}
+	if maxCommunities, ok := variables["maxCommunities"]; ok {
+		payload["max_communities"] = maxCommunities
+	}
+	return payload
+}
+
+// writeGraphQLError writes a GraphQL error response with the given status code and message.
+func (c *Component) writeGraphQLError(w http.ResponseWriter, statusCode int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	response := map[string]interface{}{
+		"errors": []map[string]interface{}{
+			{"message": message},
+		},
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+// writeGraphQLSuccess writes a successful GraphQL response wrapping data with the field name.
+func (c *Component) writeGraphQLSuccess(w http.ResponseWriter, subject string, resp []byte) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	fieldName := c.subjectToGraphQLField(subject)
+	var dataPayload interface{}
+	if fieldName != "" {
+		dataPayload = map[string]json.RawMessage{fieldName: resp}
+	} else {
+		dataPayload = json.RawMessage(resp)
 	}
 
-	// Use request context with timeout
-	ctx, cancel := context.WithTimeout(r.Context(), c.config.QueryTimeout)
-	defer cancel()
-
-	// Parse GraphQL request
-	var gqlReq struct {
-		Query     string                 `json:"query"`
-		Variables map[string]interface{} `json:"variables"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&gqlReq); err != nil {
+	response := map[string]interface{}{"data": dataPayload}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
 		atomic.AddInt64(&c.errors, 1)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		response := map[string]interface{}{
-			"errors": []map[string]interface{}{
-				{"message": "invalid request"},
-			},
-		}
-		json.NewEncoder(w).Encode(response)
-		return
+		c.logger.Error("failed to encode response", slog.Any("error", err))
 	}
+}
 
-	// Validate query field
-	if gqlReq.Query == "" {
-		atomic.AddInt64(&c.errors, 1)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		response := map[string]interface{}{
-			"errors": []map[string]interface{}{
-				{"message": "invalid request"},
-			},
-		}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
-	// Map to NATS subject
-	subject := c.mapGraphQLQueryToNATSSubject(gqlReq.Query)
-
-	// Transform variables to NATS payload format
-	payload := c.transformVariablesToNATSPayload(gqlReq.Variables, subject)
-	payloadBytes, _ := json.Marshal(payload)
-	resp, err := c.natsRequester.Request(ctx, subject, payloadBytes, c.config.QueryTimeout)
-	if err != nil {
-		atomic.AddInt64(&c.errors, 1)
-		w.Header().Set("Content-Type", "application/json")
-
-		// Check if error is due to timeout or context cancellation
-		if err == context.DeadlineExceeded || ctx.Err() == context.DeadlineExceeded || ctx.Err() == context.Canceled {
-			w.WriteHeader(http.StatusGatewayTimeout)
-			response := map[string]interface{}{
-				"errors": []map[string]interface{}{
-					{"message": "request timeout"},
-				},
-			}
-			json.NewEncoder(w).Encode(response)
-			return
-		}
-
-		// Other errors (e.g., component unavailable)
-		w.WriteHeader(http.StatusInternalServerError)
-		response := map[string]interface{}{
-			"errors": []map[string]interface{}{
-				{"message": "query failed"},
-			},
-		}
-		json.NewEncoder(w).Encode(response)
-		return
-	}
-
+// handleNATSResponse processes the NATS response and writes appropriate GraphQL response.
+func (c *Component) handleNATSResponse(w http.ResponseWriter, subject string, resp []byte) {
 	// Check if response is a plain-text error from NATS handler (format: "error: <message>")
 	respStr := string(resp)
 	if strings.HasPrefix(respStr, "error:") {
 		atomic.AddInt64(&c.errors, 1)
-		errorMsg := strings.TrimPrefix(respStr, "error: ")
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK) // GraphQL convention: 200 with errors
-		response := map[string]interface{}{
-			"errors": []map[string]interface{}{
-				{"message": strings.TrimSpace(errorMsg)},
-			},
-		}
-		json.NewEncoder(w).Encode(response)
+		errorMsg := strings.TrimSpace(strings.TrimPrefix(respStr, "error: "))
+		c.writeGraphQLError(w, http.StatusOK, errorMsg) // GraphQL convention: 200 with errors
 		return
 	}
 
@@ -914,7 +821,6 @@ func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 	var respData map[string]interface{}
 	if err := json.Unmarshal(resp, &respData); err == nil {
 		if errors, ok := respData["errors"]; ok && errors != nil {
-			// Response contains GraphQL errors - return 200 with errors (GraphQL convention)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(respData)
@@ -922,27 +828,55 @@ func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Success - wrap in GraphQL format with field name from subject
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
+	c.writeGraphQLSuccess(w, subject, resp)
+}
 
-	// Wrap response with GraphQL field name based on subject
-	fieldName := c.subjectToGraphQLField(subject)
-	var dataPayload interface{}
-	if fieldName != "" {
-		dataPayload = map[string]json.RawMessage{
-			fieldName: resp,
-		}
-	} else {
-		dataPayload = json.RawMessage(resp)
+// handleGraphQL handles GraphQL requests
+func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
+	atomic.AddInt64(&c.messagesProcessed, 1)
+	c.lastActivity.Store(time.Now())
+	c.reportServing(r.Context())
+
+	if r.Method != http.MethodPost {
+		c.writeGraphQLError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
 	}
-	response := map[string]interface{}{
-		"data": dataPayload,
+
+	ctx, cancel := context.WithTimeout(r.Context(), c.config.QueryTimeout)
+	defer cancel()
+
+	var gqlReq struct {
+		Query     string                 `json:"query"`
+		Variables map[string]interface{} `json:"variables"`
 	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&gqlReq); err != nil {
 		atomic.AddInt64(&c.errors, 1)
-		c.logger.Error("failed to encode response", slog.Any("error", err))
+		c.writeGraphQLError(w, http.StatusBadRequest, "invalid request")
+		return
 	}
+
+	if gqlReq.Query == "" {
+		atomic.AddInt64(&c.errors, 1)
+		c.writeGraphQLError(w, http.StatusBadRequest, "invalid request")
+		return
+	}
+
+	subject := c.mapGraphQLQueryToNATSSubject(gqlReq.Query)
+	payload := c.transformVariablesToNATSPayload(gqlReq.Variables, subject)
+	payloadBytes, _ := json.Marshal(payload)
+
+	resp, err := c.natsRequester.Request(ctx, subject, payloadBytes, c.config.QueryTimeout)
+	if err != nil {
+		atomic.AddInt64(&c.errors, 1)
+		if err == context.DeadlineExceeded || ctx.Err() == context.DeadlineExceeded || ctx.Err() == context.Canceled {
+			c.writeGraphQLError(w, http.StatusGatewayTimeout, "request timeout")
+			return
+		}
+		c.writeGraphQLError(w, http.StatusInternalServerError, "query failed")
+		return
+	}
+
+	c.handleNATSResponse(w, subject, resp)
 }
 
 // handleMCP handles MCP requests

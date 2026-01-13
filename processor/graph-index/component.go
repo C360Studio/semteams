@@ -454,61 +454,13 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 
 	// Create output KV buckets (we are the writer)
-	for _, portDef := range c.config.Ports.Outputs {
-		bucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-			Bucket:      portDef.Subject,
-			Description: fmt.Sprintf("Graph index bucket: %s", portDef.Name),
-		})
-		if err != nil {
-			cancel()
-			if ctx.Err() != nil {
-				return errs.Wrap(ctx.Err(), "Component", "Start", "context cancelled during bucket creation")
-			}
-			return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", portDef.Subject))
-		}
-
-		// Assign bucket based on subject
-		switch portDef.Subject {
-		case graph.BucketOutgoingIndex:
-			c.outgoingBucket = bucket
-		case graph.BucketIncomingIndex:
-			c.incomingBucket = bucket
-		case graph.BucketAliasIndex:
-			c.aliasBucket = bucket
-		case graph.BucketPredicateIndex:
-			c.predicateBucket = bucket
-		}
-	}
-
-	// Create CONTEXT_INDEX bucket for triple provenance tracking
-	// This tracks which entities have triples with specific context values (e.g., "inference.hierarchy")
-	contextBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      graph.BucketContextIndex,
-		Description: "Triple context provenance index",
-	})
-	if err != nil {
+	if err := c.createOutputBuckets(ctx); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketContextIndex))
+		return err
 	}
-	c.contextBucket = contextBucket
 
 	// Initialize lifecycle reporter (throttled for high-throughput indexing)
-	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      "COMPONENT_STATUS",
-		Description: "Component lifecycle status tracking",
-	})
-	if err != nil {
-		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
-			slog.Any("error", err))
-		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
-	} else {
-		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
-			KV:               statusBucket,
-			ComponentName:    "graph-index",
-			Logger:           c.logger,
-			EnableThrottling: true,
-		})
-	}
+	c.initLifecycleReporter(ctx)
 
 	// Wait for input KV bucket (ENTITY_STATES) with bounded startup attempts
 	js, err := c.natsClient.JetStream()
@@ -610,6 +562,68 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-index"))
 		return fmt.Errorf("stop timeout after %v", timeout)
 	}
+}
+
+// createOutputBuckets creates all output KV buckets for the indexes.
+func (c *Component) createOutputBuckets(ctx context.Context) error {
+	for _, portDef := range c.config.Ports.Outputs {
+		bucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+			Bucket:      portDef.Subject,
+			Description: fmt.Sprintf("Graph index bucket: %s", portDef.Name),
+		})
+		if err != nil {
+			if ctx.Err() != nil {
+				return errs.Wrap(ctx.Err(), "Component", "createOutputBuckets", "context cancelled")
+			}
+			return errs.Wrap(err, "Component", "createOutputBuckets", fmt.Sprintf("KV bucket: %s", portDef.Subject))
+		}
+		c.assignBucket(portDef.Subject, bucket)
+	}
+
+	// Create CONTEXT_INDEX bucket for triple provenance tracking
+	contextBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketContextIndex,
+		Description: "Triple context provenance index",
+	})
+	if err != nil {
+		return errs.Wrap(err, "Component", "createOutputBuckets", fmt.Sprintf("KV bucket: %s", graph.BucketContextIndex))
+	}
+	c.contextBucket = contextBucket
+	return nil
+}
+
+// assignBucket assigns a bucket to the appropriate field based on subject.
+func (c *Component) assignBucket(subject string, bucket jetstream.KeyValue) {
+	switch subject {
+	case graph.BucketOutgoingIndex:
+		c.outgoingBucket = bucket
+	case graph.BucketIncomingIndex:
+		c.incomingBucket = bucket
+	case graph.BucketAliasIndex:
+		c.aliasBucket = bucket
+	case graph.BucketPredicateIndex:
+		c.predicateBucket = bucket
+	}
+}
+
+// initLifecycleReporter initializes the lifecycle reporter for component status tracking.
+func (c *Component) initLifecycleReporter(ctx context.Context) {
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		return
+	}
+	c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+		KV:               statusBucket,
+		ComponentName:    "graph-index",
+		Logger:           c.logger,
+		EnableThrottling: true,
+	})
 }
 
 // ============================================================================

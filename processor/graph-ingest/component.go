@@ -464,46 +464,10 @@ func (c *Component) Start(ctx context.Context) error {
 	c.entityBucket = bucket
 
 	// Initialize lifecycle reporter (throttled for high-throughput ingestion)
-	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      "COMPONENT_STATUS",
-		Description: "Component lifecycle status tracking",
-	})
-	if err != nil {
-		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
-			slog.Any("error", err))
-		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
-	} else {
-		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
-			KV:               statusBucket,
-			ComponentName:    "graph-ingest",
-			Logger:           c.logger,
-			EnableThrottling: true,
-		})
-	}
+	c.initLifecycleReporter(ctx)
 
 	// Initialize hierarchy inference if enabled (synchronous - no Start/Stop)
-	if c.config.EnableHierarchy {
-		// Enable sibling edges by default, can be disabled via config
-		enableTypeSiblings := true
-		if c.config.EnableTypeSiblings != nil {
-			enableTypeSiblings = *c.config.EnableTypeSiblings
-		}
-
-		hierarchyConfig := inference.HierarchyConfig{
-			Enabled:            true,
-			CreateTypeEdges:    true,
-			CreateSystemEdges:  true,
-			CreateDomainEdges:  true,
-			CreateTypeSiblings: enableTypeSiblings,
-		}
-
-		c.hierarchyInference = inference.NewHierarchyInference(
-			&entityManagerAdapter{component: c},
-			&tripleAdderAdapter{component: c},
-			hierarchyConfig,
-			c.logger,
-		)
-	}
+	c.initHierarchyInference()
 
 	// Set up subscriptions for input ports
 	if err := c.setupSubscriptions(ctx); err != nil {
@@ -571,6 +535,54 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-ingest"))
 		return fmt.Errorf("stop timeout after %v", timeout)
 	}
+}
+
+// initLifecycleReporter initializes the lifecycle reporter for component status tracking.
+func (c *Component) initLifecycleReporter(ctx context.Context) {
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		return
+	}
+	c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+		KV:               statusBucket,
+		ComponentName:    "graph-ingest",
+		Logger:           c.logger,
+		EnableThrottling: true,
+	})
+}
+
+// initHierarchyInference initializes hierarchy inference if enabled.
+func (c *Component) initHierarchyInference() {
+	if !c.config.EnableHierarchy {
+		return
+	}
+
+	// Enable sibling edges by default, can be disabled via config
+	enableTypeSiblings := true
+	if c.config.EnableTypeSiblings != nil {
+		enableTypeSiblings = *c.config.EnableTypeSiblings
+	}
+
+	hierarchyConfig := inference.HierarchyConfig{
+		Enabled:            true,
+		CreateTypeEdges:    true,
+		CreateSystemEdges:  true,
+		CreateDomainEdges:  true,
+		CreateTypeSiblings: enableTypeSiblings,
+	}
+
+	c.hierarchyInference = inference.NewHierarchyInference(
+		&entityManagerAdapter{component: c},
+		&tripleAdderAdapter{component: c},
+		hierarchyConfig,
+		c.logger,
+	)
 }
 
 // ============================================================================

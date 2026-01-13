@@ -1304,7 +1304,7 @@ func (c *NATSValidationClient) waitForContainerGroupsPolling(
 const BucketComponentStatus = "COMPONENT_STATUS"
 
 // ComponentStatus represents the current processing state of a component.
-// Matches component.ComponentStatus from the core package.
+// Matches component.Status from the core package.
 type ComponentStatus struct {
 	Component       string `json:"component"`
 	Stage           string `json:"stage"`

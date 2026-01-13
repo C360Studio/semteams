@@ -36,7 +36,7 @@ type EntityProvider interface {
 
 // LPADetector implements community detection using Label Propagation Algorithm
 type LPADetector struct {
-	graphProvider GraphProvider
+	graphProvider Provider
 	storage       CommunityStorage
 
 	// Configuration
@@ -55,7 +55,7 @@ type LPADetector struct {
 }
 
 // NewLPADetector creates a new Label Propagation Algorithm detector
-func NewLPADetector(provider GraphProvider, storage CommunityStorage) *LPADetector {
+func NewLPADetector(provider Provider, storage CommunityStorage) *LPADetector {
 	return &LPADetector{
 		graphProvider: provider,
 		storage:       storage,
@@ -591,7 +591,7 @@ type InferredTriple struct {
 
 // computeCommunityTightness computes how tightly connected a community is.
 // Returns a value between 0.0 (loose) and 1.0 (very tight).
-// Uses cached similarity scores when available (from SemanticGraphProvider).
+// Uses cached similarity scores when available (from SemanticProvider).
 func (d *LPADetector) computeCommunityTightness(ctx context.Context, community *Community) float64 {
 	if len(community.Members) < 2 {
 		return 0.0

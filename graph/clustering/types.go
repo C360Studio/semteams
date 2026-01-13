@@ -70,9 +70,9 @@ type CommunityDetector interface {
 	InferRelationshipsFromCommunities(ctx context.Context, level int, config InferenceConfig) ([]InferredTriple, error)
 }
 
-// GraphProvider is an alias to the shared interface in graph package.
+// Provider is an alias to the shared interface in graph package.
 // Abstracts the graph data source for community detection.
-type GraphProvider = gtypes.GraphProvider
+type Provider = gtypes.Provider
 
 // CommunityStorage abstracts persistence layer for communities
 type CommunityStorage interface {

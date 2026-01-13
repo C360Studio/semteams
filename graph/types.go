@@ -77,9 +77,9 @@ func (es *EntityState) GetPropertyValue(predicate string) (any, bool) {
 	return nil, false
 }
 
-// GraphProvider abstracts the graph data source for algorithms.
+// Provider abstracts the graph data source for algorithms.
 // Used by clustering, structural indexing, and other graph operations.
-type GraphProvider interface {
+type Provider interface {
 	// GetAllEntityIDs returns all entity IDs in the graph.
 	GetAllEntityIDs(ctx context.Context) ([]string, error)
 

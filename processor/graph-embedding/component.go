@@ -454,143 +454,32 @@ func (c *Component) Start(ctx context.Context) error {
 	c.embeddingBucket = embeddingBucket
 
 	// Create embedder based on config
-	switch c.config.EmbedderType {
-	case "bm25":
-		c.embedder = embedding.NewBM25Embedder(embedding.BM25Config{
-			Dimensions: 384,
-			K1:         1.5,
-			B:          0.75,
-		})
-		c.logger.Info("using BM25 embedder", slog.Int("dimensions", 384))
-
-	case "http":
-		httpEmbedder, err := embedding.NewHTTPEmbedder(embedding.HTTPConfig{
-			BaseURL: c.config.EmbedderURL,
-			Model:   "all-MiniLM-L6-v2",
-			Timeout: 30 * time.Second,
-			Logger:  c.logger,
-		})
-		if err != nil {
-			cancel()
-			return errs.Wrap(err, "Component", "Start", "HTTP embedder creation")
-		}
-		c.embedder = httpEmbedder
-		c.logger.Info("using HTTP embedder", slog.String("url", c.config.EmbedderURL))
-
-	default:
+	if err := c.createEmbedder(); err != nil {
 		cancel()
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "Start", fmt.Sprintf("unknown embedder type: %s", c.config.EmbedderType))
+		return err
 	}
 
-	// Set embedder type metric for E2E detection
-	if c.metrics != nil {
-		c.metrics.setEmbedderType(c.config.EmbedderType)
-	}
-
-	// Create EMBEDDING_INDEX bucket for storage (we are the WRITER)
-	embeddingIndexBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      graph.BucketEmbeddingIndex,
-		Description: "Entity embedding index",
-	})
+	// Create embedding storage buckets
+	embeddingIndexBucket, embeddingDedupBucket, err := c.createEmbeddingBuckets(ctx)
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketEmbeddingIndex))
+		return err
 	}
 
-	// Create EMBEDDING_DEDUP bucket (we are the WRITER)
-	embeddingDedupBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      graph.BucketEmbeddingDedup,
-		Description: "Entity embedding deduplication",
-	})
-	if err != nil {
+	// Initialize lifecycle reporter
+	c.initLifecycleReporter(ctx)
+
+	// Create storage and worker
+	if err := c.initStorageAndWorker(ctx, embeddingIndexBucket, embeddingDedupBucket); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("KV bucket creation: %s", graph.BucketEmbeddingDedup))
+		return err
 	}
 
-	// Initialize lifecycle reporter (throttled for high-throughput embedding)
-	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      "COMPONENT_STATUS",
-		Description: "Component lifecycle status tracking",
-	})
-	if err != nil {
-		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
-			slog.Any("error", err))
-		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
-	} else {
-		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
-			KV:               statusBucket,
-			ComponentName:    "graph-embedding",
-			Logger:           c.logger,
-			EnableThrottling: true,
-		})
-	}
-
-	// Create storage
-	c.storage = embedding.NewStorage(embeddingIndexBucket, embeddingDedupBucket)
-
-	// Create worker with metrics and generation callback
-	c.worker = embedding.NewWorker(c.storage, c.embedder, embeddingIndexBucket, c.logger).
-		WithWorkers(c.config.BatchSize / 10). // Scale workers based on batch size
-		WithMetrics(newWorkerMetricsAdapter(c.metrics)).
-		WithOnGenerated(func(entityID string, _ []float32) {
-			// Record successful embedding generation
-			if c.metrics != nil {
-				c.metrics.recordEmbeddingGenerated()
-			}
-			c.logger.Debug("embedding generated", "entity_id", entityID)
-		})
-
-	// Start worker
-	if err := c.worker.Start(ctx); err != nil {
+	// Wait for ENTITY_STATES bucket and start entity watcher
+	if err := c.waitForDependenciesAndStartWatcher(ctx); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "worker start")
+		return err
 	}
-
-	// Wait for input KV bucket (ENTITY_STATES) with bounded startup attempts
-	js, err := c.natsClient.JetStream()
-	if err != nil {
-		cancel()
-		return errs.Wrap(err, "Component", "Start", "JetStream connection")
-	}
-
-	// Report waiting stage for visibility
-	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketEntityStates); err != nil {
-		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketEntityStates), slog.Any("error", err))
-	}
-
-	// Use resource.Watcher for bounded startup with clear timeout behavior
-	watcherCfg := resource.DefaultConfig()
-	watcherCfg.StartupAttempts = c.config.StartupAttempts
-	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
-	watcherCfg.Logger = c.logger
-
-	entityWatcher := resource.NewWatcher(
-		graph.BucketEntityStates,
-		func(checkCtx context.Context) error {
-			_, err := js.KeyValue(checkCtx, graph.BucketEntityStates)
-			return err
-		},
-		watcherCfg,
-	)
-
-	if !entityWatcher.WaitForStartup(ctx) {
-		cancel()
-		return errs.WrapTransient(
-			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
-			"Component", "Start", "dependency not available",
-		)
-	}
-
-	// Bucket is available - get it for use
-	entityBucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
-	if err != nil {
-		cancel()
-		return errs.Wrap(err, "Component", "Start", "get entity bucket after availability check")
-	}
-
-	// Start entity watcher goroutine to queue entities for embedding
-	c.wg.Add(1)
-	go c.watchEntityStates(ctx, entityBucket)
 
 	// Set up query handlers
 	if err := c.setupQueryHandlers(ctx); err != nil {
@@ -661,6 +550,146 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-embedding"))
 		return fmt.Errorf("stop timeout after %v", timeout)
 	}
+}
+
+// createEmbedder creates the embedder based on configuration.
+func (c *Component) createEmbedder() error {
+	switch c.config.EmbedderType {
+	case "bm25":
+		c.embedder = embedding.NewBM25Embedder(embedding.BM25Config{
+			Dimensions: 384,
+			K1:         1.5,
+			B:          0.75,
+		})
+		c.logger.Info("using BM25 embedder", slog.Int("dimensions", 384))
+
+	case "http":
+		httpEmbedder, err := embedding.NewHTTPEmbedder(embedding.HTTPConfig{
+			BaseURL: c.config.EmbedderURL,
+			Model:   "all-MiniLM-L6-v2",
+			Timeout: 30 * time.Second,
+			Logger:  c.logger,
+		})
+		if err != nil {
+			return errs.Wrap(err, "Component", "createEmbedder", "HTTP embedder creation")
+		}
+		c.embedder = httpEmbedder
+		c.logger.Info("using HTTP embedder", slog.String("url", c.config.EmbedderURL))
+
+	default:
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "createEmbedder",
+			fmt.Sprintf("unknown embedder type: %s", c.config.EmbedderType))
+	}
+
+	if c.metrics != nil {
+		c.metrics.setEmbedderType(c.config.EmbedderType)
+	}
+	return nil
+}
+
+// createEmbeddingBuckets creates the embedding index and dedup buckets.
+func (c *Component) createEmbeddingBuckets(ctx context.Context) (jetstream.KeyValue, jetstream.KeyValue, error) {
+	indexBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEmbeddingIndex,
+		Description: "Entity embedding index",
+	})
+	if err != nil {
+		return nil, nil, errs.Wrap(err, "Component", "createEmbeddingBuckets",
+			fmt.Sprintf("KV bucket: %s", graph.BucketEmbeddingIndex))
+	}
+
+	dedupBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEmbeddingDedup,
+		Description: "Entity embedding deduplication",
+	})
+	if err != nil {
+		return nil, nil, errs.Wrap(err, "Component", "createEmbeddingBuckets",
+			fmt.Sprintf("KV bucket: %s", graph.BucketEmbeddingDedup))
+	}
+
+	return indexBucket, dedupBucket, nil
+}
+
+// initLifecycleReporter initializes the lifecycle reporter for component status tracking.
+func (c *Component) initLifecycleReporter(ctx context.Context) {
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		return
+	}
+	c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+		KV:               statusBucket,
+		ComponentName:    "graph-embedding",
+		Logger:           c.logger,
+		EnableThrottling: true,
+	})
+}
+
+// initStorageAndWorker initializes storage and starts the embedding worker.
+func (c *Component) initStorageAndWorker(ctx context.Context, indexBucket, dedupBucket jetstream.KeyValue) error {
+	c.storage = embedding.NewStorage(indexBucket, dedupBucket)
+
+	c.worker = embedding.NewWorker(c.storage, c.embedder, indexBucket, c.logger).
+		WithWorkers(c.config.BatchSize / 10).
+		WithMetrics(newWorkerMetricsAdapter(c.metrics)).
+		WithOnGenerated(func(entityID string, _ []float32) {
+			if c.metrics != nil {
+				c.metrics.recordEmbeddingGenerated()
+			}
+			c.logger.Debug("embedding generated", "entity_id", entityID)
+		})
+
+	if err := c.worker.Start(ctx); err != nil {
+		return errs.Wrap(err, "Component", "initStorageAndWorker", "worker start")
+	}
+	return nil
+}
+
+// waitForDependenciesAndStartWatcher waits for ENTITY_STATES bucket and starts the entity watcher.
+func (c *Component) waitForDependenciesAndStartWatcher(ctx context.Context) error {
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return errs.Wrap(err, "Component", "waitForDependenciesAndStartWatcher", "JetStream connection")
+	}
+
+	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketEntityStates); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketEntityStates), slog.Any("error", err))
+	}
+
+	watcherCfg := resource.DefaultConfig()
+	watcherCfg.StartupAttempts = c.config.StartupAttempts
+	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
+	watcherCfg.Logger = c.logger
+
+	entityWatcher := resource.NewWatcher(
+		graph.BucketEntityStates,
+		func(checkCtx context.Context) error {
+			_, err := js.KeyValue(checkCtx, graph.BucketEntityStates)
+			return err
+		},
+		watcherCfg,
+	)
+
+	if !entityWatcher.WaitForStartup(ctx) {
+		return errs.WrapTransient(
+			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
+			"Component", "waitForDependenciesAndStartWatcher", "dependency not available",
+		)
+	}
+
+	entityBucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
+	if err != nil {
+		return errs.Wrap(err, "Component", "waitForDependenciesAndStartWatcher", "get entity bucket")
+	}
+
+	c.wg.Add(1)
+	go c.watchEntityStates(ctx, entityBucket)
+	return nil
 }
 
 // ============================================================================

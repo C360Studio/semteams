@@ -1,4 +1,4 @@
-// Package structuralindex provides structural graph indexing algorithms
+// Package structural provides structural graph indexing algorithms
 // for query optimization and inference detection.
 //
 // The package implements two complementary indexing strategies:
@@ -267,8 +267,8 @@ func (idx *PivotIndex) GetReachableCandidates(source string, maxHops int) []stri
 	return candidates
 }
 
-// StructuralIndices bundles both indices together for convenience.
-type StructuralIndices struct {
+// Indices bundles both indices together for convenience.
+type Indices struct {
 	KCore *KCoreIndex `json:"kcore,omitempty"`
 	Pivot *PivotIndex `json:"pivot,omitempty"`
 }

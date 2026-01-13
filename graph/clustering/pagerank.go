@@ -47,7 +47,7 @@ type PageRankResult struct {
 }
 
 // ComputePageRank computes PageRank scores for all nodes in the graph
-func ComputePageRank(ctx context.Context, provider GraphProvider, config PageRankConfig) (*PageRankResult, error) {
+func ComputePageRank(ctx context.Context, provider Provider, config PageRankConfig) (*PageRankResult, error) {
 	// Get all entity IDs
 	entityIDs, err := provider.GetAllEntityIDs(ctx)
 	if err != nil {
@@ -59,12 +59,12 @@ func ComputePageRank(ctx context.Context, provider GraphProvider, config PageRan
 
 // ComputePageRankForCommunity computes PageRank for entities within a community
 // This is more efficient than full graph PageRank for large graphs
-func ComputePageRankForCommunity(ctx context.Context, provider GraphProvider, communityMembers []string, config PageRankConfig) (*PageRankResult, error) {
+func ComputePageRankForCommunity(ctx context.Context, provider Provider, communityMembers []string, config PageRankConfig) (*PageRankResult, error) {
 	return computePageRankForSubset(ctx, provider, communityMembers, config)
 }
 
 // computePageRankForSubset computes PageRank for a subset of nodes
-func computePageRankForSubset(ctx context.Context, provider GraphProvider, nodeIDs []string, config PageRankConfig) (*PageRankResult, error) {
+func computePageRankForSubset(ctx context.Context, provider Provider, nodeIDs []string, config PageRankConfig) (*PageRankResult, error) {
 	n := len(nodeIDs)
 	if n == 0 {
 		return &PageRankResult{
@@ -103,7 +103,7 @@ func computePageRankForSubset(ctx context.Context, provider GraphProvider, nodeI
 }
 
 // buildAdjacencyLists builds the adjacency structure from the provider
-func buildAdjacencyLists(ctx context.Context, provider GraphProvider, nodeIDs []string, nodeIndex map[string]int) ([][]int, []int, error) {
+func buildAdjacencyLists(ctx context.Context, provider Provider, nodeIDs []string, nodeIndex map[string]int) ([][]int, []int, error) {
 	n := len(nodeIDs)
 	outLinks := make([][]int, n)
 	outLinkCount := make([]int, n)
@@ -253,7 +253,7 @@ func rankNodes(scoreMap map[string]float64, _ int, topN int) []string {
 
 // ComputeRepresentativeEntities computes representative entities for a community using PageRank
 // Returns the top N entities by PageRank score
-func ComputeRepresentativeEntities(ctx context.Context, provider GraphProvider, communityMembers []string, topN int) ([]string, map[string]float64, error) {
+func ComputeRepresentativeEntities(ctx context.Context, provider Provider, communityMembers []string, topN int) ([]string, map[string]float64, error) {
 	if len(communityMembers) == 0 {
 		return []string{}, make(map[string]float64), nil
 	}
@@ -277,7 +277,7 @@ func ComputeRepresentativeEntities(ctx context.Context, provider GraphProvider, 
 }
 
 // computeDegreeCentrality is a fallback method using degree centrality
-func computeDegreeCentrality(ctx context.Context, provider GraphProvider, nodeIDs []string, topN int) ([]string, map[string]float64, error) {
+func computeDegreeCentrality(ctx context.Context, provider Provider, nodeIDs []string, topN int) ([]string, map[string]float64, error) {
 	type degreeNode struct {
 		id     string
 		degree int

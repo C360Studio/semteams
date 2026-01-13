@@ -11,7 +11,7 @@ import (
 	"github.com/c360/semstreams/pkg/errs"
 )
 
-// EntityIDGraphProvider wraps a base GraphProvider and adds virtual edges
+// EntityIDProvider wraps a base Provider and adds virtual edges
 // based on EntityID hierarchy. This enables LPA clustering to find communities
 // using the 6-part EntityID structure even when explicit relationship triples don't exist.
 //
@@ -22,8 +22,8 @@ import (
 // These edges are NOT persisted - they're ephemeral hints for the clustering algorithm.
 //
 // Explicit edges (from base provider) always take precedence over virtual edges.
-type EntityIDGraphProvider struct {
-	base GraphProvider
+type EntityIDProvider struct {
+	base Provider
 
 	// Configuration
 	siblingWeight   float64 // Weight for sibling edges (default: 0.7)
@@ -43,7 +43,7 @@ type EntityIDGraphProvider struct {
 	cacheInitialized  atomic.Bool
 }
 
-// EntityIDProviderConfig holds configuration for EntityIDGraphProvider
+// EntityIDProviderConfig holds configuration for EntityIDProvider
 type EntityIDProviderConfig struct {
 	// SiblingWeight is the edge weight for sibling relationships.
 	// Higher values = stronger connection influence in LPA.
@@ -69,18 +69,18 @@ func DefaultEntityIDProviderConfig() EntityIDProviderConfig {
 	}
 }
 
-// NewEntityIDGraphProvider creates a GraphProvider that augments explicit edges
+// NewEntityIDProvider creates a Provider that augments explicit edges
 // with virtual edges based on EntityID hierarchy (6-part dotted format).
 //
 // Parameters:
-//   - base: The underlying GraphProvider for explicit edges (also used to list all entities)
+//   - base: The underlying Provider for explicit edges (also used to list all entities)
 //   - config: Configuration for edge weights and limits
 //   - logger: Optional logger for observability (can be nil)
-func NewEntityIDGraphProvider(
-	base GraphProvider,
+func NewEntityIDProvider(
+	base Provider,
 	config EntityIDProviderConfig,
 	logger *slog.Logger,
-) *EntityIDGraphProvider {
+) *EntityIDProvider {
 	// Apply defaults for zero values
 	if config.SiblingWeight <= 0 {
 		config.SiblingWeight = 0.7
@@ -89,7 +89,7 @@ func NewEntityIDGraphProvider(
 		config.MaxSiblings = 10
 	}
 
-	return &EntityIDGraphProvider{
+	return &EntityIDProvider{
 		base:            base,
 		siblingWeight:   config.SiblingWeight,
 		maxSiblings:     config.MaxSiblings,
@@ -100,7 +100,7 @@ func NewEntityIDGraphProvider(
 }
 
 // GetAllEntityIDs delegates to the base provider
-func (p *EntityIDGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
+func (p *EntityIDProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
 	return p.base.GetAllEntityIDs(ctx)
 }
 
@@ -109,15 +109,15 @@ func (p *EntityIDGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string, 
 //
 // Direction parameter is respected for explicit edges but ignored for sibling edges
 // (sibling relationships are symmetric).
-func (p *EntityIDGraphProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
+func (p *EntityIDProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
 	if entityID == "" {
-		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "EntityIDGraphProvider", "GetNeighbors", "entityID is empty")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "EntityIDProvider", "GetNeighbors", "entityID is empty")
 	}
 
 	// 1. Get explicit neighbors from base provider
 	explicit, err := p.base.GetNeighbors(ctx, entityID, direction)
 	if err != nil {
-		return nil, errs.WrapTransient(err, "EntityIDGraphProvider", "GetNeighbors", "base provider error")
+		return nil, errs.WrapTransient(err, "EntityIDProvider", "GetNeighbors", "base provider error")
 	}
 
 	// If sibling edges are disabled, return explicit only
@@ -166,7 +166,7 @@ func getTypePrefix(entityID string) string {
 }
 
 // findSiblingNeighbors returns entities with the same type prefix that aren't already explicit neighbors.
-func (p *EntityIDGraphProvider) findSiblingNeighbors(
+func (p *EntityIDProvider) findSiblingNeighbors(
 	ctx context.Context,
 	entityID string,
 	explicitSet map[string]bool,
@@ -213,7 +213,7 @@ func (p *EntityIDGraphProvider) findSiblingNeighbors(
 }
 
 // ensureTypePrefixCache builds the type prefix -> entity IDs mapping if not already done.
-func (p *EntityIDGraphProvider) ensureTypePrefixCache(ctx context.Context) error {
+func (p *EntityIDProvider) ensureTypePrefixCache(ctx context.Context) error {
 	if p.cacheInitialized.Load() {
 		return nil // Already initialized
 	}
@@ -229,7 +229,7 @@ func (p *EntityIDGraphProvider) ensureTypePrefixCache(ctx context.Context) error
 	// Get all entity IDs from base provider
 	allEntities, err := p.base.GetAllEntityIDs(ctx)
 	if err != nil {
-		return errs.WrapTransient(err, "EntityIDGraphProvider", "ensureTypePrefixCache", "get all entity IDs")
+		return errs.WrapTransient(err, "EntityIDProvider", "ensureTypePrefixCache", "get all entity IDs")
 	}
 
 	// Build prefix -> entities mapping
@@ -261,15 +261,15 @@ func (p *EntityIDGraphProvider) ensureTypePrefixCache(ctx context.Context) error
 //
 // Explicit edges always take precedence - if base returns weight > 0,
 // that's used directly. Sibling edge weight is only used when no explicit edge exists.
-func (p *EntityIDGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error) {
+func (p *EntityIDProvider) GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error) {
 	if fromID == "" || toID == "" {
-		return 0.0, errs.WrapInvalid(errs.ErrMissingConfig, "EntityIDGraphProvider", "GetEdgeWeight", "entity IDs are empty")
+		return 0.0, errs.WrapInvalid(errs.ErrMissingConfig, "EntityIDProvider", "GetEdgeWeight", "entity IDs are empty")
 	}
 
 	// 1. Try explicit edge first (always takes precedence)
 	weight, err := p.base.GetEdgeWeight(ctx, fromID, toID)
 	if err != nil {
-		return 0.0, errs.WrapTransient(err, "EntityIDGraphProvider", "GetEdgeWeight", "base provider error")
+		return 0.0, errs.WrapTransient(err, "EntityIDProvider", "GetEdgeWeight", "base provider error")
 	}
 	if weight > 0 {
 		return weight, nil // Explicit edge exists
@@ -285,7 +285,7 @@ func (p *EntityIDGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID 
 }
 
 // areSiblings returns true if two entities have the same type prefix.
-func (p *EntityIDGraphProvider) areSiblings(entityA, entityB string) bool {
+func (p *EntityIDProvider) areSiblings(entityA, entityB string) bool {
 	prefixA := getTypePrefix(entityA)
 	prefixB := getTypePrefix(entityB)
 	return prefixA != "" && prefixA == prefixB
@@ -293,7 +293,7 @@ func (p *EntityIDGraphProvider) areSiblings(entityA, entityB string) bool {
 
 // ClearCache clears the type prefix cache and propagates to wrapped providers.
 // Call this when entities are added/removed.
-func (p *EntityIDGraphProvider) ClearCache() {
+func (p *EntityIDProvider) ClearCache() {
 	p.typePrefixCacheMu.Lock()
 	p.typePrefixCache = make(map[string][]string)
 	p.cacheInitialized.Store(false)
@@ -306,7 +306,7 @@ func (p *EntityIDGraphProvider) ClearCache() {
 }
 
 // GetCacheStats returns statistics about the type prefix cache for monitoring.
-func (p *EntityIDGraphProvider) GetCacheStats() (prefixes int, entities int) {
+func (p *EntityIDProvider) GetCacheStats() (prefixes int, entities int) {
 	p.typePrefixCacheMu.RLock()
 	defer p.typePrefixCacheMu.RUnlock()
 
@@ -318,6 +318,6 @@ func (p *EntityIDGraphProvider) GetCacheStats() (prefixes int, entities int) {
 }
 
 // GetSiblingEdgeMetrics returns metrics for sibling edge operations.
-func (p *EntityIDGraphProvider) GetSiblingEdgeMetrics() (successes, errors int64) {
+func (p *EntityIDProvider) GetSiblingEdgeMetrics() (successes, errors int64) {
 	return p.siblingEdgeSuccess.Load(), p.siblingEdgeErrors.Load()
 }

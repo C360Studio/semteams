@@ -11,7 +11,7 @@ import (
 
 func TestWatcher_WaitForStartup_ImmediateSuccess(t *testing.T) {
 	// Resource available immediately
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		return nil
 	}
 
@@ -32,7 +32,7 @@ func TestWatcher_WaitForStartup_ImmediateSuccess(t *testing.T) {
 func TestWatcher_WaitForStartup_EventualSuccess(t *testing.T) {
 	// Resource becomes available after 3 attempts
 	var attempts atomic.Int32
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		if attempts.Add(1) < 3 {
 			return errors.New("not ready")
 		}
@@ -57,7 +57,7 @@ func TestWatcher_WaitForStartup_EventualSuccess(t *testing.T) {
 
 func TestWatcher_WaitForStartup_ExhaustsAttempts(t *testing.T) {
 	// Resource never becomes available
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		return errors.New("never ready")
 	}
 
@@ -80,7 +80,7 @@ func TestWatcher_WaitForStartup_ExhaustsAttempts(t *testing.T) {
 
 func TestWatcher_WaitForStartup_ContextCancellation(t *testing.T) {
 	// Context cancelled during startup
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		return errors.New("not ready")
 	}
 
@@ -111,7 +111,7 @@ func TestWatcher_BackgroundCheck_ResourceBecomesAvailable(t *testing.T) {
 	var ready atomic.Bool
 	var availableCalled atomic.Bool
 
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		if ready.Load() {
 			return nil
 		}
@@ -169,7 +169,7 @@ func TestWatcher_BackgroundCheck_ResourceLost(t *testing.T) {
 
 	var lostCalled atomic.Bool
 
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		if ready.Load() {
 			return nil
 		}
@@ -219,9 +219,9 @@ func TestWatcher_BackgroundCheck_ResourceLost(t *testing.T) {
 	w.Stop()
 }
 
-func TestWatcher_BackgroundCheck_Idempotent(t *testing.T) {
+func TestWatcher_BackgroundCheck_Idempotent(_ *testing.T) {
 	// Calling StartBackgroundCheck multiple times should be safe
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		return nil
 	}
 
@@ -241,8 +241,8 @@ func TestWatcher_BackgroundCheck_Idempotent(t *testing.T) {
 	w.Stop()
 }
 
-func TestWatcher_Stop_Idempotent(t *testing.T) {
-	checkFn := func(ctx context.Context) error {
+func TestWatcher_Stop_Idempotent(_ *testing.T) {
+	checkFn := func(_ context.Context) error {
 		return nil
 	}
 
@@ -261,7 +261,7 @@ func TestWatcher_Stop_Idempotent(t *testing.T) {
 }
 
 func TestWatcher_Name(t *testing.T) {
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		return nil
 	}
 
@@ -273,7 +273,7 @@ func TestWatcher_Name(t *testing.T) {
 }
 
 func TestWatcher_ConfigDefaults(t *testing.T) {
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		return nil
 	}
 
@@ -291,12 +291,12 @@ func TestWatcher_ConfigDefaults(t *testing.T) {
 	}
 }
 
-func TestWatcher_ConcurrentAccess(t *testing.T) {
+func TestWatcher_ConcurrentAccess(_ *testing.T) {
 	// Test that IsAvailable is safe for concurrent access
 	var ready atomic.Bool
 	ready.Store(true)
 
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		if ready.Load() {
 			return nil
 		}
@@ -343,7 +343,7 @@ func TestWatcher_ConcurrentAccess(t *testing.T) {
 func TestWatcher_HealthCheckDisabled(t *testing.T) {
 	// When HealthInterval is 0, use recheck interval for available resources
 	var checkCount atomic.Int32
-	checkFn := func(ctx context.Context) error {
+	checkFn := func(_ context.Context) error {
 		checkCount.Add(1)
 		return nil
 	}

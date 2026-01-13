@@ -29,7 +29,7 @@ type EnhancementWorker struct {
 	// Dependencies
 	storage         CommunityStorage
 	llm             *LLMSummarizer
-	provider        GraphProvider
+	provider        Provider
 	querier         EntityQuerier
 	communityBucket jetstream.KeyValue
 
@@ -63,7 +63,7 @@ type EnhancementWorker struct {
 type EnhancementWorkerConfig struct {
 	LLMSummarizer   *LLMSummarizer
 	Storage         CommunityStorage
-	GraphProvider   GraphProvider
+	Provider        Provider
 	Querier         EntityQuerier
 	CommunityBucket jetstream.KeyValue
 	Logger          *slog.Logger
@@ -80,7 +80,7 @@ func NewEnhancementWorker(config *EnhancementWorkerConfig) (*EnhancementWorker, 
 		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "EnhancementWorker",
 			"New", "storage is required")
 	}
-	if config.GraphProvider == nil {
+	if config.Provider == nil {
 		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "EnhancementWorker",
 			"New", "graph provider is required")
 	}
@@ -107,7 +107,7 @@ func NewEnhancementWorker(config *EnhancementWorkerConfig) (*EnhancementWorker, 
 	return &EnhancementWorker{
 		storage:         config.Storage,
 		llm:             config.LLMSummarizer,
-		provider:        config.GraphProvider,
+		provider:        config.Provider,
 		querier:         config.Querier,
 		communityBucket: config.CommunityBucket,
 		workers:         3, // Default concurrent workers

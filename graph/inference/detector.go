@@ -33,7 +33,7 @@ type Detector interface {
 // DetectorDependencies provides access to shared resources needed by detectors.
 type DetectorDependencies struct {
 	// StructuralIndices provides access to k-core and pivot indices.
-	StructuralIndices *structural.StructuralIndices
+	StructuralIndices *structural.Indices
 
 	// PreviousKCore is the k-core index from the previous computation (for demotion detection).
 	PreviousKCore *structural.KCoreIndex

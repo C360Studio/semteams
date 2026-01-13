@@ -14,10 +14,10 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
-// graphProviderAdapter wraps GraphProvider to implement inference.RelationshipQuerier.
+// graphProviderAdapter wraps Provider to implement inference.RelationshipQuerier.
 // This allows core anomaly detection to query graph relationships for peer counting.
 type graphProviderAdapter struct {
-	provider clustering.GraphProvider
+	provider clustering.Provider
 }
 
 func (a *graphProviderAdapter) GetOutgoingRelationships(ctx context.Context, entityID string) ([]inference.RelationshipInfo, error) {
@@ -148,7 +148,7 @@ func (c *Component) runAnomalyDetection(ctx context.Context, kcoreIndex *structu
 	start := time.Now()
 
 	// Build structural indices bundle
-	indices := &structural.StructuralIndices{
+	indices := &structural.Indices{
 		KCore: kcoreIndex,
 		Pivot: pivotIndex,
 	}

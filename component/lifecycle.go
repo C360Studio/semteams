@@ -98,9 +98,9 @@ func AsLifecycleComponent(comp Discoverable) (LifecycleComponent, bool) {
 	return lc, ok
 }
 
-// ComponentStatus represents the current processing state of a component.
+// Status represents the current processing state of a component.
 // This is used by ADR-003 lifecycle status pattern for async component observability.
-type ComponentStatus struct {
+type Status struct {
 	Component       string    `json:"component"`
 	Stage           string    `json:"stage"`
 	CycleID         string    `json:"cycle_id,omitempty"`

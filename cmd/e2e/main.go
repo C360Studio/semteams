@@ -391,7 +391,7 @@ func runScenario(ctx context.Context, logger *slog.Logger, scenario scenarios.Sc
 }
 
 // saveMetricsDump fetches raw Prometheus metrics and saves them to a file
-func saveMetricsDump(logger *slog.Logger, metricsURL, variant, outputDir string) (string, error) {
+func saveMetricsDump(_ *slog.Logger, metricsURL, variant, outputDir string) (string, error) {
 	// Fetch metrics from Prometheus endpoint
 	metricsEndpoint := metricsURL + "/metrics"
 	resp, err := http.Get(metricsEndpoint)

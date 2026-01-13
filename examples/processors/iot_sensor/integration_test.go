@@ -85,11 +85,22 @@ func setupDataManager(
 	require.NoError(t, err, "Failed to create data manager")
 
 	dataErrors := make(chan error, 1)
+	ready := make(chan struct{})
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		dataErrors <- dataManager.Run(ctx, func() {})
+		dataErrors <- dataManager.Run(ctx, func() { close(ready) })
 	}()
+
+	// Wait for initialization to complete before returning
+	select {
+	case <-ready:
+		// Manager is ready
+	case err := <-dataErrors:
+		require.NoError(t, err, "DataManager failed to start")
+	case <-time.After(10 * time.Second):
+		t.Fatal("DataManager initialization timed out")
+	}
 
 	return dataManager, dataErrors
 }

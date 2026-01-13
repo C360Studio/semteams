@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// entityIDTestProvider implements GraphProvider for EntityID provider testing
+// entityIDTestProvider implements Provider for EntityID provider testing
 type entityIDTestProvider struct {
 	entities  []string
 	neighbors map[string][]string
@@ -71,7 +71,7 @@ func TestGetTypePrefix(t *testing.T) {
 	}
 }
 
-func TestEntityIDGraphProvider_GetNeighbors_IncludesSiblings(t *testing.T) {
+func TestEntityIDProvider_GetNeighbors_IncludesSiblings(t *testing.T) {
 	// Setup: Create entities with same type prefix (siblings)
 	entities := []string{
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-001",
@@ -93,7 +93,7 @@ func TestEntityIDGraphProvider_GetNeighbors_IncludesSiblings(t *testing.T) {
 		IncludeSiblings: true,
 	}
 
-	provider := NewEntityIDGraphProvider(base, config, nil)
+	provider := NewEntityIDProvider(base, config, nil)
 
 	ctx := context.Background()
 
@@ -128,7 +128,7 @@ func TestEntityIDGraphProvider_GetNeighbors_IncludesSiblings(t *testing.T) {
 	}
 }
 
-func TestEntityIDGraphProvider_GetNeighbors_ExcludesSelf(t *testing.T) {
+func TestEntityIDProvider_GetNeighbors_ExcludesSelf(t *testing.T) {
 	entities := []string{
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-001",
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-002",
@@ -141,7 +141,7 @@ func TestEntityIDGraphProvider_GetNeighbors_ExcludesSelf(t *testing.T) {
 	}
 
 	config := DefaultEntityIDProviderConfig()
-	provider := NewEntityIDGraphProvider(base, config, nil)
+	provider := NewEntityIDProvider(base, config, nil)
 
 	ctx := context.Background()
 
@@ -158,7 +158,7 @@ func TestEntityIDGraphProvider_GetNeighbors_ExcludesSelf(t *testing.T) {
 	}
 }
 
-func TestEntityIDGraphProvider_GetNeighbors_DisabledSiblings(t *testing.T) {
+func TestEntityIDProvider_GetNeighbors_DisabledSiblings(t *testing.T) {
 	entities := []string{
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-001",
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-002",
@@ -173,7 +173,7 @@ func TestEntityIDGraphProvider_GetNeighbors_DisabledSiblings(t *testing.T) {
 	config := EntityIDProviderConfig{
 		IncludeSiblings: false, // Disabled
 	}
-	provider := NewEntityIDGraphProvider(base, config, nil)
+	provider := NewEntityIDProvider(base, config, nil)
 
 	ctx := context.Background()
 
@@ -188,7 +188,7 @@ func TestEntityIDGraphProvider_GetNeighbors_DisabledSiblings(t *testing.T) {
 	}
 }
 
-func TestEntityIDGraphProvider_GetEdgeWeight_Siblings(t *testing.T) {
+func TestEntityIDProvider_GetEdgeWeight_Siblings(t *testing.T) {
 	entities := []string{
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-001",
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-002",
@@ -205,7 +205,7 @@ func TestEntityIDGraphProvider_GetEdgeWeight_Siblings(t *testing.T) {
 		SiblingWeight:   0.7,
 		IncludeSiblings: true,
 	}
-	provider := NewEntityIDGraphProvider(base, config, nil)
+	provider := NewEntityIDProvider(base, config, nil)
 
 	ctx := context.Background()
 
@@ -228,7 +228,7 @@ func TestEntityIDGraphProvider_GetEdgeWeight_Siblings(t *testing.T) {
 	}
 }
 
-func TestEntityIDGraphProvider_GetEdgeWeight_ExplicitTakesPrecedence(t *testing.T) {
+func TestEntityIDProvider_GetEdgeWeight_ExplicitTakesPrecedence(t *testing.T) {
 	entities := []string{
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-001",
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-002",
@@ -247,7 +247,7 @@ func TestEntityIDGraphProvider_GetEdgeWeight_ExplicitTakesPrecedence(t *testing.
 		SiblingWeight:   0.7,
 		IncludeSiblings: true,
 	}
-	provider := NewEntityIDGraphProvider(base, config, nil)
+	provider := NewEntityIDProvider(base, config, nil)
 
 	ctx := context.Background()
 
@@ -261,8 +261,8 @@ func TestEntityIDGraphProvider_GetEdgeWeight_ExplicitTakesPrecedence(t *testing.
 	}
 }
 
-func TestEntityIDGraphProvider_AreSiblings(t *testing.T) {
-	provider := &EntityIDGraphProvider{includeSiblings: true}
+func TestEntityIDProvider_AreSiblings(t *testing.T) {
+	provider := &EntityIDProvider{includeSiblings: true}
 
 	tests := []struct {
 		name     string
@@ -307,7 +307,7 @@ func TestEntityIDGraphProvider_AreSiblings(t *testing.T) {
 	}
 }
 
-func TestEntityIDGraphProvider_MaxSiblings(t *testing.T) {
+func TestEntityIDProvider_MaxSiblings(t *testing.T) {
 	// Create many entities with same type prefix
 	var entities []string
 	for i := 0; i < 20; i++ {
@@ -325,7 +325,7 @@ func TestEntityIDGraphProvider_MaxSiblings(t *testing.T) {
 		MaxSiblings:     5, // Limit to 5
 		IncludeSiblings: true,
 	}
-	provider := NewEntityIDGraphProvider(base, config, nil)
+	provider := NewEntityIDProvider(base, config, nil)
 
 	ctx := context.Background()
 

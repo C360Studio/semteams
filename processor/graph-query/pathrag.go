@@ -78,24 +78,12 @@ func (p *PathSearcher) Search(ctx context.Context, req PathSearchRequest) (*Path
 		return nil, fmt.Errorf("invalid request: empty start_entity")
 	}
 
-	// Apply max depth limit
-	maxDepth := req.MaxDepth
-	if maxDepth == 0 || maxDepth > p.maxDepth {
-		maxDepth = p.maxDepth
-	}
-
-	// Apply max nodes limit
-	maxNodes := req.MaxNodes
-	if maxNodes == 0 {
-		maxNodes = 100 // Default limit
-	}
+	// Apply limits
+	maxDepth, maxNodes := p.applyLimits(req.MaxDepth, req.MaxNodes)
 
 	// Verify start entity exists
-	entityReq := map[string]string{"id": req.StartEntity}
-	entityReqData, _ := json.Marshal(entityReq)
-	_, err := p.nats.Request(ctx, "graph.ingest.query.entity", entityReqData, p.timeout)
-	if err != nil {
-		return nil, fmt.Errorf("entity not found: %w", err)
+	if err := p.verifyEntityExists(ctx, req.StartEntity); err != nil {
+		return nil, err
 	}
 
 	// BFS with parent tracking for path reconstruction
@@ -105,26 +93,15 @@ func (p *PathSearcher) Search(ctx context.Context, req PathSearchRequest) (*Path
 	}
 
 	visited := make(map[string]bool)
-	parentMap := make(map[string]parentInfo) // Track how we reached each entity
+	parentMap := make(map[string]parentInfo)
 	visited[req.StartEntity] = true
 
 	queue := []queueItem{{entityID: req.StartEntity, depth: 0}}
-
-	// Track entities with their scores (decay by depth)
-	entities := []PathEntity{{
-		ID:    req.StartEntity,
-		Type:  "entity",
-		Score: 1.0,
-	}}
-
-	paths := make([][]PathStep, 0)
-	// Start entity has no path (empty path)
-	paths = append(paths, []PathStep{})
-
+	entities := []PathEntity{{ID: req.StartEntity, Type: "entity", Score: 1.0}}
+	paths := [][]PathStep{{}} // Start entity has empty path
 	nodesDiscovered := 0
 
 	for len(queue) > 0 && nodesDiscovered < maxNodes {
-		// Check context cancellation
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("context cancelled: %w", ctx.Err())
 		}
@@ -132,40 +109,12 @@ func (p *PathSearcher) Search(ctx context.Context, req PathSearchRequest) (*Path
 		current := queue[0]
 		queue = queue[1:]
 
-		// Stop if we've reached max depth
 		if current.depth >= maxDepth {
 			continue
 		}
 
-		// Get outgoing relationships from graph-index
-		relsReq := map[string]string{"entity_id": current.entityID}
-		relsReqData, _ := json.Marshal(relsReq)
+		rels := p.getOutgoingRelationships(ctx, current.entityID)
 
-		relsResponse, err := p.nats.Request(ctx, "graph.index.query.outgoing", relsReqData, p.timeout)
-		if err != nil {
-			// Skip unreachable nodes
-			continue
-		}
-
-		// Parse relationships from envelope response
-		var envelope graph.OutgoingQueryResponse
-		if err := json.Unmarshal(relsResponse, &envelope); err != nil {
-			continue
-		}
-		if envelope.Error != nil {
-			continue
-		}
-
-		// Convert to local type
-		rels := make([]RelationshipEntry, len(envelope.Data.Relationships))
-		for i, r := range envelope.Data.Relationships {
-			rels[i] = RelationshipEntry{
-				ToEntityID: r.ToEntityID,
-				Predicate:  r.Predicate,
-			}
-		}
-
-		// Add neighbors to queue and entities
 		for _, rel := range rels {
 			if nodesDiscovered >= maxNodes {
 				break
@@ -175,40 +124,74 @@ func (p *PathSearcher) Search(ctx context.Context, req PathSearchRequest) (*Path
 				visited[rel.ToEntityID] = true
 				nodesDiscovered++
 
-				// Track parent for path reconstruction
-				parentMap[rel.ToEntityID] = parentInfo{
-					parentID:  current.entityID,
-					predicate: rel.Predicate,
-				}
+				parentMap[rel.ToEntityID] = parentInfo{parentID: current.entityID, predicate: rel.Predicate}
 
-				// Calculate score based on depth (decay)
 				newDepth := current.depth + 1
-				score := 1.0
-				for i := 0; i < newDepth; i++ {
-					score *= p.decayFactor
-				}
+				score := p.calculateDecayScore(newDepth)
 
-				entities = append(entities, PathEntity{
-					ID:    rel.ToEntityID,
-					Type:  "entity",
-					Score: score,
-				})
-
-				// Reconstruct full path from start to this entity
-				path := p.reconstructPath(rel.ToEntityID, req.StartEntity, parentMap)
-				paths = append(paths, path)
-
-				// Add to queue for further traversal
+				entities = append(entities, PathEntity{ID: rel.ToEntityID, Type: "entity", Score: score})
+				paths = append(paths, p.reconstructPath(rel.ToEntityID, req.StartEntity, parentMap))
 				queue = append(queue, queueItem{entityID: rel.ToEntityID, depth: newDepth})
 			}
 		}
 	}
 
-	return &PathSearchResponse{
-		Entities:  entities,
-		Paths:     paths,
-		Truncated: nodesDiscovered >= maxNodes,
-	}, nil
+	return &PathSearchResponse{Entities: entities, Paths: paths, Truncated: nodesDiscovered >= maxNodes}, nil
+}
+
+// applyLimits applies max depth and max nodes limits.
+func (p *PathSearcher) applyLimits(reqDepth, reqNodes int) (maxDepth, maxNodes int) {
+	maxDepth = reqDepth
+	if maxDepth == 0 || maxDepth > p.maxDepth {
+		maxDepth = p.maxDepth
+	}
+	maxNodes = reqNodes
+	if maxNodes == 0 {
+		maxNodes = 100
+	}
+	return maxDepth, maxNodes
+}
+
+// verifyEntityExists checks if an entity exists in the graph.
+func (p *PathSearcher) verifyEntityExists(ctx context.Context, entityID string) error {
+	entityReq := map[string]string{"id": entityID}
+	entityReqData, _ := json.Marshal(entityReq)
+	_, err := p.nats.Request(ctx, "graph.ingest.query.entity", entityReqData, p.timeout)
+	if err != nil {
+		return fmt.Errorf("entity not found: %w", err)
+	}
+	return nil
+}
+
+// getOutgoingRelationships fetches outgoing relationships for an entity.
+func (p *PathSearcher) getOutgoingRelationships(ctx context.Context, entityID string) []RelationshipEntry {
+	relsReq := map[string]string{"entity_id": entityID}
+	relsReqData, _ := json.Marshal(relsReq)
+
+	relsResponse, err := p.nats.Request(ctx, "graph.index.query.outgoing", relsReqData, p.timeout)
+	if err != nil {
+		return nil
+	}
+
+	var envelope graph.OutgoingQueryResponse
+	if err := json.Unmarshal(relsResponse, &envelope); err != nil || envelope.Error != nil {
+		return nil
+	}
+
+	rels := make([]RelationshipEntry, len(envelope.Data.Relationships))
+	for i, r := range envelope.Data.Relationships {
+		rels[i] = RelationshipEntry{ToEntityID: r.ToEntityID, Predicate: r.Predicate}
+	}
+	return rels
+}
+
+// calculateDecayScore calculates the score based on depth using decay factor.
+func (p *PathSearcher) calculateDecayScore(depth int) float64 {
+	score := 1.0
+	for i := 0; i < depth; i++ {
+		score *= p.decayFactor
+	}
+	return score
 }
 
 // reconstructPath builds the full path from start to target entity

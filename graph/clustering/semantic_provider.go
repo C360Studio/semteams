@@ -12,7 +12,7 @@ import (
 )
 
 // SimilarityFinder abstracts the IndexManager's similarity lookup.
-// This interface allows SemanticGraphProvider to work with IndexManager without
+// This interface allows SemanticProvider to work with IndexManager without
 // creating import cycles and enables easier testing.
 type SimilarityFinder interface {
 	// FindSimilarEntities returns entities similar to the given entity.
@@ -21,7 +21,7 @@ type SimilarityFinder interface {
 	FindSimilarEntities(ctx context.Context, entityID string, threshold float64, limit int) ([]gtypes.SimilarityHit, error)
 }
 
-// SemanticGraphProvider wraps a base GraphProvider and adds virtual edges
+// SemanticProvider wraps a base Provider and adds virtual edges
 // based on embedding similarity. This enables LPA clustering to find communities
 // even when explicit relationship triples don't exist.
 //
@@ -30,8 +30,8 @@ type SimilarityFinder interface {
 //
 // Explicit edges (from base provider) always take precedence over virtual edges,
 // and explicit edge weights are preserved as-is (typically confidence-based).
-type SemanticGraphProvider struct {
-	base GraphProvider
+type SemanticProvider struct {
+	base Provider
 
 	// Similarity lookup via IndexManager
 	similarityFinder SimilarityFinder
@@ -53,7 +53,7 @@ type SemanticGraphProvider struct {
 	similarityCacheMu sync.RWMutex
 }
 
-// SemanticProviderConfig holds configuration for SemanticGraphProvider
+// SemanticProviderConfig holds configuration for SemanticProvider
 type SemanticProviderConfig struct {
 	// SimilarityThreshold is the minimum cosine similarity for virtual edges.
 	// Higher values = fewer but stronger virtual connections.
@@ -74,20 +74,20 @@ func DefaultSemanticProviderConfig() SemanticProviderConfig {
 	}
 }
 
-// NewSemanticGraphProvider creates a GraphProvider that augments explicit edges
+// NewSemanticProvider creates a Provider that augments explicit edges
 // with virtual edges based on embedding similarity.
 //
 // Parameters:
-//   - base: The underlying GraphProvider for explicit edges
+//   - base: The underlying Provider for explicit edges
 //   - finder: SimilarityFinder (typically IndexManager) for similarity lookup
 //   - config: Configuration for similarity threshold and limits
 //   - logger: Optional logger for observability (can be nil)
-func NewSemanticGraphProvider(
-	base GraphProvider,
+func NewSemanticProvider(
+	base Provider,
 	finder SimilarityFinder,
 	config SemanticProviderConfig,
 	logger *slog.Logger,
-) *SemanticGraphProvider {
+) *SemanticProvider {
 	// Apply defaults for zero values
 	if config.SimilarityThreshold <= 0 {
 		config.SimilarityThreshold = 0.6
@@ -96,7 +96,7 @@ func NewSemanticGraphProvider(
 		config.MaxVirtualNeighbors = 5
 	}
 
-	return &SemanticGraphProvider{
+	return &SemanticProvider{
 		base:                base,
 		similarityFinder:    finder,
 		similarityThreshold: config.SimilarityThreshold,
@@ -107,7 +107,7 @@ func NewSemanticGraphProvider(
 }
 
 // GetAllEntityIDs delegates to the base provider
-func (p *SemanticGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
+func (p *SemanticProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
 	return p.base.GetAllEntityIDs(ctx)
 }
 
@@ -119,15 +119,15 @@ func (p *SemanticGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string, 
 //
 // Direction parameter is respected for explicit edges but ignored for virtual edges
 // (semantic similarity is symmetric).
-func (p *SemanticGraphProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
+func (p *SemanticProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
 	if entityID == "" {
-		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "SemanticGraphProvider", "GetNeighbors", "entityID is empty")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "SemanticProvider", "GetNeighbors", "entityID is empty")
 	}
 
 	// 1. Get explicit neighbors from base provider
 	explicit, err := p.base.GetNeighbors(ctx, entityID, direction)
 	if err != nil {
-		return nil, errs.WrapTransient(err, "SemanticGraphProvider", "GetNeighbors", "base provider error")
+		return nil, errs.WrapTransient(err, "SemanticProvider", "GetNeighbors", "base provider error")
 	}
 
 	// Create set of explicit neighbors for deduplication
@@ -158,7 +158,7 @@ func (p *SemanticGraphProvider) GetNeighbors(ctx context.Context, entityID strin
 
 // findVirtualNeighbors returns entities similar to entityID that aren't already explicit neighbors.
 // Results are cached for reuse by GetEdgeWeight.
-func (p *SemanticGraphProvider) findVirtualNeighbors(
+func (p *SemanticProvider) findVirtualNeighbors(
 	ctx context.Context,
 	entityID string,
 	explicitSet map[string]bool,
@@ -219,7 +219,7 @@ func (p *SemanticGraphProvider) findVirtualNeighbors(
 
 // batchCacheSimilarity stores multiple similarity scores under a single lock acquisition.
 // This avoids the race condition of releasing and re-acquiring locks between updates.
-func (p *SemanticGraphProvider) batchCacheSimilarity(sourceEntity string, scores map[string]float64) {
+func (p *SemanticProvider) batchCacheSimilarity(sourceEntity string, scores map[string]float64) {
 	if len(scores) == 0 {
 		return
 	}
@@ -246,7 +246,7 @@ func (p *SemanticGraphProvider) batchCacheSimilarity(sourceEntity string, scores
 }
 
 // cacheSimilarity stores similarity score bidirectionally (used for single updates)
-func (p *SemanticGraphProvider) cacheSimilarity(entityA, entityB string, score float64) {
+func (p *SemanticProvider) cacheSimilarity(entityA, entityB string, score float64) {
 	p.similarityCacheMu.Lock()
 	defer p.similarityCacheMu.Unlock()
 
@@ -268,15 +268,15 @@ func (p *SemanticGraphProvider) cacheSimilarity(entityA, entityB string, score f
 //
 // Explicit edges always take precedence - if base returns weight > 0,
 // that's used directly. Virtual edge weight is only used when no explicit edge exists.
-func (p *SemanticGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error) {
+func (p *SemanticProvider) GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error) {
 	if fromID == "" || toID == "" {
-		return 0.0, errs.WrapInvalid(errs.ErrMissingConfig, "SemanticGraphProvider", "GetEdgeWeight", "entity IDs are empty")
+		return 0.0, errs.WrapInvalid(errs.ErrMissingConfig, "SemanticProvider", "GetEdgeWeight", "entity IDs are empty")
 	}
 
 	// 1. Try explicit edge first (always takes precedence)
 	weight, err := p.base.GetEdgeWeight(ctx, fromID, toID)
 	if err != nil {
-		return 0.0, errs.WrapTransient(err, "SemanticGraphProvider", "GetEdgeWeight", "base provider error")
+		return 0.0, errs.WrapTransient(err, "SemanticProvider", "GetEdgeWeight", "base provider error")
 	}
 	if weight > 0 {
 		return weight, nil // Explicit edge exists
@@ -311,7 +311,7 @@ func (p *SemanticGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID 
 
 // ClearCache clears the similarity cache and propagates to wrapped providers.
 // Call this between clustering runs to ensure fresh similarity data.
-func (p *SemanticGraphProvider) ClearCache() {
+func (p *SemanticProvider) ClearCache() {
 	p.similarityCacheMu.Lock()
 	p.similarityCache = make(map[string]map[string]float64)
 	p.similarityCacheMu.Unlock()
@@ -323,7 +323,7 @@ func (p *SemanticGraphProvider) ClearCache() {
 }
 
 // GetCacheStats returns statistics about the similarity cache for monitoring.
-func (p *SemanticGraphProvider) GetCacheStats() (entities int, edges int) {
+func (p *SemanticProvider) GetCacheStats() (entities int, edges int) {
 	p.similarityCacheMu.RLock()
 	defer p.similarityCacheMu.RUnlock()
 

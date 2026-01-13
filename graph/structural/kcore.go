@@ -10,9 +10,9 @@ import (
 	"github.com/c360/semstreams/pkg/errs"
 )
 
-// GraphProvider is an alias to the shared interface in graph package.
+// Provider is an alias to the shared interface in graph package.
 // Abstracts the graph data source for structural index computation.
-type GraphProvider = gtypes.GraphProvider
+type Provider = gtypes.Provider
 
 // KCoreComputer computes k-core decomposition of a graph.
 //
@@ -24,12 +24,12 @@ type GraphProvider = gtypes.GraphProvider
 // Time complexity: O(V + E)
 // Space complexity: O(V)
 type KCoreComputer struct {
-	provider GraphProvider
+	provider Provider
 	logger   *slog.Logger
 }
 
 // NewKCoreComputer creates a new k-core computer.
-func NewKCoreComputer(provider GraphProvider, logger *slog.Logger) *KCoreComputer {
+func NewKCoreComputer(provider Provider, logger *slog.Logger) *KCoreComputer {
 	if logger == nil {
 		logger = slog.Default()
 	}

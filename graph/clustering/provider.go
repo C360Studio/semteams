@@ -36,20 +36,20 @@ type RelationshipQuerier interface {
 	QueryByPredicate(ctx context.Context, predicate string) ([]string, error)
 }
 
-// QueryManagerGraphProvider implements GraphProvider using QueryManager
-type QueryManagerGraphProvider struct {
+// QueryManagerProvider implements Provider using QueryManager
+type QueryManagerProvider struct {
 	queryManager RelationshipQuerier
 }
 
-// NewQueryManagerGraphProvider creates a GraphProvider backed by QueryManager
-func NewQueryManagerGraphProvider(qm RelationshipQuerier) *QueryManagerGraphProvider {
-	return &QueryManagerGraphProvider{
+// NewQueryManagerProvider creates a Provider backed by QueryManager
+func NewQueryManagerProvider(qm RelationshipQuerier) *QueryManagerProvider {
+	return &QueryManagerProvider{
 		queryManager: qm,
 	}
 }
 
 // GetAllEntityIDs returns all entity IDs in the graph
-func (p *QueryManagerGraphProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
+func (p *QueryManagerProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
 	// QueryManager doesn't have a "get all entities" method
 	// We'll need to query by common predicates or use a different approach
 
@@ -59,16 +59,16 @@ func (p *QueryManagerGraphProvider) GetAllEntityIDs(_ context.Context) ([]string
 
 	return nil, errs.WrapFatal(
 		errs.ErrMissingConfig,
-		"QueryManagerGraphProvider",
+		"QueryManagerProvider",
 		"GetAllEntityIDs",
-		"full graph scan not yet implemented - use PredicateGraphProvider instead",
+		"full graph scan not yet implemented - use PredicateProvider instead",
 	)
 }
 
 // GetNeighbors returns entity IDs connected to the given entity
-func (p *QueryManagerGraphProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
+func (p *QueryManagerProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
 	if entityID == "" {
-		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "QueryManagerGraphProvider", "GetNeighbors", "entityID is empty")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "QueryManagerProvider", "GetNeighbors", "entityID is empty")
 	}
 
 	// Map direction string to QueryManager direction
@@ -81,13 +81,13 @@ func (p *QueryManagerGraphProvider) GetNeighbors(ctx context.Context, entityID s
 	case "both":
 		qmDirection = DirectionBoth
 	default:
-		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "QueryManagerGraphProvider", "GetNeighbors", "invalid direction")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "QueryManagerProvider", "GetNeighbors", "invalid direction")
 	}
 
 	// Query relationships
 	rels, err := p.queryManager.QueryRelationships(ctx, entityID, qmDirection)
 	if err != nil {
-		return nil, errs.WrapTransient(err, "QueryManagerGraphProvider", "GetNeighbors", "query relationships")
+		return nil, errs.WrapTransient(err, "QueryManagerProvider", "GetNeighbors", "query relationships")
 	}
 
 	// Extract unique neighbor IDs
@@ -112,15 +112,15 @@ func (p *QueryManagerGraphProvider) GetNeighbors(ctx context.Context, entityID s
 }
 
 // GetEdgeWeight returns the weight of an edge between two entities
-func (p *QueryManagerGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error) {
+func (p *QueryManagerProvider) GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error) {
 	if fromID == "" || toID == "" {
-		return 0.0, errs.WrapInvalid(errs.ErrMissingConfig, "QueryManagerGraphProvider", "GetEdgeWeight", "entity IDs are empty")
+		return 0.0, errs.WrapInvalid(errs.ErrMissingConfig, "QueryManagerProvider", "GetEdgeWeight", "entity IDs are empty")
 	}
 
 	// Query outgoing relationships from fromID
 	rels, err := p.queryManager.QueryRelationships(ctx, fromID, DirectionOutgoing)
 	if err != nil {
-		return 0.0, errs.WrapTransient(err, "QueryManagerGraphProvider", "GetEdgeWeight", "query relationships")
+		return 0.0, errs.WrapTransient(err, "QueryManagerProvider", "GetEdgeWeight", "query relationships")
 	}
 
 	// Find edge to toID
@@ -137,18 +137,18 @@ func (p *QueryManagerGraphProvider) GetEdgeWeight(ctx context.Context, fromID, t
 	return 0.0, nil
 }
 
-// PredicateGraphProvider implements GraphProvider for entities matching a predicate
+// PredicateProvider implements Provider for entities matching a predicate
 // This is more practical for real-world use: cluster entities of specific types
-type PredicateGraphProvider struct {
+type PredicateProvider struct {
 	queryManager  RelationshipQuerier
 	predicate     string          // Entity type/predicate to cluster
 	validEntities map[string]bool // Cached set of valid entity IDs
 }
 
-// NewPredicateGraphProvider creates a GraphProvider for entities matching a predicate
+// NewPredicateProvider creates a Provider for entities matching a predicate
 // It caches the valid entity set at construction time for performance
-func NewPredicateGraphProvider(qm RelationshipQuerier, predicate string) *PredicateGraphProvider {
-	return &PredicateGraphProvider{
+func NewPredicateProvider(qm RelationshipQuerier, predicate string) *PredicateProvider {
+	return &PredicateProvider{
 		queryManager:  qm,
 		predicate:     predicate,
 		validEntities: nil, // Lazy initialization on first use
@@ -156,7 +156,7 @@ func NewPredicateGraphProvider(qm RelationshipQuerier, predicate string) *Predic
 }
 
 // GetAllEntityIDs returns all entities matching the predicate
-func (p *PredicateGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
+func (p *PredicateProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
 	// Initialize cache if needed
 	if err := p.ensureValidEntitiesCache(ctx); err != nil {
 		return nil, err
@@ -172,7 +172,7 @@ func (p *PredicateGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string,
 }
 
 // ensureValidEntitiesCache initializes the valid entities cache if not already done
-func (p *PredicateGraphProvider) ensureValidEntitiesCache(ctx context.Context) error {
+func (p *PredicateProvider) ensureValidEntitiesCache(ctx context.Context) error {
 	if p.validEntities != nil {
 		return nil // Already cached
 	}
@@ -180,7 +180,7 @@ func (p *PredicateGraphProvider) ensureValidEntitiesCache(ctx context.Context) e
 	// Query all entities matching predicate
 	entityIDs, err := p.queryManager.QueryByPredicate(ctx, p.predicate)
 	if err != nil {
-		return errs.WrapTransient(err, "PredicateGraphProvider", "ensureValidEntitiesCache", "query by predicate")
+		return errs.WrapTransient(err, "PredicateProvider", "ensureValidEntitiesCache", "query by predicate")
 	}
 
 	// Build cache map for O(1) lookup
@@ -193,9 +193,9 @@ func (p *PredicateGraphProvider) ensureValidEntitiesCache(ctx context.Context) e
 }
 
 // GetNeighbors returns entity IDs connected to the given entity
-func (p *PredicateGraphProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
+func (p *PredicateProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
 	if entityID == "" {
-		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "PredicateGraphProvider", "GetNeighbors", "entityID is empty")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "PredicateProvider", "GetNeighbors", "entityID is empty")
 	}
 
 	// Ensure cache is initialized
@@ -213,13 +213,13 @@ func (p *PredicateGraphProvider) GetNeighbors(ctx context.Context, entityID stri
 	case "both":
 		qmDirection = DirectionBoth
 	default:
-		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "PredicateGraphProvider", "GetNeighbors", "invalid direction")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "PredicateProvider", "GetNeighbors", "invalid direction")
 	}
 
 	// Query relationships
 	rels, err := p.queryManager.QueryRelationships(ctx, entityID, qmDirection)
 	if err != nil {
-		return nil, errs.WrapTransient(err, "PredicateGraphProvider", "GetNeighbors", "query relationships")
+		return nil, errs.WrapTransient(err, "PredicateProvider", "GetNeighbors", "query relationships")
 	}
 
 	// Extract neighbors that match predicate (using cached validEntities)
@@ -244,15 +244,15 @@ func (p *PredicateGraphProvider) GetNeighbors(ctx context.Context, entityID stri
 }
 
 // GetEdgeWeight returns the weight of an edge (unweighted: 1.0 or 0.0)
-func (p *PredicateGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error) {
+func (p *PredicateProvider) GetEdgeWeight(ctx context.Context, fromID, toID string) (float64, error) {
 	if fromID == "" || toID == "" {
-		return 0.0, errs.WrapInvalid(errs.ErrMissingConfig, "PredicateGraphProvider", "GetEdgeWeight", "entity IDs are empty")
+		return 0.0, errs.WrapInvalid(errs.ErrMissingConfig, "PredicateProvider", "GetEdgeWeight", "entity IDs are empty")
 	}
 
 	// Query outgoing relationships
 	rels, err := p.queryManager.QueryRelationships(ctx, fromID, DirectionOutgoing)
 	if err != nil {
-		return 0.0, errs.WrapTransient(err, "PredicateGraphProvider", "GetEdgeWeight", "query relationships")
+		return 0.0, errs.WrapTransient(err, "PredicateProvider", "GetEdgeWeight", "query relationships")
 	}
 
 	// Find edge to toID

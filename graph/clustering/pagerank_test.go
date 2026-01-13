@@ -6,18 +6,18 @@ import (
 	"testing"
 )
 
-// mockGraphProvider implements GraphProvider for testing
-type mockGraphProvider struct {
+// mockProvider implements Provider for testing
+type mockProvider struct {
 	entities map[string][]string // entityID -> neighbor IDs
 }
 
-func newMockGraphProvider() *mockGraphProvider {
-	return &mockGraphProvider{
+func newMockProvider() *mockProvider {
+	return &mockProvider{
 		entities: make(map[string][]string),
 	}
 }
 
-func (m *mockGraphProvider) addEdge(from, to string) {
+func (m *mockProvider) addEdge(from, to string) {
 	if m.entities[from] == nil {
 		m.entities[from] = []string{}
 	}
@@ -29,7 +29,7 @@ func (m *mockGraphProvider) addEdge(from, to string) {
 	}
 }
 
-func (m *mockGraphProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
+func (m *mockProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
 	ids := make([]string, 0, len(m.entities))
 	for id := range m.entities {
 		ids = append(ids, id)
@@ -37,7 +37,7 @@ func (m *mockGraphProvider) GetAllEntityIDs(_ context.Context) ([]string, error)
 	return ids, nil
 }
 
-func (m *mockGraphProvider) GetNeighbors(_ context.Context, entityID string, direction string) ([]string, error) {
+func (m *mockProvider) GetNeighbors(_ context.Context, entityID string, direction string) ([]string, error) {
 	if direction == "outgoing" || direction == "both" {
 		return m.entities[entityID], nil
 	}
@@ -54,7 +54,7 @@ func (m *mockGraphProvider) GetNeighbors(_ context.Context, entityID string, dir
 	return incoming, nil
 }
 
-func (m *mockGraphProvider) GetEdgeWeight(_ context.Context, fromID, toID string) (float64, error) {
+func (m *mockProvider) GetEdgeWeight(_ context.Context, fromID, toID string) (float64, error) {
 	neighbors := m.entities[fromID]
 	for _, n := range neighbors {
 		if n == toID {
@@ -68,7 +68,7 @@ func TestPageRank_SimpleGraph(t *testing.T) {
 	// Create simple graph:
 	// A -> B -> C
 	//      B -> D
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	provider.addEdge("A", "B")
 	provider.addEdge("B", "C")
 	provider.addEdge("B", "D")
@@ -107,7 +107,7 @@ func TestPageRank_StarGraph(t *testing.T) {
 	// B -> A <- C
 	//      ^
 	//      D
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	provider.addEdge("B", "A")
 	provider.addEdge("C", "A")
 	provider.addEdge("D", "A")
@@ -135,7 +135,7 @@ func TestPageRank_StarGraph(t *testing.T) {
 }
 
 func TestPageRank_EmptyGraph(t *testing.T) {
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 
 	ctx := context.Background()
 	config := DefaultPageRankConfig()
@@ -159,7 +159,7 @@ func TestPageRank_EmptyGraph(t *testing.T) {
 }
 
 func TestPageRank_SingleNode(t *testing.T) {
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	provider.addEdge("A", "A") // Self-loop
 
 	ctx := context.Background()
@@ -181,7 +181,7 @@ func TestPageRank_SingleNode(t *testing.T) {
 
 func TestPageRank_TopN(t *testing.T) {
 	// Create graph with multiple nodes
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	for i := 0; i < 10; i++ {
 		from := string(rune('A' + i))
 		to := string(rune('A' + (i+1)%10))
@@ -213,7 +213,7 @@ func TestPageRankForCommunity(t *testing.T) {
 	// Community 1: A -> B -> C
 	// Community 2: D -> E -> F
 	// Cross-link: C -> D
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	provider.addEdge("A", "B")
 	provider.addEdge("B", "C")
 	provider.addEdge("C", "D")
@@ -255,7 +255,7 @@ func TestPageRankForCommunity(t *testing.T) {
 func TestComputeRepresentativeEntities(t *testing.T) {
 	// Create hub-and-spoke graph
 	// A is hub, B,C,D,E are spokes
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	provider.addEdge("A", "B")
 	provider.addEdge("A", "C")
 	provider.addEdge("A", "D")
@@ -292,7 +292,7 @@ func TestComputeRepresentativeEntities(t *testing.T) {
 }
 
 func TestComputeRepresentativeEntities_SmallCommunity(t *testing.T) {
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	provider.addEdge("A", "B")
 
 	ctx := context.Background()
@@ -315,7 +315,7 @@ func TestComputeRepresentativeEntities_SmallCommunity(t *testing.T) {
 }
 
 func TestComputeRepresentativeEntities_EmptyCommunity(t *testing.T) {
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 
 	ctx := context.Background()
 	community := []string{}
@@ -336,7 +336,7 @@ func TestComputeRepresentativeEntities_EmptyCommunity(t *testing.T) {
 
 func TestPageRank_Convergence(t *testing.T) {
 	// Create chain graph
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	provider.addEdge("A", "B")
 	provider.addEdge("B", "C")
 	provider.addEdge("C", "D")
@@ -361,7 +361,7 @@ func TestPageRank_Convergence(t *testing.T) {
 
 func TestPageRank_DeterministicRanking(t *testing.T) {
 	// Same graph should produce same ranking every time
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	provider.addEdge("A", "B")
 	provider.addEdge("A", "C")
 	provider.addEdge("B", "C")
@@ -402,7 +402,7 @@ func TestPageRank_DeterministicRanking(t *testing.T) {
 }
 
 func BenchmarkPageRank_SmallGraph(b *testing.B) {
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 	for i := 0; i < 10; i++ {
 		from := string(rune('A' + i))
 		to := string(rune('A' + (i+1)%10))
@@ -422,7 +422,7 @@ func BenchmarkPageRank_SmallGraph(b *testing.B) {
 }
 
 func BenchmarkPageRank_LargeGraph(b *testing.B) {
-	provider := newMockGraphProvider()
+	provider := newMockProvider()
 
 	// Create larger graph (100 nodes, random connections)
 	nodes := make([]string, 100)

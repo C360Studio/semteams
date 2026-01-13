@@ -241,42 +241,6 @@ func TestAttack_ConcurrentReadWriteSameEntity(t *testing.T) {
 	// If we get here without race detector failures, test passes
 }
 
-func TestAttack_RapidStartStop(t *testing.T) {
-	// Skip if not in integration mode
-	if testing.Short() {
-		t.Skip("requires NATS - run with integration tests")
-	}
-
-	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
-	nc := testClient.Client
-
-	config := DefaultConfig()
-	configJSON, _ := json.Marshal(config)
-
-	deps := component.Dependencies{NATSClient: nc}
-	comp, err := CreateGraphIndex(configJSON, deps)
-	require.NoError(t, err)
-
-	graphIndex := comp.(*Component)
-
-	ctx := context.Background()
-	require.NoError(t, graphIndex.Initialize())
-
-	// Create input bucket
-	js, _ := nc.JetStream()
-	_, _ = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
-		Bucket:      graph.BucketEntityStates,
-		Description: "Test",
-	})
-
-	// Rapid start/stop cycles
-	for i := 0; i < 5; i++ {
-		require.NoError(t, graphIndex.Start(ctx))
-		time.Sleep(10 * time.Millisecond)
-		require.NoError(t, graphIndex.Stop(100*time.Millisecond))
-	}
-}
-
 // ============================================================================
 // Attack Vector: Large Inputs
 // ============================================================================

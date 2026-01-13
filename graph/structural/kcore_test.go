@@ -8,26 +8,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockGraphProvider implements clustering.GraphProvider for testing
-type mockGraphProvider struct {
+// mockProvider implements clustering.Provider for testing
+type mockProvider struct {
 	entities  []string
 	neighbors map[string][]string
 }
 
-func (m *mockGraphProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
+func (m *mockProvider) GetAllEntityIDs(_ context.Context) ([]string, error) {
 	return m.entities, nil
 }
 
-func (m *mockGraphProvider) GetNeighbors(_ context.Context, entityID string, _ string) ([]string, error) {
+func (m *mockProvider) GetNeighbors(_ context.Context, entityID string, _ string) ([]string, error) {
 	return m.neighbors[entityID], nil
 }
 
-func (m *mockGraphProvider) GetEdgeWeight(_ context.Context, _, _ string) (float64, error) {
+func (m *mockProvider) GetEdgeWeight(_ context.Context, _, _ string) (float64, error) {
 	return 1.0, nil
 }
 
 func TestKCoreComputer_EmptyGraph(t *testing.T) {
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities:  []string{},
 		neighbors: map[string][]string{},
 	}
@@ -43,7 +43,7 @@ func TestKCoreComputer_EmptyGraph(t *testing.T) {
 }
 
 func TestKCoreComputer_SingleNode(t *testing.T) {
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities:  []string{"A"},
 		neighbors: map[string][]string{"A": {}},
 	}
@@ -60,7 +60,7 @@ func TestKCoreComputer_SingleNode(t *testing.T) {
 func TestKCoreComputer_SimpleChain(t *testing.T) {
 	// Chain: A -- B -- C -- D
 	// All nodes should be core-1 (each has 1 or 2 neighbors)
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "D"},
 		neighbors: map[string][]string{
 			"A": {"B"},
@@ -88,7 +88,7 @@ func TestKCoreComputer_SimpleChain(t *testing.T) {
 func TestKCoreComputer_Triangle(t *testing.T) {
 	// Triangle: A -- B -- C -- A
 	// All nodes should be core-2 (each has exactly 2 neighbors in the clique)
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C"},
 		neighbors: map[string][]string{
 			"A": {"B", "C"},
@@ -112,7 +112,7 @@ func TestKCoreComputer_Triangle(t *testing.T) {
 func TestKCoreComputer_TriangleWithLeaf(t *testing.T) {
 	// Triangle with a leaf: D -- A -- B -- C -- A
 	// D should be core-1, A/B/C should be core-2
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "D"},
 		neighbors: map[string][]string{
 			"A": {"B", "C", "D"},
@@ -137,7 +137,7 @@ func TestKCoreComputer_TriangleWithLeaf(t *testing.T) {
 
 func TestKCoreComputer_DisconnectedComponents(t *testing.T) {
 	// Two disconnected triangles
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "X", "Y", "Z"},
 		neighbors: map[string][]string{
 			"A": {"B", "C"},
@@ -165,7 +165,7 @@ func TestKCoreComputer_DisconnectedComponents(t *testing.T) {
 func TestKCoreComputer_CompleteGraph(t *testing.T) {
 	// K4 complete graph: all nodes connected to all others
 	// Should be core-3 (each node has 3 neighbors)
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "D"},
 		neighbors: map[string][]string{
 			"A": {"B", "C", "D"},
@@ -189,7 +189,7 @@ func TestKCoreComputer_CompleteGraph(t *testing.T) {
 func TestKCoreComputer_HubAndSpoke(t *testing.T) {
 	// Hub-and-spoke: H connected to A, B, C, D (no inter-spoke connections)
 	// All should be core-1 (H has degree 4, but spokes only have degree 1)
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"H", "A", "B", "C", "D"},
 		neighbors: map[string][]string{
 			"H": {"A", "B", "C", "D"},
@@ -311,7 +311,7 @@ func TestKCoreComputer_BarbellGraph(t *testing.T) {
 	//
 	// Expected: Bridge endpoints should still be core-2 because they have
 	// 2 neighbors within their triangle. The bridge doesn't reduce their core.
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "X", "Y", "Z"},
 		neighbors: map[string][]string{
 			"A": {"B", "C"},
@@ -349,7 +349,7 @@ func TestKCoreComputer_BarbellWithWeakBridge(t *testing.T) {
 	// K-core definition: maximal subgraph where every vertex has >= k neighbors IN that subgraph
 	// M has degree 2, so it can be in 2-core (both neighbors D,W are also in 2-core)
 	// But M cannot be in 3-core (would need 3 neighbors all in 3-core)
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "D", "M", "W", "X", "Y", "Z"},
 		neighbors: map[string][]string{
 			// K4 clique 1
@@ -390,7 +390,7 @@ func TestKCoreComputer_ChainGraph(t *testing.T) {
 	// Linear chain: A-B-C-D-E
 	// All nodes should be core-1 (endpoints have degree 1, middle nodes have degree 2)
 	// But in k-core peeling, when we remove degree-1 nodes, neighbors' degrees drop
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "D", "E"},
 		neighbors: map[string][]string{
 			"A": {"B"},

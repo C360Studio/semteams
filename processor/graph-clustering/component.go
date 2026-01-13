@@ -289,8 +289,8 @@ type Component struct {
 	// Structural analysis (optional)
 	structuralBucket  jetstream.KeyValue
 	structuralStorage *structural.NATSStructuralIndexStorage
-	graphProvider     clustering.GraphProvider // shared with detector
-	previousKCore     *structural.KCoreIndex   // for demotion detection
+	graphProvider     clustering.Provider    // shared with detector
+	previousKCore     *structural.KCoreIndex // for demotion detection
 
 	// Anomaly detection (optional, requires structural)
 	anomalyBucket       jetstream.KeyValue
@@ -564,146 +564,16 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "setup query handlers")
 	}
 
-	// Get JetStream for bucket access
-	js, err := c.natsClient.JetStream()
-	if err != nil {
+	// Initialize lifecycle reporter and wait for dependencies
+	c.initLifecycleReporter(ctx)
+
+	if err := c.waitForDependencies(ctx); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "JetStream connection")
+		return err
 	}
-
-	// Initialize lifecycle reporter early for dependency waiting visibility
-	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      graph.BucketComponentStatus,
-		Description: "Component lifecycle status",
-	})
-	if err != nil {
-		c.logger.Warn("failed to create status bucket, lifecycle reporting disabled",
-			slog.Any("error", err))
-		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
-	} else {
-		c.lifecycleReporter = component.NewKVLifecycleReporter(statusBucket, "graph-clustering", c.logger)
-	}
-
-	// Configure resource watcher for bounded startup attempts
-	watcherCfg := resource.DefaultConfig()
-	watcherCfg.StartupAttempts = c.config.StartupAttempts
-	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
-	watcherCfg.Logger = c.logger
-
-	// Wait for ENTITY_STATES bucket (we are the READER)
-	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketEntityStates); err != nil {
-		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketEntityStates), slog.Any("error", err))
-	}
-
-	entityWatcher := resource.NewWatcher(
-		graph.BucketEntityStates,
-		func(checkCtx context.Context) error {
-			_, err := js.KeyValue(checkCtx, graph.BucketEntityStates)
-			return err
-		},
-		watcherCfg,
-	)
-
-	if !entityWatcher.WaitForStartup(ctx) {
-		cancel()
-		return errs.WrapTransient(
-			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
-			"Component", "Start", "dependency not available",
-		)
-	}
-	entityBucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
-	if err != nil {
-		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("get %s bucket", graph.BucketEntityStates))
-	}
-	c.entityBucket = entityBucket
-
-	// Wait for OUTGOING_INDEX bucket
-	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketOutgoingIndex); err != nil {
-		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketOutgoingIndex), slog.Any("error", err))
-	}
-
-	outgoingWatcher := resource.NewWatcher(
-		graph.BucketOutgoingIndex,
-		func(checkCtx context.Context) error {
-			_, err := js.KeyValue(checkCtx, graph.BucketOutgoingIndex)
-			return err
-		},
-		watcherCfg,
-	)
-
-	if !outgoingWatcher.WaitForStartup(ctx) {
-		cancel()
-		return errs.WrapTransient(
-			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketOutgoingIndex, c.config.StartupAttempts),
-			"Component", "Start", "dependency not available",
-		)
-	}
-	outgoingBucket, err := js.KeyValue(ctx, graph.BucketOutgoingIndex)
-	if err != nil {
-		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("get %s bucket", graph.BucketOutgoingIndex))
-	}
-	c.outgoingBucket = outgoingBucket
-
-	// Wait for INCOMING_INDEX bucket
-	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketIncomingIndex); err != nil {
-		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketIncomingIndex), slog.Any("error", err))
-	}
-
-	incomingWatcher := resource.NewWatcher(
-		graph.BucketIncomingIndex,
-		func(checkCtx context.Context) error {
-			_, err := js.KeyValue(checkCtx, graph.BucketIncomingIndex)
-			return err
-		},
-		watcherCfg,
-	)
-
-	if !incomingWatcher.WaitForStartup(ctx) {
-		cancel()
-		return errs.WrapTransient(
-			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketIncomingIndex, c.config.StartupAttempts),
-			"Component", "Start", "dependency not available",
-		)
-	}
-	incomingBucket, err := js.KeyValue(ctx, graph.BucketIncomingIndex)
-	if err != nil {
-		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("get %s bucket", graph.BucketIncomingIndex))
-	}
-	c.incomingBucket = incomingBucket
 
 	// Create graph provider and detector
-	provider := newKVGraphProvider(c.entityBucket, c.outgoingBucket, c.incomingBucket, c.logger)
-
-	// Optionally wrap with EntityID-based sibling edges for better clustering
-	entityIDProvider := clustering.NewEntityIDGraphProvider(
-		provider,
-		clustering.DefaultEntityIDProviderConfig(),
-		c.logger,
-	)
-
-	// Create entity querier for summarization and enhancement
-	entityQuerier := &kvEntityQuerier{entityBucket: c.entityBucket, logger: c.logger}
-
-	// Create statistical summarizer for immediate summaries
-	// This sets SummaryStatus="statistical" which triggers EnhancementWorker
-	summarizer := clustering.NewStatisticalSummarizer()
-
-	// Create LPA detector with summarizer and entity provider
-	detector := clustering.NewLPADetector(entityIDProvider, c.storage).
-		WithLogger(c.logger).
-		WithMaxIterations(c.config.MaxIterations).
-		WithLevels(3).
-		WithSummarizer(summarizer)
-
-	// Set entity provider for summarization (must be called on concrete type)
-	detector.SetEntityProvider(entityQuerier)
-	c.detector = detector
-
-	// Store graph provider for structural computation
-	c.graphProvider = entityIDProvider
+	c.initProviderAndDetector()
 
 	// Initialize structural analysis if enabled
 	if c.config.EnableStructural {
@@ -723,7 +593,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	// Start LLM enhancement worker if enabled
 	if c.config.EnableLLM {
-		if err := c.startEnhancementWorker(ctx, provider); err != nil {
+		if err := c.startEnhancementWorker(ctx, c.graphProvider); err != nil {
 			c.logger.Warn("failed to start enhancement worker, continuing without LLM",
 				slog.Any("error", err))
 		}
@@ -796,6 +666,110 @@ func (c *Component) Stop(timeout time.Duration) error {
 	}
 }
 
+// initLifecycleReporter initializes the lifecycle reporter for component status tracking.
+func (c *Component) initLifecycleReporter(ctx context.Context) {
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketComponentStatus,
+		Description: "Component lifecycle status",
+	})
+	if err != nil {
+		c.logger.Warn("failed to create status bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		return
+	}
+	c.lifecycleReporter = component.NewKVLifecycleReporter(statusBucket, "graph-clustering", c.logger)
+}
+
+// waitForDependencies waits for all required KV buckets and stores references.
+func (c *Component) waitForDependencies(ctx context.Context) error {
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return errs.Wrap(err, "Component", "waitForDependencies", "JetStream connection")
+	}
+
+	watcherCfg := resource.DefaultConfig()
+	watcherCfg.StartupAttempts = c.config.StartupAttempts
+	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
+	watcherCfg.Logger = c.logger
+
+	// Wait for ENTITY_STATES bucket
+	entityBucket, err := c.waitForBucket(ctx, js, graph.BucketEntityStates, watcherCfg)
+	if err != nil {
+		return err
+	}
+	c.entityBucket = entityBucket
+
+	// Wait for OUTGOING_INDEX bucket
+	outgoingBucket, err := c.waitForBucket(ctx, js, graph.BucketOutgoingIndex, watcherCfg)
+	if err != nil {
+		return err
+	}
+	c.outgoingBucket = outgoingBucket
+
+	// Wait for INCOMING_INDEX bucket
+	incomingBucket, err := c.waitForBucket(ctx, js, graph.BucketIncomingIndex, watcherCfg)
+	if err != nil {
+		return err
+	}
+	c.incomingBucket = incomingBucket
+
+	return nil
+}
+
+// waitForBucket waits for a KV bucket to become available and returns it.
+func (c *Component) waitForBucket(ctx context.Context, js jetstream.JetStream, bucketName string, cfg resource.Config) (jetstream.KeyValue, error) {
+	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+bucketName); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+bucketName), slog.Any("error", err))
+	}
+
+	watcher := resource.NewWatcher(
+		bucketName,
+		func(checkCtx context.Context) error {
+			_, err := js.KeyValue(checkCtx, bucketName)
+			return err
+		},
+		cfg,
+	)
+
+	if !watcher.WaitForStartup(ctx) {
+		return nil, errs.WrapTransient(
+			fmt.Errorf("bucket %s not available after %d attempts", bucketName, c.config.StartupAttempts),
+			"Component", "waitForBucket", "dependency not available",
+		)
+	}
+
+	bucket, err := js.KeyValue(ctx, bucketName)
+	if err != nil {
+		return nil, errs.Wrap(err, "Component", "waitForBucket", fmt.Sprintf("get %s bucket", bucketName))
+	}
+	return bucket, nil
+}
+
+// initProviderAndDetector creates the graph provider and community detector.
+func (c *Component) initProviderAndDetector() {
+	provider := newKVProvider(c.entityBucket, c.outgoingBucket, c.incomingBucket, c.logger)
+
+	entityIDProvider := clustering.NewEntityIDProvider(
+		provider,
+		clustering.DefaultEntityIDProviderConfig(),
+		c.logger,
+	)
+
+	entityQuerier := &kvEntityQuerier{entityBucket: c.entityBucket, logger: c.logger}
+	summarizer := clustering.NewStatisticalSummarizer()
+
+	detector := clustering.NewLPADetector(entityIDProvider, c.storage).
+		WithLogger(c.logger).
+		WithMaxIterations(c.config.MaxIterations).
+		WithLevels(3).
+		WithSummarizer(summarizer)
+
+	detector.SetEntityProvider(entityQuerier)
+	c.detector = detector
+	c.graphProvider = entityIDProvider
+}
+
 // reportStage safely reports a lifecycle stage change.
 // Errors are logged but do not interrupt processing.
 func (c *Component) reportStage(ctx context.Context, stage string) {
@@ -838,15 +812,60 @@ func (c *Component) runDetectionLoop(ctx context.Context) {
 	}
 }
 
+// handleDetectionError handles errors during detection, returning true if the error was handled as shutdown.
+func (c *Component) handleDetectionError(ctx context.Context, err error, operation string) bool {
+	if errors.Is(err, context.Canceled) {
+		c.logger.Info(operation + " interrupted by shutdown")
+		return true
+	}
+	c.logger.Error(operation+" failed", slog.Any("error", err))
+	atomic.AddInt64(&c.errors, 1)
+	if c.lifecycleReporter != nil {
+		if repErr := c.lifecycleReporter.ReportCycleError(ctx, err); repErr != nil {
+			c.logger.Debug("failed to report cycle error", slog.Any("error", repErr))
+		}
+	}
+	return false
+}
+
+// runStructuralAndAnomalyDetection runs structural computation and anomaly detection if enabled.
+func (c *Component) runStructuralAndAnomalyDetection(ctx context.Context) bool {
+	if !c.config.EnableStructural {
+		return true
+	}
+	if ctx.Err() != nil {
+		c.logger.Debug("skipping structural computation - shutdown in progress")
+		return false
+	}
+
+	c.reportStage(ctx, "structural_computation")
+	kcoreIndex, pivotIndex, err := c.runStructuralComputation(ctx)
+	if err != nil {
+		c.handleDetectionError(ctx, err, "structural computation")
+		return false
+	}
+
+	if c.config.EnableAnomalyDetection && kcoreIndex != nil {
+		if ctx.Err() != nil {
+			c.logger.Debug("skipping anomaly detection - shutdown in progress")
+			return false
+		}
+		c.reportStage(ctx, "anomaly_detection")
+		if err := c.runAnomalyDetection(ctx, kcoreIndex, pivotIndex); err != nil {
+			c.handleDetectionError(ctx, err, "anomaly detection")
+			return false
+		}
+	}
+	return true
+}
+
 // runCommunityDetection executes the community detection algorithm
 func (c *Component) runCommunityDetection(ctx context.Context) {
-	// Check if context is already cancelled (shutdown in progress)
 	if ctx.Err() != nil {
 		c.logger.Debug("skipping detection - shutdown in progress")
 		return
 	}
 
-	// Report cycle start
 	if c.lifecycleReporter != nil {
 		if err := c.lifecycleReporter.ReportCycleStart(ctx); err != nil {
 			c.logger.Debug("failed to report cycle start", slog.Any("error", err))
@@ -855,28 +874,14 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 
 	c.logger.Info("running community detection")
 	start := time.Now()
-
-	// Report community detection stage
 	c.reportStage(ctx, "community_detection")
 
 	communities, err := c.detector.DetectCommunities(ctx)
 	if err != nil {
-		// Context cancellation during shutdown is expected, not an error
-		if errors.Is(err, context.Canceled) {
-			c.logger.Info("detection interrupted by shutdown")
-			return
-		}
-		c.logger.Error("community detection failed", slog.Any("error", err))
-		atomic.AddInt64(&c.errors, 1)
-		if c.lifecycleReporter != nil {
-			if repErr := c.lifecycleReporter.ReportCycleError(ctx, err); repErr != nil {
-				c.logger.Debug("failed to report cycle error", slog.Any("error", repErr))
-			}
-		}
+		c.handleDetectionError(ctx, err, "detection")
 		return
 	}
 
-	// Count total communities across all levels
 	totalCommunities := 0
 	for _, levelCommunities := range communities {
 		totalCommunities += len(levelCommunities)
@@ -890,60 +895,10 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 		slog.Int("levels", len(communities)),
 		slog.Duration("duration", time.Since(start)))
 
-	// Run structural computation if enabled (after community detection)
-	if c.config.EnableStructural {
-		if ctx.Err() != nil {
-			c.logger.Debug("skipping structural computation - shutdown in progress")
-			return
-		}
-
-		// Report structural computation stage
-		c.reportStage(ctx, "structural_computation")
-
-		kcoreIndex, pivotIndex, err := c.runStructuralComputation(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				c.logger.Info("structural computation interrupted by shutdown")
-				return
-			}
-			c.logger.Error("structural computation failed", slog.Any("error", err))
-			atomic.AddInt64(&c.errors, 1)
-			if c.lifecycleReporter != nil {
-				if repErr := c.lifecycleReporter.ReportCycleError(ctx, err); repErr != nil {
-					c.logger.Debug("failed to report cycle error", slog.Any("error", repErr))
-				}
-			}
-			return // Cannot continue to anomaly detection without structural indices
-		}
-
-		// Run anomaly detection if enabled (after structural computation)
-		if c.config.EnableAnomalyDetection && kcoreIndex != nil {
-			if ctx.Err() != nil {
-				c.logger.Debug("skipping anomaly detection - shutdown in progress")
-				return
-			}
-
-			// Report anomaly detection stage
-			c.reportStage(ctx, "anomaly_detection")
-
-			if err := c.runAnomalyDetection(ctx, kcoreIndex, pivotIndex); err != nil {
-				if errors.Is(err, context.Canceled) {
-					c.logger.Info("anomaly detection interrupted by shutdown")
-					return
-				}
-				c.logger.Error("anomaly detection failed", slog.Any("error", err))
-				atomic.AddInt64(&c.errors, 1)
-				if c.lifecycleReporter != nil {
-					if repErr := c.lifecycleReporter.ReportCycleError(ctx, err); repErr != nil {
-						c.logger.Debug("failed to report cycle error", slog.Any("error", repErr))
-					}
-				}
-				return
-			}
-		}
+	if !c.runStructuralAndAnomalyDetection(ctx) {
+		return
 	}
 
-	// Report successful cycle completion and return to idle
 	if c.lifecycleReporter != nil {
 		if err := c.lifecycleReporter.ReportCycleComplete(ctx); err != nil {
 			c.logger.Debug("failed to report cycle complete", slog.Any("error", err))
@@ -955,22 +910,22 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 // KV-based Graph Provider for Community Detection
 // ============================================================================
 
-// kvGraphProvider implements clustering.GraphProvider using NATS KV buckets
-type kvGraphProvider struct {
+// kvProvider implements clustering.Provider using NATS KV buckets
+type kvProvider struct {
 	entityBucket   jetstream.KeyValue
 	outgoingBucket jetstream.KeyValue
 	incomingBucket jetstream.KeyValue
 	logger         *slog.Logger
 }
 
-// newKVGraphProvider creates a graph provider that reads from KV buckets
-func newKVGraphProvider(
+// newKVProvider creates a graph provider that reads from KV buckets
+func newKVProvider(
 	entityBucket jetstream.KeyValue,
 	outgoingBucket jetstream.KeyValue,
 	incomingBucket jetstream.KeyValue,
 	logger *slog.Logger,
-) *kvGraphProvider {
-	return &kvGraphProvider{
+) *kvProvider {
+	return &kvProvider{
 		entityBucket:   entityBucket,
 		outgoingBucket: outgoingBucket,
 		incomingBucket: incomingBucket,
@@ -979,22 +934,22 @@ func newKVGraphProvider(
 }
 
 // GetAllEntityIDs returns all entity IDs from the ENTITY_STATES bucket
-func (p *kvGraphProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
+func (p *kvProvider) GetAllEntityIDs(ctx context.Context) ([]string, error) {
 	keys, err := p.entityBucket.Keys(ctx)
 	if err != nil {
 		// Empty bucket returns an error in some cases
 		if err == jetstream.ErrNoKeysFound {
 			return nil, nil
 		}
-		return nil, errs.WrapTransient(err, "kvGraphProvider", "GetAllEntityIDs", "list keys")
+		return nil, errs.WrapTransient(err, "kvProvider", "GetAllEntityIDs", "list keys")
 	}
 	return keys, nil
 }
 
 // GetNeighbors returns entity IDs connected to the given entity
-func (p *kvGraphProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
+func (p *kvProvider) GetNeighbors(ctx context.Context, entityID string, direction string) ([]string, error) {
 	if entityID == "" {
-		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "kvGraphProvider", "GetNeighbors", "entityID is empty")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "kvProvider", "GetNeighbors", "entityID is empty")
 	}
 
 	neighbors := make(map[string]bool)
@@ -1036,7 +991,7 @@ type relationshipEntry struct {
 }
 
 // getNeighborsFromBucket reads neighbor entity IDs from a relationship index bucket
-func (p *kvGraphProvider) getNeighborsFromBucket(ctx context.Context, bucket jetstream.KeyValue, entityID string) ([]string, error) {
+func (p *kvProvider) getNeighborsFromBucket(ctx context.Context, bucket jetstream.KeyValue, entityID string) ([]string, error) {
 	entry, err := bucket.Get(ctx, entityID)
 	if err != nil {
 		if err == jetstream.ErrKeyNotFound {
@@ -1064,7 +1019,7 @@ func (p *kvGraphProvider) getNeighborsFromBucket(ctx context.Context, bucket jet
 }
 
 // GetEdgeWeight returns the weight of the edge between two entities
-func (p *kvGraphProvider) GetEdgeWeight(_ context.Context, _, _ string) (float64, error) {
+func (p *kvProvider) GetEdgeWeight(_ context.Context, _, _ string) (float64, error) {
 	// For now, return 1.0 for all edges (equal weight)
 	// Could be enhanced to read confidence from the relationship data
 	return 1.0, nil
@@ -1075,7 +1030,7 @@ func (p *kvGraphProvider) GetEdgeWeight(_ context.Context, _, _ string) (float64
 // ============================================================================
 
 // startEnhancementWorker initializes and starts the LLM enhancement worker
-func (c *Component) startEnhancementWorker(ctx context.Context, provider clustering.GraphProvider) error {
+func (c *Component) startEnhancementWorker(ctx context.Context, provider clustering.Provider) error {
 	// Use default model if not specified (LLM service provides its own default)
 	model := c.config.LLMModel
 	if model == "" {
@@ -1110,7 +1065,7 @@ func (c *Component) startEnhancementWorker(ctx context.Context, provider cluster
 	worker, err := clustering.NewEnhancementWorker(&clustering.EnhancementWorkerConfig{
 		LLMSummarizer:   llmSummarizer,
 		Storage:         c.storage,
-		GraphProvider:   provider,
+		Provider:        provider,
 		Querier:         querier,
 		CommunityBucket: c.communityBucket,
 		Logger:          c.logger,

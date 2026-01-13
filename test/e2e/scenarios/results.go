@@ -227,13 +227,13 @@ type AnomalyDetail struct {
 
 // AnomalyGroundTruthResults contains the results of ground truth validation.
 type AnomalyGroundTruthResults struct {
-	ExpectedTotal      int                    `json:"expected_total"`
-	ExpectedFound      int                    `json:"expected_found"`
-	FalsePositiveTotal int                    `json:"false_positive_total"`
-	DetectedTotal      int                    `json:"detected_total"`
-	FalsePositiveRate  float64                `json:"false_positive_rate"`
-	Passed             bool                   `json:"passed"`
-	Violations         []map[string]any       `json:"violations,omitempty"`
+	ExpectedTotal      int              `json:"expected_total"`
+	ExpectedFound      int              `json:"expected_found"`
+	FalsePositiveTotal int              `json:"false_positive_total"`
+	DetectedTotal      int              `json:"detected_total"`
+	FalsePositiveRate  float64          `json:"false_positive_rate"`
+	Passed             bool             `json:"passed"`
+	Violations         []map[string]any `json:"violations,omitempty"`
 }
 
 // VirtualEdgeResults contains virtual edge creation metrics from semantic inference.
@@ -310,6 +310,113 @@ type HierarchyResults struct {
 	ContainerTypes map[string]int `json:"container_types,omitempty"`
 }
 
+// buildCoreResults populates the core result fields (variant, entities, indexes, search, rules).
+func buildCoreResults(tr *TieredResults, result *Result, searchStats *search.Stats) {
+	tr.Variant = VariantResults{
+		Name:              getStringMetric(result, "variant"),
+		EmbeddingProvider: getStringMetric(result, "embedding_provider"),
+		SemembedAvailable: getBoolDetail(result, "semembed_available"),
+	}
+	tr.Entities = EntityResults{
+		ExpectedCount:   getIntMetric(result, "total_expected_entities"),
+		ActualCount:     getIntMetric(result, "entity_count"),
+		MissingCount:    getIntMetric(result, "entities_missing"),
+		DataLossPercent: getFloatMetric(result, "data_loss_percent"),
+		SampledCount:    getIntMetric(result, "entities_sampled"),
+		ValidatedCount:  getIntMetric(result, "entities_validated"),
+		RetrievedCount:  getIntMetric(result, "entities_retrieved"),
+	}
+	tr.Indexes = IndexResults{
+		ExpectedIndexes:  getIntMetric(result, "indexes_total"),
+		PopulatedIndexes: getIntMetric(result, "indexes_populated"),
+	}
+	if searchStats != nil {
+		tr.Search = SearchResults{
+			Stats:                searchStats,
+			WeakResultsThreshold: 0.5,
+			IsWeak:               searchStats.OverallAvgScore > 0 && searchStats.OverallAvgScore < 0.5,
+		}
+	}
+	tr.Rules = RuleResults{
+		EvaluatedCount:   getIntMetric(result, "rules_evaluated_count"),
+		TriggeredCount:   getIntMetric(result, "rules_triggered_count"),
+		ValidationPassed: getIntMetric(result, "rules_validation_passed") == 1,
+		OnEnterFired:     getIntMetric(result, "on_enter_fired"),
+		OnExitFired:      getIntMetric(result, "on_exit_fired"),
+	}
+}
+
+// buildCommunityResults populates community detection results.
+func buildCommunityResults(tr *TieredResults, result *Result) {
+	if getIntMetric(result, "communities_total") > 0 {
+		tr.Communities = &CommunityResults{
+			TotalCommunities:  getIntMetric(result, "communities_total"),
+			NonSingletonCount: getIntMetric(result, "communities_non_singleton"),
+			LargestSize:       getIntMetric(result, "communities_largest_size"),
+			AverageSize:       float64(getIntMetric(result, "communities_avg_size")),
+			WithKeywords:      getIntMetric(result, "communities_with_keywords"),
+		}
+	}
+}
+
+// buildAnomalyResults populates anomaly detection results.
+func buildAnomalyResults(tr *TieredResults, result *Result) {
+	if getIntMetric(result, "anomalies_total") == 0 && getIntMetric(result, "anomalies_semantic_gap") == 0 &&
+		getIntMetric(result, "virtual_edges_total") == 0 {
+		return
+	}
+
+	tr.Anomalies = &AnomalyResults{
+		Total:         getIntMetric(result, "anomalies_total"),
+		SemanticGap:   getIntMetric(result, "anomalies_semantic_gap"),
+		CoreIsolation: getIntMetric(result, "anomalies_core_isolation"),
+		CoreDemotion:  getIntMetric(result, "anomalies_core_demotion"),
+		Transitivity:  getIntMetric(result, "anomalies_transitivity"),
+		ByStatus: AnomalyStatusCounts{
+			Pending:   getIntMetric(result, "anomalies_pending"),
+			Confirmed: getIntMetric(result, "anomalies_confirmed"),
+			Dismissed: getIntMetric(result, "anomalies_dismissed"),
+		},
+	}
+
+	virtualTotal := getIntMetric(result, "virtual_edges_total")
+	autoApplied := getIntMetric(result, "anomalies_auto_applied")
+	if virtualTotal > 0 || autoApplied > 0 {
+		tr.Anomalies.VirtualEdges = &VirtualEdgeResults{
+			Total:       virtualTotal,
+			High:        getIntMetric(result, "virtual_edges_high"),
+			Medium:      getIntMetric(result, "virtual_edges_medium"),
+			Related:     getIntMetric(result, "virtual_edges_related"),
+			AutoApplied: autoApplied,
+		}
+	}
+
+	if anomalyList, ok := result.Details["anomaly_list"].([]map[string]any); ok {
+		for _, a := range anomalyList {
+			detail := AnomalyDetail{
+				ID: getMapString(a, "id"), Type: getMapString(a, "type"),
+				EntityA: getMapString(a, "entity_a"), EntityB: getMapString(a, "entity_b"),
+				Status: getMapString(a, "status"),
+			}
+			if conf, ok := a["confidence"].(float64); ok {
+				detail.Confidence = conf
+			}
+			tr.Anomalies.List = append(tr.Anomalies.List, detail)
+		}
+	}
+
+	if gt, ok := result.Details["anomaly_ground_truth"].(map[string]any); ok {
+		tr.Anomalies.GroundTruth = &AnomalyGroundTruthResults{
+			ExpectedTotal: getMapInt(gt, "expected_total"), ExpectedFound: getMapInt(gt, "expected_found"),
+			FalsePositiveTotal: getMapInt(gt, "false_positive_total"), DetectedTotal: getMapInt(gt, "detected_total"),
+			FalsePositiveRate: getMapFloat(gt, "false_positive_rate"), Passed: getMapBool(gt, "passed"),
+		}
+		if violations, ok := gt["violations"].([]map[string]any); ok {
+			tr.Anomalies.GroundTruth.Violations = violations
+		}
+	}
+}
+
 // BuildTieredResults creates a TieredResults from legacy Result data and search stats.
 // This provides the bridge between the old flat format and new structured format.
 func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResults {
@@ -330,153 +437,49 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 		},
 	}
 
-	// Variant info
-	tr.Variant = VariantResults{
-		Name:              getStringMetric(result, "variant"),
-		EmbeddingProvider: getStringMetric(result, "embedding_provider"),
-		SemembedAvailable: getBoolDetail(result, "semembed_available"),
-	}
+	buildCoreResults(tr, result, searchStats)
+	buildCommunityResults(tr, result)
+	buildAnomalyResults(tr, result)
+	buildStructuralIndexResults(tr, result)
+	buildPathRAGResultsForTier(tr, result)
+	buildGraphRAGResultsForTier(tr, result)
+	buildComponentAndOutputResults(tr, result)
+	buildEmbeddingMetrics(tr, result)
+	buildHierarchyResults(tr, result)
+	extractStageDurations(tr, result)
 
-	// Entity results
-	tr.Entities = EntityResults{
-		ExpectedCount:   getIntMetric(result, "total_expected_entities"),
-		ActualCount:     getIntMetric(result, "entity_count"),
-		MissingCount:    getIntMetric(result, "entities_missing"),
-		DataLossPercent: getFloatMetric(result, "data_loss_percent"),
-		SampledCount:    getIntMetric(result, "entities_sampled"),
-		ValidatedCount:  getIntMetric(result, "entities_validated"),
-		RetrievedCount:  getIntMetric(result, "entities_retrieved"),
-	}
+	return tr
+}
 
-	// Index results
-	tr.Indexes = IndexResults{
-		ExpectedIndexes:  getIntMetric(result, "indexes_total"),
-		PopulatedIndexes: getIntMetric(result, "indexes_populated"),
+// buildStructuralIndexResults populates structural index results.
+func buildStructuralIndexResults(tr *TieredResults, result *Result) {
+	structIdx, ok := result.Details["structural_indexes"].(*stages.StructuralIndexResult)
+	if !ok || structIdx == nil {
+		return
 	}
-
-	// Search results
-	if searchStats != nil {
-		tr.Search = SearchResults{
-			Stats:                searchStats,
-			WeakResultsThreshold: 0.5,
-			IsWeak:               searchStats.OverallAvgScore > 0 && searchStats.OverallAvgScore < 0.5,
+	tr.StructuralIndexes = &StructuralIndexResults{}
+	if structIdx.KCore != nil {
+		tr.StructuralIndexes.KCore = &KCoreResults{
+			MaxCore: structIdx.KCore.MaxCore, EntityCount: structIdx.KCore.EntityCount,
+			CoreBucketCounts: structIdx.KCore.CoreBuckets, Verified: structIdx.KCoreValid,
 		}
 	}
-
-	// Rule results
-	tr.Rules = RuleResults{
-		EvaluatedCount:   getIntMetric(result, "rules_evaluated_count"),
-		TriggeredCount:   getIntMetric(result, "rules_triggered_count"),
-		ValidationPassed: getIntMetric(result, "rules_validation_passed") == 1,
-		OnEnterFired:     getIntMetric(result, "on_enter_fired"),
-		OnExitFired:      getIntMetric(result, "on_exit_fired"),
-	}
-
-	// Community results (only for statistical/semantic)
-	if getIntMetric(result, "communities_total") > 0 {
-		tr.Communities = &CommunityResults{
-			TotalCommunities:  getIntMetric(result, "communities_total"),
-			NonSingletonCount: getIntMetric(result, "communities_non_singleton"),
-			LargestSize:       getIntMetric(result, "communities_largest_size"),
-			AverageSize:       float64(getIntMetric(result, "communities_avg_size")),
-			WithKeywords:      getIntMetric(result, "communities_with_keywords"),
+	if structIdx.Pivot != nil {
+		tr.StructuralIndexes.Pivot = &PivotResults{
+			PivotCount: len(structIdx.Pivot.Pivots), EntityCount: structIdx.Pivot.EntityCount,
+			TriangleInequalityValid: true, Verified: structIdx.PivotValid,
 		}
 	}
+}
 
-	// Anomaly detection results (semantic only - uses k-core and pivot indexes)
-	if getIntMetric(result, "anomalies_total") > 0 || getIntMetric(result, "anomalies_semantic_gap") > 0 ||
-		getIntMetric(result, "virtual_edges_total") > 0 {
-		tr.Anomalies = &AnomalyResults{
-			Total:         getIntMetric(result, "anomalies_total"),
-			SemanticGap:   getIntMetric(result, "anomalies_semantic_gap"),
-			CoreIsolation: getIntMetric(result, "anomalies_core_isolation"),
-			CoreDemotion:  getIntMetric(result, "anomalies_core_demotion"),
-			Transitivity:  getIntMetric(result, "anomalies_transitivity"),
-			ByStatus: AnomalyStatusCounts{
-				Pending:   getIntMetric(result, "anomalies_pending"),
-				Confirmed: getIntMetric(result, "anomalies_confirmed"),
-				Dismissed: getIntMetric(result, "anomalies_dismissed"),
-			},
-		}
-
-		// Add virtual edge metrics if any were recorded
-		virtualTotal := getIntMetric(result, "virtual_edges_total")
-		autoApplied := getIntMetric(result, "anomalies_auto_applied")
-		if virtualTotal > 0 || autoApplied > 0 {
-			tr.Anomalies.VirtualEdges = &VirtualEdgeResults{
-				Total:       virtualTotal,
-				High:        getIntMetric(result, "virtual_edges_high"),
-				Medium:      getIntMetric(result, "virtual_edges_medium"),
-				Related:     getIntMetric(result, "virtual_edges_related"),
-				AutoApplied: autoApplied,
-			}
-		}
-
-		// Add actual anomaly list for auditability
-		if anomalyList, ok := result.Details["anomaly_list"].([]map[string]any); ok {
-			for _, a := range anomalyList {
-				detail := AnomalyDetail{
-					ID:      getMapString(a, "id"),
-					Type:    getMapString(a, "type"),
-					EntityA: getMapString(a, "entity_a"),
-					EntityB: getMapString(a, "entity_b"),
-					Status:  getMapString(a, "status"),
-				}
-				if conf, ok := a["confidence"].(float64); ok {
-					detail.Confidence = conf
-				}
-				tr.Anomalies.List = append(tr.Anomalies.List, detail)
-			}
-		}
-
-		// Add ground truth validation results
-		if gt, ok := result.Details["anomaly_ground_truth"].(map[string]any); ok {
-			tr.Anomalies.GroundTruth = &AnomalyGroundTruthResults{
-				ExpectedTotal:      getMapInt(gt, "expected_total"),
-				ExpectedFound:      getMapInt(gt, "expected_found"),
-				FalsePositiveTotal: getMapInt(gt, "false_positive_total"),
-				DetectedTotal:      getMapInt(gt, "detected_total"),
-				FalsePositiveRate:  getMapFloat(gt, "false_positive_rate"),
-				Passed:             getMapBool(gt, "passed"),
-			}
-			if violations, ok := gt["violations"].([]map[string]any); ok {
-				tr.Anomalies.GroundTruth.Violations = violations
-			}
-		}
-	}
-
-	// Structural index results (Tier 0 - runs on all tiers now)
-	if structIdx, ok := result.Details["structural_indexes"].(*stages.StructuralIndexResult); ok && structIdx != nil {
-		tr.StructuralIndexes = &StructuralIndexResults{}
-		if structIdx.KCore != nil {
-			tr.StructuralIndexes.KCore = &KCoreResults{
-				MaxCore:          structIdx.KCore.MaxCore,
-				EntityCount:      structIdx.KCore.EntityCount,
-				CoreBucketCounts: structIdx.KCore.CoreBuckets,
-				Verified:         structIdx.KCoreValid,
-			}
-		}
-		if structIdx.Pivot != nil {
-			tr.StructuralIndexes.Pivot = &PivotResults{
-				PivotCount:              len(structIdx.Pivot.Pivots),
-				EntityCount:             structIdx.Pivot.EntityCount,
-				TriangleInequalityValid: true, // Validated in verifier
-				Verified:                structIdx.PivotValid,
-			}
-		}
-	}
-
-	// PathRAG sensor test results (Tier 0 - runs on all tiers)
+// buildPathRAGResultsForTier populates PathRAG test results.
+func buildPathRAGResultsForTier(tr *TieredResults, result *Result) {
 	if pathragTest, ok := result.Details["pathrag_sensor_test"].(map[string]any); ok {
 		tr.PathRAGSensor = extractPathRAGResults(pathragTest)
 	}
-
-	// PathRAG document test results (Tier 0 - runs on all tiers)
 	if pathragTest, ok := result.Details["pathrag_document_test"].(map[string]any); ok {
 		tr.PathRAGDocument = extractPathRAGResults(pathragTest)
 	}
-
-	// PathRAG boundary test results - attach to sensor test
 	if boundaryTest, ok := result.Details["pathrag_boundary_test"].(map[string]any); ok {
 		if tr.PathRAGSensor == nil {
 			tr.PathRAGSensor = &PathRAGResults{}
@@ -487,19 +490,18 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 			RespectedLimit:   getMapBool(boundaryTest, "respected_limit"),
 		}
 	}
+}
 
-	// GraphRAG results (Tier 2 - semantic only)
+// buildGraphRAGResultsForTier populates GraphRAG results.
+func buildGraphRAGResultsForTier(tr *TieredResults, result *Result) {
 	if graphragLocal, ok := result.Details["graphrag_local"].(map[string]any); ok {
 		if tr.GraphRAG == nil {
 			tr.GraphRAG = &GraphRAGResults{}
 		}
 		tr.GraphRAG.LocalQuery = &GraphRAGQueryResult{
-			Query:           getMapString(graphragLocal, "query"),
-			Response:        getMapString(graphragLocal, "response"),
-			EntitiesUsed:    getMapInt(graphragLocal, "entities_used"),
-			CommunitiesUsed: getMapInt(graphragLocal, "communities_used"),
-			LatencyMs:       int64(getMapInt(graphragLocal, "latency_ms")),
-			Success:         getMapBool(graphragLocal, "success"),
+			Query: getMapString(graphragLocal, "query"), Response: getMapString(graphragLocal, "response"),
+			EntitiesUsed: getMapInt(graphragLocal, "entities_used"), CommunitiesUsed: getMapInt(graphragLocal, "communities_used"),
+			LatencyMs: int64(getMapInt(graphragLocal, "latency_ms")), Success: getMapBool(graphragLocal, "success"),
 		}
 	}
 	if graphragGlobal, ok := result.Details["graphrag_global"].(map[string]any); ok {
@@ -507,65 +509,62 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 			tr.GraphRAG = &GraphRAGResults{}
 		}
 		tr.GraphRAG.GlobalQuery = &GraphRAGQueryResult{
-			Query:           getMapString(graphragGlobal, "query"),
-			Response:        getMapString(graphragGlobal, "response"),
-			EntitiesUsed:    getMapInt(graphragGlobal, "entities_used"),
-			CommunitiesUsed: getMapInt(graphragGlobal, "communities_used"),
-			LatencyMs:       int64(getMapInt(graphragGlobal, "latency_ms")),
-			Success:         getMapBool(graphragGlobal, "success"),
+			Query: getMapString(graphragGlobal, "query"), Response: getMapString(graphragGlobal, "response"),
+			EntitiesUsed: getMapInt(graphragGlobal, "entities_used"), CommunitiesUsed: getMapInt(graphragGlobal, "communities_used"),
+			LatencyMs: int64(getMapInt(graphragGlobal, "latency_ms")), Success: getMapBool(graphragGlobal, "success"),
 		}
 	}
+}
 
-	// Component results
+// buildComponentAndOutputResults populates component and output results.
+func buildComponentAndOutputResults(tr *TieredResults, result *Result) {
 	tr.Components = ComponentResults{
 		ExpectedCount: getIntMetric(result, "component_count"),
-		FoundCount:    getIntMetric(result, "component_count"), // Same if all found
+		FoundCount:    getIntMetric(result, "component_count"),
 	}
-
-	// Output results
 	tr.Outputs = OutputResults{
 		ExpectedCount: getIntMetric(result, "outputs_expected"),
 		FoundCount:    getIntMetric(result, "outputs_found"),
 	}
+}
 
-	// Embedding queue metrics (Phase 4 - statistical/semantic only)
+// buildEmbeddingMetrics populates embedding queue metrics.
+func buildEmbeddingMetrics(tr *TieredResults, result *Result) {
 	queuedTotal := getInt64Metric(result, "embedding_queued_total")
 	generatedTotal := getInt64Metric(result, "embedding_generated_total")
+	if queuedTotal == 0 && generatedTotal == 0 {
+		return
+	}
 	dedupHits := getInt64Metric(result, "embedding_dedup_hits")
 	failedTotal := getInt64Metric(result, "embedding_failed_total")
 	pendingCount := getInt64Metric(result, "embedding_pending_count")
-
-	if queuedTotal > 0 || generatedTotal > 0 {
-		dedupRate := 0.0
-		if queuedTotal > 0 {
-			dedupRate = float64(dedupHits) / float64(queuedTotal)
-		}
-		tr.Embeddings = &EmbeddingMetrics{
-			QueuedTotal:    queuedTotal,
-			GeneratedTotal: generatedTotal,
-			DedupHits:      dedupHits,
-			FailedTotal:    failedTotal,
-			PendingCount:   pendingCount,
-			DedupRate:      dedupRate,
-			QueueDrained:   pendingCount == 0,
-			NoFailures:     failedTotal == 0,
-		}
+	dedupRate := 0.0
+	if queuedTotal > 0 {
+		dedupRate = float64(dedupHits) / float64(queuedTotal)
 	}
+	tr.Embeddings = &EmbeddingMetrics{
+		QueuedTotal: queuedTotal, GeneratedTotal: generatedTotal, DedupHits: dedupHits,
+		FailedTotal: failedTotal, PendingCount: pendingCount, DedupRate: dedupRate,
+		QueueDrained: pendingCount == 0, NoFailures: failedTotal == 0,
+	}
+}
 
-	// Hierarchy inference results (Phase 4 - statistical/semantic only)
+// buildHierarchyResults populates hierarchy inference results.
+func buildHierarchyResults(tr *TieredResults, result *Result) {
 	containerCount := getIntMetric(result, "hierarchy_container_count")
 	sourceEntityCount := getIntMetric(result, "hierarchy_source_entity_count")
-	if containerCount > 0 || sourceEntityCount > 0 {
-		expectedMinContainers := getIntMetric(result, "hierarchy_expected_min_containers")
-		tr.Hierarchy = &HierarchyResults{
-			ContainerCount:        containerCount,
-			SourceEntityCount:     sourceEntityCount,
-			ExpectedMinContainers: expectedMinContainers,
-			InferenceWorking:      containerCount >= expectedMinContainers,
-		}
+	if containerCount == 0 && sourceEntityCount == 0 {
+		return
 	}
+	expectedMinContainers := getIntMetric(result, "hierarchy_expected_min_containers")
+	tr.Hierarchy = &HierarchyResults{
+		ContainerCount: containerCount, SourceEntityCount: sourceEntityCount,
+		ExpectedMinContainers: expectedMinContainers, InferenceWorking: containerCount >= expectedMinContainers,
+	}
+}
 
-	// Extract stage durations from metrics
+// extractStageDurations extracts stage durations from metrics.
+func extractStageDurations(tr *TieredResults, result *Result) {
 	for key, val := range result.Metrics {
 		if len(key) > 12 && key[len(key)-12:] == "_duration_ms" {
 			stageName := key[:len(key)-12]
@@ -576,8 +575,6 @@ func BuildTieredResults(result *Result, searchStats *search.Stats) *TieredResult
 			}
 		}
 	}
-
-	return tr
 }
 
 // Helper functions to safely extract values from Result maps

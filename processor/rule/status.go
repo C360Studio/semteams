@@ -2,8 +2,8 @@ package rule
 
 import "time"
 
-// RuleStatus represents the current status of rule evaluation for debug observability
-type RuleStatus struct {
+// Status represents the current status of rule evaluation for debug observability
+type Status struct {
 	DebounceDelayMs    int       `json:"debounce_delay_ms"`
 	PendingEvaluations int       `json:"pending_evaluations"`
 	TotalEvaluations   int       `json:"total_evaluations"`

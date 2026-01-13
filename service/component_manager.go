@@ -261,97 +261,22 @@ func (cm *ComponentManager) Start(ctx context.Context) error {
 	cm.shutdown = make(chan struct{})
 	cm.done = make(chan struct{})
 
-	// Use provided context
-	workingCtx := ctx
-
 	// Start watching for config updates if channel is available
 	if cm.configUpdates != nil {
 		cm.wg.Add(1)
 		go func() {
 			defer cm.wg.Done()
-			cm.watchConfigUpdates(workingCtx)
+			cm.watchConfigUpdates(ctx)
 		}()
 	}
 
 	cm.startOrder = make([]string, 0)
 
-	// Initialize NATS-backed capability discovery if NATS client is available
-	if cm.natsClient != nil {
-		nodeID := fmt.Sprintf("%s.%s", cm.platform.Org, cm.platform.Platform)
-		if nodeID == "." {
-			nodeID = "default-node"
-		}
-		if err := cm.registry.InitNATS(workingCtx, cm.natsClient, nodeID); err != nil {
-			cm.logger.Warn("Failed to initialize capability discovery, continuing without it",
-				"error", err)
-		} else {
-			cm.logger.Info("Capability discovery initialized", "node_id", nodeID)
-			// Start heartbeat for TTL renewal (30 second interval)
-			cm.registry.StartHeartbeat(workingCtx, 30*time.Second)
-		}
-	}
+	// Initialize NATS-backed capability discovery
+	cm.initCapabilityDiscovery(ctx)
 
-	// Start each initialized component with proper thread safety
-	cm.mu.Lock()
-	// Create a copy of components to start to avoid holding the lock during goroutine operations
-	componentsToStart := make([]struct {
-		name      string
-		mc        *component.ManagedComponent
-		lifecycle component.LifecycleComponent
-	}, 0, len(cm.components))
-
-	for name, mc := range cm.components {
-		if lifecycle, ok := component.AsLifecycleComponent(mc.Component); ok {
-			// Create child context for this component
-			childCtx, cancel := context.WithCancel(workingCtx)
-			mc.Context = childCtx
-			mc.Cancel = cancel
-
-			componentsToStart = append(componentsToStart, struct {
-				name      string
-				mc        *component.ManagedComponent
-				lifecycle component.LifecycleComponent
-			}{name, mc, lifecycle})
-
-			mc.StartOrder = len(cm.startOrder)
-			cm.startOrder = append(cm.startOrder, name)
-		}
-	}
-	cm.mu.Unlock()
-
-	// Start components without holding the main lock
-	for _, comp := range componentsToStart {
-		cm.wg.Add(1)
-		go func(name string, mc *component.ManagedComponent, lc component.LifecycleComponent) {
-			defer cm.wg.Done()
-
-			cm.logger.Info("Starting component", "name", name, "type", mc.Component.Meta().Type)
-
-			if err := lc.Start(mc.Context); err != nil {
-				// Thread-safe state updates
-				cm.updateComponentState(name, component.StateFailed, err)
-
-				cm.logger.Error("Component failed to start",
-					"name", name, "type", mc.Component.Meta().Type, "error", err)
-
-				// Call error hook if registered
-				if cm.onComponentError != nil {
-					cm.onComponentError(mc.Context, name, err)
-				}
-				return
-			}
-
-			// Thread-safe state update
-			cm.updateComponentState(name, component.StateStarted, nil)
-
-			cm.logger.Info("Component started successfully", "name", name, "type", mc.Component.Meta().Type)
-
-			// Call start hook if registered
-			if cm.onComponentStart != nil {
-				cm.onComponentStart(mc.Context, name, mc.Component)
-			}
-		}(comp.name, comp.mc, comp.lifecycle)
-	}
+	// Start all components
+	cm.startAllComponents(ctx)
 
 	cm.started.Store(true)
 
@@ -361,6 +286,77 @@ func (cm *ComponentManager) Start(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// initCapabilityDiscovery initializes NATS-backed capability discovery if available.
+func (cm *ComponentManager) initCapabilityDiscovery(ctx context.Context) {
+	if cm.natsClient == nil {
+		return
+	}
+
+	nodeID := fmt.Sprintf("%s.%s", cm.platform.Org, cm.platform.Platform)
+	if nodeID == "." {
+		nodeID = "default-node"
+	}
+	if err := cm.registry.InitNATS(ctx, cm.natsClient, nodeID); err != nil {
+		cm.logger.Warn("Failed to initialize capability discovery, continuing without it",
+			"error", err)
+		return
+	}
+	cm.logger.Info("Capability discovery initialized", "node_id", nodeID)
+	cm.registry.StartHeartbeat(ctx, 30*time.Second)
+}
+
+// componentToStart holds component info for async startup.
+type componentToStart struct {
+	name      string
+	mc        *component.ManagedComponent
+	lifecycle component.LifecycleComponent
+}
+
+// startAllComponents prepares and starts all lifecycle components asynchronously.
+func (cm *ComponentManager) startAllComponents(ctx context.Context) {
+	cm.mu.Lock()
+	componentsToStart := make([]componentToStart, 0, len(cm.components))
+	for name, mc := range cm.components {
+		if lifecycle, ok := component.AsLifecycleComponent(mc.Component); ok {
+			childCtx, cancel := context.WithCancel(ctx)
+			mc.Context = childCtx
+			mc.Cancel = cancel
+			componentsToStart = append(componentsToStart, componentToStart{name, mc, lifecycle})
+			mc.StartOrder = len(cm.startOrder)
+			cm.startOrder = append(cm.startOrder, name)
+		}
+	}
+	cm.mu.Unlock()
+
+	for _, comp := range componentsToStart {
+		cm.wg.Add(1)
+		go cm.startComponentAsync(comp.name, comp.mc, comp.lifecycle)
+	}
+}
+
+// startComponentAsync starts a single component in a goroutine.
+func (cm *ComponentManager) startComponentAsync(name string, mc *component.ManagedComponent, lc component.LifecycleComponent) {
+	defer cm.wg.Done()
+
+	cm.logger.Info("Starting component", "name", name, "type", mc.Component.Meta().Type)
+
+	if err := lc.Start(mc.Context); err != nil {
+		cm.updateComponentState(name, component.StateFailed, err)
+		cm.logger.Error("Component failed to start",
+			"name", name, "type", mc.Component.Meta().Type, "error", err)
+		if cm.onComponentError != nil {
+			cm.onComponentError(mc.Context, name, err)
+		}
+		return
+	}
+
+	cm.updateComponentState(name, component.StateStarted, nil)
+	cm.logger.Info("Component started successfully", "name", name, "type", mc.Component.Meta().Type)
+	if cm.onComponentStart != nil {
+		cm.onComponentStart(mc.Context, name, mc.Component)
+	}
 }
 
 // Stop gracefully stops all components in reverse order of startup

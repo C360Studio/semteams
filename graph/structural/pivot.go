@@ -24,13 +24,13 @@ import (
 // Time complexity: O(k * (V + E)) where k = pivot count
 // Space complexity: O(V * k)
 type PivotComputer struct {
-	provider   GraphProvider
+	provider   Provider
 	pivotCount int
 	logger     *slog.Logger
 }
 
 // NewPivotComputer creates a new pivot computer.
-func NewPivotComputer(provider GraphProvider, pivotCount int, logger *slog.Logger) *PivotComputer {
+func NewPivotComputer(provider Provider, pivotCount int, logger *slog.Logger) *PivotComputer {
 	if pivotCount <= 0 {
 		pivotCount = DefaultPivotCount
 	}
@@ -135,47 +135,54 @@ func (c *PivotComputer) selectPivots(ctx context.Context, entityIDs []string, ne
 		pivotCount = n
 	}
 
-	// Initialize PageRank scores
-	scores := make(map[string]float64, n)
-	initialScore := 1.0 / float64(n)
-	for _, id := range entityIDs {
-		scores[id] = initialScore
-	}
-
 	// Compute out-degrees for normalization
 	outDegree := make(map[string]int, n)
 	for id, neighs := range neighbors {
 		outDegree[id] = len(neighs)
 	}
 
-	// PageRank iterations
+	// Run PageRank to get scores
+	scores, err := c.runPageRank(ctx, entityIDs, neighbors, outDegree)
+	if err != nil {
+		return nil, err
+	}
+
+	// Sort and select top-k pivots
+	return c.selectTopPivots(entityIDs, scores, pivotCount)
+}
+
+// runPageRank executes the PageRank algorithm and returns final scores.
+func (c *PivotComputer) runPageRank(ctx context.Context, entityIDs []string, neighbors map[string][]string, outDegree map[string]int) (map[string]float64, error) {
+	n := len(entityIDs)
 	damping := DefaultPageRankDamping
 	teleport := (1.0 - damping) / float64(n)
+
+	// Initialize scores
+	scores := make(map[string]float64, n)
+	initialScore := 1.0 / float64(n)
+	for _, id := range entityIDs {
+		scores[id] = initialScore
+	}
 
 	for iter := 0; iter < DefaultPageRankIterations; iter++ {
 		select {
 		case <-ctx.Done():
-			return nil, errs.WrapTransient(ctx.Err(), "PivotComputer", "selectPivots", "context cancelled during PageRank")
+			return nil, errs.WrapTransient(ctx.Err(), "PivotComputer", "runPageRank", "context cancelled")
 		default:
 		}
 
 		newScores := make(map[string]float64, n)
-
-		// Initialize with teleport probability
 		for _, id := range entityIDs {
 			newScores[id] = teleport
 		}
 
-		// Collect dangling node scores (nodes with no outgoing edges)
-		// These redistribute their PageRank uniformly to all nodes
+		// Collect and redistribute dangling node scores
 		danglingScore := 0.0
 		for _, id := range entityIDs {
 			if outDegree[id] == 0 {
 				danglingScore += scores[id]
 			}
 		}
-
-		// Redistribute dangling node scores uniformly
 		if danglingScore > 0 {
 			danglingContribution := damping * danglingScore / float64(n)
 			for _, id := range entityIDs {
@@ -186,7 +193,7 @@ func (c *PivotComputer) selectPivots(ctx context.Context, entityIDs []string, ne
 		// Distribute scores along edges
 		for id, neighs := range neighbors {
 			if outDegree[id] == 0 {
-				continue // Already handled above
+				continue
 			}
 			contribution := damping * scores[id] / float64(outDegree[id])
 			for _, neighbor := range neighs {
@@ -197,18 +204,22 @@ func (c *PivotComputer) selectPivots(ctx context.Context, entityIDs []string, ne
 		scores = newScores
 	}
 
-	// Sort entities by PageRank score (descending)
-	// Only include entities from entityIDs (neighbors may have received scores
-	// but aren't in our entity set and won't have distance vectors)
+	return scores, nil
+}
+
+// selectTopPivots sorts entities by score and returns top-k as pivots.
+func (c *PivotComputer) selectTopPivots(entityIDs []string, scores map[string]float64, pivotCount int) ([]string, error) {
 	type entityScore struct {
 		id    string
 		score float64
 	}
-	entitySet := make(map[string]bool, n)
+
+	entitySet := make(map[string]bool, len(entityIDs))
 	for _, id := range entityIDs {
 		entitySet[id] = true
 	}
-	sorted := make([]entityScore, 0, n)
+
+	sorted := make([]entityScore, 0, len(entityIDs))
 	for id, score := range scores {
 		if entitySet[id] {
 			sorted = append(sorted, entityScore{id: id, score: score})
@@ -218,7 +229,6 @@ func (c *PivotComputer) selectPivots(ctx context.Context, entityIDs []string, ne
 		return sorted[i].score > sorted[j].score
 	})
 
-	// Select top-k as pivots
 	pivots := make([]string, pivotCount)
 	for i := 0; i < pivotCount; i++ {
 		pivots[i] = sorted[i].id

@@ -427,22 +427,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.temporalBucket = temporalBucket
 
 	// Initialize lifecycle reporter early for dependency waiting visibility
-	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      graph.BucketComponentStatus,
-		Description: "Component lifecycle status tracking",
-	})
-	if err != nil {
-		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
-			slog.Any("error", err))
-		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
-	} else {
-		c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
-			KV:               statusBucket,
-			ComponentName:    "graph-index-temporal",
-			Logger:           c.logger,
-			EnableThrottling: true,
-		})
-	}
+	c.initLifecycleReporter(ctx)
 
 	// Set up query handlers
 	if err := c.setupQueryHandlers(ctx); err != nil {
@@ -545,6 +530,26 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-index-temporal"))
 		return fmt.Errorf("stop timeout after %v", timeout)
 	}
+}
+
+// initLifecycleReporter initializes the lifecycle reporter for component status tracking.
+func (c *Component) initLifecycleReporter(ctx context.Context) {
+	statusBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketComponentStatus,
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		return
+	}
+	c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+		KV:               statusBucket,
+		ComponentName:    "graph-index-temporal",
+		Logger:           c.logger,
+		EnableThrottling: true,
+	})
 }
 
 // ============================================================================

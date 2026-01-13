@@ -703,7 +703,7 @@ func (rp *Processor) DebugStatus() any {
 		debounceDelayMs = int(rp.config.DebounceDelayMs.Milliseconds())
 	}
 
-	return RuleStatus{
+	return Status{
 		DebounceDelayMs:    debounceDelayMs,
 		PendingEvaluations: pendingCount,
 		TotalEvaluations:   int(totalEvaluations),

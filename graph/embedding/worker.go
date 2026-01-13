@@ -245,50 +245,62 @@ func (w *Worker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
 		return
 	}
 
+	// Get or generate embedding vector
+	vector, err := w.getOrGenerateEmbedding(entityID, sourceText, record.ContentHash)
+	if err != nil {
+		return // Error already logged and marked as failed
+	}
+
+	// Save and notify
+	w.saveAndNotify(entityID, vector)
+}
+
+// getOrGenerateEmbedding returns an existing embedding via dedup or generates a new one.
+func (w *Worker) getOrGenerateEmbedding(entityID, sourceText, contentHash string) ([]float32, error) {
 	// Check deduplication first
-	dedupRecord, err := w.storage.GetByContentHash(w.ctx, record.ContentHash)
+	dedupRecord, err := w.storage.GetByContentHash(w.ctx, contentHash)
 	if err != nil {
 		w.logger.Error("Failed to check dedup", "entity_id", entityID, "error", err)
 		w.markFailed(entityID, fmt.Sprintf("dedup check failed: %v", err))
-		return
+		return nil, err
 	}
 
-	var vector []float32
-
 	if dedupRecord != nil {
-		// Reuse existing embedding
-		w.logger.Debug("Deduplicating embedding", "entity_id", entityID, "content_hash", record.ContentHash)
-		vector = dedupRecord.Vector
+		w.logger.Debug("Deduplicating embedding", "entity_id", entityID, "content_hash", contentHash)
 		if w.metrics != nil {
 			w.metrics.IncDedupHits()
 		}
-	} else {
-		// Generate new embedding
-		w.logger.Debug("Generating new embedding", "entity_id", entityID)
-
-		vectors, err := w.embedder.Generate(w.ctx, []string{sourceText})
-		if err != nil {
-			w.logger.Error("Failed to generate embedding", "entity_id", entityID, "error", err)
-			w.markFailed(entityID, fmt.Sprintf("generation failed: %v", err))
-			return
-		}
-
-		if len(vectors) == 0 {
-			w.logger.Error("No embedding generated", "entity_id", entityID)
-			w.markFailed(entityID, "no embedding returned")
-			return
-		}
-
-		vector = vectors[0]
-
-		// Save to dedup bucket
-		if err := w.storage.SaveDedup(w.ctx, record.ContentHash, vector, entityID); err != nil {
-			w.logger.Warn("Failed to save dedup record", "entity_id", entityID, "error", err)
-			// Continue anyway - not critical
-		}
+		return dedupRecord.Vector, nil
 	}
 
-	// Save generated embedding
+	// Generate new embedding
+	w.logger.Debug("Generating new embedding", "entity_id", entityID)
+	vectors, err := w.embedder.Generate(w.ctx, []string{sourceText})
+	if err != nil {
+		w.logger.Error("Failed to generate embedding", "entity_id", entityID, "error", err)
+		w.markFailed(entityID, fmt.Sprintf("generation failed: %v", err))
+		return nil, err
+	}
+
+	if len(vectors) == 0 {
+		w.logger.Error("No embedding generated", "entity_id", entityID)
+		w.markFailed(entityID, "no embedding returned")
+		return nil, fmt.Errorf("no embedding returned")
+	}
+
+	vector := vectors[0]
+
+	// Save to dedup bucket
+	if err := w.storage.SaveDedup(w.ctx, contentHash, vector, entityID); err != nil {
+		w.logger.Warn("Failed to save dedup record", "entity_id", entityID, "error", err)
+		// Continue anyway - not critical
+	}
+
+	return vector, nil
+}
+
+// saveAndNotify saves the generated embedding and notifies callback.
+func (w *Worker) saveAndNotify(entityID string, vector []float32) {
 	dimensions := len(vector)
 	model := w.embedder.Model()
 	if err := w.storage.SaveGenerated(w.ctx, entityID, vector, model, dimensions); err != nil {
@@ -299,7 +311,6 @@ func (w *Worker) handleKVEntry(entry jetstream.KeyValueEntry, workerID int) {
 
 	w.logger.Info("Embedding generated successfully", "entity_id", entityID, "dimensions", dimensions)
 
-	// Notify callback (for cache population)
 	if w.onGenerated != nil {
 		w.onGenerated(entityID, vector)
 	}

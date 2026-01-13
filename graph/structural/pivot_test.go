@@ -9,7 +9,7 @@ import (
 )
 
 func TestPivotComputer_EmptyGraph(t *testing.T) {
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities:  []string{},
 		neighbors: map[string][]string{},
 	}
@@ -25,7 +25,7 @@ func TestPivotComputer_EmptyGraph(t *testing.T) {
 }
 
 func TestPivotComputer_SingleNode(t *testing.T) {
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities:  []string{"A"},
 		neighbors: map[string][]string{"A": {}},
 	}
@@ -44,7 +44,7 @@ func TestPivotComputer_SingleNode(t *testing.T) {
 
 func TestPivotComputer_SimpleChain(t *testing.T) {
 	// Chain: A -- B -- C -- D
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "D"},
 		neighbors: map[string][]string{
 			"A": {"B"},
@@ -76,7 +76,7 @@ func TestPivotComputer_SimpleChain(t *testing.T) {
 
 func TestPivotComputer_Triangle(t *testing.T) {
 	// Triangle: A -- B -- C -- A
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C"},
 		neighbors: map[string][]string{
 			"A": {"B", "C"},
@@ -101,7 +101,7 @@ func TestPivotComputer_Triangle(t *testing.T) {
 
 func TestPivotComputer_DisconnectedComponents(t *testing.T) {
 	// Two disconnected pairs
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "X", "Y"},
 		neighbors: map[string][]string{
 			"A": {"B"},
@@ -130,7 +130,7 @@ func TestPivotComputer_DisconnectedComponents(t *testing.T) {
 func TestPivotComputer_PageRankSelectsCentralNodes(t *testing.T) {
 	// Star graph: H is the hub connected to A, B, C, D
 	// H should be selected as a pivot (highest PageRank)
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"H", "A", "B", "C", "D"},
 		neighbors: map[string][]string{
 			"H": {"A", "B", "C", "D"},
@@ -153,7 +153,7 @@ func TestPivotComputer_PageRankSelectsCentralNodes(t *testing.T) {
 func TestPivotIndex_EstimateDistance_TriangleInequality(t *testing.T) {
 	// Verify triangle inequality bounds are valid
 	// Graph: A -- B -- C -- D -- E (chain of 5)
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "D", "E"},
 		neighbors: map[string][]string{
 			"A": {"B"},
@@ -257,7 +257,7 @@ func TestPivotIndex_UnknownEntity(t *testing.T) {
 
 func TestPivotComputer_LimitsPivotCount(t *testing.T) {
 	// Graph with only 3 nodes, but requesting 10 pivots
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C"},
 		neighbors: map[string][]string{
 			"A": {"B"},
@@ -275,7 +275,7 @@ func TestPivotComputer_LimitsPivotCount(t *testing.T) {
 }
 
 func TestPivotComputer_DefaultPivotCount(t *testing.T) {
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities:  []string{},
 		neighbors: map[string][]string{},
 	}
@@ -293,7 +293,7 @@ func TestPivotComputer_DanglingNodes(t *testing.T) {
 	// Graph with dangling nodes (no outgoing edges)
 	// D is a "sink" - has incoming edges but no outgoing
 	// PageRank should still work correctly, redistributing D's score
-	provider := &mockGraphProvider{
+	provider := &mockProvider{
 		entities: []string{"A", "B", "C", "D"},
 		neighbors: map[string][]string{
 			"A": {"B", "D"},
