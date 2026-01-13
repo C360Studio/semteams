@@ -259,7 +259,7 @@ func TestIntegration_HealthMonitoring(t *testing.T) {
 // Helper function to start NATS container
 func startNATSContainer(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
 	req := testcontainers.ContainerRequest{
-		Image:        "nats:latest",
+		Image:        "nats:2.12-alpine",
 		ExposedPorts: []string{"4222/tcp", "8222/tcp"},
 		WaitingFor:   wait.ForListeningPort("4222/tcp"),
 		Cmd:          []string{"-m", "8222"}, // Enable monitoring
@@ -288,7 +288,7 @@ func startNATSContainer(ctx context.Context, t *testing.T) (testcontainers.Conta
 // Helper function to start NATS container with JetStream
 func startNATSContainerWithJS(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
 	req := testcontainers.ContainerRequest{
-		Image:        "nats:latest",
+		Image:        "nats:2.12-alpine",
 		ExposedPorts: []string{"4222/tcp", "8222/tcp"},
 		WaitingFor:   wait.ForListeningPort("4222/tcp"),
 		Cmd:          []string{"-js", "-m", "8222"}, // Enable JetStream and monitoring

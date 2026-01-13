@@ -110,7 +110,7 @@ func WithBucketPrefix(prefix string) TestOption {
 func NewSharedTestClient(opts ...TestOption) (*TestClient, error) {
 	// Default configuration
 	cfg := &testConfig{
-		natsVersion:  "2.11.7-alpine",
+		natsVersion:  "2.12-alpine",
 		timeout:      5 * time.Second,
 		startTimeout: 30 * time.Second,
 	}
@@ -235,7 +235,7 @@ func NewTestClient(t testing.TB, opts ...TestOption) *TestClient {
 
 	// Default configuration
 	cfg := &testConfig{
-		natsVersion:  "2.11.7-alpine",
+		natsVersion:  "2.12-alpine",
 		timeout:      5 * time.Second,
 		startTimeout: 30 * time.Second,
 	}

@@ -25,7 +25,7 @@ func setupTestNATS(t *testing.T) (*natsclient.Client, func()) {
 
 	// Start NATS container with JetStream
 	req := testcontainers.ContainerRequest{
-		Image:        "nats:2.10-alpine",
+		Image:        "nats:2.12-alpine",
 		ExposedPorts: []string{"4222/tcp"},
 		WaitingFor:   wait.ForListeningPort("4222/tcp"),
 		Cmd:          []string{"-js"}, // Enable JetStream

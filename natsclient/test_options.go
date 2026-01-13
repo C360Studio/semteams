@@ -39,7 +39,7 @@ func WithProductionLike() TestOption {
 		cfg.jetstream = true
 		cfg.kv = true
 		// Use latest stable version
-		cfg.natsVersion = "latest"
+		cfg.natsVersion = "2.12-alpine"
 	}
 }
 

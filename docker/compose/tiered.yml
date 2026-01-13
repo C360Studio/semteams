@@ -100,7 +100,7 @@ services:
 
   # NATS Server with JetStream
   nats:
-    image: nats:alpine
+    image: nats:2.12-alpine
     container_name: semstreams-tiered-nats
     ports:
       - "4222:4222" # Client connections
