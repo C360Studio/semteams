@@ -142,10 +142,10 @@ func TestWatcher_BackgroundCheck_ResourceBecomesAvailable(t *testing.T) {
 	// Make resource available
 	ready.Store(true)
 
-	// Wait for background check to detect availability
-	deadline := time.Now().Add(500 * time.Millisecond)
+	// Wait for OnAvailable callback to be called (not just IsAvailable)
+	deadline := time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
-		if w.IsAvailable() {
+		if availableCalled.Load() {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
@@ -199,10 +199,10 @@ func TestWatcher_BackgroundCheck_ResourceLost(t *testing.T) {
 	// Simulate resource loss
 	ready.Store(false)
 
-	// Wait for background check to detect loss
-	deadline := time.Now().Add(500 * time.Millisecond)
+	// Wait for OnLost callback to be called (not just !IsAvailable)
+	deadline := time.Now().Add(1 * time.Second)
 	for time.Now().Before(deadline) {
-		if !w.IsAvailable() {
+		if lostCalled.Load() {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
