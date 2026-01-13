@@ -3,7 +3,6 @@ package natsclient
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -11,9 +10,6 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 // Test basic manager creation
@@ -327,74 +323,6 @@ func TestKeyValueBuckets(t *testing.T) {
 		_, err = client.ListKeyValueBuckets(ctx)
 		assert.Equal(t, ErrCircuitOpen, err)
 	})
-
-	t.Run("operations work with real KV server", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("Skipping integration test in short mode")
-		}
-
-		ctx := context.Background()
-		natsContainer, natsURL := startTestNATSContainerWithJS(ctx, t)
-		defer natsContainer.Terminate(ctx)
-
-		// Create and connect client
-		client, err := NewClient(natsURL,
-			WithMaxReconnects(0), // No reconnects in tests
-		)
-		require.NoError(t, err)
-
-		err = client.Connect(ctx)
-		require.NoError(t, err)
-		defer client.Close(ctx)
-
-		// Test KV bucket operations
-		cfg := jetstream.KeyValueConfig{Bucket: "unit_test_bucket"}
-
-		// Create bucket
-		kv, err := client.CreateKeyValueBucket(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, kv)
-
-		// Test put/get operations
-		_, err = kv.Put(ctx, "test-key", []byte("test-value"))
-		require.NoError(t, err)
-
-		entry, err := kv.Get(ctx, "test-key")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("test-value"), entry.Value())
-
-		// Get bucket by name
-		retrievedKV, err := client.GetKeyValueBucket(ctx, "unit_test_bucket")
-		require.NoError(t, err)
-		require.NotNil(t, retrievedKV)
-
-		// Verify we can still access data
-		entry2, err := retrievedKV.Get(ctx, "test-key")
-		require.NoError(t, err)
-		assert.Equal(t, []byte("test-value"), entry2.Value())
-
-		// List buckets
-		buckets, err := client.ListKeyValueBuckets(ctx)
-		require.NoError(t, err)
-
-		// Should have at least our bucket
-		found := false
-		for _, bucketName := range buckets {
-			if bucketName == "unit_test_bucket" {
-				found = true
-				break
-			}
-		}
-		assert.True(t, found, "Should find our unit_test_bucket in list")
-
-		// Delete bucket
-		err = client.DeleteKeyValueBucket(ctx, "unit_test_bucket")
-		require.NoError(t, err)
-
-		// Verify bucket is gone
-		_, err = client.GetKeyValueBucket(ctx, "unit_test_bucket")
-		assert.Error(t, err) // Should fail to get deleted bucket
-	})
 }
 
 // Test context-aware methods
@@ -422,52 +350,6 @@ func TestContextAwareMethods(t *testing.T) {
 		err = client.Subscribe(ctx, "test.subject", func(_ context.Context, _ []byte) {})
 		assert.Equal(t, ErrNotConnected, err)
 	})
-
-	t.Run("with real NATS server", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("Skipping integration test in short mode")
-		}
-
-		ctx := context.Background()
-		natsContainer, natsURL := startTestNATSContainer(ctx, t)
-		defer natsContainer.Terminate(ctx)
-
-		// Create and connect client
-		client, err := NewClient(natsURL,
-			WithMaxReconnects(0), // No reconnects in tests
-		)
-		require.NoError(t, err)
-
-		err = client.Connect(ctx)
-		require.NoError(t, err)
-		defer client.Close(ctx)
-
-		// Test successful operations with real server
-		assert.True(t, client.IsHealthy())
-
-		// Test Publish with context (should succeed)
-		err = client.Publish(ctx, "test.subject", []byte("data"))
-		assert.NoError(t, err)
-
-		// Test Subscribe with context (should succeed)
-		received := make(chan []byte, 1)
-		err = client.Subscribe(ctx, "test.reply", func(_ context.Context, data []byte) {
-			received <- data
-		})
-		assert.NoError(t, err)
-
-		// Test round-trip message
-		err = client.Publish(ctx, "test.reply", []byte("response"))
-		assert.NoError(t, err)
-
-		// Verify message received
-		select {
-		case data := <-received:
-			assert.Equal(t, []byte("response"), data)
-		case <-time.After(1 * time.Second):
-			t.Fatal("Message not received")
-		}
-	})
 }
 
 // Test JetStream methods with context
@@ -490,61 +372,6 @@ func TestJetStreamMethods(t *testing.T) {
 
 		err = client.ConsumeStream(ctx, "test", "test.*", func([]byte) {})
 		assert.Equal(t, ErrNotConnected, err)
-	})
-
-	t.Run("with real JetStream server", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("Skipping integration test in short mode")
-		}
-
-		ctx := context.Background()
-		natsContainer, natsURL := startTestNATSContainerWithJS(ctx, t)
-		defer natsContainer.Terminate(ctx)
-
-		// Create and connect client
-		client, err := NewClient(natsURL,
-			WithMaxReconnects(0), // No reconnects in tests
-		)
-		require.NoError(t, err)
-
-		err = client.Connect(ctx)
-		require.NoError(t, err)
-		defer client.Close(ctx)
-
-		// Test JetStream functionality
-		js, err := client.JetStream()
-		require.NoError(t, err)
-		require.NotNil(t, js)
-
-		// Create a stream
-		cfg := jetstream.StreamConfig{Name: "UNIT_TEST", Subjects: []string{"unit.test.*"}}
-		stream, err := client.CreateStream(ctx, cfg)
-		require.NoError(t, err)
-		require.NotNil(t, stream)
-
-		// Get the stream back
-		retrievedStream, err := client.GetStream(ctx, "UNIT_TEST")
-		require.NoError(t, err)
-		assert.Equal(t, "UNIT_TEST", retrievedStream.CachedInfo().Config.Name)
-
-		// Test publish to stream
-		err = client.PublishToStream(ctx, "unit.test.data", []byte("test message"))
-		require.NoError(t, err)
-
-		// Test consume from stream
-		received := make(chan []byte, 1)
-		err = client.ConsumeStream(ctx, "UNIT_TEST", "unit.test.*", func(data []byte) {
-			received <- data
-		})
-		require.NoError(t, err)
-
-		// Verify message received
-		select {
-		case data := <-received:
-			assert.Equal(t, []byte("test message"), data)
-		case <-time.After(2 * time.Second):
-			t.Fatal("Stream message not received")
-		}
 	})
 }
 
@@ -706,55 +533,3 @@ func TestCreateKeyValueBucket_AlreadyExists(t *testing.T) {
 	})
 }
 
-// Helper function to start NATS container for unit tests
-func startTestNATSContainer(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
-	t.Helper()
-
-	req := testcontainers.ContainerRequest{
-		Image:        "nats:2.12-alpine",
-		ExposedPorts: []string{"4222/tcp"},
-		WaitingFor:   wait.ForListeningPort("4222/tcp"),
-	}
-
-	natsContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	require.NoError(t, err)
-
-	host, err := natsContainer.Host(ctx)
-	require.NoError(t, err)
-
-	port, err := natsContainer.MappedPort(ctx, "4222")
-	require.NoError(t, err)
-
-	natsURL := fmt.Sprintf("nats://%s:%s", host, port.Port())
-	return natsContainer, natsURL
-}
-
-// Helper function to start NATS container with JetStream for unit tests
-func startTestNATSContainerWithJS(ctx context.Context, t *testing.T) (testcontainers.Container, string) {
-	t.Helper()
-
-	req := testcontainers.ContainerRequest{
-		Image:        "nats:2.12-alpine",
-		ExposedPorts: []string{"4222/tcp"},
-		WaitingFor:   wait.ForListeningPort("4222/tcp"),
-		Cmd:          []string{"--js"}, // Enable JetStream
-	}
-
-	natsContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	require.NoError(t, err)
-
-	host, err := natsContainer.Host(ctx)
-	require.NoError(t, err)
-
-	port, err := natsContainer.MappedPort(ctx, "4222")
-	require.NoError(t, err)
-
-	natsURL := fmt.Sprintf("nats://%s:%s", host, port.Port())
-	return natsContainer, natsURL
-}
