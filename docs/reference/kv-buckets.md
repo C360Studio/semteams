@@ -109,6 +109,30 @@ Component lifecycle status. Tracks current processing stage of long-running comp
 
 **Use case**: Operational monitoring, "What stage is graph-clustering in?"
 
+### CONTEXT_INDEX
+
+Provenance tracking. Maps context values to triples that have them.
+
+| Attribute | Value |
+|-----------|-------|
+| **Created by** | graph-index |
+| **Key format** | Context value (e.g., `inference.hierarchy`) |
+| **Value** | Array of `{entity_id, predicate}` |
+
+**Use case**: "Find all triples from hierarchy inference."
+
+### STRUCTURAL_INDEX
+
+K-core decomposition and pivot distance data for structural analysis.
+
+| Attribute | Value |
+|-----------|-------|
+| **Created by** | graph-clustering |
+| **Key format** | Entity ID |
+| **Value** | K-core level, pivot distances |
+
+**Use case**: Anomaly detection, structural importance ranking.
+
 ## Tier 1+ Buckets
 
 These buckets require embeddings or community detection and are created by statistical/semantic tier processors.
@@ -148,30 +172,6 @@ Community membership and metadata.
 | **Value** | Community JSON (members, level, summary) |
 
 **Use case**: GraphRAG queries, community-based search.
-
-### STRUCTURAL_INDEX
-
-K-core decomposition and pivot distance data.
-
-| Attribute | Value |
-|-----------|-------|
-| **Created by** | graph-clustering |
-| **Key format** | Entity ID |
-| **Value** | K-core level, pivot distances |
-
-**Use case**: Anomaly detection, structural importance ranking.
-
-### CONTEXT_INDEX
-
-Provenance tracking. Maps context values to triples that have them.
-
-| Attribute | Value |
-|-----------|-------|
-| **Created by** | graph-index |
-| **Key format** | Context value (e.g., `inference.hierarchy`) |
-| **Value** | Array of `{entity_id, predicate}` |
-
-**Use case**: "Find all triples from hierarchy inference."
 
 ### ANOMALY_INDEX
 

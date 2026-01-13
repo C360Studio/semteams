@@ -30,8 +30,8 @@ rather than a monolithic processor. Each tier requires a specific set of compone
 | **graph-gateway** | Core (All) | Query gateway | N/A (read-only) |
 | **graph-clustering** | Statistical (Tier 1+) | Community detection, structural analysis, anomaly detection | `COMMUNITY_INDEX`, `STRUCTURAL_INDEX`, `ANOMALY_INDEX` |
 | **graph-embedding** | Statistical/Semantic (Tier 1+) | Vector embeddings | `EMBEDDING_INDEX`, `EMBEDDINGS_CACHE`, `EMBEDDING_DEDUP` |
-| **graph-index-spatial** | Semantic (Tier 2) | Geospatial indexing | `SPATIAL_INDEX` |
-| **graph-index-temporal** | Semantic (Tier 2) | Temporal indexing | `TEMPORAL_INDEX` |
+| **graph-index-spatial** | Core (All) | Geospatial indexing | `SPATIAL_INDEX` |
+| **graph-index-temporal** | Core (All) | Temporal indexing | `TEMPORAL_INDEX` |
 
 ### Deployment Configurations by Tier
 
@@ -220,8 +220,6 @@ Everything in Rules-Only, plus:
 
 - Neural embeddings
 - LLM summaries
-- Spatial indexing
-- Temporal indexing
 
 ### Example Configuration
 

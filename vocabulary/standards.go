@@ -117,6 +117,23 @@ const (
 	DcSource = "http://purl.org/dc/terms/source"
 )
 
+// Dublin Core Dotted Notation Predicates
+// These constants provide dotted notation predicates for use in Triples.
+// They map semantically to the Dublin Core IRIs above.
+const (
+	// DCTermsTitle is the dotted notation predicate for resource title.
+	// Maps to: DcTitle (http://purl.org/dc/terms/title)
+	DCTermsTitle = "dc.terms.title"
+
+	// DCTermsCreator is the dotted notation predicate for resource creator.
+	// Maps to: http://purl.org/dc/terms/creator
+	DCTermsCreator = "dc.terms.creator"
+
+	// DCTermsIdentifier is the dotted notation predicate for resource identifier.
+	// Maps to: DcIdentifier (http://purl.org/dc/terms/identifier)
+	DCTermsIdentifier = "dc.terms.identifier"
+)
+
 // Schema.org Standard IRIs
 const (
 	// SchemaName provides the name of the item.

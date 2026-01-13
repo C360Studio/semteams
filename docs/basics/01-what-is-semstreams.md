@@ -120,7 +120,7 @@ Entities stored in NATS KV with version tracking:
 | Index | Question It Answers | Requirements |
 |-------|---------------------|--------------|
 | STRUCTURAL_INDEX | "Core connectivity and distance estimation" | Tier 0 (Structural) |
-| EMBEDDING_INDEX | "Semantically similar entities" | Tier 1+ (Statistical/Semantic) |
+| EMBEDDING_INDEX | "Semantically similar entities" | Tier 2 (Semantic) |
 | COMMUNITY_INDEX | "What community does this entity belong to?" | Tier 1+ (Statistical/Semantic) |
 
 ### Structural Indexing
@@ -136,11 +136,11 @@ Entities that reference each other cluster into communities. You don't define co
 
 ### Anomaly Detection
 
-With structural indexing and embeddings enabled, SemStreams can detect anomalies:
+With structural indexing enabled (Tier 0+), SemStreams can detect anomalies:
 
 - **Core isolation**: Entities disconnected from their expected peer group
 - **Core demotion**: Entities losing connectivity over time
-- **Semantic-structural gaps**: Semantically similar entities that lack graph connections (requires Tier 1+)
+- **Semantic-structural gaps**: Semantically similar entities that lack graph connections (requires Tier 2)
 
 ### Progressive Enhancement (Tiers)
 

@@ -54,8 +54,8 @@ The graph system decomposes into 8 specialized components with clear responsibil
 
 | Component | Purpose | Writes To | Watches |
 |-----------|---------|-----------|---------|
-| **graph-ingest** | Entity ingestion from event streams | ENTITY_STATES, CONTEXT_INDEX | - |
-| **graph-index** | Relationship indexing | OUTGOING_INDEX, INCOMING_INDEX, ALIAS_INDEX, PREDICATE_INDEX | ENTITY_STATES |
+| **graph-ingest** | Entity ingestion from event streams | ENTITY_STATES | - |
+| **graph-index** | Relationship indexing | OUTGOING_INDEX, INCOMING_INDEX, ALIAS_INDEX, PREDICATE_INDEX, CONTEXT_INDEX | ENTITY_STATES |
 | **graph-query** | Query coordinator, PathRAG | - | - (request/reply) |
 | **graph-clustering** | Community detection, structural analysis, anomaly detection | COMMUNITY_INDEX, STRUCTURAL_INDEX, ANOMALY_INDEX | ENTITY_STATES |
 | **graph-embedding** | Vector embeddings (BM25 or HTTP) | EMBEDDING_INDEX, EMBEDDINGS_CACHE | ENTITY_STATES |
@@ -235,7 +235,7 @@ All state lives in NATS JetStream KV buckets. Each bucket has exactly one writer
 | `INCOMING_INDEX` | graph-index | Entity ID → referencing entities |
 | `PREDICATE_INDEX` | graph-index | Predicate → entity IDs |
 | `ALIAS_INDEX` | graph-index | Alias → entity ID |
-| `CONTEXT_INDEX` | graph-ingest | Context/provenance for hierarchy inference |
+| `CONTEXT_INDEX` | graph-index | Context/provenance tracking |
 
 **Optional buckets** (created when specific components are deployed):
 
