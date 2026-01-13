@@ -1,8 +1,8 @@
 # Index Reference
 
-SemStreams maintains seven indexes. Understanding which indexes affect community detection helps you design triples that enable the queries you need.
+SemStreams maintains multiple indexes for graph traversal and query. Understanding which indexes affect community detection helps you design triples that enable the queries you need. For the full list of KV buckets, see [KV Buckets Reference](../reference/kv-buckets.md).
 
-## The Seven Indexes
+## Core Indexes
 
 | Index | Purpose | Affects Clustering? | LLM Context? |
 |-------|---------|---------------------|--------------|
@@ -174,6 +174,6 @@ nats kv get EMBEDDING_INDEX "drone-007"
 
 ## Next Steps
 
-- [Community Detection](../concepts/04-community-detection.md) - How indexes enable clustering
+- [Community Detection](../concepts/05-community-detection.md) - How indexes enable clustering
 - [Vocabulary](../basics/04-vocabulary.md) - Predicate naming conventions
 - [Clustering Configuration](01-clustering.md) - LPA and hierarchical detection

@@ -542,4 +542,4 @@ curl -s localhost:9090/metrics | grep enhancement_latency_seconds_bucket
 
 - [Clustering](01-clustering.md) - Detection algorithm details
 - [LLM Enhancement](02-llm-enhancement.md) - LLM configuration
-- [Configuration](../reference/configuration.md) - All configuration options
+- [Configuration](../basics/06-configuration.md) - Progressive enhancement configuration

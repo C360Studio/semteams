@@ -466,12 +466,12 @@ More workers help when LLM is fast. Too many workers with slow LLM just builds b
 
 - [Clustering](01-clustering.md) - Community detection
 - [Performance](03-performance.md) - Optimization strategies
-- [Configuration](../reference/configuration.md) - Full config reference
+- [KV Buckets Reference](../reference/kv-buckets.md) - Storage bucket details
 
 ### Background Concepts
 
 For foundational understanding of the RAG patterns and algorithms:
 
-- [GraphRAG Pattern](../concepts/05-graphrag-pattern.md) - Community-based RAG explained
-- [Community Detection](../concepts/04-community-detection.md) - How communities form
-- [Similarity Metrics](../concepts/07-similarity-metrics.md) - TF-IDF keyword extraction
+- [GraphRAG Pattern](../concepts/07-graphrag-pattern.md) - Community-based RAG explained
+- [Community Detection](../concepts/05-community-detection.md) - How communities form
+- [Similarity Metrics](../concepts/04-similarity-metrics.md) - TF-IDF keyword extraction

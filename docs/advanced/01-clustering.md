@@ -431,6 +431,6 @@ Community detection exposes Prometheus metrics:
 
 For foundational understanding of the algorithms and metrics used here:
 
-- [Community Detection Concepts](../concepts/04-community-detection.md) - LPA intuition, failure modes, tuning guidance
+- [Community Detection Concepts](../concepts/05-community-detection.md) - LPA intuition, failure modes, tuning guidance
 - [Embeddings](../concepts/03-embeddings.md) - What vectors are, cosine similarity explained
-- [Similarity Metrics](../concepts/07-similarity-metrics.md) - TF-IDF, Jaccard, threshold tuning
+- [Similarity Metrics](../concepts/04-similarity-metrics.md) - TF-IDF, Jaccard, threshold tuning
