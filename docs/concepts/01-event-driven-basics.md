@@ -166,16 +166,21 @@ See [Implementing Graphable](../basics/04-implementing-graphable.md) for code ex
 
 ### State (KV Buckets)
 
-The Graph processor manages entity state in NATS KV buckets:
+The Graph processors manage entity state in NATS KV buckets:
 
 | Bucket | Purpose |
 |--------|---------|
 | `ENTITY_STATES` | Entity records with triples |
-| `PREDICATE_INDEX` | Predicate → entity lookup |
+| `OUTGOING_INDEX` | Forward relationship lookup |
 | `INCOMING_INDEX` | Reverse relationship lookup |
-| `COMMUNITY_INDEX` | Community membership |
+| `ALIAS_INDEX` | Entity alias resolution |
+| `PREDICATE_INDEX` | Predicate → entity lookup |
 
-KV buckets are **not** a separate component—they're internal state managed by the Graph processor.
+Additional indexes (spatial, temporal, embedding, community, structural, anomaly) are created by their respective processors at higher tiers.
+
+See [KV Bucket Reference](../reference/kv-buckets.md) for complete bucket documentation.
+
+KV buckets are **not** separate components—they're internal state managed by the graph processors.
 
 ### Storage Components (Optional)
 
