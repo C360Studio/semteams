@@ -38,6 +38,15 @@ type Config struct {
 	MetadataExtractor storage.MetadataExtractor `json:"-" schema:"-"`
 }
 
+// Validate checks if the configuration is valid.
+func (c Config) Validate() error {
+	// BucketName is optional - defaults to MESSAGES
+	// DataCache validation is handled by cache.Config.Validate() if called
+	// KeyGenerator and MetadataExtractor are optional pluggable interfaces
+	// Ports validation is handled by component.PortConfig if present
+	return nil
+}
+
 // DefaultConfig returns the default configuration for ObjectStore.
 // Creates a simple key-value store with:
 //   - Generic input/output ports (no interface requirements)
