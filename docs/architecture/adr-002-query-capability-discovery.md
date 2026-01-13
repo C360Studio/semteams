@@ -2,7 +2,13 @@
 
 ## Status
 
-Accepted
+Deprecated
+
+> **Note**: This pattern was implemented but later rolled back. Query routing now uses
+> static subject mapping in `processor/graph-query/router.go`. The dynamic capability
+> discovery added complexity without sufficient benefit for the current use cases.
+> See [ADR-004](./adr-004-search-query-classification.md) for the current query
+> classification approach.
 
 ## Context
 
