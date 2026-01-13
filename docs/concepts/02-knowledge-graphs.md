@@ -304,8 +304,6 @@ Three query patterns enabled by indexes:
 | By predicate | PREDICATE_INDEX | "All entities with temperature readings" |
 | By relationship | INCOMING_INDEX | "All sensors in zone-A" |
 
-See [Query Capabilities](../contributing/06-query-capabilities.md) for implementation details.
-
 ## Graph vs Relational
 
 | Concern | Relational (SQL) | Graph (Triples) |
@@ -362,7 +360,6 @@ Query with wildcards: `acme.logistics.facility.zone.area.warehouse-7.*`
 
 **Reference (API details):**
 - [Index and Bucket Reference](../advanced/05-index-reference.md) - Index storage schema
-- [Query Capabilities](../contributing/06-query-capabilities.md) - Querying entities
 
 **Concepts (mental models):**
 - [Community Detection](05-community-detection.md) - Clustering from edges

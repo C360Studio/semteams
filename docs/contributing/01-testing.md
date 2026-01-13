@@ -664,4 +664,3 @@ func BenchmarkCondition_Evaluate(b *testing.B) { ... }
 ## Related Documentation
 
 - [E2E Tests](02-e2e-tests.md) - End-to-end testing
-- [Go Standards](../agent/go.md) - Go development standards

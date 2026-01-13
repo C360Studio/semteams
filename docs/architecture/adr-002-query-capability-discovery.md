@@ -117,6 +117,5 @@ func (c *Component) handleQueryEntity(ctx context.Context, data []byte) ([]byte,
 
 ## References
 
-- [Query Discovery Concept](../contributing/06-query-capabilities.md)
 - [Graph Components Reference](../advanced/07-graph-components.md)
 - [ADR-001: Pragmatic Semantic Web](./adr-001-pragmatic-semantic-web.md)

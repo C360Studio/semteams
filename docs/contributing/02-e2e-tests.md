@@ -86,20 +86,6 @@ Neural embeddings + LLM. Full ML stack validation.
 - LLM summary quality
 - Semantic search relevance
 
-### Gateway (`task e2e:gateway`)
-
-GraphQL + MCP APIs. Runs against statistical tier (no ML deps for CI).
-
-| Duration | Purpose | Dependencies |
-|----------|---------|--------------|
-| ~20s | API contract validation | NATS only |
-
-**Coverage**:
-- GraphQL operations (entity queries, relationships, search)
-- MCP protocol (tool invocation via SSE)
-- Rate limiting
-- Error handling
-
 ## Assertion Strategy
 
 | Tier | What We Assert | What We DON'T Assert |
@@ -108,7 +94,6 @@ GraphQL + MCP APIs. Runs against statistical tier (no ML deps for CI).
 | **Structural** | Entities in KV, predicates indexed, anomaly flags in index, PathRAG edges | LLM response quality |
 | **Statistical** | Above + BM25 embeddings, communities detected | LLM summaries |
 | **Semantic** | Above + LLM summary quality, semantic search relevance | - |
-| **Gateway** | API contracts (GraphQL shape, MCP protocol) | LLM content |
 
 **Key insight**: Anomaly worker can run at structural tier with LLM, but we only assert on *index state* (flag exists), not LLM reasoning. LLM output assertions wait until semantic tier.
 
@@ -139,7 +124,6 @@ Full CI validation (no ML dependencies):
 task e2e:core
 task e2e:structural
 task e2e:statistical
-task e2e:gateway
 ```
 
 ### Full Validation
@@ -199,7 +183,6 @@ All compose files are in `docker/compose/`:
 | `e2e.yml` | Core E2E tests | - |
 | `structural.yml` | Structural tier | - |
 | `tiered.yml` | Statistical + Semantic | `statistical`, `semantic` |
-| `gateway.yml` | Gateway testing | - |
 | `federation.yml` | Edge-to-cloud federation | - |
 
 ## Directory Structure
@@ -218,9 +201,7 @@ test/e2e/
     ├── semantic_basic.go
     ├── semantic_indexes.go
     ├── tiered.go           # Statistical + Semantic tiers
-    ├── tiered_structural.go  # Structural tier validation
-    ├── gateway_graphql.go
-    └── gateway_mcp.go
+    └── tiered_structural.go  # Structural tier validation
 
 cmd/e2e/
 └── main.go                 # Test runner CLI
@@ -231,7 +212,6 @@ taskfiles/e2e/
 ├── structural.yml          # Structural tier
 ├── statistical.yml         # Statistical tier
 ├── semantic.yml            # Semantic tier
-├── gateway.yml             # Gateway tests
 └── federation.yml          # Federation tests
 ```
 
@@ -292,7 +272,6 @@ Check graph processor logs for errors. Increase timeout if processing is slow.
 steps:
   - task e2e:core
   - task e2e:structural
-  - task e2e:gateway
 ```
 
 ### Main Branch
@@ -302,7 +281,6 @@ steps:
   - task e2e:core
   - task e2e:structural
   - task e2e:statistical
-  - task e2e:gateway
 ```
 
 ### Release

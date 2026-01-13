@@ -755,7 +755,6 @@ NATS query handlers return structured errors:
 
 - [Architecture Overview](../basics/02-architecture.md) - High-level system design
 - [Query Access Patterns](../concepts/09-query-access.md) - GraphQL and NATS query usage
-- [Query Discovery](../contributing/06-query-capabilities.md) - Implementing QueryCapabilityProvider
 - [Configuration Guide](../basics/06-configuration.md) - Component configuration examples
 - [PathRAG Pattern](../concepts/08-pathrag-pattern.md) - Structural traversal details
 - [GraphRAG Pattern](../concepts/07-graphrag-pattern.md) - Community-based search details
