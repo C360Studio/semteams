@@ -18,7 +18,7 @@ E2E tests follow the **Observer Pattern**: they run against real services in Doc
 ```bash
 # 5 E2E tasks - one per tier
 task e2e:core        # Platform boots, data flows (~10s)
-task e2e:structural  # Rules + structural inference (~30s)
+task e2e:structural  # Rules + PathRAG (~30s)
 task e2e:statistical # BM25 + community detection (~60s)
 task e2e:semantic    # Neural embeddings + LLM (~90s)
 
@@ -44,7 +44,7 @@ Platform boots, data flows. Validates basic health and dataflow.
 
 ### Structural (`task e2e:structural`)
 
-Rules + structural inference. Deterministic behavior, no embeddings.
+Rules + PathRAG. Deterministic behavior, no embeddings or anomaly detection.
 
 | Duration | Purpose | Dependencies |
 |----------|---------|--------------|

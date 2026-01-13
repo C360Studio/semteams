@@ -1,20 +1,22 @@
-# Structural Inference
+# Anomaly Detection
 
-> **Tier 0 Feature**: Discovers missing relationships by analyzing graph topology.
+> **Tier 1+ Feature**: Discovers missing relationships by analyzing graph topology.
 
-Structural inference complements explicit triples and rules by detecting potential missing relationships through graph analysis. It runs as a background process after community detection and produces suggestions for LLM and/or human review—or auto-approval when confidence exceeds a configured threshold.
+Anomaly detection complements explicit triples and rules by detecting potential missing relationships through graph analysis. It runs as a background process after community detection and produces suggestions for LLM and/or human review—or auto-approval when confidence exceeds a configured threshold.
 
 ## Overview
 
-SemStreams builds graphs from three sources at Tier 0:
+SemStreams builds graphs progressively across tiers:
 
-| Source | How it works | Timing |
-|--------|--------------|--------|
-| **Explicit Triples** | Ingested from source data | Sync, per-event |
-| **Rules Engine** | Pattern matching creates new triples | Sync, per-event |
-| **Structural Inference** | Topology analysis suggests missing edges | Async, after clustering |
+| Source | Tier | How it works | Timing |
+|--------|------|--------------|--------|
+| **Explicit Triples** | 0+ | Ingested from source data | Sync, per-event |
+| **Rules Engine** | 0+ | Pattern matching creates new triples | Sync, per-event |
+| **Anomaly Detection** | 1+ | Topology analysis suggests missing edges | Async, after clustering |
 
-Structural inference answers: "Based on the graph's shape, what relationships might be missing?"
+Anomaly detection requires embeddings and community detection (Tier 1+) because it analyzes structural patterns within and across communities.
+
+**Key question answered**: "Based on the graph's shape, what relationships might be missing?"
 
 ---
 
@@ -157,7 +159,7 @@ Approved suggestions become new triples in the graph, enriching it for future qu
 
 ## When It Runs
 
-Structural inference runs as part of the clustering cycle:
+Anomaly detection runs as part of the clustering cycle:
 
 ```
 Entity changes accumulate
@@ -184,7 +186,7 @@ This is background processing—queries continue to run against the current grap
 
 ## Configuration
 
-Structural inference is controlled through clustering configuration. Key parameters fall into three categories:
+Anomaly detection is controlled through clustering configuration. Key parameters fall into three categories:
 
 ### Structural Index Parameters
 
@@ -249,19 +251,19 @@ Anomalies between the thresholds are queued for LLM or human review.
 
 ### Telemetry Networks
 
-A sensor network ingests equipment relationships. Structural inference detects:
+A sensor network ingests equipment relationships. Anomaly detection finds:
 - Sensors semantically similar (same type) but not connected to common zones
 - Equipment that lost connections (core demotion) after maintenance
 
 ### Document Graphs
 
-A knowledge base links documents via citations. Structural inference finds:
+A knowledge base links documents via citations. Anomaly detection finds:
 - Papers with similar abstracts but no citation relationship
 - Authors who should be connected based on co-authorship patterns
 
 ### Enterprise Systems
 
-An IT asset graph tracks dependencies. Structural inference surfaces:
+An IT asset graph tracks dependencies. Anomaly detection surfaces:
 - Services with similar configurations but no documented dependency
 - Servers that dropped out of their usual connectivity cluster
 
@@ -272,16 +274,16 @@ An IT asset graph tracks dependencies. Structural inference surfaces:
 | Mechanism | Timing | Input | Output |
 |-----------|--------|-------|--------|
 | **Rules** | Sync, per-event | Entity patterns | New triples (deterministic) |
-| **Structural Inference** | Async, after clustering | Graph topology | Suggestions (probabilistic) |
+| **Anomaly Detection** | Async, after clustering | Graph topology | Suggestions (probabilistic) |
 | **Embeddings** | Async, per-entity | Text content | Virtual edges (Tier 1+) |
 
-Structural inference is unique in analyzing the **shape** of the graph rather than its content.
+Anomaly detection is unique in analyzing the **shape** of the graph rather than its content.
 
 ---
 
 ## Related Concepts
 
-- [Real-Time Inference](00-real-time-inference.md) — Structural inference is a Tier 0 capability
+- [Real-Time Inference](00-real-time-inference.md) — Anomaly detection is a Tier 1+ capability
 - [Community Detection](05-community-detection.md) — Inference runs after clustering completes
 - [Knowledge Graphs](02-knowledge-graphs.md) — Approved suggestions become new triples
 - [Similarity Metrics](04-similarity-metrics.md) — Cosine similarity powers semantic gap detection

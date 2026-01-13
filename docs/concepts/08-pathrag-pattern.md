@@ -222,7 +222,7 @@ These indexes maintain entity-to-entity relationships for efficient traversal. T
 - [GraphRAG Pattern](07-graphrag-pattern.md) - Semantic search alternative for topic-based queries
 - [Knowledge Graphs](02-knowledge-graphs.md) - How triples create the relationships PathRAG traverses
 - [Community Detection](05-community-detection.md) - How communities differ from structural paths
-- [Structural Inference](06-structural-analysis.md) - Background topology analysis (separate Tier 0 feature)
+- [Anomaly Detection](06-structural-analysis.md) - Background topology analysis (Tier 1+ feature)
 
 **Configuration**
 - [Configuration Guide](../basics/06-configuration.md) - Index and traversal settings

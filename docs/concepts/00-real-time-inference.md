@@ -104,15 +104,14 @@ All tiers include rules and clustering. The difference is how virtual edges form
 
 ### Tier 0: Structural
 
-Build and enrich graphs using structure alone—no embeddings required.
+Build graphs using explicit relationships and rules—no embeddings required.
 
-Tier 0 provides three complementary capabilities for graph construction:
+Tier 0 provides two complementary capabilities for graph construction:
 
 | Capability | Description | Timing |
 |------------|-------------|--------|
 | **Explicit Triples** | Relationships from source data (SPO format) | Sync, per-event |
 | **Rules Engine** | Pattern-based inference (IF A→B AND B→C THEN A→C) | Sync, per-event |
-| **Structural Inference** | Topology analysis suggests missing relationships | Async, after clustering |
 
 #### Explicit Triples
 
@@ -122,19 +121,7 @@ Entities connect via triples like `sensor-001 located_in zone-A`. Communities fo
 
 Evaluates patterns on entity changes. Can create new triples, fire alerts, or update state. Deterministic, no external dependencies.
 
-#### Structural Inference
-
-Analyzes graph topology to detect potential missing relationships:
-
-- **K-core decomposition**: Identifies graph backbone vs periphery
-- **Pivot-based distances**: Estimates structural distance between entities
-- **Anomaly detection**: Finds gaps (e.g., semantically similar but structurally distant)
-
-Detected anomalies are queued for review. Approved suggestions become new triples in the graph.
-
-See [Structural Inference](06-structural-analysis.md) for details.
-
-**Use case:** Any deployment where explicit relationships are sufficient—telemetry, network topology, highly structured domains. Structural inference adds value when you want the system to suggest missing connections.
+**Use case:** Any deployment where explicit relationships are sufficient—telemetry, network topology, highly structured domains.
 
 ### Tier 1: Statistical
 
@@ -144,8 +131,14 @@ BM25 embeddings for entities with text content—pure Go, no external services.
 - TF-IDF keyword extraction from text fields
 - Hybrid clustering: explicit edges + virtual edges (for text entities)
 - Telemetry entities still cluster via explicit relationships only
+- **Anomaly detection**: Topology analysis suggests missing relationships (see [Anomaly Detection](06-structural-analysis.md))
 
-**Use case:** Mixed deployments with documents AND telemetry—documents cluster by topic, telemetry by explicit relationships.
+Tier 1 also enables structural analysis after community detection:
+- **K-core decomposition**: Identifies graph backbone vs periphery
+- **Pivot-based distances**: Estimates structural distance between entities
+- **Gap detection**: Finds entities that are semantically similar but structurally distant
+
+**Use case:** Mixed deployments with documents AND telemetry—documents cluster by topic, telemetry by explicit relationships. Anomaly detection helps identify missing connections.
 
 ### Tier 2: Semantic
 
@@ -240,6 +233,6 @@ Rules provide real-time responsiveness. Embeddings enable similarity. Clustering
 - [Event-Driven Basics](01-event-driven-basics.md) - How events flow through the system
 - [Similarity Metrics](04-similarity-metrics.md) - Cosine, Jaccard, TF-IDF fundamentals
 - [Community Detection](05-community-detection.md) - How clustering works
-- [Structural Inference](06-structural-analysis.md) - Tier 0 topology analysis and anomaly detection
+- [Anomaly Detection](06-structural-analysis.md) - Tier 1+ topology analysis and gap detection
 - [GraphRAG Pattern](07-graphrag-pattern.md) - How communities enable RAG
 - [PathRAG Pattern](08-pathrag-pattern.md) - Structural traversal queries
