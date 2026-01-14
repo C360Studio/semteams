@@ -15,6 +15,40 @@ These are typical configuration presets. Mix and match features based on your ne
 > **Default**: Native configuration. The Graph processor enables BM25 embeddings by default. For Rules-Only
 (no search), explicitly disable embeddings in your config.
 
+## Static Config and UI Flows
+
+SemStreams supports two operational modes that share the same underlying infrastructure.
+
+### Headless Mode (Static Config)
+
+Start with a JSON config file for automated deployments:
+
+```bash
+semstreams --config config.json
+```
+
+Components defined in the config start automatically. Ideal for production and CI/CD.
+
+### UI Mode (Visual Flow Builder)
+
+Design flows visually with drag-and-drop components, real-time validation, and live metrics. The UI
+connects to the same APIs that power headless mode.
+
+### Static Config → Flow Bridge
+
+When you start with a static config, SemStreams automatically creates a Flow in the flows bucket.
+This makes your static configuration visible and controllable through the UI:
+
+- **First boot**: Static config → Flow created in KV
+- **Subsequent boots**: KV wins (UI customizations preserved)
+- **Reset**: Delete flow from KV to restore static config
+
+This allows you to start in headless mode for deployment, then connect the UI later to monitor
+and adjust the running flow.
+
+See [Flow Architecture](../concepts/10-flow-architecture.md) for details on the dual-bucket design
+and lifecycle operations.
+
 ## Component-Based Deployment
 
 SemStreams uses a component-based architecture where capabilities are provided by specialized components

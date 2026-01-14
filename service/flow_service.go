@@ -111,7 +111,85 @@ func (fs *FlowService) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Bridge static config to FlowStore: create default flow if needed
+	// This makes headless static configs visible to the UI.
+	// Precedence: KV wins if it exists (preserves UI customizations)
+	if err := fs.ensureDefaultFlowFromConfig(ctx); err != nil {
+		fs.logger.Warn("Failed to create default flow from config", "error", err)
+		// Non-fatal: continue without default flow
+	}
+
 	fs.logger.Info("Flow service started")
+	return nil
+}
+
+// ensureDefaultFlowFromConfig creates a default flow from static config if:
+// 1. No flows exist in the FlowStore (first boot)
+// 2. Static config has enabled components
+//
+// This bridges the gap between headless static configs and the UI.
+// On subsequent boots, existing flows in KV are preserved (KV wins).
+func (fs *FlowService) ensureDefaultFlowFromConfig(ctx context.Context) error {
+	// Check if any flows already exist
+	flows, err := fs.flowStore.List(ctx)
+	if err != nil {
+		// If error is "no keys found", that's fine - no flows exist
+		if !strings.Contains(err.Error(), "no keys found") {
+			return fmt.Errorf("list flows: %w", err)
+		}
+		flows = nil
+	}
+
+	if len(flows) > 0 {
+		// KV wins: flows already exist, preserve UI customizations
+		fs.logger.Debug("Using existing flows from KV", "count", len(flows))
+		return nil
+	}
+
+	// No flows in KV - check if static config has components
+	if fs.configMgr == nil {
+		return nil // No config manager available
+	}
+
+	cfg := fs.configMgr.GetConfig()
+	if cfg == nil {
+		return nil
+	}
+
+	currentCfg := cfg.Get()
+	if currentCfg == nil || len(currentCfg.Components) == 0 {
+		fs.logger.Debug("No components in static config, skipping default flow creation")
+		return nil
+	}
+
+	// Count enabled components
+	enabledCount := 0
+	for _, comp := range currentCfg.Components {
+		if comp.Enabled {
+			enabledCount++
+		}
+	}
+
+	if enabledCount == 0 {
+		fs.logger.Debug("No enabled components in static config")
+		return nil
+	}
+
+	// First boot: create flow from static config
+	defaultFlow, err := flowstore.FromComponentConfigs("default", currentCfg.Components)
+	if err != nil {
+		return fmt.Errorf("convert config to flow: %w", err)
+	}
+
+	if err := fs.flowStore.Create(ctx, defaultFlow); err != nil {
+		return fmt.Errorf("create default flow: %w", err)
+	}
+
+	fs.logger.Info("Created default flow from static config",
+		"flow_id", defaultFlow.ID,
+		"components", enabledCount,
+		"state", defaultFlow.RuntimeState)
+
 	return nil
 }
 
