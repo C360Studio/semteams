@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -154,16 +155,26 @@ func (s *Server) Start(ctx context.Context, ready chan<- struct{}) error {
 	httpServer := s.httpServer
 	s.mu.Unlock()
 
+	// Create listener first so we can signal ready after the port is bound
+	listener, err := net.Listen("tcp", s.config.BindAddress)
+	if err != nil {
+		s.mu.Lock()
+		s.running = false
+		s.mu.Unlock()
+		return errs.WrapFatal(err, "Server", "Start", "failed to bind address")
+	}
+
+	s.logger.Info("MCP gateway starting", "address", s.config.BindAddress)
+
+	// Signal ready now that the port is bound and listening
+	if ready != nil {
+		close(ready)
+	}
+
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(errChan)
-		s.logger.Info("MCP gateway starting", "address", s.config.BindAddress)
-
-		if ready != nil {
-			close(ready)
-		}
-
-		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := httpServer.Serve(listener); err != nil && err != http.ErrServerClosed {
 			s.logger.Error("MCP HTTP server error", "error", err)
 			select {
 			case errChan <- err:
