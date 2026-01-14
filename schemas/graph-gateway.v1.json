@@ -10,6 +10,11 @@
       "description": "HTTP server bind address",
       "category": "basic"
     },
+    "enable_inference_api": {
+      "type": "boolean",
+      "description": "Enable inference API for anomaly review",
+      "category": "basic"
+    },
     "enable_playground": {
       "type": "boolean",
       "description": "Enable GraphQL playground",

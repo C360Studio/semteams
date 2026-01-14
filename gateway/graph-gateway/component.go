@@ -15,6 +15,8 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/gateway"
+	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/inference"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
@@ -36,12 +38,13 @@ var (
 
 // Config holds configuration for graph-gateway component
 type Config struct {
-	Ports            *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
-	GraphQLPath      string                `json:"graphql_path" schema:"type:string,description:GraphQL endpoint path,category:basic"`
-	MCPPath          string                `json:"mcp_path" schema:"type:string,description:MCP endpoint path,category:basic"`
-	BindAddress      string                `json:"bind_address" schema:"type:string,description:HTTP server bind address,category:basic"`
-	EnablePlayground bool                  `json:"enable_playground" schema:"type:bool,description:Enable GraphQL playground,category:basic"`
-	QueryTimeout     time.Duration         `json:"query_timeout" schema:"type:duration,description:Query timeout duration,category:basic"`
+	Ports              *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
+	GraphQLPath        string                `json:"graphql_path" schema:"type:string,description:GraphQL endpoint path,category:basic"`
+	MCPPath            string                `json:"mcp_path" schema:"type:string,description:MCP endpoint path,category:basic"`
+	BindAddress        string                `json:"bind_address" schema:"type:string,description:HTTP server bind address,category:basic"`
+	EnablePlayground   bool                  `json:"enable_playground" schema:"type:bool,description:Enable GraphQL playground,category:basic"`
+	EnableInferenceAPI bool                  `json:"enable_inference_api" schema:"type:bool,description:Enable inference API for anomaly review,category:basic"`
+	QueryTimeout       time.Duration         `json:"query_timeout" schema:"type:duration,description:Query timeout duration,category:basic"`
 }
 
 // Validate implements component.Validatable interface
@@ -550,10 +553,66 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 		mux.HandleFunc(playgroundPath, c.handlePlayground)
 	}
 
+	// Register inference API handlers if enabled
+	inferenceEnabled := false
+	if c.config.EnableInferenceAPI {
+		if err := c.registerInferenceHandlers(prefix, mux); err != nil {
+			c.logger.Warn("failed to register inference handlers",
+				slog.Any("error", err))
+		} else {
+			inferenceEnabled = true
+		}
+	}
+
 	c.logger.Info("HTTP handlers registered",
 		slog.String("graphql_path", graphqlPath),
 		slog.String("mcp_path", mcpPath),
-		slog.Bool("playground_enabled", c.config.EnablePlayground))
+		slog.Bool("playground_enabled", c.config.EnablePlayground),
+		slog.Bool("inference_enabled", inferenceEnabled))
+}
+
+// registerInferenceHandlers registers inference API handlers for anomaly review.
+// The gateway creates its own read-only connection to ANOMALY_INDEX bucket.
+func (c *Component) registerInferenceHandlers(prefix string, mux *http.ServeMux) error {
+	// Get JetStream to access the ANOMALY_INDEX bucket
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return errs.Wrap(err, "Component", "registerInferenceHandlers", "get JetStream")
+	}
+
+	// Get the ANOMALY_INDEX bucket (created by graph-clustering)
+	anomalyBucket, err := js.KeyValue(context.Background(), graph.BucketAnomalyIndex)
+	if err != nil {
+		// Bucket may not exist if graph-clustering hasn't started yet
+		// This is not a fatal error - just skip inference API
+		return errs.Wrap(err, "Component", "registerInferenceHandlers", "get anomaly bucket")
+	}
+
+	// Create read-only storage for listing/viewing anomalies
+	storage := inference.NewNATSAnomalyStorage(anomalyBucket, c.logger)
+
+	// Create relationship applier for approved anomalies
+	applier := inference.NewNATSRelationshipApplier(js, "graph.events.relationship.create", c.logger)
+
+	// Create and register inference HTTP handler
+	handler := inference.NewHTTPHandler(storage, applier, c.logger)
+	inferencePath := prefix + "/inference"
+	if inferencePath[0] != '/' {
+		inferencePath = "/" + inferencePath
+	}
+	// Clean double slashes
+	for i := 0; i < len(inferencePath)-1; i++ {
+		if inferencePath[i] == '/' && inferencePath[i+1] == '/' {
+			inferencePath = inferencePath[:i] + inferencePath[i+1:]
+			i--
+		}
+	}
+	handler.RegisterHTTPHandlers(inferencePath, mux)
+
+	c.logger.Info("inference API handlers registered",
+		slog.String("inference_path", inferencePath))
+
+	return nil
 }
 
 // ============================================================================

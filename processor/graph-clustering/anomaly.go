@@ -3,6 +3,7 @@ package graphclustering
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
 
@@ -45,6 +46,77 @@ func (a *graphProviderAdapter) GetIncomingRelationships(ctx context.Context, ent
 		result[i] = inference.RelationshipInfo{
 			FromEntityID: n,
 			ToEntityID:   entityID,
+		}
+	}
+	return result, nil
+}
+
+// kvRelationshipQuerier implements inference.RelationshipQuerier using KV buckets directly.
+// Unlike graphProviderAdapter, this implementation preserves predicate information
+// which is required by the TransitivityDetector to filter by transitive predicates.
+type kvRelationshipQuerier struct {
+	outgoingBucket jetstream.KeyValue
+	incomingBucket jetstream.KeyValue
+	logger         *slog.Logger
+}
+
+func newKVRelationshipQuerier(
+	outgoingBucket jetstream.KeyValue,
+	incomingBucket jetstream.KeyValue,
+	logger *slog.Logger,
+) *kvRelationshipQuerier {
+	return &kvRelationshipQuerier{
+		outgoingBucket: outgoingBucket,
+		incomingBucket: incomingBucket,
+		logger:         logger,
+	}
+}
+
+func (q *kvRelationshipQuerier) GetOutgoingRelationships(ctx context.Context, entityID string) ([]inference.RelationshipInfo, error) {
+	entry, err := q.outgoingBucket.Get(ctx, entityID)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var relationships []relationshipEntry
+	if err := json.Unmarshal(entry.Value(), &relationships); err != nil {
+		return nil, err
+	}
+
+	result := make([]inference.RelationshipInfo, len(relationships))
+	for i, rel := range relationships {
+		result[i] = inference.RelationshipInfo{
+			FromEntityID: entityID,
+			ToEntityID:   rel.ToEntityID,
+			Predicate:    rel.Predicate,
+		}
+	}
+	return result, nil
+}
+
+func (q *kvRelationshipQuerier) GetIncomingRelationships(ctx context.Context, entityID string) ([]inference.RelationshipInfo, error) {
+	entry, err := q.incomingBucket.Get(ctx, entityID)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var relationships []relationshipEntry
+	if err := json.Unmarshal(entry.Value(), &relationships); err != nil {
+		return nil, err
+	}
+
+	result := make([]inference.RelationshipInfo, len(relationships))
+	for i, rel := range relationships {
+		result[i] = inference.RelationshipInfo{
+			FromEntityID: rel.FromEntityID,
+			ToEntityID:   entityID,
+			Predicate:    rel.Predicate,
 		}
 	}
 	return result, nil
@@ -129,9 +201,14 @@ func (c *Component) registerAnomalyDetectors() error {
 		c.logger.Debug("registered semantic gap detector")
 	}
 
-	// Note: Transitivity detector requires RelationshipQuerier (future work)
+	// Register transitivity detector for detecting missing transitive relationships
 	if cfg.Transitivity.Enabled {
-		c.logger.Warn("transitivity detector enabled but RelationshipQuerier not yet wired - skipping")
+		transitivityDetector := inference.NewTransitivityDetector(nil)
+		if err := transitivityDetector.Configure(cfg.Transitivity); err != nil {
+			return errs.Wrap(err, "Component", "registerAnomalyDetectors", "configure transitivity detector")
+		}
+		c.anomalyOrchestrator.RegisterDetector(transitivityDetector)
+		c.logger.Debug("registered transitivity detector")
 	}
 
 	return nil
@@ -166,7 +243,7 @@ func (c *Component) runAnomalyDetection(ctx context.Context, kcoreIndex *structu
 		PreviousKCore:       c.previousKCore, // May be nil on first run
 		Communities:         communities,
 		SimilarityFinder:    c.similarityFinder,
-		RelationshipQuerier: &graphProviderAdapter{provider: c.graphProvider},
+		RelationshipQuerier: newKVRelationshipQuerier(c.outgoingBucket, c.incomingBucket, c.logger),
 		AnomalyStorage:      c.anomalyStorage,
 		Logger:              c.logger,
 	}

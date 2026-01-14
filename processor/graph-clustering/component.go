@@ -302,6 +302,9 @@ type Component struct {
 	enhancementWorker *clustering.EnhancementWorker
 	llmClient         llm.Client
 
+	// Review worker (optional, for anomaly approval workflow)
+	reviewWorker *inference.ReviewWorker
+
 	// Lifecycle state
 	mu                sync.RWMutex
 	running           bool
@@ -599,6 +602,14 @@ func (c *Component) Start(ctx context.Context) error {
 		}
 	}
 
+	// Start review worker if enabled (for anomaly approval workflow)
+	if c.config.AnomalyConfig.Review.Enabled && c.anomalyStorage != nil {
+		if err := c.startReviewWorker(ctx); err != nil {
+			c.logger.Warn("failed to start review worker, continuing without anomaly review",
+				slog.Any("error", err))
+		}
+	}
+
 	// Mark as running
 	c.running = true
 	c.startTime = time.Now()
@@ -625,6 +636,13 @@ func (c *Component) Stop(timeout time.Duration) error {
 	if !c.running {
 		c.mu.Unlock()
 		return nil // Already stopped
+	}
+
+	// Stop review worker if running
+	if c.reviewWorker != nil {
+		if err := c.reviewWorker.Stop(); err != nil {
+			c.logger.Warn("review worker stop error", slog.Any("error", err))
+		}
 	}
 
 	// Stop enhancement worker if running
@@ -1089,6 +1107,49 @@ func (c *Component) startEnhancementWorker(ctx context.Context, provider cluster
 		slog.String("endpoint", c.config.LLMEndpoint),
 		slog.String("model", c.config.LLMModel),
 		slog.Int("workers", c.config.EnhancementWorkers))
+
+	return nil
+}
+
+// startReviewWorker initializes and starts the anomaly review worker.
+// The review worker processes pending anomalies and can auto-approve/reject
+// based on confidence thresholds, optionally using LLM for uncertain cases.
+func (c *Component) startReviewWorker(ctx context.Context) error {
+	// Get JetStream for the applier
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return errs.Wrap(err, "Component", "startReviewWorker", "get JetStream")
+	}
+
+	// Create relationship applier for approved anomalies
+	// Uses the relationship create event subject for publishing inferred relationships
+	applier := inference.NewNATSRelationshipApplier(js, "graph.events.relationship.create", c.logger)
+
+	// Create review worker - llmClient may be nil for human-only mode
+	reviewWorker, err := inference.NewReviewWorker(&inference.ReviewWorkerConfig{
+		AnomalyBucket: c.anomalyBucket,
+		Storage:       c.anomalyStorage,
+		LLMClient:     c.llmClient, // May be nil for human-only mode
+		Applier:       applier,
+		Config:        c.config.AnomalyConfig.Review,
+		Logger:        c.logger,
+	})
+	if err != nil {
+		return errs.Wrap(err, "Component", "startReviewWorker", "create review worker")
+	}
+	c.reviewWorker = reviewWorker
+
+	// Start the worker
+	if err := c.reviewWorker.Start(ctx); err != nil {
+		c.reviewWorker = nil
+		return errs.Wrap(err, "Component", "startReviewWorker", "start review worker")
+	}
+
+	c.logger.Info("review worker started",
+		slog.Int("workers", c.config.AnomalyConfig.Review.Workers),
+		slog.Bool("llm_enabled", c.llmClient != nil),
+		slog.Float64("auto_approve_threshold", c.config.AnomalyConfig.Review.AutoApproveThreshold),
+		slog.Float64("auto_reject_threshold", c.config.AnomalyConfig.Review.AutoRejectThreshold))
 
 	return nil
 }

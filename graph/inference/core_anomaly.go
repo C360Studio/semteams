@@ -2,6 +2,7 @@ package inference
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -241,6 +242,13 @@ func (d *CoreAnomalyDetector) createIsolationAnomaly(
 		EntityA:    entityID,
 		Confidence: confidence,
 		Evidence:   evidence,
+		Suggestion: &RelationshipSuggestion{
+			FromEntity: entityID,
+			ToEntity:   "", // To be populated during review with suggested peer
+			Predicate:  "inference.suggested.peer",
+			Confidence: confidence,
+			Reasoning:  fmt.Sprintf("High k-core entity (level %d) with only %d/%d expected same-core peers", coreLevel, peerCount, expectedPeers),
+		},
 		Status:     StatusPending,
 		DetectedAt: now,
 	}
@@ -310,6 +318,13 @@ func (d *CoreAnomalyDetector) createDemotionAnomaly(
 		EntityA:    entityID,
 		Confidence: confidence,
 		Evidence:   evidence,
+		Suggestion: &RelationshipSuggestion{
+			FromEntity: entityID,
+			ToEntity:   "", // To be populated during review with support entity
+			Predicate:  "inference.suggested.support",
+			Confidence: confidence,
+			Reasoning:  fmt.Sprintf("Entity dropped from k-core %d to %d, may need additional connections", previousCore, currentCore),
+		},
 		Status:     StatusPending,
 		DetectedAt: now,
 	}
