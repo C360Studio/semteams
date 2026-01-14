@@ -347,6 +347,104 @@ func TestHTTPHandler_HandleReviewAnomaly_WrongState(t *testing.T) {
 	assert.Equal(t, http.StatusConflict, w.Code)
 }
 
+func TestHTTPHandler_HandleReviewAnomaly_EmptyToEntityRequiresTargetEntity(t *testing.T) {
+	storage := NewNATSAnomalyStorage(nil, slog.Default())
+	applier := &mockApplier{}
+
+	ctx := context.Background()
+	// Anomaly with Suggestion but empty ToEntity (common for core isolation anomalies)
+	anomaly := &StructuralAnomaly{
+		ID:         "empty-toentity-test",
+		Type:       AnomalyCoreIsolation,
+		Status:     StatusHumanReview,
+		EntityA:    "entity:isolated",
+		Confidence: 0.75,
+		DetectedAt: time.Now(),
+		Suggestion: &RelationshipSuggestion{
+			FromEntity: "entity:isolated",
+			ToEntity:   "", // Empty - needs to be filled by reviewer
+			Predicate:  "inference.suggested.peer",
+			Confidence: 0.75,
+		},
+	}
+	require.NoError(t, storage.Save(ctx, anomaly))
+
+	h := NewHTTPHandler(storage, applier, slog.Default())
+
+	// Try to approve without providing TargetEntity
+	reviewReq := ReviewRequest{
+		Decision:   "approved",
+		ReviewedBy: "test-user",
+	}
+	body, _ := json.Marshal(reviewReq)
+
+	req := httptest.NewRequest(http.MethodPost, "/inference/anomalies/empty-toentity-test/review", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	h.handleReviewAnomaly(w, req, "empty-toentity-test")
+
+	// Should fail because ToEntity is empty and no TargetEntity provided
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "Target entity required")
+
+	// Verify applier was NOT called
+	applier.mu.Lock()
+	assert.Len(t, applier.applied, 0)
+	applier.mu.Unlock()
+}
+
+func TestHTTPHandler_HandleReviewAnomaly_TargetEntityFillsEmptyToEntity(t *testing.T) {
+	storage := NewNATSAnomalyStorage(nil, slog.Default())
+	applier := &mockApplier{}
+
+	ctx := context.Background()
+	// Anomaly with Suggestion but empty ToEntity
+	anomaly := &StructuralAnomaly{
+		ID:         "fill-toentity-test",
+		Type:       AnomalyCoreIsolation,
+		Status:     StatusHumanReview,
+		EntityA:    "entity:isolated",
+		Confidence: 0.75,
+		DetectedAt: time.Now(),
+		Suggestion: &RelationshipSuggestion{
+			FromEntity: "entity:isolated",
+			ToEntity:   "", // Empty - will be filled by TargetEntity
+			Predicate:  "inference.suggested.peer",
+			Confidence: 0.75,
+		},
+	}
+	require.NoError(t, storage.Save(ctx, anomaly))
+
+	h := NewHTTPHandler(storage, applier, slog.Default())
+
+	// Approve with TargetEntity to fill empty ToEntity
+	reviewReq := ReviewRequest{
+		Decision:     "approved",
+		TargetEntity: "entity:peer-hub",
+		ReviewedBy:   "test-user",
+	}
+	body, _ := json.Marshal(reviewReq)
+
+	req := httptest.NewRequest(http.MethodPost, "/inference/anomalies/fill-toentity-test/review", bytes.NewReader(body))
+	w := httptest.NewRecorder()
+
+	h.handleReviewAnomaly(w, req, "fill-toentity-test")
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var result StructuralAnomaly
+	err := json.Unmarshal(w.Body.Bytes(), &result)
+	require.NoError(t, err)
+	assert.Equal(t, StatusApplied, result.Status)
+
+	// Verify applier was called with filled ToEntity
+	applier.mu.Lock()
+	require.Len(t, applier.applied, 1)
+	assert.Equal(t, "entity:peer-hub", applier.applied[0].ToEntity)
+	assert.Equal(t, "entity:isolated", applier.applied[0].FromEntity)
+	applier.mu.Unlock()
+}
+
 func TestHTTPHandler_HandleStats(t *testing.T) {
 	storage := NewNATSAnomalyStorage(nil, slog.Default())
 

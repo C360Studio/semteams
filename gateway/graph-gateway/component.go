@@ -165,6 +165,7 @@ type Component struct {
 	initialized bool
 	startTime   time.Time
 	wg          sync.WaitGroup
+	ctx         context.Context // Stored context from Start() for use in handler registration
 	cancel      context.CancelFunc
 
 	// Metrics (atomic)
@@ -388,8 +389,9 @@ func (c *Component) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Create cancellable context
+	// Create cancellable context and store for handler registration
 	ctx, cancel := context.WithCancel(ctx)
+	c.ctx = ctx
 	c.cancel = cancel
 
 	// Initialize lifecycle reporter (throttled for high-throughput serving)
@@ -581,7 +583,8 @@ func (c *Component) registerInferenceHandlers(prefix string, mux *http.ServeMux)
 	}
 
 	// Get the ANOMALY_INDEX bucket (created by graph-clustering)
-	anomalyBucket, err := js.KeyValue(context.Background(), graph.BucketAnomalyIndex)
+	// Use stored context to allow cancellation during shutdown
+	anomalyBucket, err := js.KeyValue(c.ctx, graph.BucketAnomalyIndex)
 	if err != nil {
 		// Bucket may not exist if graph-clustering hasn't started yet
 		// This is not a fatal error - just skip inference API

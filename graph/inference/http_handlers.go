@@ -2,6 +2,7 @@
 package inference
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -44,10 +45,11 @@ func (h *HTTPHandler) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 
 // ReviewRequest represents a human review decision.
 type ReviewRequest struct {
-	Decision          string `json:"decision"` // "approved" or "rejected"
-	Notes             string `json:"notes,omitempty"`
-	OverridePredicate string `json:"override_predicate,omitempty"`
-	ReviewedBy        string `json:"reviewed_by,omitempty"`
+	Decision          string `json:"decision"`                     // "approved" or "rejected"
+	Notes             string `json:"notes,omitempty"`              // Optional notes about the decision
+	OverridePredicate string `json:"override_predicate,omitempty"` // Override the suggested predicate
+	TargetEntity      string `json:"target_entity,omitempty"`      // Target entity for approval (required if suggestion has empty ToEntity)
+	ReviewedBy        string `json:"reviewed_by,omitempty"`        // Who reviewed this anomaly
 }
 
 // StatsResponse contains inference statistics.
@@ -170,6 +172,43 @@ func (h *HTTPHandler) handleGetAnomaly(w http.ResponseWriter, r *http.Request, a
 	}
 }
 
+// processApproval handles the approval decision for an anomaly.
+// Returns an error message if approval fails, empty string on success.
+func (h *HTTPHandler) processApproval(ctx context.Context, anomaly *StructuralAnomaly, req *ReviewRequest) string {
+	if anomaly.Suggestion == nil {
+		anomaly.Status = StatusApproved
+		return ""
+	}
+
+	// Apply target entity override if provided, or use it to fill empty ToEntity
+	if req.TargetEntity != "" {
+		anomaly.Suggestion.ToEntity = req.TargetEntity
+	}
+
+	// Apply predicate override if provided
+	if req.OverridePredicate != "" {
+		anomaly.Suggestion.Predicate = req.OverridePredicate
+	}
+
+	// Validate that ToEntity is set before applying
+	if anomaly.Suggestion.ToEntity == "" {
+		return "Target entity required: suggestion has no target and none provided in request"
+	}
+
+	// Apply the relationship
+	if h.applier != nil {
+		if err := h.applier.ApplyRelationship(ctx, anomaly.Suggestion); err != nil {
+			h.logger.Error("Failed to apply approved relationship", "id", anomaly.ID, "error", err)
+			return "Failed to apply relationship"
+		}
+		anomaly.Status = StatusApplied
+	} else {
+		anomaly.Status = StatusApproved
+	}
+
+	return ""
+}
+
 // handleReviewAnomaly processes a human review decision.
 // POST /inference/anomalies/{id}/review
 func (h *HTTPHandler) handleReviewAnomaly(w http.ResponseWriter, r *http.Request, anomalyID string) {
@@ -224,22 +263,13 @@ func (h *HTTPHandler) handleReviewAnomaly(w http.ResponseWriter, r *http.Request
 	anomaly.ReviewNotes = req.Notes
 
 	if req.Decision == "approved" {
-		// Apply predicate override if provided
-		if req.OverridePredicate != "" && anomaly.Suggestion != nil {
-			anomaly.Suggestion.Predicate = req.OverridePredicate
-		}
-
-		// Apply the relationship
-		if anomaly.Suggestion != nil && h.applier != nil {
-			if err := h.applier.ApplyRelationship(ctx, anomaly.Suggestion); err != nil {
-				h.logger.Error("Failed to apply approved relationship",
-					"id", anomalyID, "error", err)
-				http.Error(w, "Failed to apply relationship", http.StatusInternalServerError)
-				return
+		if errMsg := h.processApproval(ctx, anomaly, &req); errMsg != "" {
+			if errMsg == "Failed to apply relationship" {
+				http.Error(w, errMsg, http.StatusInternalServerError)
+			} else {
+				http.Error(w, errMsg, http.StatusBadRequest)
 			}
-			anomaly.Status = StatusApplied
-		} else {
-			anomaly.Status = StatusApproved
+			return
 		}
 	} else {
 		anomaly.Status = StatusRejected
