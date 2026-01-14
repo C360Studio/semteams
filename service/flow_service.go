@@ -181,6 +181,29 @@ func (fs *FlowService) ensureDefaultFlowFromConfig(ctx context.Context) error {
 		return fmt.Errorf("convert config to flow: %w", err)
 	}
 
+	// Derive connections using FlowEngine validation
+	// The validator builds a FlowGraph and auto-discovers connections via port subject matching
+	validationResult, validationErr := fs.flowEngine.ValidateFlowDefinition(defaultFlow)
+	if validationErr != nil {
+		fs.logger.Debug("Flow validation failed during connection derivation",
+			"error", validationErr)
+		// Non-fatal: proceed without connections
+	} else if validationResult != nil {
+		// Convert discovered connections to FlowConnections
+		for _, dc := range validationResult.DiscoveredConnections {
+			conn := flowstore.FlowConnection{
+				ID:           uuid.New().String(),
+				SourceNodeID: dc.SourceNodeID,
+				SourcePort:   dc.SourcePort,
+				TargetNodeID: dc.TargetNodeID,
+				TargetPort:   dc.TargetPort,
+			}
+			defaultFlow.Connections = append(defaultFlow.Connections, conn)
+		}
+		fs.logger.Debug("Derived connections from static config",
+			"connections", len(defaultFlow.Connections))
+	}
+
 	if err := fs.flowStore.Create(ctx, defaultFlow); err != nil {
 		return fmt.Errorf("create default flow: %w", err)
 	}
@@ -188,6 +211,7 @@ func (fs *FlowService) ensureDefaultFlowFromConfig(ctx context.Context) error {
 	fs.logger.Info("Created default flow from static config",
 		"flow_id", defaultFlow.ID,
 		"components", enabledCount,
+		"connections", len(defaultFlow.Connections),
 		"state", defaultFlow.RuntimeState)
 
 	return nil
