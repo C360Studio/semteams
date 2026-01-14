@@ -30,6 +30,7 @@
 //   - ALIAS_INDEX, PREDICATE_INDEX: Lookups
 //   - EMBEDDINGS_CACHE: Vector similarity (semantic tier)
 //   - COMMUNITY_INDEX: Clustering results (semantic tier)
+//   - ANOMALY_INDEX: Structural anomalies for inference endpoints
 //
 // # HTTP Endpoints
 //
@@ -41,6 +42,11 @@
 // MCP (/mcp):
 //   - Model Context Protocol for LLM tool integration
 //   - Provides structured graph operations for AI agents
+//
+// Inference (/inference/*):
+//   - List pending anomalies for human review
+//   - Get anomaly details and submit review decisions
+//   - View inference statistics
 //
 // Playground (/ when enabled):
 //   - Interactive GraphQL IDE for development

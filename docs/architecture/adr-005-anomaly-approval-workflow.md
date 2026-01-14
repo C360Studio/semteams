@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Implemented
 
 ## Context
 
@@ -13,16 +13,16 @@ SemStreams includes structural anomaly detection that identifies potential issue
 - **Core Demotion**: Entities that dropped k-core level between runs
 - **Transitivity Gaps**: Missing transitive relationships
 
-The detection system is implemented and working. However, the **approval workflow** for acting on detected anomalies exists as code but is **not wired** into the runtime:
+The detection system is implemented and working. The **approval workflow** components are now **fully wired** into the runtime:
 
 | Component | Status | Location |
 |-----------|--------|----------|
 | Anomaly Detection | Working | `graph/inference/core_anomaly.go` |
-| ReviewWorker | Implemented, NOT started | `graph/inference/review_worker.go` |
-| HTTP Handlers | Implemented, NOT registered | `graph/inference/http_handlers.go` |
-| RelationshipApplier | Implemented | `graph/inference/applier.go` |
-| ReviewConfig | Defined, NOT used | `graph/inference/config.go` |
-| Suggestion Generation | Incomplete | Core anomalies lack suggestions |
+| ReviewWorker | Working | `graph/inference/review_worker.go` |
+| HTTP Handlers | Working | `graph/inference/http_handlers.go` |
+| RelationshipApplier | Working | `graph/inference/applier.go` |
+| ReviewConfig | Working | `graph/inference/config.go` |
+| Suggestion Generation | Working | `graph/inference/core_anomaly.go` |
 
 ## Decision
 
@@ -133,11 +133,33 @@ For each anomaly type, define the suggested relationship:
 
 | File | Change |
 |------|--------|
-| `graph/inference/core_anomaly.go` | Add suggestion generation |
-| `processor/graph-clustering/component.go` | Start ReviewWorker |
-| `gateway/graph-gateway/component.go` | Register HTTP handlers |
+| `graph/inference/core_anomaly.go` | Suggestion generation added |
+| `processor/graph-clustering/component.go` | ReviewWorker started |
+| `gateway/graph-gateway/component.go` | HTTP handlers registered |
 | `graph/inference/review_worker.go` | Already implemented |
-| `graph/inference/http_handlers.go` | Already implemented |
+| `graph/inference/http_handlers.go` | TargetEntity validation added |
+
+## Implementation Notes
+
+The following enhancements were made during implementation:
+
+### TargetEntity Support
+
+Core anomaly detectors (isolation, demotion) create suggestions with empty `ToEntity` because the target peer/support entity must be determined by the reviewer. The HTTP review endpoint now supports a `target_entity` field in the review request:
+
+```json
+{
+  "decision": "approved",
+  "target_entity": "entity:peer-hub",
+  "notes": "Connect to main hub"
+}
+```
+
+The endpoint validates that `ToEntity` is set before applying—either from the original suggestion or from `target_entity` in the request.
+
+### Context Propagation
+
+The graph-gateway component stores the context from `Start()` and uses it when registering inference handlers. This ensures proper cancellation during shutdown instead of using `context.Background()`.
 
 ## References
 

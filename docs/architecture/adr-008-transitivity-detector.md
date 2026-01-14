@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Implemented
 
 ## Context
 
@@ -17,16 +17,7 @@ The detector code exists at `graph/inference/transitivity.go` with full implemen
 - Configuration for transitive predicates (`member_of`, `part_of`, `located_in`, `belongs_to`)
 - Path length analysis logic
 
-However, the detector is **intentionally skipped at runtime** due to a missing dependency:
-
-```go
-// processor/graph-clustering/anomaly.go:132-135
-if cfg.Transitivity.Enabled {
-    c.logger.Warn("transitivity detector enabled but RelationshipQuerier not yet wired - skipping")
-}
-```
-
-The detector requires a `RelationshipQuerier` interface to traverse relationship chains, which is not currently passed to `initAnomalyDetection()`.
+The detector is now **fully wired** into the runtime with a `kvRelationshipQuerier` implementation that preserves predicate information from the KV buckets.
 
 ## Decision
 
@@ -39,36 +30,47 @@ Wire the `RelationshipQuerier` dependency to enable the transitivity detector:
 
 ## Implementation
 
-### 1. Adapt GraphProvider to RelationshipQuerier
+### 1. kvRelationshipQuerier (Actual Approach)
 
-The `graphProviderAdapter` in `anomaly.go` already wraps the provider. Extend it to satisfy `RelationshipQuerier`:
+Instead of adapting `graphProviderAdapter`, a new `kvRelationshipQuerier` was created that reads directly from the KV buckets. This approach **preserves predicate information** which is essential for transitivity detection:
 
 ```go
-type graphProviderAdapter struct {
-    provider graph.Provider
+type kvRelationshipQuerier struct {
+    outgoingBucket jetstream.KeyValue  // OUTGOING_INDEX
+    incomingBucket jetstream.KeyValue  // INCOMING_INDEX
+    logger         *slog.Logger
 }
 
-func (a *graphProviderAdapter) GetRelationships(entityID string, predicates []string) ([]Relationship, error) {
-    // Use provider.GetOutgoing/GetIncoming filtered by predicates
+func (q *kvRelationshipQuerier) GetOutgoingRelationships(ctx context.Context, entityID string) ([]inference.RelationshipInfo, error) {
+    // Reads relationship entries with Predicate field preserved
 }
 ```
+
+**Why not graphProviderAdapter?**
+The `graphProviderAdapter` uses `graph.Provider.GetNeighbors()` which only returns entity IDs, losing predicate information. The transitivity detector needs predicates to filter chains (e.g., only follow `member_of` relationships).
 
 ### 2. Register Transitivity Detector
 
 ```go
 if cfg.Transitivity.Enabled {
-    querier := &graphProviderAdapter{provider: c.graphProvider}
-    transitivityDetector := inference.NewTransitivityDetector(cfg.Transitivity, querier)
+    querier := newKVRelationshipQuerier(outgoingBucket, incomingBucket, c.logger)
+    transitivityDeps := &inference.DetectorDependencies{
+        StructuralIndices:   &structural.Indices{Pivot: pivotIndex},
+        RelationshipQuerier: querier,
+    }
+    transitivityDetector := inference.NewTransitivityDetector(transitivityDeps)
+    transitivityDetector.Configure(cfg.Transitivity)
     c.anomalyOrchestrator.RegisterDetector(transitivityDetector)
 }
 ```
 
-### 3. Update Configuration
+### 3. Configuration
 
-Ensure transitivity config is properly exposed:
+Configuration is exposed through the anomaly detection config:
 - `transitivity.enabled` (default: false)
 - `transitivity.transitive_predicates` (default: ["member_of", "part_of", "located_in", "belongs_to"])
 - `transitivity.max_intermediate_hops` (default: 2)
+- `transitivity.min_expected_transitivity` (default: 1)
 
 ## Consequences
 

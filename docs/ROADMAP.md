@@ -15,14 +15,15 @@ Hybrid NL intent extraction with progressive fallback:
 Current state: Rule-based strategy inference from structured `SearchOptions`. Works for API clients but doesn't handle natural language inputs.
 
 ### Anomaly Approval Workflow
-**Status:** Needs Wiring | **ADR:** [ADR-005](architecture/adr-005-anomaly-approval-workflow.md)
+**Status:** Implemented | **ADR:** [ADR-005](architecture/adr-005-anomaly-approval-workflow.md)
 
-Wire existing ReviewWorker and HTTP handlers into runtime:
-- Start ReviewWorker in graph-clustering when enabled
-- Register `/inference/*` HTTP handlers in graph-gateway
-- Add suggestion generation to core anomaly detectors
+ReviewWorker and HTTP handlers wired into runtime:
+- ReviewWorker started in graph-clustering when enabled
+- `/inference/*` HTTP handlers registered in graph-gateway
+- Suggestion generation added to core anomaly detectors
+- `TargetEntity` support for approving anomalies with empty targets
 
-Current state: Detection works, review code exists but is disconnected from runtime.
+Current state: Fully operational. Human-only mode works without LLM.
 
 ### Mutation E2E Testing
 **Status:** Partial Coverage | **ADR:** [ADR-006](architecture/adr-006-mutation-e2e-testing.md)
@@ -35,14 +36,14 @@ Add explicit mutation tests beyond rule-driven coverage:
 Current state: Mutations only tested indirectly via rules engine.
 
 ### Transitivity Detector Wiring
-**Status:** Needs Wiring | **ADR:** [ADR-008](architecture/adr-008-transitivity-detector.md)
+**Status:** Implemented | **ADR:** [ADR-008](architecture/adr-008-transitivity-detector.md)
 
-Wire the transitivity gap detector into the anomaly detection pipeline:
-- Implement RelationshipQuerier adapter for graph provider
-- Register transitivity detector with anomaly orchestrator
-- Enable detection of missing edges in transitive predicate chains
+Transitivity gap detector wired into anomaly detection pipeline:
+- `kvRelationshipQuerier` implementation preserves predicate information
+- Transitivity detector registered with anomaly orchestrator
+- Detection of missing edges in transitive predicate chains enabled
 
-Current state: Detector code exists but is intentionally skipped at runtime pending RelationshipQuerier integration.
+Current state: Fully operational. Detects transitivity gaps for configured predicates.
 
 ### Query Pattern Enhancements
 **Status:** Partial Implementation | **ADR:** [ADR-009](architecture/adr-009-pathrag-enhancements.md)
