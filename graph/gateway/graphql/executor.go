@@ -664,6 +664,14 @@ func (e *Executor) resolveGlobalSearch(ctx context.Context, args map[string]any,
 		return nil, nil
 	}
 
+	// Apply temporal filtering if TimeRange is specified
+	if opts.TimeRange != nil {
+		result, err = e.filterByTemporal(ctx, result, opts.TimeRange)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return e.formatGlobalSearchResult(result, selections)
 }
 
@@ -839,6 +847,36 @@ func (e *Executor) resolvePathSearchFromGlobal(ctx context.Context, opts *Search
 	}
 
 	return e.formatPathSearchResult(result, selections)
+}
+
+// filterByTemporal filters GlobalSearchResult to only include entities within time range.
+// Queries the temporal index for entity IDs in the range, then filters results to the intersection.
+func (e *Executor) filterByTemporal(ctx context.Context, result *GlobalSearchResult, timeRange *TimeRange) (*GlobalSearchResult, error) {
+	// Query temporal index for entity IDs in time range
+	temporalEntityIDs, err := e.resolver.QueryTemporalIDs(ctx, timeRange.Start, timeRange.End)
+	if err != nil {
+		return nil, fmt.Errorf("temporal query failed: %w", err)
+	}
+
+	// Build lookup set for O(1) membership check
+	temporalSet := make(map[string]struct{}, len(temporalEntityIDs))
+	for _, id := range temporalEntityIDs {
+		temporalSet[id] = struct{}{}
+	}
+
+	// Filter entities to only those in temporal range
+	filtered := make([]*Entity, 0, len(result.Entities))
+	for _, entity := range result.Entities {
+		if _, ok := temporalSet[entity.ID]; ok {
+			filtered = append(filtered, entity)
+		}
+	}
+
+	return &GlobalSearchResult{
+		Entities:           filtered,
+		CommunitySummaries: result.CommunitySummaries,
+		Count:              len(filtered),
+	}, nil
 }
 
 func (e *Executor) resolveSpatialSearch(ctx context.Context, args map[string]any, selections ast.SelectionSet) (any, error) {

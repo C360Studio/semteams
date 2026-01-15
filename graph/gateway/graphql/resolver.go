@@ -603,6 +603,30 @@ func (r *Resolver) TemporalSearch(ctx context.Context,
 	return entities, nil
 }
 
+// QueryTemporalIDs returns entity IDs within a time range without fetching full entities.
+// Used for filtering search results by temporal constraints.
+func (r *Resolver) QueryTemporalIDs(ctx context.Context, start, end time.Time) ([]string, error) {
+	var entityIDs []string
+	var err error
+
+	queryFn := func() error {
+		var qErr error
+		entityIDs, qErr = r.queryManager.QueryTemporal(ctx, start, end)
+		return qErr
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "QueryTemporalIDs", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "QueryTemporalIDs")
+	}
+	return entityIDs, nil
+}
+
 // GraphSnapshot retrieves a bounded spatial/temporal subgraph.
 func (r *Resolver) GraphSnapshot(ctx context.Context,
 	north, south, east, west *float64,
