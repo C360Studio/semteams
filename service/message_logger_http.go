@@ -85,7 +85,8 @@ func messageLoggerOpenAPISpec() *OpenAPISpec {
 						"200": {
 							Description: "List of message entries",
 							ContentType: "application/json",
-							SchemaRef:   "#/components/schemas/MessageLogEntryList",
+							SchemaRef:   "#/components/schemas/MessageLogEntry",
+							IsArray:     true,
 						},
 					},
 				},

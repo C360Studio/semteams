@@ -45,6 +45,7 @@ type ResponseSpec struct {
 	Description string `json:"description"`
 	ContentType string `json:"content_type,omitempty"`
 	SchemaRef   string `json:"schema_ref,omitempty"` // $ref to schema, e.g., "#/components/schemas/RuntimeHealthResponse"
+	IsArray     bool   `json:"is_array,omitempty"`   // If true, response is an array of SchemaRef items
 }
 
 // Schema defines parameter or response schema

@@ -87,7 +87,9 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/MessageLogEntryList'
+                                type: array
+                                items:
+                                    $ref: '#/components/schemas/MessageLogEntry'
     /flowgraph:
         get:
             summary: Get component FlowGraph
@@ -358,7 +360,9 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/StructuralAnomalyList'
+                                type: array
+                                items:
+                                    $ref: '#/components/schemas/StructuralAnomaly'
                 "500":
                     description: Internal server error
     /inference/stats:

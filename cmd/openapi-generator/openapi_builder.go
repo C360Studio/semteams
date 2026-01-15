@@ -117,10 +117,20 @@ func convertOperation(op *service.OperationSpec) *Operation {
 			if contentType == "" {
 				contentType = "application/json"
 			}
+
+			var schema SchemaRef
+			if resp.IsArray {
+				// Generate inline array with $ref items
+				schema = SchemaRef{
+					Type:  "array",
+					Items: &SchemaRef{Ref: resp.SchemaRef},
+				}
+			} else {
+				schema = SchemaRef{Ref: resp.SchemaRef}
+			}
+
 			response.Content = map[string]MediaType{
-				contentType: {
-					Schema: SchemaRef{Ref: resp.SchemaRef},
-				},
+				contentType: {Schema: schema},
 			}
 		} else if resp.ContentType != "" && resp.ContentType != "text/event-stream" {
 			// Non-SSE endpoint with content type but no schema

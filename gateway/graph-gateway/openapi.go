@@ -63,7 +63,8 @@ func graphGatewayOpenAPISpec() *service.OpenAPISpec {
 						"200": {
 							Description: "List of pending anomalies",
 							ContentType: "application/json",
-							SchemaRef:   "#/components/schemas/StructuralAnomalyList",
+							SchemaRef:   "#/components/schemas/StructuralAnomaly",
+							IsArray:     true,
 						},
 						"500": {Description: "Internal server error"},
 					},
