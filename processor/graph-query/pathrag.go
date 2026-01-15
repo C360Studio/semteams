@@ -11,12 +11,23 @@ import (
 	"github.com/c360/semstreams/graph"
 )
 
+// Direction constants for path traversal
+const (
+	DirectionOutgoing = "outgoing" // Follow edges from entity to targets (default)
+	DirectionIncoming = "incoming" // Follow edges from sources to entity
+	DirectionBoth     = "both"     // Follow edges in both directions
+)
+
 // PathSearchRequest defines the request schema for path search queries
 type PathSearchRequest struct {
-	StartEntity     string `json:"start_entity"`
-	MaxDepth        int    `json:"max_depth"`
-	MaxNodes        int    `json:"max_nodes"`
-	IncludeSiblings bool   `json:"include_siblings"`
+	StartEntity     string   `json:"start_entity"`
+	MaxDepth        int      `json:"max_depth"`
+	MaxNodes        int      `json:"max_nodes"`
+	IncludeSiblings bool     `json:"include_siblings"`
+	Direction       string   `json:"direction,omitempty"`  // "outgoing" (default), "incoming", "both"
+	Predicates      []string `json:"predicates,omitempty"` // Filter to specific predicates (empty = all)
+	Timeout         string   `json:"timeout,omitempty"`    // Request timeout e.g. "5s" (0 = default)
+	MaxPaths        int      `json:"max_paths,omitempty"`  // Limit number of paths returned (0 = unlimited)
 }
 
 // PathSearchResponse defines the response for path search
@@ -78,12 +89,33 @@ func (p *PathSearcher) Search(ctx context.Context, req PathSearchRequest) (*Path
 		return nil, fmt.Errorf("invalid request: empty start_entity")
 	}
 
+	// Apply request-level timeout if specified
+	if req.Timeout != "" {
+		if timeout, err := time.ParseDuration(req.Timeout); err == nil && timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+		}
+	}
+
 	// Apply limits
 	maxDepth, maxNodes := p.applyLimits(req.MaxDepth, req.MaxNodes)
 
 	// Verify start entity exists
 	if err := p.verifyEntityExists(ctx, req.StartEntity); err != nil {
 		return nil, err
+	}
+
+	// Build predicate filter map for efficient lookup
+	predicateFilter := make(map[string]bool)
+	for _, pred := range req.Predicates {
+		predicateFilter[pred] = true
+	}
+
+	// Normalize direction (default to outgoing)
+	direction := req.Direction
+	if direction == "" {
+		direction = DirectionOutgoing
 	}
 
 	// BFS with parent tracking for path reconstruction
@@ -100,6 +132,7 @@ func (p *PathSearcher) Search(ctx context.Context, req PathSearchRequest) (*Path
 	entities := []PathEntity{{ID: req.StartEntity, Type: "entity", Score: 1.0}}
 	paths := [][]PathStep{{}} // Start entity has empty path
 	nodesDiscovered := 0
+	pathsCollected := 1 // Start entity counts as first path
 
 	for len(queue) > 0 && nodesDiscovered < maxNodes {
 		if ctx.Err() != nil {
@@ -113,16 +146,23 @@ func (p *PathSearcher) Search(ctx context.Context, req PathSearchRequest) (*Path
 			continue
 		}
 
-		rels := p.getOutgoingRelationships(ctx, current.entityID)
+		// Use direction-aware relationship fetching with predicate filtering
+		rels := p.getRelationships(ctx, current.entityID, direction, predicateFilter)
 
 		for _, rel := range rels {
 			if nodesDiscovered >= maxNodes {
 				break
 			}
 
+			// Check max_paths limit if specified
+			if req.MaxPaths > 0 && pathsCollected >= req.MaxPaths {
+				return &PathSearchResponse{Entities: entities, Paths: paths, Truncated: true}, nil
+			}
+
 			if !visited[rel.ToEntityID] {
 				visited[rel.ToEntityID] = true
 				nodesDiscovered++
+				pathsCollected++
 
 				parentMap[rel.ToEntityID] = parentInfo{parentID: current.entityID, predicate: rel.Predicate}
 
@@ -182,6 +222,78 @@ func (p *PathSearcher) getOutgoingRelationships(ctx context.Context, entityID st
 	for i, r := range envelope.Data.Relationships {
 		rels[i] = RelationshipEntry{ToEntityID: r.ToEntityID, Predicate: r.Predicate}
 	}
+	return rels
+}
+
+// getIncomingRelationships fetches incoming relationships for an entity.
+// Returns relationships where this entity is the target (sources pointing to us).
+func (p *PathSearcher) getIncomingRelationships(ctx context.Context, entityID string) []RelationshipEntry {
+	relsReq := map[string]string{"entity_id": entityID}
+	relsReqData, _ := json.Marshal(relsReq)
+
+	relsResponse, err := p.nats.Request(ctx, "graph.index.query.incoming", relsReqData, p.timeout)
+	if err != nil {
+		return nil
+	}
+
+	var envelope graph.IncomingQueryResponse
+	if err := json.Unmarshal(relsResponse, &envelope); err != nil || envelope.Error != nil {
+		return nil
+	}
+
+	// Convert incoming entries to relationship entries
+	// For incoming, the "neighbor" is the FromEntityID (the entity pointing to us)
+	rels := make([]RelationshipEntry, len(envelope.Data.Relationships))
+	for i, r := range envelope.Data.Relationships {
+		rels[i] = RelationshipEntry{ToEntityID: r.FromEntityID, Predicate: r.Predicate}
+	}
+	return rels
+}
+
+// getRelationships fetches relationships based on direction and predicate filters.
+func (p *PathSearcher) getRelationships(ctx context.Context, entityID, direction string, predicateFilter map[string]bool) []RelationshipEntry {
+	var rels []RelationshipEntry
+
+	switch direction {
+	case DirectionIncoming:
+		rels = p.getIncomingRelationships(ctx, entityID)
+	case DirectionBoth:
+		// Merge outgoing and incoming, deduplicating by target+predicate
+		outgoing := p.getOutgoingRelationships(ctx, entityID)
+		incoming := p.getIncomingRelationships(ctx, entityID)
+
+		seen := make(map[string]bool)
+		rels = make([]RelationshipEntry, 0, len(outgoing)+len(incoming))
+
+		for _, r := range outgoing {
+			key := r.ToEntityID + ":" + r.Predicate
+			if !seen[key] {
+				seen[key] = true
+				rels = append(rels, r)
+			}
+		}
+		for _, r := range incoming {
+			key := r.ToEntityID + ":" + r.Predicate
+			if !seen[key] {
+				seen[key] = true
+				rels = append(rels, r)
+			}
+		}
+	default: // DirectionOutgoing or empty
+		rels = p.getOutgoingRelationships(ctx, entityID)
+	}
+
+	// Apply predicate filter if specified
+	if len(predicateFilter) > 0 {
+		filtered := make([]RelationshipEntry, 0, len(rels))
+		for _, r := range rels {
+			if predicateFilter[r.Predicate] {
+				filtered = append(filtered, r)
+			}
+		}
+		return filtered
+	}
+
 	return rels
 }
 

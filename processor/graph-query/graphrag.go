@@ -48,19 +48,47 @@ type LocalSearchResponse struct {
 
 // GlobalSearchRequest is the request format for global search
 type GlobalSearchRequest struct {
-	Query          string `json:"query"`
-	Level          int    `json:"level"`
-	MaxCommunities int    `json:"max_communities"`
+	Query                string `json:"query"`
+	Level                int    `json:"level"`
+	MaxCommunities       int    `json:"max_communities"`
+	IncludeSummaries     *bool  `json:"include_summaries,omitempty"`     // Include community summaries (default: true)
+	IncludeRelationships bool   `json:"include_relationships,omitempty"` // Include relationships between entities (default: false)
+	IncludeSources       bool   `json:"include_sources,omitempty"`       // Include source attribution (default: false)
+}
+
+// shouldIncludeSummaries returns whether summaries should be included in the response.
+// Defaults to true for backward compatibility.
+func (r *GlobalSearchRequest) shouldIncludeSummaries() bool {
+	if r.IncludeSummaries == nil {
+		return true // Default to true for backward compatibility
+	}
+	return *r.IncludeSummaries
 }
 
 // GlobalSearchResponse is the response format for global search
 type GlobalSearchResponse struct {
 	Entities           []*gtypes.EntityState `json:"entities"`
-	CommunitySummaries []CommunitySummary    `json:"community_summaries"`
+	CommunitySummaries []CommunitySummary    `json:"community_summaries,omitempty"`
+	Relationships      []Relationship        `json:"relationships,omitempty"`
+	Sources            []Source              `json:"sources,omitempty"`
 	Count              int                   `json:"count"`
 	DurationMs         int64                 `json:"duration_ms"`
 	Answer             string                `json:"answer,omitempty"`
 	AnswerModel        string                `json:"answer_model,omitempty"`
+}
+
+// Relationship represents a relationship between two entities in search results
+type Relationship struct {
+	FromEntityID string `json:"from_entity_id"`
+	ToEntityID   string `json:"to_entity_id"`
+	Predicate    string `json:"predicate"`
+}
+
+// Source represents source attribution for search results
+type Source struct {
+	EntityID    string  `json:"entity_id"`
+	CommunityID string  `json:"community_id,omitempty"`
+	Relevance   float64 `json:"relevance"`
 }
 
 // CommunitySummary represents a community's summary used in global search
@@ -217,10 +245,24 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 		} else {
 			// Build response with semantic results
 			response := GlobalSearchResponse{
-				Entities:           entities,
-				CommunitySummaries: communityMatches,
-				Count:              len(entities),
-				DurationMs:         time.Since(startTime).Milliseconds(),
+				Entities:   entities,
+				Count:      len(entities),
+				DurationMs: time.Since(startTime).Milliseconds(),
+			}
+
+			// Conditionally include summaries (default: true)
+			if req.shouldIncludeSummaries() {
+				response.CommunitySummaries = communityMatches
+			}
+
+			// Conditionally extract relationships (opt-in)
+			if req.IncludeRelationships {
+				response.Relationships = c.extractRelationships(ctx, entities)
+			}
+
+			// Conditionally build sources (opt-in)
+			if req.IncludeSources {
+				response.Sources = c.buildSources(entities, semanticHits, communityMatches)
 			}
 
 			c.recordSuccess(len(data), 0)
@@ -242,10 +284,13 @@ func (c *Component) globalSearchTextBased(ctx context.Context, req GlobalSearchR
 	communities := c.communityCache.GetCommunitiesByLevel(req.Level)
 	if len(communities) == 0 {
 		response := GlobalSearchResponse{
-			Entities:           []*gtypes.EntityState{},
-			CommunitySummaries: []CommunitySummary{},
-			Count:              0,
-			DurationMs:         time.Since(startTime).Milliseconds(),
+			Entities:   []*gtypes.EntityState{},
+			Count:      0,
+			DurationMs: time.Since(startTime).Milliseconds(),
+		}
+		// Include empty summaries array for backward compatibility if summaries requested
+		if req.shouldIncludeSummaries() {
+			response.CommunitySummaries = []CommunitySummary{}
 		}
 		return json.Marshal(response)
 	}
@@ -311,10 +356,24 @@ func (c *Component) globalSearchTextBased(ctx context.Context, req GlobalSearchR
 
 	// Build response
 	response := GlobalSearchResponse{
-		Entities:           matchedEntities,
-		CommunitySummaries: summaries,
-		Count:              len(matchedEntities),
-		DurationMs:         time.Since(startTime).Milliseconds(),
+		Entities:   matchedEntities,
+		Count:      len(matchedEntities),
+		DurationMs: time.Since(startTime).Milliseconds(),
+	}
+
+	// Conditionally include summaries (default: true)
+	if req.shouldIncludeSummaries() {
+		response.CommunitySummaries = summaries
+	}
+
+	// Conditionally extract relationships (opt-in)
+	if req.IncludeRelationships {
+		response.Relationships = c.extractRelationships(ctx, matchedEntities)
+	}
+
+	// Conditionally build sources (opt-in, no semantic hits in text-based search)
+	if req.IncludeSources {
+		response.Sources = c.buildSources(matchedEntities, nil, summaries)
 	}
 
 	c.recordSuccess(requestSize, 0)
@@ -669,4 +728,82 @@ func scoreCommunitySummaries(communities []*clustering.Community, query string) 
 	}
 
 	return result
+}
+
+// extractRelationships extracts relationships between entities in the result set.
+// Only includes relationships where both endpoints are in the entity set.
+func (c *Component) extractRelationships(_ context.Context, entities []*gtypes.EntityState) []Relationship {
+	// Build entity ID set for fast lookup
+	entitySet := make(map[string]bool)
+	for _, e := range entities {
+		entitySet[e.ID] = true
+	}
+
+	var relationships []Relationship
+
+	// Extract relationships from entity triples
+	for _, entity := range entities {
+		for _, triple := range entity.Triples {
+			// Only include relationships (object is entity reference)
+			if triple.IsRelationship() {
+				targetID, ok := triple.Object.(string)
+				if ok && entitySet[targetID] {
+					relationships = append(relationships, Relationship{
+						FromEntityID: entity.ID,
+						ToEntityID:   targetID,
+						Predicate:    triple.Predicate,
+					})
+				}
+			}
+		}
+	}
+
+	return relationships
+}
+
+// buildSources builds source attribution for search results.
+// Maps entities to their communities and assigns relevance scores.
+func (c *Component) buildSources(entities []*gtypes.EntityState, semanticHits []SemanticHit, communitySummaries []CommunitySummary) []Source {
+	// Build semantic score lookup
+	semanticScores := make(map[string]float64)
+	for _, hit := range semanticHits {
+		semanticScores[hit.EntityID] = hit.Score
+	}
+
+	// Build entity → community lookup from summaries
+	entityToCommunity := make(map[string]string)
+	for _, cs := range communitySummaries {
+		// We don't have member lists in CommunitySummary, so skip community mapping
+		// unless we can access it from cache
+		if c.communityCache != nil {
+			community := c.communityCache.GetCommunity(cs.CommunityID)
+			if community != nil {
+				for _, member := range community.Members {
+					entityToCommunity[member] = cs.CommunityID
+				}
+			}
+		}
+	}
+
+	sources := make([]Source, 0, len(entities))
+	for i, entity := range entities {
+		// Calculate relevance: use semantic score if available, otherwise position-based
+		relevance := 1.0 - (float64(i) / float64(len(entities)+1))
+		if score, ok := semanticScores[entity.ID]; ok {
+			relevance = score
+		}
+
+		sources = append(sources, Source{
+			EntityID:    entity.ID,
+			CommunityID: entityToCommunity[entity.ID],
+			Relevance:   relevance,
+		})
+	}
+
+	// Sort by relevance descending
+	sort.Slice(sources, func(i, j int) bool {
+		return sources[i].Relevance > sources[j].Relevance
+	})
+
+	return sources
 }
