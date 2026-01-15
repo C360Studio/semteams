@@ -268,10 +268,11 @@ const defaultMaxQueryDepth = 10
 
 // Executor provides in-process GraphQL execution against the Resolver.
 type Executor struct {
-	schema   *ast.Schema
-	resolver *Resolver
-	logger   *slog.Logger
-	maxDepth int
+	schema     *ast.Schema
+	resolver   *Resolver
+	logger     *slog.Logger
+	maxDepth   int
+	classifier QueryClassifier
 }
 
 // ExecutorOption configures an Executor.
@@ -282,6 +283,15 @@ func WithMaxDepth(depth int) ExecutorOption {
 	return func(e *Executor) {
 		if depth > 0 {
 			e.maxDepth = depth
+		}
+	}
+}
+
+// WithClassifier sets the query classifier for NL query analysis.
+func WithClassifier(c QueryClassifier) ExecutorOption {
+	return func(e *Executor) {
+		if c != nil {
+			e.classifier = c
 		}
 	}
 }
@@ -297,10 +307,11 @@ func NewExecutor(resolver *Resolver, logger *slog.Logger, opts ...ExecutorOption
 	}
 
 	e := &Executor{
-		schema:   schema,
-		resolver: resolver,
-		logger:   logger,
-		maxDepth: defaultMaxQueryDepth,
+		schema:     schema,
+		resolver:   resolver,
+		logger:     logger,
+		maxDepth:   defaultMaxQueryDepth,
+		classifier: &KeywordClassifier{}, // Default to keyword-based classification
 	}
 
 	for _, opt := range opts {
@@ -633,7 +644,13 @@ func (e *Executor) resolveGlobalSearch(ctx context.Context, args map[string]any,
 		maxCommunities = int(mc)
 	}
 
-	result, err := e.resolver.GlobalSearch(ctx, query, level, maxCommunities)
+	// Classify NL query to extract temporal/spatial/intent information
+	opts := e.classifier.ClassifyQuery(ctx, query)
+	opts.Level = level
+	opts.MaxCommunities = maxCommunities
+	opts.SetDefaults()
+
+	result, err := e.resolver.GlobalSearchWithOptions(ctx, opts)
 	if err != nil {
 		return nil, err
 	}

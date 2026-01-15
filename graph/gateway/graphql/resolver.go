@@ -346,6 +346,49 @@ func (r *Resolver) GlobalSearch(ctx context.Context, query string, level int, ma
 	return result, nil
 }
 
+// GlobalSearchWithOptions performs a global search with classified SearchOptions.
+// This enables NL query classification to influence search strategy selection.
+func (r *Resolver) GlobalSearchWithOptions(ctx context.Context, opts *SearchOptions) (*GlobalSearchResult, error) {
+	var result *GlobalSearchResult
+	var err error
+
+	queryFn := func() error {
+		qmResult, qErr := r.queryManager.GlobalSearchWithOptions(ctx, opts)
+		if qErr != nil {
+			return qErr
+		}
+
+		summaries := make([]CommunitySummary, len(qmResult.CommunitySummaries))
+		for i, s := range qmResult.CommunitySummaries {
+			summaries[i] = CommunitySummary{
+				CommunityID: s.CommunityID,
+				Summary:     s.Summary,
+				Keywords:    s.Keywords,
+				Level:       s.Level,
+				Relevance:   s.Relevance,
+			}
+		}
+
+		result = &GlobalSearchResult{
+			Entities:           convertEntityStatesToGraphQL(qmResult.Entities),
+			CommunitySummaries: summaries,
+			Count:              qmResult.Count,
+		}
+		return nil
+	}
+
+	if r.metricsRecorder != nil {
+		err = r.metricsRecorder.RecordMetrics(ctx, "GlobalSearchWithOptions", queryFn)
+	} else {
+		err = queryFn()
+	}
+
+	if err != nil {
+		return nil, wrapError(err, "GlobalSearchWithOptions")
+	}
+	return result, nil
+}
+
 // GetCommunity retrieves a community by ID.
 func (r *Resolver) GetCommunity(ctx context.Context, communityID string) (*Community, error) {
 	var community *Community
