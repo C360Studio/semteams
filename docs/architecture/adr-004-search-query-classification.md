@@ -2,7 +2,12 @@
 
 ## Status
 
-Proposed
+Implemented (Phase 1)
+
+> **Implementation**: Phase 1 (Keyword Heuristics) was implemented in `graph/gateway/graphql/`.
+> The `KeywordClassifier` extracts temporal, spatial, similarity, and path intents from NL queries
+> using regex patterns. See [classifier_keyword.go](../../graph/gateway/graphql/classifier_keyword.go)
+> for implementation details.
 
 ## Context
 
@@ -112,12 +117,15 @@ For queries that don't match Tier 1 patterns and have low Tier 2 similarity scor
 
 ## Implementation Plan
 
-### Phase 1: Keyword Heuristics
-- Add `QueryClassifier` interface in `graph/gateway/graphql/`
-- Implement `KeywordClassifier` with regex patterns
-- Wire into `SearchOptions` construction
+### Phase 1: Keyword Heuristics ✓ (Complete)
+- ✓ Add `QueryClassifier` interface in `graph/gateway/graphql/classifier.go`
+- ✓ Implement `KeywordClassifier` with regex patterns in `classifier_keyword.go`
+- ✓ Wire into `Executor.resolveGlobalSearch()` via dependency injection
+- ✓ Add `GlobalSearchWithOptions` to Resolver for classified queries
+- ✓ Comprehensive unit tests in `classifier_keyword_test.go`
+- ✓ Integration tests verifying strategy inference in `classifier_integration_test.go`
 
-### Phase 2: Embedding Similarity
+### Phase 2: Embedding Similarity (Planned)
 - Add training examples JSON file
 - Implement `EmbeddingClassifier` with lazy warm
 - Background goroutine for vector generation
@@ -129,14 +137,18 @@ For queries that don't match Tier 1 patterns and have low Tier 2 similarity scor
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `graph/gateway/graphql/query_search.go` | Current SearchOptions.InferStrategy() |
-| `graph/gateway/graphql/classifier.go` | New: QueryClassifier interface |
-| `graph/gateway/graphql/classifier_keyword.go` | New: Tier 1 implementation |
-| `graph/gateway/graphql/classifier_embedding.go` | New: Tier 2 implementation |
-| `graph/gateway/graphql/classifier_llm.go` | New: Tier 3 implementation |
-| `configs/training_examples.json` | New: Example queries for Tier 2 |
+| File | Purpose | Status |
+|------|---------|--------|
+| `graph/gateway/graphql/query_search.go` | SearchOptions.InferStrategy() | Existing |
+| `graph/gateway/graphql/classifier.go` | QueryClassifier interface | ✓ Implemented |
+| `graph/gateway/graphql/classifier_keyword.go` | Tier 1 regex implementation | ✓ Implemented |
+| `graph/gateway/graphql/classifier_keyword_test.go` | Unit tests for KeywordClassifier | ✓ Implemented |
+| `graph/gateway/graphql/classifier_integration_test.go` | Integration tests | ✓ Implemented |
+| `graph/gateway/graphql/executor.go` | Wired classifier into resolvers | ✓ Modified |
+| `graph/gateway/graphql/resolver.go` | GlobalSearchWithOptions method | ✓ Modified |
+| `graph/gateway/graphql/classifier_embedding.go` | Tier 2 implementation | Planned |
+| `graph/gateway/graphql/classifier_llm.go` | Tier 3 implementation | Planned |
+| `configs/training_examples.json` | Example queries for Tier 2 | Planned |
 
 ## References
 

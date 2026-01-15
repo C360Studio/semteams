@@ -67,8 +67,11 @@ GraphQL provides schema-validated queries with field selection.
 - Schema defines available operations
 - Introspection enables tooling and exploration
 - Single HTTP endpoint for all operations
+- Natural language query classification extracts search intents automatically
 
-**Best for:** External applications, web frontends, interactive exploration.
+**Natural language support:** The GraphQL gateway includes a query classifier that extracts temporal, spatial, and intent information from natural language queries. For example, "What sensors were active yesterday?" automatically populates temporal filters and routes to the appropriate search strategy. See [ADR-004](../architecture/adr-004-search-query-classification.md) for details.
+
+**Best for:** External applications, web frontends, interactive exploration, natural language queries.
 
 ### MCP: AI Agent Access
 
@@ -97,7 +100,9 @@ Model Context Protocol wraps GraphQL for AI assistants.
 
 MCP trades flexibility for safety—appropriate for production AI deployments.
 
-**Best for:** Claude, LLM agents, automated reasoning systems.
+**Natural language handling:** AI agents typically issue natural language queries. The underlying GraphQL gateway's query classifier automatically extracts temporal, spatial, and intent information, routing queries to appropriate search strategies without requiring agents to construct structured parameters.
+
+**Best for:** Claude, LLM agents, automated reasoning systems, conversational interfaces.
 
 ### NATS Direct: Service-to-Service
 
@@ -231,7 +236,11 @@ The access pattern affects latency, not consistency guarantees.
 
 ## Related
 
+**Concepts**
 - [Knowledge Graphs](02-knowledge-graphs.md) - The data model being queried
 - [GraphRAG Pattern](07-graphrag-pattern.md) - Community-based search operations
 - [PathRAG Pattern](08-pathrag-pattern.md) - Graph traversal operations
 - [Event-Driven Basics](01-event-driven-basics.md) - NATS fundamentals
+
+**Architecture**
+- [ADR-004: Search Query Classification](../architecture/adr-004-search-query-classification.md) - NL query classification design

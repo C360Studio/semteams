@@ -29,9 +29,15 @@ The LLM gets organized context, not a raw document dump.
 ### Community-Based Search Flow
 
 ```text
-User Question
+User Question (natural language)
       │
       ▼
+┌─────────────────┐
+│ Query Classifier │◄── extracts temporal/spatial/intent
+│ (ADR-004)        │    from NL query
+└────────┬────────┘
+         │
+         ▼
 ┌─────────────────┐
 │  Find relevant   │
 │   communities    │◄── keyword/semantic matching
@@ -51,6 +57,8 @@ User Question
 │     answer       │
 └─────────────────┘
 ```
+
+The query classifier automatically extracts structured search parameters from natural language. For example, "What sensors were active yesterday?" extracts a temporal filter (last 24 hours) and routes to the temporal GraphRAG strategy.
 
 ### Local Search
 
@@ -224,6 +232,10 @@ The LLM receives organized context—summaries, key entities, relationships—ra
 - [Community Detection](05-community-detection.md) - How communities form via LPA
 - [PathRAG Pattern](08-pathrag-pattern.md) - Structural traversal alternative for impact analysis
 - [Embeddings](03-embeddings.md) - Semantic matching that enables community search
+- [Query Access](09-query-access.md) - Access patterns for GraphQL, MCP, and NATS
+
+**Architecture**
+- [ADR-004: Search Query Classification](../architecture/adr-004-search-query-classification.md) - NL query classification design
 
 **Configuration**
 - [Clustering Configuration](../advanced/01-clustering.md) - Community detection settings

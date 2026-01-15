@@ -54,6 +54,21 @@
 //   - Global search (GraphRAG) - cross-graph queries
 //   - Community queries - detecting and querying communities
 //
+// # Natural Language Query Classification
+//
+// The gateway includes a QueryClassifier that extracts structured search parameters
+// from natural language queries. The KeywordClassifier (Phase 1) uses regex patterns
+// to detect:
+//   - Temporal intents: "yesterday", "last 24 hours", "this week"
+//   - Spatial intents: "near sensor-001", "in zone A", "within 5km"
+//   - Similarity intents: "similar to pump-42", "like device X"
+//   - Path intents: "connected to", "related to", "path from"
+//   - Aggregation intents: "count", "how many", "total"
+//
+// Classification populates SearchOptions before strategy inference, enabling NL queries
+// from MCP/chat interfaces to route to appropriate search strategies automatically.
+// See ADR-004 for the full classification architecture.
+//
 // # Lifecycle
 //
 // The gateway lifecycle is managed by the graph processor:
