@@ -17,6 +17,7 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/types"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -472,9 +473,10 @@ func createTestFlowInStore(t *testing.T, ctx context.Context, store *flowstore.S
 		Version: 1,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:   "node-1",
-				Name: "test-component",
-				Type: "input",
+				ID:            "node-1",
+				Name:          "test-component",
+				ComponentID:   "udp",
+				ComponentType: types.ComponentTypeInput,
 			},
 		},
 	}

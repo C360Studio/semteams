@@ -10,6 +10,7 @@ import (
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/types"
 )
 
 // Validator provides flow validation using FlowGraph analysis
@@ -41,11 +42,12 @@ type ValidationResult struct {
 
 // ValidatedNode represents a flow node with its port information
 type ValidatedNode struct {
-	ID          string          `json:"id"`
-	Type        string          `json:"type"`
-	Name        string          `json:"name"`
-	InputPorts  []ValidatedPort `json:"input_ports"`
-	OutputPorts []ValidatedPort `json:"output_ports"`
+	ID            string              `json:"id"`
+	ComponentID   string              `json:"component_id"`   // Factory name (e.g., "udp", "graph-processor")
+	ComponentType types.ComponentType `json:"component_type"` // Enum (e.g., "input", "processor")
+	Name          string              `json:"name"`
+	InputPorts    []ValidatedPort     `json:"input_ports"`
+	OutputPorts   []ValidatedPort     `json:"output_ports"`
 }
 
 // ValidatedPort represents a port with validation information
@@ -203,30 +205,31 @@ func (v *Validator) buildFlowGraph(flow *flowstore.Flow) (*flowgraph.FlowGraph, 
 	for _, node := range flow.Nodes {
 		v.logger.Debug("Adding component to FlowGraph",
 			"node_id", node.ID,
-			"node_type", node.Type,
+			"component_id", node.ComponentID,
+			"component_type", node.ComponentType,
 			"node_name", node.Name,
 			"config", node.Config)
 
 		// Get component from registry with node's actual config
-		comp, err := v.getComponentFromRegistry(node.Type, node.Config)
+		comp, err := v.getComponentFromRegistry(node.ComponentID, node.Config)
 		if err != nil {
 			v.logger.Debug("Component lookup failed",
-				"type", node.Type,
+				"component_id", node.ComponentID,
 				"error", err)
 			// Unknown component type is a critical error
 			buildErrors = append(buildErrors, ValidationIssue{
 				Type:          "unknown_component",
 				Severity:      "error",
 				ComponentName: node.Name,
-				Message:       fmt.Sprintf("Unknown component type: %s", node.Type),
+				Message:       fmt.Sprintf("Unknown component: %s", node.ComponentID),
 				Suggestions: []string{
-					"Check that component type is registered",
+					"Check that component is registered",
 					"Verify component name spelling",
 				},
 			})
 			continue
 		}
-		v.logger.Debug("Component lookup succeeded", "type", node.Type)
+		v.logger.Debug("Component lookup succeeded", "component_id", node.ComponentID)
 
 		// Add to graph using node.ID (unique identifier), not node.Name (user-friendly label)
 		if err := graph.AddComponentNode(node.ID, comp); err != nil {
@@ -385,18 +388,21 @@ func (v *Validator) extractNodePorts(flow *flowstore.Flow, graph *flowgraph.Flow
 	// Create maps from node ID to node metadata for lookup
 	// Note: FlowGraph now uses node.ID as keys (not node.Name)
 	idToName := make(map[string]string)
-	idToType := make(map[string]string)
+	idToComponentID := make(map[string]string)
+	idToComponentType := make(map[string]types.ComponentType)
 	for _, flowNode := range flow.Nodes {
 		idToName[flowNode.ID] = flowNode.Name
-		idToType[flowNode.ID] = flowNode.Type
+		idToComponentID[flowNode.ID] = flowNode.ComponentID
+		idToComponentType[flowNode.ID] = flowNode.ComponentType
 	}
 
 	result.Nodes = make([]ValidatedNode, 0, len(graphNodes))
 
 	for nodeID, graphNode := range graphNodes {
-		// Find the flow node name and type
+		// Find the flow node name, component ID, and component type
 		nodeName := idToName[nodeID]
-		nodeType := idToType[nodeID]
+		componentID := idToComponentID[nodeID]
+		componentType := idToComponentType[nodeID]
 
 		// Convert input ports
 		inputPorts := make([]ValidatedPort, 0, len(graphNode.InputPorts))
@@ -435,11 +441,12 @@ func (v *Validator) extractNodePorts(flow *flowstore.Flow, graph *flowgraph.Flow
 		}
 
 		result.Nodes = append(result.Nodes, ValidatedNode{
-			ID:          nodeID,
-			Type:        nodeType,
-			Name:        nodeName,
-			InputPorts:  inputPorts,
-			OutputPorts: outputPorts,
+			ID:            nodeID,
+			ComponentID:   componentID,
+			ComponentType: componentType,
+			Name:          nodeName,
+			InputPorts:    inputPorts,
+			OutputPorts:   outputPorts,
 		})
 	}
 }

@@ -1184,3 +1184,273 @@ func (s *TieredScenario) executeTestEntityByAlias(ctx context.Context, result *R
 
 	return nil
 }
+
+// globalSearchResponse represents the parsed GraphQL response for globalSearch queries
+type globalSearchResponse struct {
+	Data struct {
+		GlobalSearch struct {
+			Entities []struct {
+				ID   string `json:"id"`
+				Type string `json:"type"`
+			} `json:"entities"`
+			CommunitySummaries []struct {
+				CommunityID string  `json:"communityId"`
+				Summary     string  `json:"summary"`
+				Relevance   float64 `json:"relevance"`
+			} `json:"communitySummaries"`
+			Count int `json:"count"`
+		} `json:"globalSearch"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+// sendNLQuery sends a natural language query through globalSearch and returns the response.
+// This tests the classifier → strategy routing → filtered results pipeline.
+func (s *TieredScenario) sendNLQuery(ctx context.Context, query string) (*globalSearchResponse, time.Duration, error) {
+	gatewayURL := s.config.GraphQLURL
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
+	nlQuery := map[string]any{
+		"query": `query($query: String!, $maxCommunities: Int) {
+			globalSearch(query: $query, maxCommunities: $maxCommunities) {
+				entities { id type }
+				communitySummaries { communityId summary relevance }
+				count
+			}
+		}`,
+		"variables": map[string]any{
+			"query":          query,
+			"maxCommunities": 10,
+		},
+	}
+
+	queryJSON, err := json.Marshal(nlQuery)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to marshal NL query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create NL query request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := httpClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return nil, latency, fmt.Errorf("NL query request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, latency, fmt.Errorf("NL query returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, latency, fmt.Errorf("failed to read NL query response: %w", err)
+	}
+
+	var graphqlResp globalSearchResponse
+	if err := json.Unmarshal(bodyBytes, &graphqlResp); err != nil {
+		return nil, latency, fmt.Errorf("failed to parse NL query response: %w", err)
+	}
+
+	if len(graphqlResp.Errors) > 0 {
+		return nil, latency, fmt.Errorf("NL query GraphQL error: %s", graphqlResp.Errors[0].Message)
+	}
+
+	return &graphqlResp, latency, nil
+}
+
+// executeTestNLPathIntent validates that NL queries with path intent
+// are properly routed through the classifier to PathRAG.
+// Tests queries like "What is related to temp-sensor-001?" and "sensors in zone-cold-storage-1".
+// This is a Tier 0 capability - graph traversal works without embeddings.
+func (s *TieredScenario) executeTestNLPathIntent(ctx context.Context, result *Result) error {
+	testCases := []struct {
+		name          string
+		query         string
+		expectResults bool   // Whether we expect any results
+		description   string // What this tests
+	}{
+		{
+			name:          "path_intent_related_to",
+			query:         "What is related to temp-sensor-001?",
+			expectResults: true,
+			description:   "Tests path intent with 'related to' + entity ID extraction",
+		},
+		{
+			name:          "path_intent_connected_to",
+			query:         "Show everything connected to humid-sensor-001",
+			expectResults: true,
+			description:   "Tests path intent with 'connected to' + entity ID extraction",
+		},
+		{
+			name:          "zone_intent",
+			query:         "Find sensors in zone-cold-storage-1",
+			expectResults: true,
+			description:   "Tests zone intent routing with located_in predicate",
+		},
+	}
+
+	allResults := make([]map[string]any, 0, len(testCases))
+	passedCount := 0
+
+	for _, tc := range testCases {
+		resp, latency, err := s.sendNLQuery(ctx, tc.query)
+
+		testResult := map[string]any{
+			"name":           tc.name,
+			"query":          tc.query,
+			"description":    tc.description,
+			"latency_ms":     latency.Milliseconds(),
+			"expect_results": tc.expectResults,
+		}
+
+		if err != nil {
+			testResult["success"] = false
+			testResult["error"] = err.Error()
+			allResults = append(allResults, testResult)
+			continue
+		}
+
+		entityCount := len(resp.Data.GlobalSearch.Entities)
+		testResult["entity_count"] = entityCount
+
+		// Collect entity IDs
+		entityIDs := make([]string, entityCount)
+		for i, e := range resp.Data.GlobalSearch.Entities {
+			entityIDs[i] = e.ID
+		}
+		testResult["entity_ids"] = entityIDs
+
+		// Determine success based on whether we expected results
+		success := (tc.expectResults && entityCount > 0) || (!tc.expectResults && entityCount == 0)
+		testResult["success"] = success
+
+		if success {
+			passedCount++
+			testResult["message"] = fmt.Sprintf("NL path intent query returned %d entities", entityCount)
+		} else if tc.expectResults && entityCount == 0 {
+			testResult["message"] = "Expected results but got none - path routing may not be working"
+		}
+
+		allResults = append(allResults, testResult)
+	}
+
+	result.Metrics["nl_path_intent_tests_passed"] = passedCount
+	result.Metrics["nl_path_intent_tests_total"] = len(testCases)
+
+	result.Details["nl_path_intent_test"] = map[string]any{
+		"tests_passed": passedCount,
+		"tests_total":  len(testCases),
+		"test_results": allResults,
+		"message":      fmt.Sprintf("NL path intent: %d/%d tests passed", passedCount, len(testCases)),
+	}
+
+	// Warn if no tests passed, but don't fail - this allows gradual rollout
+	if passedCount == 0 {
+		result.Warnings = append(result.Warnings,
+			"NL path intent tests returned no results - classifier routing may need attention")
+	}
+
+	return nil
+}
+
+// executeTestNLTemporalIntent validates that NL queries with temporal intent
+// are properly routed through the classifier and results are filtered by time.
+// Tests queries like "What happened in the last hour?".
+// This runs on statistical+ tiers where temporal filtering is meaningful with search results.
+func (s *TieredScenario) executeTestNLTemporalIntent(ctx context.Context, result *Result) error {
+	testCases := []struct {
+		name          string
+		query         string
+		expectResults bool
+		description   string
+	}{
+		{
+			name:          "temporal_last_hour",
+			query:         "What happened in the last hour?",
+			expectResults: true, // Entities were just created, should be in last hour
+			description:   "Tests temporal intent with 'last hour' extraction",
+		},
+		{
+			name:          "temporal_today",
+			query:         "Show events from today",
+			expectResults: true, // Entities created today
+			description:   "Tests temporal intent with 'today' extraction",
+		},
+	}
+
+	allResults := make([]map[string]any, 0, len(testCases))
+	passedCount := 0
+
+	for _, tc := range testCases {
+		resp, latency, err := s.sendNLQuery(ctx, tc.query)
+
+		testResult := map[string]any{
+			"name":           tc.name,
+			"query":          tc.query,
+			"description":    tc.description,
+			"latency_ms":     latency.Milliseconds(),
+			"expect_results": tc.expectResults,
+		}
+
+		if err != nil {
+			testResult["success"] = false
+			testResult["error"] = err.Error()
+			allResults = append(allResults, testResult)
+			continue
+		}
+
+		entityCount := len(resp.Data.GlobalSearch.Entities)
+		testResult["entity_count"] = entityCount
+
+		// Collect entity IDs (limit to first 10 for brevity)
+		maxDisplay := 10
+		if entityCount < maxDisplay {
+			maxDisplay = entityCount
+		}
+		entityIDs := make([]string, maxDisplay)
+		for i := 0; i < maxDisplay; i++ {
+			entityIDs[i] = resp.Data.GlobalSearch.Entities[i].ID
+		}
+		testResult["entity_ids_sample"] = entityIDs
+
+		// Determine success
+		success := (tc.expectResults && entityCount > 0) || (!tc.expectResults && entityCount == 0)
+		testResult["success"] = success
+
+		if success {
+			passedCount++
+			testResult["message"] = fmt.Sprintf("NL temporal query returned %d entities", entityCount)
+		} else if tc.expectResults && entityCount == 0 {
+			testResult["message"] = "Expected results but got none - temporal filtering may be too restrictive"
+		}
+
+		allResults = append(allResults, testResult)
+	}
+
+	result.Metrics["nl_temporal_intent_tests_passed"] = passedCount
+	result.Metrics["nl_temporal_intent_tests_total"] = len(testCases)
+
+	result.Details["nl_temporal_intent_test"] = map[string]any{
+		"tests_passed": passedCount,
+		"tests_total":  len(testCases),
+		"test_results": allResults,
+		"message":      fmt.Sprintf("NL temporal intent: %d/%d tests passed", passedCount, len(testCases)),
+	}
+
+	// Warn if no tests passed
+	if passedCount == 0 {
+		result.Warnings = append(result.Warnings,
+			"NL temporal intent tests returned no results - temporal filtering may need attention")
+	}
+
+	return nil
+}

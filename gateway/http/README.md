@@ -356,11 +356,15 @@ const results = await client.semanticSearch('drone battery');
 
 ## OpenAPI Integration
 
-The gateway automatically contributes routes to OpenAPI specification:
+The HTTP gateway uses **config-driven dynamic routes** that are defined at runtime via YAML/JSON configuration. Because routes vary by deployment, they are **not included in the static OpenAPI specification**.
+
+For gateways with well-defined endpoints (like `graph-gateway`), see their OpenAPI contributions in the generated spec.
 
 **Access OpenAPI:**
 - JSON Spec: `http://localhost:8080/openapi.json`
 - Swagger UI: `http://localhost:8080/docs`
+
+**Note:** The routes you configure for this gateway won't appear in the OpenAPI spec. Document your deployment-specific routes separately if needed.
 
 ## Security Considerations
 

@@ -9,14 +9,15 @@ import (
 
 func TestFromComponentConfigs(t *testing.T) {
 	tests := []struct {
-		name            string
-		flowName        string
-		configs         map[string]types.ComponentConfig
-		wantNodeCount   int
-		wantNodeIDs     []string
-		wantNodeTypes   map[string]string // nodeID -> type
-		wantState       RuntimeState
-		wantHasDeployed bool
+		name               string
+		flowName           string
+		configs            map[string]types.ComponentConfig
+		wantNodeCount      int
+		wantNodeIDs        []string
+		wantComponentIDs   map[string]string              // nodeID -> componentID (factory name)
+		wantComponentTypes map[string]types.ComponentType // nodeID -> componentType (category)
+		wantState          RuntimeState
+		wantHasDeployed    bool
 	}{
 		{
 			name:            "empty configs creates empty flow",
@@ -38,11 +39,12 @@ func TestFromComponentConfigs(t *testing.T) {
 					Config:  json.RawMessage(`{"port": 14550}`),
 				},
 			},
-			wantNodeCount:   1,
-			wantNodeIDs:     []string{"udp-input"},
-			wantNodeTypes:   map[string]string{"udp-input": "udp"},
-			wantState:       StateRunning,
-			wantHasDeployed: true,
+			wantNodeCount:      1,
+			wantNodeIDs:        []string{"udp-input"},
+			wantComponentIDs:   map[string]string{"udp-input": "udp"},
+			wantComponentTypes: map[string]types.ComponentType{"udp-input": types.ComponentTypeInput},
+			wantState:          StateRunning,
+			wantHasDeployed:    true,
 		},
 		{
 			name:     "multiple components",
@@ -69,10 +71,15 @@ func TestFromComponentConfigs(t *testing.T) {
 			},
 			wantNodeCount: 3,
 			wantNodeIDs:   []string{"file-output", "graph-processor", "udp-input"}, // sorted
-			wantNodeTypes: map[string]string{
+			wantComponentIDs: map[string]string{
 				"udp-input":       "udp",
 				"graph-processor": "graph-processor",
 				"file-output":     "file",
+			},
+			wantComponentTypes: map[string]types.ComponentType{
+				"udp-input":       types.ComponentTypeInput,
+				"graph-processor": types.ComponentTypeProcessor,
+				"file-output":     types.ComponentTypeOutput,
 			},
 			wantState:       StateRunning,
 			wantHasDeployed: true,
@@ -92,11 +99,12 @@ func TestFromComponentConfigs(t *testing.T) {
 					Enabled: false,
 				},
 			},
-			wantNodeCount:   1,
-			wantNodeIDs:     []string{"enabled-input"},
-			wantNodeTypes:   map[string]string{"enabled-input": "udp"},
-			wantState:       StateRunning,
-			wantHasDeployed: true,
+			wantNodeCount:      1,
+			wantNodeIDs:        []string{"enabled-input"},
+			wantComponentIDs:   map[string]string{"enabled-input": "udp"},
+			wantComponentTypes: map[string]types.ComponentType{"enabled-input": types.ComponentTypeInput},
+			wantState:          StateRunning,
+			wantHasDeployed:    true,
 		},
 	}
 
@@ -140,11 +148,20 @@ func TestFromComponentConfigs(t *testing.T) {
 				}
 			}
 
-			// Verify node types
+			// Verify component IDs (factory names)
 			for _, node := range flow.Nodes {
-				if wantType, ok := tt.wantNodeTypes[node.ID]; ok {
-					if node.Type != wantType {
-						t.Errorf("node %s Type = %v, want %v", node.ID, node.Type, wantType)
+				if wantID, ok := tt.wantComponentIDs[node.ID]; ok {
+					if node.ComponentID != wantID {
+						t.Errorf("node %s ComponentID = %v, want %v", node.ID, node.ComponentID, wantID)
+					}
+				}
+			}
+
+			// Verify component types (categories)
+			for _, node := range flow.Nodes {
+				if wantType, ok := tt.wantComponentTypes[node.ID]; ok {
+					if node.ComponentType != wantType {
+						t.Errorf("node %s ComponentType = %v, want %v", node.ID, node.ComponentType, wantType)
 					}
 				}
 			}

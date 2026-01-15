@@ -14,6 +14,7 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,25 +43,28 @@ func TestRuntimeHealthIntegration(t *testing.T) {
 		Name: "Health Test Flow",
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:   "node1",
-				Name: "udp-source",
-				Type: "input",
+				ID:            "node1",
+				Name:          "udp-source",
+				ComponentID:   "udp",
+				ComponentType: types.ComponentTypeInput,
 				Config: map[string]any{
 					"port": 8081,
 				},
 			},
 			{
-				ID:   "node2",
-				Name: "processor",
-				Type: "processor",
+				ID:            "node2",
+				Name:          "processor",
+				ComponentID:   "graph-processor",
+				ComponentType: types.ComponentTypeProcessor,
 				Config: map[string]any{
 					"filter": "$.data",
 				},
 			},
 			{
-				ID:   "node3",
-				Name: "file-sink",
-				Type: "output",
+				ID:            "node3",
+				Name:          "file-sink",
+				ComponentID:   "file",
+				ComponentType: types.ComponentTypeOutput,
 				Config: map[string]any{
 					"path": "/tmp/output.jsonl",
 				},

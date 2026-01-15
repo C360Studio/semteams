@@ -20,6 +20,10 @@ type Querier interface {
 	GetEntities(ctx context.Context, ids []string) ([]*gtypes.EntityState, error)
 	GetEntityByAlias(ctx context.Context, aliasOrID string) (*gtypes.EntityState, error)
 
+	// Entity ID resolution for NL queries
+	// Resolves partial IDs (e.g., "temp-sensor-001") to full 6-part IDs
+	ResolvePartialEntityID(ctx context.Context, partial string) (string, error)
+
 	// Complex queries
 	ExecutePath(ctx context.Context, start string, pattern PathPattern) (*QueryResult, error)
 	GetGraphSnapshot(ctx context.Context, bounds QueryBounds) (*QMGraphSnapshot, error)

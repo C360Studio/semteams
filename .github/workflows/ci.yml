@@ -108,8 +108,8 @@ jobs:
       - name: Generate schemas and OpenAPI spec
         run: task schema:generate
 
-      - name: Run component schema exporter tests
-        run: go test -v ./cmd/component-schema-exporter
+      - name: Run OpenAPI generator tests
+        run: go test -v ./cmd/openapi-generator
 
       - name: Check for uncommitted schema changes
         run: |

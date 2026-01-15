@@ -825,6 +825,37 @@ func (e *Executor) resolvePathSearch(ctx context.Context, args map[string]any, s
 // queries should handle both response shapes, or use explicit pathSearch/globalSearch
 // fields for predictable responses.
 func (e *Executor) resolvePathSearchFromGlobal(ctx context.Context, opts *SearchOptions, selections ast.SelectionSet) (any, error) {
+	// Resolve partial entity ID to full 6-part ID
+	// NL queries extract partial IDs like "temp-sensor-001" which need resolution
+	// to full IDs like "c360.logistics.environmental.sensor.temperature.temp-sensor-001"
+	startEntity := opts.PathStartNode
+	if startEntity != "" {
+		// Count dots to check if already a full 6-part ID
+		dotCount := 0
+		for _, c := range startEntity {
+			if c == '.' {
+				dotCount++
+			}
+		}
+		if dotCount < 5 {
+			// Partial ID - try to resolve to full ID
+			resolved, err := e.resolver.queryManager.ResolvePartialEntityID(ctx, startEntity)
+			if err != nil {
+				// Log but don't fail - resolution is best-effort
+				e.logger.Debug("entity ID resolution failed", "partial", startEntity, "error", err)
+			}
+			if resolved != "" {
+				startEntity = resolved
+			} else {
+				// No matching entity found - return empty result
+				return e.formatPathSearchResult(&PathSearchResult{
+					Entities: []*PathEntity{},
+					Paths:    [][]PathStep{},
+				}, selections)
+			}
+		}
+	}
+
 	// Use sensible defaults for NL-derived path queries
 	maxDepth := 3
 	maxNodes := 100
@@ -838,7 +869,7 @@ func (e *Executor) resolvePathSearchFromGlobal(ctx context.Context, opts *Search
 		edgeTypes = opts.PathPredicates
 	}
 
-	result, err := e.resolver.PathSearch(ctx, opts.PathStartNode, maxDepth, maxNodes, direction, edgeTypes, decayFactor, includeSiblings)
+	result, err := e.resolver.PathSearch(ctx, startEntity, maxDepth, maxNodes, direction, edgeTypes, decayFactor, includeSiblings)
 	if err != nil {
 		return nil, err
 	}

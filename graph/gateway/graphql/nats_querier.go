@@ -379,3 +379,45 @@ func (q *NATSQuerier) SearchSimilar(ctx context.Context, query string, limit int
 
 	return &resp, nil
 }
+
+// ResolvePartialEntityID resolves a partial entity ID to a full 6-part ID.
+// Uses the EntityID structure: org.platform.domain.system.type.instance
+//
+// Resolution strategy:
+// 1. If already full (5+ dots), return as-is
+// 2. Try alias lookup via graph-index
+// 3. Try wildcard suffix match via graph-ingest (*.*.*.*.*.partial)
+//
+// This enables NL queries to use partial IDs like "temp-sensor-001" which get
+// resolved to full IDs like "c360.logistics.environmental.sensor.temperature.temp-sensor-001".
+func (q *NATSQuerier) ResolvePartialEntityID(ctx context.Context, partial string) (string, error) {
+	// If already looks like a full 6-part ID (has 5+ dots), return as-is
+	dotCount := 0
+	for _, c := range partial {
+		if c == '.' {
+			dotCount++
+		}
+	}
+	if dotCount >= 5 {
+		return partial, nil
+	}
+
+	// Step 1: Try alias lookup first via graph-index
+	var aliasResp graph.AliasQueryResponse
+	err := q.request(ctx, "graph.index.query.alias", map[string]string{"alias": partial}, &aliasResp)
+	if err == nil && aliasResp.Error == nil && aliasResp.Data.CanonicalID != nil {
+		return *aliasResp.Data.CanonicalID, nil
+	}
+
+	// Step 2: Try wildcard suffix match via graph-ingest
+	var suffixResp struct {
+		ID string `json:"id"`
+	}
+	err = q.request(ctx, "graph.ingest.query.suffix", map[string]string{"suffix": partial}, &suffixResp)
+	if err == nil && suffixResp.ID != "" {
+		return suffixResp.ID, nil
+	}
+
+	// No match found
+	return "", nil
+}

@@ -1,13 +1,17 @@
 // Package service provides OpenAPI specification types for HTTP endpoint documentation
 package service
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"reflect"
+)
 
 // OpenAPISpec represents a service's OpenAPI specification fragment
 type OpenAPISpec struct {
-	Paths      map[string]PathSpec `json:"paths"`
-	Components map[string]any      `json:"components,omitempty"`
-	Tags       []TagSpec           `json:"tags,omitempty"`
+	Paths         map[string]PathSpec `json:"paths"`
+	Components    map[string]any      `json:"components,omitempty"`
+	Tags          []TagSpec           `json:"tags,omitempty"`
+	ResponseTypes []reflect.Type      `json:"-"` // Types to generate schemas for (not serialized)
 }
 
 // PathSpec defines HTTP operations for a specific path
@@ -40,6 +44,7 @@ type ParameterSpec struct {
 type ResponseSpec struct {
 	Description string `json:"description"`
 	ContentType string `json:"content_type,omitempty"`
+	SchemaRef   string `json:"schema_ref,omitempty"` // $ref to schema, e.g., "#/components/schemas/RuntimeHealthResponse"
 }
 
 // Schema defines parameter or response schema

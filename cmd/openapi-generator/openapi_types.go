@@ -25,7 +25,7 @@ type ServerObject struct {
 
 // ComponentsObject holds reusable objects
 type ComponentsObject struct {
-	Schemas map[string]interface{} `yaml:"schemas"`
+	Schemas map[string]any `yaml:"schemas"`
 }
 
 // TagObject defines an API tag

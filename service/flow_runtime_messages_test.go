@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/flowstore"
+	"github.com/c360/semstreams/types"
 )
 
 func TestGetSubjectPrefix(t *testing.T) {
@@ -59,9 +60,9 @@ func TestGetFlowMessageSubjects(t *testing.T) {
 			name: "Flow with mixed components",
 			flow: &flowstore.Flow{
 				Nodes: []flowstore.FlowNode{
-					{Name: "udp-source", Type: "udp"},
-					{Name: "json-proc", Type: "json-processor"},
-					{Name: "nats-out", Type: "nats-sink"},
+					{ID: "n1", Name: "udp-source", ComponentID: "udp", ComponentType: types.ComponentTypeInput},
+					{ID: "n2", Name: "json-proc", ComponentID: "json-processor", ComponentType: types.ComponentTypeProcessor},
+					{ID: "n3", Name: "nats-out", ComponentID: "nats-sink", ComponentType: types.ComponentTypeOutput},
 				},
 			},
 			expected: []string{
@@ -74,7 +75,7 @@ func TestGetFlowMessageSubjects(t *testing.T) {
 			name: "Flow with single component",
 			flow: &flowstore.Flow{
 				Nodes: []flowstore.FlowNode{
-					{Name: "processor-1", Type: "processor"},
+					{ID: "n1", Name: "processor-1", ComponentID: "graph-processor", ComponentType: types.ComponentTypeProcessor},
 				},
 			},
 			expected: []string{
@@ -236,8 +237,8 @@ func TestFormatMessageEntries(t *testing.T) {
 
 	flow := &flowstore.Flow{
 		Nodes: []flowstore.FlowNode{
-			{Name: "udp-source", Type: "udp"},
-			{Name: "json-proc", Type: "json-processor"},
+			{ID: "n1", Name: "udp-source", ComponentID: "udp", ComponentType: types.ComponentTypeInput},
+			{ID: "n2", Name: "json-proc", ComponentID: "json-processor", ComponentType: types.ComponentTypeProcessor},
 		},
 	}
 
@@ -303,7 +304,7 @@ func TestFormatMessageEntries(t *testing.T) {
 func TestFormatMessageEntriesEmptyInput(t *testing.T) {
 	flow := &flowstore.Flow{
 		Nodes: []flowstore.FlowNode{
-			{Name: "test-component", Type: "processor"},
+			{ID: "n1", Name: "test-component", ComponentID: "graph-processor", ComponentType: types.ComponentTypeProcessor},
 		},
 	}
 

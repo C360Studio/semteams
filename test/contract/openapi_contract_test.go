@@ -226,12 +226,14 @@ func TestOpenAPISpecPaths(t *testing.T) {
 	}
 
 	// Verify required paths exist
+	// Note: Paths are service-relative (without /components prefix)
+	// as they come from the service OpenAPI registry
 	requiredPaths := []string{
-		"/components/types",
-		"/components/types/{id}",
-		"/components/status/{name}",
-		"/components/flowgraph",
-		"/components/validate",
+		"/types",
+		"/types/{id}",
+		"/status/{name}",
+		"/flowgraph",
+		"/validate",
 	}
 
 	for _, path := range requiredPaths {

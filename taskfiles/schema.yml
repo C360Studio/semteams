@@ -1,11 +1,11 @@
-version: '3'
+version: "3"
 
 tasks:
   generate:
     desc: Generate component schemas and OpenAPI spec
     cmds:
       - mkdir -p schemas specs
-      - go run ./cmd/component-schema-exporter -out ./schemas -openapi ./specs/openapi.v3.yaml
+      - go run ./cmd/openapi-generator -out ./schemas -openapi ./specs/openapi.v3.yaml
       - echo "Schemas and OpenAPI spec generated"
 
   validate:

@@ -29,8 +29,13 @@ func (c *Component) setupQueryHandlers(ctx context.Context) error {
 		return fmt.Errorf("subscribe prefix query: %w", err)
 	}
 
+	// Subscribe to suffix query (for partial entity ID resolution)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.ingest.query.suffix", c.handleQuerySuffixNATS); err != nil {
+		return fmt.Errorf("subscribe suffix query: %w", err)
+	}
+
 	c.logger.Info("query handlers registered",
-		"subjects", []string{"graph.ingest.query.entity", "graph.ingest.query.batch", "graph.ingest.query.prefix"})
+		"subjects", []string{"graph.ingest.query.entity", "graph.ingest.query.batch", "graph.ingest.query.prefix", "graph.ingest.query.suffix"})
 
 	return nil
 }
@@ -164,6 +169,66 @@ func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byt
 		"prefix":     req.Prefix,
 	}
 	return json.Marshal(response)
+}
+
+// handleQuerySuffixNATS handles suffix-based entity ID resolution.
+// Uses NATS KV ListKeysFiltered with wildcard pattern to match instance part.
+// This enables NL queries to use partial entity IDs like "temp-sensor-001" which
+// get resolved to full 6-part IDs like "c360.logistics.environmental.sensor.temperature.temp-sensor-001".
+func (c *Component) handleQuerySuffixNATS(_ context.Context, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var req struct {
+		Suffix string `json:"suffix"` // e.g., "temp-sensor-001"
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return nil, fmt.Errorf("invalid request: %w", err)
+	}
+
+	if req.Suffix == "" {
+		return nil, fmt.Errorf("invalid request: empty suffix")
+	}
+
+	// Build wildcard pattern: *.*.*.*.*.suffix (6-part EntityID structure)
+	// The pattern matches any entity where the instance part (last segment) equals suffix
+	pattern := fmt.Sprintf("*.*.*.*.*.%s", req.Suffix)
+
+	// Use ListKeysFiltered with wildcard pattern for efficient server-side filtering
+	lister, err := c.entityBucket.ListKeysFiltered(ctx, pattern)
+	if err != nil {
+		// If filtering fails, fall back to scanning all keys
+		return c.fallbackSuffixSearch(ctx, req.Suffix)
+	}
+
+	// Get first matching key
+	var matchedID string
+	for key := range lister.Keys() {
+		matchedID = key
+		break // Take first match
+	}
+
+	return json.Marshal(map[string]string{"id": matchedID})
+}
+
+// fallbackSuffixSearch provides a fallback when ListKeysFiltered doesn't work.
+// This manually scans keys and filters by suffix.
+func (c *Component) fallbackSuffixSearch(ctx context.Context, suffix string) ([]byte, error) {
+	keys, err := c.entityBucket.Keys(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get keys: %w", err)
+	}
+
+	suffixWithDot := "." + suffix
+	var matchedID string
+	for _, key := range keys {
+		if strings.HasSuffix(key, suffixWithDot) || key == suffix {
+			matchedID = key
+			break
+		}
+	}
+
+	return json.Marshal(map[string]string{"id": matchedID})
 }
 
 // queryMsg is an interface for query request messages.

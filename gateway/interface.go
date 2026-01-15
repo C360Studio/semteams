@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/c360/semstreams/component"
+	"github.com/c360/semstreams/service"
 )
 
 // Gateway defines the interface for protocol bridge components that enable
@@ -40,4 +41,24 @@ type Gateway interface {
 // need HTTP endpoint exposure.
 type HTTPHandler interface {
 	RegisterHTTPHandlers(prefix string, mux *http.ServeMux)
+}
+
+// OpenAPIProvider is an optional interface for gateways that can contribute
+// their endpoint definitions to the OpenAPI specification.
+//
+// Gateways with well-defined endpoints (like graph-gateway) implement this
+// to document their HTTP API. Gateways with config-driven dynamic routes
+// (like the generic http gateway) may skip this interface.
+//
+// Example implementation:
+//
+//	func (g *GraphGateway) OpenAPISpec() *service.OpenAPISpec {
+//	    return &service.OpenAPISpec{
+//	        Paths: map[string]service.PathSpec{
+//	            "/graphql": {POST: &service.OperationSpec{...}},
+//	        },
+//	    }
+//	}
+type OpenAPIProvider interface {
+	OpenAPISpec() *service.OpenAPISpec
 }

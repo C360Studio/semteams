@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +16,10 @@ import (
 	"github.com/c360/semstreams/flowstore"
 	"github.com/google/uuid"
 )
+
+func init() {
+	RegisterOpenAPISpec("flow-service", flowServiceOpenAPISpec())
+}
 
 // FlowServiceConfig holds configuration for the flow service
 type FlowServiceConfig struct {
@@ -270,6 +275,12 @@ func (fs *FlowService) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 
 // OpenAPISpec returns the OpenAPI specification for flow service endpoints
 func (fs *FlowService) OpenAPISpec() *OpenAPISpec {
+	return flowServiceOpenAPISpec()
+}
+
+// flowServiceOpenAPISpec returns the OpenAPI specification for flow service endpoints.
+// This is a standalone function so it can be called from init() for registration.
+func flowServiceOpenAPISpec() *OpenAPISpec {
 	return &OpenAPISpec{
 		Paths: map[string]PathSpec{
 			"/flows": {
@@ -411,6 +422,7 @@ func (fs *FlowService) OpenAPISpec() *OpenAPISpec {
 						"200": {
 							Description: "Runtime metrics",
 							ContentType: "application/json",
+							SchemaRef:   "#/components/schemas/RuntimeMetricsResponse",
 						},
 						"404": {
 							Description: "Flow not found",
@@ -436,6 +448,7 @@ func (fs *FlowService) OpenAPISpec() *OpenAPISpec {
 						"200": {
 							Description: "Runtime health status",
 							ContentType: "application/json",
+							SchemaRef:   "#/components/schemas/RuntimeHealthResponse",
 						},
 						"404": {
 							Description: "Flow not found",
@@ -468,6 +481,7 @@ func (fs *FlowService) OpenAPISpec() *OpenAPISpec {
 						"200": {
 							Description: "Runtime message entries",
 							ContentType: "application/json",
+							SchemaRef:   "#/components/schemas/RuntimeMessagesResponse",
 						},
 						"404": {
 							Description: "Flow not found",
@@ -505,6 +519,12 @@ func (fs *FlowService) OpenAPISpec() *OpenAPISpec {
 				Name:        "Status",
 				Description: "Real-time status updates",
 			},
+		},
+		ResponseTypes: []reflect.Type{
+			reflect.TypeOf(RuntimeHealthResponse{}),
+			reflect.TypeOf(RuntimeMetricsResponse{}),
+			reflect.TypeOf(RuntimeMessagesResponse{}),
+			reflect.TypeOf(flowstore.Flow{}),
 		},
 	}
 }

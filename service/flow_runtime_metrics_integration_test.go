@@ -13,6 +13,7 @@ import (
 
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,25 +38,28 @@ func TestRuntimeMetricsIntegration(t *testing.T) {
 		Name: "Metrics Test Flow",
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:   "node1",
-				Name: "udp-input",
-				Type: "input",
+				ID:            "node1",
+				Name:          "udp-input",
+				ComponentID:   "udp",
+				ComponentType: types.ComponentTypeInput,
 				Config: map[string]any{
 					"port": 8080,
 				},
 			},
 			{
-				ID:   "node2",
-				Name: "json-processor",
-				Type: "processor",
+				ID:            "node2",
+				Name:          "json-processor",
+				ComponentID:   "json-filter",
+				ComponentType: types.ComponentTypeProcessor,
 				Config: map[string]any{
 					"filter": "$.data",
 				},
 			},
 			{
-				ID:   "node3",
-				Name: "file-output",
-				Type: "output",
+				ID:            "node3",
+				Name:          "file-output",
+				ComponentID:   "file",
+				ComponentType: types.ComponentTypeOutput,
 				Config: map[string]any{
 					"path": "/tmp/output.jsonl",
 				},
@@ -240,9 +244,10 @@ func TestRuntimeMetrics_WithMockPrometheus(t *testing.T) {
 		Name: "Prometheus Test Flow",
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:   "node1",
-				Name: "test-component",
-				Type: "input",
+				ID:            "node1",
+				Name:          "test-component",
+				ComponentID:   "udp",
+				ComponentType: types.ComponentTypeInput,
 			},
 		},
 		RuntimeState: flowstore.StateRunning,

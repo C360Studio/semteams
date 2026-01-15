@@ -1,4 +1,4 @@
-// Package main provides a command-line tool for exporting semantic graph schemas.
+// Package main provides a command-line tool for generating OpenAPI specifications.
 package main
 
 import (
@@ -8,10 +8,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/componentregistry"
+	"github.com/c360/semstreams/service"
 )
 
 func main() {
@@ -21,7 +23,7 @@ func main() {
 	openapiOut := flag.String("openapi", "./specs/openapi.v3.yaml", "Output path for OpenAPI spec")
 	flag.Parse()
 
-	log.Printf("Schema Exporter")
+	log.Printf("OpenAPI Generator")
 	log.Printf("  Registry: %s", *registryPkg)
 	log.Printf("  Output dir: %s", *outDir)
 	log.Printf("  OpenAPI spec: %s", *openapiOut)
@@ -52,7 +54,7 @@ func main() {
 		log.Fatalf("Failed to create output directory: %v", err)
 	}
 
-	// Extract and write schemas
+	// Extract and write component configuration schemas
 	var componentSchemas []ComponentSchema
 	for name, registration := range factories {
 		schema := extractSchema(name, registration)
@@ -72,8 +74,12 @@ func main() {
 			log.Fatalf("Failed to write schema for %s: %v", name, err)
 		}
 
-		log.Printf("  ✓ Generated: %s", outFile)
+		log.Printf("  ✓ Generated component schema: %s", outFile)
 	}
+
+	// Get all registered service OpenAPI specs
+	serviceSpecs := service.GetAllOpenAPISpecs()
+	log.Printf("Found %d service OpenAPI specs", len(serviceSpecs))
 
 	// Generate OpenAPI spec
 	if *openapiOut != "" {
@@ -87,7 +93,7 @@ func main() {
 			return componentSchemas[i].ID < componentSchemas[j].ID
 		})
 
-		openapi := generateOpenAPISpec(componentSchemas, *outDir)
+		openapi := generateOpenAPISpec(componentSchemas, serviceSpecs, *outDir)
 		if err := writeYAMLFile(*openapiOut, openapi); err != nil {
 			log.Fatalf("Failed to write OpenAPI spec: %v", err)
 		}
@@ -95,7 +101,7 @@ func main() {
 		log.Printf("  ✓ Generated OpenAPI spec: %s", *openapiOut)
 	}
 
-	log.Printf("✅ Schema generation complete!")
+	log.Printf("✅ OpenAPI generation complete!")
 }
 
 // ComponentSchema represents the exported component schema
@@ -208,4 +214,21 @@ func writeJSONSchema(filename string, schema ComponentSchema) error {
 	}
 
 	return nil
+}
+
+// collectResponseTypes gathers all unique response types from service specs
+func collectResponseTypes(specs map[string]*service.OpenAPISpec) []reflect.Type {
+	seen := make(map[reflect.Type]bool)
+	var types []reflect.Type
+
+	for _, spec := range specs {
+		for _, t := range spec.ResponseTypes {
+			if !seen[t] {
+				seen[t] = true
+				types = append(types, t)
+			}
+		}
+	}
+
+	return types
 }

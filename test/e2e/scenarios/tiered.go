@@ -271,6 +271,9 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"test-spatial-query", s.executeTestSpatialQuery, nil},
 		{"test-temporal-query", s.executeTestTemporalQuery, nil},
 		{"test-zone-relationships", s.executeTestZoneRelationships, nil},
+		// NL intent routing tests (validates classifier → strategy routing through globalSearch)
+		{"test-nl-path-intent", s.executeTestNLPathIntent, nil},
+		{"test-nl-temporal-intent", s.executeTestNLTemporalIntent, []string{"statistical", "semantic"}},
 		// Alias resolution via ALIAS_INDEX (structural - no ML)
 		{"test-entity-by-alias", s.executeTestEntityByAlias, nil},
 

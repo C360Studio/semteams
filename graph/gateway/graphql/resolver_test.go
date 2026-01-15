@@ -260,6 +260,9 @@ func (m *mockQueryManager) GetEntities(_ context.Context, _ []string) ([]*graph.
 func (m *mockQueryManager) GetEntityByAlias(_ context.Context, _ string) (*graph.EntityState, error) {
 	return nil, nil
 }
+func (m *mockQueryManager) ResolvePartialEntityID(_ context.Context, partial string) (string, error) {
+	return partial, nil // Mock returns input unchanged
+}
 func (m *mockQueryManager) ExecutePath(_ context.Context, _ string, _ PathPattern) (*QueryResult, error) {
 	return nil, nil
 }

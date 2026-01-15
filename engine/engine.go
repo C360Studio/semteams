@@ -292,45 +292,15 @@ func (e *Engine) translateToComponentConfigs(flow *flowstore.Flow) (map[string]t
 			return nil, fmt.Errorf("marshal node %s config: %w", node.ID, err)
 		}
 
-		// Map factory name (node.Type) to ComponentType
-		compType, err := e.mapFactoryToComponentType(node.Type)
-		if err != nil {
-			return nil, fmt.Errorf("map component type for %s: %w", node.ID, err)
-		}
-
 		configs[node.Name] = types.ComponentConfig{
-			Type:    compType,
-			Name:    node.Type, // Factory name (e.g., "udp", "graph-processor")
-			Enabled: true,      // Deploy as enabled by default
+			Type:    node.ComponentType, // Category (input/processor/output/storage/gateway)
+			Name:    node.ComponentID,   // Factory name (e.g., "udp", "graph-processor")
+			Enabled: true,               // Deploy as enabled by default
 			Config:  configJSON,
 		}
 	}
 
 	return configs, nil
-}
-
-// mapFactoryToComponentType maps a factory name to its ComponentType using the component registry
-func (e *Engine) mapFactoryToComponentType(factoryName string) (types.ComponentType, error) {
-	// Look up the factory registration
-	factories := e.componentRegistry.ListFactories()
-	registration, exists := factories[factoryName]
-	if !exists {
-		return "", fmt.Errorf("unknown factory name: %s", factoryName)
-	}
-
-	// Convert registry type string to ComponentType
-	switch registration.Type {
-	case "input":
-		return types.ComponentTypeInput, nil
-	case "processor":
-		return types.ComponentTypeProcessor, nil
-	case "output":
-		return types.ComponentTypeOutput, nil
-	case "storage":
-		return types.ComponentTypeStorage, nil
-	default:
-		return "", fmt.Errorf("unknown component type in registry: %s", registration.Type)
-	}
 }
 
 // writeComponentConfigs writes component configs to memory and KV atomically

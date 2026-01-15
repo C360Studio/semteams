@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
+	"time"
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/componentregistry"
+	"github.com/c360/semstreams/service"
 	"github.com/xeipuuv/gojsonschema"
 	"gopkg.in/yaml.v3"
 )
@@ -34,8 +37,11 @@ func TestSchemaGeneration(t *testing.T) {
 	// Verify schema files
 	validateSchemaFiles(t, componentSchemas, schemasDir)
 
+	// Get service specs from registry
+	serviceSpecs := service.GetAllOpenAPISpecs()
+
 	// Generate and verify OpenAPI spec
-	openapi := generateOpenAPISpec(componentSchemas, schemasDir)
+	openapi := generateOpenAPISpec(componentSchemas, serviceSpecs, schemasDir)
 	if err := writeYAMLFile(openapiPath, openapi); err != nil {
 		t.Fatalf("Failed to write OpenAPI spec: %v", err)
 	}
@@ -115,7 +121,7 @@ func validateSchemaFiles(t *testing.T, schemas []ComponentSchema, schemasDir str
 			continue
 		}
 
-		var parsed map[string]interface{}
+		var parsed map[string]any
 		if err := json.Unmarshal(data, &parsed); err != nil {
 			t.Errorf("Schema file %s is not valid JSON: %v", schemaFile, err)
 		}
@@ -135,7 +141,7 @@ func verifyOpenAPISpec(t *testing.T, openapiPath string, openapi OpenAPIDocument
 		t.Fatalf("Failed to read OpenAPI spec: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := yaml.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("OpenAPI spec is not valid YAML: %v", err)
 	}
@@ -197,7 +203,7 @@ func TestMetaSchemaValidity(t *testing.T) {
 	}
 
 	// Verify valid JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("Meta-schema is not valid JSON: %v", err)
 	}
@@ -292,6 +298,171 @@ func TestMapTypeToJSONSchema(t *testing.T) {
 				t.Errorf("mapTypeToJSONSchema(%s) = %s, want %s", tt.input, result, tt.expected)
 			}
 		})
+	}
+}
+
+// TestSchemaFromType tests the reflection-based schema generation
+func TestSchemaFromType(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    reflect.Type
+		expected map[string]any
+	}{
+		{
+			name:     "string",
+			input:    reflect.TypeOf(""),
+			expected: map[string]any{"type": "string"},
+		},
+		{
+			name:     "int",
+			input:    reflect.TypeOf(0),
+			expected: map[string]any{"type": "integer"},
+		},
+		{
+			name:     "int64",
+			input:    reflect.TypeOf(int64(0)),
+			expected: map[string]any{"type": "integer"},
+		},
+		{
+			name:     "float64",
+			input:    reflect.TypeOf(0.0),
+			expected: map[string]any{"type": "number"},
+		},
+		{
+			name:     "bool",
+			input:    reflect.TypeOf(true),
+			expected: map[string]any{"type": "boolean"},
+		},
+		{
+			name:     "time.Time",
+			input:    reflect.TypeOf(time.Time{}),
+			expected: map[string]any{"type": "string", "format": "date-time"},
+		},
+		{
+			name:  "[]string",
+			input: reflect.TypeOf([]string{}),
+			expected: map[string]any{
+				"type":  "array",
+				"items": map[string]any{"type": "string"},
+			},
+		},
+		{
+			name:  "map[string]int",
+			input: reflect.TypeOf(map[string]int{}),
+			expected: map[string]any{
+				"type":                 "object",
+				"additionalProperties": map[string]any{"type": "integer"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := schemaFromType(tt.input)
+			if !reflect.DeepEqual(result, tt.expected) {
+				t.Errorf("schemaFromType(%v) = %v, want %v", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestSchemaFromStruct tests struct schema generation
+func TestSchemaFromStruct(t *testing.T) {
+	type TestStruct struct {
+		Name     string `json:"name"`
+		Age      int    `json:"age"`
+		Optional string `json:"optional,omitempty"`
+		Ignored  string `json:"-"`
+	}
+
+	schema := schemaFromType(reflect.TypeOf(TestStruct{}))
+
+	// Verify it's an object type
+	if schema["type"] != "object" {
+		t.Errorf("Expected type=object, got %v", schema["type"])
+	}
+
+	// Verify properties
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("Expected properties to be a map")
+	}
+
+	if len(properties) != 3 {
+		t.Errorf("Expected 3 properties (excluding ignored), got %d", len(properties))
+	}
+
+	// Verify required fields (name and age are required, optional is omitempty)
+	required, ok := schema["required"].([]string)
+	if !ok {
+		t.Fatal("Expected required to be a string slice")
+	}
+
+	if len(required) != 2 {
+		t.Errorf("Expected 2 required fields, got %d: %v", len(required), required)
+	}
+}
+
+// TestTypeNameFromReflect tests type name extraction
+func TestTypeNameFromReflect(t *testing.T) {
+	type LocalType struct{}
+
+	tests := []struct {
+		input    reflect.Type
+		expected string
+	}{
+		{reflect.TypeOf(""), "string"},
+		{reflect.TypeOf(0), "int"},
+		{reflect.TypeOf(LocalType{}), "LocalType"},
+		{reflect.TypeOf(&LocalType{}), "LocalType"}, // Pointer should unwrap
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expected, func(t *testing.T) {
+			result := typeNameFromReflect(tt.input)
+			if result != tt.expected {
+				t.Errorf("typeNameFromReflect(%v) = %s, want %s", tt.input, result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestServiceOpenAPIRegistry tests that services register their specs
+func TestServiceOpenAPIRegistry(t *testing.T) {
+	specs := service.GetAllOpenAPISpecs()
+
+	// We should have at least the flow-service, component-manager, and message-logger
+	expectedServices := []string{"flow-service", "component-manager", "message-logger"}
+
+	for _, name := range expectedServices {
+		if _, exists := specs[name]; !exists {
+			t.Errorf("Expected service %q to be registered in OpenAPI registry", name)
+		}
+	}
+}
+
+// TestResponseTypesInRegistry tests that services declare their response types
+func TestResponseTypesInRegistry(t *testing.T) {
+	specs := service.GetAllOpenAPISpecs()
+
+	// Flow service should have response types
+	flowSpec, exists := specs["flow-service"]
+	if !exists {
+		t.Fatal("flow-service not found in registry")
+	}
+
+	if len(flowSpec.ResponseTypes) == 0 {
+		t.Error("flow-service should have ResponseTypes declared")
+	}
+
+	// Message logger should have response types
+	msgSpec, exists := specs["message-logger"]
+	if !exists {
+		t.Fatal("message-logger not found in registry")
+	}
+
+	if len(msgSpec.ResponseTypes) == 0 {
+		t.Error("message-logger should have ResponseTypes declared")
 	}
 }
 

@@ -6,12 +6,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+func init() {
+	RegisterOpenAPISpec("message-logger", messageLoggerOpenAPISpec())
+}
 
 // Compile-time check that MessageLogger implements HTTPHandler
 var _ HTTPHandler = (*MessageLogger)(nil)
@@ -41,159 +46,159 @@ func (ml *MessageLogger) RegisterHTTPHandlers(prefix string, mux *http.ServeMux)
 
 // OpenAPISpec returns the OpenAPI specification for MessageLogger endpoints
 func (ml *MessageLogger) OpenAPISpec() *OpenAPISpec {
-	spec := NewOpenAPISpec()
+	return messageLoggerOpenAPISpec()
+}
 
-	// Add tags
-	spec.Tags = []TagSpec{
-		{
-			Name:        "MessageLogger",
-			Description: "Message observation and debugging endpoints",
-		},
-	}
-
-	// Add /entries endpoint
-	spec.Paths["/entries"] = PathSpec{
-		GET: &OperationSpec{
-			Summary:     "Get recent message entries",
-			Description: "Returns the most recent logged messages from the circular buffer",
-			Tags:        []string{"MessageLogger"},
-			Parameters: []ParameterSpec{
-				{
-					Name:        "limit",
-					In:          "query",
-					Description: "Maximum number of entries to return (default: 100, max: 10000)",
-					Required:    false,
-					Schema:      Schema{Type: "integer"},
-				},
-				{
-					Name:        "subject",
-					In:          "query",
-					Description: "Filter by NATS subject pattern",
-					Required:    false,
-					Schema:      Schema{Type: "string"},
-				},
-			},
-			Responses: map[string]ResponseSpec{
-				"200": {
-					Description: "List of message entries",
-					ContentType: "application/json",
-				},
+// messageLoggerOpenAPISpec returns the OpenAPI specification for MessageLogger endpoints.
+// This is a standalone function so it can be called during init() for registry registration.
+func messageLoggerOpenAPISpec() *OpenAPISpec {
+	return &OpenAPISpec{
+		Tags: []TagSpec{
+			{
+				Name:        "MessageLogger",
+				Description: "Message observation and debugging endpoints",
 			},
 		},
-	}
-
-	// Add /stats endpoint
-	spec.Paths["/stats"] = PathSpec{
-		GET: &OperationSpec{
-			Summary:     "Get message statistics",
-			Description: "Returns statistics about processed messages",
-			Tags:        []string{"MessageLogger"},
-			Responses: map[string]ResponseSpec{
-				"200": {
-					Description: "Message statistics",
-					ContentType: "application/json",
+		Paths: map[string]PathSpec{
+			"/entries": {
+				GET: &OperationSpec{
+					Summary:     "Get recent message entries",
+					Description: "Returns the most recent logged messages from the circular buffer",
+					Tags:        []string{"MessageLogger"},
+					Parameters: []ParameterSpec{
+						{
+							Name:        "limit",
+							In:          "query",
+							Description: "Maximum number of entries to return (default: 100, max: 10000)",
+							Required:    false,
+							Schema:      Schema{Type: "integer"},
+						},
+						{
+							Name:        "subject",
+							In:          "query",
+							Description: "Filter by NATS subject pattern",
+							Required:    false,
+							Schema:      Schema{Type: "string"},
+						},
+					},
+					Responses: map[string]ResponseSpec{
+						"200": {
+							Description: "List of message entries",
+							ContentType: "application/json",
+							SchemaRef:   "#/components/schemas/MessageLogEntryList",
+						},
+					},
 				},
 			},
-		},
-	}
-
-	// Add /subjects endpoint
-	spec.Paths["/subjects"] = PathSpec{
-		GET: &OperationSpec{
-			Summary:     "Get monitored subjects",
-			Description: "Returns list of NATS subjects being monitored",
-			Tags:        []string{"MessageLogger"},
-			Responses: map[string]ResponseSpec{
-				"200": {
-					Description: "List of monitored subjects",
-					ContentType: "application/json",
+			"/stats": {
+				GET: &OperationSpec{
+					Summary:     "Get message statistics",
+					Description: "Returns statistics about processed messages",
+					Tags:        []string{"MessageLogger"},
+					Responses: map[string]ResponseSpec{
+						"200": {
+							Description: "Message statistics",
+							ContentType: "application/json",
+						},
+					},
 				},
 			},
-		},
-	}
-
-	// Add /kv/{bucket} endpoint
-	spec.Paths["/kv/{bucket}"] = PathSpec{
-		GET: &OperationSpec{
-			Summary:     "Query KV bucket",
-			Description: "Query NATS KV bucket entries (development/test only)",
-			Tags:        []string{"MessageLogger"},
-			Parameters: []ParameterSpec{
-				{
-					Name:        "bucket",
-					In:          "path",
-					Description: "KV bucket name",
-					Required:    true,
-					Schema:      Schema{Type: "string"},
-				},
-				{
-					Name:        "pattern",
-					In:          "query",
-					Description: "Key pattern to match (e.g., 'entity.*')",
-					Required:    false,
-					Schema:      Schema{Type: "string"},
-				},
-				{
-					Name:        "limit",
-					In:          "query",
-					Description: "Maximum number of entries to return (default: 100, max: 1000)",
-					Required:    false,
-					Schema:      Schema{Type: "integer"},
+			"/subjects": {
+				GET: &OperationSpec{
+					Summary:     "Get monitored subjects",
+					Description: "Returns list of NATS subjects being monitored",
+					Tags:        []string{"MessageLogger"},
+					Responses: map[string]ResponseSpec{
+						"200": {
+							Description: "List of monitored subjects",
+							ContentType: "application/json",
+						},
+					},
 				},
 			},
-			Responses: map[string]ResponseSpec{
-				"200": {
-					Description: "KV bucket entries",
-					ContentType: "application/json",
-				},
-				"403": {
-					Description: "KV query disabled in production",
-				},
-				"404": {
-					Description: "Bucket not found",
+			"/kv/{bucket}": {
+				GET: &OperationSpec{
+					Summary:     "Query KV bucket",
+					Description: "Query NATS KV bucket entries (development/test only)",
+					Tags:        []string{"MessageLogger"},
+					Parameters: []ParameterSpec{
+						{
+							Name:        "bucket",
+							In:          "path",
+							Description: "KV bucket name",
+							Required:    true,
+							Schema:      Schema{Type: "string"},
+						},
+						{
+							Name:        "pattern",
+							In:          "query",
+							Description: "Key pattern to match (e.g., 'entity.*')",
+							Required:    false,
+							Schema:      Schema{Type: "string"},
+						},
+						{
+							Name:        "limit",
+							In:          "query",
+							Description: "Maximum number of entries to return (default: 100, max: 1000)",
+							Required:    false,
+							Schema:      Schema{Type: "integer"},
+						},
+					},
+					Responses: map[string]ResponseSpec{
+						"200": {
+							Description: "KV bucket entries",
+							ContentType: "application/json",
+						},
+						"403": {
+							Description: "KV query disabled in production",
+						},
+						"404": {
+							Description: "Bucket not found",
+						},
+					},
 				},
 			},
-		},
-	}
-
-	// Add /kv/{bucket}/watch SSE endpoint
-	spec.Paths["/kv/{bucket}/watch"] = PathSpec{
-		GET: &OperationSpec{
-			Summary:     "Watch KV bucket changes",
-			Description: "Stream KV bucket changes via Server-Sent Events (SSE). Supports pattern filtering and SSE reconnection with event IDs.",
-			Tags:        []string{"MessageLogger"},
-			Parameters: []ParameterSpec{
-				{
-					Name:        "bucket",
-					In:          "path",
-					Description: "KV bucket name (e.g., ENTITY_STATES, CONTEXT_INDEX)",
-					Required:    true,
-					Schema:      Schema{Type: "string"},
-				},
-				{
-					Name:        "pattern",
-					In:          "query",
-					Description: "Key pattern to watch (e.g., 'entity.*'). Default: '*' (all keys)",
-					Required:    false,
-					Schema:      Schema{Type: "string"},
-				},
-			},
-			Responses: map[string]ResponseSpec{
-				"200": {
-					Description: "SSE stream of KV changes. Events: 'connected' (initial), 'kv_change' (updates), 'error' (failures)",
-					ContentType: "text/event-stream",
-				},
-				"400": {
-					Description: "Invalid bucket name or pattern",
-				},
-				"404": {
-					Description: "Bucket not found",
+			"/kv/{bucket}/watch": {
+				GET: &OperationSpec{
+					Summary:     "Watch KV bucket changes",
+					Description: "Stream KV bucket changes via Server-Sent Events (SSE). Supports pattern filtering and SSE reconnection with event IDs.",
+					Tags:        []string{"MessageLogger"},
+					Parameters: []ParameterSpec{
+						{
+							Name:        "bucket",
+							In:          "path",
+							Description: "KV bucket name (e.g., ENTITY_STATES, CONTEXT_INDEX)",
+							Required:    true,
+							Schema:      Schema{Type: "string"},
+						},
+						{
+							Name:        "pattern",
+							In:          "query",
+							Description: "Key pattern to watch (e.g., 'entity.*'). Default: '*' (all keys)",
+							Required:    false,
+							Schema:      Schema{Type: "string"},
+						},
+					},
+					Responses: map[string]ResponseSpec{
+						"200": {
+							Description: "SSE stream of KV changes. Events: 'connected' (initial), 'kv_change' (updates), 'error' (failures)",
+							ContentType: "text/event-stream",
+						},
+						"400": {
+							Description: "Invalid bucket name or pattern",
+						},
+						"404": {
+							Description: "Bucket not found",
+						},
+					},
 				},
 			},
 		},
+		// MessageLogEntry is the only typed response - stats returns map[string]any
+		ResponseTypes: []reflect.Type{
+			reflect.TypeOf(MessageLogEntry{}),
+		},
 	}
-
-	return spec
 }
 
 // handleGetEntries returns recent message entries

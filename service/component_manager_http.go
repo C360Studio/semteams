@@ -15,6 +15,10 @@ import (
 	"github.com/c360/semstreams/health"
 )
 
+func init() {
+	RegisterOpenAPISpec("component-manager", componentManagerOpenAPISpec())
+}
+
 // Ensure ComponentManager implements HTTPHandler interface
 var _ HTTPHandler = (*ComponentManager)(nil)
 
@@ -76,6 +80,12 @@ func (cm *ComponentManager) RegisterHTTPHandlers(prefix string, mux *http.ServeM
 
 // OpenAPISpec returns the OpenAPI specification for ComponentManager endpoints
 func (cm *ComponentManager) OpenAPISpec() *OpenAPISpec {
+	return componentManagerOpenAPISpec()
+}
+
+// componentManagerOpenAPISpec returns the OpenAPI specification for ComponentManager endpoints.
+// This is a standalone function so it can be called from init() for registration.
+func componentManagerOpenAPISpec() *OpenAPISpec {
 	return &OpenAPISpec{
 		Paths: map[string]PathSpec{
 			"/health": {
@@ -100,6 +110,44 @@ func (cm *ComponentManager) OpenAPISpec() *OpenAPISpec {
 						"200": {
 							Description: "List of components",
 							ContentType: "application/json",
+						},
+					},
+				},
+			},
+			"/types": {
+				GET: &OperationSpec{
+					Summary:     "List available component types",
+					Description: "Returns array of component metadata including schemas",
+					Tags:        []string{"Components"},
+					Responses: map[string]ResponseSpec{
+						"200": {
+							Description: "Array of component types",
+							ContentType: "application/json",
+						},
+					},
+				},
+			},
+			"/types/{id}": {
+				GET: &OperationSpec{
+					Summary:     "Get component type by ID",
+					Description: "Returns metadata and schema for a specific component type",
+					Tags:        []string{"Components"},
+					Parameters: []ParameterSpec{
+						{
+							Name:        "id",
+							In:          "path",
+							Required:    true,
+							Description: "Component type ID",
+							Schema:      Schema{Type: "string"},
+						},
+					},
+					Responses: map[string]ResponseSpec{
+						"200": {
+							Description: "Component type metadata",
+							ContentType: "application/json",
+						},
+						"404": {
+							Description: "Component type not found",
 						},
 					},
 				},
@@ -217,6 +265,9 @@ func (cm *ComponentManager) OpenAPISpec() *OpenAPISpec {
 				Description: "Component flow analysis and connectivity validation endpoints",
 			},
 		},
+		// Note: ComponentManager uses dynamic map[string]any responses and flowgraph types
+		// Response types from flowgraph package would need separate handling
+		ResponseTypes: nil,
 	}
 }
 
@@ -282,10 +333,11 @@ func (cm *ComponentManager) handleComponentsList(w http.ResponseWriter, r *http.
 			"state": mc.State.String(),
 		}
 
-		// Get component type from config if available
+		// Get component type and ID from config if available
 		if cm.componentConfigs != nil {
 			if compConfig, ok := cm.componentConfigs[name]; ok {
-				compInfo["type"] = string(compConfig.Type)
+				compInfo["component_id"] = compConfig.Name           // Factory name (e.g., "udp", "graph-processor")
+				compInfo["component_type"] = string(compConfig.Type) // Enum (e.g., "input", "processor")
 				compInfo["enabled"] = compConfig.Enabled
 			}
 		}

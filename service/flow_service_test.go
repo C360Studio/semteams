@@ -19,6 +19,7 @@ import (
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/service"
+	"github.com/c360/semstreams/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -87,9 +88,10 @@ func TestHandleValidateFlow_WithBody(t *testing.T) {
 		RuntimeState: flowstore.StateNotDeployed,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:   "node-1",
-				Type: "udp",
-				Name: "UDP Input",
+				ID:            "node-1",
+				ComponentID:   "udp",
+				ComponentType: types.ComponentTypeInput,
+				Name:          "UDP Input",
 				Position: flowstore.Position{
 					X: 100,
 					Y: 100,
@@ -153,9 +155,10 @@ func TestHandleValidateFlow_WithoutBody(t *testing.T) {
 		RuntimeState: flowstore.StateNotDeployed,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:   "node-1",
-				Type: "udp",
-				Name: "UDP Input",
+				ID:            "node-1",
+				ComponentID:   "udp",
+				ComponentType: types.ComponentTypeInput,
+				Name:          "UDP Input",
 				Position: flowstore.Position{
 					X: 100,
 					Y: 100,
@@ -306,9 +309,10 @@ func TestHandleValidateFlow_WithBodyNoID(t *testing.T) {
 		"runtime_state": "not_deployed",
 		"nodes": []flowstore.FlowNode{
 			{
-				ID:   "node-1",
-				Type: "udp",
-				Name: "UDP Input",
+				ID:            "node-1",
+				ComponentID:   "udp",
+				ComponentType: types.ComponentTypeInput,
+				Name:          "UDP Input",
 				Position: flowstore.Position{
 					X: 100,
 					Y: 100,

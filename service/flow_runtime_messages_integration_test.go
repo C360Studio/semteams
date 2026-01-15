@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/flowstore"
+	"github.com/c360/semstreams/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,25 +35,28 @@ func TestRuntimeMessagesIntegration(t *testing.T) {
 		Name: "Messages Test Flow",
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:   "node1",
-				Name: "udp-source",
-				Type: "udp",
+				ID:            "node1",
+				Name:          "udp-source",
+				ComponentID:   "udp",
+				ComponentType: types.ComponentTypeInput,
 				Config: map[string]any{
 					"port": 8090,
 				},
 			},
 			{
-				ID:   "node2",
-				Name: "json-processor",
-				Type: "json-processor",
+				ID:            "node2",
+				Name:          "json-processor",
+				ComponentID:   "json-filter",
+				ComponentType: types.ComponentTypeProcessor,
 				Config: map[string]any{
 					"filter": "$.data",
 				},
 			},
 			{
-				ID:   "node3",
-				Name: "nats-sink",
-				Type: "nats-sink",
+				ID:            "node3",
+				Name:          "nats-sink",
+				ComponentID:   "nats-output",
+				ComponentType: types.ComponentTypeOutput,
 				Config: map[string]any{
 					"subject": "output.data",
 				},
@@ -361,9 +365,10 @@ func TestRuntimeMessagesLoggerUnavailable(t *testing.T) {
 		Name: "No Logger Flow",
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:   "node1",
-				Name: "test-component",
-				Type: "processor",
+				ID:            "node1",
+				Name:          "test-component",
+				ComponentID:   "graph-processor",
+				ComponentType: types.ComponentTypeProcessor,
 			},
 		},
 		RuntimeState: flowstore.StateRunning,
@@ -445,14 +450,16 @@ func TestRuntimeMessagesWithActualNATSFlow(t *testing.T) {
 		Name: "NATS Flow Test",
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:   "node1",
-				Name: "data-source",
-				Type: "input",
+				ID:            "node1",
+				Name:          "data-source",
+				ComponentID:   "udp",
+				ComponentType: types.ComponentTypeInput,
 			},
 			{
-				ID:   "node2",
-				Name: "transformer",
-				Type: "transform",
+				ID:            "node2",
+				Name:          "transformer",
+				ComponentID:   "json-filter",
+				ComponentType: types.ComponentTypeProcessor,
 			},
 		},
 		RuntimeState: flowstore.StateRunning,
