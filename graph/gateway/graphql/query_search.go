@@ -27,6 +27,7 @@ const (
 	StrategyGeoGraphRAG      SearchStrategy = "geo_graphrag"
 	StrategyTemporalGraphRAG SearchStrategy = "temporal_graphrag"
 	StrategyHybridGraphRAG   SearchStrategy = "hybrid_graphrag"
+	StrategyPathRAG          SearchStrategy = "pathrag"
 	StrategySemantic         SearchStrategy = "semantic"
 	StrategyExact            SearchStrategy = "exact"
 )
@@ -47,6 +48,9 @@ type SearchOptions struct {
 	Limit             int            `json:"limit,omitempty"`
 	Level             int            `json:"level,omitempty"`
 	MaxCommunities    int            `json:"max_communities,omitempty"`
+	PathIntent        bool           `json:"path_intent,omitempty"`
+	PathStartNode     string         `json:"path_start_node,omitempty"`
+	PathPredicates    []string       `json:"path_predicates,omitempty"`
 }
 
 // TimeRange represents temporal query bounds.
@@ -66,7 +70,17 @@ func (o *SearchOptions) InferStrategy() SearchStrategy {
 	hasPredicates := len(o.Predicates) > 0
 	hasTypes := len(o.Types) > 0
 	hasText := o.Query != ""
+	hasPath := o.PathIntent && o.PathStartNode != ""
 	hasAnyFilter := hasGeo || hasTemporal || hasPredicates || hasTypes
+
+	// Path intent with extractable entity routes to PathRAG
+	if hasPath {
+		// If combined with temporal, use hybrid strategy
+		if hasTemporal {
+			return StrategyHybridGraphRAG
+		}
+		return StrategyPathRAG
+	}
 
 	if o.UseEmbeddings && hasText {
 		if hasAnyFilter {

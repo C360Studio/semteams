@@ -650,6 +650,12 @@ func (e *Executor) resolveGlobalSearch(ctx context.Context, args map[string]any,
 	opts.MaxCommunities = maxCommunities
 	opts.SetDefaults()
 
+	// Route PathRAG queries to PathSearch when entity is extractable
+	strategy := opts.InferStrategy()
+	if strategy == StrategyPathRAG && opts.PathStartNode != "" {
+		return e.resolvePathSearchFromGlobal(ctx, opts, selections)
+	}
+
 	result, err := e.resolver.GlobalSearchWithOptions(ctx, opts)
 	if err != nil {
 		return nil, err
@@ -793,6 +799,38 @@ func (e *Executor) resolvePathSearch(ctx context.Context, args map[string]any, s
 	}
 
 	result, err := e.resolver.PathSearch(ctx, startEntity, maxDepth, maxNodes, direction, edgeTypes, decayFactor, includeSiblings)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return nil, nil
+	}
+
+	return e.formatPathSearchResult(result, selections)
+}
+
+// resolvePathSearchFromGlobal handles NL queries classified as path intent.
+// Routes globalSearch queries like "What is related to sensor-001?" to PathSearch.
+//
+// NOTE: This returns PathSearchResult fields (entities, paths, truncated) instead of
+// GlobalSearchResult fields (entities, communitySummaries, count). Clients using NL
+// queries should handle both response shapes, or use explicit pathSearch/globalSearch
+// fields for predictable responses.
+func (e *Executor) resolvePathSearchFromGlobal(ctx context.Context, opts *SearchOptions, selections ast.SelectionSet) (any, error) {
+	// Use sensible defaults for NL-derived path queries
+	maxDepth := 3
+	maxNodes := 100
+	direction := "BOTH" // NL queries typically want bidirectional exploration
+	decayFactor := 0.8
+	includeSiblings := false
+
+	// Apply predicate filter if set (e.g., "located_in" for zone queries)
+	var edgeTypes []string
+	if len(opts.PathPredicates) > 0 {
+		edgeTypes = opts.PathPredicates
+	}
+
+	result, err := e.resolver.PathSearch(ctx, opts.PathStartNode, maxDepth, maxNodes, direction, edgeTypes, decayFactor, includeSiblings)
 	if err != nil {
 		return nil, err
 	}

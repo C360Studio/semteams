@@ -2,6 +2,7 @@ package graphql
 
 import (
 	"context"
+	"math"
 	"regexp"
 	"strconv"
 	"time"
@@ -28,8 +29,9 @@ var (
 // Spatial patterns
 var (
 	nearPattern   = regexp.MustCompile(`(?i)\bnear\s+`)
-	inZonePattern = regexp.MustCompile(`(?i)\bin\s+(zone|area|region)\s+`)
-	withinPattern = regexp.MustCompile(`(?i)\bwithin\s+\d+\s*(km|m|miles?)\b`)
+	inZonePattern = regexp.MustCompile(`(?i)\bin\s+(zone|area)[-\s]([a-zA-Z0-9-]+)\b`)
+	zonePattern   = regexp.MustCompile(`(?i)\b(zone|area)[-\s]([a-zA-Z0-9-]+)\b`)
+	withinPattern = regexp.MustCompile(`(?i)\bwithin\s+(\d+(?:\.\d+)?)\s*(km|m|miles?)\s+of\s+(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)`)
 )
 
 // Intent patterns
@@ -38,6 +40,9 @@ var (
 	pathPattern        = regexp.MustCompile(`(?i)\b(connect|relat|path|link|between)\w*`)
 	aggregationPattern = regexp.MustCompile(`(?i)\b(count|how\s+many|total|sum|average)\b`)
 )
+
+// Entity extraction pattern - matches patterns like "sensor-001", "pump-42", "device-abc"
+var entityPattern = regexp.MustCompile(`\b([a-zA-Z]+[-][a-zA-Z0-9-]+)\b`)
 
 // ClassifyQuery analyzes a natural language query and populates SearchOptions.
 // Detects temporal, spatial, similarity, path, and aggregation intents.
@@ -62,8 +67,40 @@ func (k *KeywordClassifier) ClassifyQuery(_ context.Context, query string) *Sear
 		opts.UseEmbeddings = true
 	}
 
-	// Note: Spatial and path intents are detected but not yet acted upon in Phase 1
-	// They will be used by downstream strategy inference or future phases
+	// Detect path intent - "related to", "connected to", "path", "links"
+	// This takes precedence over zone patterns for entity extraction
+	hasPathIntent := pathPattern.MatchString(query)
+	if hasPathIntent {
+		opts.PathIntent = true
+		if entity := k.extractEntityID(query); entity != "" {
+			opts.PathStartNode = entity
+		}
+	}
+
+	// Detect zone intent - "in zone-A", "zone-cold-storage"
+	// Zone queries are path queries with specific predicates
+	// Only set zone as start node if path intent didn't already extract an entity
+	if !hasPathIntent || opts.PathStartNode == "" {
+		if matches := inZonePattern.FindStringSubmatch(query); matches != nil {
+			opts.PathIntent = true
+			opts.PathPredicates = []string{"located_in"}
+			if len(matches) > 2 {
+				opts.PathStartNode = matches[1] + "-" + matches[2] // Reconstruct "zone-A" or "area-north"
+			}
+		} else if matches := zonePattern.FindStringSubmatch(query); matches != nil {
+			// Also match zone patterns without "in" prefix
+			opts.PathIntent = true
+			opts.PathPredicates = []string{"located_in"}
+			if len(matches) > 2 {
+				opts.PathStartNode = matches[1] + "-" + matches[2]
+			}
+		}
+	}
+
+	// Detect true spatial intent - "within Xkm of lat,lon"
+	if bounds := k.extractSpatialBounds(query); bounds != nil {
+		opts.GeoBounds = bounds
+	}
 
 	return opts
 }
@@ -209,4 +246,72 @@ func (k *KeywordClassifier) getThisYearRange() *TimeRange {
 		Start: yearStart,
 		End:   yearEnd,
 	}
+}
+
+// extractEntityID attempts to extract an entity ID from the query.
+// Looks for patterns like "sensor-001", "pump-42", "device-abc".
+// Returns the first matching entity ID found, or empty string if none.
+func (k *KeywordClassifier) extractEntityID(query string) string {
+	matches := entityPattern.FindStringSubmatch(query)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
+}
+
+// extractSpatialBounds attempts to extract spatial bounds from query text.
+// Handles patterns like "within 5km of 40.7128,-74.0060".
+// Converts radius-based queries to bounding boxes.
+func (k *KeywordClassifier) extractSpatialBounds(query string) *SpatialBounds {
+	matches := withinPattern.FindStringSubmatch(query)
+	if len(matches) < 5 {
+		return nil
+	}
+
+	// Parse radius value
+	radiusStr := matches[1]
+	radius, err := strconv.ParseFloat(radiusStr, 64)
+	if err != nil || radius <= 0 {
+		return nil
+	}
+
+	// Parse unit and convert to kilometers
+	unit := matches[2]
+	switch unit {
+	case "m":
+		radius = radius / 1000.0 // meters to km
+	case "miles", "mile":
+		radius = radius * 1.60934 // miles to km
+	}
+	// "km" needs no conversion
+
+	// Parse coordinates
+	latStr := matches[3]
+	lonStr := matches[4]
+	lat, err := strconv.ParseFloat(latStr, 64)
+	if err != nil {
+		return nil
+	}
+	lon, err := strconv.ParseFloat(lonStr, 64)
+	if err != nil {
+		return nil
+	}
+
+	// Convert radius to approximate degrees (rough approximation)
+	// 1 degree latitude ≈ 111 km
+	// 1 degree longitude ≈ 111 km * cos(latitude)
+	latDelta := radius / 111.0
+	lonDelta := radius / (111.0 * cosDegrees(lat))
+
+	return &SpatialBounds{
+		North: lat + latDelta,
+		South: lat - latDelta,
+		East:  lon + lonDelta,
+		West:  lon - lonDelta,
+	}
+}
+
+// cosDegrees calculates cosine of angle in degrees.
+func cosDegrees(degrees float64) float64 {
+	return math.Cos(degrees * math.Pi / 180.0)
 }
