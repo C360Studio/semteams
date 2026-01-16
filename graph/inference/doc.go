@@ -126,8 +126,12 @@
 //	VirtualEdges:
 //	  AutoApply:
 //	    Enabled:           false          # Auto-create edges
-//	    MinSimilarity:     0.85           # High confidence threshold
+//	    MinConfidence:     0.95           # Confidence threshold for auto-apply
 //	    PredicateTemplate: "inferred.semantic.{band}"
+//	  ReviewQueue:
+//	    Enabled:           false          # Queue uncertain gaps for review
+//	    MinConfidence:     0.7            # Lower bound for review queue
+//	    MaxConfidence:     0.95           # Upper bound (below auto-apply)
 //
 // # Anomaly Lifecycle
 //

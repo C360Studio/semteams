@@ -216,9 +216,20 @@ More pivots provide tighter distance bounds but increase memory usage. For most 
 | Parameter | Default | Effect |
 |-----------|---------|--------|
 | `similarity_threshold` | 0.7 | Minimum embedding similarity to consider |
-| `min_structural_distance` | 3 | Minimum graph distance to flag as gap |
 
-Higher similarity threshold produces fewer but more confident gap detections. Higher minimum distance focuses on widely separated entity pairs.
+Higher similarity threshold produces fewer but more confident gap detections.
+
+**Virtual Edge Auto-Apply**
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `auto_apply.enabled` | false | Enable automatic edge creation |
+| `auto_apply.min_confidence` | 0.95 | Confidence threshold for auto-apply |
+| `review_queue.enabled` | false | Queue uncertain gaps for review |
+| `review_queue.min_confidence` | 0.7 | Lower bound for review queue |
+| `review_queue.max_confidence` | 0.95 | Upper bound (below auto-apply) |
+
+Confidence is a composite score combining similarity, structural distance, and core level factors. Gaps with confidence >= 0.95 are auto-applied; those between 0.7-0.95 go to the review queue.
 
 **Core Anomaly Detector**
 

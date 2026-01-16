@@ -67,7 +67,11 @@
 //	  "anomaly_config": {
 //	    "enabled": true,
 //	    "core_anomaly": {"enabled": true, "min_core_level": 2},
-//	    "semantic_gap": {"enabled": true, "similarity_threshold": 0.7}
+//	    "semantic_gap": {"enabled": true, "similarity_threshold": 0.7},
+//	    "virtual_edges": {
+//	      "auto_apply": {"enabled": false, "min_confidence": 0.95},
+//	      "review_queue": {"enabled": false, "min_confidence": 0.7, "max_confidence": 0.95}
+//	    }
 //	  }
 //	}
 //

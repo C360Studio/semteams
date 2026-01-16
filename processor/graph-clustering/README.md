@@ -76,8 +76,19 @@ When triggered, the component runs through these phases:
       },
       "semantic_gap": {
         "enabled": false,
-        "similarity_threshold": 0.7,
-        "min_structural_distance": 3
+        "similarity_threshold": 0.7
+      },
+      "virtual_edges": {
+        "auto_apply": {
+          "enabled": false,
+          "min_confidence": 0.95,
+          "predicate_template": "inferred.semantic.{band}"
+        },
+        "review_queue": {
+          "enabled": false,
+          "min_confidence": 0.7,
+          "max_confidence": 0.95
+        }
       }
     }
   }
@@ -110,8 +121,12 @@ When triggered, the component runs through these phases:
 | `core_anomaly.enabled` | bool | true | Detect core isolation anomalies |
 | `core_anomaly.min_core_level` | int | 2 | Minimum k-core level to analyze |
 | `semantic_gap.enabled` | bool | false | Detect semantic-structural gaps |
-| `semantic_gap.similarity_threshold` | float | 0.7 | Minimum similarity for semantic edges |
-| `semantic_gap.min_structural_distance` | int | 3 | Minimum hop distance for gap detection |
+| `semantic_gap.similarity_threshold` | float | 0.7 | Minimum similarity for semantic gaps |
+| `virtual_edges.auto_apply.enabled` | bool | false | Auto-create edges for high-confidence gaps |
+| `virtual_edges.auto_apply.min_confidence` | float | 0.95 | Confidence threshold for auto-apply |
+| `virtual_edges.review_queue.enabled` | bool | false | Queue uncertain gaps for review |
+| `virtual_edges.review_queue.min_confidence` | float | 0.7 | Lower bound for review queue |
+| `virtual_edges.review_queue.max_confidence` | float | 0.95 | Upper bound (below auto-apply) |
 
 ## Ports
 
