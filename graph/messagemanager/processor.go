@@ -39,7 +39,7 @@ func NewManager(config Config, deps Dependencies, errorCallback func(string)) *M
 	return &Manager{
 		deps:          deps,
 		config:        config,
-		metrics:       NewMetrics(deps.MetricsRegistry, "messagemanager"),
+		metrics:       NewMetrics(deps.MetricsRegistry),
 		errorCallback: errorCallback,
 		lastActivity:  time.Now(),
 	}

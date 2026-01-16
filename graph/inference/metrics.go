@@ -28,56 +28,75 @@ func NewReviewMetrics(component string, registry *metric.MetricsRegistry) *Revie
 		return nil
 	}
 
+	const (
+		namespace = "semstreams"
+		subsystem = "inference"
+	)
+
 	// Review latency - buckets tuned for review processing (typically 0.1-30s for LLM)
 	reviewLatency := prometheus.NewHistogram(prometheus.HistogramOpts{
-		Name:        "semstreams_inference_review_latency_seconds",
+		Namespace:   namespace,
+		Subsystem:   subsystem,
+		Name:        "review_latency_seconds",
 		Help:        "Latency of anomaly review processing in seconds",
 		ConstLabels: prometheus.Labels{"component": component},
 		Buckets:     []float64{0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0},
 	})
-	registry.RegisterHistogram("inference", "review_latency_seconds", reviewLatency)
+	registry.RegisterHistogram(subsystem, "review_latency_seconds", reviewLatency)
 
 	approvedTotal := prometheus.NewCounter(prometheus.CounterOpts{
-		Name:        "semstreams_inference_approved_total",
+		Namespace:   namespace,
+		Subsystem:   subsystem,
+		Name:        "approved_total",
 		Help:        "Total number of anomalies approved (auto or LLM)",
 		ConstLabels: prometheus.Labels{"component": component},
 	})
-	registry.RegisterCounter("inference", "approved_total", approvedTotal)
+	registry.RegisterCounter(subsystem, "approved_total", approvedTotal)
 
 	rejectedTotal := prometheus.NewCounter(prometheus.CounterOpts{
-		Name:        "semstreams_inference_rejected_total",
+		Namespace:   namespace,
+		Subsystem:   subsystem,
+		Name:        "rejected_total",
 		Help:        "Total number of anomalies rejected (auto or LLM)",
 		ConstLabels: prometheus.Labels{"component": component},
 	})
-	registry.RegisterCounter("inference", "rejected_total", rejectedTotal)
+	registry.RegisterCounter(subsystem, "rejected_total", rejectedTotal)
 
 	deferredTotal := prometheus.NewCounter(prometheus.CounterOpts{
-		Name:        "semstreams_inference_deferred_total",
+		Namespace:   namespace,
+		Subsystem:   subsystem,
+		Name:        "deferred_total",
 		Help:        "Total number of anomalies deferred to human review",
 		ConstLabels: prometheus.Labels{"component": component},
 	})
-	registry.RegisterCounter("inference", "deferred_total", deferredTotal)
+	registry.RegisterCounter(subsystem, "deferred_total", deferredTotal)
 
 	failedTotal := prometheus.NewCounter(prometheus.CounterOpts{
-		Name:        "semstreams_inference_failed_total",
+		Namespace:   namespace,
+		Subsystem:   subsystem,
+		Name:        "failed_total",
 		Help:        "Total number of failed anomaly processing attempts",
 		ConstLabels: prometheus.Labels{"component": component},
 	})
-	registry.RegisterCounter("inference", "failed_total", failedTotal)
+	registry.RegisterCounter(subsystem, "failed_total", failedTotal)
 
 	pendingCount := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:        "semstreams_inference_pending_count",
+		Namespace:   namespace,
+		Subsystem:   subsystem,
+		Name:        "pending_count",
 		Help:        "Current number of anomalies pending review",
 		ConstLabels: prometheus.Labels{"component": component},
 	})
-	registry.RegisterGauge("inference", "pending_count", pendingCount)
+	registry.RegisterGauge(subsystem, "pending_count", pendingCount)
 
 	workersActive := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name:        "semstreams_inference_workers_active",
+		Namespace:   namespace,
+		Subsystem:   subsystem,
+		Name:        "workers_active",
 		Help:        "Number of review workers currently processing",
 		ConstLabels: prometheus.Labels{"component": component},
 	})
-	registry.RegisterGauge("inference", "workers_active", workersActive)
+	registry.RegisterGauge(subsystem, "workers_active", workersActive)
 
 	return &ReviewMetrics{
 		reviewLatency: reviewLatency,

@@ -26,70 +26,92 @@ type Metrics struct {
 	MessagesFailed    prometheus.Counter
 }
 
-// NewMetrics creates and registers metrics with the provided registry
-func NewMetrics(registry *metric.MetricsRegistry, prefix string) *Metrics {
+// NewMetrics creates and registers metrics with the provided registry.
+func NewMetrics(registry *metric.MetricsRegistry) *Metrics {
 	if registry == nil {
 		return nil
 	}
 
-	serviceName := "messagemanager"
+	const (
+		namespace   = "semstreams"
+		subsystem   = "messagemanager"
+		serviceName = "messagemanager"
+	)
 
-	// Create metrics
+	// Create metrics with standard namespace/subsystem pattern
 	entitiesExtracted := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: prefix + "_entities_extracted_total",
-		Help: "Total entities extracted from messages",
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "entities_extracted_total",
+		Help:      "Total entities extracted from messages",
 	})
 
 	entitiesUpdateAttempts := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: prefix + "_entities_update_attempts_total",
-		Help: "Total entity update attempts",
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "entities_update_attempts_total",
+		Help:      "Total entity update attempts",
 	})
 
 	entitiesUpdateSuccess := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: prefix + "_entities_update_success_total",
-		Help: "Total successful entity updates",
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "entities_update_success_total",
+		Help:      "Total successful entity updates",
 	})
 
 	entitiesUpdateFailed := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: prefix + "_entities_update_failed_total",
-		Help: "Total failed entity updates (silent loss detection)",
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "entities_update_failed_total",
+		Help:      "Total failed entity updates (silent loss detection)",
 	})
 
 	entitiesCreateAttempts := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: prefix + "_entities_create_attempts_total",
-		Help: "Total entity create attempts",
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "entities_create_attempts_total",
+		Help:      "Total entity create attempts",
 	})
 
 	entitiesCreateSuccess := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: prefix + "_entities_create_success_total",
-		Help: "Total successful entity creates",
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "entities_create_success_total",
+		Help:      "Total successful entity creates",
 	})
 
 	entitiesCreateFailed := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: prefix + "_entities_create_failed_total",
-		Help: "Total failed entity creates",
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "entities_create_failed_total",
+		Help:      "Total failed entity creates",
 	})
 
 	messagesProcessed := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: prefix + "_messages_processed_total",
-		Help: "Total messages processed by message manager",
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "messages_processed_total",
+		Help:      "Total messages processed by message manager",
 	})
 
 	messagesFailed := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: prefix + "_messages_failed_total",
-		Help: "Total messages that failed processing",
+		Namespace: namespace,
+		Subsystem: subsystem,
+		Name:      "messages_failed_total",
+		Help:      "Total messages that failed processing",
 	})
 
 	// Register with framework's registry
-	registry.RegisterCounter(serviceName, prefix+"_entities_extracted_total", entitiesExtracted)
-	registry.RegisterCounter(serviceName, prefix+"_entities_update_attempts_total", entitiesUpdateAttempts)
-	registry.RegisterCounter(serviceName, prefix+"_entities_update_success_total", entitiesUpdateSuccess)
-	registry.RegisterCounter(serviceName, prefix+"_entities_update_failed_total", entitiesUpdateFailed)
-	registry.RegisterCounter(serviceName, prefix+"_entities_create_attempts_total", entitiesCreateAttempts)
-	registry.RegisterCounter(serviceName, prefix+"_entities_create_success_total", entitiesCreateSuccess)
-	registry.RegisterCounter(serviceName, prefix+"_entities_create_failed_total", entitiesCreateFailed)
-	registry.RegisterCounter(serviceName, prefix+"_messages_processed_total", messagesProcessed)
-	registry.RegisterCounter(serviceName, prefix+"_messages_failed_total", messagesFailed)
+	registry.RegisterCounter(serviceName, "entities_extracted_total", entitiesExtracted)
+	registry.RegisterCounter(serviceName, "entities_update_attempts_total", entitiesUpdateAttempts)
+	registry.RegisterCounter(serviceName, "entities_update_success_total", entitiesUpdateSuccess)
+	registry.RegisterCounter(serviceName, "entities_update_failed_total", entitiesUpdateFailed)
+	registry.RegisterCounter(serviceName, "entities_create_attempts_total", entitiesCreateAttempts)
+	registry.RegisterCounter(serviceName, "entities_create_success_total", entitiesCreateSuccess)
+	registry.RegisterCounter(serviceName, "entities_create_failed_total", entitiesCreateFailed)
+	registry.RegisterCounter(serviceName, "messages_processed_total", messagesProcessed)
+	registry.RegisterCounter(serviceName, "messages_failed_total", messagesFailed)
 
 	return &Metrics{
 		EntitiesExtracted:      entitiesExtracted,
