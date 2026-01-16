@@ -881,6 +881,75 @@ func (c *Component) CreateEntity(ctx context.Context, entity *graph.EntityState)
 		slog.String("entity_id", entity.ID),
 		slog.Int("triples", len(entity.Triples)))
 
+	// Ensure referenced entities exist (fallback for referential integrity)
+	// This creates stub entities for any entity IDs referenced in relationship triples
+	// that don't already exist, guaranteeing graph consistency.
+	for _, triple := range entity.Triples {
+		if triple.IsRelationship() {
+			targetID, ok := triple.Object.(string)
+			if ok && targetID != "" && targetID != entity.ID {
+				if err := c.ensureReferencedEntityExists(ctx, targetID, entity.ID); err != nil {
+					c.logger.Debug("failed to ensure referenced entity exists",
+						slog.String("target", targetID),
+						slog.String("referenced_by", entity.ID),
+						slog.Any("error", err))
+					// Don't fail entity creation - this is a best-effort fallback
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// ensureReferencedEntityExists creates a stub entity if the referenced entity doesn't exist.
+// This is a fallback mechanism to guarantee referential integrity - if an entity references
+// another entity by ID, that entity must exist in the graph.
+func (c *Component) ensureReferencedEntityExists(ctx context.Context, entityID, referencedBy string) error {
+	// Check if entity already exists
+	_, err := c.entityBucket.Get(ctx, entityID)
+	if err == nil {
+		return nil // Entity exists, nothing to do
+	}
+
+	// Entity doesn't exist - create a stub
+	now := time.Now()
+	stub := &graph.EntityState{
+		ID:        entityID,
+		UpdatedAt: now,
+		Triples: []message.Triple{
+			{
+				Subject:    entityID,
+				Predicate:  "core.identity.stub",
+				Object:     true,
+				Source:     "graph-ingest-referential-integrity",
+				Timestamp:  now,
+				Confidence: 1.0,
+			},
+			{
+				Subject:    entityID,
+				Predicate:  "core.identity.referenced_by",
+				Object:     referencedBy,
+				Source:     "graph-ingest-referential-integrity",
+				Timestamp:  now,
+				Confidence: 1.0,
+			},
+		},
+	}
+
+	data, err := json.Marshal(stub)
+	if err != nil {
+		return fmt.Errorf("marshal stub entity: %w", err)
+	}
+
+	if _, err := c.entityBucket.Put(ctx, entityID, data); err != nil {
+		return fmt.Errorf("store stub entity: %w", err)
+	}
+
+	c.logger.Debug("created stub entity for referential integrity",
+		slog.String("entity_id", entityID),
+		slog.String("referenced_by", referencedBy))
+
 	return nil
 }
 

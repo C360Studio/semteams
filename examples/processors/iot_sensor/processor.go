@@ -186,3 +186,36 @@ func getFloat64(m map[string]any, key string) (float64, error) {
 		return 0, fmt.Errorf("field %q is not a number: %T", key, v)
 	}
 }
+
+// ParseZoneEntityID extracts zone type and zone ID from a full zone entity ID.
+// Zone entity ID format: org.platform.facility.zone.{zoneType}.{zoneID}
+// Example: "c360.logistics.facility.zone.area.cold-storage-1" -> ("area", "cold-storage-1")
+// Returns empty strings if the entity ID is not a valid zone format.
+func ParseZoneEntityID(entityID string) (zoneType, zoneID string) {
+	parts := splitEntityID(entityID)
+	if len(parts) != 6 {
+		return "", ""
+	}
+	// Validate it's a zone entity (parts 2-3 should be "facility.zone")
+	if parts[2] != "facility" || parts[3] != "zone" {
+		return "", ""
+	}
+	return parts[4], parts[5]
+}
+
+// splitEntityID splits an entity ID into its parts.
+func splitEntityID(entityID string) []string {
+	if entityID == "" {
+		return nil
+	}
+	var parts []string
+	start := 0
+	for i := 0; i < len(entityID); i++ {
+		if entityID[i] == '.' {
+			parts = append(parts, entityID[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, entityID[start:])
+	return parts
+}

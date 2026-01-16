@@ -189,8 +189,77 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 	return json.Marshal(response)
 }
 
+// tryPathIntentSearch attempts to handle a query using PathRAG if path intent is detected.
+// Returns (result, true) if handled, or (nil, false) if should fall through to other tiers.
+func (c *Component) tryPathIntentSearch(ctx context.Context, query string, startTime time.Time, requestSize int) ([]byte, bool) {
+	if c.classifier == nil {
+		return nil, false
+	}
+
+	opts := c.classifier.ClassifyQuery(ctx, query)
+	if !opts.PathIntent || opts.PathStartNode == "" {
+		return nil, false
+	}
+
+	c.logger.Info("path intent detected in NL query",
+		"query", query,
+		"start_node", opts.PathStartNode)
+
+	// Resolve partial entity ID to full ID
+	fullID, err := c.resolvePartialEntityID(ctx, opts.PathStartNode)
+	c.logger.Info("entity ID resolution result",
+		"partial", opts.PathStartNode,
+		"full", fullID,
+		"error", err)
+
+	if err == nil && fullID != "" {
+		// Execute PathRAG search
+		pathResult, pathErr := c.executePathSearchForGlobal(ctx, fullID, opts.PathPredicates)
+		entityCount := 0
+		if pathResult != nil {
+			entityCount = len(pathResult.Entities)
+		}
+		c.logger.Info("PathRAG search result",
+			"start", fullID,
+			"entities", entityCount,
+			"error", pathErr)
+
+		if pathErr == nil && pathResult != nil && len(pathResult.Entities) > 0 {
+			response := GlobalSearchResponse{
+				Entities:   pathResult.Entities,
+				Count:      len(pathResult.Entities),
+				DurationMs: time.Since(startTime).Milliseconds(),
+			}
+			c.recordSuccess(requestSize, 0)
+			result, _ := json.Marshal(response)
+			return result, true
+		}
+		c.logger.Info("PathRAG returned no results, falling through to other tiers",
+			"error", pathErr)
+		return nil, false
+	}
+
+	// At structural tier without entity resolution, return empty result
+	if c.communityCache == nil {
+		c.logger.Info("structural tier: cannot resolve entity ID, returning empty result",
+			"partial", opts.PathStartNode)
+		response := GlobalSearchResponse{
+			Entities:   []*gtypes.EntityState{},
+			Count:      0,
+			DurationMs: time.Since(startTime).Milliseconds(),
+		}
+		result, _ := json.Marshal(response)
+		return result, true
+	}
+
+	return nil, false
+}
+
 // handleGlobalSearch handles global search requests via NATS request/reply
-// Uses a tiered search approach: semantic search first, then text fallback.
+// Uses a tiered search approach:
+// - Tier 0: Path intent detection (PathRAG) - works without embeddings
+// - Tier 1: Semantic search (requires embeddings)
+// - Tier 2: Text-based community search (fallback)
 func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte, error) {
 	startTime := time.Now()
 
@@ -210,7 +279,13 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 		req.MaxCommunities = DefaultMaxCommunities
 	}
 
-	// Check if community cache is available
+	// Tier 0: Use classifier to detect path intent
+	// PathRAG doesn't require embeddings - works at structural tier
+	if result, handled := c.tryPathIntentSearch(ctx, req.Query, startTime, len(data)); handled {
+		return result, nil
+	}
+
+	// Check if community cache is available for Tier 1/2
 	if c.communityCache == nil {
 		return nil, fmt.Errorf("community cache not available")
 	}
@@ -806,4 +881,52 @@ func (c *Component) buildSources(entities []*gtypes.EntityState, semanticHits []
 	})
 
 	return sources
+}
+
+// PathRAGResult wraps the result of a PathRAG query for use in handleGlobalSearch.
+// It contains EntityState objects rather than PathEntity for consistency with GlobalSearchResponse.
+type PathRAGResult struct {
+	Entities  []*gtypes.EntityState
+	Truncated bool
+}
+
+// executePathSearchForGlobal executes a PathRAG traversal starting from the given entity.
+// This is used by handleGlobalSearch when path intent is detected.
+// It converts the PathSearchResponse to a format usable by GlobalSearchResponse.
+func (c *Component) executePathSearchForGlobal(ctx context.Context, startEntityID string, predicates []string) (*PathRAGResult, error) {
+	// Build PathSearch request with reasonable defaults for NL queries
+	req := PathSearchRequest{
+		StartEntity: startEntityID,
+		MaxDepth:    3,
+		MaxNodes:    100,
+		Predicates:  predicates, // May be nil (all predicates)
+	}
+
+	// Ensure pathSearcher is initialized
+	searcher := c.pathSearcher
+	if searcher == nil {
+		searcher = NewPathSearcher(c.natsClient, c.config.QueryTimeout, c.config.MaxDepth, c.logger)
+	}
+
+	resp, err := searcher.Search(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	// Extract entity IDs from PathSearchResponse
+	entityIDs := make([]string, len(resp.Entities))
+	for i, e := range resp.Entities {
+		entityIDs[i] = e.ID
+	}
+
+	// Load full entity data via graph-ingest
+	entities, err := c.loadEntities(ctx, entityIDs)
+	if err != nil {
+		return nil, fmt.Errorf("load entities: %w", err)
+	}
+
+	return &PathRAGResult{
+		Entities:  entities,
+		Truncated: resp.Truncated,
+	}, nil
 }

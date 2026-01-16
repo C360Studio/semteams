@@ -1291,10 +1291,10 @@ func (s *TieredScenario) executeTestNLPathIntent(ctx context.Context, result *Re
 			description:   "Tests path intent with 'connected to' + entity ID extraction",
 		},
 		{
-			name:          "zone_intent",
-			query:         "Find sensors in zone-cold-storage-1",
+			name:          "zone_entity",
+			query:         "What is related to cold-storage-1",
 			expectResults: true,
-			description:   "Tests zone intent routing with located_in predicate",
+			description:   "Tests path intent starting from zone entity (now created by IoT processor)",
 		},
 	}
 

@@ -410,8 +410,8 @@ func (c *Component) handleJetStreamMessage(ctx context.Context, msg jetstream.Ms
 // This is the bridge between NATS transport and domain logic:
 //  1. Parse incoming JSON
 //  2. Call domain processor (pure business logic)
-//  3. Wrap result in BaseMessage for transport
-//  4. Publish to output NATS subject
+//  3. Emit Zone entity (referenced entity - upsert)
+//  4. Emit SensorReading entity
 func (c *Component) handleMessage(ctx context.Context, msgData []byte) {
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	c.mu.Lock()
@@ -442,36 +442,61 @@ func (c *Component) handleMessage(ctx context.Context, msgData []byte) {
 		return
 	}
 
-	// Wrap Graphable payload in BaseMessage for transport
-	// Type format: domain.category.version → iot.sensor.v1
-	baseMsg := message.NewBaseMessage(
-		message.Type{
-			Domain:   "iot",
-			Category: "sensor",
-			Version:  "v1",
-		},
-		reading, // SensorReading implements Graphable
-		c.name,  // source component name
-	)
+	// Emit Zone entity first (referenced entity - graph-ingest handles upsert)
+	// This ensures the zone exists before the sensor that references it
+	if reading.ZoneEntityID != "" {
+		zoneType, zoneID := ParseZoneEntityID(reading.ZoneEntityID)
+		if zoneType != "" && zoneID != "" {
+			zone := &Zone{
+				ZoneID:   zoneID,
+				ZoneType: zoneType,
+				Name:     zoneID, // Default name to zone ID
+				OrgID:    reading.OrgID,
+				Platform: reading.Platform,
+			}
+			c.emitGraphable(ctx, zone, message.Type{
+				Domain:   "facility",
+				Category: "zone",
+				Version:  "v1",
+			})
+		}
+	}
 
-	// Marshal the BaseMessage
+	// Emit SensorReading entity
+	c.emitGraphable(ctx, reading, message.Type{
+		Domain:   "iot",
+		Category: "sensor",
+		Version:  "v1",
+	})
+}
+
+// graphablePayload combines Graphable and Payload interfaces for entities that implement both.
+type graphablePayload interface {
+	message.Payload
+	EntityID() string
+}
+
+// emitGraphable wraps a Payload in BaseMessage and publishes to output subject.
+func (c *Component) emitGraphable(ctx context.Context, payload graphablePayload, msgType message.Type) {
+	baseMsg := message.NewBaseMessage(msgType, payload, c.name)
+
 	wrappedData, err := json.Marshal(baseMsg)
 	if err != nil {
 		atomic.AddInt64(&c.errors, 1)
 		c.logger.Error("Failed to marshal BaseMessage",
 			"component", c.name,
+			"entity_id", payload.EntityID(),
 			"error", err)
 		return
 	}
 
 	atomic.AddInt64(&c.messagesWrapped, 1)
 
-	c.logger.Debug("Message wrapped in BaseMessage with SensorReading payload",
+	c.logger.Debug("Emitting entity",
 		"component", c.name,
 		"output_subject", c.outputSubj,
-		"original_size", len(msgData),
-		"wrapped_size", len(wrappedData),
-		"entity_id", reading.EntityID())
+		"entity_id", payload.EntityID(),
+		"type", msgType.String())
 
 	// Publish to output subject
 	if c.outputSubj != "" {
@@ -483,14 +508,11 @@ func (c *Component) handleMessage(ctx context.Context, msgData []byte) {
 		}
 		if publishErr != nil {
 			atomic.AddInt64(&c.errors, 1)
-			c.logger.Error("Failed to publish wrapped message",
+			c.logger.Error("Failed to publish entity",
 				"component", c.name,
 				"output_subject", c.outputSubj,
+				"entity_id", payload.EntityID(),
 				"error", publishErr)
-		} else {
-			c.logger.Debug("Published wrapped message",
-				"component", c.name,
-				"output_subject", c.outputSubj)
 		}
 	}
 }

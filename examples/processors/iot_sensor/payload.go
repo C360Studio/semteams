@@ -310,3 +310,38 @@ func (z *Zone) Triples() []message.Triple {
 		},
 	}
 }
+
+// Schema returns the message type for Zone payloads.
+func (z *Zone) Schema() message.Type {
+	return message.Type{
+		Domain:   "facility",
+		Category: "zone",
+		Version:  "v1",
+	}
+}
+
+// Validate checks that the Zone has required fields.
+func (z *Zone) Validate() error {
+	if z.ZoneID == "" {
+		return fmt.Errorf("zone_id is required")
+	}
+	if z.OrgID == "" {
+		return fmt.Errorf("org_id is required")
+	}
+	if z.Platform == "" {
+		return fmt.Errorf("platform is required")
+	}
+	return nil
+}
+
+// MarshalJSON implements custom JSON marshaling for Zone.
+func (z *Zone) MarshalJSON() ([]byte, error) {
+	type Alias Zone
+	return json.Marshal((*Alias)(z))
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling for Zone.
+func (z *Zone) UnmarshalJSON(data []byte) error {
+	type Alias Zone
+	return json.Unmarshal(data, (*Alias)(z))
+}
