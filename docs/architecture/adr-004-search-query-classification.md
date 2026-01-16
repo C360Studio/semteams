@@ -4,10 +4,9 @@
 
 Implemented (Phase 1)
 
-> **Implementation**: Phase 1 (Keyword Heuristics) was implemented in `graph/gateway/graphql/`.
+> **Implementation**: Phase 1 (Keyword Heuristics) is implemented in `graph/query/`.
 > The `KeywordClassifier` extracts temporal, spatial, similarity, and path intents from NL queries
-> using regex patterns. See [classifier_keyword.go](../../graph/gateway/graphql/classifier_keyword.go)
-> for implementation details.
+> using regex patterns. See [classifier.go](../../graph/query/classifier.go) for implementation details.
 
 ## Context
 
@@ -41,21 +40,81 @@ Implementation: Regex patterns with named capture groups. Fast, deterministic, n
 
 ### Tier 2: Embedding Similarity (Requires Embedding Service)
 
-Compare query embedding against training examples to classify intent:
+Compare query embedding against domain-registered training examples to classify intent:
 
-1. **Training Examples**: Curated JSON file with example queries and their intent labels
-2. **Vector Generation**: Generate embeddings at startup (not saved in repo)
+1. **Domain-Specific Examples**: Each domain registers query examples alongside its vocabulary
+2. **Vector Generation**: Generate embeddings at runtime when seminstruct is available
 3. **Lazy Warm**: Start in keyword-only mode, background-generate vectors, upgrade when ready
 4. **Fallback**: If embedding service unavailable, operate in Tier 1 only
 
-```json
-{
-  "examples": [
-    {"query": "What happened in the warehouse yesterday?", "intent": "temporal", "options": {"time_reference": "relative"}},
-    {"query": "Find devices near sensor-001", "intent": "spatial", "options": {"reference_entity": true}},
-    {"query": "Show me similar equipment to pump-42", "intent": "similarity", "options": {}}
-  ]
+#### Domain Example Registration
+
+Domains register query examples using the vocabulary system:
+
+```go
+// vocabulary/examples/logistics.go
+func RegisterLogisticsVocabulary() {
+    // Register predicates (existing pattern)
+    vocabulary.Register("logistics.shipment.status", ...)
+
+    // Register query examples for this domain
+    vocabulary.RegisterQueryExamples("logistics",
+        vocabulary.QueryExample{
+            Query:  "Where is shipment ABC-123?",
+            Intent: "entity_lookup",
+            Options: map[string]any{"entity_pattern": "shipment"},
+        },
+        vocabulary.QueryExample{
+            Query:  "Show delayed deliveries this week",
+            Intent: "temporal_filter",
+            Options: map[string]any{"status_filter": "delayed"},
+        },
+        vocabulary.QueryExample{
+            Query:  "Find packages similar to order-456",
+            Intent: "similarity",
+            Options: map[string]any{"reference_entity": true},
+        },
+        vocabulary.QueryExample{
+            Query:  "Which trucks are near warehouse-east?",
+            Intent: "spatial_relationship",
+            Options: map[string]any{"relationship": "near"},
+        },
+    )
 }
+```
+
+#### Example Structure
+
+```go
+// vocabulary/query_examples.go
+type QueryExample struct {
+    Query   string         // Natural language query
+    Intent  string         // Intent category (temporal, spatial, similarity, etc.)
+    Options map[string]any // SearchOptions hints
+
+    // Runtime fields (not persisted)
+    Vector  []float32      // Generated when embedding service available
+}
+```
+
+#### Runtime Vector Generation
+
+When seminstruct becomes available:
+
+1. Collect all registered examples across domains
+2. Batch-generate embeddings via `graph.embedding.generate`
+3. Store vectors in memory (not persisted - regenerated on restart)
+4. Enable Tier 2 classification
+
+```
+Startup (no embedding service):
+    KeywordClassifier only (Tier 1)
+
+Background (embedding service detected):
+    1. Enumerate registered QueryExamples
+    2. Generate vectors in batches
+    3. Build similarity index
+    4. Upgrade to EmbeddingClassifier (Tier 2)
 ```
 
 ### Tier 3: LLM Classification (Complex/Ambiguous Queries)
@@ -68,18 +127,30 @@ For queries that don't match Tier 1 patterns and have low Tier 2 similarity scor
 
 ### Training Example Vector Strategy
 
-**Decision**: Generate vectors at startup, not save in repository.
+**Decision**: Generate vectors at runtime, not save in repository.
 
 | Approach | Pros | Cons |
 |----------|------|------|
 | Save in repo | Zero startup cost | Tied to specific model, stale if model changes |
-| Generate at startup | Model-agnostic, always fresh | Requires embedding service, startup latency |
+| Generate at runtime | Model-agnostic, always fresh, domain-extensible | Requires embedding service, startup latency |
 
 **Rationale**:
-- Training examples are small (dozens, not thousands) - generation is fast
+- Training examples are small (dozens per domain, ~100 total) - generation is fast
 - Progressive enhancement: if embedding service unavailable, graceful fallback to keywords
 - Model upgrades don't require repository changes
 - Embeddings warm lazily in background - immediate keyword availability
+- Domain vocabularies can be loaded dynamically (plugins, config-driven)
+
+### Domain Example Best Practices
+
+When authoring query examples for a domain:
+
+1. **Cover intent variety**: Include temporal, spatial, similarity, relationship queries
+2. **Use domain terminology**: "shipment", "delivery", "route" for logistics; "sensor", "reading", "calibration" for IoT
+3. **Vary phrasing**: "Where is X?", "Show me X", "Find X", "What happened to X?"
+4. **Include entity patterns**: Use realistic entity ID formats (e.g., "shipment-ABC123", "sensor-001")
+5. **Keep examples concise**: 5-20 examples per domain is typically sufficient
+6. **Test similarity**: Ensure distinct intents have dissimilar example vectors
 
 ### Intent Categories
 
@@ -118,37 +189,37 @@ For queries that don't match Tier 1 patterns and have low Tier 2 similarity scor
 ## Implementation Plan
 
 ### Phase 1: Keyword Heuristics ✓ (Complete)
-- ✓ Add `QueryClassifier` interface in `graph/gateway/graphql/classifier.go`
-- ✓ Implement `KeywordClassifier` with regex patterns in `classifier_keyword.go`
-- ✓ Wire into `Executor.resolveGlobalSearch()` via dependency injection
-- ✓ Add `GlobalSearchWithOptions` to Resolver for classified queries
-- ✓ Comprehensive unit tests in `classifier_keyword_test.go`
-- ✓ Integration tests verifying strategy inference in `classifier_integration_test.go`
+- ✓ Add `QueryClassifier` interface in `graph/query/classifier.go`
+- ✓ Implement `KeywordClassifier` with regex patterns for temporal, spatial, path intents
+- ✓ Wire into gateway resolvers via dependency injection
+- ✓ Comprehensive unit tests in `graph/query/classifier_test.go`
 
 ### Phase 2: Embedding Similarity (Planned)
-- Add training examples JSON file
-- Implement `EmbeddingClassifier` with lazy warm
-- Background goroutine for vector generation
+- Add `QueryExample` type and registry to `vocabulary/` package
+- Add `RegisterQueryExamples()` function for domain registration
+- Implement `EmbeddingClassifier` in `graph/query/classifier_embedding.go`
+- Background goroutine for lazy vector generation
+- Wire into classifier chain with similarity threshold (e.g., 0.75)
+- Add example domain vocabularies (logistics, IoT, robotics)
 
-### Phase 3: LLM Classification
+### Phase 3: LLM Classification (Future)
 - Implement `LLMClassifier` with structured prompt
 - Add timeout and error handling
-- Wire fallback chain
+- Wire fallback chain: Keywords → Embedding → LLM
+- Use domain examples as few-shot context for LLM
 
 ## Key Files
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `graph/gateway/graphql/query_search.go` | SearchOptions.InferStrategy() | Existing |
-| `graph/gateway/graphql/classifier.go` | QueryClassifier interface | ✓ Implemented |
-| `graph/gateway/graphql/classifier_keyword.go` | Tier 1 regex implementation | ✓ Implemented |
-| `graph/gateway/graphql/classifier_keyword_test.go` | Unit tests for KeywordClassifier | ✓ Implemented |
-| `graph/gateway/graphql/classifier_integration_test.go` | Integration tests | ✓ Implemented |
-| `graph/gateway/graphql/executor.go` | Wired classifier into resolvers | ✓ Modified |
-| `graph/gateway/graphql/resolver.go` | GlobalSearchWithOptions method | ✓ Modified |
-| `graph/gateway/graphql/classifier_embedding.go` | Tier 2 implementation | Planned |
-| `graph/gateway/graphql/classifier_llm.go` | Tier 3 implementation | Planned |
-| `configs/training_examples.json` | Example queries for Tier 2 | Planned |
+| `graph/query/classifier.go` | QueryClassifier interface + KeywordClassifier | ✓ Implemented |
+| `graph/query/classifier_test.go` | Unit tests for KeywordClassifier | ✓ Implemented |
+| `graph/query/classifier_embedding.go` | Tier 2 embedding similarity | Planned |
+| `graph/query/classifier_llm.go` | Tier 3 LLM classification | Future |
+| `vocabulary/query_examples.go` | QueryExample type + registry | Planned |
+| `vocabulary/examples/logistics.go` | Logistics domain examples | Planned |
+| `vocabulary/examples/iot.go` | IoT domain examples | Planned |
+| `vocabulary/examples/robotics.go` | Robotics domain examples (extend) | Planned |
 
 ## References
 

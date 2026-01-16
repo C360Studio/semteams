@@ -260,13 +260,11 @@ func TestStaticRouter_Route_EdgeCases(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), nil))
 	router := NewStaticRouter(logger)
 
-	t.Run("nil router does not panic", func(t *testing.T) {
-		// This test verifies that Route handles nil router gracefully
-		// (will panic, but we verify the panic behavior is consistent)
+	t.Run("nil router returns empty", func(t *testing.T) {
+		// Nil receiver returns empty string gracefully (no panic)
 		var nilRouter *StaticRouter
-		require.Panics(t, func() {
-			nilRouter.Route("entity")
-		})
+		subject := nilRouter.Route("entity")
+		assert.Empty(t, subject)
 	})
 
 	t.Run("empty query type returns empty", func(t *testing.T) {

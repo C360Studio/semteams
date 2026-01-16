@@ -41,8 +41,11 @@ func NewStaticRouter(logger *slog.Logger) *StaticRouter {
 }
 
 // Route returns the NATS subject for a given query type.
-// Returns empty string if the query type is unknown.
+// Returns empty string if the query type is unknown or receiver is nil.
 func (r *StaticRouter) Route(queryType string) string {
+	if r == nil {
+		return ""
+	}
 	if subject, ok := r.routes[queryType]; ok {
 		return subject
 	}
