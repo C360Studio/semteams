@@ -394,9 +394,8 @@ func (o *Orchestrator) applyVirtualEdges(ctx context.Context, config Config, res
 
 	// Collect statistics for debugging
 	var evaluated int
-	var belowSimThreshold, belowDistThreshold int
-	var simSum float64
-	var distSum int
+	var belowConfidenceThreshold int
+	var confidenceSum float64
 
 	for _, anomaly := range result.Anomalies {
 		// Only process semantic gap anomalies
@@ -404,36 +403,29 @@ func (o *Orchestrator) applyVirtualEdges(ctx context.Context, config Config, res
 			continue
 		}
 
-		similarity := anomaly.Evidence.Similarity
-		structuralDist := anomaly.Evidence.StructuralDistance
+		confidence := anomaly.Confidence
 		evaluated++
-		simSum += similarity
-		distSum += structuralDist
+		confidenceSum += confidence
 
 		// Log threshold evaluation for debugging
-		meetsSimThreshold := similarity >= config.VirtualEdges.AutoApply.MinSimilarity
-		meetsDistThreshold := structuralDist >= config.VirtualEdges.AutoApply.MinStructuralDistance
+		meetsConfidenceThreshold := confidence >= config.VirtualEdges.AutoApply.MinConfidence
 
-		if !meetsSimThreshold {
-			belowSimThreshold++
-		}
-		if !meetsDistThreshold {
-			belowDistThreshold++
+		if !meetsConfidenceThreshold {
+			belowConfidenceThreshold++
 		}
 
 		o.logger.Debug("evaluating anomaly for auto-apply",
 			"entity_a", anomaly.EntityA,
 			"entity_b", anomaly.EntityB,
-			"similarity", similarity,
-			"structural_distance", structuralDist,
-			"min_similarity", config.VirtualEdges.AutoApply.MinSimilarity,
-			"min_structural_distance", config.VirtualEdges.AutoApply.MinStructuralDistance,
-			"meets_similarity", meetsSimThreshold,
-			"meets_distance", meetsDistThreshold,
+			"confidence", confidence,
+			"similarity", anomaly.Evidence.Similarity,
+			"structural_distance", anomaly.Evidence.StructuralDistance,
+			"min_confidence", config.VirtualEdges.AutoApply.MinConfidence,
+			"meets_confidence", meetsConfidenceThreshold,
 		)
 
-		// Check if this should be auto-applied
-		if config.VirtualEdges.AutoApply.ShouldAutoApply(similarity, structuralDist) {
+		// Check if this should be auto-applied (based on confidence score)
+		if config.VirtualEdges.AutoApply.ShouldAutoApply(confidence) {
 			if err := o.autoApplyEdge(ctx, config, anomaly); err != nil {
 				o.logger.Error("failed to auto-apply edge",
 					"entity_a", anomaly.EntityA,
@@ -446,8 +438,8 @@ func (o *Orchestrator) applyVirtualEdges(ctx context.Context, config Config, res
 			continue
 		}
 
-		// Check if this should go to review queue
-		if config.VirtualEdges.ReviewQueue.ShouldQueue(similarity) {
+		// Check if this should go to review queue (based on confidence score)
+		if config.VirtualEdges.ReviewQueue.ShouldQueue(confidence) {
 			anomaly.Status = StatusHumanReview
 			if err := o.storage.Save(ctx, anomaly); err != nil {
 				o.logger.Error("failed to queue for review",
@@ -461,11 +453,9 @@ func (o *Orchestrator) applyVirtualEdges(ctx context.Context, config Config, res
 	}
 
 	// Calculate averages for diagnostic logging
-	avgSim := 0.0
-	avgDist := 0.0
+	avgConfidence := 0.0
 	if evaluated > 0 {
-		avgSim = simSum / float64(evaluated)
-		avgDist = float64(distSum) / float64(evaluated)
+		avgConfidence = confidenceSum / float64(evaluated)
 	}
 
 	// Always log summary for visibility - including diagnostic info
@@ -473,12 +463,9 @@ func (o *Orchestrator) applyVirtualEdges(ctx context.Context, config Config, res
 		"semantic_gaps_evaluated", evaluated,
 		"auto_applied", applied,
 		"queued_for_review", queued,
-		"below_sim_threshold", belowSimThreshold,
-		"below_dist_threshold", belowDistThreshold,
-		"avg_similarity", avgSim,
-		"avg_structural_distance", avgDist,
-		"min_similarity_threshold", config.VirtualEdges.AutoApply.MinSimilarity,
-		"min_distance_threshold", config.VirtualEdges.AutoApply.MinStructuralDistance)
+		"below_confidence_threshold", belowConfidenceThreshold,
+		"avg_confidence", avgConfidence,
+		"min_confidence_threshold", config.VirtualEdges.AutoApply.MinConfidence)
 
 	// Update result with virtual edge stats
 	result.AutoApplied = applied
@@ -489,15 +476,15 @@ func (o *Orchestrator) applyVirtualEdges(ctx context.Context, config Config, res
 
 // autoApplyEdge creates a virtual edge from a high-confidence semantic gap.
 func (o *Orchestrator) autoApplyEdge(ctx context.Context, config Config, anomaly *StructuralAnomaly) error {
-	predicate := config.VirtualEdges.AutoApply.BuildPredicate(anomaly.Evidence.Similarity)
+	predicate := config.VirtualEdges.AutoApply.BuildPredicate(anomaly.Confidence)
 
 	suggestion := &RelationshipSuggestion{
 		FromEntity: anomaly.EntityA,
 		ToEntity:   anomaly.EntityB,
 		Predicate:  predicate,
 		Confidence: anomaly.Confidence,
-		Reasoning: fmt.Sprintf("Auto-applied: semantic similarity %.2f, structural distance %d",
-			anomaly.Evidence.Similarity, anomaly.Evidence.StructuralDistance),
+		Reasoning: fmt.Sprintf("Auto-applied: confidence %.2f (similarity %.2f, structural distance %d)",
+			anomaly.Confidence, anomaly.Evidence.Similarity, anomaly.Evidence.StructuralDistance),
 	}
 
 	if err := o.applier.ApplyRelationship(ctx, suggestion); err != nil {

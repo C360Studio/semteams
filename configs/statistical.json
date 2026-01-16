@@ -616,14 +616,13 @@
           "virtual_edges": {
             "auto_apply": {
               "enabled": true,
-              "min_similarity": 0.85,
-              "min_structural_distance": 4,
+              "min_confidence": 0.95,
               "predicate_template": "inferred.semantic.{band}"
             },
             "review_queue": {
               "enabled": true,
-              "min_similarity": 0.7,
-              "max_similarity": 0.85,
+              "min_confidence": 0.7,
+              "max_confidence": 0.95,
               "require_llm_classification": false
             }
           }

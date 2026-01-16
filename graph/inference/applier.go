@@ -4,13 +4,16 @@ package inference
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/message"
+	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 )
 
@@ -194,6 +197,90 @@ func (a *DirectRelationshipApplier) ApplyRelationship(
 	}
 
 	a.logger.Info("Applied inferred relationship",
+		"from", suggestion.FromEntity,
+		"predicate", suggestion.Predicate,
+		"to", suggestion.ToEntity,
+		"confidence", suggestion.Confidence)
+
+	return nil
+}
+
+// MutationRelationshipApplier sends triple add requests to graph-ingest via NATS request/reply.
+// This is the preferred applier for cross-processor mutations as it goes through the
+// proper ingestion pipeline (graph.mutation.triple.add -> graph-ingest -> indexing).
+type MutationRelationshipApplier struct {
+	natsClient *natsclient.Client
+	logger     *slog.Logger
+}
+
+// NewMutationRelationshipApplier creates an applier that uses the graph-ingest mutation API.
+func NewMutationRelationshipApplier(natsClient *natsclient.Client, logger *slog.Logger) *MutationRelationshipApplier {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &MutationRelationshipApplier{
+		natsClient: natsClient,
+		logger:     logger,
+	}
+}
+
+// ApplyRelationship sends an add triple request to graph-ingest.
+func (a *MutationRelationshipApplier) ApplyRelationship(
+	ctx context.Context,
+	suggestion *RelationshipSuggestion,
+) error {
+	if suggestion == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "MutationRelationshipApplier", "ApplyRelationship",
+			"suggestion is nil")
+	}
+
+	if suggestion.FromEntity == "" || suggestion.ToEntity == "" {
+		return errs.WrapInvalid(errs.ErrInvalidData, "MutationRelationshipApplier", "ApplyRelationship",
+			"from_entity and to_entity are required")
+	}
+
+	if suggestion.Predicate == "" {
+		return errs.WrapInvalid(errs.ErrInvalidData, "MutationRelationshipApplier", "ApplyRelationship",
+			"predicate is required")
+	}
+
+	// Build triple using message.Triple
+	triple := message.Triple{
+		Subject:    suggestion.FromEntity,
+		Predicate:  suggestion.Predicate,
+		Object:     suggestion.ToEntity,
+		Source:     "inference.semantic",
+		Timestamp:  time.Now(),
+		Confidence: suggestion.Confidence,
+		Context:    "auto-applied",
+	}
+
+	req := graph.AddTripleRequest{Triple: triple}
+	data, err := json.Marshal(req)
+	if err != nil {
+		return errs.WrapInvalid(err, "MutationRelationshipApplier", "ApplyRelationship",
+			"failed to serialize request")
+	}
+
+	// Request/reply to graph-ingest mutation API
+	resp, err := a.natsClient.Request(ctx, "graph.mutation.triple.add", data, 5*time.Second)
+	if err != nil {
+		return errs.WrapTransient(err, "MutationRelationshipApplier", "ApplyRelationship",
+			fmt.Sprintf("mutation request failed: %s -> %s -> %s",
+				suggestion.FromEntity, suggestion.Predicate, suggestion.ToEntity))
+	}
+
+	var result graph.AddTripleResponse
+	if err := json.Unmarshal(resp, &result); err != nil {
+		return errs.WrapInvalid(err, "MutationRelationshipApplier", "ApplyRelationship",
+			"failed to parse response")
+	}
+
+	if !result.Success {
+		return errors.New(result.Error)
+	}
+
+	a.logger.Info("Applied inferred relationship via mutation API",
 		"from", suggestion.FromEntity,
 		"predicate", suggestion.Predicate,
 		"to", suggestion.ToEntity,

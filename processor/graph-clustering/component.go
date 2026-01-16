@@ -1115,15 +1115,9 @@ func (c *Component) startEnhancementWorker(ctx context.Context, provider cluster
 // The review worker processes pending anomalies and can auto-approve/reject
 // based on confidence thresholds, optionally using LLM for uncertain cases.
 func (c *Component) startReviewWorker(ctx context.Context) error {
-	// Get JetStream for the applier
-	js, err := c.natsClient.JetStream()
-	if err != nil {
-		return errs.Wrap(err, "Component", "startReviewWorker", "get JetStream")
-	}
-
 	// Create relationship applier for approved anomalies
-	// Uses the relationship create event subject for publishing inferred relationships
-	applier := inference.NewNATSRelationshipApplier(js, "graph.events.relationship.create", c.logger)
+	// Uses the mutation API to go through graph-ingest for proper indexing
+	applier := inference.NewMutationRelationshipApplier(c.natsClient, c.logger)
 
 	// Create review worker - llmClient may be nil for human-only mode
 	reviewWorker, err := inference.NewReviewWorker(&inference.ReviewWorkerConfig{

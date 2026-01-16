@@ -749,19 +749,34 @@ func (c *NATSValidationClient) CountVirtualEdges(ctx context.Context) (*VirtualE
 		ByBand: make(map[string]int),
 	}
 
-	// Count keys with "inferred." prefix
+	// Count actual edges (entities) under each inferred.* predicate key
 	for _, key := range keys {
 		if !strings.HasPrefix(key, "inferred.") {
 			continue
 		}
 
-		counts.Total++
+		// Get the predicate entry to count entities
+		entry, err := bucket.Get(ctx, key)
+		if err != nil {
+			continue
+		}
+
+		// Parse the predicate index entry
+		var predEntry struct {
+			Entities []string `json:"entities"`
+		}
+		if err := json.Unmarshal(entry.Value(), &predEntry); err != nil {
+			continue
+		}
+
+		edgeCount := len(predEntry.Entities)
+		counts.Total += edgeCount
 
 		// Parse the band from the predicate (e.g., "inferred.semantic.high" -> "high")
 		parts := strings.Split(key, ".")
 		if len(parts) >= 3 && parts[1] == "semantic" {
 			band := parts[2]
-			counts.ByBand[band]++
+			counts.ByBand[band] += edgeCount
 		}
 	}
 

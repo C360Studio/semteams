@@ -153,6 +153,14 @@ func (c *Component) initAnomalyDetection(ctx context.Context) error {
 	}
 	c.anomalyOrchestrator = orchestrator
 
+	// Set up relationship applier for auto-apply if enabled
+	if c.config.AnomalyConfig.VirtualEdges.AutoApply.Enabled {
+		if err := c.setupRelationshipApplier(); err != nil {
+			c.logger.Warn("failed to set up relationship applier, virtual edges will not auto-apply",
+				slog.Any("error", err))
+		}
+	}
+
 	// Register enabled detectors
 	if err := c.registerAnomalyDetectors(); err != nil {
 		return errs.Wrap(err, "Component", "initAnomalyDetection", "register detectors")
@@ -171,6 +179,19 @@ func (c *Component) initAnomalyDetection(ctx context.Context) error {
 		slog.Any("enabled_detectors", c.config.AnomalyConfig.GetEnabledDetectors()),
 		slog.Int("max_anomalies_per_run", c.config.AnomalyConfig.MaxAnomaliesPerRun),
 		slog.Bool("similarity_finder_available", c.similarityFinder != nil))
+
+	return nil
+}
+
+// setupRelationshipApplier creates and configures the relationship applier for auto-apply.
+// This enables automatic creation of virtual edges for high-confidence semantic gaps.
+// Uses the mutation API (graph.mutation.triple.add) to go through graph-ingest for proper indexing.
+func (c *Component) setupRelationshipApplier() error {
+	applier := inference.NewMutationRelationshipApplier(c.natsClient, c.logger)
+	c.anomalyOrchestrator.SetApplier(applier)
+
+	c.logger.Info("relationship applier configured for virtual edge auto-apply",
+		slog.Float64("min_confidence", c.config.AnomalyConfig.VirtualEdges.AutoApply.MinConfidence))
 
 	return nil
 }

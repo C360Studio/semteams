@@ -364,10 +364,9 @@ func TestOrchestrator_ApplyVirtualEdges_HighConfidenceGaps(t *testing.T) {
 	config.Enabled = true
 	config.VirtualEdges = VirtualEdgeConfig{
 		AutoApply: AutoApplyConfig{
-			Enabled:               true,
-			MinSimilarity:         0.85,
-			MinStructuralDistance: 4,
-			PredicateTemplate:     "inferred.semantic.{band}",
+			Enabled:           true,
+			MinConfidence:     0.95,
+			PredicateTemplate: "inferred.semantic.{band}",
 		},
 	}
 
@@ -381,16 +380,17 @@ func TestOrchestrator_ApplyVirtualEdges_HighConfidenceGaps(t *testing.T) {
 	require.NoError(t, err)
 	orch.SetApplier(applier)
 
-	// Create anomalies that meet auto-apply threshold
+	// Create anomalies that meet auto-apply threshold (confidence >= 0.95)
 	result := &Result{
 		Anomalies: []*StructuralAnomaly{
 			{
-				ID:       "gap-1",
-				Type:     AnomalySemanticStructuralGap,
-				EntityA:  "entity-a",
-				EntityB:  "entity-b",
-				Evidence: Evidence{Similarity: 0.90, StructuralDistance: 5},
-				Status:   StatusPending,
+				ID:         "gap-1",
+				Type:       AnomalySemanticStructuralGap,
+				EntityA:    "entity-a",
+				EntityB:    "entity-b",
+				Confidence: 0.98, // Above 0.95 threshold
+				Evidence:   Evidence{Similarity: 0.90, StructuralDistance: 5},
+				Status:     StatusPending,
 			},
 		},
 	}
@@ -401,7 +401,7 @@ func TestOrchestrator_ApplyVirtualEdges_HighConfidenceGaps(t *testing.T) {
 	assert.Equal(t, 0, result.QueuedForReview)
 	assert.Equal(t, 1, applier.AppliedCount())
 
-	// Verify the predicate was built correctly (0.90 = high)
+	// Verify the predicate was built correctly (confidence 0.98 >= 0.95 = high)
 	assert.Equal(t, "inferred.semantic.high", applier.applied[0].Predicate)
 }
 
@@ -410,10 +410,9 @@ func TestOrchestrator_ApplyVirtualEdges_LowConfidenceGaps(t *testing.T) {
 	config.Enabled = true
 	config.VirtualEdges = VirtualEdgeConfig{
 		AutoApply: AutoApplyConfig{
-			Enabled:               true,
-			MinSimilarity:         0.85,
-			MinStructuralDistance: 4,
-			PredicateTemplate:     "inferred.semantic.{band}",
+			Enabled:           true,
+			MinConfidence:     0.95,
+			PredicateTemplate: "inferred.semantic.{band}",
 		},
 	}
 
@@ -427,16 +426,17 @@ func TestOrchestrator_ApplyVirtualEdges_LowConfidenceGaps(t *testing.T) {
 	require.NoError(t, err)
 	orch.SetApplier(applier)
 
-	// Create anomalies that DON'T meet auto-apply threshold
+	// Create anomalies that DON'T meet auto-apply threshold (confidence < 0.95)
 	result := &Result{
 		Anomalies: []*StructuralAnomaly{
 			{
-				ID:       "gap-1",
-				Type:     AnomalySemanticStructuralGap,
-				EntityA:  "entity-a",
-				EntityB:  "entity-b",
-				Evidence: Evidence{Similarity: 0.75, StructuralDistance: 5}, // Below 0.85
-				Status:   StatusPending,
+				ID:         "gap-1",
+				Type:       AnomalySemanticStructuralGap,
+				EntityA:    "entity-a",
+				EntityB:    "entity-b",
+				Confidence: 0.80, // Below 0.95 threshold
+				Evidence:   Evidence{Similarity: 0.75, StructuralDistance: 5},
+				Status:     StatusPending,
 			},
 		},
 	}
@@ -447,15 +447,14 @@ func TestOrchestrator_ApplyVirtualEdges_LowConfidenceGaps(t *testing.T) {
 	assert.Equal(t, 0, applier.AppliedCount())
 }
 
-func TestOrchestrator_ApplyVirtualEdges_StructuralDistanceTooLow(t *testing.T) {
+func TestOrchestrator_ApplyVirtualEdges_BelowThreshold(t *testing.T) {
 	config := DefaultConfig()
 	config.Enabled = true
 	config.VirtualEdges = VirtualEdgeConfig{
 		AutoApply: AutoApplyConfig{
-			Enabled:               true,
-			MinSimilarity:         0.85,
-			MinStructuralDistance: 4,
-			PredicateTemplate:     "inferred.semantic.{band}",
+			Enabled:           true,
+			MinConfidence:     0.95,
+			PredicateTemplate: "inferred.semantic.{band}",
 		},
 	}
 
@@ -469,16 +468,17 @@ func TestOrchestrator_ApplyVirtualEdges_StructuralDistanceTooLow(t *testing.T) {
 	require.NoError(t, err)
 	orch.SetApplier(applier)
 
-	// Create anomaly with high similarity but low structural distance
+	// Create anomaly with confidence just below threshold
 	result := &Result{
 		Anomalies: []*StructuralAnomaly{
 			{
-				ID:       "gap-1",
-				Type:     AnomalySemanticStructuralGap,
-				EntityA:  "entity-a",
-				EntityB:  "entity-b",
-				Evidence: Evidence{Similarity: 0.95, StructuralDistance: 3}, // Distance below 4
-				Status:   StatusPending,
+				ID:         "gap-1",
+				Type:       AnomalySemanticStructuralGap,
+				EntityA:    "entity-a",
+				EntityB:    "entity-b",
+				Confidence: 0.94, // Just below 0.95 threshold
+				Evidence:   Evidence{Similarity: 0.95, StructuralDistance: 3},
+				Status:     StatusPending,
 			},
 		},
 	}
@@ -494,15 +494,14 @@ func TestOrchestrator_ApplyVirtualEdges_QueueForReview(t *testing.T) {
 	config.Enabled = true
 	config.VirtualEdges = VirtualEdgeConfig{
 		AutoApply: AutoApplyConfig{
-			Enabled:               true,
-			MinSimilarity:         0.85,
-			MinStructuralDistance: 4,
-			PredicateTemplate:     "inferred.semantic.{band}",
+			Enabled:           true,
+			MinConfidence:     0.95,
+			PredicateTemplate: "inferred.semantic.{band}",
 		},
 		ReviewQueue: ReviewQueueConfig{
 			Enabled:       true,
-			MinSimilarity: 0.70,
-			MaxSimilarity: 0.85,
+			MinConfidence: 0.70,
+			MaxConfidence: 0.95,
 		},
 	}
 
@@ -516,16 +515,17 @@ func TestOrchestrator_ApplyVirtualEdges_QueueForReview(t *testing.T) {
 	require.NoError(t, err)
 	orch.SetApplier(applier)
 
-	// Create anomaly that should go to review queue (similarity 0.78 is in range 0.70-0.85)
+	// Create anomaly that should go to review queue (confidence 0.85 is in range 0.70-0.95)
 	result := &Result{
 		Anomalies: []*StructuralAnomaly{
 			{
-				ID:       "gap-1",
-				Type:     AnomalySemanticStructuralGap,
-				EntityA:  "entity-a",
-				EntityB:  "entity-b",
-				Evidence: Evidence{Similarity: 0.78, StructuralDistance: 5},
-				Status:   StatusPending,
+				ID:         "gap-1",
+				Type:       AnomalySemanticStructuralGap,
+				EntityA:    "entity-a",
+				EntityB:    "entity-b",
+				Confidence: 0.85, // In review queue range (0.70-0.95)
+				Evidence:   Evidence{Similarity: 0.78, StructuralDistance: 5},
+				Status:     StatusPending,
 			},
 		},
 	}
@@ -545,15 +545,14 @@ func TestOrchestrator_ApplyVirtualEdges_MixedAnomalies(t *testing.T) {
 	config.Enabled = true
 	config.VirtualEdges = VirtualEdgeConfig{
 		AutoApply: AutoApplyConfig{
-			Enabled:               true,
-			MinSimilarity:         0.85,
-			MinStructuralDistance: 4,
-			PredicateTemplate:     "inferred.semantic.{band}",
+			Enabled:           true,
+			MinConfidence:     0.95,
+			PredicateTemplate: "inferred.semantic.{band}",
 		},
 		ReviewQueue: ReviewQueueConfig{
 			Enabled:       true,
-			MinSimilarity: 0.70,
-			MaxSimilarity: 0.85,
+			MinConfidence: 0.70,
+			MaxConfidence: 0.95,
 		},
 	}
 
@@ -571,43 +570,48 @@ func TestOrchestrator_ApplyVirtualEdges_MixedAnomalies(t *testing.T) {
 	result := &Result{
 		Anomalies: []*StructuralAnomaly{
 			{
-				ID:       "gap-1",
-				Type:     AnomalySemanticStructuralGap,
-				EntityA:  "entity-a",
-				EntityB:  "entity-b",
-				Evidence: Evidence{Similarity: 0.92, StructuralDistance: 6}, // Auto-apply (high)
-				Status:   StatusPending,
+				ID:         "gap-1",
+				Type:       AnomalySemanticStructuralGap,
+				EntityA:    "entity-a",
+				EntityB:    "entity-b",
+				Confidence: 0.98, // Auto-apply (high) - confidence >= 0.95
+				Evidence:   Evidence{Similarity: 0.92, StructuralDistance: 6},
+				Status:     StatusPending,
 			},
 			{
-				ID:       "gap-2",
-				Type:     AnomalySemanticStructuralGap,
-				EntityA:  "entity-c",
-				EntityB:  "entity-d",
-				Evidence: Evidence{Similarity: 0.87, StructuralDistance: 5}, // Auto-apply (medium)
-				Status:   StatusPending,
+				ID:         "gap-2",
+				Type:       AnomalySemanticStructuralGap,
+				EntityA:    "entity-c",
+				EntityB:    "entity-d",
+				Confidence: 0.95, // Auto-apply (high) - exactly at threshold
+				Evidence:   Evidence{Similarity: 0.87, StructuralDistance: 5},
+				Status:     StatusPending,
 			},
 			{
-				ID:       "gap-3",
-				Type:     AnomalySemanticStructuralGap,
-				EntityA:  "entity-e",
-				EntityB:  "entity-f",
-				Evidence: Evidence{Similarity: 0.78, StructuralDistance: 5}, // Queue for review
-				Status:   StatusPending,
+				ID:         "gap-3",
+				Type:       AnomalySemanticStructuralGap,
+				EntityA:    "entity-e",
+				EntityB:    "entity-f",
+				Confidence: 0.85, // Queue for review - in range 0.70-0.95
+				Evidence:   Evidence{Similarity: 0.78, StructuralDistance: 5},
+				Status:     StatusPending,
 			},
 			{
-				ID:       "gap-4",
-				Type:     AnomalySemanticStructuralGap,
-				EntityA:  "entity-g",
-				EntityB:  "entity-h",
-				Evidence: Evidence{Similarity: 0.60, StructuralDistance: 5}, // Skip (too low)
-				Status:   StatusPending,
+				ID:         "gap-4",
+				Type:       AnomalySemanticStructuralGap,
+				EntityA:    "entity-g",
+				EntityB:    "entity-h",
+				Confidence: 0.60, // Skip (too low) - below 0.70
+				Evidence:   Evidence{Similarity: 0.60, StructuralDistance: 5},
+				Status:     StatusPending,
 			},
 			{
-				ID:       "core-1",
-				Type:     AnomalyCoreIsolation, // Non-semantic gap - should be skipped
-				EntityA:  "entity-i",
-				Evidence: Evidence{},
-				Status:   StatusPending,
+				ID:         "core-1",
+				Type:       AnomalyCoreIsolation, // Non-semantic gap - should be skipped
+				EntityA:    "entity-i",
+				Confidence: 0.99,
+				Evidence:   Evidence{},
+				Status:     StatusPending,
 			},
 		},
 	}
@@ -618,9 +622,9 @@ func TestOrchestrator_ApplyVirtualEdges_MixedAnomalies(t *testing.T) {
 	assert.Equal(t, 1, result.QueuedForReview)
 	assert.Equal(t, 2, applier.AppliedCount())
 
-	// Verify predicates
+	// Verify predicates (both are "high" since confidence >= 0.95)
 	assert.Equal(t, "inferred.semantic.high", applier.applied[0].Predicate)
-	assert.Equal(t, "inferred.semantic.medium", applier.applied[1].Predicate)
+	assert.Equal(t, "inferred.semantic.high", applier.applied[1].Predicate)
 }
 
 func TestOrchestrator_ApplyVirtualEdges_Disabled(t *testing.T) {
@@ -666,10 +670,9 @@ func TestOrchestrator_ApplyVirtualEdges_NoApplier(t *testing.T) {
 	config.Enabled = true
 	config.VirtualEdges = VirtualEdgeConfig{
 		AutoApply: AutoApplyConfig{
-			Enabled:               true,
-			MinSimilarity:         0.85,
-			MinStructuralDistance: 4,
-			PredicateTemplate:     "inferred.semantic.{band}",
+			Enabled:           true,
+			MinConfidence:     0.95,
+			PredicateTemplate: "inferred.semantic.{band}",
 		},
 	}
 
@@ -685,12 +688,13 @@ func TestOrchestrator_ApplyVirtualEdges_NoApplier(t *testing.T) {
 	result := &Result{
 		Anomalies: []*StructuralAnomaly{
 			{
-				ID:       "gap-1",
-				Type:     AnomalySemanticStructuralGap,
-				EntityA:  "entity-a",
-				EntityB:  "entity-b",
-				Evidence: Evidence{Similarity: 0.95, StructuralDistance: 10},
-				Status:   StatusPending,
+				ID:         "gap-1",
+				Type:       AnomalySemanticStructuralGap,
+				EntityA:    "entity-a",
+				EntityB:    "entity-b",
+				Confidence: 0.98, // High confidence
+				Evidence:   Evidence{Similarity: 0.95, StructuralDistance: 10},
+				Status:     StatusPending,
 			},
 		},
 	}

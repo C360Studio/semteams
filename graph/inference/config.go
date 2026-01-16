@@ -135,17 +135,14 @@ type AutoApplyConfig struct {
 	// Enabled activates automatic edge creation
 	Enabled bool `json:"enabled"`
 
-	// MinSimilarity is the minimum semantic similarity to auto-apply (0.0-1.0)
+	// MinConfidence is the minimum confidence score to auto-apply (0.0-1.0)
+	// Confidence is a composite score: similarity + distance boost + core boost
 	// Gaps at or above this threshold are automatically converted to edges
-	MinSimilarity float64 `json:"min_similarity"`
-
-	// MinStructuralDistance is the minimum graph distance for auto-apply (hops)
-	// Only gaps with structural distance >= this value are considered
-	MinStructuralDistance int `json:"min_structural_distance"`
+	MinConfidence float64 `json:"min_confidence"`
 
 	// PredicateTemplate is the predicate format for created edges
 	// Supports {band} placeholder: "inferred.semantic.{band}"
-	// Band values: "high" (>=0.9), "medium" (>=0.85), "related" (else)
+	// Band values: "high" (>=0.95), "medium" (>=0.85), "related" (else)
 	PredicateTemplate string `json:"predicate_template"`
 }
 
@@ -154,13 +151,13 @@ type ReviewQueueConfig struct {
 	// Enabled activates the review queue for lower-confidence gaps
 	Enabled bool `json:"enabled"`
 
-	// MinSimilarity is the minimum semantic similarity for review queue (0.0-1.0)
-	// Gaps at or above this but below AutoApply.MinSimilarity go to review
-	MinSimilarity float64 `json:"min_similarity"`
+	// MinConfidence is the minimum confidence score for review queue (0.0-1.0)
+	// Gaps at or above this but below AutoApply.MinConfidence go to review
+	MinConfidence float64 `json:"min_confidence"`
 
-	// MaxSimilarity is the maximum semantic similarity for review queue (0.0-1.0)
-	// Should match AutoApply.MinSimilarity for seamless handoff
-	MaxSimilarity float64 `json:"max_similarity"`
+	// MaxConfidence is the maximum confidence score for review queue (0.0-1.0)
+	// Should match AutoApply.MinConfidence for seamless handoff
+	MaxConfidence float64 `json:"max_confidence"`
 
 	// RequireLLMClassification requires LLM to suggest relationship type
 	RequireLLMClassification bool `json:"require_llm_classification"`
@@ -215,15 +212,14 @@ func DefaultConfig() Config {
 		},
 		VirtualEdges: VirtualEdgeConfig{
 			AutoApply: AutoApplyConfig{
-				Enabled:               false, // Opt-in feature
-				MinSimilarity:         0.85,
-				MinStructuralDistance: 4,
-				PredicateTemplate:     "inferred.semantic.{band}",
+				Enabled:           false, // Opt-in feature
+				MinConfidence:     0.95,  // High confidence = auto-apply
+				PredicateTemplate: "inferred.semantic.{band}",
 			},
 			ReviewQueue: ReviewQueueConfig{
 				Enabled:                  false, // Requires LLM setup
-				MinSimilarity:            0.7,
-				MaxSimilarity:            0.85,
+				MinConfidence:            0.7,   // Review queue lower bound
+				MaxConfidence:            0.95,  // Below auto-apply threshold
 				RequireLLMClassification: true,
 			},
 		},
@@ -450,18 +446,10 @@ func (c *Config) validateReview() error {
 func (c *Config) validateVirtualEdges() error {
 	// Validate AutoApply config
 	if c.VirtualEdges.AutoApply.Enabled {
-		if c.VirtualEdges.AutoApply.MinSimilarity < 0 || c.VirtualEdges.AutoApply.MinSimilarity > 1 {
+		if c.VirtualEdges.AutoApply.MinConfidence < 0 || c.VirtualEdges.AutoApply.MinConfidence > 1 {
 			msg := fmt.Sprintf(
-				"virtual_edges.auto_apply.min_similarity must be between 0 and 1, got %f",
-				c.VirtualEdges.AutoApply.MinSimilarity,
-			)
-			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
-		}
-
-		if c.VirtualEdges.AutoApply.MinStructuralDistance <= 0 {
-			msg := fmt.Sprintf(
-				"virtual_edges.auto_apply.min_structural_distance must be positive, got %d",
-				c.VirtualEdges.AutoApply.MinStructuralDistance,
+				"virtual_edges.auto_apply.min_confidence must be between 0 and 1, got %f",
+				c.VirtualEdges.AutoApply.MinConfidence,
 			)
 			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
 		}
@@ -474,27 +462,27 @@ func (c *Config) validateVirtualEdges() error {
 
 	// Validate ReviewQueue config
 	if c.VirtualEdges.ReviewQueue.Enabled {
-		if c.VirtualEdges.ReviewQueue.MinSimilarity < 0 || c.VirtualEdges.ReviewQueue.MinSimilarity > 1 {
+		if c.VirtualEdges.ReviewQueue.MinConfidence < 0 || c.VirtualEdges.ReviewQueue.MinConfidence > 1 {
 			msg := fmt.Sprintf(
-				"virtual_edges.review_queue.min_similarity must be between 0 and 1, got %f",
-				c.VirtualEdges.ReviewQueue.MinSimilarity,
+				"virtual_edges.review_queue.min_confidence must be between 0 and 1, got %f",
+				c.VirtualEdges.ReviewQueue.MinConfidence,
 			)
 			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
 		}
 
-		if c.VirtualEdges.ReviewQueue.MaxSimilarity < 0 || c.VirtualEdges.ReviewQueue.MaxSimilarity > 1 {
+		if c.VirtualEdges.ReviewQueue.MaxConfidence < 0 || c.VirtualEdges.ReviewQueue.MaxConfidence > 1 {
 			msg := fmt.Sprintf(
-				"virtual_edges.review_queue.max_similarity must be between 0 and 1, got %f",
-				c.VirtualEdges.ReviewQueue.MaxSimilarity,
+				"virtual_edges.review_queue.max_confidence must be between 0 and 1, got %f",
+				c.VirtualEdges.ReviewQueue.MaxConfidence,
 			)
 			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
 		}
 
-		if c.VirtualEdges.ReviewQueue.MinSimilarity >= c.VirtualEdges.ReviewQueue.MaxSimilarity {
+		if c.VirtualEdges.ReviewQueue.MinConfidence >= c.VirtualEdges.ReviewQueue.MaxConfidence {
 			msg := fmt.Sprintf(
-				"virtual_edges.review_queue.min_similarity (%f) must be less than max_similarity (%f)",
-				c.VirtualEdges.ReviewQueue.MinSimilarity,
-				c.VirtualEdges.ReviewQueue.MaxSimilarity,
+				"virtual_edges.review_queue.min_confidence (%f) must be less than max_confidence (%f)",
+				c.VirtualEdges.ReviewQueue.MinConfidence,
+				c.VirtualEdges.ReviewQueue.MaxConfidence,
 			)
 			return errs.WrapInvalid(errs.ErrInvalidConfig, "inference", "Validate", msg)
 		}
@@ -612,22 +600,19 @@ func (c *Config) applyReviewDefaults(defaults Config) {
 
 func (c *Config) applyVirtualEdgesDefaults(defaults Config) {
 	// AutoApply defaults
-	if c.VirtualEdges.AutoApply.MinSimilarity == 0 {
-		c.VirtualEdges.AutoApply.MinSimilarity = defaults.VirtualEdges.AutoApply.MinSimilarity
-	}
-	if c.VirtualEdges.AutoApply.MinStructuralDistance == 0 {
-		c.VirtualEdges.AutoApply.MinStructuralDistance = defaults.VirtualEdges.AutoApply.MinStructuralDistance
+	if c.VirtualEdges.AutoApply.MinConfidence == 0 {
+		c.VirtualEdges.AutoApply.MinConfidence = defaults.VirtualEdges.AutoApply.MinConfidence
 	}
 	if c.VirtualEdges.AutoApply.PredicateTemplate == "" {
 		c.VirtualEdges.AutoApply.PredicateTemplate = defaults.VirtualEdges.AutoApply.PredicateTemplate
 	}
 
 	// ReviewQueue defaults
-	if c.VirtualEdges.ReviewQueue.MinSimilarity == 0 {
-		c.VirtualEdges.ReviewQueue.MinSimilarity = defaults.VirtualEdges.ReviewQueue.MinSimilarity
+	if c.VirtualEdges.ReviewQueue.MinConfidence == 0 {
+		c.VirtualEdges.ReviewQueue.MinConfidence = defaults.VirtualEdges.ReviewQueue.MinConfidence
 	}
-	if c.VirtualEdges.ReviewQueue.MaxSimilarity == 0 {
-		c.VirtualEdges.ReviewQueue.MaxSimilarity = defaults.VirtualEdges.ReviewQueue.MaxSimilarity
+	if c.VirtualEdges.ReviewQueue.MaxConfidence == 0 {
+		c.VirtualEdges.ReviewQueue.MaxConfidence = defaults.VirtualEdges.ReviewQueue.MaxConfidence
 	}
 }
 
@@ -672,34 +657,36 @@ func (c *Config) IsDetectorEnabled(detector string) bool {
 	}
 }
 
-// BuildPredicate generates the predicate string from the template based on similarity.
+// BuildPredicate generates the predicate string from the template based on confidence.
 // Template supports {band} placeholder which is replaced with:
-//   - "high" for similarity >= 0.9
-//   - "medium" for similarity >= 0.85
-//   - "related" for lower similarities
-func (c *AutoApplyConfig) BuildPredicate(similarity float64) string {
+//   - "high" for confidence >= 0.95
+//   - "medium" for confidence >= 0.85
+//   - "related" for lower confidence scores
+func (c *AutoApplyConfig) BuildPredicate(confidence float64) string {
 	band := "related"
-	if similarity >= 0.9 {
+	if confidence >= 0.95 {
 		band = "high"
-	} else if similarity >= 0.85 {
+	} else if confidence >= 0.85 {
 		band = "medium"
 	}
 
 	return strings.Replace(c.PredicateTemplate, "{band}", band, 1)
 }
 
-// ShouldAutoApply returns true if the anomaly meets auto-apply criteria.
-func (c *AutoApplyConfig) ShouldAutoApply(similarity float64, structuralDistance int) bool {
+// ShouldAutoApply returns true if the anomaly meets auto-apply criteria based on confidence.
+// Confidence is a composite score (similarity + distance boost + core boost) capped at 1.0.
+func (c *AutoApplyConfig) ShouldAutoApply(confidence float64) bool {
 	if !c.Enabled {
 		return false
 	}
-	return similarity >= c.MinSimilarity && structuralDistance >= c.MinStructuralDistance
+	return confidence >= c.MinConfidence
 }
 
-// ShouldQueue returns true if the anomaly should go to the review queue.
-func (c *ReviewQueueConfig) ShouldQueue(similarity float64) bool {
+// ShouldQueue returns true if the anomaly should go to the review queue based on confidence.
+// Anomalies with confidence >= MinConfidence but < MaxConfidence go to review.
+func (c *ReviewQueueConfig) ShouldQueue(confidence float64) bool {
 	if !c.Enabled {
 		return false
 	}
-	return similarity >= c.MinSimilarity && similarity < c.MaxSimilarity
+	return confidence >= c.MinConfidence && confidence < c.MaxConfidence
 }
