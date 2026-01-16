@@ -17,6 +17,7 @@ import (
 	"github.com/c360/semstreams/gateway"
 	"github.com/c360/semstreams/graph"
 	"github.com/c360/semstreams/graph/inference"
+	"github.com/c360/semstreams/graph/query"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
@@ -152,6 +153,9 @@ type Component struct {
 	natsRequester natsRequester // Interface for NATS request/reply (mockable)
 	logger        *slog.Logger
 
+	// Query classification (T0: keywords, T1/T2: embedding similarity)
+	classifier *query.ClassifierChain
+
 	// Lifecycle reporting
 	lifecycleReporter component.LifecycleReporter
 
@@ -206,6 +210,11 @@ func CreateGraphGateway(rawConfig json.RawMessage, deps component.Dependencies) 
 	// Create logger with component context
 	logger := deps.GetLoggerWithComponent("graph-gateway")
 
+	// Create query classifier chain (T0: keywords only for now)
+	// T1/T2 embedding classifier can be added later when domain examples are loaded
+	keywordClassifier := query.NewKeywordClassifier()
+	classifier := query.NewClassifierChain(keywordClassifier, nil)
+
 	// Create component
 	comp := &Component{
 		name:          "graph-gateway",
@@ -213,6 +222,7 @@ func CreateGraphGateway(rawConfig json.RawMessage, deps component.Dependencies) 
 		natsClient:    natsClient,
 		natsRequester: natsClient, // Assign to interface field for mockability
 		logger:        logger,
+		classifier:    classifier,
 	}
 
 	// Initialize last activity
@@ -836,6 +846,30 @@ func (c *Component) transformGlobalSearchVars(variables map[string]interface{}) 
 	return payload
 }
 
+// mergeClassificationOptions merges query classification results into the NATS payload.
+// This allows the backend to receive extracted temporal, spatial, and other hints
+// from natural language queries.
+func (c *Component) mergeClassificationOptions(payload map[string]interface{}, result *query.ClassificationResult) {
+	if result == nil || result.Options == nil {
+		return
+	}
+
+	// Add classification metadata
+	payload["classification_tier"] = result.Tier
+	payload["classification_confidence"] = result.Confidence
+	if result.Intent != "" {
+		payload["classification_intent"] = result.Intent
+	}
+
+	// Merge extracted options (temporal, spatial, similarity hints)
+	for key, value := range result.Options {
+		// Don't overwrite existing payload values
+		if _, exists := payload[key]; !exists {
+			payload[key] = value
+		}
+	}
+}
+
 // writeGraphQLError writes a GraphQL error response with the given status code and message.
 func (c *Component) writeGraphQLError(w http.ResponseWriter, statusCode int, message string) {
 	w.Header().Set("Content-Type", "application/json")
@@ -925,6 +959,18 @@ func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 
 	subject := c.mapGraphQLQueryToNATSSubject(gqlReq.Query)
 	payload := c.transformVariablesToNATSPayload(gqlReq.Variables, subject)
+
+	// For search queries, classify the query text and merge extracted options
+	if c.classifier != nil && (subject == "graph.query.globalSearch" || subject == "graph.query.semantic") {
+		if queryText, ok := payload["query"].(string); ok && queryText != "" {
+			result := c.classifier.ClassifyQuery(ctx, queryText)
+			if result != nil {
+				// Merge classification options into payload
+				c.mergeClassificationOptions(payload, result)
+			}
+		}
+	}
+
 	payloadBytes, _ := json.Marshal(payload)
 
 	resp, err := c.natsRequester.Request(ctx, subject, payloadBytes, c.config.QueryTimeout)
