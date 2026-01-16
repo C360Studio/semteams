@@ -72,6 +72,7 @@ type Processor struct {
 	running            bool          // Tracks if processor is running (protected by mu)
 	shutdown           chan struct{} // Closed to signal shutdown, never set to nil while running
 	done               chan struct{}
+	ready              chan struct{} // Closed when run() completes initialization
 	startTime          time.Time
 	messagesEvaluated  int64
 	rulesTriggered     int64
@@ -267,6 +268,25 @@ func (rp *Processor) Initialize() error {
 func (rp *Processor) run(ctx context.Context) {
 	defer close(rp.done)
 
+	// Use sync.Once to safely close ready channel - handles both happy path
+	// (explicit close after coalescer init) and error paths (defer on early return)
+	var readyOnce sync.Once
+	signalReady := func() { readyOnce.Do(func() { close(rp.ready) }) }
+	defer signalReady() // Ensure ready is closed if run() exits early
+
+	// Initialize entity coalescer BEFORE spawning watchers to avoid race condition.
+	// Watchers read entityCoalescer, so it must be set before any watcher goroutine starts.
+	// Only create coalescer if debounce delay is non-zero.
+	// When debounce is 0, entities are evaluated immediately without batching.
+	if rp.config.DebounceDelayMs > 0 {
+		rp.entityCoalescer = cache.NewCoalescingSet(ctx, rp.config.DebounceDelayMs, func(entityIDs []string) {
+			rp.evaluateEntitiesInBatch(ctx, entityIDs)
+		})
+	}
+
+	// Signal that initialization is complete - entityCoalescer is now safe to read
+	signalReady()
+
 	// Start KV watchers for entity state changes FIRST
 	if err := rp.watchEntityStates(ctx); err != nil {
 		rp.logger.Warn("Failed to start entity state watching", "error", err)
@@ -376,14 +396,8 @@ func (rp *Processor) Start(ctx context.Context) error {
 		// Don't fail - processor can still work with stateless rules
 	}
 
-	// Initialize entity coalescer for batched rule evaluation
-	// Only create coalescer if debounce delay is non-zero
-	// When debounce is 0, entities are evaluated immediately without batching
-	if rp.config.DebounceDelayMs > 0 {
-		rp.entityCoalescer = cache.NewCoalescingSet(ctx, rp.config.DebounceDelayMs, func(entityIDs []string) {
-			rp.evaluateEntitiesInBatch(ctx, entityIDs)
-		})
-	}
+	// Note: entityCoalescer is initialized in run() before spawning watchers
+	// to avoid race between Start() setting it and watcher goroutines reading it
 
 	// Initialize lifecycle reporter for observability
 	if rp.natsClient != nil {
@@ -407,15 +421,27 @@ func (rp *Processor) Start(ctx context.Context) error {
 		rp.lifecycleReporter = component.NewNoOpLifecycleReporter()
 	}
 
-	// Create shutdown and done channels for coordination
+	// Create shutdown, done, and ready channels for coordination
 	rp.shutdown = make(chan struct{})
 	rp.done = make(chan struct{})
+	rp.ready = make(chan struct{})
 	rp.running = true
 	rp.startTime = time.Now()
 	// Note: health.Healthy is set in run() after watchers and subscriptions are established
 
 	// Start background goroutine with context
 	go rp.run(ctx)
+
+	// Wait for run() to complete initialization (coalescer setup, watchers started)
+	// This ensures entityCoalescer is set before Start() returns
+	select {
+	case <-rp.ready:
+		// Initialization complete
+	case <-ctx.Done():
+		// Context cancelled during startup - trigger shutdown and return error
+		close(rp.shutdown)
+		return ctx.Err()
+	}
 
 	rp.isSubscribed = true
 
