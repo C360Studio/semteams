@@ -269,6 +269,7 @@ func healthTicker(
 	componentMgr ComponentHealthProvider,
 	flowID string,
 	sendFn func(StatusStreamEnvelope) error,
+	logger *slog.Logger,
 ) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -297,7 +298,7 @@ func healthTicker(
 			// Marshal payload
 			payload, err := json.Marshal(health)
 			if err != nil {
-				slog.Debug("Failed to marshal health payload", "error", err)
+				logger.Debug("Failed to marshal health payload", "error", err)
 				continue
 			}
 
@@ -312,7 +313,7 @@ func healthTicker(
 
 			// Send envelope
 			if err := sendFn(envelope); err != nil {
-				slog.Debug("Failed to send health envelope", "error", err)
+				logger.Debug("Failed to send health envelope", "error", err)
 			}
 		}
 	}
@@ -325,6 +326,7 @@ func flowWatcher(
 	flowStore FlowStore,
 	flowID string,
 	sendFn func(StatusStreamEnvelope) error,
+	logger *slog.Logger,
 ) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -350,7 +352,7 @@ func flowWatcher(
 			// Get current flow state
 			flow, err := flowStore.Get(ctx, flowID)
 			if err != nil {
-				slog.Debug("Failed to get flow state", "flow_id", flowID, "error", err)
+				logger.Debug("Failed to get flow state", "flow_id", flowID, "error", err)
 				continue
 			}
 
@@ -368,7 +370,7 @@ func flowWatcher(
 
 			payloadBytes, err := json.Marshal(payload)
 			if err != nil {
-				slog.Debug("Failed to marshal flow status payload", "error", err)
+				logger.Debug("Failed to marshal flow status payload", "error", err)
 				continue
 			}
 
@@ -383,7 +385,7 @@ func flowWatcher(
 
 			// Send envelope
 			if err := sendFn(envelope); err != nil {
-				slog.Debug("Failed to send flow status envelope", "error", err)
+				logger.Debug("Failed to send flow status envelope", "error", err)
 			}
 
 			// Update previous state
@@ -399,6 +401,7 @@ func logStreamer(
 	natsClient natsSubscriber,
 	flowID string,
 	sendFn func(StatusStreamEnvelope) error,
+	logger *slog.Logger,
 ) {
 	// Subscribe to logs.>
 	err := natsClient.Subscribe(ctx, "logs.>", func(_ context.Context, data []byte) {
@@ -410,7 +413,7 @@ func logStreamer(
 		// Parse log entry
 		var logEntry map[string]interface{}
 		if err := json.Unmarshal(data, &logEntry); err != nil {
-			slog.Debug("Failed to unmarshal log entry", "error", err)
+			logger.Debug("Failed to unmarshal log entry", "error", err)
 			return
 		}
 
@@ -439,12 +442,12 @@ func logStreamer(
 
 		// Send envelope
 		if err := sendFn(envelope); err != nil {
-			slog.Debug("Failed to send log envelope", "error", err)
+			logger.Debug("Failed to send log envelope", "error", err)
 		}
 	})
 
 	if err != nil {
-		slog.Error("Failed to subscribe to logs", "error", err)
+		logger.Error("Failed to subscribe to logs", "error", err)
 		return
 	}
 
@@ -459,6 +462,7 @@ func metricsStreamer(
 	natsClient natsSubscriber,
 	flowID string,
 	sendFn func(StatusStreamEnvelope) error,
+	logger *slog.Logger,
 ) {
 	// Subscribe to metrics.>
 	err := natsClient.Subscribe(ctx, "metrics.>", func(_ context.Context, data []byte) {
@@ -478,12 +482,12 @@ func metricsStreamer(
 
 		// Send envelope
 		if err := sendFn(envelope); err != nil {
-			slog.Debug("Failed to send metrics envelope", "error", err)
+			logger.Debug("Failed to send metrics envelope", "error", err)
 		}
 	})
 
 	if err != nil {
-		slog.Error("Failed to subscribe to metrics", "error", err)
+		logger.Error("Failed to subscribe to metrics", "error", err)
 		return
 	}
 
@@ -525,7 +529,7 @@ func (fs *FlowService) startWebSocketWorkers(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			healthTicker(ctx, clientState, componentMgr, flowID, sendFn)
+			healthTicker(ctx, clientState, componentMgr, flowID, sendFn, fs.logger)
 		}()
 	}
 
@@ -533,7 +537,7 @@ func (fs *FlowService) startWebSocketWorkers(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		flowWatcher(ctx, clientState, fs.flowStore, flowID, sendFn)
+		flowWatcher(ctx, clientState, fs.flowStore, flowID, sendFn, fs.logger)
 	}()
 
 	// Log streamer - subscribes to NATS logs.>
@@ -541,7 +545,7 @@ func (fs *FlowService) startWebSocketWorkers(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logStreamer(ctx, clientState, fs.natsClient, flowID, sendFn)
+			logStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, fs.logger)
 		}()
 	}
 
@@ -550,7 +554,7 @@ func (fs *FlowService) startWebSocketWorkers(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			metricsStreamer(ctx, clientState, fs.natsClient, flowID, sendFn)
+			metricsStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, fs.logger)
 		}()
 	}
 }
