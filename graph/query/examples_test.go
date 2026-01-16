@@ -375,8 +375,8 @@ func TestLoadAllDomainExamples_NilPaths(t *testing.T) {
 	assert.Empty(t, allExamples)
 }
 
-// TestQueryExample_VectorField tests that Vector field is properly initialized
-func TestQueryExample_VectorField(t *testing.T) {
+// TestExample_VectorField tests that Vector field is properly initialized
+func TestExample_VectorField(t *testing.T) {
 	// The Vector field should not be populated from JSON, it's runtime-only
 	json := `{
 		"domain": "test",
@@ -404,9 +404,9 @@ func TestQueryExample_VectorField(t *testing.T) {
 	assert.Nil(t, ex.Vector)
 }
 
-// TestQueryExample_JSONRoundTrip tests marshaling and unmarshaling
-func TestQueryExample_JSONRoundTrip(t *testing.T) {
-	original := QueryExample{
+// TestExample_JSONRoundTrip tests marshaling and unmarshaling
+func TestExample_JSONRoundTrip(t *testing.T) {
+	original := Example{
 		Query:  "test query",
 		Intent: "entity_lookup",
 		Options: map[string]any{
@@ -422,7 +422,7 @@ func TestQueryExample_JSONRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	// Unmarshal back
-	var restored QueryExample
+	var restored Example
 	err = json.Unmarshal(data, &restored)
 	require.NoError(t, err)
 
@@ -487,8 +487,8 @@ func TestDomainExamples_DuplicateDomains(t *testing.T) {
 	// This test ensures the function handles duplicates gracefully
 }
 
-// TestQueryExample_EmptyQueryString tests handling of empty query strings
-func TestQueryExample_EmptyQueryString(t *testing.T) {
+// TestExample_EmptyQueryString tests handling of empty query strings
+func TestExample_EmptyQueryString(t *testing.T) {
 	json := `{
 		"domain": "test",
 		"version": "1.0",
@@ -514,8 +514,8 @@ func TestQueryExample_EmptyQueryString(t *testing.T) {
 	assert.Equal(t, "test_intent", examples.Examples[0].Intent)
 }
 
-// TestQueryExample_SpecialCharacters tests handling of special characters in queries
-func TestQueryExample_SpecialCharacters(t *testing.T) {
+// TestExample_SpecialCharacters tests handling of special characters in queries
+func TestExample_SpecialCharacters(t *testing.T) {
 	tests := []struct {
 		name  string
 		query string
@@ -543,7 +543,7 @@ func TestQueryExample_SpecialCharacters(t *testing.T) {
 			domainExamples := DomainExamples{
 				Domain:  "test",
 				Version: "1.0",
-				Examples: []QueryExample{
+				Examples: []Example{
 					{
 						Query:  tt.query,
 						Intent: "test",
@@ -573,11 +573,11 @@ func TestLoadDomainExamples_LargeFile(t *testing.T) {
 	domainExamples := DomainExamples{
 		Domain:   "large_test",
 		Version:  "1.0",
-		Examples: make([]QueryExample, 1000),
+		Examples: make([]Example, 1000),
 	}
 
 	for i := range domainExamples.Examples {
-		domainExamples.Examples[i] = QueryExample{
+		domainExamples.Examples[i] = Example{
 			Query:  "Test query number " + string(rune(i)),
 			Intent: "test_intent",
 			Options: map[string]any{
@@ -604,9 +604,9 @@ func TestLoadDomainExamples_LargeFile(t *testing.T) {
 	assert.Equal(t, "large_test", loaded.Domain)
 }
 
-// TestQueryExample_OptionsTypes tests that Options can hold various Go types
-func TestQueryExample_OptionsTypes(t *testing.T) {
-	example := QueryExample{
+// TestExample_OptionsTypes tests that Options can hold various Go types
+func TestExample_OptionsTypes(t *testing.T) {
+	example := Example{
 		Query:  "test",
 		Intent: "test",
 		Options: map[string]any{

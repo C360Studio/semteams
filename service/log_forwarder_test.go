@@ -24,89 +24,67 @@ func TestLogForwarderService_ConfigParsing(t *testing.T) {
 	tests := []struct {
 		name         string
 		rawConfig    json.RawMessage
-		wantEnabled  bool
 		wantMinLevel string
 		wantErr      bool
 		errContains  string
 	}{
 		{
-			name:         "valid config - enabled with DEBUG level",
-			rawConfig:    json.RawMessage(`{"enabled": true, "min_level": "DEBUG"}`),
-			wantEnabled:  true,
+			name:         "valid config - DEBUG level",
+			rawConfig:    json.RawMessage(`{"min_level": "DEBUG"}`),
 			wantMinLevel: "DEBUG",
 			wantErr:      false,
 		},
 		{
-			name:         "valid config - enabled with INFO level",
-			rawConfig:    json.RawMessage(`{"enabled": true, "min_level": "INFO"}`),
-			wantEnabled:  true,
+			name:         "valid config - INFO level",
+			rawConfig:    json.RawMessage(`{"min_level": "INFO"}`),
 			wantMinLevel: "INFO",
 			wantErr:      false,
 		},
 		{
-			name:         "valid config - enabled with WARN level",
-			rawConfig:    json.RawMessage(`{"enabled": true, "min_level": "WARN"}`),
-			wantEnabled:  true,
+			name:         "valid config - WARN level",
+			rawConfig:    json.RawMessage(`{"min_level": "WARN"}`),
 			wantMinLevel: "WARN",
 			wantErr:      false,
 		},
 		{
-			name:         "valid config - enabled with ERROR level",
-			rawConfig:    json.RawMessage(`{"enabled": true, "min_level": "ERROR"}`),
-			wantEnabled:  true,
+			name:         "valid config - ERROR level",
+			rawConfig:    json.RawMessage(`{"min_level": "ERROR"}`),
 			wantMinLevel: "ERROR",
-			wantErr:      false,
-		},
-		{
-			name:         "valid config - disabled",
-			rawConfig:    json.RawMessage(`{"enabled": false, "min_level": "INFO"}`),
-			wantEnabled:  false,
-			wantMinLevel: "INFO",
 			wantErr:      false,
 		},
 		{
 			name:         "default values - empty config",
 			rawConfig:    json.RawMessage(`{}`),
-			wantEnabled:  false,
 			wantMinLevel: "INFO",
 			wantErr:      false,
 		},
 		{
 			name:         "default values - null config",
 			rawConfig:    nil,
-			wantEnabled:  false,
-			wantMinLevel: "INFO",
-			wantErr:      false,
-		},
-		{
-			name:         "default min_level when missing",
-			rawConfig:    json.RawMessage(`{"enabled": true}`),
-			wantEnabled:  true,
 			wantMinLevel: "INFO",
 			wantErr:      false,
 		},
 		{
 			name:         "lowercase level converted to uppercase",
-			rawConfig:    json.RawMessage(`{"enabled": true, "min_level": "debug"}`),
-			wantEnabled:  true,
+			rawConfig:    json.RawMessage(`{"min_level": "debug"}`),
 			wantMinLevel: "DEBUG",
 			wantErr:      false,
 		},
 		{
 			name:        "invalid log level",
-			rawConfig:   json.RawMessage(`{"enabled": true, "min_level": "TRACE"}`),
+			rawConfig:   json.RawMessage(`{"min_level": "TRACE"}`),
 			wantErr:     true,
 			errContains: "invalid log level",
 		},
 		{
 			name:        "invalid log level - random string",
-			rawConfig:   json.RawMessage(`{"enabled": true, "min_level": "INVALID"}`),
+			rawConfig:   json.RawMessage(`{"min_level": "INVALID"}`),
 			wantErr:     true,
 			errContains: "invalid log level",
 		},
 		{
 			name:        "malformed JSON",
-			rawConfig:   json.RawMessage(`{"enabled": true, "min_level": `),
+			rawConfig:   json.RawMessage(`{"min_level": `),
 			wantErr:     true,
 			errContains: "parse",
 		},
@@ -138,7 +116,6 @@ func TestLogForwarderService_ConfigParsing(t *testing.T) {
 			require.True(t, ok, "service should be *LogForwarder type")
 
 			// Verify config values
-			assert.Equal(t, tt.wantEnabled, logForwarder.config.Enabled)
 			assert.Equal(t, tt.wantMinLevel, logForwarder.config.MinLevel)
 		})
 	}
@@ -179,7 +156,7 @@ func TestLogForwarderService_RequiresDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rawConfig := json.RawMessage(`{"enabled": true}`)
+			rawConfig := json.RawMessage(`{"min_level": "INFO"}`)
 			svc, err := NewLogForwarderService(rawConfig, tt.deps)
 
 			if tt.wantErr {
@@ -310,7 +287,7 @@ func TestLogForwarder_Handler_Enabled(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create handler with specific min level
-			handler := createTestLogForwarderHandler(t, tt.minLevel, true)
+			handler := createTestLogForwarderHandler(t, tt.minLevel)
 
 			// Test Enabled()
 			ctx := context.Background()
@@ -433,7 +410,7 @@ func TestLogForwarder_Handler_Handle(t *testing.T) {
 			}
 
 			// Create LogForwarder with mock NATS
-			handler := createTestLogForwarderHandlerWithNATS(t, tt.minLevel, true, mockNATS)
+			handler := createTestLogForwarderHandlerWithNATS(t, tt.minLevel, mockNATS)
 
 			// Create log record
 			ctx := context.Background()
@@ -484,7 +461,7 @@ func TestLogForwarder_Handler_Handle(t *testing.T) {
 // TestLogForwarder_Handler_WithAttrs tests attribute accumulation
 func TestLogForwarder_Handler_WithAttrs(t *testing.T) {
 	// Create handler with attributes
-	baseHandler := createTestLogForwarderHandler(t, "INFO", true)
+	baseHandler := createTestLogForwarderHandler(t, "INFO")
 
 	// Add attributes
 	handlerWithAttrs := baseHandler.WithAttrs([]slog.Attr{
@@ -513,7 +490,7 @@ func TestLogForwarder_Handler_WithAttrs(t *testing.T) {
 	}
 
 	// Create handler with mock NATS and add attrs
-	handler := createTestLogForwarderHandlerWithNATS(t, "INFO", true, mockNATS)
+	handler := createTestLogForwarderHandlerWithNATS(t, "INFO", mockNATS)
 	handlerWithAttrs = handler.WithAttrs([]slog.Attr{
 		slog.String("component", "processor"),
 	})
@@ -534,7 +511,7 @@ func TestLogForwarder_Handler_WithAttrs(t *testing.T) {
 
 // TestLogForwarder_Handler_WithGroup tests group handling
 func TestLogForwarder_Handler_WithGroup(t *testing.T) {
-	baseHandler := createTestLogForwarderHandler(t, "INFO", true)
+	baseHandler := createTestLogForwarderHandler(t, "INFO")
 
 	// Add group
 	handlerWithGroup := baseHandler.WithGroup("test-group")
@@ -562,7 +539,7 @@ func TestLogForwarder_Handler_WrapsExisting(t *testing.T) {
 	}
 
 	// Create LogForwarder that wraps the handler
-	handler := createTestLogForwarderHandlerWithNATSAndWrapped(t, "INFO", true, mockNATS, wrappedHandler)
+	handler := createTestLogForwarderHandlerWithNATSAndWrapped(t, "INFO", mockNATS, wrappedHandler)
 
 	// Log a message
 	ctx := context.Background()
@@ -577,37 +554,6 @@ func TestLogForwarder_Handler_WrapsExisting(t *testing.T) {
 	assert.Contains(t, buf.String(), "test message")
 }
 
-// TestLogForwarder_Disabled tests that disabled forwarder does not publish
-func TestLogForwarder_Disabled(t *testing.T) {
-	publishCalled := false
-	var publishMu sync.Mutex
-
-	mockNATS := &logForwarderMockNATS{
-		publishFunc: func(ctx context.Context, subject string, data []byte) error {
-			publishMu.Lock()
-			defer publishMu.Unlock()
-			publishCalled = true
-			return nil
-		},
-	}
-
-	// Create DISABLED handler
-	handler := createTestLogForwarderHandlerWithNATS(t, "INFO", false, mockNATS)
-
-	// Log a message
-	ctx := context.Background()
-	record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
-	err := handler.Handle(ctx, record)
-	require.NoError(t, err)
-
-	time.Sleep(10 * time.Millisecond)
-
-	// Verify publish was NOT called
-	publishMu.Lock()
-	defer publishMu.Unlock()
-	assert.False(t, publishCalled, "disabled forwarder should not publish")
-}
-
 // TestLogForwarder_PublishError tests error handling when NATS publish fails
 func TestLogForwarder_PublishError(t *testing.T) {
 	mockNATS := &logForwarderMockNATS{
@@ -616,7 +562,7 @@ func TestLogForwarder_PublishError(t *testing.T) {
 		},
 	}
 
-	handler := createTestLogForwarderHandlerWithNATS(t, "INFO", true, mockNATS)
+	handler := createTestLogForwarderHandlerWithNATS(t, "INFO", mockNATS)
 
 	// Log a message (should not return error even if publish fails)
 	ctx := context.Background()
@@ -629,7 +575,7 @@ func TestLogForwarder_PublishError(t *testing.T) {
 
 // TestLogForwarder_ServiceLifecycle tests Start/Stop behavior
 func TestLogForwarder_ServiceLifecycle(t *testing.T) {
-	logForwarder := createTestLogForwarderHandler(t, "INFO", true)
+	logForwarder := createTestLogForwarderHandler(t, "INFO")
 
 	// Initially stopped
 	assert.Equal(t, StatusStopped, logForwarder.Status())
@@ -652,7 +598,7 @@ func TestLogForwarder_ServiceLifecycle(t *testing.T) {
 
 // TestLogForwarder_ServiceImplementsInterface verifies Service interface implementation
 func TestLogForwarder_ServiceImplementsInterface(t *testing.T) {
-	logForwarder := createTestLogForwarderHandler(t, "INFO", true)
+	logForwarder := createTestLogForwarderHandler(t, "INFO")
 
 	// Verify Service interface implementation
 	var _ Service = logForwarder
@@ -675,7 +621,7 @@ func TestLogForwarder_ConcurrentPublish(t *testing.T) {
 		},
 	}
 
-	handler := createTestLogForwarderHandlerWithNATS(t, "INFO", true, mockNATS)
+	handler := createTestLogForwarderHandlerWithNATS(t, "INFO", mockNATS)
 
 	// Concurrent log publishing
 	numGoroutines := 50
@@ -702,27 +648,26 @@ func TestLogForwarder_ConcurrentPublish(t *testing.T) {
 }
 
 // Helper: create test LogForwarder handler
-func createTestLogForwarderHandler(t *testing.T, minLevel string, enabled bool) *LogForwarder {
+func createTestLogForwarderHandler(t *testing.T, minLevel string) *LogForwarder {
 	mockNATS := &logForwarderMockNATS{
 		publishFunc: func(ctx context.Context, subject string, data []byte) error {
 			return nil
 		},
 	}
-	return createTestLogForwarderHandlerWithNATS(t, minLevel, enabled, mockNATS)
+	return createTestLogForwarderHandlerWithNATS(t, minLevel, mockNATS)
 }
 
 // Helper: create test LogForwarder handler with custom NATS client
-func createTestLogForwarderHandlerWithNATS(t *testing.T, minLevel string, enabled bool, natsClient *logForwarderMockNATS) *LogForwarder {
+func createTestLogForwarderHandlerWithNATS(t *testing.T, minLevel string, natsClient *logForwarderMockNATS) *LogForwarder {
 	wrappedHandler := slog.NewJSONHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	})
-	return createTestLogForwarderHandlerWithNATSAndWrapped(t, minLevel, enabled, natsClient, wrappedHandler)
+	return createTestLogForwarderHandlerWithNATSAndWrapped(t, minLevel, natsClient, wrappedHandler)
 }
 
 // Helper: create test LogForwarder handler with custom NATS client and wrapped handler
-func createTestLogForwarderHandlerWithNATSAndWrapped(t *testing.T, minLevel string, enabled bool, natsClient *logForwarderMockNATS, wrappedHandler slog.Handler) *LogForwarder {
+func createTestLogForwarderHandlerWithNATSAndWrapped(t *testing.T, minLevel string, natsClient *logForwarderMockNATS, wrappedHandler slog.Handler) *LogForwarder {
 	config := &LogForwarderConfig{
-		Enabled:  enabled,
 		MinLevel: minLevel,
 	}
 

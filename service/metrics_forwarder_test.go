@@ -26,86 +26,67 @@ func TestMetricsForwarderService_ConfigParsing(t *testing.T) {
 	tests := []struct {
 		name             string
 		rawConfig        json.RawMessage
-		wantEnabled      bool
 		wantPushInterval string
 		wantErr          bool
 		errContains      string
 	}{
 		{
-			name:             "valid config - enabled with custom interval",
-			rawConfig:        json.RawMessage(`{"enabled": true, "push_interval": "10s"}`),
-			wantEnabled:      true,
+			name:             "valid config - custom interval 10s",
+			rawConfig:        json.RawMessage(`{"push_interval": "10s"}`),
 			wantPushInterval: "10s",
 			wantErr:          false,
 		},
 		{
-			name:             "valid config - enabled with 1 minute interval",
-			rawConfig:        json.RawMessage(`{"enabled": true, "push_interval": "1m"}`),
-			wantEnabled:      true,
+			name:             "valid config - 1 minute interval",
+			rawConfig:        json.RawMessage(`{"push_interval": "1m"}`),
 			wantPushInterval: "1m",
-			wantErr:          false,
-		},
-		{
-			name:             "valid config - disabled",
-			rawConfig:        json.RawMessage(`{"enabled": false, "push_interval": "5s"}`),
-			wantEnabled:      false,
-			wantPushInterval: "5s",
 			wantErr:          false,
 		},
 		{
 			name:             "default values - empty config",
 			rawConfig:        json.RawMessage(`{}`),
-			wantEnabled:      false,
 			wantPushInterval: "5s",
 			wantErr:          false,
 		},
 		{
 			name:             "default values - null config",
 			rawConfig:        nil,
-			wantEnabled:      false,
-			wantPushInterval: "5s",
-			wantErr:          false,
-		},
-		{
-			name:             "default push_interval when missing",
-			rawConfig:        json.RawMessage(`{"enabled": true}`),
-			wantEnabled:      true,
 			wantPushInterval: "5s",
 			wantErr:          false,
 		},
 		{
 			name:        "invalid interval format - missing unit",
-			rawConfig:   json.RawMessage(`{"enabled": true, "push_interval": "10"}`),
+			rawConfig:   json.RawMessage(`{"push_interval": "10"}`),
 			wantErr:     true,
 			errContains: "invalid push interval",
 		},
 		{
 			name:        "invalid interval format - invalid unit",
-			rawConfig:   json.RawMessage(`{"enabled": true, "push_interval": "10x"}`),
+			rawConfig:   json.RawMessage(`{"push_interval": "10x"}`),
 			wantErr:     true,
 			errContains: "invalid push interval",
 		},
 		{
 			name:        "invalid interval format - empty string",
-			rawConfig:   json.RawMessage(`{"enabled": true, "push_interval": ""}`),
+			rawConfig:   json.RawMessage(`{"push_interval": ""}`),
 			wantErr:     true,
 			errContains: "invalid push interval",
 		},
 		{
 			name:        "invalid interval format - negative duration",
-			rawConfig:   json.RawMessage(`{"enabled": true, "push_interval": "-5s"}`),
+			rawConfig:   json.RawMessage(`{"push_interval": "-5s"}`),
 			wantErr:     true,
 			errContains: "invalid push interval",
 		},
 		{
 			name:        "invalid interval format - zero duration",
-			rawConfig:   json.RawMessage(`{"enabled": true, "push_interval": "0s"}`),
+			rawConfig:   json.RawMessage(`{"push_interval": "0s"}`),
 			wantErr:     true,
 			errContains: "invalid push interval",
 		},
 		{
 			name:        "malformed JSON",
-			rawConfig:   json.RawMessage(`{"enabled": true, "push_interval": `),
+			rawConfig:   json.RawMessage(`{"push_interval": `),
 			wantErr:     true,
 			errContains: "parse",
 		},
@@ -137,7 +118,6 @@ func TestMetricsForwarderService_ConfigParsing(t *testing.T) {
 			require.True(t, ok, "service should be *MetricsForwarder type")
 
 			// Verify config values
-			assert.Equal(t, tt.wantEnabled, metricsForwarder.config.Enabled)
 			assert.Equal(t, tt.wantPushInterval, metricsForwarder.config.PushInterval)
 		})
 	}
@@ -187,7 +167,7 @@ func TestMetricsForwarderService_RequiresDependencies(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rawConfig := json.RawMessage(`{"enabled": true}`)
+			rawConfig := json.RawMessage(`{"push_interval": "5s"}`)
 			svc, err := NewMetricsForwarderService(rawConfig, tt.deps)
 
 			if tt.wantErr {
@@ -212,7 +192,7 @@ func TestMetricsForwarder_ServiceLifecycle(t *testing.T) {
 	}
 
 	registry := metric.NewMetricsRegistry()
-	forwarder := createTestMetricsForwarder(t, "5s", true, mockNATS, registry)
+	forwarder := createTestMetricsForwarder(t, "5s", mockNATS, registry)
 
 	// Initially stopped
 	assert.Equal(t, StatusStopped, forwarder.Status())
@@ -267,7 +247,7 @@ func TestMetricsForwarder_TickerInterval(t *testing.T) {
 	counter.Inc()
 
 	// Use 100ms interval for fast test
-	forwarder := createTestMetricsForwarder(t, "100ms", true, mockNATS, registry)
+	forwarder := createTestMetricsForwarder(t, "100ms", mockNATS, registry)
 
 	ctx := context.Background()
 	err := forwarder.Start(ctx)
@@ -294,41 +274,6 @@ func TestMetricsForwarder_TickerInterval(t *testing.T) {
 				"intervals should be approximately 100ms")
 		}
 	}
-}
-
-// TestMetricsForwarder_DisabledNoPublish tests that disabled forwarder does not publish
-func TestMetricsForwarder_DisabledNoPublish(t *testing.T) {
-	publishCalled := false
-	var publishMu sync.Mutex
-
-	mockNATS := &metricsForwarderMockNATS{
-		publishFunc: func(ctx context.Context, subject string, data []byte) error {
-			publishMu.Lock()
-			defer publishMu.Unlock()
-			publishCalled = true
-			return nil
-		},
-	}
-
-	registry := metric.NewMetricsRegistry()
-
-	// Create DISABLED forwarder
-	forwarder := createTestMetricsForwarder(t, "100ms", false, mockNATS, registry)
-
-	ctx := context.Background()
-	err := forwarder.Start(ctx)
-	require.NoError(t, err)
-
-	// Wait for potential publish cycle
-	time.Sleep(150 * time.Millisecond)
-
-	err = forwarder.Stop(1 * time.Second)
-	require.NoError(t, err)
-
-	// Verify publish was NOT called
-	publishMu.Lock()
-	defer publishMu.Unlock()
-	assert.False(t, publishCalled, "disabled forwarder should not publish")
 }
 
 // TestMetricsForwarder_GatherMetrics tests metrics gathering from registry
@@ -369,7 +314,7 @@ func TestMetricsForwarder_GatherMetrics(t *testing.T) {
 	gauge.Set(42)
 	histogram.Observe(0.5)
 
-	forwarder := createTestMetricsForwarder(t, "100ms", true, mockNATS, registry)
+	forwarder := createTestMetricsForwarder(t, "100ms", mockNATS, registry)
 
 	ctx := context.Background()
 	err := forwarder.Start(ctx)
@@ -462,7 +407,7 @@ func TestMetricsForwarder_SubjectPattern(t *testing.T) {
 			registry.PrometheusRegistry().MustRegister(counter)
 			counter.With(tt.labels).Inc()
 
-			forwarder := createTestMetricsForwarder(t, "100ms", true, mockNATS, registry)
+			forwarder := createTestMetricsForwarder(t, "100ms", mockNATS, registry)
 
 			ctx := context.Background()
 			err := forwarder.Start(ctx)
@@ -512,7 +457,7 @@ func TestMetricsForwarder_MessageFormat(t *testing.T) {
 	registry.PrometheusRegistry().MustRegister(counter)
 	counter.With(prometheus.Labels{"component": "test-input", "status": "success"}).Add(123)
 
-	forwarder := createTestMetricsForwarder(t, "100ms", true, mockNATS, registry)
+	forwarder := createTestMetricsForwarder(t, "100ms", mockNATS, registry)
 
 	ctx := context.Background()
 	err := forwarder.Start(ctx)
@@ -635,7 +580,6 @@ func TestMetricsForwarder_ExtractComponent(t *testing.T) {
 			}
 
 			config := &MetricsForwarderConfig{
-				Enabled:      true,
 				PushInterval: "100ms",
 			}
 
@@ -685,7 +629,7 @@ func TestMetricsForwarder_PublishError(t *testing.T) {
 	registry.PrometheusRegistry().MustRegister(counter)
 	counter.Inc()
 
-	forwarder := createTestMetricsForwarder(t, "100ms", true, mockNATS, registry)
+	forwarder := createTestMetricsForwarder(t, "100ms", mockNATS, registry)
 
 	// Service should start and run even if publish fails
 	ctx := context.Background()
@@ -723,7 +667,7 @@ func TestMetricsForwarder_ConcurrentGather(t *testing.T) {
 	})
 	registry.PrometheusRegistry().MustRegister(counter)
 
-	forwarder := createTestMetricsForwarder(t, "50ms", true, mockNATS, registry)
+	forwarder := createTestMetricsForwarder(t, "50ms", mockNATS, registry)
 
 	ctx := context.Background()
 	err := forwarder.Start(ctx)
@@ -765,7 +709,7 @@ func TestMetricsForwarder_MultipleStarts(t *testing.T) {
 	}
 
 	registry := metric.NewMetricsRegistry()
-	forwarder := createTestMetricsForwarder(t, "5s", true, mockNATS, registry)
+	forwarder := createTestMetricsForwarder(t, "5s", mockNATS, registry)
 
 	ctx := context.Background()
 
@@ -791,7 +735,7 @@ func TestMetricsForwarder_StopBeforeStart(t *testing.T) {
 	}
 
 	registry := metric.NewMetricsRegistry()
-	forwarder := createTestMetricsForwarder(t, "5s", true, mockNATS, registry)
+	forwarder := createTestMetricsForwarder(t, "5s", mockNATS, registry)
 
 	// Stop without Start should return error
 	err := forwarder.Stop(1 * time.Second)
@@ -807,7 +751,7 @@ func TestMetricsForwarder_ServiceImplementsInterface(t *testing.T) {
 	}
 
 	registry := metric.NewMetricsRegistry()
-	forwarder := createTestMetricsForwarder(t, "5s", true, mockNATS, registry)
+	forwarder := createTestMetricsForwarder(t, "5s", mockNATS, registry)
 
 	// Verify Service interface implementation
 	var _ Service = forwarder
@@ -834,7 +778,7 @@ func TestMetricsForwarder_GatherReturnsError(t *testing.T) {
 		},
 	}
 
-	forwarder := createTestMetricsForwarderWithRegistry(t, "100ms", true, mockNATS, mockRegistry)
+	forwarder := createTestMetricsForwarderWithRegistry(t, "100ms", mockNATS, mockRegistry)
 
 	ctx := context.Background()
 	err := forwarder.Start(ctx)
@@ -944,7 +888,6 @@ func TestMetricsForwarder_SystemMetricsFiltering(t *testing.T) {
 			}
 
 			config := &MetricsForwarderConfig{
-				Enabled:            true,
 				PushInterval:       "100ms",
 				IncludeGoMetrics:   tt.includeGoMetrics,
 				IncludeProcMetrics: tt.includeProcMetrics,
@@ -985,25 +928,25 @@ func TestMetricsForwarder_ConfigParsingSystemMetrics(t *testing.T) {
 	}{
 		{
 			name:            "both system metric options enabled",
-			rawConfig:       json.RawMessage(`{"enabled": true, "include_go_metrics": true, "include_proc_metrics": true}`),
+			rawConfig:       json.RawMessage(`{"include_go_metrics": true, "include_proc_metrics": true}`),
 			wantGoMetrics:   true,
 			wantProcMetrics: true,
 		},
 		{
 			name:            "only go metrics enabled",
-			rawConfig:       json.RawMessage(`{"enabled": true, "include_go_metrics": true}`),
+			rawConfig:       json.RawMessage(`{"include_go_metrics": true}`),
 			wantGoMetrics:   true,
 			wantProcMetrics: false,
 		},
 		{
 			name:            "only process metrics enabled",
-			rawConfig:       json.RawMessage(`{"enabled": true, "include_proc_metrics": true}`),
+			rawConfig:       json.RawMessage(`{"include_proc_metrics": true}`),
 			wantGoMetrics:   false,
 			wantProcMetrics: true,
 		},
 		{
 			name:            "defaults to false when not specified",
-			rawConfig:       json.RawMessage(`{"enabled": true}`),
+			rawConfig:       json.RawMessage(`{}`),
 			wantGoMetrics:   false,
 			wantProcMetrics: false,
 		},
@@ -1032,12 +975,10 @@ func TestMetricsForwarder_ConfigParsingSystemMetrics(t *testing.T) {
 func createTestMetricsForwarder(
 	t *testing.T,
 	pushInterval string,
-	enabled bool,
 	natsClient *metricsForwarderMockNATS,
 	registry *metric.MetricsRegistry,
 ) *MetricsForwarder {
 	config := &MetricsForwarderConfig{
-		Enabled:      enabled,
 		PushInterval: pushInterval,
 	}
 
@@ -1051,12 +992,10 @@ func createTestMetricsForwarder(
 func createTestMetricsForwarderWithRegistry(
 	t *testing.T,
 	pushInterval string,
-	enabled bool,
 	natsClient *metricsForwarderMockNATS,
 	registry MetricsGatherer,
 ) *MetricsForwarder {
 	config := &MetricsForwarderConfig{
-		Enabled:      enabled,
 		PushInterval: pushInterval,
 	}
 

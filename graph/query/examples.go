@@ -6,8 +6,8 @@ import (
 	"os"
 )
 
-// QueryExample represents a single domain query example for intent classification.
-type QueryExample struct {
+// Example represents a single domain query example for intent classification.
+type Example struct {
 	Query   string         `json:"query"`   // Natural language query
 	Intent  string         `json:"intent"`  // Intent category
 	Options map[string]any `json:"options"` // SearchOptions hints (optional)
@@ -16,9 +16,9 @@ type QueryExample struct {
 
 // DomainExamples represents a collection of examples for a domain.
 type DomainExamples struct {
-	Domain   string         `json:"domain"`
-	Version  string         `json:"version"`
-	Examples []QueryExample `json:"examples"`
+	Domain   string    `json:"domain"`
+	Version  string    `json:"version"`
+	Examples []Example `json:"examples"`
 }
 
 // LoadDomainExamples loads query examples from a JSON file.

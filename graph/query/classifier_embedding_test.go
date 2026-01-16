@@ -81,7 +81,7 @@ func TestNewEmbeddingClassifier(t *testing.T) {
 				{
 					Domain:  "logistics",
 					Version: "1.0",
-					Examples: []QueryExample{
+					Examples: []Example{
 						{Query: "Where is shipment ABC-123?", Intent: "entity_lookup"},
 						{Query: "Show delayed deliveries", Intent: "temporal_filter"},
 					},
@@ -101,13 +101,13 @@ func TestNewEmbeddingClassifier(t *testing.T) {
 			domains: []*DomainExamples{
 				{
 					Domain: "logistics",
-					Examples: []QueryExample{
+					Examples: []Example{
 						{Query: "Where is my package?", Intent: "entity_lookup"},
 					},
 				},
 				{
 					Domain: "iot",
-					Examples: []QueryExample{
+					Examples: []Example{
 						{Query: "Show temperature readings", Intent: "sensor_query"},
 						{Query: "Find sensors above threshold", Intent: "threshold_filter"},
 					},
@@ -145,7 +145,7 @@ func TestNewEmbeddingClassifier(t *testing.T) {
 			domains: []*DomainExamples{
 				{
 					Domain:   "test",
-					Examples: []QueryExample{},
+					Examples: []Example{},
 				},
 			},
 			threshold: 0.5,
@@ -159,7 +159,7 @@ func TestNewEmbeddingClassifier(t *testing.T) {
 			domains: []*DomainExamples{
 				{
 					Domain: "test",
-					Examples: []QueryExample{
+					Examples: []Example{
 						{Query: "test query", Intent: "test"},
 					},
 				},
@@ -176,7 +176,7 @@ func TestNewEmbeddingClassifier(t *testing.T) {
 			domains: []*DomainExamples{
 				{
 					Domain: "test",
-					Examples: []QueryExample{
+					Examples: []Example{
 						{Query: "test", Intent: "test"},
 					},
 				},
@@ -203,7 +203,7 @@ func TestEmbeddingClassifier_BM25Initialization(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "test",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{Query: "test query one", Intent: "intent1"},
 				{Query: "test query two", Intent: "intent2"},
 			},
@@ -230,7 +230,7 @@ func TestFindBestMatch(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "logistics",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{
 					Query:   "Where is shipment ABC-123?",
 					Intent:  "entity_lookup",
@@ -339,7 +339,7 @@ func TestFindBestMatch_ContextCancellation(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "test",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{Query: "test query", Intent: "test"},
 			},
 		},
@@ -363,7 +363,7 @@ func TestFindBestMatch_ContextTimeout(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "test",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{Query: "test query", Intent: "test"},
 			},
 		},
@@ -403,7 +403,7 @@ func TestUpgradeVectors(t *testing.T) {
 		domains := []*DomainExamples{
 			{
 				Domain: "test",
-				Examples: []QueryExample{
+				Examples: []Example{
 					{Query: "query one", Intent: "intent1"},
 					{Query: "query two", Intent: "intent2"},
 				},
@@ -435,7 +435,7 @@ func TestUpgradeVectors(t *testing.T) {
 		domains := []*DomainExamples{
 			{
 				Domain: "test",
-				Examples: []QueryExample{
+				Examples: []Example{
 					{Query: "test", Intent: "test"},
 				},
 			},
@@ -465,7 +465,7 @@ func TestUpgradeVectors(t *testing.T) {
 		domains := []*DomainExamples{
 			{
 				Domain: "test",
-				Examples: []QueryExample{
+				Examples: []Example{
 					{Query: "test", Intent: "test"},
 				},
 			},
@@ -494,7 +494,7 @@ func TestUpgradeVectors_ConcurrentAccess(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "test",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{Query: "test query one", Intent: "intent1"},
 				{Query: "test query two", Intent: "intent2"},
 				{Query: "test query three", Intent: "intent3"},
@@ -595,7 +595,7 @@ func TestCosineSimilarity(t *testing.T) {
 			domains := []*DomainExamples{
 				{
 					Domain: "test",
-					Examples: []QueryExample{
+					Examples: []Example{
 						{Query: tt.query1, Intent: "test_intent"},
 					},
 				},
@@ -626,7 +626,7 @@ func TestFindBestMatch_MultipleMatches(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "logistics",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{
 					Query:  "Where is shipment ABC?",
 					Intent: "exact_match",
@@ -660,7 +660,7 @@ func TestFindBestMatch_PreservesOptions(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "logistics",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{
 					Query:  "Show delayed deliveries",
 					Intent: "temporal_filter",
@@ -714,7 +714,7 @@ func TestEmbeddingClassifier_UnicodeQueries(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "international",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{Query: "Où est mon colis?", Intent: "french_query"},
 				{Query: "运输在哪里？", Intent: "chinese_query"},
 				{Query: "Show deliveries 🚚📦", Intent: "emoji_query"},
@@ -742,7 +742,7 @@ func TestEmbeddingClassifier_LongQueries(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "test",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{Query: "show delayed deliveries", Intent: "test"},
 			},
 		},
@@ -764,7 +764,7 @@ func TestEmbeddingClassifier_SpecialCharacters(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "test",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{Query: "Find item #ABC-123 @location", Intent: "special_chars"},
 				{Query: "Query with \"quotes\" and 'apostrophes'", Intent: "quotes"},
 			},
@@ -797,7 +797,7 @@ func TestUpgradeVectors_VectorDimensionMismatch(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "test",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{Query: "test", Intent: "test"},
 			},
 		},
@@ -829,7 +829,7 @@ func TestFindBestMatch_AllBelowThreshold(t *testing.T) {
 	domains := []*DomainExamples{
 		{
 			Domain: "test",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{Query: "completely unrelated example one", Intent: "intent1"},
 				{Query: "completely unrelated example two", Intent: "intent2"},
 			},

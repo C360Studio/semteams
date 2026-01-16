@@ -79,10 +79,9 @@ func NewMetricsForwarderService(rawConfig json.RawMessage, deps *Dependencies) (
 }
 
 // MetricsForwarderConfig holds configuration for the MetricsForwarder service
+// Note: The service is enabled/disabled via types.ServiceConfig.Enabled at the outer level.
+// If the service is created, it will forward metrics.
 type MetricsForwarderConfig struct {
-	// Enable or disable metrics forwarding
-	Enabled bool `json:"enabled"`
-
 	// Push interval for metrics publishing (e.g., "5s", "1m")
 	PushInterval string `json:"push_interval"`
 
@@ -150,7 +149,6 @@ func newMetricsForwarderWithPublisher(
 ) (*MetricsForwarder, error) {
 	if config == nil {
 		config = &MetricsForwarderConfig{
-			Enabled:      false,
 			PushInterval: "5s",
 		}
 	}
@@ -195,15 +193,12 @@ func (mf *MetricsForwarder) Start(ctx context.Context) error {
 	}
 
 	mf.logger.Info("MetricsForwarder started",
-		"enabled", mf.config.Enabled,
 		"push_interval", mf.config.PushInterval)
 
-	// Only start publishing loop if enabled
-	if mf.config.Enabled {
-		mf.ticker = time.NewTicker(mf.pushInterval)
-		mf.wg.Add(1)
-		go mf.publishLoop(ctx)
-	}
+	// Start publishing loop
+	mf.ticker = time.NewTicker(mf.pushInterval)
+	mf.wg.Add(1)
+	go mf.publishLoop(ctx)
 
 	return nil
 }
@@ -224,23 +219,21 @@ func (mf *MetricsForwarder) Stop(timeout time.Duration) error {
 	}
 
 	// Signal stop and wait for goroutine
-	if mf.config.Enabled {
-		close(mf.stopChan)
+	close(mf.stopChan)
 
-		// Wait for publishing goroutine with timeout
-		done := make(chan struct{})
-		go func() {
-			mf.wg.Wait()
-			close(done)
-		}()
+	// Wait for publishing goroutine with timeout
+	done := make(chan struct{})
+	go func() {
+		mf.wg.Wait()
+		close(done)
+	}()
 
-		select {
-		case <-done:
-			// Goroutine finished
-		case <-time.After(timeout):
-			// Timeout waiting for goroutine
-			mf.logger.Warn("MetricsForwarder stop timeout waiting for goroutine")
-		}
+	select {
+	case <-done:
+		// Goroutine finished
+	case <-time.After(timeout):
+		// Timeout waiting for goroutine
+		mf.logger.Warn("MetricsForwarder stop timeout waiting for goroutine")
 	}
 
 	return mf.BaseService.Stop(timeout)
@@ -423,7 +416,6 @@ func newMetricsForwarderForTestWithMockRegistry(
 ) (*MetricsForwarder, error) {
 	if config == nil {
 		config = &MetricsForwarderConfig{
-			Enabled:      false,
 			PushInterval: "5s",
 		}
 	}

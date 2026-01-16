@@ -587,7 +587,7 @@ func createTestEmbeddingClassifierWithThreshold(threshold float64) *EmbeddingCla
 		{
 			Domain:  "logistics",
 			Version: "1.0",
-			Examples: []QueryExample{
+			Examples: []Example{
 				{
 					Query:   "Where is shipment ABC-123?",
 					Intent:  "entity_lookup",

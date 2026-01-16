@@ -29,10 +29,10 @@ type Embedder interface {
 //
 // Thread-safe for concurrent FindBestMatch calls during vector upgrades.
 type EmbeddingClassifier struct {
-	examples  []QueryExample // All loaded examples with vectors
-	embedder  Embedder       // Current embedder (BM25 or neural)
-	threshold float64        // Minimum similarity threshold
-	mu        sync.RWMutex   // Protects examples during upgrades
+	examples  []Example    // All loaded examples with vectors
+	embedder  Embedder     // Current embedder (BM25 or neural)
+	threshold float64      // Minimum similarity threshold
+	mu        sync.RWMutex // Protects examples during upgrades
 }
 
 // bm25Adapter adapts graph/embedding.BM25Embedder to the Embedder interface.
@@ -61,7 +61,7 @@ func (b *bm25Adapter) EmbedBatch(texts []string) ([][]float32, error) {
 // Returns a classifier ready for statistical similarity matching.
 func NewEmbeddingClassifier(domains []*DomainExamples, threshold float64) *EmbeddingClassifier {
 	// Aggregate all examples from all domains
-	var allExamples []QueryExample
+	var allExamples []Example
 	for _, domain := range domains {
 		if domain == nil {
 			continue
@@ -106,7 +106,7 @@ func NewEmbeddingClassifier(domains []*DomainExamples, threshold float64) *Embed
 //
 // Returns nil if no match above threshold or context cancelled.
 // Thread-safe - uses read lock to allow concurrent calls during vector upgrades.
-func (c *EmbeddingClassifier) FindBestMatch(ctx context.Context, query string) (*QueryExample, float64) {
+func (c *EmbeddingClassifier) FindBestMatch(ctx context.Context, query string) (*Example, float64) {
 	// Defensive nil check
 	if c == nil {
 		return nil, 0.0
@@ -155,7 +155,7 @@ func (c *EmbeddingClassifier) FindBestMatch(ctx context.Context, query string) (
 		return nil, 0.0
 	}
 
-	var bestMatch *QueryExample
+	var bestMatch *Example
 	var bestScore float64
 
 	for i := range examples {

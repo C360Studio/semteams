@@ -67,10 +67,9 @@ func NewLogForwarderService(rawConfig json.RawMessage, deps *Dependencies) (Serv
 }
 
 // LogForwarderConfig holds configuration for the LogForwarder service
+// Note: The service is enabled/disabled via types.ServiceConfig.Enabled at the outer level.
+// If the service is created, it will forward logs.
 type LogForwarderConfig struct {
-	// Enable or disable log forwarding
-	Enabled bool `json:"enabled"`
-
 	// Minimum log level to forward (DEBUG, INFO, WARN, ERROR)
 	MinLevel string `json:"min_level"`
 }
@@ -133,7 +132,6 @@ func newLogForwarderWithPublisher(
 ) (*LogForwarder, error) {
 	if config == nil {
 		config = &LogForwarderConfig{
-			Enabled:  false,
 			MinLevel: "INFO",
 		}
 	}
@@ -171,7 +169,6 @@ func (lf *LogForwarder) Start(ctx context.Context) error {
 	}
 
 	lf.logger.Info("LogForwarder started",
-		"enabled", lf.config.Enabled,
 		"min_level", lf.config.MinLevel)
 
 	return nil
@@ -200,8 +197,8 @@ func (lf *LogForwarder) Handle(ctx context.Context, record slog.Record) error {
 		lf.logger.Debug("wrapped handler error", "error", err)
 	}
 
-	// If disabled or below min level, we're done
-	if !lf.config.Enabled || record.Level < lf.minLevel {
+	// If below min level, we're done
+	if record.Level < lf.minLevel {
 		return nil
 	}
 
