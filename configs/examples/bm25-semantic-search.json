@@ -38,6 +38,22 @@
         "path": "/metrics",
         "include_go_metrics": true
       }
+    },
+    "log-forwarder": {
+      "name": "log-forwarder",
+      "enabled": true,
+      "config": {
+        "min_level": "DEBUG"
+      }
+    },
+    "metrics-forwarder": {
+      "name": "metrics-forwarder",
+      "enabled": true,
+      "config": {
+        "push_interval": "5s",
+        "include_go_metrics": false,
+        "include_proc_metrics": false
+      }
     }
   },
   "components": {
@@ -83,13 +99,16 @@
           "embedding": {
             "enabled": true,
             "provider": "bm25",
-            "text_fields": ["title", "content", "description", "summary", "name", "text"],
+            "text_fields": [
+              "title",
+              "content",
+              "description",
+              "summary",
+              "name",
+              "text"
+            ],
             "retention_window": "24h",
-            "skip_types": [
-              "telemetry.*.*",
-              "sensors.*.*",
-              "metrics.*.*"
-            ]
+            "skip_types": ["telemetry.*.*", "sensors.*.*", "metrics.*.*"]
           }
         },
         "querier": {

@@ -25,6 +25,22 @@
         "path": "/metrics",
         "include_go_metrics": true
       }
+    },
+    "log-forwarder": {
+      "name": "log-forwarder",
+      "enabled": true,
+      "config": {
+        "min_level": "DEBUG"
+      }
+    },
+    "metrics-forwarder": {
+      "name": "metrics-forwarder",
+      "enabled": true,
+      "config": {
+        "push_interval": "5s",
+        "include_go_metrics": false,
+        "include_proc_metrics": false
+      }
     }
   },
   "components": {

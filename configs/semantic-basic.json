@@ -36,6 +36,22 @@
         "log_level": "DEBUG",
         "output_to_stdout": true
       }
+    },
+    "log-forwarder": {
+      "name": "log-forwarder",
+      "enabled": true,
+      "config": {
+        "min_level": "DEBUG"
+      }
+    },
+    "metrics-forwarder": {
+      "name": "metrics-forwarder",
+      "enabled": true,
+      "config": {
+        "push_interval": "5s",
+        "include_go_metrics": false,
+        "include_proc_metrics": false
+      }
     }
   },
   "components": {
