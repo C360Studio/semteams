@@ -48,17 +48,22 @@ func (s *Store) Create(ctx context.Context, flow *Flow) error {
 		return errs.WrapInvalid(nil, "flowstore", "Create", "flow ID cannot be empty")
 	}
 
+	// Set defaults before validation
+	if flow.RuntimeState == "" {
+		flow.RuntimeState = StateNotDeployed
+	}
+
+	// Validate flow structure before saving
+	if err := flow.Validate(); err != nil {
+		return err
+	}
+
 	// Initialize version and timestamps
 	flow.Version = 1
 	now := time.Now()
 	flow.CreatedAt = now
 	flow.UpdatedAt = now
 	flow.LastModified = now
-
-	// Default runtime state
-	if flow.RuntimeState == "" {
-		flow.RuntimeState = StateNotDeployed
-	}
 
 	// Marshal and store
 	data, err := json.Marshal(flow)
@@ -103,6 +108,11 @@ func (s *Store) Update(ctx context.Context, flow *Flow) error {
 	}
 	if flow.ID == "" {
 		return errs.WrapInvalid(nil, "flowstore", "Update", "flow ID cannot be empty")
+	}
+
+	// Validate flow structure before saving
+	if err := flow.Validate(); err != nil {
+		return err
 	}
 
 	// Get current version from KV
