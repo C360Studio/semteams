@@ -194,13 +194,13 @@ When authoring query examples for a domain:
 - ✓ Wire into gateway resolvers via dependency injection
 - ✓ Comprehensive unit tests in `graph/query/classifier_test.go`
 
-### Phase 2: Embedding Similarity (Planned)
-- Add `QueryExample` type and registry to `vocabulary/` package
-- Add `RegisterQueryExamples()` function for domain registration
-- Implement `EmbeddingClassifier` in `graph/query/classifier_embedding.go`
-- Background goroutine for lazy vector generation
-- Wire into classifier chain with similarity threshold (e.g., 0.75)
-- Add example domain vocabularies (logistics, IoT, robotics)
+### Phase 2: Embedding Similarity ✓ (Complete)
+- ✓ Add `QueryExample` type and JSON loader in `graph/query/examples.go`
+- ✓ Domain examples as JSON config files in `configs/domains/`
+- ✓ Implement `EmbeddingClassifier` in `graph/query/classifier_embedding.go`
+- ✓ BM25 warm cache pattern (instant vectors, upgrade when neural available)
+- ✓ Implement `ClassifierChain` for tiered routing (T0→T1/T2)
+- ✓ Add domain examples: logistics, IoT, robotics
 
 ### Phase 3: LLM Classification (Future)
 - Implement `LLMClassifier` with structured prompt
@@ -214,12 +214,13 @@ When authoring query examples for a domain:
 |------|---------|--------|
 | `graph/query/classifier.go` | QueryClassifier interface + KeywordClassifier | ✓ Implemented |
 | `graph/query/classifier_test.go` | Unit tests for KeywordClassifier | ✓ Implemented |
-| `graph/query/classifier_embedding.go` | Tier 2 embedding similarity | Planned |
+| `graph/query/classifier_embedding.go` | Tier 1/2 embedding similarity | ✓ Implemented |
+| `graph/query/classifier_chain.go` | Tiered classifier chain (T0→T1/T2) | ✓ Implemented |
+| `graph/query/examples.go` | QueryExample type + JSON loader | ✓ Implemented |
 | `graph/query/classifier_llm.go` | Tier 3 LLM classification | Future |
-| `vocabulary/query_examples.go` | QueryExample type + registry | Planned |
-| `vocabulary/examples/logistics.go` | Logistics domain examples | Planned |
-| `vocabulary/examples/iot.go` | IoT domain examples | Planned |
-| `vocabulary/examples/robotics.go` | Robotics domain examples (extend) | Planned |
+| `configs/domains/logistics.json` | Logistics domain examples | ✓ Implemented |
+| `configs/domains/iot.json` | IoT domain examples | ✓ Implemented |
+| `configs/domains/robotics.json` | Robotics domain examples | ✓ Implemented |
 
 ## References
 

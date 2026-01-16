@@ -1,0 +1,86 @@
+{
+  "domain": "robotics",
+  "version": "1.0",
+  "examples": [
+    {
+      "query": "Where is drone DRONE-001?",
+      "intent": "entity_lookup",
+      "options": {"entity_pattern": "drone"}
+    },
+    {
+      "query": "Show robot ARM-5 status",
+      "intent": "entity_lookup",
+      "options": {"entity_pattern": "robot"}
+    },
+    {
+      "query": "Find AGV vehicle-12",
+      "intent": "entity_lookup",
+      "options": {"entity_pattern": "agv"}
+    },
+    {
+      "query": "What drones were active in the last hour?",
+      "intent": "temporal_filter",
+      "options": {"time_window": "1h"}
+    },
+    {
+      "query": "Show missions completed yesterday",
+      "intent": "temporal_filter",
+      "options": {"status_filter": "completed"}
+    },
+    {
+      "query": "List robots idle since this morning",
+      "intent": "temporal_filter",
+      "options": {"status_filter": "idle"}
+    },
+    {
+      "query": "Find drones similar to DRONE-001",
+      "intent": "similarity",
+      "options": {"reference_entity": true}
+    },
+    {
+      "query": "Show robots like welding-arm-3",
+      "intent": "similarity",
+      "options": {"reference_entity": true}
+    },
+    {
+      "query": "Which drones are near waypoint-alpha?",
+      "intent": "spatial_relationship",
+      "options": {"relationship": "near"}
+    },
+    {
+      "query": "Show AGVs in warehouse-section-2",
+      "intent": "spatial_relationship",
+      "options": {"relationship": "in"}
+    },
+    {
+      "query": "What is connected to control-station-1?",
+      "intent": "relationship",
+      "options": {"direction": "both"}
+    },
+    {
+      "query": "Show the command path from GCS to drone",
+      "intent": "path",
+      "options": {"strategy": "pathrag"}
+    },
+    {
+      "query": "How many robots are currently operating?",
+      "intent": "aggregation",
+      "options": {"operation": "count", "status_filter": "operating"}
+    },
+    {
+      "query": "Count drones in maintenance mode",
+      "intent": "aggregation",
+      "options": {"operation": "count", "status_filter": "maintenance"}
+    },
+    {
+      "query": "What is the battery level of drone-fleet?",
+      "intent": "metric_query",
+      "options": {"metric_type": "battery"}
+    },
+    {
+      "query": "Show operational status across all robots",
+      "intent": "metric_query",
+      "options": {"metric_type": "status", "scope": "all"}
+    }
+  ]
+}

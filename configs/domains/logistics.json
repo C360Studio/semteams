@@ -1,0 +1,76 @@
+{
+  "domain": "logistics",
+  "version": "1.0",
+  "examples": [
+    {
+      "query": "Where is shipment ABC-123?",
+      "intent": "entity_lookup",
+      "options": {"entity_pattern": "shipment"}
+    },
+    {
+      "query": "Show me package PKG-456",
+      "intent": "entity_lookup",
+      "options": {"entity_pattern": "package"}
+    },
+    {
+      "query": "Find order ORD-789",
+      "intent": "entity_lookup",
+      "options": {"entity_pattern": "order"}
+    },
+    {
+      "query": "Show delayed deliveries this week",
+      "intent": "temporal_filter",
+      "options": {"status_filter": "delayed"}
+    },
+    {
+      "query": "What shipments arrived yesterday?",
+      "intent": "temporal_filter",
+      "options": {"status_filter": "arrived"}
+    },
+    {
+      "query": "List packages pending since Monday",
+      "intent": "temporal_filter",
+      "options": {"status_filter": "pending"}
+    },
+    {
+      "query": "Find packages similar to order-456",
+      "intent": "similarity",
+      "options": {"reference_entity": true}
+    },
+    {
+      "query": "Show shipments like ABC-123",
+      "intent": "similarity",
+      "options": {"reference_entity": true}
+    },
+    {
+      "query": "Which trucks are near warehouse-east?",
+      "intent": "spatial_relationship",
+      "options": {"relationship": "near"}
+    },
+    {
+      "query": "Show vehicles within 5km of depot-central",
+      "intent": "spatial_relationship",
+      "options": {"relationship": "within", "distance": "5km"}
+    },
+    {
+      "query": "What is connected to distribution-center-1?",
+      "intent": "relationship",
+      "options": {"direction": "both"}
+    },
+    {
+      "query": "Show the path from warehouse to customer",
+      "intent": "path",
+      "options": {"strategy": "pathrag"}
+    },
+    {
+      "query": "How many packages are in transit?",
+      "intent": "aggregation",
+      "options": {"operation": "count", "status_filter": "in_transit"}
+    },
+    {
+      "query": "Count deliveries completed today",
+      "intent": "aggregation",
+      "options": {"operation": "count", "status_filter": "completed"}
+    }
+  ]
+}

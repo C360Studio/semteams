@@ -1,0 +1,86 @@
+{
+  "domain": "iot",
+  "version": "1.0",
+  "examples": [
+    {
+      "query": "Show sensor SENS-001 status",
+      "intent": "entity_lookup",
+      "options": {"entity_pattern": "sensor"}
+    },
+    {
+      "query": "Get device DEV-ABC readings",
+      "intent": "entity_lookup",
+      "options": {"entity_pattern": "device"}
+    },
+    {
+      "query": "Find gateway GW-MAIN",
+      "intent": "entity_lookup",
+      "options": {"entity_pattern": "gateway"}
+    },
+    {
+      "query": "What sensors were active yesterday?",
+      "intent": "temporal_filter",
+      "options": {"status_filter": "active"}
+    },
+    {
+      "query": "Show readings from last hour",
+      "intent": "temporal_filter",
+      "options": {"time_window": "1h"}
+    },
+    {
+      "query": "List sensors offline since Tuesday",
+      "intent": "temporal_filter",
+      "options": {"status_filter": "offline"}
+    },
+    {
+      "query": "Find sensors similar to TEMP-001",
+      "intent": "similarity",
+      "options": {"reference_entity": true}
+    },
+    {
+      "query": "Show devices like humidity-sensor-5",
+      "intent": "similarity",
+      "options": {"reference_entity": true}
+    },
+    {
+      "query": "Which sensors are in zone-A?",
+      "intent": "spatial_relationship",
+      "options": {"relationship": "in"}
+    },
+    {
+      "query": "Show devices near building-3",
+      "intent": "spatial_relationship",
+      "options": {"relationship": "near"}
+    },
+    {
+      "query": "What is connected to gateway-main?",
+      "intent": "relationship",
+      "options": {"direction": "incoming"}
+    },
+    {
+      "query": "Show the network path from sensor to cloud",
+      "intent": "path",
+      "options": {"strategy": "pathrag"}
+    },
+    {
+      "query": "How many sensors are reporting?",
+      "intent": "aggregation",
+      "options": {"operation": "count", "status_filter": "reporting"}
+    },
+    {
+      "query": "Count devices in error state",
+      "intent": "aggregation",
+      "options": {"operation": "count", "status_filter": "error"}
+    },
+    {
+      "query": "What is the temperature in zone-B?",
+      "intent": "metric_query",
+      "options": {"metric_type": "temperature"}
+    },
+    {
+      "query": "Show humidity levels across all zones",
+      "intent": "metric_query",
+      "options": {"metric_type": "humidity", "scope": "all"}
+    }
+  ]
+}
