@@ -65,8 +65,13 @@ func (c *Component) setupQueryHandlers() error {
 		return fmt.Errorf("subscribe to similar query: %w", err)
 	}
 
+	// Subscribe to globalSearch - the main NL query handler with classifier routing
+	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.globalSearch", c.handleGlobalSearch); err != nil {
+		return fmt.Errorf("subscribe to globalSearch query: %w", err)
+	}
+
 	c.logger.Info("query handlers registered",
-		"subjects", []string{"graph.query.entity", "graph.query.entityByAlias", "graph.query.relationships", "graph.query.pathSearch", "graph.query.hierarchyStats", "graph.query.prefix", "graph.query.spatial", "graph.query.temporal", "graph.query.semantic", "graph.query.similar"})
+		"subjects", []string{"graph.query.entity", "graph.query.entityByAlias", "graph.query.relationships", "graph.query.pathSearch", "graph.query.hierarchyStats", "graph.query.prefix", "graph.query.spatial", "graph.query.temporal", "graph.query.semantic", "graph.query.similar", "graph.query.globalSearch"})
 
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/graph"
+	"github.com/c360/semstreams/graph/query"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/resource"
 	"github.com/nats-io/nats.go/jetstream"
@@ -106,6 +107,7 @@ type Component struct {
 	pathSearcher *PathSearcher
 	router       *StaticRouter
 	logger       *slog.Logger
+	classifier   query.Classifier
 
 	// Community cache for GraphRAG (consumer-owned, KV watch based)
 	communityCache   *CommunityCache
@@ -174,6 +176,7 @@ func CreateGraphQuery(rawConfig json.RawMessage, deps component.Dependencies) (c
 		natsClient:       deps.NATSClient, // Assign to interface field
 		pathSearcher:     NewPathSearcher(deps.NATSClient, config.QueryTimeout, config.MaxDepth, logger),
 		logger:           logger,
+		classifier:       query.NewKeywordClassifier(),
 		lastMetricsReset: time.Now(),
 		promMetrics:      getMetrics(deps.MetricsRegistry),
 	}

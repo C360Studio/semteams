@@ -1,22 +1,6 @@
-// Package graphql provides GraphQL gateway types and query definitions.
-package graphql
+package query
 
 import "time"
-
-// CacheStats represents cache statistics.
-type CacheStats struct {
-	L1Hits      int64   `json:"l1_hits"`
-	L1Misses    int64   `json:"l1_misses"`
-	L1Size      int     `json:"l1_size"`
-	L1HitRatio  float64 `json:"l1_hit_ratio"`
-	L1Evictions int64   `json:"l1_evictions"`
-	L2Hits      int64   `json:"l2_hits"`
-	L2Misses    int64   `json:"l2_misses"`
-	L2Size      int     `json:"l2_size"`
-	L2HitRatio  float64 `json:"l2_hit_ratio"`
-	L3Hits      int64   `json:"l3_hits"`
-	L3Misses    int64   `json:"l3_misses"`
-}
 
 // SearchStrategy represents the type of search to perform.
 type SearchStrategy string
@@ -57,6 +41,14 @@ type SearchOptions struct {
 type TimeRange struct {
 	Start time.Time `json:"start"`
 	End   time.Time `json:"end"`
+}
+
+// SpatialBounds represents geographic bounding box.
+type SpatialBounds struct {
+	North float64 `json:"north"`
+	South float64 `json:"south"`
+	East  float64 `json:"east"`
+	West  float64 `json:"west"`
 }
 
 // InferStrategy determines the best search strategy based on options.

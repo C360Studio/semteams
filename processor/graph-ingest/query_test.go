@@ -601,6 +601,210 @@ func (m *mockNATSMsg) Metadata() (*jetstream.MsgMetadata, error) {
 }
 
 // ====================================================================================
+// Query Handler: handleQuerySuffixNATS Tests
+// ====================================================================================
+
+func TestComponent_HandleQuerySuffix_Success(t *testing.T) {
+	tests := []struct {
+		name           string
+		storedIDs      []string
+		suffix         string
+		expectedResult string
+	}{
+		{
+			name: "match temp-sensor-001",
+			storedIDs: []string{
+				"c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+				"c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+				"c360.logistics.environmental.sensor.humidity.humid-sensor-001",
+			},
+			suffix:         "temp-sensor-001",
+			expectedResult: "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+		},
+		{
+			name: "match maint-001",
+			storedIDs: []string{
+				"c360.logistics.maintenance.work.completed.maint-001",
+				"c360.logistics.maintenance.work.completed.maint-002",
+			},
+			suffix:         "maint-001",
+			expectedResult: "c360.logistics.maintenance.work.completed.maint-001",
+		},
+		{
+			name: "match robot-007",
+			storedIDs: []string{
+				"acme.ops.logistics.warehouse.robot.robot-007",
+				"acme.ops.logistics.warehouse.robot.robot-008",
+			},
+			suffix:         "robot-007",
+			expectedResult: "acme.ops.logistics.warehouse.robot.robot-007",
+		},
+		{
+			name: "match drone.001 (with dot in suffix)",
+			storedIDs: []string{
+				"c360.platform.robotics.mav1.drone.001",
+				"c360.platform.robotics.mav1.drone.002",
+			},
+			suffix:         "drone.001",
+			expectedResult: "c360.platform.robotics.mav1.drone.001",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comp := createTestComponentWithMockKV(t)
+			ctx := context.Background()
+
+			// Store entities in KV bucket
+			for _, id := range tt.storedIDs {
+				entity := &graph.EntityState{
+					ID:        id,
+					Triples:   []message.Triple{},
+					Version:   1,
+					UpdatedAt: time.Now(),
+				}
+				require.NoError(t, comp.CreateEntity(ctx, entity))
+			}
+
+			// Create request
+			request := map[string]string{"suffix": tt.suffix}
+			requestJSON, err := json.Marshal(request)
+			require.NoError(t, err)
+
+			// Call handler directly
+			responseJSON, err := comp.handleQuerySuffixNATS(ctx, requestJSON)
+			require.NoError(t, err, "handleQuerySuffixNATS should not return error")
+
+			// Parse response
+			var response struct {
+				ID string `json:"id"`
+			}
+			err = json.Unmarshal(responseJSON, &response)
+			require.NoError(t, err, "response should be valid JSON")
+
+			assert.Equal(t, tt.expectedResult, response.ID, "should match expected entity ID")
+		})
+	}
+}
+
+func TestComponent_HandleQuerySuffix_NoMatch(t *testing.T) {
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	// Store some entities
+	entities := []string{
+		"c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+		"c360.logistics.environmental.sensor.temperature.temp-sensor-002",
+	}
+	for _, id := range entities {
+		entity := &graph.EntityState{
+			ID:        id,
+			Triples:   []message.Triple{},
+			Version:   1,
+			UpdatedAt: time.Now(),
+		}
+		require.NoError(t, comp.CreateEntity(ctx, entity))
+	}
+
+	// Query for non-existent suffix
+	request := map[string]string{"suffix": "nonexistent-sensor-999"}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	responseJSON, err := comp.handleQuerySuffixNATS(ctx, requestJSON)
+	require.NoError(t, err, "should not error for no match")
+
+	var response struct {
+		ID string `json:"id"`
+	}
+	err = json.Unmarshal(responseJSON, &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, "", response.ID, "should return empty ID when no match")
+}
+
+func TestComponent_HandleQuerySuffix_EmptyBucket(t *testing.T) {
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	// Don't store any entities - bucket is empty
+
+	request := map[string]string{"suffix": "temp-sensor-001"}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	responseJSON, err := comp.handleQuerySuffixNATS(ctx, requestJSON)
+	require.NoError(t, err, "should handle empty bucket gracefully")
+
+	var response struct {
+		ID string `json:"id"`
+	}
+	err = json.Unmarshal(responseJSON, &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, "", response.ID, "should return empty ID for empty bucket")
+}
+
+func TestComponent_HandleQuerySuffix_InvalidRequest(t *testing.T) {
+	tests := []struct {
+		name        string
+		requestData []byte
+	}{
+		{
+			name:        "malformed JSON",
+			requestData: []byte(`{invalid json}`),
+		},
+		{
+			name:        "empty suffix",
+			requestData: []byte(`{"suffix": ""}`),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comp := createTestComponentWithMockKV(t)
+			ctx := context.Background()
+
+			_, err := comp.handleQuerySuffixNATS(ctx, tt.requestData)
+			assert.Error(t, err, "should return error for invalid request")
+		})
+	}
+}
+
+func TestComponent_HandleQuerySuffix_PartialSuffixNoMatch(t *testing.T) {
+	// Ensure we only match on complete instance suffix, not partial
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	// Store entity
+	entity := &graph.EntityState{
+		ID:        "c360.logistics.environmental.sensor.temperature.temp-sensor-001",
+		Triples:   []message.Triple{},
+		Version:   1,
+		UpdatedAt: time.Now(),
+	}
+	require.NoError(t, comp.CreateEntity(ctx, entity))
+
+	// Query with partial suffix (should NOT match "sensor-001" because we need ".sensor-001")
+	request := map[string]string{"suffix": "sensor-001"}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	responseJSON, err := comp.handleQuerySuffixNATS(ctx, requestJSON)
+	require.NoError(t, err)
+
+	var response struct {
+		ID string `json:"id"`
+	}
+	err = json.Unmarshal(responseJSON, &response)
+	require.NoError(t, err)
+
+	// This should NOT match because "sensor-001" is not the full instance part
+	// The entity ends with ".temp-sensor-001" not ".sensor-001"
+	assert.Equal(t, "", response.ID, "partial suffix should not match")
+}
+
+// ====================================================================================
 // Helper Functions
 // ====================================================================================
 

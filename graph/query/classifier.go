@@ -1,4 +1,5 @@
-package graphql
+// Package query provides a clean interface for reading graph data from NATS KV buckets.
+package query
 
 import (
 	"context"
@@ -8,9 +9,20 @@ import (
 	"time"
 )
 
+// Classifier analyzes natural language queries to extract search intent.
+type Classifier interface {
+	// ClassifyQuery analyzes a query string and returns SearchOptions.
+	ClassifyQuery(ctx context.Context, query string) *SearchOptions
+}
+
 // KeywordClassifier implements regex-based natural language query classification.
 // Uses pattern matching to extract temporal, spatial, and intent information.
 type KeywordClassifier struct{}
+
+// NewKeywordClassifier creates a new keyword-based classifier.
+func NewKeywordClassifier() *KeywordClassifier {
+	return &KeywordClassifier{}
+}
 
 // Temporal patterns
 var (
@@ -28,7 +40,6 @@ var (
 
 // Spatial patterns
 var (
-	nearPattern   = regexp.MustCompile(`(?i)\bnear\s+`)
 	inZonePattern = regexp.MustCompile(`(?i)\bin\s+(zone|area)[-\s]([a-zA-Z0-9-]+)\b`)
 	zonePattern   = regexp.MustCompile(`(?i)\b(zone|area)[-\s]([a-zA-Z0-9-]+)\b`)
 	withinPattern = regexp.MustCompile(`(?i)\bwithin\s+(\d+(?:\.\d+)?)\s*(km|m|miles?)\s+of\s+(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)`)
@@ -36,9 +47,8 @@ var (
 
 // Intent patterns
 var (
-	similarityPattern  = regexp.MustCompile(`(?i)\b(similar|like|resembl|compar)\w*`)
-	pathPattern        = regexp.MustCompile(`(?i)\b(connect|relat|path|link|between)\w*`)
-	aggregationPattern = regexp.MustCompile(`(?i)\b(count|how\s+many|total|sum|average)\b`)
+	similarityPattern = regexp.MustCompile(`(?i)\b(similar|like|resembl|compar)\w*`)
+	pathPattern       = regexp.MustCompile(`(?i)\b(connect|relat|path|link|between)\w*`)
 )
 
 // Entity extraction pattern - matches patterns like "sensor-001", "pump-42", "device-abc"

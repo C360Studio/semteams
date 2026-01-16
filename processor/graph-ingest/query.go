@@ -172,7 +172,7 @@ func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byt
 }
 
 // handleQuerySuffixNATS handles suffix-based entity ID resolution.
-// Uses NATS KV ListKeysFiltered with wildcard pattern to match instance part.
+// Scans entity keys and matches by suffix to resolve partial entity IDs.
 // This enables NL queries to use partial entity IDs like "temp-sensor-001" which
 // get resolved to full 6-part IDs like "c360.logistics.environmental.sensor.temperature.temp-sensor-001".
 func (c *Component) handleQuerySuffixNATS(_ context.Context, data []byte) ([]byte, error) {
@@ -183,49 +183,42 @@ func (c *Component) handleQuerySuffixNATS(_ context.Context, data []byte) ([]byt
 		Suffix string `json:"suffix"` // e.g., "temp-sensor-001"
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
+		c.logger.Error("suffix query unmarshal failed", "error", err)
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
+
+	c.logger.Debug("suffix query received", "suffix", req.Suffix)
 
 	if req.Suffix == "" {
 		return nil, fmt.Errorf("invalid request: empty suffix")
 	}
 
-	// Build wildcard pattern: *.*.*.*.*.suffix (6-part EntityID structure)
-	// The pattern matches any entity where the instance part (last segment) equals suffix
-	pattern := fmt.Sprintf("*.*.*.*.*.%s", req.Suffix)
-
-	// Use ListKeysFiltered with wildcard pattern for efficient server-side filtering
-	lister, err := c.entityBucket.ListKeysFiltered(ctx, pattern)
-	if err != nil {
-		// If filtering fails, fall back to scanning all keys
-		return c.fallbackSuffixSearch(ctx, req.Suffix)
-	}
-
-	// Get first matching key
-	var matchedID string
-	for key := range lister.Keys() {
-		matchedID = key
-		break // Take first match
-	}
-
-	return json.Marshal(map[string]string{"id": matchedID})
-}
-
-// fallbackSuffixSearch provides a fallback when ListKeysFiltered doesn't work.
-// This manually scans keys and filters by suffix.
-func (c *Component) fallbackSuffixSearch(ctx context.Context, suffix string) ([]byte, error) {
+	// Get all entity keys and find one matching the suffix
+	// This matches the instance part of a 6-part EntityID: org.platform.domain.system.type.instance
 	keys, err := c.entityBucket.Keys(ctx)
 	if err != nil {
+		c.logger.Error("suffix query keys failed", "error", err)
+		if err == jetstream.ErrNoKeysFound {
+			return json.Marshal(map[string]string{"id": ""})
+		}
 		return nil, fmt.Errorf("failed to get keys: %w", err)
 	}
 
-	suffixWithDot := "." + suffix
+	c.logger.Debug("suffix query scanning keys", "suffix", req.Suffix, "key_count", len(keys))
+
+	// Match keys ending with ".suffix" (the instance part)
+	suffixWithDot := "." + req.Suffix
 	var matchedID string
 	for _, key := range keys {
-		if strings.HasSuffix(key, suffixWithDot) || key == suffix {
+		if strings.HasSuffix(key, suffixWithDot) || key == req.Suffix {
 			matchedID = key
+			c.logger.Debug("suffix query matched", "suffix", req.Suffix, "matched", matchedID)
 			break
 		}
+	}
+
+	if matchedID == "" {
+		c.logger.Debug("suffix query no match found", "suffix", req.Suffix)
 	}
 
 	return json.Marshal(map[string]string{"id": matchedID})
