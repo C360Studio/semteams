@@ -41,11 +41,13 @@ type FlowServiceConfig struct {
 type FlowService struct {
 	*BaseService
 
-	flowStore  *flowstore.Store
-	flowEngine *flowengine.Engine
-	configMgr  *config.Manager
-	serviceMgr *Manager // Access to other services (ComponentManager)
-	config     FlowServiceConfig
+	flowStore        *flowstore.Store
+	flowEngine       *flowengine.Engine
+	configMgr        *config.Manager
+	serviceMgr       *Manager // Access to other services (ComponentManager)
+	natsClient       natsSubscriber
+	componentManager ComponentHealthProvider
+	config           FlowServiceConfig
 
 	mu sync.RWMutex
 }
@@ -93,12 +95,14 @@ func NewFlowServiceFromConfig(rawConfig json.RawMessage, deps *Dependencies) (Se
 	)
 
 	service := &FlowService{
-		BaseService: baseService,
-		flowStore:   flowStore,
-		flowEngine:  flowEngine,
-		configMgr:   deps.Manager,
-		serviceMgr:  deps.ServiceManager,
-		config:      cfg,
+		BaseService:      baseService,
+		flowStore:        flowStore,
+		flowEngine:       flowEngine,
+		configMgr:        deps.Manager,
+		serviceMgr:       deps.ServiceManager,
+		natsClient:       deps.NATSClient,
+		componentManager: nil, // Will be set in Start() when ComponentManager is available
+		config:           cfg,
 	}
 
 	return service, nil
@@ -106,6 +110,15 @@ func NewFlowServiceFromConfig(rawConfig json.RawMessage, deps *Dependencies) (Se
 
 // Start starts the flow service
 func (fs *FlowService) Start(ctx context.Context) error {
+	// Get ComponentManager from service manager if available
+	if fs.serviceMgr != nil {
+		if svc, ok := fs.serviceMgr.GetService("component-manager"); ok {
+			if cm, ok := svc.(ComponentHealthProvider); ok {
+				fs.componentManager = cm
+			}
+		}
+	}
+
 	// Set health check
 	fs.SetHealthCheck(func() error {
 		return nil // Always healthy for now
@@ -815,13 +828,8 @@ func (fs *FlowService) handleValidateFlow(w http.ResponseWriter, r *http.Request
 }
 
 // handleStatusWebSocket handles WebSocket connections for real-time status updates
-func (fs *FlowService) handleStatusWebSocket(w http.ResponseWriter, _ *http.Request) {
-	// TODO: Implement WebSocket upgrade and status streaming
-	// This will subscribe to component health events and broadcast to connected clients
-	// Implementation follows TDD in tasks
-
-	fs.logger.Info("WebSocket status stream requested (not yet implemented)")
-	fs.writeJSONError(w, "WebSocket not yet implemented", http.StatusNotImplemented)
+func (fs *FlowService) handleStatusWebSocket(w http.ResponseWriter, r *http.Request) {
+	fs.handleStatusWebSocketImpl(w, r)
 }
 
 // generateFlowID generates a unique flow ID
