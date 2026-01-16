@@ -25,12 +25,42 @@ type StatusStreamEnvelope struct {
 	Payload   json.RawMessage `json:"payload,omitempty"`
 }
 
-// SubscribeCommand represents a client subscription command
+// SubscribeCommand represents a client subscription command (Client → Server)
 type SubscribeCommand struct {
-	Command      string   `json:"command"`
-	MessageTypes []string `json:"message_types,omitempty"`
-	LogLevel     string   `json:"log_level,omitempty"`
-	Sources      []string `json:"sources,omitempty"`
+	Command      string   `json:"command"`                 // Must be "subscribe"
+	MessageTypes []string `json:"message_types,omitempty"` // Filter: flow_status, component_health, component_metrics, log_entry
+	LogLevel     string   `json:"log_level,omitempty"`     // Minimum log level: DEBUG, INFO, WARN, ERROR
+	Sources      []string `json:"sources,omitempty"`       // Filter by source component names
+}
+
+// FlowStatusPayload is the payload for type=flow_status messages
+type FlowStatusPayload struct {
+	State     string `json:"state"`           // Current state: draft, deployed, running, stopped, failed
+	PrevState string `json:"prev_state"`      // Previous state (if changed)
+	Timestamp int64  `json:"timestamp"`       // State change timestamp (Unix milliseconds)
+	Error     string `json:"error,omitempty"` // Error message if state=failed
+}
+
+// LogEntryPayload is the payload for type=log_entry messages
+type LogEntryPayload struct {
+	Level   string         `json:"level"`   // DEBUG, INFO, WARN, ERROR
+	Source  string         `json:"source"`  // Component or service name
+	Message string         `json:"message"` // Log message
+	Fields  map[string]any `json:"fields"`  // Structured log fields
+}
+
+// MetricsPayload is the payload for type=component_metrics messages
+type MetricsPayload struct {
+	Component string        `json:"component"` // Component name
+	Metrics   []MetricEntry `json:"metrics"`   // Array of metric values
+}
+
+// MetricEntry represents a single metric in a MetricsPayload
+type MetricEntry struct {
+	Name   string            `json:"name"`   // Metric name
+	Type   string            `json:"type"`   // counter, gauge, histogram
+	Value  float64           `json:"value"`  // Current value
+	Labels map[string]string `json:"labels"` // Metric labels
 }
 
 // ClientState represents client subscription state

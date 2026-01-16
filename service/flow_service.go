@@ -504,12 +504,47 @@ func flowServiceOpenAPISpec() *OpenAPISpec {
 			},
 			"/status/stream": {
 				GET: &OperationSpec{
-					Summary:     "WebSocket status stream",
-					Description: "Real-time flow status updates via WebSocket",
-					Tags:        []string{"Status"},
+					Summary: "WebSocket status stream",
+					Description: `Real-time flow status updates via WebSocket.
+
+## Connection
+Connect with: ws://host/flowbuilder/status/stream?flowId={flowId}
+
+## Message Types (Server → Client)
+All messages are wrapped in StatusStreamEnvelope:
+- **flow_status**: Flow state changes (deployed, running, stopped, failed)
+- **component_health**: Component health updates (every 5s)
+- **component_metrics**: Real-time metrics from MetricsForwarder
+- **log_entry**: Log messages from LogForwarder
+
+## Filtering (Client → Server)
+Send SubscribeCommand JSON to filter messages:
+- message_types: Array of message types to receive
+- log_level: Minimum log level (DEBUG < INFO < WARN < ERROR)
+- sources: Array of component names to filter by
+
+## Example Subscribe Command
+{"command":"subscribe","message_types":["flow_status","log_entry"],"log_level":"WARN"}
+`,
+					Tags: []string{"Status"},
+					Parameters: []ParameterSpec{
+						{
+							Name:        "flowId",
+							In:          "query",
+							Required:    true,
+							Description: "Flow ID to subscribe to for status updates",
+							Schema:      Schema{Type: "string"},
+						},
+					},
 					Responses: map[string]ResponseSpec{
 						"101": {
-							Description: "Switching to WebSocket",
+							Description: "Switching to WebSocket protocol",
+						},
+						"400": {
+							Description: "Missing or invalid flowId parameter",
+						},
+						"404": {
+							Description: "Flow not found",
 						},
 					},
 				},
@@ -538,6 +573,13 @@ func flowServiceOpenAPISpec() *OpenAPISpec {
 			reflect.TypeOf(RuntimeMetricsResponse{}),
 			reflect.TypeOf(RuntimeMessagesResponse{}),
 			reflect.TypeOf(flowstore.Flow{}),
+			// WebSocket message types
+			reflect.TypeOf(StatusStreamEnvelope{}),
+			reflect.TypeOf(SubscribeCommand{}),
+			reflect.TypeOf(FlowStatusPayload{}),
+			reflect.TypeOf(LogEntryPayload{}),
+			reflect.TypeOf(MetricsPayload{}),
+			reflect.TypeOf(MetricEntry{}),
 		},
 	}
 }

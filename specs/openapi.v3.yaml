@@ -517,12 +517,43 @@ paths:
     /status/stream:
         get:
             summary: WebSocket status stream
-            description: Real-time flow status updates via WebSocket
+            description: |
+                Real-time flow status updates via WebSocket.
+
+                ## Connection
+                Connect with: ws://host/flowbuilder/status/stream?flowId={flowId}
+
+                ## Message Types (Server → Client)
+                All messages are wrapped in StatusStreamEnvelope:
+                - **flow_status**: Flow state changes (deployed, running, stopped, failed)
+                - **component_health**: Component health updates (every 5s)
+                - **component_metrics**: Real-time metrics from MetricsForwarder
+                - **log_entry**: Log messages from LogForwarder
+
+                ## Filtering (Client → Server)
+                Send SubscribeCommand JSON to filter messages:
+                - message_types: Array of message types to receive
+                - log_level: Minimum log level (DEBUG < INFO < WARN < ERROR)
+                - sources: Array of component names to filter by
+
+                ## Example Subscribe Command
+                {"command":"subscribe","message_types":["flow_status","log_entry"],"log_level":"WARN"}
             tags:
                 - Status
+            parameters:
+                - name: flowId
+                  in: query
+                  required: true
+                  description: Flow ID to subscribe to for status updates
+                  schema:
+                    type: string
             responses:
                 "101":
-                    description: Switching to WebSocket
+                    description: Switching to WebSocket protocol
+                "400":
+                    description: Missing or invalid flowId parameter
+                "404":
+                    description: Flow not found
     /subjects:
         get:
             summary: Get monitored subjects
@@ -743,6 +774,38 @@ components:
                 - updated_at
                 - last_modified
             type: object
+        FlowStatusPayload:
+            properties:
+                error:
+                    type: string
+                prev_state:
+                    type: string
+                state:
+                    type: string
+                timestamp:
+                    type: integer
+            required:
+                - state
+                - prev_state
+                - timestamp
+            type: object
+        LogEntryPayload:
+            properties:
+                fields:
+                    additionalProperties: {}
+                    type: object
+                level:
+                    type: string
+                message:
+                    type: string
+                source:
+                    type: string
+            required:
+                - level
+                - source
+                - message
+                - fields
+            type: object
         MessageLogEntry:
             properties:
                 message_id:
@@ -766,6 +829,52 @@ components:
                 - timestamp
                 - subject
                 - summary
+            type: object
+        MetricEntry:
+            properties:
+                labels:
+                    additionalProperties:
+                        type: string
+                    type: object
+                name:
+                    type: string
+                type:
+                    type: string
+                value:
+                    type: number
+            required:
+                - name
+                - type
+                - value
+                - labels
+            type: object
+        MetricsPayload:
+            properties:
+                component:
+                    type: string
+                metrics:
+                    items:
+                        properties:
+                            labels:
+                                additionalProperties:
+                                    type: string
+                                type: object
+                            name:
+                                type: string
+                            type:
+                                type: string
+                            value:
+                                type: number
+                        required:
+                            - name
+                            - type
+                            - value
+                            - labels
+                        type: object
+                    type: array
+            required:
+                - component
+                - metrics
             type: object
         RuntimeHealthResponse:
             properties:
@@ -948,6 +1057,25 @@ components:
                 - human_rejected
                 - applied
             type: object
+        StatusStreamEnvelope:
+            properties:
+                flow_id:
+                    type: string
+                id:
+                    type: string
+                payload:
+                    format: byte
+                    type: string
+                timestamp:
+                    type: integer
+                type:
+                    type: string
+            required:
+                - type
+                - id
+                - timestamp
+                - flow_id
+            type: object
         StructuralAnomaly:
             properties:
                 confidence:
@@ -1044,6 +1172,23 @@ components:
                 - evidence
                 - status
                 - detected_at
+            type: object
+        SubscribeCommand:
+            properties:
+                command:
+                    type: string
+                log_level:
+                    type: string
+                message_types:
+                    items:
+                        type: string
+                    type: array
+                sources:
+                    items:
+                        type: string
+                    type: array
+            required:
+                - command
             type: object
 tags:
     - name: Components
