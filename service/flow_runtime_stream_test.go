@@ -704,7 +704,9 @@ func (m *streamMockFlowStore) Get(ctx context.Context, id string) (*flowstore.Fl
 	if !exists {
 		return nil, ErrStreamFlowNotFound
 	}
-	return flow, nil
+	// Return a copy to avoid races when caller reads while another goroutine writes
+	flowCopy := *flow
+	return &flowCopy, nil
 }
 
 func (m *streamMockFlowStore) List(ctx context.Context) ([]*flowstore.Flow, error) {
