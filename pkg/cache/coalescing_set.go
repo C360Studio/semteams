@@ -10,13 +10,14 @@ import (
 // It deduplicates keys automatically using a map-based set structure.
 // Follows the ticker-based background goroutine pattern from ttl.go.
 type CoalescingSet struct {
-	pending  map[string]struct{}
-	mu       sync.Mutex
-	window   time.Duration
-	callback func(keys []string)
-	ticker   *time.Ticker
-	shutdown chan struct{}
-	done     chan struct{}
+	pending   map[string]struct{}
+	mu        sync.Mutex
+	window    time.Duration
+	callback  func(keys []string)
+	ticker    *time.Ticker
+	shutdown  chan struct{}
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 // NewCoalescingSet creates a new CoalescingSet that fires the callback every window duration
@@ -73,14 +74,10 @@ func (c *CoalescingSet) PendingCount() int {
 // Close stops the background ticker and waits for cleanup to complete.
 // It is idempotent - multiple calls are safe.
 func (c *CoalescingSet) Close() error {
-	// Use select with default to make Close() idempotent
-	select {
-	case <-c.shutdown:
-		// Already closed
-		return nil
-	default:
+	// Use sync.Once to make Close() safe for concurrent calls
+	c.closeOnce.Do(func() {
 		close(c.shutdown)
-	}
+	})
 
 	// Wait for background goroutine to finish
 	<-c.done
