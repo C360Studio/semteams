@@ -514,11 +514,18 @@ func (fs *FlowService) startWebSocketWorkers(
 	}
 
 	// Health ticker - polls ComponentManager every 5s
-	if fs.componentManager != nil {
+	// Lazy lookup: ComponentManager may not have been available at FlowService.Start()
+	componentMgr := fs.componentManager
+	if componentMgr == nil && fs.serviceMgr != nil {
+		if svc, ok := fs.serviceMgr.GetService("component-manager"); ok {
+			componentMgr, _ = svc.(ComponentHealthProvider)
+		}
+	}
+	if componentMgr != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			healthTicker(ctx, clientState, fs.componentManager, flowID, sendFn)
+			healthTicker(ctx, clientState, componentMgr, flowID, sendFn)
 		}()
 	}
 

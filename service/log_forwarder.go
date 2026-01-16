@@ -101,7 +101,8 @@ type LogForwarder struct {
 	publisher natsPublisher
 
 	// Wrapped handler (preserves stdout/stderr output)
-	wrappedHandler slog.Handler
+	wrappedHandler    slog.Handler
+	wrappedHandlerSet bool // True if SetWrappedHandler was called (for tests)
 
 	// Minimum level as slog.Level
 	minLevel slog.Level
@@ -166,6 +167,22 @@ func newLogForwarderWithPublisher(
 func (lf *LogForwarder) Start(ctx context.Context) error {
 	if err := lf.BaseService.Start(ctx); err != nil {
 		return err
+	}
+
+	// Wire ourselves into the slog system by wrapping the current default handler
+	// This ensures all application logs flow through us to NATS
+	// Only capture default handler if wrappedHandler wasn't explicitly set via SetWrappedHandler
+	if !lf.wrappedHandlerSet {
+		lf.wrappedHandler = slog.Default().Handler()
+	}
+
+	// Create internal logger that writes directly to wrapped handler (avoids recursion)
+	// This must be done BEFORE SetDefault, otherwise lf.logger would use us as handler
+	lf.logger = slog.New(lf.wrappedHandler).With("component", "log-forwarder")
+
+	// Now set ourselves as the default handler (only in production, not when wrappedHandler was explicitly set for tests)
+	if !lf.wrappedHandlerSet {
+		slog.SetDefault(slog.New(lf))
 	}
 
 	lf.logger.Info("LogForwarder started",
@@ -388,6 +405,8 @@ func newLogForwarderForTest(config *LogForwarderConfig, publisher natsPublisher,
 
 // SetWrappedHandler sets a custom wrapped handler (for testing).
 // This allows tests to verify that logs are delegated to the wrapped handler.
+// When set, Start() will not modify wrappedHandler or call slog.SetDefault().
 func (lf *LogForwarder) SetWrappedHandler(handler slog.Handler) {
 	lf.wrappedHandler = handler
+	lf.wrappedHandlerSet = true
 }
