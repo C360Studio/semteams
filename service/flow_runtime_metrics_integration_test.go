@@ -118,7 +118,7 @@ func TestRuntimeMetricsIntegration(t *testing.T) {
 		componentNames := make(map[string]bool)
 		for _, comp := range response.Components {
 			componentNames[comp.Name] = true
-			assert.NotEmpty(t, comp.Type)
+			assert.NotEmpty(t, comp.ComponentType)
 		}
 
 		assert.True(t, componentNames["udp-input"])
@@ -300,7 +300,7 @@ func TestRuntimeMetrics_WithMockPrometheus(t *testing.T) {
 	// Verify component has data
 	comp := response.Components[0]
 	assert.Equal(t, "test-component", comp.Name)
-	assert.Equal(t, "input", comp.Type)
+	assert.Equal(t, types.ComponentTypeInput, comp.ComponentType)
 
 	// Throughput might be populated depending on mock implementation
 	t.Logf("Component throughput: %v", comp.Throughput)
