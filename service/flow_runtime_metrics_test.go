@@ -61,14 +61,14 @@ func TestRuntimeMetricsResponse_JSONMarshaling(t *testing.T) {
 		PrometheusAvailable: true,
 		Components: []ComponentMetric{
 			{
-				Name:          "test-component",
-				ComponentID:   "udp",
-				ComponentType: types.ComponentTypeInput,
-				Status:        "healthy",
-				Throughput:    &throughput,
-				ErrorRate:     &errorRate,
-				QueueDepth:    &queueDepth,
-				RawCounters:   nil,
+				Name:        "test-component",
+				Component:   "udp",
+				Type:        types.ComponentTypeInput,
+				Status:      "healthy",
+				Throughput:  &throughput,
+				ErrorRate:   &errorRate,
+				QueueDepth:  &queueDepth,
+				RawCounters: nil,
 			},
 		},
 	}
@@ -94,14 +94,14 @@ func TestRuntimeMetricsResponse_NullValues(t *testing.T) {
 		PrometheusAvailable: false,
 		Components: []ComponentMetric{
 			{
-				Name:          "test-component",
-				ComponentID:   "udp",
-				ComponentType: types.ComponentTypeInput,
-				Status:        "unknown",
-				Throughput:    nil,
-				ErrorRate:     nil,
-				QueueDepth:    nil,
-				RawCounters:   nil,
+				Name:        "test-component",
+				Component:   "udp",
+				Type:        types.ComponentTypeInput,
+				Status:      "unknown",
+				Throughput:  nil,
+				ErrorRate:   nil,
+				QueueDepth:  nil,
+				RawCounters: nil,
 			},
 		},
 	}
@@ -128,9 +128,9 @@ func TestBuildHealthOnlyResponse(t *testing.T) {
 	fs := &FlowService{}
 
 	components := []componentInfo{
-		{Name: "comp1", ComponentID: "udp", ComponentType: types.ComponentTypeInput},
-		{Name: "comp2", ComponentID: "graph-processor", ComponentType: types.ComponentTypeProcessor},
-		{Name: "comp3", ComponentID: "file-output", ComponentType: types.ComponentTypeOutput},
+		{Name: "comp1", Component: "udp", Type: types.ComponentTypeInput},
+		{Name: "comp2", Component: "graph-processor", Type: types.ComponentTypeProcessor},
+		{Name: "comp3", Component: "file-output", Type: types.ComponentTypeOutput},
 	}
 
 	response := fs.buildHealthOnlyResponse(components)
@@ -138,8 +138,8 @@ func TestBuildHealthOnlyResponse(t *testing.T) {
 	assert.Len(t, response.Components, 3)
 	for i, comp := range response.Components {
 		assert.Equal(t, components[i].Name, comp.Name)
-		assert.Equal(t, components[i].ComponentID, comp.ComponentID)
-		assert.Equal(t, components[i].ComponentType, comp.ComponentType)
+		assert.Equal(t, components[i].Component, comp.Component)
+		assert.Equal(t, components[i].Type, comp.Type)
 		assert.Equal(t, "unknown", comp.Status)
 		assert.Nil(t, comp.Throughput)
 		assert.Nil(t, comp.ErrorRate)

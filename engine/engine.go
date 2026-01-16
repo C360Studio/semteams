@@ -293,9 +293,9 @@ func (e *Engine) translateToComponentConfigs(flow *flowstore.Flow) (map[string]t
 		}
 
 		configs[node.Name] = types.ComponentConfig{
-			Type:    node.ComponentType, // Category (input/processor/output/storage/gateway)
-			Name:    node.ComponentID,   // Factory name (e.g., "udp", "graph-processor")
-			Enabled: true,               // Deploy as enabled by default
+			Type:    node.Type,      // Category (input/processor/output/storage/gateway)
+			Name:    node.Component, // Factory name (e.g., "udp", "graph-processor")
+			Enabled: true,           // Deploy as enabled by default
 			Config:  configJSON,
 		}
 	}

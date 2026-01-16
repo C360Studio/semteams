@@ -42,12 +42,12 @@ type ValidationResult struct {
 
 // ValidatedNode represents a flow node with its port information
 type ValidatedNode struct {
-	ID            string              `json:"id"`
-	ComponentID   string              `json:"component_id"`   // Factory name (e.g., "udp", "graph-processor")
-	ComponentType types.ComponentType `json:"component_type"` // Enum (e.g., "input", "processor")
-	Name          string              `json:"name"`
-	InputPorts    []ValidatedPort     `json:"input_ports"`
-	OutputPorts   []ValidatedPort     `json:"output_ports"`
+	ID          string              `json:"id"`
+	Component   string              `json:"component"` // Component factory name (e.g., "udp", "graph-processor")
+	Type        types.ComponentType `json:"type"`      // Component category (input/processor/output/storage/gateway)
+	Name        string              `json:"name"`
+	InputPorts  []ValidatedPort     `json:"input_ports"`
+	OutputPorts []ValidatedPort     `json:"output_ports"`
 }
 
 // ValidatedPort represents a port with validation information
@@ -205,23 +205,23 @@ func (v *Validator) buildFlowGraph(flow *flowstore.Flow) (*flowgraph.FlowGraph, 
 	for _, node := range flow.Nodes {
 		v.logger.Debug("Adding component to FlowGraph",
 			"node_id", node.ID,
-			"component_id", node.ComponentID,
-			"component_type", node.ComponentType,
+			"component", node.Component,
+			"type", node.Type,
 			"node_name", node.Name,
 			"config", node.Config)
 
 		// Get component from registry with node's actual config
-		comp, err := v.getComponentFromRegistry(node.ComponentID, node.Config)
+		comp, err := v.getComponentFromRegistry(node.Component, node.Config)
 		if err != nil {
 			v.logger.Debug("Component lookup failed",
-				"component_id", node.ComponentID,
+				"component", node.Component,
 				"error", err)
 			// Unknown component type is a critical error
 			buildErrors = append(buildErrors, ValidationIssue{
 				Type:          "unknown_component",
 				Severity:      "error",
 				ComponentName: node.Name,
-				Message:       fmt.Sprintf("Unknown component: %s", node.ComponentID),
+				Message:       fmt.Sprintf("Unknown component: %s", node.Component),
 				Suggestions: []string{
 					"Check that component is registered",
 					"Verify component name spelling",
@@ -229,7 +229,7 @@ func (v *Validator) buildFlowGraph(flow *flowstore.Flow) (*flowgraph.FlowGraph, 
 			})
 			continue
 		}
-		v.logger.Debug("Component lookup succeeded", "component_id", node.ComponentID)
+		v.logger.Debug("Component lookup succeeded", "component", node.Component)
 
 		// Add to graph using node.ID (unique identifier), not node.Name (user-friendly label)
 		if err := graph.AddComponentNode(node.ID, comp); err != nil {
@@ -388,21 +388,21 @@ func (v *Validator) extractNodePorts(flow *flowstore.Flow, graph *flowgraph.Flow
 	// Create maps from node ID to node metadata for lookup
 	// Note: FlowGraph now uses node.ID as keys (not node.Name)
 	idToName := make(map[string]string)
-	idToComponentID := make(map[string]string)
-	idToComponentType := make(map[string]types.ComponentType)
+	idToComponent := make(map[string]string)
+	idToType := make(map[string]types.ComponentType)
 	for _, flowNode := range flow.Nodes {
 		idToName[flowNode.ID] = flowNode.Name
-		idToComponentID[flowNode.ID] = flowNode.ComponentID
-		idToComponentType[flowNode.ID] = flowNode.ComponentType
+		idToComponent[flowNode.ID] = flowNode.Component
+		idToType[flowNode.ID] = flowNode.Type
 	}
 
 	result.Nodes = make([]ValidatedNode, 0, len(graphNodes))
 
 	for nodeID, graphNode := range graphNodes {
-		// Find the flow node name, component ID, and component type
+		// Find the flow node name, component, and type
 		nodeName := idToName[nodeID]
-		componentID := idToComponentID[nodeID]
-		componentType := idToComponentType[nodeID]
+		comp := idToComponent[nodeID]
+		compType := idToType[nodeID]
 
 		// Convert input ports
 		inputPorts := make([]ValidatedPort, 0, len(graphNode.InputPorts))
@@ -441,12 +441,12 @@ func (v *Validator) extractNodePorts(flow *flowstore.Flow, graph *flowgraph.Flow
 		}
 
 		result.Nodes = append(result.Nodes, ValidatedNode{
-			ID:            nodeID,
-			ComponentID:   componentID,
-			ComponentType: componentType,
-			Name:          nodeName,
-			InputPorts:    inputPorts,
-			OutputPorts:   outputPorts,
+			ID:          nodeID,
+			Component:   comp,
+			Type:        compType,
+			Name:        nodeName,
+			InputPorts:  inputPorts,
+			OutputPorts: outputPorts,
 		})
 	}
 }

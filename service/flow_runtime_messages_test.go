@@ -60,9 +60,9 @@ func TestGetFlowMessageSubjects(t *testing.T) {
 			name: "Flow with mixed components",
 			flow: &flowstore.Flow{
 				Nodes: []flowstore.FlowNode{
-					{ID: "n1", Name: "udp-source", ComponentID: "udp", ComponentType: types.ComponentTypeInput},
-					{ID: "n2", Name: "json-proc", ComponentID: "json-processor", ComponentType: types.ComponentTypeProcessor},
-					{ID: "n3", Name: "nats-out", ComponentID: "nats-sink", ComponentType: types.ComponentTypeOutput},
+					{ID: "n1", Name: "udp-source", Component: "udp", Type: types.ComponentTypeInput},
+					{ID: "n2", Name: "json-proc", Component: "json-processor", Type: types.ComponentTypeProcessor},
+					{ID: "n3", Name: "nats-out", Component: "nats-sink", Type: types.ComponentTypeOutput},
 				},
 			},
 			expected: []string{
@@ -75,7 +75,7 @@ func TestGetFlowMessageSubjects(t *testing.T) {
 			name: "Flow with single component",
 			flow: &flowstore.Flow{
 				Nodes: []flowstore.FlowNode{
-					{ID: "n1", Name: "processor-1", ComponentID: "graph-processor", ComponentType: types.ComponentTypeProcessor},
+					{ID: "n1", Name: "processor-1", Component: "graph-processor", Type: types.ComponentTypeProcessor},
 				},
 			},
 			expected: []string{
@@ -237,8 +237,8 @@ func TestFormatMessageEntries(t *testing.T) {
 
 	flow := &flowstore.Flow{
 		Nodes: []flowstore.FlowNode{
-			{ID: "n1", Name: "udp-source", ComponentID: "udp", ComponentType: types.ComponentTypeInput},
-			{ID: "n2", Name: "json-proc", ComponentID: "json-processor", ComponentType: types.ComponentTypeProcessor},
+			{ID: "n1", Name: "udp-source", Component: "udp", Type: types.ComponentTypeInput},
+			{ID: "n2", Name: "json-proc", Component: "json-processor", Type: types.ComponentTypeProcessor},
 		},
 	}
 
@@ -304,7 +304,7 @@ func TestFormatMessageEntries(t *testing.T) {
 func TestFormatMessageEntriesEmptyInput(t *testing.T) {
 	flow := &flowstore.Flow{
 		Nodes: []flowstore.FlowNode{
-			{ID: "n1", Name: "test-component", ComponentID: "graph-processor", ComponentType: types.ComponentTypeProcessor},
+			{ID: "n1", Name: "test-component", Component: "graph-processor", Type: types.ComponentTypeProcessor},
 		},
 	}
 

@@ -17,8 +17,8 @@ import (
 // The conversion:
 //   - Each ComponentConfig becomes a FlowNode
 //   - Node.ID = config key (e.g., "udp-input")
-//   - Node.ComponentID = cfg.Name (factory name, e.g., "udp")
-//   - Node.ComponentType = cfg.Type (category, e.g., "input", "processor")
+//   - Node.Component = cfg.Name (factory name, e.g., "udp")
+//   - Node.Type = cfg.Type (category, e.g., "input", "processor")
 //   - Node.Config = component config as map[string]any
 //   - Positions are auto-calculated using grid layout
 //
@@ -71,12 +71,12 @@ func FromComponentConfigs(name string, configs map[string]types.ComponentConfig)
 		}
 
 		node := FlowNode{
-			ID:            key,
-			ComponentID:   cfg.Name, // Factory name (e.g., "udp", "graph-processor")
-			ComponentType: cfg.Type, // Category (input/processor/output/storage/gateway)
-			Name:          key,      // Use config key as display name
-			Position:      calculateGridPosition(i, len(keys)),
-			Config:        configMap,
+			ID:        key,
+			Component: cfg.Name, // Factory name (e.g., "udp", "graph-processor")
+			Type:      cfg.Type, // Category (input/processor/output/storage/gateway)
+			Name:      key,      // Use config key as display name
+			Position:  calculateGridPosition(i, len(keys)),
+			Config:    configMap,
 		}
 		flow.Nodes = append(flow.Nodes, node)
 	}

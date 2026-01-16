@@ -43,28 +43,28 @@ func TestRuntimeHealthIntegration(t *testing.T) {
 		Name: "Health Test Flow",
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:            "node1",
-				Name:          "udp-source",
-				ComponentID:   "udp",
-				ComponentType: types.ComponentTypeInput,
+				ID:        "node1",
+				Name:      "udp-source",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
 				Config: map[string]any{
 					"port": 8081,
 				},
 			},
 			{
-				ID:            "node2",
-				Name:          "processor",
-				ComponentID:   "graph-processor",
-				ComponentType: types.ComponentTypeProcessor,
+				ID:        "node2",
+				Name:      "processor",
+				Component: "graph-processor",
+				Type:      types.ComponentTypeProcessor,
 				Config: map[string]any{
 					"filter": "$.data",
 				},
 			},
 			{
-				ID:            "node3",
-				Name:          "file-sink",
-				ComponentID:   "file",
-				ComponentType: types.ComponentTypeOutput,
+				ID:        "node3",
+				Name:      "file-sink",
+				Component: "file",
+				Type:      types.ComponentTypeOutput,
 				Config: map[string]any{
 					"path": "/tmp/output.jsonl",
 				},

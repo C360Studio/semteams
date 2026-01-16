@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/c360/semstreams/natsclient"
+	"github.com/c360/semstreams/types"
 )
 
 type StoreIntegrationSuite struct {
@@ -51,11 +52,12 @@ func (s *StoreIntegrationSuite) TestCreateAndGet() {
 		RuntimeState: StateNotDeployed,
 		Nodes: []FlowNode{
 			{
-				ID:       "node-1",
-				Type:     "udp",
-				Name:     "UDP Input",
-				Position: Position{X: 100, Y: 100},
-				Config:   map[string]any{"port": 5000},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "UDP Input",
+				Position:  Position{X: 100, Y: 100},
+				Config:    map[string]any{"port": 5000},
 			},
 		},
 		Connections: []FlowConnection{},
@@ -83,7 +85,8 @@ func (s *StoreIntegrationSuite) TestCreateAndGet() {
 	s.Equal(int64(1), retrieved.Version)
 	s.Len(retrieved.Nodes, 1)
 	s.Equal("node-1", retrieved.Nodes[0].ID)
-	s.Equal("udp", retrieved.Nodes[0].Type)
+	s.Equal("udp", retrieved.Nodes[0].Component)
+	s.Equal(types.ComponentTypeInput, retrieved.Nodes[0].Type)
 }
 
 // TestCreateDuplicate tests that creating a duplicate flow returns an error
@@ -268,25 +271,28 @@ func (s *StoreIntegrationSuite) TestComplexFlow() {
 		RuntimeState: StateNotDeployed,
 		Nodes: []FlowNode{
 			{
-				ID:       "node-1",
-				Type:     "udp",
-				Name:     "UDP Input",
-				Position: Position{X: 100, Y: 100},
-				Config:   map[string]any{"port": 5000, "protocol": "mavlink"},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "UDP Input",
+				Position:  Position{X: 100, Y: 100},
+				Config:    map[string]any{"port": 5000, "protocol": "mavlink"},
 			},
 			{
-				ID:       "node-2",
-				Type:     "graph-processor",
-				Name:     "Graph Processor",
-				Position: Position{X: 300, Y: 100},
-				Config:   map[string]any{"enabled": true},
+				ID:        "node-2",
+				Component: "graph-processor",
+				Type:      types.ComponentTypeProcessor,
+				Name:      "Graph Processor",
+				Position:  Position{X: 300, Y: 100},
+				Config:    map[string]any{"enabled": true},
 			},
 			{
-				ID:       "node-3",
-				Type:     "websocket",
-				Name:     "WebSocket Output",
-				Position: Position{X: 500, Y: 100},
-				Config:   map[string]any{"port": 8080},
+				ID:        "node-3",
+				Component: "websocket",
+				Type:      types.ComponentTypeOutput,
+				Name:      "WebSocket Output",
+				Position:  Position{X: 500, Y: 100},
+				Config:    map[string]any{"port": 8080},
 			},
 		},
 		Connections: []FlowConnection{

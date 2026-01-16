@@ -27,8 +27,8 @@ func TestRuntimeHealthResponse_JSONMarshaling(t *testing.T) {
 		Components: []ComponentHealth{
 			{
 				Name:          "udp-source",
-				ComponentID:   "udp",
-				ComponentType: types.ComponentTypeInput,
+				Component:     "udp",
+				Type:          types.ComponentTypeInput,
 				Status:        "running",
 				Healthy:       true,
 				Message:       "Processing messages",
@@ -39,8 +39,8 @@ func TestRuntimeHealthResponse_JSONMarshaling(t *testing.T) {
 			},
 			{
 				Name:          "processor",
-				ComponentID:   "graph-processor",
-				ComponentType: types.ComponentTypeProcessor,
+				Component:     "graph-processor",
+				Type:          types.ComponentTypeProcessor,
 				Status:        "degraded",
 				Healthy:       false,
 				Message:       "NATS connection slow",
@@ -74,8 +74,8 @@ func TestRuntimeHealthResponse_JSONMarshaling(t *testing.T) {
 	// Verify first component
 	comp1 := decoded.Components[0]
 	assert.Equal(t, "udp-source", comp1.Name)
-	assert.Equal(t, "udp", comp1.ComponentID)
-	assert.Equal(t, types.ComponentTypeInput, comp1.ComponentType)
+	assert.Equal(t, "udp", comp1.Component)
+	assert.Equal(t, types.ComponentTypeInput, comp1.Type)
 	assert.Equal(t, "running", comp1.Status)
 	assert.True(t, comp1.Healthy)
 	assert.NotNil(t, comp1.StartTime)
@@ -105,8 +105,8 @@ func TestRuntimeHealthResponse_NullFields(t *testing.T) {
 		Components: []ComponentHealth{
 			{
 				Name:          "stopped-component",
-				ComponentID:   "graph-processor",
-				ComponentType: types.ComponentTypeProcessor,
+				Component:     "graph-processor",
+				Type:          types.ComponentTypeProcessor,
 				Status:        "stopped",
 				Healthy:       false,
 				Message:       "Component not started",

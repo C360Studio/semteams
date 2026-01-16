@@ -49,9 +49,9 @@ type OverallHealth struct {
 // ComponentHealth represents health and timing for a single component
 type ComponentHealth struct {
 	Name          string              `json:"name"`
-	ComponentID   string              `json:"component_id"`   // Factory name (e.g., "udp", "graph-processor")
-	ComponentType types.ComponentType `json:"component_type"` // Enum (e.g., "input", "processor")
-	Status        string              `json:"status"`         // "running", "degraded", "error", "stopped"
+	Component     string              `json:"component"` // Component factory name (e.g., "udp", "graph-processor")
+	Type          types.ComponentType `json:"type"`      // Component category (input/processor/output/storage/gateway)
+	Status        string              `json:"status"`    // "running", "degraded", "error", "stopped"
 	Healthy       bool                `json:"healthy"`
 	Message       string              `json:"message"`
 	StartTime     *time.Time          `json:"start_time"`     // ISO 8601 timestamp, null if not started
@@ -80,16 +80,16 @@ func (fs *FlowService) handleRuntimeHealth(w http.ResponseWriter, r *http.Reques
 
 	// Build component list from flow nodes
 	componentNames := make([]string, 0, len(flow.Nodes))
-	componentIDs := make(map[string]string)
+	components := make(map[string]string)
 	componentTypes := make(map[string]types.ComponentType)
 	for _, node := range flow.Nodes {
 		componentNames = append(componentNames, node.Name)
-		componentIDs[node.Name] = node.ComponentID
-		componentTypes[node.Name] = node.ComponentType
+		components[node.Name] = node.Component
+		componentTypes[node.Name] = node.Type
 	}
 
 	// Get component health from ComponentManager
-	response, err := fs.getComponentsHealth(ctx, componentNames, componentIDs, componentTypes)
+	response, err := fs.getComponentsHealth(ctx, componentNames, components, componentTypes)
 	if err != nil {
 		fs.logger.Error("Failed to get component health", "flow_id", flowID, "error", err)
 		// Return partial response with error status
@@ -118,7 +118,7 @@ func (fs *FlowService) handleRuntimeHealth(w http.ResponseWriter, r *http.Reques
 func (fs *FlowService) getComponentsHealth(
 	_ context.Context,
 	componentNames []string,
-	componentIDs map[string]string,
+	components map[string]string,
 	componentTypes map[string]types.ComponentType,
 ) (*RuntimeHealthResponse, error) {
 	// Get ComponentManager from service manager
@@ -131,9 +131,9 @@ func (fs *FlowService) getComponentsHealth(
 	managedComponents := componentManager.GetManagedComponents()
 
 	// Build component health list and collect counts
-	components, runningCount, degradedCount, errorCount := fs.buildComponentHealthList(
+	healthList, runningCount, degradedCount, errorCount := fs.buildComponentHealthList(
 		componentNames,
-		componentIDs,
+		components,
 		componentTypes,
 		managedComponents,
 	)
@@ -148,18 +148,18 @@ func (fs *FlowService) getComponentsHealth(
 			DegradedCount: degradedCount,
 			ErrorCount:    errorCount,
 		},
-		Components: components,
+		Components: healthList,
 	}, nil
 }
 
 // buildComponentHealthList builds the component health list and returns status counts
 func (fs *FlowService) buildComponentHealthList(
 	componentNames []string,
-	componentIDs map[string]string,
+	components map[string]string,
 	componentTypes map[string]types.ComponentType,
 	managedComponents map[string]*component.ManagedComponent,
 ) ([]ComponentHealth, int, int, int) {
-	components := make([]ComponentHealth, 0, len(componentNames))
+	healthList := make([]ComponentHealth, 0, len(componentNames))
 	runningCount := 0
 	degradedCount := 0
 	errorCount := 0
@@ -168,13 +168,13 @@ func (fs *FlowService) buildComponentHealthList(
 		mc, exists := managedComponents[name]
 		if !exists {
 			// Component not found - likely not started yet
-			components = append(components, ComponentHealth{
-				Name:          name,
-				ComponentID:   componentIDs[name],
-				ComponentType: componentTypes[name],
-				Status:        "stopped",
-				Healthy:       false,
-				Message:       "Component not started",
+			healthList = append(healthList, ComponentHealth{
+				Name:      name,
+				Component: components[name],
+				Type:      componentTypes[name],
+				Status:    "stopped",
+				Healthy:   false,
+				Message:   "Component not started",
 			})
 			errorCount++
 			continue
@@ -195,8 +195,8 @@ func (fs *FlowService) buildComponentHealthList(
 		// Build component health
 		compHealth := ComponentHealth{
 			Name:          name,
-			ComponentID:   componentIDs[name],
-			ComponentType: componentTypes[name],
+			Component:     components[name],
+			Type:          componentTypes[name],
 			Status:        status,
 			Healthy:       healthy,
 			Message:       message,
@@ -212,7 +212,7 @@ func (fs *FlowService) buildComponentHealthList(
 			}
 		}
 
-		components = append(components, compHealth)
+		healthList = append(healthList, compHealth)
 
 		// Update counts
 		if status == "running" && healthy {
@@ -224,7 +224,7 @@ func (fs *FlowService) buildComponentHealthList(
 		}
 	}
 
-	return components, runningCount, degradedCount, errorCount
+	return healthList, runningCount, degradedCount, errorCount
 }
 
 // calculateComponentTiming calculates start time, last activity, and uptime for a component

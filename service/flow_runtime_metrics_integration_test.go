@@ -38,28 +38,28 @@ func TestRuntimeMetricsIntegration(t *testing.T) {
 		Name: "Metrics Test Flow",
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:            "node1",
-				Name:          "udp-input",
-				ComponentID:   "udp",
-				ComponentType: types.ComponentTypeInput,
+				ID:        "node1",
+				Name:      "udp-input",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
 				Config: map[string]any{
 					"port": 8080,
 				},
 			},
 			{
-				ID:            "node2",
-				Name:          "json-processor",
-				ComponentID:   "json-filter",
-				ComponentType: types.ComponentTypeProcessor,
+				ID:        "node2",
+				Name:      "json-processor",
+				Component: "json-filter",
+				Type:      types.ComponentTypeProcessor,
 				Config: map[string]any{
 					"filter": "$.data",
 				},
 			},
 			{
-				ID:            "node3",
-				Name:          "file-output",
-				ComponentID:   "file",
-				ComponentType: types.ComponentTypeOutput,
+				ID:        "node3",
+				Name:      "file-output",
+				Component: "file",
+				Type:      types.ComponentTypeOutput,
 				Config: map[string]any{
 					"path": "/tmp/output.jsonl",
 				},
@@ -118,7 +118,7 @@ func TestRuntimeMetricsIntegration(t *testing.T) {
 		componentNames := make(map[string]bool)
 		for _, comp := range response.Components {
 			componentNames[comp.Name] = true
-			assert.NotEmpty(t, comp.ComponentType)
+			assert.NotEmpty(t, comp.Type)
 		}
 
 		assert.True(t, componentNames["udp-input"])
@@ -244,10 +244,10 @@ func TestRuntimeMetrics_WithMockPrometheus(t *testing.T) {
 		Name: "Prometheus Test Flow",
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:            "node1",
-				Name:          "test-component",
-				ComponentID:   "udp",
-				ComponentType: types.ComponentTypeInput,
+				ID:        "node1",
+				Name:      "test-component",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
 			},
 		},
 		RuntimeState: flowstore.StateRunning,
@@ -300,7 +300,7 @@ func TestRuntimeMetrics_WithMockPrometheus(t *testing.T) {
 	// Verify component has data
 	comp := response.Components[0]
 	assert.Equal(t, "test-component", comp.Name)
-	assert.Equal(t, types.ComponentTypeInput, comp.ComponentType)
+	assert.Equal(t, types.ComponentTypeInput, comp.Type)
 
 	// Throughput might be populated depending on mock implementation
 	t.Logf("Component throughput: %v", comp.Throughput)

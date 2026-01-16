@@ -687,9 +687,7 @@ components:
                 nodes:
                     items:
                         properties:
-                            component_id:
-                                type: string
-                            component_type:
+                            component:
                                 type: string
                             config:
                                 additionalProperties: {}
@@ -708,10 +706,12 @@ components:
                                     - x
                                     - "y"
                                 type: object
+                            type:
+                                type: string
                         required:
                             - id
-                            - component_id
-                            - component_type
+                            - component
+                            - type
                             - name
                             - position
                             - config
@@ -772,9 +772,7 @@ components:
                 components:
                     items:
                         properties:
-                            component_id:
-                                type: string
-                            component_type:
+                            component:
                                 type: string
                             details: {}
                             healthy:
@@ -793,13 +791,15 @@ components:
                                 type: string
                             status:
                                 type: string
+                            type:
+                                type: string
                             uptime_seconds:
                                 nullable: true
                                 type: number
                         required:
                             - name
-                            - component_id
-                            - component_type
+                            - component
+                            - type
                             - status
                             - healthy
                             - message
@@ -880,9 +880,7 @@ components:
                 components:
                     items:
                         properties:
-                            component_id:
-                                type: string
-                            component_type:
+                            component:
                                 type: string
                             error_rate:
                                 nullable: true
@@ -903,10 +901,12 @@ components:
                             throughput:
                                 nullable: true
                                 type: number
+                            type:
+                                type: string
                         required:
                             - name
-                            - component_id
-                            - component_type
+                            - component
+                            - type
                             - status
                         type: object
                     type: array

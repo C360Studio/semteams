@@ -17,6 +17,7 @@ import (
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360/semstreams/types"
 )
 
 type EngineIntegrationSuite struct {
@@ -102,11 +103,12 @@ func (s *EngineIntegrationSuite) TestDeployFlow() {
 		RuntimeState: flowstore.StateNotDeployed,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:       "node-1",
-				Type:     "udp",
-				Name:     "udp-1",
-				Position: flowstore.Position{X: 100, Y: 100},
-				Config:   map[string]any{"port": 5000},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "udp-1",
+				Position:  flowstore.Position{X: 100, Y: 100},
+				Config:    map[string]any{"port": 5000},
 			},
 		},
 		Connections: []flowstore.FlowConnection{},
@@ -154,11 +156,12 @@ func (s *EngineIntegrationSuite) TestStartFlow() {
 		RuntimeState: flowstore.StateNotDeployed,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:       "node-1",
-				Type:     "udp",
-				Name:     "udp-start-1",
-				Position: flowstore.Position{X: 100, Y: 100},
-				Config:   map[string]any{"port": 5001},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "udp-start-1",
+				Position:  flowstore.Position{X: 100, Y: 100},
+				Config:    map[string]any{"port": 5001},
 			},
 		},
 		Connections: []flowstore.FlowConnection{},
@@ -215,11 +218,12 @@ func (s *EngineIntegrationSuite) TestStopFlow() {
 		RuntimeState: flowstore.StateNotDeployed,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:       "node-1",
-				Type:     "udp",
-				Name:     "udp-stop-1",
-				Position: flowstore.Position{X: 100, Y: 100},
-				Config:   map[string]any{"port": 5002},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "udp-stop-1",
+				Position:  flowstore.Position{X: 100, Y: 100},
+				Config:    map[string]any{"port": 5002},
 			},
 		},
 		Connections: []flowstore.FlowConnection{},
@@ -259,11 +263,12 @@ func (s *EngineIntegrationSuite) TestStopNotRunningFlow() {
 		RuntimeState: flowstore.StateNotDeployed,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:       "node-1",
-				Type:     "udp",
-				Name:     "udp-minimal",
-				Position: flowstore.Position{X: 100, Y: 100},
-				Config:   map[string]any{"port": 5003},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "udp-minimal",
+				Position:  flowstore.Position{X: 100, Y: 100},
+				Config:    map[string]any{"port": 5003},
 			},
 		},
 		Connections: []flowstore.FlowConnection{},
@@ -290,11 +295,12 @@ func (s *EngineIntegrationSuite) TestUndeployFlow() {
 		RuntimeState: flowstore.StateNotDeployed,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:       "node-1",
-				Type:     "udp",
-				Name:     "udp-undeploy-1",
-				Position: flowstore.Position{X: 100, Y: 100},
-				Config:   map[string]any{"port": 5004},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "udp-undeploy-1",
+				Position:  flowstore.Position{X: 100, Y: 100},
+				Config:    map[string]any{"port": 5004},
 			},
 		},
 		Connections: []flowstore.FlowConnection{},
@@ -330,11 +336,12 @@ func (s *EngineIntegrationSuite) TestUndeployRunningFlow() {
 		RuntimeState: flowstore.StateNotDeployed,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:       "node-1",
-				Type:     "udp",
-				Name:     "udp-running-1",
-				Position: flowstore.Position{X: 100, Y: 100},
-				Config:   map[string]any{"port": 5005},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "udp-running-1",
+				Position:  flowstore.Position{X: 100, Y: 100},
+				Config:    map[string]any{"port": 5005},
 			},
 		},
 		Connections: []flowstore.FlowConnection{},
@@ -365,18 +372,20 @@ func (s *EngineIntegrationSuite) TestFullLifecycle() {
 		RuntimeState: flowstore.StateNotDeployed,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:       "node-1",
-				Type:     "udp",
-				Name:     "udp-lifecycle-1",
-				Position: flowstore.Position{X: 100, Y: 100},
-				Config:   map[string]any{"port": 5006},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "udp-lifecycle-1",
+				Position:  flowstore.Position{X: 100, Y: 100},
+				Config:    map[string]any{"port": 5006},
 			},
 			{
-				ID:       "node-2",
-				Type:     "websocket",
-				Name:     "ws-lifecycle-1",
-				Position: flowstore.Position{X: 300, Y: 100},
-				Config:   map[string]any{"port": 8080},
+				ID:        "node-2",
+				Component: "websocket",
+				Type:      types.ComponentTypeOutput,
+				Name:      "ws-lifecycle-1",
+				Position:  flowstore.Position{X: 300, Y: 100},
+				Config:    map[string]any{"port": 8080},
 			},
 		},
 		Connections: []flowstore.FlowConnection{

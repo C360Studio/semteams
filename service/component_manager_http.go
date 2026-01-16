@@ -336,8 +336,8 @@ func (cm *ComponentManager) handleComponentsList(w http.ResponseWriter, r *http.
 		// Get component type and ID from config if available
 		if cm.componentConfigs != nil {
 			if compConfig, ok := cm.componentConfigs[name]; ok {
-				compInfo["component_id"] = compConfig.Name           // Factory name (e.g., "udp", "graph-processor")
-				compInfo["component_type"] = string(compConfig.Type) // Enum (e.g., "input", "processor")
+				compInfo["component"] = compConfig.Name    // Component factory name (e.g., "udp", "graph-processor")
+				compInfo["type"] = string(compConfig.Type) // Component category (input/processor/output/storage/gateway)
 				compInfo["enabled"] = compConfig.Enabled
 			}
 		}

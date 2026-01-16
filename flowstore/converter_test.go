@@ -9,15 +9,15 @@ import (
 
 func TestFromComponentConfigs(t *testing.T) {
 	tests := []struct {
-		name               string
-		flowName           string
-		configs            map[string]types.ComponentConfig
-		wantNodeCount      int
-		wantNodeIDs        []string
-		wantComponentIDs   map[string]string              // nodeID -> componentID (factory name)
-		wantComponentTypes map[string]types.ComponentType // nodeID -> componentType (category)
-		wantState          RuntimeState
-		wantHasDeployed    bool
+		name            string
+		flowName        string
+		configs         map[string]types.ComponentConfig
+		wantNodeCount   int
+		wantNodeIDs     []string
+		wantComponents  map[string]string              // nodeID -> component (factory name)
+		wantTypes       map[string]types.ComponentType // nodeID -> type (category)
+		wantState       RuntimeState
+		wantHasDeployed bool
 	}{
 		{
 			name:            "empty configs creates empty flow",
@@ -39,12 +39,12 @@ func TestFromComponentConfigs(t *testing.T) {
 					Config:  json.RawMessage(`{"port": 14550}`),
 				},
 			},
-			wantNodeCount:      1,
-			wantNodeIDs:        []string{"udp-input"},
-			wantComponentIDs:   map[string]string{"udp-input": "udp"},
-			wantComponentTypes: map[string]types.ComponentType{"udp-input": types.ComponentTypeInput},
-			wantState:          StateRunning,
-			wantHasDeployed:    true,
+			wantNodeCount:   1,
+			wantNodeIDs:     []string{"udp-input"},
+			wantComponents:  map[string]string{"udp-input": "udp"},
+			wantTypes:       map[string]types.ComponentType{"udp-input": types.ComponentTypeInput},
+			wantState:       StateRunning,
+			wantHasDeployed: true,
 		},
 		{
 			name:     "multiple components",
@@ -71,12 +71,12 @@ func TestFromComponentConfigs(t *testing.T) {
 			},
 			wantNodeCount: 3,
 			wantNodeIDs:   []string{"file-output", "graph-processor", "udp-input"}, // sorted
-			wantComponentIDs: map[string]string{
+			wantComponents: map[string]string{
 				"udp-input":       "udp",
 				"graph-processor": "graph-processor",
 				"file-output":     "file",
 			},
-			wantComponentTypes: map[string]types.ComponentType{
+			wantTypes: map[string]types.ComponentType{
 				"udp-input":       types.ComponentTypeInput,
 				"graph-processor": types.ComponentTypeProcessor,
 				"file-output":     types.ComponentTypeOutput,
@@ -99,12 +99,12 @@ func TestFromComponentConfigs(t *testing.T) {
 					Enabled: false,
 				},
 			},
-			wantNodeCount:      1,
-			wantNodeIDs:        []string{"enabled-input"},
-			wantComponentIDs:   map[string]string{"enabled-input": "udp"},
-			wantComponentTypes: map[string]types.ComponentType{"enabled-input": types.ComponentTypeInput},
-			wantState:          StateRunning,
-			wantHasDeployed:    true,
+			wantNodeCount:   1,
+			wantNodeIDs:     []string{"enabled-input"},
+			wantComponents:  map[string]string{"enabled-input": "udp"},
+			wantTypes:       map[string]types.ComponentType{"enabled-input": types.ComponentTypeInput},
+			wantState:       StateRunning,
+			wantHasDeployed: true,
 		},
 	}
 
@@ -148,20 +148,20 @@ func TestFromComponentConfigs(t *testing.T) {
 				}
 			}
 
-			// Verify component IDs (factory names)
+			// Verify components (factory names)
 			for _, node := range flow.Nodes {
-				if wantID, ok := tt.wantComponentIDs[node.ID]; ok {
-					if node.ComponentID != wantID {
-						t.Errorf("node %s ComponentID = %v, want %v", node.ID, node.ComponentID, wantID)
+				if want, ok := tt.wantComponents[node.ID]; ok {
+					if node.Component != want {
+						t.Errorf("node %s Component = %v, want %v", node.ID, node.Component, want)
 					}
 				}
 			}
 
-			// Verify component types (categories)
+			// Verify types (categories)
 			for _, node := range flow.Nodes {
-				if wantType, ok := tt.wantComponentTypes[node.ID]; ok {
-					if node.ComponentType != wantType {
-						t.Errorf("node %s ComponentType = %v, want %v", node.ID, node.ComponentType, wantType)
+				if want, ok := tt.wantTypes[node.ID]; ok {
+					if node.Type != want {
+						t.Errorf("node %s Type = %v, want %v", node.ID, node.Type, want)
 					}
 				}
 			}

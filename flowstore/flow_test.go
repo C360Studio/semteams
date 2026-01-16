@@ -26,12 +26,12 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "udp",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "UDP Input",
-						Position:      Position{X: 100, Y: 100},
-						Config:        map[string]any{"port": 5000},
+						ID:        "node-1",
+						Component: "udp",
+						Type:      types.ComponentTypeInput,
+						Name:      "UDP Input",
+						Position:  Position{X: 100, Y: 100},
+						Config:    map[string]any{"port": 5000},
 					},
 				},
 				Connections: []FlowConnection{},
@@ -84,11 +84,11 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "",
-						ComponentID:   "udp",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "UDP Input",
-						Position:      Position{X: 100, Y: 100},
+						ID:        "",
+						Component: "udp",
+						Type:      types.ComponentTypeInput,
+						Name:      "UDP Input",
+						Position:  Position{X: 100, Y: 100},
 					},
 				},
 				Connections: []FlowConnection{},
@@ -104,11 +104,11 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "UDP Input",
-						Position:      Position{X: 100, Y: 100},
+						ID:        "node-1",
+						Component: "",
+						Type:      types.ComponentTypeInput,
+						Name:      "UDP Input",
+						Position:  Position{X: 100, Y: 100},
 					},
 				},
 				Connections: []FlowConnection{},
@@ -124,11 +124,11 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "udp",
-						ComponentType: "",
-						Name:          "UDP Input",
-						Position:      Position{X: 100, Y: 100},
+						ID:        "node-1",
+						Component: "udp",
+						Type:      "",
+						Name:      "UDP Input",
+						Position:  Position{X: 100, Y: 100},
 					},
 				},
 				Connections: []FlowConnection{},
@@ -144,11 +144,11 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "udp",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "",
-						Position:      Position{X: 100, Y: 100},
+						ID:        "node-1",
+						Component: "udp",
+						Type:      types.ComponentTypeInput,
+						Name:      "",
+						Position:  Position{X: 100, Y: 100},
 					},
 				},
 				Connections: []FlowConnection{},
@@ -164,18 +164,18 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "udp",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "UDP Input 1",
-						Position:      Position{X: 100, Y: 100},
+						ID:        "node-1",
+						Component: "udp",
+						Type:      types.ComponentTypeInput,
+						Name:      "UDP Input 1",
+						Position:  Position{X: 100, Y: 100},
 					},
 					{
-						ID:            "node-1", // Duplicate ID
-						ComponentID:   "graph-processor",
-						ComponentType: types.ComponentTypeProcessor,
-						Name:          "Graph Processor",
-						Position:      Position{X: 300, Y: 100},
+						ID:        "node-1", // Duplicate ID
+						Component: "graph-processor",
+						Type:      types.ComponentTypeProcessor,
+						Name:      "Graph Processor",
+						Position:  Position{X: 300, Y: 100},
 					},
 				},
 				Connections: []FlowConnection{},
@@ -191,11 +191,11 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "udp",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "UDP Input",
-						Position:      Position{X: 100, Y: 100},
+						ID:        "node-1",
+						Component: "udp",
+						Type:      types.ComponentTypeInput,
+						Name:      "UDP Input",
+						Position:  Position{X: 100, Y: 100},
 					},
 				},
 				Connections: []FlowConnection{
@@ -219,11 +219,11 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "udp",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "UDP Input",
-						Position:      Position{X: 100, Y: 100},
+						ID:        "node-1",
+						Component: "udp",
+						Type:      types.ComponentTypeInput,
+						Name:      "UDP Input",
+						Position:  Position{X: 100, Y: 100},
 					},
 				},
 				Connections: []FlowConnection{
@@ -247,18 +247,18 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "udp",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "Node 1",
-						Position:      Position{X: 100, Y: 100},
+						ID:        "node-1",
+						Component: "udp",
+						Type:      types.ComponentTypeInput,
+						Name:      "Node 1",
+						Position:  Position{X: 100, Y: 100},
 					},
 					{
-						ID:            "node-2",
-						ComponentID:   "graph-processor",
-						ComponentType: types.ComponentTypeProcessor,
-						Name:          "Node 2",
-						Position:      Position{X: 300, Y: 100},
+						ID:        "node-2",
+						Component: "graph-processor",
+						Type:      types.ComponentTypeProcessor,
+						Name:      "Node 2",
+						Position:  Position{X: 300, Y: 100},
 					},
 				},
 				Connections: []FlowConnection{
@@ -282,18 +282,18 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "udp",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "Node 1",
-						Position:      Position{X: 100, Y: 100},
+						ID:        "node-1",
+						Component: "udp",
+						Type:      types.ComponentTypeInput,
+						Name:      "Node 1",
+						Position:  Position{X: 100, Y: 100},
 					},
 					{
-						ID:            "node-2",
-						ComponentID:   "graph-processor",
-						ComponentType: types.ComponentTypeProcessor,
-						Name:          "Node 2",
-						Position:      Position{X: 300, Y: 100},
+						ID:        "node-2",
+						Component: "graph-processor",
+						Type:      types.ComponentTypeProcessor,
+						Name:      "Node 2",
+						Position:  Position{X: 300, Y: 100},
 					},
 				},
 				Connections: []FlowConnection{
@@ -317,20 +317,20 @@ func TestFlowValidation(t *testing.T) {
 				RuntimeState: StateNotDeployed,
 				Nodes: []FlowNode{
 					{
-						ID:            "node-1",
-						ComponentID:   "udp",
-						ComponentType: types.ComponentTypeInput,
-						Name:          "UDP Input",
-						Position:      Position{X: 100, Y: 100},
-						Config:        map[string]any{"port": 5000},
+						ID:        "node-1",
+						Component: "udp",
+						Type:      types.ComponentTypeInput,
+						Name:      "UDP Input",
+						Position:  Position{X: 100, Y: 100},
+						Config:    map[string]any{"port": 5000},
 					},
 					{
-						ID:            "node-2",
-						ComponentID:   "graph-processor",
-						ComponentType: types.ComponentTypeProcessor,
-						Name:          "Graph Processor",
-						Position:      Position{X: 300, Y: 100},
-						Config:        map[string]any{},
+						ID:        "node-2",
+						Component: "graph-processor",
+						Type:      types.ComponentTypeProcessor,
+						Name:      "Graph Processor",
+						Position:  Position{X: 300, Y: 100},
+						Config:    map[string]any{},
 					},
 				},
 				Connections: []FlowConnection{
@@ -407,12 +407,12 @@ func TestRuntimeStateConstants(t *testing.T) {
 func TestFlowNodeValidation(t *testing.T) {
 	// This test ensures that the Flow.Validate() method properly validates nodes
 	node := FlowNode{
-		ID:            "node-1",
-		ComponentID:   "udp",
-		ComponentType: types.ComponentTypeInput,
-		Name:          "Test Node",
-		Position:      Position{X: 100, Y: 200},
-		Config:        map[string]any{"port": 5000},
+		ID:        "node-1",
+		Component: "udp",
+		Type:      types.ComponentTypeInput,
+		Name:      "Test Node",
+		Position:  Position{X: 100, Y: 200},
+		Config:    map[string]any{"port": 5000},
 	}
 
 	flow := Flow{
@@ -434,8 +434,8 @@ func TestFlowNodeValidation(t *testing.T) {
 		modifyFn func(*FlowNode)
 	}{
 		{"empty ID", func(n *FlowNode) { n.ID = "" }},
-		{"empty ComponentID", func(n *FlowNode) { n.ComponentID = "" }},
-		{"empty ComponentType", func(n *FlowNode) { n.ComponentType = "" }},
+		{"empty Component", func(n *FlowNode) { n.Component = "" }},
+		{"empty Type", func(n *FlowNode) { n.Type = "" }},
 		{"empty Name", func(n *FlowNode) { n.Name = "" }},
 	}
 
@@ -471,18 +471,18 @@ func TestFlowConnectionValidation(t *testing.T) {
 		RuntimeState: StateNotDeployed,
 		Nodes: []FlowNode{
 			{
-				ID:            "node-1",
-				ComponentID:   "udp",
-				ComponentType: types.ComponentTypeInput,
-				Name:          "Node 1",
-				Position:      Position{X: 100, Y: 100},
+				ID:        "node-1",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
+				Name:      "Node 1",
+				Position:  Position{X: 100, Y: 100},
 			},
 			{
-				ID:            "node-2",
-				ComponentID:   "graph-processor",
-				ComponentType: types.ComponentTypeProcessor,
-				Name:          "Node 2",
-				Position:      Position{X: 300, Y: 100},
+				ID:        "node-2",
+				Component: "graph-processor",
+				Type:      types.ComponentTypeProcessor,
+				Name:      "Node 2",
+				Position:  Position{X: 300, Y: 100},
 			},
 		},
 		Connections: []FlowConnection{},

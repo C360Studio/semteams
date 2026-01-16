@@ -40,13 +40,13 @@ type PlatformHealth struct {
 // ComponentInfo represents a single component's information
 // Matches SemStreams /components/list API response format
 type ComponentInfo struct {
-	Name          string `json:"name"`
-	ComponentID   string `json:"component_id"`   // Factory name (e.g., "udp", "graph-processor")
-	ComponentType string `json:"component_type"` // Enum (e.g., "input", "processor")
-	Enabled       bool   `json:"enabled"`
-	State         string `json:"state"`
-	Healthy       bool   `json:"healthy"`
-	LastError     string `json:"last_error,omitempty"`
+	Name      string `json:"name"`
+	Component string `json:"component"` // Component factory name (e.g., "udp", "graph-processor")
+	Type      string `json:"type"`      // Component category (input/processor/output/storage/gateway)
+	Enabled   bool   `json:"enabled"`
+	State     string `json:"state"`
+	Healthy   bool   `json:"healthy"`
+	LastError string `json:"last_error,omitempty"`
 }
 
 // GetPlatformHealth retrieves overall platform health

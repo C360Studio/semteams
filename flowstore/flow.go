@@ -37,12 +37,12 @@ type Flow struct {
 
 // FlowNode represents a component instance on the canvas
 type FlowNode struct {
-	ID            string              `json:"id"`             // Unique instance ID
-	ComponentID   string              `json:"component_id"`   // Factory name (e.g., "udp", "graph-processor")
-	ComponentType types.ComponentType `json:"component_type"` // Category (input/processor/output/storage/gateway)
-	Name          string              `json:"name"`           // Instance name
-	Position      Position            `json:"position"`       // Canvas coordinates
-	Config        map[string]any      `json:"config"`         // Component configuration
+	ID        string              `json:"id"`        // Unique instance ID
+	Component string              `json:"component"` // Component factory name (e.g., "udp", "graph-processor")
+	Type      types.ComponentType `json:"type"`      // Component category (input/processor/output/storage/gateway)
+	Name      string              `json:"name"`      // Instance name
+	Position  Position            `json:"position"`  // Canvas coordinates
+	Config    map[string]any      `json:"config"`    // Component configuration
 }
 
 // FlowConnection represents a connection between two component ports
@@ -106,15 +106,15 @@ func (f *Flow) Validate() error {
 				fmt.Errorf("node at index %d has empty ID", i),
 				"flowstore", "Validate", "node ID validation failed")
 		}
-		if node.ComponentID == "" {
+		if node.Component == "" {
 			return errs.WrapInvalid(
-				fmt.Errorf("node '%s' has empty component_id", node.ID),
-				"flowstore", "Validate", "node component_id validation failed")
+				fmt.Errorf("node '%s' has empty component", node.ID),
+				"flowstore", "Validate", "node component validation failed")
 		}
-		if node.ComponentType == "" {
+		if node.Type == "" {
 			return errs.WrapInvalid(
-				fmt.Errorf("node '%s' has empty component_type", node.ID),
-				"flowstore", "Validate", "node component_type validation failed")
+				fmt.Errorf("node '%s' has empty type", node.ID),
+				"flowstore", "Validate", "node type validation failed")
 		}
 		if node.Name == "" {
 			return errs.WrapInvalid(

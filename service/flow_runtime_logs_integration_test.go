@@ -473,10 +473,10 @@ func createTestFlowInStore(t *testing.T, ctx context.Context, store *flowstore.S
 		Version: 1,
 		Nodes: []flowstore.FlowNode{
 			{
-				ID:            "node-1",
-				Name:          "test-component",
-				ComponentID:   "udp",
-				ComponentType: types.ComponentTypeInput,
+				ID:        "node-1",
+				Name:      "test-component",
+				Component: "udp",
+				Type:      types.ComponentTypeInput,
 			},
 		},
 	}

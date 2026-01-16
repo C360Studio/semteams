@@ -50,14 +50,14 @@ type RuntimeMetricsResponse struct {
 
 // ComponentMetric represents metrics for a single component
 type ComponentMetric struct {
-	Name          string              `json:"name"`
-	ComponentID   string              `json:"component_id"`   // Factory name (e.g., "udp", "graph-processor")
-	ComponentType types.ComponentType `json:"component_type"` // Enum (e.g., "input", "processor")
-	Status        string              `json:"status"`
-	Throughput    *float64            `json:"throughput"`   // msgs/sec, null if unavailable
-	ErrorRate     *float64            `json:"error_rate"`   // errors/sec, null if unavailable
-	QueueDepth    *float64            `json:"queue_depth"`  // current queue depth, null if unavailable
-	RawCounters   *map[string]uint64  `json:"raw_counters"` // only present when Prometheus unavailable
+	Name        string              `json:"name"`
+	Component   string              `json:"component"` // Component factory name (e.g., "udp", "graph-processor")
+	Type        types.ComponentType `json:"type"`      // Component category (input/processor/output/storage/gateway)
+	Status      string              `json:"status"`
+	Throughput  *float64            `json:"throughput"`   // msgs/sec, null if unavailable
+	ErrorRate   *float64            `json:"error_rate"`   // errors/sec, null if unavailable
+	QueueDepth  *float64            `json:"queue_depth"`  // current queue depth, null if unavailable
+	RawCounters *map[string]uint64  `json:"raw_counters"` // only present when Prometheus unavailable
 }
 
 // componentTypeToMetricPrefix maps component types to their Prometheus metric prefixes
@@ -113,9 +113,9 @@ func (fs *FlowService) handleRuntimeMetrics(w http.ResponseWriter, r *http.Reque
 	components := make([]componentInfo, 0, len(flow.Nodes))
 	for _, node := range flow.Nodes {
 		components = append(components, componentInfo{
-			Name:          node.Name,
-			ComponentID:   node.ComponentID,
-			ComponentType: node.ComponentType,
+			Name:      node.Name,
+			Component: node.Component,
+			Type:      node.Type,
 		})
 	}
 
@@ -153,9 +153,9 @@ func (fs *FlowService) handleRuntimeMetrics(w http.ResponseWriter, r *http.Reque
 
 // componentInfo holds basic component information
 type componentInfo struct {
-	Name          string
-	ComponentID   string
-	ComponentType types.ComponentType
+	Name      string
+	Component string
+	Type      types.ComponentType
 }
 
 // queryPrometheusMetrics queries Prometheus HTTP API for computed metrics
@@ -178,17 +178,17 @@ func (fs *FlowService) queryPrometheusMetrics(ctx context.Context, components []
 
 	for _, comp := range components {
 		metric := ComponentMetric{
-			Name:          comp.Name,
-			ComponentID:   comp.ComponentID,
-			ComponentType: comp.ComponentType,
-			Status:        "unknown", // Will be updated if we add health status integration
+			Name:      comp.Name,
+			Component: comp.Component,
+			Type:      comp.Type,
+			Status:    "unknown", // Will be updated if we add health status integration
 		}
 
 		// Get metric prefix based on component type
-		metricPrefix, ok := componentTypeToMetricPrefix[string(comp.ComponentType)]
+		metricPrefix, ok := componentTypeToMetricPrefix[string(comp.Type)]
 		if !ok {
 			// Unknown type, try to infer from factory name
-			metricPrefix = inferMetricPrefix(comp.ComponentID)
+			metricPrefix = inferMetricPrefix(comp.Component)
 		}
 
 		// Sanitize component name to prevent PromQL injection
@@ -299,10 +299,10 @@ func (fs *FlowService) parseRawMetrics(ctx context.Context, components []compone
 
 	for _, comp := range components {
 		metric := ComponentMetric{
-			Name:          comp.Name,
-			ComponentID:   comp.ComponentID,
-			ComponentType: comp.ComponentType,
-			Status:        "unknown",
+			Name:      comp.Name,
+			Component: comp.Component,
+			Type:      comp.Type,
+			Status:    "unknown",
 		}
 
 		// Sanitize component name before using in metric extraction
@@ -359,10 +359,10 @@ func (fs *FlowService) buildHealthOnlyResponse(components []componentInfo) *Runt
 
 	for _, comp := range components {
 		componentMetrics = append(componentMetrics, ComponentMetric{
-			Name:          comp.Name,
-			ComponentID:   comp.ComponentID,
-			ComponentType: comp.ComponentType,
-			Status:        "unknown", // TODO: integrate with component manager health status
+			Name:      comp.Name,
+			Component: comp.Component,
+			Type:      comp.Type,
+			Status:    "unknown", // TODO: integrate with component manager health status
 		})
 	}
 

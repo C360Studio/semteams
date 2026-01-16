@@ -154,11 +154,12 @@ func (s *FlowServiceHTTPSuite) TestHTTP_CreateFlow() {
 		"name": "Test Flow 1",
 		"nodes": []map[string]any{
 			{
-				"id":       "node-1",
-				"type":     "udp",
-				"name":     "udp-1",
-				"position": map[string]int{"x": 100, "y": 100},
-				"config":   map[string]any{"port": 5000},
+				"id":        "node-1",
+				"component": "udp",
+				"type":      "input",
+				"name":      "udp-1",
+				"position":  map[string]int{"x": 100, "y": 100},
+				"config":    map[string]any{"port": 5000},
 			},
 		},
 		"connections": []any{},
@@ -343,11 +344,12 @@ func (s *FlowServiceHTTPSuite) TestHTTP_ValidateFlow() {
 		"name": "Validation Test",
 		"nodes": []map[string]any{
 			{
-				"id":       "node-1",
-				"type":     "udp",
-				"name":     "udp-validate",
-				"position": map[string]int{"x": 100, "y": 100},
-				"config":   map[string]any{"port": 5000},
+				"id":        "node-1",
+				"component": "udp",
+				"type":      "input",
+				"name":      "udp-validate",
+				"position":  map[string]int{"x": 100, "y": 100},
+				"config":    map[string]any{"port": 5000},
 			},
 		},
 		"connections": []any{},
@@ -376,10 +378,11 @@ func (s *FlowServiceHTTPSuite) TestHTTP_ValidateFlowInvalid() {
 		"name": "Invalid Flow",
 		"nodes": []map[string]any{
 			{
-				"id":       "node-1",
-				"type":     "filter",
-				"name":     "filter-invalid",
-				"position": map[string]int{"x": 100, "y": 100},
+				"id":        "node-1",
+				"component": "json-filter",
+				"type":      "processor",
+				"name":      "filter-invalid",
+				"position":  map[string]int{"x": 100, "y": 100},
 				"config": map[string]any{
 					"ports": map[string]any{
 						"inputs": []map[string]any{
@@ -421,11 +424,12 @@ func (s *FlowServiceHTTPSuite) TestHTTP_DeployFlow() {
 		"name": "Deploy Test",
 		"nodes": []map[string]any{
 			{
-				"id":       "node-1",
-				"type":     "udp",
-				"name":     "udp-deploy",
-				"position": map[string]int{"x": 100, "y": 100},
-				"config":   map[string]any{"port": 5001},
+				"id":        "node-1",
+				"component": "udp",
+				"type":      "input",
+				"name":      "udp-deploy",
+				"position":  map[string]int{"x": 100, "y": 100},
+				"config":    map[string]any{"port": 5001},
 			},
 		},
 		"connections": []any{},
@@ -452,11 +456,12 @@ func (s *FlowServiceHTTPSuite) TestHTTP_StartFlow() {
 		"name": "Start Test",
 		"nodes": []map[string]any{
 			{
-				"id":       "node-1",
-				"type":     "udp",
-				"name":     "udp-start",
-				"position": map[string]int{"x": 100, "y": 100},
-				"config":   map[string]any{"port": 5002},
+				"id":        "node-1",
+				"component": "udp",
+				"type":      "input",
+				"name":      "udp-start",
+				"position":  map[string]int{"x": 100, "y": 100},
+				"config":    map[string]any{"port": 5002},
 			},
 		},
 		"connections": []any{},
@@ -484,11 +489,12 @@ func (s *FlowServiceHTTPSuite) TestHTTP_StopFlow() {
 		"name": "Stop Test",
 		"nodes": []map[string]any{
 			{
-				"id":       "node-1",
-				"type":     "udp",
-				"name":     "udp-stop",
-				"position": map[string]int{"x": 100, "y": 100},
-				"config":   map[string]any{"port": 5003},
+				"id":        "node-1",
+				"component": "udp",
+				"type":      "input",
+				"name":      "udp-stop",
+				"position":  map[string]int{"x": 100, "y": 100},
+				"config":    map[string]any{"port": 5003},
 			},
 		},
 		"connections": []any{},
@@ -517,11 +523,12 @@ func (s *FlowServiceHTTPSuite) TestHTTP_UndeployFlow() {
 		"name": "Undeploy Test",
 		"nodes": []map[string]any{
 			{
-				"id":       "node-1",
-				"type":     "udp",
-				"name":     "udp-undeploy",
-				"position": map[string]int{"x": 100, "y": 100},
-				"config":   map[string]any{"port": 5004},
+				"id":        "node-1",
+				"component": "udp",
+				"type":      "input",
+				"name":      "udp-undeploy",
+				"position":  map[string]int{"x": 100, "y": 100},
+				"config":    map[string]any{"port": 5004},
 			},
 		},
 		"connections": []any{},
@@ -549,10 +556,11 @@ func (s *FlowServiceHTTPSuite) TestHTTP_DeployInvalidFlow() {
 		"name": "Invalid Deploy",
 		"nodes": []map[string]any{
 			{
-				"id":       "node-1",
-				"type":     "filter",
-				"name":     "filter-deploy-invalid",
-				"position": map[string]int{"x": 100, "y": 100},
+				"id":        "node-1",
+				"component": "json-filter",
+				"type":      "processor",
+				"name":      "filter-deploy-invalid",
+				"position":  map[string]int{"x": 100, "y": 100},
 				"config": map[string]any{
 					"ports": map[string]any{
 						"inputs": []map[string]any{
@@ -593,11 +601,12 @@ func (s *FlowServiceHTTPSuite) TestHTTP_FullLifecycle() {
 		"name": "HTTP Lifecycle Test",
 		"nodes": []map[string]any{
 			{
-				"id":       "node-1",
-				"type":     "udp",
-				"name":     "udp-lifecycle",
-				"position": map[string]int{"x": 100, "y": 100},
-				"config":   map[string]any{"port": 5005},
+				"id":        "node-1",
+				"component": "udp",
+				"type":      "input",
+				"name":      "udp-lifecycle",
+				"position":  map[string]int{"x": 100, "y": 100},
+				"config":    map[string]any{"port": 5005},
 			},
 		},
 		"connections": []any{},

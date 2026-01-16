@@ -138,7 +138,7 @@ func getFlowMessageSubjects(flow *flowstore.Flow) []string {
 
 	for _, node := range flow.Nodes {
 		// Component type determines subject prefix
-		prefix := getSubjectPrefix(string(node.ComponentType))
+		prefix := getSubjectPrefix(string(node.Type))
 		// Use NATS wildcard '>' for hierarchical matching
 		subject := fmt.Sprintf("%s.%s.>", prefix, node.Name)
 		subjects = append(subjects, subject)
@@ -240,7 +240,7 @@ func formatMessageEntries(entries []MessageLogEntry, flow *flowstore.Flow) []Run
 	// Build component name map for quick lookup
 	componentMap := make(map[string]string) // subject prefix -> component name
 	for _, node := range flow.Nodes {
-		prefix := getSubjectPrefix(string(node.ComponentType))
+		prefix := getSubjectPrefix(string(node.Type))
 		key := fmt.Sprintf("%s.%s", prefix, node.Name)
 		componentMap[key] = node.Name
 	}

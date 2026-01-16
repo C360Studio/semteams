@@ -169,11 +169,11 @@ func (s *TieredScenario) executeValidateProcessing(ctx context.Context, result *
 				)
 			}
 			graphStatus[comp.Name] = map[string]any{
-				"name":           comp.Name,
-				"component_id":   comp.ComponentID,
-				"component_type": comp.ComponentType,
-				"healthy":        comp.Healthy,
-				"state":          comp.State,
+				"name":      comp.Name,
+				"component": comp.Component,
+				"type":      comp.Type,
+				"healthy":   comp.Healthy,
+				"state":     comp.State,
 			}
 		}
 	}
