@@ -312,6 +312,206 @@ For implementation details, see:
 - `flow_runtime_messages.go` - NATS message flow filtering
 - `flow_runtime_logs.go` - SSE log streaming (if implemented)
 
+### WebSocket Status Stream
+
+Real-time flow status updates via WebSocket connection. This endpoint provides unified streaming of flow state changes, component health, metrics, and logs.
+
+```go
+// GET /flowbuilder/status/stream?flowId={flowId} - WebSocket status stream
+// Connection: WebSocket (ws:// or wss://)
+// Real-time streaming of all flow observability data
+```
+
+**Connection:**
+
+```bash
+wscat -c "ws://localhost:8080/flowbuilder/status/stream?flowId=my-flow-id"
+```
+
+**Message Types (Server → Client):**
+
+All messages are wrapped in a `StatusStreamEnvelope`:
+
+```json
+{
+    "type": "flow_status",
+    "id": "msg-uuid-12345",
+    "timestamp": 1705412345000,
+    "flow_id": "my-flow-id",
+    "payload": { ... }
+}
+```
+
+| Type | Trigger | Description |
+|------|---------|-------------|
+| `flow_status` | State change | Flow state transitions (deployed, running, stopped, failed) |
+| `component_health` | Every 5s | Component health status from ComponentManager |
+| `component_metrics` | As published | Real-time metrics from MetricsForwarder |
+| `log_entry` | As logged | Application logs via NATS LogForwarder |
+
+**Flow Status Payload:**
+
+```json
+{
+    "state": "running",
+    "prev_state": "deployed_stopped",
+    "timestamps": {
+        "created": "2025-01-15T10:00:00Z",
+        "deployed": "2025-01-15T10:05:00Z",
+        "started": "2025-01-15T10:05:30Z"
+    },
+    "error": null
+}
+```
+
+**Component Health Payload:**
+
+```json
+{
+    "udp-input": {
+        "healthy": true,
+        "status": "running",
+        "error_count": 0
+    },
+    "json-processor": {
+        "healthy": true,
+        "status": "processing",
+        "error_count": 2
+    }
+}
+```
+
+**Log Entry Payload:**
+
+```json
+{
+    "level": "INFO",
+    "source": "udp-input",
+    "message": "Packet received from 192.168.1.1:5000",
+    "fields": {
+        "bytes": 1024,
+        "remote_addr": "192.168.1.1:5000"
+    }
+}
+```
+
+**Component Metrics Payload:**
+
+```json
+{
+    "component": "udp-input",
+    "metrics": [
+        {
+            "name": "packets_received_total",
+            "type": "counter",
+            "value": 12345,
+            "labels": {"status": "success"}
+        }
+    ]
+}
+```
+
+**Client Commands (Client → Server):**
+
+Clients can filter what messages they receive:
+
+```json
+{
+    "command": "subscribe",
+    "message_types": ["flow_status", "log_entry"],
+    "log_level": "WARN",
+    "sources": ["udp-input", "json-processor"]
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `message_types` | Filter which message types to receive |
+| `log_level` | Minimum log level: DEBUG, INFO, WARN, ERROR |
+| `sources` | Filter logs/metrics by component names |
+
+**Architecture:**
+
+The WebSocket status stream uses NATS as the backbone for all real-time data:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Application                               │
+│  ┌─────────────┐  ┌──────────────┐  ┌─────────────────────┐ │
+│  │ slog.Logger │  │MetricsForward│  │ ComponentManager    │ │
+│  └──────┬──────┘  └──────┬───────┘  └──────────┬──────────┘ │
+└─────────┼────────────────┼───────────────────────┼───────────┘
+          │                │                       │
+          ▼                ▼                       │
+   ┌──────────────────────────────────────┐       │
+   │         NATS JetStream               │       │
+   │  ┌────────┐  ┌──────────┐            │       │
+   │  │ logs.> │  │ metrics.>│            │       │
+   │  └────────┘  └──────────┘            │       │
+   └──────────────────┬───────────────────┘       │
+                      │                           │
+                      ▼                           ▼
+            ┌─────────────────────────────────────────┐
+            │        WebSocket Status Stream          │
+            │  ┌────────────┐  ┌────────────────────┐ │
+            │  │logStreamer │  │metricsStreamer     │ │
+            │  │flowWatcher │  │healthTicker        │ │
+            │  └────────────┘  └────────────────────┘ │
+            └─────────────────────────────────────────┘
+                              │
+                              ▼
+                    ┌──────────────────┐
+                    │  WebSocket Client │
+                    │  (Frontend UI)    │
+                    └──────────────────┘
+```
+
+**Log Architecture:**
+
+Logs flow through the system using the [logging package](../pkg/logging):
+
+1. Application code calls `slog.Info()`, `slog.Error()`, etc.
+2. `MultiHandler` dispatches to both `TextHandler` (stdout) and `NATSLogHandler`
+3. `NATSLogHandler` publishes to NATS `logs.{source}.{level}` subjects
+4. LOGS JetStream stream stores logs with 1hr TTL and 100MB limit
+5. WebSocket's `logStreamer` subscribes to `logs.>` and forwards to clients
+
+This architecture ensures:
+- **No timing issues**: Logs publish to NATS at handler creation time
+- **Out-of-band logs**: Always available via NATS even without WebSocket
+- **Graceful fallback**: NATS failures don't block stdout logging
+- **Source filtering**: `exclude_sources` config prevents feedback loops
+
+**Configuration:**
+
+Log forwarding is configured via `log-forwarder` service config:
+
+```json
+{
+    "services": {
+        "log-forwarder": {
+            "enabled": true,
+            "config": {
+                "min_level": "INFO",
+                "exclude_sources": ["flow-service.websocket"]
+            }
+        }
+    }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `min_level` | Minimum log level to publish to NATS |
+| `exclude_sources` | Source prefixes to exclude (prevents feedback loops) |
+
+**Implementation Files:**
+
+- `flow_runtime_stream.go` - WebSocket handler, client state, worker goroutines
+- `flow_runtime_stream_test.go` - Unit tests
+- `flow_runtime_stream_integration_test.go` - Integration tests with real NATS
+- [`pkg/logging/`](../pkg/logging) - MultiHandler, NATSLogHandler
+
 ## API Reference
 
 ### Types
