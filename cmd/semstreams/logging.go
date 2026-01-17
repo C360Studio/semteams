@@ -86,18 +86,39 @@ func setupLoggerWithNATS(
 	excludeSources := []string{"flow-service.websocket"}
 
 	if cfg != nil && cfg.Services != nil {
-		if logFwdCfg, ok := cfg.Services["log-forwarder"]; ok && logFwdCfg.Enabled {
-			var lfCfg struct {
-				ExcludeSources []string `json:"exclude_sources"`
+		slog.Debug("Checking log-forwarder config", "services_count", len(cfg.Services))
+		if logFwdCfg, ok := cfg.Services["log-forwarder"]; ok {
+			slog.Debug("Found log-forwarder service config",
+				"enabled", logFwdCfg.Enabled,
+				"config_raw", string(logFwdCfg.Config))
+			if logFwdCfg.Enabled {
+				var lfCfg struct {
+					ExcludeSources []string `json:"exclude_sources"`
+				}
+				if err := json.Unmarshal(logFwdCfg.Config, &lfCfg); err != nil {
+					slog.Warn("Failed to parse log-forwarder config", "error", err)
+				} else if len(lfCfg.ExcludeSources) > 0 {
+					// Config overrides default if explicitly set
+					excludeSources = lfCfg.ExcludeSources
+					slog.Info("Loaded exclude_sources from log-forwarder config", "exclude_sources", excludeSources)
+				} else {
+					slog.Debug("No exclude_sources in config, using default")
+				}
 			}
-			if err := json.Unmarshal(logFwdCfg.Config, &lfCfg); err == nil && len(lfCfg.ExcludeSources) > 0 {
-				// Config overrides default if explicitly set
-				excludeSources = lfCfg.ExcludeSources
-			}
+		} else {
+			slog.Debug("log-forwarder service not found in config")
 		}
+	} else {
+		slog.Debug("No services in config", "cfg_nil", cfg == nil)
 	}
+	slog.Info("NATSLogHandler exclude_sources configured", "exclude_sources", excludeSources)
 
 	// Create NATS handler for out-of-band logging
+	// Log the configuration for debugging
+	slog.Debug("Creating NATSLogHandler",
+		"min_level", logLevel.String(),
+		"exclude_sources", excludeSources)
+
 	natsHandler := logging.NewNATSLogHandler(natsClient, logging.NATSLogHandlerConfig{
 		MinLevel:       logLevel,
 		ExcludeSources: excludeSources,

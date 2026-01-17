@@ -85,6 +85,60 @@ func TestNATSLogHandler_Enabled(t *testing.T) {
 	}
 }
 
+// TestMultiHandler_WithLogger_ExcludedSource tests the full production scenario:
+// slog.Logger -> MultiHandler -> NATSLogHandler with excluded source
+// This simulates: wsLogger := fs.logger.With("source", "flow-service.websocket")
+func TestMultiHandler_WithLogger_ExcludedSource(t *testing.T) {
+	mock := &mockNATSPublisher{}
+
+	// Create NATSLogHandler with exclude_sources
+	natsHandler := NewNATSLogHandler(mock, NATSLogHandlerConfig{
+		MinLevel:       slog.LevelDebug,
+		ExcludeSources: []string{"flow-service.websocket"},
+	})
+
+	// Create stdout handler (discard output for test)
+	stdoutHandler := slog.NewTextHandler(&discardWriter{}, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
+
+	// Create MultiHandler (same as production)
+	multiHandler := NewMultiHandler(stdoutHandler, natsHandler)
+
+	// Create logger with base attrs (simulating setupLoggerWithNATS)
+	baseLogger := slog.New(multiHandler).With("service", "semstreams")
+
+	// Create WebSocket worker logger (simulating wsLogger := fs.logger.With("source", "..."))
+	wsLogger := baseLogger.With("source", "flow-service.websocket")
+
+	// Log a message (simulating logger.Debug("Failed to send log envelope"))
+	wsLogger.Debug("Failed to send log envelope", "error", "connection closed")
+
+	// Wait for async publish
+	time.Sleep(50 * time.Millisecond)
+
+	// Should NOT have published - source is excluded
+	calls := mock.getCalls()
+	assert.Empty(t, calls, "Logs from excluded source via slog.Logger should not be published to NATS")
+
+	// Now test that non-excluded sources DO publish
+	otherLogger := baseLogger.With("source", "graph-processor")
+	otherLogger.Info("Processing complete")
+
+	time.Sleep(50 * time.Millisecond)
+
+	calls = mock.getCalls()
+	assert.Len(t, calls, 1, "Logs from non-excluded source should be published")
+	assert.Equal(t, "logs.graph-processor.INFO", calls[0].Subject)
+}
+
+// discardWriter is an io.Writer that discards all writes
+type discardWriter struct{}
+
+func (d *discardWriter) Write(p []byte) (n int, err error) {
+	return len(p), nil
+}
+
 func TestNATSLogHandler_Handle_PublishesToNATS(t *testing.T) {
 	mock := &mockNATSPublisher{}
 	handler := NewNATSLogHandler(mock, NATSLogHandlerConfig{
@@ -310,6 +364,36 @@ func TestNATSLogHandler_WithAttrs(t *testing.T) {
 
 	// Source should be extracted from accumulated attrs
 	assert.Equal(t, "logs.test-component.INFO", calls[0].Subject)
+}
+
+// TestNATSLogHandler_WithAttrs_ExcludedSource verifies that source attributes
+// added via WithAttrs are correctly excluded based on exclude_sources config.
+// This simulates the WebSocket worker scenario: logger.With("source", "flow-service.websocket")
+func TestNATSLogHandler_WithAttrs_ExcludedSource(t *testing.T) {
+	mock := &mockNATSPublisher{}
+	handler := NewNATSLogHandler(mock, NATSLogHandlerConfig{
+		MinLevel:       slog.LevelInfo,
+		ExcludeSources: []string{"flow-service.websocket"},
+	})
+
+	// Simulate wsLogger := fs.logger.With("source", "flow-service.websocket")
+	handlerWithSource := handler.WithAttrs([]slog.Attr{
+		slog.String("source", "flow-service.websocket"),
+	})
+
+	// Create record (simulating logger.Debug("Failed to send log envelope"))
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "Failed to send log envelope", 0)
+	record.AddAttrs(slog.String("error", "connection closed"))
+
+	err := handlerWithSource.Handle(context.Background(), record)
+	require.NoError(t, err)
+
+	// Wait for async publish (if any)
+	time.Sleep(50 * time.Millisecond)
+
+	// Should NOT have published - source is excluded
+	calls := mock.getCalls()
+	assert.Empty(t, calls, "Logs from excluded source should not be published to NATS")
 }
 
 func TestNATSLogHandler_WithGroup(t *testing.T) {
