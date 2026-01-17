@@ -80,14 +80,18 @@ func setupLoggerWithNATS(
 		stdoutHandler = slog.NewJSONHandler(os.Stdout, opts)
 	}
 
-	// Parse exclude_sources from log-forwarder config
-	var excludeSources []string
+	// Parse exclude_sources from log-forwarder config.
+	// Default excludes WebSocket worker logs to prevent feedback loops where
+	// debug logs from WebSocket workers get sent back over the same WebSocket.
+	excludeSources := []string{"flow-service.websocket"}
+
 	if cfg != nil && cfg.Services != nil {
 		if logFwdCfg, ok := cfg.Services["log-forwarder"]; ok && logFwdCfg.Enabled {
 			var lfCfg struct {
 				ExcludeSources []string `json:"exclude_sources"`
 			}
-			if err := json.Unmarshal(logFwdCfg.Config, &lfCfg); err == nil {
+			if err := json.Unmarshal(logFwdCfg.Config, &lfCfg); err == nil && len(lfCfg.ExcludeSources) > 0 {
+				// Config overrides default if explicitly set
 				excludeSources = lfCfg.ExcludeSources
 			}
 		}
