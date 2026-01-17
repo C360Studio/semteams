@@ -10,6 +10,7 @@ import (
 
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/metric"
+	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/security"
 )
 
@@ -17,10 +18,11 @@ import (
 type Metrics struct {
 	*BaseService
 
-	config   MetricsConfig           // Consistent config field
-	server   *metric.Server          // Runtime state
-	registry *metric.MetricsRegistry // Dependency
-	security security.Config         // Platform security config
+	config     MetricsConfig           // Consistent config field
+	server     *metric.Server          // Runtime state
+	registry   *metric.MetricsRegistry // Dependency
+	natsClient *natsclient.Client      // For JetStream metrics publishing
+	security   security.Config         // Platform security config
 }
 
 // MetricsConfig holds configuration for the metrics service

@@ -24,7 +24,7 @@ type publishCall struct {
 	Data    []byte
 }
 
-func (m *mockNATSPublisher) Publish(ctx context.Context, subject string, data []byte) error {
+func (m *mockNATSPublisher) PublishToStream(ctx context.Context, subject string, data []byte) error {
 	m.mu.Lock()
 	m.calls = append(m.calls, publishCall{Subject: subject, Data: data})
 	m.mu.Unlock()
@@ -129,7 +129,7 @@ func TestMultiHandler_WithLogger_ExcludedSource(t *testing.T) {
 
 	calls = mock.getCalls()
 	assert.Len(t, calls, 1, "Logs from non-excluded source should be published")
-	assert.Equal(t, "logs.graph-processor.INFO", calls[0].Subject)
+	assert.Equal(t, "logs.INFO.graph-processor", calls[0].Subject)
 }
 
 // discardWriter is an io.Writer that discards all writes
@@ -157,8 +157,8 @@ func TestNATSLogHandler_Handle_PublishesToNATS(t *testing.T) {
 	calls := mock.getCalls()
 	require.Len(t, calls, 1)
 
-	// Verify subject format: logs.{source}.{level}
-	assert.Equal(t, "logs.system.INFO", calls[0].Subject)
+	// Verify subject format: logs.{level}.{source}
+	assert.Equal(t, "logs.INFO.system", calls[0].Subject)
 
 	// Verify payload structure
 	var entry map[string]any
@@ -254,8 +254,8 @@ func TestNATSLogHandler_Handle_ExtractsSource(t *testing.T) {
 			calls := mock.getCalls()
 			require.Len(t, calls, 1)
 
-			// Verify source in subject
-			expectedSubject := "logs." + tt.wantSource + ".INFO"
+			// Verify source in subject (format: logs.{level}.{source})
+			expectedSubject := "logs.INFO." + tt.wantSource
 			assert.Equal(t, expectedSubject, calls[0].Subject)
 
 			// Verify source in payload
@@ -362,8 +362,8 @@ func TestNATSLogHandler_WithAttrs(t *testing.T) {
 	calls := mock.getCalls()
 	require.Len(t, calls, 1)
 
-	// Source should be extracted from accumulated attrs
-	assert.Equal(t, "logs.test-component.INFO", calls[0].Subject)
+	// Source should be extracted from accumulated attrs (format: logs.{level}.{source})
+	assert.Equal(t, "logs.INFO.test-component", calls[0].Subject)
 }
 
 // TestNATSLogHandler_WithAttrs_ExcludedSource verifies that source attributes

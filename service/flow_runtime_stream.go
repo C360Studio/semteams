@@ -311,10 +311,8 @@ func healthTicker(
 				Payload:   json.RawMessage(payload),
 			}
 
-			// Send envelope
-			if err := sendFn(envelope); err != nil {
-				logger.Debug("Failed to send health envelope", "error", err)
-			}
+			// Send envelope (ignore error - context cancelled means connection closed)
+			_ = sendFn(envelope)
 		}
 	}
 }
@@ -383,10 +381,8 @@ func flowWatcher(
 				Payload:   json.RawMessage(payloadBytes),
 			}
 
-			// Send envelope
-			if err := sendFn(envelope); err != nil {
-				logger.Debug("Failed to send flow status envelope", "error", err)
-			}
+			// Send envelope (ignore error - context cancelled means connection closed)
+			_ = sendFn(envelope)
 
 			// Update previous state
 			prevState = flow.RuntimeState
@@ -440,10 +436,8 @@ func logStreamer(
 			Payload:   json.RawMessage(data),
 		}
 
-		// Send envelope
-		if err := sendFn(envelope); err != nil {
-			logger.Debug("Failed to send log envelope", "error", err)
-		}
+		// Send envelope (ignore error - context cancelled means connection closed)
+		_ = sendFn(envelope)
 	})
 
 	if err != nil {
@@ -480,10 +474,8 @@ func metricsStreamer(
 			Payload:   json.RawMessage(data),
 		}
 
-		// Send envelope
-		if err := sendFn(envelope); err != nil {
-			logger.Debug("Failed to send metrics envelope", "error", err)
-		}
+		// Send envelope (ignore error - context cancelled means connection closed)
+		_ = sendFn(envelope)
 	})
 
 	if err != nil {

@@ -77,11 +77,47 @@ func NewStreamsManager(natsClient *natsclient.Client, logger *slog.Logger) *Stre
 
 // logsStreamConfig defines the configuration for the LOGS stream.
 // This stream captures all application logs with automatic expiration.
+// Subject pattern: logs.{level}.{source} (e.g., logs.INFO.graph-processor)
 var logsStreamConfig = StreamConfig{
 	Subjects: []string{"logs.>"},
 	Storage:  "file",
 	MaxAge:   "1h",              // TTL: expire after 1 hour
 	MaxBytes: 100 * 1024 * 1024, // 100MB max storage
+	Replicas: 1,
+}
+
+// healthStreamConfig defines the configuration for the HEALTH stream.
+// This stream captures component and service health updates.
+// Subject patterns:
+//   - health.component.{name} (e.g., health.component.graph-processor)
+//   - health.service.{name} (e.g., health.service.flow-service)
+var healthStreamConfig = StreamConfig{
+	Subjects: []string{"health.>"},
+	Storage:  "memory",         // No persistence needed for health
+	MaxAge:   "5m",             // Short TTL - only recent health matters
+	MaxBytes: 10 * 1024 * 1024, // 10MB max storage
+	Replicas: 1,
+}
+
+// metricsStreamConfig defines the configuration for the METRICS stream.
+// This stream captures prometheus metrics snapshots.
+// Subject pattern: metrics.{component}.{metric} (e.g., metrics.graph-processor.messages_processed)
+var metricsStreamConfig = StreamConfig{
+	Subjects: []string{"metrics.>"},
+	Storage:  "memory",         // No persistence needed for metrics
+	MaxAge:   "5m",             // Short TTL - only recent metrics matter
+	MaxBytes: 50 * 1024 * 1024, // 50MB max storage
+	Replicas: 1,
+}
+
+// flowsStreamConfig defines the configuration for the FLOWS stream.
+// This stream captures flow status changes.
+// Subject pattern: flows.{flowId}.status (e.g., flows.abc123.status)
+var flowsStreamConfig = StreamConfig{
+	Subjects: []string{"flows.>"},
+	Storage:  "memory",         // No persistence needed for status
+	MaxAge:   "5m",             // Short TTL - only recent status matters
+	MaxBytes: 10 * 1024 * 1024, // 10MB max storage
 	Replicas: 1,
 }
 
@@ -92,9 +128,13 @@ var logsStreamConfig = StreamConfig{
 func (sm *StreamsManager) EnsureStreams(ctx context.Context, cfg *Config) error {
 	streams := make(map[string]StreamConfig)
 
-	// 1. Always create LOGS stream for out-of-band logging
+	// 1. Always create system streams for observability
 	streams["LOGS"] = logsStreamConfig
-	sm.logger.Debug("Adding system LOGS stream", "subjects", logsStreamConfig.Subjects)
+	streams["HEALTH"] = healthStreamConfig
+	streams["METRICS"] = metricsStreamConfig
+	streams["FLOWS"] = flowsStreamConfig
+	sm.logger.Debug("Adding system streams",
+		"streams", []string{"LOGS", "HEALTH", "METRICS", "FLOWS"})
 
 	// 2. Explicit streams from config (can override system streams)
 	for name, sc := range cfg.Streams {

@@ -260,8 +260,61 @@ func (m *Manager) StartAll(ctx context.Context) error {
 	}
 	logger.Info("Manager HTTP server started", "port", m.config.HTTPPort)
 
+	// Start health publishing loop (publishes to health.service.{name})
+	go m.publishHealthLoop(ctx)
+
 	logger.Info("Manager.StartAll: All services started", "count", len(services))
 	return nil
+}
+
+// publishHealthLoop publishes service health to JetStream every 5s.
+// Each service's health is published to health.service.{name} for granular filtering.
+// Gracefully handles NATS being unavailable - skips publish, doesn't block.
+func (m *Manager) publishHealthLoop(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.publishServiceHealth(ctx)
+		}
+	}
+}
+
+// publishServiceHealth publishes health for each service to NATS JetStream.
+func (m *Manager) publishServiceHealth(ctx context.Context) {
+	// Graceful fallback: skip if NATS unavailable
+	if m.natsClient == nil {
+		return
+	}
+
+	m.mu.RLock()
+	services := make(map[string]Service, len(m.services))
+	for name, svc := range m.services {
+		services[name] = svc
+	}
+	m.mu.RUnlock()
+
+	timestamp := time.Now().UnixMilli()
+
+	for name, svc := range services {
+		data, err := json.Marshal(map[string]any{
+			"timestamp": timestamp,
+			"name":      name,
+			"status":    svc.Status().String(),
+			"health":    svc.Health(),
+		})
+		if err != nil {
+			continue
+		}
+
+		// Publish to health.service.{name} for granular filtering
+		subject := "health.service." + name
+		_ = m.natsClient.PublishToStream(ctx, subject, data)
+	}
 }
 
 // createMandatoryServices creates mandatory services if they don't already exist

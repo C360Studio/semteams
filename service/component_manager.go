@@ -280,6 +280,13 @@ func (cm *ComponentManager) Start(ctx context.Context) error {
 
 	cm.started.Store(true)
 
+	// Start health publishing loop (publishes to health.component.{name})
+	cm.wg.Add(1)
+	go func() {
+		defer cm.wg.Done()
+		cm.publishHealthLoop(ctx)
+	}()
+
 	// Start the base service after components are started to avoid health check deadlocks
 	if err := cm.BaseService.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start base service: %w", err)
@@ -1783,4 +1790,60 @@ type ComponentGap struct {
 	Issue         string   `json:"issue"`
 	Description   string   `json:"description"`
 	Suggestions   []string `json:"suggestions,omitempty"`
+}
+
+// publishHealthLoop publishes component health to JetStream every 5s.
+// Each component's health is published to health.component.{name} for granular filtering.
+// Gracefully handles NATS being unavailable - skips publish, doesn't block.
+func (cm *ComponentManager) publishHealthLoop(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-cm.shutdown:
+			return
+		case <-ticker.C:
+			cm.publishComponentHealth(ctx)
+		}
+	}
+}
+
+// publishComponentHealth publishes health for each component to NATS JetStream.
+func (cm *ComponentManager) publishComponentHealth(ctx context.Context) {
+	// Graceful fallback: skip if NATS unavailable
+	if cm.natsClient == nil {
+		return
+	}
+
+	cm.mu.RLock()
+	components := make(map[string]*component.ManagedComponent, len(cm.components))
+	for name, mc := range cm.components {
+		components[name] = mc
+	}
+	cm.mu.RUnlock()
+
+	timestamp := time.Now().UnixMilli()
+
+	for name, mc := range components {
+		if mc.Component == nil {
+			continue
+		}
+
+		health := mc.Component.Health()
+		data, err := json.Marshal(map[string]any{
+			"timestamp": timestamp,
+			"name":      name,
+			"health":    health,
+		})
+		if err != nil {
+			continue
+		}
+
+		// Publish to health.component.{name} for granular filtering
+		subject := "health.component." + name
+		_ = cm.natsClient.PublishToStream(ctx, subject, data)
+	}
 }

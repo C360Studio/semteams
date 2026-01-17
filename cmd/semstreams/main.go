@@ -51,7 +51,10 @@ func main() {
 
 func run() error {
 	// Parse and validate CLI flags
-	cliCfg, logger, shouldExit, err := initializeCLI()
+	// IMPORTANT: This sets slog.SetDefault() EARLY with MultiHandler containing NATSLogHandler
+	// The NATSLogHandler starts with nil publisher - we wire it after NATS connects
+	// This ensures all components that call slog.Default() get the correct handler
+	cliCfg, loggerComponents, shouldExit, err := initializeCLI()
 	if shouldExit || err != nil {
 		return err
 	}
@@ -69,7 +72,7 @@ func run() error {
 
 	// Setup core infrastructure
 	ctx := context.Background()
-	natsClient, metricsRegistry, platform, configManager, err := setupInfrastructure(ctx, cfg, logger)
+	natsClient, metricsRegistry, platform, configManager, err := setupInfrastructure(ctx, cfg, loggerComponents.Logger)
 	if err != nil {
 		return err
 	}
@@ -78,16 +81,15 @@ func run() error {
 
 	// Ensure JetStream streams exist before components start
 	// Streams are derived from component port definitions or explicit config
-	streamsManager := config.NewStreamsManager(natsClient, logger)
+	streamsManager := config.NewStreamsManager(natsClient, loggerComponents.Logger)
 	if err := streamsManager.EnsureStreams(ctx, cfg); err != nil {
 		return fmt.Errorf("ensure streams: %w", err)
 	}
 
-	// Upgrade logger to also publish to NATS (now that NATS is connected and LOGS stream exists)
+	// Wire the NATSLogHandler to NATS (now that NATS is connected and LOGS stream exists)
 	// This enables out-of-band logging - logs are always available via NATS even if WebSocket not connected
-	logger = setupLoggerWithNATS(cliCfg.LogLevel, cliCfg.LogFormat, natsClient, cfg)
-	slog.SetDefault(logger)
-	slog.Info("Logger upgraded to publish to NATS", "stream", "LOGS")
+	loggerComponents.WireNATS(natsClient, cfg)
+	slog.Info("Logger wired to NATS for out-of-band logging", "stream", "LOGS")
 
 	// Setup registries and manager
 	componentRegistry, manager, err := setupRegistriesAndManager(cfg)
@@ -95,8 +97,8 @@ func run() error {
 		return err
 	}
 
-	// Create service dependencies (uses upgraded logger with NATS publishing)
-	svcDeps := createServiceDependencies(natsClient, metricsRegistry, logger, platform, configManager, componentRegistry)
+	// Create service dependencies
+	svcDeps := createServiceDependencies(natsClient, metricsRegistry, loggerComponents.Logger, platform, configManager, componentRegistry)
 
 	// Configure and create services
 	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
@@ -107,8 +109,11 @@ func run() error {
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
 }
 
-// initializeCLI parses flags and sets up logging
-func initializeCLI() (*CLIConfig, *slog.Logger, bool, error) {
+// initializeCLI parses flags and sets up logging.
+// IMPORTANT: This sets slog.SetDefault() EARLY with MultiHandler containing NATSLogHandler.
+// The NATSLogHandler starts with nil publisher - call WireNATS() after NATS connects.
+// This ensures all components that call slog.Default() get the correct handler from the start.
+func initializeCLI() (*CLIConfig, *LoggerComponents, bool, error) {
 	cliCfg := parseFlags()
 	if err := validateFlags(cliCfg); err != nil {
 		return nil, nil, false, fmt.Errorf("invalid flags: %w", err)
@@ -124,15 +129,17 @@ func initializeCLI() (*CLIConfig, *slog.Logger, bool, error) {
 		return nil, nil, true, nil
 	}
 
-	logger := setupLogger(cliCfg.LogLevel, cliCfg.LogFormat)
-	slog.SetDefault(logger)
+	// Setup logger EARLY with MultiHandler (stdout + NATSLogHandler with nil publisher)
+	// This is critical - all subsequent code that calls slog.Default() will get this handler
+	loggerComponents := setupLoggerEarly(cliCfg.LogLevel, cliCfg.LogFormat)
+	slog.SetDefault(loggerComponents.Logger)
 
 	slog.Info("Starting SemStreams (semantic stream processing)",
 		"version", Version,
 		"build_time", BuildTime,
 		"config_path", cliCfg.ConfigPath)
 
-	return cliCfg, logger, false, nil
+	return cliCfg, loggerComponents, false, nil
 }
 
 // initializeConfiguration loads and validates configuration
