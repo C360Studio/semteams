@@ -503,6 +503,11 @@ func (fs *FlowService) startWebSocketWorkers(
 	envelopeChan chan StatusStreamEnvelope,
 	wg *sync.WaitGroup,
 ) {
+	// Create a tagged logger for WebSocket workers.
+	// This uses the dotted notation convention so these logs can be excluded
+	// from NATS forwarding via LogForwarder's exclude_sources config.
+	wsLogger := fs.logger.With("source", "flow-service.websocket")
+
 	// Create send function that writes to the envelope channel
 	sendFn := func(envelope StatusStreamEnvelope) error {
 		select {
@@ -512,7 +517,7 @@ func (fs *FlowService) startWebSocketWorkers(
 			return ctx.Err()
 		default:
 			// Channel full, drop message to avoid blocking workers
-			fs.logger.Debug("Envelope channel full, dropping message", "type", envelope.Type)
+			wsLogger.Debug("Envelope channel full, dropping message", "type", envelope.Type)
 			return nil
 		}
 	}
@@ -529,7 +534,7 @@ func (fs *FlowService) startWebSocketWorkers(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			healthTicker(ctx, clientState, componentMgr, flowID, sendFn, fs.logger)
+			healthTicker(ctx, clientState, componentMgr, flowID, sendFn, wsLogger)
 		}()
 	}
 
@@ -537,7 +542,7 @@ func (fs *FlowService) startWebSocketWorkers(
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		flowWatcher(ctx, clientState, fs.flowStore, flowID, sendFn, fs.logger)
+		flowWatcher(ctx, clientState, fs.flowStore, flowID, sendFn, wsLogger)
 	}()
 
 	// Log streamer - subscribes to NATS logs.>
@@ -545,7 +550,7 @@ func (fs *FlowService) startWebSocketWorkers(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, fs.logger)
+			logStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, wsLogger)
 		}()
 	}
 
@@ -554,7 +559,7 @@ func (fs *FlowService) startWebSocketWorkers(
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			metricsStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, fs.logger)
+			metricsStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, wsLogger)
 		}()
 	}
 }

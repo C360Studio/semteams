@@ -701,3 +701,259 @@ func (m *logForwarderMockNATS) Publish(ctx context.Context, subject string, data
 	}
 	return nil
 }
+
+// TestLogForwarder_IsExcluded tests the isExcluded method with prefix matching
+func TestLogForwarder_IsExcluded(t *testing.T) {
+	tests := []struct {
+		name           string
+		excludeSources []string
+		source         string
+		wantExcluded   bool
+	}{
+		{
+			name:           "empty exclude list allows all",
+			excludeSources: []string{},
+			source:         "flow-service.websocket",
+			wantExcluded:   false,
+		},
+		{
+			name:           "exact match excludes",
+			excludeSources: []string{"flow-service.websocket"},
+			source:         "flow-service.websocket",
+			wantExcluded:   true,
+		},
+		{
+			name:           "prefix match excludes child",
+			excludeSources: []string{"flow-service.websocket"},
+			source:         "flow-service.websocket.health",
+			wantExcluded:   true,
+		},
+		{
+			name:           "prefix match excludes deeply nested child",
+			excludeSources: []string{"flow-service"},
+			source:         "flow-service.websocket.health.ticker",
+			wantExcluded:   true,
+		},
+		{
+			name:           "prefix does not match parent",
+			excludeSources: []string{"flow-service.websocket"},
+			source:         "flow-service",
+			wantExcluded:   false,
+		},
+		{
+			name:           "prefix does not match sibling",
+			excludeSources: []string{"flow-service.websocket"},
+			source:         "flow-service.api",
+			wantExcluded:   false,
+		},
+		{
+			name:           "partial string match not allowed",
+			excludeSources: []string{"flow"},
+			source:         "flow-service",
+			wantExcluded:   false,
+		},
+		{
+			name:           "multiple excludes - first matches",
+			excludeSources: []string{"flow-service.websocket", "metrics-forwarder"},
+			source:         "flow-service.websocket",
+			wantExcluded:   true,
+		},
+		{
+			name:           "multiple excludes - second matches",
+			excludeSources: []string{"flow-service.websocket", "metrics-forwarder"},
+			source:         "metrics-forwarder",
+			wantExcluded:   true,
+		},
+		{
+			name:           "multiple excludes - none match",
+			excludeSources: []string{"flow-service.websocket", "metrics-forwarder"},
+			source:         "graph-processor",
+			wantExcluded:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &LogForwarderConfig{
+				MinLevel:       "INFO",
+				ExcludeSources: tt.excludeSources,
+			}
+
+			mockNATS := &logForwarderMockNATS{
+				publishFunc: func(ctx context.Context, subject string, data []byte) error {
+					return nil
+				},
+			}
+
+			lf, err := newLogForwarderForTest(config, mockNATS, slog.Default())
+			require.NoError(t, err)
+
+			got := lf.isExcluded(tt.source)
+			assert.Equal(t, tt.wantExcluded, got)
+		})
+	}
+}
+
+// TestLogForwarder_ExtractSource_PrioritizesSourceAttr tests that source attr takes priority
+func TestLogForwarder_ExtractSource_PrioritizesSourceAttr(t *testing.T) {
+	tests := []struct {
+		name       string
+		attrs      []slog.Attr
+		wantSource string
+	}{
+		{
+			name:       "source attr takes priority over component",
+			attrs:      []slog.Attr{slog.String("source", "flow-service.websocket"), slog.String("component", "flow-service")},
+			wantSource: "flow-service.websocket",
+		},
+		{
+			name:       "source attr takes priority over service",
+			attrs:      []slog.Attr{slog.String("source", "custom-source"), slog.String("service", "some-service")},
+			wantSource: "custom-source",
+		},
+		{
+			name:       "component used when no source attr",
+			attrs:      []slog.Attr{slog.String("component", "graph-processor")},
+			wantSource: "graph-processor",
+		},
+		{
+			name:       "service used when no source or component",
+			attrs:      []slog.Attr{slog.String("service", "gateway")},
+			wantSource: "gateway",
+		},
+		{
+			name:       "defaults to system when no relevant attrs",
+			attrs:      []slog.Attr{slog.String("other", "value")},
+			wantSource: "system",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			publishedSource := ""
+			var publishMu sync.Mutex
+
+			mockNATS := &logForwarderMockNATS{
+				publishFunc: func(ctx context.Context, subject string, data []byte) error {
+					publishMu.Lock()
+					defer publishMu.Unlock()
+					var entry map[string]interface{}
+					if err := json.Unmarshal(data, &entry); err == nil {
+						if src, ok := entry["source"].(string); ok {
+							publishedSource = src
+						}
+					}
+					return nil
+				},
+			}
+
+			handler := createTestLogForwarderHandlerWithNATS(t, "INFO", mockNATS)
+
+			// Add attributes to handler
+			handlerWithAttrs := handler.WithAttrs(tt.attrs)
+
+			// Log a message
+			ctx := context.Background()
+			record := slog.NewRecord(time.Now(), slog.LevelInfo, "test message", 0)
+			err := handlerWithAttrs.Handle(ctx, record)
+			require.NoError(t, err)
+
+			time.Sleep(10 * time.Millisecond)
+
+			publishMu.Lock()
+			defer publishMu.Unlock()
+			assert.Equal(t, tt.wantSource, publishedSource)
+		})
+	}
+}
+
+// TestLogForwarder_ExcludeSourcesSkipsNATSPublish tests that excluded sources don't publish to NATS
+func TestLogForwarder_ExcludeSourcesSkipsNATSPublish(t *testing.T) {
+	publishCalled := false
+	var publishMu sync.Mutex
+
+	mockNATS := &logForwarderMockNATS{
+		publishFunc: func(ctx context.Context, subject string, data []byte) error {
+			publishMu.Lock()
+			defer publishMu.Unlock()
+			publishCalled = true
+			return nil
+		},
+	}
+
+	config := &LogForwarderConfig{
+		MinLevel:       "INFO",
+		ExcludeSources: []string{"flow-service.websocket"},
+	}
+
+	lf, err := newLogForwarderForTest(config, mockNATS, slog.Default())
+	require.NoError(t, err)
+
+	// Set a wrapped handler to capture output
+	var buf bytes.Buffer
+	wrappedHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	lf.SetWrappedHandler(wrappedHandler)
+
+	// Add source attribute that matches exclude pattern
+	handlerWithAttrs := lf.WithAttrs([]slog.Attr{slog.String("source", "flow-service.websocket")})
+
+	// Log a message
+	ctx := context.Background()
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "excluded message", 0)
+	err = handlerWithAttrs.Handle(ctx, record)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	// Verify NATS publish was NOT called
+	publishMu.Lock()
+	defer publishMu.Unlock()
+	assert.False(t, publishCalled, "NATS publish should not be called for excluded source")
+
+	// But verify wrapped handler still received the log
+	assert.Contains(t, buf.String(), "excluded message", "wrapped handler should still receive log")
+}
+
+// TestLogForwarder_NonExcludedSourcePublishes tests that non-excluded sources still publish
+func TestLogForwarder_NonExcludedSourcePublishes(t *testing.T) {
+	publishCalled := false
+	var publishMu sync.Mutex
+
+	mockNATS := &logForwarderMockNATS{
+		publishFunc: func(ctx context.Context, subject string, data []byte) error {
+			publishMu.Lock()
+			defer publishMu.Unlock()
+			publishCalled = true
+			return nil
+		},
+	}
+
+	config := &LogForwarderConfig{
+		MinLevel:       "INFO",
+		ExcludeSources: []string{"flow-service.websocket"},
+	}
+
+	lf, err := newLogForwarderForTest(config, mockNATS, slog.Default())
+	require.NoError(t, err)
+
+	// Set a wrapped handler
+	var buf bytes.Buffer
+	wrappedHandler := slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+	lf.SetWrappedHandler(wrappedHandler)
+
+	// Add source attribute that does NOT match exclude pattern
+	handlerWithAttrs := lf.WithAttrs([]slog.Attr{slog.String("source", "graph-processor")})
+
+	// Log a message
+	ctx := context.Background()
+	record := slog.NewRecord(time.Now(), slog.LevelInfo, "allowed message", 0)
+	err = handlerWithAttrs.Handle(ctx, record)
+	require.NoError(t, err)
+
+	time.Sleep(10 * time.Millisecond)
+
+	// Verify NATS publish WAS called
+	publishMu.Lock()
+	defer publishMu.Unlock()
+	assert.True(t, publishCalled, "NATS publish should be called for non-excluded source")
+}

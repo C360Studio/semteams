@@ -72,6 +72,12 @@ func NewLogForwarderService(rawConfig json.RawMessage, deps *Dependencies) (Serv
 type LogForwarderConfig struct {
 	// Minimum log level to forward (DEBUG, INFO, WARN, ERROR)
 	MinLevel string `json:"min_level"`
+
+	// ExcludeSources is a list of source prefixes to exclude from NATS forwarding.
+	// Logs from excluded sources still go to stdout but are not published to NATS.
+	// Uses prefix matching with dotted notation: excluding "flow-service.websocket"
+	// also excludes "flow-service.websocket.health" but NOT "flow-service".
+	ExcludeSources []string `json:"exclude_sources"`
 }
 
 // Validate checks if the configuration is valid
@@ -222,6 +228,11 @@ func (lf *LogForwarder) Handle(ctx context.Context, record slog.Record) error {
 	// Extract source from attributes
 	source := lf.extractSource(record)
 
+	// Check if source is excluded from NATS forwarding
+	if lf.isExcluded(source) {
+		return nil
+	}
+
 	// Convert level to string
 	levelStr := record.Level.String()
 
@@ -303,12 +314,20 @@ func (lf *LogForwarder) WithGroup(name string) slog.Handler {
 }
 
 // extractSource extracts the source identifier from log attributes
-// Priority: component > service > "system"
+// Priority: source > component > service > "system"
+// The "source" attribute uses dotted notation for hierarchical naming (e.g., "flow-service.websocket")
 func (lf *LogForwarder) extractSource(record slog.Record) string {
 	source := "system"
 
-	// Check accumulated attributes first
+	// Check accumulated attributes first, in priority order: source > component > service
 	lf.mu.RLock()
+	for _, attr := range lf.attrs {
+		if attr.Key == "source" {
+			source = attr.Value.String()
+			lf.mu.RUnlock()
+			return source
+		}
+	}
 	for _, attr := range lf.attrs {
 		if attr.Key == "component" {
 			source = attr.Value.String()
@@ -325,7 +344,19 @@ func (lf *LogForwarder) extractSource(record slog.Record) string {
 	}
 	lf.mu.RUnlock()
 
-	// Check record attributes
+	// Check record attributes in priority order
+	record.Attrs(func(attr slog.Attr) bool {
+		if attr.Key == "source" {
+			source = attr.Value.String()
+			return false // Stop iteration
+		}
+		return true
+	})
+
+	if source != "system" {
+		return source
+	}
+
 	record.Attrs(func(attr slog.Attr) bool {
 		if attr.Key == "component" {
 			source = attr.Value.String()
@@ -348,6 +379,18 @@ func (lf *LogForwarder) extractSource(record slog.Record) string {
 	})
 
 	return source
+}
+
+// isExcluded checks if a source should be excluded from NATS forwarding.
+// Uses prefix matching: "flow-service.websocket" matches both "flow-service.websocket"
+// and "flow-service.websocket.health", but NOT "flow-service".
+func (lf *LogForwarder) isExcluded(source string) bool {
+	for _, prefix := range lf.config.ExcludeSources {
+		if source == prefix || strings.HasPrefix(source, prefix+".") {
+			return true
+		}
+	}
+	return false
 }
 
 // extractFields extracts all attributes from the record as a map
