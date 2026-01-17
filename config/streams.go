@@ -19,6 +19,7 @@ type StreamConfig struct {
 	Subjects  []string `json:"subjects"`            // Subjects captured by this stream
 	Storage   string   `json:"storage,omitempty"`   // "file" or "memory" (default: file)
 	MaxAge    string   `json:"max_age,omitempty"`   // TTL for messages (e.g., "168h", "7d")
+	MaxBytes  int64    `json:"max_bytes,omitempty"` // Max storage size in bytes (0 = unlimited)
 	Retention string   `json:"retention,omitempty"` // "limits", "interest", "workqueue" (default: limits)
 	Replicas  int      `json:"replicas,omitempty"`  // Replication factor (default: 1)
 }
@@ -74,19 +75,34 @@ func NewStreamsManager(natsClient *natsclient.Client, logger *slog.Logger) *Stre
 	}
 }
 
+// logsStreamConfig defines the configuration for the LOGS stream.
+// This stream captures all application logs with automatic expiration.
+var logsStreamConfig = StreamConfig{
+	Subjects: []string{"logs.>"},
+	Storage:  "file",
+	MaxAge:   "1h",              // TTL: expire after 1 hour
+	MaxBytes: 100 * 1024 * 1024, // 100MB max storage
+	Replicas: 1,
+}
+
 // EnsureStreams creates all required JetStream streams based on:
-// 1. Explicit streams defined in config.Streams (highest priority)
-// 2. Streams derived from component JetStream output ports
+// 1. System streams (LOGS for out-of-band logging)
+// 2. Explicit streams defined in config.Streams (highest priority)
+// 3. Streams derived from component JetStream output ports
 func (sm *StreamsManager) EnsureStreams(ctx context.Context, cfg *Config) error {
 	streams := make(map[string]StreamConfig)
 
-	// 1. Explicit streams from config (highest priority)
+	// 1. Always create LOGS stream for out-of-band logging
+	streams["LOGS"] = logsStreamConfig
+	sm.logger.Debug("Adding system LOGS stream", "subjects", logsStreamConfig.Subjects)
+
+	// 2. Explicit streams from config (can override system streams)
 	for name, sc := range cfg.Streams {
 		streams[name] = sc
 		sm.logger.Debug("Found explicit stream config", "stream", name, "subjects", sc.Subjects)
 	}
 
-	// 2. Derive streams from component JetStream output ports
+	// 3. Derive streams from component JetStream output ports
 	for compName, compCfg := range cfg.Components {
 		if !compCfg.Enabled {
 			continue
@@ -126,7 +142,7 @@ func (sm *StreamsManager) EnsureStreams(ctx context.Context, cfg *Config) error 
 		}
 	}
 
-	// 3. Create all streams
+	// 4. Create all streams
 	for name, streamCfg := range streams {
 		if err := sm.createStream(ctx, name, streamCfg); err != nil {
 			return fmt.Errorf("create stream %s: %w", name, err)
@@ -209,6 +225,8 @@ func (sm *StreamsManager) createStream(ctx context.Context, name string, cfg Str
 		Storage:   storage,
 		Retention: retention,
 		MaxAge:    maxAge,
+		MaxBytes:  cfg.MaxBytes, // 0 means unlimited
+		Discard:   jetstream.DiscardOld,
 		Replicas:  replicas,
 	}
 

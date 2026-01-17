@@ -528,6 +528,7 @@ func (fs *FlowService) startWebSocketWorkers(
 	if componentMgr == nil && fs.serviceMgr != nil {
 		if svc, ok := fs.serviceMgr.GetService("component-manager"); ok {
 			componentMgr, _ = svc.(ComponentHealthProvider)
+			wsLogger.Debug("Lazy-loaded ComponentManager for health ticker")
 		}
 	}
 	if componentMgr != nil {
@@ -536,6 +537,8 @@ func (fs *FlowService) startWebSocketWorkers(
 			defer wg.Done()
 			healthTicker(ctx, clientState, componentMgr, flowID, sendFn, wsLogger)
 		}()
+	} else {
+		wsLogger.Warn("ComponentManager not available, health ticker disabled")
 	}
 
 	// Flow watcher - polls FlowStore for state changes every 1s

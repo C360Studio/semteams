@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 
@@ -10,6 +11,12 @@ import (
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/types"
 )
+
+// natsPublisher defines the minimal interface needed for publishing to NATS.
+// This allows for easier testing with mocks.
+type natsPublisher interface {
+	Publish(ctx context.Context, subject string, data []byte) error
+}
 
 // Dependencies provides the standard dependencies that all services receive.
 // This replaces the old Dependencies struct and provides consistent injection.

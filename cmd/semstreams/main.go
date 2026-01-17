@@ -83,13 +83,19 @@ func run() error {
 		return fmt.Errorf("ensure streams: %w", err)
 	}
 
+	// Upgrade logger to also publish to NATS (now that NATS is connected and LOGS stream exists)
+	// This enables out-of-band logging - logs are always available via NATS even if WebSocket not connected
+	logger = setupLoggerWithNATS(cliCfg.LogLevel, cliCfg.LogFormat, natsClient, cfg)
+	slog.SetDefault(logger)
+	slog.Info("Logger upgraded to publish to NATS", "stream", "LOGS")
+
 	// Setup registries and manager
 	componentRegistry, manager, err := setupRegistriesAndManager(cfg)
 	if err != nil {
 		return err
 	}
 
-	// Create service dependencies
+	// Create service dependencies (uses upgraded logger with NATS publishing)
 	svcDeps := createServiceDependencies(natsClient, metricsRegistry, logger, platform, configManager, componentRegistry)
 
 	// Configure and create services
