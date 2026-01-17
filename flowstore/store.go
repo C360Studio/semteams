@@ -178,3 +178,10 @@ func (s *Store) List(ctx context.Context) ([]*Flow, error) {
 
 	return flows, nil
 }
+
+// Watch watches for changes to flows matching the pattern.
+// Pattern supports wildcards: "*" matches any single token, ">" matches remaining tokens.
+// Returns a KeyWatcher that emits updates on its Updates() channel.
+func (s *Store) Watch(ctx context.Context, pattern string) (jetstream.KeyWatcher, error) {
+	return s.kvStore.Watch(ctx, pattern)
+}

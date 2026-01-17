@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/flowstore"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/pkg/logging"
@@ -20,52 +19,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// --- Mock types for ComponentHealth testing ---
-
-// mockComponentHealthProvider implements ComponentHealthProvider for testing
-type mockComponentHealthProvider struct {
-	components map[string]*component.ManagedComponent
-}
-
-func (m *mockComponentHealthProvider) GetManagedComponents() map[string]*component.ManagedComponent {
-	return m.components
-}
-
-// mockHealthComponent implements component.Discoverable for health testing
-type mockHealthComponent struct {
-	name   string
-	health component.HealthStatus
-}
-
-func (m *mockHealthComponent) Meta() component.Metadata {
-	return component.Metadata{
-		Name:        m.name,
-		Type:        "input",
-		Description: "Mock component for testing",
-		Version:     "1.0.0",
-	}
-}
-
-func (m *mockHealthComponent) InputPorts() []component.Port {
-	return nil
-}
-
-func (m *mockHealthComponent) OutputPorts() []component.Port {
-	return []component.Port{{Name: "output", Direction: component.DirectionOutput}}
-}
-
-func (m *mockHealthComponent) ConfigSchema() component.ConfigSchema {
-	return component.ConfigSchema{}
-}
-
-func (m *mockHealthComponent) Health() component.HealthStatus {
-	return m.health
-}
-
-func (m *mockHealthComponent) DataFlow() component.FlowMetrics {
-	return component.FlowMetrics{}
-}
 
 // TestWebSocketStatusStream_ReceivesMetrics verifies metrics flow through WebSocket
 func TestWebSocketStatusStream_ReceivesMetrics(t *testing.T) {
@@ -189,7 +142,7 @@ func TestWebSocketStatusStream_ReceivesLogs(t *testing.T) {
 	assert.Contains(t, payload["message"], "Integration test log message")
 }
 
-// TestWebSocketStatusStream_ReceivesFlowStatus verifies flow state changes are sent
+// TestWebSocketStatusStream_ReceivesFlowStatus verifies flow state changes are sent via NATS
 func TestWebSocketStatusStream_ReceivesFlowStatus(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -218,19 +171,23 @@ func TestWebSocketStatusStream_ReceivesFlowStatus(t *testing.T) {
 	conn := connectTestWebSocket(t, server, flowID)
 	defer conn.Close()
 
-	// Set read deadline
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	// Give WebSocket time to establish subscriptions
+	time.Sleep(100 * time.Millisecond)
 
-	// Update flow state - this should trigger flow_status message
-	flow, err := flowStore.Get(ctx, flowID)
+	// Publish flow status to NATS using core NATS publish
+	// (WebSocket subscribes via core NATS, not JetStream consumers)
+	statusData := map[string]interface{}{
+		"timestamp": time.Now().UnixMilli(),
+		"flow_id":   flowID,
+		"state":     string(flowstore.StateRunning),
+	}
+	statusBytes, err := json.Marshal(statusData)
+	require.NoError(t, err)
+	err = natsClient.Publish(ctx, "flows."+flowID+".status", statusBytes)
 	require.NoError(t, err)
 
-	flow.RuntimeState = flowstore.StateRunning
-	err = flowStore.Update(ctx, flow)
-	require.NoError(t, err)
-
-	// Wait for flow_status envelope (flowWatcher polls every 1 second)
-	envelope := waitForEnvelopeType(t, conn, "flow_status", 3*time.Second)
+	// Wait for flow_status envelope
+	envelope := waitForEnvelopeType(t, conn, "flow_status", 5*time.Second)
 	require.NotNil(t, envelope, "Should receive flow_status envelope")
 
 	assert.Equal(t, "flow_status", envelope.Type)
@@ -244,7 +201,7 @@ func TestWebSocketStatusStream_ReceivesFlowStatus(t *testing.T) {
 	assert.Equal(t, string(flowstore.StateRunning), payload["state"])
 }
 
-// TestWebSocketStatusStream_ReceivesComponentHealth verifies component health flows through WebSocket
+// TestWebSocketStatusStream_ReceivesComponentHealth verifies component health flows through WebSocket via NATS
 func TestWebSocketStatusStream_ReceivesComponentHealth(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -259,35 +216,8 @@ func TestWebSocketStatusStream_ReceivesComponentHealth(t *testing.T) {
 	flowID := createTestFlowForStream(t, ctx, flowStore)
 	defer func() { _ = flowStore.Delete(ctx, flowID) }()
 
-	// Create mock ComponentHealthProvider with test components
-	mockProvider := &mockComponentHealthProvider{
-		components: map[string]*component.ManagedComponent{
-			"test-input": {
-				Component: &mockHealthComponent{
-					name: "test-input",
-					health: component.HealthStatus{
-						Healthy:    true,
-						Status:     "running",
-						ErrorCount: 0,
-					},
-				},
-			},
-			"test-processor": {
-				Component: &mockHealthComponent{
-					name: "test-processor",
-					health: component.HealthStatus{
-						Healthy:    true,
-						Status:     "processing",
-						ErrorCount: 2,
-					},
-				},
-			},
-		},
-	}
-
-	// Create FlowService with componentManager set
+	// Create FlowService
 	fs := createTestFlowServiceForStream(t, natsClient, flowStore)
-	fs.componentManager = mockProvider
 
 	// Create test server
 	mux := http.NewServeMux()
@@ -299,9 +229,27 @@ func TestWebSocketStatusStream_ReceivesComponentHealth(t *testing.T) {
 	conn := connectTestWebSocket(t, server, flowID)
 	defer conn.Close()
 
-	// Wait for component_health envelope (healthTicker runs every 5s, but first tick is immediate)
-	// We need to wait up to 6 seconds to catch the first tick
-	envelope := waitForEnvelopeType(t, conn, "component_health", 6*time.Second)
+	// Give WebSocket time to establish subscriptions
+	time.Sleep(100 * time.Millisecond)
+
+	// Publish health data to NATS using core NATS publish
+	// (WebSocket subscribes via core NATS, not JetStream consumers)
+	healthData := map[string]interface{}{
+		"timestamp": time.Now().UnixMilli(),
+		"name":      "test-input",
+		"health": map[string]interface{}{
+			"healthy":     true,
+			"status":      "running",
+			"error_count": 0,
+		},
+	}
+	healthBytes, err := json.Marshal(healthData)
+	require.NoError(t, err)
+	err = natsClient.Publish(ctx, "health.component.test-input", healthBytes)
+	require.NoError(t, err)
+
+	// Wait for component_health envelope
+	envelope := waitForEnvelopeType(t, conn, "component_health", 5*time.Second)
 	require.NotNil(t, envelope, "Should receive component_health envelope")
 
 	assert.Equal(t, "component_health", envelope.Type)
@@ -309,22 +257,16 @@ func TestWebSocketStatusStream_ReceivesComponentHealth(t *testing.T) {
 	assert.NotEmpty(t, envelope.ID)
 	assert.Greater(t, envelope.Timestamp, int64(0))
 
-	// Verify payload contains health data for our test components
+	// Verify payload contains the published health data
 	var payload map[string]interface{}
 	err = json.Unmarshal(envelope.Payload, &payload)
 	require.NoError(t, err)
 
-	// Check test-input health
-	testInput, ok := payload["test-input"].(map[string]interface{})
-	require.True(t, ok, "Should have test-input in health payload")
-	assert.Equal(t, true, testInput["healthy"])
-	assert.Equal(t, "running", testInput["status"])
-
-	// Check test-processor health
-	testProcessor, ok := payload["test-processor"].(map[string]interface{})
-	require.True(t, ok, "Should have test-processor in health payload")
-	assert.Equal(t, true, testProcessor["healthy"])
-	assert.Equal(t, "processing", testProcessor["status"])
+	assert.Equal(t, "test-input", payload["name"])
+	health, ok := payload["health"].(map[string]interface{})
+	require.True(t, ok, "Should have health object in payload")
+	assert.Equal(t, true, health["healthy"])
+	assert.Equal(t, "running", health["status"])
 }
 
 // TestWebSocketStatusStream_LogsNotReceivedWhenLogForwarderDisabled verifies no logs without LogForwarder

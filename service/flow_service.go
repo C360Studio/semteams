@@ -41,13 +41,12 @@ type FlowServiceConfig struct {
 type FlowService struct {
 	*BaseService
 
-	flowStore        *flowstore.Store
-	flowEngine       *flowengine.Engine
-	configMgr        *config.Manager
-	serviceMgr       *Manager // Access to other services (ComponentManager)
-	natsClient       natsSubscriber
-	componentManager ComponentHealthProvider
-	config           FlowServiceConfig
+	flowStore  *flowstore.Store
+	flowEngine *flowengine.Engine
+	configMgr  *config.Manager
+	serviceMgr *Manager // Access to other services (for health API, message-logger)
+	natsClient natsSubscriber
+	config     FlowServiceConfig
 
 	mu sync.RWMutex
 }
@@ -95,14 +94,13 @@ func NewFlowServiceFromConfig(rawConfig json.RawMessage, deps *Dependencies) (Se
 	)
 
 	service := &FlowService{
-		BaseService:      baseService,
-		flowStore:        flowStore,
-		flowEngine:       flowEngine,
-		configMgr:        deps.Manager,
-		serviceMgr:       deps.ServiceManager,
-		natsClient:       deps.NATSClient,
-		componentManager: nil, // Will be set in Start() when ComponentManager is available
-		config:           cfg,
+		BaseService: baseService,
+		flowStore:   flowStore,
+		flowEngine:  flowEngine,
+		configMgr:   deps.Manager,
+		serviceMgr:  deps.ServiceManager,
+		natsClient:  deps.NATSClient,
+		config:      cfg,
 	}
 
 	return service, nil
@@ -110,15 +108,6 @@ func NewFlowServiceFromConfig(rawConfig json.RawMessage, deps *Dependencies) (Se
 
 // Start starts the flow service
 func (fs *FlowService) Start(ctx context.Context) error {
-	// Get ComponentManager from service manager if available
-	if fs.serviceMgr != nil {
-		if svc, ok := fs.serviceMgr.GetService("component-manager"); ok {
-			if cm, ok := svc.(ComponentHealthProvider); ok {
-				fs.componentManager = cm
-			}
-		}
-	}
-
 	// Set health check
 	fs.SetHealthCheck(func() error {
 		return nil // Always healthy for now
@@ -136,6 +125,9 @@ func (fs *FlowService) Start(ctx context.Context) error {
 		fs.logger.Warn("Failed to create default flow from config", "error", err)
 		// Non-fatal: continue without default flow
 	}
+
+	// Start flow status publisher (watches KV and publishes to NATS for WebSocket consumption)
+	fs.startFlowStatusPublisher(ctx)
 
 	fs.logger.Info("Flow service started")
 	return nil
@@ -877,4 +869,58 @@ func (fs *FlowService) handleStatusWebSocket(w http.ResponseWriter, r *http.Requ
 // generateFlowID generates a unique flow ID
 func generateFlowID() string {
 	return uuid.New().String()
+}
+
+// startFlowStatusPublisher watches the flows KV bucket for state changes
+// and publishes them to flows.{flowId}.status for WebSocket consumption.
+// This enables event-driven flow status updates instead of per-client polling.
+func (fs *FlowService) startFlowStatusPublisher(ctx context.Context) {
+	if fs.natsClient == nil || fs.flowStore == nil {
+		fs.logger.Warn("Flow status publisher disabled: missing NATS client or flow store")
+		return
+	}
+
+	// Watch all flows in the KV bucket
+	watcher, err := fs.flowStore.Watch(ctx, "*")
+	if err != nil {
+		fs.logger.Error("Failed to start flow status watcher", "error", err)
+		return
+	}
+
+	go func() {
+		defer watcher.Stop()
+		fs.logger.Info("Flow status publisher started")
+
+		for {
+			select {
+			case <-ctx.Done():
+				fs.logger.Debug("Flow status publisher stopping")
+				return
+			case entry := <-watcher.Updates():
+				if entry == nil {
+					continue
+				}
+				// Parse flow and publish state change
+				var flow flowstore.Flow
+				if err := json.Unmarshal(entry.Value(), &flow); err != nil {
+					fs.logger.Debug("Failed to unmarshal flow for status publish", "error", err)
+					continue
+				}
+				fs.publishFlowStatus(ctx, flow.ID, flow.RuntimeState)
+			}
+		}
+	}()
+}
+
+// publishFlowStatus publishes a flow state change to NATS JetStream.
+func (fs *FlowService) publishFlowStatus(ctx context.Context, flowID string, state flowstore.RuntimeState) {
+	data, err := json.Marshal(map[string]any{
+		"timestamp": time.Now().UnixMilli(),
+		"flow_id":   flowID,
+		"state":     string(state),
+	})
+	if err != nil {
+		return
+	}
+	_ = fs.natsClient.PublishToStream(ctx, "flows."+flowID+".status", data)
 }

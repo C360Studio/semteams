@@ -11,8 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/flowstore"
 	"github.com/gorilla/websocket"
 )
 
@@ -233,23 +231,10 @@ func (fs *FlowService) handleStatusWebSocketImpl(w http.ResponseWriter, r *http.
 	fs.logger.Info("WebSocket client disconnected", "flow_id", flowID)
 }
 
-// FlowStore interface for dependency injection in tests
-type FlowStore interface {
-	Get(ctx context.Context, id string) (*flowstore.Flow, error)
-	List(ctx context.Context) ([]*flowstore.Flow, error)
-	Create(ctx context.Context, flow *flowstore.Flow) error
-	Update(ctx context.Context, flow *flowstore.Flow) error
-	Delete(ctx context.Context, id string) error
-}
-
-// ComponentHealthProvider interface for dependency injection in tests
-type ComponentHealthProvider interface {
-	GetManagedComponents() map[string]*component.ManagedComponent
-}
-
-// natsSubscriber interface for NATS subscription with wildcard subjects
+// natsSubscriber interface for NATS pub/sub operations
 type natsSubscriber interface {
 	Subscribe(ctx context.Context, subject string, handler func(context.Context, []byte)) error
+	PublishToStream(ctx context.Context, subject string, data []byte) error
 }
 
 // generateMessageID generates a unique message ID for envelopes
@@ -262,132 +247,84 @@ func generateMessageID() string {
 	return hex.EncodeToString(bytes)
 }
 
-// healthTicker polls ComponentManager for health updates and sends envelopes
-func healthTicker(
+// healthStreamer subscribes to NATS health.> and forwards health updates as envelopes.
+// Health data is published by ComponentManager and ServiceManager to health.component.{name}
+// and health.service.{name} respectively.
+func healthStreamer(
 	ctx context.Context,
 	clientState *ClientState,
-	componentMgr ComponentHealthProvider,
+	natsClient natsSubscriber,
 	flowID string,
 	sendFn func(StatusStreamEnvelope) error,
 	logger *slog.Logger,
 ) {
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
+	// Subscribe to health.> (component and service health)
+	err := natsClient.Subscribe(ctx, "health.>", func(_ context.Context, data []byte) {
+		// Check if client is subscribed to component_health
+		if !clientState.IsSubscribed("component_health") {
 			return
-		case <-ticker.C:
-			// Check if client is subscribed to component_health
-			if !clientState.IsSubscribed("component_health") {
-				continue
-			}
-
-			// Get health from component manager
-			components := componentMgr.GetManagedComponents()
-
-			// Build health payload
-			health := make(map[string]interface{})
-			for name, mc := range components {
-				if mc.Component != nil {
-					health[name] = mc.Component.Health()
-				}
-			}
-
-			// Marshal payload
-			payload, err := json.Marshal(health)
-			if err != nil {
-				logger.Debug("Failed to marshal health payload", "error", err)
-				continue
-			}
-
-			// Create envelope
-			envelope := StatusStreamEnvelope{
-				Type:      "component_health",
-				ID:        generateMessageID(),
-				Timestamp: time.Now().UnixMilli(),
-				FlowID:    flowID,
-				Payload:   json.RawMessage(payload),
-			}
-
-			// Send envelope (ignore error - context cancelled means connection closed)
-			_ = sendFn(envelope)
 		}
+
+		// Create envelope with the health data as payload
+		envelope := StatusStreamEnvelope{
+			Type:      "component_health",
+			ID:        generateMessageID(),
+			Timestamp: time.Now().UnixMilli(),
+			FlowID:    flowID,
+			Payload:   json.RawMessage(data),
+		}
+
+		// Send envelope (ignore error - context cancelled means connection closed)
+		_ = sendFn(envelope)
+	})
+
+	if err != nil {
+		logger.Error("Failed to subscribe to health", "error", err)
+		return
 	}
+
+	// Wait for context cancellation
+	<-ctx.Done()
 }
 
-// flowWatcher polls FlowStore for state changes and sends envelopes
-func flowWatcher(
+// flowStatusStreamer subscribes to NATS flows.{flowId}.status and forwards status updates as envelopes.
+// Flow status data is published by FlowService when the flow KV bucket is updated.
+func flowStatusStreamer(
 	ctx context.Context,
 	clientState *ClientState,
-	flowStore FlowStore,
+	natsClient natsSubscriber,
 	flowID string,
 	sendFn func(StatusStreamEnvelope) error,
 	logger *slog.Logger,
 ) {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	var prevState flowstore.RuntimeState
-
-	// Get initial state
-	flow, err := flowStore.Get(ctx, flowID)
-	if err == nil {
-		prevState = flow.RuntimeState
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
+	// Subscribe to flows.{flowId}.status for this specific flow
+	subject := "flows." + flowID + ".status"
+	err := natsClient.Subscribe(ctx, subject, func(_ context.Context, data []byte) {
+		// Check if client is subscribed to flow_status
+		if !clientState.IsSubscribed("flow_status") {
 			return
-		case <-ticker.C:
-			// Check if client is subscribed to flow_status
-			if !clientState.IsSubscribed("flow_status") {
-				continue
-			}
-
-			// Get current flow state
-			flow, err := flowStore.Get(ctx, flowID)
-			if err != nil {
-				logger.Debug("Failed to get flow state", "flow_id", flowID, "error", err)
-				continue
-			}
-
-			// Only send if state changed
-			if flow.RuntimeState == prevState {
-				continue
-			}
-
-			// Build payload
-			payload := map[string]interface{}{
-				"state":      string(flow.RuntimeState),
-				"prev_state": string(prevState),
-				"timestamp":  time.Now().UnixMilli(),
-			}
-
-			payloadBytes, err := json.Marshal(payload)
-			if err != nil {
-				logger.Debug("Failed to marshal flow status payload", "error", err)
-				continue
-			}
-
-			// Create envelope
-			envelope := StatusStreamEnvelope{
-				Type:      "flow_status",
-				ID:        generateMessageID(),
-				Timestamp: time.Now().UnixMilli(),
-				FlowID:    flowID,
-				Payload:   json.RawMessage(payloadBytes),
-			}
-
-			// Send envelope (ignore error - context cancelled means connection closed)
-			_ = sendFn(envelope)
-
-			// Update previous state
-			prevState = flow.RuntimeState
 		}
+
+		// Create envelope with the flow status data as payload
+		envelope := StatusStreamEnvelope{
+			Type:      "flow_status",
+			ID:        generateMessageID(),
+			Timestamp: time.Now().UnixMilli(),
+			FlowID:    flowID,
+			Payload:   json.RawMessage(data),
+		}
+
+		// Send envelope (ignore error - context cancelled means connection closed)
+		_ = sendFn(envelope)
+	})
+
+	if err != nil {
+		logger.Error("Failed to subscribe to flow status", "flow_id", flowID, "error", err)
+		return
 	}
+
+	// Wait for context cancellation
+	<-ctx.Done()
 }
 
 // logStreamer subscribes to NATS logs.> and forwards log entries as envelopes
@@ -514,49 +451,39 @@ func (fs *FlowService) startWebSocketWorkers(
 		}
 	}
 
-	// Health ticker - polls ComponentManager every 5s
-	// Lazy lookup: ComponentManager may not have been available at FlowService.Start()
-	componentMgr := fs.componentManager
-	if componentMgr == nil && fs.serviceMgr != nil {
-		if svc, ok := fs.serviceMgr.GetService("component-manager"); ok {
-			componentMgr, _ = svc.(ComponentHealthProvider)
-			wsLogger.Debug("Lazy-loaded ComponentManager for health ticker")
-		}
-	}
-	if componentMgr != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			healthTicker(ctx, clientState, componentMgr, flowID, sendFn, wsLogger)
-		}()
-	} else {
-		wsLogger.Warn("ComponentManager not available, health ticker disabled")
+	// All workers subscribe to NATS streams - no direct service dependencies
+	if fs.natsClient == nil {
+		wsLogger.Warn("NATS client not available, WebSocket workers disabled")
+		return
 	}
 
-	// Flow watcher - polls FlowStore for state changes every 1s
+	// Health streamer - subscribes to NATS health.>
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		flowWatcher(ctx, clientState, fs.flowStore, flowID, sendFn, wsLogger)
+		healthStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, wsLogger)
+	}()
+
+	// Flow status streamer - subscribes to NATS flows.{flowId}.status
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		flowStatusStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, wsLogger)
 	}()
 
 	// Log streamer - subscribes to NATS logs.>
-	if fs.natsClient != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			logStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, wsLogger)
-		}()
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, wsLogger)
+	}()
 
 	// Metrics streamer - subscribes to NATS metrics.>
-	if fs.natsClient != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			metricsStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, wsLogger)
-		}()
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		metricsStreamer(ctx, clientState, fs.natsClient, flowID, sendFn, wsLogger)
+	}()
 }
 
 // startWebSocketWriter starts the goroutine that writes envelopes to the WebSocket
