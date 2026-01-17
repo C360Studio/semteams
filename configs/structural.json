@@ -54,7 +54,8 @@
       "name": "log-forwarder",
       "enabled": true,
       "config": {
-        "min_level": "DEBUG"
+        "min_level": "DEBUG",
+        "exclude_sources": ["flow-service.websocket"]
       }
     },
     "metrics-forwarder": {
