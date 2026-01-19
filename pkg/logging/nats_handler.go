@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -23,12 +22,10 @@ type NATSPublisher interface {
 //   - logs.WARN.> (all WARN and above)
 //   - logs.*.graph-processor (one component, all levels)
 //
-// The handler supports lazy initialization - it can be created without a publisher
-// and have the publisher set later via SetPublisher(). This allows setting up
-// the slog handler early in application startup before NATS is connected.
+// The handler requires a non-nil publisher at construction time.
+// Create the handler AFTER NATS is connected and streams are created.
 type NATSLogHandler struct {
 	publisher      NATSPublisher
-	mu             sync.RWMutex // Protects publisher access
 	minLevel       slog.Level
 	excludeSources []string
 	attrs          []slog.Attr
@@ -42,8 +39,11 @@ type NATSLogHandlerConfig struct {
 }
 
 // NewNATSLogHandler creates a new NATSLogHandler.
-// The publisher can be nil - use SetPublisher() to set it later when NATS connects.
+// The publisher must be non-nil - create this handler AFTER NATS is connected.
 func NewNATSLogHandler(publisher NATSPublisher, cfg NATSLogHandlerConfig) *NATSLogHandler {
+	if publisher == nil {
+		panic("NATSLogHandler requires a non-nil publisher - create handler after NATS is connected")
+	}
 	return &NATSLogHandler{
 		publisher:      publisher,
 		minLevel:       cfg.MinLevel,
@@ -51,23 +51,6 @@ func NewNATSLogHandler(publisher NATSPublisher, cfg NATSLogHandlerConfig) *NATSL
 		attrs:          make([]slog.Attr, 0),
 		groups:         make([]string, 0),
 	}
-}
-
-// SetPublisher sets or updates the NATS publisher.
-// This allows lazy initialization - create the handler early, set publisher when NATS connects.
-// Thread-safe: can be called while logging is active.
-func (h *NATSLogHandler) SetPublisher(publisher NATSPublisher) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.publisher = publisher
-}
-
-// SetExcludeSources updates the list of source prefixes to exclude from NATS publishing.
-// Thread-safe: can be called while logging is active.
-func (h *NATSLogHandler) SetExcludeSources(sources []string) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	h.excludeSources = sources
 }
 
 // Enabled reports whether the handler handles records at the given level.
@@ -79,17 +62,6 @@ func (h *NATSLogHandler) Enabled(_ context.Context, level slog.Level) bool {
 func (h *NATSLogHandler) Handle(_ context.Context, r slog.Record) error {
 	// Check level
 	if r.Level < h.minLevel {
-		return nil
-	}
-
-	// Get publisher (thread-safe)
-	h.mu.RLock()
-	publisher := h.publisher
-	h.mu.RUnlock()
-
-	// If no publisher yet (NATS not connected), silently skip
-	// Logs still go to stdout via MultiHandler's other handlers
-	if publisher == nil {
 		return nil
 	}
 
@@ -119,7 +91,7 @@ func (h *NATSLogHandler) Handle(_ context.Context, r slog.Record) error {
 	// JetStream provides durability - messages are persisted to the LOGS stream
 	go func() {
 		// Use background context since original ctx may be cancelled
-		_ = publisher.PublishToStream(context.Background(), subject, data)
+		_ = h.publisher.PublishToStream(context.Background(), subject, data)
 	}()
 
 	return nil
@@ -158,13 +130,8 @@ func (h *NATSLogHandler) WithGroup(name string) slog.Handler {
 // isExcluded checks if a source should be excluded from NATS publishing.
 // Uses prefix matching: excluding "flow-service.websocket" also excludes
 // "flow-service.websocket.health" but NOT "flow-service".
-// Thread-safe: reads excludeSources under lock.
 func (h *NATSLogHandler) isExcluded(source string) bool {
-	h.mu.RLock()
-	excludeSources := h.excludeSources
-	h.mu.RUnlock()
-
-	for _, prefix := range excludeSources {
+	for _, prefix := range h.excludeSources {
 		if source == prefix || strings.HasPrefix(source, prefix+".") {
 			return true
 		}

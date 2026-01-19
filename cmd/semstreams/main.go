@@ -44,176 +44,205 @@ func main() {
 
 	// Run application with proper error handling
 	if err := run(); err != nil {
-		slog.Error("Application failed", "error", err, "exit_code", 1)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
 }
 
 func run() error {
-	// Parse and validate CLI flags
-	// IMPORTANT: This sets slog.SetDefault() EARLY with MultiHandler containing NATSLogHandler
-	// The NATSLogHandler starts with nil publisher - we wire it after NATS connects
-	// This ensures all components that call slog.Default() get the correct handler
-	cliCfg, loggerComponents, shouldExit, err := initializeCLI()
+	// 1. Print banner
+	printBanner()
+
+	// 2. Parse and validate CLI flags
+	cliCfg, shouldExit, err := parseCLI()
 	if shouldExit || err != nil {
 		return err
 	}
 
-	// Load and validate configuration
-	cfg, err := initializeConfiguration(cliCfg)
+	// 3. Load and validate configuration
+	cfg, err := loadConfig(cliCfg.ConfigPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		return fmt.Errorf("invalid configuration: %w", err)
 	}
 
 	if cliCfg.Validate {
-		slog.Info("Configuration is valid")
+		fmt.Println("✓ Configuration is valid")
 		return nil
 	}
 
-	// Setup core infrastructure
+	// 4. Connect to NATS (required - semstreams cannot operate without NATS)
 	ctx := context.Background()
-	natsClient, metricsRegistry, platform, configManager, err := setupInfrastructure(ctx, cfg, loggerComponents.Logger)
+	natsClient, err := connectToNATSWithSpinner(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer natsClient.Close(ctx)
-	defer configManager.Stop(5 * time.Second)
 
-	// Ensure JetStream streams exist before components start
-	// Streams are derived from component port definitions or explicit config
-	streamsManager := config.NewStreamsManager(natsClient, loggerComponents.Logger)
-	if err := streamsManager.EnsureStreams(ctx, cfg); err != nil {
-		return fmt.Errorf("ensure streams: %w", err)
+	// 5. Ensure JetStream streams exist (LOGS, HEALTH, METRICS, FLOWS)
+	if err := ensureStreamsWithSpinner(ctx, cfg, natsClient); err != nil {
+		return err
 	}
 
-	// Wire the NATSLogHandler to NATS (now that NATS is connected and LOGS stream exists)
-	// This enables out-of-band logging - logs are always available via NATS even if WebSocket not connected
-	loggerComponents.WireNATS(natsClient, cfg)
-	slog.Info("Logger wired to NATS for out-of-band logging", "stream", "LOGS")
+	// 6. NOW create the full logger with NATS publisher (no nil, no mutation)
+	logger := setupLogger(cliCfg.LogLevel, cliCfg.LogFormat, natsClient, cfg)
+	slog.SetDefault(logger)
 
-	// Setup registries and manager
+	slog.Info("SemStreams ready",
+		"version", Version,
+		"build_time", BuildTime)
+
+	// 7. Create remaining infrastructure
+	metricsRegistry, platform, configManager, err := setupRemainingInfrastructure(ctx, cfg, natsClient, logger)
+	if err != nil {
+		return err
+	}
+	defer configManager.Stop(5 * time.Second)
+
+	// 8. Setup registries and manager
 	componentRegistry, manager, err := setupRegistriesAndManager(cfg)
 	if err != nil {
 		return err
 	}
 
-	// Create service dependencies
-	svcDeps := createServiceDependencies(natsClient, metricsRegistry, loggerComponents.Logger, platform, configManager, componentRegistry)
+	// 9. Create service dependencies
+	svcDeps := createServiceDependencies(natsClient, metricsRegistry, logger, platform, configManager, componentRegistry)
 
-	// Configure and create services
+	// 10. Configure and create services
 	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
 		return err
 	}
 
-	// Run application with signal handling
+	// 11. Run application with signal handling
 	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
 }
 
-// initializeCLI parses flags and sets up logging.
-// IMPORTANT: This sets slog.SetDefault() EARLY with MultiHandler containing NATSLogHandler.
-// The NATSLogHandler starts with nil publisher - call WireNATS() after NATS connects.
-// This ensures all components that call slog.Default() get the correct handler from the start.
-func initializeCLI() (*CLIConfig, *LoggerComponents, bool, error) {
+// parseCLI parses and validates CLI flags.
+func parseCLI() (*CLIConfig, bool, error) {
 	cliCfg := parseFlags()
 	if err := validateFlags(cliCfg); err != nil {
-		return nil, nil, false, fmt.Errorf("invalid flags: %w", err)
+		return nil, false, fmt.Errorf("invalid flags: %w", err)
 	}
 
 	if cliCfg.ShowVersion {
 		fmt.Printf("%s version %s\n", appName, Version)
-		return nil, nil, true, nil
+		return nil, true, nil
 	}
 
 	if cliCfg.ShowHelp {
 		printHelp()
-		return nil, nil, true, nil
+		return nil, true, nil
 	}
 
-	// Setup logger EARLY with MultiHandler (stdout + NATSLogHandler with nil publisher)
-	// This is critical - all subsequent code that calls slog.Default() will get this handler
-	loggerComponents := setupLoggerEarly(cliCfg.LogLevel, cliCfg.LogFormat)
-	slog.SetDefault(loggerComponents.Logger)
-
-	slog.Info("Starting SemStreams (semantic stream processing)",
-		"version", Version,
-		"build_time", BuildTime,
-		"config_path", cliCfg.ConfigPath)
-
-	return cliCfg, loggerComponents, false, nil
+	return cliCfg, false, nil
 }
 
-// initializeConfiguration loads and validates configuration
-func initializeConfiguration(cliCfg *CLIConfig) (*config.Config, error) {
-	cfg, err := loadConfig(cliCfg.ConfigPath)
+// connectToNATSWithSpinner connects to NATS with a spinner for user feedback.
+// NATS is a hard requirement - semstreams cannot operate without it.
+func connectToNATSWithSpinner(ctx context.Context, cfg *config.Config) (*natsclient.Client, error) {
+	spinner := NewSpinner("Connecting to NATS...")
+	spinner.Start()
+
+	natsClient, err := createNATSClient(cfg)
 	if err != nil {
-		return nil, fmt.Errorf("load config: %w", err)
+		spinner.StopWithError(err)
+		return nil, fmt.Errorf("create NATS client: %w", err)
 	}
 
-	if err := cfg.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid configuration: %w", err)
-	}
-
-	return cfg, nil
-}
-
-// setupInfrastructure creates and connects core infrastructure components
-func setupInfrastructure(
-	ctx context.Context,
-	cfg *config.Config,
-	logger *slog.Logger,
-) (*natsclient.Client, *metric.MetricsRegistry, types.PlatformMeta, *config.Manager, error) {
-	natsClient, metricsRegistry, platform, err := createCoreDependencies(cfg)
-	if err != nil {
-		return nil, nil, types.PlatformMeta{}, nil, fmt.Errorf("create dependencies: %w", err)
-	}
-
-	if err := connectToNATS(ctx, natsClient); err != nil {
-		return nil, nil, types.PlatformMeta{}, nil, err
-	}
-
-	configManager, err := setupConfigManager(ctx, cfg, natsClient, logger)
-	if err != nil {
-		return nil, nil, types.PlatformMeta{}, nil, err
-	}
-
-	return natsClient, metricsRegistry, platform, configManager, nil
-}
-
-// connectToNATS establishes NATS connection and waits for it to be ready
-func connectToNATS(ctx context.Context, natsClient *natsclient.Client) error {
-	slog.Info("Connecting to NATS")
 	if err := natsClient.Connect(ctx); err != nil {
-		return fmt.Errorf("connect to NATS: %w", err)
+		spinner.StopWithError(err)
+		return nil, fmt.Errorf("connect to NATS: %w", err)
 	}
 
 	connCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	if err := natsClient.WaitForConnection(connCtx); err != nil {
-		return fmt.Errorf("NATS connection timeout: %w", err)
+		spinner.StopWithError(err)
+		return nil, fmt.Errorf("NATS connection timeout: %w", err)
 	}
 
+	spinner.Stop()
+	return natsClient, nil
+}
+
+// ensureStreamsWithSpinner creates JetStream streams with a spinner for user feedback.
+func ensureStreamsWithSpinner(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client) error {
+	spinner := NewSpinner("Creating JetStream streams...")
+	spinner.Start()
+
+	// Use a quiet logger for stream creation (we have the spinner for feedback)
+	quietLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	streamsManager := config.NewStreamsManager(natsClient, quietLogger)
+
+	if err := streamsManager.EnsureStreams(ctx, cfg); err != nil {
+		spinner.StopWithError(err)
+		return fmt.Errorf("ensure streams: %w", err)
+	}
+
+	spinner.Stop()
 	return nil
 }
 
-// setupConfigManager creates and starts the config manager
-func setupConfigManager(
+// setupRemainingInfrastructure creates metrics, platform, and config manager.
+func setupRemainingInfrastructure(
 	ctx context.Context,
 	cfg *config.Config,
 	natsClient *natsclient.Client,
 	logger *slog.Logger,
-) (*config.Manager, error) {
-	slog.Info("Creating Manager")
+) (*metric.MetricsRegistry, types.PlatformMeta, *config.Manager, error) {
+	// Create metrics registry
+	metricsRegistry := metric.NewMetricsRegistry()
+
+	// Extract platform identity
+	platform := extractPlatformMeta(cfg)
+
+	slog.Info("Platform identity configured",
+		"org", platform.Org,
+		"platform", platform.Platform,
+		"environment", cfg.Platform.Environment)
+
+	// Create and start config manager
 	configManager, err := config.NewConfigManager(cfg, natsClient, logger)
 	if err != nil {
-		return nil, fmt.Errorf("create config manager: %w", err)
+		return nil, types.PlatformMeta{}, nil, fmt.Errorf("create config manager: %w", err)
 	}
 
 	if err := configManager.Start(ctx); err != nil {
-		return nil, fmt.Errorf("start config manager: %w", err)
+		return nil, types.PlatformMeta{}, nil, fmt.Errorf("start config manager: %w", err)
 	}
 
-	return configManager, nil
+	return metricsRegistry, platform, configManager, nil
+}
+
+// createNATSClient creates a NATS client from config.
+func createNATSClient(cfg *config.Config) (*natsclient.Client, error) {
+	natsURLs := "nats://localhost:4222"
+
+	// Environment variable override takes precedence
+	if envURL := os.Getenv("SEMSTREAMS_NATS_URLS"); envURL != "" {
+		natsURLs = envURL
+	} else if len(cfg.NATS.URLs) > 0 {
+		natsURLs = strings.Join(cfg.NATS.URLs, ",")
+	}
+
+	return natsclient.NewClient(natsURLs)
+}
+
+// extractPlatformMeta extracts platform identity from config.
+func extractPlatformMeta(cfg *config.Config) types.PlatformMeta {
+	platformID := cfg.Platform.InstanceID
+	if platformID == "" {
+		platformID = cfg.Platform.ID
+	}
+
+	return types.PlatformMeta{
+		Org:      cfg.Platform.Org,
+		Platform: platformID,
+	}
 }
 
 // setupRegistriesAndManager creates registries and service manager
@@ -225,7 +254,7 @@ func setupRegistriesAndManager(cfg *config.Config) (*component.Registry, *servic
 	}
 
 	factories := componentRegistry.ListFactories()
-	slog.Info("core component factories registered", "count", len(factories), "factories", factories)
+	slog.Info("Core component factories registered", "count", len(factories), "factories", factories)
 
 	serviceRegistry := service.NewServiceRegistry()
 	if err := service.RegisterAll(serviceRegistry); err != nil {
@@ -345,14 +374,12 @@ func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdo
 	slog.Debug("Setting up signal handling")
 	signalCtx, signalCancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer signalCancel()
-	slog.Debug("Signal handling setup complete")
 
-	slog.Info("About to start all services")
+	slog.Info("Starting all services")
 	if err := manager.StartAll(signalCtx); err != nil {
 		return fmt.Errorf("start services: %w", err)
 	}
-	slog.Info("StartAll completed successfully")
-	slog.Info("SemStreams started successfully (semantic stream processing ready)")
+	slog.Info("All services started successfully")
 
 	<-signalCtx.Done()
 	slog.Info("Received shutdown signal")
@@ -368,50 +395,8 @@ func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdo
 	return nil
 }
 
-// createCoreDependencies creates the core dependencies needed by services
-func createCoreDependencies(
-	cfg *config.Config,
-) (*natsclient.Client, *metric.MetricsRegistry, types.PlatformMeta, error) {
-	// Create NATS client (supports clustering via comma-separated URLs)
-	natsURLs := "nats://localhost:4222"
-
-	// Environment variable override takes precedence
-	if envURL := os.Getenv("SEMSTREAMS_NATS_URLS"); envURL != "" {
-		natsURLs = envURL
-	} else if len(cfg.NATS.URLs) > 0 {
-		natsURLs = strings.Join(cfg.NATS.URLs, ",")
-	}
-
-	natsClient, err := natsclient.NewClient(natsURLs)
-	if err != nil {
-		return nil, nil, types.PlatformMeta{}, fmt.Errorf("create NATS client: %w", err)
-	}
-
-	// Create metrics registry
-	metricsRegistry := metric.NewMetricsRegistry()
-
-	// Extract platform identity (prefer instance_id for federation)
-	platformID := cfg.Platform.InstanceID
-	if platformID == "" {
-		platformID = cfg.Platform.ID
-	}
-
-	platform := types.PlatformMeta{
-		Org:      cfg.Platform.Org, // From config, required field
-		Platform: platformID,       // InstanceID or ID
-	}
-
-	slog.Info("Platform identity configured",
-		"org", platform.Org,
-		"platform", platform.Platform,
-		"environment", cfg.Platform.Environment)
-
-	return natsClient, metricsRegistry, platform, nil
-}
-
 // shutdown performs graceful shutdown of all services
 func shutdown(ctx context.Context, manager *service.Manager, timeout time.Duration) error {
-	// Calculate timeout from context
 	if deadline, ok := ctx.Deadline(); ok {
 		remaining := time.Until(deadline)
 		if remaining < timeout {
@@ -419,7 +404,6 @@ func shutdown(ctx context.Context, manager *service.Manager, timeout time.Durati
 		}
 	}
 
-	// Stop all services in reverse order
 	if err := manager.StopAll(timeout); err != nil {
 		slog.Error("Error stopping services", "error", err)
 		return err

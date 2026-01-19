@@ -27,17 +27,10 @@ func parseLogLevel(level string) slog.Level {
 	}
 }
 
-// LoggerComponents holds the components needed for logger setup.
-// This allows setting up the handler early and wiring NATS later.
-type LoggerComponents struct {
-	Logger      *slog.Logger
-	NATSHandler *logging.NATSLogHandler
-}
-
-// setupLoggerEarly creates the logger with MultiHandler immediately at startup.
-// The NATSLogHandler starts with nil publisher - call WireNATS() after NATS connects.
-// This ensures all components that call slog.Default() get the correct handler.
-func setupLoggerEarly(level, format string) *LoggerComponents {
+// setupLogger creates the logger with MultiHandler.
+// The NATSLogHandler is created with a fully initialized publisher.
+// This should only be called AFTER NATS is connected and streams are created.
+func setupLogger(level, format string, natsClient *natsclient.Client, cfg *config.Config) *slog.Logger {
 	logLevel := parseLogLevel(level)
 
 	opts := &slog.HandlerOptions{
@@ -56,49 +49,45 @@ func setupLoggerEarly(level, format string) *LoggerComponents {
 		stdoutHandler = slog.NewJSONHandler(os.Stdout, opts)
 	}
 
-	// Create NATS handler with nil publisher - will be set later
-	// Default exclude_sources - can be updated when config is loaded
-	natsHandler := logging.NewNATSLogHandler(nil, logging.NATSLogHandlerConfig{
+	// Get exclude_sources from config
+	excludeSources := getExcludeSources(cfg)
+
+	// Create NATS handler with publisher already set (no nil, no mutation)
+	natsHandler := logging.NewNATSLogHandler(natsClient, logging.NATSLogHandlerConfig{
 		MinLevel:       logLevel,
-		ExcludeSources: []string{"flow-service.websocket"},
+		ExcludeSources: excludeSources,
 	})
 
 	// Compose handlers using MultiHandler
 	multiHandler := logging.NewMultiHandler(stdoutHandler, natsHandler)
 
-	logger := slog.New(multiHandler).With(
+	return slog.New(multiHandler).With(
 		"service", "semstreams",
 		"version", Version,
 		"pid", os.Getpid(),
 	)
-
-	return &LoggerComponents{
-		Logger:      logger,
-		NATSHandler: natsHandler,
-	}
 }
 
-// WireNATS connects the NATSLogHandler to the NATS client.
-// Call this after NATS is connected and streams are created.
-func (lc *LoggerComponents) WireNATS(natsClient *natsclient.Client, cfg *config.Config) {
-	// Update exclude_sources from config if available
+// getExcludeSources extracts exclude_sources from log-forwarder config.
+func getExcludeSources(cfg *config.Config) []string {
+	// Default: exclude WebSocket worker logs to prevent feedback loops
 	excludeSources := []string{"flow-service.websocket"}
 
-	if cfg != nil && cfg.Services != nil {
-		if logFwdCfg, ok := cfg.Services["log-forwarder"]; ok && logFwdCfg.Enabled {
-			var lfCfg struct {
-				ExcludeSources []string `json:"exclude_sources"`
-			}
-			if err := json.Unmarshal(logFwdCfg.Config, &lfCfg); err == nil && len(lfCfg.ExcludeSources) > 0 {
-				excludeSources = lfCfg.ExcludeSources
-				slog.Info("Loaded exclude_sources from log-forwarder config", "exclude_sources", excludeSources)
-			}
-		}
+	if cfg == nil || cfg.Services == nil {
+		return excludeSources
 	}
 
-	// Update the handler's exclude sources and set the publisher
-	lc.NATSHandler.SetExcludeSources(excludeSources)
-	lc.NATSHandler.SetPublisher(natsClient)
+	logFwdCfg, ok := cfg.Services["log-forwarder"]
+	if !ok || !logFwdCfg.Enabled {
+		return excludeSources
+	}
 
-	slog.Info("Logger wired to NATS", "exclude_sources", excludeSources)
+	var lfCfg struct {
+		ExcludeSources []string `json:"exclude_sources"`
+	}
+	if err := json.Unmarshal(logFwdCfg.Config, &lfCfg); err == nil && len(lfCfg.ExcludeSources) > 0 {
+		return lfCfg.ExcludeSources
+	}
+
+	return excludeSources
 }
