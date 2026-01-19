@@ -516,8 +516,7 @@ func (f *Output) flush() {
 	f.bufferMu.Lock()
 	if len(f.buffer) == 0 {
 		f.bufferMu.Unlock()
-		f.logger.Debug("Flush called with empty buffer",
-			"component", f.name)
+		// No logging for empty buffer - this is normal during periodic flush
 		return
 	}
 

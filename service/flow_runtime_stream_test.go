@@ -578,6 +578,66 @@ func TestClientState_SubscribeCommand_CombinedFilters(t *testing.T) {
 	assert.False(t, state.ShouldReceiveSource("udp-input"))
 }
 
+// TestClientState_GetSubscribedTypes verifies getter returns current subscribed types
+func TestClientState_GetSubscribedTypes(t *testing.T) {
+	state := newClientState()
+
+	// Default: all 4 types subscribed
+	types := state.GetSubscribedTypes()
+	assert.Len(t, types, 4)
+	assert.Contains(t, types, "flow_status")
+	assert.Contains(t, types, "component_health")
+	assert.Contains(t, types, "component_metrics")
+	assert.Contains(t, types, "log_entry")
+
+	// After filtering to single type
+	state.UpdateSubscription([]string{"log_entry"}, "", nil)
+	types = state.GetSubscribedTypes()
+	assert.Len(t, types, 1)
+	assert.Equal(t, []string{"log_entry"}, types)
+}
+
+// TestClientState_GetLogLevel verifies getter returns current log level
+func TestClientState_GetLogLevel(t *testing.T) {
+	state := newClientState()
+
+	// Default: empty (allow all)
+	assert.Equal(t, "", state.GetLogLevel())
+
+	// After setting level
+	state.UpdateSubscription(nil, "WARN", nil)
+	assert.Equal(t, "WARN", state.GetLogLevel())
+}
+
+// TestClientState_GetSources verifies getter returns current source filters
+func TestClientState_GetSources(t *testing.T) {
+	state := newClientState()
+
+	// Default: empty (allow all)
+	assert.Empty(t, state.GetSources())
+
+	// After setting sources
+	state.UpdateSubscription(nil, "", []string{"processor", "gateway"})
+	sources := state.GetSources()
+	assert.Len(t, sources, 2)
+	assert.Contains(t, sources, "processor")
+	assert.Contains(t, sources, "gateway")
+}
+
+// TestClientState_LogLevelNotOverwrittenWhenEmpty verifies empty logLevel preserves existing value
+func TestClientState_LogLevelNotOverwrittenWhenEmpty(t *testing.T) {
+	state := newClientState()
+
+	// Set initial log level
+	state.UpdateSubscription(nil, "WARN", nil)
+	assert.Equal(t, "WARN", state.GetLogLevel())
+
+	// Update message types with empty log level - should preserve WARN
+	state.UpdateSubscription([]string{"log_entry"}, "", nil)
+	assert.Equal(t, "WARN", state.GetLogLevel())
+	assert.Equal(t, []string{"log_entry"}, state.GetSubscribedTypes())
+}
+
 // TestMessageFiltering_OnlySubscribedTypes verifies clients receive only subscribed types
 func TestMessageFiltering_OnlySubscribedTypes(t *testing.T) {
 	// This test verifies the integration between ClientState and message delivery
@@ -2151,14 +2211,15 @@ func TestHandleCommand_Subscribe(t *testing.T) {
 			verifySources:    nil,
 		},
 		{
-			name: "subscribe with empty filters resets to defaults",
+			name: "subscribe with empty filters preserves defaults",
 			commandJSON: `{
 				"command": "subscribe",
 				"message_types": []
 			}`,
-			wantErr:          false,
-			verifySubscribed: []string{}, // explicitly empty
-			verifyFiltered:   []string{"flow_status", "component_health", "log_entry", "component_metrics"},
+			wantErr: false,
+			// Empty array preserves existing subscriptions (all types by default)
+			verifySubscribed: []string{"flow_status", "component_health", "log_entry", "component_metrics"},
+			verifyFiltered:   []string{}, // none filtered
 			verifyLogLevel:   "",
 			verifySources:    nil,
 		},
@@ -2412,4 +2473,104 @@ func TestClientState_ConcurrentCommandUpdates(t *testing.T) {
 	// Should be one or the other (XOR)
 	assert.True(t, isFlowStatus != isLogEntry,
 		"should be subscribed to either flow_status or log_entry, not both or neither")
+}
+
+// TestUpdateSubscription_EmptyArrayPreservesDefaults verifies that empty arrays
+// preserve existing subscriptions rather than clearing them
+func TestUpdateSubscription_EmptyArrayPreservesDefaults(t *testing.T) {
+	state := newClientState()
+
+	// Verify default state - all types subscribed
+	assert.True(t, state.IsSubscribed("flow_status"))
+	assert.True(t, state.IsSubscribed("component_health"))
+	assert.True(t, state.IsSubscribed("component_metrics"))
+	assert.True(t, state.IsSubscribed("log_entry"))
+
+	// Send empty message_types array - should preserve defaults
+	state.UpdateSubscription([]string{}, "", []string{})
+
+	// All types should still be subscribed
+	assert.True(t, state.IsSubscribed("flow_status"),
+		"empty message_types should preserve flow_status subscription")
+	assert.True(t, state.IsSubscribed("component_health"),
+		"empty message_types should preserve component_health subscription")
+	assert.True(t, state.IsSubscribed("component_metrics"),
+		"empty message_types should preserve component_metrics subscription")
+	assert.True(t, state.IsSubscribed("log_entry"),
+		"empty message_types should preserve log_entry subscription")
+}
+
+// TestUpdateSubscription_NilArrayPreservesDefaults verifies that nil arrays
+// also preserve existing subscriptions
+func TestUpdateSubscription_NilArrayPreservesDefaults(t *testing.T) {
+	state := newClientState()
+
+	// Send nil message_types - should preserve defaults
+	state.UpdateSubscription(nil, "", nil)
+
+	// All types should still be subscribed
+	assert.True(t, state.IsSubscribed("flow_status"))
+	assert.True(t, state.IsSubscribed("component_health"))
+	assert.True(t, state.IsSubscribed("component_metrics"))
+	assert.True(t, state.IsSubscribed("log_entry"))
+}
+
+// TestUpdateSubscription_NonEmptyArrayUpdates verifies that non-empty arrays
+// do update subscriptions
+func TestUpdateSubscription_NonEmptyArrayUpdates(t *testing.T) {
+	state := newClientState()
+
+	// Send specific message_types - should update
+	state.UpdateSubscription([]string{"log_entry"}, "", []string{})
+
+	// Only log_entry should be subscribed
+	assert.False(t, state.IsSubscribed("flow_status"))
+	assert.False(t, state.IsSubscribed("component_health"))
+	assert.False(t, state.IsSubscribed("component_metrics"))
+	assert.True(t, state.IsSubscribed("log_entry"))
+}
+
+// TestErrorResponse_JSONMarshaling verifies ErrorResponse serializes correctly
+func TestErrorResponse_JSONMarshaling(t *testing.T) {
+	tests := []struct {
+		name     string
+		response ErrorResponse
+		expected string
+	}{
+		{
+			name: "invalid_json error",
+			response: ErrorResponse{
+				Type:    "error",
+				Code:    "invalid_json",
+				Message: "Failed to parse command",
+			},
+			expected: `{"type":"error","code":"invalid_json","message":"Failed to parse command"}`,
+		},
+		{
+			name: "unknown_command error",
+			response: ErrorResponse{
+				Type:    "error",
+				Code:    "unknown_command",
+				Message: "Unknown command: foo",
+			},
+			expected: `{"type":"error","code":"unknown_command","message":"Unknown command: foo"}`,
+		},
+		{
+			name: "missing_command error",
+			response: ErrorResponse{
+				Type:    "error",
+				Code:    "missing_command",
+				Message: "Command field is required",
+			},
+			expected: `{"type":"error","code":"missing_command","message":"Command field is required"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(tt.response)
+			require.NoError(t, err)
+			assert.JSONEq(t, tt.expected, string(data))
+		})
+	}
 }

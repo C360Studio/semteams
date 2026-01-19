@@ -91,6 +91,7 @@ func (h *NATSLogHandler) Handle(_ context.Context, r slog.Record) error {
 	// JetStream provides durability - messages are persisted to the LOGS stream
 	go func() {
 		// Use background context since original ctx may be cancelled
+		// Errors are silently dropped - can't log errors from the log handler (recursion)
 		_ = h.publisher.PublishToStream(context.Background(), subject, data)
 	}()
 

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/c360/semstreams/natsclient"
@@ -407,4 +408,231 @@ func createTestMessageLogger() (*MessageLogger, error) {
 	}
 
 	return NewMessageLogger(loggerConfig, natsClient)
+}
+
+// TestShouldSample tests the sampling logic
+func TestShouldSample(t *testing.T) {
+	tests := []struct {
+		name       string
+		sampleRate int
+		callCount  int
+		wantSample int // Expected number of samples
+	}{
+		{
+			name:       "sample_rate_0_logs_all",
+			sampleRate: 0,
+			callCount:  10,
+			wantSample: 10,
+		},
+		{
+			name:       "sample_rate_1_logs_all",
+			sampleRate: 1,
+			callCount:  10,
+			wantSample: 10,
+		},
+		{
+			name:       "sample_rate_2_logs_half",
+			sampleRate: 2,
+			callCount:  10,
+			wantSample: 5,
+		},
+		{
+			name:       "sample_rate_10_logs_tenth",
+			sampleRate: 10,
+			callCount:  100,
+			wantSample: 10,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ml := &MessageLogger{
+				sampleRate: tt.sampleRate,
+			}
+
+			sampled := 0
+			for i := 0; i < tt.callCount; i++ {
+				if ml.shouldSample() {
+					sampled++
+				}
+			}
+
+			assert.Equal(t, tt.wantSample, sampled, "unexpected sample count")
+		})
+	}
+}
+
+// TestContainsWildcard tests the wildcard detection helper
+func TestContainsWildcard(t *testing.T) {
+	tests := []struct {
+		name     string
+		subjects []string
+		want     bool
+	}{
+		{
+			name:     "empty_list",
+			subjects: []string{},
+			want:     false,
+		},
+		{
+			name:     "no_wildcard",
+			subjects: []string{"raw.udp.messages", "processed.>"},
+			want:     false,
+		},
+		{
+			name:     "only_wildcard",
+			subjects: []string{"*"},
+			want:     true,
+		},
+		{
+			name:     "wildcard_with_others",
+			subjects: []string{"*", "debug.>"},
+			want:     true,
+		},
+		{
+			name:     "nats_wildcard_not_auto_discover",
+			subjects: []string{"raw.>", "*.messages"},
+			want:     false, // NATS wildcards are not the same as "*" auto-discover
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := containsWildcard(tt.subjects)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDiscoverSubjectsFromComponents tests subject discovery from component configs
+func TestDiscoverSubjectsFromComponents(t *testing.T) {
+	t.Run("empty_components", func(t *testing.T) {
+		subjects, metadata := discoverSubjectsFromComponents(nil)
+		assert.Empty(t, subjects)
+		assert.Empty(t, metadata)
+	})
+
+	t.Run("discovers_subjects_from_ports", func(t *testing.T) {
+		components := map[string]json.RawMessage{
+			"udp": json.RawMessage(`{
+				"ports": {
+					"inputs": [],
+					"outputs": [
+						{"name": "udp_out", "subject": "raw.udp.messages", "type": "jetstream"}
+					]
+				}
+			}`),
+			"json_generic": json.RawMessage(`{
+				"ports": {
+					"inputs": [
+						{"name": "generic_in", "subject": "raw.udp.messages", "type": "jetstream"}
+					],
+					"outputs": [
+						{"name": "generic_out", "subject": "generic.messages", "type": "jetstream", "interface": "core.json.v1"}
+					]
+				}
+			}`),
+		}
+
+		subjects, metadata := discoverSubjectsFromComponents(components)
+
+		// Should discover unique subjects
+		assert.Contains(t, subjects, "raw.udp.messages")
+		assert.Contains(t, subjects, "generic.messages")
+
+		// Check metadata for raw.udp.messages (could be from either component due to map iteration order)
+		rawMeta, ok := metadata["raw.udp.messages"]
+		assert.True(t, ok, "should have metadata for raw.udp.messages")
+		assert.Equal(t, "jetstream", rawMeta.PortType)
+
+		// Check metadata for generic.messages
+		genericMeta, ok := metadata["generic.messages"]
+		assert.True(t, ok, "should have metadata for generic.messages")
+		assert.Equal(t, "json_generic", genericMeta.Component)
+		assert.Equal(t, "generic_out", genericMeta.PortName)
+		assert.Equal(t, "jetstream", genericMeta.PortType)
+		assert.Equal(t, "core.json.v1", genericMeta.Interface)
+	})
+
+	t.Run("skips_invalid_json", func(t *testing.T) {
+		components := map[string]json.RawMessage{
+			"invalid": json.RawMessage(`{not valid json`),
+			"valid": json.RawMessage(`{
+				"ports": {
+					"outputs": [{"name": "out", "subject": "valid.subject", "type": "nats"}]
+				}
+			}`),
+		}
+
+		subjects, metadata := discoverSubjectsFromComponents(components)
+
+		// Should still discover from valid component
+		assert.Len(t, subjects, 1)
+		assert.Contains(t, subjects, "valid.subject")
+		assert.Len(t, metadata, 1)
+	})
+
+	t.Run("skips_empty_subjects", func(t *testing.T) {
+		components := map[string]json.RawMessage{
+			"test": json.RawMessage(`{
+				"ports": {
+					"inputs": [{"name": "in", "subject": "", "type": "nats"}],
+					"outputs": [{"name": "out", "subject": "real.subject", "type": "nats"}]
+				}
+			}`),
+		}
+
+		subjects, metadata := discoverSubjectsFromComponents(components)
+
+		// Should only have the non-empty subject
+		assert.Len(t, subjects, 1)
+		assert.Contains(t, subjects, "real.subject")
+		assert.Len(t, metadata, 1)
+	})
+}
+
+// TestMessageLoggerConfig_SampleRate tests sample rate config field
+func TestMessageLoggerConfig_SampleRate(t *testing.T) {
+	t.Run("default_sample_rate", func(t *testing.T) {
+		cfg := DefaultMessageLoggerConfig()
+		assert.Equal(t, 1, cfg.SampleRate, "default sample rate should be 1 (log all)")
+	})
+
+	t.Run("sample_rate_in_config", func(t *testing.T) {
+		natsClient := &natsclient.Client{}
+		loggerConfig := &MessageLoggerConfig{
+			MonitorSubjects: []string{"test.>"},
+			MaxEntries:      1000,
+			SampleRate:      5,
+		}
+
+		ml, err := NewMessageLogger(loggerConfig, natsClient)
+		require.NoError(t, err)
+		assert.Equal(t, 5, ml.sampleRate)
+	})
+
+	t.Run("zero_sample_rate_defaults_to_1", func(t *testing.T) {
+		natsClient := &natsclient.Client{}
+		loggerConfig := &MessageLoggerConfig{
+			MonitorSubjects: []string{"test.>"},
+			MaxEntries:      1000,
+			SampleRate:      0, // Should default to 1 (log all)
+		}
+
+		ml, err := NewMessageLogger(loggerConfig, natsClient)
+		require.NoError(t, err)
+		assert.Equal(t, 1, ml.sampleRate)
+	})
+}
+
+// TestMessageLogger_GetStatistics_IncludesSampling tests that statistics include sampling info
+func TestMessageLogger_GetStatistics_IncludesSampling(t *testing.T) {
+	ml, err := createTestMessageLogger()
+	require.NoError(t, err)
+
+	stats := ml.GetStatistics()
+
+	assert.Contains(t, stats, "total_messages")
+	assert.Contains(t, stats, "sampled_messages")
+	assert.Contains(t, stats, "sample_rate")
 }

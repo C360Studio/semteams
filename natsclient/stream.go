@@ -237,6 +237,8 @@ func (c *Client) buildConsumerConfig(cfg StreamConsumerConfig) jetstream.Consume
 	switch cfg.DeliverPolicy {
 	case "last":
 		consumerCfg.DeliverPolicy = jetstream.DeliverLastPolicy
+	case "last_per_subject":
+		consumerCfg.DeliverPolicy = jetstream.DeliverLastPerSubjectPolicy
 	case "new":
 		consumerCfg.DeliverPolicy = jetstream.DeliverNewPolicy
 	case "by_start_time":

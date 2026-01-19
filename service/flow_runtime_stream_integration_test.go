@@ -54,7 +54,7 @@ func TestWebSocketStatusStream_ReceivesMetrics(t *testing.T) {
 	// Set read deadline
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 
-	// Publish a metric directly to NATS
+	// Publish a metric to JetStream METRICS stream
 	metricData := map[string]interface{}{
 		"timestamp": time.Now().UnixMilli(),
 		"name":      "test_counter",
@@ -66,7 +66,7 @@ func TestWebSocketStatusStream_ReceivesMetrics(t *testing.T) {
 	metricBytes, err := json.Marshal(metricData)
 	require.NoError(t, err)
 
-	err = natsClient.Publish(ctx, "metrics.test-component.test_counter", metricBytes)
+	err = natsClient.PublishToStream(ctx, "metrics.test-component.test_counter", metricBytes)
 	require.NoError(t, err)
 
 	// Wait for metrics envelope
@@ -112,6 +112,9 @@ func TestWebSocketStatusStream_ReceivesLogs(t *testing.T) {
 	// Connect WebSocket
 	conn := connectTestWebSocket(t, server, flowID)
 	defer conn.Close()
+
+	// Give the server-side goroutines time to set up JetStream consumers
+	time.Sleep(100 * time.Millisecond)
 
 	// Set read deadline
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
@@ -174,8 +177,7 @@ func TestWebSocketStatusStream_ReceivesFlowStatus(t *testing.T) {
 	// Give WebSocket time to establish subscriptions
 	time.Sleep(100 * time.Millisecond)
 
-	// Publish flow status to NATS using core NATS publish
-	// (WebSocket subscribes via core NATS, not JetStream consumers)
+	// Publish flow status to JetStream FLOWS stream
 	statusData := map[string]interface{}{
 		"timestamp": time.Now().UnixMilli(),
 		"flow_id":   flowID,
@@ -183,7 +185,7 @@ func TestWebSocketStatusStream_ReceivesFlowStatus(t *testing.T) {
 	}
 	statusBytes, err := json.Marshal(statusData)
 	require.NoError(t, err)
-	err = natsClient.Publish(ctx, "flows."+flowID+".status", statusBytes)
+	err = natsClient.PublishToStream(ctx, "flows."+flowID+".status", statusBytes)
 	require.NoError(t, err)
 
 	// Wait for flow_status envelope
@@ -232,8 +234,7 @@ func TestWebSocketStatusStream_ReceivesComponentHealth(t *testing.T) {
 	// Give WebSocket time to establish subscriptions
 	time.Sleep(100 * time.Millisecond)
 
-	// Publish health data to NATS using core NATS publish
-	// (WebSocket subscribes via core NATS, not JetStream consumers)
+	// Publish health data to JetStream HEALTH stream
 	healthData := map[string]interface{}{
 		"timestamp": time.Now().UnixMilli(),
 		"name":      "test-input",
@@ -245,7 +246,7 @@ func TestWebSocketStatusStream_ReceivesComponentHealth(t *testing.T) {
 	}
 	healthBytes, err := json.Marshal(healthData)
 	require.NoError(t, err)
-	err = natsClient.Publish(ctx, "health.component.test-input", healthBytes)
+	err = natsClient.PublishToStream(ctx, "health.component.test-input", healthBytes)
 	require.NoError(t, err)
 
 	// Wait for component_health envelope
@@ -349,6 +350,9 @@ func TestWebSocketStatusStream_ExcludeSourcesFiltering(t *testing.T) {
 	// Connect WebSocket
 	conn := connectTestWebSocket(t, server, flowID)
 	defer conn.Close()
+
+	// Give the server-side goroutines time to set up JetStream consumers
+	time.Sleep(100 * time.Millisecond)
 
 	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 

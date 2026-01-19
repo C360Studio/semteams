@@ -1022,7 +1022,7 @@ type metricsForwarderMockNATS struct {
 	publishFunc func(ctx context.Context, subject string, data []byte) error
 }
 
-func (m *metricsForwarderMockNATS) Publish(ctx context.Context, subject string, data []byte) error {
+func (m *metricsForwarderMockNATS) PublishToStream(ctx context.Context, subject string, data []byte) error {
 	if m.publishFunc != nil {
 		return m.publishFunc(ctx, subject, data)
 	}

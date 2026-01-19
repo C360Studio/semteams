@@ -12,10 +12,11 @@ import (
 	"github.com/c360/semstreams/types"
 )
 
-// natsPublisher defines the minimal interface needed for publishing to NATS.
-// This allows for easier testing with mocks.
+// natsPublisher defines the interface for publishing to NATS JetStream.
+// All observability streams (logs, health, metrics, flows) should use
+// PublishToStream for consistent async pub/sub behavior with persistence.
 type natsPublisher interface {
-	Publish(ctx context.Context, subject string, data []byte) error
+	PublishToStream(ctx context.Context, subject string, data []byte) error
 }
 
 // Dependencies provides the standard dependencies that all services receive.

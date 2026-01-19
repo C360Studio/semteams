@@ -30,10 +30,49 @@ func NewMessageLoggerService(rawConfig json.RawMessage, deps *Dependencies) (Ser
 		cfg.MaxEntries = 10000
 	}
 	if len(cfg.MonitorSubjects) == 0 {
-		cfg.MonitorSubjects = []string{"process.>", "input.>", "events.>"}
+		cfg.MonitorSubjects = []string{"*"} // Default to auto-discover
 	}
 	if cfg.LogLevel == "" {
 		cfg.LogLevel = "INFO"
+	}
+	if cfg.SampleRate == 0 {
+		cfg.SampleRate = 1 // Default: log all messages
+	}
+
+	// Handle "*" wildcard for auto-discovery from flow config
+	var subjectMetadata map[string]portMetadata
+	if containsWildcard(cfg.MonitorSubjects) {
+		// Extract component configs for discovery
+		var componentConfigs map[string]json.RawMessage
+		if deps.Manager != nil {
+			safeConfig := deps.Manager.GetConfig()
+			if safeConfig != nil {
+				flowConfig := safeConfig.Get()
+				if flowConfig != nil && flowConfig.Components != nil {
+					componentConfigs = make(map[string]json.RawMessage)
+					for name, comp := range flowConfig.Components {
+						if comp.Enabled {
+							componentConfigs[name] = comp.Config
+						}
+					}
+				}
+			}
+		}
+
+		// Discover subjects from component port configs
+		discoveredSubjects, metadata := discoverSubjectsFromComponents(componentConfigs)
+		subjectMetadata = metadata
+
+		// Replace "*" with discovered subjects, keep other explicit subjects
+		var finalSubjects []string
+		for _, subj := range cfg.MonitorSubjects {
+			if subj == "*" {
+				finalSubjects = append(finalSubjects, discoveredSubjects...)
+			} else {
+				finalSubjects = append(finalSubjects, subj)
+			}
+		}
+		cfg.MonitorSubjects = finalSubjects
 	}
 
 	// Validate configuration
@@ -55,13 +94,35 @@ func NewMessageLoggerService(rawConfig json.RawMessage, deps *Dependencies) (Ser
 		opts = append(opts, WithMetrics(deps.MetricsRegistry))
 	}
 
-	return NewMessageLogger(&cfg, deps.NATSClient, opts...)
+	ml, err := NewMessageLogger(&cfg, deps.NATSClient, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	// Set discovered metadata if available
+	if subjectMetadata != nil {
+		ml.subjectMetadata = subjectMetadata
+	}
+
+	return ml, nil
+}
+
+// containsWildcard checks if the subjects list contains the "*" auto-discover wildcard
+func containsWildcard(subjects []string) bool {
+	for _, s := range subjects {
+		if s == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 // MessageLoggerConfig holds configuration for the MessageLogger service
 // Simple struct - no UnmarshalJSON, no Enabled field
 type MessageLoggerConfig struct {
-	// Subjects to monitor (empty = default to ["process.>", "input.>", "events.>"])
+	// Subjects to monitor
+	// Use "*" to auto-discover subjects from flow component configs
+	// Example: ["*"] or ["*", "debug.>"] or ["raw.udp.messages", "processed.>"]
 	MonitorSubjects []string `json:"monitor_subjects"`
 
 	// Maximum entries to keep in memory for querying
@@ -72,6 +133,10 @@ type MessageLoggerConfig struct {
 
 	// Log level threshold (DEBUG, INFO, WARN, ERROR)
 	LogLevel string `json:"log_level"`
+
+	// SampleRate controls message sampling (1 in N messages logged)
+	// 0 or 1 = log all messages, 10 = log 10% of messages
+	SampleRate int `json:"sample_rate"`
 }
 
 // Validate checks if the configuration is valid
@@ -90,10 +155,11 @@ func (c MessageLoggerConfig) Validate() error {
 // DefaultMessageLoggerConfig returns sensible defaults
 func DefaultMessageLoggerConfig() MessageLoggerConfig {
 	return MessageLoggerConfig{
-		MonitorSubjects: []string{"process.>", "input.>", "events.>"}, // Default subjects
+		MonitorSubjects: []string{"*"}, // Auto-discover from flow config
 		MaxEntries:      10000,
 		OutputToStdout:  false,
 		LogLevel:        "INFO",
+		SampleRate:      1, // Log all messages by default (increase for high-volume flows)
 	}
 }
 
@@ -106,6 +172,14 @@ type MessageLogEntry struct {
 	Summary     string          `json:"summary"`
 	RawData     json.RawMessage `json:"raw_data,omitempty"`
 	Metadata    map[string]any  `json:"metadata,omitempty"`
+}
+
+// portMetadata holds information about a port for enriching log entries
+type portMetadata struct {
+	Component string // Component name (e.g., "udp", "json_generic")
+	PortName  string // Port name (e.g., "udp_out", "generic_in")
+	PortType  string // Port type (e.g., "jetstream", "nats")
+	Interface string // Interface contract (e.g., "core.json.v1")
 }
 
 // MessageLogger provides message observation and logging as a service
@@ -123,11 +197,19 @@ type MessageLogger struct {
 	entriesIndex int
 	entriesMu    sync.RWMutex
 
+	// Sampling support
+	sampleRate   int           // 1 in N messages (0 or 1 = all)
+	messageCount atomic.Uint64 // Counter for sampling
+
+	// Subject metadata for enriched logging
+	subjectMetadata map[string]portMetadata
+
 	// Statistics
 	stats struct {
 		totalMessages   atomic.Int64
 		validMessages   atomic.Int64
 		invalidMessages atomic.Int64
+		sampledMessages atomic.Int64
 		startTime       time.Time
 		lastMessageTime atomic.Value // time.Time
 	}
@@ -160,13 +242,21 @@ func NewMessageLogger(
 		maxEntries = 10000
 	}
 
+	// Apply sample rate default
+	sampleRate := loggerConfig.SampleRate
+	if sampleRate == 0 {
+		sampleRate = 1 // Default: log all messages
+	}
+
 	ml := &MessageLogger{
-		BaseService:   baseService,
-		config:        *loggerConfig, // Store config as value
-		natsClient:    natsClient,
-		subscriptions: make(map[string]bool),
-		entries:       make([]MessageLogEntry, maxEntries),
-		logger:        slog.Default().With("component", "message-logger-service"),
+		BaseService:     baseService,
+		config:          *loggerConfig, // Store config as value
+		natsClient:      natsClient,
+		subscriptions:   make(map[string]bool),
+		entries:         make([]MessageLogEntry, maxEntries),
+		sampleRate:      sampleRate,
+		subjectMetadata: make(map[string]portMetadata),
+		logger:          baseService.logger.With("source", "message-logger"),
 	}
 
 	// Initialize statistics
@@ -174,6 +264,68 @@ func NewMessageLogger(
 	ml.stats.lastMessageTime.Store(time.Now())
 
 	return ml, nil
+}
+
+// discoverSubjectsFromComponents extracts NATS subjects from component port configs.
+// Returns a list of subjects and a map of subject -> portMetadata for enriched logging.
+func discoverSubjectsFromComponents(components map[string]json.RawMessage) ([]string, map[string]portMetadata) {
+	subjects := make(map[string]bool)
+	metadata := make(map[string]portMetadata)
+
+	for compName, rawConfig := range components {
+		// Parse the component's config to extract ports
+		var compConfig struct {
+			Ports struct {
+				Inputs  []component.PortDefinition `json:"inputs"`
+				Outputs []component.PortDefinition `json:"outputs"`
+			} `json:"ports"`
+		}
+
+		if err := json.Unmarshal(rawConfig, &compConfig); err != nil {
+			continue // Skip components we can't parse
+		}
+
+		// Process input ports
+		for _, port := range compConfig.Ports.Inputs {
+			if port.Subject != "" {
+				subjects[port.Subject] = true
+				metadata[port.Subject] = portMetadata{
+					Component: compName,
+					PortName:  port.Name,
+					PortType:  port.Type,
+					Interface: port.Interface,
+				}
+			}
+		}
+
+		// Process output ports
+		for _, port := range compConfig.Ports.Outputs {
+			if port.Subject != "" {
+				subjects[port.Subject] = true
+				metadata[port.Subject] = portMetadata{
+					Component: compName,
+					PortName:  port.Name,
+					PortType:  port.Type,
+					Interface: port.Interface,
+				}
+			}
+		}
+	}
+
+	result := make([]string, 0, len(subjects))
+	for subj := range subjects {
+		result = append(result, subj)
+	}
+	return result, metadata
+}
+
+// shouldSample returns true if this message should be logged based on sample rate
+func (ml *MessageLogger) shouldSample() bool {
+	if ml.sampleRate <= 1 {
+		return true // Log all messages
+	}
+	count := ml.messageCount.Add(1)
+	return count%uint64(ml.sampleRate) == 0
 }
 
 // Start begins message observation
@@ -265,6 +417,13 @@ func (ml *MessageLogger) handleMessage(ctx context.Context, subject string, data
 	ml.stats.totalMessages.Add(1)
 	ml.stats.lastMessageTime.Store(time.Now())
 
+	// Apply sampling - skip most messages based on sample rate
+	if !ml.shouldSample() {
+		return
+	}
+
+	ml.stats.sampledMessages.Add(1)
+
 	// Parse message
 	var msg message.BaseMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -290,6 +449,26 @@ func (ml *MessageLogger) handleMessage(ctx context.Context, subject string, data
 
 	// Store entry
 	ml.storeEntry(entry)
+
+	// Log with structured fields for frontend filtering
+	logArgs := []any{
+		"subject", subject,
+		"size", len(data),
+	}
+
+	// Add port metadata if available
+	if meta, ok := ml.subjectMetadata[subject]; ok {
+		logArgs = append(logArgs, "component", meta.Component)
+		logArgs = append(logArgs, "port", meta.PortName)
+		if meta.PortType != "" {
+			logArgs = append(logArgs, "port_type", meta.PortType)
+		}
+		if meta.Interface != "" {
+			logArgs = append(logArgs, "interface", meta.Interface)
+		}
+	}
+
+	ml.logger.Info("Message sample", logArgs...)
 
 	// Output to stdout if configured
 	if ml.config.OutputToStdout {
@@ -365,8 +544,10 @@ func (ml *MessageLogger) GetStatistics() map[string]any {
 
 	return map[string]any{
 		"total_messages":     ml.stats.totalMessages.Load(),
+		"sampled_messages":   ml.stats.sampledMessages.Load(),
 		"valid_messages":     ml.stats.validMessages.Load(),
 		"invalid_messages":   ml.stats.invalidMessages.Load(),
+		"sample_rate":        ml.sampleRate,
 		"start_time":         ml.stats.startTime,
 		"last_message_time":  lastMessageTime,
 		"uptime_seconds":     time.Since(ml.stats.startTime).Seconds(),

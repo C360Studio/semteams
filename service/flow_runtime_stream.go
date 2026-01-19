@@ -11,7 +11,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360/semstreams/natsclient"
 	"github.com/gorilla/websocket"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // StatusStreamEnvelope wraps all WebSocket status stream messages
@@ -29,6 +31,21 @@ type SubscribeCommand struct {
 	MessageTypes []string `json:"message_types,omitempty"` // Filter: flow_status, component_health, component_metrics, log_entry
 	LogLevel     string   `json:"log_level,omitempty"`     // Minimum log level: DEBUG, INFO, WARN, ERROR
 	Sources      []string `json:"sources,omitempty"`       // Filter by source component names
+}
+
+// SubscribeAck is the acknowledgment response sent after processing a subscribe command (Server → Client)
+type SubscribeAck struct {
+	Type       string   `json:"type"`                // Always "subscribe_ack"
+	Subscribed []string `json:"subscribed"`          // Message types now subscribed
+	LogLevel   string   `json:"log_level,omitempty"` // Current log level filter (empty = all)
+	Sources    []string `json:"sources,omitempty"`   // Current source filters (empty = all)
+}
+
+// ErrorResponse is sent to client when a command fails (Server → Client)
+type ErrorResponse struct {
+	Type    string `json:"type"`    // Always "error"
+	Code    string `json:"code"`    // Error code: "invalid_json", "unknown_command", "missing_command"
+	Message string `json:"message"` // Human-readable error message
 }
 
 // FlowStatusPayload is the payload for type=flow_status messages
@@ -92,23 +109,28 @@ func (cs *ClientState) IsSubscribed(messageType string) bool {
 }
 
 // UpdateSubscription updates the client's subscription filters
+// Empty arrays are treated as "keep current subscriptions" rather than "unsubscribe all"
 func (cs *ClientState) UpdateSubscription(messageTypes []string, logLevel string, sources []string) {
 	cs.mu.Lock()
 	defer cs.mu.Unlock()
 
-	// Update message types if provided
-	if messageTypes != nil {
+	// Update message types only if non-empty array provided
+	// Empty array means "keep current subscriptions"
+	if len(messageTypes) > 0 {
 		cs.messageTypes = make(map[string]bool)
 		for _, mt := range messageTypes {
 			cs.messageTypes[mt] = true
 		}
 	}
 
-	// Update log level
-	cs.logLevel = logLevel
+	// Update log level only if provided (non-empty)
+	if logLevel != "" {
+		cs.logLevel = logLevel
+	}
 
-	// Update sources if provided
-	if sources != nil {
+	// Update sources only if non-empty array provided
+	// Empty array means "keep current sources"
+	if len(sources) > 0 {
 		cs.sources = make(map[string]bool)
 		for _, src := range sources {
 			cs.sources[src] = true
@@ -156,6 +178,39 @@ func (cs *ClientState) ShouldReceiveSource(source string) bool {
 	}
 
 	return cs.sources[source]
+}
+
+// GetSubscribedTypes returns the list of currently subscribed message types
+func (cs *ClientState) GetSubscribedTypes() []string {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+	types := make([]string, 0, len(cs.messageTypes))
+	for mt, subscribed := range cs.messageTypes {
+		if subscribed {
+			types = append(types, mt)
+		}
+	}
+	return types
+}
+
+// GetLogLevel returns the current log level filter
+func (cs *ClientState) GetLogLevel() string {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+	return cs.logLevel
+}
+
+// GetSources returns the current source filters
+func (cs *ClientState) GetSources() []string {
+	cs.mu.RLock()
+	defer cs.mu.RUnlock()
+	sources := make([]string, 0, len(cs.sources))
+	for src, filtered := range cs.sources {
+		if filtered {
+			sources = append(sources, src)
+		}
+	}
+	return sources
 }
 
 // handleStatusWebSocketImpl is the actual implementation of WebSocket status streaming
@@ -231,9 +286,16 @@ func (fs *FlowService) handleStatusWebSocketImpl(w http.ResponseWriter, r *http.
 	fs.logger.Info("WebSocket client disconnected", "flow_id", flowID)
 }
 
-// natsSubscriber interface for NATS pub/sub operations
+// natsSubscriber interface for NATS pub/sub operations.
+// WebSocket streamers use JetStream consumers (ConsumeStreamWithConfig) to receive
+// observability data that is published via PublishToStream to JetStream streams.
 type natsSubscriber interface {
-	Subscribe(ctx context.Context, subject string, handler func(context.Context, []byte)) error
+	// ConsumeStreamWithConfig creates a JetStream consumer for receiving stream messages.
+	// Used by WebSocket streamers to consume logs, health, metrics, and flow status.
+	ConsumeStreamWithConfig(ctx context.Context, cfg natsclient.StreamConsumerConfig, handler func(context.Context, jetstream.Msg)) error
+
+	// PublishToStream publishes data to a JetStream stream.
+	// Used for testing to inject messages into streams.
 	PublishToStream(ctx context.Context, subject string, data []byte) error
 }
 
@@ -247,7 +309,7 @@ func generateMessageID() string {
 	return hex.EncodeToString(bytes)
 }
 
-// healthStreamer subscribes to NATS health.> and forwards health updates as envelopes.
+// healthStreamer consumes from HEALTH JetStream and forwards health updates as envelopes.
 // Health data is published by ComponentManager and ServiceManager to health.component.{name}
 // and health.service.{name} respectively.
 func healthStreamer(
@@ -258,8 +320,20 @@ func healthStreamer(
 	sendFn func(StatusStreamEnvelope) error,
 	logger *slog.Logger,
 ) {
-	// Subscribe to health.> (component and service health)
-	err := natsClient.Subscribe(ctx, "health.>", func(_ context.Context, data []byte) {
+	// Configure JetStream consumer for HEALTH stream
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    "HEALTH",
+		FilterSubject: "health.>",
+		DeliverPolicy: "last_per_subject", // Last message per subject on connect, then new
+		AckPolicy:     "none",             // Fire-and-forget to browser
+		AutoCreate:    true,               // Create stream if it doesn't exist
+		AutoCreateConfig: &natsclient.StreamAutoCreateConfig{
+			Subjects: []string{"health.>"},
+			Storage:  "memory",
+		},
+	}
+
+	err := natsClient.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 		// Check if client is subscribed to component_health
 		if !clientState.IsSubscribed("component_health") {
 			return
@@ -271,7 +345,7 @@ func healthStreamer(
 			ID:        generateMessageID(),
 			Timestamp: time.Now().UnixMilli(),
 			FlowID:    flowID,
-			Payload:   json.RawMessage(data),
+			Payload:   json.RawMessage(msg.Data()),
 		}
 
 		// Send envelope (ignore error - context cancelled means connection closed)
@@ -279,7 +353,7 @@ func healthStreamer(
 	})
 
 	if err != nil {
-		logger.Error("Failed to subscribe to health", "error", err)
+		logger.Error("Failed to consume from HEALTH stream", "error", err)
 		return
 	}
 
@@ -287,7 +361,7 @@ func healthStreamer(
 	<-ctx.Done()
 }
 
-// flowStatusStreamer subscribes to NATS flows.{flowId}.status and forwards status updates as envelopes.
+// flowStatusStreamer consumes from FLOWS JetStream and forwards status updates as envelopes.
 // Flow status data is published by FlowService when the flow KV bucket is updated.
 func flowStatusStreamer(
 	ctx context.Context,
@@ -297,9 +371,21 @@ func flowStatusStreamer(
 	sendFn func(StatusStreamEnvelope) error,
 	logger *slog.Logger,
 ) {
-	// Subscribe to flows.{flowId}.status for this specific flow
+	// Configure JetStream consumer for FLOWS stream, filtered to this specific flow
 	subject := "flows." + flowID + ".status"
-	err := natsClient.Subscribe(ctx, subject, func(_ context.Context, data []byte) {
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    "FLOWS",
+		FilterSubject: subject,
+		DeliverPolicy: "last_per_subject", // Last message per subject on connect, then new
+		AckPolicy:     "none",             // Fire-and-forget to browser
+		AutoCreate:    true,               // Create stream if it doesn't exist
+		AutoCreateConfig: &natsclient.StreamAutoCreateConfig{
+			Subjects: []string{"flows.>"},
+			Storage:  "memory",
+		},
+	}
+
+	err := natsClient.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 		// Check if client is subscribed to flow_status
 		if !clientState.IsSubscribed("flow_status") {
 			return
@@ -311,7 +397,7 @@ func flowStatusStreamer(
 			ID:        generateMessageID(),
 			Timestamp: time.Now().UnixMilli(),
 			FlowID:    flowID,
-			Payload:   json.RawMessage(data),
+			Payload:   json.RawMessage(msg.Data()),
 		}
 
 		// Send envelope (ignore error - context cancelled means connection closed)
@@ -319,7 +405,7 @@ func flowStatusStreamer(
 	})
 
 	if err != nil {
-		logger.Error("Failed to subscribe to flow status", "flow_id", flowID, "error", err)
+		logger.Error("Failed to consume from FLOWS stream", "flow_id", flowID, "error", err)
 		return
 	}
 
@@ -327,7 +413,7 @@ func flowStatusStreamer(
 	<-ctx.Done()
 }
 
-// logStreamer subscribes to NATS logs.> and forwards log entries as envelopes
+// logStreamer consumes from LOGS JetStream and forwards log entries as envelopes
 func logStreamer(
 	ctx context.Context,
 	clientState *ClientState,
@@ -336,12 +422,26 @@ func logStreamer(
 	sendFn func(StatusStreamEnvelope) error,
 	logger *slog.Logger,
 ) {
-	// Subscribe to logs.>
-	err := natsClient.Subscribe(ctx, "logs.>", func(_ context.Context, data []byte) {
+	// Configure JetStream consumer for LOGS stream
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    "LOGS",
+		FilterSubject: "logs.>",
+		DeliverPolicy: "last_per_subject", // Last message per subject on connect, then new
+		AckPolicy:     "none",             // Fire-and-forget to browser
+		AutoCreate:    true,               // Create stream if it doesn't exist
+		AutoCreateConfig: &natsclient.StreamAutoCreateConfig{
+			Subjects: []string{"logs.>"},
+			Storage:  "file", // Logs should persist
+		},
+	}
+
+	err := natsClient.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 		// Check if client is subscribed to log_entry
 		if !clientState.IsSubscribed("log_entry") {
 			return
 		}
+
+		data := msg.Data()
 
 		// Parse log entry
 		var logEntry map[string]interface{}
@@ -378,7 +478,7 @@ func logStreamer(
 	})
 
 	if err != nil {
-		logger.Error("Failed to subscribe to logs", "error", err)
+		logger.Error("Failed to consume from LOGS stream", "error", err)
 		return
 	}
 
@@ -386,7 +486,7 @@ func logStreamer(
 	<-ctx.Done()
 }
 
-// metricsStreamer subscribes to NATS metrics.> and forwards metrics as envelopes
+// metricsStreamer consumes from METRICS JetStream and forwards metrics as envelopes
 func metricsStreamer(
 	ctx context.Context,
 	clientState *ClientState,
@@ -395,8 +495,20 @@ func metricsStreamer(
 	sendFn func(StatusStreamEnvelope) error,
 	logger *slog.Logger,
 ) {
-	// Subscribe to metrics.>
-	err := natsClient.Subscribe(ctx, "metrics.>", func(_ context.Context, data []byte) {
+	// Configure JetStream consumer for METRICS stream
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    "METRICS",
+		FilterSubject: "metrics.>",
+		DeliverPolicy: "last_per_subject", // Last message per subject on connect, then new
+		AckPolicy:     "none",             // Fire-and-forget to browser
+		AutoCreate:    true,               // Create stream if it doesn't exist
+		AutoCreateConfig: &natsclient.StreamAutoCreateConfig{
+			Subjects: []string{"metrics.>"},
+			Storage:  "memory",
+		},
+	}
+
+	err := natsClient.ConsumeStreamWithConfig(ctx, cfg, func(_ context.Context, msg jetstream.Msg) {
 		// Check if client is subscribed to component_metrics
 		if !clientState.IsSubscribed("component_metrics") {
 			return
@@ -408,7 +520,7 @@ func metricsStreamer(
 			ID:        generateMessageID(),
 			Timestamp: time.Now().UnixMilli(),
 			FlowID:    flowID,
-			Payload:   json.RawMessage(data),
+			Payload:   json.RawMessage(msg.Data()),
 		}
 
 		// Send envelope (ignore error - context cancelled means connection closed)
@@ -416,7 +528,7 @@ func metricsStreamer(
 	})
 
 	if err != nil {
-		logger.Error("Failed to subscribe to metrics", "error", err)
+		logger.Error("Failed to consume from METRICS stream", "error", err)
 		return
 	}
 
@@ -537,6 +649,15 @@ func (fs *FlowService) startWebSocketReader(
 			conn.Close()
 		}()
 
+		// Create send function for ACK responses
+		sendFn := func(v any) error {
+			data, err := json.Marshal(v)
+			if err != nil {
+				return err
+			}
+			return conn.WriteMessage(websocket.TextMessage, data)
+		}
+
 		for {
 			_, message, err := conn.ReadMessage()
 			if err != nil {
@@ -552,24 +673,51 @@ func (fs *FlowService) startWebSocketReader(
 			}
 
 			// Handle client command
-			fs.handleWebSocketCommand(message, clientState)
+			fs.handleWebSocketCommand(message, clientState, sendFn)
 		}
 	}()
 }
 
 // handleWebSocketCommand processes a client command from the WebSocket
-func (fs *FlowService) handleWebSocketCommand(message []byte, clientState *ClientState) {
+func (fs *FlowService) handleWebSocketCommand(message []byte, clientState *ClientState, sendFn func(any) error) {
 	// Parse the command
 	var cmd SubscribeCommand
 	if err := json.Unmarshal(message, &cmd); err != nil {
-		// Malformed JSON - log and ignore (don't crash)
+		// Malformed JSON - send error to client
+		_ = sendFn(ErrorResponse{
+			Type:    "error",
+			Code:    "invalid_json",
+			Message: "Failed to parse command: " + err.Error(),
+		})
 		fs.logger.Debug("WebSocket received malformed JSON command", "error", err)
+		return
+	}
+
+	// Require command field
+	if cmd.Command == "" {
+		_ = sendFn(ErrorResponse{
+			Type:    "error",
+			Code:    "missing_command",
+			Message: "Command field is required",
+		})
 		return
 	}
 
 	// Handle subscribe command
 	if cmd.Command == "subscribe" {
 		clientState.UpdateSubscription(cmd.MessageTypes, cmd.LogLevel, cmd.Sources)
+
+		// Send acknowledgment with current subscription state
+		ack := SubscribeAck{
+			Type:       "subscribe_ack",
+			Subscribed: clientState.GetSubscribedTypes(),
+			LogLevel:   clientState.GetLogLevel(),
+			Sources:    clientState.GetSources(),
+		}
+		if err := sendFn(ack); err != nil {
+			fs.logger.Debug("Failed to send subscribe_ack", "error", err)
+		}
+
 		fs.logger.Debug("WebSocket client updated subscription",
 			"message_types", cmd.MessageTypes,
 			"log_level", cmd.LogLevel,
@@ -577,8 +725,11 @@ func (fs *FlowService) handleWebSocketCommand(message []byte, clientState *Clien
 		return
 	}
 
-	// Unknown command - log and ignore (don't crash)
-	if cmd.Command != "" {
-		fs.logger.Debug("WebSocket received unknown command", "command", cmd.Command)
-	}
+	// Unknown command - send error to client
+	_ = sendFn(ErrorResponse{
+		Type:    "error",
+		Code:    "unknown_command",
+		Message: "Unknown command: " + cmd.Command,
+	})
+	fs.logger.Debug("WebSocket received unknown command", "command", cmd.Command)
 }

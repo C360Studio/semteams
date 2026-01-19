@@ -13,6 +13,7 @@ func RegisterAll(registry *Registry) error {
 		"metrics-forwarder": NewMetricsForwarderService,
 		"component-manager": NewComponentManager,
 		"flow-builder":      NewFlowServiceFromConfig,
+		"heartbeat":         NewHeartbeatService,
 	}
 
 	for name, constructor := range services {

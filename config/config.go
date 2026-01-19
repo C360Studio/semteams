@@ -358,12 +358,17 @@ func (l *Loader) getDefaults() *Config {
 			"message-logger": types.ServiceConfig{
 				Name:    "message-logger",
 				Enabled: true,
-				Config:  json.RawMessage(`{}`),
+				Config:  json.RawMessage(`{"monitor_subjects": ["*"], "sample_rate": 1}`),
 			},
 			"discovery": types.ServiceConfig{
 				Name:    "discovery",
 				Enabled: false, // Dormant by default
 				Config:  json.RawMessage(`{}`),
+			},
+			"heartbeat": types.ServiceConfig{
+				Name:    "heartbeat",
+				Enabled: true,
+				Config:  json.RawMessage(`{"interval": "30s"}`),
 			},
 		},
 		// Graph and ObjectStore configuration moved to components

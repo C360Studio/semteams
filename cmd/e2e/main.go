@@ -101,6 +101,8 @@ type cliFlags struct {
 	targetFile        string // Target structured result file
 	baselineVariant   string // Baseline variant for auto-compare
 	targetVariant     string // Target variant for auto-compare
+	// WebSocket status stream endpoint (uses baseURL by default)
+	wsStatusURL string
 }
 
 // parseCommandLineFlags parses and returns command-line flags
@@ -140,6 +142,8 @@ func parseCommandLineFlags() *cliFlags {
 		"Baseline variant for auto-compare (finds latest file)")
 	flag.StringVar(&flags.targetVariant, "target-variant", "",
 		"Target variant for auto-compare (finds latest file)")
+	flag.StringVar(&flags.wsStatusURL, "ws-status-url", "",
+		"WebSocket status stream base URL (defaults to base-url)")
 
 	// Support environment variables for Docker Compose
 	if envURL := os.Getenv("SEMSTREAMS_BASE_URL"); envURL != "" {
@@ -297,7 +301,14 @@ func createScenario(
 	case "core-health", "health":
 		return scenarios.NewCoreHealthScenario(edgeClient, nil)
 	case "core-dataflow", "dataflow":
-		return scenarios.NewCoreDataflowScenario(edgeClient, flags.udpEndpoint, nil)
+		// Create WebSocket client for status stream verification
+		var wsClient *client.WebSocketClient
+		wsURL := flags.wsStatusURL
+		if wsURL == "" {
+			wsURL = flags.baseURL // Default to same base URL
+		}
+		wsClient = client.NewWebSocketClient(wsURL)
+		return scenarios.NewCoreDataflowScenario(edgeClient, wsClient, flags.udpEndpoint, nil)
 	case "core-federation", "federation":
 		return scenarios.NewCoreFederationScenario(edgeClient, cloudClient, flags.udpEndpoint, flags.wsEndpoint, nil)
 
@@ -420,9 +431,13 @@ func runAllScenarios(
 	obsClient *client.ObservabilityClient,
 	udpEndpoint string,
 ) int {
+	// Create WebSocket client for dataflow scenario
+	// When running all scenarios, we use the default HTTP endpoint for WebSocket
+	wsClient := client.NewWebSocketClient(config.DefaultEndpoints.HTTP)
+
 	tests := []scenarios.Scenario{
 		scenarios.NewCoreHealthScenario(obsClient, nil),
-		scenarios.NewCoreDataflowScenario(obsClient, udpEndpoint, nil),
+		scenarios.NewCoreDataflowScenario(obsClient, wsClient, udpEndpoint, nil),
 	}
 
 	passed := 0

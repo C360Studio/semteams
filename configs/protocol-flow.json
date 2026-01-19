@@ -32,6 +32,7 @@
       "config": {
         "buffer_size": 10000,
         "monitor_subjects": ["*"],
+        "sample_rate": 1,
         "enable_kv_query": true,
         "log_level": "INFO"
       }

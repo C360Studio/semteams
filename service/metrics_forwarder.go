@@ -72,7 +72,7 @@ func NewMetricsForwarderService(rawConfig json.RawMessage, deps *Dependencies) (
 	// The NATS client should implement the publisher interface
 	publisher, ok := interface{}(deps.NATSClient).(natsPublisher)
 	if !ok {
-		return nil, fmt.Errorf("NATS client does not implement Publish method")
+		return nil, fmt.Errorf("NATS client does not implement PublishToStream method")
 	}
 
 	return newMetricsForwarderWithPublisher(&cfg, publisher, deps.MetricsRegistry, opts...)
@@ -349,8 +349,8 @@ func (mf *MetricsForwarder) processMetric(ctx context.Context, name string, metr
 		return
 	}
 
-	// Publish to NATS
-	if err := mf.publisher.Publish(ctx, subject, data); err != nil {
+	// Publish to NATS JetStream for persistence and consistency with other observability streams
+	if err := mf.publisher.PublishToStream(ctx, subject, data); err != nil {
 		mf.logger.Debug("failed to publish metrics to NATS",
 			"subject", subject,
 			"error", err)
