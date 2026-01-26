@@ -2,24 +2,31 @@
 
 ## Overview
 
-This document defines the boundary between SemStreams core components and optional feature components. The distinction matters for:
+This document defines SemStreams core components and their boundaries.
+It reflects the **current implementation** as the stable API contract for alpha.
 
-- **Understanding:** What's fundamental vs. what's built on top
-- **Deployment:** Minimal vs. full-featured configurations
-- **Development:** What changes require careful compatibility vs. what can evolve independently
-- **Documentation:** Core concepts vs. optional capabilities
+The distinction between core and optional matters for:
+
+- **Understanding**: What's fundamental vs. what's built on top
+- **Deployment**: Minimal vs. full-featured configurations
+- **Development**: What changes require careful compatibility vs. what can evolve independently
+- **Documentation**: Core concepts vs. optional capabilities
+
+For optional components (training, multi-agent, federation), see [semstreams-optional-components.md](./semstreams-optional-components.md).
 
 ## Design Principle
 
 > SemStreams core is agnostic about how capabilities are created and extended.
 
 Core provides:
+
 - Storage and indexing primitives
 - Processing infrastructure
 - Tiered operational capability (0/1/2)
-- Query routing and execution (template matching, PathRAG, GraphRAG)
+- Query routing and execution (ClassifierChain, PathRAG, GraphRAG)
 
 Core does not care:
+
 - How flows are created (manual, AI-generated, imported)
 - How models are trained (or whether training happens at all)
 - How the UI presents capabilities
@@ -33,359 +40,257 @@ Core components are required for tiered operations. Without them, SemStreams can
 
 | Component | Package | Purpose |
 |-----------|---------|---------|
-| NATS Client | `natsclient` | Pub/sub, KV, Object Store, Streams |
-| Flow Runtime | `flow` | Component model, execution |
-| Gateway | `gateway` | HTTP/GraphQL/MCP API |
-| Vocab | `vocab` | Semantic vocabulary, entity types |
-| Internal Utils | `metric`, `errors`, `worker`, `cache`, `buffer` | Shared infrastructure |
+| NATS Client | `natsclient/` | Pub/sub, KV, Object Store, Streams, circuit breaker |
+| Flow Runtime | `service/`, `engine/`, `flowstore/` | Component lifecycle, validation, persistence |
+| Gateway | `gateway/`, `gateway/http/`, `gateway/graph-gateway/` | HTTP/GraphQL API |
+| Vocabulary | `vocabulary/` | Semantic predicates, IRI mappings, hierarchy |
+| Component Framework | `component/`, `componentregistry/` | Registry, lifecycle, port definitions, discovery |
+| Message Types | `message/` | Graphable interface, Triple, behavioral interfaces |
+| Configuration | `config/` | Loading, validation, NATS KV watching |
+| Health | `health/` | Health monitoring and status aggregation |
+| Metrics | `metric/` | Prometheus metrics registry and collectors |
+
+**Shared utilities** in `pkg/`:
+
+- `pkg/cache/` - LRU, TTL, hybrid caching
+- `pkg/buffer/` - Ring buffer, streaming
+- `pkg/worker/` - Worker pools, concurrency
+- `pkg/errs/` - Error wrapping
+- `pkg/retry/` - Retry policies
+- `pkg/logging/` - NATS handler, multi-handler
 
 ### Tier 0: Structural/Deterministic
 
 | Component | Package | Purpose |
 |-----------|---------|---------|
-| Entity Store | `entity` | Graph state, ENTITY_STATES bucket |
-| Relationship Index | `entity` | SPO triples, OUTGOING/INCOMING_INDEX |
-| Alias Index | `entity` | Entity aliases, ALIAS_INDEX |
-| Rule Engine | `rules` | Rule definitions, evaluation, triggers |
-| Workflow Engine | `workflow` | Workflow definitions, execution |
+| Entity Storage | `graph/datamanager/` | Entity CRUD, batch operations, edge operations |
+| Graph Types | `graph/` | EntityState, Triple, constants, query types |
+| KV Buckets | `graph/kvbuckets/` | Bucket access patterns |
+| Rule Engine | `processor/rule/` | CEL expressions, entity watching, state tracking |
 
-**Tier 0 enables:** Deterministic operations, structural queries, rule-based automation.
+**Tier 0 enables**: Deterministic operations, structural queries, rule-based automation.
 
 ### Tier 1: Statistical
 
 | Component | Package | Purpose |
 |-----------|---------|---------|
-| BM25 Index | `index` | Text search |
-| Community Index | `index` | LPA clustering, COMMUNITY_INDEX |
-| Structural Index | `index` | k-core, centrality, PageRank |
+| BM25/Text Index | `processor/graph-index/` | Full-text search indexing |
+| Spatial Index | `processor/graph-index-spatial/` | Geohash-based spatial queries |
+| Temporal Index | `processor/graph-index-temporal/` | Time-window queries |
+| Community Detection | `graph/clustering/` | LPA, PageRank, summarization |
+| Structural Analysis | `graph/structural/` | k-core, centrality metrics |
+| BM25 Embeddings | `graph/embedding/` (BM25 mode) | Statistical embeddings |
 
-**Tier 1 enables:** Statistical queries, community detection, graph analytics, BM25-based similarity.
+**Tier 1 enables**: Statistical queries, community detection, graph analytics, BM25-based similarity.
 
 ### Tier 2: Semantic
 
 | Component | Package | Purpose |
 |-----------|---------|---------|
-| SemEmbed | `embed` | Embedding models, vector similarity |
-| SemInstruct | `instruct` | Lightweight LLM gateway |
-| Content Analysis | `content` | LLM-based document processing |
+| Neural Embeddings | `graph/embedding/` (HTTP mode) | Vector embeddings via semembed service |
+| LLM Integration | `graph/llm/` | OpenAI client, prompts, content fetching |
+| Inference | `graph/inference/` | Anomaly detection, hierarchy inference, semantic gaps |
 
-**Tier 2 enables:** Semantic search, LLM-augmented queries, document understanding.
+**Tier 2 enables**: Semantic search, LLM-augmented queries, document understanding.
 
-### Query (Required for Useful Operations)
+### Query
 
 | Component | Package | Purpose |
 |-----------|---------|---------|
-| Query Router | `query` | Template matching, classification |
-| PathRAG | `query` | Path-based retrieval |
-| GraphRAG | `query` | Graph-augmented retrieval |
+| Query Client | `graph/query/` | Entity lookup, path queries, caching |
+| Classifier Chain | `graph/query/classifier_chain.go` | Tiered classification (T0 keyword → T1/T2 embedding) |
+| PathRAG | `processor/graph-query/pathrag.go` | Path-based retrieval |
+| GraphRAG | `processor/graph-query/graphrag.go` | Graph-augmented retrieval |
+| Query Gateway | `gateway/graph-gateway/` | GraphQL resolvers, HTTP handlers |
 
 ## Core Data Model
 
 ### Buckets (NATS KV)
 
+All bucket constants defined in `graph/constants.go`:
+
 **Tier 0 Buckets:**
 
-| Bucket | Owner | Purpose |
-|--------|-------|---------|
-| `ENTITY_STATES` | entity | Primary entity storage |
-| `OUTGOING_INDEX` | entity | Outbound relationships |
-| `INCOMING_INDEX` | entity | Inbound relationships |
-| `ALIAS_INDEX` | entity | Entity aliases |
-| `PREDICATE_INDEX` | entity | Relationship types |
-| `RULE_DEFINITIONS` | rules | Rule specifications |
-| `WORKFLOW_DEFINITIONS` | workflow | Workflow specifications |
-| `FLOW_DEFINITIONS` | flow | Component configurations |
-| `FLOW_STATES` | flow | Runtime state |
-| `VOCAB_TYPES` | vocab | Entity type definitions |
+| Bucket | Purpose |
+|--------|---------|
+| `ENTITY_STATES` | Primary entity storage with triples and versions |
+| `PREDICATE_INDEX` | Predicate → entity IDs mapping |
+| `INCOMING_INDEX` | Entity ID → referencing entities |
+| `OUTGOING_INDEX` | Entity ID → referenced entities |
+| `ALIAS_INDEX` | Alias → entity ID resolution |
+| `SPATIAL_INDEX` | Geohash-based spatial indexing |
+| `TEMPORAL_INDEX` | Time-based temporal indexing |
+| `CONTEXT_INDEX` | Context values storage |
+| `COMPONENT_STATUS` | Component lifecycle and status |
 
 **Tier 1 Buckets:**
 
-| Bucket | Owner | Purpose |
-|--------|-------|---------|
-| `COMMUNITY_INDEX` | index | Detected communities |
-| `STRUCTURAL_INDEX` | index | k-core, centrality metrics |
+| Bucket | Purpose |
+|--------|---------|
+| `COMMUNITY_INDEX` | Community records with members and summaries |
+| `STRUCTURAL_INDEX` | k-core levels and pivot distances |
 
 **Tier 2 Buckets:**
 
-| Bucket | Owner | Purpose |
-|--------|-------|---------|
-| `EMBEDDING_INDEX` | embed | Vector embeddings |
-
-### Object Store
-
-| Store | Owner | Purpose |
-|-------|-------|---------|
-| `OBJECT_STORE` | flow | Documents, video frames, blobs (storage is infrastructure; analysis is Tier 2) |
+| Bucket | Purpose |
+|--------|---------|
+| `EMBEDDING_INDEX` | Entity ID → embedding vector storage |
+| `EMBEDDINGS_CACHE` | Embedding cache layer |
+| `EMBEDDING_DEDUP` | Content-addressed deduplication |
+| `ANOMALY_INDEX` | Structural anomaly detection results |
 
 ### Streams
 
-| Stream | Owner | Purpose |
-|--------|-------|---------|
-| `QUERY_LOG` | query | Query history with signals |
-| `RULE_TRIGGERS` | rules | Rule trigger history |
-| `ENTITY_EVENTS` | entity | Entity change events |
+System streams defined in `config/streams.go`:
 
-## Optional Components
+| Stream | Storage | TTL | Purpose |
+|--------|---------|-----|---------|
+| `LOGS` | file | 1h | Application logs |
+| `HEALTH` | memory | 5m | Component health updates |
+| `METRICS` | memory | 5m | Prometheus metrics snapshots |
+| `FLOWS` | memory | 5m | Flow status changes |
 
-Optional components enable features built on core capabilities. The system functions without them, but with reduced functionality.
+Additional streams are derived dynamically from component JetStream output ports.
+Convention: subject `component.action.type` → stream `COMPONENT` (uppercase).
 
-### Training
+### Object Store
 
-**Enables:** Domain-specific model adaptation
-
-| Component | Purpose |
-|-----------|---------|
-| training-export | Extracts QA pairs from core buckets |
-| training-filter | Deduplication, quality, clustering |
-| slm-trainer | QLoRA fine-tuning |
-| model-deployer | Adapter distribution |
-
-**Reads from core:**
-- `ENTITY_STATES`, `*_INDEX` buckets
-- `QUERY_LOG` stream
-- `OBJECT_STORE`
-- Embeddings via `embed` package (Tier 2, for semantic dedup/clustering)
-- LLM via `instruct` package (Tier 2, for synthetic QA generation)
-
-**Owns:**
-- `TRAINING_DATA` bucket
-- `TRAINING_STATE` bucket
-- `MODEL_ADAPTERS` bucket
-- `training.*` subjects
-
-**Deployment options:**
-- Same node as core (typical)
-- Separate node with NATS access
-- Shore-only (not deployed to edge)
-
-**Tier considerations:**
-- Tier 0/1: Deterministic training data only (entities, relationships, rules, query logs)
-- Tier 2: Adds semantic deduplication, synthetic QA from documents
-
-### Multi-Agent
-
-**Enables:** Specialized agent routing and orchestration
-
-| Component | Purpose |
-|-----------|---------|
-| agent-registry | Agent definitions, capabilities |
-| agent-router | Query → agent routing |
-| agent-orchestrator | Multi-agent coordination |
-
-**Reads from core:**
-- Query capabilities via `query` package
-- Embeddings via `embed` package (Tier 2)
-- Graph context via `entity` package
-
-**Owns:**
-- `AGENT_REGISTRY` bucket
-- `ROUTING_LOG` stream
-- `agent.*` subjects
-
-### Federation
-
-**Enables:** Multi-node synchronization
-
-| Component | Purpose |
-|-----------|---------|
-| fed-sync | Entity/relationship replication |
-| fed-auth | mTLS, Step CA integration |
-| fed-gateway | Cross-node query routing |
-
-**Reads from core:**
-- All core buckets (for replication)
-
-**Owns:**
-- `FEDERATION_STATE` bucket
-- `SYNC_LOG` stream
-- `federation.*` subjects
-
-### Domain Packs
-
-**Enables:** Domain-specific operations
-
-| Pack | Domain |
-|------|--------|
-| SemOps | Robotics, maritime, tactical |
-| (future) | Other verticals |
-
-**Contains:**
-- Entity schemas for domain
-- Pre-built flows
-- Domain-specific rules
-- Integration adapters (MAVLink, AIS, TAK, etc.)
-
-## Tier Dependencies
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Tier Dependencies                            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Tier 2 (Semantic)                                              │
-│  ├── Requires: Tier 1 + Tier 0 + Infrastructure                │
-│  ├── Adds: SemEmbed, SemInstruct, content analysis             │
-│  └── Enables: Semantic search, LLM queries, doc understanding  │
-│       │                                                         │
-│       ▼                                                         │
-│  Tier 1 (Statistical)                                           │
-│  ├── Requires: Tier 0 + Infrastructure                         │
-│  ├── Adds: BM25, communities, structural indices               │
-│  └── Enables: Text search, clustering, graph analytics         │
-│       │                                                         │
-│       ▼                                                         │
-│  Tier 0 (Structural)                                            │
-│  ├── Requires: Infrastructure                                   │
-│  ├── Adds: Entities, relationships, rules, workflows           │
-│  └── Enables: Deterministic ops, structural queries, automation│
-│       │                                                         │
-│       ▼                                                         │
-│  Infrastructure                                                  │
-│  ├── Requires: Nothing                                          │
-│  ├── Provides: NATS, flow runtime, gateway, vocab              │
-│  └── Enables: Component execution, API access                   │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-## Optional Component Dependencies
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│               Optional Component Dependencies                    │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  Training                                                       │
-│  ├── Minimum: Core Tier 0 (deterministic data extraction)      │
-│  ├── Better: Core Tier 1 (includes query logs with BM25)       │
-│  ├── Best: Core Tier 2 (semantic dedup, synthetic QA)          │
-│  └── Produces: Model adapters consumed by SemInstruct          │
-│                                                                  │
-│  Multi-Agent                                                    │
-│  ├── Minimum: Core Tier 1 (BM25-based routing)                 │
-│  ├── Best: Core Tier 2 (embedding-based routing)               │
-│  └── Consumes: Training outputs (specialized adapters)         │
-│                                                                  │
-│  Federation                                                     │
-│  ├── Requires: Core (any tier)                                  │
-│  ├── Independent of: Training, Multi-Agent                     │
-│  └── Replicates: Core bucket state                             │
-│                                                                  │
-│  Domain Packs                                                   │
-│  ├── Requires: Core (any tier)                                  │
-│  ├── Independent of: Other optional components                 │
-│  └── Provides: Schemas, flows, rules, adapters                 │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+The `storage/objectstore/` component provides ObjectStore functionality for documents,
+video frames, and blobs. Storage is infrastructure (Tier 0); content analysis requires Tier 2.
 
 ## Configuration
 
 ### Tier Selection
 
-```yaml
-semstreams:
-  tier: 2  # 0, 1, or 2
+Tiers are selected by choosing the appropriate configuration file at startup:
+
+| Config File | Tier | Description |
+|-------------|------|-------------|
+| `configs/structural.json` | 0 | Rules + graph traversal (no ML) |
+| `configs/statistical.json` | 1 | + BM25 embeddings + community detection |
+| `configs/semantic.json` | 2 | + Neural embeddings + LLM |
+
+Config files include a `tier` field with string values: `"rules"`, `"statistical"`, or the full semantic config.
+
+### Component Enable/Disable
+
+Components are enabled/disabled individually in config:
+
+```json
+{
+  "components": {
+    "graph-embedding": {
+      "type": "processor",
+      "name": "graph-embedding",
+      "enabled": true,
+      "config": {
+        "embedder_type": "bm25"
+      }
+    }
+  }
+}
 ```
 
-Components for higher tiers are only loaded when tier is set appropriately.
+### Services Configuration
 
-### Optional Features
-
-```yaml
-semstreams:
-  tier: 2
-  
-  features:
-    training:
-      enabled: true
-      # Training-specific config...
-      
-    agents:
-      enabled: false
-      
-    federation:
-      enabled: false
+```json
+{
+  "services": {
+    "message-logger": { "enabled": true },
+    "discovery": { "enabled": false },
+    "heartbeat": { "enabled": true }
+  }
+}
 ```
 
-### Domain Packs
+### Environment Variables
 
-```yaml
-semstreams:
-  tier: 2
-  
-  domains:
-    - semops  # Loads SemOps domain pack
+Limited environment variable overrides supported with `STREAMKIT_` prefix:
+
+- `STREAMKIT_PLATFORM_ID`, `STREAMKIT_PLATFORM_TYPE`, `STREAMKIT_PLATFORM_REGION`
+- `STREAMKIT_NATS_URLS`, `STREAMKIT_NATS_USERNAME`, `STREAMKIT_NATS_PASSWORD`, `STREAMKIT_NATS_TOKEN`
+
+## Tier Dependencies
+
+```text
+Tier 2 (Semantic)
+├── Requires: Tier 1 + Tier 0 + Infrastructure
+├── Adds: Neural embeddings, LLM integration, inference
+└── Enables: Semantic search, LLM queries, document understanding
+     │
+     ▼
+Tier 1 (Statistical)
+├── Requires: Tier 0 + Infrastructure
+├── Adds: BM25, communities, structural indices
+└── Enables: Text search, clustering, graph analytics
+     │
+     ▼
+Tier 0 (Structural)
+├── Requires: Infrastructure
+├── Adds: Entities, relationships, rules
+└── Enables: Deterministic ops, structural queries, automation
+     │
+     ▼
+Infrastructure
+├── Requires: Nothing
+├── Provides: NATS, flow runtime, gateway, vocabulary
+└── Enables: Component execution, API access
 ```
 
 ## API Boundaries
 
-### Core API (Stable)
+### Core Interfaces (Stable)
 
-These APIs are stable and optional components depend on them:
+These interfaces are stable and optional components depend on them:
 
-| API | Purpose |
-|-----|---------|
-| `entity.Store` | Entity CRUD, relationship management |
-| `index.Search` | BM25, community, structural queries |
-| `embed.Embed` | Vector embedding (Tier 2) |
-| `instruct.Complete` | LLM completion (Tier 2) |
-| `query.Execute` | Query routing and execution |
-| `rules.Evaluate` | Rule evaluation |
-| `workflow.Execute` | Workflow execution |
-| `flow.Runtime` | Component lifecycle |
+| Interface | Package | Purpose |
+|-----------|---------|---------|
+| `query.Client` | `graph/query/` | Entity lookup, path queries |
+| `embedding.Embedder` | `graph/embedding/` | Vector embedding |
+| `llm.Client` | `graph/llm/` | LLM completion |
+| `datamanager.DataManager` | `graph/datamanager/` | Entity CRUD |
+| `component.Discoverable` | `component/` | Component metadata |
 
-### Optional APIs (May Change)
+### Extension Points
 
-These APIs are internal to optional components:
+Core provides these extension points for optional components:
 
-| API | Owner |
-|-----|-------|
-| `training.Export` | Training component |
-| `training.Train` | Training component |
-| `agents.Route` | Multi-agent component |
-| `agents.Registry` | Multi-agent component |
-| `federation.Sync` | Federation component |
+1. **ClassifierChain** (`graph/query/classifier_chain.go`): Tiered query classification,
+   extensible with additional classifiers
+2. **Component Registry** (`componentregistry/`): Register new component types
+3. **JetStream Streams**: Derived streams from component output ports
+4. **KV Buckets**: Optional components can create their own buckets
 
 ## Development Guidelines
 
 ### Adding to Core
 
 Core changes require:
+
 - Consideration of all three tiers
 - Backward compatibility (or clear migration path)
 - Documentation updates
 - Impact assessment on optional components
 
-### Adding Optional Components
-
-Optional components should:
-- Only depend on core APIs (not other optional components, unless explicitly layered)
-- Own their own buckets/streams/subjects
-- Be deployable independently
-- Degrade gracefully when dependencies unavailable
-
 ### Feature Flags vs. Build Tags
 
 Prefer runtime feature flags over build tags:
+
 - Easier deployment (single binary)
 - Runtime reconfiguration
 - Clearer debugging
 
 Build tags only for:
+
 - Significantly different dependencies (e.g., CGO vs. pure Go)
 - Platform-specific code
 
 ## Summary
 
-| Category | Components | Required For |
-|----------|------------|--------------|
-| **Infrastructure** | natsclient, flow, gateway, vocab, utils | Everything |
-| **Tier 0** | entity, rules, workflow | Deterministic ops |
-| **Tier 1** | index (BM25, community, structural) | Statistical ops |
-| **Tier 2** | semembed, seminstruct, content | Semantic ops |
-| **Query** | query (router, pathrag, graphrag) | Useful queries |
-| **Optional: Training** | training-* | Domain adaptation |
-| **Optional: Agents** | agent-* | Specialized routing |
-| **Optional: Federation** | fed-* | Multi-node sync |
-| **Optional: Domains** | semops, etc. | Domain-specific ops |
+| Category | Packages | Required For |
+|----------|----------|--------------|
+| **Infrastructure** | `natsclient/`, `service/`, `engine/`, `flowstore/`, `gateway/`, `vocabulary/`, `component/`, `config/`, `health/`, `metric/` | Everything |
+| **Tier 0** | `graph/datamanager/`, `graph/kvbuckets/`, `processor/rule/` | Deterministic ops |
+| **Tier 1** | `processor/graph-index*/`, `graph/clustering/`, `graph/structural/`, `graph/embedding/` (BM25) | Statistical ops |
+| **Tier 2** | `graph/embedding/` (HTTP), `graph/llm/`, `graph/inference/` | Semantic ops |
+| **Query** | `graph/query/`, `processor/graph-query/`, `gateway/graph-gateway/` | Useful queries |
