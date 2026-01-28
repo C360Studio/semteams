@@ -3,6 +3,7 @@ package rule
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -78,11 +79,21 @@ type TripleMutator interface {
 	RemoveTriple(ctx context.Context, subject, predicate string) (uint64, error)
 }
 
+// Publisher handles publishing messages to NATS subjects.
+// It abstracts the decision between core NATS and JetStream publishing.
+type Publisher interface {
+	// Publish sends a message to a NATS subject.
+	// The implementation determines whether to use core NATS or JetStream
+	// based on port configuration.
+	Publish(ctx context.Context, subject string, data []byte) error
+}
+
 // ActionExecutor executes actions for rules.
 // It handles triple mutations, NATS publishing, and other action types.
 type ActionExecutor struct {
 	logger        *slog.Logger
 	tripleMutator TripleMutator // Optional: if nil, triple mutations are logged but not persisted
+	publisher     Publisher     // Optional: if nil, publish actions are logged but not sent
 }
 
 // NewActionExecutor creates a new ActionExecutor with the given logger.
@@ -105,6 +116,19 @@ func NewActionExecutorWithMutator(logger *slog.Logger, mutator TripleMutator) *A
 	return &ActionExecutor{
 		logger:        logger,
 		tripleMutator: mutator,
+	}
+}
+
+// NewActionExecutorFull creates a new ActionExecutor with full functionality.
+// The mutator enables triple persistence, and the publisher enables NATS publishing.
+func NewActionExecutorFull(logger *slog.Logger, mutator TripleMutator, publisher Publisher) *ActionExecutor {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &ActionExecutor{
+		logger:        logger,
+		tripleMutator: mutator,
+		publisher:     publisher,
 	}
 }
 
@@ -234,18 +258,56 @@ func (e *ActionExecutor) ExecuteRemoveTriple(ctx context.Context, action Action,
 }
 
 // executePublish executes a publish action, sending a message to a NATS subject.
-func (e *ActionExecutor) executePublish(_ context.Context, action Action, entityID, relatedID string) error {
+func (e *ActionExecutor) executePublish(ctx context.Context, action Action, entityID, relatedID string) error {
+	// Validate subject is present
+	if action.Subject == "" {
+		return errors.New("subject is required for publish action")
+	}
+
 	subject := substituteVariables(action.Subject, entityID, relatedID)
+
+	// Build the message payload
+	payload := map[string]any{
+		"entity_id":  entityID,
+		"subject":    subject,
+		"timestamp":  time.Now().Format(time.RFC3339Nano),
+		"source":     "rule_engine",
+		"properties": action.Properties,
+	}
+	if relatedID != "" {
+		payload["related_id"] = relatedID
+	}
 
 	if e.logger != nil {
 		e.logger.Debug("Publishing message",
 			"subject", subject,
 			"entity_id", entityID,
+			"related_id", relatedID,
 			"properties", action.Properties)
 	}
 
-	// TODO: Publish to NATS subject
-	// This will be integrated with NATS client in a future task
+	// Publish via NATS if publisher is configured
+	if e.publisher != nil {
+		data, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("marshal publish payload: %w", err)
+		}
+
+		if err := e.publisher.Publish(ctx, subject, data); err != nil {
+			return fmt.Errorf("publish to %s: %w", subject, err)
+		}
+
+		if e.logger != nil {
+			e.logger.Debug("Message published",
+				"subject", subject,
+				"entity_id", entityID,
+				"size", len(data))
+		}
+	} else if e.logger != nil {
+		e.logger.Debug("Message not published (no publisher configured)",
+			"subject", subject,
+			"entity_id", entityID)
+	}
 
 	return nil
 }

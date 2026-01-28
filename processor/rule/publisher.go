@@ -10,6 +10,45 @@ import (
 	"github.com/c360/semstreams/pkg/errs"
 )
 
+// actionPublisher implements the Publisher interface for ActionExecutor.
+// It wraps the Processor's NATS client and port configuration to provide
+// transparent publishing to either core NATS or JetStream based on config.
+type actionPublisher struct {
+	processor *Processor
+}
+
+// newActionPublisher creates a new publisher that uses the processor's NATS client.
+func newActionPublisher(processor *Processor) *actionPublisher {
+	return &actionPublisher{processor: processor}
+}
+
+// Publish sends a message to a NATS subject.
+// It checks port configuration to determine whether to use JetStream or core NATS.
+func (p *actionPublisher) Publish(ctx context.Context, subject string, data []byte) error {
+	if p.processor.natsClient == nil {
+		return errs.WrapFatal(fmt.Errorf("NATS client not configured"), "actionPublisher", "Publish", "client check")
+	}
+
+	var publishErr error
+	if p.processor.isJetStreamPortBySubject(subject) {
+		publishErr = p.processor.natsClient.PublishToStream(ctx, subject, data)
+	} else {
+		publishErr = p.processor.natsClient.Publish(ctx, subject, data)
+	}
+
+	if publishErr != nil {
+		return errs.WrapTransient(publishErr, "actionPublisher", "Publish", fmt.Sprintf("publish to %s", subject))
+	}
+
+	// Update metrics
+	if p.processor.metrics != nil {
+		p.processor.metrics.eventsPublishedTotal.WithLabelValues(subject, "action_publish").Inc()
+	}
+
+	atomic.AddInt64(&p.processor.eventsPublished, 1)
+	return nil
+}
+
 // isJetStreamPortBySubject checks if an output port with the given subject is configured for JetStream
 func (rp *Processor) isJetStreamPortBySubject(subject string) bool {
 	if rp.config == nil || rp.config.Ports == nil {

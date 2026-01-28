@@ -356,15 +356,22 @@ func (rp *Processor) initializeStateTracker(ctx context.Context) error {
 
 	// Create ActionExecutor with triple mutation support
 	// The tripleMutator uses NATS request/response to persist triples and tracks
-	// KV revisions to prevent feedback loops in rule evaluation
+	// KV revisions to prevent feedback loops in rule evaluation.
+	// The publisher enables publish actions to send messages to NATS subjects.
 	var actionExecutor ActionExecutorInterface
-	if rp.natsClient != nil && rp.config.EnableGraphIntegration {
-		mutator := newTripleMutator(rp.natsClient, rp)
-		actionExecutor = NewActionExecutorWithMutator(rp.logger, mutator)
-		rp.logger.Info("ActionExecutor initialized with triple mutation support")
+	if rp.natsClient != nil {
+		publisher := newActionPublisher(rp)
+		if rp.config.EnableGraphIntegration {
+			mutator := newTripleMutator(rp.natsClient, rp)
+			actionExecutor = NewActionExecutorFull(rp.logger, mutator, publisher)
+			rp.logger.Info("ActionExecutor initialized with triple mutation and publishing support")
+		} else {
+			actionExecutor = NewActionExecutorFull(rp.logger, nil, publisher)
+			rp.logger.Info("ActionExecutor initialized with publishing support (graph integration disabled)")
+		}
 	} else {
 		actionExecutor = NewActionExecutor(rp.logger)
-		rp.logger.Info("ActionExecutor initialized without triple mutation (graph integration disabled)")
+		rp.logger.Info("ActionExecutor initialized without NATS support")
 	}
 
 	// Create StatefulEvaluator

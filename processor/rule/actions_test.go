@@ -3,6 +3,7 @@ package rule
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -371,4 +372,182 @@ func TestActionExecutor(t *testing.T) {
 			assert.NotNil(t, executor)
 		})
 	}
+}
+
+// mockPublisher implements Publisher interface for testing
+type mockPublisher struct {
+	published []publishedMessage
+	err       error
+}
+
+type publishedMessage struct {
+	subject string
+	data    []byte
+}
+
+func (m *mockPublisher) Publish(_ context.Context, subject string, data []byte) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.published = append(m.published, publishedMessage{subject: subject, data: data})
+	return nil
+}
+
+// T041: Test Action Publish - sends message to NATS subject
+func TestAction_Publish(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		action      Action
+		entityID    string
+		relatedID   string
+		wantSubject string
+		wantErr     bool
+		errMsg      string
+	}{
+		{
+			name: "publish to static subject",
+			action: Action{
+				Type:    ActionTypePublish,
+				Subject: "alerts.battery.low",
+				Properties: map[string]any{
+					"severity": "critical",
+				},
+			},
+			entityID:    "c360.platform.robotics.mav1.drone.001",
+			relatedID:   "",
+			wantSubject: "alerts.battery.low",
+			wantErr:     false,
+		},
+		{
+			name: "publish with entity variable substitution",
+			action: Action{
+				Type:    ActionTypePublish,
+				Subject: "events.$entity.id",
+			},
+			entityID:    "c360.platform.robotics.mav1.drone.001",
+			relatedID:   "",
+			wantSubject: "events.c360.platform.robotics.mav1.drone.001",
+			wantErr:     false,
+		},
+		{
+			name: "publish with related variable substitution",
+			action: Action{
+				Type:    ActionTypePublish,
+				Subject: "proximity.$related.id",
+			},
+			entityID:    "c360.platform.robotics.mav1.drone.001",
+			relatedID:   "c360.platform.robotics.mav1.drone.002",
+			wantSubject: "proximity.c360.platform.robotics.mav1.drone.002",
+			wantErr:     false,
+		},
+		{
+			name: "missing subject should fail",
+			action: Action{
+				Type: ActionTypePublish,
+			},
+			entityID: "c360.platform.robotics.mav1.drone.001",
+			wantErr:  true,
+			errMsg:   "subject is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockPublisher{}
+			executor := NewActionExecutorFull(nil, nil, mock)
+
+			err := executor.Execute(ctx, tt.action, tt.entityID, tt.relatedID)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+				require.Len(t, mock.published, 1, "should have published one message")
+				assert.Equal(t, tt.wantSubject, mock.published[0].subject)
+			}
+		})
+	}
+}
+
+// T042: Test Publish action payload format
+func TestAction_Publish_PayloadFormat(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mock := &mockPublisher{}
+	executor := NewActionExecutorFull(nil, nil, mock)
+
+	action := Action{
+		Type:    ActionTypePublish,
+		Subject: "test.subject",
+		Properties: map[string]any{
+			"custom_field": "custom_value",
+			"priority":     1,
+		},
+	}
+
+	err := executor.Execute(ctx, action, "entity.001", "related.002")
+	require.NoError(t, err)
+	require.Len(t, mock.published, 1)
+
+	// Parse the published payload
+	var payload map[string]any
+	err = json.Unmarshal(mock.published[0].data, &payload)
+	require.NoError(t, err)
+
+	// Verify required fields
+	assert.Equal(t, "entity.001", payload["entity_id"])
+	assert.Equal(t, "related.002", payload["related_id"])
+	assert.Equal(t, "test.subject", payload["subject"])
+	assert.Equal(t, "rule_engine", payload["source"])
+	assert.NotEmpty(t, payload["timestamp"])
+
+	// Verify properties are included
+	props, ok := payload["properties"].(map[string]any)
+	require.True(t, ok, "properties should be a map")
+	assert.Equal(t, "custom_value", props["custom_field"])
+	assert.Equal(t, float64(1), props["priority"]) // JSON numbers are float64
+}
+
+// T043: Test Publish action without publisher (no-op)
+func TestAction_Publish_NoPublisher(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	executor := NewActionExecutor(nil) // No publisher configured
+
+	action := Action{
+		Type:    ActionTypePublish,
+		Subject: "test.subject",
+	}
+
+	// Should not error, just log and return
+	err := executor.Execute(ctx, action, "entity.001", "")
+	require.NoError(t, err)
+}
+
+// T044: Test Publish action error handling
+func TestAction_Publish_ErrorHandling(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	expectedErr := assert.AnError
+	mock := &mockPublisher{err: expectedErr}
+	executor := NewActionExecutorFull(nil, nil, mock)
+
+	action := Action{
+		Type:    ActionTypePublish,
+		Subject: "test.subject",
+	}
+
+	err := executor.Execute(ctx, action, "entity.001", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "publish to test.subject")
 }
