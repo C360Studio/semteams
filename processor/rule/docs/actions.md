@@ -20,6 +20,7 @@ type Action struct {
 |--------|--------|--------------|
 | `add_triple` | Creates relationship/property | Adds edge, affects clustering |
 | `remove_triple` | Removes relationship | Removes edge, may split communities |
+| `update_triple` | Replaces existing triple value | Updates edge, may affect clustering |
 | `publish` | Sends NATS message | No direct graph impact |
 
 ## add_triple
@@ -113,6 +114,69 @@ When removing relationship triples:
 - Triple removed from entity
 - Edge removed from OUTGOING_INDEX and INCOMING_INDEX
 - Next community detection: entity may move to different community
+
+## update_triple
+
+Updates an existing triple by removing the old value and adding a new one. This is an atomic remove+add operation:
+
+```json
+{
+  "type": "update_triple",
+  "predicate": "status.level",
+  "object": "critical"
+}
+```
+
+**Result:** 
+1. Any existing triple with predicate `status.level` is removed
+2. New triple `entity.status.level = "critical"` is added
+
+### Use Cases
+
+Update triple is useful when you want to change a value without creating duplicates:
+
+```json
+{
+  "type": "update_triple",
+  "predicate": "battery.state",
+  "object": "low"
+}
+```
+
+If the entity already has `battery.state = "normal"`, this will:
+1. Remove `battery.state = "normal"`
+2. Add `battery.state = "low"`
+
+### Template Variables
+
+Like `add_triple`, you can use entity data in values:
+
+```json
+{
+  "type": "update_triple",
+  "predicate": "last.zone",
+  "object": "$entity.current_zone"
+}
+```
+
+### TTL Support
+
+Update triple supports TTL for temporary values:
+
+```json
+{
+  "type": "update_triple",
+  "predicate": "alert.level",
+  "object": "warning",
+  "ttl": "10m"
+}
+```
+
+### Behavior Notes
+
+- If no existing triple with the predicate exists, `update_triple` behaves like `add_triple`
+- The remove step is best-effort; if it fails (e.g., triple doesn't exist), the add still proceeds
+- This ensures the final state is always set, even on first execution
 
 ## publish
 

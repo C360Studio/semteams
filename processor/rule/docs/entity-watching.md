@@ -344,10 +344,33 @@ INFO Started KV watcher pattern="acme.*.robotics.>"
 nats kv watch ENTITY_STATES "acme.*.robotics.>"
 ```
 
+## Dynamic Pattern Updates
+
+Entity watch patterns can be updated at runtime without restarting the processor. When patterns are changed via `ApplyConfigUpdate()`:
+
+1. **Removed patterns**: Watchers for patterns no longer in the list are stopped
+2. **New patterns**: New watchers are started for patterns not previously watched
+3. **Unchanged patterns**: Existing watchers continue uninterrupted
+
+```go
+// Example: Update patterns dynamically
+changes := map[string]any{
+    "entity_watch_patterns": []string{
+        "acme.*.robotics.*.drone.*",
+        "acme.*.logistics.>",  // New pattern
+    },
+}
+processor.ApplyConfigUpdate(changes)
+```
+
+This enables:
+- Adding monitoring for new entity types without downtime
+- Removing patterns for decommissioned systems
+- Adjusting scope based on operational needs
+
 ## Limitations
 
 - Patterns only match entity IDs, not triple contents
-- Pattern changes require processor restart (no hot reload)
 - `>` wildcard must be at end of pattern
 - High cardinality patterns can cause CPU pressure
 - Deleted entities don't trigger exit actions (state cleaned up separately)

@@ -264,7 +264,7 @@ Some settings can be updated at runtime without restart.
 |---------|------------|-------|
 | `enable_graph_integration` | Yes | Takes effect on next action |
 | `rules` (individual) | Yes | Add/update/remove rules |
-| `entity_watch_patterns` | No | Requires restart |
+| `entity_watch_patterns` | Yes | Watchers added/removed dynamically |
 
 ### ApplyConfigUpdate
 
