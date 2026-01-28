@@ -23,6 +23,7 @@ type Component struct {
 	logger      *slog.Logger
 	loopTracker *LoopTracker
 	registry    *CommandRegistry
+	metrics     *routerMetrics
 
 	// Lifecycle state
 	mu        sync.RWMutex
@@ -78,6 +79,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		logger:      deps.GetLogger(),
 		loopTracker: NewLoopTracker(),
 		registry:    NewCommandRegistry(),
+		metrics:     getMetrics(deps.MetricsRegistry),
 		inputPorts:  inputPorts,
 		outputPorts: outputPorts,
 	}
@@ -231,11 +233,16 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 
 // handleUserMessage processes incoming user messages
 func (c *Component) handleUserMessage(ctx context.Context, data []byte) {
+	startTime := time.Now()
+
 	var msg agentic.UserMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		c.logger.Error("Failed to unmarshal user message", slog.String("error", err.Error()))
 		return
 	}
+
+	// Record message received
+	c.metrics.recordMessageReceived(msg.ChannelType)
 
 	c.logger.Debug("Received user message",
 		slog.String("message_id", msg.MessageID),
@@ -245,11 +252,14 @@ func (c *Component) handleUserMessage(ctx context.Context, data []byte) {
 	// Check if it's a command
 	if strings.HasPrefix(msg.Content, "/") {
 		c.handleCommand(ctx, msg)
-		return
+	} else {
+		// It's a task submission
+		c.handleTaskSubmission(ctx, msg)
 	}
 
-	// It's a task submission
-	c.handleTaskSubmission(ctx, msg)
+	// Record routing duration
+	duration := time.Since(startTime).Seconds()
+	c.metrics.recordRoutingDuration(duration)
 }
 
 // handleCommand processes command messages
@@ -321,6 +331,9 @@ func (c *Component) handleCommand(ctx context.Context, msg agentic.UserMessage) 
 
 	c.sendResponse(ctx, resp)
 
+	// Record command executed
+	c.metrics.recordCommandExecuted(name)
+
 	c.logger.Info("Command executed",
 		slog.String("command", name),
 		slog.String("user_id", msg.UserID))
@@ -378,6 +391,9 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 		CreatedAt:     time.Now(),
 	})
 
+	// Record loop started
+	c.metrics.recordLoopStarted()
+
 	// Publish task
 	taskData, err := json.Marshal(task)
 	if err != nil {
@@ -399,6 +415,9 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 		})
 		return
 	}
+
+	// Record task submitted
+	c.metrics.recordTaskSubmitted()
 
 	// Send acknowledgment
 	c.sendResponse(ctx, agentic.UserResponse{
@@ -442,6 +461,12 @@ func (c *Component) handleAgentComplete(ctx context.Context, data []byte) {
 
 	// Update loop state
 	c.loopTracker.UpdateState(completion.LoopID, completion.Outcome)
+
+	// Record loop ended
+	c.metrics.recordLoopEnded()
+
+	// Record completion received
+	c.metrics.recordCompletionReceived(completion.Outcome)
 
 	// Build response content
 	var content string

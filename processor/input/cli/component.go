@@ -28,6 +28,7 @@ type Component struct {
 	deps       component.Dependencies
 	natsClient *natsclient.Client
 	logger     *slog.Logger
+	metrics    *cliMetrics
 
 	// Lifecycle state
 	mu        sync.RWMutex
@@ -93,6 +94,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		deps:        deps,
 		natsClient:  deps.NATSClient,
 		logger:      deps.GetLogger(),
+		metrics:     getMetrics(deps.MetricsRegistry),
 		reader:      os.Stdin,
 		writer:      os.Stdout,
 		inputPorts:  inputPorts,
@@ -303,6 +305,9 @@ func (c *Component) handleCtrlC(ctx context.Context) {
 		return
 	}
 
+	// Record signal sent
+	c.metrics.recordSignalSent("cancel")
+
 	fmt.Fprintf(c.writer, "\nCancel signal sent for loop %s\n", loopID)
 }
 
@@ -393,6 +398,9 @@ func (c *Component) publishMessage(ctx context.Context, content string) {
 		return
 	}
 
+	// Record message published
+	c.metrics.recordMessagePublished()
+
 	c.logger.Debug("Published user message",
 		slog.String("message_id", msg.MessageID),
 		slog.String("subject", subject))
@@ -405,6 +413,9 @@ func (c *Component) handleResponse(ctx context.Context, data []byte) {
 		c.logger.ErrorContext(ctx, "Failed to unmarshal response", slog.String("error", err.Error()))
 		return
 	}
+
+	// Record response received
+	c.metrics.recordResponseReceived(resp.Type)
 
 	c.logger.DebugContext(ctx, "Received response",
 		slog.String("response_id", resp.ResponseID),
