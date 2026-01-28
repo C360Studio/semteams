@@ -38,19 +38,24 @@ func TestComponent_InputPorts(t *testing.T) {
 
 	ports := comp.InputPorts()
 
-	if len(ports) != 3 {
-		t.Fatalf("InputPorts() count = %d, want 3", len(ports))
+	if len(ports) != 4 {
+		t.Fatalf("InputPorts() count = %d, want 4", len(ports))
 	}
 
-	// Expected input ports
-	expected := map[string]string{
-		"agent.task":     "agent.task.*",
-		"agent.response": "agent.response.>",
-		"tool.result":    "tool.result.>",
+	// Expected input ports with required flag
+	type portExpectation struct {
+		subject  string
+		required bool
+	}
+	expected := map[string]portExpectation{
+		"agent.task":     {"agent.task.*", true},
+		"agent.response": {"agent.response.>", true},
+		"tool.result":    {"tool.result.>", true},
+		"agent.signal":   {"agent.signal.*", false}, // Optional - not all deployments need signal handling
 	}
 
 	for _, port := range ports {
-		expectedSubject, ok := expected[port.Name]
+		expectation, ok := expected[port.Name]
 		if !ok {
 			t.Errorf("Unexpected input port: %s", port.Name)
 			continue
@@ -60,8 +65,8 @@ func TestComponent_InputPorts(t *testing.T) {
 			t.Errorf("Port %s direction = %v, want DirectionInput", port.Name, port.Direction)
 		}
 
-		if !port.Required {
-			t.Errorf("Port %s should be required", port.Name)
+		if port.Required != expectation.required {
+			t.Errorf("Port %s required = %v, want %v", port.Name, port.Required, expectation.required)
 		}
 
 		// Verify JetStream config
@@ -70,8 +75,8 @@ func TestComponent_InputPorts(t *testing.T) {
 			t.Errorf("Port %s config should be JetStreamPort, got %T", port.Name, port.Config)
 			continue
 		}
-		if len(jsConfig.Subjects) == 0 || jsConfig.Subjects[0] != expectedSubject {
-			t.Errorf("Port %s subject = %v, want %s", port.Name, jsConfig.Subjects, expectedSubject)
+		if len(jsConfig.Subjects) == 0 || jsConfig.Subjects[0] != expectation.subject {
+			t.Errorf("Port %s subject = %v, want %s", port.Name, jsConfig.Subjects, expectation.subject)
 		}
 	}
 }

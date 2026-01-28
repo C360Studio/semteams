@@ -255,8 +255,8 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// Verify input ports
-	if len(cfg.Ports.Inputs) != 3 {
-		t.Errorf("DefaultConfig() input ports count = %d, want 3", len(cfg.Ports.Inputs))
+	if len(cfg.Ports.Inputs) != 4 {
+		t.Errorf("DefaultConfig() input ports count = %d, want 4", len(cfg.Ports.Inputs))
 	}
 
 	// Verify output ports

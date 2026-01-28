@@ -410,6 +410,11 @@ func (h *MessageHandler) GetLoop(loopID string) (agentic.LoopEntity, error) {
 	return h.loopManager.GetLoop(loopID)
 }
 
+// UpdateLoop updates a loop entity
+func (h *MessageHandler) UpdateLoop(entity agentic.LoopEntity) error {
+	return h.loopManager.UpdateLoop(entity)
+}
+
 // spawnEditorLoop creates an editor loop from an architect completion.
 // The architectEntity provides task context; the caller is responsible for
 // building the editor's initial message with the architect's output.

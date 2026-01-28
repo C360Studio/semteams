@@ -49,6 +49,9 @@ func TestLoopState_IsTerminal(t *testing.T) {
 		{"reviewing not terminal", agentic.LoopStateReviewing, false},
 		{"complete is terminal", agentic.LoopStateComplete, true},
 		{"failed is terminal", agentic.LoopStateFailed, true},
+		{"cancelled is terminal", agentic.LoopStateCancelled, true},
+		{"paused not terminal", agentic.LoopStatePaused, false},
+		{"awaiting_approval not terminal", agentic.LoopStateAwaitingApproval, false},
 	}
 
 	for _, tt := range tests {
@@ -209,7 +212,7 @@ func TestLoopEntity_Validation(t *testing.T) {
 				MaxIterations: 20,
 			},
 			wantErr: true,
-			errMsg:  "invalid state",
+			errMsg:  "invalid state: invalid",
 		},
 		{
 			name: "zero max iterations",

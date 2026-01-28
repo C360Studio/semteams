@@ -89,6 +89,14 @@ func DefaultConfig() Config {
 					Required:    true,
 					Description: "Tool execution results (JetStream)",
 				},
+				{
+					Name:        "agent.signal",
+					Type:        "jetstream",
+					Subject:     "agent.signal.*",
+					StreamName:  "AGENT",
+					Required:    false,
+					Description: "Control signals for loops (cancel, pause, etc.)",
+				},
 			},
 			Outputs: []component.PortDefinition{
 				{

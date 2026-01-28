@@ -13,13 +13,21 @@ type LoopState string
 // Loop states for the agentic state machine.
 // The state machine supports fluid transitions (can move backward) except from terminal states.
 const (
+	// Standard workflow states
 	LoopStateExploring    LoopState = "exploring"
 	LoopStatePlanning     LoopState = "planning"
 	LoopStateArchitecting LoopState = "architecting"
 	LoopStateExecuting    LoopState = "executing"
 	LoopStateReviewing    LoopState = "reviewing"
-	LoopStateComplete     LoopState = "complete"
-	LoopStateFailed       LoopState = "failed"
+
+	// Terminal states
+	LoopStateComplete  LoopState = "complete"
+	LoopStateFailed    LoopState = "failed"
+	LoopStateCancelled LoopState = "cancelled" // Cancelled by user signal
+
+	// Signal-related states
+	LoopStatePaused           LoopState = "paused"            // Paused by user signal
+	LoopStateAwaitingApproval LoopState = "awaiting_approval" // Waiting for user approval
 )
 
 // String returns the string representation of the state
@@ -29,7 +37,7 @@ func (s LoopState) String() string {
 
 // IsTerminal returns true if the state is a terminal state
 func (s LoopState) IsTerminal() bool {
-	return s == LoopStateComplete || s == LoopStateFailed
+	return s == LoopStateComplete || s == LoopStateFailed || s == LoopStateCancelled
 }
 
 // LoopEntity represents an agentic loop instance
@@ -45,6 +53,18 @@ type LoopEntity struct {
 	StartedAt          time.Time             `json:"started_at,omitempty"`           // When the loop was created
 	TimeoutAt          time.Time             `json:"timeout_at,omitempty"`           // When the loop should timeout
 	ParentLoopID       string                `json:"parent_loop_id,omitempty"`       // Parent loop ID for architect->editor relationship
+
+	// Signal support fields
+	PauseRequested   bool      `json:"pause_requested,omitempty"`    // Pause requested, will pause at next checkpoint
+	PauseRequestedBy string    `json:"pause_requested_by,omitempty"` // User who requested pause
+	StateBeforePause LoopState `json:"state_before_pause,omitempty"` // State before pause (for resume)
+	CancelledBy      string    `json:"cancelled_by,omitempty"`       // User who cancelled the loop
+	CancelledAt      time.Time `json:"cancelled_at,omitempty"`       // When the loop was cancelled
+
+	// User context (for routing responses)
+	UserID      string `json:"user_id,omitempty"`      // User who initiated the loop
+	ChannelType string `json:"channel_type,omitempty"` // cli, slack, discord, web
+	ChannelID   string `json:"channel_id,omitempty"`   // Channel/session ID for routing responses
 }
 
 // Validate checks if the LoopEntity is valid
@@ -52,19 +72,26 @@ func (e *LoopEntity) Validate() error {
 	if e.ID == "" {
 		return fmt.Errorf("id required")
 	}
-	if e.State != LoopStateExploring &&
-		e.State != LoopStatePlanning &&
-		e.State != LoopStateArchitecting &&
-		e.State != LoopStateExecuting &&
-		e.State != LoopStateReviewing &&
-		e.State != LoopStateComplete &&
-		e.State != LoopStateFailed {
-		return fmt.Errorf("invalid state")
+	if !isValidLoopState(e.State) {
+		return fmt.Errorf("invalid state: %s", e.State)
 	}
 	if e.MaxIterations <= 0 {
 		return fmt.Errorf("max_iterations must be greater than 0")
 	}
 	return nil
+}
+
+// isValidLoopState checks if the state is a valid LoopState
+func isValidLoopState(s LoopState) bool {
+	switch s {
+	case LoopStateExploring, LoopStatePlanning, LoopStateArchitecting,
+		LoopStateExecuting, LoopStateReviewing, LoopStateComplete,
+		LoopStateFailed, LoopStateCancelled, LoopStatePaused,
+		LoopStateAwaitingApproval:
+		return true
+	default:
+		return false
+	}
 }
 
 // TransitionTo transitions the entity to a new state

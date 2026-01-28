@@ -1,0 +1,212 @@
+package agentic
+
+import (
+	"fmt"
+	"time"
+)
+
+// Signal type constants for user control signals
+const (
+	SignalCancel   = "cancel"   // Stop execution immediately
+	SignalPause    = "pause"    // Pause at next checkpoint
+	SignalResume   = "resume"   // Continue paused loop
+	SignalApprove  = "approve"  // Approve pending result
+	SignalReject   = "reject"   // Reject with optional reason
+	SignalFeedback = "feedback" // Add feedback without decision
+	SignalRetry    = "retry"    // Retry failed loop
+)
+
+// UserMessage represents normalized input from any channel (CLI, Slack, Discord, web)
+type UserMessage struct {
+	// Identity
+	MessageID   string `json:"message_id"`
+	ChannelType string `json:"channel_type"` // cli, slack, discord, web
+	ChannelID   string `json:"channel_id"`   // specific conversation/channel
+	UserID      string `json:"user_id"`
+
+	// Content
+	Content     string       `json:"content"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+
+	// Context
+	ReplyTo  string            `json:"reply_to,omitempty"`  // loop_id if continuing
+	ThreadID string            `json:"thread_id,omitempty"` // for threaded channels
+	Metadata map[string]string `json:"metadata,omitempty"`  // channel-specific
+
+	// Timing
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// Validate checks if the UserMessage is valid
+func (m UserMessage) Validate() error {
+	if m.MessageID == "" {
+		return fmt.Errorf("message_id required")
+	}
+	if m.ChannelType == "" {
+		return fmt.Errorf("channel_type required")
+	}
+	if m.ChannelID == "" {
+		return fmt.Errorf("channel_id required")
+	}
+	if m.UserID == "" {
+		return fmt.Errorf("user_id required")
+	}
+	if m.Content == "" && len(m.Attachments) == 0 {
+		return fmt.Errorf("either content or attachments must be present")
+	}
+	return nil
+}
+
+// Attachment represents a file or other media attached to a message
+type Attachment struct {
+	Type     string `json:"type"`              // file, image, code, url
+	Name     string `json:"name"`              // filename or title
+	URL      string `json:"url,omitempty"`     // URL to fetch content
+	Content  string `json:"content,omitempty"` // inline content if small
+	MimeType string `json:"mime_type,omitempty"`
+	Size     int64  `json:"size,omitempty"`
+}
+
+// UserSignal represents a control signal from user to affect loop execution
+type UserSignal struct {
+	SignalID    string    `json:"signal_id"`
+	Type        string    `json:"type"` // cancel, pause, resume, approve, reject, feedback, retry
+	LoopID      string    `json:"loop_id"`
+	UserID      string    `json:"user_id"`
+	ChannelType string    `json:"channel_type"`
+	ChannelID   string    `json:"channel_id"`
+	Payload     any       `json:"payload,omitempty"` // signal-specific data (e.g., rejection reason)
+	Timestamp   time.Time `json:"timestamp"`
+}
+
+// Validate checks if the UserSignal is valid
+func (s UserSignal) Validate() error {
+	if s.SignalID == "" {
+		return fmt.Errorf("signal_id required")
+	}
+	if s.Type == "" {
+		return fmt.Errorf("type required")
+	}
+	if !isValidSignalType(s.Type) {
+		return fmt.Errorf("type must be one of: cancel, pause, resume, approve, reject, feedback, retry")
+	}
+	if s.LoopID == "" {
+		return fmt.Errorf("loop_id required")
+	}
+	if s.UserID == "" {
+		return fmt.Errorf("user_id required")
+	}
+	return nil
+}
+
+func isValidSignalType(t string) bool {
+	switch t {
+	case SignalCancel, SignalPause, SignalResume, SignalApprove, SignalReject, SignalFeedback, SignalRetry:
+		return true
+	default:
+		return false
+	}
+}
+
+// Response type constants
+const (
+	ResponseTypeText   = "text"   // Plain text response
+	ResponseTypeStatus = "status" // Status update
+	ResponseTypeResult = "result" // Final result
+	ResponseTypeError  = "error"  // Error message
+	ResponseTypePrompt = "prompt" // Awaiting user input (approval, etc.)
+	ResponseTypeStream = "stream" // Streaming partial content
+)
+
+// UserResponse is sent back to users via their channel
+type UserResponse struct {
+	ResponseID  string `json:"response_id"`
+	ChannelType string `json:"channel_type"`
+	ChannelID   string `json:"channel_id"`
+	UserID      string `json:"user_id"` // who to respond to
+
+	// What we're responding to
+	InReplyTo string `json:"in_reply_to,omitempty"` // message_id or loop_id
+	ThreadID  string `json:"thread_id,omitempty"`
+
+	// Content
+	Type    string `json:"type"` // text, status, result, error, prompt, stream
+	Content string `json:"content"`
+
+	// Rich content (optional)
+	Blocks  []ResponseBlock  `json:"blocks,omitempty"`
+	Actions []ResponseAction `json:"actions,omitempty"`
+
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// Validate checks if the UserResponse is valid
+func (r UserResponse) Validate() error {
+	if r.ResponseID == "" {
+		return fmt.Errorf("response_id required")
+	}
+	if r.ChannelType == "" {
+		return fmt.Errorf("channel_type required")
+	}
+	if r.ChannelID == "" {
+		return fmt.Errorf("channel_id required")
+	}
+	if r.Type == "" {
+		return fmt.Errorf("type required")
+	}
+	if !isValidResponseType(r.Type) {
+		return fmt.Errorf("type must be one of: text, status, result, error, prompt, stream")
+	}
+	return nil
+}
+
+func isValidResponseType(t string) bool {
+	switch t {
+	case ResponseTypeText, ResponseTypeStatus, ResponseTypeResult, ResponseTypeError, ResponseTypePrompt, ResponseTypeStream:
+		return true
+	default:
+		return false
+	}
+}
+
+// ResponseBlock represents a block of content in a rich response
+type ResponseBlock struct {
+	Type    string `json:"type"` // text, code, diff, file, progress
+	Content string `json:"content"`
+	Lang    string `json:"lang,omitempty"` // for code blocks
+}
+
+// ResponseAction represents an interactive action in a response
+type ResponseAction struct {
+	ID     string `json:"id"`
+	Type   string `json:"type"` // button, reaction
+	Label  string `json:"label"`
+	Signal string `json:"signal"` // signal to send if clicked
+	Style  string `json:"style"`  // primary, danger, secondary
+}
+
+// TaskMessage represents a task to be executed by an agentic loop
+type TaskMessage struct {
+	LoopID string `json:"loop_id,omitempty"` // loop to continue, or empty for new
+	TaskID string `json:"task_id"`
+	Role   string `json:"role"`
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+}
+
+// Validate checks if the TaskMessage is valid
+func (t TaskMessage) Validate() error {
+	if t.TaskID == "" {
+		return fmt.Errorf("task_id required")
+	}
+	if t.Role == "" {
+		return fmt.Errorf("role required")
+	}
+	if t.Model == "" {
+		return fmt.Errorf("model required")
+	}
+	if t.Prompt == "" {
+		return fmt.Errorf("prompt required")
+	}
+	return nil
+}

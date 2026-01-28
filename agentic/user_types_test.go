@@ -1,0 +1,524 @@
+package agentic
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestUserMessage_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		msg     UserMessage
+		wantErr string
+	}{
+		{
+			name: "valid message",
+			msg: UserMessage{
+				MessageID:   "msg-123",
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				UserID:      "user-1",
+				Content:     "hello world",
+				Timestamp:   time.Now(),
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid message with attachment only",
+			msg: UserMessage{
+				MessageID:   "msg-123",
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				UserID:      "user-1",
+				Attachments: []Attachment{{Type: "file", Name: "test.txt"}},
+				Timestamp:   time.Now(),
+			},
+			wantErr: "",
+		},
+		{
+			name: "missing message_id",
+			msg: UserMessage{
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				UserID:      "user-1",
+				Content:     "hello",
+			},
+			wantErr: "message_id required",
+		},
+		{
+			name: "missing channel_type",
+			msg: UserMessage{
+				MessageID: "msg-123",
+				ChannelID: "session-1",
+				UserID:    "user-1",
+				Content:   "hello",
+			},
+			wantErr: "channel_type required",
+		},
+		{
+			name: "missing channel_id",
+			msg: UserMessage{
+				MessageID:   "msg-123",
+				ChannelType: "cli",
+				UserID:      "user-1",
+				Content:     "hello",
+			},
+			wantErr: "channel_id required",
+		},
+		{
+			name: "missing user_id",
+			msg: UserMessage{
+				MessageID:   "msg-123",
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				Content:     "hello",
+			},
+			wantErr: "user_id required",
+		},
+		{
+			name: "missing content and attachments",
+			msg: UserMessage{
+				MessageID:   "msg-123",
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				UserID:      "user-1",
+			},
+			wantErr: "either content or attachments must be present",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.msg.Validate()
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestUserMessage_JSONRoundTrip(t *testing.T) {
+	original := UserMessage{
+		MessageID:   "msg-123",
+		ChannelType: "slack",
+		ChannelID:   "C12345",
+		UserID:      "U67890",
+		Content:     "test message",
+		ReplyTo:     "loop-abc",
+		ThreadID:    "thread-xyz",
+		Metadata:    map[string]string{"team_id": "T123"},
+		Attachments: []Attachment{
+			{Type: "file", Name: "doc.pdf", MimeType: "application/pdf", Size: 1024},
+		},
+		Timestamp: time.Now().UTC().Truncate(time.Millisecond),
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded UserMessage
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.MessageID, decoded.MessageID)
+	assert.Equal(t, original.ChannelType, decoded.ChannelType)
+	assert.Equal(t, original.Content, decoded.Content)
+	assert.Equal(t, original.Metadata, decoded.Metadata)
+	assert.Len(t, decoded.Attachments, 1)
+	assert.Equal(t, original.Attachments[0].Name, decoded.Attachments[0].Name)
+}
+
+func TestUserSignal_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		signal  UserSignal
+		wantErr string
+	}{
+		{
+			name: "valid cancel signal",
+			signal: UserSignal{
+				SignalID:    "sig-123",
+				Type:        SignalCancel,
+				LoopID:      "loop-abc",
+				UserID:      "user-1",
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				Timestamp:   time.Now(),
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid reject signal with payload",
+			signal: UserSignal{
+				SignalID:    "sig-123",
+				Type:        SignalReject,
+				LoopID:      "loop-abc",
+				UserID:      "user-1",
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				Payload:     "needs more tests",
+				Timestamp:   time.Now(),
+			},
+			wantErr: "",
+		},
+		{
+			name: "missing signal_id",
+			signal: UserSignal{
+				Type:   SignalCancel,
+				LoopID: "loop-abc",
+				UserID: "user-1",
+			},
+			wantErr: "signal_id required",
+		},
+		{
+			name: "missing type",
+			signal: UserSignal{
+				SignalID: "sig-123",
+				LoopID:   "loop-abc",
+				UserID:   "user-1",
+			},
+			wantErr: "type required",
+		},
+		{
+			name: "invalid type",
+			signal: UserSignal{
+				SignalID: "sig-123",
+				Type:     "invalid",
+				LoopID:   "loop-abc",
+				UserID:   "user-1",
+			},
+			wantErr: "type must be one of: cancel, pause, resume, approve, reject, feedback, retry",
+		},
+		{
+			name: "missing loop_id",
+			signal: UserSignal{
+				SignalID: "sig-123",
+				Type:     SignalCancel,
+				UserID:   "user-1",
+			},
+			wantErr: "loop_id required",
+		},
+		{
+			name: "missing user_id",
+			signal: UserSignal{
+				SignalID: "sig-123",
+				Type:     SignalCancel,
+				LoopID:   "loop-abc",
+			},
+			wantErr: "user_id required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.signal.Validate()
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestUserSignal_JSONRoundTrip(t *testing.T) {
+	original := UserSignal{
+		SignalID:    "sig-123",
+		Type:        SignalReject,
+		LoopID:      "loop-abc",
+		UserID:      "user-1",
+		ChannelType: "slack",
+		ChannelID:   "C12345",
+		Payload:     "rejection reason",
+		Timestamp:   time.Now().UTC().Truncate(time.Millisecond),
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded UserSignal
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.SignalID, decoded.SignalID)
+	assert.Equal(t, original.Type, decoded.Type)
+	assert.Equal(t, original.LoopID, decoded.LoopID)
+	assert.Equal(t, original.Payload, decoded.Payload)
+}
+
+func TestUserResponse_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		resp    UserResponse
+		wantErr string
+	}{
+		{
+			name: "valid text response",
+			resp: UserResponse{
+				ResponseID:  "resp-123",
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				UserID:      "user-1",
+				Type:        ResponseTypeText,
+				Content:     "Hello!",
+				Timestamp:   time.Now(),
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid prompt response with actions",
+			resp: UserResponse{
+				ResponseID:  "resp-123",
+				ChannelType: "slack",
+				ChannelID:   "C12345",
+				UserID:      "U67890",
+				Type:        ResponseTypePrompt,
+				Content:     "Ready for review",
+				Actions: []ResponseAction{
+					{ID: "approve", Type: "button", Label: "Approve", Signal: SignalApprove, Style: "primary"},
+					{ID: "reject", Type: "button", Label: "Reject", Signal: SignalReject, Style: "danger"},
+				},
+				Timestamp: time.Now(),
+			},
+			wantErr: "",
+		},
+		{
+			name: "missing response_id",
+			resp: UserResponse{
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				Type:        ResponseTypeText,
+			},
+			wantErr: "response_id required",
+		},
+		{
+			name: "missing channel_type",
+			resp: UserResponse{
+				ResponseID: "resp-123",
+				ChannelID:  "session-1",
+				Type:       ResponseTypeText,
+			},
+			wantErr: "channel_type required",
+		},
+		{
+			name: "missing channel_id",
+			resp: UserResponse{
+				ResponseID:  "resp-123",
+				ChannelType: "cli",
+				Type:        ResponseTypeText,
+			},
+			wantErr: "channel_id required",
+		},
+		{
+			name: "missing type",
+			resp: UserResponse{
+				ResponseID:  "resp-123",
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+			},
+			wantErr: "type required",
+		},
+		{
+			name: "invalid type",
+			resp: UserResponse{
+				ResponseID:  "resp-123",
+				ChannelType: "cli",
+				ChannelID:   "session-1",
+				Type:        "invalid",
+			},
+			wantErr: "type must be one of: text, status, result, error, prompt, stream",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.resp.Validate()
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestUserResponse_JSONRoundTrip(t *testing.T) {
+	original := UserResponse{
+		ResponseID:  "resp-123",
+		ChannelType: "cli",
+		ChannelID:   "session-1",
+		UserID:      "user-1",
+		InReplyTo:   "loop-abc",
+		Type:        ResponseTypeResult,
+		Content:     "Task completed successfully",
+		Blocks: []ResponseBlock{
+			{Type: "code", Content: "fmt.Println(\"hello\")", Lang: "go"},
+		},
+		Actions: []ResponseAction{
+			{ID: "retry", Type: "button", Label: "Retry", Signal: SignalRetry},
+		},
+		Timestamp: time.Now().UTC().Truncate(time.Millisecond),
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded UserResponse
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.ResponseID, decoded.ResponseID)
+	assert.Equal(t, original.Type, decoded.Type)
+	assert.Equal(t, original.Content, decoded.Content)
+	assert.Len(t, decoded.Blocks, 1)
+	assert.Equal(t, "go", decoded.Blocks[0].Lang)
+	assert.Len(t, decoded.Actions, 1)
+	assert.Equal(t, SignalRetry, decoded.Actions[0].Signal)
+}
+
+func TestSignalTypeConstants(t *testing.T) {
+	// Verify all signal types are valid
+	validTypes := []string{
+		SignalCancel,
+		SignalPause,
+		SignalResume,
+		SignalApprove,
+		SignalReject,
+		SignalFeedback,
+		SignalRetry,
+	}
+
+	for _, sigType := range validTypes {
+		assert.True(t, isValidSignalType(sigType), "expected %s to be valid", sigType)
+	}
+
+	// Verify invalid types
+	assert.False(t, isValidSignalType("invalid"))
+	assert.False(t, isValidSignalType(""))
+}
+
+func TestResponseTypeConstants(t *testing.T) {
+	// Verify all response types are valid
+	validTypes := []string{
+		ResponseTypeText,
+		ResponseTypeStatus,
+		ResponseTypeResult,
+		ResponseTypeError,
+		ResponseTypePrompt,
+		ResponseTypeStream,
+	}
+
+	for _, respType := range validTypes {
+		assert.True(t, isValidResponseType(respType), "expected %s to be valid", respType)
+	}
+
+	// Verify invalid types
+	assert.False(t, isValidResponseType("invalid"))
+	assert.False(t, isValidResponseType(""))
+}
+
+func TestTaskMessage_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		task    TaskMessage
+		wantErr string
+	}{
+		{
+			name: "valid task message",
+			task: TaskMessage{
+				TaskID: "task-123",
+				Role:   "general",
+				Model:  "qwen2.5-coder:32b",
+				Prompt: "help me write code",
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid task message with loop_id",
+			task: TaskMessage{
+				LoopID: "loop-abc",
+				TaskID: "task-123",
+				Role:   "developer",
+				Model:  "gpt-4",
+				Prompt: "continue the task",
+			},
+			wantErr: "",
+		},
+		{
+			name: "missing task_id",
+			task: TaskMessage{
+				Role:   "general",
+				Model:  "qwen2.5-coder:32b",
+				Prompt: "help me",
+			},
+			wantErr: "task_id required",
+		},
+		{
+			name: "missing role",
+			task: TaskMessage{
+				TaskID: "task-123",
+				Model:  "qwen2.5-coder:32b",
+				Prompt: "help me",
+			},
+			wantErr: "role required",
+		},
+		{
+			name: "missing model",
+			task: TaskMessage{
+				TaskID: "task-123",
+				Role:   "general",
+				Prompt: "help me",
+			},
+			wantErr: "model required",
+		},
+		{
+			name: "missing prompt",
+			task: TaskMessage{
+				TaskID: "task-123",
+				Role:   "general",
+				Model:  "qwen2.5-coder:32b",
+			},
+			wantErr: "prompt required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.task.Validate()
+			if tt.wantErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestTaskMessage_JSONRoundTrip(t *testing.T) {
+	original := TaskMessage{
+		LoopID: "loop-abc",
+		TaskID: "task-123",
+		Role:   "developer",
+		Model:  "qwen2.5-coder:32b",
+		Prompt: "help me write better Go code",
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded TaskMessage
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, original.LoopID, decoded.LoopID)
+	assert.Equal(t, original.TaskID, decoded.TaskID)
+	assert.Equal(t, original.Role, decoded.Role)
+	assert.Equal(t, original.Model, decoded.Model)
+	assert.Equal(t, original.Prompt, decoded.Prompt)
+}

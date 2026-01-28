@@ -357,6 +357,8 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 			handler = c.handleResponseMessage
 		case "tool.result":
 			handler = c.handleToolResultMessage
+		case "agent.signal":
+			handler = c.handleSignalMessage
 		default:
 			c.logger.Warn("Unknown input port", "port", port.Name)
 			continue
@@ -772,4 +774,197 @@ func (c *Component) findLoopIDForToolCall(callID string) string {
 		return ""
 	}
 	return loopID
+}
+
+// handleSignalMessage processes incoming signal messages (cancel, pause, etc.)
+func (c *Component) handleSignalMessage(ctx context.Context, data []byte) {
+	var signal agentic.UserSignal
+	if err := json.Unmarshal(data, &signal); err != nil {
+		c.logger.Error("Failed to unmarshal signal message", "error", err)
+		return
+	}
+
+	c.logger.Info("Processing signal message",
+		slog.String("signal_id", signal.SignalID),
+		slog.String("type", signal.Type),
+		slog.String("loop_id", signal.LoopID),
+		slog.String("user_id", signal.UserID))
+
+	// Handle based on signal type
+	switch signal.Type {
+	case agentic.SignalCancel:
+		c.handleCancelSignal(ctx, signal)
+	case agentic.SignalPause:
+		c.handlePauseSignal(ctx, signal)
+	case agentic.SignalResume:
+		c.handleResumeSignal(ctx, signal)
+	default:
+		c.logger.Warn("Unsupported signal type",
+			slog.String("type", signal.Type),
+			slog.String("loop_id", signal.LoopID))
+	}
+}
+
+// handleCancelSignal handles a cancel signal for a loop
+func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserSignal) {
+	loopID := signal.LoopID
+
+	// Get current loop state
+	entity, err := c.handler.GetLoop(loopID)
+	if err != nil {
+		c.logger.Error("Failed to get loop for cancel",
+			slog.String("error", err.Error()),
+			slog.String("loop_id", loopID))
+		return
+	}
+
+	// Check if loop is already terminal
+	if entity.State.IsTerminal() {
+		c.logger.Warn("Cannot cancel terminal loop",
+			slog.String("loop_id", loopID),
+			slog.String("state", string(entity.State)))
+		return
+	}
+
+	// Update loop state to cancelled
+	now := time.Now()
+	entity.State = agentic.LoopStateCancelled
+	entity.CancelledBy = signal.UserID
+	entity.CancelledAt = now
+
+	// Update in handler
+	if err := c.handler.UpdateLoop(entity); err != nil {
+		c.logger.Error("Failed to update loop state",
+			slog.String("error", err.Error()),
+			slog.String("loop_id", loopID))
+		return
+	}
+
+	// Persist loop state to KV
+	c.persistLoopState(ctx, loopID)
+
+	// Record metrics
+	if c.metrics != nil {
+		duration := time.Since(entity.StartedAt).Seconds()
+		c.metrics.recordLoopFailed("cancelled", entity.Iterations, duration)
+	}
+
+	// Publish completion event
+	completion := struct {
+		LoopID      string    `json:"loop_id"`
+		TaskID      string    `json:"task_id"`
+		Outcome     string    `json:"outcome"`
+		CancelledBy string    `json:"cancelled_by"`
+		CancelledAt time.Time `json:"cancelled_at"`
+	}{
+		LoopID:      loopID,
+		TaskID:      entity.TaskID,
+		Outcome:     "cancelled",
+		CancelledBy: signal.UserID,
+		CancelledAt: now,
+	}
+
+	completionData, err := json.Marshal(completion)
+	if err != nil {
+		c.logger.Error("Failed to marshal completion",
+			slog.String("error", err.Error()),
+			slog.String("loop_id", loopID))
+		return
+	}
+
+	subject := fmt.Sprintf("agent.complete.%s", loopID)
+	if err := c.natsClient.PublishToStream(ctx, subject, completionData); err != nil {
+		c.logger.Error("Failed to publish completion",
+			slog.String("error", err.Error()),
+			slog.String("loop_id", loopID))
+		return
+	}
+
+	// Finalize trajectory
+	c.finalizeTrajectory(ctx, loopID, agentic.LoopStateCancelled)
+
+	c.logger.Info("Loop cancelled",
+		slog.String("loop_id", loopID),
+		slog.String("cancelled_by", signal.UserID))
+}
+
+// handlePauseSignal handles a pause signal for a loop
+func (c *Component) handlePauseSignal(ctx context.Context, signal agentic.UserSignal) {
+	loopID := signal.LoopID
+
+	// Get current loop state
+	entity, err := c.handler.GetLoop(loopID)
+	if err != nil {
+		c.logger.Error("Failed to get loop for pause",
+			slog.String("error", err.Error()),
+			slog.String("loop_id", loopID))
+		return
+	}
+
+	// Check if loop can be paused
+	if entity.State.IsTerminal() || entity.State == agentic.LoopStatePaused {
+		c.logger.Warn("Cannot pause loop",
+			slog.String("loop_id", loopID),
+			slog.String("state", string(entity.State)))
+		return
+	}
+
+	// Set pause requested flag
+	entity.PauseRequested = true
+
+	// Update in handler
+	if err := c.handler.UpdateLoop(entity); err != nil {
+		c.logger.Error("Failed to update loop state",
+			slog.String("error", err.Error()),
+			slog.String("loop_id", loopID))
+		return
+	}
+
+	// Persist loop state to KV
+	c.persistLoopState(ctx, loopID)
+
+	c.logger.Info("Pause requested for loop",
+		slog.String("loop_id", loopID),
+		slog.String("requested_by", signal.UserID))
+}
+
+// handleResumeSignal handles a resume signal for a paused loop
+func (c *Component) handleResumeSignal(ctx context.Context, signal agentic.UserSignal) {
+	loopID := signal.LoopID
+
+	// Get current loop state
+	entity, err := c.handler.GetLoop(loopID)
+	if err != nil {
+		c.logger.Error("Failed to get loop for resume",
+			slog.String("error", err.Error()),
+			slog.String("loop_id", loopID))
+		return
+	}
+
+	// Check if loop can be resumed
+	if entity.State != agentic.LoopStatePaused {
+		c.logger.Warn("Cannot resume non-paused loop",
+			slog.String("loop_id", loopID),
+			slog.String("state", string(entity.State)))
+		return
+	}
+
+	// Clear pause state and restore to executing
+	entity.State = agentic.LoopStateExecuting
+	entity.PauseRequested = false
+
+	// Update in handler
+	if err := c.handler.UpdateLoop(entity); err != nil {
+		c.logger.Error("Failed to update loop state",
+			slog.String("error", err.Error()),
+			slog.String("loop_id", loopID))
+		return
+	}
+
+	// Persist loop state to KV
+	c.persistLoopState(ctx, loopID)
+
+	c.logger.Info("Loop resumed",
+		slog.String("loop_id", loopID),
+		slog.String("resumed_by", signal.UserID))
 }
