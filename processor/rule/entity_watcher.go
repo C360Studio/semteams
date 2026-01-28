@@ -14,43 +14,160 @@ import (
 
 // watchEntityStates creates KV watchers for entity state changes
 func (rp *Processor) watchEntityStates(ctx context.Context) error {
+	// Store the watcher context for dynamic management
+	rp.mu.Lock()
+	rp.watcherCtx, rp.watcherCancelFunc = context.WithCancel(ctx)
+	watcherCtx := rp.watcherCtx
+	rp.mu.Unlock()
+
 	// Skip if no entity watch patterns configured
 	if len(rp.config.EntityWatchPatterns) == 0 {
 		rp.logger.Info("No entity watch patterns configured, skipping KV watch setup")
 		return nil
 	}
 
-	// Get ENTITY_STATES bucket
-	// Create or get ENTITY_STATES bucket using resilient pattern
-	entityBucket, err := rp.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+	// Start watchers for all configured patterns
+	for _, pattern := range rp.config.EntityWatchPatterns {
+		if err := rp.startWatcherForPattern(watcherCtx, pattern); err != nil {
+			rp.logger.Warn("Failed to start watcher for pattern", "pattern", pattern, "error", err)
+			// Continue with other patterns - don't fail completely
+		}
+	}
+
+	return nil
+}
+
+// getOrCreateEntityBucket gets or creates the ENTITY_STATES KV bucket
+func (rp *Processor) getOrCreateEntityBucket(ctx context.Context) (jetstream.KeyValue, error) {
+	return rp.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
 		Bucket:      "ENTITY_STATES",
 		Description: "Entity state storage",
 		History:     10,
 		TTL:         7 * 24 * time.Hour, // 7 days
 		MaxBytes:    -1,                 // Unlimited
 	})
+}
+
+// startWatcherForPattern starts a KV watcher for a specific pattern
+// Returns an error if the watcher cannot be started
+func (rp *Processor) startWatcherForPattern(ctx context.Context, pattern string) error {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+
+	// Check if watcher already exists for this pattern
+	if _, exists := rp.entityWatcherMap[pattern]; exists {
+		rp.logger.Debug("Watcher already exists for pattern", "pattern", pattern)
+		return nil
+	}
+
+	// Get ENTITY_STATES bucket
+	entityBucket, err := rp.getOrCreateEntityBucket(ctx)
 	if err != nil {
-		rp.logger.Warn("Failed to create/access ENTITY_STATES bucket, skipping entity watch", "error", err)
-		return nil // Don't fail - rules can still process messages
+		return fmt.Errorf("failed to get ENTITY_STATES bucket: %w", err)
 	}
 
-	// Use configured patterns
-	patterns := rp.config.EntityWatchPatterns
+	watcher, err := entityBucket.Watch(ctx, pattern)
+	if err != nil {
+		return errs.Wrap(err, "RuleProcessor", "startWatcherForPattern", "create watcher")
+	}
 
-	for _, pattern := range patterns {
-		watcher, err := entityBucket.Watch(ctx, pattern)
-		if err != nil {
-			return errs.Wrap(err, "RuleProcessor", "watchEntityStates", "create watcher")
+	// Store watcher in both slice (for legacy cleanup) and map (for dynamic management)
+	rp.entityWatchers = append(rp.entityWatchers, watcher)
+	rp.entityWatcherMap[pattern] = watcher
+
+	// Start goroutine to handle updates
+	go rp.handleEntityUpdates(ctx, watcher)
+
+	rp.logger.Info("Started KV watcher", "pattern", pattern)
+	return nil
+}
+
+// stopWatcherForPattern stops a KV watcher for a specific pattern
+func (rp *Processor) stopWatcherForPattern(pattern string) error {
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+
+	watcher, exists := rp.entityWatcherMap[pattern]
+	if !exists {
+		rp.logger.Debug("No watcher exists for pattern", "pattern", pattern)
+		return nil
+	}
+
+	// Stop the watcher
+	if err := watcher.Stop(); err != nil {
+		rp.logger.Warn("Error stopping watcher for pattern", "pattern", pattern, "error", err)
+		// Continue with cleanup even if stop fails
+	}
+
+	// Remove from map
+	delete(rp.entityWatcherMap, pattern)
+
+	// Remove from slice (find and remove)
+	for i, w := range rp.entityWatchers {
+		if w == watcher {
+			rp.entityWatchers = append(rp.entityWatchers[:i], rp.entityWatchers[i+1:]...)
+			break
 		}
-
-		// Store watcher for cleanup
-		rp.entityWatchers = append(rp.entityWatchers, watcher)
-
-		// Start goroutine to handle updates
-		go rp.handleEntityUpdates(ctx, watcher)
-
-		rp.logger.Info("Started KV watcher", "pattern", pattern)
 	}
+
+	rp.logger.Info("Stopped KV watcher", "pattern", pattern)
+	return nil
+}
+
+// UpdateWatchPatterns dynamically updates the entity watch patterns
+// It stops watchers for removed patterns and starts watchers for new patterns
+func (rp *Processor) UpdateWatchPatterns(newPatterns []string) error {
+	rp.mu.RLock()
+	watcherCtx := rp.watcherCtx
+	currentPatterns := make(map[string]bool)
+	for pattern := range rp.entityWatcherMap {
+		currentPatterns[pattern] = true
+	}
+	rp.mu.RUnlock()
+
+	// If no watcher context, processor not started yet - just update config
+	if watcherCtx == nil {
+		rp.mu.Lock()
+		rp.config.EntityWatchPatterns = newPatterns
+		rp.mu.Unlock()
+		rp.logger.Info("Updated entity watch patterns (processor not running)", "patterns", newPatterns)
+		return nil
+	}
+
+	// Build set of new patterns
+	newPatternSet := make(map[string]bool)
+	for _, p := range newPatterns {
+		newPatternSet[p] = true
+	}
+
+	// Stop watchers for removed patterns
+	for pattern := range currentPatterns {
+		if !newPatternSet[pattern] {
+			if err := rp.stopWatcherForPattern(pattern); err != nil {
+				rp.logger.Warn("Failed to stop watcher for removed pattern", "pattern", pattern, "error", err)
+			}
+		}
+	}
+
+	// Start watchers for new patterns
+	for pattern := range newPatternSet {
+		if !currentPatterns[pattern] {
+			if err := rp.startWatcherForPattern(watcherCtx, pattern); err != nil {
+				rp.logger.Warn("Failed to start watcher for new pattern", "pattern", pattern, "error", err)
+				// Continue with other patterns
+			}
+		}
+	}
+
+	// Update config
+	rp.mu.Lock()
+	rp.config.EntityWatchPatterns = newPatterns
+	rp.mu.Unlock()
+
+	rp.logger.Info("Updated entity watch patterns dynamically",
+		"added", len(newPatternSet)-len(currentPatterns),
+		"removed", len(currentPatterns)-len(newPatternSet),
+		"total", len(newPatterns))
 
 	return nil
 }

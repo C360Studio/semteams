@@ -20,14 +20,14 @@ func (rp *Processor) ApplyConfigUpdate(changes map[string]any) error {
 		}
 	}
 
-	// Apply entity_watch_patterns changes
+	// Apply entity_watch_patterns changes dynamically
 	if patternsVal, ok := changes["entity_watch_patterns"]; ok {
 		patterns := rp.convertToStringSlice(patternsVal)
-		rp.config.EntityWatchPatterns = patterns
 
-		// Note: Changing watch patterns requires restart for now
-		// TODO: Implement dynamic watcher management
-		rp.logger.Info("Updated entity watch patterns (restart required)", "patterns", patterns)
+		// Dynamically update watchers - no restart required
+		if err := rp.UpdateWatchPatterns(patterns); err != nil {
+			return errs.Wrap(err, "RuleProcessor", "ApplyConfigUpdate", "update watch patterns")
+		}
 	}
 
 	// Apply enable_graph_integration changes

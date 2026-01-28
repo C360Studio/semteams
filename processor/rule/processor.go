@@ -93,7 +93,11 @@ type Processor struct {
 	entityConsumer jetstream.Consumer
 
 	// KV watchers for entity state changes
-	entityWatchers []jetstream.KeyWatcher
+	// Maps pattern string to watcher for dynamic management
+	entityWatchers    []jetstream.KeyWatcher
+	entityWatcherMap  map[string]jetstream.KeyWatcher
+	watcherCtx        context.Context    // Context for watcher goroutines
+	watcherCancelFunc context.CancelFunc // Cancel function for stopping all watchers
 
 	// Entity coalescer for batched rule evaluation
 	entityCoalescer *cache.CoalescingSet
@@ -144,15 +148,16 @@ func NewProcessorWithMetrics(natsClient *natsclient.Client, config *Config, metr
 			Description: "Processes messages through configurable rules and generates alerts",
 			Version:     "1.0.0",
 		},
-		natsClient:      natsClient,
-		rules:           make(map[string]Rule),
-		ruleDefinitions: make(map[string]Definition),
-		ruleConfigs:     make(map[string]map[string]any),
-		messageCache:    msgCache,
-		config:          config,
-		metricsRegistry: metricsRegistry,
-		entityWatchers:  make([]jetstream.KeyWatcher, 0),
-		ownRevisions:    make(map[string]uint64),
+		natsClient:       natsClient,
+		rules:            make(map[string]Rule),
+		ruleDefinitions:  make(map[string]Definition),
+		ruleConfigs:      make(map[string]map[string]any),
+		messageCache:     msgCache,
+		config:           config,
+		metricsRegistry:  metricsRegistry,
+		entityWatchers:   make([]jetstream.KeyWatcher, 0),
+		entityWatcherMap: make(map[string]jetstream.KeyWatcher),
+		ownRevisions:     make(map[string]uint64),
 		health: component.HealthStatus{
 			Healthy:    true,
 			LastCheck:  time.Now(),
@@ -650,6 +655,11 @@ func (rp *Processor) Stop(_ time.Duration) error {
 	}
 	rp.subscriptions = nil
 
+	// Cancel watcher context to signal all watcher goroutines to stop
+	if rp.watcherCancelFunc != nil {
+		rp.watcherCancelFunc()
+	}
+
 	// Stop all entity watchers
 	for _, watcher := range rp.entityWatchers {
 		if err := watcher.Stop(); err != nil {
@@ -657,6 +667,7 @@ func (rp *Processor) Stop(_ time.Duration) error {
 		}
 	}
 	rp.entityWatchers = nil
+	rp.entityWatcherMap = nil
 
 	// Close entity coalescer
 	if rp.entityCoalescer != nil {

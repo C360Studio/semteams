@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360/semstreams/natsclient"
 	"github.com/c360/semstreams/processor/rule/expression"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -428,4 +429,72 @@ func createTestRuleDefinition(id string, threshold float64) Definition {
 func marshalRuleDefinition(def Definition) json.RawMessage {
 	data, _ := json.Marshal(def)
 	return data
+}
+
+// TestUpdateWatchPatterns_NotRunning tests pattern updates when processor is not running
+func TestUpdateWatchPatterns_NotRunning(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.EntityWatchPatterns = []string{"*.initial.*"}
+
+	processor := &Processor{
+		logger:           slog.Default(),
+		config:           &cfg,
+		entityWatcherMap: make(map[string]jetstream.KeyWatcher),
+		// watcherCtx is nil - processor not started
+	}
+
+	// Update patterns when not running should just update config
+	newPatterns := []string{"*.new.pattern.*", "*.another.*"}
+	err := processor.UpdateWatchPatterns(newPatterns)
+	require.NoError(t, err)
+
+	// Verify config was updated
+	assert.Equal(t, newPatterns, processor.config.EntityWatchPatterns)
+}
+
+// TestUpdateWatchPatterns_AddRemove tests adding and removing patterns
+func TestUpdateWatchPatterns_AddRemove(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.EntityWatchPatterns = []string{}
+
+	processor := &Processor{
+		logger:           slog.Default(),
+		config:           &cfg,
+		entityWatcherMap: make(map[string]jetstream.KeyWatcher),
+		entityWatchers:   make([]jetstream.KeyWatcher, 0),
+		// watcherCtx is nil - processor not started, so this tests the config-only path
+	}
+
+	// Start with no patterns
+	assert.Empty(t, processor.config.EntityWatchPatterns)
+
+	// Add some patterns
+	patterns1 := []string{"*.pattern1.*", "*.pattern2.*"}
+	err := processor.UpdateWatchPatterns(patterns1)
+	require.NoError(t, err)
+	assert.Equal(t, patterns1, processor.config.EntityWatchPatterns)
+
+	// Update to different patterns (remove pattern1, keep pattern2, add pattern3)
+	patterns2 := []string{"*.pattern2.*", "*.pattern3.*"}
+	err = processor.UpdateWatchPatterns(patterns2)
+	require.NoError(t, err)
+	assert.Equal(t, patterns2, processor.config.EntityWatchPatterns)
+
+	// Clear all patterns
+	err = processor.UpdateWatchPatterns([]string{})
+	require.NoError(t, err)
+	assert.Empty(t, processor.config.EntityWatchPatterns)
+}
+
+// TestStopWatcherForPattern_NotExists tests stopping a non-existent watcher
+func TestStopWatcherForPattern_NotExists(t *testing.T) {
+	processor := &Processor{
+		logger:           slog.Default(),
+		entityWatcherMap: make(map[string]jetstream.KeyWatcher),
+		entityWatchers:   make([]jetstream.KeyWatcher, 0),
+	}
+
+	// Stopping a non-existent watcher should not error
+	err := processor.stopWatcherForPattern("*.nonexistent.*")
+	require.NoError(t, err)
 }
