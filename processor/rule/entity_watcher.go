@@ -48,12 +48,17 @@ func (rp *Processor) getOrCreateEntityBucket(ctx context.Context) (jetstream.Key
 	})
 }
 
-// startWatcherForPattern starts a KV watcher for a specific pattern
-// Returns an error if the watcher cannot be started
+// startWatcherForPattern starts a KV watcher for a specific pattern.
+// Returns an error if the watcher cannot be started.
+// This is the public method that acquires the lock.
 func (rp *Processor) startWatcherForPattern(ctx context.Context, pattern string) error {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
+	return rp.startWatcherForPatternLocked(ctx, pattern)
+}
 
+// startWatcherForPatternLocked is the internal version that assumes the caller holds the lock.
+func (rp *Processor) startWatcherForPatternLocked(ctx context.Context, pattern string) error {
 	// Check if watcher already exists for this pattern
 	if _, exists := rp.entityWatcherMap[pattern]; exists {
 		rp.logger.Debug("Watcher already exists for pattern", "pattern", pattern)
@@ -82,11 +87,16 @@ func (rp *Processor) startWatcherForPattern(ctx context.Context, pattern string)
 	return nil
 }
 
-// stopWatcherForPattern stops a KV watcher for a specific pattern
+// stopWatcherForPattern stops a KV watcher for a specific pattern.
+// This is the public method that acquires the lock.
 func (rp *Processor) stopWatcherForPattern(pattern string) error {
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
+	return rp.stopWatcherForPatternLocked(pattern)
+}
 
+// stopWatcherForPatternLocked is the internal version that assumes the caller holds the lock.
+func (rp *Processor) stopWatcherForPatternLocked(pattern string) error {
 	watcher, exists := rp.entityWatcherMap[pattern]
 	if !exists {
 		rp.logger.Debug("No watcher exists for pattern", "pattern", pattern)
@@ -114,22 +124,27 @@ func (rp *Processor) stopWatcherForPattern(pattern string) error {
 	return nil
 }
 
-// UpdateWatchPatterns dynamically updates the entity watch patterns
-// It stops watchers for removed patterns and starts watchers for new patterns
+// UpdateWatchPatterns dynamically updates the entity watch patterns.
+// It stops watchers for removed patterns and starts watchers for new patterns.
+// This is the public method that acquires the lock.
 func (rp *Processor) UpdateWatchPatterns(newPatterns []string) error {
-	rp.mu.RLock()
+	rp.mu.Lock()
+	defer rp.mu.Unlock()
+	return rp.updateWatchPatternsLocked(newPatterns)
+}
+
+// updateWatchPatternsLocked is the internal version that assumes the caller holds the lock.
+// Called by ApplyConfigUpdate which already holds the lock.
+func (rp *Processor) updateWatchPatternsLocked(newPatterns []string) error {
 	watcherCtx := rp.watcherCtx
 	currentPatterns := make(map[string]bool)
 	for pattern := range rp.entityWatcherMap {
 		currentPatterns[pattern] = true
 	}
-	rp.mu.RUnlock()
 
 	// If no watcher context, processor not started yet - just update config
 	if watcherCtx == nil {
-		rp.mu.Lock()
 		rp.config.EntityWatchPatterns = newPatterns
-		rp.mu.Unlock()
 		rp.logger.Info("Updated entity watch patterns (processor not running)", "patterns", newPatterns)
 		return nil
 	}
@@ -143,7 +158,7 @@ func (rp *Processor) UpdateWatchPatterns(newPatterns []string) error {
 	// Stop watchers for removed patterns
 	for pattern := range currentPatterns {
 		if !newPatternSet[pattern] {
-			if err := rp.stopWatcherForPattern(pattern); err != nil {
+			if err := rp.stopWatcherForPatternLocked(pattern); err != nil {
 				rp.logger.Warn("Failed to stop watcher for removed pattern", "pattern", pattern, "error", err)
 			}
 		}
@@ -152,7 +167,7 @@ func (rp *Processor) UpdateWatchPatterns(newPatterns []string) error {
 	// Start watchers for new patterns
 	for pattern := range newPatternSet {
 		if !currentPatterns[pattern] {
-			if err := rp.startWatcherForPattern(watcherCtx, pattern); err != nil {
+			if err := rp.startWatcherForPatternLocked(watcherCtx, pattern); err != nil {
 				rp.logger.Warn("Failed to start watcher for new pattern", "pattern", pattern, "error", err)
 				// Continue with other patterns
 			}
@@ -160,9 +175,7 @@ func (rp *Processor) UpdateWatchPatterns(newPatterns []string) error {
 	}
 
 	// Update config
-	rp.mu.Lock()
 	rp.config.EntityWatchPatterns = newPatterns
-	rp.mu.Unlock()
 
 	rp.logger.Info("Updated entity watch patterns dynamically",
 		"added", len(newPatternSet)-len(currentPatterns),

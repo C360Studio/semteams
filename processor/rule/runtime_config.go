@@ -25,7 +25,8 @@ func (rp *Processor) ApplyConfigUpdate(changes map[string]any) error {
 		patterns := rp.convertToStringSlice(patternsVal)
 
 		// Dynamically update watchers - no restart required
-		if err := rp.UpdateWatchPatterns(patterns); err != nil {
+		// Use the locked version since we already hold the lock
+		if err := rp.updateWatchPatternsLocked(patterns); err != nil {
 			return errs.Wrap(err, "RuleProcessor", "ApplyConfigUpdate", "update watch patterns")
 		}
 	}
