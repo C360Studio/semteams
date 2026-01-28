@@ -312,21 +312,81 @@ func (e *ActionExecutor) executePublish(ctx context.Context, action Action, enti
 	return nil
 }
 
-// executeUpdateTriple executes an update_triple action, updating triple metadata.
-func (e *ActionExecutor) executeUpdateTriple(_ context.Context, action Action, entityID, relatedID string) error {
+// executeUpdateTriple executes an update_triple action by removing the existing triple
+// and adding a new one with the updated values. This is the only way to "update" a triple
+// since triples are identified by (subject, predicate, object) - changing any of those
+// creates a different triple.
+func (e *ActionExecutor) executeUpdateTriple(ctx context.Context, action Action, entityID, relatedID string) error {
+	// Validate predicate is present
+	if action.Predicate == "" {
+		return errors.New("predicate is required for update_triple action")
+	}
+
 	predicate := substituteVariables(action.Predicate, entityID, relatedID)
 	object := substituteVariables(action.Object, entityID, relatedID)
 
 	if e.logger != nil {
-		e.logger.Debug("Updating triple",
+		e.logger.Debug("Updating triple (remove + add)",
 			"entity_id", entityID,
 			"predicate", predicate,
 			"object", object,
 			"properties", action.Properties)
 	}
 
-	// TODO: Update triple metadata via graph processor API
-	// This will be integrated with the graph processor in a future task
+	// Step 1: Remove existing triple with this predicate
+	if e.tripleMutator != nil {
+		_, err := e.tripleMutator.RemoveTriple(ctx, entityID, predicate)
+		if err != nil {
+			// Log but continue - triple may not exist, which is fine for update
+			if e.logger != nil {
+				e.logger.Debug("No existing triple to remove (or error)",
+					"entity_id", entityID,
+					"predicate", predicate,
+					"error", err)
+			}
+		}
+	}
+
+	// Step 2: Add the new triple with updated values
+	// Parse TTL
+	ttl, err := action.ParseTTL()
+	if err != nil {
+		return fmt.Errorf("parse TTL: %w", err)
+	}
+
+	var expiresAt *time.Time
+	if ttl > 0 {
+		expTime := time.Now().Add(ttl)
+		expiresAt = &expTime
+	}
+
+	triple := message.Triple{
+		Subject:    entityID,
+		Predicate:  predicate,
+		Object:     object,
+		Source:     "rule_engine",
+		Timestamp:  time.Now(),
+		Confidence: 1.0,
+		ExpiresAt:  expiresAt,
+	}
+
+	if e.tripleMutator != nil {
+		revision, err := e.tripleMutator.AddTriple(ctx, triple)
+		if err != nil {
+			return fmt.Errorf("add updated triple: %w", err)
+		}
+		if e.logger != nil {
+			e.logger.Debug("Triple updated",
+				"entity_id", entityID,
+				"predicate", predicate,
+				"object", object,
+				"kv_revision", revision)
+		}
+	} else if e.logger != nil {
+		e.logger.Debug("Triple not updated (no mutator configured)",
+			"entity_id", entityID,
+			"predicate", predicate)
+	}
 
 	return nil
 }

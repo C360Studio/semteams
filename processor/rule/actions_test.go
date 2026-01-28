@@ -551,3 +551,197 @@ func TestAction_Publish_ErrorHandling(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "publish to test.subject")
 }
+
+// mockTripleMutator implements TripleMutator interface for testing
+type mockTripleMutator struct {
+	addedTriples   []message.Triple
+	removedTriples []struct {
+		subject   string
+		predicate string
+	}
+	addErr    error
+	removeErr error
+}
+
+func (m *mockTripleMutator) AddTriple(_ context.Context, triple message.Triple) (uint64, error) {
+	if m.addErr != nil {
+		return 0, m.addErr
+	}
+	m.addedTriples = append(m.addedTriples, triple)
+	return uint64(len(m.addedTriples)), nil
+}
+
+func (m *mockTripleMutator) RemoveTriple(_ context.Context, subject, predicate string) (uint64, error) {
+	if m.removeErr != nil {
+		return 0, m.removeErr
+	}
+	m.removedTriples = append(m.removedTriples, struct {
+		subject   string
+		predicate string
+	}{subject, predicate})
+	return 1, nil
+}
+
+// T045: Test Action UpdateTriple - updates a triple (remove + add)
+func TestAction_UpdateTriple(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name          string
+		action        Action
+		entityID      string
+		relatedID     string
+		wantPredicate string
+		wantObject    string
+		wantErr       bool
+		errMsg        string
+	}{
+		{
+			name: "update status triple",
+			action: Action{
+				Type:      ActionTypeUpdateTriple,
+				Predicate: "status.battery",
+				Object:    "low",
+			},
+			entityID:      "c360.platform.robotics.mav1.drone.001",
+			wantPredicate: "status.battery",
+			wantObject:    "low",
+			wantErr:       false,
+		},
+		{
+			name: "update with variable substitution",
+			action: Action{
+				Type:      ActionTypeUpdateTriple,
+				Predicate: "fleet.membership",
+				Object:    "$related.id",
+			},
+			entityID:      "c360.platform.robotics.mav1.drone.001",
+			relatedID:     "c360.platform.fleet.alpha",
+			wantPredicate: "fleet.membership",
+			wantObject:    "c360.platform.fleet.alpha",
+			wantErr:       false,
+		},
+		{
+			name: "update with TTL",
+			action: Action{
+				Type:      ActionTypeUpdateTriple,
+				Predicate: "alert.status",
+				Object:    "active",
+				TTL:       "5m",
+			},
+			entityID:      "c360.platform.robotics.mav1.drone.001",
+			wantPredicate: "alert.status",
+			wantObject:    "active",
+			wantErr:       false,
+		},
+		{
+			name: "missing predicate should fail",
+			action: Action{
+				Type:   ActionTypeUpdateTriple,
+				Object: "test.value",
+			},
+			entityID: "c360.platform.robotics.mav1.drone.001",
+			wantErr:  true,
+			errMsg:   "predicate is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockTripleMutator{}
+			executor := NewActionExecutorWithMutator(nil, mock)
+
+			err := executor.Execute(ctx, tt.action, tt.entityID, tt.relatedID)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+
+				// Verify remove was called
+				require.Len(t, mock.removedTriples, 1, "should have removed one triple")
+				assert.Equal(t, tt.entityID, mock.removedTriples[0].subject)
+				assert.Equal(t, tt.wantPredicate, mock.removedTriples[0].predicate)
+
+				// Verify add was called
+				require.Len(t, mock.addedTriples, 1, "should have added one triple")
+				assert.Equal(t, tt.entityID, mock.addedTriples[0].Subject)
+				assert.Equal(t, tt.wantPredicate, mock.addedTriples[0].Predicate)
+				assert.Equal(t, tt.wantObject, mock.addedTriples[0].Object)
+
+				// Verify TTL if specified
+				if tt.action.TTL != "" {
+					assert.NotNil(t, mock.addedTriples[0].ExpiresAt, "Triple should have expiration")
+				}
+			}
+		})
+	}
+}
+
+// T046: Test UpdateTriple without mutator (no-op)
+func TestAction_UpdateTriple_NoMutator(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	executor := NewActionExecutor(nil) // No mutator configured
+
+	action := Action{
+		Type:      ActionTypeUpdateTriple,
+		Predicate: "test.predicate",
+		Object:    "test.value",
+	}
+
+	// Should not error, just log and return
+	err := executor.Execute(ctx, action, "entity.001", "")
+	require.NoError(t, err)
+}
+
+// T047: Test UpdateTriple continues even if remove fails (triple may not exist)
+func TestAction_UpdateTriple_RemoveFailsContinues(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mock := &mockTripleMutator{
+		removeErr: assert.AnError, // Simulate remove failure
+	}
+	executor := NewActionExecutorWithMutator(nil, mock)
+
+	action := Action{
+		Type:      ActionTypeUpdateTriple,
+		Predicate: "test.predicate",
+		Object:    "test.value",
+	}
+
+	// Should still succeed - add should still be called
+	err := executor.Execute(ctx, action, "entity.001", "")
+	require.NoError(t, err)
+
+	// Add should still have been called
+	require.Len(t, mock.addedTriples, 1, "should have added triple even if remove failed")
+}
+
+// T048: Test UpdateTriple fails if add fails
+func TestAction_UpdateTriple_AddFails(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mock := &mockTripleMutator{
+		addErr: assert.AnError,
+	}
+	executor := NewActionExecutorWithMutator(nil, mock)
+
+	action := Action{
+		Type:      ActionTypeUpdateTriple,
+		Predicate: "test.predicate",
+		Object:    "test.value",
+	}
+
+	err := executor.Execute(ctx, action, "entity.001", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "add updated triple")
+}
