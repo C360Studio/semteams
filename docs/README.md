@@ -42,3 +42,10 @@
 - [Rules Engine](advanced/06-rules-engine.md) - Condition-based actions
 - [Community Detection](concepts/05-community-detection.md) - LPA algorithm
 - [Query Access](concepts/09-query-access.md) - GraphQL and MCP gateway
+
+## Agentic Systems
+
+Build LLM-powered autonomous agents with tool use:
+
+- [Agentic Systems](concepts/11-agentic-systems.md) - Concepts: loops, state machine, tools, trajectories
+- [Agentic Components](advanced/08-agentic-components.md) - Reference: loop, model, and tools processors

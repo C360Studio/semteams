@@ -130,7 +130,7 @@ func TestIntegration_CircuitBreakerWithRealConnection(t *testing.T) {
 
 // TestIntegration_PublishSubscribe tests basic pub/sub functionality
 func TestIntegration_PublishSubscribe(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Start NATS container
 	natsContainer, natsURL := startNATSContainer(ctx, t)
@@ -145,10 +145,11 @@ func TestIntegration_PublishSubscribe(t *testing.T) {
 
 	// Subscribe to a subject
 	received := make(chan string, 1)
-	err = manager.Subscribe(ctx, "test.subject", func(_ context.Context, data []byte) {
+	sub, err := manager.Subscribe(ctx, "test.subject", func(_ context.Context, data []byte) {
 		received <- string(data)
 	})
 	require.NoError(t, err)
+	defer sub.Unsubscribe()
 
 	// Publish a message
 	testMessage := "Hello NATS"

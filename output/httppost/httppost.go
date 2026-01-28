@@ -103,14 +103,15 @@ type Output struct {
 	httpClient  *http.Client
 
 	// Lifecycle management
-	shutdown    chan struct{}
-	done        chan struct{}
-	running     bool
-	startTime   time.Time
-	mu          sync.RWMutex
-	lifecycleMu sync.Mutex
-	wg          *sync.WaitGroup
-	tlsCleanup  func() // TLS cleanup function (ACME renewal loop)
+	shutdown      chan struct{}
+	done          chan struct{}
+	running       bool
+	startTime     time.Time
+	mu            sync.RWMutex
+	lifecycleMu   sync.Mutex
+	wg            *sync.WaitGroup
+	subscriptions []*natsclient.Subscription
+	tlsCleanup    func() // TLS cleanup function (ACME renewal loop)
 
 	// Metrics
 	messagesSent    int64
@@ -294,7 +295,8 @@ func (h *Output) setupSubscriptions(ctx context.Context) error {
 			}
 
 		case "nats":
-			if err := h.natsClient.Subscribe(ctx, port.Subject, h.handleMessage); err != nil {
+			sub, err := h.natsClient.Subscribe(ctx, port.Subject, h.handleMessage)
+			if err != nil {
 				h.logger.Error("Failed to subscribe to NATS subject",
 					"component", h.name,
 					"subject", port.Subject,
@@ -302,6 +304,7 @@ func (h *Output) setupSubscriptions(ctx context.Context) error {
 				return errs.WrapTransient(err, "Output", "Start",
 					fmt.Sprintf("subscribe to %s", port.Subject))
 			}
+			h.subscriptions = append(h.subscriptions, sub)
 			h.logger.Debug("Subscribed to NATS subject successfully",
 				"component", h.name,
 				"subject", port.Subject)
@@ -413,6 +416,14 @@ func (h *Output) Stop(timeout time.Duration) error {
 
 	// Signal shutdown
 	close(h.shutdown)
+
+	// Unsubscribe from all NATS subjects
+	for _, sub := range h.subscriptions {
+		if err := sub.Unsubscribe(); err != nil {
+			h.logger.Warn("Failed to unsubscribe", "error", err)
+		}
+	}
+	h.subscriptions = nil
 
 	// Wait for goroutines with timeout
 	waitCh := make(chan struct{})

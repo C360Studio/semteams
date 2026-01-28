@@ -99,7 +99,7 @@ func TestEntityWatcher_RuleTriggerDebouncing(t *testing.T) {
 	var triggerCount int64
 	var triggerMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "events.rule.triggered", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "events.rule.triggered", func(_ context.Context, data []byte) {
 		triggerMu.Lock()
 		triggerCount++
 		triggerMu.Unlock()

@@ -17,6 +17,9 @@ import (
 	"github.com/c360/semstreams/output/httppost"
 	"github.com/c360/semstreams/output/websocket"
 	pkgerrs "github.com/c360/semstreams/pkg/errs"
+	agenticloop "github.com/c360/semstreams/processor/agentic-loop"
+	agenticmodel "github.com/c360/semstreams/processor/agentic-model"
+	agentictools "github.com/c360/semstreams/processor/agentic-tools"
 	graphclustering "github.com/c360/semstreams/processor/graph-clustering"
 	graphembedding "github.com/c360/semstreams/processor/graph-embedding"
 	graphindex "github.com/c360/semstreams/processor/graph-index"
@@ -64,6 +67,11 @@ import (
 // Semantic Layer - Rule Processing:
 //   - Rule processor (rule-based transformations)
 //
+// Agentic Layer - LLM-powered autonomous agents:
+//   - agentic-model (OpenAI-compatible LLM endpoint caller)
+//   - agentic-tools (tool execution dispatcher)
+//   - agentic-loop (state machine orchestrator with trajectory capture)
+//
 // Domain Layer (example processors):
 //   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
 //   - Document processor (document processing)
@@ -78,7 +86,24 @@ func Register(registry *component.Registry) error {
 			"ComponentRegistry", "Register", "registry validation")
 	}
 
-	// Protocol Layer - Network Inputs
+	if err := registerProtocolLayer(registry); err != nil {
+		return err
+	}
+
+	if err := registerSemanticLayer(registry); err != nil {
+		return err
+	}
+
+	if err := registerAgenticLayer(registry); err != nil {
+		return err
+	}
+
+	return registerDomainLayer(registry)
+}
+
+// registerProtocolLayer registers protocol-layer components (inputs, processors, outputs, gateways).
+func registerProtocolLayer(registry *component.Registry) error {
+	// Network Inputs
 	if err := udp.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "UDP input component registration")
 	}
@@ -91,35 +116,25 @@ func Register(registry *component.Registry) error {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "File input component registration")
 	}
 
-	// Protocol Layer - Processors
+	// Processors
 	if err := jsongeneric.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(
-			err,
-			"ComponentRegistry",
-			"Register",
-			"JSONGeneric processor component registration",
-		)
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "JSONGeneric processor component registration")
 	}
 
 	if err := jsonfilter.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(
-			err,
-			"ComponentRegistry",
-			"Register",
-			"JSONFilter processor component registration",
-		)
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "JSONFilter processor component registration")
 	}
 
 	if err := jsonmap.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "JSONMap processor component registration")
 	}
 
-	// Protocol Layer - Storage
+	// Storage
 	if err := objectstore.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "ObjectStore storage component registration")
 	}
 
-	// Protocol Layer - Outputs
+	// Outputs
 	if err := file.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "File output component registration")
 	}
@@ -132,15 +147,17 @@ func Register(registry *component.Registry) error {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "WebSocket output component registration")
 	}
 
-	// Protocol Layer - Gateways
-	// Note: GraphQL and MCP gateways are now output ports of the graph processor,
-	// not standalone components. They are configured via graph processor's gateway config.
+	// Gateways
 	if err := gatewayhttp.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "HTTP gateway component registration")
 	}
 
-	// Semantic Layer - Graph Components (modular architecture)
-	// Core components (required for all tiers)
+	return nil
+}
+
+// registerSemanticLayer registers semantic-layer components (graph and rule processors).
+func registerSemanticLayer(registry *component.Registry) error {
+	// Graph Components - Core (required for all tiers)
 	if err := graphingest.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "graph-ingest component registration")
 	}
@@ -181,7 +198,28 @@ func Register(registry *component.Registry) error {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "Rule processor component registration")
 	}
 
-	// Domain Layer - Example Processors
+	return nil
+}
+
+// registerAgenticLayer registers agentic-layer components (LLM-powered autonomous agents).
+func registerAgenticLayer(registry *component.Registry) error {
+	if err := agenticmodel.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-model component registration")
+	}
+
+	if err := agentictools.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-tools component registration")
+	}
+
+	if err := agenticloop.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-loop component registration")
+	}
+
+	return nil
+}
+
+// registerDomainLayer registers domain-layer example processors.
+func registerDomainLayer(registry *component.Registry) error {
 	if err := iotsensor.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "IoT sensor processor component registration")
 	}

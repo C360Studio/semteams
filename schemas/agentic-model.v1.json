@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agentic-model.v1.json",
+  "type": "object",
+  "title": "agentic-model Configuration",
+  "description": "OpenAI-compatible agentic model processor with tool calling support",
+  "properties": {
+    "consumer_name_suffix": {
+      "type": "string",
+      "description": "Suffix appended to consumer names for uniqueness",
+      "category": "advanced"
+    },
+    "endpoints": {
+      "type": "object",
+      "description": "Model endpoints",
+      "category": "basic"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    },
+    "retry": {
+      "type": "object",
+      "description": "Retry configuration",
+      "category": "advanced"
+    },
+    "stream_name": {
+      "type": "string",
+      "description": "JetStream stream name for agentic messages",
+      "default": "AGENT",
+      "category": "basic"
+    },
+    "timeout": {
+      "type": "string",
+      "description": "Request timeout",
+      "default": "120s",
+      "category": "advanced"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "agentic-model",
+    "type": "processor",
+    "protocol": "openai",
+    "domain": "semantic",
+    "version": "0.1.0"
+  }
+}

@@ -617,15 +617,29 @@ func (m *Client) RTT() (time.Duration, error) {
 	return conn.RTT()
 }
 
+// Subscription wraps a NATS subscription for lifecycle management
+type Subscription struct {
+	sub *nats.Subscription
+}
+
+// Unsubscribe unsubscribes from the subject
+func (s *Subscription) Unsubscribe() error {
+	if s.sub == nil {
+		return nil
+	}
+	return s.sub.Unsubscribe()
+}
+
 // Subscribe subscribes to a NATS subject with context propagation.
 // Each message handler receives a context derived from the parent context
 // with a 30-second timeout for message processing.
-func (m *Client) Subscribe(ctx context.Context, subject string, handler func(context.Context, []byte)) error {
+// Returns a Subscription handle that can be used to unsubscribe.
+func (m *Client) Subscribe(ctx context.Context, subject string, handler func(context.Context, []byte)) (*Subscription, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.conn == nil || !m.conn.IsConnected() {
-		return ErrNotConnected
+		return nil, ErrNotConnected
 	}
 
 	sub, err := m.conn.Subscribe(subject, func(msg *nats.Msg) {
@@ -636,11 +650,11 @@ func (m *Client) Subscribe(ctx context.Context, subject string, handler func(con
 		handler(msgCtx, msg.Data)
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	m.subs = append(m.subs, sub)
-	return nil
+	return &Subscription{sub: sub}, nil
 }
 
 // Publish publishes a message to a NATS subject

@@ -368,10 +368,12 @@ func extractSchemaFromRegistration(name string, reg *component.Registration) map
 			}
 		}
 		if propSchema.Minimum != nil {
-			prop["minimum"] = *propSchema.Minimum
+			// Convert int to float64 for JSON comparison compatibility
+			prop["minimum"] = float64(*propSchema.Minimum)
 		}
 		if propSchema.Maximum != nil {
-			prop["maximum"] = *propSchema.Maximum
+			// Convert int to float64 for JSON comparison compatibility
+			prop["maximum"] = float64(*propSchema.Maximum)
 		}
 		if len(propSchema.Enum) > 0 {
 			// Convert []string to []any for JSON comparison compatibility

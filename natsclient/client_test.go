@@ -347,7 +347,7 @@ func TestContextAwareMethods(t *testing.T) {
 		assert.Equal(t, ErrNotConnected, err)
 
 		// Test Subscribe with context (will fail due to not connected)
-		err = client.Subscribe(ctx, "test.subject", func(_ context.Context, _ []byte) {})
+		_, err = client.Subscribe(ctx, "test.subject", func(_ context.Context, _ []byte) {})
 		assert.Equal(t, ErrNotConnected, err)
 	})
 }

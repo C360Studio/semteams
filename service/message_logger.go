@@ -190,7 +190,8 @@ type MessageLogger struct {
 
 	// NATS dependencies
 	natsClient    *natsclient.Client
-	subscriptions map[string]bool // Track which subjects we're subscribed to
+	subscriptions map[string]bool            // Track which subjects we're subscribed to
+	natsSubsRefs  []*natsclient.Subscription // Subscription references for cleanup
 
 	// Message storage (circular buffer)
 	entries      []MessageLogEntry
@@ -351,7 +352,7 @@ func (ml *MessageLogger) Start(ctx context.Context) error {
 
 	// Subscribe to configured subjects
 	for _, subject := range ml.config.MonitorSubjects {
-		err := ml.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
+		sub, err := ml.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
 			ml.handleMessage(msgCtx, subject, data)
 		})
 		if err != nil {
@@ -361,6 +362,7 @@ func (ml *MessageLogger) Start(ctx context.Context) error {
 			continue
 		}
 		ml.subscriptions[subject] = true
+		ml.natsSubsRefs = append(ml.natsSubsRefs, sub)
 		ml.logger.Info("Subscribed to subject", "subject", subject)
 	}
 
@@ -388,10 +390,16 @@ func (ml *MessageLogger) Stop(timeout time.Duration) error {
 	if shutdown != nil {
 		close(shutdown)
 
-		// Note: natsclient doesn't provide unsubscribe method
-		// Subscriptions will be cleaned up when connection closes
+		// Unsubscribe from all NATS subjects
+		for _, sub := range ml.natsSubsRefs {
+			if err := sub.Unsubscribe(); err != nil {
+				ml.logger.Warn("Failed to unsubscribe", "error", err)
+			}
+		}
+
 		ml.lifecycleMu.Lock()
 		ml.subscriptions = make(map[string]bool)
+		ml.natsSubsRefs = nil
 		ml.shutdown = nil // Prevent double-close
 		ml.done = nil     // Clear done channel reference
 		ml.lifecycleMu.Unlock()
@@ -809,7 +817,7 @@ func (ml *MessageLogger) startRuntime() error {
 
 	// Subscribe to configured subjects
 	for _, subject := range ml.config.MonitorSubjects {
-		err := ml.natsClient.Subscribe(context.Background(), subject, func(msgCtx context.Context, data []byte) {
+		sub, err := ml.natsClient.Subscribe(context.Background(), subject, func(msgCtx context.Context, data []byte) {
 			ml.handleMessage(msgCtx, subject, data)
 		})
 		if err != nil {
@@ -819,6 +827,7 @@ func (ml *MessageLogger) startRuntime() error {
 			continue
 		}
 		ml.subscriptions[subject] = true
+		ml.natsSubsRefs = append(ml.natsSubsRefs, sub)
 		ml.logger.Info("Subscribed to subject", "subject", subject)
 	}
 
@@ -832,9 +841,14 @@ func (ml *MessageLogger) startRuntime() error {
 
 // stopRuntime stops NATS subscriptions and logging.
 func (ml *MessageLogger) stopRuntime() error {
-	// Note: natsclient doesn't provide unsubscribe method
-	// Subscriptions will be cleaned up when connection closes
+	// Unsubscribe from all NATS subjects
+	for _, sub := range ml.natsSubsRefs {
+		if err := sub.Unsubscribe(); err != nil {
+			ml.logger.Warn("Failed to unsubscribe", "error", err)
+		}
+	}
 	ml.subscriptions = make(map[string]bool)
+	ml.natsSubsRefs = nil
 
 	ml.logger.Info("MessageLogger runtime stopped")
 	return nil

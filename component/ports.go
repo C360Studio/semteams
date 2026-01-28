@@ -11,12 +11,14 @@ type PortDefinition struct {
 	Description string `json:"description,omitempty" schema:"readonly,type:string,description:Human-readable port description"`
 	Timeout     string `json:"timeout,omitempty"     schema:"editable,type:string,description:Request timeout for request/reply ports"`
 	StreamName  string `json:"stream_name,omitempty" schema:"editable,type:string,description:JetStream stream name"`
+	Bucket      string `json:"bucket,omitempty"      schema:"editable,type:string,description:KV bucket name for KV ports"`
 }
 
 // PortConfig represents port configuration in component config
 type PortConfig struct {
 	Inputs  []PortDefinition `json:"inputs,omitempty"`
 	Outputs []PortDefinition `json:"outputs,omitempty"`
+	KVWrite []PortDefinition `json:"kv_write,omitempty"`
 }
 
 // MergePortConfigs merges default ports with configured overrides
@@ -88,12 +90,20 @@ func BuildPortFromDefinition(def PortDefinition, direction Direction) Port {
 			Timeout: timeout,
 		}
 	case "kv-watch", "kvwatch":
-		// Parse KV watch config - simplified for now
+		// Parse KV watch config
+		bucket := def.Bucket
+		if bucket == "" {
+			bucket = def.Subject // Fallback to Subject for backward compatibility
+		}
 		port.Config = KVWatchPort{
-			Bucket: def.Subject, // Subject holds bucket name
+			Bucket: bucket,
 		}
 	case "kv", "kv-write", "kvwrite":
 		// Parse KV write config
+		bucket := def.Bucket
+		if bucket == "" {
+			bucket = def.Subject // Fallback to Subject for backward compatibility
+		}
 		var iface *InterfaceContract
 		if def.Interface != "" {
 			iface = &InterfaceContract{
@@ -102,7 +112,7 @@ func BuildPortFromDefinition(def PortDefinition, direction Direction) Port {
 			}
 		}
 		port.Config = KVWritePort{
-			Bucket:    def.Subject, // Subject holds bucket name
+			Bucket:    bucket,
 			Interface: iface,
 		}
 	default: // Default to NATS pub/sub

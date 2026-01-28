@@ -129,7 +129,8 @@ type Output struct {
 	clients   map[*websocket.Conn]*clientInfo
 	clientsMu sync.RWMutex
 
-	// NATS subscriptions are managed by natsclient wrapper
+	// NATS subscriptions for cleanup
+	subscriptions []*natsclient.Subscription
 
 	// Lifecycle management
 	shutdown      chan struct{} // Signal shutdown to all goroutines
@@ -809,12 +810,13 @@ func (w *Output) subscribeToNATS(ctx context.Context) error {
 
 	// Subscribe to each subject using natsclient wrapper
 	for _, subject := range w.subjects {
-		err := w.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
+		sub, err := w.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
 			w.handleNATSMessageData(msgCtx, data, subject)
 		})
 		if err != nil {
 			return errs.Wrap(err, "Output", "subscribeToNATS", fmt.Sprintf("subscribe to NATS subject %s", subject))
 		}
+		w.subscriptions = append(w.subscriptions, sub)
 	}
 
 	return nil
@@ -822,8 +824,13 @@ func (w *Output) subscribeToNATS(ctx context.Context) error {
 
 // unsubscribeFromNATS unsubscribes from all NATS subjects
 func (w *Output) unsubscribeFromNATS() {
-	// The natsclient wrapper handles subscription cleanup automatically
-	// when the connection is closed or disconnected
+	// Unsubscribe from all NATS subjects
+	for _, sub := range w.subscriptions {
+		if err := sub.Unsubscribe(); err != nil {
+			w.logger.Warn("Failed to unsubscribe", "error", err)
+		}
+	}
+	w.subscriptions = nil
 }
 
 // closeAllClients closes all WebSocket client connections

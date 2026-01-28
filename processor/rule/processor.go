@@ -86,6 +86,9 @@ type Processor struct {
 	// Active subscriptions flag
 	isSubscribed bool
 
+	// NATS subscriptions for cleanup
+	subscriptions []*natsclient.Subscription
+
 	// JetStream consumer for entity events
 	entityConsumer jetstream.Consumer
 
@@ -492,12 +495,13 @@ func (rp *Processor) setupSubscriptions(ctx context.Context) error {
 		case "nats":
 			// Core NATS subscription
 			subject := port.Subject // capture for closure
-			err := rp.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
+			sub, err := rp.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
 				rp.handleMessage(msgCtx, subject, data)
 			})
 			if err != nil {
 				return errs.Wrap(err, "RuleProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
 			}
+			rp.subscriptions = append(rp.subscriptions, sub)
 			rp.logger.Info("Rule processor subscribed (NATS)", "subject", subject)
 
 		default:
@@ -630,6 +634,14 @@ func (rp *Processor) Stop(_ time.Duration) error {
 	// Clean up resources
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
+
+	// Unsubscribe from all NATS subjects
+	for _, sub := range rp.subscriptions {
+		if err := sub.Unsubscribe(); err != nil {
+			rp.logger.Warn("Failed to unsubscribe", "error", err)
+		}
+	}
+	rp.subscriptions = nil
 
 	// Stop all entity watchers
 	for _, watcher := range rp.entityWatchers {

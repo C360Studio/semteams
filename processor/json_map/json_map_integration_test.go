@@ -135,7 +135,7 @@ func TestIntegration_FieldRenaming(t *testing.T) {
 	receivedMessages := make([]message.GenericJSONPayload, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "test.jsonmap.output", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "test.jsonmap.output", func(_ context.Context, data []byte) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(data, &baseMsg); err == nil {
 			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
@@ -239,7 +239,7 @@ func TestIntegration_StringTransforms(t *testing.T) {
 	receivedMessages := make([]message.GenericJSONPayload, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "test.jsonmap.transform.output", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "test.jsonmap.transform.output", func(_ context.Context, data []byte) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(data, &baseMsg); err == nil {
 			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
@@ -339,7 +339,7 @@ func TestIntegration_AddRemoveFields(t *testing.T) {
 	receivedMessages := make([]message.GenericJSONPayload, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "test.jsonmap.addremove.output", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "test.jsonmap.addremove.output", func(_ context.Context, data []byte) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(data, &baseMsg); err == nil {
 			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
@@ -449,7 +449,7 @@ func TestIntegration_CombinedTransformations(t *testing.T) {
 	receivedMessages := make([]message.GenericJSONPayload, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "test.jsonmap.combined.output", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "test.jsonmap.combined.output", func(_ context.Context, data []byte) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(data, &baseMsg); err == nil {
 			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {

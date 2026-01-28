@@ -150,7 +150,7 @@ func TestIntegration_KVEntityStateWatch(t *testing.T) {
 	receivedEvents := make([]map[string]any, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(testCtx, "events.rule.triggered", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(testCtx, "events.rule.triggered", func(_ context.Context, data []byte) {
 		var event map[string]any
 		if err := json.Unmarshal(data, &event); err == nil {
 			receiveMu.Lock()
@@ -549,7 +549,7 @@ func TestIntegration_GraphIntegration(t *testing.T) {
 	receivedMutations := make([]map[string]any, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "graph.events.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "graph.events.>", func(_ context.Context, data []byte) {
 		var mutation map[string]any
 		if err := json.Unmarshal(data, &mutation); err == nil {
 			receiveMu.Lock()

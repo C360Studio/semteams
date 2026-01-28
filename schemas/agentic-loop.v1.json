@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agentic-loop.v1.json",
+  "type": "object",
+  "title": "agentic-loop Configuration",
+  "description": "Orchestrates agentic loops with tool calls, state management, and trajectory tracking",
+  "properties": {
+    "loops_bucket": {
+      "type": "string",
+      "description": "NATS KV bucket name for storing loop state",
+      "default": "AGENT_LOOPS",
+      "category": "advanced"
+    },
+    "max_iterations": {
+      "type": "string",
+      "description": "Maximum number of iterations before loop terminates",
+      "default": 20,
+      "minimum": 1,
+      "maximum": 1000,
+      "category": "basic"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration for inputs and outputs",
+      "category": "advanced"
+    },
+    "timeout": {
+      "type": "string",
+      "description": "Timeout duration for loop execution (e.g., 120s, 5m)",
+      "default": "120s",
+      "category": "basic"
+    },
+    "trajectories_bucket": {
+      "type": "string",
+      "description": "NATS KV bucket name for storing trajectories",
+      "default": "AGENT_TRAJECTORIES",
+      "category": "advanced"
+    }
+  },
+  "required": [
+    "max_iterations",
+    "timeout",
+    "loops_bucket",
+    "trajectories_bucket"
+  ],
+  "x-component-metadata": {
+    "name": "agentic-loop",
+    "type": "processor",
+    "protocol": "nats",
+    "domain": "agentic",
+    "version": "1.0.0"
+  }
+}

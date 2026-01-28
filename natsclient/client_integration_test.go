@@ -84,7 +84,7 @@ func TestIntegration_KeyValueBuckets_RealServer(t *testing.T) {
 // TestIntegration_ContextAwareMethods_RealServer tests context-aware methods against a real NATS server.
 // Extracted from TestContextAwareMethods subtest "with real NATS server".
 func TestIntegration_ContextAwareMethods_RealServer(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	natsContainer, natsURL := startTestNATSContainer(ctx, t)
 	defer natsContainer.Terminate(ctx)
 
@@ -107,10 +107,11 @@ func TestIntegration_ContextAwareMethods_RealServer(t *testing.T) {
 
 	// Test Subscribe with context (should succeed)
 	received := make(chan []byte, 1)
-	err = client.Subscribe(ctx, "test.reply", func(_ context.Context, data []byte) {
+	sub, err := client.Subscribe(ctx, "test.reply", func(_ context.Context, data []byte) {
 		received <- data
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	defer sub.Unsubscribe()
 
 	// Test round-trip message
 	err = client.Publish(ctx, "test.reply", []byte("response"))

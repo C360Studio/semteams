@@ -138,7 +138,7 @@ func TestIntegration_JSONFilterProcessing(t *testing.T) {
 	receivedMessages := make([]message.GenericJSONPayload, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "test.jsonfilter.output", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "test.jsonfilter.output", func(_ context.Context, data []byte) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(data, &baseMsg); err == nil {
 			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
@@ -256,7 +256,7 @@ func TestIntegration_MultipleRules(t *testing.T) {
 	receivedMessages := make([]message.GenericJSONPayload, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "test.jsonfilter.multi.output", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "test.jsonfilter.multi.output", func(_ context.Context, data []byte) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(data, &baseMsg); err == nil {
 			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
@@ -361,7 +361,7 @@ func TestIntegration_ContainsOperator(t *testing.T) {
 	receivedMessages := make([]message.GenericJSONPayload, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "test.jsonfilter.contains.output", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "test.jsonfilter.contains.output", func(_ context.Context, data []byte) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(data, &baseMsg); err == nil {
 			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {
@@ -462,7 +462,7 @@ func TestIntegration_RejectsInvalidJSON(t *testing.T) {
 	receivedMessages := make([]message.GenericJSONPayload, 0)
 	var receiveMu sync.Mutex
 
-	err = natsClient.Subscribe(ctx, "test.jsonfilter.reject.output", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "test.jsonfilter.reject.output", func(_ context.Context, data []byte) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(data, &baseMsg); err == nil {
 			if payload, ok := baseMsg.Payload().(*message.GenericJSONPayload); ok {

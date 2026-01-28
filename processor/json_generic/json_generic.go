@@ -68,13 +68,14 @@ type Processor struct {
 	logger     *slog.Logger
 
 	// Lifecycle management
-	shutdown    chan struct{}
-	done        chan struct{}
-	running     bool
-	startTime   time.Time
-	mu          sync.RWMutex
-	lifecycleMu sync.Mutex
-	wg          *sync.WaitGroup
+	shutdown      chan struct{}
+	done          chan struct{}
+	running       bool
+	startTime     time.Time
+	mu            sync.RWMutex
+	lifecycleMu   sync.Mutex
+	wg            *sync.WaitGroup
+	subscriptions []*natsclient.Subscription
 
 	// Metrics
 	messagesProcessed int64
@@ -208,7 +209,8 @@ func (p *Processor) setupSubscriptions(ctx context.Context) error {
 			}
 
 		case "nats":
-			if err := p.natsClient.Subscribe(ctx, port.Subject, p.handleMessage); err != nil {
+			sub, err := p.natsClient.Subscribe(ctx, port.Subject, p.handleMessage)
+			if err != nil {
 				p.logger.Error("Failed to subscribe to NATS subject",
 					"component", p.name,
 					"subject", port.Subject,
@@ -216,6 +218,7 @@ func (p *Processor) setupSubscriptions(ctx context.Context) error {
 				return errs.WrapTransient(err, "JSONGenericProcessor", "Start",
 					fmt.Sprintf("subscribe to %s", port.Subject))
 			}
+			p.subscriptions = append(p.subscriptions, sub)
 			p.logger.Debug("Subscribed to NATS subject successfully",
 				"component", p.name,
 				"subject", port.Subject,
@@ -328,6 +331,14 @@ func (p *Processor) Stop(timeout time.Duration) error {
 
 	// Signal shutdown
 	close(p.shutdown)
+
+	// Unsubscribe from all NATS subjects
+	for _, sub := range p.subscriptions {
+		if err := sub.Unsubscribe(); err != nil {
+			p.logger.Warn("Failed to unsubscribe", "error", err)
+		}
+	}
+	p.subscriptions = nil
 
 	// Wait for goroutines with timeout
 	waitCh := make(chan struct{})

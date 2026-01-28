@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agentic-tools.v1.json",
+  "type": "object",
+  "title": "agentic-tools Configuration",
+  "description": "Tool executor processor with filtering and timeout support",
+  "properties": {
+    "allowed_tools": {
+      "type": "array",
+      "description": "List of allowed tools (nil/empty allows all)",
+      "items": {
+        "type": "string"
+      },
+      "category": "advanced"
+    },
+    "consumer_name_suffix": {
+      "type": "string",
+      "description": "Suffix appended to consumer names for uniqueness",
+      "category": "advanced"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    },
+    "stream_name": {
+      "type": "string",
+      "description": "JetStream stream name for agentic messages",
+      "default": "AGENT",
+      "category": "basic"
+    },
+    "timeout": {
+      "type": "string",
+      "description": "Tool execution timeout",
+      "default": "60s",
+      "category": "advanced"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "agentic-tools",
+    "type": "processor",
+    "protocol": "tools",
+    "domain": "semantic",
+    "version": "0.1.0"
+  }
+}

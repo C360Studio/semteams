@@ -161,7 +161,7 @@ func TestNewTestClient_PubSub(t *testing.T) {
 	var receivedMu sync.Mutex
 	receiveCh := make(chan struct{})
 
-	err := testClient.Client.Subscribe(ctx, "test.subject", func(_ context.Context, data []byte) {
+	_, err := testClient.Client.Subscribe(ctx, "test.subject", func(_ context.Context, data []byte) {
 		receivedMu.Lock()
 		received = data
 		receivedMu.Unlock()

@@ -85,13 +85,14 @@ type Component struct {
 	processor *Processor
 
 	// Lifecycle management
-	shutdown    chan struct{}
-	done        chan struct{}
-	running     bool
-	startTime   time.Time
-	mu          sync.RWMutex
-	lifecycleMu sync.Mutex
-	wg          *sync.WaitGroup
+	shutdown      chan struct{}
+	done          chan struct{}
+	running       bool
+	startTime     time.Time
+	mu            sync.RWMutex
+	lifecycleMu   sync.Mutex
+	wg            *sync.WaitGroup
+	subscriptions []*natsclient.Subscription
 
 	// Metrics
 	messagesProcessed int64
@@ -211,13 +212,15 @@ func (c *Component) Start(ctx context.Context) error {
 			}
 		} else {
 			// Core NATS subscription
-			if err := c.natsClient.Subscribe(ctx, subject, c.handleMessage); err != nil {
+			sub, err := c.natsClient.Subscribe(ctx, subject, c.handleMessage)
+			if err != nil {
 				c.logger.Error("Failed to subscribe to NATS subject",
 					"component", c.name,
 					"subject", subject,
 					"error", err)
 				return errs.WrapTransient(err, "IoTSensorComponent", "Start", fmt.Sprintf("subscribe to %s", subject))
 			}
+			c.subscriptions = append(c.subscriptions, sub)
 		}
 
 		c.logger.Debug("Subscription setup successfully",
@@ -251,6 +254,14 @@ func (c *Component) Stop(timeout time.Duration) error {
 
 	// Signal shutdown
 	close(c.shutdown)
+
+	// Unsubscribe from all NATS subjects
+	for _, sub := range c.subscriptions {
+		if err := sub.Unsubscribe(); err != nil {
+			c.logger.Warn("Failed to unsubscribe", "error", err)
+		}
+	}
+	c.subscriptions = nil
 
 	// Wait for goroutines with timeout
 	waitCh := make(chan struct{})
