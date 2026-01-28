@@ -322,6 +322,23 @@ func (kv *KVStore) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// Keys returns all keys in the bucket
+func (kv *KVStore) Keys(ctx context.Context) ([]string, error) {
+	ctx, cancel := kv.applyTimeout(ctx)
+	defer cancel()
+
+	keys, err := kv.bucket.Keys(ctx)
+	if err != nil {
+		// Handle empty bucket case
+		if err == jetstream.ErrNoKeysFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("kv keys: %w", err)
+	}
+
+	return keys, nil
+}
+
 // Watch creates a watcher for key changes
 // Note: Watch does not apply timeout as it creates a long-lived watcher
 func (kv *KVStore) Watch(ctx context.Context, pattern string) (jetstream.KeyWatcher, error) {

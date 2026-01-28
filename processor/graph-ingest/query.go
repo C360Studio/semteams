@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/graph"
-	"github.com/nats-io/nats.go/jetstream"
+	"github.com/c360/semstreams/natsclient"
 )
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
@@ -62,13 +62,13 @@ func (c *Component) handleQueryEntityNATS(_ context.Context, data []byte) ([]byt
 	// Get entity from KV bucket
 	entry, err := c.entityBucket.Get(ctx, req.ID)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			return nil, fmt.Errorf("not found: %s", req.ID)
 		}
 		return nil, fmt.Errorf("internal error: %w", err)
 	}
 
-	return entry.Value(), nil
+	return entry.Value, nil
 }
 
 // handleQueryBatchNATS handles batch entity query requests via NATS request/reply
@@ -104,7 +104,7 @@ func (c *Component) handleQueryBatchNATS(_ context.Context, data []byte) ([]byte
 		}
 
 		var entity graph.EntityState
-		if err := json.Unmarshal(entry.Value(), &entity); err != nil {
+		if err := json.Unmarshal(entry.Value, &entity); err != nil {
 			// Skip entities that fail to unmarshal
 			continue
 		}
@@ -198,10 +198,11 @@ func (c *Component) handleQuerySuffixNATS(_ context.Context, data []byte) ([]byt
 	keys, err := c.entityBucket.Keys(ctx)
 	if err != nil {
 		c.logger.Error("suffix query keys failed", "error", err)
-		if err == jetstream.ErrNoKeysFound {
-			return json.Marshal(map[string]string{"id": ""})
-		}
 		return nil, fmt.Errorf("failed to get keys: %w", err)
+	}
+	// Handle empty bucket
+	if keys == nil {
+		return json.Marshal(map[string]string{"id": ""})
 	}
 
 	c.logger.Debug("suffix query scanning keys", "suffix", req.Suffix, "key_count", len(keys))
@@ -255,7 +256,7 @@ func (c *Component) handleQueryEntity(msg queryMsg) {
 	// Get entity from KV bucket
 	entry, err := c.entityBucket.Get(ctx, req.ID)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			c.respondError(msg, "not found")
 			return
 		}
@@ -264,7 +265,7 @@ func (c *Component) handleQueryEntity(msg queryMsg) {
 	}
 
 	// Respond with entity JSON
-	if err := msg.Respond(entry.Value()); err != nil {
+	if err := msg.Respond(entry.Value); err != nil {
 		c.logger.Error("failed to respond to query", "error", err)
 	}
 }
@@ -318,7 +319,7 @@ func (c *Component) handleQueryBatch(msg queryMsg) {
 		}
 
 		var entity graph.EntityState
-		if err := json.Unmarshal(entry.Value(), &entity); err != nil {
+		if err := json.Unmarshal(entry.Value, &entity); err != nil {
 			// Skip entities that fail to unmarshal
 			continue
 		}

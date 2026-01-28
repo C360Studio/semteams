@@ -79,7 +79,7 @@ func TestComponent_SynchronousHierarchy_IncludedBeforeWrite(t *testing.T) {
 			require.NoError(t, err, "entity should exist in KV bucket")
 
 			var storedEntity graph.EntityState
-			err = json.Unmarshal(entry.Value(), &storedEntity)
+			err = json.Unmarshal(entry.Value, &storedEntity)
 			require.NoError(t, err)
 
 			// Verify entity was written with hierarchy triples included
@@ -155,7 +155,7 @@ func TestComponent_SynchronousHierarchy_SingleWrite(t *testing.T) {
 			require.NoError(t, err)
 
 			var storedEntity graph.EntityState
-			err = json.Unmarshal(entry.Value(), &storedEntity)
+			err = json.Unmarshal(entry.Value, &storedEntity)
 			require.NoError(t, err)
 
 			// CRITICAL: Entity must be version 1 (written once with all triples)
@@ -232,7 +232,7 @@ func TestComponent_SynchronousHierarchy_ContainerCreation(t *testing.T) {
 			require.NoError(t, err, "container %s should exist immediately after entity write", tt.containerID)
 
 			var containerEntity graph.EntityState
-			err = json.Unmarshal(entry.Value(), &containerEntity)
+			err = json.Unmarshal(entry.Value, &containerEntity)
 			require.NoError(t, err)
 
 			// Verify container has type classification
@@ -294,7 +294,7 @@ func TestComponent_SynchronousHierarchy_MultipleEntitiesSameType(t *testing.T) {
 		require.NoError(t, err)
 
 		var containerEntity graph.EntityState
-		err = json.Unmarshal(entry.Value(), &containerEntity)
+		err = json.Unmarshal(entry.Value, &containerEntity)
 		require.NoError(t, err)
 
 		// Container should exist with type classification
@@ -316,7 +316,7 @@ func TestComponent_SynchronousHierarchy_MultipleEntitiesSameType(t *testing.T) {
 		require.NoError(t, err)
 
 		var containerEntity graph.EntityState
-		err = json.Unmarshal(entry.Value(), &containerEntity)
+		err = json.Unmarshal(entry.Value, &containerEntity)
 		require.NoError(t, err)
 
 		// Count inverse edges (hierarchy.type.contains)
@@ -396,7 +396,7 @@ func TestComponent_SynchronousHierarchy_NoWatcherLifecycle(t *testing.T) {
 				require.NoError(t, err)
 
 				var storedEntity graph.EntityState
-				err = json.Unmarshal(entry.Value(), &storedEntity)
+				err = json.Unmarshal(entry.Value, &storedEntity)
 				require.NoError(t, err)
 
 				// Should have hierarchy triples despite never calling Start()
@@ -458,7 +458,7 @@ func TestComponent_SynchronousHierarchy_DisabledConfig(t *testing.T) {
 		require.NoError(t, err)
 
 		var storedEntity graph.EntityState
-		err = json.Unmarshal(entry.Value(), &storedEntity)
+		err = json.Unmarshal(entry.Value, &storedEntity)
 		require.NoError(t, err)
 
 		// Should only have the base triple (no hierarchy)
@@ -551,7 +551,7 @@ func TestComponent_SynchronousHierarchy_InvalidEntityID(t *testing.T) {
 				require.NoError(t, err)
 
 				var storedEntity graph.EntityState
-				err = json.Unmarshal(entry.Value(), &storedEntity)
+				err = json.Unmarshal(entry.Value, &storedEntity)
 				require.NoError(t, err)
 
 				if tt.expectHierarchy {
@@ -654,7 +654,7 @@ func TestComponent_SynchronousHierarchy_SiblingEdges(t *testing.T) {
 		require.NoError(t, err)
 
 		var stored1 graph.EntityState
-		err = json.Unmarshal(entry1.Value(), &stored1)
+		err = json.Unmarshal(entry1.Value, &stored1)
 		require.NoError(t, err)
 
 		siblingCount1 := countSiblingTriples(stored1.Triples)
@@ -683,7 +683,7 @@ func TestComponent_SynchronousHierarchy_SiblingEdges(t *testing.T) {
 		require.NoError(t, err)
 
 		var stored2 graph.EntityState
-		err = json.Unmarshal(entry2.Value(), &stored2)
+		err = json.Unmarshal(entry2.Value, &stored2)
 		require.NoError(t, err)
 
 		siblingCount2 := countSiblingTriples(stored2.Triples)
@@ -705,7 +705,7 @@ func TestComponent_SynchronousHierarchy_SiblingEdges(t *testing.T) {
 		require.NoError(t, err)
 
 		var stored1Updated graph.EntityState
-		err = json.Unmarshal(entry1Updated.Value(), &stored1Updated)
+		err = json.Unmarshal(entry1Updated.Value, &stored1Updated)
 		require.NoError(t, err)
 
 		hasSiblingToEntity2 := false
@@ -756,7 +756,7 @@ func TestComponent_SynchronousHierarchy_SiblingEdges(t *testing.T) {
 		require.NoError(t, err)
 
 		var stored3 graph.EntityState
-		err = json.Unmarshal(entry3.Value(), &stored3)
+		err = json.Unmarshal(entry3.Value, &stored3)
 		require.NoError(t, err)
 
 		siblingCount3 := countSiblingTriples(stored3.Triples)
@@ -767,7 +767,7 @@ func TestComponent_SynchronousHierarchy_SiblingEdges(t *testing.T) {
 		require.NoError(t, err)
 
 		var stored1 graph.EntityState
-		err = json.Unmarshal(entry1.Value(), &stored1)
+		err = json.Unmarshal(entry1.Value, &stored1)
 		require.NoError(t, err)
 
 		siblingCount1 := countSiblingTriples(stored1.Triples)

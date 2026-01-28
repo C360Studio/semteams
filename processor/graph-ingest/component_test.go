@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,15 +23,22 @@ import (
 
 // Mock KV bucket for testing
 type mockKVBucket struct {
-	data       map[string][]byte
+	mu         sync.Mutex
+	data       map[string]mockKVData
 	putFunc    func(ctx context.Context, key string, value []byte) (uint64, error)
 	getFunc    func(ctx context.Context, key string) (jetstream.KeyValueEntry, error)
 	deleteFunc func(ctx context.Context, key string, opts ...jetstream.KVDeleteOpt) error
 }
 
+// mockKVData stores value with revision for CAS testing
+type mockKVData struct {
+	value    []byte
+	revision uint64
+}
+
 func newMockKVBucket() *mockKVBucket {
 	return &mockKVBucket{
-		data: make(map[string][]byte),
+		data: make(map[string]mockKVData),
 	}
 }
 
@@ -38,16 +46,28 @@ func (m *mockKVBucket) Put(ctx context.Context, key string, value []byte) (uint6
 	if m.putFunc != nil {
 		return m.putFunc(ctx, key, value)
 	}
-	m.data[key] = value
-	return 1, nil
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Increment revision (or start at 1 if new)
+	current, exists := m.data[key]
+	newRev := uint64(1)
+	if exists {
+		newRev = current.revision + 1
+	}
+	m.data[key] = mockKVData{value: value, revision: newRev}
+	return newRev, nil
 }
 
 func (m *mockKVBucket) Get(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
 	if m.getFunc != nil {
 		return m.getFunc(ctx, key)
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if data, exists := m.data[key]; exists {
-		return &mockKVEntry{data: data}, nil
+		return &mockKVEntry{data: data.value, revision: data.revision, key: key}, nil
 	}
 	return nil, jetstream.ErrKeyNotFound
 }
@@ -56,6 +76,9 @@ func (m *mockKVBucket) Delete(ctx context.Context, key string, opts ...jetstream
 	if m.deleteFunc != nil {
 		return m.deleteFunc(ctx, key, opts...)
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	delete(m.data, key)
 	return nil
 }
@@ -74,14 +97,32 @@ func (m *mockKVBucket) PutString(ctx context.Context, key string, value string) 
 }
 
 func (m *mockKVBucket) Create(ctx context.Context, key string, value []byte, opts ...jetstream.KVCreateOpt) (uint64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	if _, exists := m.data[key]; exists {
 		return 0, jetstream.ErrKeyExists
 	}
-	return m.Put(ctx, key, value)
+	m.data[key] = mockKVData{value: value, revision: 1}
+	return 1, nil
 }
 
 func (m *mockKVBucket) Update(ctx context.Context, key string, value []byte, revision uint64) (uint64, error) {
-	return m.Put(ctx, key, value)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	current, exists := m.data[key]
+	if !exists {
+		return 0, jetstream.ErrKeyNotFound
+	}
+	if current.revision != revision {
+		// CAS failure - revision mismatch
+		return 0, errors.New("wrong last sequence")
+	}
+
+	newRev := current.revision + 1
+	m.data[key] = mockKVData{value: value, revision: newRev}
+	return newRev, nil
 }
 
 func (m *mockKVBucket) Purge(ctx context.Context, key string, opts ...jetstream.KVDeleteOpt) error {
@@ -130,12 +171,14 @@ func (m *mockKVBucket) Status(ctx context.Context) (jetstream.KeyValueStatus, er
 
 // Mock KV entry for testing
 type mockKVEntry struct {
-	data []byte
+	key      string
+	data     []byte
+	revision uint64
 }
 
-func (m *mockKVEntry) Key() string                     { return "test-key" }
+func (m *mockKVEntry) Key() string                     { return m.key }
 func (m *mockKVEntry) Value() []byte                   { return m.data }
-func (m *mockKVEntry) Revision() uint64                { return 1 }
+func (m *mockKVEntry) Revision() uint64                { return m.revision }
 func (m *mockKVEntry) Created() time.Time              { return time.Now() }
 func (m *mockKVEntry) Delta() uint64                   { return 0 }
 func (m *mockKVEntry) Operation() jetstream.KeyValueOp { return jetstream.KeyValuePut }
@@ -846,7 +889,8 @@ func createTestComponentWithMockKV(t *testing.T) *Component {
 
 	// Initialize with mock bucket (bypass actual NATS connection)
 	component := comp.(*Component)
-	component.entityBucket = mockBucket
+	// Create KVStore wrapper for all KV operations
+	component.entityBucket = natsClient.NewKVStore(mockBucket)
 
 	return component
 }

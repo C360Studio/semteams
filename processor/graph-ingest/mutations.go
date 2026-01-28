@@ -59,10 +59,17 @@ func (c *Component) handleTripleAdd(ctx context.Context, data []byte) ([]byte, e
 		})
 	}
 
+	// Get revision after successful mutation for feedback loop prevention
+	var kvRevision uint64
+	if entry, err := c.entityBucket.Get(ctx, req.Triple.Subject); err == nil {
+		kvRevision = entry.Revision
+	}
+
 	return json.Marshal(graph.AddTripleResponse{
 		MutationResponse: graph.MutationResponse{
-			Success:   true,
-			Timestamp: time.Now().UnixNano(),
+			Success:    true,
+			Timestamp:  time.Now().UnixNano(),
+			KVRevision: kvRevision,
 		},
 		Triple: &req.Triple,
 	})
@@ -93,10 +100,17 @@ func (c *Component) handleTripleRemove(ctx context.Context, data []byte) ([]byte
 		})
 	}
 
+	// Get revision after successful mutation for feedback loop prevention
+	var kvRevision uint64
+	if entry, err := c.entityBucket.Get(ctx, req.Subject); err == nil {
+		kvRevision = entry.Revision
+	}
+
 	return json.Marshal(graph.RemoveTripleResponse{
 		MutationResponse: graph.MutationResponse{
-			Success:   true,
-			Timestamp: time.Now().UnixNano(),
+			Success:    true,
+			Timestamp:  time.Now().UnixNano(),
+			KVRevision: kvRevision,
 		},
 		Removed: true,
 	})

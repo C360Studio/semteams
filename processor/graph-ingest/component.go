@@ -122,14 +122,14 @@ type entityManagerAdapter struct {
 }
 
 func (a *entityManagerAdapter) ExistsEntity(ctx context.Context, id string) (bool, error) {
-	entry, err := a.component.entityBucket.Get(ctx, id)
+	_, err := a.component.entityBucket.Get(ctx, id)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			return false, nil
 		}
 		return false, err
 	}
-	return entry != nil, nil
+	return true, nil
 }
 
 func (a *entityManagerAdapter) CreateEntity(ctx context.Context, entity *graph.EntityState) (*graph.EntityState, error) {
@@ -144,9 +144,6 @@ func (a *entityManagerAdapter) ListWithPrefix(ctx context.Context, prefix string
 	// Get all keys from KV bucket
 	keys, err := a.component.entityBucket.Keys(ctx)
 	if err != nil {
-		if err == jetstream.ErrNoKeysFound {
-			return nil, nil
-		}
 		return nil, err
 	}
 
@@ -183,7 +180,7 @@ type Component struct {
 	logger     *slog.Logger
 
 	// Domain resources
-	entityBucket jetstream.KeyValue
+	entityBucket *natsclient.KVStore // KV operations with CAS support
 
 	// Inference components
 	hierarchyInference *inference.HierarchyInference
@@ -461,7 +458,8 @@ func (c *Component) Start(ctx context.Context) error {
 		cancel()
 		return errs.Wrap(err, "Component", "Start", "KV bucket creation")
 	}
-	c.entityBucket = bucket
+	// Wrap in KVStore for all KV operations (includes CAS support via UpdateWithRetry)
+	c.entityBucket = c.natsClient.NewKVStore(bucket)
 
 	// Initialize lifecycle reporter (throttled for high-throughput ingestion)
 	c.initLifecycleReporter(ctx)
@@ -1026,7 +1024,7 @@ func (c *Component) DeleteEntity(ctx context.Context, entityID string) error {
 // Triple Operations
 // ============================================================================
 
-// AddTriple adds a triple to an entity
+// AddTriple adds a triple to an entity using CAS for concurrency safety
 func (c *Component) AddTriple(ctx context.Context, triple message.Triple) error {
 	if triple.Subject == "" {
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "AddTriple", "triple subject cannot be empty")
@@ -1040,40 +1038,41 @@ func (c *Component) AddTriple(ctx context.Context, triple message.Triple) error 
 		return errs.Wrap(err, "Component", "AddTriple", "context cancelled")
 	}
 
-	// Get existing entity
-	entry, err := c.entityBucket.Get(ctx, triple.Subject)
-	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
-			// Create new entity with this triple
-			entity := &graph.EntityState{
+	// Use UpdateWithRetry for atomic read-modify-write with CAS
+	err := c.entityBucket.UpdateWithRetry(ctx, triple.Subject, func(current []byte) ([]byte, error) {
+		var entity graph.EntityState
+
+		if len(current) > 0 {
+			// Deserialize existing entity
+			if err := json.Unmarshal(current, &entity); err != nil {
+				return nil, err // Non-retryable
+			}
+		} else {
+			// Create new entity if doesn't exist
+			entity = graph.EntityState{
 				ID:        triple.Subject,
-				Triples:   []message.Triple{triple},
-				Version:   1,
+				Version:   0,
 				UpdatedAt: time.Now(),
 			}
-			return c.CreateEntity(ctx, entity)
 		}
+
+		// Add triple
+		entity.Triples = append(entity.Triples, triple)
+		entity.Version++
+		entity.UpdatedAt = time.Now()
+
+		return json.Marshal(&entity)
+	})
+
+	if err != nil {
 		atomic.AddInt64(&c.errors, 1)
-		return errs.Wrap(err, "Component", "AddTriple", "entity lookup")
+		return errs.Wrap(err, "Component", "AddTriple", "CAS update")
 	}
 
-	// Deserialize existing entity
-	var entity graph.EntityState
-	if err := json.Unmarshal(entry.Value(), &entity); err != nil {
-		atomic.AddInt64(&c.errors, 1)
-		return errs.Wrap(err, "Component", "AddTriple", "entity deserialization")
-	}
-
-	// Add triple
-	entity.Triples = append(entity.Triples, triple)
-	entity.Version++
-	entity.UpdatedAt = time.Now()
-
-	// Update entity
-	return c.UpdateEntity(ctx, &entity)
+	return nil
 }
 
-// RemoveTriple removes a triple from an entity
+// RemoveTriple removes a triple from an entity using CAS for concurrency safety
 func (c *Component) RemoveTriple(ctx context.Context, subject, predicate string) error {
 	if subject == "" {
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "RemoveTriple", "subject cannot be empty")
@@ -1087,35 +1086,58 @@ func (c *Component) RemoveTriple(ctx context.Context, subject, predicate string)
 		return errs.Wrap(err, "Component", "RemoveTriple", "context cancelled")
 	}
 
-	// Get existing entity
-	entry, err := c.entityBucket.Get(ctx, subject)
+	// Check if entity exists first - if not, nothing to remove
+	_, err := c.entityBucket.Get(ctx, subject)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			return nil // Entity doesn't exist, nothing to remove
 		}
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "RemoveTriple", "entity lookup")
 	}
 
-	// Deserialize existing entity
-	var entity graph.EntityState
-	if err := json.Unmarshal(entry.Value(), &entity); err != nil {
-		atomic.AddInt64(&c.errors, 1)
-		return errs.Wrap(err, "Component", "RemoveTriple", "entity deserialization")
-	}
-
-	// Remove matching triples
-	filtered := make([]message.Triple, 0, len(entity.Triples))
-	for _, t := range entity.Triples {
-		if t.Predicate != predicate {
-			filtered = append(filtered, t)
+	// Use UpdateWithRetry for atomic read-modify-write with CAS
+	err = c.entityBucket.UpdateWithRetry(ctx, subject, func(current []byte) ([]byte, error) {
+		if len(current) == 0 {
+			// Entity was deleted between our check and update - nothing to do
+			return nil, natsclient.ErrKVKeyNotFound
 		}
+
+		// Deserialize existing entity
+		var entity graph.EntityState
+		if err := json.Unmarshal(current, &entity); err != nil {
+			return nil, err // Non-retryable
+		}
+
+		// Remove matching triples
+		filtered := make([]message.Triple, 0, len(entity.Triples))
+		for _, t := range entity.Triples {
+			if t.Predicate != predicate {
+				filtered = append(filtered, t)
+			}
+		}
+
+		// If nothing changed, return input unchanged to avoid unnecessary write
+		if len(filtered) == len(entity.Triples) {
+			return current, nil
+		}
+
+		entity.Triples = filtered
+		entity.Version++
+		entity.UpdatedAt = time.Now()
+
+		return json.Marshal(&entity)
+	})
+
+	// Handle errors - ErrKVKeyNotFound means entity was deleted, which is fine
+	if err != nil {
+		// Check if it's a wrapped "not found" error
+		if natsclient.IsKVNotFoundError(err) {
+			return nil // Entity was deleted, nothing to remove
+		}
+		atomic.AddInt64(&c.errors, 1)
+		return errs.Wrap(err, "Component", "RemoveTriple", "CAS update")
 	}
 
-	entity.Triples = filtered
-	entity.Version++
-	entity.UpdatedAt = time.Now()
-
-	// Update entity
-	return c.UpdateEntity(ctx, &entity)
+	return nil
 }
