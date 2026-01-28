@@ -51,6 +51,11 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 			Content: msg.Content,
 		}
 
+		// Handle tool results - include tool_call_id (required by OpenAI API)
+		if msg.Role == "tool" && msg.ToolCallID != "" {
+			messages[i].ToolCallID = msg.ToolCallID
+		}
+
 		// Convert tool calls if present
 		if len(msg.ToolCalls) > 0 {
 			toolCalls := make([]openai.ToolCall, len(msg.ToolCalls))

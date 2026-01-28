@@ -19,6 +19,7 @@ import (
 	"github.com/c360/semstreams/test/e2e/config"
 	"github.com/c360/semstreams/test/e2e/results"
 	scenarios "github.com/c360/semstreams/test/e2e/scenarios"
+	"github.com/c360/semstreams/test/e2e/scenarios/agentic"
 )
 
 var (
@@ -188,6 +189,7 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Println("  e2e:structural  - Rules + structural inference (~30s)")
 	fmt.Println("  e2e:statistical - BM25 + community detection (~60s)")
 	fmt.Println("  e2e:semantic    - Neural embeddings + LLM (~90s)")
+	fmt.Println("  e2e:agentic     - Agent loop + tools with mock LLM (~30s)")
 	fmt.Println("")
 	fmt.Println("Individual Scenarios:")
 	fmt.Println("")
@@ -200,6 +202,11 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Println("    tiered --variant structural  - Rules-only, ZERO embeddings/clusters")
 	fmt.Println("    tiered --variant statistical - BM25 embeddings, no external ML")
 	fmt.Println("    tiered --variant semantic    - Neural embeddings + LLM summaries")
+	fmt.Println("")
+	fmt.Println("  Agentic:")
+	fmt.Println("    agentic         - Agent loop, model, and tools E2E test")
+	fmt.Println("                      Uses mock LLM by default (CI-friendly)")
+	fmt.Println("                      Override with AGENTIC_LLM_URL for real LLM")
 	fmt.Println("")
 	fmt.Println("Variant flag (for tiered scenario):")
 	fmt.Println("  --variant structural  - Rules-only, validates ZERO ML inference")
@@ -336,6 +343,12 @@ func createScenario(
 			cfg.GraphQLURL = "http://localhost:8082/graphql"
 		}
 		return scenarios.NewTieredScenario(edgeClient, flags.udpEndpoint, cfg)
+
+	// Agentic scenario (agent loop, model, tools)
+	case "agentic":
+		cfg := agentic.DefaultConfig()
+		cfg.MetricsURL = flags.metricsURL
+		return agentic.NewScenario(edgeClient, cfg)
 
 	default:
 		return nil

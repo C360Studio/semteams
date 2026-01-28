@@ -1,0 +1,67 @@
+version: "3"
+
+# Agentic Tier: Agent loop, model, and tools E2E testing
+# Uses mock OpenAI server by default for deterministic CI testing
+# Override with AGENTIC_LLM_URL for local testing with real LLMs (e.g., Ollama)
+
+tasks:
+  default:
+    desc: "Agentic tier: Agent loop + tools (~30s)"
+    silent: false
+    deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
+    cmds:
+      - echo "[AGENTIC] Starting agentic tier E2E test..."
+      - docker compose -f docker/compose/agentic.yml up -d --wait --build
+      - echo "[OK] Services are healthy (NATS + mock-llm + semstreams)"
+      - echo "[AGENTIC] Running agentic tier scenario..."
+      - cmd: cd cmd/e2e && ./e2e --scenario agentic --output-dir ./test/e2e/results --metrics-url http://localhost:9090
+        ignore_error: true
+      - docker compose -f docker/compose/agentic.yml down -v --timeout 15
+
+  up:
+    desc: Start agentic tier services without running tests
+    silent: false
+    cmds:
+      - echo "[AGENTIC] Starting agentic tier services..."
+      - docker compose -f docker/compose/agentic.yml up -d --wait --build
+      - echo "[OK] Services are healthy"
+      - 'echo ""'
+      - 'echo "Services:"'
+      - 'echo "  NATS:       nats://localhost:4222"'
+      - 'echo "  Mock LLM:   http://localhost:18080"'
+      - 'echo "  SemStreams: http://localhost:8080"'
+      - 'echo "  Metrics:    http://localhost:9090/metrics"'
+      - 'echo ""'
+      - 'echo "To run tests: task e2e:agentic:test"'
+      - 'echo "To stop:      task e2e:agentic:down"'
+
+  test:
+    desc: Run agentic tests against already-running services
+    silent: false
+    deps: [":build:e2e"]
+    cmds:
+      - echo "[AGENTIC] Running agentic scenario..."
+      - cd cmd/e2e && ./e2e --scenario agentic --output-dir ./test/e2e/results --metrics-url http://localhost:9090
+
+  down:
+    desc: Stop agentic tier services
+    silent: false
+    cmds:
+      - echo "[AGENTIC] Stopping agentic tier services..."
+      - docker compose -f docker/compose/agentic.yml down -v --timeout 15
+      - echo "[OK] Services stopped"
+
+  logs:
+    desc: Tail logs from agentic services
+    silent: false
+    cmds:
+      - docker compose -f docker/compose/agentic.yml logs -f
+
+  clean:
+    desc: Clean agentic tier environment
+    silent: false
+    cmds:
+      - echo "[AGENTIC] Cleaning agentic tier environment..."
+      - docker compose -f docker/compose/agentic.yml down -v --timeout 15 2>/dev/null || true
+      - docker volume ls -q --filter name=agentic | xargs -r docker volume rm 2>/dev/null || true
+      - echo "[OK] Agentic environment cleaned"

@@ -38,6 +38,7 @@ type Component struct {
 	requestsProcessed int64
 	errors            int64
 	lastActivity      time.Time
+	metrics           *modelMetrics
 }
 
 // NewComponent creates a new agentic-model processor component
@@ -77,6 +78,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		clients:    clients,
 		natsClient: deps.NATSClient,
 		logger:     deps.GetLogger(),
+		metrics:    getMetrics(deps.MetricsRegistry),
 	}, nil
 }
 
@@ -256,22 +258,70 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 		return
 	}
 
+	c.logger.Info("Processing agent request",
+		slog.String("request_id", req.RequestID),
+		slog.String("model", req.Model),
+		slog.String("role", req.Role))
+
 	// Resolve endpoint and get client
 	client, err := c.getClientForRequest(req)
 	if err != nil {
+		c.logger.Error("Failed to resolve endpoint", "error", err, "model", req.Model)
 		c.publishErrorResponse(ctx, req.RequestID, err.Error())
 		c.incrementErrors()
 		return
 	}
 
+	// Record request start
+	startTime := time.Now()
+	if c.metrics != nil {
+		c.metrics.recordRequestStart(req.Model)
+	}
+
 	// Execute request with timeout
 	resp, err := c.executeRequest(ctx, client, req)
+	duration := time.Since(startTime).Seconds()
+
 	if err != nil {
-		c.logger.Error("Failed to complete chat", "error", err)
+		c.logger.Error("Failed to complete chat", "error", err, "model", req.Model)
+
+		// Determine error type
+		errorType := "unknown"
+		if ctx.Err() != nil {
+			errorType = "timeout"
+		} else if strings.Contains(err.Error(), "connection") {
+			errorType = "connection"
+		} else if strings.Contains(err.Error(), "rate limit") {
+			errorType = "rate_limit"
+		}
+
+		if c.metrics != nil {
+			c.metrics.recordRequestError(req.Model, errorType, duration)
+		}
+
 		c.publishErrorResponse(ctx, req.RequestID, err.Error())
 		c.incrementErrors()
 		return
 	}
+
+	// Record successful completion
+	toolCallCount := len(resp.Message.ToolCalls)
+	if c.metrics != nil {
+		c.metrics.recordRequestComplete(req.Model, duration, toolCallCount)
+
+		// Record token usage if available
+		if resp.TokenUsage.PromptTokens > 0 || resp.TokenUsage.CompletionTokens > 0 {
+			c.metrics.recordTokenUsage(req.Model, resp.TokenUsage.PromptTokens, resp.TokenUsage.CompletionTokens)
+		}
+	}
+
+	c.logger.Debug("Model request completed",
+		slog.String("request_id", req.RequestID),
+		slog.String("model", req.Model),
+		slog.Float64("duration_seconds", duration),
+		slog.Int("tool_calls", toolCallCount),
+		slog.Int("prompt_tokens", resp.TokenUsage.PromptTokens),
+		slog.Int("completion_tokens", resp.TokenUsage.CompletionTokens))
 
 	// Publish response
 	if err := c.publishResponse(ctx, resp); err != nil {

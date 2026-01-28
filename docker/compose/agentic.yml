@@ -1,0 +1,106 @@
+# Agentic E2E Test Environment for SemStreams
+#
+# Tests the agentic components (loop, model, tools) with a mock LLM server.
+#
+# Usage:
+#   task e2e:agentic                                    # Uses built-in mock
+#   AGENTIC_LLM_URL=http://localhost:11434/v1 task e2e:agentic  # Uses Ollama
+#
+# This compose file starts:
+#   - NATS with JetStream
+#   - Mock OpenAI server (deterministic responses for CI)
+#   - SemStreams with agentic config
+#
+# The mock server can be bypassed by setting AGENTIC_LLM_URL environment variable.
+
+services:
+  # NATS Server with JetStream
+  nats:
+    image: nats:2.10-alpine
+    container_name: semstreams-agentic-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    command:
+      ["-js", "-sd", "/data", "-m", "8222", "--name", "semstreams-agentic-nats"]
+    volumes:
+      - nats-agentic-data:/data
+    networks:
+      - semstreams-agentic-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Mock OpenAI Server (deterministic LLM responses for testing)
+  mock-llm:
+    build:
+      context: ../..
+      dockerfile: test/e2e/mock/Dockerfile
+    container_name: semstreams-agentic-mock-llm
+    ports:
+      - "18080:8080"
+    networks:
+      - semstreams-agentic-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # SemStreams Application with Agentic Components
+  semstreams:
+    build:
+      context: ../..
+      dockerfile: docker/Dockerfile
+      target: production
+    container_name: semstreams-agentic-app
+    command: ["--config", "/app/configs/agentic.json"]
+    depends_on:
+      nats:
+        condition: service_healthy
+      mock-llm:
+        condition: service_healthy
+    environment:
+      - SEMSTREAMS_NATS_URLS=nats://nats:4222
+      - SEMSTREAMS_LOG_LEVEL=debug
+      - AGENTIC_LLM_URL=${AGENTIC_LLM_URL:-http://mock-llm:8080}
+    volumes:
+      - ../../configs:/app/configs:ro
+      - ../../testdata:/data/testdata:ro
+    ports:
+      - "8080:8080"   # HTTP API (health, components)
+      - "9090:9090"   # Prometheus metrics
+    networks:
+      - semstreams-agentic-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8080/readyz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  semstreams-agentic-net:
+    driver: bridge
+
+volumes:
+  nats-agentic-data:
+    driver: local

@@ -35,6 +35,9 @@ type Component struct {
 	// Ports (merged from config)
 	inputPorts  []component.Port
 	outputPorts []component.Port
+
+	// Metrics
+	metrics *loopMetrics
 }
 
 // NewComponent creates a new agentic-loop component
@@ -85,6 +88,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		logger:      deps.GetLogger(),
 		inputPorts:  inputPorts,
 		outputPorts: outputPorts,
+		metrics:     getMetrics(deps.MetricsRegistry),
 	}
 
 	return comp, nil
@@ -464,12 +468,26 @@ func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
 		return
 	}
 
+	c.logger.Info("Processing task message",
+		slog.String("task_id", task.TaskID),
+		slog.String("role", task.Role),
+		slog.String("model", task.Model))
+
 	// Handle the task using the message handler
 	result, err := c.handler.HandleTask(ctx, task)
 	if err != nil {
 		c.logger.Error("Failed to handle task", "error", err, "task_id", task.TaskID)
 		return
 	}
+
+	// Record loop creation
+	if c.metrics != nil {
+		c.metrics.recordLoopCreated()
+	}
+
+	c.logger.Debug("Loop created",
+		slog.String("loop_id", result.LoopID),
+		slog.String("task_id", task.TaskID))
 
 	// Publish output messages
 	c.publishResults(ctx, result)
@@ -501,11 +519,69 @@ func (c *Component) handleResponseMessage(ctx context.Context, data []byte) {
 		return
 	}
 
+	c.logger.Debug("Processing model response",
+		slog.String("loop_id", loopID),
+		slog.String("request_id", response.RequestID),
+		slog.String("status", response.Status))
+
+	// Get loop entity to track iterations and duration
+	entity, err := c.handler.GetLoop(loopID)
+	if err != nil {
+		c.logger.Error("Failed to get loop for metrics", "error", err, "loop_id", loopID)
+	}
+	startTime := entity.StartedAt
+
 	// Handle the response using the message handler
 	result, err := c.handler.HandleModelResponse(ctx, loopID, response)
 	if err != nil {
 		c.logger.Error("Failed to handle model response", "error", err, "loop_id", loopID)
+
+		// Record failed loop metrics
+		if c.metrics != nil && entity.ID != "" {
+			duration := time.Since(startTime).Seconds()
+			c.metrics.recordLoopFailed("handler_error", entity.Iterations, duration)
+		}
 		return
+	}
+
+	// Record iteration
+	if c.metrics != nil {
+		c.metrics.recordIteration()
+		c.metrics.recordTrajectoryStep("model_call")
+	}
+
+	// Record tool calls if any
+	if response.Status == "tool_call" && c.metrics != nil {
+		for _, toolCall := range response.Message.ToolCalls {
+			c.metrics.recordToolCallDispatched(toolCall.Name)
+			c.logger.Debug("Tool call dispatched",
+				slog.String("loop_id", loopID),
+				slog.String("tool", toolCall.Name),
+				slog.String("call_id", toolCall.ID))
+		}
+	}
+
+	// Record completion or failure
+	if result.State == agentic.LoopStateComplete {
+		if c.metrics != nil && entity.ID != "" {
+			duration := time.Since(startTime).Seconds()
+			c.metrics.recordLoopCompleted(entity.Iterations, duration)
+		}
+		c.logger.Info("Loop completed",
+			slog.String("loop_id", loopID),
+			slog.Int("iterations", entity.Iterations))
+	} else if result.State == agentic.LoopStateFailed {
+		if c.metrics != nil && entity.ID != "" {
+			duration := time.Since(startTime).Seconds()
+			reason := "unknown"
+			if response.Status == "error" {
+				reason = "model_error"
+			}
+			c.metrics.recordLoopFailed(reason, entity.Iterations, duration)
+		}
+		c.logger.Warn("Loop failed",
+			slog.String("loop_id", loopID),
+			slog.Int("iterations", entity.Iterations))
 	}
 
 	// Publish output messages
@@ -536,6 +612,19 @@ func (c *Component) handleToolResultMessage(ctx context.Context, data []byte) {
 	if loopID == "" {
 		c.logger.Warn("No loop found for tool call", "call_id", toolResult.CallID)
 		return
+	}
+
+	hasError := toolResult.Error != ""
+
+	c.logger.Debug("Processing tool result",
+		slog.String("loop_id", loopID),
+		slog.String("call_id", toolResult.CallID),
+		slog.Bool("has_error", hasError))
+
+	// Record tool result received
+	if c.metrics != nil {
+		c.metrics.recordToolResultReceived(hasError)
+		c.metrics.recordTrajectoryStep("tool_call")
 	}
 
 	// Handle the tool result using the message handler

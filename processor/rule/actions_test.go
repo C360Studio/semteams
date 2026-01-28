@@ -745,3 +745,222 @@ func TestAction_UpdateTriple_AddFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "add updated triple")
 }
+
+// T049: Test Action PublishAgent - triggers an agentic loop
+func TestAction_PublishAgent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		action      Action
+		entityID    string
+		relatedID   string
+		wantSubject string
+		wantErr     bool
+		errMsg      string
+	}{
+		{
+			name: "publish agent task with general role",
+			action: Action{
+				Type:    ActionTypePublishAgent,
+				Subject: "agent.task.anomaly",
+				Role:    "general",
+				Model:   "mock-model",
+				Prompt:  "Analyze anomaly for entity $entity.id",
+			},
+			entityID:    "c360.platform.sensor.temp.001",
+			wantSubject: "agent.task.anomaly",
+			wantErr:     false,
+		},
+		{
+			name: "publish agent task with architect role",
+			action: Action{
+				Type:    ActionTypePublishAgent,
+				Subject: "agent.task.design",
+				Role:    "architect",
+				Model:   "gpt-4",
+				Prompt:  "Design solution for $entity.id",
+			},
+			entityID:    "c360.platform.system.001",
+			wantSubject: "agent.task.design",
+			wantErr:     false,
+		},
+		{
+			name: "publish agent task with variable substitution in subject",
+			action: Action{
+				Type:    ActionTypePublishAgent,
+				Subject: "agent.task.$entity.id",
+				Role:    "general",
+				Model:   "mock-model",
+				Prompt:  "Analyze $entity.id",
+			},
+			entityID:    "sensor-001",
+			wantSubject: "agent.task.sensor-001",
+			wantErr:     false,
+		},
+		{
+			name: "missing subject should fail",
+			action: Action{
+				Type:   ActionTypePublishAgent,
+				Role:   "general",
+				Model:  "mock-model",
+				Prompt: "Test prompt",
+			},
+			entityID: "entity.001",
+			wantErr:  true,
+			errMsg:   "subject is required",
+		},
+		{
+			name: "missing role should fail",
+			action: Action{
+				Type:    ActionTypePublishAgent,
+				Subject: "agent.task.test",
+				Model:   "mock-model",
+				Prompt:  "Test prompt",
+			},
+			entityID: "entity.001",
+			wantErr:  true,
+			errMsg:   "role is required",
+		},
+		{
+			name: "missing model should fail",
+			action: Action{
+				Type:    ActionTypePublishAgent,
+				Subject: "agent.task.test",
+				Role:    "general",
+				Prompt:  "Test prompt",
+			},
+			entityID: "entity.001",
+			wantErr:  true,
+			errMsg:   "model is required",
+		},
+		{
+			name: "missing prompt should fail",
+			action: Action{
+				Type:    ActionTypePublishAgent,
+				Subject: "agent.task.test",
+				Role:    "general",
+				Model:   "mock-model",
+			},
+			entityID: "entity.001",
+			wantErr:  true,
+			errMsg:   "prompt is required",
+		},
+		{
+			name: "invalid role should fail",
+			action: Action{
+				Type:    ActionTypePublishAgent,
+				Subject: "agent.task.test",
+				Role:    "invalid_role",
+				Model:   "mock-model",
+				Prompt:  "Test prompt",
+			},
+			entityID: "entity.001",
+			wantErr:  true,
+			errMsg:   "invalid role",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockPublisher{}
+			executor := NewActionExecutorFull(nil, nil, mock)
+
+			err := executor.Execute(ctx, tt.action, tt.entityID, tt.relatedID)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+				require.Len(t, mock.published, 1, "should have published one message")
+				assert.Equal(t, tt.wantSubject, mock.published[0].subject)
+			}
+		})
+	}
+}
+
+// T050: Test PublishAgent payload format (TaskMessage)
+func TestAction_PublishAgent_PayloadFormat(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mock := &mockPublisher{}
+	executor := NewActionExecutorFull(nil, nil, mock)
+
+	action := Action{
+		Type:    ActionTypePublishAgent,
+		Subject: "agent.task.test",
+		Role:    "general",
+		Model:   "mock-model",
+		Prompt:  "Analyze entity $entity.id in location $related.id",
+	}
+
+	err := executor.Execute(ctx, action, "sensor.temp.001", "warehouse.zone.A")
+	require.NoError(t, err)
+	require.Len(t, mock.published, 1)
+
+	// Parse the published payload
+	var task TaskMessage
+	err = json.Unmarshal(mock.published[0].data, &task)
+	require.NoError(t, err)
+
+	// Verify TaskMessage fields
+	assert.NotEmpty(t, task.TaskID, "task_id should be set")
+	assert.Contains(t, task.TaskID, "rule-", "task_id should start with 'rule-'")
+	assert.Equal(t, "general", task.Role)
+	assert.Equal(t, "mock-model", task.Model)
+	assert.Equal(t, "Analyze entity sensor.temp.001 in location warehouse.zone.A", task.Prompt)
+}
+
+// T051: Test PublishAgent without publisher (no-op)
+func TestAction_PublishAgent_NoPublisher(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	executor := NewActionExecutor(nil) // No publisher configured
+
+	action := Action{
+		Type:    ActionTypePublishAgent,
+		Subject: "agent.task.test",
+		Role:    "general",
+		Model:   "mock-model",
+		Prompt:  "Test prompt",
+	}
+
+	// Should not error, just log and return
+	err := executor.Execute(ctx, action, "entity.001", "")
+	require.NoError(t, err)
+}
+
+// T052: Test PublishAgent error handling
+func TestAction_PublishAgent_ErrorHandling(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	expectedErr := assert.AnError
+	mock := &mockPublisher{err: expectedErr}
+	executor := NewActionExecutorFull(nil, nil, mock)
+
+	action := Action{
+		Type:    ActionTypePublishAgent,
+		Subject: "agent.task.test",
+		Role:    "general",
+		Model:   "mock-model",
+		Prompt:  "Test prompt",
+	}
+
+	err := executor.Execute(ctx, action, "entity.001", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "publish agent task to agent.task.test")
+}
+
+// T053: Test ActionTypePublishAgent constant
+func TestActionConstant_PublishAgent(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "publish_agent", ActionTypePublishAgent)
+}

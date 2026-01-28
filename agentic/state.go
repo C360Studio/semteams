@@ -4,6 +4,7 @@ package agentic
 
 import (
 	"fmt"
+	"time"
 )
 
 // LoopState represents the current state of an agentic loop
@@ -33,13 +34,17 @@ func (s LoopState) IsTerminal() bool {
 
 // LoopEntity represents an agentic loop instance
 type LoopEntity struct {
-	ID            string    `json:"id"`
-	TaskID        string    `json:"task_id"`
-	State         LoopState `json:"state"`
-	Role          string    `json:"role"`
-	Model         string    `json:"model"`
-	Iterations    int       `json:"iterations"`
-	MaxIterations int       `json:"max_iterations"`
+	ID                 string                `json:"id"`
+	TaskID             string                `json:"task_id"`
+	State              LoopState             `json:"state"`
+	Role               string                `json:"role"`
+	Model              string                `json:"model"`
+	Iterations         int                   `json:"iterations"`
+	MaxIterations      int                   `json:"max_iterations"`
+	PendingToolResults map[string]ToolResult `json:"pending_tool_results,omitempty"` // Accumulated tool results by call ID
+	StartedAt          time.Time             `json:"started_at,omitempty"`           // When the loop was created
+	TimeoutAt          time.Time             `json:"timeout_at,omitempty"`           // When the loop should timeout
+	ParentLoopID       string                `json:"parent_loop_id,omitempty"`       // Parent loop ID for architect->editor relationship
 }
 
 // Validate checks if the LoopEntity is valid

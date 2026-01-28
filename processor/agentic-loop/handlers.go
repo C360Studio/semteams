@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/c360/semstreams/agentic"
-	"github.com/google/uuid"
 )
 
 // Subject patterns for NATS publishing (concrete subjects, no wildcards).
@@ -91,6 +90,14 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		}
 	}
 
+	// Set timeout if configured
+	if h.config.Timeout != "" {
+		timeout, parseErr := time.ParseDuration(h.config.Timeout)
+		if parseErr == nil {
+			_ = h.loopManager.SetTimeout(loopID, timeout)
+		}
+	}
+
 	// Start trajectory
 	_, err = h.trajectoryManager.StartTrajectory(loopID)
 	if err != nil {
@@ -103,9 +110,9 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		return HandlerResult{}, err
 	}
 
-	// Create initial agent request
+	// Create initial agent request with structured ID for recovery
 	request := agentic.AgentRequest{
-		RequestID: uuid.New().String(),
+		RequestID: h.loopManager.GenerateRequestID(loopID),
 		LoopID:    loopID,
 		Role:      task.Role,
 		Model:     task.Model,
@@ -117,7 +124,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		},
 	}
 
-	// Track request ID to loop ID mapping
+	// Track request ID to loop ID mapping (cache for fast lookup)
 	h.loopManager.TrackRequest(request.RequestID, loopID)
 
 	requestData, err := json.Marshal(request)
@@ -153,6 +160,15 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	// Check for cancellation before starting work
 	if err := ctx.Err(); err != nil {
 		return HandlerResult{}, err
+	}
+
+	// Check for timeout before processing
+	if h.loopManager.IsTimedOut(loopID) {
+		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
+		return HandlerResult{
+			LoopID: loopID,
+			State:  agentic.LoopStateFailed,
+		}, fmt.Errorf("loop timeout exceeded")
 	}
 
 	entity, err := h.loopManager.GetLoop(loopID)
@@ -246,9 +262,9 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 			}
 			result.EditorLoopID = editorLoopID
 
-			// Create agent request for editor
+			// Create agent request for editor with structured ID for recovery
 			editorRequest := agentic.AgentRequest{
-				RequestID: uuid.New().String(),
+				RequestID: h.loopManager.GenerateRequestID(editorLoopID),
 				LoopID:    editorLoopID,
 				Role:      "editor",
 				Model:     entity.Model,
@@ -260,7 +276,7 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 				},
 			}
 
-			// Track request ID to loop ID mapping
+			// Track request ID to loop ID mapping (cache for fast lookup)
 			h.loopManager.TrackRequest(editorRequest.RequestID, editorLoopID)
 
 			editorData, err := json.Marshal(editorRequest)
@@ -293,7 +309,22 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		return HandlerResult{}, err
 	}
 
+	// Check for timeout before processing
+	if h.loopManager.IsTimedOut(loopID) {
+		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
+		return HandlerResult{
+			LoopID: loopID,
+			State:  agentic.LoopStateFailed,
+		}, fmt.Errorf("loop timeout exceeded")
+	}
+
 	entity, err := h.loopManager.GetLoop(loopID)
+	if err != nil {
+		return HandlerResult{}, err
+	}
+
+	// Store this tool result for accumulation
+	err = h.loopManager.StoreToolResult(loopID, toolResult)
 	if err != nil {
 		return HandlerResult{}, err
 	}
@@ -335,21 +366,29 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 			return result, nil
 		}
 
-		// All tools complete - send next agent request
+		// Get ALL accumulated tool results
+		allResults := h.loopManager.GetAndClearToolResults(loopID)
+
+		// Build messages with ALL tool results, each with its tool_call_id
+		toolMessages := make([]agentic.ChatMessage, len(allResults))
+		for i, r := range allResults {
+			toolMessages[i] = agentic.ChatMessage{
+				Role:       "tool",
+				ToolCallID: r.CallID,
+				Content:    r.Content,
+			}
+		}
+
+		// All tools complete - send next agent request with ALL results
 		request := agentic.AgentRequest{
-			RequestID: uuid.New().String(),
+			RequestID: h.loopManager.GenerateRequestID(loopID),
 			LoopID:    loopID,
 			Role:      entity.Role,
 			Model:     entity.Model,
-			Messages: []agentic.ChatMessage{
-				{
-					Role:    "tool",
-					Content: toolResult.Content,
-				},
-			},
+			Messages:  toolMessages,
 		}
 
-		// Track request ID to loop ID mapping
+		// Track request ID to loop ID mapping (cache for fast lookup)
 		h.loopManager.TrackRequest(request.RequestID, loopID)
 
 		requestData, err := json.Marshal(request)
@@ -385,6 +424,9 @@ func (h *MessageHandler) spawnEditorLoop(architectEntity agentic.LoopEntity) (st
 	if err != nil {
 		return "", err
 	}
+
+	// Track parent-child relationship for traceability
+	_ = h.loopManager.SetParentLoop(editorLoopID, architectEntity.ID)
 
 	// Start trajectory for editor
 	_, err = h.trajectoryManager.StartTrajectory(editorLoopID)

@@ -1,0 +1,383 @@
+{
+  "version": "1.1.0",
+  "platform": {
+    "org": "c360",
+    "id": "semstreams-agentic",
+    "type": "agentic-e2e",
+    "region": "local",
+    "instance_id": "agentic-001",
+    "environment": "test"
+  },
+  "tier": "agentic",
+  "nats": {
+    "urls": ["nats://localhost:4222"]
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemStreams Agentic Tier - Agent Loop Testing",
+          "description": "Agentic components with mock LLM for E2E testing",
+          "version": "0.7.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": true
+      }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "buffer_size": 10000,
+        "monitor_subjects": ["agent.*", "tool.*"],
+        "enable_kv_query": true,
+        "log_level": "INFO"
+      }
+    },
+    "log-forwarder": {
+      "name": "log-forwarder",
+      "enabled": true,
+      "config": {
+        "min_level": "DEBUG",
+        "exclude_sources": []
+      }
+    },
+    "metrics-forwarder": {
+      "name": "metrics-forwarder",
+      "enabled": true,
+      "config": {
+        "push_interval": "5s",
+        "include_go_metrics": false,
+        "include_proc_metrics": false
+      }
+    }
+  },
+  "components": {
+    "file_sensors": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "file_out",
+              "subject": "raw.sensor.file",
+              "type": "jetstream"
+            }
+          ]
+        },
+        "path": "/data/testdata/semantic/sensors.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
+        "loop": false
+      }
+    },
+    "iot_sensor": {
+      "type": "processor",
+      "name": "iot_sensor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "sensor_in",
+              "subject": "raw.sensor.>",
+              "type": "jetstream"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "sensor_out",
+              "subject": "sensor.processed.entity",
+              "type": "jetstream",
+              "interface": "iot.sensor.v1"
+            }
+          ]
+        },
+        "org_id": "c360",
+        "platform": "logistics"
+      }
+    },
+    "graph-ingest": {
+      "type": "processor",
+      "name": "graph-ingest",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "sensor_in",
+              "subject": "sensor.processed.entity",
+              "type": "jetstream",
+              "interface": "iot.sensor.v1",
+              "description": "Sensor entity events from IoT processor"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "entity_states",
+              "subject": "ENTITY_STATES",
+              "type": "kv-write",
+              "description": "Entity state KV bucket"
+            }
+          ]
+        },
+        "enable_hierarchy": true
+      }
+    },
+    "rule": {
+      "type": "processor",
+      "name": "rule-processor",
+      "enabled": true,
+      "config": {
+        "entity_watch_patterns": ["c360.>"],
+        "ports": {
+          "inputs": [
+            {
+              "name": "rule_sensor_in",
+              "subject": "sensor.processed.entity",
+              "type": "jetstream",
+              "description": "Sensor entity events"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "rule_out",
+              "subject": "rule.triggered.alert",
+              "type": "jetstream"
+            },
+            {
+              "name": "agent_task",
+              "subject": "agent.task.*",
+              "type": "jetstream",
+              "stream_name": "AGENT",
+              "description": "Agent task triggers from rules"
+            }
+          ]
+        },
+        "enable_graph_integration": true,
+        "graph_event_subject_prefix": "sensor.processed",
+        "inline_rules": [
+          {
+            "id": "temperature-anomaly-agent",
+            "type": "expression",
+            "name": "Temperature Anomaly Agent Trigger",
+            "description": "Triggers an agent when temperature exceeds threshold to analyze sensor data",
+            "enabled": true,
+            "conditions": [
+              {
+                "field": "sensor.measurement.fahrenheit",
+                "operator": "gte",
+                "value": 45.0,
+                "required": true
+              },
+              {
+                "field": "sensor.classification.type",
+                "operator": "eq",
+                "value": "temperature",
+                "required": true
+              }
+            ],
+            "logic": "and",
+            "cooldown": "30s",
+            "on_enter": [
+              {
+                "type": "publish_agent",
+                "subject": "agent.task.temp_anomaly",
+                "role": "general",
+                "model": "mock",
+                "prompt": "Temperature anomaly detected. Sensor: {{.EntityID}}, Reading: {{.Properties.sensor.measurement.fahrenheit}}F. Use query_entity tool to get full sensor details, then provide assessment and recommendations."
+              },
+              {
+                "type": "publish",
+                "subject": "alerts.temperature.anomaly"
+              }
+            ],
+            "on_exit": [],
+            "metadata": {
+              "severity": "warning",
+              "category": "environmental",
+              "tier": 0
+            }
+          }
+        ]
+      }
+    },
+    "agentic-loop": {
+      "type": "processor",
+      "name": "agentic-loop",
+      "enabled": true,
+      "config": {
+        "max_iterations": 5,
+        "timeout": "30s",
+        "stream_name": "AGENT",
+        "loops_bucket": "AGENT_LOOPS",
+        "trajectories_bucket": "AGENT_TRAJECTORIES",
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent.task",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent task requests"
+            },
+            {
+              "name": "agent.response",
+              "type": "jetstream",
+              "subject": "agent.response.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Model responses"
+            },
+            {
+              "name": "tool.result",
+              "type": "jetstream",
+              "subject": "tool.result.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Tool execution results"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.request",
+              "type": "jetstream",
+              "subject": "agent.request.*",
+              "stream_name": "AGENT",
+              "description": "Model requests"
+            },
+            {
+              "name": "tool.execute",
+              "type": "jetstream",
+              "subject": "tool.execute.*",
+              "stream_name": "AGENT",
+              "description": "Tool execution requests"
+            },
+            {
+              "name": "agent.complete",
+              "type": "jetstream",
+              "subject": "agent.complete.*",
+              "stream_name": "AGENT",
+              "description": "Task completions"
+            }
+          ],
+          "kv_write": [
+            {
+              "name": "loops",
+              "type": "kv-write",
+              "bucket": "AGENT_LOOPS",
+              "description": "Loop state storage"
+            },
+            {
+              "name": "trajectories",
+              "type": "kv-write",
+              "bucket": "AGENT_TRAJECTORIES",
+              "description": "Trajectory storage"
+            }
+          ]
+        }
+      }
+    },
+    "agentic-model": {
+      "type": "processor",
+      "name": "agentic-model",
+      "enabled": true,
+      "config": {
+        "stream_name": "AGENT",
+        "timeout": "30s",
+        "endpoints": {
+          "mock": {
+            "url": "${AGENTIC_LLM_URL:-http://mock-llm:8080}/v1/chat/completions",
+            "model": "mock-model"
+          }
+        },
+        "retry": {
+          "max_attempts": 3,
+          "backoff": "exponential"
+        },
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent.request",
+              "type": "jetstream",
+              "subject": "agent.request.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent request input"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "agent.response",
+              "type": "jetstream",
+              "subject": "agent.response.*",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent response output"
+            }
+          ]
+        }
+      }
+    },
+    "agentic-tools": {
+      "type": "processor",
+      "name": "agentic-tools",
+      "enabled": true,
+      "config": {
+        "stream_name": "AGENT",
+        "timeout": "10s",
+        "allowed_tools": ["query_entity"],
+        "ports": {
+          "inputs": [
+            {
+              "name": "tool.execute",
+              "type": "jetstream",
+              "subject": "tool.execute.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Tool execution requests"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "tool.result",
+              "type": "jetstream",
+              "subject": "tool.result.*",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Tool execution results"
+            }
+          ],
+          "kv_read": [
+            {
+              "name": "entity_states",
+              "type": "kv-read",
+              "bucket": "ENTITY_STATES",
+              "description": "Entity state KV for graph queries"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

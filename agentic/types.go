@@ -49,9 +49,10 @@ func (r AgentResponse) Validate() error {
 
 // ChatMessage represents a message in a conversation
 type ChatMessage struct {
-	Role      string     `json:"role"`
-	Content   string     `json:"content,omitempty"`
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Role       string     `json:"role"`
+	Content    string     `json:"content,omitempty"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"` // Required for tool role messages
 }
 
 // Validate checks if the ChatMessage is valid

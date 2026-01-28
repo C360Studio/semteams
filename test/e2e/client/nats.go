@@ -93,6 +93,19 @@ func (c *NATSValidationClient) Close(ctx context.Context) error {
 	return nil
 }
 
+// Publish publishes a message to a NATS subject via JetStream.
+// Used for injecting test messages into the system.
+func (c *NATSValidationClient) Publish(ctx context.Context, subject string, data []byte) error {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return fmt.Errorf("client is closed")
+	}
+	c.mu.Unlock()
+
+	return c.client.PublishToStream(ctx, subject, data)
+}
+
 // CountEntities counts the number of entities in the ENTITY_STATES bucket
 // Returns 0, nil if bucket doesn't exist (graceful degradation)
 func (c *NATSValidationClient) CountEntities(ctx context.Context) (int, error) {

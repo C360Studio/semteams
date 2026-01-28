@@ -38,6 +38,7 @@ type Component struct {
 	requestsProcessed int64
 	errors            int64
 	lastActivity      time.Time
+	metrics           *toolsMetrics
 }
 
 // NewComponent creates a new agentic-tools processor component
@@ -67,6 +68,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		registry:   NewExecutorRegistry(),
 		natsClient: deps.NATSClient,
 		logger:     deps.GetLogger(),
+		metrics:    getMetrics(deps.MetricsRegistry),
 	}, nil
 }
 
@@ -227,9 +229,18 @@ func (c *Component) handleToolCall(ctx context.Context, data []byte) {
 		return
 	}
 
+	c.logger.Debug("Processing tool call",
+		slog.String("tool", call.Name),
+		slog.String("call_id", call.ID))
+
 	// Check if tool is allowed
 	if !c.isToolAllowed(call.Name) {
 		c.logger.Warn("Tool not allowed", "tool", call.Name)
+
+		if c.metrics != nil {
+			c.metrics.recordToolFiltered(call.Name, "not_allowed")
+		}
+
 		result := agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("tool %q is not allowed", call.Name),
@@ -240,10 +251,43 @@ func (c *Component) handleToolCall(ctx context.Context, data []byte) {
 	}
 
 	// Execute tool with timeout
+	startTime := time.Now()
 	result, err := c.executeWithTimeout(ctx, call)
+	duration := time.Since(startTime).Seconds()
+
 	if err != nil {
 		c.logger.Error("Failed to execute tool", "tool", call.Name, "error", err)
+
+		// Determine error type
+		errorType := "unknown"
+		if ctx.Err() != nil {
+			errorType = "timeout"
+			if c.metrics != nil {
+				c.metrics.recordExecutionTimeout(call.Name, duration)
+			}
+		} else {
+			if c.metrics != nil {
+				c.metrics.recordExecutionError(call.Name, errorType, duration)
+			}
+		}
+
 		c.incrementErrors()
+	} else if result.Error != "" {
+		// Tool executed but returned an error
+		if c.metrics != nil {
+			c.metrics.recordExecutionError(call.Name, "tool_error", duration)
+		}
+		c.logger.Debug("Tool returned error",
+			slog.String("tool", call.Name),
+			slog.String("error", result.Error))
+	} else {
+		// Successful execution
+		if c.metrics != nil {
+			c.metrics.recordExecutionSuccess(call.Name, duration)
+		}
+		c.logger.Debug("Tool executed successfully",
+			slog.String("tool", call.Name),
+			slog.Float64("duration_seconds", duration))
 	}
 
 	// Publish result
@@ -335,6 +379,15 @@ func (c *Component) RegisterToolExecutor(executor ToolExecutor) error {
 		if err := c.registry.RegisterTool(tool.Name, executor); err != nil {
 			return err
 		}
+	}
+
+	// Record total registered tools
+	if c.metrics != nil {
+		allTools := c.registry.ListTools()
+		c.metrics.recordToolsRegistered(len(allTools))
+		c.logger.Info("Tools registered",
+			slog.Int("count", len(tools)),
+			slog.Int("total", len(allTools)))
 	}
 
 	return nil

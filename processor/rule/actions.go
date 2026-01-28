@@ -24,13 +24,15 @@ const (
 	ActionTypeRemoveTriple = "remove_triple"
 	// ActionTypeUpdateTriple updates metadata on an existing triple
 	ActionTypeUpdateTriple = "update_triple"
+	// ActionTypePublishAgent triggers an agentic loop by publishing a TaskMessage
+	ActionTypePublishAgent = "publish_agent"
 )
 
 // Action represents an action to execute when a rule fires.
 // Actions are triggered by state transitions (OnEnter, OnExit) or
 // while a condition remains true (WhileTrue).
 type Action struct {
-	// Type specifies the action type (publish, add_triple, remove_triple, update_triple)
+	// Type specifies the action type (publish, add_triple, remove_triple, update_triple, publish_agent)
 	Type string `json:"type"`
 
 	// Subject is the NATS subject for publish actions
@@ -47,6 +49,16 @@ type Action struct {
 
 	// Properties contains additional metadata for the action
 	Properties map[string]any `json:"properties,omitempty"`
+
+	// Role is the agent role for publish_agent actions (e.g., "general", "architect", "editor")
+	Role string `json:"role,omitempty"`
+
+	// Model is the model endpoint name for publish_agent actions
+	Model string `json:"model,omitempty"`
+
+	// Prompt is the task prompt template for publish_agent actions
+	// Supports variable substitution: $entity.id, $related.id
+	Prompt string `json:"prompt,omitempty"`
 }
 
 // ParseTTL parses the TTL string into a duration.
@@ -146,6 +158,8 @@ func (e *ActionExecutor) Execute(ctx context.Context, action Action, entityID st
 		return e.executePublish(ctx, action, entityID, relatedID)
 	case ActionTypeUpdateTriple:
 		return e.executeUpdateTriple(ctx, action, entityID, relatedID)
+	case ActionTypePublishAgent:
+		return e.executePublishAgent(ctx, action, entityID, relatedID)
 	default:
 		return fmt.Errorf("unknown action type: %s", action.Type)
 	}
@@ -400,4 +414,85 @@ func substituteVariables(template, entityID, relatedID string) string {
 	result = strings.ReplaceAll(result, "$entity.id", entityID)
 	result = strings.ReplaceAll(result, "$related.id", relatedID)
 	return result
+}
+
+// TaskMessage represents a task message for triggering an agentic loop.
+// This matches the expected format of the agentic-loop component.
+type TaskMessage struct {
+	TaskID string `json:"task_id"`
+	Role   string `json:"role"`
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+}
+
+// executePublishAgent executes a publish_agent action, triggering an agentic loop.
+// It publishes a TaskMessage to the specified NATS subject.
+func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action, entityID, relatedID string) error {
+	// Validate required fields
+	if action.Subject == "" {
+		return errors.New("subject is required for publish_agent action")
+	}
+	if action.Role == "" {
+		return errors.New("role is required for publish_agent action")
+	}
+	if action.Model == "" {
+		return errors.New("model is required for publish_agent action")
+	}
+	if action.Prompt == "" {
+		return errors.New("prompt is required for publish_agent action")
+	}
+
+	// Validate role
+	if action.Role != "general" && action.Role != "architect" && action.Role != "editor" {
+		return fmt.Errorf("invalid role %q: must be one of: general, architect, editor", action.Role)
+	}
+
+	// Substitute variables in subject and prompt
+	subject := substituteVariables(action.Subject, entityID, relatedID)
+	prompt := substituteVariables(action.Prompt, entityID, relatedID)
+
+	// Generate a unique task ID
+	taskID := fmt.Sprintf("rule-%s-%d", entityID, time.Now().UnixNano())
+
+	// Build the TaskMessage
+	task := TaskMessage{
+		TaskID: taskID,
+		Role:   action.Role,
+		Model:  action.Model,
+		Prompt: prompt,
+	}
+
+	if e.logger != nil {
+		e.logger.Info("Triggering agent task",
+			"subject", subject,
+			"task_id", taskID,
+			"role", action.Role,
+			"model", action.Model,
+			"entity_id", entityID)
+	}
+
+	// Publish via NATS if publisher is configured
+	if e.publisher != nil {
+		data, err := json.Marshal(task)
+		if err != nil {
+			return fmt.Errorf("marshal task message: %w", err)
+		}
+
+		if err := e.publisher.Publish(ctx, subject, data); err != nil {
+			return fmt.Errorf("publish agent task to %s: %w", subject, err)
+		}
+
+		if e.logger != nil {
+			e.logger.Info("Agent task published",
+				"subject", subject,
+				"task_id", taskID,
+				"size", len(data))
+		}
+	} else if e.logger != nil {
+		e.logger.Debug("Agent task not published (no publisher configured)",
+			"subject", subject,
+			"task_id", taskID)
+	}
+
+	return nil
 }
