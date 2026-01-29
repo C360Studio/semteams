@@ -18,6 +18,12 @@
       "description": "Suffix appended to consumer names for uniqueness",
       "category": "advanced"
     },
+    "heartbeat_timeout": {
+      "type": "string",
+      "description": "External tool heartbeat timeout",
+      "default": "30s",
+      "category": "advanced"
+    },
     "ports": {
       "type": "string",
       "description": "Port configuration",

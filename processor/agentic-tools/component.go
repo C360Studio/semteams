@@ -39,6 +39,11 @@ type Component struct {
 	errors            int64
 	lastActivity      time.Time
 	metrics           *toolsMetrics
+
+	// External tool registry
+	externalRegistry *ExternalToolRegistry
+	heartbeatTimeout time.Duration
+	heartbeatCancel  context.CancelFunc
 }
 
 // NewComponent creates a new agentic-tools processor component
@@ -62,13 +67,26 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
+	// Initialize external tool registry
+	externalRegistry := NewExternalToolRegistry()
+
+	// Parse heartbeat timeout
+	heartbeatTimeout := 30 * time.Second // default
+	if config.HeartbeatTimeout != "" {
+		if d, err := time.ParseDuration(config.HeartbeatTimeout); err == nil {
+			heartbeatTimeout = d
+		}
+	}
+
 	return &Component{
-		name:       "agentic-tools",
-		config:     config,
-		registry:   NewExecutorRegistry(),
-		natsClient: deps.NATSClient,
-		logger:     deps.GetLogger(),
-		metrics:    getMetrics(deps.MetricsRegistry),
+		name:             "agentic-tools",
+		config:           config,
+		registry:         NewExecutorRegistry(),
+		natsClient:       deps.NATSClient,
+		logger:           deps.GetLogger(),
+		metrics:          getMetrics(deps.MetricsRegistry),
+		externalRegistry: externalRegistry,
+		heartbeatTimeout: heartbeatTimeout,
 	}, nil
 }
 
@@ -96,10 +114,53 @@ func (c *Component) Start(ctx context.Context) error {
 			continue
 		}
 
-		if err := c.setupConsumer(ctx, port); err != nil {
-			return fmt.Errorf("failed to setup consumer for %s: %w", port.Subject, err)
+		// Only set up JetStream consumers for jetstream ports
+		// Plain NATS subscriptions are handled separately below
+		if port.Type == "jetstream" {
+			if err := c.setupConsumer(ctx, port); err != nil {
+				return fmt.Errorf("failed to setup consumer for %s: %w", port.Subject, err)
+			}
 		}
 	}
+
+	// Subscribe to external tool registration subjects (plain NATS)
+	// tool.register.* for external tool registration
+	if _, err := c.natsClient.Subscribe(ctx, "tool.register.*", c.handleToolRegistration); err != nil {
+		c.logger.Warn("Failed to subscribe to tool.register.*", "error", err)
+	}
+
+	// tool.unregister.* for external tool unregistration
+	if _, err := c.natsClient.Subscribe(ctx, "tool.unregister.*", c.handleToolUnregistration); err != nil {
+		c.logger.Warn("Failed to subscribe to tool.unregister.*", "error", err)
+	}
+
+	// tool.heartbeat.* for provider heartbeats
+	if _, err := c.natsClient.Subscribe(ctx, "tool.heartbeat.*", c.handleToolHeartbeat); err != nil {
+		c.logger.Warn("Failed to subscribe to tool.heartbeat.*", "error", err)
+	}
+
+	// tool.list for request/reply discovery
+	// Use subject from port config if available, otherwise default to "tool.list"
+	// Note: If your JetStream stream subjects include "tool.>" or similar patterns,
+	// you must configure a different subject (e.g., "discovery.tool.list") to avoid
+	// JetStream capturing the request/reply message before the handler responds.
+	toolListSubject := "tool.list"
+	for _, port := range c.config.Ports.Inputs {
+		if port.Name == "tool_list_request" {
+			if port.Subject != "" {
+				toolListSubject = port.Subject
+			}
+			break
+		}
+	}
+	if err := c.natsClient.SubscribeForRequests(ctx, toolListSubject, c.handleToolListRequest); err != nil {
+		c.logger.Warn("Failed to subscribe to tool.list", "error", err, "subject", toolListSubject)
+	} else {
+		c.logger.Info("Subscribed to tool.list", "subject", toolListSubject)
+	}
+
+	// Start heartbeat monitoring goroutine
+	c.startHeartbeatMonitor(ctx)
 
 	c.running = true
 	c.startTime = time.Now()
@@ -205,6 +266,11 @@ func (c *Component) Stop(_ time.Duration) error {
 
 	if !c.running {
 		return nil
+	}
+
+	// Cancel heartbeat monitor goroutine
+	if c.heartbeatCancel != nil {
+		c.heartbeatCancel()
 	}
 
 	// JetStream consumers are cleaned up automatically when their context is cancelled
@@ -393,9 +459,27 @@ func (c *Component) RegisterToolExecutor(executor ToolExecutor) error {
 	return nil
 }
 
-// ListTools returns all registered tool definitions
-func (c *Component) ListTools() []agentic.ToolDefinition {
-	return c.registry.ListTools()
+// ListTools returns all tool definitions (internal + external) for discovery
+func (c *Component) ListTools() []ToolDefinition {
+	// Get internal tools
+	internalTools := c.registry.ListTools()
+
+	// Convert to ToolDefinition format
+	tools := make([]ToolDefinition, 0, len(internalTools))
+	for _, tool := range internalTools {
+		tools = append(tools, ToolDefinition{
+			Name:        tool.Name,
+			Description: tool.Description,
+			Provider:    "internal",
+			Available:   true,
+		})
+	}
+
+	// Add external tools
+	externalTools := c.externalRegistry.ListExternalTools()
+	tools = append(tools, externalTools...)
+
+	return tools
 }
 
 // Execute executes a tool call (for testing and direct invocation)
@@ -411,6 +495,108 @@ func (c *Component) Execute(ctx context.Context, call agentic.ToolCall) (agentic
 
 	// Execute with timeout
 	return c.executeWithTimeout(ctx, call)
+}
+
+// External tool handlers
+
+// handleToolRegistration processes external tool registration requests
+func (c *Component) handleToolRegistration(_ context.Context, data []byte) {
+	var reg ExternalToolRegistration
+	if err := json.Unmarshal(data, &reg); err != nil {
+		c.logger.Error("Failed to parse tool registration", "error", err)
+		return
+	}
+
+	if err := c.externalRegistry.RegisterExternalTool(reg); err != nil {
+		c.logger.Warn("Failed to register external tool",
+			"tool", reg.Name, "provider", reg.Provider, "error", err)
+		return
+	}
+
+	c.logger.Info("Registered external tool",
+		"tool", reg.Name, "provider", reg.Provider)
+}
+
+// handleToolUnregistration processes external tool unregistration requests
+func (c *Component) handleToolUnregistration(_ context.Context, data []byte) {
+	var unreg ToolUnregister
+	if err := json.Unmarshal(data, &unreg); err != nil {
+		c.logger.Error("Failed to parse tool unregistration", "error", err)
+		return
+	}
+
+	if err := c.externalRegistry.UnregisterTool(unreg); err != nil {
+		c.logger.Warn("Failed to unregister external tool",
+			"tool", unreg.Name, "provider", unreg.Provider, "error", err)
+		return
+	}
+
+	c.logger.Info("Unregistered external tool",
+		"tool", unreg.Name, "provider", unreg.Provider)
+}
+
+// handleToolHeartbeat processes provider heartbeat messages
+func (c *Component) handleToolHeartbeat(_ context.Context, data []byte) {
+	var hb ToolHeartbeat
+	if err := json.Unmarshal(data, &hb); err != nil {
+		c.logger.Error("Failed to parse heartbeat", "error", err)
+		return
+	}
+
+	c.externalRegistry.RecordHeartbeat(hb)
+	c.logger.Debug("Recorded heartbeat", "provider", hb.Provider)
+}
+
+// handleToolListRequest handles tool.list request/reply for tool discovery
+func (c *Component) handleToolListRequest(_ context.Context, _ []byte) ([]byte, error) {
+	tools := c.ListTools() // Uses combined listing (internal + external)
+	c.logger.Debug("Handling tool.list request", "tool_count", len(tools))
+	response := ToolListResponse{Tools: tools}
+	return json.Marshal(response)
+}
+
+// startHeartbeatMonitor starts a goroutine that checks for heartbeat timeouts
+func (c *Component) startHeartbeatMonitor(ctx context.Context) {
+	hbCtx, cancel := context.WithCancel(ctx)
+	c.heartbeatCancel = cancel
+
+	checkInterval := c.heartbeatTimeout / 2
+	if checkInterval < time.Second {
+		checkInterval = time.Second
+	}
+
+	go func() {
+		ticker := time.NewTicker(checkInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-hbCtx.Done():
+				return
+			case <-ticker.C:
+				c.checkHeartbeatTimeouts()
+			}
+		}
+	}()
+}
+
+// checkHeartbeatTimeouts checks all providers and marks timed-out ones as unavailable
+func (c *Component) checkHeartbeatTimeouts() {
+	// Get unique providers from external tools
+	tools := c.externalRegistry.ListExternalTools()
+	providers := make(map[string]bool)
+	for _, tool := range tools {
+		providers[tool.Provider] = true
+	}
+
+	// Check each provider's health
+	for provider := range providers {
+		if !c.externalRegistry.IsProviderHealthy(provider, c.heartbeatTimeout) {
+			c.externalRegistry.MarkProviderUnavailable(provider)
+			c.logger.Warn("Provider heartbeat timeout, marking tools unavailable",
+				"provider", provider)
+		}
+	}
 }
 
 // Discoverable interface implementation

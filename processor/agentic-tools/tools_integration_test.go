@@ -29,8 +29,11 @@ var (
 
 // TestMain sets up shared NATS container for all tools integration tests
 func TestMain(m *testing.M) {
+	// Stream subjects are specific to JetStream-based messaging (execute/result).
+	// Core NATS subjects (tool.list, tool.register.*, tool.unregister.*, tool.heartbeat.*)
+	// are intentionally excluded to allow request/reply patterns without JetStream interference.
 	streams := []natsclient.TestStreamConfig{
-		{Name: "AGENT", Subjects: []string{"agent.>", "tool.>"}},
+		{Name: "AGENT", Subjects: []string{"agent.>", "tool.execute.>", "tool.result.>"}},
 	}
 
 	testClient, err := natsclient.NewSharedTestClient(
@@ -575,4 +578,704 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 	// Verify parallel execution (should be ~200ms + overhead, not 600ms sequential)
 	// Allow generous overhead for test infrastructure
 	assert.Less(t, elapsed, 800*time.Millisecond, "Tools should execute in parallel (not 600ms+ sequential)")
+}
+
+// TestIntegration_ExternalToolRegistration tests external tool registration via NATS
+func TestIntegration_ExternalToolRegistration(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := agentictools.Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{
+					Name:       "tool_calls",
+					Type:       "jetstream",
+					Subject:    "tool.execute.>",
+					StreamName: "AGENT",
+					Required:   true,
+				},
+				{
+					Name:     "tool_registration",
+					Type:     "nats",
+					Subject:  "tool.register.*",
+					Required: false,
+				},
+			},
+			Outputs: []component.PortDefinition{
+				{
+					Name:       "tool_results",
+					Type:       "jetstream",
+					Subject:    "tool.result.*",
+					StreamName: "AGENT",
+				},
+			},
+		},
+		StreamName:         "AGENT",
+		ConsumerNameSuffix: "ext-reg-test",
+		Timeout:            "5s",
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: natsClient,
+	}
+
+	comp, err := agentictools.NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+
+	toolsComp, ok := comp.(*agentictools.Component)
+	require.True(t, ok)
+
+	// Start component
+	lc, ok := comp.(component.LifecycleComponent)
+	require.True(t, ok)
+
+	err = lc.Initialize()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = lc.Start(ctx)
+	require.NoError(t, err)
+	defer lc.Stop(5 * time.Second)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Publish external tool registration
+	reg := agentictools.ExternalToolRegistration{
+		Name:        "file_read",
+		Description: "Read file contents",
+		Parameters: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"path": map[string]interface{}{"type": "string"},
+			},
+		},
+		Provider:  "semspec",
+		Timestamp: time.Now(),
+	}
+
+	regData, err := json.Marshal(reg)
+	require.NoError(t, err)
+
+	err = natsClient.Publish(ctx, "tool.register.file_read", regData)
+	require.NoError(t, err)
+
+	// Wait for registration to be processed
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify tool appears in ListTools
+	tools := toolsComp.ListTools()
+	var foundTool bool
+	for _, tool := range tools {
+		if tool.Name == "file_read" {
+			foundTool = true
+			assert.Equal(t, "Read file contents", tool.Description)
+			break
+		}
+	}
+	assert.True(t, foundTool, "External tool should appear in ListTools")
+}
+
+// TestIntegration_ExternalToolUnregistration tests external tool unregistration via NATS
+func TestIntegration_ExternalToolUnregistration(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := agentictools.Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{
+					Name:       "tool_calls",
+					Type:       "jetstream",
+					Subject:    "tool.execute.>",
+					StreamName: "AGENT",
+					Required:   true,
+				},
+				{
+					Name:     "tool_registration",
+					Type:     "nats",
+					Subject:  "tool.register.*",
+					Required: false,
+				},
+				{
+					Name:     "tool_unregistration",
+					Type:     "nats",
+					Subject:  "tool.unregister.*",
+					Required: false,
+				},
+			},
+			Outputs: []component.PortDefinition{
+				{
+					Name:       "tool_results",
+					Type:       "jetstream",
+					Subject:    "tool.result.*",
+					StreamName: "AGENT",
+				},
+			},
+		},
+		StreamName:         "AGENT",
+		ConsumerNameSuffix: "ext-unreg-test",
+		Timeout:            "5s",
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: natsClient,
+	}
+
+	comp, err := agentictools.NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+
+	toolsComp, ok := comp.(*agentictools.Component)
+	require.True(t, ok)
+
+	// Start component
+	lc, ok := comp.(component.LifecycleComponent)
+	require.True(t, ok)
+
+	err = lc.Initialize()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = lc.Start(ctx)
+	require.NoError(t, err)
+	defer lc.Stop(5 * time.Second)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Register external tool
+	reg := agentictools.ExternalToolRegistration{
+		Name:        "git_status",
+		Description: "Get git status",
+		Parameters:  map[string]interface{}{"type": "object"},
+		Provider:    "semspec",
+		Timestamp:   time.Now(),
+	}
+
+	regData, err := json.Marshal(reg)
+	require.NoError(t, err)
+
+	err = natsClient.Publish(ctx, "tool.register.git_status", regData)
+	require.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify tool is registered
+	tools := toolsComp.ListTools()
+	var foundBeforeUnreg bool
+	for _, tool := range tools {
+		if tool.Name == "git_status" {
+			foundBeforeUnreg = true
+			break
+		}
+	}
+	require.True(t, foundBeforeUnreg, "Tool should be registered before unregister")
+
+	// Unregister tool
+	unreg := agentictools.ToolUnregister{
+		Name:     "git_status",
+		Provider: "semspec",
+	}
+
+	unregData, err := json.Marshal(unreg)
+	require.NoError(t, err)
+
+	err = natsClient.Publish(ctx, "tool.unregister.git_status", unregData)
+	require.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify tool is removed from ListTools
+	tools = toolsComp.ListTools()
+	var foundAfterUnreg bool
+	for _, tool := range tools {
+		if tool.Name == "git_status" {
+			foundAfterUnreg = true
+			break
+		}
+	}
+	assert.False(t, foundAfterUnreg, "Tool should be removed after unregister")
+}
+
+// TestIntegration_ExternalToolHeartbeat tests provider heartbeat processing
+func TestIntegration_ExternalToolHeartbeat(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := agentictools.Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{
+					Name:       "tool_calls",
+					Type:       "jetstream",
+					Subject:    "tool.execute.>",
+					StreamName: "AGENT",
+					Required:   true,
+				},
+				{
+					Name:     "tool_registration",
+					Type:     "nats",
+					Subject:  "tool.register.*",
+					Required: false,
+				},
+				{
+					Name:     "tool_heartbeat",
+					Type:     "nats",
+					Subject:  "tool.heartbeat.*",
+					Required: false,
+				},
+			},
+			Outputs: []component.PortDefinition{
+				{
+					Name:       "tool_results",
+					Type:       "jetstream",
+					Subject:    "tool.result.*",
+					StreamName: "AGENT",
+				},
+			},
+		},
+		StreamName:         "AGENT",
+		ConsumerNameSuffix: "heartbeat-test",
+		Timeout:            "5s",
+		HeartbeatTimeout:   "5s",
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: natsClient,
+	}
+
+	comp, err := agentictools.NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+
+	toolsComp, ok := comp.(*agentictools.Component)
+	require.True(t, ok)
+
+	// Start component
+	lc, ok := comp.(component.LifecycleComponent)
+	require.True(t, ok)
+
+	err = lc.Initialize()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = lc.Start(ctx)
+	require.NoError(t, err)
+	defer lc.Stop(5 * time.Second)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Register external tool
+	reg := agentictools.ExternalToolRegistration{
+		Name:        "external_tool",
+		Description: "External test tool",
+		Parameters:  map[string]interface{}{"type": "object"},
+		Provider:    "test_provider",
+		Timestamp:   time.Now(),
+	}
+
+	regData, err := json.Marshal(reg)
+	require.NoError(t, err)
+
+	err = natsClient.Publish(ctx, "tool.register.external_tool", regData)
+	require.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Send heartbeat
+	hb := agentictools.ToolHeartbeat{
+		Provider:  "test_provider",
+		Tools:     []string{"external_tool"},
+		Timestamp: time.Now(),
+	}
+
+	hbData, err := json.Marshal(hb)
+	require.NoError(t, err)
+
+	err = natsClient.Publish(ctx, "tool.heartbeat.test_provider", hbData)
+	require.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify tool is available (heartbeat processed)
+	tools := toolsComp.ListTools()
+	var foundTool bool
+	for _, tool := range tools {
+		if tool.Name == "external_tool" {
+			foundTool = true
+			assert.True(t, tool.Available, "Tool should be available after heartbeat")
+			break
+		}
+	}
+	assert.True(t, foundTool, "External tool should be in list")
+}
+
+// TestIntegration_ToolListRequestReply tests tool.list request/reply for tool discovery
+func TestIntegration_ToolListRequestReply(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	// Use unique subject to avoid interference from other tests sharing the NATS connection.
+	// tool.list uses core NATS request/reply (not JetStream), so multiple subscribers
+	// on the same subject would cause unpredictable responses.
+	toolListSubject := "tool.list.list-req-test"
+
+	config := agentictools.Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{
+					Name:       "tool_calls",
+					Type:       "jetstream",
+					Subject:    "tool.execute.>",
+					StreamName: "AGENT",
+					Required:   true,
+				},
+				{
+					Name:     "tool_list_request",
+					Type:     "nats",
+					Subject:  toolListSubject,
+					Required: false,
+				},
+			},
+			Outputs: []component.PortDefinition{
+				{
+					Name:       "tool_results",
+					Type:       "jetstream",
+					Subject:    "tool.result.*",
+					StreamName: "AGENT",
+				},
+			},
+		},
+		StreamName:         "AGENT",
+		ConsumerNameSuffix: "list-req-test",
+		Timeout:            "5s",
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: natsClient,
+	}
+
+	comp, err := agentictools.NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+
+	toolsComp, ok := comp.(*agentictools.Component)
+	require.True(t, ok)
+
+	// Register internal tool
+	mockTool := &integrationMockExecutor{
+		toolName:      "internal_tool",
+		resultContent: "Internal result",
+	}
+	err = toolsComp.RegisterToolExecutor(mockTool)
+	require.NoError(t, err)
+
+	// Start component
+	lc, ok := comp.(component.LifecycleComponent)
+	require.True(t, ok)
+
+	err = lc.Initialize()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = lc.Start(ctx)
+	require.NoError(t, err)
+	defer lc.Stop(5 * time.Second)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Send tool.list request with retry to handle NATS timing issues
+	retryConfig := natsclient.DefaultRetryConfig()
+	retryConfig.InitialBackoff = 100 * time.Millisecond
+	retryConfig.MaxRetries = 5
+	responseData, err := natsClient.RequestWithRetry(ctx, toolListSubject, []byte("{}"), 2*time.Second, retryConfig)
+	require.NoError(t, err)
+
+	// Parse response
+	var response agentictools.ToolListResponse
+	err = json.Unmarshal(responseData, &response)
+	require.NoError(t, err)
+
+	// Debug: log what we received
+	t.Logf("Raw response: %s", string(responseData))
+	t.Logf("Parsed %d tools:", len(response.Tools))
+	for _, tool := range response.Tools {
+		t.Logf("  - Name=%q Provider=%q Available=%v", tool.Name, tool.Provider, tool.Available)
+	}
+
+	// Verify response contains internal tool
+	var foundInternalTool bool
+	for _, tool := range response.Tools {
+		if tool.Name == "internal_tool" {
+			foundInternalTool = true
+			assert.Equal(t, "internal", tool.Provider)
+			assert.True(t, tool.Available)
+			break
+		}
+	}
+	assert.True(t, foundInternalTool, "Response should include internal tool")
+}
+
+// TestIntegration_CombinedToolListing tests that both internal and external tools appear in ListTools
+func TestIntegration_CombinedToolListing(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := agentictools.Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{
+					Name:       "tool_calls",
+					Type:       "jetstream",
+					Subject:    "tool.execute.>",
+					StreamName: "AGENT",
+					Required:   true,
+				},
+				{
+					Name:     "tool_registration",
+					Type:     "nats",
+					Subject:  "tool.register.*",
+					Required: false,
+				},
+			},
+			Outputs: []component.PortDefinition{
+				{
+					Name:       "tool_results",
+					Type:       "jetstream",
+					Subject:    "tool.result.*",
+					StreamName: "AGENT",
+				},
+			},
+		},
+		StreamName:         "AGENT",
+		ConsumerNameSuffix: "combined-test",
+		Timeout:            "5s",
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: natsClient,
+	}
+
+	comp, err := agentictools.NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+
+	toolsComp, ok := comp.(*agentictools.Component)
+	require.True(t, ok)
+
+	// Register internal tool
+	mockTool := &integrationMockExecutor{
+		toolName:      "query_entity",
+		resultContent: "Internal result",
+	}
+	err = toolsComp.RegisterToolExecutor(mockTool)
+	require.NoError(t, err)
+
+	// Start component
+	lc, ok := comp.(component.LifecycleComponent)
+	require.True(t, ok)
+
+	err = lc.Initialize()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = lc.Start(ctx)
+	require.NoError(t, err)
+	defer lc.Stop(5 * time.Second)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Register external tool
+	reg := agentictools.ExternalToolRegistration{
+		Name:        "file_read",
+		Description: "Read file contents",
+		Parameters:  map[string]interface{}{"type": "object"},
+		Provider:    "semspec",
+		Timestamp:   time.Now(),
+	}
+
+	regData, err := json.Marshal(reg)
+	require.NoError(t, err)
+
+	err = natsClient.Publish(ctx, "tool.register.file_read", regData)
+	require.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify both tools appear in ListTools
+	tools := toolsComp.ListTools()
+	require.GreaterOrEqual(t, len(tools), 2, "Should have at least 2 tools")
+
+	var foundInternal, foundExternal bool
+	var internalTool, externalTool agentictools.ToolDefinition
+
+	for _, tool := range tools {
+		if tool.Name == "query_entity" {
+			foundInternal = true
+			internalTool = tool
+		}
+		if tool.Name == "file_read" {
+			foundExternal = true
+			externalTool = tool
+		}
+	}
+
+	assert.True(t, foundInternal, "Should find internal tool")
+	assert.True(t, foundExternal, "Should find external tool")
+
+	// Verify internal tool has Provider="internal"
+	assert.Equal(t, "internal", internalTool.Provider)
+	assert.True(t, internalTool.Available)
+
+	// Verify external tool has Provider=name
+	assert.Equal(t, "semspec", externalTool.Provider)
+	assert.True(t, externalTool.Available)
+}
+
+// TestIntegration_HeartbeatTimeout tests that tools become unavailable after heartbeat timeout
+func TestIntegration_HeartbeatTimeout(t *testing.T) {
+	natsClient := getSharedNATSClient(t)
+
+	config := agentictools.Config{
+		Ports: &component.PortConfig{
+			Inputs: []component.PortDefinition{
+				{
+					Name:       "tool_calls",
+					Type:       "jetstream",
+					Subject:    "tool.execute.>",
+					StreamName: "AGENT",
+					Required:   true,
+				},
+				{
+					Name:     "tool_registration",
+					Type:     "nats",
+					Subject:  "tool.register.*",
+					Required: false,
+				},
+				{
+					Name:     "tool_heartbeat",
+					Type:     "nats",
+					Subject:  "tool.heartbeat.*",
+					Required: false,
+				},
+			},
+			Outputs: []component.PortDefinition{
+				{
+					Name:       "tool_results",
+					Type:       "jetstream",
+					Subject:    "tool.result.*",
+					StreamName: "AGENT",
+				},
+			},
+		},
+		StreamName:         "AGENT",
+		ConsumerNameSuffix: "timeout-hb-test",
+		Timeout:            "5s",
+		HeartbeatTimeout:   "2s", // Short timeout for testing
+	}
+
+	rawConfig, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: natsClient,
+	}
+
+	comp, err := agentictools.NewComponent(rawConfig, deps)
+	require.NoError(t, err)
+
+	toolsComp, ok := comp.(*agentictools.Component)
+	require.True(t, ok)
+
+	// Start component
+	lc, ok := comp.(component.LifecycleComponent)
+	require.True(t, ok)
+
+	err = lc.Initialize()
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	err = lc.Start(ctx)
+	require.NoError(t, err)
+	defer lc.Stop(5 * time.Second)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Register external tool with initial heartbeat
+	reg := agentictools.ExternalToolRegistration{
+		Name:        "timeout_tool",
+		Description: "Tool that will timeout",
+		Parameters:  map[string]interface{}{"type": "object"},
+		Provider:    "timeout_provider",
+		Timestamp:   time.Now(),
+	}
+
+	regData, err := json.Marshal(reg)
+	require.NoError(t, err)
+
+	err = natsClient.Publish(ctx, "tool.register.timeout_tool", regData)
+	require.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Send initial heartbeat
+	hb := agentictools.ToolHeartbeat{
+		Provider:  "timeout_provider",
+		Tools:     []string{"timeout_tool"},
+		Timestamp: time.Now(),
+	}
+
+	hbData, err := json.Marshal(hb)
+	require.NoError(t, err)
+
+	err = natsClient.Publish(ctx, "tool.heartbeat.timeout_provider", hbData)
+	require.NoError(t, err)
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify tool is initially available
+	tools := toolsComp.ListTools()
+	var foundAvailable bool
+	for _, tool := range tools {
+		if tool.Name == "timeout_tool" {
+			foundAvailable = tool.Available
+			break
+		}
+	}
+	require.True(t, foundAvailable, "Tool should be available initially")
+
+	// Wait for heartbeat timeout (2s + buffer)
+	time.Sleep(3 * time.Second)
+
+	// Verify tool is now unavailable
+	tools = toolsComp.ListTools()
+	var foundAfterTimeout bool
+	var unavailable bool
+	for _, tool := range tools {
+		if tool.Name == "timeout_tool" {
+			foundAfterTimeout = true
+			unavailable = !tool.Available
+			break
+		}
+	}
+	assert.True(t, foundAfterTimeout, "Tool should still be in list after timeout")
+	assert.True(t, unavailable, "Tool should be marked unavailable after heartbeat timeout")
 }

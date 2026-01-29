@@ -187,3 +187,84 @@ func (c *Client) SubscribeForRequests(
 	c.subs = append(c.subs, sub)
 	return nil
 }
+
+// RetryConfig configures retry behavior for requests.
+type RetryConfig struct {
+	MaxRetries        int           // Number of retry attempts (default: 3)
+	InitialBackoff    time.Duration // First retry delay (default: 100ms)
+	MaxBackoff        time.Duration // Cap on backoff growth (default: 2s)
+	BackoffMultiplier float64       // Exponential growth factor (default: 2.0)
+}
+
+// DefaultRetryConfig returns sensible defaults for retry configuration.
+func DefaultRetryConfig() RetryConfig {
+	return RetryConfig{
+		MaxRetries:        3,
+		InitialBackoff:    100 * time.Millisecond,
+		MaxBackoff:        2 * time.Second,
+		BackoffMultiplier: 2.0,
+	}
+}
+
+// RequestWithRetry performs a request with configurable retry on failure.
+// This is useful for handling transient "no responders" errors in NATS
+// where the subscriber may not be ready when the request arrives.
+func (c *Client) RequestWithRetry(
+	ctx context.Context,
+	subject string,
+	data []byte,
+	timeout time.Duration,
+	retry RetryConfig,
+) ([]byte, error) {
+	c.mu.RLock()
+	conn := c.conn
+	c.mu.RUnlock()
+
+	if conn == nil || !conn.IsConnected() {
+		return nil, ErrNotConnected
+	}
+
+	if c.Status() == StatusCircuitOpen {
+		return nil, ErrCircuitOpen
+	}
+
+	if timeout == 0 {
+		timeout = DefaultRequestTimeout
+	}
+
+	var lastErr error
+	for attempt := 0; attempt <= retry.MaxRetries; attempt++ {
+		reqCtx, cancel := context.WithTimeout(ctx, timeout)
+		msg, err := conn.RequestWithContext(reqCtx, subject, data)
+		cancel()
+
+		if err == nil {
+			c.resetCircuit()
+			return msg.Data, nil
+		}
+
+		lastErr = err
+		c.recordFailure()
+
+		// Wait before retry (if more retries remain)
+		if attempt < retry.MaxRetries {
+			// Calculate exponential backoff
+			backoff := retry.InitialBackoff
+			for i := 0; i < attempt; i++ {
+				backoff = time.Duration(float64(backoff) * retry.BackoffMultiplier)
+			}
+			if backoff > retry.MaxBackoff {
+				backoff = retry.MaxBackoff
+			}
+
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(backoff):
+				// Continue to next retry
+			}
+		}
+	}
+
+	return nil, lastErr
+}

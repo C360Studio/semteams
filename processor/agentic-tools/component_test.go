@@ -331,7 +331,7 @@ func TestComponent_ListRegisteredTools(t *testing.T) {
 
 	// Component should have ListTools method
 	lister, ok := comp.(interface {
-		ListTools() []agentic.ToolDefinition
+		ListTools() []agentictools.ToolDefinition
 	})
 	if !ok {
 		t.Fatal("Component should implement ListTools method")
@@ -376,6 +376,16 @@ func TestComponent_ListRegisteredTools(t *testing.T) {
 	tools = lister.ListTools()
 	if len(tools) != len(toolNames) {
 		t.Errorf("ListTools() count = %d, want %d", len(tools), len(toolNames))
+	}
+
+	// Verify internal tools have correct provider and availability
+	for _, tool := range tools {
+		if tool.Provider != "internal" {
+			t.Errorf("Internal tool %s should have Provider='internal', got %s", tool.Name, tool.Provider)
+		}
+		if !tool.Available {
+			t.Errorf("Internal tool %s should have Available=true", tool.Name)
+		}
 	}
 }
 

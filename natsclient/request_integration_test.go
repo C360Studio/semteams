@@ -286,3 +286,95 @@ func TestIntegration_SubscribeForRequests_NotConnected(t *testing.T) {
 	})
 	assert.Equal(t, ErrNotConnected, err)
 }
+
+// TestIntegration_RequestWithRetry_Success tests retry succeeds when responder starts late
+func TestIntegration_RequestWithRetry_Success(t *testing.T) {
+	ctx := context.Background()
+
+	// Start NATS container
+	natsContainer, natsURL := startNATSContainer(ctx, t)
+	defer natsContainer.Terminate(ctx)
+
+	// Create and connect client
+	client, err := NewClient(natsURL)
+	require.NoError(t, err)
+	err = client.Connect(ctx)
+	require.NoError(t, err)
+	defer client.Close(ctx)
+
+	subject := "test.retry"
+	expectedResponse := []byte("delayed-response")
+
+	// Start responder after a delay to simulate "not ready yet" scenario
+	go func() {
+		time.Sleep(150 * time.Millisecond)
+		err := client.SubscribeForRequests(ctx, subject, func(_ context.Context, data []byte) ([]byte, error) {
+			return expectedResponse, nil
+		})
+		if err != nil {
+			t.Logf("Failed to subscribe: %v", err)
+		}
+	}()
+
+	// Configure retry with short backoff for faster test
+	config := DefaultRetryConfig()
+	config.InitialBackoff = 50 * time.Millisecond
+	config.MaxRetries = 5
+	config.BackoffMultiplier = 1.5
+
+	// Send request that should retry until responder is ready
+	response, err := client.RequestWithRetry(
+		ctx,
+		subject,
+		[]byte("request"),
+		2*time.Second,
+		config,
+	)
+
+	require.NoError(t, err, "retry should succeed when responder becomes available")
+	assert.Equal(t, expectedResponse, response)
+}
+
+// TestIntegration_RequestWithRetry_NoResponder tests all retries exhausted when no responder exists
+func TestIntegration_RequestWithRetry_NoResponder(t *testing.T) {
+	ctx := context.Background()
+
+	// Start NATS container
+	natsContainer, natsURL := startNATSContainer(ctx, t)
+	defer natsContainer.Terminate(ctx)
+
+	// Create and connect client
+	client, err := NewClient(natsURL)
+	require.NoError(t, err)
+	err = client.Connect(ctx)
+	require.NoError(t, err)
+	defer client.Close(ctx)
+
+	// Configure retry with short backoff for faster test
+	config := DefaultRetryConfig()
+	config.InitialBackoff = 20 * time.Millisecond
+	config.MaxRetries = 3
+	config.MaxBackoff = 100 * time.Millisecond
+
+	// Send request to subject with no responder
+	_, err = client.RequestWithRetry(
+		ctx,
+		"nonexistent.subject",
+		[]byte("request"),
+		100*time.Millisecond,
+		config,
+	)
+
+	// Should fail with "no responders" or timeout error
+	require.Error(t, err)
+	errStr := err.Error()
+	assert.True(t,
+		errStr == "nats: no responders available for request" ||
+			errStr == "context deadline exceeded" ||
+			errStr == "nats: timeout",
+		"Expected no responders or timeout error, got: %s", errStr)
+
+	// Note: NATS returns "no responders" immediately (no wait), so with retries
+	// and backoff the timing is: retry backoffs (20ms + 40ms + 60ms) ~120ms
+	// We don't assert on timing as it varies with server configuration
+}
