@@ -2,7 +2,7 @@
 // Task: Global command registration with init() pattern
 // Builder must make these tests pass without modification.
 
-package router
+package agenticdispatch
 
 import (
 	"context"

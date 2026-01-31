@@ -1,6 +1,6 @@
-// Package router provides message routing between users and agentic loops.
+// Package agenticdispatch provides message routing between users and agentic loops.
 // It handles command parsing, permission checking, loop tracking, and message dispatch.
-package router
+package agenticdispatch
 
 import (
 	"context"

@@ -1,19 +1,19 @@
-package router
+package agenticdispatch
 
 // Global command registration
 //
-// External packages can register custom commands with the router via init()
-// functions using RegisterCommand. Commands are loaded by the router component
-// during initialization, after built-in commands are registered.
+// External packages can register custom commands with the agentic-dispatch
+// component via init() functions using RegisterCommand. Commands are loaded
+// by the component during initialization, after built-in commands are registered.
 //
 // Example usage:
 //
 //	package semspec
 //
-//	import "github.com/c360/semstreams/processor/router"
+//	import agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch"
 //
 //	func init() {
-//	    router.RegisterCommand("spec", &SpecCommandExecutor{})
+//	    agenticdispatch.RegisterCommand("spec", &SpecCommandExecutor{})
 //	}
 //
 // Duplicate command names will cause registration to fail with an error.

@@ -2,7 +2,7 @@
 // Attack tests - permanent CI fixtures.
 // These tests verify the global command registration handles edge cases.
 
-package router
+package agenticdispatch
 
 import (
 	"context"

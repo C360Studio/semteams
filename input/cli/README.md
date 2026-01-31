@@ -103,4 +103,4 @@ The CLI component works with the router component:
 4. CLI receives response on `user.response.cli.*`
 5. CLI displays formatted response
 
-See the [Router documentation](../../processor/router/README.md) for command handling details.
+See the [Agentic Dispatch documentation](../../processor/agentic-dispatch/README.md) for command handling details.

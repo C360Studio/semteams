@@ -1,4 +1,4 @@
-package router
+package agenticdispatch
 
 import (
 	"context"

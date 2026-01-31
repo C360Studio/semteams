@@ -1,4 +1,4 @@
-package router
+package agenticdispatch
 
 import (
 	"github.com/c360/semstreams/component"

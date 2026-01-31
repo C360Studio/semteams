@@ -1,5 +1,5 @@
-// Package router provides Prometheus metrics for router component.
-package router
+// Package agenticdispatch provides Prometheus metrics for agentic-dispatch component.
+package agenticdispatch
 
 import (
 	"sync"

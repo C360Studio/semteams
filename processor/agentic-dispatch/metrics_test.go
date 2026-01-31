@@ -2,7 +2,7 @@
 // Task: velvety-jingling-tulip Step 6 - router metrics tests
 // Builder must make these tests pass without modification.
 
-package router
+package agenticdispatch
 
 import (
 	"testing"

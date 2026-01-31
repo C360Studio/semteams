@@ -1,23 +1,23 @@
-// Package router provides message routing between users and agentic loops.
+// Package agenticdispatch provides message routing between users and agentic loops.
 //
-// The router component handles command parsing, permission checking, loop
+// The agentic-dispatch component handles command parsing, permission checking, loop
 // tracking, and message dispatch. It bridges input components (CLI, Slack,
 // Discord, Web) with the agentic processing system.
 //
 // # Architecture
 //
-//	┌─────────────┐                           ┌─────────────┐
-//	│  CLI/Slack/ │     user.message.*        │             │
-//	│  Discord/   │ ─────────────────────────▶│   Router    │
-//	│  Web Input  │                           │             │
-//	│             │◀───────────────────────── │  • Commands │
-//	└─────────────┘     user.response.*       │  • Perms    │
-//	                                          │  • Loops    │
-//	                                          └──────┬──────┘
-//	                                                 │
-//	                                                 │ agent.task.*
-//	                                                 │ agent.signal.*
-//	                                                 ▼
+//	┌─────────────┐                           ┌─────────────────┐
+//	│  CLI/Slack/ │     user.message.*        │                 │
+//	│  Discord/   │ ─────────────────────────▶│ agentic-dispatch│
+//	│  Web Input  │                           │                 │
+//	│             │◀───────────────────────── │  • Commands     │
+//	└─────────────┘     user.response.*       │  • Perms        │
+//	                                          │  • Loops        │
+//	                                          └────────┬────────┘
+//	                                                   │
+//	                                                   │ agent.task.*
+//	                                                   │ agent.signal.*
+//	                                                   ▼
 //	                                          ┌─────────────┐
 //	                                          │ agentic-    │
 //	                                          │ loop        │
@@ -31,15 +31,15 @@
 //
 //	package mycommands
 //
-//	import "github.com/c360/semstreams/processor/router"
+//	import agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch"
 //
 //	func init() {
-//	    router.RegisterCommand("mycommand", &MyCommandExecutor{})
+//	    agenticdispatch.RegisterCommand("mycommand", &MyCommandExecutor{})
 //	}
 //
 // 2. Per-component registration - for component-specific commands:
 //
-//	registry := routerComponent.CommandRegistry()
+//	registry := dispatchComponent.CommandRegistry()
 //	registry.Register("local", config, handler)
 //
 // # CommandExecutor Interface
@@ -51,7 +51,7 @@
 //	    Config() CommandConfig
 //	}
 //
-// The CommandContext provides access to router services:
+// The CommandContext provides access to dispatch services:
 //
 //	type CommandContext struct {
 //	    NATSClient    *natsclient.Client       // For publishing messages
@@ -62,7 +62,7 @@
 //
 // # Built-in Commands
 //
-// The router provides these built-in commands:
+// The agentic-dispatch component provides these built-in commands:
 //
 //   - /cancel [loop_id] - Cancel current or specified loop
 //   - /status [loop_id] - Show loop status
@@ -81,11 +81,11 @@
 //
 // # NATS Subjects
 //
-// The router uses these subject patterns:
+// The agentic-dispatch component uses these subject patterns:
 //
 //   - user.message.{channel}.{id} - Incoming user messages
 //   - user.response.{channel}.{id} - Outgoing responses
 //   - agent.task.{task_id} - Task dispatch to agentic-loop
 //   - agent.signal.{loop_id} - Signals to agentic-loop
 //   - agent.complete.{loop_id} - Completion events from agentic-loop
-package router
+package agenticdispatch

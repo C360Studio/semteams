@@ -1,16 +1,16 @@
 # Semspec Command Integration Guide
 
-This document describes how to integrate semspec commands with the SemStreams router using the global command registration pattern.
+This document describes how to integrate semspec commands with the SemStreams agentic-dispatch component using the global command registration pattern.
 
 ## Overview
 
-The router component now supports global command registration via `init()` functions. This allows the semspec package to register custom commands (like `/spec`, `/propose`, `/review`) that will be automatically loaded when the router starts.
+The agentic-dispatch component supports global command registration via `init()` functions. This allows the semspec package to register custom commands (like `/spec`, `/propose`, `/review`) that will be automatically loaded when the component starts.
 
 ## Quick Start
 
 ### 1. Create Command Executor
 
-Each command needs an executor that implements `router.CommandExecutor`:
+Each command needs an executor that implements `agenticdispatch.CommandExecutor`:
 
 ```go
 // semspec/commands/spec.go
@@ -22,7 +22,7 @@ import (
     "time"
 
     "github.com/c360/semstreams/agentic"
-    "github.com/c360/semstreams/processor/router"
+    agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch"
     "github.com/google/uuid"
 )
 
@@ -30,8 +30,8 @@ import (
 type SpecCommand struct{}
 
 // Config returns the command configuration
-func (c *SpecCommand) Config() router.CommandConfig {
-    return router.CommandConfig{
+func (c *SpecCommand) Config() agenticdispatch.CommandConfig {
+    return agenticdispatch.CommandConfig{
         Pattern:     `^/spec\s*(.*)$`,    // /spec or /spec <name>
         Permission:  "submit_task",        // Required permission
         RequireLoop: false,                // Can run without active loop
@@ -42,7 +42,7 @@ func (c *SpecCommand) Config() router.CommandConfig {
 // Execute handles the command
 func (c *SpecCommand) Execute(
     ctx context.Context,
-    cmdCtx *router.CommandContext,
+    cmdCtx *agenticdispatch.CommandContext,
     msg agentic.UserMessage,
     args []string,
     loopID string,
@@ -68,20 +68,20 @@ func (c *SpecCommand) Execute(
 
 ### 2. Register via init()
 
-Register the command globally so it's loaded when the router starts:
+Register the command globally so it's loaded when the agentic-dispatch component starts:
 
 ```go
 // semspec/commands/register.go
 package commands
 
-import "github.com/c360/semstreams/processor/router"
+import agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch"
 
 func init() {
     // Register all semspec commands
-    router.RegisterCommand("spec", &SpecCommand{})
-    router.RegisterCommand("propose", &ProposeCommand{})
-    router.RegisterCommand("review", &ReviewCommand{})
-    router.RegisterCommand("tasks", &TasksCommand{})
+    agenticdispatch.RegisterCommand("spec", &SpecCommand{})
+    agenticdispatch.RegisterCommand("propose", &ProposeCommand{})
+    agenticdispatch.RegisterCommand("review", &ReviewCommand{})
+    agenticdispatch.RegisterCommand("tasks", &TasksCommand{})
 }
 ```
 
@@ -114,7 +114,7 @@ type CommandExecutor interface {
 
 ### CommandContext
 
-The `CommandContext` provides access to router services:
+The `CommandContext` provides access to agentic-dispatch services:
 
 ```go
 type CommandContext struct {
@@ -166,7 +166,7 @@ func RegisterCommand(name string, executor CommandExecutor) error
 ### Publishing to NATS
 
 ```go
-func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
+func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *agenticdispatch.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
     // Publish a task to the agentic loop
     task := agentic.TaskMessage{
         LoopID: "loop_" + uuid.New().String()[:8],
@@ -192,7 +192,7 @@ func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext
 ### Tracking Loops
 
 ```go
-func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
+func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *agenticdispatch.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
     // Get user's active loops
     loops := cmdCtx.LoopTracker.GetUserLoops(msg.UserID)
 
@@ -205,7 +205,7 @@ func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext
     }
 
     // Track a new loop
-    cmdCtx.LoopTracker.Track(&router.LoopInfo{
+    cmdCtx.LoopTracker.Track(&agenticdispatch.LoopInfo{
         LoopID:      newLoopID,
         UserID:      msg.UserID,
         ChannelType: msg.ChannelType,
@@ -221,7 +221,7 @@ func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext
 ### Checking Permissions
 
 ```go
-func (c *AdminCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
+func (c *AdminCommand) Execute(ctx context.Context, cmdCtx *agenticdispatch.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
     // Additional permission check beyond Config().Permission
     if !cmdCtx.HasPermission(msg.UserID, "admin") {
         return agentic.UserResponse{
@@ -238,7 +238,7 @@ func (c *AdminCommand) Execute(ctx context.Context, cmdCtx *router.CommandContex
 ### Logging
 
 ```go
-func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
+func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *agenticdispatch.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
     cmdCtx.Logger.Info("Executing spec command",
         slog.String("user_id", msg.UserID),
         slog.String("spec_name", args[0]),
@@ -256,8 +256,8 @@ func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext
 
 ```go
 // /constitution - No arguments
-func (c *ConstitutionCommand) Config() router.CommandConfig {
-    return router.CommandConfig{
+func (c *ConstitutionCommand) Config() agenticdispatch.CommandConfig {
+    return agenticdispatch.CommandConfig{
         Pattern:     `^/constitution$`,
         Permission:  "view",
         RequireLoop: false,
@@ -270,8 +270,8 @@ func (c *ConstitutionCommand) Config() router.CommandConfig {
 
 ```go
 // /spec or /spec feature-name
-func (c *SpecCommand) Config() router.CommandConfig {
-    return router.CommandConfig{
+func (c *SpecCommand) Config() agenticdispatch.CommandConfig {
+    return agenticdispatch.CommandConfig{
         Pattern:     `^/spec\s*(.*)$`,  // Captures everything after /spec
         Permission:  "submit_task",
         RequireLoop: false,
@@ -292,8 +292,8 @@ func (c *SpecCommand) Execute(..., args []string, ...) {
 
 ```go
 // /propose <description> - Requires description
-func (c *ProposeCommand) Config() router.CommandConfig {
-    return router.CommandConfig{
+func (c *ProposeCommand) Config() agenticdispatch.CommandConfig {
+    return agenticdispatch.CommandConfig{
         Pattern:     `^/propose\s+(.+)$`,  // Requires at least one character after /propose
         Permission:  "submit_task",
         RequireLoop: false,
@@ -306,8 +306,8 @@ func (c *ProposeCommand) Config() router.CommandConfig {
 
 ```go
 // /assign <task_id> <user_id>
-func (c *AssignCommand) Config() router.CommandConfig {
-    return router.CommandConfig{
+func (c *AssignCommand) Config() agenticdispatch.CommandConfig {
+    return agenticdispatch.CommandConfig{
         Pattern:     `^/assign\s+(\S+)\s+(\S+)$`,
         Permission:  "approve",
         RequireLoop: false,
@@ -326,8 +326,8 @@ func (c *AssignCommand) Execute(..., args []string, ...) {
 
 ```go
 // /feedback <text> - Requires active loop
-func (c *FeedbackCommand) Config() router.CommandConfig {
-    return router.CommandConfig{
+func (c *FeedbackCommand) Config() agenticdispatch.CommandConfig {
+    return agenticdispatch.CommandConfig{
         Pattern:     `^/feedback\s+(.+)$`,
         Permission:  "view",
         RequireLoop: true,  // Router will reject if no active loop
@@ -338,7 +338,7 @@ func (c *FeedbackCommand) Config() router.CommandConfig {
 
 ## Suggested Semspec Commands
 
-Based on the router specification, here are recommended commands for semspec:
+Based on the agentic-dispatch specification, here are recommended commands for semspec:
 
 | Command | Pattern | Permission | Description |
 |---------|---------|------------|-------------|
@@ -353,7 +353,7 @@ Based on the router specification, here are recommended commands for semspec:
 
 ## Testing Commands
 
-Commands can be tested without the full router:
+Commands can be tested without the full agentic-dispatch component:
 
 ```go
 func TestSpecCommand(t *testing.T) {
@@ -370,8 +370,8 @@ func TestSpecCommand(t *testing.T) {
     assert.Equal(t, "my-feature", matches[1])
 
     // Test execute
-    cmdCtx := &router.CommandContext{
-        LoopTracker: router.NewLoopTracker(),
+    cmdCtx := &agenticdispatch.CommandContext{
+        LoopTracker: agenticdispatch.NewLoopTracker(),
         Logger:      slog.Default(),
         HasPermission: func(_, _ string) bool { return true },
     }
@@ -402,7 +402,7 @@ func (c *SpecCommand) Execute(...) (agentic.UserResponse, error) {
         }, nil
     }
 
-    // Return error for system errors (will be wrapped by router)
+    // Return error for system errors (will be wrapped by agentic-dispatch)
     result, err := c.doSomething()
     if err != nil {
         return agentic.UserResponse{}, fmt.Errorf("spec command failed: %w", err)
@@ -431,6 +431,6 @@ semspec/
 
 ## See Also
 
-- [Router README](../../processor/router/README.md) - Router component documentation
-- [Router doc.go](../../processor/router/doc.go) - Package documentation
-- [Input Router Spec](../architecture/specs/semstreams-input-router-spec.md) - Full specification
+- [Agentic Dispatch README](../../processor/agentic-dispatch/README.md) - Component documentation
+- [Agentic Dispatch doc.go](../../processor/agentic-dispatch/doc.go) - Package documentation
+- [Agentic Dispatch Spec](../architecture/specs/semstreams-input-router-spec.md) - Full specification

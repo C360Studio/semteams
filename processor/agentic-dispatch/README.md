@@ -1,10 +1,10 @@
-# Router Component
+# Agentic Dispatch Component
 
 Message routing between users and agentic loops with command parsing, permissions, and loop tracking.
 
 ## Overview
 
-The router component is the central hub for user interaction with the agentic system. It:
+The agentic-dispatch component is the central hub for user interaction with the agentic system. It:
 
 - Parses commands from user messages
 - Checks permissions before executing commands
@@ -49,17 +49,17 @@ package semspec
 import (
     "context"
     "github.com/c360/semstreams/agentic"
-    "github.com/c360/semstreams/processor/router"
+    agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch"
 )
 
 func init() {
-    router.RegisterCommand("spec", &SpecCommand{})
+    agenticdispatch.RegisterCommand("spec", &SpecCommand{})
 }
 
 type SpecCommand struct{}
 
-func (c *SpecCommand) Config() router.CommandConfig {
-    return router.CommandConfig{
+func (c *SpecCommand) Config() agenticdispatch.CommandConfig {
+    return agenticdispatch.CommandConfig{
         Pattern:     `^/spec\s*(.*)$`,
         Permission:  "submit_task",
         RequireLoop: false,
@@ -69,7 +69,7 @@ func (c *SpecCommand) Config() router.CommandConfig {
 
 func (c *SpecCommand) Execute(
     ctx context.Context,
-    cmdCtx *router.CommandContext,
+    cmdCtx *agenticdispatch.CommandContext,
     msg agentic.UserMessage,
     args []string,
     loopID string,
@@ -101,7 +101,7 @@ type CommandExecutor interface {
 
 ## CommandContext
 
-The `CommandContext` provides access to router services:
+The `CommandContext` provides access to agentic-dispatch services:
 
 ```go
 type CommandContext struct {
@@ -146,13 +146,13 @@ type CommandConfig struct {
 ## Integration Example
 
 ```go
-// Register commands before creating router
+// Register commands before creating agentic-dispatch component
 func init() {
-    router.RegisterCommand("mycommand", &MyCommand{})
+    agenticdispatch.RegisterCommand("mycommand", &MyCommand{})
 }
 
-// Commands are automatically loaded when router starts
-comp, _ := router.NewComponent(config, deps)
+// Commands are automatically loaded when component starts
+comp, _ := agenticdispatch.NewComponent(config, deps)
 comp.Start(ctx)
 ```
 

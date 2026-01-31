@@ -2,7 +2,7 @@
 
 **Version**: Draft v1  
 **Status**: Planning  
-**Location**: `processor/input/*`, `processor/router/`
+**Location**: `processor/input/*`, `processor/agentic-dispatch/`
 
 ---
 
@@ -84,7 +84,7 @@ ServiceManager coordinates HTTP with existing endpoints:
 | `UserMessage`, `UserSignal`, `UserResponse` | New message types for user interaction |
 | `user.message.*`, `user.signal.*`, `user.response.*` | New NATS subject patterns |
 | `agent.signal.*` | New subject for loop control signals |
-| `processor/router/` | New routing component |
+| `processor/agentic-dispatch/` | New routing component |
 | `processor/input/cli/` | New CLI input component |
 | Signal handling in agentic-loop | New functionality (cancel, pause, approve, etc.) |
 | New loop states | `paused`, `cancelled`, `awaiting_approval` |
@@ -434,7 +434,7 @@ func (s *SlackInput) handleReaction(evt *slackevents.ReactionAddedEvent) {
 
 ## Part 3: Router Component
 
-### processor/router
+### processor/agentic-dispatch
 
 **Purpose**: Parse commands, check permissions, route to handlers
 
@@ -1532,7 +1532,7 @@ package commands
 import (
     "context"
     "github.com/c360/semstreams/agentic"
-    "github.com/c360/semstreams/processor/router"
+    "agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch""
 )
 
 func init() {
@@ -1831,7 +1831,7 @@ package commands
 import (
     "context"
     "github.com/c360/semstreams/agentic"
-    "github.com/c360/semstreams/processor/router"
+    "agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch""
 )
 
 func init() {
@@ -2485,7 +2485,7 @@ WS   /ws/activity
 ### Implementation Example
 
 ```go
-// processor/router/http.go
+// processor/agentic-dispatch/http.go
 func (r *Router) RegisterRoutes(mux *http.ServeMux, prefix string) {
     mux.HandleFunc(prefix+"/loops", r.handleGetLoops)
     mux.HandleFunc(prefix+"/loops/", r.handleLoopByID)
@@ -2525,7 +2525,7 @@ func (r *Router) handleGetLoops(w http.ResponseWriter, req *http.Request) {
 | Item | Type | Description |
 |------|------|-------------|
 | `processor/input/cli/` | NEW | Basic stdin handling, publishes `user.message.cli.*` |
-| `processor/router/` | NEW | Command parsing, basic permissions, routing |
+| `processor/agentic-dispatch/` | NEW | Command parsing, basic permissions, routing |
 | `UserMessage`, `UserSignal`, `UserResponse` types | NEW | Add to `agentic/` or new `interaction/` package |
 | `user.message.*`, `user.signal.*`, `user.response.*` | NEW | New NATS subject patterns |
 | Signal handling in agentic-loop | EXTEND | Add `agent.signal.*` subscription, handlers for cancel/approve/reject |
