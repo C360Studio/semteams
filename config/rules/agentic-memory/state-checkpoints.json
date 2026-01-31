@@ -1,0 +1,62 @@
+{
+  "id": "agentic-state-checkpoint",
+  "type": "expression",
+  "name": "Extract Iteration State",
+  "description": "Extract iteration state checkpoints during agentic execution. Creates triples tracking iteration count, state transitions, and timestamps for recovery.",
+  "enabled": true,
+  "entity": {
+    "pattern": "loop.agentic.task.*",
+    "watch_buckets": ["AGENT_LOOPS"]
+  },
+  "conditions": [
+    {
+      "field": "iteration",
+      "operator": "gte",
+      "value": 1,
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "cooldown": "0s",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "predicate": "agentic.checkpoint.started",
+      "object": "$entity.id",
+      "ttl": "720h",
+      "properties": {
+        "source": "rule_engine",
+        "extraction_type": "rule_based"
+      }
+    }
+  ],
+  "while_true": [
+    {
+      "type": "add_triple",
+      "predicate": "agentic.checkpoint.iteration",
+      "object": "$entity.id",
+      "ttl": "720h",
+      "properties": {
+        "source": "rule_engine",
+        "extraction_type": "rule_based"
+      }
+    }
+  ],
+  "on_exit": [
+    {
+      "type": "add_triple",
+      "predicate": "agentic.checkpoint.completed",
+      "object": "$entity.id",
+      "ttl": "720h",
+      "properties": {
+        "source": "rule_engine",
+        "extraction_type": "rule_based"
+      }
+    }
+  ],
+  "metadata": {
+    "category": "agentic-memory",
+    "extraction_type": "state_tracking",
+    "adr": "ADR-017"
+  }
+}

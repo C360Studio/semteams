@@ -1,0 +1,40 @@
+{
+  "id": "agentic-decision-pattern",
+  "type": "expression",
+  "name": "Extract Decision Patterns",
+  "description": "Pattern-match common decision language in agent responses. Creates triples for decisions like 'decided to use', 'chose', 'will implement'. Supplements LLM-assisted extraction.",
+  "enabled": true,
+  "entity": {
+    "pattern": "loop.agentic.task.*",
+    "watch_buckets": ["AGENT_LOOPS"]
+  },
+  "conditions": [
+    {
+      "field": "response.content",
+      "operator": "regex",
+      "value": "(decided to|chose|will (use|implement|create)|going to|selected|opted for)",
+      "required": true
+    }
+  ],
+  "logic": "and",
+  "cooldown": "1m",
+  "on_enter": [
+    {
+      "type": "add_triple",
+      "predicate": "agentic.decision.detected",
+      "object": "$entity.id",
+      "ttl": "720h",
+      "properties": {
+        "source": "rule_engine",
+        "extraction_type": "rule_based",
+        "requires_llm_extraction": true
+      }
+    }
+  ],
+  "metadata": {
+    "category": "agentic-memory",
+    "extraction_type": "decision_detection",
+    "adr": "ADR-017",
+    "notes": "This rule detects decision language patterns to flag responses for LLM-assisted extraction. The actual decision content extraction happens via the llm_extractor component."
+  }
+}
