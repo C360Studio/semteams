@@ -325,16 +325,35 @@ type ToolExecutor interface {
 }
 ```
 
-**Executor Registry**:
+**Tool Registration**:
+
+Tools can be registered in two ways:
+
+1. **Global registration via init()** (preferred for reusable tools):
 
 ```go
-// Register a custom tool executor
-registry := agentictools.NewExecutorRegistry()
-registry.Register("file_reader", &FileReaderExecutor{})
-registry.Register("web_search", &WebSearchExecutor{})
+// In your tool package
+func init() {
+    agentictools.RegisterTool("file_reader", &FileReaderExecutor{})
+    agentictools.RegisterTool("web_search", &WebSearchExecutor{})
+}
+```
 
-// Get all available tools
-tools := registry.ListAllTools()
+2. **Per-component registration** (for component-specific tools):
+
+```go
+comp, _ := agentictools.NewComponent(rawConfig, deps)
+toolsComp := comp.(*agentictools.Component)
+toolsComp.RegisterToolExecutor(&CustomExecutor{})
+```
+
+The global registration pattern matches how components and rules are registered in SemStreams.
+
+**Listing Available Tools**:
+
+```go
+// Get all registered tools (global + local)
+tools := toolsComp.ListTools()
 ```
 
 **Allowlist Behavior**:

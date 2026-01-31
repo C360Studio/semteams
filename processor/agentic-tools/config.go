@@ -14,7 +14,6 @@ type Config struct {
 	ConsumerNameSuffix string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix appended to consumer names for uniqueness,category:advanced"`
 	Timeout            string                `json:"timeout"              schema:"type:string,description:Tool execution timeout,category:advanced,default:60s"`
 	AllowedTools       []string              `json:"allowed_tools"        schema:"type:array,description:List of allowed tools (nil/empty allows all),category:advanced"`
-	HeartbeatTimeout   string                `json:"heartbeat_timeout"    schema:"type:string,description:External tool heartbeat timeout,category:advanced,default:30s"`
 }
 
 // Validate checks the configuration for errors

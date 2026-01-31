@@ -74,7 +74,7 @@ The `agentic-tools` component executes tool calls from the agentic loop orchestr
 
 ## Tool Registration
 
-### ToolExecutor Interface
+Tools implement the `ToolExecutor` interface:
 
 ```go
 type ToolExecutor interface {
@@ -83,26 +83,67 @@ type ToolExecutor interface {
 }
 ```
 
+### Global Registration (Preferred)
+
+Register tools globally via `init()` so they're available to all agentic-tools components:
+
+```go
+package mytools
+
+import agentictools "github.com/c360/semstreams/processor/agentic-tools"
+
+func init() {
+    agentictools.RegisterTool("read_file", &FileReader{})
+    agentictools.RegisterTool("query_graph", &GraphQueryExecutor{})
+}
+```
+
+This pattern matches how components and rules are registered in SemStreams. Globally registered tools are automatically available to all agentic-tools component instances.
+
+### Per-Component Registration
+
+For component-specific tools, register after creating the component:
+
+```go
+comp, _ := agentictools.NewComponent(rawConfig, deps)
+toolsComp := comp.(*agentictools.Component)
+
+// Register component-specific executors
+toolsComp.RegisterToolExecutor(&CustomExecutor{})
+
+// Start component
+lc := comp.(component.LifecycleComponent)
+lc.Initialize()
+lc.Start(ctx)
+```
+
+Local tools take precedence over global tools with the same name.
+
 ### Example Implementation
 
 ```go
 type FileReader struct{}
 
 func (f *FileReader) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
-    path, _ := call.Arguments["path"].(string)
-    
+    var args struct {
+        Path string `json:"path"`
+    }
+    if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+        return agentic.ToolResult{CallID: call.ID, Error: err.Error()}, nil
+    }
+
     // Respect context cancellation
     select {
     case <-ctx.Done():
         return agentic.ToolResult{CallID: call.ID, Error: "cancelled"}, ctx.Err()
     default:
     }
-    
-    content, err := os.ReadFile(path)
+
+    content, err := os.ReadFile(args.Path)
     if err != nil {
         return agentic.ToolResult{CallID: call.ID, Error: err.Error()}, nil
     }
-    
+
     return agentic.ToolResult{CallID: call.ID, Content: string(content)}, nil
 }
 
@@ -119,22 +160,6 @@ func (f *FileReader) ListTools() []agentic.ToolDefinition {
         },
     }}
 }
-```
-
-### Registering Tools
-
-```go
-comp, _ := agentictools.NewComponent(rawConfig, deps)
-toolsComp := comp.(*agentictools.Component)
-
-// Register executors
-toolsComp.RegisterToolExecutor(&FileReader{})
-toolsComp.RegisterToolExecutor(&DatabaseTools{})
-
-// Start component
-lc := comp.(component.LifecycleComponent)
-lc.Initialize()
-lc.Start(ctx)
 ```
 
 ## Tool Allowlist

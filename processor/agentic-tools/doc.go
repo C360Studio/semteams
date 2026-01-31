@@ -80,16 +80,22 @@
 //
 // # Tool Registration
 //
-// Register tool executors with the component after creation:
+// Tools can be registered in two ways:
+//
+// 1. Global registration via init() (preferred for reusable tools):
+//
+//	func init() {
+//	    agentictools.RegisterTool("my_tool", &MyToolExecutor{})
+//	}
+//
+// Global registration makes tools available to all agentic-tools components
+// automatically. This pattern matches how components and rules are registered.
+//
+// 2. Per-component registration (for component-specific tools):
 //
 //	comp, _ := agentictools.NewComponent(rawConfig, deps)
 //	toolsComp := comp.(*agentictools.Component)
-//
-//	// Register single-tool executor
 //	err := toolsComp.RegisterToolExecutor(&FileReader{})
-//
-//	// Register multi-tool executor
-//	err = toolsComp.RegisterToolExecutor(&DatabaseTools{})  // Has query, insert, delete
 //
 // The processor extracts tool names from ListTools() for routing and validation.
 //
