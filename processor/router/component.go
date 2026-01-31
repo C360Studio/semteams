@@ -87,6 +87,9 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// Register built-in commands
 	comp.registerBuiltinCommands()
 
+	// Load globally registered commands
+	comp.loadGlobalCommands()
+
 	return comp, nil
 }
 
@@ -572,4 +575,31 @@ func (c *Component) CommandRegistry() *CommandRegistry {
 // LoopTracker returns the loop tracker
 func (c *Component) LoopTracker() *LoopTracker {
 	return c.loopTracker
+}
+
+// loadGlobalCommands loads globally registered commands into the component
+func (c *Component) loadGlobalCommands() {
+	cmdCtx := &CommandContext{
+		NATSClient:    c.natsClient,
+		LoopTracker:   c.loopTracker,
+		Logger:        c.logger,
+		HasPermission: c.hasPermission,
+	}
+
+	for name, executor := range ListRegisteredCommands() {
+		config := executor.Config()
+
+		// Wrap executor in handler function
+		handler := func(exec CommandExecutor) CommandHandler {
+			return func(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
+				return exec.Execute(ctx, cmdCtx, msg, args, loopID)
+			}
+		}(executor)
+
+		if err := c.registry.Register(name, config, handler); err != nil {
+			c.logger.Warn("Failed to register global command",
+				slog.String("command", name),
+				slog.String("error", err.Error()))
+		}
+	}
 }

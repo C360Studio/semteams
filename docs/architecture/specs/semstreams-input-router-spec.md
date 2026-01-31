@@ -1481,12 +1481,118 @@ func (c *Component) handleFeedback(ctx context.Context, signal UserSignal) {
 
 ## Part 6: Command Registry
 
-Applications extend the router by registering custom commands, following the same pattern as component and vocabulary registration.
+Applications extend the router by registering custom commands, following the same pattern as tool registration
+in the agentic-tools component.
 
-### Registry Interface
+### Two Registration Approaches
+
+Commands can be registered in two ways:
+
+1. **Global registration via init()** - Preferred for reusable commands
+2. **Per-component registration** - For component-specific commands
+
+The router loads global commands automatically during initialization, after built-in commands are registered.
+
+### Global Command Registration
+
+External packages can register commands globally using `RegisterCommand()` in an `init()` function:
 
 ```go
-// router/registry.go
+// router/global.go
+
+// RegisterCommand registers a command executor globally via init().
+// Returns an error if the command name is empty or already registered.
+// Panics if executor is nil (programmer error).
+func RegisterCommand(name string, executor CommandExecutor) error
+
+// ListRegisteredCommands returns a copy of all globally registered commands.
+func ListRegisteredCommands() map[string]CommandExecutor
+
+// CommandContext provides services to command executors
+type CommandContext struct {
+    NATSClient    *natsclient.Client
+    LoopTracker   *LoopTracker
+    Logger        *slog.Logger
+    HasPermission func(userID, permission string) bool
+}
+
+// CommandExecutor is the interface for command implementations
+type CommandExecutor interface {
+    Execute(ctx context.Context, cmdCtx *CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error)
+    Config() CommandConfig
+}
+```
+
+**Example: Global registration in external package**
+
+```go
+// semspec/commands/spec.go
+package commands
+
+import (
+    "context"
+    "github.com/c360/semstreams/agentic"
+    "github.com/c360/semstreams/processor/router"
+)
+
+func init() {
+    if err := router.RegisterCommand("spec", &SpecCommand{}); err != nil {
+        panic(err) // Registration errors are programmer errors
+    }
+}
+
+type SpecCommand struct{}
+
+func (c *SpecCommand) Config() router.CommandConfig {
+    return router.CommandConfig{
+        Pattern:     `^/spec\s*(.*)$`,
+        Permission:  "submit_task",
+        RequireLoop: false,
+        Scope:       "user",
+        Category:    "semspec",
+        Help:        "/spec [name] - Run spec-driven development workflow",
+    }
+}
+
+func (c *SpecCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
+    // Access router services via cmdCtx:
+    // - cmdCtx.NATSClient for publishing messages
+    // - cmdCtx.LoopTracker for active loop tracking
+    // - cmdCtx.Logger for logging
+    // - cmdCtx.HasPermission(userID, perm) for permission checks
+
+    specName := ""
+    if len(args) > 0 && args[0] != "" {
+        specName = args[0]
+    }
+
+    // Example: publish a task to start a spec workflow
+    taskMsg := agentic.TaskMessage{
+        LoopID: "spec_" + uuid.New().String()[:8],
+        TaskID: uuid.New().String(),
+        Role:   "architect",
+        Model:  "qwen2.5-coder:32b",
+        Prompt: fmt.Sprintf("Create specification: %s", specName),
+    }
+
+    data, _ := json.Marshal(taskMsg)
+    if err := cmdCtx.NATSClient.Publish(ctx, "agent.task."+taskMsg.TaskID, data); err != nil {
+        return agentic.UserResponse{}, err
+    }
+
+    return agentic.UserResponse{
+        Type:    "status",
+        Content: fmt.Sprintf("Started spec workflow: %s", taskMsg.LoopID),
+    }, nil
+}
+```
+
+### Per-Component Registration
+
+The CommandRegistry also supports per-component registration for component-specific commands:
+
+```go
+// router/command_registry.go
 
 // CommandRegistry manages command registration
 type CommandRegistry struct {
@@ -1512,16 +1618,16 @@ func NewCommandRegistry() *CommandRegistry {
 func (r *CommandRegistry) Register(name string, config CommandConfig, handler CommandHandler) error {
     r.mu.Lock()
     defer r.mu.Unlock()
-    
+
     if _, exists := r.commands[name]; exists {
         return fmt.Errorf("command %s already registered", name)
     }
-    
+
     // Compile pattern
     if config.Pattern != "" {
         config.compiledPattern = regexp.MustCompile(config.Pattern)
     }
-    
+
     r.commands[name] = RegisteredCommand{
         Config:  config,
         Handler: handler,
@@ -1552,7 +1658,7 @@ func (r *CommandRegistry) All() map[string]CommandConfig {
 func (r *CommandRegistry) Match(input string) (string, RegisteredCommand, []string, bool) {
     r.mu.RLock()
     defer r.mu.RUnlock()
-    
+
     for name, reg := range r.commands {
         if reg.Config.compiledPattern != nil {
             if matches := reg.Config.compiledPattern.FindStringSubmatch(input); matches != nil {
@@ -1582,14 +1688,46 @@ func NewRouter(config Config, nats *natsclient.Client) *Router {
         registry:   NewCommandRegistry(),
         natsClient: nats,
     }
-    
-    // Register built-in commands
+
+    // Register built-in commands first
     r.registerBuiltinCommands()
-    
+
+    // Load globally registered commands via init()
+    r.loadGlobalCommands()
+
     return r
 }
 
+// loadGlobalCommands registers all globally registered commands
+func (r *Router) loadGlobalCommands() {
+    globalCommands := ListRegisteredCommands()
+    for name, executor := range globalCommands {
+        config := executor.Config()
+        handler := r.makeHandlerFromExecutor(executor)
+        if err := r.registry.Register(name, config, handler); err != nil {
+            r.logger.Error("failed to register global command",
+                "command", name,
+                "error", err)
+        }
+    }
+}
+
+// makeHandlerFromExecutor adapts a CommandExecutor to CommandHandler
+func (r *Router) makeHandlerFromExecutor(executor CommandExecutor) CommandHandler {
+    return func(ctx context.Context, msg UserMessage, args []string) (UserResponse, error) {
+        cmdCtx := &CommandContext{
+            NATSClient:    r.natsClient,
+            LoopTracker:   r.loopTracker,
+            Logger:        r.logger,
+            HasPermission: r.hasPermission,
+        }
+        loopID := r.loopTracker.GetActiveLoop(msg.UserID, msg.ChannelID)
+        return executor.Execute(ctx, cmdCtx, msg, args, loopID)
+    }
+}
+
 // CommandRegistry exposes the registry for applications to register commands
+// (per-component registration approach)
 func (r *Router) CommandRegistry() *CommandRegistry {
     return r.registry
 }
@@ -1682,115 +1820,45 @@ func (r *Router) registerBuiltinCommands() {
 
 ### Application Registration (Semspec Example)
 
-```go
-// semspec/commands.go
+This example shows both global registration (preferred) and per-component registration approaches.
 
-func (s *Semspec) RegisterCommands(registry *router.CommandRegistry) error {
-    commands := []struct {
-        name    string
-        config  router.CommandConfig
-        handler router.CommandHandler
-    }{
-        {
-            name: "propose",
-            config: router.CommandConfig{
-                Pattern:    `^/propose\s+(.+)$`,
-                Permission: "submit_task",
-                Scope:      "user",
-                Help:       "/propose <description> - Create new proposal",
-            },
-            handler: s.handlePropose,
-        },
-        {
-            name: "spec",
-            config: router.CommandConfig{
-                Pattern:    `^/spec\s*(\S+)?$`,
-                Permission: "view",
-                Scope:      "user",
-                Help:       "/spec [id] - Show or create specification",
-            },
-            handler: s.handleSpec,
-        },
-        {
-            name: "review",
-            config: router.CommandConfig{
-                Pattern:    `^/review\s*(\S+)?$`,
-                Permission: "approve",
-                Scope:      "user",
-                Help:       "/review [id] - Review pending result",
-            },
-            handler: s.handleReview,
-        },
-        {
-            name: "tasks",
-            config: router.CommandConfig{
-                Pattern:    `^/tasks(?:\s+(\w+))?$`,
-                Permission: "view",
-                Scope:      "user",
-                Help:       "/tasks [status] - List tasks",
-            },
-            handler: s.handleTasks,
-        },
-        {
-            name: "constitution",
-            config: router.CommandConfig{
-                Pattern:    `^/constitution$`,
-                Permission: "view",
-                Scope:      "user",
-                Help:       "/constitution - Show project constitution",
-            },
-            handler: s.handleConstitution,
-        },
-        {
-            name: "explore",
-            config: router.CommandConfig{
-                Pattern:    `^/explore\s+(.+)$`,
-                Permission: "submit_task",
-                Scope:      "user",
-                Help:       "/explore <topic> - Free exploration mode",
-            },
-            handler: s.handleExplore,
-        },
-        {
-            name: "plan",
-            config: router.CommandConfig{
-                Pattern:    `^/plan\s*(\S+)?$`,
-                Permission: "submit_task",
-                Scope:      "user",
-                Help:       "/plan [proposal_id] - Create plan from proposal",
-            },
-            handler: s.handlePlan,
-        },
-        {
-            name: "graph",
-            config: router.CommandConfig{
-                Pattern:    `^/graph\s+(.+)$`,
-                Permission: "view",
-                Scope:      "user",
-                Help:       "/graph <query> - Query knowledge graph",
-            },
-            handler: s.handleGraph,
-        },
-    }
-    
-    for _, cmd := range commands {
-        if err := registry.Register(cmd.name, cmd.config, cmd.handler); err != nil {
-            return fmt.Errorf("failed to register command %s: %w", cmd.name, err)
-        }
-    }
-    
-    return nil
+**Approach 1: Global Registration (Preferred)**
+
+```go
+// semspec/commands/propose.go
+package commands
+
+import (
+    "context"
+    "github.com/c360/semstreams/agentic"
+    "github.com/c360/semstreams/processor/router"
+)
+
+func init() {
+    router.RegisterCommand("propose", &ProposeCommand{})
 }
 
-// Command handlers
+type ProposeCommand struct {
+    entityStore EntityStore // Set via dependency injection
+}
 
-func (s *Semspec) handlePropose(ctx context.Context, msg router.UserMessage, args []string) (router.UserResponse, error) {
-    if len(args) == 0 {
-        return router.UserResponse{}, fmt.Errorf("usage: /propose <description>")
+func (c *ProposeCommand) Config() router.CommandConfig {
+    return router.CommandConfig{
+        Pattern:    `^/propose\s+(.+)$`,
+        Permission: "submit_task",
+        Scope:      "user",
+        Category:   "semspec",
+        Help:       "/propose <description> - Create new proposal",
     }
-    
+}
+
+func (c *ProposeCommand) Execute(ctx context.Context, cmdCtx *router.CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
+    if len(args) == 0 {
+        return agentic.UserResponse{}, fmt.Errorf("usage: /propose <description>")
+    }
+
     description := args[0]
-    
+
     // Create proposal entity
     proposal := &entity.Proposal{
         ID:          "proposal:" + uuid.New().String()[:8],
@@ -1800,15 +1868,15 @@ func (s *Semspec) handlePropose(ctx context.Context, msg router.UserMessage, arg
         CreatedBy:   msg.UserID,
         CreatedAt:   time.Now(),
     }
-    
-    if err := s.entityStore.Put(ctx, proposal.ID, proposal); err != nil {
-        return router.UserResponse{}, err
+
+    if err := c.entityStore.Put(ctx, proposal.ID, proposal); err != nil {
+        return agentic.UserResponse{}, err
     }
-    
-    // Start exploration loop
-    loopID := "loop_" + proposal.ID[9:]
+
+    // Start exploration loop using CommandContext
+    newLoopID := "loop_" + proposal.ID[9:]
     task := agentic.TaskMessage{
-        LoopID: loopID,
+        LoopID: newLoopID,
         TaskID: uuid.New().String(),
         Role:   "planner",
         Prompt: fmt.Sprintf("Explore this proposal and identify questions:\n\n%s", description),
@@ -1816,46 +1884,80 @@ func (s *Semspec) handlePropose(ctx context.Context, msg router.UserMessage, arg
             "proposal_id": proposal.ID,
         },
     }
-    
-    if err := s.publishTask(ctx, task); err != nil {
-        return router.UserResponse{}, err
+
+    data, _ := json.Marshal(task)
+    if err := cmdCtx.NATSClient.Publish(ctx, "agent.task."+task.TaskID, data); err != nil {
+        return agentic.UserResponse{}, err
     }
-    
-    return router.UserResponse{
+
+    return agentic.UserResponse{
         Type:    "status",
         Content: fmt.Sprintf("Created proposal %s\nStarting exploration...", proposal.ID),
-        LoopID:  loopID,
     }, nil
 }
+```
 
+**Approach 2: Per-Component Registration**
+
+For component-specific commands that need access to component state:
+
+```go
+// semspec/commands.go
+
+func (s *Semspec) RegisterCommands(registry *router.CommandRegistry) error {
+    // Register component-specific command handlers
+    if err := registry.Register("tasks", router.CommandConfig{
+        Pattern:    `^/tasks(?:\s+(\w+))?$`,
+        Permission: "view",
+        Scope:      "user",
+        Category:   "semspec",
+        Help:       "/tasks [status] - List tasks",
+    }, s.handleTasks); err != nil {
+        return err
+    }
+
+    if err := registry.Register("constitution", router.CommandConfig{
+        Pattern:    `^/constitution$`,
+        Permission: "view",
+        Scope:      "user",
+        Category:   "semspec",
+        Help:       "/constitution - Show project constitution",
+    }, s.handleConstitution); err != nil {
+        return err
+    }
+
+    return nil
+}
+
+// Command handlers have access to semspec state
 func (s *Semspec) handleTasks(ctx context.Context, msg router.UserMessage, args []string) (router.UserResponse, error) {
     statusFilter := ""
     if len(args) > 0 {
         statusFilter = args[0]
     }
-    
+
     tasks, err := s.entityStore.Query(ctx, "task:*")
     if err != nil {
         return router.UserResponse{}, err
     }
-    
+
     var lines []string
     for _, t := range tasks {
         task := t.(*entity.Task)
         if statusFilter != "" && task.Status != statusFilter {
             continue
         }
-        lines = append(lines, fmt.Sprintf("%-12s %-10s %s", 
+        lines = append(lines, fmt.Sprintf("%-12s %-10s %s",
             task.ID[5:13], task.Status, truncate(task.Title, 40)))
     }
-    
+
     if len(lines) == 0 {
         return router.UserResponse{
             Type:    "text",
             Content: "No tasks found",
         }, nil
     }
-    
+
     header := "TASK         STATUS     TITLE"
     return router.UserResponse{
         Type:    "text",
@@ -1868,9 +1970,9 @@ func (s *Semspec) handleConstitution(ctx context.Context, msg router.UserMessage
     if err != nil {
         return router.UserResponse{}, fmt.Errorf("no constitution found for project")
     }
-    
+
     c := constitution.(*entity.Constitution)
-    
+
     var sections []string
     if len(c.CodeQuality) > 0 {
         sections = append(sections, "CODE QUALITY\n  • "+strings.Join(c.CodeQuality, "\n  • "))
@@ -1884,62 +1986,59 @@ func (s *Semspec) handleConstitution(ctx context.Context, msg router.UserMessage
     if len(c.Architecture) > 0 {
         sections = append(sections, "ARCHITECTURE\n  • "+strings.Join(c.Architecture, "\n  • "))
     }
-    
+
     return router.UserResponse{
         Type:    "text",
         Content: strings.Join(sections, "\n\n"),
-    }, nil
-}
-
-func (s *Semspec) handleGraph(ctx context.Context, msg router.UserMessage, args []string) (router.UserResponse, error) {
-    if len(args) == 0 {
-        return router.UserResponse{}, fmt.Errorf("usage: /graph <query>")
-    }
-    
-    query := args[0]
-    results, err := s.queryEngine.Query(ctx, query)
-    if err != nil {
-        return router.UserResponse{}, err
-    }
-    
-    if len(results) == 0 {
-        return router.UserResponse{
-            Type:    "text",
-            Content: "No results found",
-        }, nil
-    }
-    
-    var lines []string
-    for _, r := range results {
-        lines = append(lines, fmt.Sprintf("• %s", r.String()))
-    }
-    
-    return router.UserResponse{
-        Type:    "text",
-        Content: fmt.Sprintf("Found %d results:\n%s", len(results), strings.Join(lines, "\n")),
     }, nil
 }
 ```
 
 ### Startup Integration
 
+**With global registration** (commands auto-loaded via init()):
+
 ```go
 // semspec/main.go
 
 func main() {
     // ... setup ...
-    
+
+    // Create router - automatically loads global commands
+    router := router.NewRouter(routerConfig, natsClient)
+
+    // Create Semspec (global commands already registered)
+    semspec := semspec.New(config, natsClient, entityStore, queryEngine)
+
+    // Optional: register component-specific commands
+    if err := semspec.RegisterCommands(router.CommandRegistry()); err != nil {
+        log.Fatal(err)
+    }
+
+    // Start components
+    // ...
+}
+```
+
+**With per-component registration only**:
+
+```go
+// semspec/main.go
+
+func main() {
+    // ... setup ...
+
     // Create router
     router := router.NewRouter(routerConfig, natsClient)
-    
+
     // Create Semspec
     semspec := semspec.New(config, natsClient, entityStore, queryEngine)
-    
+
     // Register Semspec commands with router
     if err := semspec.RegisterCommands(router.CommandRegistry()); err != nil {
         log.Fatal(err)
     }
-    
+
     // Start components
     // ...
 }
@@ -1986,13 +2085,13 @@ type CommandConfig struct {
     Scope       string `json:"scope"`      // user | system
     Category    string `json:"category"`   // built-in | semspec | custom
     Help        string `json:"help"`
-    
+
     compiledPattern *regexp.Regexp
 }
 
 func (r *Router) handleHelp(ctx context.Context, msg UserMessage, args []string) (UserResponse, error) {
     commands := r.registry.All()
-    
+
     // Group by category
     categories := make(map[string][]string)
     for name, config := range commands {
@@ -2000,31 +2099,59 @@ func (r *Router) handleHelp(ctx context.Context, msg UserMessage, args []string)
         if config.Permission != "" && !r.hasPermission(msg.UserID, config.Permission) {
             continue
         }
-        
+
         category := config.Category
         if category == "" {
             category = "built-in"
         }
-        
-        categories[category] = append(categories[category], 
+
+        categories[category] = append(categories[category],
             fmt.Sprintf("  %-18s %s", "/"+name, config.Help))
     }
-    
+
     var sections []string
     for _, cat := range []string{"built-in", "system", "semspec"} {
         if cmds, ok := categories[cat]; ok {
             sort.Strings(cmds)
-            sections = append(sections, 
+            sections = append(sections,
                 strings.ToUpper(cat)+" COMMANDS\n"+strings.Join(cmds, "\n"))
         }
     }
-    
+
     return UserResponse{
         Type:    "text",
         Content: strings.Join(sections, "\n\n"),
     }, nil
 }
 ```
+
+### Command Registration Summary
+
+**When to use global registration**:
+
+- Reusable commands that work across projects
+- Commands that don't need component-specific state
+- Commands from external packages or libraries
+- Following the SemStreams pattern (matches tool and component registration)
+
+**When to use per-component registration**:
+
+- Commands that need access to component instance state
+- Commands tightly coupled to a specific component lifecycle
+- Commands that require dependency injection at component creation time
+
+**Key differences**:
+
+| Aspect | Global (init) | Per-Component |
+|--------|--------------|---------------|
+| Registration timing | Package init | Component creation |
+| State access | Via CommandContext | Direct component access |
+| Reusability | High | Component-specific |
+| Pattern | `CommandExecutor` interface | `CommandHandler` function |
+| Dependencies | Via CommandContext | Via component closure |
+
+Both approaches can coexist in the same application. Global commands are loaded first, then per-component
+commands are added.
 
 | Subject Pattern | Publisher | Subscriber | Purpose |
 |-----------------|-----------|------------|---------|

@@ -349,6 +349,10 @@ toolsComp.RegisterToolExecutor(&CustomExecutor{})
 
 The global registration pattern matches how components and rules are registered in SemStreams.
 
+**Note**: The router component uses the same `init()` pattern for command registration. See the
+[Input Router Specification](../architecture/specs/semstreams-input-router-spec.md#part-6-command-registry)
+for details on registering custom commands.
+
 **Listing Available Tools**:
 
 ```go

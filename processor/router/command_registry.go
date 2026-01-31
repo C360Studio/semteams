@@ -5,10 +5,12 @@ package router
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"sync"
 
 	"github.com/c360/semstreams/agentic"
+	"github.com/c360/semstreams/natsclient"
 )
 
 // CommandConfig defines a command's configuration
@@ -21,6 +23,20 @@ type CommandConfig struct {
 
 // CommandHandler is a function that handles a command
 type CommandHandler func(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error)
+
+// CommandContext provides services to command executors
+type CommandContext struct {
+	NATSClient    *natsclient.Client
+	LoopTracker   *LoopTracker
+	Logger        *slog.Logger
+	HasPermission func(userID, permission string) bool
+}
+
+// CommandExecutor is the interface for command implementations
+type CommandExecutor interface {
+	Execute(ctx context.Context, cmdCtx *CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error)
+	Config() CommandConfig
+}
 
 // RegisteredCommand contains a command's config and handler
 type RegisteredCommand struct {
