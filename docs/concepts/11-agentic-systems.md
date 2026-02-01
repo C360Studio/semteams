@@ -96,10 +96,27 @@ Agentic systems use a state machine to track progress through well-defined phase
       └───────────────┴───────────────┴────────────────┘               │
                    (fluid backward transitions)                         │
                                                                         ▼
-                                                              ┌─────────────────┐
-                                                              │complete │ failed│
-                                                              └─────────────────┘
+                                                    ┌───────────────────────────┐
+                                                    │complete│failed│cancelled  │
+                                                    ├───────────────────────────┤
+                                                    │paused │ awaiting_approval │
+                                                    └───────────────────────────┘
 ```
+
+**States:**
+
+| State | Terminal | Description |
+|-------|----------|-------------|
+| `exploring` | No | Initial state, gathering information |
+| `planning` | No | Developing approach |
+| `architecting` | No | Designing solution |
+| `executing` | No | Implementing solution |
+| `reviewing` | No | Validating results |
+| `complete` | Yes | Successfully finished |
+| `failed` | Yes | Failed due to error or max iterations |
+| `cancelled` | Yes | Cancelled by user signal |
+| `paused` | No | Paused by user signal, can resume |
+| `awaiting_approval` | No | Waiting for user approval |
 
 **Why states matter:**
 
@@ -109,7 +126,28 @@ Agentic systems use a state machine to track progress through well-defined phase
 - **Debugging**: Understand where things went wrong
 
 SemStreams uses **fluid states** — the agent can move backward (e.g., from executing back to exploring) when it
-needs to rethink. Only terminal states (complete, failed) are final.
+needs to rethink. Only terminal states (complete, failed, cancelled) are final.
+
+### Signal Handling
+
+Users can send control signals to affect running loops:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                     Signal Types                             │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  cancel  ──▶  Stop execution immediately (→ cancelled)      │
+│  pause   ──▶  Pause at next checkpoint (→ paused)           │
+│  resume  ──▶  Continue paused loop (→ previous state)       │
+│  approve ──▶  Approve pending result (→ complete)           │
+│  reject  ──▶  Reject with reason (→ failed)                 │
+│  retry   ──▶  Retry failed loop (→ exploring)               │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Signals are published to `agent.signal.{loop_id}` and processed by the loop orchestrator.
 
 ### Tool Abstraction
 
@@ -143,6 +181,35 @@ name, and the arguments matching the parameter schema.
 
 **Tool Result** is the response after execution. It references the call ID, contains the output content (file
 contents, query results, etc.), and an error field if something went wrong.
+
+### Context Management
+
+Long-running loops can exceed model token limits. The context manager handles this automatically:
+
+```text
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Context Regions (by priority)                     │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  5. system_prompt      Never evicted                                 │
+│  4. compacted_history  Summarized old conversation                   │
+│  3. hydrated_context   Retrieved from knowledge graph                │
+│  2. recent_history     Recent messages                               │
+│  1. tool_results       Tool outputs (GC'd by age)                    │
+│                                                                      │
+│  Lower priority = evicted first when approaching token limit         │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+When context approaches the model's token limit:
+
+1. **Compaction** summarizes older messages into a compressed form
+2. **GC** removes tool results older than N iterations
+3. **Hydration** recovers relevant context from the knowledge graph
+
+Context events are published to `agent.context.compaction.*` for observability and integration with
+agentic-memory.
 
 ### Trajectory
 
@@ -212,6 +279,9 @@ This separation enables:
 - Clearer responsibility boundaries
 - Independent cost and time tracking
 
+The handoff is managed via the `COMPLETE_{loopID}` KV key pattern, which the rules engine can watch to
+spawn the editor when the architect completes.
+
 ### Parallel Tool Execution
 
 When an agent needs multiple independent pieces of information, tools can execute concurrently:
@@ -260,6 +330,7 @@ For very complex tasks, agents can spawn sub-agents:
 ```
 
 Each sub-agent has its own loop, state, and trajectory — enabling divide-and-conquer for complex problems.
+Parent-child relationships are tracked via the `parent_loop_id` field.
 
 ## When to Use Agentic Systems
 
@@ -300,6 +371,7 @@ The agentic-loop manages its own state machine internally. State transitions hap
 │                                                                      │
 │   All Tools Complete ─────────────▶  Increment iteration, continue  │
 │   Max Iterations     ─────────────▶  Mark failed                    │
+│   User Signal        ─────────────▶  Handle cancel/pause/resume     │
 │                                                                      │
 │   No rules required. No external state machine driver.              │
 │                                                                      │
@@ -312,17 +384,39 @@ Agent loops are stored in NATS KV (`AGENT_LOOPS`) as queryable entities:
 
 ```text
 ┌─────────────────────────────────────────────┐
-│ Entity: agent_loop.loop_123                 │
+│ Key: loop_123                               │
 ├─────────────────────────────────────────────┤
-│ agent.loop.state      = "executing"         │
-│ agent.loop.iterations = 3                   │
-│ agent.loop.role       = "general"           │
-│ agent.loop.model      = "gpt-4"             │
-│ agent.loop.started_at = 1705312200          │
+│ id             = "loop_123"                 │
+│ task_id        = "task_456"                 │
+│ state          = "executing"                │
+│ role           = "general"                  │
+│ model          = "gpt-4"                    │
+│ iterations     = 3                          │
+│ max_iterations = 20                         │
+│ user_id        = "user_789"                 │
+│ channel_type   = "cli"                      │
+│ parent_loop_id = ""                         │
 └─────────────────────────────────────────────┘
 ```
 
-This enables querying agent state through the graph infrastructure, but is not required for agent operation.
+On completion, an enriched state is also written to `COMPLETE_{loopID}`:
+
+```text
+┌─────────────────────────────────────────────┐
+│ Key: COMPLETE_loop_123                      │
+├─────────────────────────────────────────────┤
+│ loop_id     = "loop_123"                    │
+│ task_id     = "task_456"                    │
+│ outcome     = "success"                     │
+│ role        = "architect"                   │
+│ result      = "Designed auth system..."     │
+│ model       = "gpt-4"                       │
+│ iterations  = 3                             │
+│ parent_loop = ""                            │
+└─────────────────────────────────────────────┘
+```
+
+This `COMPLETE_*` pattern enables rules-based orchestration without tight coupling.
 
 ### Optional: Trajectory Storage
 
@@ -330,13 +424,16 @@ Trajectories are stored in NATS KV (`AGENT_TRAJECTORIES`) on loop completion:
 
 ```text
 ┌─────────────────────────────────────────────┐
-│ Entity: trajectory.loop_123                 │
+│ Key: loop_123                               │
 ├─────────────────────────────────────────────┤
-│ agent.trajectory.tokens_in  = 1500          │
-│ agent.trajectory.tokens_out = 800           │
-│ agent.trajectory.duration   = 105000 (ms)   │
-│ agent.trajectory.steps      = 5             │
-│ agent.trajectory.outcome    = "complete"    │
+│ loop_id        = "loop_123"                 │
+│ start_time     = "2024-01-15T10:30:00Z"     │
+│ end_time       = "2024-01-15T10:31:45Z"     │
+│ outcome        = "complete"                 │
+│ total_tokens_in  = 1500                     │
+│ total_tokens_out = 800                      │
+│ duration       = 105000 (ms)                │
+│ steps          = [...]                      │
 └─────────────────────────────────────────────┘
 ```
 
@@ -355,7 +452,7 @@ The rule processor can observe and react to agent activity, but **does not drive
 │   └──────┬───────┘                      └──────┬───────┘            │
 │          │                                     │                     │
 │          │  Can observe ──────────────────────▶│                     │
-│          │  (watch AGENT_LOOPS KV)             │                     │
+│          │  (watch COMPLETE_* keys in KV)      │                     │
 │          │                                     │                     │
 │          │  Can trigger ──────────────────────▶│                     │
 │          │  (publish to agent.task.*)          │                     │
@@ -367,7 +464,7 @@ The rule processor can observe and react to agent activity, but **does not drive
 ```
 
 **Rules can observe agents:**
-- Watch `AGENT_LOOPS` KV bucket for state changes
+- Watch `COMPLETE_*` keys in KV bucket for completion
 - Fire alerts when iterations exceed thresholds
 - Track agent costs and durations
 - Log completions for compliance
@@ -375,12 +472,30 @@ The rule processor can observe and react to agent activity, but **does not drive
 **Rules can trigger agents:**
 - Use the `publish` action to send tasks to `agent.task.*`
 - Spawn agents based on graph events (e.g., new entity triggers investigation)
-- Chain agents by triggering follow-up tasks on completion
+- Chain agents by triggering follow-up tasks on completion (architect → editor)
 
 **Rules cannot control agents:**
 - No mechanism for rules to force state transitions
 - Agents are autonomous once started
 - This is intentional — agents should reason, not be puppeted
+
+### Optional: agentic-memory Integration
+
+The agentic-memory component provides graph-backed persistent memory:
+
+```text
+┌────────────────┐     ┌─────────────────┐     ┌──────────────┐
+│  agentic-loop  │────▶│ agentic-memory  │────▶│   Graph      │
+│                │     │                 │     │  Processor   │
+│                │◀────│                 │     │              │
+└────────────────┘     └─────────────────┘     └──────────────┘
+  context.compaction.*   graph.mutation.*
+                         context.injected.*
+```
+
+- **Fact extraction**: Before context compaction, extract key facts to the graph
+- **Context hydration**: Recover relevant context from the graph after compaction
+- **Pre-task preparation**: Inject relevant prior knowledge before a task starts
 
 ### Optional: Graph Query as Tool
 
@@ -424,13 +539,19 @@ or reporting what it couldn't do.
 
 ## SemStreams Agentic Components
 
-SemStreams provides three components for building agentic systems:
+SemStreams provides five components for building agentic systems:
 
 ```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      Component Architecture                          │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                      │
+│   ┌──────────────────┐                                              │
+│   │ agentic-dispatch │  User message routing, commands, permissions │
+│   │                  │  Bridges input channels to agentic system    │
+│   └────────┬─────────┘                                              │
+│            │                                                         │
+│            ▼                                                         │
 │   ┌─────────────────┐                                               │
 │   │  agentic-loop   │  State machine, orchestration, trajectory     │
 │   │                 │  Coordinates the entire agent lifecycle       │
@@ -446,6 +567,12 @@ SemStreams provides three components for building agentic systems:
 │ │ (OpenAI-   │ │ Registry     │                                     │
 │ │ compatible)│ │ Allowlist    │                                     │
 │ └────────────┘ └──────────────┘                                     │
+│            │                                                         │
+│            ▼                                                         │
+│   ┌──────────────────┐                                              │
+│   │ agentic-memory   │  Graph-backed persistent memory              │
+│   │                  │  Context hydration, fact extraction          │
+│   └──────────────────┘                                              │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -453,26 +580,41 @@ SemStreams provides three components for building agentic systems:
 These communicate over NATS JetStream for reliable, ordered message delivery:
 
 ```text
-External Task
+External Input (CLI/Slack/Discord/Web)
       │
       ▼
-agent.task.* ────▶ agentic-loop ────▶ agent.request.*
-                        │                    │
-                        │                    ▼
-                        │              agentic-model ◀──▶ LLM
-                        │                    │
-                        │◀─── agent.response.*
-                        │
-                        ├────▶ tool.execute.*
-                        │            │
-                        │            ▼
-                        │      agentic-tools ──▶ Executors
-                        │            │
-                        │◀─── tool.result.*
-                        │
-                        ▼
-                  agent.complete.*
+user.message.* ────▶ agentic-dispatch ────▶ agent.task.*
+                           │                     │
+                           │                     ▼
+                           │               agentic-loop ─────▶ agent.request.*
+                           │                     │                   │
+                           │                     │                   ▼
+                           │                     │             agentic-model ◀──▶ LLM
+                           │                     │                   │
+                           │                     │◀──── agent.response.*
+                           │                     │
+                           │                     ├─────▶ tool.execute.*
+                           │                     │              │
+                           │                     │              ▼
+                           │                     │        agentic-tools ──▶ Executors
+                           │                     │              │
+                           │                     │◀──── tool.result.*
+                           │                     │
+                           │                     ├─────▶ agent.context.compaction.*
+                           │                     │              │
+                           │                     │              ▼
+                           │                     │       agentic-memory ──▶ Graph
+                           │                     │              │
+                           │                     │◀──── agent.context.injected.*
+                           │                     │
+                           │◀──── agent.complete.*
+                           │
+                           ▼
+                    user.response.*
 ```
 
 For implementation details, configuration options, and production guidance, see the
 [Advanced: Agentic Components](../advanced/08-agentic-components.md) guide.
+
+For orchestration patterns (when to use rules vs. workflows), see
+[Orchestration Layers](./12-orchestration-layers.md).

@@ -19,7 +19,7 @@ The agentic-dispatch component is the central hub for user interaction with the 
   "default_role": "general",
   "default_model": "qwen2.5-coder:32b",
   "auto_continue": true,
-  "stream_name": "AGENT",
+  "stream_name": "USER",
   "permissions": {
     "view": ["*"],
     "submit_task": ["*"],
@@ -29,6 +29,26 @@ The agentic-dispatch component is the central hub for user interaction with the 
   }
 }
 ```
+
+### Configuration Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `default_role` | string | "general" | Default role for tasks |
+| `default_model` | string | "" | Default model for tasks |
+| `auto_continue` | bool | true | Auto-continue conversations |
+| `stream_name` | string | "USER" | JetStream stream for user messages |
+| `permissions` | object | (see above) | Permission configuration |
+
+### JetStream Integration
+
+All messaging uses JetStream for durability:
+
+- User messages consumed from USER stream
+- Agent tasks published to AGENT stream
+- Completion events consumed from AGENT stream
+
+Consumer naming: `agentic-dispatch-{port-name}`
 
 ## Built-in Commands
 

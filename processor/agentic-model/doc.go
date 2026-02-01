@@ -81,8 +81,44 @@
 // When processing an AgentRequest, the processor resolves the endpoint by:
 //
 //  1. Looking for an endpoint matching the request's Model field exactly
-//  2. Falling back to a "default" endpoint if configured
-//  3. Returning an error if no matching endpoint is found
+//  2. Looking for a model alias matching the Model field, then resolving to target
+//  3. Falling back to a "default" endpoint if configured
+//  4. Returning an error if no matching endpoint is found
+//
+// # Model Aliases
+//
+// Model aliases provide semantic names for endpoints, allowing other components
+// to reference models by purpose rather than specific endpoint name:
+//
+//	config := agenticmodel.Config{
+//	    Endpoints: map[string]agenticmodel.Endpoint{
+//	        "gpt-4": {URL: "...", Model: "gpt-4"},
+//	        "gpt-3.5-turbo": {URL: "...", Model: "gpt-3.5-turbo"},
+//	    },
+//	    ModelAliases: map[string]string{
+//	        "reasoning": "gpt-4",
+//	        "coding":    "gpt-4",
+//	        "fast":      "gpt-3.5-turbo",
+//	    },
+//	}
+//
+// Alias validation rules:
+//
+//   - Target must exist in Endpoints
+//   - No alias chaining (alias cannot point to another alias)
+//   - Empty target is not allowed
+//
+// Usage in requests:
+//
+//	// Using endpoint name directly
+//	request := agentic.AgentRequest{Model: "gpt-4", ...}
+//
+//	// Using alias
+//	request := agentic.AgentRequest{Model: "fast", ...}  // Resolves to gpt-3.5-turbo
+//
+// This allows agentic-loop, agentic-memory, and workflow components to reference
+// models semantically (e.g., "fast" for summarization) without hardcoding
+// specific model names.
 //
 // This allows routing different requests to different models/providers:
 //

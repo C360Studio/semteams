@@ -4,7 +4,7 @@ Loop orchestrator component for the agentic processing system.
 
 ## Overview
 
-The `agentic-loop` component orchestrates autonomous agent execution by managing the lifecycle of agentic loops. It coordinates communication between the model processor (LLM calls) and tools processor (tool execution), tracks state through a 7-state machine, and captures complete execution trajectories for observability.
+The `agentic-loop` component orchestrates autonomous agent execution by managing the lifecycle of agentic loops. It coordinates communication between the model processor (LLM calls) and tools processor (tool execution), tracks state through a 10-state machine, supports signal handling for user control, manages context memory with automatic compaction, and captures complete execution trajectories for observability.
 
 ## Architecture
 
@@ -16,7 +16,9 @@ The `agentic-loop` component orchestrates autonomous agent execution by managing
                          │                 │
     tool.result.>   ────►│                 │────► tool.execute.*
                          │                 │
-                         │                 │────► agent.complete.*
+    agent.signal.*  ────►│                 │────► agent.complete.*
+                         │                 │
+                         │                 │────► agent.context.compaction.*
                          └────────┬────────┘
                                   │
                          ┌────────┴────────┐
@@ -28,11 +30,14 @@ The `agentic-loop` component orchestrates autonomous agent execution by managing
 
 ## Features
 
-- **State Machine**: 7-state lifecycle (exploring → complete/failed)
+- **State Machine**: 10-state lifecycle with signal-related states
+- **Signal Handling**: Cancel, pause, resume, and approval signals
+- **Context Management**: Automatic compaction and GC for long-running loops
 - **Tool Coordination**: Tracks pending tool calls, aggregates results
 - **Trajectory Capture**: Records complete execution paths for debugging
 - **Iteration Guards**: Configurable max iterations to prevent runaway loops
 - **Architect/Editor Split**: Automatic spawning of editor from architect
+- **Rules Integration**: Enriched completion events for rules-based orchestration
 
 ## Configuration
 
@@ -47,16 +52,32 @@ The `agentic-loop` component orchestrates autonomous agent execution by managing
     "stream_name": "AGENT",
     "loops_bucket": "AGENT_LOOPS",
     "trajectories_bucket": "AGENT_TRAJECTORIES",
+    "context": {
+      "enabled": true,
+      "compact_threshold": 0.60,
+      "tool_result_max_age": 3,
+      "headroom_tokens": 6400,
+      "summarization_model": "fast",
+      "model_limits": {
+        "gpt-4o": 128000,
+        "gpt-4o-mini": 128000,
+        "claude-sonnet": 200000,
+        "claude-opus": 200000,
+        "default": 128000
+      }
+    },
     "ports": {
       "inputs": [
         {"name": "agent.task", "type": "jetstream", "subject": "agent.task.*", "stream_name": "AGENT"},
         {"name": "agent.response", "type": "jetstream", "subject": "agent.response.>", "stream_name": "AGENT"},
-        {"name": "tool.result", "type": "jetstream", "subject": "tool.result.>", "stream_name": "AGENT"}
+        {"name": "tool.result", "type": "jetstream", "subject": "tool.result.>", "stream_name": "AGENT"},
+        {"name": "agent.signal", "type": "jetstream", "subject": "agent.signal.*", "stream_name": "AGENT"}
       ],
       "outputs": [
         {"name": "agent.request", "type": "jetstream", "subject": "agent.request.*", "stream_name": "AGENT"},
         {"name": "tool.execute", "type": "jetstream", "subject": "tool.execute.*", "stream_name": "AGENT"},
-        {"name": "agent.complete", "type": "jetstream", "subject": "agent.complete.*", "stream_name": "AGENT"}
+        {"name": "agent.complete", "type": "jetstream", "subject": "agent.complete.*", "stream_name": "AGENT"},
+        {"name": "agent.context.compaction", "type": "jetstream", "subject": "agent.context.compaction.*", "stream_name": "AGENT"}
       ]
     }
   }
@@ -73,7 +94,19 @@ The `agentic-loop` component orchestrates autonomous agent execution by managing
 | `consumer_name_suffix` | string | "" | Suffix for consumer names (for testing) |
 | `loops_bucket` | string | "AGENT_LOOPS" | KV bucket for loop state |
 | `trajectories_bucket` | string | "AGENT_TRAJECTORIES" | KV bucket for trajectories |
+| `context` | object | (defaults) | Context management configuration |
 | `ports` | object | (defaults) | Port configuration |
+
+### Context Configuration
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `enabled` | bool | true | Enable context memory management |
+| `compact_threshold` | float | 0.60 | Trigger compaction at this utilization (0.01-1.0) |
+| `tool_result_max_age` | int | 3 | Evict tool results older than N iterations |
+| `headroom_tokens` | int | 6400 | Reserve tokens for new content |
+| `summarization_model` | string | "fast" | Model alias for summarization |
+| `model_limits` | map | (defaults) | Token limits per model name |
 
 ## Ports
 
@@ -84,6 +117,7 @@ The `agentic-loop` component orchestrates autonomous agent execution by managing
 | agent.task | jetstream | agent.task.* | Task requests from external systems |
 | agent.response | jetstream | agent.response.> | Model responses from agentic-model |
 | tool.result | jetstream | tool.result.> | Tool results from agentic-tools |
+| agent.signal | jetstream | agent.signal.* | Control signals (cancel, pause, resume) |
 
 ### Outputs
 
@@ -92,22 +126,118 @@ The `agentic-loop` component orchestrates autonomous agent execution by managing
 | agent.request | jetstream | agent.request.* | Model requests to agentic-model |
 | tool.execute | jetstream | tool.execute.* | Tool calls to agentic-tools |
 | agent.complete | jetstream | agent.complete.* | Loop completion events |
+| agent.context.compaction | jetstream | agent.context.compaction.* | Context compaction events |
 
 ### KV Write
 
-| Name | Bucket | Description |
-|------|--------|-------------|
-| loops | AGENT_LOOPS | Loop entity state |
-| trajectories | AGENT_TRAJECTORIES | Execution trajectories |
+| Name | Bucket | Key Pattern | Description |
+|------|--------|-------------|-------------|
+| loops | AGENT_LOOPS | `{loop_id}` | Loop entity state |
+| loops | AGENT_LOOPS | `COMPLETE_{loop_id}` | Completion state for rules engine |
+| trajectories | AGENT_TRAJECTORIES | `{loop_id}` | Execution trajectories |
 
 ## State Machine
 
 ```
 exploring → planning → architecting → executing → reviewing → complete
-                                                            ↘ failed
+     ↑          ↑            ↑             ↑           ↑        ↘ failed
+     └──────────┴────────────┴─────────────┴───────────┘         ↘ cancelled
+                                                                  ↘ paused
+                                                                   ↘ awaiting_approval
 ```
 
+### States
+
+| State | Terminal | Description |
+|-------|----------|-------------|
+| `exploring` | No | Initial state, gathering information |
+| `planning` | No | Developing approach |
+| `architecting` | No | Designing solution |
+| `executing` | No | Implementing solution |
+| `reviewing` | No | Validating results |
+| `complete` | Yes | Successfully finished |
+| `failed` | Yes | Failed due to error or max iterations |
+| `cancelled` | Yes | Cancelled by user signal |
+| `paused` | No | Paused by user signal, can resume |
+| `awaiting_approval` | No | Waiting for user approval |
+
 States are fluid checkpoints - loops can transition backward except from terminal states.
+
+## Signal Handling
+
+The loop accepts control signals via the `agent.signal.*` input port.
+
+### Signal Message Format
+
+```json
+{
+  "signal_id": "sig_abc123",
+  "type": "cancel",
+  "loop_id": "loop_456",
+  "user_id": "user_789",
+  "channel_type": "cli",
+  "channel_id": "session_001",
+  "payload": null,
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+```
+
+### Signal Types
+
+| Type | Description | Resulting State |
+|------|-------------|-----------------|
+| `cancel` | Stop execution immediately | `cancelled` |
+| `pause` | Pause at next checkpoint | `paused` |
+| `resume` | Continue paused loop | (previous state) |
+| `approve` | Approve pending result | `complete` |
+| `reject` | Reject with optional reason | `failed` |
+| `feedback` | Add feedback without decision | (no change) |
+| `retry` | Retry failed loop | `exploring` |
+
+## Context Management
+
+The loop includes automatic context memory management to handle long-running conversations.
+
+### Context Regions
+
+Messages are organized into priority regions (lower priority evicted first):
+
+1. **tool_results** (priority 1) - Tool execution results, GC'd by age
+2. **recent_history** (priority 2) - Recent conversation messages
+3. **hydrated_context** (priority 3) - Retrieved context from memory
+4. **compacted_history** (priority 4) - Summarized old conversation
+5. **system_prompt** (priority 5) - Never evicted
+
+### Context Events
+
+Published to `agent.context.compaction.*`:
+
+```json
+{
+  "type": "compaction_starting",
+  "loop_id": "loop_123",
+  "iteration": 5,
+  "utilization": 0.65
+}
+```
+
+```json
+{
+  "type": "compaction_complete",
+  "loop_id": "loop_123",
+  "iteration": 5,
+  "tokens_saved": 2500,
+  "summary": "Discussed authentication implementation..."
+}
+```
+
+```json
+{
+  "type": "gc_complete",
+  "loop_id": "loop_123",
+  "iteration": 6
+}
+```
 
 ## KV Storage
 
@@ -123,7 +253,35 @@ Stores `LoopEntity` as JSON:
   "role": "general",
   "model": "gpt-4",
   "iterations": 3,
-  "max_iterations": 20
+  "max_iterations": 20,
+  "started_at": "2024-01-15T10:30:00Z",
+  "timeout_at": "2024-01-15T10:32:00Z",
+  "parent_loop_id": "",
+  "pause_requested": false,
+  "pause_requested_by": "",
+  "state_before_pause": "",
+  "cancelled_by": "",
+  "cancelled_at": null,
+  "user_id": "user_789",
+  "channel_type": "cli",
+  "channel_id": "session_001"
+}
+```
+
+### COMPLETE_{loopID}
+
+Written when a loop completes, for rules engine consumption:
+
+```json
+{
+  "loop_id": "loop_123",
+  "task_id": "task_456",
+  "outcome": "success",
+  "role": "architect",
+  "result": "Designed authentication system with JWT...",
+  "model": "gpt-4",
+  "iterations": 3,
+  "parent_loop": ""
 }
 ```
 
@@ -164,9 +322,41 @@ Stores `Trajectory` as JSON:
 {
   "loop_id": "loop_123",
   "task_id": "task_456",
-  "outcome": "success"
+  "outcome": "success",
+  "role": "architect",
+  "result": "Designed authentication system...",
+  "model": "gpt-4",
+  "iterations": 3,
+  "parent_loop": ""
 }
 ```
+
+## Rules/Workflow Integration
+
+The loop integrates with the rules engine for orchestration:
+
+1. On completion, writes `COMPLETE_{loopID}` key to KV
+2. Rules engine watches `COMPLETE_*` keys
+3. Rules can trigger follow-up actions (e.g., spawn editor when architect completes)
+
+### Architect/Editor Pattern
+
+```
+1. Task arrives with role="architect"
+2. Architect loop executes and produces a plan
+3. On completion, COMPLETE_{loopID} written with role="architect"
+4. Rule matches COMPLETE_* where role="architect"
+5. Rule spawns new loop with role="editor", parent_loop={loopID}
+6. Editor receives architect's output as context
+```
+
+## agentic-memory Integration
+
+The loop publishes context events that agentic-memory consumes:
+
+- `compaction_starting` - agentic-memory extracts facts before compaction
+- `compaction_complete` - agentic-memory injects recovered context
+- `gc_complete` - Logged for observability
 
 ## Troubleshooting
 
@@ -188,8 +378,23 @@ Stores `Trajectory` as JSON:
 - Check tool executor is registered
 - Ensure tool name matches exactly
 
+### Context compaction issues
+
+- Check `compact_threshold` is appropriate for workload
+- Verify `summarization_model` alias exists in agentic-model
+- Review `model_limits` for your model
+
+### Signal not processed
+
+- Verify signal published to correct subject: `agent.signal.{loop_id}`
+- Check loop is not in terminal state (complete/failed/cancelled)
+- Ensure signal message format is correct
+
 ## Related Components
 
 - [agentic-model](../agentic-model/) - LLM endpoint integration
 - [agentic-tools](../agentic-tools/) - Tool execution
+- [agentic-memory](../agentic-memory/) - Graph-backed agent memory
+- [agentic-dispatch](../agentic-dispatch/) - User message routing
+- [workflow](../workflow/) - Multi-step orchestration
 - [agentic types](../../agentic/) - Shared type definitions

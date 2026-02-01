@@ -332,4 +332,12 @@
 //   - agentic: Shared types (ToolCall, ToolResult, ToolDefinition)
 //   - processor/agentic-loop: Loop orchestration
 //   - processor/agentic-model: LLM endpoint integration
+//
+// # JetStream Integration
+//
+// All messaging uses JetStream for durability. Tool call subjects require
+// the AGENT stream to exist with subjects matching tool.execute.> and
+// tool.result.>.
+//
+// Consumer naming follows the pattern: agentic-tools-{subject-pattern}
 package agentictools

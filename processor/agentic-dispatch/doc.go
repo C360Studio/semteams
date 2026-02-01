@@ -88,4 +88,17 @@
 //   - agent.task.{task_id} - Task dispatch to agentic-loop
 //   - agent.signal.{loop_id} - Signals to agentic-loop
 //   - agent.complete.{loop_id} - Completion events from agentic-loop
+//
+// # JetStream Integration
+//
+// All messaging uses JetStream for durability:
+//
+//   - User messages consumed from USER stream
+//   - Agent tasks published to AGENT stream
+//   - Completion events consumed from AGENT stream
+//
+// Consumer naming follows the pattern: agentic-dispatch-{port-name}
+//
+// Default stream is USER (not AGENT) since this component bridges user
+// input to the agentic system.
 package agenticdispatch

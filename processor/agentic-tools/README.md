@@ -58,6 +58,12 @@ The `agentic-tools` component executes tool calls from the agentic loop orchestr
 | `consumer_name_suffix` | string | "" | Suffix for consumer names (for testing) |
 | `ports` | object | (defaults) | Port configuration |
 
+### JetStream Integration
+
+All messaging uses JetStream for durability. Tool call subjects require the AGENT stream to exist with subjects matching `tool.execute.>` and `tool.result.>`.
+
+Consumer naming: `agentic-tools-{subject-pattern}`
+
 ## Ports
 
 ### Inputs

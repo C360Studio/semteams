@@ -83,6 +83,37 @@ The `agentic-model` component routes agent requests to OpenAI-compatible LLM end
 | `model` | string | yes | Model name for API requests |
 | `api_key_env` | string | no | Environment variable for API key |
 
+### Model Aliases
+
+Model aliases provide semantic names for endpoints, allowing other components to reference models by purpose rather than specific endpoint:
+
+```json
+{
+  "model_aliases": {
+    "reasoning": "gpt-4",
+    "coding": "gpt-4-turbo",
+    "fast": "gpt-3.5-turbo",
+    "summarization": "gpt-3.5-turbo"
+  }
+}
+```
+
+Alias rules:
+
+- Target must exist in `endpoints`
+- No alias chaining (alias cannot point to another alias)
+- Empty target is not allowed
+
+Requests can use either endpoint names or aliases:
+
+```json
+{
+  "model": "fast"
+}
+```
+
+Resolves to the `gpt-3.5-turbo` endpoint.
+
 ## Ports
 
 ### Inputs
@@ -102,8 +133,9 @@ The `agentic-model` component routes agent requests to OpenAI-compatible LLM end
 Requests are routed to endpoints by model name:
 
 1. Exact match: Request `model: "gpt-4"` routes to `endpoints.gpt-4`
-2. Default fallback: If no match, routes to `endpoints.default` (if configured)
-3. Error: If no match and no default, returns error response
+2. Alias match: Request `model: "fast"` routes to `model_aliases.fast` target
+3. Default fallback: If no match, routes to `endpoints.default` (if configured)
+4. Error: If no match and no default, returns error response
 
 ## Compatible Providers
 
