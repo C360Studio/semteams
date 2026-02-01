@@ -1,0 +1,32 @@
+{
+  "id": "architect_complete_spawn_editor",
+  "type": "expression",
+  "name": "Architect Completion - Spawn Editor",
+  "description": "When architect completes successfully, spawn editor to implement the architecture specification",
+  "enabled": true,
+  "entity": {
+    "pattern": "agent.complete.>"
+  },
+  "conditions": [
+    {
+      "field": "role",
+      "operator": "eq",
+      "value": "architect"
+    },
+    {
+      "field": "outcome",
+      "operator": "eq",
+      "value": "success"
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "subject": "agent.task.$entity.task_id.editor",
+      "role": "editor",
+      "model": "$entity.model",
+      "prompt": "Implement the following architecture specification:\n\n$entity.result"
+    }
+  ]
+}
