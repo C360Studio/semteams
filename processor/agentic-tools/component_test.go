@@ -53,13 +53,16 @@ func TestComponent_InputPorts(t *testing.T) {
 		t.Error("InputPort should be required")
 	}
 
-	// Verify NATS config
-	natsConfig, ok := port.Config.(component.NATSPort)
+	// Verify JetStream config (component uses JetStream for durable messaging)
+	jsConfig, ok := port.Config.(component.JetStreamPort)
 	if !ok {
-		t.Fatalf("InputPort config should be NATSPort, got %T", port.Config)
+		t.Fatalf("InputPort config should be JetStreamPort, got %T", port.Config)
 	}
-	if natsConfig.Subject != "tool.execute.>" {
-		t.Errorf("InputPort subject = %s, want tool.execute.>", natsConfig.Subject)
+	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "tool.execute.>" {
+		t.Errorf("InputPort subjects = %v, want [tool.execute.>]", jsConfig.Subjects)
+	}
+	if jsConfig.StreamName != "AGENT" {
+		t.Errorf("InputPort stream = %s, want AGENT", jsConfig.StreamName)
 	}
 }
 
@@ -80,13 +83,16 @@ func TestComponent_OutputPorts(t *testing.T) {
 		t.Errorf("OutputPort direction = %v, want DirectionOutput", port.Direction)
 	}
 
-	// Verify NATS config
-	natsConfig, ok := port.Config.(component.NATSPort)
+	// Verify JetStream config (component uses JetStream for durable messaging)
+	jsConfig, ok := port.Config.(component.JetStreamPort)
 	if !ok {
-		t.Fatalf("OutputPort config should be NATSPort, got %T", port.Config)
+		t.Fatalf("OutputPort config should be JetStreamPort, got %T", port.Config)
 	}
-	if natsConfig.Subject != "tool.result.*" {
-		t.Errorf("OutputPort subject = %s, want tool.result.*", natsConfig.Subject)
+	if len(jsConfig.Subjects) != 1 || jsConfig.Subjects[0] != "tool.result.*" {
+		t.Errorf("OutputPort subjects = %v, want [tool.result.*]", jsConfig.Subjects)
+	}
+	if jsConfig.StreamName != "AGENT" {
+		t.Errorf("OutputPort stream = %s, want AGENT", jsConfig.StreamName)
 	}
 }
 

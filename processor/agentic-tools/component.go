@@ -515,15 +515,24 @@ func (c *Component) InputPorts() []component.Port {
 
 	ports := make([]component.Port, len(c.config.Ports.Inputs))
 	for i, portDef := range c.config.Ports.Inputs {
-		ports[i] = component.Port{
+		port := component.Port{
 			Name:        portDef.Name,
 			Direction:   component.DirectionInput,
 			Required:    portDef.Required,
 			Description: portDef.Description,
-			Config: component.NATSPort{
-				Subject: portDef.Subject,
-			},
 		}
+		// Use JetStreamPort for jetstream type ports, NATSPort for others (e.g., request/reply)
+		if portDef.Type == "jetstream" {
+			port.Config = component.JetStreamPort{
+				StreamName: portDef.StreamName,
+				Subjects:   []string{portDef.Subject},
+			}
+		} else {
+			port.Config = component.NATSPort{
+				Subject: portDef.Subject,
+			}
+		}
+		ports[i] = port
 	}
 	return ports
 }
@@ -536,15 +545,24 @@ func (c *Component) OutputPorts() []component.Port {
 
 	ports := make([]component.Port, len(c.config.Ports.Outputs))
 	for i, portDef := range c.config.Ports.Outputs {
-		ports[i] = component.Port{
+		port := component.Port{
 			Name:        portDef.Name,
 			Direction:   component.DirectionOutput,
 			Required:    portDef.Required,
 			Description: portDef.Description,
-			Config: component.NATSPort{
-				Subject: portDef.Subject,
-			},
 		}
+		// Use JetStreamPort for jetstream type ports, NATSPort for others
+		if portDef.Type == "jetstream" {
+			port.Config = component.JetStreamPort{
+				StreamName: portDef.StreamName,
+				Subjects:   []string{portDef.Subject},
+			}
+		} else {
+			port.Config = component.NATSPort{
+				Subject: portDef.Subject,
+			}
+		}
+		ports[i] = port
 	}
 	return ports
 }

@@ -378,16 +378,32 @@ func (c *Component) incrementErrors() {
 
 // ResolveEndpoint resolves a model name to an endpoint
 func (c *Component) ResolveEndpoint(modelName string) (Endpoint, error) {
-	// First, try exact match by endpoint name
-	if endpoint, exists := c.config.Endpoints[modelName]; exists {
+	// Resolution priority:
+	// 1. Check if modelName is an alias -> resolve to alias target
+	// 2. Check if (resolved or original) name is in Endpoints -> return endpoint
+	// 3. Fall back to "default" endpoint if it exists
+	// 4. Error if no resolution found
+
+	resolvedName := modelName
+
+	// Step 1: Check if modelName is an alias
+	if c.config.ModelAliases != nil {
+		if target, isAlias := c.config.ModelAliases[modelName]; isAlias {
+			resolvedName = target
+		}
+	}
+
+	// Step 2: Check if resolved name is an endpoint
+	if endpoint, exists := c.config.Endpoints[resolvedName]; exists {
 		return endpoint, nil
 	}
 
-	// Try to find "default" endpoint
+	// Step 3: Try to find "default" endpoint
 	if defaultEndpoint, exists := c.config.Endpoints["default"]; exists {
 		return defaultEndpoint, nil
 	}
 
+	// Step 4: No resolution found
 	return Endpoint{}, fmt.Errorf("no endpoint found for model %q", modelName)
 }
 
@@ -457,8 +473,9 @@ func (c *Component) InputPorts() []component.Port {
 			Direction:   component.DirectionInput,
 			Required:    portDef.Required,
 			Description: portDef.Description,
-			Config: component.NATSPort{
-				Subject: portDef.Subject,
+			Config: component.JetStreamPort{
+				StreamName: portDef.StreamName,
+				Subjects:   []string{portDef.Subject},
 			},
 		}
 	}
@@ -478,8 +495,9 @@ func (c *Component) OutputPorts() []component.Port {
 			Direction:   component.DirectionOutput,
 			Required:    portDef.Required,
 			Description: portDef.Description,
-			Config: component.NATSPort{
-				Subject: portDef.Subject,
+			Config: component.JetStreamPort{
+				StreamName: portDef.StreamName,
+				Subjects:   []string{portDef.Subject},
 			},
 		}
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/c360/semstreams/component"
 	"github.com/c360/semstreams/natsclient"
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // Component implements the router processor
@@ -213,25 +214,86 @@ func (c *Component) Stop(timeout time.Duration) error {
 	return nil
 }
 
-// setupSubscriptions sets up NATS subscriptions
+// setupSubscriptions sets up JetStream consumers for durable messaging
 func (c *Component) setupSubscriptions(ctx context.Context) error {
-	// Subscribe to user messages
-	_, err := c.natsClient.Subscribe(ctx, "user.message.>", func(ctx context.Context, data []byte) {
-		c.handleUserMessage(ctx, data)
+	// Wait for streams to be available
+	if err := c.waitForStream(ctx, c.config.StreamName); err != nil {
+		return fmt.Errorf("stream %s not available: %w", c.config.StreamName, err)
+	}
+	if err := c.waitForStream(ctx, "AGENT"); err != nil {
+		return fmt.Errorf("stream AGENT not available: %w", err)
+	}
+
+	// Subscribe to user messages via JetStream
+	userMsgCfg := natsclient.StreamConsumerConfig{
+		StreamName:    c.config.StreamName,
+		ConsumerName:  "agentic-dispatch-user-message",
+		FilterSubject: "user.message.>",
+		DeliverPolicy: "new",
+		AckPolicy:     "explicit",
+		MaxDeliver:    3,
+		AutoCreate:    false,
+	}
+	err := c.natsClient.ConsumeStreamWithConfig(ctx, userMsgCfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		c.handleUserMessage(msgCtx, msg.Data())
+		if ackErr := msg.Ack(); ackErr != nil {
+			c.logger.Error("Failed to ack user message", slog.String("error", ackErr.Error()))
+		}
 	})
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to user.message: %w", err)
 	}
 
-	// Subscribe to agent completions
-	_, err = c.natsClient.Subscribe(ctx, "agent.complete.*", func(ctx context.Context, data []byte) {
-		c.handleAgentComplete(ctx, data)
+	// Subscribe to agent completions via JetStream
+	agentCompleteCfg := natsclient.StreamConsumerConfig{
+		StreamName:    "AGENT",
+		ConsumerName:  "agentic-dispatch-agent-complete",
+		FilterSubject: "agent.complete.*",
+		DeliverPolicy: "new",
+		AckPolicy:     "explicit",
+		MaxDeliver:    3,
+		AutoCreate:    false,
+	}
+	err = c.natsClient.ConsumeStreamWithConfig(ctx, agentCompleteCfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		c.handleAgentComplete(msgCtx, msg.Data())
+		if ackErr := msg.Ack(); ackErr != nil {
+			c.logger.Error("Failed to ack agent complete message", slog.String("error", ackErr.Error()))
+		}
 	})
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to agent.complete: %w", err)
 	}
 
 	return nil
+}
+
+// waitForStream waits for a JetStream stream to be available
+func (c *Component) waitForStream(ctx context.Context, streamName string) error {
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return fmt.Errorf("failed to get JetStream context: %w", err)
+	}
+
+	maxRetries := 30
+	retryInterval := 100 * time.Millisecond
+	maxInterval := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		_, err := js.Stream(ctx, streamName)
+		if err == nil {
+			return nil
+		}
+		if i < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retryInterval):
+				retryInterval = min(retryInterval*2, maxInterval)
+			}
+		}
+	}
+
+	return fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries)
 }
 
 // handleUserMessage processes incoming user messages
@@ -405,7 +467,7 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 	}
 
 	subject := fmt.Sprintf("agent.task.%s", taskID)
-	if err := c.natsClient.Publish(ctx, subject, taskData); err != nil {
+	if err := c.natsClient.PublishToStream(ctx, subject, taskData); err != nil {
 		c.logger.Error("Failed to publish task", slog.String("error", err.Error()))
 		c.sendResponse(ctx, agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
@@ -518,7 +580,7 @@ func (c *Component) sendResponse(ctx context.Context, resp agentic.UserResponse)
 	}
 
 	subject := fmt.Sprintf("user.response.%s.%s", resp.ChannelType, resp.ChannelID)
-	if err := c.natsClient.Publish(ctx, subject, data); err != nil {
+	if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
 		c.logger.Error("Failed to publish response", slog.String("error", err.Error()))
 	}
 }

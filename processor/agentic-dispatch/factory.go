@@ -13,9 +13,9 @@ func Register(registry *component.Registry) error {
 	schema := buildConfigSchema()
 
 	registration := &component.Registration{
-		Name:        "router",
+		Name:        "agentic-dispatch",
 		Type:        "processor",
-		Protocol:    "nats",
+		Protocol:    "jetstream",
 		Domain:      "agentic",
 		Description: "Routes user messages to agentic loops with command parsing and permissions",
 		Version:     "1.0.0",
@@ -23,7 +23,7 @@ func Register(registry *component.Registry) error {
 		Factory:     NewComponent,
 	}
 
-	return registry.RegisterFactory("router", registration)
+	return registry.RegisterFactory("agentic-dispatch", registration)
 }
 
 // buildConfigSchema builds the configuration schema for the router
