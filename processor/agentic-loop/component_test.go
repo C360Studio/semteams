@@ -86,15 +86,16 @@ func TestComponent_OutputPorts(t *testing.T) {
 
 	ports := comp.OutputPorts()
 
-	if len(ports) != 3 {
-		t.Fatalf("OutputPorts() count = %d, want 3", len(ports))
+	if len(ports) != 4 {
+		t.Fatalf("OutputPorts() count = %d, want 4", len(ports))
 	}
 
 	// Expected output ports
 	expected := map[string]string{
-		"agent.request":  "agent.request.*",
-		"tool.execute":   "tool.execute.*",
-		"agent.complete": "agent.complete.*",
+		"agent.request":            "agent.request.*",
+		"tool.execute":             "tool.execute.*",
+		"agent.complete":           "agent.complete.*",
+		"agent.context.compaction": "agent.context.compaction.*",
 	}
 
 	for _, port := range ports {

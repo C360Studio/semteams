@@ -260,8 +260,8 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// Verify output ports
-	if len(cfg.Ports.Outputs) != 3 {
-		t.Errorf("DefaultConfig() output ports count = %d, want 3", len(cfg.Ports.Outputs))
+	if len(cfg.Ports.Outputs) != 4 {
+		t.Errorf("DefaultConfig() output ports count = %d, want 4", len(cfg.Ports.Outputs))
 	}
 
 	// Verify KV ports

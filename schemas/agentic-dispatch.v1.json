@@ -34,7 +34,7 @@
   "x-component-metadata": {
     "name": "agentic-dispatch",
     "type": "processor",
-    "protocol": "nats",
+    "protocol": "jetstream",
     "domain": "agentic",
     "version": "1.0.0"
   }

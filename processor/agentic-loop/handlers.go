@@ -41,13 +41,27 @@ type PublishedMessage struct {
 // HandlerResult contains the results of a handler operation
 type HandlerResult struct {
 	LoopID               string
-	EditorLoopID         string
 	State                agentic.LoopState
 	PublishedMessages    []PublishedMessage
 	PendingTools         []string
 	TrajectorySteps      []agentic.TrajectoryStep
+	ContextEvents        []ContextEvent
 	RetryScheduled       bool
 	MaxIterationsReached bool
+	// CompletionState contains enriched completion data for KV persistence.
+	// This is populated when a loop completes and is used by component.go
+	// to write to the loops bucket with key pattern COMPLETE_{loopID}.
+	CompletionState map[string]any
+}
+
+// ContextEvent represents a context management event for publishing
+type ContextEvent struct {
+	Type        string  `json:"type"` // "compaction_starting", "compaction_complete", "gc_complete"
+	LoopID      string  `json:"loop_id"`
+	Iteration   int     `json:"iteration"`
+	Utilization float64 `json:"utilization,omitempty"`
+	TokensSaved int     `json:"tokens_saved,omitempty"`
+	Summary     string  `json:"summary,omitempty"`
 }
 
 // MessageHandler handles incoming messages and coordinates loop execution
@@ -55,14 +69,17 @@ type MessageHandler struct {
 	config            Config
 	loopManager       *LoopManager
 	trajectoryManager *TrajectoryManager
+	compactor         *Compactor
 }
 
 // NewMessageHandler creates a new MessageHandler
 func NewMessageHandler(config Config) *MessageHandler {
+	loopManager := NewLoopManagerWithConfig(config.Context)
 	return &MessageHandler{
 		config:            config,
-		loopManager:       NewLoopManager(),
+		loopManager:       loopManager,
 		trajectoryManager: NewTrajectoryManager(),
+		compactor:         NewCompactor(config.Context),
 	}
 }
 
@@ -108,6 +125,14 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	entity, err := h.loopManager.GetLoop(loopID)
 	if err != nil {
 		return HandlerResult{}, err
+	}
+
+	// Add user prompt to context manager if enabled
+	if cm := h.loopManager.GetContextManager(loopID); cm != nil {
+		_ = cm.AddMessage(RegionRecentHistory, agentic.ChatMessage{
+			Role:    "user",
+			Content: task.Prompt,
+		})
 	}
 
 	// Create initial agent request with structured ID for recovery
@@ -186,6 +211,7 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 		State:             entity.State,
 		PublishedMessages: []PublishedMessage{},
 		TrajectorySteps:   []agentic.TrajectoryStep{},
+		ContextEvents:     []ContextEvent{},
 	}
 
 	// Record trajectory step
@@ -200,106 +226,115 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
-	switch response.Status {
-	case "tool_call":
-		// Handle tool calls
-		for _, toolCall := range response.Message.ToolCalls {
-			// Add to pending tools
-			err = h.loopManager.AddPendingTool(loopID, toolCall.ID)
-			if err != nil {
-				return result, err
-			}
-
-			// Track tool call ID to loop ID mapping
-			h.loopManager.TrackToolCall(toolCall.ID, loopID)
-
-			// Publish tool execution request as ToolCall
-			toolData, err := json.Marshal(toolCall)
-			if err != nil {
-				return result, err
-			}
-
-			result.PublishedMessages = append(result.PublishedMessages, PublishedMessage{
-				Subject: subjectToolExecute + "." + toolCall.Name,
-				Data:    toolData,
-			})
-		}
-
-		result.PendingTools = h.loopManager.GetPendingTools(loopID)
-
-	case "complete":
-		// Mark loop as complete
-		err = h.loopManager.TransitionLoop(loopID, agentic.LoopStateComplete)
-		if err != nil {
-			return result, err
-		}
-
-		entity.State = agentic.LoopStateComplete
-		result.State = agentic.LoopStateComplete
-
-		// Publish completion
-		completion := map[string]any{
-			"loop_id": loopID,
-			"task_id": entity.TaskID,
-			"outcome": "success",
-		}
-
-		completionData, err := json.Marshal(completion)
-		if err != nil {
-			return result, err
-		}
-
-		result.PublishedMessages = append(result.PublishedMessages, PublishedMessage{
-			Subject: subjectAgentComplete + "." + loopID,
-			Data:    completionData,
+	// Add assistant response to context manager if enabled
+	cm := h.loopManager.GetContextManager(loopID)
+	if cm != nil && response.Message.Content != "" {
+		_ = cm.AddMessage(RegionRecentHistory, agentic.ChatMessage{
+			Role:    "assistant",
+			Content: response.Message.Content,
 		})
 
-		// Check if architect role - spawn editor if so
-		if entity.Role == "architect" {
-			editorLoopID, err := h.spawnEditorLoop(entity)
-			if err != nil {
-				return result, err
-			}
-			result.EditorLoopID = editorLoopID
-
-			// Create agent request for editor with structured ID for recovery
-			editorRequest := agentic.AgentRequest{
-				RequestID: h.loopManager.GenerateRequestID(editorLoopID),
-				LoopID:    editorLoopID,
-				Role:      "editor",
-				Model:     entity.Model,
-				Messages: []agentic.ChatMessage{
-					{
-						Role:    "user",
-						Content: "Implement based on architecture: " + response.Message.Content,
-					},
-				},
-			}
-
-			// Track request ID to loop ID mapping (cache for fast lookup)
-			h.loopManager.TrackRequest(editorRequest.RequestID, editorLoopID)
-
-			editorData, err := json.Marshal(editorRequest)
-			if err != nil {
-				return result, err
-			}
-
-			result.PublishedMessages = append(result.PublishedMessages, PublishedMessage{
-				Subject: subjectAgentRequest + "." + editorLoopID,
-				Data:    editorData,
+		// Check if compaction is needed
+		if h.compactor.ShouldCompact(cm) {
+			result.ContextEvents = append(result.ContextEvents, ContextEvent{
+				Type:        "compaction_starting",
+				LoopID:      loopID,
+				Iteration:   entity.Iterations,
+				Utilization: cm.Utilization(),
 			})
+
+			// Perform compaction
+			compactResult, compactErr := h.compactor.Compact(ctx, cm)
+			if compactErr == nil {
+				result.ContextEvents = append(result.ContextEvents, ContextEvent{
+					Type:        "compaction_complete",
+					LoopID:      loopID,
+					Iteration:   entity.Iterations,
+					TokensSaved: compactResult.EvictedTokens - compactResult.NewTokens,
+					Summary:     compactResult.Summary,
+				})
+			}
+		}
+	}
+
+	switch response.Status {
+	case "tool_call":
+		if err := h.handleToolCallResponse(&result, loopID, response.Message.ToolCalls); err != nil {
+			return result, err
+		}
+
+	case "complete":
+		if err := h.handleCompleteResponse(&result, loopID, entity, response.Message.Content); err != nil {
+			return result, err
 		}
 
 	case "error":
-		// Mark as failed
-		err = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
-		if err != nil {
+		if err := h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed); err != nil {
 			return result, err
 		}
 		result.State = agentic.LoopStateFailed
 	}
 
 	return result, nil
+}
+
+// handleToolCallResponse processes tool call responses
+func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID string, toolCalls []agentic.ToolCall) error {
+	for _, toolCall := range toolCalls {
+		if err := h.loopManager.AddPendingTool(loopID, toolCall.ID); err != nil {
+			return err
+		}
+		h.loopManager.TrackToolCall(toolCall.ID, loopID)
+
+		toolData, err := json.Marshal(toolCall)
+		if err != nil {
+			return err
+		}
+		result.PublishedMessages = append(result.PublishedMessages, PublishedMessage{
+			Subject: subjectToolExecute + "." + toolCall.Name,
+			Data:    toolData,
+		})
+	}
+	result.PendingTools = h.loopManager.GetPendingTools(loopID)
+	return nil
+}
+
+// handleCompleteResponse processes completion responses.
+// It enriches the completion event with full context for rules-based orchestration.
+func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID string, entity agentic.LoopEntity, responseContent string) error {
+	if err := h.loopManager.TransitionLoop(loopID, agentic.LoopStateComplete); err != nil {
+		return err
+	}
+	result.State = agentic.LoopStateComplete
+
+	// Enriched completion event for rules-based orchestration.
+	// Rules engine watches COMPLETE_* keys in KV and can trigger
+	// follow-up actions (e.g., spawn editor when architect completes).
+	completion := map[string]any{
+		"loop_id":     loopID,
+		"task_id":     entity.TaskID,
+		"outcome":     "success",
+		"role":        entity.Role,
+		"result":      responseContent,
+		"model":       entity.Model,
+		"iterations":  entity.Iterations,
+		"parent_loop": entity.ParentLoopID,
+	}
+
+	completionData, err := json.Marshal(completion)
+	if err != nil {
+		return err
+	}
+	result.PublishedMessages = append(result.PublishedMessages, PublishedMessage{
+		Subject: subjectAgentComplete + "." + loopID,
+		Data:    completionData,
+	})
+
+	// Pass completion state to component for KV write.
+	// Component will write this to COMPLETE_{loopID} key for rules engine.
+	result.CompletionState = completion
+
+	return nil
 }
 
 // HandleToolResult processes a tool execution result
@@ -341,6 +376,7 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		PendingTools:      h.loopManager.GetPendingTools(loopID),
 		PublishedMessages: []PublishedMessage{},
 		TrajectorySteps:   []agentic.TrajectoryStep{},
+		ContextEvents:     []ContextEvent{},
 	}
 
 	// Record trajectory step
@@ -351,6 +387,16 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		Duration:   defaultToolCallDurationMs,
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
+
+	// Add tool result to context manager if enabled
+	cm := h.loopManager.GetContextManager(loopID)
+	if cm != nil {
+		_ = cm.AddMessage(RegionToolResults, agentic.ChatMessage{
+			Role:       "tool",
+			ToolCallID: toolResult.CallID,
+			Content:    toolResult.Content,
+		})
+	}
 
 	// Check if all tools are complete
 	if h.loopManager.AllToolsComplete(loopID) {
@@ -364,6 +410,21 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 			result.State = agentic.LoopStateFailed
 			result.MaxIterationsReached = true
 			return result, nil
+		}
+
+		// Get the new iteration count for GC
+		newIteration := h.loopManager.GetCurrentIteration(loopID)
+
+		// Run GC on tool results if context management is enabled
+		if cm != nil {
+			evicted := cm.GCToolResults(newIteration)
+			if evicted > 0 {
+				result.ContextEvents = append(result.ContextEvents, ContextEvent{
+					Type:      "gc_complete",
+					LoopID:    loopID,
+					Iteration: newIteration,
+				})
+			}
 		}
 
 		// Get ALL accumulated tool results
@@ -413,31 +474,4 @@ func (h *MessageHandler) GetLoop(loopID string) (agentic.LoopEntity, error) {
 // UpdateLoop updates a loop entity
 func (h *MessageHandler) UpdateLoop(entity agentic.LoopEntity) error {
 	return h.loopManager.UpdateLoop(entity)
-}
-
-// spawnEditorLoop creates an editor loop from an architect completion.
-// The architectEntity provides task context; the caller is responsible for
-// building the editor's initial message with the architect's output.
-func (h *MessageHandler) spawnEditorLoop(architectEntity agentic.LoopEntity) (string, error) {
-	// Create editor loop with same task ID
-	editorLoopID, err := h.loopManager.CreateLoop(
-		architectEntity.TaskID,
-		"editor",
-		architectEntity.Model,
-		architectEntity.MaxIterations,
-	)
-	if err != nil {
-		return "", err
-	}
-
-	// Track parent-child relationship for traceability
-	_ = h.loopManager.SetParentLoop(editorLoopID, architectEntity.ID)
-
-	// Start trajectory for editor
-	_, err = h.trajectoryManager.StartTrajectory(editorLoopID)
-	if err != nil {
-		return "", err
-	}
-
-	return editorLoopID, nil
 }

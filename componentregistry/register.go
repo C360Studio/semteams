@@ -17,6 +17,7 @@ import (
 	"github.com/c360/semstreams/output/httppost"
 	"github.com/c360/semstreams/output/websocket"
 	pkgerrs "github.com/c360/semstreams/pkg/errs"
+	agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch"
 	agenticloop "github.com/c360/semstreams/processor/agentic-loop"
 	agenticmodel "github.com/c360/semstreams/processor/agentic-model"
 	agentictools "github.com/c360/semstreams/processor/agentic-tools"
@@ -31,6 +32,7 @@ import (
 	jsongeneric "github.com/c360/semstreams/processor/json_generic"
 	jsonmap "github.com/c360/semstreams/processor/json_map"
 	"github.com/c360/semstreams/processor/rule"
+	"github.com/c360/semstreams/processor/workflow"
 	"github.com/c360/semstreams/storage/objectstore"
 )
 
@@ -71,6 +73,7 @@ import (
 //   - agentic-model (OpenAI-compatible LLM endpoint caller)
 //   - agentic-tools (tool execution dispatcher)
 //   - agentic-loop (state machine orchestrator with trajectory capture)
+//   - workflow-processor (multi-step workflow orchestration with loops and timeouts)
 //
 // Domain Layer (example processors):
 //   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
@@ -203,6 +206,10 @@ func registerSemanticLayer(registry *component.Registry) error {
 
 // registerAgenticLayer registers agentic-layer components (LLM-powered autonomous agents).
 func registerAgenticLayer(registry *component.Registry) error {
+	if err := agenticdispatch.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-dispatch component registration")
+	}
+
 	if err := agenticmodel.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-model component registration")
 	}
@@ -213,6 +220,10 @@ func registerAgenticLayer(registry *component.Registry) error {
 
 	if err := agenticloop.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-loop component registration")
+	}
+
+	if err := workflow.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "workflow-processor component registration")
 	}
 
 	return nil

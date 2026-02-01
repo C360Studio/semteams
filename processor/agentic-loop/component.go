@@ -595,9 +595,14 @@ func (c *Component) handleResponseMessage(ctx context.Context, data []byte) {
 	// Persist trajectory steps
 	c.persistTrajectorySteps(ctx, result.LoopID, result.TrajectorySteps)
 
-	// If loop completed, finalize trajectory
+	// If loop completed, finalize trajectory and persist completion state
 	if result.State == agentic.LoopStateComplete || result.State == agentic.LoopStateFailed {
 		c.finalizeTrajectory(ctx, result.LoopID, result.State)
+
+		// Persist enriched completion state for rules engine
+		if result.CompletionState != nil {
+			c.persistCompletionState(ctx, result.LoopID, result.CompletionState)
+		}
 	}
 }
 
@@ -654,6 +659,54 @@ func (c *Component) publishResults(ctx context.Context, result HandlerResult) {
 			c.logger.Error("Failed to publish message", "error", err, "subject", msg.Subject)
 		}
 	}
+
+	// Publish context events for agentic-memory to consume
+	for _, event := range result.ContextEvents {
+		c.publishContextEvent(ctx, event)
+	}
+}
+
+// publishContextEvent publishes a context management event
+func (c *Component) publishContextEvent(ctx context.Context, event ContextEvent) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		c.logger.Error("Failed to marshal context event", "error", err, "type", event.Type)
+		return
+	}
+
+	subject := fmt.Sprintf("agent.context.compaction.%s", event.LoopID)
+	if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
+		c.logger.Error("Failed to publish context event", "error", err, "subject", subject)
+	}
+}
+
+// persistCompletionState persists the enriched completion state to KV.
+// Key pattern: COMPLETE_{loopID} for rules engine to watch.
+// The rules engine can then trigger follow-up actions based on completion data.
+func (c *Component) persistCompletionState(ctx context.Context, loopID string, completion map[string]any) {
+	if c.loopsBucket == nil {
+		return
+	}
+
+	completion["completed_at"] = time.Now().Format(time.RFC3339)
+
+	data, err := json.Marshal(completion)
+	if err != nil {
+		c.logger.Error("Failed to marshal completion state", "error", err, "loop_id", loopID)
+		return
+	}
+
+	// Key pattern: COMPLETE_{loopID} for rules engine to watch
+	key := fmt.Sprintf("COMPLETE_%s", loopID)
+	if _, err := c.loopsBucket.Put(ctx, key, data); err != nil {
+		c.logger.Error("Failed to persist completion state", "error", err, "loop_id", loopID)
+		return
+	}
+
+	c.logger.Debug("Persisted completion state",
+		slog.String("loop_id", loopID),
+		slog.String("key", key),
+		slog.String("role", fmt.Sprintf("%v", completion["role"])))
 }
 
 // persistLoopState persists the loop state to KV

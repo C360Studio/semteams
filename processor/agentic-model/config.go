@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Ports              *component.PortConfig `json:"ports"                schema:"type:ports,description:Port configuration,category:basic"`
 	Endpoints          map[string]Endpoint   `json:"endpoints"            schema:"type:object,description:Model endpoints,category:basic"`
+	ModelAliases       map[string]string     `json:"model_aliases,omitempty" schema:"type:object,description:Semantic model aliases mapping to endpoint names,category:basic"`
 	StreamName         string                `json:"stream_name"          schema:"type:string,description:JetStream stream name for agentic messages,category:basic,default:AGENT"`
 	ConsumerNameSuffix string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix appended to consumer names for uniqueness,category:advanced"`
 	Timeout            string                `json:"timeout"              schema:"type:string,description:Request timeout,category:advanced,default:120s"`
@@ -39,6 +40,26 @@ func (c *Config) Validate() error {
 	for name, endpoint := range c.Endpoints {
 		if err := endpoint.Validate(); err != nil {
 			return fmt.Errorf("endpoint %q: %w", name, err)
+		}
+	}
+
+	// Validate model aliases if present
+	if c.ModelAliases != nil && len(c.ModelAliases) > 0 {
+		for alias, target := range c.ModelAliases {
+			// Empty target is not allowed
+			if target == "" {
+				return fmt.Errorf("alias %q has empty target", alias)
+			}
+
+			// Target must exist in Endpoints
+			if _, exists := c.Endpoints[target]; !exists {
+				return fmt.Errorf("alias %q points to non-existent endpoint %q", alias, target)
+			}
+
+			// No alias chaining: target cannot be another alias
+			if _, isAlias := c.ModelAliases[target]; isAlias {
+				return fmt.Errorf("alias %q points to another alias %q, chaining not supported", alias, target)
+			}
 		}
 	}
 

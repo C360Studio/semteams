@@ -12,20 +12,36 @@ import (
 
 // LoopManager manages loop entity lifecycle and state
 type LoopManager struct {
-	loops          map[string]*agentic.LoopEntity
-	pendingTools   map[string]map[string]bool // loopID -> map[callID]bool
-	requestToLoop  map[string]string          // requestID -> loopID
-	toolCallToLoop map[string]string          // callID -> loopID
-	mu             sync.RWMutex
+	loops           map[string]*agentic.LoopEntity
+	contextManagers map[string]*ContextManager // loopID -> ContextManager
+	pendingTools    map[string]map[string]bool // loopID -> map[callID]bool
+	requestToLoop   map[string]string          // requestID -> loopID
+	toolCallToLoop  map[string]string          // callID -> loopID
+	contextConfig   ContextConfig              // shared context config
+	mu              sync.RWMutex
 }
 
 // NewLoopManager creates a new LoopManager
 func NewLoopManager() *LoopManager {
 	return &LoopManager{
-		loops:          make(map[string]*agentic.LoopEntity),
-		pendingTools:   make(map[string]map[string]bool),
-		requestToLoop:  make(map[string]string),
-		toolCallToLoop: make(map[string]string),
+		loops:           make(map[string]*agentic.LoopEntity),
+		contextManagers: make(map[string]*ContextManager),
+		pendingTools:    make(map[string]map[string]bool),
+		requestToLoop:   make(map[string]string),
+		toolCallToLoop:  make(map[string]string),
+		contextConfig:   DefaultContextConfig(),
+	}
+}
+
+// NewLoopManagerWithConfig creates a new LoopManager with custom context config
+func NewLoopManagerWithConfig(contextConfig ContextConfig) *LoopManager {
+	return &LoopManager{
+		loops:           make(map[string]*agentic.LoopEntity),
+		contextManagers: make(map[string]*ContextManager),
+		pendingTools:    make(map[string]map[string]bool),
+		requestToLoop:   make(map[string]string),
+		toolCallToLoop:  make(map[string]string),
+		contextConfig:   contextConfig,
 	}
 }
 
@@ -50,6 +66,11 @@ func (m *LoopManager) CreateLoopWithID(loopID, taskID, role, model string, maxIt
 
 	m.loops[loopID] = &entity
 	m.pendingTools[loopID] = make(map[string]bool)
+
+	// Create context manager for this loop if context management is enabled
+	if m.contextConfig.Enabled {
+		m.contextManagers[loopID] = NewContextManager(loopID, model, m.contextConfig)
+	}
 
 	return loopID, nil
 }
@@ -91,7 +112,27 @@ func (m *LoopManager) DeleteLoop(loopID string) error {
 
 	delete(m.loops, loopID)
 	delete(m.pendingTools, loopID)
+	delete(m.contextManagers, loopID)
 	return nil
+}
+
+// GetContextManager retrieves the context manager for a loop
+func (m *LoopManager) GetContextManager(loopID string) *ContextManager {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.contextManagers[loopID]
+}
+
+// GetCurrentIteration returns the current iteration for a loop
+func (m *LoopManager) GetCurrentIteration(loopID string) int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	entity, exists := m.loops[loopID]
+	if !exists {
+		return 0
+	}
+	return entity.Iterations
 }
 
 // TransitionLoop transitions a loop to a new state

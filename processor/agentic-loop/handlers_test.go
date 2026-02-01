@@ -264,9 +264,12 @@ func TestHandleModelResponse_Complete_General(t *testing.T) {
 		t.Error("Should record trajectory step for completion")
 	}
 
-	// Should NOT spawn editor loop (general role)
-	if result.EditorLoopID != "" {
-		t.Error("General role should not spawn editor loop")
+	// Should have completion state with general role
+	if result.CompletionState == nil {
+		t.Error("CompletionState should not be nil on completion")
+	}
+	if result.CompletionState["role"] != "general" {
+		t.Errorf("CompletionState[role] = %v, want general", result.CompletionState["role"])
 	}
 }
 
@@ -286,6 +289,7 @@ func TestHandleModelResponse_Complete_Architect(t *testing.T) {
 	}
 
 	loopID := taskResult.LoopID
+	architectOutput := "Architecture design complete"
 
 	// Architect completion response
 	response := agentic.AgentResponse{
@@ -293,7 +297,7 @@ func TestHandleModelResponse_Complete_Architect(t *testing.T) {
 		Status:    "complete",
 		Message: agentic.ChatMessage{
 			Role:    "assistant",
-			Content: "Architecture design complete",
+			Content: architectOutput,
 		},
 		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     200,
@@ -311,38 +315,37 @@ func TestHandleModelResponse_Complete_Architect(t *testing.T) {
 		t.Errorf("Architect state = %s, want complete", result.State)
 	}
 
-	// Should spawn editor loop
-	if result.EditorLoopID == "" {
-		t.Error("Architect completion should spawn editor loop")
+	// Should have enriched completion state for rules engine
+	// (Rules engine handles spawning editor - not the handler directly)
+	if result.CompletionState == nil {
+		t.Fatal("CompletionState should not be nil")
+	}
+	if result.CompletionState["role"] != "architect" {
+		t.Errorf("CompletionState[role] = %v, want architect", result.CompletionState["role"])
+	}
+	if result.CompletionState["outcome"] != "success" {
+		t.Errorf("CompletionState[outcome] = %v, want success", result.CompletionState["outcome"])
+	}
+	if result.CompletionState["result"] != architectOutput {
+		t.Errorf("CompletionState[result] = %v, want %s", result.CompletionState["result"], architectOutput)
+	}
+	if result.CompletionState["task_id"] != "task-001" {
+		t.Errorf("CompletionState[task_id] = %v, want task-001", result.CompletionState["task_id"])
+	}
+	if result.CompletionState["model"] != "qwen-32b" {
+		t.Errorf("CompletionState[model] = %v, want qwen-32b", result.CompletionState["model"])
 	}
 
-	// Editor loop should have different ID
-	if result.EditorLoopID == loopID {
-		t.Error("Editor loop ID should differ from architect loop ID")
-	}
-
-	// Should publish initial agent.request for editor
-	foundEditorRequest := false
+	// Should publish agent.complete (rules engine watches this)
+	foundComplete := false
 	for _, msg := range result.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.request") {
-			var req agentic.AgentRequest
-			if err := json.Unmarshal(msg.Data, &req); err == nil {
-				if req.LoopID == result.EditorLoopID {
-					foundEditorRequest = true
-					if req.Role != "editor" {
-						t.Errorf("Editor request role = %s, want editor", req.Role)
-					}
-					// Editor should receive architect output as context
-					if len(req.Messages) == 0 {
-						t.Error("Editor request should have messages with architect output")
-					}
-					break
-				}
-			}
+		if containsIgnoreCase(msg.Subject, "agent.complete") {
+			foundComplete = true
+			break
 		}
 	}
-	if !foundEditorRequest {
-		t.Error("Should publish agent.request for editor loop")
+	if !foundComplete {
+		t.Error("Should publish agent.complete message")
 	}
 }
 
@@ -747,11 +750,11 @@ type PublishedMessage struct {
 
 type HandlerResult struct {
 	LoopID               string
-	EditorLoopID         string
 	State                agentic.LoopState
 	PublishedMessages    []PublishedMessage
 	PendingTools         []string
 	TrajectorySteps      []agentic.TrajectoryStep
 	RetryScheduled       bool
 	MaxIterationsReached bool
+	CompletionState      map[string]any
 }

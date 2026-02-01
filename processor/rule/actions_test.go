@@ -964,3 +964,148 @@ func TestActionConstant_PublishAgent(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "publish_agent", ActionTypePublishAgent)
 }
+
+// T054: Test extended role validation (ADR-018)
+func TestAction_PublishAgent_ExtendedRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		role    string
+		wantErr bool
+	}{
+		{name: "general role", role: "general", wantErr: false},
+		{name: "architect role", role: "architect", wantErr: false},
+		{name: "editor role", role: "editor", wantErr: false},
+		{name: "reviewer role", role: "reviewer", wantErr: false},
+		{name: "fixer role", role: "fixer", wantErr: false},
+		{name: "invalid role", role: "unknown", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockPublisher{}
+			executor := NewActionExecutorFull(nil, nil, mock)
+
+			action := Action{
+				Type:    ActionTypePublishAgent,
+				Subject: "agent.task.test",
+				Role:    tt.role,
+				Model:   "mock-model",
+				Prompt:  "Test prompt",
+			}
+
+			err := executor.Execute(ctx, action, "entity.001", "")
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "invalid role")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// T055: Test EntityContext type and substituteVariablesWithContext (ADR-018)
+func TestSubstituteVariablesWithContext(t *testing.T) {
+	t.Parallel()
+
+	entity := EntityContext{
+		ID:         "loop-123",
+		Role:       "architect",
+		Result:     "Design complete: use microservices",
+		Model:      "gpt-4",
+		TaskID:     "task-456",
+		ParentLoop: "parent-789",
+		Iterations: 3,
+	}
+
+	tests := []struct {
+		name     string
+		template string
+		related  string
+		want     string
+	}{
+		{
+			name:     "substitute entity.id",
+			template: "Loop: $entity.id",
+			want:     "Loop: loop-123",
+		},
+		{
+			name:     "substitute entity.role",
+			template: "Role: $entity.role",
+			want:     "Role: architect",
+		},
+		{
+			name:     "substitute entity.result",
+			template: "Result: $entity.result",
+			want:     "Result: Design complete: use microservices",
+		},
+		{
+			name:     "substitute entity.model",
+			template: "Model: $entity.model",
+			want:     "Model: gpt-4",
+		},
+		{
+			name:     "substitute entity.task_id",
+			template: "Task: $entity.task_id",
+			want:     "Task: task-456",
+		},
+		{
+			name:     "substitute entity.parent_loop",
+			template: "Parent: $entity.parent_loop",
+			want:     "Parent: parent-789",
+		},
+		{
+			name:     "substitute entity.iterations",
+			template: "Iterations: $entity.iterations",
+			want:     "Iterations: 3",
+		},
+		{
+			name:     "substitute related.id",
+			template: "Related: $related.id",
+			related:  "related-abc",
+			want:     "Related: related-abc",
+		},
+		{
+			name:     "multiple substitutions",
+			template: "Implement $entity.result for task $entity.task_id using $entity.model",
+			want:     "Implement Design complete: use microservices for task task-456 using gpt-4",
+		},
+		{
+			name:     "no substitution needed",
+			template: "Static content",
+			want:     "Static content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := substituteVariablesWithContext(tt.template, entity, tt.related)
+			assert.Equal(t, tt.want, result)
+		})
+	}
+}
+
+// T056: Test EntityContext with empty fields
+func TestSubstituteVariablesWithContext_EmptyFields(t *testing.T) {
+	t.Parallel()
+
+	entity := EntityContext{
+		ID:   "loop-123",
+		Role: "general",
+		// Other fields empty
+	}
+
+	result := substituteVariablesWithContext(
+		"ID: $entity.id, Parent: $entity.parent_loop, Iterations: $entity.iterations",
+		entity,
+		"",
+	)
+
+	// Empty strings and zero values should substitute correctly
+	assert.Equal(t, "ID: loop-123, Parent: , Iterations: 0", result)
+}

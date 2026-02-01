@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow-processor.v1.json",
+  "type": "object",
+  "title": "workflow-processor Configuration",
+  "description": "Orchestrates multi-step agentic workflows with loops, limits, and timeouts",
+  "properties": {
+    "default_max_iterations": {
+      "type": "string",
+      "description": "Default max iterations for loop workflows",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 100,
+      "category": "basic"
+    },
+    "default_timeout": {
+      "type": "string",
+      "description": "Default timeout for workflows (e.g., 10m, 1h)",
+      "default": "10m",
+      "category": "basic"
+    },
+    "definitions_bucket": {
+      "type": "string",
+      "description": "NATS KV bucket for workflow definitions",
+      "default": "WORKFLOW_DEFINITIONS",
+      "category": "advanced"
+    },
+    "executions_bucket": {
+      "type": "string",
+      "description": "NATS KV bucket for workflow execution state",
+      "default": "WORKFLOW_EXECUTIONS",
+      "category": "advanced"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration for inputs and outputs",
+      "category": "advanced"
+    },
+    "request_timeout": {
+      "type": "string",
+      "description": "Timeout for NATS request/response calls",
+      "default": "30s",
+      "category": "advanced"
+    },
+    "stream_name": {
+      "type": "string",
+      "description": "JetStream stream name for workflow messages",
+      "default": "WORKFLOW",
+      "category": "advanced"
+    }
+  },
+  "required": [
+    "definitions_bucket",
+    "executions_bucket",
+    "stream_name"
+  ],
+  "x-component-metadata": {
+    "name": "workflow-processor",
+    "type": "processor",
+    "protocol": "nats",
+    "domain": "agentic",
+    "version": "1.0.0"
+  }
+}

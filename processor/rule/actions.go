@@ -416,6 +416,42 @@ func substituteVariables(template, entityID, relatedID string) string {
 	return result
 }
 
+// EntityContext provides entity data for variable substitution in rules.
+// This is used for rules-based workflow orchestration where completion
+// state from agentic loops is used to trigger follow-up actions.
+type EntityContext struct {
+	ID         string // The entity/loop ID
+	Role       string // Agent role (architect, editor, general, etc.)
+	Result     string // The result/output content
+	Model      string // Model used for the agent
+	TaskID     string // Task identifier
+	ParentLoop string // Parent loop ID (for chained workflows)
+	Iterations int    // Number of iterations completed
+}
+
+// substituteVariablesWithContext replaces template variables with entity context values.
+// Supports all basic variables plus extended context fields:
+//   - $entity.id: The entity ID
+//   - $related.id: The related entity ID (for pair rules)
+//   - $entity.role: The agent role
+//   - $entity.result: The agent output/result
+//   - $entity.model: The model used
+//   - $entity.task_id: The task identifier
+//   - $entity.parent_loop: The parent loop ID
+//   - $entity.iterations: The iteration count
+func substituteVariablesWithContext(template string, entity EntityContext, relatedID string) string {
+	result := template
+	result = strings.ReplaceAll(result, "$entity.id", entity.ID)
+	result = strings.ReplaceAll(result, "$related.id", relatedID)
+	result = strings.ReplaceAll(result, "$entity.role", entity.Role)
+	result = strings.ReplaceAll(result, "$entity.result", entity.Result)
+	result = strings.ReplaceAll(result, "$entity.model", entity.Model)
+	result = strings.ReplaceAll(result, "$entity.task_id", entity.TaskID)
+	result = strings.ReplaceAll(result, "$entity.parent_loop", entity.ParentLoop)
+	result = strings.ReplaceAll(result, "$entity.iterations", fmt.Sprintf("%d", entity.Iterations))
+	return result
+}
+
 // TaskMessage represents a task message for triggering an agentic loop.
 // This matches the expected format of the agentic-loop component.
 type TaskMessage struct {
@@ -443,8 +479,15 @@ func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action,
 	}
 
 	// Validate role
-	if action.Role != "general" && action.Role != "architect" && action.Role != "editor" {
-		return fmt.Errorf("invalid role %q: must be one of: general, architect, editor", action.Role)
+	validRoles := map[string]bool{
+		"general":   true,
+		"architect": true,
+		"editor":    true,
+		"reviewer":  true,
+		"fixer":     true,
+	}
+	if !validRoles[action.Role] {
+		return fmt.Errorf("invalid role %q: must be one of: general, architect, editor, reviewer, fixer", action.Role)
 	}
 
 	// Substitute variables in subject and prompt
