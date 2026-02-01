@@ -642,6 +642,7 @@ components:
                     description: Component configuration schema
                     oneOf:
                         - $ref: ../schemas/agentic-dispatch.v1.json
+                        - $ref: ../schemas/agentic-governance.v1.json
                         - $ref: ../schemas/agentic-loop.v1.json
                         - $ref: ../schemas/agentic-model.v1.json
                         - $ref: ../schemas/agentic-tools.v1.json

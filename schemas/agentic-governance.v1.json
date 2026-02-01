@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agentic-governance.v1.json",
+  "type": "object",
+  "title": "agentic-governance Configuration",
+  "description": "Content governance layer for agentic systems with PII redaction, injection detection, and rate limiting",
+  "properties": {
+    "consumer_name_suffix": {
+      "type": "string",
+      "description": "Consumer name suffix for uniqueness",
+      "category": "advanced"
+    },
+    "filter_chain": {
+      "type": "object",
+      "description": "Filter chain configuration",
+      "category": "basic"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    },
+    "stream_name": {
+      "type": "string",
+      "description": "JetStream stream name",
+      "default": "AGENT",
+      "category": "advanced"
+    },
+    "violations": {
+      "type": "object",
+      "description": "Violation handling configuration",
+      "category": "basic"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "agentic-governance",
+    "type": "processor",
+    "protocol": "agentic",
+    "domain": "governance",
+    "version": "0.1.0"
+  }
+}
