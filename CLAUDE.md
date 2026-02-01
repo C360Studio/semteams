@@ -85,3 +85,40 @@ task e2e:all            # Run all tiers sequentially
 - Integration tests: `//go:build integration` tag, uses testcontainers
 - E2E tests: Full Docker stack, tiered by capability
 - Always run with `-race` flag for concurrency checks
+
+## Orchestration Boundaries
+
+SemStreams uses three orchestration layers. Respecting layer boundaries prevents design debt.
+
+### Layer Summary
+
+| Layer | Purpose | Owns |
+|-------|---------|------|
+| **Rules** | React to state, fire single actions | Conditions, triggers |
+| **Workflow** | Multi-step coordination with limits | Step sequence, loop limits, timeouts |
+| **Component** | Execute work | Execution mechanics |
+
+### Rules of Thumb
+
+1. **Rules trigger, they don't orchestrate** — A rule fires one action, not a sequence
+2. **Workflows coordinate, they don't execute** — Workflows spawn components, not inline logic
+3. **Components are workflow-agnostic** — Components don't know their caller
+4. **State ownership is exclusive** — Only one layer owns any state
+5. **If it needs a loop limit, it's a workflow** — Simple handoffs use rules; loops use workflows
+
+### Anti-Patterns to Avoid
+
+- Rule chains that build up state across multiple firings
+- Workflows with inline processing logic (belongs in components)
+- Components checking workflow context to decide behavior
+- Both rules and workflows tracking the same state
+
+### Quick Decision Guide
+
+| Pattern | Use |
+|---------|-----|
+| A completes → B starts (no retry) | Rules |
+| A → B → A → B... (max N times) | Workflow |
+| Execute LLM call, process tools | Component |
+
+See [Orchestration Layers](docs/concepts/12-orchestration-layers.md) for details.

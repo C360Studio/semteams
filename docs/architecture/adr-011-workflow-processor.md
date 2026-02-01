@@ -2,7 +2,26 @@
 
 ## Status
 
-Proposed
+Accepted (Minimal)
+
+**Note**: Minimal implementation required for semspec-driven development and multi-agent workflows.
+The full specification remains valid but implementation is phased.
+
+**Initial scope (Phases 1-2)**:
+- Step tracking and sequencing
+- Loop limits (max_iterations)
+- Workflow timeout enforcement
+- Basic actions: call, publish, set_state
+
+**Deferred (Phases 3-4)**:
+- Retry with exponential backoff
+- HTTP action
+- Wait action
+- Secrets management
+- Timer service for scheduled triggers
+
+See [Orchestration Layers](../concepts/12-orchestration-layers.md) for how workflows fit into the
+three-layer orchestration model alongside rules and components.
 
 ## Context
 
@@ -141,4 +160,6 @@ NATS KV Buckets:
 ## References
 
 - **Depends on**: [ADR-010: Rules Processor Completion](./adr-010-rules-processor-completion.md)
+- **Related**: [ADR-018: Agentic Workflow Orchestration](./adr-018-agentic-workflow-orchestration.md)
+- **Concept**: [Orchestration Layers](../concepts/12-orchestration-layers.md)
 - **Full specification**: [Workflow Processor Spec](./specs/workflow-processor-spec.md)
