@@ -225,11 +225,12 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 	}
 
 	// Subscribe to user messages via JetStream
+	// Use "last" policy to catch messages sent just before consumer starts
 	userMsgCfg := natsclient.StreamConsumerConfig{
 		StreamName:    c.config.StreamName,
 		ConsumerName:  "agentic-dispatch-user-message",
 		FilterSubject: "user.message.>",
-		DeliverPolicy: "new",
+		DeliverPolicy: "last",
 		AckPolicy:     "explicit",
 		MaxDeliver:    3,
 		AutoCreate:    false,

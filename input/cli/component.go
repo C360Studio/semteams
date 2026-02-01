@@ -300,7 +300,7 @@ func (c *Component) handleCtrlC(ctx context.Context) {
 	}
 
 	subject := fmt.Sprintf("user.signal.%s", loopID)
-	if err := c.natsClient.Publish(ctx, subject, data); err != nil {
+	if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
 		c.logger.Error("Failed to publish cancel signal", slog.String("error", err.Error()))
 		return
 	}
@@ -392,7 +392,7 @@ func (c *Component) publishMessage(ctx context.Context, content string) {
 	}
 
 	subject := fmt.Sprintf("user.message.cli.%s", c.config.SessionID)
-	if err := c.natsClient.Publish(ctx, subject, data); err != nil {
+	if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
 		c.logger.Error("Failed to publish message", slog.String("error", err.Error()))
 		fmt.Fprintln(c.writer, "Error: Failed to send message")
 		return
