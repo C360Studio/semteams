@@ -1,0 +1,327 @@
+package workflow
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/nats-io/nats.go/jetstream"
+)
+
+// ExecutionState represents the state of a workflow execution
+type ExecutionState string
+
+// ExecutionState values represent the possible states of a workflow execution.
+const (
+	ExecutionStatePending   ExecutionState = "pending"
+	ExecutionStateRunning   ExecutionState = "running"
+	ExecutionStateCompleted ExecutionState = "completed"
+	ExecutionStateFailed    ExecutionState = "failed"
+	ExecutionStateTimedOut  ExecutionState = "timed_out"
+)
+
+// Special step name constants for workflow transitions
+const (
+	StepNameComplete = "complete"
+	StepNameFail     = "fail"
+)
+
+// IsTerminal returns true if the state is terminal (no further transitions)
+func (s ExecutionState) IsTerminal() bool {
+	return s == ExecutionStateCompleted || s == ExecutionStateFailed || s == ExecutionStateTimedOut
+}
+
+// Execution represents a running workflow instance
+type Execution struct {
+	mu sync.RWMutex `json:"-"` // Protects all fields
+
+	ID           string                `json:"id"`
+	WorkflowID   string                `json:"workflow_id"`
+	WorkflowName string                `json:"workflow_name,omitempty"`
+	State        ExecutionState        `json:"state"`
+	CurrentStep  int                   `json:"current_step"`
+	CurrentName  string                `json:"current_name,omitempty"`
+	Iteration    int                   `json:"iteration"`
+	Trigger      TriggerContext        `json:"trigger"`
+	StepResults  map[string]StepResult `json:"step_results"`
+	StartedAt    time.Time             `json:"started_at"`
+	UpdatedAt    time.Time             `json:"updated_at"`
+	CompletedAt  *time.Time            `json:"completed_at,omitempty"`
+	Deadline     time.Time             `json:"deadline"`
+	Error        string                `json:"error,omitempty"`
+}
+
+// NewExecution creates a new workflow execution
+func NewExecution(workflowID, workflowName string, trigger TriggerContext, timeout time.Duration) *Execution {
+	now := time.Now()
+	return &Execution{
+		ID:           generateExecutionID(),
+		WorkflowID:   workflowID,
+		WorkflowName: workflowName,
+		State:        ExecutionStatePending,
+		CurrentStep:  0,
+		Iteration:    1,
+		Trigger:      trigger,
+		StepResults:  make(map[string]StepResult),
+		StartedAt:    now,
+		UpdatedAt:    now,
+		Deadline:     now.Add(timeout),
+	}
+}
+
+// IsTimedOut checks if the execution has exceeded its deadline
+func (e *Execution) IsTimedOut() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return time.Now().After(e.Deadline)
+}
+
+// GetState returns the current execution state
+func (e *Execution) GetState() ExecutionState {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.State
+}
+
+// GetIteration returns the current iteration count
+func (e *Execution) GetIteration() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.Iteration
+}
+
+// GetCurrentName returns the current step name
+func (e *Execution) GetCurrentName() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.CurrentName
+}
+
+// MarkRunning transitions the execution to running state
+func (e *Execution) MarkRunning() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.State = ExecutionStateRunning
+	e.UpdatedAt = time.Now()
+}
+
+// MarkCompleted transitions the execution to completed state
+func (e *Execution) MarkCompleted() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	now := time.Now()
+	e.State = ExecutionStateCompleted
+	e.UpdatedAt = now
+	e.CompletedAt = &now
+}
+
+// MarkFailed transitions the execution to failed state
+func (e *Execution) MarkFailed(err string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	now := time.Now()
+	e.State = ExecutionStateFailed
+	e.Error = err
+	e.UpdatedAt = now
+	e.CompletedAt = &now
+}
+
+// MarkTimedOut transitions the execution to timed out state
+func (e *Execution) MarkTimedOut() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	now := time.Now()
+	e.State = ExecutionStateTimedOut
+	e.Error = "workflow timeout exceeded"
+	e.UpdatedAt = now
+	e.CompletedAt = &now
+}
+
+// RecordStepResult records the result of a step execution
+func (e *Execution) RecordStepResult(stepName string, result StepResult) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.StepResults[stepName] = result
+	e.UpdatedAt = time.Now()
+}
+
+// IncrementIteration increments the iteration counter for loop workflows
+func (e *Execution) IncrementIteration() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.Iteration++
+	e.UpdatedAt = time.Now()
+}
+
+// SetCurrentStep updates the current step information
+func (e *Execution) SetCurrentStep(index int, name string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.CurrentStep = index
+	e.CurrentName = name
+	e.UpdatedAt = time.Now()
+}
+
+// GetStepResult returns the result for a specific step
+func (e *Execution) GetStepResult(stepName string) (StepResult, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	result, ok := e.StepResults[stepName]
+	return result, ok
+}
+
+// Clone returns a deep copy of the execution for safe reading
+func (e *Execution) Clone() *Execution {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+
+	clone := &Execution{
+		ID:           e.ID,
+		WorkflowID:   e.WorkflowID,
+		WorkflowName: e.WorkflowName,
+		State:        e.State,
+		CurrentStep:  e.CurrentStep,
+		CurrentName:  e.CurrentName,
+		Iteration:    e.Iteration,
+		Trigger:      e.Trigger,
+		StepResults:  make(map[string]StepResult, len(e.StepResults)),
+		StartedAt:    e.StartedAt,
+		UpdatedAt:    e.UpdatedAt,
+		Deadline:     e.Deadline,
+		Error:        e.Error,
+	}
+
+	if e.CompletedAt != nil {
+		t := *e.CompletedAt
+		clone.CompletedAt = &t
+	}
+
+	for k, v := range e.StepResults {
+		clone.StepResults[k] = v
+	}
+
+	return clone
+}
+
+// TriggerContext contains context from the trigger event
+type TriggerContext struct {
+	Subject   string            `json:"subject"`
+	Payload   json.RawMessage   `json:"payload,omitempty"`
+	Timestamp time.Time         `json:"timestamp"`
+	Headers   map[string]string `json:"headers,omitempty"`
+}
+
+// MaxPayloadSize is the maximum allowed size for trigger payloads (1MB)
+const MaxPayloadSize = 1024 * 1024
+
+// ValidatePayloadSize checks if the payload is within acceptable limits
+func (t *TriggerContext) ValidatePayloadSize() error {
+	if len(t.Payload) > MaxPayloadSize {
+		return fmt.Errorf("payload size %d exceeds maximum %d bytes", len(t.Payload), MaxPayloadSize)
+	}
+	return nil
+}
+
+// StepResult represents the result of a step execution
+type StepResult struct {
+	StepName    string          `json:"step_name"`
+	Status      string          `json:"status"` // success, failed, skipped
+	Output      json.RawMessage `json:"output,omitempty"`
+	Error       string          `json:"error,omitempty"`
+	StartedAt   time.Time       `json:"started_at"`
+	CompletedAt time.Time       `json:"completed_at"`
+	Duration    time.Duration   `json:"duration"`
+	Iteration   int             `json:"iteration"` // Which iteration this result is from
+}
+
+// ExecutionStore manages workflow execution persistence
+type ExecutionStore struct {
+	bucket jetstream.KeyValue
+}
+
+// NewExecutionStore creates a new execution store
+func NewExecutionStore(bucket jetstream.KeyValue) *ExecutionStore {
+	return &ExecutionStore{bucket: bucket}
+}
+
+// Save persists an execution to KV
+func (s *ExecutionStore) Save(ctx context.Context, exec *Execution) error {
+	// Use Clone to get a consistent snapshot for marshaling
+	snapshot := exec.Clone()
+
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return fmt.Errorf("failed to marshal execution: %w", err)
+	}
+
+	if _, err := s.bucket.Put(ctx, snapshot.ID, data); err != nil {
+		return fmt.Errorf("failed to save execution: %w", err)
+	}
+
+	return nil
+}
+
+// Get retrieves an execution from KV
+func (s *ExecutionStore) Get(ctx context.Context, execID string) (*Execution, error) {
+	entry, err := s.bucket.Get(ctx, execID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get execution: %w", err)
+	}
+
+	var exec Execution
+	if err := json.Unmarshal(entry.Value(), &exec); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal execution: %w", err)
+	}
+
+	// Initialize the map if nil (for executions created before map was initialized)
+	if exec.StepResults == nil {
+		exec.StepResults = make(map[string]StepResult)
+	}
+
+	return &exec, nil
+}
+
+// Delete removes an execution from KV
+func (s *ExecutionStore) Delete(ctx context.Context, execID string) error {
+	if err := s.bucket.Delete(ctx, execID); err != nil {
+		return fmt.Errorf("failed to delete execution: %w", err)
+	}
+	return nil
+}
+
+// generateExecutionID generates a unique execution ID using timestamp and random bytes
+func generateExecutionID() string {
+	// Use timestamp prefix for rough ordering plus random bytes for uniqueness
+	timestamp := time.Now().UnixNano()
+	randomBytes := make([]byte, 8)
+	if _, err := rand.Read(randomBytes); err != nil {
+		// Fallback to just timestamp if crypto/rand fails (extremely unlikely)
+		return fmt.Sprintf("exec_%d", timestamp)
+	}
+	return fmt.Sprintf("exec_%d_%s", timestamp, hex.EncodeToString(randomBytes))
+}
+
+// Event represents a workflow lifecycle event
+type Event struct {
+	Type        string         `json:"type"` // started, step_started, step_completed, completed, failed, timed_out
+	ExecutionID string         `json:"execution_id"`
+	WorkflowID  string         `json:"workflow_id"`
+	StepName    string         `json:"step_name,omitempty"`
+	Iteration   int            `json:"iteration,omitempty"`
+	State       ExecutionState `json:"state,omitempty"`
+	Error       string         `json:"error,omitempty"`
+	Timestamp   time.Time      `json:"timestamp"`
+}
+
+// StepCompleteMessage represents a step completion message from an agent
+type StepCompleteMessage struct {
+	ExecutionID string          `json:"execution_id"`
+	StepName    string          `json:"step_name"`
+	Status      string          `json:"status"` // success, failed
+	Output      json.RawMessage `json:"output,omitempty"`
+	Error       string          `json:"error,omitempty"`
+}

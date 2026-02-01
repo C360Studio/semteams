@@ -40,7 +40,7 @@ func getTestNATSClient(t *testing.T) *natsclient.TestClient {
 }
 
 // registerTestWorkflow registers a workflow definition directly in the KV bucket
-func registerTestWorkflow(t *testing.T, kv jetstream.KeyValue, wf *workflow.WorkflowDef) {
+func registerTestWorkflow(t *testing.T, kv jetstream.KeyValue, wf *workflow.Definition) {
 	t.Helper()
 	data, err := json.Marshal(wf)
 	require.NoError(t, err, "Failed to marshal workflow definition")
@@ -111,7 +111,7 @@ func TestIntegration_WorkflowRegistryLoad(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a test workflow
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:      "test-registry-workflow",
 		Name:    "Test Registry Workflow",
 		Enabled: true,
@@ -213,7 +213,7 @@ func TestIntegration_SimpleWorkflowTrigger(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a simple workflow
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:      "simple-trigger-test",
 		Name:    "Simple Trigger Test",
 		Enabled: true,
@@ -319,7 +319,7 @@ func TestIntegration_CallActionWithResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with a call action
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:      "call-action-test",
 		Name:    "Call Action Test",
 		Enabled: true,
@@ -434,7 +434,7 @@ func TestIntegration_PublishAction(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with a publish action
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:      "publish-action-test",
 		Name:    "Publish Action Test",
 		Enabled: true,
@@ -551,7 +551,7 @@ func TestIntegration_LoopWorkflowMaxIterations(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with a loop (step2 goes back to step1)
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:            "loop-max-iter-test",
 		Name:          "Loop Max Iterations Test",
 		Enabled:       true,
@@ -670,7 +670,7 @@ func TestIntegration_ConditionEvaluation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with conditional steps
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:      "condition-eval-test",
 		Name:    "Condition Evaluation Test",
 		Enabled: true,
@@ -792,7 +792,7 @@ func TestIntegration_StepCompleteMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with an agent action (waits for external completion)
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:      "step-complete-msg-test",
 		Name:    "Step Complete Message Test",
 		Enabled: true,
@@ -911,7 +911,7 @@ func TestIntegration_WorkflowTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with a very short timeout and a step that won't complete
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:      "timeout-test",
 		Name:    "Timeout Test",
 		Enabled: true,
@@ -1024,7 +1024,7 @@ func TestIntegration_VariableInterpolation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow that uses interpolation
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:      "interpolation-test",
 		Name:    "Variable Interpolation Test",
 		Enabled: true,
@@ -1175,7 +1175,7 @@ func TestIntegration_RegistryWatchUpdates(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Now add a workflow definition dynamically
-	wf := &workflow.WorkflowDef{
+	wf := &workflow.Definition{
 		ID:      "dynamic-watch-workflow",
 		Name:    "Dynamically Added Workflow",
 		Enabled: true,
