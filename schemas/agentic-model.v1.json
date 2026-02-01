@@ -15,6 +15,11 @@
       "description": "Model endpoints",
       "category": "basic"
     },
+    "model_aliases": {
+      "type": "object",
+      "description": "Semantic model aliases mapping to endpoint names",
+      "category": "basic"
+    },
     "ports": {
       "type": "string",
       "description": "Port configuration",

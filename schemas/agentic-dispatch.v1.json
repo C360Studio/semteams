@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agentic-dispatch.v1.json",
+  "type": "object",
+  "title": "agentic-dispatch Configuration",
+  "description": "Routes user messages to agentic loops with command parsing and permissions",
+  "properties": {
+    "auto_continue": {
+      "type": "string",
+      "description": "Automatically continue last active loop",
+      "default": true
+    },
+    "default_model": {
+      "type": "string",
+      "description": "Default model for new tasks",
+      "default": "qwen2.5-coder:32b"
+    },
+    "default_role": {
+      "type": "string",
+      "description": "Default role for new tasks",
+      "default": "general"
+    },
+    "permissions": {
+      "type": "object",
+      "description": "Permission configuration"
+    },
+    "stream_name": {
+      "type": "string",
+      "description": "NATS stream name for user messages",
+      "default": "USER"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "agentic-dispatch",
+    "type": "processor",
+    "protocol": "nats",
+    "domain": "agentic",
+    "version": "1.0.0"
+  }
+}
