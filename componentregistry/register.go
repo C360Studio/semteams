@@ -18,6 +18,7 @@ import (
 	"github.com/c360/semstreams/output/websocket"
 	pkgerrs "github.com/c360/semstreams/pkg/errs"
 	agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch"
+	agenticgovernance "github.com/c360/semstreams/processor/agentic-governance"
 	agenticloop "github.com/c360/semstreams/processor/agentic-loop"
 	agenticmodel "github.com/c360/semstreams/processor/agentic-model"
 	agentictools "github.com/c360/semstreams/processor/agentic-tools"
@@ -208,6 +209,10 @@ func registerSemanticLayer(registry *component.Registry) error {
 func registerAgenticLayer(registry *component.Registry) error {
 	if err := agenticdispatch.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-dispatch component registration")
+	}
+
+	if err := agenticgovernance.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-governance component registration")
 	}
 
 	if err := agenticmodel.Register(registry); err != nil {
