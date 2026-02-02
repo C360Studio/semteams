@@ -13,6 +13,19 @@ servers:
     - url: http://localhost
       description: Production server (via reverse proxy)
 paths:
+    /commands:
+        get:
+            summary: List available commands
+            description: Returns the list of all registered commands with their descriptions and usage
+            tags:
+                - AgenticDispatch
+            responses:
+                "200":
+                    description: List of available commands
+                    content:
+                        application/json:
+                            schema:
+                                type: object
     /config/{name}:
         get:
             summary: Get component configuration
@@ -465,6 +478,21 @@ paths:
                         application/json:
                             schema:
                                 type: object
+    /message:
+        post:
+            summary: Process a user message
+            description: 'Processes a user message synchronously. Commands (starting with /) are executed immediately. Regular messages are submitted as tasks. Request body: {content: string (required), user_id?: string, channel_type?: string, channel_id?: string, reply_to?: string}'
+            tags:
+                - AgenticDispatch
+            responses:
+                "200":
+                    description: Message processed successfully
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                "400":
+                    description: Invalid request
     /paths:
         get:
             summary: Get component data paths
@@ -1197,6 +1225,8 @@ components:
                 - command
             type: object
 tags:
+    - name: AgenticDispatch
+      description: User message processing and command dispatch
     - name: Components
       description: Component management and monitoring endpoints
     - name: Deployment
