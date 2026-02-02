@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // hybridEntry represents an entry in the Hybrid cache.

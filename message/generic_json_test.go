@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/message"
 )
 
 func TestGenericJSON_Schema(t *testing.T) {

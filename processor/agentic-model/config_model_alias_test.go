@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	agenticmodel "github.com/c360/semstreams/processor/agentic-model"
+	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
 )
 
 // TestConfig_ModelAliases_JSONSerialization verifies ModelAliases field

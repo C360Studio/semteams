@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // SamplePayload is a simple test implementation of the Payload interface

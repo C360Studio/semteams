@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/agentic"
-	agenticloop "github.com/c360/semstreams/processor/agentic-loop"
+	"github.com/c360studio/semstreams/agentic"
+	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
 )
 
 func TestCompactor_ShouldCompact(t *testing.T) {

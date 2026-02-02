@@ -10,7 +10,7 @@ package agenticdispatch
 //
 //	package semspec
 //
-//	import agenticdispatch "github.com/c360/semstreams/processor/agentic-dispatch"
+//	import agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
 //
 //	func init() {
 //	    agenticdispatch.RegisterCommand("spec", &SpecCommandExecutor{})

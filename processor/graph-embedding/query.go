@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/c360/semstreams/graph/embedding"
+	"github.com/c360studio/semstreams/graph/embedding"
 )
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers

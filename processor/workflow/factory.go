@@ -1,7 +1,7 @@
 package workflow
 
 import (
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Register registers the workflow processor component factory with the registry

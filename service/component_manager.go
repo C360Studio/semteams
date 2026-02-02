@@ -11,13 +11,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/component/flowgraph"
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/retry"
-	"github.com/c360/semstreams/pkg/security"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/component/flowgraph"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/retry"
+	"github.com/c360studio/semstreams/pkg/security"
+	"github.com/c360studio/semstreams/types"
 )
 
 // ComponentManager handles lifecycle management of all components (inputs, processors, outputs)

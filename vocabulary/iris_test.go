@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360/semstreams/config"
+	"github.com/c360studio/semstreams/config"
 	"github.com/stretchr/testify/assert"
 )
 

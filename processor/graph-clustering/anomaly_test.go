@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/c360/semstreams/graph/inference"
+	"github.com/c360studio/semstreams/graph/inference"
 )
 
 // Tests for kvRelationshipQuerier

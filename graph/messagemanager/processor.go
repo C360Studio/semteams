@@ -10,10 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/storage/objectstore"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/storage/objectstore"
 )
 
 // Manager implements the MessageHandler interface

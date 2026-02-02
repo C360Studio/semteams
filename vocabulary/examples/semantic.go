@@ -5,7 +5,7 @@
 // Applications should create similar packages in their own codebases.
 package examples
 
-import "github.com/c360/semstreams/vocabulary"
+import "github.com/c360studio/semstreams/vocabulary"
 
 // Example semantic domain predicates for identity and labeling.
 // In a real application, this would be in your application's vocabulary package.

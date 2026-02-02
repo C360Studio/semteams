@@ -1,7 +1,7 @@
 package buffer
 
 import (
-	"github.com/c360/semstreams/metric"
+	"github.com/c360studio/semstreams/metric"
 )
 
 // Option configures buffer behavior using the functional options pattern.

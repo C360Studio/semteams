@@ -71,7 +71,7 @@
 //
 // # Usage
 //
-//	import agenticgovernance "github.com/c360/semstreams/processor/agentic-governance"
+//	import agenticgovernance "github.com/c360studio/semstreams/processor/agentic-governance"
 //
 //	// Register with component registry
 //	err := agenticgovernance.Register(registry)

@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/types"
 )
 
 // Helper function to extract enabled flag from service config

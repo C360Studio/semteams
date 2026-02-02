@@ -11,7 +11,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // KVTestHelper provides utilities for KV-based testing with JSON-only format

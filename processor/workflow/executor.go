@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/processor/workflow/actions"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/processor/workflow/actions"
 )
 
 // Default timeout when parsing fails

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/message"
 )
 
 // InjectedContextMessage represents context injected back to the agent loop

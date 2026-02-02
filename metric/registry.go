@@ -8,7 +8,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // MetricsRegistrar defines the interface for registering service-specific metrics

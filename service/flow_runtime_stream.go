@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/gorilla/websocket"
 	"github.com/nats-io/nats.go/jetstream"
 )

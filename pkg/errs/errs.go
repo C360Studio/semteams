@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/pkg/retry"
+	"github.com/c360studio/semstreams/pkg/retry"
 )
 
 // ErrorClass represents the classification of errors for handling purposes

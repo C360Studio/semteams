@@ -5,7 +5,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/message"
 )
 
 // EntityState represents complete local graph state for an entity.

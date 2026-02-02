@@ -4,7 +4,7 @@ package graph
 import (
 	"time"
 
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/message"
 )
 
 // Mutation Response Types

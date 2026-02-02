@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/c360/semstreams/pkg/acme"
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/pkg/security"
+	"github.com/c360studio/semstreams/pkg/acme"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/security"
 )
 
 // LoadServerTLSConfig creates a tls.Config for HTTP/WebSocket servers from platform config

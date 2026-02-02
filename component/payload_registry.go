@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // PayloadFactory creates a payload instance for a specific message type.

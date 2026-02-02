@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // PivotComputer computes pivot-based distance index for a graph.

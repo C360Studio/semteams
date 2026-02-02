@@ -11,8 +11,8 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/graph/clustering"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/graph/clustering"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // EntityState represents an entity stored in NATS KV

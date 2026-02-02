@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/test/e2e/client"
-	"github.com/c360/semstreams/test/e2e/config"
-	"github.com/c360/semstreams/test/e2e/scenarios/search"
+	"github.com/c360studio/semstreams/test/e2e/client"
+	"github.com/c360studio/semstreams/test/e2e/config"
+	"github.com/c360studio/semstreams/test/e2e/scenarios/search"
 )
 
 // Variant-specific entity count expectations

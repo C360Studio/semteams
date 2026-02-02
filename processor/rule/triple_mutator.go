@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"time"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/natsclient"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // NATS subjects for graph mutations (must match processor/graph/mutations.go)

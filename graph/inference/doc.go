@@ -164,7 +164,7 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/graph/clustering]: Community detection that triggers inference
-//   - [github.com/c360/semstreams/graph/embedding]: Embedding similarity for semantic gaps
-//   - [github.com/c360/semstreams/graph/llm]: LLM integration for review pipeline
+//   - [github.com/c360studio/semstreams/graph/clustering]: Community detection that triggers inference
+//   - [github.com/c360studio/semstreams/graph/embedding]: Embedding similarity for semantic gaps
+//   - [github.com/c360studio/semstreams/graph/llm]: LLM integration for review pipeline
 package inference

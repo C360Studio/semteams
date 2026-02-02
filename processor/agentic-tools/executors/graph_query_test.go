@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // mockKVGetter implements KVGetter for testing

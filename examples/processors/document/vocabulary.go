@@ -1,6 +1,6 @@
 package document
 
-import "github.com/c360/semstreams/vocabulary"
+import "github.com/c360studio/semstreams/vocabulary"
 
 func init() {
 	// Auto-register content vocabulary when package is imported

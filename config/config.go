@@ -11,8 +11,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/c360/semstreams/pkg/security"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/pkg/security"
+	"github.com/c360studio/semstreams/types"
 )
 
 // Storage mode constants

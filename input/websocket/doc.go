@@ -382,10 +382,10 @@
 // # Integration Example
 //
 //	import (
-//	    "github.com/c360/semstreams/input/websocket_input"
-//	    "github.com/c360/semstreams/component"
-//	    "github.com/c360/semstreams/natsclient"
-//	    "github.com/c360/semstreams/metric"
+//	    "github.com/c360studio/semstreams/input/websocket_input"
+//	    "github.com/c360studio/semstreams/component"
+//	    "github.com/c360studio/semstreams/natsclient"
+//	    "github.com/c360studio/semstreams/metric"
 //	)
 //
 //	// Create NATS client

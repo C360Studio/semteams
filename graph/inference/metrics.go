@@ -2,7 +2,7 @@
 package inference
 
 import (
-	"github.com/c360/semstreams/metric"
+	"github.com/c360studio/semstreams/metric"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

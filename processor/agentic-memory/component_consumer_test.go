@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 func TestComponent_Start_WithoutNATSClient(t *testing.T) {

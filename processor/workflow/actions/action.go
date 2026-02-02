@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // Result represents the result of an action execution

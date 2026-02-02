@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // ToolExecutor defines the interface for tool executors

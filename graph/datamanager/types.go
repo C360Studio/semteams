@@ -7,9 +7,9 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/metric"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/metric"
 )
 
 // Dependencies defines all dependencies needed by DataManager

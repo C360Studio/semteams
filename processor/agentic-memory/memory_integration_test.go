@@ -13,9 +13,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/natsclient"
-	agenticmemory "github.com/c360/semstreams/processor/agentic-memory"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
+	agenticmemory "github.com/c360studio/semstreams/processor/agentic-memory"
 )
 
 var (

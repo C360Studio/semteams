@@ -5,7 +5,7 @@ package robotapi
 import (
 	"context"
 
-	"github.com/c360/semstreams/graph/gateway/graphql"
+	"github.com/c360studio/semstreams/graph/gateway/graphql"
 )
 
 // Resolver is the root resolver

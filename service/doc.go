@@ -175,7 +175,7 @@
 //
 // Use project error wrapping for context:
 //
-//	import "github.com/c360/semstreams/pkg/errs"
+//	import "github.com/c360studio/semstreams/pkg/errs"
 //
 //	if err := validateConfig(cfg); err != nil {
 //	    return errs.WrapInvalid(err, "my-service", "NewMyService", "validate config")
@@ -241,10 +241,10 @@
 //	    "os/signal"
 //	    "syscall"
 //
-//	    "github.com/c360/semstreams/service"
-//	    "github.com/c360/semstreams/config"
-//	    "github.com/c360/semstreams/natsclient"
-//	    "github.com/c360/semstreams/metric"
+//	    "github.com/c360studio/semstreams/service"
+//	    "github.com/c360studio/semstreams/config"
+//	    "github.com/c360studio/semstreams/natsclient"
+//	    "github.com/c360studio/semstreams/metric"
 //	)
 //
 //	func main() {

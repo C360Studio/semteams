@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/c360/semstreams/graph"
+	"github.com/c360studio/semstreams/graph"
 )
 
 // Direction constants for path traversal

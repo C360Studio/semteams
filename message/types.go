@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Keyable interface represents types that can be converted to semantic keys

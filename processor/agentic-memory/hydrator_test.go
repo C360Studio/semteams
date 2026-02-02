@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	agenticmemory "github.com/c360/semstreams/processor/agentic-memory"
+	agenticmemory "github.com/c360studio/semstreams/processor/agentic-memory"
 )
 
 func TestHydrator_HydratePostCompaction(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // Package-level shared test client to avoid Docker resource exhaustion

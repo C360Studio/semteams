@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 func TestParseSchemaTag(t *testing.T) {

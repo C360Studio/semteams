@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/c360/semstreams/test/e2e/client"
-	"github.com/c360/semstreams/test/e2e/mock"
-	"github.com/c360/semstreams/test/e2e/scenarios"
+	"github.com/c360studio/semstreams/test/e2e/client"
+	"github.com/c360studio/semstreams/test/e2e/mock"
+	"github.com/c360studio/semstreams/test/e2e/scenarios"
 )
 
 // Scenario validates the agentic components (loop, model, tools) work together.

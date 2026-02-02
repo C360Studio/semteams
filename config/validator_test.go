@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // TestConfigValidationErrors tests enhanced validation error structure (T020)

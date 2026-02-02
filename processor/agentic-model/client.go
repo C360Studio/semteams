@@ -7,7 +7,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 	openai "github.com/sashabaranov/go-openai"
 )
 

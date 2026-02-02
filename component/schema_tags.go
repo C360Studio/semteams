@@ -52,8 +52,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/c360/semstreams/pkg/cache"
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // SchemaDirectives represents parsed schema tag directives

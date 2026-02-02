@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/test/e2e/scenarios"
-	"github.com/c360/semstreams/test/e2e/scenarios/search"
+	"github.com/c360studio/semstreams/test/e2e/scenarios"
+	"github.com/c360studio/semstreams/test/e2e/scenarios/search"
 )
 
 // handleCompareFilesCommand compares two structured result files

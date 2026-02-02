@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	agenticloop "github.com/c360/semstreams/processor/agentic-loop"
+	"github.com/c360studio/semstreams/component"
+	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
 )
 
 func TestComponent_Meta(t *testing.T) {

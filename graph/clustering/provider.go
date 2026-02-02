@@ -3,7 +3,7 @@ package clustering
 import (
 	"context"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Direction represents the direction of relationship traversal.

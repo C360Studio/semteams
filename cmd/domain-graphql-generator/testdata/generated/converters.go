@@ -3,7 +3,7 @@
 package robotapi
 
 import (
-	"github.com/c360/semstreams/graph/gateway/graphql"
+	"github.com/c360studio/semstreams/graph/gateway/graphql"
 )
 
 // getDescription extracts properties.description as string

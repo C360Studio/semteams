@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/sashabaranov/go-openai"
 )
 

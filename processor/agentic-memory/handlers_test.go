@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/c360/semstreams/message"
-	agenticmemory "github.com/c360/semstreams/processor/agentic-memory"
+	"github.com/c360studio/semstreams/message"
+	agenticmemory "github.com/c360studio/semstreams/processor/agentic-memory"
 )
 
 // ContextEvent matches the structure from agentic-loop/handlers.go

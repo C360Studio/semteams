@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/component/flowgraph"
-	"github.com/c360/semstreams/health"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/component/flowgraph"
+	"github.com/c360studio/semstreams/health"
 )
 
 func init() {

@@ -7,8 +7,8 @@ package agentictools_test
 import (
 	"testing"
 
-	"github.com/c360/semstreams/component"
-	agentictools "github.com/c360/semstreams/processor/agentic-tools"
+	"github.com/c360studio/semstreams/component"
+	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 )
 
 func TestRegister_SuccessfulRegistration(t *testing.T) {

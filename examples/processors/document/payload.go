@@ -25,7 +25,7 @@ package document
 import (
 	"fmt"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Triple source and confidence constants

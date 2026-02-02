@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/componentregistry"
-	"github.com/c360/semstreams/service"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/componentregistry"
+	"github.com/c360studio/semstreams/service"
 	"github.com/xeipuuv/gojsonschema"
 	"gopkg.in/yaml.v3"
 )

@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/c360/semstreams/graph/clustering"
-	"github.com/c360/semstreams/test/e2e/scenarios/community"
+	"github.com/c360studio/semstreams/graph/clustering"
+	"github.com/c360studio/semstreams/test/e2e/scenarios/community"
 )
 
 // Statistical variant validation functions (GraphRAG, community validation)

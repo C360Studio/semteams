@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/health"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/retry"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/health"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/retry"
+	"github.com/c360studio/semstreams/types"
 )
 
 // Manager manages service lifecycle using a provided registry.

@@ -3,8 +3,8 @@ package udp
 import (
 	"testing"
 
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 func TestUDPMetrics_Creation(t *testing.T) {

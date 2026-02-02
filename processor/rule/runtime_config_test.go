@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/processor/rule/expression"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/processor/rule/expression"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

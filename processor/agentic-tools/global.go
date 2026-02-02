@@ -3,7 +3,7 @@ package agentictools
 import (
 	"sync"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 var (

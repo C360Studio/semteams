@@ -123,7 +123,7 @@
 //
 // With Prometheus Metrics:
 //
-//	import "github.com/c360/semstreams/metric"
+//	import "github.com/c360studio/semstreams/metric"
 //
 //	registry := metric.NewMetricsRegistry()
 //
@@ -221,7 +221,7 @@
 //
 // Metrics Integration:
 //
-//	import "github.com/c360/semstreams/metric"
+//	import "github.com/c360studio/semstreams/metric"
 //
 //	registry := metric.NewMetricsRegistry()
 //	pool := worker.NewPool[T](
@@ -272,7 +272,7 @@
 //
 // Retry on Queue Full:
 //
-//	import "github.com/c360/semstreams/pkg/retry"
+//	import "github.com/c360studio/semstreams/pkg/retry"
 //
 //	cfg := retry.Quick() // Fast retries with exponential backoff
 //	err := retry.Do(ctx, cfg, func() error {

@@ -6,9 +6,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/logging"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/logging"
 )
 
 // parseLogLevel converts a string log level to slog.Level.

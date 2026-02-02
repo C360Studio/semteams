@@ -3,7 +3,7 @@ package cache
 import (
 	"sync"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // simpleCache is a thread-safe cache with no eviction policy.

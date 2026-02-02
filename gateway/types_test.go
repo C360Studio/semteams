@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/gateway"
-	pkgerrs "github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/gateway"
+	pkgerrs "github.com/c360studio/semstreams/pkg/errs"
 )
 
 func TestRouteMapping_Validate(t *testing.T) {

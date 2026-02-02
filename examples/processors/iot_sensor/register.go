@@ -1,6 +1,6 @@
 package iotsensor
 
-import "github.com/c360/semstreams/component"
+import "github.com/c360studio/semstreams/component"
 
 // Register registers the IoT sensor processor component with the given registry.
 // This enables the component to be discovered and instantiated by the component

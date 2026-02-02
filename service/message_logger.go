@@ -10,9 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // NewMessageLoggerService creates a new message logger service using the standard constructor pattern

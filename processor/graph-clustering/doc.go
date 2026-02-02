@@ -105,7 +105,7 @@
 //
 // Register the component with the component registry:
 //
-//	import graphclustering "github.com/c360/semstreams/processor/graph-clustering"
+//	import graphclustering "github.com/c360studio/semstreams/processor/graph-clustering"
 //
 //	func init() {
 //	    graphclustering.Register(registry)

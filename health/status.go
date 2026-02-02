@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Pre-compiled regexes for error message sanitization (performance optimization)

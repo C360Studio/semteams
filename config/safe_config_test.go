@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/types"
 )
 
 func TestSafeConfig_ThreadSafety(t *testing.T) {

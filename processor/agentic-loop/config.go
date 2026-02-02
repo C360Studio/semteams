@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Config represents the configuration for the agentic-loop processor

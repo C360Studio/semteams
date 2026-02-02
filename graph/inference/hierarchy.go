@@ -10,9 +10,9 @@ import (
 	"sync"
 	"sync/atomic"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/vocabulary"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/vocabulary"
 )
 
 // HierarchyInference creates membership edges to container entities based on

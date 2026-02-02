@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/processor/rule/expression"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/processor/rule/expression"
 )
 
 // ExpressionRule implements Rule interface for expression-based condition evaluation

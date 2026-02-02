@@ -15,9 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/output/httppost"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/output/httppost"
 )
 
 // Package-level shared test client to avoid Docker resource exhaustion

@@ -166,7 +166,7 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/graph/indexmanager]: Uses embeddings for similarity search
-//   - [github.com/c360/semstreams/graph/inference]: Semantic gap detection using similarities
-//   - [github.com/c360/semstreams/storage/objectstore]: Content storage for large texts
+//   - [github.com/c360studio/semstreams/graph/indexmanager]: Uses embeddings for similarity search
+//   - [github.com/c360studio/semstreams/graph/inference]: Semantic gap detection using similarities
+//   - [github.com/c360studio/semstreams/storage/objectstore]: Content storage for large texts
 package embedding

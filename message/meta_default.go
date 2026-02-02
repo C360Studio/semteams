@@ -3,7 +3,7 @@ package message
 import (
 	"time"
 
-	"github.com/c360/semstreams/pkg/timestamp"
+	"github.com/c360studio/semstreams/pkg/timestamp"
 )
 
 // DefaultMeta provides the standard implementation of the Meta interface.

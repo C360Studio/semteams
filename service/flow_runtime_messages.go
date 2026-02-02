@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/flowstore"
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/flowstore"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // RuntimeMessage represents a formatted message entry for UI consumption

@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
 )
 
 // Document represents a generic document entity. It implements the ContentStorable

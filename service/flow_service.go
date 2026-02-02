@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/config"
-	flowengine "github.com/c360/semstreams/engine"
-	"github.com/c360/semstreams/flowstore"
+	"github.com/c360studio/semstreams/config"
+	flowengine "github.com/c360studio/semstreams/engine"
+	"github.com/c360studio/semstreams/flowstore"
 	"github.com/google/uuid"
 )
 

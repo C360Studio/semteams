@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/message"
-	agenticmemory "github.com/c360/semstreams/processor/agentic-memory"
+	"github.com/c360studio/semstreams/message"
+	agenticmemory "github.com/c360studio/semstreams/processor/agentic-memory"
 )
 
 func TestLLMExtractor_ExtractFacts(t *testing.T) {

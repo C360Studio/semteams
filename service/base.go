@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/health"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/health"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // Status represents the current status of a service

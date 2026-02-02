@@ -9,7 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/c360/semstreams/test/e2e/mock"
+	"github.com/c360studio/semstreams/test/e2e/mock"
 )
 
 func main() {

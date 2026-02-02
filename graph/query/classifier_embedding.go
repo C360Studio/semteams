@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/c360/semstreams/graph/embedding"
+	"github.com/c360studio/semstreams/graph/embedding"
 )
 
 // Embedder interface for vector generation.

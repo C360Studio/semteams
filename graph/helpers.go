@@ -4,7 +4,7 @@
 package graph
 
 import (
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/message"
 )
 
 // GetPropertyValue retrieves a property value from entity triples by predicate.

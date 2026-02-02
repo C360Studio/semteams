@@ -11,8 +11,8 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/graph/llm"
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/graph/llm"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // ReviewWorker watches ANOMALY_INDEX and processes pending anomalies.

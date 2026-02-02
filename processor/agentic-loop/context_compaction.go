@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // CompactionResult contains the results of a compaction operation

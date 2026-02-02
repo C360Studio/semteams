@@ -1,7 +1,7 @@
 package agenticdispatch
 
 import (
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Register registers the router component factory with the registry

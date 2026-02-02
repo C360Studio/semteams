@@ -22,7 +22,7 @@
 //
 // The JSON parser provides reliable parsing with validation:
 //
-//	import "github.com/c360/semstreams/processor/parser"
+//	import "github.com/c360studio/semstreams/processor/parser"
 //
 //	// Parse JSON bytes
 //	data := []byte(`{"sensor": "temp-001", "value": 23.5}`)
@@ -158,8 +158,8 @@
 // Parsed results can be wrapped in GenericJSON messages:
 //
 //	import (
-//	    "github.com/c360/semstreams/message"
-//	    "github.com/c360/semstreams/processor/parser"
+//	    "github.com/c360studio/semstreams/message"
+//	    "github.com/c360studio/semstreams/processor/parser"
 //	)
 //
 //	// Parse raw JSON

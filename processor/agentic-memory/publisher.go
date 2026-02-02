@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/message"
 )
 
 // Publisher defines the interface for publishing messages

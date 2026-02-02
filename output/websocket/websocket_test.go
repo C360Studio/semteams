@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/security"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/security"
 	"github.com/gorilla/websocket"
 	natspkg "github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"

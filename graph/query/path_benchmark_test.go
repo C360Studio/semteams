@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	gtypes "github.com/c360/semstreams/graph"
+	gtypes "github.com/c360studio/semstreams/graph"
 )
 
 // BenchmarkPathQuery_SmallGraph benchmarks path queries on a small graph (100 entities)

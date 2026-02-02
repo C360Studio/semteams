@@ -16,9 +16,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/c360/semstreams/agentic"
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/google/uuid"
 )
 

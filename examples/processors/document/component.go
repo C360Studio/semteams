@@ -11,12 +11,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/storage/objectstore"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

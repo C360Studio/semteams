@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/message"
 )
 
 // LLMClient defines the interface for LLM operations

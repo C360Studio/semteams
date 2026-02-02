@@ -62,7 +62,7 @@
 //
 // Register the component with the component registry:
 //
-//	import graphindextemporal "github.com/c360/semstreams/processor/graph-index-temporal"
+//	import graphindextemporal "github.com/c360studio/semstreams/processor/graph-index-temporal"
 //
 //	func init() {
 //	    graphindextemporal.Register(registry)

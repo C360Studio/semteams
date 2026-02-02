@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/types"
 )
 
 // Flow represents a visual flow definition with metadata and canvas layout

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Event represents a graph mutation request from rules.

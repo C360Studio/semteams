@@ -14,7 +14,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Cache represents a generic cache interface that all cache implementations must satisfy.

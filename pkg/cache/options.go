@@ -3,7 +3,7 @@ package cache
 import (
 	"time"
 
-	"github.com/c360/semstreams/metric"
+	"github.com/c360studio/semstreams/metric"
 )
 
 // Option configures cache behavior using the functional options pattern.

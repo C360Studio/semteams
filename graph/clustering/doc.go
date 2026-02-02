@@ -189,7 +189,7 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/graph]: Core graph types and Provider interface
-//   - [github.com/c360/semstreams/graph/llm]: LLM integration for summarization
-//   - [github.com/c360/semstreams/graph/inference]: Anomaly detection triggered by clustering
+//   - [github.com/c360studio/semstreams/graph]: Core graph types and Provider interface
+//   - [github.com/c360studio/semstreams/graph/llm]: LLM integration for summarization
+//   - [github.com/c360studio/semstreams/graph/inference]: Anomaly detection triggered by clustering
 package clustering

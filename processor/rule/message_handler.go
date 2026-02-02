@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
 )
 
 // reportEvaluating reports the evaluating stage (throttled to avoid KV spam)

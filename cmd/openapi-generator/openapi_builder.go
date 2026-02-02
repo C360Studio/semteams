@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/c360/semstreams/service"
+	"github.com/c360studio/semstreams/service"
 	"gopkg.in/yaml.v3"
 )
 

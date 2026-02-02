@@ -127,7 +127,7 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/gateway]: Gateway interface and Config types
-//   - [github.com/c360/semstreams/natsclient]: NATS connection management
-//   - [github.com/c360/semstreams/component]: Component lifecycle interface
+//   - [github.com/c360studio/semstreams/gateway]: Gateway interface and Config types
+//   - [github.com/c360studio/semstreams/natsclient]: NATS connection management
+//   - [github.com/c360studio/semstreams/component]: Component lifecycle interface
 package http

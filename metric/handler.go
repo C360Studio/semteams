@@ -7,9 +7,9 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/pkg/security"
-	"github.com/c360/semstreams/pkg/tlsutil"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/security"
+	"github.com/c360studio/semstreams/pkg/tlsutil"
 )
 
 // Server represents the metrics HTTP server

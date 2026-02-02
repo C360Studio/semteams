@@ -1,7 +1,7 @@
 package service
 
 import (
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Configurable is an optional interface for services that expose their configuration schema.

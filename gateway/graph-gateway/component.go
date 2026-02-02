@@ -13,13 +13,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/gateway"
-	"github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/graph/inference"
-	"github.com/c360/semstreams/graph/query"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/gateway"
+	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/graph/inference"
+	"github.com/c360studio/semstreams/graph/query"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

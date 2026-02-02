@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/types"
 )
 
 func TestFromComponentConfigs(t *testing.T) {

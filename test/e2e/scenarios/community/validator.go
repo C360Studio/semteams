@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/c360/semstreams/graph/clustering"
+	"github.com/c360studio/semstreams/graph/clustering"
 )
 
 // Validator validates communities against ground truth expectations.

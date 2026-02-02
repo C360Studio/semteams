@@ -7,7 +7,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/c360/semstreams/test/e2e/client"
+	"github.com/c360studio/semstreams/test/e2e/client"
 )
 
 // DataSender handles sending test data through the pipeline

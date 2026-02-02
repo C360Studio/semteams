@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // CreateInput is the factory function for creating WebSocket input components

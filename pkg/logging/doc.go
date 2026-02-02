@@ -188,8 +188,8 @@
 //	    "log/slog"
 //	    "os"
 //
-//	    "github.com/c360/semstreams/natsclient"
-//	    "github.com/c360/semstreams/pkg/logging"
+//	    "github.com/c360studio/semstreams/natsclient"
+//	    "github.com/c360studio/semstreams/pkg/logging"
 //	)
 //
 //	func setupLogger(natsClient *natsclient.Client, level slog.Level) *slog.Logger {

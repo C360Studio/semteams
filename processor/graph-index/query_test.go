@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/graph"
+	"github.com/c360studio/semstreams/graph"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"

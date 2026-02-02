@@ -16,14 +16,14 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/pkg/buffer"
-	"github.com/c360/semstreams/pkg/cache"
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/pkg/retry"
-	"github.com/c360/semstreams/pkg/worker"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/pkg/buffer"
+	"github.com/c360studio/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/retry"
+	"github.com/c360studio/semstreams/pkg/worker"
 )
 
 var (

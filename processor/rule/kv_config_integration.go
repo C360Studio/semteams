@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

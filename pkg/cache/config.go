@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Strategy defines the eviction strategy for the cache.

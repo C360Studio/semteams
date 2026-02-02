@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // ConfigValidator provides secure validation for component configurations

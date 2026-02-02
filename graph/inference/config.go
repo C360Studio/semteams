@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/graph/llm"
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/graph/llm"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Config configures the structural inference system

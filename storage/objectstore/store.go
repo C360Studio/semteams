@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/cache"
-	"github.com/c360/semstreams/storage"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/storage"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

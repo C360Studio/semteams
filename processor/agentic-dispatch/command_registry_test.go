@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/c360/semstreams/graph/structural"
+	"github.com/c360studio/semstreams/graph/structural"
 )
 
 func TestCoreAnomalyDetector_Name(t *testing.T) {

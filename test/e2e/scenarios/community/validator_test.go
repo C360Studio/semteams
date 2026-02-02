@@ -3,7 +3,7 @@ package community
 import (
 	"testing"
 
-	"github.com/c360/semstreams/graph/clustering"
+	"github.com/c360studio/semstreams/graph/clustering"
 )
 
 func TestValidator_AllInSameCommunity(t *testing.T) {

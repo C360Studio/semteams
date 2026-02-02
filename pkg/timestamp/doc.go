@@ -124,5 +124,5 @@
 //
 // Related packages:
 //   - [time]: Go standard library time package
-//   - [github.com/c360/semstreams/graph]: Uses int64 timestamps for EntityState
+//   - [github.com/c360studio/semstreams/graph]: Uses int64 timestamps for EntityState
 package timestamp

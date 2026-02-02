@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/health"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/service"
+	"github.com/c360studio/semstreams/health"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/service"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

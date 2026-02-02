@@ -3,10 +3,10 @@ package component
 import (
 	"log/slog"
 
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/security"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/security"
+	"github.com/c360studio/semstreams/types"
 )
 
 // PlatformMeta provides platform identity to components.

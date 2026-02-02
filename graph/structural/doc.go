@@ -137,7 +137,7 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/graph]: Provider interface and graph types
-//   - [github.com/c360/semstreams/graph/inference]: Anomaly detection using structural indices
-//   - [github.com/c360/semstreams/graph/clustering]: Community detection (triggers recomputation)
+//   - [github.com/c360studio/semstreams/graph]: Provider interface and graph types
+//   - [github.com/c360studio/semstreams/graph/inference]: Anomaly detection using structural indices
+//   - [github.com/c360studio/semstreams/graph/clustering]: Community detection (triggers recomputation)
 package structural

@@ -3,9 +3,9 @@
 package objectstore
 
 import (
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/pkg/cache"
-	"github.com/c360/semstreams/storage"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/storage"
 )
 
 // Config holds configuration for ObjectStore storage component.

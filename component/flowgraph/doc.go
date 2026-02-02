@@ -136,6 +136,6 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/component]: Port types and component interfaces
-//   - [github.com/c360/semstreams/service]: Uses flowgraph for flow validation
+//   - [github.com/c360studio/semstreams/component]: Port types and component interfaces
+//   - [github.com/c360studio/semstreams/service]: Uses flowgraph for flow validation
 package flowgraph

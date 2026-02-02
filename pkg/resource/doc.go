@@ -161,6 +161,6 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/processor/graph-query]: Uses Watcher for optional buckets
-//   - [github.com/c360/semstreams/natsclient]: NATS KV bucket operations
+//   - [github.com/c360studio/semstreams/processor/graph-query]: Uses Watcher for optional buckets
+//   - [github.com/c360studio/semstreams/natsclient]: NATS KV bucket operations
 package resource

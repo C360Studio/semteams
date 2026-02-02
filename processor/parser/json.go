@@ -3,7 +3,7 @@ package parser
 import (
 	"encoding/json"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // JSONParser handles JSON format data

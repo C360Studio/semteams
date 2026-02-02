@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/test/e2e/config"
+	"github.com/c360studio/semstreams/test/e2e/config"
 )
 
 // ObservabilityClient interacts with SemStreams component management endpoints

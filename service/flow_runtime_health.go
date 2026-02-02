@@ -26,9 +26,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/types"
 )
 
 // RuntimeHealthResponse represents the JSON response for runtime health

@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Register registers the CLI input component factory with the registry

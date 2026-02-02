@@ -7,10 +7,10 @@ import (
 	"sort"
 	"strings"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/graph/llm"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/pkg/errs"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/graph/llm"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // extractEntityType extracts the type from an entity ID using message.ParseEntityID

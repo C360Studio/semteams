@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Config represents the code generation configuration

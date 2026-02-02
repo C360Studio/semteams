@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // FlowGraph represents a directed graph of component connections

@@ -103,7 +103,7 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/graph]: Core graph types and EntityState
-//   - [github.com/c360/semstreams/message]: Triple and message types
-//   - [github.com/c360/semstreams/graph/query]: Query execution using EntityReader
+//   - [github.com/c360studio/semstreams/graph]: Core graph types and EntityState
+//   - [github.com/c360studio/semstreams/message]: Triple and message types
+//   - [github.com/c360studio/semstreams/graph/query]: Query execution using EntityReader
 package datamanager

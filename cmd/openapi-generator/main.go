@@ -11,9 +11,9 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/componentregistry"
-	"github.com/c360/semstreams/service"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/componentregistry"
+	"github.com/c360studio/semstreams/service"
 )
 
 func main() {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Config holds configuration for agentic-model processor component

@@ -3,7 +3,7 @@ package agenticdispatch
 import (
 	"fmt"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Config represents the configuration for the router processor

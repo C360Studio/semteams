@@ -1,6 +1,6 @@
 package graph
 
-import "github.com/c360/semstreams/message"
+import "github.com/c360studio/semstreams/message"
 
 // Graphable enables messages to self-declare their domain entities and relationships.
 // This interface eliminates the need for brittle string matching in entity extraction

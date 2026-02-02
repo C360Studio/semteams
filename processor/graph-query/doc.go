@@ -163,8 +163,8 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/graph]: EntityState, Graphable interface
-//   - [github.com/c360/semstreams/graph/clustering]: Community detection
-//   - [github.com/c360/semstreams/graph/embedding]: Semantic search
-//   - [github.com/c360/semstreams/pkg/resource]: Resource availability watching
+//   - [github.com/c360studio/semstreams/graph]: EntityState, Graphable interface
+//   - [github.com/c360studio/semstreams/graph/clustering]: Community detection
+//   - [github.com/c360studio/semstreams/graph/embedding]: Semantic search
+//   - [github.com/c360studio/semstreams/pkg/resource]: Resource availability watching
 package graphquery

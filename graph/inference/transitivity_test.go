@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/graph/structural"
+	"github.com/c360studio/semstreams/graph/structural"
 )
 
 // mockRelationshipQuerier implements RelationshipQuerier for testing.

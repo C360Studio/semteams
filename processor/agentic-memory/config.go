@@ -3,7 +3,7 @@ package agenticmemory
 import (
 	"fmt"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Config holds configuration for agentic-memory processor component

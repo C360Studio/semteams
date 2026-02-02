@@ -9,8 +9,8 @@ import (
 	"regexp"
 	"sync"
 
-	"github.com/c360/semstreams/agentic"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // CommandConfig defines a command's configuration

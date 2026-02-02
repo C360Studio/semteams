@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/processor/rule/expression"
+	"github.com/c360studio/semstreams/component"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/processor/rule/expression"
 )
 
 func TestExpressionFactoryRegistration(t *testing.T) {

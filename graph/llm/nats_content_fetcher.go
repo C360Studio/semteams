@@ -8,10 +8,10 @@ import (
 	"log/slog"
 	"time"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/text"
-	"github.com/c360/semstreams/storage/objectstore"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/text"
+	"github.com/c360studio/semstreams/storage/objectstore"
 )
 
 // NATSContentFetcher implements ContentFetcher using NATS request/reply

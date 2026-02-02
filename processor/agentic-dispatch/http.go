@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/agentic"
-	"github.com/c360/semstreams/service"
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/service"
 	"github.com/google/uuid"
 )
 

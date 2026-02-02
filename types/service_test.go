@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	pkgerrs "github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/types"
+	pkgerrs "github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/types"
 )
 
 func TestServiceConfigValidate(t *testing.T) {

@@ -17,8 +17,8 @@ package datamanager
 import (
 	"context"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
 )
 
 // EntityReader provides read-only entity access with caching.

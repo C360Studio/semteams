@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/types"
 	"github.com/google/uuid"
 )
 

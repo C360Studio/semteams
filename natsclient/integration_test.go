@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/metric"
+	"github.com/c360studio/semstreams/metric"
 	"github.com/nats-io/nats.go/jetstream"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"

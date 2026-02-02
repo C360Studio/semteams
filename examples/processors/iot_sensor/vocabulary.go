@@ -1,6 +1,6 @@
 package iotsensor
 
-import "github.com/c360/semstreams/vocabulary"
+import "github.com/c360studio/semstreams/vocabulary"
 
 func init() {
 	// Auto-register IoT sensor vocabulary when package is imported

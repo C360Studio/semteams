@@ -12,11 +12,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/graph/query"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/resource"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/graph/query"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/resource"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

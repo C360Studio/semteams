@@ -4,9 +4,9 @@ package messagemanager
 import (
 	"context"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/graph/datamanager"
-	"github.com/c360/semstreams/metric"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/graph/datamanager"
+	"github.com/c360studio/semstreams/metric"
 )
 
 // MessageHandler handles all message processing business logic

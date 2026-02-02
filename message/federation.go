@@ -3,7 +3,7 @@ package message
 import (
 	"time"
 
-	"github.com/c360/semstreams/config"
+	"github.com/c360studio/semstreams/config"
 	"github.com/google/uuid"
 )
 

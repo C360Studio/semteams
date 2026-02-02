@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/health"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/health"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // mockNATSClient provides a mock NATS client for testing

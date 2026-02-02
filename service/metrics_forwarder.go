@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/metric"
+	"github.com/c360studio/semstreams/metric"
 	dto "github.com/prometheus/client_model/go"
 )
 

@@ -135,7 +135,7 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/pkg/tlsutil]: TLS configuration with ACME integration
-//   - [github.com/c360/semstreams/pkg/security]: Security configuration types
+//   - [github.com/c360studio/semstreams/pkg/tlsutil]: TLS configuration with ACME integration
+//   - [github.com/c360studio/semstreams/pkg/security]: Security configuration types
 //   - [github.com/go-acme/lego/v4]: Underlying ACME library
 package acme

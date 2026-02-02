@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers

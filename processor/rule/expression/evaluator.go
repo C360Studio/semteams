@@ -6,7 +6,7 @@ import (
 	"math"
 	"strings"
 
-	gtypes "github.com/c360/semstreams/graph"
+	gtypes "github.com/c360studio/semstreams/graph"
 )
 
 // NewExpressionEvaluator creates a new expression evaluator with all supported operators

@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/agentic"
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/natsclient"
-	agentictools "github.com/c360/semstreams/processor/agentic-tools"
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
+	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 )
 
 var (

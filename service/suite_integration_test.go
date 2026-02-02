@@ -10,10 +10,10 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/types"
 )
 
 // ServiceSuite provides shared testcontainer infrastructure for all service tests

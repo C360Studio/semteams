@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Register registers the rule processor component with the given registry

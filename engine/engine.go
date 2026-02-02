@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/flowstore"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/flowstore"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/types"
 )
 
 // Engine translates Flow entities into ComponentConfigs and manages deployment lifecycle

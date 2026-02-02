@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/c360/semstreams/graph/clustering"
+	"github.com/c360studio/semstreams/graph/clustering"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

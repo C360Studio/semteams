@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/c360/semstreams/test/e2e/config"
+	"github.com/c360studio/semstreams/test/e2e/config"
 )
 
 // MessageLoggerClient provides HTTP client access to the MessageLogger service

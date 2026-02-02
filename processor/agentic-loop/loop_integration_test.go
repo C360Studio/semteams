@@ -16,10 +16,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/agentic"
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/natsclient"
-	agenticloop "github.com/c360/semstreams/processor/agentic-loop"
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
+	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
 )
 
 var (

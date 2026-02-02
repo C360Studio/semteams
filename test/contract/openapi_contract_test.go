@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/componentregistry"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/componentregistry"
 	"gopkg.in/yaml.v3"
 )
 

@@ -10,9 +10,9 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/storage/objectstore"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/storage/objectstore"
 )
 
 // GeneratedCallback is called when an embedding is successfully generated.

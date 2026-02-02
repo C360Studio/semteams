@@ -1,7 +1,7 @@
 // Package graph provides types for NATS mutation API
 package graph
 
-import "github.com/c360/semstreams/message"
+import "github.com/c360studio/semstreams/message"
 
 // Mutation Request Types
 

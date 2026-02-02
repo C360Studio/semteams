@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/cache"
 )
 
 // TestProcessor_DebounceZero_NoCoalescingSet tests coalescer is nil when debounce=0

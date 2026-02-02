@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	cerrs "github.com/c360/semstreams/pkg/errs"
+	cerrs "github.com/c360studio/semstreams/pkg/errs"
 	"github.com/stretchr/testify/require"
 )
 

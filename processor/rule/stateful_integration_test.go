@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // TestStatefulEvaluator_Integration tests the full integration with NATS KV

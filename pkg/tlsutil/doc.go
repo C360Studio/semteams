@@ -162,7 +162,7 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/pkg/security]: Configuration types
-//   - [github.com/c360/semstreams/pkg/acme]: ACME client implementation
+//   - [github.com/c360studio/semstreams/pkg/security]: Configuration types
+//   - [github.com/c360studio/semstreams/pkg/acme]: ACME client implementation
 //   - [crypto/tls]: Go standard library TLS package
 package tlsutil

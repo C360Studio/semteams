@@ -15,11 +15,11 @@ import (
 	"time"
 
 	// SemStreams E2E infrastructure
-	"github.com/c360/semstreams/test/e2e/client"
-	"github.com/c360/semstreams/test/e2e/config"
-	"github.com/c360/semstreams/test/e2e/results"
-	scenarios "github.com/c360/semstreams/test/e2e/scenarios"
-	"github.com/c360/semstreams/test/e2e/scenarios/agentic"
+	"github.com/c360studio/semstreams/test/e2e/client"
+	"github.com/c360studio/semstreams/test/e2e/config"
+	"github.com/c360studio/semstreams/test/e2e/results"
+	scenarios "github.com/c360studio/semstreams/test/e2e/scenarios"
+	"github.com/c360studio/semstreams/test/e2e/scenarios/agentic"
 )
 
 var (

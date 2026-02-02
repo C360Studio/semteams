@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 )
 
 // init registers the SensorReading payload type with the global PayloadRegistry.

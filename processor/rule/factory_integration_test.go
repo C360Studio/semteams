@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/processor/rule"
-	"github.com/c360/semstreams/processor/rule/expression"
+	"github.com/c360studio/semstreams/processor/rule"
+	"github.com/c360studio/semstreams/processor/rule/expression"
 )
 
 // TestIntegration_FactoryRegistry tests multiple rule factories registered simultaneously

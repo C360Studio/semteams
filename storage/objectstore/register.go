@@ -1,6 +1,6 @@
 package objectstore
 
-import "github.com/c360/semstreams/component"
+import "github.com/c360studio/semstreams/component"
 
 // Register registers the ObjectStore storage component with the given registry.
 //

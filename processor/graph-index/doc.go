@@ -66,7 +66,7 @@
 //
 // Register the component with the component registry:
 //
-//	import graphindex "github.com/c360/semstreams/processor/graph-index"
+//	import graphindex "github.com/c360studio/semstreams/processor/graph-index"
 //
 //	func init() {
 //	    graphindex.Register(registry)

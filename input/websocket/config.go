@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 // Mode defines the operation mode for WebSocket input

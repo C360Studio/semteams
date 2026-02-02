@@ -12,9 +12,9 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/types"
 )
 
 // Info holds metadata about an available component type

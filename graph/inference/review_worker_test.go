@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/graph/llm"
+	"github.com/c360studio/semstreams/graph/llm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

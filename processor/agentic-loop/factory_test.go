@@ -7,8 +7,8 @@ package agenticloop_test
 import (
 	"testing"
 
-	"github.com/c360/semstreams/component"
-	agenticloop "github.com/c360/semstreams/processor/agentic-loop"
+	"github.com/c360studio/semstreams/component"
+	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
 )
 
 func TestRegister_SuccessfulRegistration(t *testing.T) {

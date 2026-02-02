@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // RouteMapping defines how an external endpoint maps to a NATS subject

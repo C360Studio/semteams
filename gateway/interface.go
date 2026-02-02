@@ -3,8 +3,8 @@ package gateway
 import (
 	"net/http"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/service"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/service"
 )
 
 // Gateway defines the interface for protocol bridge components that enable

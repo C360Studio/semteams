@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/pkg/cache"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

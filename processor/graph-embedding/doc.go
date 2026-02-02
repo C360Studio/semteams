@@ -72,7 +72,7 @@
 //
 // Register the component with the component registry:
 //
-//	import graphembedding "github.com/c360/semstreams/processor/graph-embedding"
+//	import graphembedding "github.com/c360studio/semstreams/processor/graph-embedding"
 //
 //	func init() {
 //	    graphembedding.Register(registry)

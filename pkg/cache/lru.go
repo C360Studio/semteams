@@ -4,7 +4,7 @@ import (
 	"container/list"
 	"sync"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // lruEntry represents an entry in the LRU cache.

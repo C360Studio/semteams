@@ -32,8 +32,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/types"
 	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	dto "github.com/prometheus/client_model/go"

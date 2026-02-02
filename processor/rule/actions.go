@@ -11,7 +11,7 @@ import (
 
 	"log/slog"
 
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/message"
 )
 
 // Action type constants define the supported action types for rule execution.

@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/c360/semstreams/config"
+	"github.com/c360studio/semstreams/config"
 )
 
 // ExampleLoader_Load demonstrates loading configuration from multiple layers

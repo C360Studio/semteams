@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/flowstore"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/flowstore"
+	"github.com/c360studio/semstreams/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

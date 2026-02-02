@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/processor/workflow"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/processor/workflow"
 )
 
 // getTestNATSClient creates a NATS client for integration tests with JetStream and required streams

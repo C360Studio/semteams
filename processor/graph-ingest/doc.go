@@ -68,7 +68,7 @@
 //
 // Register the component with the component registry:
 //
-//	import graphingest "github.com/c360/semstreams/processor/graph-ingest"
+//	import graphingest "github.com/c360studio/semstreams/processor/graph-ingest"
 //
 //	func init() {
 //	    graphingest.Register(registry)

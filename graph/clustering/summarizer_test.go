@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	gtypes "github.com/c360/semstreams/graph"
+	gtypes "github.com/c360studio/semstreams/graph"
 )
 
 func TestStatisticalSummarizer_SummarizeCommunity(t *testing.T) {

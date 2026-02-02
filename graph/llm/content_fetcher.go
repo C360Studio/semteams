@@ -4,7 +4,7 @@ package llm
 import (
 	"context"
 
-	gtypes "github.com/c360/semstreams/graph"
+	gtypes "github.com/c360studio/semstreams/graph"
 )
 
 // ContentFetcher abstracts content retrieval for LLM prompts.

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/agentic"
-	agentictools "github.com/c360/semstreams/processor/agentic-tools"
+	"github.com/c360studio/semstreams/agentic"
+	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 )
 
 // Mock tool executor for testing

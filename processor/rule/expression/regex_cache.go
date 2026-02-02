@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/pkg/cache"
 )
 
 // globalRegexCache is the LRU cache for compiled regular expressions

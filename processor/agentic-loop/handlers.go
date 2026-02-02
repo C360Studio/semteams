@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // Subject patterns for NATS publishing (concrete subjects, no wildcards).

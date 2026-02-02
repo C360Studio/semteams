@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // RegionType defines the type of context region

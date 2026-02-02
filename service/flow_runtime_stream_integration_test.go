@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/flowstore"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/logging"
+	"github.com/c360studio/semstreams/flowstore"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/logging"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // Violation represents a detected policy violation

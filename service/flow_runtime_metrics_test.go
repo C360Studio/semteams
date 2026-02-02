@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/types"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

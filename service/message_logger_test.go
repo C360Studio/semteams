@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

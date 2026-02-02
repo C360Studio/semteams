@@ -3,8 +3,8 @@ package graphgateway
 import (
 	"reflect"
 
-	"github.com/c360/semstreams/graph/inference"
-	"github.com/c360/semstreams/service"
+	"github.com/c360studio/semstreams/graph/inference"
+	"github.com/c360studio/semstreams/service"
 )
 
 func init() {

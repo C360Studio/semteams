@@ -15,13 +15,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/componentregistry"
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/service"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/componentregistry"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/service"
+	"github.com/c360studio/semstreams/types"
 )
 
 // Build information constants

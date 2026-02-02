@@ -31,7 +31,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 	"github.com/nats-io/nats.go"
 )
 

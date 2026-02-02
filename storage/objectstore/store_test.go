@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/message"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -1,7 +1,7 @@
 // Package flowgraph provides flow graph analysis and validation for component connections.
 package flowgraph
 
-import "github.com/c360/semstreams/component"
+import "github.com/c360studio/semstreams/component"
 
 // FlowAnalysisResult contains the results of connectivity analysis
 type FlowAnalysisResult struct {

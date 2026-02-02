@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
 )
 
 // TestProcessor_Process_JSONTransformation verifies that the processor correctly

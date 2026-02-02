@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/graph"
+	"github.com/c360studio/semstreams/graph"
 )
 
 const (

@@ -15,12 +15,12 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/graph/datamanager"
-	"github.com/c360/semstreams/graph/messagemanager"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
+	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/graph/datamanager"
+	"github.com/c360studio/semstreams/graph/messagemanager"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // testBuckets holds all KV buckets needed for integration tests

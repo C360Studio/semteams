@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/c360/semstreams/config"
+	"github.com/c360studio/semstreams/config"
 )
 
 // Base IRI constants for the SemStreams vocabulary

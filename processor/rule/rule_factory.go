@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/processor/rule/expression"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/processor/rule/expression"
 )
 
 // Definition represents a JSON rule configuration

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/agentic"
-	agenticmodel "github.com/c360/semstreams/processor/agentic-model"
+	"github.com/c360studio/semstreams/agentic"
+	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
 )
 
 func TestNewClient_ValidConfig(t *testing.T) {

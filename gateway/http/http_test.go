@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	pkgerrs "github.com/c360/semstreams/pkg/errs"
+	pkgerrs "github.com/c360studio/semstreams/pkg/errs"
 )
 
 func TestGetOrGenerateRequestID(t *testing.T) {

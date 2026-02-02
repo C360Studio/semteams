@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 func TestTrajectoryStep_JSONRoundTrip(t *testing.T) {

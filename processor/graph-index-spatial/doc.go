@@ -68,7 +68,7 @@
 //
 // Register the component with the component registry:
 //
-//	import graphindexspatial "github.com/c360/semstreams/processor/graph-index-spatial"
+//	import graphindexspatial "github.com/c360studio/semstreams/processor/graph-index-spatial"
 //
 //	func init() {
 //	    graphindexspatial.Register(registry)

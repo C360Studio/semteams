@@ -278,8 +278,8 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/component]: Component interfaces
-//   - [github.com/c360/semstreams/natsclient]: NATS connection and publishing
-//   - [github.com/c360/semstreams/input/udp]: UDP input component
-//   - [github.com/c360/semstreams/input/websocket]: WebSocket input component
+//   - [github.com/c360studio/semstreams/component]: Component interfaces
+//   - [github.com/c360studio/semstreams/natsclient]: NATS connection and publishing
+//   - [github.com/c360studio/semstreams/input/udp]: UDP input component
+//   - [github.com/c360studio/semstreams/input/websocket]: WebSocket input component
 package file

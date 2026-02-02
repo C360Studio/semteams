@@ -4,7 +4,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/c360/semstreams/metric"
+	"github.com/c360studio/semstreams/metric"
 )
 
 // Logger interface for injecting custom loggers

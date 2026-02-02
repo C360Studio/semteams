@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/pkg/timestamp"
+	"github.com/c360studio/semstreams/pkg/timestamp"
 )
 
 // ExampleNow demonstrates getting the current timestamp

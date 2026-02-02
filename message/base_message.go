@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/config"
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/pkg/timestamp"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/timestamp"
 	"github.com/google/uuid"
 )
 

@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/natsclient"
-	jsonfilter "github.com/c360/semstreams/processor/json_filter"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/natsclient"
+	jsonfilter "github.com/c360studio/semstreams/processor/json_filter"
 )
 
 // Package-level shared test client to avoid Docker resource exhaustion

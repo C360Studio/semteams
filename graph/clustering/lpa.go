@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/pkg/errs"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 const (

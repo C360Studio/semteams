@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/c360/semstreams/graph"
+	"github.com/c360studio/semstreams/graph"
 	"github.com/nats-io/nats.go"
 )
 

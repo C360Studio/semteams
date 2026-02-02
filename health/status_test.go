@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/component"
+	"github.com/c360studio/semstreams/component"
 )
 
 func TestStatus_IsHealthy(t *testing.T) {

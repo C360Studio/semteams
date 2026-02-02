@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/types"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/types"
 	"github.com/nats-io/nats.go/jetstream"
 )
 

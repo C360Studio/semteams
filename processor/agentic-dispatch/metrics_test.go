@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/metric"
+	"github.com/c360studio/semstreams/metric"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"

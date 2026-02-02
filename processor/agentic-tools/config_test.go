@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	agentictools "github.com/c360/semstreams/processor/agentic-tools"
+	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 )
 
 func TestConfig_JSONSerialization(t *testing.T) {

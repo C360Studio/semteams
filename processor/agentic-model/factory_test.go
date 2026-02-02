@@ -7,8 +7,8 @@ package agenticmodel_test
 import (
 	"testing"
 
-	"github.com/c360/semstreams/component"
-	agenticmodel "github.com/c360/semstreams/processor/agentic-model"
+	"github.com/c360studio/semstreams/component"
+	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
 )
 
 func TestRegister_Success(t *testing.T) {

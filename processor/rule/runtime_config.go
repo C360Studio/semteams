@@ -3,8 +3,8 @@ package rule
 import (
 	"fmt"
 
-	"github.com/c360/semstreams/pkg/errs"
-	"github.com/c360/semstreams/processor/rule/expression"
+	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/processor/rule/expression"
 )
 
 // ApplyConfigUpdate applies validated configuration changes

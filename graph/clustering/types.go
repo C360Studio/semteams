@@ -3,7 +3,7 @@ package clustering
 import (
 	"context"
 
-	gtypes "github.com/c360/semstreams/graph"
+	gtypes "github.com/c360studio/semstreams/graph"
 )
 
 // Community represents a detected community/cluster in the graph

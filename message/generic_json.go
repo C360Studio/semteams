@@ -4,8 +4,8 @@ package message
 import (
 	"encoding/json"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // init registers the GenericJSON payload type with the global PayloadRegistry.

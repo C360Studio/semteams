@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // ComponentRegistry defines the interface needed for schema validation

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/agentic"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/google/uuid"
 )
 

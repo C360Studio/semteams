@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/message"
+	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
 )
 
 // TestSensorReading_EntityID_6PartFormat verifies that SensorReading.EntityID()

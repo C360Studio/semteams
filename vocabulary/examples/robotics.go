@@ -1,6 +1,6 @@
 package examples
 
-import "github.com/c360/semstreams/vocabulary"
+import "github.com/c360studio/semstreams/vocabulary"
 
 // Example robotics domain predicates.
 // Shows how domain-specific applications would define their vocabulary.

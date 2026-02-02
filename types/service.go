@@ -4,7 +4,7 @@ package types
 import (
 	"encoding/json"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // ServiceConfig provides configuration for creating a service instance.

@@ -128,8 +128,8 @@
 // # See Also
 //
 // Related packages:
-//   - [github.com/c360/semstreams/graph]: EntityState and Graphable interface
-//   - [github.com/c360/semstreams/graph/datamanager]: Entity persistence
-//   - [github.com/c360/semstreams/message]: Message types and Triple
-//   - [github.com/c360/semstreams/storage/objectstore]: Large content storage
+//   - [github.com/c360studio/semstreams/graph]: EntityState and Graphable interface
+//   - [github.com/c360studio/semstreams/graph/datamanager]: Entity persistence
+//   - [github.com/c360studio/semstreams/message]: Message types and Triple
+//   - [github.com/c360studio/semstreams/storage/objectstore]: Large content storage
 package messagemanager

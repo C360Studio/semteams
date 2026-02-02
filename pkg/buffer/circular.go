@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // circularBuffer is a thread-safe circular buffer with configurable overflow policies.

@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/c360/semstreams/component"
-	agenticmemory "github.com/c360/semstreams/processor/agentic-memory"
+	"github.com/c360studio/semstreams/component"
+	agenticmemory "github.com/c360studio/semstreams/processor/agentic-memory"
 )
 
 func TestComponent_Meta(t *testing.T) {

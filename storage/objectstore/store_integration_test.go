@@ -12,12 +12,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/c360/semstreams/examples/processors/document"
-	"github.com/c360/semstreams/message"
-	"github.com/c360/semstreams/metric"
-	"github.com/c360/semstreams/natsclient"
-	"github.com/c360/semstreams/pkg/cache"
-	"github.com/c360/semstreams/storage/objectstore"
+	"github.com/c360studio/semstreams/examples/processors/document"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	dto "github.com/prometheus/client_model/go"
 )
 

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/c360/semstreams/component"
-	"github.com/c360/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/cache"
 )
 
 // Config holds configuration for the RuleProcessor

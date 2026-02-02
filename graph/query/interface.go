@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	gtypes "github.com/c360/semstreams/graph"
+	gtypes "github.com/c360studio/semstreams/graph"
 )
 
 // Client defines the interface for querying graph data.

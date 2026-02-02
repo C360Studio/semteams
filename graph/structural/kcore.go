@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	gtypes "github.com/c360/semstreams/graph"
-	"github.com/c360/semstreams/pkg/errs"
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Provider is an alias to the shared interface in graph package.
