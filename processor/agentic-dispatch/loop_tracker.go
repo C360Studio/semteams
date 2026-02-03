@@ -1,8 +1,13 @@
 package agenticdispatch
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
+
+	"github.com/c360studio/semstreams/natsclient"
 )
 
 // LoopInfo contains information about an active loop
@@ -163,3 +168,36 @@ func isTerminalState(state string) bool {
 		return false
 	}
 }
+
+// SignalMessage represents a control signal sent to a loop.
+type SignalMessage struct {
+	LoopID    string    `json:"loop_id"`
+	Type      string    `json:"type"`   // pause, resume, cancel
+	Reason    string    `json:"reason"` // optional reason
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// SendSignal publishes a control signal to a loop via NATS.
+func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, loopID, signalType, reason string) error {
+	if nc == nil {
+		return ErrNATSClientNil
+	}
+
+	signal := SignalMessage{
+		LoopID:    loopID,
+		Type:      signalType,
+		Reason:    reason,
+		Timestamp: time.Now(),
+	}
+
+	data, err := json.Marshal(signal)
+	if err != nil {
+		return err
+	}
+
+	subject := "agent.signal." + loopID
+	return nc.PublishToStream(ctx, subject, data)
+}
+
+// ErrNATSClientNil is returned when NATS client is nil.
+var ErrNATSClientNil = fmt.Errorf("NATS client is nil")

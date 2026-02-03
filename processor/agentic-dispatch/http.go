@@ -12,6 +12,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/service"
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 func init() {
@@ -59,6 +60,14 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 
 	// GET /health - component health check
 	mux.HandleFunc("GET "+prefix+"health", c.handleHTTPHealth)
+
+	// Loop management endpoints
+	mux.HandleFunc("GET "+prefix+"loops", c.handleListLoops)
+	mux.HandleFunc("GET "+prefix+"loops/{id}", c.handleGetLoop)
+	mux.HandleFunc("POST "+prefix+"loops/{id}/signal", c.handleLoopSignal)
+
+	// Real-time activity stream (SSE)
+	mux.HandleFunc("GET "+prefix+"activity", c.handleActivityStream)
 
 	c.logger.Info("agentic-dispatch HTTP handlers registered", slog.String("prefix", prefix))
 }
@@ -337,6 +346,7 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg agentic.U
 
 // handleListCommands returns the list of available commands.
 func (c *Component) handleListCommands(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	commands := c.registry.All()
 
 	type commandInfo struct {
@@ -356,13 +366,14 @@ func (c *Component) handleListCommands(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(result); err != nil {
-		c.logger.Error("Failed to encode commands list", slog.String("error", err.Error()))
+		c.logger.ErrorContext(ctx, "Failed to encode commands list", slog.String("error", err.Error()))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
 // handleHTTPHealth returns the component health status.
 func (c *Component) handleHTTPHealth(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	health := c.Health()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -370,7 +381,7 @@ func (c *Component) handleHTTPHealth(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}
 	if err := json.NewEncoder(w).Encode(health); err != nil {
-		c.logger.Error("Failed to encode health status", slog.String("error", err.Error()))
+		c.logger.ErrorContext(ctx, "Failed to encode health status", slog.String("error", err.Error()))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
@@ -398,6 +409,278 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// SignalRequest represents a control signal request for a loop.
+type SignalRequest struct {
+	Type   string `json:"type"`   // pause, resume, cancel
+	Reason string `json:"reason"` // optional reason
+}
+
+// SignalResponse represents the response to a signal request.
+type SignalResponse struct {
+	LoopID    string `json:"loop_id"`
+	Signal    string `json:"signal"`
+	Accepted  bool   `json:"accepted"`
+	Message   string `json:"message,omitempty"`
+	Timestamp string `json:"timestamp"`
+}
+
+// ActivityEvent represents a real-time activity event sent via SSE.
+type ActivityEvent struct {
+	Type      string          `json:"type"` // loop_created, loop_updated, loop_deleted
+	LoopID    string          `json:"loop_id"`
+	Timestamp time.Time       `json:"timestamp"`
+	Data      json.RawMessage `json:"data,omitempty"`
+}
+
+// handleListLoops returns all tracked loops with optional filtering.
+func (c *Component) handleListLoops(w http.ResponseWriter, r *http.Request) {
+	// Get optional query filters
+	userID := r.URL.Query().Get("user_id")
+	state := r.URL.Query().Get("state")
+
+	var loops []*LoopInfo
+	if userID != "" {
+		loops = c.loopTracker.GetUserLoops(userID)
+	} else {
+		loops = c.loopTracker.GetAllLoops()
+	}
+
+	// Apply state filter if specified
+	if state != "" {
+		filtered := make([]*LoopInfo, 0, len(loops))
+		for _, loop := range loops {
+			if loop.State == state {
+				filtered = append(filtered, loop)
+			}
+		}
+		loops = filtered
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(loops); err != nil {
+		c.logger.Error("Failed to encode loops list", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+// handleGetLoop returns a single loop by ID.
+func (c *Component) handleGetLoop(w http.ResponseWriter, r *http.Request) {
+	loopID := r.PathValue("id")
+	if loopID == "" {
+		c.writeJSONError(w, http.StatusBadRequest, "loop ID is required")
+		return
+	}
+
+	loop := c.loopTracker.Get(loopID)
+	if loop == nil {
+		c.writeJSONError(w, http.StatusNotFound, "loop not found")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(loop); err != nil {
+		c.logger.Error("Failed to encode loop", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+// handleLoopSignal sends a control signal to a loop.
+func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	loopID := r.PathValue("id")
+	if loopID == "" {
+		c.writeJSONError(w, http.StatusBadRequest, "loop ID is required")
+		return
+	}
+
+	// Check if loop exists
+	loop := c.loopTracker.Get(loopID)
+	if loop == nil {
+		c.writeJSONError(w, http.StatusNotFound, "loop not found")
+		return
+	}
+
+	// Parse signal request
+	var req SignalRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.writeJSONError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
+		return
+	}
+
+	// Validate signal type
+	switch req.Type {
+	case "pause", "resume", "cancel":
+		// Valid signal types
+	default:
+		c.writeJSONError(w, http.StatusBadRequest, "invalid signal type: must be pause, resume, or cancel")
+		return
+	}
+
+	// Send signal via NATS
+	if err := c.loopTracker.SendSignal(ctx, c.natsClient, loopID, req.Type, req.Reason); err != nil {
+		c.logger.Error("Failed to send signal",
+			slog.String("loop_id", loopID),
+			slog.String("signal", req.Type),
+			slog.String("error", err.Error()))
+		c.writeJSONError(w, http.StatusInternalServerError, "failed to send signal: "+err.Error())
+		return
+	}
+
+	c.logger.Info("Signal sent to loop",
+		slog.String("loop_id", loopID),
+		slog.String("signal", req.Type),
+		slog.String("reason", req.Reason))
+
+	// Return success response
+	resp := SignalResponse{
+		LoopID:    loopID,
+		Signal:    req.Type,
+		Accepted:  true,
+		Message:   fmt.Sprintf("Signal '%s' sent to loop %s", req.Type, loopID),
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		c.logger.Error("Failed to encode signal response", slog.String("error", err.Error()))
+	}
+}
+
+// handleActivityStream streams real-time activity events via SSE.
+func (c *Component) handleActivityStream(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Setup SSE headers
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// Get KV bucket for AGENT_LOOPS
+	kv, err := c.natsClient.GetKeyValueBucket(ctx, "AGENT_LOOPS")
+	if err != nil {
+		c.sendActivityError(w, flusher, "Failed to access AGENT_LOOPS bucket", err)
+		return
+	}
+
+	// Create watcher for all keys
+	watcher, err := kv.WatchAll(ctx)
+	if err != nil {
+		c.sendActivityError(w, flusher, "Failed to create watcher", err)
+		return
+	}
+	defer func() {
+		if stopErr := watcher.Stop(); stopErr != nil {
+			c.logger.Warn("Failed to stop activity watcher", slog.String("error", stopErr.Error()))
+		}
+	}()
+
+	// Send initial connected event
+	c.sendActivityEvent(w, flusher, "connected", map[string]string{
+		"message": "Watching for activity events",
+	})
+
+	// Send retry directive
+	fmt.Fprintf(w, "retry: 5000\n\n")
+	flusher.Flush()
+
+	c.logger.Info("Activity SSE client connected")
+
+	// Stream events
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Info("Activity SSE client disconnected")
+			return
+
+		case entry, ok := <-watcher.Updates():
+			if !ok {
+				c.sendActivityError(w, flusher, "Watcher closed unexpectedly", nil)
+				return
+			}
+
+			if entry == nil {
+				// Initial sync complete
+				c.sendActivityEvent(w, flusher, "sync_complete", map[string]string{
+					"message": "Initial sync complete",
+				})
+				continue
+			}
+
+			// Determine event type from KV operation
+			eventType := c.mapKVOperation(entry.Operation(), entry.Revision())
+
+			// Build activity event
+			event := ActivityEvent{
+				Type:      eventType,
+				LoopID:    entry.Key(),
+				Timestamp: entry.Created(),
+			}
+
+			// Include value for non-delete operations
+			if entry.Operation() != jetstream.KeyValueDelete {
+				if json.Valid(entry.Value()) {
+					event.Data = entry.Value()
+				} else {
+					event.Data, _ = json.Marshal(string(entry.Value()))
+				}
+			}
+
+			// Send SSE event
+			data, err := json.Marshal(event)
+			if err != nil {
+				c.logger.Error("Failed to marshal activity event", slog.String("error", err.Error()))
+				continue
+			}
+
+			fmt.Fprintf(w, "event: activity\ndata: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
+}
+
+// mapKVOperation maps a KV operation to an activity event type.
+func (c *Component) mapKVOperation(op jetstream.KeyValueOp, revision uint64) string {
+	switch op {
+	case jetstream.KeyValuePut:
+		if revision == 1 {
+			return "loop_created"
+		}
+		return "loop_updated"
+	case jetstream.KeyValueDelete:
+		return "loop_deleted"
+	default:
+		return "unknown"
+	}
+}
+
+// sendActivityEvent sends an SSE event for activity stream.
+func (c *Component) sendActivityEvent(w http.ResponseWriter, flusher http.Flusher, event string, data interface{}) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		c.logger.Error("Failed to marshal activity event", slog.String("event", event), slog.String("error", err.Error()))
+		return
+	}
+	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event, jsonData)
+	flusher.Flush()
+}
+
+// sendActivityError sends an error event via SSE.
+func (c *Component) sendActivityError(w http.ResponseWriter, flusher http.Flusher, message string, err error) {
+	errorData := map[string]string{"error": message}
+	if err != nil {
+		errorData["details"] = err.Error()
+	}
+	c.sendActivityEvent(w, flusher, "error", errorData)
 }
 
 // agenticDispatchOpenAPISpec returns the OpenAPI specification for agentic-dispatch endpoints.
@@ -451,6 +734,77 @@ func agenticDispatchOpenAPISpec() *service.OpenAPISpec {
 						},
 						"503": {
 							Description: "Component is unhealthy",
+						},
+					},
+				},
+			},
+			"/loops": {
+				GET: &service.OperationSpec{
+					Summary:     "List all tracked loops",
+					Description: "Returns all active and recent loops. Supports optional filtering by user_id and state query parameters.",
+					Tags:        []string{"AgenticDispatch"},
+					Parameters: []service.ParameterSpec{
+						{Name: "user_id", In: "query", Description: "Filter by user ID"},
+						{Name: "state", In: "query", Description: "Filter by loop state (pending, executing, paused, complete, failed, cancelled)"},
+					},
+					Responses: map[string]service.ResponseSpec{
+						"200": {
+							Description: "List of loops",
+							ContentType: "application/json",
+						},
+					},
+				},
+			},
+			"/loops/{id}": {
+				GET: &service.OperationSpec{
+					Summary:     "Get single loop by ID",
+					Description: "Returns detailed information about a specific loop including state, iterations, and metadata.",
+					Tags:        []string{"AgenticDispatch"},
+					Parameters: []service.ParameterSpec{
+						{Name: "id", In: "path", Description: "Loop ID", Required: true},
+					},
+					Responses: map[string]service.ResponseSpec{
+						"200": {
+							Description: "Loop details",
+							ContentType: "application/json",
+						},
+						"404": {
+							Description: "Loop not found",
+						},
+					},
+				},
+			},
+			"/loops/{id}/signal": {
+				POST: &service.OperationSpec{
+					Summary:     "Send control signal to loop",
+					Description: "Sends a control signal (pause, resume, cancel) to an active loop. Request body: {type: 'pause'|'resume'|'cancel', reason?: string}",
+					Tags:        []string{"AgenticDispatch"},
+					Parameters: []service.ParameterSpec{
+						{Name: "id", In: "path", Description: "Loop ID", Required: true},
+					},
+					Responses: map[string]service.ResponseSpec{
+						"200": {
+							Description: "Signal accepted",
+							ContentType: "application/json",
+						},
+						"400": {
+							Description: "Invalid signal type",
+						},
+						"404": {
+							Description: "Loop not found",
+						},
+					},
+				},
+			},
+			"/activity": {
+				GET: &service.OperationSpec{
+					Summary:     "Real-time activity events (SSE)",
+					Description: "Server-Sent Events stream of loop activity. Events include loop_created, loop_updated, loop_deleted. Connect with EventSource or curl -N.",
+					Tags:        []string{"AgenticDispatch"},
+					Responses: map[string]service.ResponseSpec{
+						"200": {
+							Description: "SSE event stream",
+							ContentType: "text/event-stream",
 						},
 					},
 				},
