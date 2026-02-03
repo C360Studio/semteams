@@ -13,6 +13,15 @@ servers:
     - url: http://localhost
       description: Production server (via reverse proxy)
 paths:
+    /activity:
+        get:
+            summary: Real-time activity events (SSE)
+            description: Server-Sent Events stream of loop activity. Events include loop_created, loop_updated, loop_deleted. Connect with EventSource or curl -N.
+            tags:
+                - AgenticDispatch
+            responses:
+                "200":
+                    description: SSE event stream
     /commands:
         get:
             summary: List available commands
@@ -465,6 +474,72 @@ paths:
                         application/json:
                             schema:
                                 type: object
+    /loops:
+        get:
+            summary: List all tracked loops
+            description: Returns all active and recent loops. Supports optional filtering by user_id and state query parameters.
+            tags:
+                - AgenticDispatch
+            parameters:
+                - name: user_id
+                  in: query
+                  description: Filter by user ID
+                  schema: {}
+                - name: state
+                  in: query
+                  description: Filter by loop state (pending, executing, paused, complete, failed, cancelled)
+                  schema: {}
+            responses:
+                "200":
+                    description: List of loops
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+    /loops/{id}:
+        get:
+            summary: Get single loop by ID
+            description: Returns detailed information about a specific loop including state, iterations, and metadata.
+            tags:
+                - AgenticDispatch
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  description: Loop ID
+                  schema: {}
+            responses:
+                "200":
+                    description: Loop details
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                "404":
+                    description: Loop not found
+    /loops/{id}/signal:
+        post:
+            summary: Send control signal to loop
+            description: 'Sends a control signal (pause, resume, cancel) to an active loop. Request body: {type: ''pause''|''resume''|''cancel'', reason?: string}'
+            tags:
+                - AgenticDispatch
+            parameters:
+                - name: id
+                  in: path
+                  required: true
+                  description: Loop ID
+                  schema: {}
+            responses:
+                "200":
+                    description: Signal accepted
+                    content:
+                        application/json:
+                            schema:
+                                type: object
+                "400":
+                    description: Invalid signal type
+                "404":
+                    description: Loop not found
     /mcp:
         post:
             summary: MCP endpoint
