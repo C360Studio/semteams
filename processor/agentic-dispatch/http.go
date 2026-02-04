@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strings"
 	"time"
 
@@ -1026,6 +1027,12 @@ func agenticDispatchOpenAPISpec() *service.OpenAPISpec {
 					},
 				},
 			},
+		},
+		ResponseTypes: []reflect.Type{
+			reflect.TypeOf(LoopInfo{}),
+			reflect.TypeOf(HTTPMessageResponse{}),
+			reflect.TypeOf(SignalResponse{}),
+			reflect.TypeOf(ActivityEvent{}),
 		},
 	}
 }

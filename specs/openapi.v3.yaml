@@ -734,6 +734,23 @@ paths:
                                 type: object
 components:
     schemas:
+        ActivityEvent:
+            properties:
+                data:
+                    format: byte
+                    type: string
+                loop_id:
+                    type: string
+                timestamp:
+                    format: date-time
+                    type: string
+                type:
+                    type: string
+            required:
+                - type
+                - loop_id
+                - timestamp
+            type: object
         ComponentType:
             properties:
                 category:
@@ -911,6 +928,26 @@ components:
                 - prev_state
                 - timestamp
             type: object
+        HTTPMessageResponse:
+            properties:
+                content:
+                    type: string
+                error:
+                    type: string
+                in_reply_to:
+                    type: string
+                response_id:
+                    type: string
+                timestamp:
+                    type: string
+                type:
+                    type: string
+            required:
+                - response_id
+                - type
+                - content
+                - timestamp
+            type: object
         LogEntryPayload:
             properties:
                 fields:
@@ -927,6 +964,38 @@ components:
                 - source
                 - message
                 - fields
+            type: object
+        LoopInfo:
+            properties:
+                channel_id:
+                    type: string
+                channel_type:
+                    type: string
+                created_at:
+                    format: date-time
+                    type: string
+                iterations:
+                    type: integer
+                loop_id:
+                    type: string
+                max_iterations:
+                    type: integer
+                state:
+                    type: string
+                task_id:
+                    type: string
+                user_id:
+                    type: string
+            required:
+                - loop_id
+                - task_id
+                - user_id
+                - channel_type
+                - channel_id
+                - state
+                - iterations
+                - max_iterations
+                - created_at
             type: object
         MessageLogEntry:
             properties:
@@ -1150,6 +1219,24 @@ components:
                 - timestamp
                 - prometheus_available
                 - components
+            type: object
+        SignalResponse:
+            properties:
+                accepted:
+                    type: boolean
+                loop_id:
+                    type: string
+                message:
+                    type: string
+                signal:
+                    type: string
+                timestamp:
+                    type: string
+            required:
+                - loop_id
+                - signal
+                - accepted
+                - timestamp
             type: object
         StatsResponse:
             properties:
