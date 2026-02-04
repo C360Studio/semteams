@@ -57,6 +57,19 @@ paths:
                                 type: object
                 "404":
                     description: Component not found
+    /debug/state:
+        get:
+            summary: Internal component state for debugging
+            description: Returns internal state including active loops, registered commands, configuration, and uptime. Useful for debugging and monitoring.
+            tags:
+                - AgenticDispatch
+            responses:
+                "200":
+                    description: Debug state
+                    content:
+                        application/json:
+                            schema:
+                                type: object
     /deployment/{id}/deploy:
         post:
             summary: Deploy flow
