@@ -73,12 +73,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		}
 	}
 
+	logger := deps.GetLogger()
 	comp := &Component{
 		config:      config,
 		deps:        deps,
 		natsClient:  deps.NATSClient,
-		logger:      deps.GetLogger(),
-		loopTracker: NewLoopTracker(),
+		logger:      logger,
+		loopTracker: NewLoopTrackerWithLogger(logger),
 		registry:    NewCommandRegistry(),
 		metrics:     getMetrics(deps.MetricsRegistry),
 		inputPorts:  inputPorts,

@@ -45,6 +45,29 @@ type HTTPMessageResponse struct {
 	Timestamp  string `json:"timestamp"`
 }
 
+// contextKey is a custom type for context keys to avoid collisions.
+type contextKey string
+
+const (
+	// requestIDKey is the context key for request ID.
+	requestIDKey contextKey = "request_id"
+)
+
+// extractRequestID extracts or generates a request ID from the HTTP request.
+func extractRequestID(r *http.Request) string {
+	if id := r.Header.Get("X-Request-ID"); id != "" {
+		return id
+	}
+	return uuid.New().String()[:8]
+}
+
+// withRequestID adds a request ID to the context and response headers.
+func (c *Component) withRequestID(w http.ResponseWriter, r *http.Request) (context.Context, string) {
+	requestID := extractRequestID(r)
+	w.Header().Set("X-Request-ID", requestID)
+	return context.WithValue(r.Context(), requestIDKey, requestID), requestID
+}
+
 // RegisterHTTPHandlers registers HTTP endpoints for agentic-dispatch.
 // This enables synchronous message processing via HTTP for web clients and E2E tests.
 func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
@@ -68,6 +91,9 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 
 	// Real-time activity stream (SSE)
 	mux.HandleFunc("GET "+prefix+"activity", c.handleActivityStream)
+
+	// Debug endpoint for internal state
+	mux.HandleFunc("GET "+prefix+"debug/state", c.handleDebugState)
 
 	c.logger.Info("agentic-dispatch HTTP handlers registered", slog.String("prefix", prefix))
 }
@@ -388,6 +414,11 @@ func (c *Component) handleHTTPHealth(w http.ResponseWriter, r *http.Request) {
 
 // writeJSONError writes a JSON error response.
 func (c *Component) writeJSONError(w http.ResponseWriter, status int, message string) {
+	// Log error responses for debugging
+	c.logger.Warn("HTTP error response",
+		slog.Int("status", status),
+		slog.String("message", message))
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 
@@ -399,7 +430,7 @@ func (c *Component) writeJSONError(w http.ResponseWriter, status int, message st
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		c.logger.Error("Failed to encode error response", slog.String("error", err.Error()))
+		c.logger.Error("failed to encode error response", slog.String("error", err.Error()))
 	}
 }
 
@@ -436,9 +467,17 @@ type ActivityEvent struct {
 
 // handleListLoops returns all tracked loops with optional filtering.
 func (c *Component) handleListLoops(w http.ResponseWriter, r *http.Request) {
+	ctx, requestID := c.withRequestID(w, r)
+	startTime := time.Now()
+
 	// Get optional query filters
 	userID := r.URL.Query().Get("user_id")
 	state := r.URL.Query().Get("state")
+
+	c.logger.DebugContext(ctx, "listing loops",
+		slog.String("request_id", requestID),
+		slog.String("user_id", userID),
+		slog.String("state", state))
 
 	var loops []*LoopInfo
 	if userID != "" {
@@ -458,40 +497,63 @@ func (c *Component) handleListLoops(w http.ResponseWriter, r *http.Request) {
 		loops = filtered
 	}
 
+	c.metrics.recordHTTPRequest("/loops", "GET", "200")
+	c.metrics.recordHTTPDuration("/loops", "GET", time.Since(startTime).Seconds())
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(loops); err != nil {
-		c.logger.Error("Failed to encode loops list", slog.String("error", err.Error()))
+		c.logger.ErrorContext(ctx, "failed to encode loops list",
+			slog.String("request_id", requestID),
+			slog.String("error", err.Error()))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
 // handleGetLoop returns a single loop by ID.
 func (c *Component) handleGetLoop(w http.ResponseWriter, r *http.Request) {
+	ctx, requestID := c.withRequestID(w, r)
+	startTime := time.Now()
+
 	loopID := r.PathValue("id")
 	if loopID == "" {
+		c.metrics.recordHTTPRequest("/loops/{id}", "GET", "400")
 		c.writeJSONError(w, http.StatusBadRequest, "loop ID is required")
 		return
 	}
 
+	c.logger.DebugContext(ctx, "getting loop",
+		slog.String("request_id", requestID),
+		slog.String("loop_id", loopID))
+
 	loop := c.loopTracker.Get(loopID)
 	if loop == nil {
+		c.metrics.recordHTTPRequest("/loops/{id}", "GET", "404")
+		c.metrics.recordHTTPDuration("/loops/{id}", "GET", time.Since(startTime).Seconds())
 		c.writeJSONError(w, http.StatusNotFound, "loop not found")
 		return
 	}
 
+	c.metrics.recordHTTPRequest("/loops/{id}", "GET", "200")
+	c.metrics.recordHTTPDuration("/loops/{id}", "GET", time.Since(startTime).Seconds())
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(loop); err != nil {
-		c.logger.Error("Failed to encode loop", slog.String("error", err.Error()))
+		c.logger.ErrorContext(ctx, "failed to encode loop",
+			slog.String("request_id", requestID),
+			slog.String("loop_id", loopID),
+			slog.String("error", err.Error()))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
 }
 
 // handleLoopSignal sends a control signal to a loop.
 func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, requestID := c.withRequestID(w, r)
+	startTime := time.Now()
 
 	loopID := r.PathValue("id")
 	if loopID == "" {
+		c.metrics.recordHTTPRequest("/loops/{id}/signal", "POST", "400")
 		c.writeJSONError(w, http.StatusBadRequest, "loop ID is required")
 		return
 	}
@@ -499,6 +561,8 @@ func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
 	// Check if loop exists
 	loop := c.loopTracker.Get(loopID)
 	if loop == nil {
+		c.metrics.recordHTTPRequest("/loops/{id}/signal", "POST", "404")
+		c.metrics.recordHTTPDuration("/loops/{id}/signal", "POST", time.Since(startTime).Seconds())
 		c.writeJSONError(w, http.StatusNotFound, "loop not found")
 		return
 	}
@@ -506,6 +570,7 @@ func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
 	// Parse signal request
 	var req SignalRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		c.metrics.recordHTTPRequest("/loops/{id}/signal", "POST", "400")
 		c.writeJSONError(w, http.StatusBadRequest, "invalid request body: "+err.Error())
 		return
 	}
@@ -515,24 +580,39 @@ func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
 	case "pause", "resume", "cancel":
 		// Valid signal types
 	default:
+		c.metrics.recordHTTPRequest("/loops/{id}/signal", "POST", "400")
 		c.writeJSONError(w, http.StatusBadRequest, "invalid signal type: must be pause, resume, or cancel")
 		return
 	}
 
+	c.logger.InfoContext(ctx, "sending signal to loop",
+		slog.String("request_id", requestID),
+		slog.String("loop_id", loopID),
+		slog.String("signal", req.Type),
+		slog.String("reason", req.Reason),
+		slog.String("user_id", loop.UserID))
+
 	// Send signal via NATS
 	if err := c.loopTracker.SendSignal(ctx, c.natsClient, loopID, req.Type, req.Reason); err != nil {
-		c.logger.Error("Failed to send signal",
+		c.logger.ErrorContext(ctx, "failed to send signal",
+			slog.String("request_id", requestID),
 			slog.String("loop_id", loopID),
 			slog.String("signal", req.Type),
 			slog.String("error", err.Error()))
+		c.metrics.recordHTTPRequest("/loops/{id}/signal", "POST", "500")
+		c.metrics.recordLoopSignal(req.Type, false)
 		c.writeJSONError(w, http.StatusInternalServerError, "failed to send signal: "+err.Error())
 		return
 	}
 
-	c.logger.Info("Signal sent to loop",
+	c.metrics.recordHTTPRequest("/loops/{id}/signal", "POST", "200")
+	c.metrics.recordHTTPDuration("/loops/{id}/signal", "POST", time.Since(startTime).Seconds())
+	c.metrics.recordLoopSignal(req.Type, true)
+
+	c.logger.InfoContext(ctx, "signal sent to loop",
+		slog.String("request_id", requestID),
 		slog.String("loop_id", loopID),
-		slog.String("signal", req.Type),
-		slog.String("reason", req.Reason))
+		slog.String("signal", req.Type))
 
 	// Return success response
 	resp := SignalResponse{
@@ -545,13 +625,19 @@ func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		c.logger.Error("Failed to encode signal response", slog.String("error", err.Error()))
+		c.logger.ErrorContext(ctx, "failed to encode signal response",
+			slog.String("request_id", requestID),
+			slog.String("error", err.Error()))
 	}
 }
 
 // handleActivityStream streams real-time activity events via SSE.
 func (c *Component) handleActivityStream(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx, requestID := c.withRequestID(w, r)
+	clientID := r.Header.Get("X-Client-ID")
+	if clientID == "" {
+		clientID = requestID
+	}
 
 	// Setup SSE headers
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -561,6 +647,7 @@ func (c *Component) handleActivityStream(w http.ResponseWriter, r *http.Request)
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
+		c.metrics.recordSSEError("streaming_not_supported")
 		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
 		return
 	}
@@ -568,6 +655,11 @@ func (c *Component) handleActivityStream(w http.ResponseWriter, r *http.Request)
 	// Get KV bucket for AGENT_LOOPS
 	kv, err := c.natsClient.GetKeyValueBucket(ctx, "AGENT_LOOPS")
 	if err != nil {
+		c.logger.ErrorContext(ctx, "failed to access KV bucket for activity stream",
+			slog.String("request_id", requestID),
+			slog.String("client_id", clientID),
+			slog.String("error", err.Error()))
+		c.metrics.recordSSEError("kv_bucket_access")
 		c.sendActivityError(w, flusher, "Failed to access AGENT_LOOPS bucket", err)
 		return
 	}
@@ -575,35 +667,66 @@ func (c *Component) handleActivityStream(w http.ResponseWriter, r *http.Request)
 	// Create watcher for all keys
 	watcher, err := kv.WatchAll(ctx)
 	if err != nil {
+		c.logger.ErrorContext(ctx, "failed to create KV watcher for activity stream",
+			slog.String("request_id", requestID),
+			slog.String("client_id", clientID),
+			slog.String("error", err.Error()))
+		c.metrics.recordSSEError("watcher_create")
 		c.sendActivityError(w, flusher, "Failed to create watcher", err)
 		return
 	}
 	defer func() {
 		if stopErr := watcher.Stop(); stopErr != nil {
-			c.logger.Warn("Failed to stop activity watcher", slog.String("error", stopErr.Error()))
+			c.logger.WarnContext(ctx, "failed to stop activity watcher",
+				slog.String("client_id", clientID),
+				slog.String("error", stopErr.Error()))
 		}
 	}()
 
+	// Track SSE connection
+	c.metrics.recordSSEConnect()
+	defer c.metrics.recordSSEDisconnect()
+
+	c.logger.InfoContext(ctx, "activity SSE client connected",
+		slog.String("request_id", requestID),
+		slog.String("client_id", clientID),
+		slog.String("remote_addr", r.RemoteAddr))
+
 	// Send initial connected event
 	c.sendActivityEvent(w, flusher, "connected", map[string]string{
-		"message": "Watching for activity events",
+		"message":   "Watching for activity events",
+		"client_id": clientID,
 	})
+	c.metrics.recordSSEEvent("connected")
 
 	// Send retry directive
 	fmt.Fprintf(w, "retry: 5000\n\n")
 	flusher.Flush()
 
-	c.logger.Info("Activity SSE client connected")
+	// Heartbeat ticker for connection health
+	heartbeatTicker := time.NewTicker(30 * time.Second)
+	defer heartbeatTicker.Stop()
 
 	// Stream events
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Info("Activity SSE client disconnected")
+			c.logger.InfoContext(ctx, "activity SSE client disconnected",
+				slog.String("client_id", clientID),
+				slog.String("reason", ctx.Err().Error()))
 			return
+
+		case <-heartbeatTicker.C:
+			// Send heartbeat comment to keep connection alive and detect stale connections
+			fmt.Fprintf(w, ":heartbeat %d\n\n", time.Now().Unix())
+			flusher.Flush()
+			c.metrics.recordSSEEvent("heartbeat")
 
 		case entry, ok := <-watcher.Updates():
 			if !ok {
+				c.logger.WarnContext(ctx, "KV watcher closed unexpectedly",
+					slog.String("client_id", clientID))
+				c.metrics.recordSSEError("watcher_closed")
 				c.sendActivityError(w, flusher, "Watcher closed unexpectedly", nil)
 				return
 			}
@@ -613,6 +736,7 @@ func (c *Component) handleActivityStream(w http.ResponseWriter, r *http.Request)
 				c.sendActivityEvent(w, flusher, "sync_complete", map[string]string{
 					"message": "Initial sync complete",
 				})
+				c.metrics.recordSSEEvent("sync_complete")
 				continue
 			}
 
@@ -638,12 +762,22 @@ func (c *Component) handleActivityStream(w http.ResponseWriter, r *http.Request)
 			// Send SSE event
 			data, err := json.Marshal(event)
 			if err != nil {
-				c.logger.Error("Failed to marshal activity event", slog.String("error", err.Error()))
+				c.logger.ErrorContext(ctx, "failed to marshal activity event",
+					slog.String("client_id", clientID),
+					slog.String("loop_id", entry.Key()),
+					slog.String("error", err.Error()))
+				c.metrics.recordSSEError("marshal_event")
 				continue
 			}
 
 			fmt.Fprintf(w, "event: activity\ndata: %s\n\n", data)
 			flusher.Flush()
+			c.metrics.recordSSEEvent(eventType)
+
+			c.logger.DebugContext(ctx, "sent activity event",
+				slog.String("client_id", clientID),
+				slog.String("loop_id", entry.Key()),
+				slog.String("event_type", eventType))
 		}
 	}
 }
@@ -681,6 +815,76 @@ func (c *Component) sendActivityError(w http.ResponseWriter, flusher http.Flushe
 		errorData["details"] = err.Error()
 	}
 	c.sendActivityEvent(w, flusher, "error", errorData)
+}
+
+// DebugState represents the internal state of the component for debugging.
+type DebugState struct {
+	Started      bool        `json:"started"`
+	StartTime    time.Time   `json:"start_time,omitempty"`
+	Uptime       string      `json:"uptime,omitempty"`
+	LoopCount    int         `json:"loop_count"`
+	CommandCount int         `json:"command_count"`
+	Loops        []*LoopInfo `json:"loops"`
+	Commands     []string    `json:"commands"`
+	Config       DebugConfig `json:"config"`
+}
+
+// DebugConfig contains non-sensitive configuration for debugging.
+type DebugConfig struct {
+	DefaultRole  string `json:"default_role"`
+	DefaultModel string `json:"default_model"`
+	AutoContinue bool   `json:"auto_continue"`
+	StreamName   string `json:"stream_name"`
+}
+
+// handleDebugState returns internal component state for debugging.
+func (c *Component) handleDebugState(w http.ResponseWriter, r *http.Request) {
+	ctx, requestID := c.withRequestID(w, r)
+
+	c.logger.DebugContext(ctx, "debug state requested",
+		slog.String("request_id", requestID),
+		slog.String("remote_addr", r.RemoteAddr))
+
+	c.mu.RLock()
+	started := c.started
+	startTime := c.startTime
+	c.mu.RUnlock()
+
+	var uptime string
+	if started {
+		uptime = time.Since(startTime).Round(time.Second).String()
+	}
+
+	// Get command names
+	commands := c.registry.All()
+	commandNames := make([]string, 0, len(commands))
+	for name := range commands {
+		commandNames = append(commandNames, name)
+	}
+
+	state := DebugState{
+		Started:      started,
+		StartTime:    startTime,
+		Uptime:       uptime,
+		LoopCount:    c.loopTracker.Count(),
+		CommandCount: c.registry.Count(),
+		Loops:        c.loopTracker.GetAllLoops(),
+		Commands:     commandNames,
+		Config: DebugConfig{
+			DefaultRole:  c.config.DefaultRole,
+			DefaultModel: c.config.DefaultModel,
+			AutoContinue: c.config.AutoContinue,
+			StreamName:   c.config.StreamName,
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(state); err != nil {
+		c.logger.ErrorContext(ctx, "failed to encode debug state",
+			slog.String("request_id", requestID),
+			slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }
 
 // agenticDispatchOpenAPISpec returns the OpenAPI specification for agentic-dispatch endpoints.
@@ -805,6 +1009,19 @@ func agenticDispatchOpenAPISpec() *service.OpenAPISpec {
 						"200": {
 							Description: "SSE event stream",
 							ContentType: "text/event-stream",
+						},
+					},
+				},
+			},
+			"/debug/state": {
+				GET: &service.OperationSpec{
+					Summary:     "Internal component state for debugging",
+					Description: "Returns internal state including active loops, registered commands, configuration, and uptime. Useful for debugging and monitoring.",
+					Tags:        []string{"AgenticDispatch"},
+					Responses: map[string]service.ResponseSpec{
+						"200": {
+							Description: "Debug state",
+							ContentType: "application/json",
 						},
 					},
 				},

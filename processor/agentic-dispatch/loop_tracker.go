@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -29,6 +30,7 @@ type LoopTracker struct {
 	userLoops    map[string]string    // user_id -> most recent loop_id
 	channelLoops map[string]string    // channel_id -> most recent loop_id
 	loops        map[string]*LoopInfo // loop_id -> LoopInfo
+	logger       *slog.Logger
 }
 
 // NewLoopTracker creates a new LoopTracker
@@ -40,15 +42,42 @@ func NewLoopTracker() *LoopTracker {
 	}
 }
 
+// NewLoopTrackerWithLogger creates a new LoopTracker with logging.
+func NewLoopTrackerWithLogger(logger *slog.Logger) *LoopTracker {
+	return &LoopTracker{
+		userLoops:    make(map[string]string),
+		channelLoops: make(map[string]string),
+		loops:        make(map[string]*LoopInfo),
+		logger:       logger,
+	}
+}
+
+// SetLogger sets the logger for the LoopTracker.
+func (t *LoopTracker) SetLogger(logger *slog.Logger) {
+	t.logger = logger
+}
+
 // Track adds or updates a loop in the tracker
 func (t *LoopTracker) Track(info *LoopInfo) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
+	_, existed := t.loops[info.LoopID]
 	t.loops[info.LoopID] = info
 	t.userLoops[info.UserID] = info.LoopID
 	if info.ChannelID != "" {
 		t.channelLoops[info.ChannelID] = info.LoopID
+	}
+
+	if t.logger != nil {
+		t.logger.Debug("loop tracked",
+			slog.String("loop_id", info.LoopID),
+			slog.String("task_id", info.TaskID),
+			slog.String("user_id", info.UserID),
+			slog.String("channel_id", info.ChannelID),
+			slog.String("state", info.State),
+			slog.Bool("new", !existed),
+			slog.Int("total_loops", len(t.loops)))
 	}
 }
 
@@ -89,7 +118,21 @@ func (t *LoopTracker) UpdateState(loopID, state string) {
 	defer t.mu.Unlock()
 
 	if info, ok := t.loops[loopID]; ok {
+		oldState := info.State
 		info.State = state
+
+		if t.logger != nil {
+			t.logger.Info("loop state changed",
+				slog.String("loop_id", loopID),
+				slog.String("user_id", info.UserID),
+				slog.String("old_state", oldState),
+				slog.String("new_state", state),
+				slog.Bool("terminal", isTerminalState(state)))
+		}
+	} else if t.logger != nil {
+		t.logger.Warn("attempted to update state for unknown loop",
+			slog.String("loop_id", loopID),
+			slog.String("state", state))
 	}
 }
 
@@ -100,6 +143,13 @@ func (t *LoopTracker) UpdateIterations(loopID string, iterations int) {
 
 	if info, ok := t.loops[loopID]; ok {
 		info.Iterations = iterations
+
+		if t.logger != nil {
+			t.logger.Debug("loop iterations updated",
+				slog.String("loop_id", loopID),
+				slog.Int("iterations", iterations),
+				slog.Int("max_iterations", info.MaxIterations))
+		}
 	}
 }
 
@@ -110,6 +160,10 @@ func (t *LoopTracker) Remove(loopID string) {
 
 	info, ok := t.loops[loopID]
 	if !ok {
+		if t.logger != nil {
+			t.logger.Debug("attempted to remove unknown loop",
+				slog.String("loop_id", loopID))
+		}
 		return
 	}
 
@@ -124,6 +178,15 @@ func (t *LoopTracker) Remove(loopID string) {
 	}
 
 	delete(t.loops, loopID)
+
+	if t.logger != nil {
+		t.logger.Info("loop removed",
+			slog.String("loop_id", loopID),
+			slog.String("user_id", info.UserID),
+			slog.String("final_state", info.State),
+			slog.Int("iterations", info.Iterations),
+			slog.Int("remaining_loops", len(t.loops)))
+	}
 }
 
 // GetUserLoops returns all loops for a specific user
@@ -192,11 +255,23 @@ func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, loo
 
 	data, err := json.Marshal(signal)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal signal for loop %s: %w", loopID, err)
 	}
 
 	subject := "agent.signal." + loopID
-	return nc.PublishToStream(ctx, subject, data)
+	if err := nc.PublishToStream(ctx, subject, data); err != nil {
+		return fmt.Errorf("publish signal %s to loop %s on subject %s: %w", signalType, loopID, subject, err)
+	}
+
+	if t.logger != nil {
+		t.logger.Debug("signal published",
+			slog.String("loop_id", loopID),
+			slog.String("signal_type", signalType),
+			slog.String("subject", subject),
+			slog.String("reason", reason))
+	}
+
+	return nil
 }
 
 // ErrNATSClientNil is returned when NATS client is nil.

@@ -18,12 +18,14 @@ import (
 // newTestComponent creates a minimal Component for testing HTTP handlers
 func newTestComponent(t *testing.T) *Component {
 	t.Helper()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return &Component{
 		config:      DefaultConfig(),
-		loopTracker: NewLoopTracker(),
+		loopTracker: NewLoopTrackerWithLogger(logger),
 		registry:    NewCommandRegistry(),
-		logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
-		natsClient:  nil, // Will be nil for unit tests
+		logger:      logger,
+		metrics:     getMetrics(nil), // Use default metrics for tests
+		natsClient:  nil,             // Will be nil for unit tests
 	}
 }
 
