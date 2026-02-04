@@ -391,13 +391,14 @@ func (e *Engine) enableComponent(ctx context.Context, name string) error {
 	compConfig.Enabled = true
 	currentConfig.Components[name] = compConfig
 
-	// Update config and push to KV
+	// Update config in memory
 	if err := safeConfig.Update(currentConfig); err != nil {
 		return fmt.Errorf("update config: %w", err)
 	}
 
-	if err := e.configMgr.PushToKV(ctx); err != nil {
-		return fmt.Errorf("push to KV: %w", err)
+	// Push only this component to KV (not all components)
+	if err := e.configMgr.PutComponentToKV(ctx, name, compConfig); err != nil {
+		return fmt.Errorf("put component to KV: %w", err)
 	}
 
 	return nil
@@ -418,13 +419,15 @@ func (e *Engine) disableComponent(ctx context.Context, name string) error {
 	compConfig.Enabled = false
 	currentConfig.Components[name] = compConfig
 
-	// Update config and push to KV
+	// Update config in memory
 	if err := safeConfig.Update(currentConfig); err != nil {
 		return fmt.Errorf("update config: %w", err)
 	}
 
-	if err := e.configMgr.PushToKV(ctx); err != nil {
-		return fmt.Errorf("push to KV: %w", err)
+	// Push only this component to KV (not all components)
+	// This avoids race conditions with KV watchers when multiple operations are in flight
+	if err := e.configMgr.PutComponentToKV(ctx, name, compConfig); err != nil {
+		return fmt.Errorf("put component to KV: %w", err)
 	}
 
 	return nil

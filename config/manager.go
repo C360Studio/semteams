@@ -480,6 +480,22 @@ func (cm *Manager) DeleteComponentFromKV(ctx context.Context, name string) error
 	return nil
 }
 
+// PutComponentToKV writes a single component's configuration to NATS KV.
+// This is more efficient than PushToKV when only one component has changed,
+// and avoids race conditions with KV watchers when multiple operations are in flight.
+func (cm *Manager) PutComponentToKV(ctx context.Context, name string, compConfig types.ComponentConfig) error {
+	key := fmt.Sprintf("components.%s", sanitizeNATSKey(name))
+	data, err := json.Marshal(compConfig)
+	if err != nil {
+		return fmt.Errorf("marshal component %s: %w", name, err)
+	}
+	if _, err := cm.kvStore.Put(ctx, key, data); err != nil {
+		return fmt.Errorf("put component %s to KV: %w", name, err)
+	}
+	cm.logger.Debug("Put component to KV", "component", name, "key", key)
+	return nil
+}
+
 // PushToKV pushes the current configuration to NATS KV
 // This is useful for initial setup or config synchronization
 func (cm *Manager) PushToKV(ctx context.Context) error {
