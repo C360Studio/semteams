@@ -20,6 +20,17 @@ import (
 // When: Processor is initialized
 // Then: entityCoalescer field remains nil (no coalescing set created)
 func TestProcessor_DebounceZero_NoCoalescingSet(t *testing.T) {
+	// Create shared test client outside subtests to avoid container startup flakiness
+	testClient, err := natsclient.NewSharedTestClient(
+		natsclient.WithJetStream(),
+		natsclient.WithTestTimeout(10*time.Second),
+		natsclient.WithStartTimeout(30*time.Second),
+	)
+	if err != nil {
+		t.Fatalf("Failed to create test client: %v", err)
+	}
+	defer testClient.Terminate()
+
 	tests := []struct {
 		name               string
 		debounceDelayMs    time.Duration
@@ -48,16 +59,6 @@ func TestProcessor_DebounceZero_NoCoalescingSet(t *testing.T) {
 			config := DefaultConfig()
 			config.DebounceDelayMs = tt.debounceDelayMs
 			config.EntityWatchPatterns = []string{} // No KV watchers for this test
-
-			// Create test NATS client
-			testClient, err := natsclient.NewSharedTestClient(
-				natsclient.WithJetStream(),
-				natsclient.WithTestTimeout(5*time.Second),
-			)
-			if err != nil {
-				t.Fatalf("Failed to create test client: %v", err)
-			}
-			defer testClient.Terminate()
 
 			// Create processor
 			processor, err := NewProcessorWithMetrics(testClient.Client, &config, nil)
@@ -355,6 +356,17 @@ func TestCoalescingSet_Remove(t *testing.T) {
 // When: Processor is created with each config
 // Then: Coalescer state matches expected behavior
 func TestProcessor_DebounceZero_Transition(t *testing.T) {
+	// Create shared test client outside subtests to avoid container startup flakiness
+	testClient, err := natsclient.NewSharedTestClient(
+		natsclient.WithJetStream(),
+		natsclient.WithTestTimeout(10*time.Second),
+		natsclient.WithStartTimeout(30*time.Second),
+	)
+	if err != nil {
+		t.Fatalf("Failed to create test client: %v", err)
+	}
+	defer testClient.Terminate()
+
 	tests := []struct {
 		name                  string
 		debounceDelayMs       time.Duration
@@ -398,15 +410,6 @@ func TestProcessor_DebounceZero_Transition(t *testing.T) {
 			config := DefaultConfig()
 			config.DebounceDelayMs = tt.debounceDelayMs
 			config.EntityWatchPatterns = []string{}
-
-			testClient, err := natsclient.NewSharedTestClient(
-				natsclient.WithJetStream(),
-				natsclient.WithTestTimeout(5*time.Second),
-			)
-			if err != nil {
-				t.Fatalf("Failed to create test client: %v", err)
-			}
-			defer testClient.Terminate()
 
 			processor, err := NewProcessorWithMetrics(testClient.Client, &config, nil)
 			if err != nil {
@@ -475,6 +478,17 @@ func TestProcessor_DebounceZero_ConfigValidation(t *testing.T) {
 // When: Processor is created
 // Then: Behavior matches expected semantics
 func TestProcessor_DebounceZero_EdgeCases(t *testing.T) {
+	// Create shared test client outside subtests to avoid container startup flakiness
+	testClient, err := natsclient.NewSharedTestClient(
+		natsclient.WithJetStream(),
+		natsclient.WithTestTimeout(10*time.Second),
+		natsclient.WithStartTimeout(30*time.Second),
+	)
+	if err != nil {
+		t.Fatalf("Failed to create test client: %v", err)
+	}
+	defer testClient.Terminate()
+
 	tests := []struct {
 		name                  string
 		debounceDelayMs       time.Duration
@@ -506,15 +520,6 @@ func TestProcessor_DebounceZero_EdgeCases(t *testing.T) {
 			config := DefaultConfig()
 			config.DebounceDelayMs = tt.debounceDelayMs
 			config.EntityWatchPatterns = []string{}
-
-			testClient, err := natsclient.NewSharedTestClient(
-				natsclient.WithJetStream(),
-				natsclient.WithTestTimeout(5*time.Second),
-			)
-			if err != nil {
-				t.Fatalf("Failed to create test client: %v", err)
-			}
-			defer testClient.Terminate()
 
 			processor, err := NewProcessorWithMetrics(testClient.Client, &config, nil)
 			if err != nil {
