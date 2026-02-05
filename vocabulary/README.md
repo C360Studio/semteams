@@ -275,8 +275,9 @@ Common standard vocabulary IRIs are provided in `standards.go`:
 
 ```go
 const (
-    OWL_SAME_AS = "http://www.w3.org/2002/07/owl#sameAs"
-    OWL_THING   = "http://www.w3.org/2002/07/owl#Thing"
+    OwlSameAs            = "http://www.w3.org/2002/07/owl#sameAs"
+    OwlEquivalentClass   = "http://www.w3.org/2002/07/owl#equivalentClass"
+    OwlInverseOf         = "http://www.w3.org/2002/07/owl#inverseOf"
 )
 ```
 
@@ -284,18 +285,10 @@ const (
 
 ```go
 const (
-    SKOS_PREF_LABEL = "http://www.w3.org/2004/02/skos/core#prefLabel"
-    SKOS_ALT_LABEL  = "http://www.w3.org/2004/02/skos/core#altLabel"
-)
-```
-
-### Schema.org
-
-```go
-const (
-    SCHEMA_NAME           = "http://schema.org/name"
-    SCHEMA_ALTERNATE_NAME = "http://schema.org/alternateName"
-    SCHEMA_IDENTIFIER     = "http://schema.org/identifier"
+    SkosPrefLabel = "http://www.w3.org/2004/02/skos/core#prefLabel"
+    SkosAltLabel  = "http://www.w3.org/2004/02/skos/core#altLabel"
+    SkosBroader   = "http://www.w3.org/2004/02/skos/core#broader"
+    SkosNarrower  = "http://www.w3.org/2004/02/skos/core#narrower"
 )
 ```
 
@@ -303,8 +296,46 @@ const (
 
 ```go
 const (
-    DC_IDENTIFIER   = "http://purl.org/dc/terms/identifier"
-    DC_TITLE        = "http://purl.org/dc/terms/title"
+    DcIdentifier  = "http://purl.org/dc/terms/identifier"
+    DcTitle       = "http://purl.org/dc/terms/title"
+    DcAlternative = "http://purl.org/dc/terms/alternative"
+    DcReferences  = "http://purl.org/dc/terms/references"
+    DcRequires    = "http://purl.org/dc/terms/requires"
+)
+```
+
+### Schema.org
+
+```go
+const (
+    SchemaName          = "https://schema.org/name"
+    SchemaAlternateName = "https://schema.org/alternateName"
+    SchemaIdentifier    = "https://schema.org/identifier"
+    SchemaSameAs        = "https://schema.org/sameAs"
+)
+```
+
+### PROV-O (Provenance Ontology)
+
+```go
+const (
+    ProvEntity            = "http://www.w3.org/ns/prov#Entity"
+    ProvActivity          = "http://www.w3.org/ns/prov#Activity"
+    ProvAgent             = "http://www.w3.org/ns/prov#Agent"
+    ProvWasDerivedFrom    = "http://www.w3.org/ns/prov#wasDerivedFrom"
+    ProvWasGeneratedBy    = "http://www.w3.org/ns/prov#wasGeneratedBy"
+    ProvWasAssociatedWith = "http://www.w3.org/ns/prov#wasAssociatedWith"
+    ProvActedOnBehalfOf   = "http://www.w3.org/ns/prov#actedOnBehalfOf"
+)
+```
+
+### SSN/SOSA (Semantic Sensor Network)
+
+```go
+const (
+    SsnHasDeployment    = "http://www.w3.org/ns/ssn/hasDeployment"
+    SosaObserves        = "http://www.w3.org/ns/sosa/observes"
+    SosaHasSimpleResult = "http://www.w3.org/ns/sosa/hasSimpleResult"
 )
 ```
 
@@ -312,12 +343,72 @@ const (
 
 ```go
 const (
-    FOAF_NAME        = "http://xmlns.com/foaf/0.1/name"
-    FOAF_ACCOUNT_NAME = "http://xmlns.com/foaf/0.1/accountName"
+    FoafName        = "http://xmlns.com/foaf/0.1/name"
+    FoafAccountName = "http://xmlns.com/foaf/0.1/accountName"
 )
 ```
 
 See `standards.go` for the complete list of standard vocabulary IRIs.
+
+## Ontology Subpackages
+
+The vocabulary package includes ontology subpackages that provide IRI constants layered from foundational to domain-specific:
+
+### `bfo/` - Basic Formal Ontology (BFO 2.0)
+
+Upper-level ontology (ISO 21838-2) providing domain-neutral categories for all entities.
+
+```go
+import "github.com/c360studio/semstreams/vocabulary/bfo"
+
+// Classify a physical asset
+triple := message.Triple{
+    Subject:   entityID,
+    Predicate: "rdf.type",
+    Object:    bfo.Object, // http://purl.obolibrary.org/obo/BFO_0000030
+}
+```
+
+Key concepts: `Entity`, `Continuant`, `Occurrent`, `Object`, `Process`, `Role`, `Quality`
+
+### `cco/` - Common Core Ontologies
+
+Mid-level ontology built on BFO for modeling agents, actions, information entities, and artifacts.
+
+```go
+import "github.com/c360studio/semstreams/vocabulary/cco"
+
+// Classify a software agent
+triple := message.Triple{
+    Subject:   agentID,
+    Predicate: "rdf.type",
+    Object:    cco.IntelligentSoftwareAgent,
+}
+```
+
+Key concepts: `InformationContentEntity`, `Agent`, `IntentionalAct`, `PlanSpecification`, `Capability`
+
+### `agentic/` - W3C S-Agent-Comm
+
+AI agent interoperability predicates aligned with the W3C Semantic Agent Communication ontology.
+
+```go
+import "github.com/c360studio/semstreams/vocabulary/agentic"
+
+// Express an agent's intent
+triple := message.Triple{
+    Subject:   agentID,
+    Predicate: agentic.IntentGoal,
+    Object:    "analyze customer feedback",
+}
+
+// Register all agentic predicates with IRI mappings
+agentic.Register()
+```
+
+Key concepts: `IntentGoal`, `CapabilityName`, `DelegationFrom`, `AccountabilityActor`, `ExecutionEnvironment`
+
+See [Vocabulary Documentation](docs/vocabulary/) for architecture guides and detailed usage.
 
 ## Registry API
 
@@ -552,7 +643,7 @@ vocabulary.GraphRelCommunicates // Communication/interaction
 ### Usage Example
 
 ```go
-import "github.com/c360/semstreams/vocabulary"
+import "github.com/c360studio/semstreams/vocabulary"
 
 // Create relationship between specification and implementation
 triple := message.Triple{
@@ -585,9 +676,13 @@ Applications should define their own domain-specific vocabularies. See `examples
 ## Related Documentation
 
 - `doc.go` - Comprehensive package documentation
-- `standards.go` - Standard vocabulary IRI constants
+- `standards.go` - Standard vocabulary IRI constants (OWL, SKOS, Dublin Core, PROV-O, SSN/SOSA)
+- `bfo/` - BFO 2.0 upper-level ontology classes and relations
+- `cco/` - Common Core Ontology classes for agents, actions, information
+- `agentic/` - W3C S-Agent-Comm predicates for AI agent interoperability
 - `examples/` - Reference domain vocabulary implementations
 - `message/triple.go` - Triple structure for semantic facts
 - `message/types.go` - EntityID, EntityType, Type patterns
+- [Vocabulary Documentation](docs/vocabulary/) - Architecture guides and usage patterns
 
 The vocabulary package focuses on **predicate management**, not IRI generation. For entity-level IRI needs, use the entity's own methods.

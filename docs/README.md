@@ -43,6 +43,12 @@
 - [Community Detection](concepts/05-community-detection.md) - LPA algorithm
 - [Query Access](concepts/09-query-access.md) - GraphQL and MCP gateway
 
+## Vocabulary & Standards
+
+- [Vocabulary Guide](basics/04-vocabulary.md) - Predicate design, registration, alias resolution
+- [Agentic Vocabulary](vocabulary/agentic.md) - W3C S-Agent-Comm predicates for agent interoperability
+- [Vocabulary Package](../vocabulary/README.md) - Full API reference, IRI mappings, ontology subpackages
+
 ## Agentic Systems
 
 Build LLM-powered autonomous agents with tool use:

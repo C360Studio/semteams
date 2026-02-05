@@ -100,7 +100,7 @@ Registration is optional but enables:
 
 ## Standard Vocabularies
 
-SemStreams supports mapping predicates to established vocabularies like Dublin Core. This enables interoperability with existing semantic systems.
+SemStreams supports mapping predicates to established vocabularies like Dublin Core, PROV-O, and Schema.org. This enables interoperability with existing semantic systems.
 
 Standard vocabulary predicates should be defined in the `vocabulary/` package so all processors can import them. The package provides:
 - **IRI constants** (`vocabulary.DcTitle` = `http://purl.org/dc/terms/title`)
@@ -324,6 +324,38 @@ const TelemetryBattery = "drone.telemetry.battery"
 ```
 
 Migrate data before removing the old predicate.
+
+## Ontology Standards
+
+SemStreams provides ontology subpackages that layer from foundational categories to domain-specific vocabularies:
+
+```text
+BFO (upper ontology)     ── foundational categories (Entity, Process, Object)
+ └─ CCO (mid-level)      ── reusable concepts (Agent, Act, InformationContentEntity)
+     └─ Domain standards  ── specific vocabularies (PROV-O, S-Agent-Comm, SSN/SOSA)
+```
+
+### Subpackages
+
+| Package | Import Path | Purpose |
+|---------|-------------|---------|
+| `bfo` | `vocabulary/bfo` | BFO 2.0 (ISO 21838-2) upper-level ontology classes and relations |
+| `cco` | `vocabulary/cco` | Common Core Ontologies for agents, actions, information entities |
+| `agentic` | `vocabulary/agentic` | W3C S-Agent-Comm predicates for AI agent interoperability |
+
+### Standards in `standards.go`
+
+The root `vocabulary` package provides IRI constants for widely used semantic web standards:
+
+- **OWL** - Web Ontology Language (equivalence, property types)
+- **SKOS** - Simple Knowledge Organization System (labels, hierarchies)
+- **Dublin Core** - Metadata terms (identifiers, titles, relations)
+- **PROV-O** - W3C Provenance Ontology (entities, activities, agents, derivations)
+- **SSN/SOSA** - Semantic Sensor Network / Sensor Observation (deployments, observations)
+- **Schema.org** - Common web vocabulary (names, identifiers)
+- **FOAF** - Friend of a Friend (names, accounts)
+
+See [Vocabulary Package](../../vocabulary/README.md) for the full API reference and [Vocabulary Documentation](../vocabulary/) for architecture guides.
 
 ## Next Steps
 
