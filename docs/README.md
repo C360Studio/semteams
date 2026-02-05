@@ -47,6 +47,7 @@
 
 - [Vocabulary Guide](basics/04-vocabulary.md) - Predicate design, registration, alias resolution
 - [Agentic Vocabulary](vocabulary/agentic.md) - W3C S-Agent-Comm predicates for agent interoperability
+- [RDF Export](../vocabulary/export/doc.go) - Serialize triples to Turtle, N-Triples, JSON-LD
 - [Vocabulary Package](../vocabulary/README.md) - Full API reference, IRI mappings, ontology subpackages
 
 ## Agentic Systems

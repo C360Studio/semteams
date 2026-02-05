@@ -65,6 +65,20 @@ agentic.AccountabilityActor // Responsibility attribution
 
 See [Agentic Vocabulary](agentic.md) for detailed predicate tables and usage patterns.
 
+### `vocabulary/export` - RDF Serialization
+
+Serializes `[]message.Triple` to standard RDF formats, using the vocabulary registry for predicate IRI resolution and `message.ParseEntityID` for subject IRIs.
+
+```go
+import "github.com/c360studio/semstreams/vocabulary/export"
+
+export.Serialize(w, triples, export.Turtle)    // Turtle with prefix declarations
+export.Serialize(w, triples, export.NTriples)  // One triple per line
+export.Serialize(w, triples, export.JSONLD)    // JSON with @context
+```
+
+Options: `export.WithBaseIRI(...)`, `export.WithSubjectIRIFunc(...)`
+
 ## Standards in `standards.go`
 
 The root `vocabulary` package provides IRI constants for widely used semantic web standards:

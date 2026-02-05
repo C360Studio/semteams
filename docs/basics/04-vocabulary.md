@@ -96,7 +96,7 @@ Registration is optional but enables:
 
 - API introspection of available predicates
 - Data type validation
-- RDF/Turtle export with standard IRIs
+- RDF/Turtle export with standard IRIs via the [`export`](../../vocabulary/export/doc.go) package
 
 ## Standard Vocabularies
 

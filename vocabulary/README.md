@@ -108,12 +108,14 @@ nc.Subscribe("robotics.battery.*", handler)  // All battery predicates
 ### 4. Export to RDF (Optional)
 
 ```go
-// At API boundary - translate to IRI if needed
-if meta := vocabulary.GetPredicateMetadata(triple.Predicate); meta != nil {
-    if meta.StandardIRI != "" {
-        rdfTriple.Predicate = meta.StandardIRI  // "http://schema.org/batteryLevel"
-    }
-}
+import "github.com/c360studio/semstreams/vocabulary/export"
+
+// Serialize triples to Turtle
+err := export.Serialize(os.Stdout, triples, export.Turtle)
+
+// Or get as string in any format
+s, err := export.SerializeToString(triples, export.NTriples)
+s, err := export.SerializeToString(triples, export.JSONLD)
 ```
 
 ## Functional Options API
@@ -408,6 +410,18 @@ agentic.Register()
 
 Key concepts: `IntentGoal`, `CapabilityName`, `DelegationFrom`, `AccountabilityActor`, `ExecutionEnvironment`
 
+### `export/` - RDF Serialization
+
+Serializes `[]message.Triple` to standard RDF formats (Turtle, N-Triples, JSON-LD) using the vocabulary registry for IRI resolution.
+
+```go
+import "github.com/c360studio/semstreams/vocabulary/export"
+
+output, err := export.SerializeToString(triples, export.Turtle)
+```
+
+Supported formats: `export.Turtle`, `export.NTriples`, `export.JSONLD`
+
 See [Vocabulary Documentation](docs/vocabulary/) for architecture guides and detailed usage.
 
 ## Registry API
@@ -469,65 +483,24 @@ entityState.SetProperty("geo.location.latitude", 37.7749)
 
 ### External: IRI Mappings at Boundaries
 
+The `export` package handles dotted-to-IRI translation automatically:
+
 ```go
-// RDF export - translate dotted to IRI
-func ExportToRDF(triples []message.Triple) []RDFTriple {
-    rdfTriples := make([]RDFTriple, 0, len(triples))
+import "github.com/c360studio/semstreams/vocabulary/export"
 
-    for _, triple := range triples {
-        rdfTriple := RDFTriple{
-            Subject: triple.Subject,
-            Object:  triple.Object,
-        }
+// Serialize to Turtle — registered predicates map to standard IRIs,
+// unregistered predicates generate SemStreams predicate IRIs.
+err := export.Serialize(w, triples, export.Turtle)
 
-        // Translate predicate to IRI if registered
-        if meta := vocabulary.GetPredicateMetadata(triple.Predicate); meta != nil {
-            if meta.StandardIRI != "" {
-                rdfTriple.Predicate = meta.StandardIRI
-            } else {
-                rdfTriple.Predicate = triple.Predicate  // Use dotted as fallback
-            }
-        }
+// Custom base IRI for subject generation
+err = export.Serialize(w, triples, export.NTriples,
+    export.WithBaseIRI("https://example.org"))
 
-        rdfTriples = append(rdfTriples, rdfTriple)
-    }
-
-    return rdfTriples
-}
-
-// RDF import - translate IRI to dotted
-func ImportFromRDF(rdfTriples []RDFTriple) []message.Triple {
-    // Build reverse lookup: IRI -> dotted name
-    iriToName := make(map[string]string)
-    for _, name := range vocabulary.ListRegisteredPredicates() {
-        if meta := vocabulary.GetPredicateMetadata(name); meta != nil {
-            if meta.StandardIRI != "" {
-                iriToName[meta.StandardIRI] = name
-            }
-        }
-    }
-
-    triples := make([]message.Triple, 0, len(rdfTriples))
-
-    for _, rdfTriple := range rdfTriples {
-        triple := message.Triple{
-            Subject: rdfTriple.Subject,
-            Object:  rdfTriple.Object,
-        }
-
-        // Translate IRI to dotted notation
-        if dotted, ok := iriToName[rdfTriple.Predicate]; ok {
-            triple.Predicate = dotted
-        } else {
-            // Unknown IRI - skip or handle as needed
-            continue
-        }
-
-        triples = append(triples, triple)
-    }
-
-    return triples
-}
+// Custom subject IRI function for full control
+err = export.Serialize(w, triples, export.JSONLD,
+    export.WithSubjectIRIFunc(func(subject string) string {
+        return "https://example.org/entities/" + subject
+    }))
 ```
 
 ## Best Practices
@@ -680,6 +653,7 @@ Applications should define their own domain-specific vocabularies. See `examples
 - `bfo/` - BFO 2.0 upper-level ontology classes and relations
 - `cco/` - Common Core Ontology classes for agents, actions, information
 - `agentic/` - W3C S-Agent-Comm predicates for AI agent interoperability
+- `export/` - RDF serialization to Turtle, N-Triples, JSON-LD
 - `examples/` - Reference domain vocabulary implementations
 - `message/triple.go` - Triple structure for semantic facts
 - `message/types.go` - EntityID, EntityType, Type patterns
