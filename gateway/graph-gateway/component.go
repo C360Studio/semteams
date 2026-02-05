@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -902,6 +903,376 @@ func (c *Component) writeGraphQLSuccess(w http.ResponseWriter, subject string, r
 	}
 }
 
+// extractInlineArguments parses inline arguments from a GraphQL query string.
+// For example, `entity(id: "test")` returns {"id": "test"}.
+// Variable references ($varName) are skipped since they come from the variables field.
+// If the query has a variable declaration block (e.g., `query Q($id: String!)`),
+// it is skipped and the field arguments are parsed instead.
+func extractInlineArguments(query string) map[string]interface{} {
+	result := make(map[string]interface{})
+
+	// Find the first argument block
+	openIdx := strings.IndexByte(query, '(')
+	if openIdx < 0 {
+		return result
+	}
+
+	closeIdx := findMatchingParen(query, openIdx)
+	if closeIdx < 0 {
+		return result
+	}
+
+	argStr := query[openIdx+1 : closeIdx]
+
+	// Check if this is a variable declaration block (starts with $)
+	trimmed := strings.TrimLeft(argStr, " \t\n")
+	if len(trimmed) > 0 && trimmed[0] == '$' {
+		// This is a variable declaration block — skip it and find the next paren block
+		search := query[closeIdx+1:]
+		nextOpen := strings.IndexByte(search, '(')
+		if nextOpen < 0 {
+			return result
+		}
+		absOpen := closeIdx + 1 + nextOpen
+		nextClose := findMatchingParen(query, absOpen)
+		if nextClose < 0 {
+			return result
+		}
+		argStr = query[absOpen+1 : nextClose]
+	}
+
+	parseInlineArgs(argStr, result)
+	return result
+}
+
+// findMatchingParen finds the closing paren matching the open paren at openIdx.
+func findMatchingParen(s string, openIdx int) int {
+	depth := 0
+	for i := openIdx; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+// parseInlineArgs parses key: value pairs from an argument string.
+func parseInlineArgs(argStr string, result map[string]interface{}) {
+	i := 0
+	for i < len(argStr) {
+		// Skip whitespace and commas
+		for i < len(argStr) && (argStr[i] == ' ' || argStr[i] == '\t' || argStr[i] == '\n' || argStr[i] == ',') {
+			i++
+		}
+		if i >= len(argStr) {
+			break
+		}
+
+		// Read key
+		keyStart := i
+		for i < len(argStr) && argStr[i] != ':' && argStr[i] != ' ' && argStr[i] != '\t' {
+			i++
+		}
+		key := strings.TrimSpace(argStr[keyStart:i])
+		if key == "" {
+			break
+		}
+
+		// Skip to colon
+		for i < len(argStr) && argStr[i] != ':' {
+			i++
+		}
+		if i >= len(argStr) {
+			break
+		}
+		i++ // skip ':'
+
+		// Skip whitespace after colon
+		for i < len(argStr) && (argStr[i] == ' ' || argStr[i] == '\t') {
+			i++
+		}
+		if i >= len(argStr) {
+			break
+		}
+
+		// Parse value and advance position
+		val, newPos := parseInlineValue(argStr, i)
+		i = newPos
+		if val != nil {
+			result[key] = val
+		}
+	}
+}
+
+// parseInlineValue parses a single value starting at position i in argStr.
+// Returns the parsed value (or nil for variable references) and the new position.
+func parseInlineValue(argStr string, i int) (interface{}, int) {
+	switch {
+	case argStr[i] == '"':
+		return parseStringValue(argStr, i)
+
+	case argStr[i] == '$':
+		// Variable reference - skip, these come from the variables field
+		for i < len(argStr) && argStr[i] != ',' && argStr[i] != ')' && argStr[i] != ' ' {
+			i++
+		}
+		return nil, i
+
+	default:
+		return parseLiteralValue(argStr, i)
+	}
+}
+
+// parseStringValue parses a quoted string value starting at position i (the opening quote).
+func parseStringValue(argStr string, i int) (interface{}, int) {
+	i++ // skip opening quote
+	var sb strings.Builder
+	for i < len(argStr) {
+		if argStr[i] == '\\' && i+1 < len(argStr) {
+			sb.WriteByte(argStr[i+1])
+			i += 2
+			continue
+		}
+		if argStr[i] == '"' {
+			i++ // skip closing quote
+			break
+		}
+		sb.WriteByte(argStr[i])
+		i++
+	}
+	return sb.String(), i
+}
+
+// parseLiteralValue parses a boolean, numeric, null, or enum value starting at position i.
+func parseLiteralValue(argStr string, i int) (interface{}, int) {
+	valStart := i
+	for i < len(argStr) && argStr[i] != ',' && argStr[i] != ')' && argStr[i] != ' ' {
+		i++
+	}
+	val := strings.TrimSpace(argStr[valStart:i])
+	if val == "" {
+		return nil, i
+	}
+	switch val {
+	case "true":
+		return true, i
+	case "false":
+		return false, i
+	case "null":
+		return nil, i
+	}
+	// Try integer
+	if n, err := strconv.ParseInt(val, 10, 64); err == nil {
+		return n, i
+	}
+	// Try float
+	if f, err := strconv.ParseFloat(val, 64); err == nil {
+		return f, i
+	}
+	// Treat as enum/identifier value (e.g., OUTGOING, ASC)
+	return val, i
+}
+
+// mergeVariables merges inline arguments with explicit variables.
+// Explicit variables take precedence over inline arguments.
+func mergeVariables(inline, explicit map[string]interface{}) map[string]interface{} {
+	merged := make(map[string]interface{}, len(inline)+len(explicit))
+	for k, v := range inline {
+		merged[k] = v
+	}
+	for k, v := range explicit {
+		merged[k] = v
+	}
+	return merged
+}
+
+// isPubAckResponse detects JetStream PubAck responses that indicate
+// a stream/subject overlap configuration issue. PubAck responses have
+// the shape: {"stream":"NAME","seq":N} with optional "domain" and "duplicate" fields.
+func isPubAckResponse(data []byte) bool {
+	// PubAck responses are always small; real query responses are larger
+	if len(data) > 256 {
+		return false
+	}
+
+	var obj map[string]interface{}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return false
+	}
+
+	// Must have "stream" (string) and "seq" (number)
+	stream, hasStream := obj["stream"]
+	seq, hasSeq := obj["seq"]
+	if !hasStream || !hasSeq {
+		return false
+	}
+	if _, ok := stream.(string); !ok {
+		return false
+	}
+	if _, ok := seq.(float64); !ok {
+		return false
+	}
+
+	// Only allow known PubAck fields
+	for key := range obj {
+		switch key {
+		case "stream", "seq", "domain", "duplicate":
+			// known PubAck fields
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
+// isIntrospectionQuery checks if a GraphQL query's first field is an introspection field.
+// It looks for __schema or __type as the first field selector in the selection set,
+// avoiding false positives from entity IDs or comments containing these strings.
+func isIntrospectionQuery(query string) bool {
+	q := strings.TrimSpace(query)
+
+	// Strip operation keyword and name: "query MyQuery" or "query"
+	if strings.HasPrefix(q, "query") || strings.HasPrefix(q, "mutation") {
+		if braceIdx := strings.IndexByte(q, '{'); braceIdx >= 0 {
+			q = q[braceIdx:]
+		}
+	}
+
+	// Strip opening brace and whitespace to get the first field selector
+	q = strings.TrimLeft(q, "{ \t\n\r")
+	return strings.HasPrefix(q, "__schema") || strings.HasPrefix(q, "__type")
+}
+
+// handleIntrospection returns a hardcoded schema for GraphQL introspection queries.
+// Handles both __schema and __type queries.
+func (c *Component) handleIntrospection(w http.ResponseWriter, queryStr string) {
+	schema := buildIntrospectionSchema()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	var data map[string]interface{}
+	if strings.Contains(queryStr, "__type") && !strings.Contains(queryStr, "__schema") {
+		// __type query - extract requested type name and return matching type
+		data = map[string]interface{}{"__type": findTypeByName(schema, queryStr)}
+	} else {
+		data = map[string]interface{}{"__schema": schema}
+	}
+
+	response := map[string]interface{}{"data": data}
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		atomic.AddInt64(&c.errors, 1)
+		c.logger.Error("failed to encode introspection response", slog.Any("error", err))
+	}
+}
+
+// findTypeByName extracts the type name from a __type query and returns the matching type.
+func findTypeByName(schema map[string]interface{}, queryStr string) interface{} {
+	// Extract type name from __type(name: "TypeName")
+	args := extractInlineArguments(queryStr)
+	name, _ := args["name"].(string)
+	if name == "" {
+		return nil
+	}
+
+	types, _ := schema["types"].([]map[string]interface{})
+	for _, t := range types {
+		if t["name"] == name {
+			return t
+		}
+	}
+	return nil
+}
+
+// buildIntrospectionSchema builds a minimal introspection schema describing
+// the supported query fields and their argument/return types.
+func buildIntrospectionSchema() map[string]interface{} {
+	return map[string]interface{}{
+		"queryType":        map[string]interface{}{"name": "Query"},
+		"mutationType":     nil,
+		"subscriptionType": nil,
+		"types": []map[string]interface{}{
+			{
+				"kind": "OBJECT",
+				"name": "Query",
+				"fields": []map[string]interface{}{
+					fieldDef("entity", "Entity", argDef("id", "String!")),
+					fieldDef("entitiesByPrefix", "[Entity]", argDef("prefix", "String!"), argDef("limit", "Int")),
+					fieldDef("entityByAlias", "Entity", argDef("alias", "String!")),
+					fieldDef("relationships", "[Relationship]", argDef("entityId", "String!"), argDef("direction", "String")),
+					fieldDef("entityIdHierarchy", "HierarchyResult", argDef("prefix", "String!"), argDef("limit", "Int")),
+					fieldDef("pathSearch", "PathSearchResult", argDef("startEntity", "String!"), argDef("maxDepth", "Int"), argDef("maxNodes", "Int")),
+					fieldDef("spatialSearch", "[Entity]", argDef("north", "Float!"), argDef("south", "Float!"), argDef("east", "Float!"), argDef("west", "Float!"), argDef("limit", "Int")),
+					fieldDef("temporalSearch", "[Entity]", argDef("startTime", "String!"), argDef("endTime", "String!"), argDef("limit", "Int")),
+					fieldDef("semanticSearch", "[Entity]", argDef("query", "String!"), argDef("limit", "Int")),
+					fieldDef("findSimilar", "[Entity]", argDef("entityId", "String!"), argDef("limit", "Int")),
+					fieldDef("localSearch", "SearchResult", argDef("entityId", "String!"), argDef("query", "String"), argDef("level", "Int")),
+					fieldDef("globalSearch", "SearchResult", argDef("query", "String!"), argDef("level", "Int"), argDef("maxCommunities", "Int")),
+					fieldDef("capabilities", "Capabilities"),
+				},
+			},
+			typeDef("OBJECT", "Entity", "id", "triples"),
+			typeDef("OBJECT", "Triple", "subject", "predicate", "object"),
+			typeDef("OBJECT", "Relationship", "from", "to", "predicate"),
+			typeDef("OBJECT", "HierarchyResult", "prefix", "children", "count"),
+			typeDef("OBJECT", "PathSearchResult", "entities", "edges", "paths"),
+			typeDef("OBJECT", "SearchResult", "results", "score"),
+			typeDef("OBJECT", "Capabilities", "queries", "mutations"),
+			typeDef("SCALAR", "String"),
+			typeDef("SCALAR", "Int"),
+			typeDef("SCALAR", "Float"),
+			typeDef("SCALAR", "Boolean"),
+		},
+	}
+}
+
+// fieldDef builds a field definition for introspection.
+func fieldDef(name, typeName string, args ...map[string]interface{}) map[string]interface{} {
+	field := map[string]interface{}{
+		"name": name,
+		"type": map[string]interface{}{"name": typeName},
+		"args": args,
+	}
+	if len(args) == 0 {
+		field["args"] = []map[string]interface{}{}
+	}
+	return field
+}
+
+// argDef builds an argument definition for introspection.
+func argDef(name, typeName string) map[string]interface{} {
+	return map[string]interface{}{
+		"name": name,
+		"type": map[string]interface{}{"name": typeName},
+	}
+}
+
+// typeDef builds a type definition for introspection.
+func typeDef(kind, name string, fieldNames ...string) map[string]interface{} {
+	td := map[string]interface{}{
+		"kind": kind,
+		"name": name,
+	}
+	if len(fieldNames) > 0 {
+		fields := make([]map[string]interface{}, len(fieldNames))
+		for i, fn := range fieldNames {
+			fields[i] = map[string]interface{}{
+				"name": fn,
+				"type": map[string]interface{}{"name": "String"},
+			}
+		}
+		td["fields"] = fields
+	}
+	return td
+}
+
 // handleNATSResponse processes the NATS response and writes appropriate GraphQL response.
 func (c *Component) handleNATSResponse(w http.ResponseWriter, subject string, resp []byte) {
 	// Check if response is a plain-text error from NATS handler (format: "error: <message>")
@@ -910,6 +1281,14 @@ func (c *Component) handleNATSResponse(w http.ResponseWriter, subject string, re
 		atomic.AddInt64(&c.errors, 1)
 		errorMsg := strings.TrimSpace(strings.TrimPrefix(respStr, "error: "))
 		c.writeGraphQLError(w, http.StatusOK, errorMsg) // GraphQL convention: 200 with errors
+		return
+	}
+
+	// Detect JetStream PubAck responses (indicates stream/subject overlap)
+	if isPubAckResponse(resp) {
+		atomic.AddInt64(&c.errors, 1)
+		c.writeGraphQLError(w, http.StatusBadGateway,
+			"received stream acknowledgment instead of query response")
 		return
 	}
 
@@ -957,8 +1336,19 @@ func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle introspection queries locally
+	if isIntrospectionQuery(gqlReq.Query) {
+		c.handleIntrospection(w, gqlReq.Query)
+		return
+	}
+
 	subject := c.mapGraphQLQueryToNATSSubject(gqlReq.Query)
-	payload := c.transformVariablesToNATSPayload(gqlReq.Variables, subject)
+
+	// Extract inline arguments from query string and merge with explicit variables
+	inlineArgs := extractInlineArguments(gqlReq.Query)
+	mergedVars := mergeVariables(inlineArgs, gqlReq.Variables)
+
+	payload := c.transformVariablesToNATSPayload(mergedVars, subject)
 
 	// For search queries, classify the query text and merge extracted options
 	if c.classifier != nil && (subject == "graph.query.globalSearch" || subject == "graph.query.semantic") {

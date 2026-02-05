@@ -754,6 +754,447 @@ func TestGateway_HTTPMethodValidation(t *testing.T) {
 }
 
 // ====================================================================================
+// Inline Argument Extraction Tests
+// ====================================================================================
+
+func TestExtractInlineArguments_StringValue(t *testing.T) {
+	args := extractInlineArguments(`entity(id: "test")`)
+	assert.Equal(t, map[string]interface{}{"id": "test"}, args)
+}
+
+func TestExtractInlineArguments_MultipleArgs(t *testing.T) {
+	args := extractInlineArguments(`entitiesByPrefix(prefix: "", limit: 5)`)
+	assert.Equal(t, "", args["prefix"])
+	assert.Equal(t, int64(5), args["limit"])
+}
+
+func TestExtractInlineArguments_BooleanValue(t *testing.T) {
+	args := extractInlineArguments(`search(includeEdges: true)`)
+	assert.Equal(t, map[string]interface{}{"includeEdges": true}, args)
+}
+
+func TestExtractInlineArguments_NoArgs(t *testing.T) {
+	args := extractInlineArguments(`{ entity { id } }`)
+	assert.Empty(t, args)
+}
+
+func TestExtractInlineArguments_VariableRef(t *testing.T) {
+	args := extractInlineArguments(`entity(id: $myId)`)
+	assert.Empty(t, args, "variable references should be skipped")
+}
+
+func TestExtractInlineArguments_MixedArgsAndVarRefs(t *testing.T) {
+	args := extractInlineArguments(`search(query: "drones", limit: $lim)`)
+	assert.Equal(t, "drones", args["query"])
+	_, hasLimit := args["limit"]
+	assert.False(t, hasLimit, "variable ref $lim should be skipped")
+}
+
+func TestExtractInlineArguments_EscapedQuotes(t *testing.T) {
+	args := extractInlineArguments(`entity(id: "test\"value")`)
+	assert.Equal(t, `test"value`, args["id"])
+}
+
+func TestExtractInlineArguments_FloatValue(t *testing.T) {
+	args := extractInlineArguments(`spatialSearch(north: 45.5)`)
+	assert.Equal(t, 45.5, args["north"])
+}
+
+func TestExtractInlineArguments_BooleanFalse(t *testing.T) {
+	args := extractInlineArguments(`search(includeEdges: false)`)
+	assert.Equal(t, false, args["includeEdges"])
+}
+
+func TestExtractInlineArguments_EnumValue(t *testing.T) {
+	args := extractInlineArguments(`relationships(entityId: "test", direction: OUTGOING)`)
+	assert.Equal(t, "test", args["entityId"])
+	assert.Equal(t, "OUTGOING", args["direction"])
+}
+
+func TestExtractInlineArguments_NullValue(t *testing.T) {
+	args := extractInlineArguments(`entity(id: null)`)
+	_, hasID := args["id"]
+	assert.False(t, hasID, "null values should not appear in result")
+}
+
+func TestExtractInlineArguments_SkipsVariableDeclaration(t *testing.T) {
+	// The first parens are variable declarations; field args are in the second parens
+	args := extractInlineArguments(`query Q($id: String!) { entity(id: "inline-test") { id } }`)
+	assert.Equal(t, "inline-test", args["id"])
+}
+
+func TestIsIntrospectionQuery_EntityWithSchemaInID(t *testing.T) {
+	// Should NOT be treated as introspection
+	assert.False(t, isIntrospectionQuery(`{ entity(id: "__schema_config") { id } }`))
+}
+
+func TestIsIntrospectionQuery_SchemaQuery(t *testing.T) {
+	assert.True(t, isIntrospectionQuery(`{ __schema { types { name } } }`))
+}
+
+func TestIsIntrospectionQuery_TypeQuery(t *testing.T) {
+	assert.True(t, isIntrospectionQuery(`{ __type(name: "Entity") { name } }`))
+}
+
+func TestIsIntrospectionQuery_WithOperationName(t *testing.T) {
+	assert.True(t, isIntrospectionQuery(`query IntrospectionQuery { __schema { types { name } } }`))
+}
+
+func TestMergeVariables_ExplicitOverridesInline(t *testing.T) {
+	inline := map[string]interface{}{"id": "a", "extra": "keep"}
+	explicit := map[string]interface{}{"id": "b"}
+	merged := mergeVariables(inline, explicit)
+	assert.Equal(t, "b", merged["id"], "explicit should override inline")
+	assert.Equal(t, "keep", merged["extra"], "non-overlapping inline args should be preserved")
+}
+
+func TestMergeVariables_NilExplicit(t *testing.T) {
+	inline := map[string]interface{}{"id": "a"}
+	merged := mergeVariables(inline, nil)
+	assert.Equal(t, "a", merged["id"])
+}
+
+func TestMergeVariables_NilInline(t *testing.T) {
+	explicit := map[string]interface{}{"id": "b"}
+	merged := mergeVariables(nil, explicit)
+	assert.Equal(t, "b", merged["id"])
+}
+
+// ====================================================================================
+// PubAck Detection Tests
+// ====================================================================================
+
+func TestIsPubAckResponse_DetectsPubAck(t *testing.T) {
+	assert.True(t, isPubAckResponse([]byte(`{"stream":"AGENT","seq":3}`)))
+}
+
+func TestIsPubAckResponse_DetectsPubAckWithDomain(t *testing.T) {
+	assert.True(t, isPubAckResponse([]byte(`{"stream":"AGENT","seq":3,"domain":"hub"}`)))
+}
+
+func TestIsPubAckResponse_DetectsPubAckWithDuplicate(t *testing.T) {
+	assert.True(t, isPubAckResponse([]byte(`{"stream":"AGENT","seq":3,"duplicate":true}`)))
+}
+
+func TestIsPubAckResponse_NormalResponse(t *testing.T) {
+	assert.False(t, isPubAckResponse([]byte(`{"entities":[{"id":"test"}]}`)))
+}
+
+func TestIsPubAckResponse_MissingStream(t *testing.T) {
+	assert.False(t, isPubAckResponse([]byte(`{"seq":3}`)))
+}
+
+func TestIsPubAckResponse_MissingSeq(t *testing.T) {
+	assert.False(t, isPubAckResponse([]byte(`{"stream":"AGENT"}`)))
+}
+
+func TestIsPubAckResponse_ExtraFields(t *testing.T) {
+	assert.False(t, isPubAckResponse([]byte(`{"stream":"AGENT","seq":3,"extra":"field"}`)))
+}
+
+func TestIsPubAckResponse_InvalidJSON(t *testing.T) {
+	assert.False(t, isPubAckResponse([]byte(`not json`)))
+}
+
+func TestGateway_PubAckResponse_ReturnsError(t *testing.T) {
+	mock := newMockNATSRequester()
+
+	// Return a PubAck response
+	mock.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		return []byte(`{"stream":"AGENT","seq":3}`), nil
+	}
+
+	comp := createTestGatewayWithMock(t, mock)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query": `query { entity(id: "test") { id } }`,
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	assert.Equal(t, http.StatusBadGateway, w.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	errList, ok := response["errors"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, errList, 1)
+	errMsg := errList[0].(map[string]interface{})["message"].(string)
+	assert.Contains(t, errMsg, "stream acknowledgment")
+}
+
+// ====================================================================================
+// Introspection Tests
+// ====================================================================================
+
+func TestGateway_Introspection_Schema(t *testing.T) {
+	comp := createTestGateway(t)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query": `{ __schema { types { name } } }`,
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	data, ok := response["data"].(map[string]interface{})
+	require.True(t, ok, "response should have data field")
+
+	schema, ok := data["__schema"].(map[string]interface{})
+	require.True(t, ok, "data should have __schema field")
+
+	types, ok := schema["types"].([]interface{})
+	require.True(t, ok, "schema should have types field")
+	assert.NotEmpty(t, types, "types should not be empty")
+
+	// Verify Query type is present
+	found := false
+	for _, typ := range types {
+		typMap := typ.(map[string]interface{})
+		if typMap["name"] == "Query" {
+			found = true
+			fields, ok := typMap["fields"].([]interface{})
+			require.True(t, ok)
+			assert.NotEmpty(t, fields, "Query type should have fields")
+		}
+	}
+	assert.True(t, found, "should contain Query type")
+}
+
+func TestGateway_Introspection_DoesNotRouteToNATS(t *testing.T) {
+	mock := newMockNATSRequester()
+
+	natsCallMade := false
+	mock.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		natsCallMade = true
+		return []byte(`{"result":"unexpected"}`), nil
+	}
+
+	comp := createTestGatewayWithMock(t, mock)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query": `{ __schema { queryType { name } } }`,
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.False(t, natsCallMade, "introspection should not make NATS request")
+}
+
+func TestGateway_Introspection_Type(t *testing.T) {
+	comp := createTestGateway(t)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query": `{ __type(name: "Entity") { name fields { name } } }`,
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	data, ok := response["data"].(map[string]interface{})
+	require.True(t, ok, "response should have data field")
+
+	// Should be __type, not __schema
+	typeResult, ok := data["__type"].(map[string]interface{})
+	require.True(t, ok, "data should have __type field, not __schema")
+	assert.Equal(t, "Entity", typeResult["name"])
+}
+
+// ====================================================================================
+// Integration Tests: Inline Args Flow Through Gateway
+// ====================================================================================
+
+func TestGateway_InlineArgs_EntityQuery(t *testing.T) {
+	mock := newMockNATSRequester()
+
+	mock.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		assert.Equal(t, "graph.query.entity", subject)
+
+		var payload map[string]interface{}
+		err := json.Unmarshal(data, &payload)
+		require.NoError(t, err)
+
+		assert.Equal(t, "test.entity.001", payload["id"], "inline id should be extracted and sent in payload")
+
+		return []byte(`{"id":"test.entity.001","triples":[]}`), nil
+	}
+
+	comp := createTestGatewayWithMock(t, mock)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query": `{ entity(id: "test.entity.001") { id } }`,
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGateway_InlineArgs_PrefixQuery(t *testing.T) {
+	mock := newMockNATSRequester()
+
+	mock.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		assert.Equal(t, "graph.query.prefix", subject)
+
+		var payload map[string]interface{}
+		err := json.Unmarshal(data, &payload)
+		require.NoError(t, err)
+
+		assert.Equal(t, "", payload["prefix"], "inline empty prefix should be extracted")
+		assert.Equal(t, float64(5), payload["limit"], "inline limit should be extracted")
+
+		return []byte(`[{"id":"test.001"},{"id":"test.002"}]`), nil
+	}
+
+	comp := createTestGatewayWithMock(t, mock)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query": `{ entitiesByPrefix(prefix: "", limit: 5) { id } }`,
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGateway_InlineArgs_ExplicitVariablesOverrideInline(t *testing.T) {
+	mock := newMockNATSRequester()
+
+	mock.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		var payload map[string]interface{}
+		err := json.Unmarshal(data, &payload)
+		require.NoError(t, err)
+
+		// Explicit variable should override inline
+		assert.Equal(t, "explicit.id", payload["id"], "explicit variable should override inline arg")
+
+		return []byte(`{"id":"explicit.id"}`), nil
+	}
+
+	comp := createTestGatewayWithMock(t, mock)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query":     `{ entity(id: "inline.id") { id } }`,
+		"variables": map[string]interface{}{"id": "explicit.id"},
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestGateway_InlineArgs_RelationshipsQuery(t *testing.T) {
+	mock := newMockNATSRequester()
+
+	mock.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		assert.Equal(t, "graph.query.relationships", subject)
+
+		var payload map[string]interface{}
+		err := json.Unmarshal(data, &payload)
+		require.NoError(t, err)
+
+		assert.Equal(t, "test.entity.001", payload["entity_id"], "inline entityId should map to entity_id in payload")
+
+		return []byte(`[{"from":"test.entity.001","to":"test.entity.002","predicate":"knows"}]`), nil
+	}
+
+	comp := createTestGatewayWithMock(t, mock)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query": `{ relationships(entityId: "test.entity.001") { from to predicate } }`,
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// ====================================================================================
 // Helper Functions
 // ====================================================================================
 
