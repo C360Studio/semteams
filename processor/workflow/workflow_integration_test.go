@@ -255,9 +255,9 @@ func TestIntegration_SimpleWorkflowTrigger(t *testing.T) {
 	var receivedEvents []map[string]any
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
 			receivedEvents = append(receivedEvents, event)
 			eventsMu.Unlock()
@@ -377,9 +377,9 @@ func TestIntegration_CallActionWithResponse(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
 			if id, ok := event["execution_id"].(string); ok && execID == "" {
 				execID = id
@@ -476,9 +476,9 @@ func TestIntegration_PublishAction(t *testing.T) {
 	var receivedNotifications []map[string]any
 	var notifMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.notifications.>", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.notifications.>", func(_ context.Context, msg *nats.Msg) {
 		var notif map[string]any
-		if err := json.Unmarshal(data, &notif); err == nil {
+		if err := json.Unmarshal(msg.Data, &notif); err == nil {
 			notifMu.Lock()
 			receivedNotifications = append(receivedNotifications, notif)
 			notifMu.Unlock()
@@ -490,9 +490,9 @@ func TestIntegration_PublishAction(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
 			if id, ok := event["execution_id"].(string); ok && execID == "" {
 				execID = id
@@ -603,9 +603,9 @@ func TestIntegration_LoopWorkflowMaxIterations(t *testing.T) {
 	var iterations []int
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
 			if id, ok := event["execution_id"].(string); ok && execID == "" {
 				execID = id
@@ -725,7 +725,8 @@ func TestIntegration_ConditionEvaluation(t *testing.T) {
 	var highScoreReceived bool
 	var mu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.condition.high_score", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.condition.high_score", func(_ context.Context, msg *nats.Msg) {
+		_ = msg // Unused but required by signature
 		mu.Lock()
 		highScoreReceived = true
 		mu.Unlock()
@@ -736,9 +737,9 @@ func TestIntegration_ConditionEvaluation(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
 			if id, ok := event["execution_id"].(string); ok && execID == "" {
 				execID = id
@@ -841,9 +842,9 @@ func TestIntegration_StepCompleteMessage(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
 			if id, ok := event["execution_id"].(string); ok && execID == "" {
 				execID = id
@@ -952,9 +953,9 @@ func TestIntegration_WorkflowTimeout(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
 			if id, ok := event["execution_id"].(string); ok && execID == "" {
 				execID = id
@@ -1076,9 +1077,9 @@ func TestIntegration_VariableInterpolation(t *testing.T) {
 	var receivedNotification map[string]any
 	var notifMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.interpolate.notify", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.interpolate.notify", func(_ context.Context, msg *nats.Msg) {
 		var notif map[string]any
-		if err := json.Unmarshal(data, &notif); err == nil {
+		if err := json.Unmarshal(msg.Data, &notif); err == nil {
 			notifMu.Lock()
 			receivedNotification = notif
 			notifMu.Unlock()
@@ -1090,9 +1091,9 @@ func TestIntegration_VariableInterpolation(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, data []byte) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
 			if id, ok := event["execution_id"].(string); ok && execID == "" {
 				execID = id
