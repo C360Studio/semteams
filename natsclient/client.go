@@ -631,10 +631,11 @@ func (s *Subscription) Unsubscribe() error {
 }
 
 // Subscribe subscribes to a NATS subject with context propagation.
-// Each message handler receives a context derived from the parent context
-// with a 30-second timeout for message processing.
+// Each message handler receives the full *nats.Msg to access Subject, Data, Headers, etc.
+// This is essential for wildcard subscriptions where the actual subject differs from the pattern.
+// The context is derived from the parent context with a 30-second timeout for message processing.
 // Returns a Subscription handle that can be used to unsubscribe.
-func (m *Client) Subscribe(ctx context.Context, subject string, handler func(context.Context, []byte)) (*Subscription, error) {
+func (m *Client) Subscribe(ctx context.Context, subject string, handler func(context.Context, *nats.Msg)) (*Subscription, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -647,7 +648,7 @@ func (m *Client) Subscribe(ctx context.Context, subject string, handler func(con
 		msgCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		handler(msgCtx, msg.Data)
+		handler(msgCtx, msg)
 	})
 	if err != nil {
 		return nil, err
@@ -743,8 +744,11 @@ func (m *Client) PublishToStream(ctx context.Context, subject string, data []byt
 	return nil
 }
 
-// ConsumeStream creates a consumer for a stream
-func (m *Client) ConsumeStream(ctx context.Context, streamName, subject string, handler func([]byte)) error {
+// ConsumeStream creates a consumer for a stream.
+// Handler receives the full jetstream.Msg to access Subject, Data, Headers, etc.
+// This is essential for wildcard subscriptions where the actual subject differs from the pattern.
+// The handler is responsible for calling msg.Ack() after processing.
+func (m *Client) ConsumeStream(ctx context.Context, streamName, subject string, handler func(jetstream.Msg)) error {
 	// Check circuit breaker first
 	if m.Status() == StatusCircuitOpen {
 		return ErrCircuitOpen
@@ -787,8 +791,7 @@ func (m *Client) ConsumeStream(ctx context.Context, streamName, subject string, 
 
 	// Start consuming messages
 	consumeContext, err := consumer.Consume(func(msg jetstream.Msg) {
-		handler(msg.Data())
-		msg.Ack()
+		handler(msg)
 	})
 
 	if err != nil {

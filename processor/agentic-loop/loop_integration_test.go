@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -137,9 +138,9 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 	receivedRequests := make([]agentic.AgentRequest, 0)
 	var requestMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var req agentic.AgentRequest
-		if err := json.Unmarshal(data, &req); err == nil {
+		if err := json.Unmarshal(msg.Data, &req); err == nil {
 			requestMu.Lock()
 			receivedRequests = append(receivedRequests, req)
 			requestMu.Unlock()
@@ -151,9 +152,9 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 	receivedComplete := make([]map[string]any, 0)
 	var completeMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.complete.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "agent.complete.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			completeMu.Lock()
 			receivedComplete = append(receivedComplete, event)
 			completeMu.Unlock()
@@ -304,9 +305,9 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	var currentRequestID string
 	var requestMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var req agentic.AgentRequest
-		if err := json.Unmarshal(data, &req); err == nil {
+		if err := json.Unmarshal(msg.Data, &req); err == nil {
 			requestMu.Lock()
 			currentRequestID = req.RequestID
 			requestMu.Unlock()
@@ -318,9 +319,9 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	receivedToolCalls := make([]agentic.ToolCall, 0)
 	var toolMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.execute.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "tool.execute.>", func(_ context.Context, msg *nats.Msg) {
 		var call agentic.ToolCall
-		if err := json.Unmarshal(data, &call); err == nil {
+		if err := json.Unmarshal(msg.Data, &call); err == nil {
 			toolMu.Lock()
 			receivedToolCalls = append(receivedToolCalls, call)
 			toolMu.Unlock()
@@ -486,9 +487,9 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 	var requestMu sync.Mutex
 	var lastRequestID string
 
-	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var req agentic.AgentRequest
-		if err := json.Unmarshal(data, &req); err == nil {
+		if err := json.Unmarshal(msg.Data, &req); err == nil {
 			requestMu.Lock()
 			requestCount++
 			lastRequestID = req.RequestID
@@ -501,9 +502,9 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 	receivedComplete := make([]map[string]any, 0)
 	var completeMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.complete.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "agent.complete.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			completeMu.Lock()
 			receivedComplete = append(receivedComplete, event)
 			completeMu.Unlock()
@@ -748,9 +749,9 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 	var requestID string
 	var requestMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var req agentic.AgentRequest
-		if err := json.Unmarshal(data, &req); err == nil {
+		if err := json.Unmarshal(msg.Data, &req); err == nil {
 			requestMu.Lock()
 			requestID = req.RequestID
 			requestMu.Unlock()

@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -151,9 +152,9 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
 		var resp agentic.AgentResponse
-		if err := json.Unmarshal(data, &resp); err == nil {
+		if err := json.Unmarshal(msg.Data, &resp); err == nil {
 			receiveMu.Lock()
 			receivedResponses = append(receivedResponses, resp)
 			receiveMu.Unlock()
@@ -296,9 +297,9 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
 		var resp agentic.AgentResponse
-		if err := json.Unmarshal(data, &resp); err == nil {
+		if err := json.Unmarshal(msg.Data, &resp); err == nil {
 			receiveMu.Lock()
 			receivedResponses = append(receivedResponses, resp)
 			receiveMu.Unlock()
@@ -476,9 +477,9 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
 		var resp agentic.AgentResponse
-		if err := json.Unmarshal(data, &resp); err == nil {
+		if err := json.Unmarshal(msg.Data, &resp); err == nil {
 			receiveMu.Lock()
 			receivedResponses = append(receivedResponses, resp)
 			receiveMu.Unlock()

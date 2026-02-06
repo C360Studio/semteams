@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/metric"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
@@ -145,8 +146,8 @@ func TestIntegration_PublishSubscribe(t *testing.T) {
 
 	// Subscribe to a subject
 	received := make(chan string, 1)
-	sub, err := manager.Subscribe(ctx, "test.subject", func(_ context.Context, data []byte) {
-		received <- string(data)
+	sub, err := manager.Subscribe(ctx, "test.subject", func(_ context.Context, msg *nats.Msg) {
+		received <- string(msg.Data)
 	})
 	require.NoError(t, err)
 	defer sub.Unsubscribe()
@@ -200,8 +201,9 @@ func TestIntegration_JetStream(t *testing.T) {
 
 	// Create consumer and receive message
 	received := make(chan string, 1)
-	err = manager.ConsumeStream(ctx, streamName, "test.*", func(data []byte) {
-		received <- string(data)
+	err = manager.ConsumeStream(ctx, streamName, "test.*", func(msg jetstream.Msg) {
+		received <- string(msg.Data())
+		msg.Ack()
 	})
 	require.NoError(t, err)
 
@@ -355,11 +357,12 @@ func TestIntegration_JetStreamMetrics(t *testing.T) {
 
 	// Create a consumer
 	received := make(chan bool, 5)
-	err = client.ConsumeStream(ctx, "TEST_METRICS", "test.metrics.>", func(_ []byte) {
+	err = client.ConsumeStream(ctx, "TEST_METRICS", "test.metrics.>", func(msg jetstream.Msg) {
 		select {
 		case received <- true:
 		default:
 		}
+		msg.Ack()
 	})
 	require.NoError(t, err)
 

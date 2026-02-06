@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -107,8 +108,8 @@ func TestIntegration_ContextAwareMethods_RealServer(t *testing.T) {
 
 	// Test Subscribe with context (should succeed)
 	received := make(chan []byte, 1)
-	sub, err := client.Subscribe(ctx, "test.reply", func(_ context.Context, data []byte) {
-		received <- data
+	sub, err := client.Subscribe(ctx, "test.reply", func(_ context.Context, msg *nats.Msg) {
+		received <- msg.Data
 	})
 	require.NoError(t, err)
 	defer sub.Unsubscribe()
@@ -165,8 +166,9 @@ func TestIntegration_JetStreamMethods_RealServer(t *testing.T) {
 
 	// Test consume from stream
 	received := make(chan []byte, 1)
-	err = client.ConsumeStream(ctx, "UNIT_TEST", "unit.test.*", func(data []byte) {
-		received <- data
+	err = client.ConsumeStream(ctx, "UNIT_TEST", "unit.test.*", func(msg jetstream.Msg) {
+		received <- msg.Data()
+		msg.Ack()
 	})
 	require.NoError(t, err)
 

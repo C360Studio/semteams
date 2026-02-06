@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/google/uuid"
+	"github.com/nats-io/nats.go"
 )
 
 // Component implements the CLI input processor
@@ -242,8 +243,8 @@ func (c *Component) Stop(timeout time.Duration) error {
 func (c *Component) setupSubscriptions(ctx context.Context) error {
 	// Subscribe to responses for this CLI session
 	subject := fmt.Sprintf("user.response.cli.%s", c.config.SessionID)
-	_, err := c.natsClient.Subscribe(ctx, subject, func(ctx context.Context, data []byte) {
-		c.handleResponse(ctx, data)
+	_, err := c.natsClient.Subscribe(ctx, subject, func(ctx context.Context, msg *nats.Msg) {
+		c.handleResponse(ctx, msg.Data)
 	})
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to %s: %w", subject, err)

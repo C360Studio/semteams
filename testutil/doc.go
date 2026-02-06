@@ -91,10 +91,10 @@
 //	func TestPublishSubscribe(t *testing.T) {
 //	    client := testutil.NewMockNATSClient()
 //
-//	    // Subscribe to subject
+//	    // Subscribe to subject (handler receives full *nats.Msg)
 //	    var received []byte
-//	    err := client.Subscribe(ctx, "test.subject", func(_ context.Context, data []byte) {
-//	        received = data
+//	    err := client.Subscribe(ctx, "test.subject", func(_ context.Context, msg *nats.Msg) {
+//	        received = msg.Data
 //	    })
 //	    require.NoError(t, err)
 //

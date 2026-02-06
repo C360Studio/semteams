@@ -17,6 +17,7 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/storage/objectstore"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -210,7 +211,9 @@ func (c *Component) Start(ctx context.Context) error {
 			}
 		} else {
 			// Core NATS subscription
-			sub, err := c.natsClient.Subscribe(ctx, subject, c.handleMessage)
+			sub, err := c.natsClient.Subscribe(ctx, subject, func(ctx context.Context, msg *nats.Msg) {
+				c.handleMessage(ctx, msg.Data)
+			})
 			if err != nil {
 				c.logger.Error("Failed to subscribe to NATS subject",
 					"component", c.name,

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 )
@@ -347,7 +348,7 @@ func TestContextAwareMethods(t *testing.T) {
 		assert.Equal(t, ErrNotConnected, err)
 
 		// Test Subscribe with context (will fail due to not connected)
-		_, err = client.Subscribe(ctx, "test.subject", func(_ context.Context, _ []byte) {})
+		_, err = client.Subscribe(ctx, "test.subject", func(_ context.Context, _ *nats.Msg) {})
 		assert.Equal(t, ErrNotConnected, err)
 	})
 }
@@ -370,7 +371,7 @@ func TestJetStreamMethods(t *testing.T) {
 		err = client.PublishToStream(ctx, "test.subject", []byte("data"))
 		assert.Equal(t, ErrNotConnected, err)
 
-		err = client.ConsumeStream(ctx, "test", "test.*", func([]byte) {})
+		err = client.ConsumeStream(ctx, "test", "test.*", func(jetstream.Msg) {})
 		assert.Equal(t, ErrNotConnected, err)
 	})
 }

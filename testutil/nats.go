@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/nats-io/nats.go"
 )
 
 // MockNATSClient is a simple in-memory NATS client for testing (core message passing).
@@ -14,7 +16,7 @@ import (
 type MockNATSClient struct {
 	mu            sync.RWMutex
 	messages      map[string][][]byte
-	subscriptions map[string][]func(context.Context, []byte)
+	subscriptions map[string][]func(context.Context, *nats.Msg)
 	closed        bool
 }
 
@@ -22,7 +24,7 @@ type MockNATSClient struct {
 func NewMockNATSClient() *MockNATSClient {
 	return &MockNATSClient{
 		messages:      make(map[string][][]byte),
-		subscriptions: make(map[string][]func(context.Context, []byte)),
+		subscriptions: make(map[string][]func(context.Context, *nats.Msg)),
 		closed:        false,
 	}
 }
@@ -43,18 +45,23 @@ func (c *MockNATSClient) Publish(ctx context.Context, subject string, data []byt
 	c.messages[subject] = append(c.messages[subject], data)
 
 	// Copy handlers to avoid holding lock during callbacks
-	var handlers []func(context.Context, []byte)
+	var handlers []func(context.Context, *nats.Msg)
 	if h, ok := c.subscriptions[subject]; ok {
-		handlers = make([]func(context.Context, []byte), len(h))
+		handlers = make([]func(context.Context, *nats.Msg), len(h))
 		copy(handlers, h)
 	}
 	c.mu.Unlock()
 
 	// Call handlers outside the lock to prevent deadlock
 	// Create per-message context with 30s timeout (matches real client)
+	// Create a mock nats.Msg to pass to handlers
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    data,
+	}
 	for _, handler := range handlers {
 		msgCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		handler(msgCtx, data)
+		handler(msgCtx, msg)
 		cancel()
 	}
 
@@ -62,7 +69,8 @@ func (c *MockNATSClient) Publish(ctx context.Context, subject string, data []byt
 }
 
 // Subscribe creates a subscription to a subject (matches natsclient.Client signature).
-func (c *MockNATSClient) Subscribe(ctx context.Context, subject string, handler func(context.Context, []byte)) error {
+// Handler receives full *nats.Msg to access Subject, Data, Headers, etc.
+func (c *MockNATSClient) Subscribe(ctx context.Context, subject string, handler func(context.Context, *nats.Msg)) error {
 	// Check for cancellation before subscribing
 	select {
 	case <-ctx.Done():
@@ -78,7 +86,7 @@ func (c *MockNATSClient) Subscribe(ctx context.Context, subject string, handler 
 	}
 
 	if c.subscriptions[subject] == nil {
-		c.subscriptions[subject] = make([]func(context.Context, []byte), 0)
+		c.subscriptions[subject] = make([]func(context.Context, *nats.Msg), 0)
 	}
 
 	c.subscriptions[subject] = append(c.subscriptions[subject], handler)

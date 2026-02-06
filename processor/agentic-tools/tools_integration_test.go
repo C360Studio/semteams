@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -168,9 +169,9 @@ func TestIntegration_ToolExecution(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var result agentic.ToolResult
-		if err := json.Unmarshal(data, &result); err == nil {
+		if err := json.Unmarshal(msg.Data, &result); err == nil {
 			receiveMu.Lock()
 			receivedResults = append(receivedResults, result)
 			receiveMu.Unlock()
@@ -286,9 +287,9 @@ func TestIntegration_ToolAllowedList(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var result agentic.ToolResult
-		if err := json.Unmarshal(data, &result); err == nil {
+		if err := json.Unmarshal(msg.Data, &result); err == nil {
 			receiveMu.Lock()
 			receivedResults = append(receivedResults, result)
 			receiveMu.Unlock()
@@ -397,9 +398,9 @@ func TestIntegration_ToolTimeout(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var result agentic.ToolResult
-		if err := json.Unmarshal(data, &result); err == nil {
+		if err := json.Unmarshal(msg.Data, &result); err == nil {
 			receiveMu.Lock()
 			receivedResults = append(receivedResults, result)
 			receiveMu.Unlock()
@@ -523,9 +524,9 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var result agentic.ToolResult
-		if err := json.Unmarshal(data, &result); err == nil {
+		if err := json.Unmarshal(msg.Data, &result); err == nil {
 			receiveMu.Lock()
 			receivedResults = append(receivedResults, result)
 			receiveMu.Unlock()
@@ -827,9 +828,9 @@ func TestIntegration_GlobalRegistryExecution(t *testing.T) {
 	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var result agentic.ToolResult
-		if err := json.Unmarshal(data, &result); err == nil {
+		if err := json.Unmarshal(msg.Data, &result); err == nil {
 			receiveMu.Lock()
 			receivedResults = append(receivedResults, result)
 			receiveMu.Unlock()

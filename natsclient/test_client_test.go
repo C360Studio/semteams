@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -161,9 +162,9 @@ func TestNewTestClient_PubSub(t *testing.T) {
 	var receivedMu sync.Mutex
 	receiveCh := make(chan struct{})
 
-	_, err := testClient.Client.Subscribe(ctx, "test.subject", func(_ context.Context, data []byte) {
+	_, err := testClient.Client.Subscribe(ctx, "test.subject", func(_ context.Context, msg *nats.Msg) {
 		receivedMu.Lock()
-		received = data
+		received = msg.Data
 		receivedMu.Unlock()
 		close(receiveCh)
 	})

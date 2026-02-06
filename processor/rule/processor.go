@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/cache"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -506,15 +507,14 @@ func (rp *Processor) setupSubscriptions(ctx context.Context) error {
 
 		case "nats":
 			// Core NATS subscription
-			subject := port.Subject // capture for closure
-			sub, err := rp.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
-				rp.handleMessage(msgCtx, subject, data)
+			sub, err := rp.natsClient.Subscribe(ctx, port.Subject, func(msgCtx context.Context, msg *nats.Msg) {
+				rp.handleMessage(msgCtx, msg.Subject, msg.Data)
 			})
 			if err != nil {
-				return errs.Wrap(err, "RuleProcessor", "Start", fmt.Sprintf("subscribe to %s", subject))
+				return errs.Wrap(err, "RuleProcessor", "Start", fmt.Sprintf("subscribe to %s", port.Subject))
 			}
 			rp.subscriptions = append(rp.subscriptions, sub)
-			rp.logger.Info("Rule processor subscribed (NATS)", "subject", subject)
+			rp.logger.Info("Rule processor subscribed (NATS)", "subject", port.Subject)
 
 		default:
 			rp.logger.Warn("Unknown port type, skipping", "port", port.Name, "type", port.Type)

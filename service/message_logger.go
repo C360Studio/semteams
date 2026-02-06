@@ -13,6 +13,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/nats-io/nats.go"
 )
 
 // NewMessageLoggerService creates a new message logger service using the standard constructor pattern
@@ -352,8 +353,8 @@ func (ml *MessageLogger) Start(ctx context.Context) error {
 
 	// Subscribe to configured subjects
 	for _, subject := range ml.config.MonitorSubjects {
-		sub, err := ml.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
-			ml.handleMessage(msgCtx, subject, data)
+		sub, err := ml.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, msg *nats.Msg) {
+			ml.handleMessage(msgCtx, msg.Subject, msg.Data)
 		})
 		if err != nil {
 			ml.logger.Error("Failed to subscribe to subject",
@@ -817,8 +818,8 @@ func (ml *MessageLogger) startRuntime() error {
 
 	// Subscribe to configured subjects
 	for _, subject := range ml.config.MonitorSubjects {
-		sub, err := ml.natsClient.Subscribe(context.Background(), subject, func(msgCtx context.Context, data []byte) {
-			ml.handleMessage(msgCtx, subject, data)
+		sub, err := ml.natsClient.Subscribe(context.Background(), subject, func(msgCtx context.Context, msg *nats.Msg) {
+			ml.handleMessage(msgCtx, msg.Subject, msg.Data)
 		})
 		if err != nil {
 			ml.logger.Error("Failed to subscribe to subject",

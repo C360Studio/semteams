@@ -810,8 +810,8 @@ func (w *Output) subscribeToNATS(ctx context.Context) error {
 
 	// Subscribe to each subject using natsclient wrapper
 	for _, subject := range w.subjects {
-		sub, err := w.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, data []byte) {
-			w.handleNATSMessageData(msgCtx, data, subject)
+		sub, err := w.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, msg *natspkg.Msg) {
+			w.handleNATSMessageData(msgCtx, msg.Data, msg.Subject)
 		})
 		if err != nil {
 			return errs.Wrap(err, "Output", "subscribeToNATS", fmt.Sprintf("subscribe to NATS subject %s", subject))

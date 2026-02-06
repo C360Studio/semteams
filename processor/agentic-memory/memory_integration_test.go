@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -379,11 +380,11 @@ func TestIntegration_HydrateRequest_PreTask(t *testing.T) {
 	receivedContext := make([]agenticmemory.InjectedContextMessage, 0)
 	var mu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.context.injected.>", func(_ context.Context, data []byte) {
-		var msg agenticmemory.InjectedContextMessage
-		if err := json.Unmarshal(data, &msg); err == nil {
+	_, err = natsClient.Subscribe(ctx, "agent.context.injected.>", func(_ context.Context, msg *nats.Msg) {
+		var ctxMsg agenticmemory.InjectedContextMessage
+		if err := json.Unmarshal(msg.Data, &ctxMsg); err == nil {
 			mu.Lock()
-			receivedContext = append(receivedContext, msg)
+			receivedContext = append(receivedContext, ctxMsg)
 			mu.Unlock()
 		}
 	})
@@ -516,11 +517,11 @@ func TestIntegration_HydrateRequest_PostCompaction(t *testing.T) {
 	receivedContext := make([]agenticmemory.InjectedContextMessage, 0)
 	var mu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.context.injected.>", func(_ context.Context, data []byte) {
-		var msg agenticmemory.InjectedContextMessage
-		if err := json.Unmarshal(data, &msg); err == nil {
+	_, err = natsClient.Subscribe(ctx, "agent.context.injected.>", func(_ context.Context, msg *nats.Msg) {
+		var ctxMsg agenticmemory.InjectedContextMessage
+		if err := json.Unmarshal(msg.Data, &ctxMsg); err == nil {
 			mu.Lock()
-			receivedContext = append(receivedContext, msg)
+			receivedContext = append(receivedContext, ctxMsg)
 			mu.Unlock()
 		}
 	})
@@ -703,11 +704,11 @@ func TestIntegration_PublishInjectedContext_ToJetStream(t *testing.T) {
 	receivedContext := make([]agenticmemory.InjectedContextMessage, 0)
 	var mu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.context.injected.>", func(_ context.Context, data []byte) {
-		var msg agenticmemory.InjectedContextMessage
-		if err := json.Unmarshal(data, &msg); err == nil {
+	_, err = natsClient.Subscribe(ctx, "agent.context.injected.>", func(_ context.Context, msg *nats.Msg) {
+		var ctxMsg agenticmemory.InjectedContextMessage
+		if err := json.Unmarshal(msg.Data, &ctxMsg); err == nil {
 			mu.Lock()
-			receivedContext = append(receivedContext, msg)
+			receivedContext = append(receivedContext, ctxMsg)
 			mu.Unlock()
 		}
 	})

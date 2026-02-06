@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/flowstore"
 	"github.com/gorilla/websocket"
+	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -830,16 +831,16 @@ func (m *streamMockComponentManager) GetManagedComponents() map[string]*componen
 
 // streamMockNATSClient implements NATS client interface for testing (prefixed to avoid collision)
 type streamMockNATSClient struct {
-	subscriptions map[string]func(context.Context, []byte)
+	subscriptions map[string]func(context.Context, *nats.Msg)
 	mu            sync.RWMutex
 }
 
-func (m *streamMockNATSClient) Subscribe(ctx context.Context, subject string, handler func(context.Context, []byte)) error {
+func (m *streamMockNATSClient) Subscribe(ctx context.Context, subject string, handler func(context.Context, *nats.Msg)) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.subscriptions == nil {
-		m.subscriptions = make(map[string]func(context.Context, []byte))
+		m.subscriptions = make(map[string]func(context.Context, *nats.Msg))
 	}
 	m.subscriptions[subject] = handler
 	return nil
@@ -852,7 +853,8 @@ func (m *streamMockNATSClient) Publish(ctx context.Context, subject string, data
 	// Trigger subscription if exists - support NATS wildcard patterns
 	for subjectPattern, handler := range m.subscriptions {
 		if matchNATSSubject(subjectPattern, subject) {
-			go handler(ctx, data)
+			msg := &nats.Msg{Subject: subject, Data: data}
+			go handler(ctx, msg)
 		}
 	}
 	return nil
@@ -1408,13 +1410,13 @@ func TestLogStreamer_SubscribesToNATS(t *testing.T) {
 	defer cancel()
 
 	mockNATS := &streamMockNATSClient{
-		subscriptions: make(map[string]func(context.Context, []byte)),
+		subscriptions: make(map[string]func(context.Context, *nats.Msg)),
 	}
 
 	subscribedChan := make(chan string, 1)
 
 	// Simulate subscription
-	err := mockNATS.Subscribe(ctx, "logs.>", func(ctx context.Context, data []byte) {
+	err := mockNATS.Subscribe(ctx, "logs.>", func(ctx context.Context, msg *nats.Msg) {
 		// Handler
 	})
 	require.NoError(t, err)
@@ -1478,16 +1480,16 @@ func TestLogStreamer_ForwardsLogMessages(t *testing.T) {
 			defer cancel()
 
 			mockNATS := &streamMockNATSClient{
-				subscriptions: make(map[string]func(context.Context, []byte)),
+				subscriptions: make(map[string]func(context.Context, *nats.Msg)),
 			}
 
 			envelopeChan := make(chan StatusStreamEnvelope, 10)
 
 			// Subscribe to logs
-			err := mockNATS.Subscribe(ctx, "logs.>", func(ctx context.Context, data []byte) {
+			err := mockNATS.Subscribe(ctx, "logs.>", func(ctx context.Context, msg *nats.Msg) {
 				// Parse log entry
 				var logEntry map[string]interface{}
-				if err := json.Unmarshal(data, &logEntry); err != nil {
+				if err := json.Unmarshal(msg.Data, &logEntry); err != nil {
 					return
 				}
 
@@ -1497,7 +1499,7 @@ func TestLogStreamer_ForwardsLogMessages(t *testing.T) {
 					ID:        generateTestMessageID(),
 					Timestamp: time.Now().UnixMilli(),
 					FlowID:    "test-flow",
-					Payload:   data,
+					Payload:   msg.Data,
 				}
 
 				select {
@@ -1642,7 +1644,7 @@ func TestLogStreamer_StopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	mockNATS := &streamMockNATSClient{
-		subscriptions: make(map[string]func(context.Context, []byte)),
+		subscriptions: make(map[string]func(context.Context, *nats.Msg)),
 	}
 
 	stopped := make(chan struct{})
@@ -1652,7 +1654,7 @@ func TestLogStreamer_StopsOnContextCancel(t *testing.T) {
 		defer close(stopped)
 
 		// Subscribe
-		err := mockNATS.Subscribe(ctx, "logs.>", func(ctx context.Context, data []byte) {
+		err := mockNATS.Subscribe(ctx, "logs.>", func(ctx context.Context, msg *nats.Msg) {
 			// Handler
 		})
 		if err != nil {
@@ -1681,10 +1683,10 @@ func TestMetricsStreamer_SubscribesToNATS(t *testing.T) {
 	defer cancel()
 
 	mockNATS := &streamMockNATSClient{
-		subscriptions: make(map[string]func(context.Context, []byte)),
+		subscriptions: make(map[string]func(context.Context, *nats.Msg)),
 	}
 
-	err := mockNATS.Subscribe(ctx, "metrics.>", func(ctx context.Context, data []byte) {
+	err := mockNATS.Subscribe(ctx, "metrics.>", func(ctx context.Context, msg *nats.Msg) {
 		// Handler
 	})
 	require.NoError(t, err)
@@ -1728,19 +1730,19 @@ func TestMetricsStreamer_ForwardsMetrics(t *testing.T) {
 			defer cancel()
 
 			mockNATS := &streamMockNATSClient{
-				subscriptions: make(map[string]func(context.Context, []byte)),
+				subscriptions: make(map[string]func(context.Context, *nats.Msg)),
 			}
 
 			envelopeChan := make(chan StatusStreamEnvelope, 10)
 
 			// Subscribe to metrics
-			err := mockNATS.Subscribe(ctx, "metrics.>", func(ctx context.Context, data []byte) {
+			err := mockNATS.Subscribe(ctx, "metrics.>", func(ctx context.Context, msg *nats.Msg) {
 				envelope := StatusStreamEnvelope{
 					Type:      "component_metrics",
 					ID:        generateTestMessageID(),
 					Timestamp: time.Now().UnixMilli(),
 					FlowID:    "test-flow",
-					Payload:   data,
+					Payload:   msg.Data,
 				}
 
 				select {
@@ -1802,7 +1804,7 @@ func TestMetricsStreamer_StopsOnContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	mockNATS := &streamMockNATSClient{
-		subscriptions: make(map[string]func(context.Context, []byte)),
+		subscriptions: make(map[string]func(context.Context, *nats.Msg)),
 	}
 
 	stopped := make(chan struct{})
@@ -1811,7 +1813,7 @@ func TestMetricsStreamer_StopsOnContextCancel(t *testing.T) {
 	go func() {
 		defer close(stopped)
 
-		err := mockNATS.Subscribe(ctx, "metrics.>", func(ctx context.Context, data []byte) {
+		err := mockNATS.Subscribe(ctx, "metrics.>", func(ctx context.Context, msg *nats.Msg) {
 			// Handler
 		})
 		if err != nil {

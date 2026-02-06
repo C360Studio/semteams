@@ -42,10 +42,11 @@
 //	// Publish a message
 //	err = client.Publish(ctx, "subject.name", []byte("message data"))
 //
-//	// Subscribe to messages
-//	err = client.Subscribe(ctx, "subject.*", func(msgCtx context.Context, data []byte) {
+//	// Subscribe to messages (receives full *nats.Msg for access to Subject, Data, Headers)
+//	err = client.Subscribe(ctx, "subject.*", func(msgCtx context.Context, msg *nats.Msg) {
 //	    // Handle message with context (30s timeout per message)
-//	    fmt.Printf("Received: %s\n", string(data))
+//	    // For wildcard subscriptions, msg.Subject contains the actual subject
+//	    fmt.Printf("Received on %s: %s\n", msg.Subject, string(msg.Data))
 //	})
 //
 // # Advanced Configuration
@@ -77,9 +78,12 @@
 //	// Publish to stream
 //	err = client.PublishToStream(ctx, "events.user.created", []byte(`{"user_id": "123"}`))
 //
-//	// Consume from stream
-//	err = client.ConsumeStream(ctx, "EVENTS", "events.>", func(data []byte) {
-//	    // Process event
+//	// Consume from stream (receives full jetstream.Msg for access to Subject, Data, Headers)
+//	// Handler is responsible for calling msg.Ack() after processing
+//	err = client.ConsumeStream(ctx, "EVENTS", "events.>", func(msg jetstream.Msg) {
+//	    // Process event - msg.Subject() contains actual subject for wildcard filters
+//	    processEvent(msg.Subject(), msg.Data())
+//	    msg.Ack()
 //	})
 //
 // # Key-Value Store

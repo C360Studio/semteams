@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -150,9 +151,9 @@ func TestIntegration_KVEntityStateWatch(t *testing.T) {
 	receivedEvents := make([]map[string]any, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(testCtx, "events.rule.triggered", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(testCtx, "events.rule.triggered", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			receiveMu.Lock()
 			receivedEvents = append(receivedEvents, event)
 			receiveMu.Unlock()
@@ -543,9 +544,9 @@ func TestIntegration_DynamicWatchPatterns(t *testing.T) {
 	receivedEvents := make([]map[string]any, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(testCtx, "events.rule.triggered", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(testCtx, "events.rule.triggered", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
-		if err := json.Unmarshal(data, &event); err == nil {
+		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			receiveMu.Lock()
 			receivedEvents = append(receivedEvents, event)
 			receiveMu.Unlock()
@@ -686,9 +687,9 @@ func TestIntegration_GraphIntegration(t *testing.T) {
 	receivedMutations := make([]map[string]any, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "graph.events.>", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "graph.events.>", func(_ context.Context, msg *nats.Msg) {
 		var mutation map[string]any
-		if err := json.Unmarshal(data, &mutation); err == nil {
+		if err := json.Unmarshal(msg.Data, &mutation); err == nil {
 			receiveMu.Lock()
 			receivedMutations = append(receivedMutations, mutation)
 			receiveMu.Unlock()

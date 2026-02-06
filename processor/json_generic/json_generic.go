@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -209,7 +210,9 @@ func (p *Processor) setupSubscriptions(ctx context.Context) error {
 			}
 
 		case "nats":
-			sub, err := p.natsClient.Subscribe(ctx, port.Subject, p.handleMessage)
+			sub, err := p.natsClient.Subscribe(ctx, port.Subject, func(ctx context.Context, msg *nats.Msg) {
+				p.handleMessage(ctx, msg.Data)
+			})
 			if err != nil {
 				p.logger.Error("Failed to subscribe to NATS subject",
 					"component", p.name,

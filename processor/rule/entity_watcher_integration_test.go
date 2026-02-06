@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,7 +100,8 @@ func TestEntityWatcher_RuleTriggerDebouncing(t *testing.T) {
 	var triggerCount int64
 	var triggerMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "events.rule.triggered", func(_ context.Context, data []byte) {
+	_, err = natsClient.Subscribe(ctx, "events.rule.triggered", func(_ context.Context, msg *nats.Msg) {
+		_ = msg.Data // data available in msg.Data if needed
 		triggerMu.Lock()
 		triggerCount++
 		triggerMu.Unlock()
