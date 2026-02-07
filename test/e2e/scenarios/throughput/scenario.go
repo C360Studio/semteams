@@ -115,37 +115,12 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		Warnings:     []string{},
 	}
 
-	// Check if profiling is available
+	// Setup profiling if available
 	profilingEnabled := s.profile.IsAvailable(ctx)
 	result.Details["profiling_enabled"] = profilingEnabled
-
 	if profilingEnabled {
-		// Capture baseline heap before load
-		if path, err := s.profile.CaptureHeap(ctx, "throughput-baseline"); err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture baseline heap: %v", err))
-		} else {
-			result.Details["profile_baseline_heap"] = path
-		}
-
-		// Start CPU profile async (runs during the load phase)
-		var cpuProfilePath string
-		var cpuProfileErr error
-		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			cpuProfilePath, cpuProfileErr = s.profile.CaptureCPU(ctx, "throughput", s.config.ProfileDuration)
-		}()
-
-		// Store cleanup for later
-		defer func() {
-			wg.Wait()
-			if cpuProfileErr != nil {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("CPU profile failed: %v", cpuProfileErr))
-			} else if cpuProfilePath != "" {
-				result.Details["profile_cpu"] = cpuProfilePath
-			}
-		}()
+		cleanup := s.startProfiling(ctx, result)
+		defer cleanup()
 	}
 
 	// Capture baseline metrics
@@ -179,32 +154,11 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 	result.Metrics["processing_wait_ms"] = time.Since(processingStart).Milliseconds()
 
 	// Capture final metrics delta
-	if baseline != nil {
-		if diff, err := s.metrics.CompareToBaseline(ctx, baseline); err == nil {
-			result.Metrics["total_duration_sec"] = diff.Duration.Seconds()
-			// Extract key throughput metrics
-			if rate, ok := diff.RatePerSec["semstreams_udp_datagrams_received_total"]; ok {
-				result.Metrics["udp_receive_rate"] = rate
-			}
-			if rate, ok := diff.RatePerSec["semstreams_file_lines_written_total"]; ok {
-				result.Metrics["file_write_rate"] = rate
-			}
-		}
-	}
+	s.captureMetricsDelta(ctx, baseline, result)
 
 	// Capture final profiles
 	if profilingEnabled {
-		if path, err := s.profile.CaptureHeap(ctx, "throughput-final"); err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture final heap: %v", err))
-		} else {
-			result.Details["profile_final_heap"] = path
-		}
-
-		if path, err := s.profile.CaptureGoroutine(ctx, "throughput-final"); err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture goroutine profile: %v", err))
-		} else {
-			result.Details["profile_goroutine"] = path
-		}
+		s.captureFinalProfiles(ctx, result)
 	}
 
 	// Calculate end-to-end throughput
@@ -216,6 +170,69 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 	result.Duration = result.EndTime.Sub(result.StartTime)
 
 	return result, nil
+}
+
+// startProfiling captures baseline heap and starts CPU profiling.
+// Returns a cleanup function that waits for CPU profile completion.
+func (s *Scenario) startProfiling(ctx context.Context, result *scenarios.Result) func() {
+	// Capture baseline heap before load
+	if path, err := s.profile.CaptureHeap(ctx, "throughput-baseline"); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture baseline heap: %v", err))
+	} else {
+		result.Details["profile_baseline_heap"] = path
+	}
+
+	// Start CPU profile async (runs during the load phase)
+	var cpuProfilePath string
+	var cpuProfileErr error
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		cpuProfilePath, cpuProfileErr = s.profile.CaptureCPU(ctx, "throughput", s.config.ProfileDuration)
+	}()
+
+	return func() {
+		wg.Wait()
+		if cpuProfileErr != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("CPU profile failed: %v", cpuProfileErr))
+		} else if cpuProfilePath != "" {
+			result.Details["profile_cpu"] = cpuProfilePath
+		}
+	}
+}
+
+// captureMetricsDelta captures and records the metrics delta from baseline.
+func (s *Scenario) captureMetricsDelta(ctx context.Context, baseline *client.MetricsBaseline, result *scenarios.Result) {
+	if baseline == nil {
+		return
+	}
+	diff, err := s.metrics.CompareToBaseline(ctx, baseline)
+	if err != nil {
+		return
+	}
+	result.Metrics["total_duration_sec"] = diff.Duration.Seconds()
+	if rate, ok := diff.RatePerSec["semstreams_udp_datagrams_received_total"]; ok {
+		result.Metrics["udp_receive_rate"] = rate
+	}
+	if rate, ok := diff.RatePerSec["semstreams_file_lines_written_total"]; ok {
+		result.Metrics["file_write_rate"] = rate
+	}
+}
+
+// captureFinalProfiles captures heap and goroutine profiles after the test.
+func (s *Scenario) captureFinalProfiles(ctx context.Context, result *scenarios.Result) {
+	if path, err := s.profile.CaptureHeap(ctx, "throughput-final"); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture final heap: %v", err))
+	} else {
+		result.Details["profile_final_heap"] = path
+	}
+
+	if path, err := s.profile.CaptureGoroutine(ctx, "throughput-final"); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture goroutine profile: %v", err))
+	} else {
+		result.Details["profile_goroutine"] = path
+	}
 }
 
 // Teardown cleans up after the scenario.
