@@ -218,58 +218,27 @@ func buildStepResult(stepName string, result actions.Result, start time.Time, it
 func (e *Executor) executeAction(ctx context.Context, workflow *Definition, exec *Execution, step *StepDef, interpolator *Interpolator) error {
 	start := time.Now()
 
-	// Interpolate subject and payload
-	subject, err := interpolator.InterpolateString(step.Action.Subject)
-	if err != nil {
-		e.logger.Warn("Subject interpolation error", "step", step.Name, "error", err)
-		subject = step.Action.Subject
-	}
-	payload, err := interpolator.InterpolateJSON(step.Action.Payload)
-	if err != nil {
-		e.logger.Warn("Payload interpolation error", "step", step.Name, "error", err)
-		payload = step.Action.Payload
-	}
+	// Interpolate all action fields at once
+	action := interpolator.InterpolateActionDef(step.Action)
 
-	timeout := e.parseTimeout(step.Action.Timeout, e.config.RequestTimeout, step.Name)
+	timeout := e.parseTimeout(action.Timeout, e.config.RequestTimeout, step.Name)
 	actx := &actions.Context{NATSClient: e.natsClient, Timeout: timeout}
 	iteration := exec.GetIteration()
 
-	switch step.Action.Type {
+	switch action.Type {
 	case "call":
-		action := actions.NewCallAction(subject, payload, timeout)
-		result := action.Execute(ctx, actx)
+		a := actions.NewCallAction(action.Subject, action.Payload, timeout)
+		result := a.Execute(ctx, actx)
 		return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
 
 	case "publish":
-		action := actions.NewPublishAction(subject, payload)
-		result := action.Execute(ctx, actx)
+		a := actions.NewPublishAction(action.Subject, action.Payload)
+		result := a.Execute(ctx, actx)
 		return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
 
 	case "publish_agent":
-		// Interpolate individual fields for publish_agent
-		role, err := interpolator.InterpolateString(step.Action.Role)
-		if err != nil {
-			e.logger.Warn("Role interpolation error", "step", step.Name, "error", err)
-			role = step.Action.Role
-		}
-		model, err := interpolator.InterpolateString(step.Action.Model)
-		if err != nil {
-			e.logger.Warn("Model interpolation error", "step", step.Name, "error", err)
-			model = step.Action.Model
-		}
-		prompt, err := interpolator.InterpolateString(step.Action.Prompt)
-		if err != nil {
-			e.logger.Warn("Prompt interpolation error", "step", step.Name, "error", err)
-			prompt = step.Action.Prompt
-		}
-		taskID, err := interpolator.InterpolateString(step.Action.TaskID)
-		if err != nil {
-			e.logger.Warn("TaskID interpolation error", "step", step.Name, "error", err)
-			taskID = step.Action.TaskID
-		}
-
-		action := actions.NewPublishAgentAction(subject, role, model, prompt, taskID)
-		result := action.Execute(ctx, actx)
+		a := actions.NewPublishAgentAction(action.Subject, action.Role, action.Model, action.Prompt, action.TaskID)
+		result := a.Execute(ctx, actx)
 		if !result.Success {
 			return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
 		}
@@ -277,22 +246,12 @@ func (e *Executor) executeAction(ctx context.Context, workflow *Definition, exec
 		return nil
 
 	case "set_state":
-		entity, err := interpolator.InterpolateString(step.Action.Entity)
-		if err != nil {
-			e.logger.Warn("Entity interpolation error", "step", step.Name, "error", err)
-			entity = step.Action.Entity
-		}
-		state, err := interpolator.InterpolateJSON(step.Action.State)
-		if err != nil {
-			e.logger.Warn("State interpolation error", "step", step.Name, "error", err)
-			state = step.Action.State
-		}
-		action := actions.NewSetStateAction(entity, state)
-		result := action.Execute(ctx, actx)
+		a := actions.NewSetStateAction(action.Entity, action.State)
+		result := a.Execute(ctx, actx)
 		return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
 
 	default:
-		return e.failExecution(ctx, workflow, exec, fmt.Sprintf("unknown action type: %s", step.Action.Type))
+		return e.failExecution(ctx, workflow, exec, fmt.Sprintf("unknown action type: %s", action.Type))
 	}
 }
 
@@ -467,34 +426,30 @@ func (e *Executor) timeoutExecution(ctx context.Context, workflow *Definition, e
 
 // executeCompletionAction executes an on_complete or on_fail action
 func (e *Executor) executeCompletionAction(ctx context.Context, interpolator *Interpolator, actionDef ActionDef) {
-	subject, _ := interpolator.InterpolateString(actionDef.Subject)
+	// Interpolate all action fields at once
+	action := interpolator.InterpolateActionDef(actionDef)
 
-	timeout := e.parseTimeout(actionDef.Timeout, e.config.RequestTimeout, "completion_action")
+	timeout := e.parseTimeout(action.Timeout, e.config.RequestTimeout, "completion_action")
 
 	actx := &actions.Context{
 		NATSClient: e.natsClient,
 		Timeout:    timeout,
 	}
 
-	var action actions.Action
-	switch actionDef.Type {
+	var a actions.Action
+	switch action.Type {
 	case "publish":
-		payload, _ := interpolator.InterpolateJSON(actionDef.Payload)
-		action = actions.NewPublishAction(subject, payload)
+		a = actions.NewPublishAction(action.Subject, action.Payload)
 	case "publish_agent":
-		role, _ := interpolator.InterpolateString(actionDef.Role)
-		model, _ := interpolator.InterpolateString(actionDef.Model)
-		prompt, _ := interpolator.InterpolateString(actionDef.Prompt)
-		taskID, _ := interpolator.InterpolateString(actionDef.TaskID)
-		action = actions.NewPublishAgentAction(subject, role, model, prompt, taskID)
+		a = actions.NewPublishAgentAction(action.Subject, action.Role, action.Model, action.Prompt, action.TaskID)
 	default:
-		e.logger.Warn("Unsupported completion action type", "type", actionDef.Type)
+		e.logger.Warn("Unsupported completion action type", "type", action.Type)
 		return
 	}
 
-	result := action.Execute(ctx, actx)
+	result := a.Execute(ctx, actx)
 	if !result.Success {
-		e.logger.Warn("Completion action failed", "type", actionDef.Type, "error", result.Error)
+		e.logger.Warn("Completion action failed", "type", action.Type, "error", result.Error)
 	}
 }
 

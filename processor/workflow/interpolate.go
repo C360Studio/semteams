@@ -41,6 +41,47 @@ func (i *Interpolator) InterpolateJSON(input json.RawMessage) (json.RawMessage, 
 	return json.RawMessage(result), nil
 }
 
+// interpolateStringWithFallback interpolates a string, returning the original on error
+func (i *Interpolator) interpolateStringWithFallback(input string) string {
+	if input == "" {
+		return input
+	}
+	result, err := i.interpolate(input)
+	if err != nil {
+		return input
+	}
+	return result
+}
+
+// interpolateJSONWithFallback interpolates JSON, returning the original on error
+func (i *Interpolator) interpolateJSONWithFallback(input json.RawMessage) json.RawMessage {
+	if input == nil {
+		return nil
+	}
+	result, err := i.InterpolateJSON(input)
+	if err != nil {
+		return input
+	}
+	return result
+}
+
+// InterpolateActionDef returns a copy of the ActionDef with all fields interpolated.
+// On interpolation errors, the original field value is preserved.
+func (i *Interpolator) InterpolateActionDef(action ActionDef) ActionDef {
+	return ActionDef{
+		Type:    action.Type,
+		Subject: i.interpolateStringWithFallback(action.Subject),
+		Payload: i.interpolateJSONWithFallback(action.Payload),
+		Entity:  i.interpolateStringWithFallback(action.Entity),
+		State:   i.interpolateJSONWithFallback(action.State),
+		Timeout: action.Timeout, // Timeout is not interpolated (it's a duration)
+		Role:    i.interpolateStringWithFallback(action.Role),
+		Model:   i.interpolateStringWithFallback(action.Model),
+		Prompt:  i.interpolateStringWithFallback(action.Prompt),
+		TaskID:  i.interpolateStringWithFallback(action.TaskID),
+	}
+}
+
 // interpolate replaces ${...} patterns with their values
 func (i *Interpolator) interpolate(input string) (string, error) {
 	var lastErr error
