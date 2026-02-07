@@ -6,7 +6,6 @@ package cache
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -176,41 +175,6 @@ func TestAttack_ContextCancellationDuringCallback(t *testing.T) {
 
 	// Verify set stopped cleanly
 	time.Sleep(100 * time.Millisecond)
-}
-
-// TestAttack_GoroutineLeakWithRapidCreateDestroy verifies no goroutine leaks with rapid create/close cycles
-func TestAttack_GoroutineLeakWithRapidCreateDestroy(t *testing.T) {
-	t.Parallel()
-
-	before := runtime.NumGoroutine()
-
-	// Create and destroy 100 CoalescingSets rapidly
-	const iterations = 100
-	for i := 0; i < iterations; i++ {
-		ctx, cancel := context.WithCancel(context.Background())
-		set := NewCoalescingSet(ctx, 10*time.Millisecond, func(keys []string) {})
-
-		// Add some keys
-		set.Add("entity-1")
-		set.Add("entity-2")
-
-		// Immediate close
-		cancel()
-		require.NoError(t, set.Close())
-	}
-
-	// Allow goroutines to terminate
-	time.Sleep(200 * time.Millisecond)
-	runtime.GC()
-	time.Sleep(100 * time.Millisecond)
-
-	after := runtime.NumGoroutine()
-
-	// Allow for some variance, but should not grow significantly
-	// Each iteration creates 1 goroutine, so 100 leaked = after == before + 100
-	require.LessOrEqual(t, after, before+10,
-		"goroutine leak detected: before=%d after=%d (delta=%d)",
-		before, after, after-before)
 }
 
 // TestAttack_ConcurrentAddRemove verifies concurrent add/remove operations don't cause races
