@@ -10,14 +10,14 @@ import (
 
 // Config represents the configuration for the agentic-loop processor
 type Config struct {
-	MaxIterations      int                   `json:"max_iterations"`
-	Timeout            string                `json:"timeout"`
-	StreamName         string                `json:"stream_name"`
-	ConsumerNameSuffix string                `json:"consumer_name_suffix"`
-	LoopsBucket        string                `json:"loops_bucket"`
-	TrajectoriesBucket string                `json:"trajectories_bucket"`
-	Context            ContextConfig         `json:"context"`
-	Ports              *component.PortConfig `json:"ports,omitempty"`
+	MaxIterations      int                   `json:"max_iterations" schema:"type:int,description:Maximum number of iterations before loop terminates,default:20,min:1,max:1000,category:basic,required"`
+	Timeout            string                `json:"timeout" schema:"type:string,description:Timeout duration for loop execution (e.g. 120s or 5m),default:120s,category:basic,required"`
+	StreamName         string                `json:"stream_name" schema:"type:string,description:JetStream stream name,default:AGENT,category:advanced"`
+	ConsumerNameSuffix string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix for consumer names,category:advanced"`
+	LoopsBucket        string                `json:"loops_bucket" schema:"type:string,description:NATS KV bucket name for storing loop state,default:AGENT_LOOPS,category:advanced,required"`
+	TrajectoriesBucket string                `json:"trajectories_bucket" schema:"type:string,description:NATS KV bucket name for storing trajectories,default:AGENT_TRAJECTORIES,category:advanced,required"`
+	Context            ContextConfig         `json:"context" schema:"type:object,description:Context window configuration,category:advanced"`
+	Ports              *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
 }
 
 // ContextConfig represents configuration for context memory management

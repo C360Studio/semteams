@@ -10,8 +10,6 @@ func Register(registry *component.Registry) error {
 		panic("registry cannot be nil")
 	}
 
-	schema := buildConfigSchema()
-
 	registration := &component.Registration{
 		Name:        "agentic-loop",
 		Type:        "processor",

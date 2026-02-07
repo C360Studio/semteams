@@ -177,8 +177,8 @@ func TestComponent_ConfigSchema(t *testing.T) {
 	if !ok {
 		t.Fatal("ConfigSchema() should have 'max_iterations' property")
 	}
-	if maxIterProp.Type != "integer" && maxIterProp.Type != "number" {
-		t.Errorf("max_iterations type = %s, want integer or number", maxIterProp.Type)
+	if maxIterProp.Type != "int" {
+		t.Errorf("max_iterations type = %s, want int", maxIterProp.Type)
 	}
 
 	// Verify timeout property

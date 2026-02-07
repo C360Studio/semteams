@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -13,6 +14,9 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+// schema is the configuration schema for workflow-processor, generated from Config struct tags
+var schema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
 // Component implements the workflow processor
 type Component struct {
@@ -120,7 +124,7 @@ func (c *Component) OutputPorts() []component.Port {
 
 // ConfigSchema returns the configuration schema
 func (c *Component) ConfigSchema() component.ConfigSchema {
-	return buildConfigSchema()
+	return schema
 }
 
 // Health returns current health status
@@ -648,74 +652,6 @@ func buildDefaultOutputPorts() []component.Port {
 		}
 	}
 	return ports
-}
-
-// buildConfigSchema builds the configuration schema
-func buildConfigSchema() component.ConfigSchema {
-	minIterPtr := new(int)
-	*minIterPtr = 1
-
-	maxIterPtr := new(int)
-	*maxIterPtr = 100
-
-	return component.ConfigSchema{
-		Properties: map[string]component.PropertySchema{
-			"definitions_bucket": {
-				Type:        "string",
-				Description: "NATS KV bucket for workflow definitions",
-				Default:     "WORKFLOW_DEFINITIONS",
-				Category:    "advanced",
-			},
-			"executions_bucket": {
-				Type:        "string",
-				Description: "NATS KV bucket for workflow execution state",
-				Default:     "WORKFLOW_EXECUTIONS",
-				Category:    "advanced",
-			},
-			"stream_name": {
-				Type:        "string",
-				Description: "JetStream stream name for workflow messages",
-				Default:     "WORKFLOW",
-				Category:    "advanced",
-			},
-			"default_timeout": {
-				Type:        "string",
-				Description: "Default timeout for workflows (e.g., 10m, 1h)",
-				Default:     "10m",
-				Category:    "basic",
-			},
-			"default_max_iterations": {
-				Type:        "integer",
-				Description: "Default max iterations for loop workflows",
-				Default:     10,
-				Minimum:     minIterPtr,
-				Maximum:     maxIterPtr,
-				Category:    "basic",
-			},
-			"request_timeout": {
-				Type:        "string",
-				Description: "Timeout for NATS request/response calls",
-				Default:     "30s",
-				Category:    "advanced",
-			},
-			"consumer_name_suffix": {
-				Type:        "string",
-				Description: "Suffix appended to consumer names for uniqueness",
-				Category:    "advanced",
-			},
-			"workflow_files": {
-				Type:        "array",
-				Description: "Paths to JSON workflow definition files. Supports glob patterns.",
-				Category:    "basic",
-			},
-			"ports": {
-				Type:        "ports",
-				Description: "Port configuration for inputs and outputs",
-				Category:    "advanced",
-			},
-		},
-		Required: []string{"definitions_bucket", "executions_bucket", "stream_name"},
-	}
 }
 
 // sanitizeSubject converts a subject pattern to a valid consumer name suffix

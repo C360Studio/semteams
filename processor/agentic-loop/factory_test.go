@@ -115,8 +115,8 @@ func TestRegister_ConfigSchema(t *testing.T) {
 	if !ok {
 		t.Fatal("Schema should have 'max_iterations' property")
 	}
-	if maxIterProp.Type != "integer" && maxIterProp.Type != "number" {
-		t.Errorf("max_iterations.Type = %s, want integer or number", maxIterProp.Type)
+	if maxIterProp.Type != "int" {
+		t.Errorf("max_iterations.Type = %s, want int", maxIterProp.Type)
 	}
 	if maxIterProp.Description == "" {
 		t.Error("max_iterations.Description should not be empty")
@@ -238,8 +238,8 @@ func TestRegister_SchemaValidation(t *testing.T) {
 
 	// Test that schema properties have proper types
 	maxIterProp := schema.Properties["max_iterations"]
-	if maxIterProp.Type != "integer" && maxIterProp.Type != "number" {
-		t.Errorf("max_iterations type should be integer or number, got %s", maxIterProp.Type)
+	if maxIterProp.Type != "int" {
+		t.Errorf("max_iterations type should be int, got %s", maxIterProp.Type)
 	}
 
 	timeoutProp := schema.Properties["timeout"]

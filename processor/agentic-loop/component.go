@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -14,6 +15,9 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+// schema is the configuration schema for agentic-loop, generated from Config struct tags
+var schema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
 // Component implements the agentic-loop processor
 type Component struct {
@@ -116,7 +120,7 @@ func (c *Component) OutputPorts() []component.Port {
 
 // ConfigSchema returns the configuration schema
 func (c *Component) ConfigSchema() component.ConfigSchema {
-	return buildConfigSchema()
+	return schema
 }
 
 // Health returns current health status
@@ -244,52 +248,6 @@ func buildDefaultOutputPorts() []component.Port {
 		}
 	}
 	return ports
-}
-
-// buildConfigSchema builds the configuration schema
-func buildConfigSchema() component.ConfigSchema {
-	minIterPtr := new(int)
-	*minIterPtr = 1
-
-	maxIterPtr := new(int)
-	*maxIterPtr = 1000
-
-	return component.ConfigSchema{
-		Properties: map[string]component.PropertySchema{
-			"max_iterations": {
-				Type:        "integer",
-				Description: "Maximum number of iterations before loop terminates",
-				Default:     20,
-				Minimum:     minIterPtr,
-				Maximum:     maxIterPtr,
-				Category:    "basic",
-			},
-			"timeout": {
-				Type:        "string",
-				Description: "Timeout duration for loop execution (e.g., 120s, 5m)",
-				Default:     "120s",
-				Category:    "basic",
-			},
-			"loops_bucket": {
-				Type:        "string",
-				Description: "NATS KV bucket name for storing loop state",
-				Default:     "AGENT_LOOPS",
-				Category:    "advanced",
-			},
-			"trajectories_bucket": {
-				Type:        "string",
-				Description: "NATS KV bucket name for storing trajectories",
-				Default:     "AGENT_TRAJECTORIES",
-				Category:    "advanced",
-			},
-			"ports": {
-				Type:        "ports",
-				Description: "Port configuration for inputs and outputs",
-				Category:    "advanced",
-			},
-		},
-		Required: []string{"max_iterations", "timeout", "loops_bucket", "trajectories_bucket"},
-	}
 }
 
 // initializeKVBuckets initializes the KV buckets for loop and trajectory storage

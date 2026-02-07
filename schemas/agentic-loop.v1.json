@@ -5,6 +5,16 @@
   "title": "agentic-loop Configuration",
   "description": "Orchestrates agentic loops with tool calls, state management, and trajectory tracking",
   "properties": {
+    "consumer_name_suffix": {
+      "type": "string",
+      "description": "Suffix for consumer names",
+      "category": "advanced"
+    },
+    "context": {
+      "type": "object",
+      "description": "Context window configuration",
+      "category": "advanced"
+    },
     "loops_bucket": {
       "type": "string",
       "description": "NATS KV bucket name for storing loop state",
@@ -12,7 +22,7 @@
       "category": "advanced"
     },
     "max_iterations": {
-      "type": "string",
+      "type": "number",
       "description": "Maximum number of iterations before loop terminates",
       "default": 20,
       "minimum": 1,
@@ -22,11 +32,17 @@
     "ports": {
       "type": "string",
       "description": "Port configuration for inputs and outputs",
+      "category": "basic"
+    },
+    "stream_name": {
+      "type": "string",
+      "description": "JetStream stream name",
+      "default": "AGENT",
       "category": "advanced"
     },
     "timeout": {
       "type": "string",
-      "description": "Timeout duration for loop execution (e.g., 120s, 5m)",
+      "description": "Timeout duration for loop execution (e.g. 120s or 5m)",
       "default": "120s",
       "category": "basic"
     },

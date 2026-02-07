@@ -11,7 +11,7 @@
       "category": "advanced"
     },
     "default_max_iterations": {
-      "type": "string",
+      "type": "number",
       "description": "Default max iterations for loop workflows",
       "default": 10,
       "minimum": 1,
@@ -20,7 +20,7 @@
     },
     "default_timeout": {
       "type": "string",
-      "description": "Default timeout for workflows (e.g., 10m, 1h)",
+      "description": "Default timeout for workflows (e.g. 10m)",
       "default": "10m",
       "category": "basic"
     },
@@ -38,8 +38,8 @@
     },
     "ports": {
       "type": "string",
-      "description": "Port configuration for inputs and outputs",
-      "category": "advanced"
+      "description": "Port configuration for workflow inputs and outputs",
+      "category": "basic"
     },
     "request_timeout": {
       "type": "string",
@@ -52,14 +52,6 @@
       "description": "JetStream stream name for workflow messages",
       "default": "WORKFLOW",
       "category": "advanced"
-    },
-    "workflow_files": {
-      "type": "array",
-      "description": "Paths to JSON workflow definition files. Supports glob patterns.",
-      "items": {
-        "type": "string"
-      },
-      "category": "basic"
     }
   },
   "required": [

@@ -216,8 +216,8 @@ func TestComponentDataFlow(t *testing.T) {
 	}
 }
 
-func TestBuildConfigSchema(t *testing.T) {
-	schema := buildConfigSchema()
+func TestConfigSchema(t *testing.T) {
+	// Schema is auto-generated from Config struct tags
 
 	// Should have required fields
 	if len(schema.Required) == 0 {

@@ -6,31 +6,44 @@
   "description": "Routes user messages to agentic loops with command parsing and permissions",
   "properties": {
     "auto_continue": {
-      "type": "string",
+      "type": "boolean",
       "description": "Automatically continue last active loop",
-      "default": true
+      "default": true,
+      "category": "basic"
     },
     "default_model": {
       "type": "string",
       "description": "Default model for new tasks",
-      "default": "qwen2.5-coder:32b"
+      "default": "qwen2.5-coder:32b",
+      "category": "basic"
     },
     "default_role": {
       "type": "string",
       "description": "Default role for new tasks",
-      "default": "general"
+      "default": "general",
+      "category": "basic"
     },
     "permissions": {
       "type": "object",
-      "description": "Permission configuration"
+      "description": "Permission configuration",
+      "category": "advanced"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration for inputs and outputs",
+      "category": "basic"
     },
     "stream_name": {
       "type": "string",
       "description": "NATS stream name for user messages",
-      "default": "USER"
+      "default": "USER",
+      "category": "advanced"
     }
   },
-  "required": [],
+  "required": [
+    "default_role",
+    "default_model"
+  ],
   "x-component-metadata": {
     "name": "agentic-dispatch",
     "type": "processor",

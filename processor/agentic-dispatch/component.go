@@ -117,7 +117,7 @@ func (c *Component) OutputPorts() []component.Port {
 
 // ConfigSchema returns the configuration schema
 func (c *Component) ConfigSchema() component.ConfigSchema {
-	return buildConfigSchema()
+	return schema
 }
 
 // Health returns current health status

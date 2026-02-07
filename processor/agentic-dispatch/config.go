@@ -8,12 +8,12 @@ import (
 
 // Config represents the configuration for the router processor
 type Config struct {
-	DefaultRole  string                `json:"default_role"`
-	DefaultModel string                `json:"default_model"`
-	AutoContinue bool                  `json:"auto_continue"` // Continue last loop if exists
-	Permissions  PermissionConfig      `json:"permissions"`
-	StreamName   string                `json:"stream_name"`
-	Ports        *component.PortConfig `json:"ports,omitempty"`
+	DefaultRole  string                `json:"default_role" schema:"type:string,description:Default role for new tasks,default:general,category:basic,required"`
+	DefaultModel string                `json:"default_model" schema:"type:string,description:Default model for new tasks,default:qwen2.5-coder:32b,category:basic,required"`
+	AutoContinue bool                  `json:"auto_continue" schema:"type:bool,description:Automatically continue last active loop,default:true,category:basic"` // Continue last loop if exists
+	Permissions  PermissionConfig      `json:"permissions" schema:"type:object,description:Permission configuration,category:advanced"`
+	StreamName   string                `json:"stream_name" schema:"type:string,description:NATS stream name for user messages,default:USER,category:advanced"`
+	Ports        *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
 }
 
 // PermissionConfig defines permission rules for the router

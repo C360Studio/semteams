@@ -16,13 +16,13 @@ type Config struct {
 	Ports *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for workflow inputs and outputs,category:basic"`
 
 	// KV bucket for workflow definitions
-	DefinitionsBucket string `json:"definitions_bucket" schema:"type:string,description:NATS KV bucket for workflow definitions,default:WORKFLOW_DEFINITIONS,category:advanced"`
+	DefinitionsBucket string `json:"definitions_bucket" schema:"type:string,description:NATS KV bucket for workflow definitions,default:WORKFLOW_DEFINITIONS,category:advanced,required"`
 
 	// KV bucket for workflow executions
-	ExecutionsBucket string `json:"executions_bucket" schema:"type:string,description:NATS KV bucket for workflow execution state,default:WORKFLOW_EXECUTIONS,category:advanced"`
+	ExecutionsBucket string `json:"executions_bucket" schema:"type:string,description:NATS KV bucket for workflow execution state,default:WORKFLOW_EXECUTIONS,category:advanced,required"`
 
 	// JetStream stream name for workflow messages
-	StreamName string `json:"stream_name" schema:"type:string,description:JetStream stream name for workflow messages,default:WORKFLOW,category:advanced"`
+	StreamName string `json:"stream_name" schema:"type:string,description:JetStream stream name for workflow messages,default:WORKFLOW,category:advanced,required"`
 
 	// Consumer name suffix for unique consumer identification
 	ConsumerNameSuffix string `json:"consumer_name_suffix,omitempty" schema:"type:string,description:Suffix appended to consumer names for uniqueness,category:advanced"`
