@@ -74,7 +74,7 @@ services:
     environment:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
-      - AGENTIC_LLM_URL=${AGENTIC_LLM_URL:-http://mock-llm:8080}
+      - AGENTIC_LLM_URL=${AGENTIC_LLM_URL:-http://mock-llm:8080/v1}
     volumes:
       - ../../configs:/app/configs:ro
       - ../../testdata:/data/testdata:ro

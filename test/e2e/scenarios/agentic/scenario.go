@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/test/e2e/client"
-	"github.com/c360studio/semstreams/test/e2e/mock"
 	"github.com/c360studio/semstreams/test/e2e/scenarios"
 )
 
@@ -26,9 +25,8 @@ type Scenario struct {
 	metrics *client.MetricsClient
 	obs     *client.ObservabilityClient
 
-	// Mock server (if using built-in mock)
-	mockServer *mock.OpenAIServer
-	useMock    bool
+	// useMock indicates Docker compose provides mock-llm
+	useMock bool
 
 	// Configuration
 	config *Config
@@ -119,19 +117,11 @@ func (s *Scenario) Setup(ctx context.Context) error {
 	// Create metrics client
 	s.metrics = client.NewMetricsClient(s.config.MetricsURL)
 
-	// Start mock server if no external LLM configured
+	// Docker compose provides mock-llm at http://mock-llm:8080 (within Docker network)
+	// and http://localhost:18080 (from host). The semstreams container uses the Docker-internal
+	// URL, so we don't need to start a mock server here.
 	if s.useMock {
-		s.mockServer = mock.NewOpenAIServer().
-			WithToolArgs("query_entity", `{"entity_id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001"}`).
-			WithCompletionContent("Analysis complete. The temperature sensor reading of 48.2°F exceeds the 45°F threshold. This requires monitoring but is not critical.")
-
-		if err := s.mockServer.Start(":0"); err != nil {
-			return fmt.Errorf("failed to start mock server: %w", err)
-		}
-
-		// Note: The mock URL would need to be communicated to the agentic-model component
-		// In a real e2e test, this would be done via config or environment variable
-		s.config.LLMEndpointURL = s.mockServer.URL()
+		s.config.LLMEndpointURL = "http://localhost:18080" // For reference in results
 	}
 
 	return nil
@@ -192,9 +182,7 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 
 // Teardown cleans up after the scenario.
 func (s *Scenario) Teardown(_ context.Context) error {
-	if s.mockServer != nil {
-		return s.mockServer.Stop()
-	}
+	// Docker compose manages the mock-llm lifecycle, nothing to clean up here
 	return nil
 }
 
@@ -295,23 +283,12 @@ func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Resu
 			return ctx.Err()
 		case <-time.After(500 * time.Millisecond):
 			// Check if loop completed via metrics
-			loopsCompleted, err := s.metrics.SumMetricsByName(ctx, "semstreams_agentic_loops_completed_total")
+			loopsCompleted, err := s.metrics.SumMetricsByName(ctx, "semstreams_agentic_loop_loops_completed_total")
 			if err == nil && loopsCompleted > 0 {
 				result.Metrics["loops_completed"] = loopsCompleted
 				result.Details["completion_method"] = "metrics"
 				return nil
 			}
-		}
-	}
-
-	// Timeout - check if mock received requests
-	if s.useMock && s.mockServer != nil {
-		requestCount := s.mockServer.RequestCount()
-		result.Metrics["mock_requests"] = requestCount
-		if requestCount > 0 {
-			result.Details["completion_method"] = "mock_requests"
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Loop may have completed (mock received %d requests) but completion metric not found", requestCount))
-			return nil
 		}
 	}
 
@@ -321,32 +298,13 @@ func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Resu
 
 // validateResults validates the scenario results.
 func (s *Scenario) validateResults(_ context.Context, result *scenarios.Result) error {
-	// Check mock server request count if using mock
-	if s.useMock && s.mockServer != nil {
-		requestCount := s.mockServer.RequestCount()
-		result.Metrics["mock_request_count"] = requestCount
-
-		if requestCount == 0 {
-			return fmt.Errorf("mock server received no requests - agentic-model may not be configured correctly")
-		}
-
-		// For a tool-calling flow, we expect at least 2 requests:
-		// 1. Initial request (returns tool call)
-		// 2. Request with tool results (returns completion)
-		if requestCount >= 2 {
-			result.Details["tool_calling_flow"] = true
-		}
-
-		lastReq := s.mockServer.LastRequest()
-		if lastReq != nil {
-			result.Details["last_request_model"] = lastReq.Model
-			result.Details["last_request_message_count"] = len(lastReq.Messages)
-		}
+	// The Docker compose mock-llm handles LLM requests.
+	// Validation relies on metrics since we can't directly query the Docker mock server.
+	// Check that loops were completed
+	loopsCompleted, ok := result.Metrics["loops_completed"].(float64)
+	if !ok || loopsCompleted == 0 {
+		result.Warnings = append(result.Warnings, "No completed loops found in metrics")
 	}
-
-	// Try to get loop state from KV
-	// This would require the loop ID, which we don't have without subscribing to agent.complete.*
-	// For now, just rely on metrics
 
 	return nil
 }
