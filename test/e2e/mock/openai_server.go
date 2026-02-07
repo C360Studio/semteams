@@ -92,6 +92,10 @@ type OpenAIServer struct {
 	completionContent string            // content to return on completion
 	requestDelay      time.Duration     // artificial delay per request
 
+	// Response sequencing for multi-turn scenarios
+	responseSequence []string // sequence of completion contents
+	sequenceIndex    int      // current position in sequence
+
 	// Tracking for assertions
 	requestCount int
 	lastRequest  *ChatCompletionRequest
@@ -131,6 +135,31 @@ func (s *OpenAIServer) WithRequestDelay(d time.Duration) *OpenAIServer {
 	defer s.mu.Unlock()
 	s.requestDelay = d
 	return s
+}
+
+// WithResponseSequence configures a sequence of completion contents.
+// Each call to the chat completion endpoint will return the next response
+// in the sequence. After the sequence is exhausted, it returns the last response.
+func (s *OpenAIServer) WithResponseSequence(responses []string) *OpenAIServer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.responseSequence = responses
+	s.sequenceIndex = 0
+	return s
+}
+
+// ResetSequence resets the response sequence to the beginning.
+func (s *OpenAIServer) ResetSequence() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.sequenceIndex = 0
+}
+
+// SequenceIndex returns the current position in the response sequence.
+func (s *OpenAIServer) SequenceIndex() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.sequenceIndex
 }
 
 // Start starts the mock server on the given address.
@@ -296,9 +325,19 @@ func (s *OpenAIServer) buildToolCallResponse(tool Tool, model string) ChatComple
 }
 
 func (s *OpenAIServer) buildCompletionResponse(model string) ChatCompletionResponse {
-	s.mu.RLock()
+	s.mu.Lock()
 	content := s.completionContent
-	s.mu.RUnlock()
+	// Use response sequence if configured
+	if len(s.responseSequence) > 0 {
+		if s.sequenceIndex < len(s.responseSequence) {
+			content = s.responseSequence[s.sequenceIndex]
+			s.sequenceIndex++
+		} else {
+			// After sequence exhausted, return last response
+			content = s.responseSequence[len(s.responseSequence)-1]
+		}
+	}
+	s.mu.Unlock()
 
 	return ChatCompletionResponse{
 		ID:      "chatcmpl-mock-" + uuid.New().String()[:8],

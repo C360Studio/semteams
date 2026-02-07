@@ -93,6 +93,39 @@ func (c *NATSValidationClient) Close(ctx context.Context) error {
 	return nil
 }
 
+// PutKV writes a key-value entry to a KV bucket.
+// Used for test setup (e.g., registering workflow definitions).
+func (c *NATSValidationClient) PutKV(ctx context.Context, bucket, key string, value []byte) error {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return fmt.Errorf("client is closed")
+	}
+	c.mu.Unlock()
+
+	js, err := c.client.JetStream()
+	if err != nil {
+		return fmt.Errorf("failed to get JetStream: %w", err)
+	}
+
+	kv, err := js.KeyValue(ctx, bucket)
+	if err != nil {
+		// Try to create the bucket if it doesn't exist
+		kv, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+			Bucket: bucket,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get or create bucket %s: %w", bucket, err)
+		}
+	}
+
+	if _, err := kv.Put(ctx, key, value); err != nil {
+		return fmt.Errorf("failed to put key %s: %w", key, err)
+	}
+
+	return nil
+}
+
 // Publish publishes a message to a NATS subject via JetStream.
 // Used for injecting test messages into the system.
 func (c *NATSValidationClient) Publish(ctx context.Context, subject string, data []byte) error {

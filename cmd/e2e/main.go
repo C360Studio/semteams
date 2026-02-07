@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semstreams/test/e2e/results"
 	scenarios "github.com/c360studio/semstreams/test/e2e/scenarios"
 	"github.com/c360studio/semstreams/test/e2e/scenarios/agentic"
+	workflowscenario "github.com/c360studio/semstreams/test/e2e/scenarios/workflow"
 )
 
 var (
@@ -208,6 +209,11 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Println("                      Uses mock LLM by default (CI-friendly)")
 	fmt.Println("                      Override with AGENTIC_LLM_URL for real LLM")
 	fmt.Println("")
+	fmt.Println("  Workflow + Agentic:")
+	fmt.Println("    workflow-agentic - Workflow orchestration with publish_agent")
+	fmt.Println("                       Tests: triggers, steps, conditions, loops")
+	fmt.Println("                       Uses mock LLM by default")
+	fmt.Println("")
 	fmt.Println("Variant flag (for tiered scenario):")
 	fmt.Println("  --variant structural  - Rules-only, validates ZERO ML inference")
 	fmt.Println("  --variant statistical - BM25 fallback, no external ML services")
@@ -349,6 +355,12 @@ func createScenario(
 		cfg := agentic.DefaultConfig()
 		cfg.MetricsURL = flags.metricsURL
 		return agentic.NewScenario(edgeClient, cfg)
+
+	// Workflow + Agentic scenario (workflow orchestration with agent tasks)
+	case "workflow-agentic", "workflow":
+		cfg := workflowscenario.DefaultConfig()
+		cfg.MetricsURL = flags.metricsURL
+		return workflowscenario.NewScenario(edgeClient, cfg)
 
 	default:
 		return nil
