@@ -65,6 +65,10 @@ type LoopEntity struct {
 	UserID      string `json:"user_id,omitempty"`      // User who initiated the loop
 	ChannelType string `json:"channel_type,omitempty"` // cli, slack, discord, web
 	ChannelID   string `json:"channel_id,omitempty"`   // Channel/session ID for routing responses
+
+	// Workflow context (for loops created by workflow commands)
+	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
+	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
 }
 
 // Validate checks if the LoopEntity is valid

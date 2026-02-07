@@ -330,6 +330,21 @@ func (m *LoopManager) SetParentLoop(loopID, parentLoopID string) error {
 	return nil
 }
 
+// SetWorkflowContext sets the workflow slug and step for loops created by workflow commands
+func (m *LoopManager) SetWorkflowContext(loopID, workflowSlug, workflowStep string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entity, exists := m.loops[loopID]
+	if !exists {
+		return fmt.Errorf("loop %s not found", loopID)
+	}
+
+	entity.WorkflowSlug = workflowSlug
+	entity.WorkflowStep = workflowStep
+	return nil
+}
+
 // GenerateRequestID creates a structured request ID that embeds the loop ID.
 // Format: loopID:req:shortUUID
 // This allows recovery of loop ID from request ID if in-memory maps are lost.

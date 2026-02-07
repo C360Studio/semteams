@@ -22,6 +22,10 @@ type LoopInfo struct {
 	Iterations    int       `json:"iterations"`
 	MaxIterations int       `json:"max_iterations"`
 	CreatedAt     time.Time `json:"created_at"`
+
+	// Workflow context (for loops created by workflow commands)
+	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
+	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
 }
 
 // LoopTracker tracks active loops per user and channel

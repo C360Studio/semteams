@@ -30,6 +30,10 @@ type TaskMessage struct {
 	Role   string `json:"role"`
 	Model  string `json:"model"`
 	Prompt string `json:"prompt"`
+
+	// Workflow context (optional, set by workflow commands)
+	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
+	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
 }
 
 // PublishedMessage represents a message published to NATS
@@ -105,6 +109,11 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		if err != nil {
 			return HandlerResult{}, err
 		}
+	}
+
+	// Set workflow context if provided (for loops created by workflow commands)
+	if task.WorkflowSlug != "" || task.WorkflowStep != "" {
+		_ = h.loopManager.SetWorkflowContext(loopID, task.WorkflowSlug, task.WorkflowStep)
 	}
 
 	// Set timeout if configured
