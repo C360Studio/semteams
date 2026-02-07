@@ -246,7 +246,29 @@ func (e *Executor) executeAction(ctx context.Context, workflow *Definition, exec
 		return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
 
 	case "publish_agent":
-		action := actions.NewPublishAgentAction(subject, payload)
+		// Interpolate individual fields for publish_agent
+		role, err := interpolator.InterpolateString(step.Action.Role)
+		if err != nil {
+			e.logger.Warn("Role interpolation error", "step", step.Name, "error", err)
+			role = step.Action.Role
+		}
+		model, err := interpolator.InterpolateString(step.Action.Model)
+		if err != nil {
+			e.logger.Warn("Model interpolation error", "step", step.Name, "error", err)
+			model = step.Action.Model
+		}
+		prompt, err := interpolator.InterpolateString(step.Action.Prompt)
+		if err != nil {
+			e.logger.Warn("Prompt interpolation error", "step", step.Name, "error", err)
+			prompt = step.Action.Prompt
+		}
+		taskID, err := interpolator.InterpolateString(step.Action.TaskID)
+		if err != nil {
+			e.logger.Warn("TaskID interpolation error", "step", step.Name, "error", err)
+			taskID = step.Action.TaskID
+		}
+
+		action := actions.NewPublishAgentAction(subject, role, model, prompt, taskID)
 		result := action.Execute(ctx, actx)
 		if !result.Success {
 			return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
@@ -446,7 +468,6 @@ func (e *Executor) timeoutExecution(ctx context.Context, workflow *Definition, e
 // executeCompletionAction executes an on_complete or on_fail action
 func (e *Executor) executeCompletionAction(ctx context.Context, interpolator *Interpolator, actionDef ActionDef) {
 	subject, _ := interpolator.InterpolateString(actionDef.Subject)
-	payload, _ := interpolator.InterpolateJSON(actionDef.Payload)
 
 	timeout := e.parseTimeout(actionDef.Timeout, e.config.RequestTimeout, "completion_action")
 
@@ -458,9 +479,14 @@ func (e *Executor) executeCompletionAction(ctx context.Context, interpolator *In
 	var action actions.Action
 	switch actionDef.Type {
 	case "publish":
+		payload, _ := interpolator.InterpolateJSON(actionDef.Payload)
 		action = actions.NewPublishAction(subject, payload)
 	case "publish_agent":
-		action = actions.NewPublishAgentAction(subject, payload)
+		role, _ := interpolator.InterpolateString(actionDef.Role)
+		model, _ := interpolator.InterpolateString(actionDef.Model)
+		prompt, _ := interpolator.InterpolateString(actionDef.Prompt)
+		taskID, _ := interpolator.InterpolateString(actionDef.TaskID)
+		action = actions.NewPublishAgentAction(subject, role, model, prompt, taskID)
 	default:
 		e.logger.Warn("Unsupported completion action type", "type", actionDef.Type)
 		return

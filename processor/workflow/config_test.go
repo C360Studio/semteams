@@ -306,8 +306,26 @@ func TestActionDefValidation(t *testing.T) {
 		},
 		{
 			name:    "valid publish_agent action",
-			action:  ActionDef{Type: "publish_agent", Subject: "agent.task.test"},
+			action:  ActionDef{Type: "publish_agent", Subject: "agent.task.test", Role: "reviewer", Model: "claude-sonnet", Prompt: "Review this"},
 			wantErr: false,
+		},
+		{
+			name:    "publish_agent action without role",
+			action:  ActionDef{Type: "publish_agent", Subject: "agent.task.test", Model: "claude-sonnet", Prompt: "Review this"},
+			wantErr: true,
+			errMsg:  "publish_agent action requires role",
+		},
+		{
+			name:    "publish_agent action without model",
+			action:  ActionDef{Type: "publish_agent", Subject: "agent.task.test", Role: "reviewer", Prompt: "Review this"},
+			wantErr: true,
+			errMsg:  "publish_agent action requires model",
+		},
+		{
+			name:    "publish_agent action without prompt",
+			action:  ActionDef{Type: "publish_agent", Subject: "agent.task.test", Role: "reviewer", Model: "claude-sonnet"},
+			wantErr: true,
+			errMsg:  "publish_agent action requires prompt",
 		},
 		{
 			name:    "valid set_state action",
@@ -435,7 +453,9 @@ func TestDefinitionJSONRoundTrip(t *testing.T) {
 				Action: ActionDef{
 					Type:    "publish_agent",
 					Subject: "agent.task.${execution.id}.reviewer",
-					Payload: json.RawMessage(`{"role": "reviewer", "prompt": "${trigger.payload.code}"}`),
+					Role:    "reviewer",
+					Model:   "claude-sonnet",
+					Prompt:  "${trigger.payload.code}",
 				},
 				OnSuccess: "check-issues",
 			},
@@ -458,7 +478,9 @@ func TestDefinitionJSONRoundTrip(t *testing.T) {
 				Action: ActionDef{
 					Type:    "publish_agent",
 					Subject: "agent.task.${execution.id}.fixer",
-					Payload: json.RawMessage(`{"role": "fixer"}`),
+					Role:    "fixer",
+					Model:   "claude-sonnet",
+					Prompt:  "Fix the issues found in the review",
 				},
 				OnSuccess: "review",
 			},

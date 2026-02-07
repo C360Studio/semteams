@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/google/uuid"
 )
 
 // PublishAction performs a fire-and-forget NATS publish
@@ -54,24 +57,53 @@ func (a *PublishAction) Execute(ctx context.Context, actx *Context) Result {
 	}
 }
 
-// PublishAgentAction publishes a task to an agent
+// PublishAgentAction publishes a task to an agent using structured fields
 type PublishAgentAction struct {
 	Subject string
-	Payload json.RawMessage
+	Role    string
+	Model   string
+	Prompt  string
+	TaskID  string // Optional, auto-generated if empty
 }
 
-// NewPublishAgentAction creates a new publish_agent action
-func NewPublishAgentAction(subject string, payload json.RawMessage) *PublishAgentAction {
+// NewPublishAgentAction creates a new publish_agent action with structured fields
+func NewPublishAgentAction(subject, role, model, prompt, taskID string) *PublishAgentAction {
 	return &PublishAgentAction{
 		Subject: subject,
-		Payload: payload,
+		Role:    role,
+		Model:   model,
+		Prompt:  prompt,
+		TaskID:  taskID,
 	}
 }
 
-// Execute publishes the agent task message
+// Execute publishes the agent task message after validating required fields.
 func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result {
 	start := time.Now()
 
+	// Build TaskMessage from structured fields
+	task := agentic.TaskMessage{
+		TaskID: a.TaskID,
+		Role:   a.Role,
+		Model:  a.Model,
+		Prompt: a.Prompt,
+	}
+
+	// Auto-generate task_id if not provided
+	if task.TaskID == "" {
+		task.TaskID = uuid.New().String()
+	}
+
+	// Validate using agentic.TaskMessage.Validate()
+	if err := task.Validate(); err != nil {
+		return Result{
+			Success:  false,
+			Error:    fmt.Sprintf("invalid task: %v", err),
+			Duration: time.Since(start),
+		}
+	}
+
+	// Check NATS client after validation
 	if actx.NATSClient == nil {
 		return Result{
 			Success:  false,
@@ -80,10 +112,14 @@ func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result 
 		}
 	}
 
-	// Prepare payload
-	payload := a.Payload
-	if payload == nil {
-		payload = []byte("{}")
+	// Marshal task to JSON
+	payload, err := json.Marshal(task)
+	if err != nil {
+		return Result{
+			Success:  false,
+			Error:    fmt.Sprintf("failed to marshal task: %v", err),
+			Duration: time.Since(start),
+		}
 	}
 
 	// Publish to AGENT stream

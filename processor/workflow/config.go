@@ -282,6 +282,12 @@ type ActionDef struct {
 	Entity  string          `json:"entity,omitempty"`  // For set_state
 	State   json.RawMessage `json:"state,omitempty"`   // For set_state
 	Timeout string          `json:"timeout,omitempty"` // For call action
+
+	// For publish_agent action
+	Role   string `json:"role,omitempty"`
+	Model  string `json:"model,omitempty"`
+	Prompt string `json:"prompt,omitempty"`
+	TaskID string `json:"task_id,omitempty"` // Optional, auto-generated if empty
 }
 
 // Validate validates the action definition
@@ -298,9 +304,22 @@ func (a *ActionDef) Validate() error {
 	}
 
 	switch a.Type {
-	case "call", "publish", "publish_agent":
+	case "call", "publish":
 		if strings.TrimSpace(a.Subject) == "" {
 			return fmt.Errorf("%s action requires subject", a.Type)
+		}
+	case "publish_agent":
+		if strings.TrimSpace(a.Subject) == "" {
+			return fmt.Errorf("publish_agent action requires subject")
+		}
+		if strings.TrimSpace(a.Role) == "" {
+			return fmt.Errorf("publish_agent action requires role")
+		}
+		if strings.TrimSpace(a.Model) == "" {
+			return fmt.Errorf("publish_agent action requires model")
+		}
+		if strings.TrimSpace(a.Prompt) == "" {
+			return fmt.Errorf("publish_agent action requires prompt")
 		}
 	case "set_state":
 		if strings.TrimSpace(a.Entity) == "" {
