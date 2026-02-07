@@ -698,6 +698,16 @@ func buildConfigSchema() component.ConfigSchema {
 				Default:     "30s",
 				Category:    "advanced",
 			},
+			"consumer_name_suffix": {
+				Type:        "string",
+				Description: "Suffix appended to consumer names for uniqueness",
+				Category:    "advanced",
+			},
+			"workflow_files": {
+				Type:        "array",
+				Description: "Paths to JSON workflow definition files. Supports glob patterns.",
+				Category:    "basic",
+			},
 			"ports": {
 				Type:        "ports",
 				Description: "Port configuration for inputs and outputs",

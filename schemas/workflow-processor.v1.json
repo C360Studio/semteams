@@ -5,6 +5,11 @@
   "title": "workflow-processor Configuration",
   "description": "Orchestrates multi-step agentic workflows with loops, limits, and timeouts",
   "properties": {
+    "consumer_name_suffix": {
+      "type": "string",
+      "description": "Suffix appended to consumer names for uniqueness",
+      "category": "advanced"
+    },
     "default_max_iterations": {
       "type": "string",
       "description": "Default max iterations for loop workflows",
@@ -47,6 +52,14 @@
       "description": "JetStream stream name for workflow messages",
       "default": "WORKFLOW",
       "category": "advanced"
+    },
+    "workflow_files": {
+      "type": "array",
+      "description": "Paths to JSON workflow definition files. Supports glob patterns.",
+      "items": {
+        "type": "string"
+      },
+      "category": "basic"
     }
   },
   "required": [
