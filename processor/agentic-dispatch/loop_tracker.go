@@ -157,6 +157,33 @@ func (t *LoopTracker) UpdateIterations(loopID string, iterations int) {
 	}
 }
 
+// UpdateWorkflowContext atomically updates the workflow context for a loop.
+// Returns true if the update was applied (loop exists and had no workflow context).
+func (t *LoopTracker) UpdateWorkflowContext(loopID, workflowSlug, workflowStep string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	info, ok := t.loops[loopID]
+	if !ok {
+		return false
+	}
+
+	// Only update if workflow context is missing
+	if info.WorkflowSlug == "" && workflowSlug != "" {
+		info.WorkflowSlug = workflowSlug
+		info.WorkflowStep = workflowStep
+
+		if t.logger != nil {
+			t.logger.Debug("loop workflow context updated",
+				slog.String("loop_id", loopID),
+				slog.String("workflow_slug", workflowSlug),
+				slog.String("workflow_step", workflowStep))
+		}
+		return true
+	}
+	return false
+}
+
 // Remove removes a loop from the tracker
 func (t *LoopTracker) Remove(loopID string) {
 	t.mu.Lock()

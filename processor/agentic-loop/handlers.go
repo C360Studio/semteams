@@ -12,6 +12,7 @@ import (
 // Subject patterns for NATS publishing (concrete subjects, no wildcards).
 const (
 	subjectAgentRequest  = "agent.request"
+	subjectAgentCreated  = "agent.created"
 	subjectToolExecute   = "tool.execute"
 	subjectAgentComplete = "agent.complete"
 )
@@ -174,6 +175,22 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		Prompt:    task.Prompt,
 	}
 
+	// Build loop created event for dispatch sync
+	created := map[string]any{
+		"loop_id":        loopID,
+		"task_id":        task.TaskID,
+		"role":           task.Role,
+		"model":          task.Model,
+		"workflow_slug":  task.WorkflowSlug,
+		"workflow_step":  task.WorkflowStep,
+		"max_iterations": entity.MaxIterations,
+		"created_at":     time.Now().Format(time.RFC3339),
+	}
+	createdData, err := json.Marshal(created)
+	if err != nil {
+		return HandlerResult{}, err
+	}
+
 	result := HandlerResult{
 		LoopID: loopID,
 		State:  entity.State,
@@ -181,6 +198,10 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 			{
 				Subject: subjectAgentRequest + "." + loopID,
 				Data:    requestData,
+			},
+			{
+				Subject: subjectAgentCreated + "." + loopID,
+				Data:    createdData,
 			},
 		},
 		TrajectorySteps: []agentic.TrajectoryStep{step},

@@ -266,6 +266,26 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to agent.complete: %w", err)
 	}
 
+	// Subscribe to loop created events for workflow context sync
+	agentCreatedCfg := natsclient.StreamConsumerConfig{
+		StreamName:    "AGENT",
+		ConsumerName:  "agentic-dispatch-agent-created",
+		FilterSubject: "agent.created.*",
+		DeliverPolicy: "new",
+		AckPolicy:     "explicit",
+		MaxDeliver:    3,
+		AutoCreate:    false,
+	}
+	err = c.natsClient.ConsumeStreamWithConfig(ctx, agentCreatedCfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		c.handleAgentCreated(msgCtx, msg.Data())
+		if ackErr := msg.Ack(); ackErr != nil {
+			c.logger.Error("Failed to ack agent created message", slog.String("error", ackErr.Error()))
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to agent.created: %w", err)
+	}
+
 	return nil
 }
 
@@ -571,6 +591,58 @@ func (c *Component) handleAgentComplete(ctx context.Context, data []byte) {
 	c.logger.Info("Loop completed",
 		slog.String("loop_id", completion.LoopID),
 		slog.String("outcome", completion.Outcome))
+}
+
+// handleAgentCreated processes loop creation events for workflow context sync
+func (c *Component) handleAgentCreated(_ context.Context, data []byte) {
+	var created struct {
+		LoopID        string `json:"loop_id"`
+		TaskID        string `json:"task_id"`
+		Role          string `json:"role"`
+		Model         string `json:"model"`
+		WorkflowSlug  string `json:"workflow_slug"`
+		WorkflowStep  string `json:"workflow_step"`
+		MaxIterations int    `json:"max_iterations"`
+		CreatedAt     string `json:"created_at"`
+	}
+	if err := json.Unmarshal(data, &created); err != nil {
+		c.logger.Error("Failed to unmarshal agent created", slog.String("error", err.Error()))
+		return
+	}
+
+	// Check if we already track this loop (we originated it)
+	if existing := c.loopTracker.Get(created.LoopID); existing != nil {
+		// Atomically update workflow context if missing
+		c.loopTracker.UpdateWorkflowContext(created.LoopID, created.WorkflowSlug, created.WorkflowStep)
+		return
+	}
+
+	// New loop we didn't originate - track it
+	createdAt, err := time.Parse(time.RFC3339, created.CreatedAt)
+	if err != nil {
+		c.logger.Warn("Invalid created_at timestamp, using current time",
+			slog.String("loop_id", created.LoopID),
+			slog.String("raw_value", created.CreatedAt),
+			slog.String("error", err.Error()))
+		createdAt = time.Now()
+	}
+	c.loopTracker.Track(&LoopInfo{
+		LoopID:        created.LoopID,
+		TaskID:        created.TaskID,
+		State:         "executing",
+		MaxIterations: created.MaxIterations,
+		WorkflowSlug:  created.WorkflowSlug,
+		WorkflowStep:  created.WorkflowStep,
+		CreatedAt:     createdAt,
+	})
+
+	// Record external loop for metrics (will be decremented by handleAgentComplete)
+	c.metrics.recordLoopStarted()
+
+	c.logger.Debug("Tracked external loop",
+		slog.String("loop_id", created.LoopID),
+		slog.String("workflow_slug", created.WorkflowSlug),
+		slog.String("workflow_step", created.WorkflowStep))
 }
 
 // sendResponse publishes a response to the user's channel

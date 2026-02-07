@@ -151,6 +151,85 @@ func TestLoopTracker_UpdateIterations(t *testing.T) {
 	assert.Equal(t, 5, retrieved.Iterations)
 }
 
+func TestLoopTracker_UpdateWorkflowContext(t *testing.T) {
+	tracker := NewLoopTracker()
+
+	// Add a loop without workflow context
+	info := &LoopInfo{
+		LoopID:        "loop-1",
+		TaskID:        "task-1",
+		UserID:        "user-1",
+		State:         "executing",
+		MaxIterations: 20,
+		CreatedAt:     time.Now(),
+	}
+	tracker.Track(info)
+
+	// Update workflow context
+	updated := tracker.UpdateWorkflowContext("loop-1", "add-user-auth", "design")
+	assert.True(t, updated)
+
+	retrieved := tracker.Get("loop-1")
+	require.NotNil(t, retrieved)
+	assert.Equal(t, "add-user-auth", retrieved.WorkflowSlug)
+	assert.Equal(t, "design", retrieved.WorkflowStep)
+}
+
+func TestLoopTracker_UpdateWorkflowContext_NonExistent(t *testing.T) {
+	tracker := NewLoopTracker()
+
+	// Should return false for non-existent loop
+	updated := tracker.UpdateWorkflowContext("nonexistent", "workflow", "step")
+	assert.False(t, updated)
+}
+
+func TestLoopTracker_UpdateWorkflowContext_AlreadyHasContext(t *testing.T) {
+	tracker := NewLoopTracker()
+
+	// Add a loop with existing workflow context
+	info := &LoopInfo{
+		LoopID:       "loop-1",
+		TaskID:       "task-1",
+		UserID:       "user-1",
+		State:        "executing",
+		WorkflowSlug: "existing-workflow",
+		WorkflowStep: "existing-step",
+		CreatedAt:    time.Now(),
+	}
+	tracker.Track(info)
+
+	// Should not update existing context
+	updated := tracker.UpdateWorkflowContext("loop-1", "new-workflow", "new-step")
+	assert.False(t, updated)
+
+	// Original context should be preserved
+	retrieved := tracker.Get("loop-1")
+	require.NotNil(t, retrieved)
+	assert.Equal(t, "existing-workflow", retrieved.WorkflowSlug)
+	assert.Equal(t, "existing-step", retrieved.WorkflowStep)
+}
+
+func TestLoopTracker_UpdateWorkflowContext_EmptySlug(t *testing.T) {
+	tracker := NewLoopTracker()
+
+	// Add a loop without workflow context
+	info := &LoopInfo{
+		LoopID:    "loop-1",
+		TaskID:    "task-1",
+		State:     "executing",
+		CreatedAt: time.Now(),
+	}
+	tracker.Track(info)
+
+	// Should not update with empty slug
+	updated := tracker.UpdateWorkflowContext("loop-1", "", "step")
+	assert.False(t, updated)
+
+	retrieved := tracker.Get("loop-1")
+	require.NotNil(t, retrieved)
+	assert.Empty(t, retrieved.WorkflowSlug)
+}
+
 func TestLoopTracker_Remove(t *testing.T) {
 	tracker := NewLoopTracker()
 
