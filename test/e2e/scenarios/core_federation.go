@@ -64,10 +64,10 @@ func NewCoreFederationScenario(
 		config = DefaultCoreFederationConfig()
 	}
 	if udpAddr == "" {
-		udpAddr = "localhost:14550"
+		udpAddr = "localhost:34550"
 	}
 	if wsURL == "" {
-		wsURL = "ws://localhost:8082/stream"
+		wsURL = "ws://localhost:38082/stream"
 	}
 
 	return &CoreFederationScenario{

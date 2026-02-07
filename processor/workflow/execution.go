@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/message"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -324,4 +325,97 @@ type StepCompleteMessage struct {
 	Status      string          `json:"status"` // success, failed
 	Output      json.RawMessage `json:"output,omitempty"`
 	Error       string          `json:"error,omitempty"`
+}
+
+// Validate checks if the StepCompleteMessage is valid
+func (m StepCompleteMessage) Validate() error {
+	if m.ExecutionID == "" {
+		return fmt.Errorf("execution_id required")
+	}
+	if m.StepName == "" {
+		return fmt.Errorf("step_name required")
+	}
+	if m.Status != "success" && m.Status != "failed" {
+		return fmt.Errorf("status must be one of: success, failed")
+	}
+	return nil
+}
+
+// Schema implements message.Payload
+func (m *StepCompleteMessage) Schema() message.Type {
+	return message.Type{Domain: "workflow", Category: "step_complete", Version: "v1"}
+}
+
+// MarshalJSON implements json.Marshaler
+func (m *StepCompleteMessage) MarshalJSON() ([]byte, error) {
+	type Alias StepCompleteMessage
+	return json.Marshal((*Alias)(m))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (m *StepCompleteMessage) UnmarshalJSON(data []byte) error {
+	type Alias StepCompleteMessage
+	return json.Unmarshal(data, (*Alias)(m))
+}
+
+// Validate checks if the Event is valid
+func (e Event) Validate() error {
+	if e.Type == "" {
+		return fmt.Errorf("type required")
+	}
+	if e.ExecutionID == "" {
+		return fmt.Errorf("execution_id required")
+	}
+	if e.WorkflowID == "" {
+		return fmt.Errorf("workflow_id required")
+	}
+	return nil
+}
+
+// Schema implements message.Payload
+func (e *Event) Schema() message.Type {
+	return message.Type{Domain: "workflow", Category: "event", Version: "v1"}
+}
+
+// MarshalJSON implements json.Marshaler
+func (e *Event) MarshalJSON() ([]byte, error) {
+	type Alias Event
+	return json.Marshal((*Alias)(e))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (e *Event) UnmarshalJSON(data []byte) error {
+	type Alias Event
+	return json.Unmarshal(data, (*Alias)(e))
+}
+
+// TriggerPayload represents an incoming trigger to start a workflow
+type TriggerPayload struct {
+	WorkflowID string          `json:"workflow_id"`
+	Data       json.RawMessage `json:"data,omitempty"`
+}
+
+// Validate checks if the TriggerPayload is valid
+func (p TriggerPayload) Validate() error {
+	if p.WorkflowID == "" {
+		return fmt.Errorf("workflow_id required")
+	}
+	return nil
+}
+
+// Schema implements message.Payload
+func (p *TriggerPayload) Schema() message.Type {
+	return message.Type{Domain: "workflow", Category: "trigger", Version: "v1"}
+}
+
+// MarshalJSON implements json.Marshaler
+func (p *TriggerPayload) MarshalJSON() ([]byte, error) {
+	type Alias TriggerPayload
+	return json.Marshal((*Alias)(p))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (p *TriggerPayload) UnmarshalJSON(data []byte) error {
+	type Alias TriggerPayload
+	return json.Unmarshal(data, (*Alias)(p))
 }

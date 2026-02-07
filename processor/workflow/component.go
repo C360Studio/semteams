@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -431,26 +432,20 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 
 // handleTriggerMessage processes workflow trigger messages
 func (c *Component) handleTriggerMessage(ctx context.Context, data []byte) {
-	// Parse trigger payload
-	var payload json.RawMessage
-	if err := json.Unmarshal(data, &payload); err != nil {
-		c.logger.Error("Failed to unmarshal trigger payload", "error", err)
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
 		return
 	}
 
-	// Extract workflow ID from subject (simplified - actual impl would use msg.Subject)
-	// For now, we'll look for a workflow_id in the payload
-	var triggerData map[string]any
-	if err := json.Unmarshal(data, &triggerData); err != nil {
-		c.logger.Error("Failed to parse trigger data", "error", err)
-		return
-	}
-
-	workflowID, ok := triggerData["workflow_id"].(string)
+	trigger, ok := baseMsg.Payload().(*TriggerPayload)
 	if !ok {
-		c.logger.Error("Missing workflow_id in trigger")
+		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
 		return
 	}
+
+	workflowID := trigger.WorkflowID
+	triggerPayload := trigger.Data
 
 	// Get workflow definition
 	workflow, ok := c.registry.Get(workflowID)
@@ -473,7 +468,7 @@ func (c *Component) handleTriggerMessage(ctx context.Context, data []byte) {
 	// Create trigger context
 	triggerCtx := TriggerContext{
 		Subject:   fmt.Sprintf("workflow.trigger.%s", workflowID),
-		Payload:   payload,
+		Payload:   triggerPayload,
 		Timestamp: time.Now(),
 	}
 
@@ -502,9 +497,15 @@ func (c *Component) handleTriggerMessage(ctx context.Context, data []byte) {
 
 // handleStepCompleteMessage processes step completion messages
 func (c *Component) handleStepCompleteMessage(ctx context.Context, data []byte) {
-	var msg StepCompleteMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		c.logger.Error("Failed to unmarshal step complete message", "error", err)
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
+		return
+	}
+
+	msg, ok := baseMsg.Payload().(*StepCompleteMessage)
+	if !ok {
+		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
 		return
 	}
 

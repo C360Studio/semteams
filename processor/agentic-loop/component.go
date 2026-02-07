@@ -12,6 +12,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -422,10 +423,29 @@ func sanitizeSubject(subject string) string {
 
 // handleTaskMessage processes incoming task messages
 func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
-	var task TaskMessage
-	if err := json.Unmarshal(data, &task); err != nil {
-		c.logger.Error("Failed to unmarshal task message", "error", err)
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
 		return
+	}
+
+	agenticTask, ok := baseMsg.Payload().(*agentic.TaskMessage)
+	if !ok {
+		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
+		return
+	}
+
+	task := TaskMessage{
+		LoopID:       agenticTask.LoopID,
+		TaskID:       agenticTask.TaskID,
+		Role:         agenticTask.Role,
+		Model:        agenticTask.Model,
+		Prompt:       agenticTask.Prompt,
+		WorkflowSlug: agenticTask.WorkflowSlug,
+		WorkflowStep: agenticTask.WorkflowStep,
+		ChannelType:  agenticTask.ChannelType,
+		ChannelID:    agenticTask.ChannelID,
+		UserID:       agenticTask.UserID,
 	}
 
 	c.logger.Info("Processing task message",
@@ -461,18 +481,20 @@ func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
 
 // handleResponseMessage processes incoming agent response messages
 func (c *Component) handleResponseMessage(ctx context.Context, data []byte) {
-	var response agentic.AgentResponse
-	if err := json.Unmarshal(data, &response); err != nil {
-		c.logger.Error("Failed to unmarshal response message", "error", err)
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
 		return
 	}
 
-	// Extract loop ID from request ID (we need to track this mapping)
-	// For now, we'll try to extract it from the response or look it up
-	// The integration test publishes to "agent.response.{requestID}"
-	// We need to get the loop ID from somewhere - check the handler
+	responsePtr, ok := baseMsg.Payload().(*agentic.AgentResponse)
+	if !ok {
+		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
+		return
+	}
+	response := *responsePtr
 
-	// Try to find loop ID by checking all loops (not ideal but works for integration test)
+	// Try to find loop ID by checking all loops
 	loopID := c.findLoopIDForRequest(response.RequestID)
 	if loopID == "" {
 		c.logger.Warn("No loop found for request", "request_id", response.RequestID)
@@ -566,11 +588,18 @@ func (c *Component) handleResponseMessage(ctx context.Context, data []byte) {
 
 // handleToolResultMessage processes incoming tool result messages
 func (c *Component) handleToolResultMessage(ctx context.Context, data []byte) {
-	var toolResult agentic.ToolResult
-	if err := json.Unmarshal(data, &toolResult); err != nil {
-		c.logger.Error("Failed to unmarshal tool result message", "error", err)
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
 		return
 	}
+
+	toolResultPtr, ok := baseMsg.Payload().(*agentic.ToolResult)
+	if !ok {
+		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
+		return
+	}
+	toolResult := *toolResultPtr
 
 	// Find loop ID for this tool call
 	loopID := c.findLoopIDForToolCall(toolResult.CallID)
@@ -789,11 +818,18 @@ func (c *Component) findLoopIDForToolCall(callID string) string {
 
 // handleSignalMessage processes incoming signal messages (cancel, pause, etc.)
 func (c *Component) handleSignalMessage(ctx context.Context, data []byte) {
-	var signal agentic.UserSignal
-	if err := json.Unmarshal(data, &signal); err != nil {
-		c.logger.Error("Failed to unmarshal signal message", "error", err)
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
 		return
 	}
+
+	signalPtr, ok := baseMsg.Payload().(*agentic.UserSignal)
+	if !ok {
+		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
+		return
+	}
+	signal := *signalPtr
 
 	c.logger.Info("Processing signal message",
 		slog.String("signal_id", signal.SignalID),

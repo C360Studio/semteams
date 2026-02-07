@@ -1,8 +1,11 @@
 package agentic
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/c360studio/semstreams/message"
 )
 
 // ToolDefinition represents the definition of a tool that can be called
@@ -55,6 +58,23 @@ func (t ToolResult) Validate() error {
 		return fmt.Errorf("tool result call_id required")
 	}
 	return nil
+}
+
+// Schema implements message.Payload
+func (t *ToolResult) Schema() message.Type {
+	return message.Type{Domain: "agentic", Category: "tool_result", Version: "v1"}
+}
+
+// MarshalJSON implements json.Marshaler
+func (t *ToolResult) MarshalJSON() ([]byte, error) {
+	type Alias ToolResult
+	return json.Marshal((*Alias)(t))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (t *ToolResult) UnmarshalJSON(data []byte) error {
+	type Alias ToolResult
+	return json.Unmarshal(data, (*Alias)(t))
 }
 
 // ValidateToolsAllowed validates that all tool calls are in the allowed list

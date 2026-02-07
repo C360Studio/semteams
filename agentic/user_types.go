@@ -1,8 +1,11 @@
 package agentic
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/c360studio/semstreams/message"
 )
 
 // Signal type constants for user control signals
@@ -57,6 +60,23 @@ func (m UserMessage) Validate() error {
 	return nil
 }
 
+// Schema implements message.Payload
+func (m *UserMessage) Schema() message.Type {
+	return message.Type{Domain: "agentic", Category: "user_message", Version: "v1"}
+}
+
+// MarshalJSON implements json.Marshaler
+func (m *UserMessage) MarshalJSON() ([]byte, error) {
+	type Alias UserMessage
+	return json.Marshal((*Alias)(m))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (m *UserMessage) UnmarshalJSON(data []byte) error {
+	type Alias UserMessage
+	return json.Unmarshal(data, (*Alias)(m))
+}
+
 // Attachment represents a file or other media attached to a message
 type Attachment struct {
 	Type     string `json:"type"`              // file, image, code, url
@@ -97,6 +117,23 @@ func (s UserSignal) Validate() error {
 		return fmt.Errorf("user_id required")
 	}
 	return nil
+}
+
+// Schema implements message.Payload
+func (s *UserSignal) Schema() message.Type {
+	return message.Type{Domain: "agentic", Category: "signal", Version: "v1"}
+}
+
+// MarshalJSON implements json.Marshaler
+func (s *UserSignal) MarshalJSON() ([]byte, error) {
+	type Alias UserSignal
+	return json.Marshal((*Alias)(s))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (s *UserSignal) UnmarshalJSON(data []byte) error {
+	type Alias UserSignal
+	return json.Unmarshal(data, (*Alias)(s))
 }
 
 func isValidSignalType(t string) bool {
@@ -160,6 +197,23 @@ func (r UserResponse) Validate() error {
 	return nil
 }
 
+// Schema implements message.Payload
+func (r *UserResponse) Schema() message.Type {
+	return message.Type{Domain: "agentic", Category: "user_response", Version: "v1"}
+}
+
+// MarshalJSON implements json.Marshaler
+func (r *UserResponse) MarshalJSON() ([]byte, error) {
+	type Alias UserResponse
+	return json.Marshal((*Alias)(r))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (r *UserResponse) UnmarshalJSON(data []byte) error {
+	type Alias UserResponse
+	return json.Unmarshal(data, (*Alias)(r))
+}
+
 func isValidResponseType(t string) bool {
 	switch t {
 	case ResponseTypeText, ResponseTypeStatus, ResponseTypeResult, ResponseTypeError, ResponseTypePrompt, ResponseTypeStream:
@@ -218,4 +272,21 @@ func (t TaskMessage) Validate() error {
 		return fmt.Errorf("prompt required")
 	}
 	return nil
+}
+
+// Schema implements message.Payload
+func (t *TaskMessage) Schema() message.Type {
+	return message.Type{Domain: "agentic", Category: "task", Version: "v1"}
+}
+
+// MarshalJSON implements json.Marshaler
+func (t *TaskMessage) MarshalJSON() ([]byte, error) {
+	type Alias TaskMessage
+	return json.Marshal((*Alias)(t))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (t *TaskMessage) UnmarshalJSON(data []byte) error {
+	type Alias TaskMessage
+	return json.Unmarshal(data, (*Alias)(t))
 }

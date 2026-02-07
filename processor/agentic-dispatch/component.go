@@ -11,6 +11,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
@@ -342,11 +343,18 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 func (c *Component) handleUserMessage(ctx context.Context, data []byte) {
 	startTime := time.Now()
 
-	var msg agentic.UserMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		c.logger.Error("Failed to unmarshal user message", slog.String("error", err.Error()))
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", slog.String("error", err.Error()))
 		return
 	}
+
+	userMsg, ok := baseMsg.Payload().(*agentic.UserMessage)
+	if !ok {
+		c.logger.Error("Unexpected payload type", slog.String("type", fmt.Sprintf("%T", baseMsg.Payload())))
+		return
+	}
+	msg := *userMsg
 
 	// Record message received
 	c.metrics.recordMessageReceived(msg.ChannelType)

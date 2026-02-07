@@ -1,7 +1,10 @@
 package agentic
 
 import (
+	"encoding/json"
 	"fmt"
+
+	"github.com/c360studio/semstreams/message"
 )
 
 // AgentRequest represents a request to an agentic service
@@ -45,6 +48,23 @@ func (r AgentResponse) Validate() error {
 		return fmt.Errorf("status must be one of: complete, tool_call, error")
 	}
 	return nil
+}
+
+// Schema implements message.Payload
+func (r *AgentResponse) Schema() message.Type {
+	return message.Type{Domain: "agentic", Category: "response", Version: "v1"}
+}
+
+// MarshalJSON implements json.Marshaler
+func (r *AgentResponse) MarshalJSON() ([]byte, error) {
+	type Alias AgentResponse
+	return json.Marshal((*Alias)(r))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (r *AgentResponse) UnmarshalJSON(data []byte) error {
+	type Alias AgentResponse
+	return json.Unmarshal(data, (*Alias)(r))
 }
 
 // ChatMessage represents a message in a conversation

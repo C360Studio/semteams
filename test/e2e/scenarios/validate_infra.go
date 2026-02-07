@@ -245,7 +245,7 @@ func (s *TieredScenario) executeVerifyOutputs(ctx context.Context, result *Resul
 
 // checkSemembedHealth checks the semembed health endpoint.
 func (s *TieredScenario) checkSemembedHealth(result *Result) bool {
-	semembedHealthURL := "http://localhost:8081/health"
+	semembedHealthURL := "http://localhost:38081/health"
 	resp, err := http.Get(semembedHealthURL)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("semembed health check failed: %v", err))

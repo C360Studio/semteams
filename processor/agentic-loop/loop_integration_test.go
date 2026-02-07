@@ -19,6 +19,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
 )
@@ -63,6 +64,36 @@ func getSharedNATSClient(t *testing.T) *natsclient.Client {
 		t.Fatal("Shared NATS client not initialized")
 	}
 	return sharedNATSClient
+}
+
+// publishTaskMessage publishes a TaskMessage wrapped in a BaseMessage envelope
+func publishTaskMessage(t *testing.T, natsClient *natsclient.Client, subject string, task *agentic.TaskMessage) {
+	t.Helper()
+	baseMsg := message.NewBaseMessage(task.Schema(), task, "integration-test")
+	msgData, err := json.Marshal(baseMsg)
+	require.NoError(t, err, "Failed to marshal BaseMessage")
+	err = natsClient.PublishToStream(context.Background(), subject, msgData)
+	require.NoError(t, err, "Failed to publish task message")
+}
+
+// publishResponseMessage publishes an AgentResponse wrapped in a BaseMessage envelope
+func publishResponseMessage(t *testing.T, natsClient *natsclient.Client, subject string, response *agentic.AgentResponse) {
+	t.Helper()
+	baseMsg := message.NewBaseMessage(response.Schema(), response, "integration-test")
+	msgData, err := json.Marshal(baseMsg)
+	require.NoError(t, err, "Failed to marshal BaseMessage")
+	err = natsClient.PublishToStream(context.Background(), subject, msgData)
+	require.NoError(t, err, "Failed to publish response message")
+}
+
+// publishToolResultMessage publishes a ToolResult wrapped in a BaseMessage envelope
+func publishToolResultMessage(t *testing.T, natsClient *natsclient.Client, subject string, result *agentic.ToolResult) {
+	t.Helper()
+	baseMsg := message.NewBaseMessage(result.Schema(), result, "integration-test")
+	msgData, err := json.Marshal(baseMsg)
+	require.NoError(t, err, "Failed to marshal BaseMessage")
+	err = natsClient.PublishToStream(context.Background(), subject, msgData)
+	require.NoError(t, err, "Failed to publish tool result message")
 }
 
 // TestIntegration_LoopFullCycle tests a complete loop: task → model request → complete
@@ -165,19 +196,14 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish a task
-	task := map[string]any{
-		"loop_id": "loop_001",
-		"task_id": "task_001",
-		"role":    "general",
-		"model":   "test-model",
-		"prompt":  "Complete this task",
+	task := &agentic.TaskMessage{
+		LoopID: "loop_001",
+		TaskID: "task_001",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Complete this task",
 	}
-
-	taskData, err := json.Marshal(task)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.task.test", taskData)
-	require.NoError(t, err)
+	publishTaskMessage(t, natsClient, "agent.task.test", task)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -192,7 +218,7 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 	requestMu.Unlock()
 
 	// Simulate model response (complete)
-	response := agentic.AgentResponse{
+	response := &agentic.AgentResponse{
 		RequestID: receivedRequests[0].RequestID,
 		Status:    "complete",
 		Message: agentic.ChatMessage{
@@ -204,12 +230,7 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 			CompletionTokens: 50,
 		},
 	}
-
-	respData, err := json.Marshal(response)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.response."+response.RequestID, respData)
-	require.NoError(t, err)
+	publishResponseMessage(t, natsClient, "agent.response."+response.RequestID, response)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -332,19 +353,14 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish task
-	task := map[string]any{
-		"loop_id": "loop_tool_001",
-		"task_id": "task_tool_001",
-		"role":    "general",
-		"model":   "test-model",
-		"prompt":  "Use tools to complete",
+	task := &agentic.TaskMessage{
+		LoopID: "loop_tool_001",
+		TaskID: "task_tool_001",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Use tools to complete",
 	}
-
-	taskData, err := json.Marshal(task)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.task.tool", taskData)
-	require.NoError(t, err)
+	publishTaskMessage(t, natsClient, "agent.task.tool", task)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -354,7 +370,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	requestMu.Unlock()
 
 	// Simulate model response with tool calls
-	response := agentic.AgentResponse{
+	response := &agentic.AgentResponse{
 		RequestID: reqID,
 		Status:    "tool_call",
 		Message: agentic.ChatMessage{
@@ -371,12 +387,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 			},
 		},
 	}
-
-	respData, err := json.Marshal(response)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.response."+reqID, respData)
-	require.NoError(t, err)
+	publishResponseMessage(t, natsClient, "agent.response."+reqID, response)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -392,16 +403,11 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	toolMu.Unlock()
 
 	// Simulate tool result
-	toolResult := agentic.ToolResult{
+	toolResult := &agentic.ToolResult{
 		CallID:  callID,
 		Content: "file contents",
 	}
-
-	resultData, err := json.Marshal(toolResult)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "tool.result."+callID, resultData)
-	require.NoError(t, err)
+	publishToolResultMessage(t, natsClient, "tool.result."+callID, toolResult)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -515,19 +521,14 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish task
-	task := map[string]any{
-		"loop_id": "loop_max_iter",
-		"task_id": "task_max_iter",
-		"role":    "general",
-		"model":   "test-model",
-		"prompt":  "Never-ending task",
+	task := &agentic.TaskMessage{
+		LoopID: "loop_max_iter",
+		TaskID: "task_max_iter",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Never-ending task",
 	}
-
-	taskData, err := json.Marshal(task)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.task.maxiter", taskData)
-	require.NoError(t, err)
+	publishTaskMessage(t, natsClient, "agent.task.maxiter", task)
 
 	// Simulate continuous tool calls to trigger max iterations
 	for i := 0; i < 5; i++ {
@@ -542,7 +543,7 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 		}
 
 		// Always respond with tool call to keep iterating
-		response := agentic.AgentResponse{
+		response := &agentic.AgentResponse{
 			RequestID: reqID,
 			Status:    "tool_call",
 			Message: agentic.ChatMessage{
@@ -556,13 +557,7 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 				},
 			},
 		}
-
-		respData, err := json.Marshal(response)
-		if err != nil {
-			continue
-		}
-
-		natsClient.PublishToStream(ctx, "agent.response."+reqID, respData)
+		publishResponseMessage(t, natsClient, "agent.response."+reqID, response)
 	}
 
 	time.Sleep(1 * time.Second)
@@ -640,19 +635,14 @@ func TestIntegration_LoopStatePersistence(t *testing.T) {
 
 	// Publish task
 	loopID := "loop_persist_" + time.Now().Format("150405")
-	task := map[string]any{
-		"loop_id": loopID,
-		"task_id": "task_persist",
-		"role":    "general",
-		"model":   "test-model",
-		"prompt":  "Test persistence",
+	task := &agentic.TaskMessage{
+		LoopID: loopID,
+		TaskID: "task_persist",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test persistence",
 	}
-
-	taskData, err := json.Marshal(task)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.task.persist", taskData)
-	require.NoError(t, err)
+	publishTaskMessage(t, natsClient, "agent.task.persist", task)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -763,19 +753,14 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 
 	// Publish task
 	loopID := "loop_traj_" + time.Now().Format("150405")
-	task := map[string]any{
-		"loop_id": loopID,
-		"task_id": "task_trajectory",
-		"role":    "general",
-		"model":   "test-model",
-		"prompt":  "Test trajectory",
+	task := &agentic.TaskMessage{
+		LoopID: loopID,
+		TaskID: "task_trajectory",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test trajectory",
 	}
-
-	taskData, err := json.Marshal(task)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.task.traj", taskData)
-	require.NoError(t, err)
+	publishTaskMessage(t, natsClient, "agent.task.traj", task)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -785,7 +770,7 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 	requestMu.Unlock()
 
 	// Simulate complete response
-	response := agentic.AgentResponse{
+	response := &agentic.AgentResponse{
 		RequestID: reqID,
 		Status:    "complete",
 		Message: agentic.ChatMessage{
@@ -797,12 +782,7 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 			CompletionTokens: 100,
 		},
 	}
-
-	respData, err := json.Marshal(response)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.response."+reqID, respData)
-	require.NoError(t, err)
+	publishResponseMessage(t, natsClient, "agent.response."+reqID, response)
 
 	time.Sleep(1 * time.Second)
 

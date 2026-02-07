@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/processor/workflow"
@@ -46,6 +47,52 @@ func registerTestWorkflow(t *testing.T, kv jetstream.KeyValue, wf *workflow.Defi
 	require.NoError(t, err, "Failed to marshal workflow definition")
 	_, err = kv.Put(context.Background(), wf.ID, data)
 	require.NoError(t, err, "Failed to put workflow in KV bucket")
+}
+
+// publishTriggerMessage publishes a workflow trigger wrapped in a BaseMessage envelope
+func publishTriggerMessage(t *testing.T, testClient *natsclient.TestClient, subject string, workflowID string, extraData map[string]any) {
+	t.Helper()
+
+	// Build the data payload
+	var dataBytes json.RawMessage
+	if extraData != nil {
+		// Include workflow_id in extraData for backward compatibility
+		extraData["workflow_id"] = workflowID
+		var err error
+		dataBytes, err = json.Marshal(extraData)
+		require.NoError(t, err, "Failed to marshal extra data")
+	}
+
+	// Create TriggerPayload
+	trigger := &workflow.TriggerPayload{
+		WorkflowID: workflowID,
+		Data:       dataBytes,
+	}
+
+	// Wrap in BaseMessage
+	baseMsg := message.NewBaseMessage(trigger.Schema(), trigger, "integration-test")
+
+	// Marshal and publish
+	msgData, err := json.Marshal(baseMsg)
+	require.NoError(t, err, "Failed to marshal BaseMessage")
+
+	err = testClient.Client.PublishToStream(context.Background(), subject, msgData)
+	require.NoError(t, err, "Failed to publish trigger message")
+}
+
+// publishStepCompleteMessage publishes a step complete message wrapped in a BaseMessage envelope
+func publishStepCompleteMessage(t *testing.T, testClient *natsclient.TestClient, subject string, stepComplete *workflow.StepCompleteMessage) {
+	t.Helper()
+
+	// Wrap in BaseMessage
+	baseMsg := message.NewBaseMessage(stepComplete.Schema(), stepComplete, "integration-test")
+
+	// Marshal and publish
+	msgData, err := json.Marshal(baseMsg)
+	require.NoError(t, err, "Failed to marshal BaseMessage")
+
+	err = testClient.Client.PublishToStream(context.Background(), subject, msgData)
+	require.NoError(t, err, "Failed to publish step complete message")
 }
 
 // waitForExecutionState waits for an execution to reach the expected state
@@ -268,13 +315,9 @@ func TestIntegration_SimpleWorkflowTrigger(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger the workflow
-	triggerPayload := map[string]any{
-		"workflow_id": "simple-trigger-test",
-		"data":        "test data",
-	}
-	triggerData, _ := json.Marshal(triggerPayload)
-	err = testClient.Client.PublishToStream(testCtx, "workflow.trigger.simple-trigger-test", triggerData)
-	require.NoError(t, err)
+	publishTriggerMessage(t, testClient, "workflow.trigger.simple-trigger-test", "simple-trigger-test", map[string]any{
+		"data": "test data",
+	})
 
 	// Wait for execution to complete
 	time.Sleep(1 * time.Second)
@@ -392,12 +435,7 @@ func TestIntegration_CallActionWithResponse(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger the workflow
-	triggerPayload := map[string]any{
-		"workflow_id": "call-action-test",
-	}
-	triggerData, _ := json.Marshal(triggerPayload)
-	err = testClient.Client.PublishToStream(testCtx, "workflow.trigger.call-action-test", triggerData)
-	require.NoError(t, err)
+	publishTriggerMessage(t, testClient, "workflow.trigger.call-action-test", "call-action-test", nil)
 
 	// Wait for execution to complete
 	time.Sleep(2 * time.Second)
@@ -505,12 +543,7 @@ func TestIntegration_PublishAction(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger the workflow
-	triggerPayload := map[string]any{
-		"workflow_id": "publish-action-test",
-	}
-	triggerData, _ := json.Marshal(triggerPayload)
-	err = testClient.Client.PublishToStream(testCtx, "workflow.trigger.publish-action-test", triggerData)
-	require.NoError(t, err)
+	publishTriggerMessage(t, testClient, "workflow.trigger.publish-action-test", "publish-action-test", nil)
 
 	// Wait for processing
 	time.Sleep(1 * time.Second)
@@ -621,12 +654,7 @@ func TestIntegration_LoopWorkflowMaxIterations(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger the workflow
-	triggerPayload := map[string]any{
-		"workflow_id": "loop-max-iter-test",
-	}
-	triggerData, _ := json.Marshal(triggerPayload)
-	err = testClient.Client.PublishToStream(testCtx, "workflow.trigger.loop-max-iter-test", triggerData)
-	require.NoError(t, err)
+	publishTriggerMessage(t, testClient, "workflow.trigger.loop-max-iter-test", "loop-max-iter-test", nil)
 
 	// Wait for execution to complete (should stop after max iterations)
 	time.Sleep(2 * time.Second)
@@ -752,12 +780,7 @@ func TestIntegration_ConditionEvaluation(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger the workflow
-	triggerPayload := map[string]any{
-		"workflow_id": "condition-eval-test",
-	}
-	triggerData, _ := json.Marshal(triggerPayload)
-	err = testClient.Client.PublishToStream(testCtx, "workflow.trigger.condition-eval-test", triggerData)
-	require.NoError(t, err)
+	publishTriggerMessage(t, testClient, "workflow.trigger.condition-eval-test", "condition-eval-test", nil)
 
 	// Wait for execution
 	time.Sleep(2 * time.Second)
@@ -857,12 +880,7 @@ func TestIntegration_StepCompleteMessage(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger the workflow
-	triggerPayload := map[string]any{
-		"workflow_id": "step-complete-msg-test",
-	}
-	triggerData, _ := json.Marshal(triggerPayload)
-	err = testClient.Client.PublishToStream(testCtx, "workflow.trigger.step-complete-msg-test", triggerData)
-	require.NoError(t, err)
+	publishTriggerMessage(t, testClient, "workflow.trigger.step-complete-msg-test", "step-complete-msg-test", nil)
 
 	// Wait a bit for the workflow to start and reach the agent_task step
 	time.Sleep(500 * time.Millisecond)
@@ -873,15 +891,13 @@ func TestIntegration_StepCompleteMessage(t *testing.T) {
 
 	if capturedExecID != "" {
 		// Simulate external agent completing the step by publishing step.complete message
-		stepComplete := workflow.StepCompleteMessage{
+		stepComplete := &workflow.StepCompleteMessage{
 			ExecutionID: capturedExecID,
 			StepName:    "agent_task",
 			Status:      "success",
 			Output:      json.RawMessage(`{"agent_result": "processed"}`),
 		}
-		stepCompleteData, _ := json.Marshal(stepComplete)
-		err = testClient.Client.PublishToStream(testCtx, "workflow.step.complete."+capturedExecID, stepCompleteData)
-		require.NoError(t, err)
+		publishStepCompleteMessage(t, testClient, "workflow.step.complete."+capturedExecID, stepComplete)
 
 		// Wait for workflow to complete
 		time.Sleep(1 * time.Second)
@@ -968,12 +984,7 @@ func TestIntegration_WorkflowTimeout(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger the workflow
-	triggerPayload := map[string]any{
-		"workflow_id": "timeout-test",
-	}
-	triggerData, _ := json.Marshal(triggerPayload)
-	err = testClient.Client.PublishToStream(testCtx, "workflow.trigger.timeout-test", triggerData)
-	require.NoError(t, err)
+	publishTriggerMessage(t, testClient, "workflow.trigger.timeout-test", "timeout-test", nil)
 
 	// Wait for timeout to occur (workflow has 1s timeout, we never complete the step)
 	time.Sleep(3 * time.Second)
@@ -1106,14 +1117,10 @@ func TestIntegration_VariableInterpolation(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Trigger the workflow with data that will be interpolated
-	triggerPayload := map[string]any{
-		"workflow_id": "interpolation-test",
-		"type":        "user_action",
-		"source":      "test",
-	}
-	triggerData, _ := json.Marshal(triggerPayload)
-	err = testClient.Client.PublishToStream(testCtx, "workflow.trigger.interpolation-test", triggerData)
-	require.NoError(t, err)
+	publishTriggerMessage(t, testClient, "workflow.trigger.interpolation-test", "interpolation-test", map[string]any{
+		"type":   "user_action",
+		"source": "test",
+	})
 
 	// Wait for execution
 	time.Sleep(2 * time.Second)

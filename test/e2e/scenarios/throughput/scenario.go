@@ -61,8 +61,7 @@ func NewScenario(metricsURL, udpAddr string, cfg *Config) *Scenario {
 	if udpAddr == "" {
 		udpAddr = config.DefaultEndpoints.UDP
 	}
-	// Use default metrics URL from config if not provided or if old port is used
-	if metricsURL == "" || metricsURL == "http://localhost:9090" {
+	if metricsURL == "" {
 		metricsURL = config.DefaultEndpoints.Metrics
 	}
 

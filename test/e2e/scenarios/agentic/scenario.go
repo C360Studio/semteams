@@ -54,8 +54,8 @@ type Config struct {
 // DefaultConfig returns default configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		NATSURL:            "nats://localhost:4222",
-		MetricsURL:         "http://localhost:9090",
+		NATSURL:            "nats://localhost:34222",
+		MetricsURL:         "http://localhost:39090",
 		LLMEndpointURL:     "", // Empty means use mock
 		TaskTimeout:        30 * time.Second,
 		CompleteTimeout:    60 * time.Second,

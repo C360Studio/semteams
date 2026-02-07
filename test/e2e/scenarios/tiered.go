@@ -116,7 +116,7 @@ func DefaultTieredConfig() *TieredConfig {
 		MetricsURL:           config.DefaultEndpoints.Metrics,
 		ServiceManagerURL:    config.DefaultEndpoints.HTTP,
 		GatewayURL:           config.DefaultEndpoints.HTTP + "/api-gateway",
-		GraphQLURL:           "http://localhost:8082/graphql", // Default for statistical profile
+		GraphQLURL:           "http://localhost:38082/graphql", // Default for statistical profile
 		OutputDir:            "test/e2e/results",
 		MaxRegressionPercent: 20.0, // 20% regression threshold
 		// Structural tier defaults (rules-only, no ML)
@@ -138,7 +138,7 @@ func NewTieredScenario(
 		cfg = DefaultTieredConfig()
 	}
 	if udpAddr == "" {
-		udpAddr = "localhost:14550"
+		udpAddr = "localhost:34550"
 	}
 	natsURL := cfg.NatsURL
 	if natsURL == "" {
@@ -148,7 +148,7 @@ func NewTieredScenario(
 	// Set GraphQL URL if not explicitly configured
 	// Docker compose maps all profiles to host port 8082 for GraphQL
 	if cfg.GraphQLURL == "" {
-		cfg.GraphQLURL = "http://localhost:8082/graphql"
+		cfg.GraphQLURL = "http://localhost:38082/graphql"
 	}
 
 	return &TieredScenario{

@@ -59,7 +59,7 @@ func NewCoreDataflowScenario(
 		config = DefaultCoreDataflowConfig()
 	}
 	if udpAddr == "" {
-		udpAddr = "localhost:14550"
+		udpAddr = "localhost:34550"
 	}
 
 	return &CoreDataflowScenario{
