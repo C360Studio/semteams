@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semstreams/test/e2e/results"
 	scenarios "github.com/c360studio/semstreams/test/e2e/scenarios"
 	"github.com/c360studio/semstreams/test/e2e/scenarios/agentic"
+	"github.com/c360studio/semstreams/test/e2e/scenarios/throughput"
 	workflowscenario "github.com/c360studio/semstreams/test/e2e/scenarios/workflow"
 )
 
@@ -105,6 +106,8 @@ type cliFlags struct {
 	targetVariant     string // Target variant for auto-compare
 	// WebSocket status stream endpoint (uses baseURL by default)
 	wsStatusURL string
+	// Throughput scenario options
+	messageCount int
 }
 
 // parseCommandLineFlags parses and returns command-line flags
@@ -131,7 +134,7 @@ func parseCommandLineFlags() *cliFlags {
 		"Generate comparison report from existing results in output-dir")
 	flag.BoolVar(&flags.compareTiers, "compare-tiers", false,
 		"Generate tier comparison report (Tier 0 vs 1 vs 2) from existing results")
-	flag.StringVar(&flags.metricsURL, "metrics-url", "http://localhost:9090",
+	flag.StringVar(&flags.metricsURL, "metrics-url", config.DefaultEndpoints.Metrics,
 		"Prometheus metrics endpoint URL")
 	// Structured comparison flags
 	flag.BoolVar(&flags.compareStructured, "compare-structured", false,
@@ -146,6 +149,9 @@ func parseCommandLineFlags() *cliFlags {
 		"Target variant for auto-compare (finds latest file)")
 	flag.StringVar(&flags.wsStatusURL, "ws-status-url", "",
 		"WebSocket status stream base URL (defaults to base-url)")
+	// Throughput scenario options
+	flag.IntVar(&flags.messageCount, "message-count", 10000,
+		"Number of messages for throughput scenario")
 
 	// Support environment variables for Docker Compose
 	if envURL := os.Getenv("SEMSTREAMS_BASE_URL"); envURL != "" {
@@ -213,6 +219,11 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Println("    workflow-agentic - Workflow orchestration with publish_agent")
 	fmt.Println("                       Tests: triggers, steps, conditions, loops")
 	fmt.Println("                       Uses mock LLM by default")
+	fmt.Println("")
+	fmt.Println("  Throughput (for profiling):")
+	fmt.Println("    throughput       - High-volume stress test (10,000+ messages)")
+	fmt.Println("                       Captures pprof profiles when SEMSTREAMS_DEBUG=true")
+	fmt.Println("                       Use --message-count to adjust volume")
 	fmt.Println("")
 	fmt.Println("Variant flag (for tiered scenario):")
 	fmt.Println("  --variant structural  - Rules-only, validates ZERO ML inference")
@@ -361,6 +372,15 @@ func createScenario(
 		cfg := workflowscenario.DefaultConfig()
 		cfg.MetricsURL = flags.metricsURL
 		return workflowscenario.NewScenario(edgeClient, cfg)
+
+	// Throughput scenario (high-volume stress test with profiling)
+	case "throughput":
+		cfg := throughput.DefaultConfig()
+		cfg.MessageCount = flags.messageCount
+		if flags.outputDir != "" {
+			cfg.ProfileDir = flags.outputDir + "/profiles"
+		}
+		return throughput.NewScenario(flags.metricsURL, flags.udpEndpoint, cfg)
 
 	default:
 		return nil
