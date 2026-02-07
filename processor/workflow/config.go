@@ -3,6 +3,7 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -34,6 +35,10 @@ type Config struct {
 
 	// Request timeout for call actions
 	RequestTimeout string `json:"request_timeout" schema:"type:string,description:Timeout for NATS request/response calls,default:30s,category:advanced"`
+
+	// WorkflowFiles is a list of file paths to JSON workflow definitions
+	// to load at startup. Supports glob patterns.
+	WorkflowFiles []string `json:"workflow_files,omitempty" schema:"type:array,items:string,description:Paths to JSON workflow definition files. Supports glob patterns.,category:basic"`
 }
 
 // Validate validates the configuration
@@ -71,6 +76,13 @@ func (c Config) Validate() error {
 		_, err := time.ParseDuration(c.RequestTimeout)
 		if err != nil {
 			return fmt.Errorf("invalid request_timeout format: %w", err)
+		}
+	}
+
+	// Validate glob patterns in workflow files
+	for _, pattern := range c.WorkflowFiles {
+		if _, err := filepath.Match(pattern, ""); err != nil {
+			return fmt.Errorf("invalid workflow_files pattern %q: %w", pattern, err)
 		}
 	}
 
