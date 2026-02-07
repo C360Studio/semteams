@@ -13,8 +13,8 @@ tasks:
       - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait --build
       - echo "[OK] ML services are healthy (SemEmbed + SemInstruct)"
       - echo "[SEMANTIC] Running semantic tier scenario..."
-      # ML app runs on port 8180 (HTTP), 9190 (metrics), 14650 (UDP) to avoid conflict
-      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant semantic --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
+      # ML app runs on port 38180 (HTTP), 39190 (metrics), 34650 (UDP) to avoid conflict
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant semantic --base-url http://localhost:38180 --udp-endpoint localhost:34650 --metrics-url http://localhost:39190 --output-dir ./test/e2e/results
         ignore_error: true
       - docker compose -f docker/compose/tiered.yml --profile semantic down -v --timeout 15
 
@@ -32,7 +32,8 @@ tasks:
       - echo "  docker logs -f semstreams-tiered-semembed     (Follow SemEmbed logs)"
       - echo "  docker logs -f semstreams-tiered-seminstruct  (Follow SemInstruct logs)"
       - echo "  docker logs -f semstreams-tiered-nats         (Follow NATS logs)"
-      - echo "  curl http://localhost:8180/health             (Test health endpoint)"
+      - echo "  curl http://localhost:38180/health            (Test health endpoint)"
+      - echo "  curl http://localhost:36160/debug/pprof/      (PProf, if SEMSTREAMS_DEBUG=true)"
       - echo "  task e2e:clean                                (Clean up when done)"
 
   fallback:
@@ -64,7 +65,7 @@ tasks:
       - echo "[COMPARE] Running semantic variant second..."
       - sleep 5
       - docker compose -f docker/compose/tiered.yml --profile semantic up -d --wait --build
-      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant semantic --base-url http://localhost:8180 --udp-endpoint localhost:14650 --metrics-url http://localhost:9190 --output-dir ./test/e2e/results
+      - cmd: cd cmd/e2e && ./e2e --scenario tiered --variant semantic --base-url http://localhost:38180 --udp-endpoint localhost:34650 --metrics-url http://localhost:39190 --output-dir ./test/e2e/results
         ignore_error: true
       - docker compose -f docker/compose/tiered.yml --profile semantic down -v --timeout 15
       - echo "[COMPARE] Generating comparison report..."

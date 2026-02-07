@@ -118,10 +118,10 @@ func (s *Scenario) Setup(ctx context.Context) error {
 	s.metrics = client.NewMetricsClient(s.config.MetricsURL)
 
 	// Docker compose provides mock-llm at http://mock-llm:8080 (within Docker network)
-	// and http://localhost:18080 (from host). The semstreams container uses the Docker-internal
+	// and http://localhost:38180 (from host). The semstreams container uses the Docker-internal
 	// URL, so we don't need to start a mock server here.
 	if s.useMock {
-		s.config.LLMEndpointURL = "http://localhost:18080" // For reference in results
+		s.config.LLMEndpointURL = "http://localhost:38180" // For reference in results
 	}
 
 	return nil

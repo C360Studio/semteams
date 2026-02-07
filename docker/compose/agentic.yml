@@ -19,8 +19,8 @@ services:
     image: nats:2.10-alpine
     container_name: semstreams-agentic-nats
     ports:
-      - "4222:4222"
-      - "8222:8222"
+      - "34222:4222" # Client connections (3xxxx range to avoid collisions)
+      - "38222:8222" # HTTP monitoring
     command:
       ["-js", "-sd", "/data", "-m", "8222", "--name", "semstreams-agentic-nats"]
     volumes:
@@ -48,7 +48,7 @@ services:
       dockerfile: test/e2e/mock/Dockerfile
     container_name: semstreams-agentic-mock-llm
     ports:
-      - "18080:8080"
+      - "38180:8080" # Mock LLM (3xxxx range)
     networks:
       - semstreams-agentic-net
     healthcheck:
@@ -74,13 +74,16 @@ services:
     environment:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
+      - SEMSTREAMS_DEBUG=${SEMSTREAMS_DEBUG:-false}
+      - SEMSTREAMS_DEBUG_PORT=6060
       - AGENTIC_LLM_URL=${AGENTIC_LLM_URL:-http://mock-llm:8080/v1}
     volumes:
       - ../../configs:/app/configs:ro
       - ../../testdata:/data/testdata:ro
     ports:
-      - "8080:8080"   # HTTP API (health, components)
-      - "9090:9090"   # Prometheus metrics
+      - "38080:8080"   # HTTP API (health, components)
+      - "39090:9090"   # Prometheus metrics
+      - "36060:6060"   # pprof (when SEMSTREAMS_DEBUG=true)
     networks:
       - semstreams-agentic-net
     healthcheck:

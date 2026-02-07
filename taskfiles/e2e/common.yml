@@ -7,15 +7,15 @@ tasks:
     cmds:
       - |
         echo "[CHECK] Verifying ports are available..."
-        if lsof -Pi :8080 -sTCP:LISTEN -t >/dev/null 2>&1; then
-          echo "[ERROR] Port 8080 is already in use"
-          lsof -Pi :8080 -sTCP:LISTEN
+        if lsof -Pi :38080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+          echo "[ERROR] Port 38080 is already in use"
+          lsof -Pi :38080 -sTCP:LISTEN
           exit 1
         fi
       - |
-        if lsof -Pi :14550 -t >/dev/null 2>&1; then
-          echo "[ERROR] Port 14550 (UDP) is already in use"
-          lsof -i :14550
+        if lsof -Pi :34550 -t >/dev/null 2>&1; then
+          echo "[ERROR] Port 34550 (UDP) is already in use"
+          lsof -i :34550
           exit 1
         fi
       - echo "[OK] All ports available"
@@ -34,3 +34,38 @@ tasks:
       - docker volume ls -q --filter name=shimmy | xargs -r docker volume rm 2>/dev/null || true
       - docker volume ls -q --filter name=nats-semstreams | xargs -r docker volume rm 2>/dev/null || true
       - echo "[OK] E2E environment cleaned"
+
+  analyze-profiles:
+    desc: List available pprof profiles and show analysis commands
+    silent: false
+    cmds:
+      - |
+        echo "[PROFILES] Looking for captured profiles..."
+        if ls test/e2e/results/profiles/*.pprof 2>/dev/null; then
+          echo ""
+          echo "To analyze a profile:"
+          echo "  go tool pprof <profile.pprof>"
+          echo ""
+          echo "Common pprof commands:"
+          echo "  top10        - Show top 10 consumers"
+          echo "  top20 -cum   - Show top 20 by cumulative time"
+          echo "  web          - Open interactive graph (requires graphviz)"
+          echo "  list <func>  - Show annotated source for function"
+          echo ""
+          echo "Compare profiles:"
+          echo "  go tool pprof -diff_base=before.pprof after.pprof"
+        else
+          echo "No profiles found in test/e2e/results/profiles/"
+          echo ""
+          echo "To capture profiles, run e2e tests with profiling enabled:"
+          echo "  SEMSTREAMS_DEBUG=true task e2e:core"
+        fi
+
+  clean-profiles:
+    desc: Remove all captured pprof profiles
+    silent: false
+    cmds:
+      - |
+        echo "[CLEAN] Removing captured profiles..."
+        rm -rf test/e2e/results/profiles/*.pprof test/e2e/results/profiles/*.out 2>/dev/null || true
+        echo "[OK] Profiles cleaned"

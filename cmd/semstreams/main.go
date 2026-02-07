@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	_ "net/http/pprof" // Register pprof handlers on DefaultServeMux
 	"os"
 	"os/signal"
 	"runtime"
@@ -57,6 +59,11 @@ func run() error {
 	cliCfg, shouldExit, err := parseCLI()
 	if shouldExit || err != nil {
 		return err
+	}
+
+	// 2.5. Start pprof server if debug mode enabled (before NATS - independent)
+	if cliCfg.Debug && cliCfg.DebugPort > 0 {
+		go startPProfServer(cliCfg.DebugPort)
 	}
 
 	// 3. Load and validate configuration
@@ -425,4 +432,16 @@ func loadConfig(path string) (*config.Config, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 	return cfg, nil
+}
+
+// startPProfServer starts the pprof HTTP server for profiling.
+// The server runs on http.DefaultServeMux which has pprof handlers
+// registered via the blank import of net/http/pprof.
+func startPProfServer(port int) {
+	addr := fmt.Sprintf(":%d", port)
+	// Use a simple logger that works before slog is configured
+	fmt.Printf("Starting pprof server on %s\n", addr)
+	if err := http.ListenAndServe(addr, nil); err != nil && err != http.ErrServerClosed {
+		fmt.Printf("pprof server error: %v\n", err)
+	}
 }

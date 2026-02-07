@@ -4,16 +4,19 @@ package config
 import "time"
 
 // DefaultEndpoints provides default SemStreams service endpoints
+// Ports use 3xxxx range to avoid collisions with other local services
 var DefaultEndpoints = struct {
 	HTTP    string
 	UDP     string
 	NATS    string
 	Metrics string
+	PProf   string
 }{
-	HTTP:    "http://localhost:8080",
-	UDP:     "localhost:14550",
-	NATS:    "nats://localhost:4222",
-	Metrics: "http://localhost:9090",
+	HTTP:    "http://localhost:38080",
+	UDP:     "localhost:34550",
+	NATS:    "nats://localhost:34222",
+	Metrics: "http://localhost:39090",
+	PProf:   "http://localhost:36060",
 }
 
 // ComponentPaths defines API paths for component endpoints

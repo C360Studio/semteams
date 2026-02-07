@@ -24,7 +24,7 @@ tasks:
       - echo "[E2E DEBUG] Waiting for NATS to be ready..."
       - |
         for i in {1..30}; do
-          if curl -sf http://localhost:8222/healthz > /dev/null 2>&1; then
+          if curl -sf http://localhost:38222/healthz > /dev/null 2>&1; then
             echo "[OK] NATS is ready"
             break
           fi
@@ -39,7 +39,8 @@ tasks:
       - echo "[E2E DEBUG] Environment is running. Use the following commands:"
       - echo "  docker logs -f semstreams-e2e-app    (Follow SemStreams logs)"
       - echo "  docker logs -f semstreams-e2e-nats   (Follow NATS logs)"
-      - echo "  curl http://localhost:8080/health   (Test health endpoint)"
+      - echo "  curl http://localhost:38080/health  (Test health endpoint)"
+      - echo "  curl http://localhost:36060/debug/pprof/ (PProf, if SEMSTREAMS_DEBUG=true)"
       - echo "  task e2e:clean                      (Clean up when done)"
 
   rebuild:

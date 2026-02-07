@@ -35,7 +35,7 @@ services:
     profiles:
       - semantic
     ports:
-      - "8081:8081" # OpenAI-compatible /v1/embeddings endpoint
+      - "38081:8081" # OpenAI-compatible /v1/embeddings endpoint (3xxxx range)
     environment:
       - SEMEMBED_MODEL=BAAI/bge-small-en-v1.5
       - SEMEMBED_PORT=8081
@@ -81,7 +81,7 @@ services:
     profiles:
       - semantic
     ports:
-      - "8084:8083" # OpenAI-compatible /v1/chat/completions
+      - "38084:8083" # OpenAI-compatible /v1/chat/completions (3xxxx range)
     environment:
       - SEMINSTRUCT_SHIMMY_URL=http://shimmy:11435
       - SEMINSTRUCT_PORT=8083
@@ -103,8 +103,8 @@ services:
     image: nats:2.12-alpine
     container_name: semstreams-tiered-nats
     ports:
-      - "4222:4222" # Client connections
-      - "8222:8222" # HTTP monitoring
+      - "34222:4222" # Client connections (3xxxx range to avoid collisions)
+      - "38222:8222" # HTTP monitoring
     command:
       ["-js", "-sd", "/data", "-m", "8222", "--name", "semstreams-tiered-nats"]
     volumes:
@@ -143,17 +143,20 @@ services:
     environment:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
+      - SEMSTREAMS_DEBUG=${SEMSTREAMS_DEBUG:-false}
+      - SEMSTREAMS_DEBUG_PORT=6060
       # Embedding disabled by default - BM25 fallback will be used
       - EMBEDDING_PROVIDER=none
     volumes:
       - ../../configs:/app/configs:ro
       - ../../testdata:/data/testdata:ro
     ports:
-      - "8080:8080" # HTTP API (health, components)
-      - "8082:8084" # GraphQL gateway (host:8082 -> container:8084)
-      - "9090:9090" # Prometheus metrics
-      - "14550:14550/udp" # UDP input
-      - "8083:8082" # WebSocket output (host:8083 -> container:8082)
+      - "38080:8080" # HTTP API (health, components)
+      - "38082:8084" # GraphQL gateway (host:38082 -> container:8084)
+      - "39090:9090" # Prometheus metrics
+      - "36060:6060" # pprof (when SEMSTREAMS_DEBUG=true)
+      - "34550:14550/udp" # UDP input
+      - "38083:8082" # WebSocket output (host:38083 -> container:8082)
     networks:
       - semstreams-tiered-net
     healthcheck:
@@ -188,15 +191,18 @@ services:
     environment:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
+      - SEMSTREAMS_DEBUG=${SEMSTREAMS_DEBUG:-false}
+      - SEMSTREAMS_DEBUG_PORT=6060
       - EMBEDDING_PROVIDER=none
     volumes:
       - ../../configs:/app/configs:ro
       - ../../testdata:/data/testdata:ro
     ports:
-      - "8080:8080" # HTTP API (health, components)
-      - "8082:8082" # GraphQL gateway
-      - "9090:9090" # Prometheus metrics
-      - "14550:14550/udp" # UDP input
+      - "38080:8080" # HTTP API (health, components)
+      - "38082:8082" # GraphQL gateway
+      - "39090:9090" # Prometheus metrics
+      - "36060:6060" # pprof (when SEMSTREAMS_DEBUG=true)
+      - "34550:14550/udp" # UDP input
     networks:
       - semstreams-tiered-net
     healthcheck:
@@ -235,15 +241,18 @@ services:
     environment:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=debug
+      - SEMSTREAMS_DEBUG=${SEMSTREAMS_DEBUG:-false}
+      - SEMSTREAMS_DEBUG_PORT=6060
     volumes:
       - ../../configs:/app/configs:ro
       - ../../testdata:/data/testdata:ro
     ports:
-      - "8180:8080" # HTTP API (different port to avoid conflict with core)
-      - "8182:8084" # GraphQL gateway (host:8182 -> container:8084)
-      - "9190:9090" # Prometheus metrics
-      - "14650:14550/udp" # UDP input
-      - "8183:8082" # WebSocket output
+      - "38180:8080" # HTTP API (different port to avoid conflict with core)
+      - "38182:8084" # GraphQL gateway (host:38182 -> container:8084)
+      - "39190:9090" # Prometheus metrics
+      - "36160:6060" # pprof (when SEMSTREAMS_DEBUG=true)
+      - "34650:14550/udp" # UDP input
+      - "38183:8082" # WebSocket output
     networks:
       - semstreams-tiered-net
     healthcheck:
