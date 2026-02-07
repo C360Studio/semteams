@@ -36,6 +36,11 @@ type TaskMessage struct {
 	// Workflow context (optional, set by workflow commands)
 	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
 	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
+
+	// User routing info (optional, for error notifications)
+	ChannelType string `json:"channel_type,omitempty"` // e.g., "http", "cli", "slack"
+	ChannelID   string `json:"channel_id,omitempty"`   // session/channel identifier
+	UserID      string `json:"user_id,omitempty"`      // user who initiated the request
 }
 
 // PublishedMessage represents a message published to NATS
@@ -116,6 +121,11 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	// Set workflow context if provided (for loops created by workflow commands)
 	if task.WorkflowSlug != "" || task.WorkflowStep != "" {
 		_ = h.loopManager.SetWorkflowContext(loopID, task.WorkflowSlug, task.WorkflowStep)
+	}
+
+	// Set user context if provided (for error notification routing)
+	if task.ChannelType != "" || task.UserID != "" {
+		_ = h.loopManager.SetUserContext(loopID, task.ChannelType, task.ChannelID, task.UserID)
 	}
 
 	// Set timeout if configured
@@ -538,6 +548,10 @@ func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (Pub
 		"workflow_slug": entity.WorkflowSlug,
 		"workflow_step": entity.WorkflowStep,
 		"failed_at":     time.Now().Format(time.RFC3339),
+		// User routing info for error notifications
+		"channel_type": entity.ChannelType,
+		"channel_id":   entity.ChannelID,
+		"user_id":      entity.UserID,
 	}
 
 	data, err := json.Marshal(failure)

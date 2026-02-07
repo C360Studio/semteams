@@ -345,6 +345,22 @@ func (m *LoopManager) SetWorkflowContext(loopID, workflowSlug, workflowStep stri
 	return nil
 }
 
+// SetUserContext sets the user routing info for error notifications
+func (m *LoopManager) SetUserContext(loopID, channelType, channelID, userID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entity, exists := m.loops[loopID]
+	if !exists {
+		return fmt.Errorf("loop %s not found", loopID)
+	}
+
+	entity.ChannelType = channelType
+	entity.ChannelID = channelID
+	entity.UserID = userID
+	return nil
+}
+
 // GenerateRequestID creates a structured request ID that embeds the loop ID.
 // Format: loopID:req:shortUUID
 // This allows recovery of loop ID from request ID if in-memory maps are lost.

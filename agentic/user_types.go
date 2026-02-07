@@ -196,6 +196,11 @@ type TaskMessage struct {
 	// Workflow context (optional, set by workflow commands)
 	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
 	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
+
+	// User routing info (optional, for error notifications)
+	ChannelType string `json:"channel_type,omitempty"` // e.g., "http", "cli", "slack"
+	ChannelID   string `json:"channel_id,omitempty"`   // session/channel identifier
+	UserID      string `json:"user_id,omitempty"`      // user who initiated the request
 }
 
 // Validate checks if the TaskMessage is valid
