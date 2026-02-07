@@ -986,6 +986,10 @@ components:
                     type: string
                 user_id:
                     type: string
+                workflow_slug:
+                    type: string
+                workflow_step:
+                    type: string
             required:
                 - loop_id
                 - task_id
