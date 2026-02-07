@@ -13,6 +13,7 @@ import (
 const (
 	subjectAgentRequest  = "agent.request"
 	subjectAgentCreated  = "agent.created"
+	subjectAgentFailed   = "agent.failed"
 	subjectToolExecute   = "tool.execute"
 	subjectAgentComplete = "agent.complete"
 )
@@ -220,10 +221,15 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	// Check for timeout before processing
 	if h.loopManager.IsTimedOut(loopID) {
 		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
-		return HandlerResult{
+		result := HandlerResult{
 			LoopID: loopID,
 			State:  agentic.LoopStateFailed,
-		}, fmt.Errorf("loop timeout exceeded")
+		}
+		// Publish failure event
+		if failMsg, err := h.buildFailureEvent(loopID, "timeout", "loop timeout exceeded"); err == nil {
+			result.PublishedMessages = []PublishedMessage{failMsg}
+		}
+		return result, fmt.Errorf("loop timeout exceeded")
 	}
 
 	entity, err := h.loopManager.GetLoop(loopID)
@@ -303,6 +309,11 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 			return result, err
 		}
 		result.State = agentic.LoopStateFailed
+
+		// Publish failure event
+		if failMsg, err := h.buildFailureEvent(loopID, "model_error", response.Error); err == nil {
+			result.PublishedMessages = append(result.PublishedMessages, failMsg)
+		}
 	}
 
 	return result, nil
@@ -377,10 +388,15 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 	// Check for timeout before processing
 	if h.loopManager.IsTimedOut(loopID) {
 		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
-		return HandlerResult{
+		result := HandlerResult{
 			LoopID: loopID,
 			State:  agentic.LoopStateFailed,
-		}, fmt.Errorf("loop timeout exceeded")
+		}
+		// Publish failure event
+		if failMsg, err := h.buildFailureEvent(loopID, "timeout", "loop timeout exceeded"); err == nil {
+			result.PublishedMessages = []PublishedMessage{failMsg}
+		}
+		return result, fmt.Errorf("loop timeout exceeded")
 	}
 
 	entity, err := h.loopManager.GetLoop(loopID)
@@ -439,6 +455,13 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 			}
 			result.State = agentic.LoopStateFailed
 			result.MaxIterationsReached = true
+
+			// Publish failure event
+			errorMsg := fmt.Sprintf("max iterations (%d) reached", entity.MaxIterations)
+			if failMsg, fErr := h.buildFailureEvent(loopID, "max_iterations", errorMsg); fErr == nil {
+				result.PublishedMessages = append(result.PublishedMessages, failMsg)
+			}
+
 			return result, nil
 		}
 
@@ -494,6 +517,38 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 	}
 
 	return result, nil
+}
+
+// buildFailureEvent creates a failure event for publishing
+func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (PublishedMessage, error) {
+	entity, err := h.loopManager.GetLoop(loopID)
+	if err != nil {
+		return PublishedMessage{}, err
+	}
+
+	failure := map[string]any{
+		"loop_id":       loopID,
+		"task_id":       entity.TaskID,
+		"outcome":       "failed",
+		"reason":        reason,
+		"error":         errorMsg,
+		"role":          entity.Role,
+		"model":         entity.Model,
+		"iterations":    entity.Iterations,
+		"workflow_slug": entity.WorkflowSlug,
+		"workflow_step": entity.WorkflowStep,
+		"failed_at":     time.Now().Format(time.RFC3339),
+	}
+
+	data, err := json.Marshal(failure)
+	if err != nil {
+		return PublishedMessage{}, err
+	}
+
+	return PublishedMessage{
+		Subject: subjectAgentFailed + "." + loopID,
+		Data:    data,
+	}, nil
 }
 
 // GetLoop retrieves a loop entity (for testing)

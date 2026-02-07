@@ -286,6 +286,26 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to agent.created: %w", err)
 	}
 
+	// Subscribe to loop failed events
+	agentFailedCfg := natsclient.StreamConsumerConfig{
+		StreamName:    "AGENT",
+		ConsumerName:  "agentic-dispatch-agent-failed",
+		FilterSubject: "agent.failed.*",
+		DeliverPolicy: "new",
+		AckPolicy:     "explicit",
+		MaxDeliver:    3,
+		AutoCreate:    false,
+	}
+	err = c.natsClient.ConsumeStreamWithConfig(ctx, agentFailedCfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		c.handleAgentFailed(msgCtx, msg.Data())
+		if ackErr := msg.Ack(); ackErr != nil {
+			c.logger.Error("Failed to ack agent failed message", slog.String("error", ackErr.Error()))
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to agent.failed: %w", err)
+	}
+
 	return nil
 }
 
@@ -643,6 +663,55 @@ func (c *Component) handleAgentCreated(_ context.Context, data []byte) {
 		slog.String("loop_id", created.LoopID),
 		slog.String("workflow_slug", created.WorkflowSlug),
 		slog.String("workflow_step", created.WorkflowStep))
+}
+
+// handleAgentFailed processes loop failure events
+func (c *Component) handleAgentFailed(ctx context.Context, data []byte) {
+	var failure struct {
+		LoopID       string `json:"loop_id"`
+		TaskID       string `json:"task_id"`
+		Outcome      string `json:"outcome"`
+		Reason       string `json:"reason"`
+		Error        string `json:"error"`
+		WorkflowSlug string `json:"workflow_slug"`
+		WorkflowStep string `json:"workflow_step"`
+	}
+
+	if err := json.Unmarshal(data, &failure); err != nil {
+		c.logger.Error("Failed to unmarshal failure", slog.String("error", err.Error()))
+		return
+	}
+
+	// Update loop state
+	c.loopTracker.UpdateState(failure.LoopID, "failed")
+
+	// Record metrics
+	c.metrics.recordLoopEnded()
+	c.metrics.recordCompletionReceived("failed")
+
+	// Get loop info for response routing
+	loopInfo := c.loopTracker.Get(failure.LoopID)
+	if loopInfo == nil {
+		c.logger.Warn("Failure for unknown loop", slog.String("loop_id", failure.LoopID))
+		return
+	}
+
+	// Send error response to user
+	c.sendResponse(ctx, agentic.UserResponse{
+		ResponseID:  uuid.New().String(),
+		ChannelType: loopInfo.ChannelType,
+		ChannelID:   loopInfo.ChannelID,
+		UserID:      loopInfo.UserID,
+		InReplyTo:   failure.LoopID,
+		Type:        agentic.ResponseTypeError,
+		Content:     fmt.Sprintf("Loop %s failed: %s", failure.LoopID, failure.Error),
+		Timestamp:   time.Now(),
+	})
+
+	c.logger.Info("Loop failed",
+		slog.String("loop_id", failure.LoopID),
+		slog.String("reason", failure.Reason),
+		slog.String("error", failure.Error))
 }
 
 // sendResponse publishes a response to the user's channel
