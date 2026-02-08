@@ -27,10 +27,27 @@ func (r AgentRequest) Validate() error {
 	if len(r.Messages) == 0 {
 		return fmt.Errorf("messages cannot be empty")
 	}
-	if r.Role != "architect" && r.Role != "editor" && r.Role != "general" {
-		return fmt.Errorf("role must be one of: architect, editor, general")
+	if r.Role != RoleArchitect && r.Role != RoleEditor && r.Role != RoleGeneral {
+		return fmt.Errorf("role must be one of: %s, %s, %s", RoleArchitect, RoleEditor, RoleGeneral)
 	}
 	return nil
+}
+
+// Schema implements message.Payload
+func (r *AgentRequest) Schema() message.Type {
+	return message.Type{Domain: Domain, Category: CategoryRequest, Version: SchemaVersion}
+}
+
+// MarshalJSON implements json.Marshaler
+func (r *AgentRequest) MarshalJSON() ([]byte, error) {
+	type Alias AgentRequest
+	return json.Marshal((*Alias)(r))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (r *AgentRequest) UnmarshalJSON(data []byte) error {
+	type Alias AgentRequest
+	return json.Unmarshal(data, (*Alias)(r))
 }
 
 // AgentResponse represents a response from an agentic service
@@ -44,15 +61,15 @@ type AgentResponse struct {
 
 // Validate checks if the AgentResponse is valid
 func (r AgentResponse) Validate() error {
-	if r.Status != "complete" && r.Status != "tool_call" && r.Status != "error" {
-		return fmt.Errorf("status must be one of: complete, tool_call, error")
+	if r.Status != StatusComplete && r.Status != StatusToolCall && r.Status != StatusError {
+		return fmt.Errorf("status must be one of: %s, %s, %s", StatusComplete, StatusToolCall, StatusError)
 	}
 	return nil
 }
 
 // Schema implements message.Payload
 func (r *AgentResponse) Schema() message.Type {
-	return message.Type{Domain: "agentic", Category: "response", Version: "v1"}
+	return message.Type{Domain: Domain, Category: CategoryResponse, Version: SchemaVersion}
 }
 
 // MarshalJSON implements json.Marshaler

@@ -62,7 +62,7 @@ func (m UserMessage) Validate() error {
 
 // Schema implements message.Payload
 func (m *UserMessage) Schema() message.Type {
-	return message.Type{Domain: "agentic", Category: "user_message", Version: "v1"}
+	return message.Type{Domain: Domain, Category: CategoryUserMessage, Version: SchemaVersion}
 }
 
 // MarshalJSON implements json.Marshaler
@@ -121,7 +121,7 @@ func (s UserSignal) Validate() error {
 
 // Schema implements message.Payload
 func (s *UserSignal) Schema() message.Type {
-	return message.Type{Domain: "agentic", Category: "signal", Version: "v1"}
+	return message.Type{Domain: Domain, Category: CategorySignal, Version: SchemaVersion}
 }
 
 // MarshalJSON implements json.Marshaler
@@ -199,7 +199,7 @@ func (r UserResponse) Validate() error {
 
 // Schema implements message.Payload
 func (r *UserResponse) Schema() message.Type {
-	return message.Type{Domain: "agentic", Category: "user_response", Version: "v1"}
+	return message.Type{Domain: Domain, Category: CategoryUserResponse, Version: SchemaVersion}
 }
 
 // MarshalJSON implements json.Marshaler
@@ -276,7 +276,7 @@ func (t TaskMessage) Validate() error {
 
 // Schema implements message.Payload
 func (t *TaskMessage) Schema() message.Type {
-	return message.Type{Domain: "agentic", Category: "task", Version: "v1"}
+	return message.Type{Domain: Domain, Category: CategoryTask, Version: SchemaVersion}
 }
 
 // MarshalJSON implements json.Marshaler

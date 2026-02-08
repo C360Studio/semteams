@@ -15,6 +15,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -367,7 +368,8 @@ func (c *Component) executeWithTimeout(ctx context.Context, call agentic.ToolCal
 
 // publishResult publishes a tool result to JetStream
 func (c *Component) publishResult(ctx context.Context, result agentic.ToolResult) error {
-	data, err := json.Marshal(result)
+	resultMsg := message.NewBaseMessage(result.Schema(), &result, "agentic-tools")
+	data, err := json.Marshal(resultMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal result: %w", err)
 	}

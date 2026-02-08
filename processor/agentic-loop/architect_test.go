@@ -57,29 +57,25 @@ func TestArchitectCompletion_ProducesEnrichedCompletionState(t *testing.T) {
 	}
 
 	// Verify completion state fields
-	if result.CompletionState["role"] != "architect" {
-		t.Errorf("CompletionState[role] = %v, want architect", result.CompletionState["role"])
+	if result.CompletionState.Role != "architect" {
+		t.Errorf("CompletionState.Role = %v, want architect", result.CompletionState.Role)
 	}
-	if result.CompletionState["outcome"] != "success" {
-		t.Errorf("CompletionState[outcome] = %v, want success", result.CompletionState["outcome"])
+	if result.CompletionState.Outcome != agentic.OutcomeSuccess {
+		t.Errorf("CompletionState.Outcome = %v, want %s", result.CompletionState.Outcome, agentic.OutcomeSuccess)
 	}
-	if result.CompletionState["task_id"] != "task-001" {
-		t.Errorf("CompletionState[task_id] = %v, want task-001", result.CompletionState["task_id"])
+	if result.CompletionState.TaskID != "task-001" {
+		t.Errorf("CompletionState.TaskID = %v, want task-001", result.CompletionState.TaskID)
 	}
-	if result.CompletionState["loop_id"] != architectLoopID {
-		t.Errorf("CompletionState[loop_id] = %v, want %s", result.CompletionState["loop_id"], architectLoopID)
+	if result.CompletionState.LoopID != architectLoopID {
+		t.Errorf("CompletionState.LoopID = %v, want %s", result.CompletionState.LoopID, architectLoopID)
 	}
-	if result.CompletionState["model"] != "qwen-32b" {
-		t.Errorf("CompletionState[model] = %v, want qwen-32b", result.CompletionState["model"])
+	if result.CompletionState.Model != "qwen-32b" {
+		t.Errorf("CompletionState.Model = %v, want qwen-32b", result.CompletionState.Model)
 	}
 
 	// Result should include the architect's output for rules engine
-	resultContent, ok := result.CompletionState["result"].(string)
-	if !ok {
-		t.Fatal("CompletionState[result] should be a string")
-	}
-	if resultContent != architectOutput {
-		t.Errorf("CompletionState[result] = %v, want %s", resultContent, architectOutput)
+	if result.CompletionState.Result != architectOutput {
+		t.Errorf("CompletionState.Result = %v, want %s", result.CompletionState.Result, architectOutput)
 	}
 }
 
@@ -121,10 +117,16 @@ func TestArchitectCompletion_PublishesAgentComplete(t *testing.T) {
 		if containsIgnoreCase(msg.Subject, "agent.complete") {
 			foundComplete = true
 
-			// Parse the completion message
-			var completion map[string]any
-			if err := json.Unmarshal(msg.Data, &completion); err != nil {
-				t.Fatalf("Failed to parse completion message: %v", err)
+			// Parse the BaseMessage envelope
+			var envelope map[string]any
+			if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+				t.Fatalf("Failed to parse envelope message: %v", err)
+			}
+
+			// Extract payload from BaseMessage envelope
+			completion, ok := envelope["payload"].(map[string]any)
+			if !ok {
+				t.Fatalf("Expected payload in BaseMessage envelope, got: %v", envelope)
 			}
 
 			// Verify enriched fields for rules engine
@@ -186,8 +188,8 @@ func TestEditorCompletion_DoesNotChain(t *testing.T) {
 	if result.CompletionState == nil {
 		t.Fatal("CompletionState should not be nil")
 	}
-	if result.CompletionState["role"] != "editor" {
-		t.Errorf("CompletionState[role] = %v, want editor", result.CompletionState["role"])
+	if result.CompletionState.Role != "editor" {
+		t.Errorf("CompletionState.Role = %v, want editor", result.CompletionState.Role)
 	}
 
 	// Should publish agent.complete
@@ -242,8 +244,8 @@ func TestGeneralRoleCompletion_ProducesCompletionState(t *testing.T) {
 	if result.CompletionState == nil {
 		t.Fatal("CompletionState should not be nil")
 	}
-	if result.CompletionState["role"] != "general" {
-		t.Errorf("CompletionState[role] = %v, want general", result.CompletionState["role"])
+	if result.CompletionState.Role != "general" {
+		t.Errorf("CompletionState.Role = %v, want general", result.CompletionState.Role)
 	}
 }
 
@@ -319,11 +321,11 @@ func TestArchitectWithToolCalls_CompletionAfterTools(t *testing.T) {
 	if completeResult.CompletionState == nil {
 		t.Fatal("CompletionState should not be nil after completion")
 	}
-	if completeResult.CompletionState["role"] != "architect" {
-		t.Errorf("CompletionState[role] = %v, want architect", completeResult.CompletionState["role"])
+	if completeResult.CompletionState.Role != "architect" {
+		t.Errorf("CompletionState.Role = %v, want architect", completeResult.CompletionState.Role)
 	}
-	if completeResult.CompletionState["outcome"] != "success" {
-		t.Errorf("CompletionState[outcome] = %v, want success", completeResult.CompletionState["outcome"])
+	if completeResult.CompletionState.Outcome != agentic.OutcomeSuccess {
+		t.Errorf("CompletionState.Outcome = %v, want %s", completeResult.CompletionState.Outcome, agentic.OutcomeSuccess)
 	}
 }
 
@@ -420,11 +422,7 @@ func TestCompletionState_IncludesIterations(t *testing.T) {
 		t.Fatal("CompletionState should not be nil")
 	}
 
-	iterations, ok := result.CompletionState["iterations"].(int)
-	if !ok {
-		t.Fatalf("iterations should be an int, got %T", result.CompletionState["iterations"])
-	}
-	if iterations < 1 {
-		t.Errorf("iterations = %d, want >= 1", iterations)
+	if result.CompletionState.Iterations < 1 {
+		t.Errorf("iterations = %d, want >= 1", result.CompletionState.Iterations)
 	}
 }

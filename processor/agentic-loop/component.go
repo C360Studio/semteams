@@ -440,23 +440,10 @@ func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
 		return
 	}
 
-	agenticTask, ok := baseMsg.Payload().(*agentic.TaskMessage)
+	task, ok := baseMsg.Payload().(*agentic.TaskMessage)
 	if !ok {
 		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
 		return
-	}
-
-	task := TaskMessage{
-		LoopID:       agenticTask.LoopID,
-		TaskID:       agenticTask.TaskID,
-		Role:         agenticTask.Role,
-		Model:        agenticTask.Model,
-		Prompt:       agenticTask.Prompt,
-		WorkflowSlug: agenticTask.WorkflowSlug,
-		WorkflowStep: agenticTask.WorkflowStep,
-		ChannelType:  agenticTask.ChannelType,
-		ChannelID:    agenticTask.ChannelID,
-		UserID:       agenticTask.UserID,
 	}
 
 	c.logger.Info("Processing task message",
@@ -465,7 +452,7 @@ func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
 		slog.String("model", task.Model))
 
 	// Handle the task using the message handler
-	result, err := c.handler.HandleTask(ctx, task)
+	result, err := c.handler.HandleTask(ctx, *task)
 	if err != nil {
 		c.logger.Error("Failed to handle task", "error", err, "task_id", task.TaskID)
 		return
@@ -665,8 +652,9 @@ func (c *Component) publishResults(ctx context.Context, result HandlerResult) {
 }
 
 // publishContextEvent publishes a context management event
-func (c *Component) publishContextEvent(ctx context.Context, event ContextEvent) {
-	data, err := json.Marshal(event)
+func (c *Component) publishContextEvent(ctx context.Context, event agentic.ContextEvent) {
+	eventMsg := message.NewBaseMessage(event.Schema(), &event, "agentic-loop")
+	data, err := json.Marshal(eventMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal context event", "error", err, "type", event.Type)
 		return
@@ -681,12 +669,10 @@ func (c *Component) publishContextEvent(ctx context.Context, event ContextEvent)
 // persistCompletionState persists the enriched completion state to KV.
 // Key pattern: COMPLETE_{loopID} for rules engine to watch.
 // The rules engine can then trigger follow-up actions based on completion data.
-func (c *Component) persistCompletionState(ctx context.Context, loopID string, completion map[string]any) {
-	if c.loopsBucket == nil {
+func (c *Component) persistCompletionState(ctx context.Context, loopID string, completion *agentic.LoopCompletedEvent) {
+	if c.loopsBucket == nil || completion == nil {
 		return
 	}
-
-	completion["completed_at"] = time.Now().Format(time.RFC3339)
 
 	data, err := json.Marshal(completion)
 	if err != nil {
@@ -704,7 +690,7 @@ func (c *Component) persistCompletionState(ctx context.Context, loopID string, c
 	c.logger.Debug("Persisted completion state",
 		slog.String("loop_id", loopID),
 		slog.String("key", key),
-		slog.String("role", fmt.Sprintf("%v", completion["role"])))
+		slog.String("role", completion.Role))
 }
 
 // persistLoopState persists the loop state to KV
@@ -908,21 +894,16 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 	}
 
 	// Publish completion event
-	completion := struct {
-		LoopID      string    `json:"loop_id"`
-		TaskID      string    `json:"task_id"`
-		Outcome     string    `json:"outcome"`
-		CancelledBy string    `json:"cancelled_by"`
-		CancelledAt time.Time `json:"cancelled_at"`
-	}{
+	completion := agentic.LoopCancelledEvent{
 		LoopID:      loopID,
 		TaskID:      entity.TaskID,
-		Outcome:     "cancelled",
+		Outcome:     agentic.OutcomeCancelled,
 		CancelledBy: signal.UserID,
 		CancelledAt: now,
 	}
 
-	completionData, err := json.Marshal(completion)
+	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "agentic-loop")
+	completionData, err := json.Marshal(completionMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal completion",
 			slog.String("error", err.Error()),

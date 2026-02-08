@@ -44,6 +44,23 @@ func (t ToolCall) Validate() error {
 	return nil
 }
 
+// Schema implements message.Payload
+func (t *ToolCall) Schema() message.Type {
+	return message.Type{Domain: Domain, Category: CategoryToolCall, Version: SchemaVersion}
+}
+
+// MarshalJSON implements json.Marshaler
+func (t *ToolCall) MarshalJSON() ([]byte, error) {
+	type Alias ToolCall
+	return json.Marshal((*Alias)(t))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (t *ToolCall) UnmarshalJSON(data []byte) error {
+	type Alias ToolCall
+	return json.Unmarshal(data, (*Alias)(t))
+}
+
 // ToolResult represents the result of a tool call
 type ToolResult struct {
 	CallID   string         `json:"call_id"`
@@ -62,7 +79,7 @@ func (t ToolResult) Validate() error {
 
 // Schema implements message.Payload
 func (t *ToolResult) Schema() message.Type {
-	return message.Type{Domain: "agentic", Category: "tool_result", Version: "v1"}
+	return message.Type{Domain: Domain, Category: CategoryToolResult, Version: SchemaVersion}
 }
 
 // MarshalJSON implements json.Marshaler

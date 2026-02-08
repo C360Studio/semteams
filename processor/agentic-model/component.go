@@ -14,6 +14,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -424,7 +425,8 @@ func (c *Component) ResolveEndpoint(modelName string) (Endpoint, error) {
 
 // publishResponse publishes an agent response to JetStream
 func (c *Component) publishResponse(ctx context.Context, resp agentic.AgentResponse) error {
-	data, err := json.Marshal(resp)
+	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "agentic-model")
+	data, err := json.Marshal(respMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal response: %w", err)
 	}

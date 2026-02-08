@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 )
 
@@ -271,6 +273,28 @@ type SignalMessage struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// Validate implements message.Payload
+func (s *SignalMessage) Validate() error {
+	return nil
+}
+
+// Schema implements message.Payload
+func (s *SignalMessage) Schema() message.Type {
+	return message.Type{Domain: agentic.Domain, Category: agentic.CategorySignalMessage, Version: agentic.SchemaVersion}
+}
+
+// MarshalJSON implements json.Marshaler
+func (s *SignalMessage) MarshalJSON() ([]byte, error) {
+	type Alias SignalMessage
+	return json.Marshal((*Alias)(s))
+}
+
+// UnmarshalJSON implements json.Unmarshaler
+func (s *SignalMessage) UnmarshalJSON(data []byte) error {
+	type Alias SignalMessage
+	return json.Unmarshal(data, (*Alias)(s))
+}
+
 // SendSignal publishes a control signal to a loop via NATS.
 func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, loopID, signalType, reason string) error {
 	if nc == nil {
@@ -284,7 +308,8 @@ func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, loo
 		Timestamp: time.Now(),
 	}
 
-	data, err := json.Marshal(signal)
+	signalMsg := message.NewBaseMessage(signal.Schema(), &signal, "agentic-dispatch")
+	data, err := json.Marshal(signalMsg)
 	if err != nil {
 		return fmt.Errorf("marshal signal for loop %s: %w", loopID, err)
 	}

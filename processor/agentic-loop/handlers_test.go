@@ -48,22 +48,28 @@ func TestHandleTask_CreatesLoop(t *testing.T) {
 		if msg.Subject == "agent.request."+result.LoopID {
 			found = true
 
-			// Verify request content
-			var req agentic.AgentRequest
-			if err := json.Unmarshal(msg.Data, &req); err != nil {
-				t.Fatalf("Failed to unmarshal agent request: %v", err)
+			// Extract request from BaseMessage envelope
+			var envelope map[string]any
+			if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+				t.Fatalf("Failed to unmarshal envelope: %v", err)
+			}
+			payload, ok := envelope["payload"].(map[string]any)
+			if !ok {
+				t.Fatalf("Expected payload in BaseMessage envelope")
 			}
 
-			if req.LoopID != result.LoopID {
-				t.Errorf("Request.LoopID = %s, want %s", req.LoopID, result.LoopID)
+			// Verify request content
+			if payload["loop_id"] != result.LoopID {
+				t.Errorf("Request.LoopID = %v, want %s", payload["loop_id"], result.LoopID)
 			}
-			if req.Role != taskMsg.Role {
-				t.Errorf("Request.Role = %s, want %s", req.Role, taskMsg.Role)
+			if payload["role"] != taskMsg.Role {
+				t.Errorf("Request.Role = %v, want %s", payload["role"], taskMsg.Role)
 			}
-			if req.Model != taskMsg.Model {
-				t.Errorf("Request.Model = %s, want %s", req.Model, taskMsg.Model)
+			if payload["model"] != taskMsg.Model {
+				t.Errorf("Request.Model = %v, want %s", payload["model"], taskMsg.Model)
 			}
-			if len(req.Messages) == 0 {
+			messages, ok := payload["messages"].([]any)
+			if !ok || len(messages) == 0 {
 				t.Error("Request.Messages should not be empty")
 			}
 			break
@@ -268,8 +274,8 @@ func TestHandleModelResponse_Complete_General(t *testing.T) {
 	if result.CompletionState == nil {
 		t.Error("CompletionState should not be nil on completion")
 	}
-	if result.CompletionState["role"] != "general" {
-		t.Errorf("CompletionState[role] = %v, want general", result.CompletionState["role"])
+	if result.CompletionState.Role != "general" {
+		t.Errorf("CompletionState.Role = %v, want general", result.CompletionState.Role)
 	}
 }
 
@@ -320,20 +326,20 @@ func TestHandleModelResponse_Complete_Architect(t *testing.T) {
 	if result.CompletionState == nil {
 		t.Fatal("CompletionState should not be nil")
 	}
-	if result.CompletionState["role"] != "architect" {
-		t.Errorf("CompletionState[role] = %v, want architect", result.CompletionState["role"])
+	if result.CompletionState.Role != "architect" {
+		t.Errorf("CompletionState.Role = %v, want architect", result.CompletionState.Role)
 	}
-	if result.CompletionState["outcome"] != "success" {
-		t.Errorf("CompletionState[outcome] = %v, want success", result.CompletionState["outcome"])
+	if result.CompletionState.Outcome != agentic.OutcomeSuccess {
+		t.Errorf("CompletionState.Outcome = %v, want %s", result.CompletionState.Outcome, agentic.OutcomeSuccess)
 	}
-	if result.CompletionState["result"] != architectOutput {
-		t.Errorf("CompletionState[result] = %v, want %s", result.CompletionState["result"], architectOutput)
+	if result.CompletionState.Result != architectOutput {
+		t.Errorf("CompletionState.Result = %v, want %s", result.CompletionState.Result, architectOutput)
 	}
-	if result.CompletionState["task_id"] != "task-001" {
-		t.Errorf("CompletionState[task_id] = %v, want task-001", result.CompletionState["task_id"])
+	if result.CompletionState.TaskID != "task-001" {
+		t.Errorf("CompletionState.TaskID = %v, want task-001", result.CompletionState.TaskID)
 	}
-	if result.CompletionState["model"] != "qwen-32b" {
-		t.Errorf("CompletionState[model] = %v, want qwen-32b", result.CompletionState["model"])
+	if result.CompletionState.Model != "qwen-32b" {
+		t.Errorf("CompletionState.Model = %v, want qwen-32b", result.CompletionState.Model)
 	}
 
 	// Should publish agent.complete (rules engine watches this)
@@ -451,12 +457,18 @@ func TestHandleToolResult_SingleTool(t *testing.T) {
 		if containsIgnoreCase(msg.Subject, "agent.request") {
 			found = true
 
-			// Verify request includes tool result
-			var req agentic.AgentRequest
-			if err := json.Unmarshal(msg.Data, &req); err == nil {
-				if len(req.Messages) == 0 {
-					t.Error("Request should include messages with tool result")
-				}
+			// Verify request includes tool result (wrapped in BaseMessage envelope)
+			var envelope map[string]any
+			if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+				t.Fatalf("Failed to parse envelope: %v", err)
+			}
+			payload, ok := envelope["payload"].(map[string]any)
+			if !ok {
+				t.Fatalf("Expected payload in BaseMessage envelope")
+			}
+			messages, ok := payload["messages"].([]any)
+			if !ok || len(messages) == 0 {
+				t.Error("Request should include messages with tool result")
 			}
 			break
 		}

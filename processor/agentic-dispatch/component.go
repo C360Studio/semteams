@@ -725,7 +725,8 @@ func (c *Component) handleAgentFailed(ctx context.Context, data []byte) {
 
 // sendResponse publishes a response to the user's channel
 func (c *Component) sendResponse(ctx context.Context, resp agentic.UserResponse) {
-	data, err := json.Marshal(resp)
+	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "agentic-dispatch")
+	data, err := json.Marshal(respMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal response", slog.String("error", err.Error()))
 		return
