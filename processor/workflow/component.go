@@ -430,6 +430,48 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 	return fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries)
 }
 
+// buildMergedPayload creates a JSON blob with struct fields merged with Data.
+// Struct fields take precedence over Data fields with the same name.
+func buildMergedPayload(trigger *TriggerPayload) (json.RawMessage, error) {
+	result := make(map[string]any)
+
+	// First, parse Data blob (base layer)
+	if trigger.Data != nil && len(trigger.Data) > 0 {
+		if err := json.Unmarshal(trigger.Data, &result); err != nil {
+			// Data might not be a JSON object - store it as-is under "_data"
+			result["_data"] = string(trigger.Data)
+		}
+	}
+
+	// Then, overlay struct fields (takes precedence over Data)
+	if trigger.WorkflowID != "" {
+		result["workflow_id"] = trigger.WorkflowID
+	}
+	if trigger.Role != "" {
+		result["role"] = trigger.Role
+	}
+	if trigger.Model != "" {
+		result["model"] = trigger.Model
+	}
+	if trigger.Prompt != "" {
+		result["prompt"] = trigger.Prompt
+	}
+	if trigger.UserID != "" {
+		result["user_id"] = trigger.UserID
+	}
+	if trigger.ChannelType != "" {
+		result["channel_type"] = trigger.ChannelType
+	}
+	if trigger.ChannelID != "" {
+		result["channel_id"] = trigger.ChannelID
+	}
+	if trigger.RequestID != "" {
+		result["request_id"] = trigger.RequestID
+	}
+
+	return json.Marshal(result)
+}
+
 // handleTriggerMessage processes workflow trigger messages
 func (c *Component) handleTriggerMessage(ctx context.Context, data []byte) {
 	var baseMsg message.BaseMessage
@@ -445,7 +487,6 @@ func (c *Component) handleTriggerMessage(ctx context.Context, data []byte) {
 	}
 
 	workflowID := trigger.WorkflowID
-	triggerPayload := trigger.Data
 
 	// Get workflow definition
 	workflow, ok := c.registry.Get(workflowID)
@@ -465,10 +506,17 @@ func (c *Component) handleTriggerMessage(ctx context.Context, data []byte) {
 		timeout, _ = time.ParseDuration(c.config.DefaultTimeout)
 	}
 
-	// Create trigger context
+	// Build merged payload for TriggerContext (struct fields + Data)
+	mergedPayload, err := buildMergedPayload(trigger)
+	if err != nil {
+		c.logger.Error("Failed to build merged payload", "error", err)
+		return
+	}
+
+	// Create trigger context with merged payload
 	triggerCtx := TriggerContext{
 		Subject:   fmt.Sprintf("workflow.trigger.%s", workflowID),
-		Payload:   triggerPayload,
+		Payload:   mergedPayload,
 		Timestamp: time.Now(),
 	}
 
@@ -533,16 +581,28 @@ func (c *Component) handleStepCompleteMessage(ctx context.Context, data []byte) 
 		return
 	}
 
-	// Build step result
+	// Parse duration from message
+	var duration time.Duration
+	if msg.Duration != "" {
+		var err error
+		duration, err = time.ParseDuration(msg.Duration)
+		if err != nil {
+			c.logger.Warn("Invalid duration in step complete message",
+				"duration", msg.Duration,
+				"error", err)
+		}
+	}
+
+	// Build step result from message fields
 	stepResult := StepResult{
 		StepName:    msg.StepName,
 		Status:      msg.Status,
 		Output:      msg.Output,
 		Error:       msg.Error,
-		StartedAt:   exec.UpdatedAt,
-		CompletedAt: time.Now(),
-		Duration:    time.Since(exec.UpdatedAt),
-		Iteration:   exec.Iteration,
+		StartedAt:   msg.StartedAt,
+		CompletedAt: msg.CompletedAt,
+		Duration:    duration,
+		Iteration:   msg.Iteration,
 	}
 
 	// Continue execution

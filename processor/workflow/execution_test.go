@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -267,10 +268,15 @@ func TestEvent(t *testing.T) {
 }
 
 func TestStepCompleteMessage(t *testing.T) {
+	now := time.Now().Truncate(time.Second)
 	msg := StepCompleteMessage{
 		ExecutionID: "exec_123",
 		StepName:    "review",
 		Status:      "success",
+		StartedAt:   now.Add(-time.Second),
+		CompletedAt: now,
+		Duration:    "1s",
+		Iteration:   1,
 		Output:      json.RawMessage(`{"issues": []}`),
 	}
 
@@ -292,5 +298,255 @@ func TestStepCompleteMessage(t *testing.T) {
 	}
 	if decoded.Status != msg.Status {
 		t.Errorf("Status = %q, want %q", decoded.Status, msg.Status)
+	}
+	if decoded.Duration != msg.Duration {
+		t.Errorf("Duration = %q, want %q", decoded.Duration, msg.Duration)
+	}
+	if decoded.Iteration != msg.Iteration {
+		t.Errorf("Iteration = %d, want %d", decoded.Iteration, msg.Iteration)
+	}
+}
+
+func TestTriggerPayloadValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload TriggerPayload
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name:    "valid minimal",
+			payload: TriggerPayload{WorkflowID: "test-workflow"},
+			wantErr: false,
+		},
+		{
+			name: "valid with all fields",
+			payload: TriggerPayload{
+				WorkflowID:  "test-workflow",
+				Role:        "architect",
+				Model:       "claude-3-opus",
+				Prompt:      "Design a feature",
+				UserID:      "user-123",
+				ChannelType: "slack",
+				ChannelID:   "C12345",
+				RequestID:   "req-abc",
+				Data:        json.RawMessage(`{"custom": "data"}`),
+			},
+			wantErr: false,
+		},
+		{
+			name:    "missing workflow_id",
+			payload: TriggerPayload{Role: "test"},
+			wantErr: true,
+			errMsg:  "workflow_id required",
+		},
+		{
+			name:    "invalid data json",
+			payload: TriggerPayload{WorkflowID: "test", Data: json.RawMessage(`{invalid}`)},
+			wantErr: true,
+			errMsg:  "data must be valid JSON",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.payload.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && tt.errMsg != "" {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Validate() error = %q, want to contain %q", err.Error(), tt.errMsg)
+				}
+			}
+		})
+	}
+}
+
+func TestStepCompleteMessageValidation(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name    string
+		msg     StepCompleteMessage
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid with all fields",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "success",
+				StartedAt:   now.Add(-time.Second),
+				CompletedAt: now,
+				Duration:    "1s",
+				Iteration:   1,
+				Output:      json.RawMessage(`{"result": "ok"}`),
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid failed status",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "failed",
+				StartedAt:   now.Add(-time.Second),
+				CompletedAt: now,
+				Duration:    "1s",
+				Iteration:   1,
+				Error:       "something went wrong",
+			},
+			wantErr: false,
+		},
+		{
+			name: "missing execution_id",
+			msg: StepCompleteMessage{
+				StepName:    "step1",
+				Status:      "success",
+				StartedAt:   now.Add(-time.Second),
+				CompletedAt: now,
+				Duration:    "1s",
+				Iteration:   1,
+			},
+			wantErr: true,
+			errMsg:  "execution_id required",
+		},
+		{
+			name: "missing step_name",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				Status:      "success",
+				StartedAt:   now.Add(-time.Second),
+				CompletedAt: now,
+				Duration:    "1s",
+				Iteration:   1,
+			},
+			wantErr: true,
+			errMsg:  "step_name required",
+		},
+		{
+			name: "invalid status",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "pending",
+				StartedAt:   now.Add(-time.Second),
+				CompletedAt: now,
+				Duration:    "1s",
+				Iteration:   1,
+			},
+			wantErr: true,
+			errMsg:  "status must be one of",
+		},
+		{
+			name: "missing started_at",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "success",
+				CompletedAt: now,
+				Duration:    "1s",
+				Iteration:   1,
+			},
+			wantErr: true,
+			errMsg:  "started_at required",
+		},
+		{
+			name: "missing completed_at",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "success",
+				StartedAt:   now.Add(-time.Second),
+				Duration:    "1s",
+				Iteration:   1,
+			},
+			wantErr: true,
+			errMsg:  "completed_at required",
+		},
+		{
+			name: "completed_at before started_at",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "success",
+				StartedAt:   now,
+				CompletedAt: now.Add(-time.Second),
+				Duration:    "1s",
+				Iteration:   1,
+			},
+			wantErr: true,
+			errMsg:  "completed_at cannot be before started_at",
+		},
+		{
+			name: "missing duration",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "success",
+				StartedAt:   now.Add(-time.Second),
+				CompletedAt: now,
+				Iteration:   1,
+			},
+			wantErr: true,
+			errMsg:  "duration required",
+		},
+		{
+			name: "invalid duration format",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "success",
+				StartedAt:   now.Add(-time.Second),
+				CompletedAt: now,
+				Duration:    "invalid",
+				Iteration:   1,
+			},
+			wantErr: true,
+			errMsg:  "duration must be valid",
+		},
+		{
+			name: "zero iteration",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "success",
+				StartedAt:   now.Add(-time.Second),
+				CompletedAt: now,
+				Duration:    "1s",
+				Iteration:   0,
+			},
+			wantErr: true,
+			errMsg:  "iteration must be >= 1",
+		},
+		{
+			name: "negative iteration",
+			msg: StepCompleteMessage{
+				ExecutionID: "exec-1",
+				StepName:    "step1",
+				Status:      "success",
+				StartedAt:   now.Add(-time.Second),
+				CompletedAt: now,
+				Duration:    "1s",
+				Iteration:   -1,
+			},
+			wantErr: true,
+			errMsg:  "iteration must be >= 1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.msg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && tt.errMsg != "" {
+				if !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("Validate() error = %q, want to contain %q", err.Error(), tt.errMsg)
+				}
+			}
+		})
 	}
 }

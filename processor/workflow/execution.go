@@ -320,11 +320,22 @@ type Event struct {
 
 // StepCompleteMessage represents a step completion message from an agent
 type StepCompleteMessage struct {
-	ExecutionID string          `json:"execution_id"`
-	StepName    string          `json:"step_name"`
-	Status      string          `json:"status"` // success, failed
-	Output      json.RawMessage `json:"output,omitempty"`
-	Error       string          `json:"error,omitempty"`
+	// Required fields
+	ExecutionID string `json:"execution_id"`
+	StepName    string `json:"step_name"`
+	Status      string `json:"status"` // success, failed
+
+	// Timing fields
+	StartedAt   time.Time `json:"started_at,omitempty"`
+	CompletedAt time.Time `json:"completed_at,omitempty"`
+	Duration    string    `json:"duration,omitempty"` // Duration as string (e.g., "1.5s")
+
+	// Iteration context
+	Iteration int `json:"iteration,omitempty"` // Which loop iteration this belongs to
+
+	// Output/Error
+	Output json.RawMessage `json:"output,omitempty"`
+	Error  string          `json:"error,omitempty"`
 }
 
 // Validate checks if the StepCompleteMessage is valid
@@ -337,6 +348,26 @@ func (m StepCompleteMessage) Validate() error {
 	}
 	if m.Status != "success" && m.Status != "failed" {
 		return fmt.Errorf("status must be one of: success, failed")
+	}
+	// Timing fields are required
+	if m.StartedAt.IsZero() {
+		return fmt.Errorf("started_at required")
+	}
+	if m.CompletedAt.IsZero() {
+		return fmt.Errorf("completed_at required")
+	}
+	if m.CompletedAt.Before(m.StartedAt) {
+		return fmt.Errorf("completed_at cannot be before started_at")
+	}
+	if m.Duration == "" {
+		return fmt.Errorf("duration required")
+	}
+	if _, err := time.ParseDuration(m.Duration); err != nil {
+		return fmt.Errorf("duration must be valid: %w", err)
+	}
+	// Iteration must be positive (starts at 1)
+	if m.Iteration < 1 {
+		return fmt.Errorf("iteration must be >= 1")
 	}
 	return nil
 }
@@ -391,14 +422,37 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 
 // TriggerPayload represents an incoming trigger to start a workflow
 type TriggerPayload struct {
-	WorkflowID string          `json:"workflow_id"`
-	Data       json.RawMessage `json:"data,omitempty"`
+	// Required: workflow to execute
+	WorkflowID string `json:"workflow_id"`
+
+	// Agentic context (aligned with TaskMessage pattern)
+	Role   string `json:"role,omitempty"`   // Agent role for agentic workflows
+	Model  string `json:"model,omitempty"`  // LLM model to use
+	Prompt string `json:"prompt,omitempty"` // Work instruction/prompt
+
+	// User/session context (for response routing)
+	UserID      string `json:"user_id,omitempty"`      // Who triggered this workflow
+	ChannelType string `json:"channel_type,omitempty"` // Response channel (http, cli, slack)
+	ChannelID   string `json:"channel_id,omitempty"`   // Specific channel/session ID
+
+	// Correlation
+	RequestID string `json:"request_id,omitempty"` // Correlation ID for tracing
+
+	// Custom data (fallback for truly custom fields)
+	Data json.RawMessage `json:"data,omitempty"`
 }
 
 // Validate checks if the TriggerPayload is valid
 func (p TriggerPayload) Validate() error {
 	if p.WorkflowID == "" {
 		return fmt.Errorf("workflow_id required")
+	}
+	// Validate Data is valid JSON if present
+	if p.Data != nil && len(p.Data) > 0 {
+		var temp any
+		if err := json.Unmarshal(p.Data, &temp); err != nil {
+			return fmt.Errorf("data must be valid JSON: %w", err)
+		}
 	}
 	return nil
 }

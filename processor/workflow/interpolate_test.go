@@ -358,3 +358,168 @@ func TestValueToString(t *testing.T) {
 		})
 	}
 }
+
+// TestInterpolateTriggerPayloadStructFields tests that struct fields in TriggerPayload
+// are accessible via ${trigger.payload.*} interpolation and take precedence over Data fields.
+func TestInterpolateTriggerPayloadStructFields(t *testing.T) {
+	// Build a merged payload with struct fields taking precedence over Data
+	trigger := &TriggerPayload{
+		WorkflowID:  "wf-123",
+		Role:        "developer",
+		Model:       "claude-3-opus",
+		Prompt:      "Write tests",
+		UserID:      "user-456",
+		ChannelType: "cli",
+		ChannelID:   "session-789",
+		RequestID:   "req-abc",
+		Data:        json.RawMessage(`{"custom_field": "custom_value", "role": "should_be_overwritten"}`),
+	}
+
+	mergedPayload, err := buildMergedPayload(trigger)
+	if err != nil {
+		t.Fatalf("failed to build merged payload: %v", err)
+	}
+
+	exec := &Execution{
+		ID:         "exec_123",
+		WorkflowID: "wf-123",
+		Trigger: TriggerContext{
+			Subject:   "workflow.trigger.wf-123",
+			Payload:   mergedPayload,
+			Timestamp: time.Now(),
+		},
+		StepResults: make(map[string]StepResult),
+	}
+
+	interpolator := NewInterpolator(exec)
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "struct field - role takes precedence",
+			input:    "${trigger.payload.role}",
+			expected: "developer", // struct field takes precedence over Data
+		},
+		{
+			name:     "struct field - model",
+			input:    "${trigger.payload.model}",
+			expected: "claude-3-opus",
+		},
+		{
+			name:     "struct field - prompt",
+			input:    "${trigger.payload.prompt}",
+			expected: "Write tests",
+		},
+		{
+			name:     "struct field - user_id",
+			input:    "${trigger.payload.user_id}",
+			expected: "user-456",
+		},
+		{
+			name:     "struct field - channel_type",
+			input:    "${trigger.payload.channel_type}",
+			expected: "cli",
+		},
+		{
+			name:     "struct field - channel_id",
+			input:    "${trigger.payload.channel_id}",
+			expected: "session-789",
+		},
+		{
+			name:     "struct field - request_id",
+			input:    "${trigger.payload.request_id}",
+			expected: "req-abc",
+		},
+		{
+			name:     "data field - custom",
+			input:    "${trigger.payload.custom_field}",
+			expected: "custom_value",
+		},
+		{
+			name:     "combined struct and data fields",
+			input:    "Role: ${trigger.payload.role}, Custom: ${trigger.payload.custom_field}",
+			expected: "Role: developer, Custom: custom_value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := interpolator.InterpolateString(tt.input)
+			if err != nil {
+				t.Logf("interpolation had error: %v", err)
+			}
+			if result != tt.expected {
+				t.Errorf("got %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+// TestBuildMergedPayload tests the buildMergedPayload helper function.
+func TestBuildMergedPayload(t *testing.T) {
+	tests := []struct {
+		name     string
+		trigger  *TriggerPayload
+		checkKey string
+		expected any
+	}{
+		{
+			name: "struct fields only",
+			trigger: &TriggerPayload{
+				WorkflowID: "wf-1",
+				Role:       "architect",
+				Model:      "gpt-4",
+			},
+			checkKey: "role",
+			expected: "architect",
+		},
+		{
+			name: "struct takes precedence over data",
+			trigger: &TriggerPayload{
+				WorkflowID: "wf-1",
+				Role:       "architect",
+				Data:       json.RawMessage(`{"role": "developer"}`),
+			},
+			checkKey: "role",
+			expected: "architect",
+		},
+		{
+			name: "data field preserved",
+			trigger: &TriggerPayload{
+				WorkflowID: "wf-1",
+				Data:       json.RawMessage(`{"custom": "value"}`),
+			},
+			checkKey: "custom",
+			expected: "value",
+		},
+		{
+			name: "empty trigger",
+			trigger: &TriggerPayload{
+				WorkflowID: "wf-1",
+			},
+			checkKey: "workflow_id",
+			expected: "wf-1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merged, err := buildMergedPayload(tt.trigger)
+			if err != nil {
+				t.Fatalf("buildMergedPayload failed: %v", err)
+			}
+
+			var result map[string]any
+			if err := json.Unmarshal(merged, &result); err != nil {
+				t.Fatalf("failed to unmarshal result: %v", err)
+			}
+
+			if result[tt.checkKey] != tt.expected {
+				t.Errorf("got %v, want %v", result[tt.checkKey], tt.expected)
+			}
+		})
+	}
+}
