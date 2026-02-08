@@ -32,6 +32,7 @@ func (ml *MessageLogger) RegisterHTTPHandlers(prefix string, mux *http.ServeMux)
 	mux.HandleFunc(prefix+"entries", ml.handleGetEntries)
 	mux.HandleFunc(prefix+"stats", ml.handleGetStats)
 	mux.HandleFunc(prefix+"subjects", ml.handleGetSubjects)
+	mux.HandleFunc("GET "+prefix+"trace/{traceID}", ml.handleGetTrace)
 
 	// KV query endpoints (only in development/test mode)
 	mux.HandleFunc(prefix+"kv/", ml.handleKVQuery)
@@ -113,6 +114,31 @@ func messageLoggerOpenAPISpec() *OpenAPISpec {
 						"200": {
 							Description: "List of monitored subjects",
 							ContentType: "application/json",
+						},
+					},
+				},
+			},
+			"/trace/{traceID}": {
+				GET: &OperationSpec{
+					Summary:     "Get entries by trace ID",
+					Description: "Returns all message entries for a specific W3C trace ID, ordered chronologically",
+					Tags:        []string{"MessageLogger"},
+					Parameters: []ParameterSpec{
+						{
+							Name:        "traceID",
+							In:          "path",
+							Description: "W3C trace ID (32 hex characters)",
+							Required:    true,
+							Schema:      Schema{Type: "string"},
+						},
+					},
+					Responses: map[string]ResponseSpec{
+						"200": {
+							Description: "Trace entries found",
+							ContentType: "application/json",
+						},
+						"400": {
+							Description: "Invalid trace ID format",
 						},
 					},
 				},
@@ -246,6 +272,45 @@ func (ml *MessageLogger) handleGetEntries(w http.ResponseWriter, r *http.Request
 		ml.logger.Error("Failed to encode entries", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+// handleGetTrace returns all message entries for a specific trace ID
+func (ml *MessageLogger) handleGetTrace(w http.ResponseWriter, r *http.Request) {
+	traceID := r.PathValue("traceID")
+	if traceID == "" {
+		http.Error(w, "Trace ID required", http.StatusBadRequest)
+		return
+	}
+
+	// Validate trace ID format (32 hex chars for W3C trace ID)
+	if len(traceID) != 32 || !isHexString(traceID) {
+		http.Error(w, "Invalid trace ID format: must be 32 hex characters", http.StatusBadRequest)
+		return
+	}
+
+	entries := ml.GetEntriesByTrace(traceID)
+
+	response := map[string]any{
+		"trace_id": traceID,
+		"count":    len(entries),
+		"entries":  entries,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		ml.logger.Error("Failed to encode trace entries", "error", err, "trace_id", traceID)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
+}
+
+// isHexString checks if a string contains only hex characters
+func isHexString(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // handleGetStats returns message statistics

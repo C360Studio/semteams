@@ -648,6 +648,11 @@ func (m *Client) Subscribe(ctx context.Context, subject string, handler func(con
 		msgCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
+		// Extract trace context from message headers
+		if tc := ExtractTrace(msg); tc != nil {
+			msgCtx = ContextWithTrace(msgCtx, tc)
+		}
+
 		handler(msgCtx, msg)
 	})
 	if err != nil {
@@ -717,7 +722,7 @@ func (m *Client) CreateStream(ctx context.Context, cfg jetstream.StreamConfig) (
 	return stream, nil
 }
 
-// PublishToStream publishes to a JetStream stream
+// PublishToStream publishes to a JetStream stream with optional trace context propagation
 func (m *Client) PublishToStream(ctx context.Context, subject string, data []byte) error {
 	// Check circuit breaker first
 	if m.Status() == StatusCircuitOpen {
@@ -734,7 +739,14 @@ func (m *Client) PublishToStream(ctx context.Context, subject string, data []byt
 		return err
 	}
 
-	_, err = js.Publish(ctx, subject, data)
+	// Build message with headers for trace propagation
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    data,
+	}
+	InjectTrace(ctx, msg)
+
+	_, err = js.PublishMsg(ctx, msg)
 	if err != nil {
 		m.recordFailure()
 		return err

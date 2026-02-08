@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/c360studio/semstreams/pkg/errs"
@@ -387,6 +388,7 @@ func deriveStreamSubject(filterSubject string) string {
 
 // PublishToStreamWithAck publishes a message to a JetStream subject with acknowledgment.
 // If AutoCreate is true and the stream doesn't exist, it will be created.
+// Trace context from the context is propagated via NATS message headers.
 func (c *Client) PublishToStreamWithAck(
 	ctx context.Context,
 	subject string,
@@ -405,7 +407,14 @@ func (c *Client) PublishToStreamWithAck(
 		return nil, err
 	}
 
-	ack, err := js.Publish(ctx, subject, data)
+	// Build message with headers for trace propagation
+	msg := &nats.Msg{
+		Subject: subject,
+		Data:    data,
+	}
+	InjectTrace(ctx, msg)
+
+	ack, err := js.PublishMsg(ctx, msg)
 	if err != nil {
 		c.recordFailure()
 		c.jsMetrics.recordError("publish_to_stream")

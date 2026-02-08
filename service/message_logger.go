@@ -166,10 +166,13 @@ func DefaultMessageLoggerConfig() MessageLoggerConfig {
 
 // MessageLogEntry represents a logged message
 type MessageLogEntry struct {
+	Sequence    uint64          `json:"sequence"` // Monotonic sequence for index validity
 	Timestamp   time.Time       `json:"timestamp"`
 	Subject     string          `json:"subject"`
 	MessageType string          `json:"message_type,omitempty"`
 	MessageID   string          `json:"message_id,omitempty"`
+	TraceID     string          `json:"trace_id,omitempty"` // W3C trace ID (32 hex chars)
+	SpanID      string          `json:"span_id,omitempty"`  // W3C span ID (16 hex chars)
 	Summary     string          `json:"summary"`
 	RawData     json.RawMessage `json:"raw_data,omitempty"`
 	Metadata    map[string]any  `json:"metadata,omitempty"`
@@ -198,6 +201,11 @@ type MessageLogger struct {
 	entries      []MessageLogEntry
 	entriesIndex int
 	entriesMu    sync.RWMutex
+
+	// Trace indexing
+	nextSequence atomic.Uint64
+	traceIndex   map[string][]uint64 // traceID -> sequence numbers
+	traceIndexMu sync.RWMutex
 
 	// Sampling support
 	sampleRate   int           // 1 in N messages (0 or 1 = all)
@@ -256,6 +264,7 @@ func NewMessageLogger(
 		natsClient:      natsClient,
 		subscriptions:   make(map[string]bool),
 		entries:         make([]MessageLogEntry, maxEntries),
+		traceIndex:      make(map[string][]uint64),
 		sampleRate:      sampleRate,
 		subjectMetadata: make(map[string]portMetadata),
 		logger:          baseService.logger.With("source", "message-logger"),
@@ -446,18 +455,34 @@ func (ml *MessageLogger) handleMessage(ctx context.Context, subject string, data
 
 	ml.stats.validMessages.Add(1)
 
+	// Extract trace context from ctx (populated by natsclient.Subscribe)
+	var traceID, spanID string
+	if tc, ok := natsclient.TraceContextFromContext(ctx); ok && tc != nil {
+		traceID = tc.TraceID
+		spanID = tc.SpanID
+	}
+
+	// Assign sequence number for indexing
+	seq := ml.nextSequence.Add(1)
+
 	// Create log entry
 	entry := MessageLogEntry{
+		Sequence:    seq,
 		Timestamp:   time.Now(),
 		Subject:     subject,
 		MessageType: msg.Type().String(),
 		MessageID:   "", // core messages don't have IDs
+		TraceID:     traceID,
+		SpanID:      spanID,
 		Summary:     ml.generateSummary(&msg),
 		RawData:     json.RawMessage(data),
 	}
 
-	// Store entry
+	// Store entry and update trace index
 	ml.storeEntry(entry)
+	if traceID != "" {
+		ml.indexTrace(traceID, seq)
+	}
 
 	// Log with structured fields for frontend filtering
 	logArgs := []any{
@@ -504,6 +529,53 @@ func (ml *MessageLogger) storeEntry(entry MessageLogEntry) {
 
 	ml.entries[ml.entriesIndex] = entry
 	ml.entriesIndex = (ml.entriesIndex + 1) % len(ml.entries)
+}
+
+// indexTrace adds a sequence number to the trace index
+func (ml *MessageLogger) indexTrace(traceID string, seq uint64) {
+	ml.traceIndexMu.Lock()
+	defer ml.traceIndexMu.Unlock()
+	ml.traceIndex[traceID] = append(ml.traceIndex[traceID], seq)
+}
+
+// GetEntriesByTrace returns all log entries for a specific trace ID
+// Entries are returned in chronological order (by sequence number)
+func (ml *MessageLogger) GetEntriesByTrace(traceID string) []MessageLogEntry {
+	// Get sequence numbers for this trace
+	ml.traceIndexMu.RLock()
+	sequences := make([]uint64, len(ml.traceIndex[traceID]))
+	copy(sequences, ml.traceIndex[traceID])
+	ml.traceIndexMu.RUnlock()
+
+	if len(sequences) == 0 {
+		return nil
+	}
+
+	// Calculate minimum valid sequence (entries that haven't been overwritten)
+	currentSeq := ml.nextSequence.Load()
+	bufferSize := uint64(len(ml.entries))
+	var minValidSeq uint64
+	if currentSeq > bufferSize {
+		minValidSeq = currentSeq - bufferSize
+	}
+
+	// Collect valid entries
+	ml.entriesMu.RLock()
+	defer ml.entriesMu.RUnlock()
+
+	var results []MessageLogEntry
+	for _, seq := range sequences {
+		if seq < minValidSeq {
+			continue // Entry has been overwritten
+		}
+		idx := int(seq % bufferSize)
+		entry := ml.entries[idx]
+		if entry.Sequence == seq { // Verify not overwritten
+			results = append(results, entry)
+		}
+	}
+
+	return results
 }
 
 // outputEntry outputs an entry to stdout
