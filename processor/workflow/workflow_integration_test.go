@@ -19,6 +19,7 @@ import (
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/processor/workflow"
+	"github.com/c360studio/semstreams/processor/workflow/schema"
 )
 
 // getTestNATSClient creates a NATS client for integration tests with JetStream and required streams
@@ -41,7 +42,7 @@ func getTestNATSClient(t *testing.T) *natsclient.TestClient {
 }
 
 // registerTestWorkflow registers a workflow definition directly in the KV bucket
-func registerTestWorkflow(t *testing.T, kv jetstream.KeyValue, wf *workflow.Definition) {
+func registerTestWorkflow(t *testing.T, kv jetstream.KeyValue, wf *schema.Definition) {
 	t.Helper()
 	data, err := json.Marshal(wf)
 	require.NoError(t, err, "Failed to marshal workflow definition")
@@ -158,17 +159,17 @@ func TestIntegration_WorkflowRegistryLoad(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a test workflow
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:      "test-registry-workflow",
 		Name:    "Test Registry Workflow",
 		Enabled: true,
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.test-registry",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "step1",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish",
 					Subject: "test.output",
 				},
@@ -260,17 +261,17 @@ func TestIntegration_SimpleWorkflowTrigger(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a simple workflow
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:      "simple-trigger-test",
 		Name:    "Simple Trigger Test",
 		Enabled: true,
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.simple-trigger-test",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "notify",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish",
 					Subject: "workflow.output.simple", // Use workflow.> subject pattern
 					Payload: json.RawMessage(`{"message": "workflow completed"}`),
@@ -362,17 +363,17 @@ func TestIntegration_CallActionWithResponse(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with a call action
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:      "call-action-test",
 		Name:    "Call Action Test",
 		Enabled: true,
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.call-action-test",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "fetch_data",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "call",
 					Subject: "test.service.getData",
 					Payload: json.RawMessage(`{"request_id": "123"}`),
@@ -472,17 +473,17 @@ func TestIntegration_PublishAction(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with a publish action
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:      "publish-action-test",
 		Name:    "Publish Action Test",
 		Enabled: true,
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.publish-action-test",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "send_notification",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish",
 					Subject: "workflow.notifications.test",
 					Payload: json.RawMessage(`{"type": "test", "message": "Hello from workflow"}`),
@@ -584,18 +585,18 @@ func TestIntegration_LoopWorkflowMaxIterations(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with a loop (step2 goes back to step1)
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:            "loop-max-iter-test",
 		Name:          "Loop Max Iterations Test",
 		Enabled:       true,
 		MaxIterations: 3, // Limit to 3 iterations
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.loop-max-iter-test",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "increment",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish",
 					Subject: "workflow.loop.increment",
 					Payload: json.RawMessage(`{"iteration": "${execution.iteration}"}`),
@@ -604,7 +605,7 @@ func TestIntegration_LoopWorkflowMaxIterations(t *testing.T) {
 			},
 			{
 				Name: "check",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish",
 					Subject: "workflow.loop.check",
 				},
@@ -698,17 +699,17 @@ func TestIntegration_ConditionEvaluation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with conditional steps
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:      "condition-eval-test",
 		Name:    "Condition Evaluation Test",
 		Enabled: true,
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.condition-eval-test",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "get_score",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "call",
 					Subject: "test.condition.check",
 					Timeout: "5s",
@@ -717,12 +718,12 @@ func TestIntegration_ConditionEvaluation(t *testing.T) {
 			},
 			{
 				Name: "check_high",
-				Condition: &workflow.ConditionDef{
+				Condition: &schema.ConditionDef{
 					Field:    "steps.get_score.output.score",
 					Operator: "gte",
 					Value:    80,
 				},
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish",
 					Subject: "workflow.condition.high_score",
 					Payload: json.RawMessage(`{"path": "high"}`),
@@ -816,17 +817,17 @@ func TestIntegration_StepCompleteMessage(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with an agent action (waits for external completion)
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:      "step-complete-msg-test",
 		Name:    "Step Complete Message Test",
 		Enabled: true,
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.step-complete-msg-test",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "agent_task",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish_agent",
 					Subject: "agent.task.test",
 					Payload: json.RawMessage(`{"task": "process_data"}`),
@@ -835,7 +836,7 @@ func TestIntegration_StepCompleteMessage(t *testing.T) {
 			},
 			{
 				Name: "finalize",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish",
 					Subject: "workflow.finalize.output",
 				},
@@ -928,17 +929,17 @@ func TestIntegration_WorkflowTimeout(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow with a very short timeout and a step that won't complete
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:      "timeout-test",
 		Name:    "Timeout Test",
 		Enabled: true,
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.timeout-test",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "slow_agent",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish_agent",
 					Subject: "agent.task.slow",
 					Payload: json.RawMessage(`{"task": "slow_operation"}`),
@@ -1036,17 +1037,17 @@ func TestIntegration_VariableInterpolation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register a workflow that uses interpolation
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:      "interpolation-test",
 		Name:    "Variable Interpolation Test",
 		Enabled: true,
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.interpolation-test",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "get_user",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "call",
 					Subject: "test.interpolate.getData",
 					Timeout: "5s",
@@ -1055,7 +1056,7 @@ func TestIntegration_VariableInterpolation(t *testing.T) {
 			},
 			{
 				Name: "send_notification",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish",
 					Subject: "workflow.interpolate.notify",
 					// Use interpolation: trigger payload and step output
@@ -1183,17 +1184,17 @@ func TestIntegration_RegistryWatchUpdates(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Now add a workflow definition dynamically
-	wf := &workflow.Definition{
+	wf := &schema.Definition{
 		ID:      "dynamic-watch-workflow",
 		Name:    "Dynamically Added Workflow",
 		Enabled: true,
-		Trigger: workflow.TriggerDef{
+		Trigger: schema.TriggerDef{
 			Subject: "workflow.trigger.dynamic-watch-workflow",
 		},
-		Steps: []workflow.StepDef{
+		Steps: []schema.StepDef{
 			{
 				Name: "step1",
-				Action: workflow.ActionDef{
+				Action: schema.ActionDef{
 					Type:    "publish",
 					Subject: "test.dynamic.output",
 				},
