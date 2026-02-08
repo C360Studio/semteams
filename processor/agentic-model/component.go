@@ -29,6 +29,9 @@ type Component struct {
 	natsClient *natsclient.Client
 	logger     *slog.Logger
 
+	// Parsed timeout for message processing
+	messageTimeout time.Duration
+
 	// Lifecycle management
 	running   bool
 	startTime time.Time
@@ -62,6 +65,16 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
+	// Parse timeout for message processing
+	messageTimeout := 120 * time.Second // default
+	if config.Timeout != "" {
+		var err error
+		messageTimeout, err = time.ParseDuration(config.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("invalid timeout format: %w", err)
+		}
+	}
+
 	// Create clients for each endpoint
 	clients := make(map[string]*Client)
 	for name, endpoint := range config.Endpoints {
@@ -73,12 +86,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	return &Component{
-		name:       "agentic-model",
-		config:     config,
-		clients:    clients,
-		natsClient: deps.NATSClient,
-		logger:     deps.GetLogger(),
-		metrics:    getMetrics(deps.MetricsRegistry),
+		name:           "agentic-model",
+		config:         config,
+		clients:        clients,
+		natsClient:     deps.NATSClient,
+		logger:         deps.GetLogger(),
+		messageTimeout: messageTimeout,
+		metrics:        getMetrics(deps.MetricsRegistry),
 	}, nil
 }
 
@@ -145,13 +159,14 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 		"filter_subject", port.Subject)
 
 	cfg := natsclient.StreamConsumerConfig{
-		StreamName:    streamName,
-		ConsumerName:  consumerName,
-		FilterSubject: port.Subject,
-		DeliverPolicy: "new", // Only process new requests, don't replay old ones
-		AckPolicy:     "explicit",
-		MaxDeliver:    3,
-		AutoCreate:    false,
+		StreamName:     streamName,
+		ConsumerName:   consumerName,
+		FilterSubject:  port.Subject,
+		DeliverPolicy:  "new", // Only process new requests, don't replay old ones
+		AckPolicy:      "explicit",
+		MaxDeliver:     3,
+		AutoCreate:     false,
+		MessageTimeout: c.messageTimeout, // Use configured timeout for LLM calls
 	}
 
 	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {

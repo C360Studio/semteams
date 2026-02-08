@@ -50,6 +50,12 @@ type StreamConsumerConfig struct {
 	// AutoCreateConfig is used when auto-creating a stream.
 	// If nil, defaults are used based on FilterSubject.
 	AutoCreateConfig *StreamAutoCreateConfig
+
+	// MessageTimeout is the context timeout for processing each message.
+	// This timeout is passed to the handler and should accommodate the full
+	// processing time including any downstream calls (e.g., LLM requests).
+	// Default is 30 seconds if not specified.
+	MessageTimeout time.Duration
 }
 
 // StreamAutoCreateConfig configures automatic stream creation.
@@ -177,10 +183,16 @@ func (c *Client) ConsumeStreamWithConfig(
 			"failed to create consumer for stream "+cfg.StreamName)
 	}
 
+	// Determine message timeout (default 30s if not specified)
+	messageTimeout := cfg.MessageTimeout
+	if messageTimeout <= 0 {
+		messageTimeout = 30 * time.Second
+	}
+
 	// Start consuming
 	consumeCtx, err := consumer.Consume(func(msg jetstream.Msg) {
-		// Create per-message context
-		msgCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		// Create per-message context with configurable timeout
+		msgCtx, cancel := context.WithTimeout(ctx, messageTimeout)
 		defer cancel()
 
 		// Wrap handler with panic recovery and default Nak

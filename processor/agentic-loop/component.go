@@ -28,6 +28,9 @@ type Component struct {
 	natsClient *natsclient.Client
 	logger     *slog.Logger
 
+	// Parsed timeout for message processing
+	messageTimeout time.Duration
+
 	// Lifecycle state
 	mu        sync.RWMutex
 	started   bool
@@ -82,18 +85,25 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		outputPorts = buildDefaultOutputPorts()
 	}
 
+	// Parse timeout for message processing
+	messageTimeout, err := time.ParseDuration(config.Timeout)
+	if err != nil {
+		return nil, fmt.Errorf("invalid timeout format: %w", err)
+	}
+
 	// Create handler
 	handler := NewMessageHandler(config)
 
 	comp := &Component{
-		config:      config,
-		handler:     handler,
-		deps:        deps,
-		natsClient:  deps.NATSClient,
-		logger:      deps.GetLogger(),
-		inputPorts:  inputPorts,
-		outputPorts: outputPorts,
-		metrics:     getMetrics(deps.MetricsRegistry),
+		config:         config,
+		handler:        handler,
+		deps:           deps,
+		natsClient:     deps.NATSClient,
+		logger:         deps.GetLogger(),
+		messageTimeout: messageTimeout,
+		inputPorts:     inputPorts,
+		outputPorts:    outputPorts,
+		metrics:        getMetrics(deps.MetricsRegistry),
 	}
 
 	return comp, nil
@@ -357,13 +367,14 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 		"port", portName)
 
 	cfg := natsclient.StreamConsumerConfig{
-		StreamName:    streamName,
-		ConsumerName:  consumerName,
-		FilterSubject: subject,
-		DeliverPolicy: "new", // Only process new messages, don't replay old ones
-		AckPolicy:     "explicit",
-		MaxDeliver:    3,
-		AutoCreate:    false,
+		StreamName:     streamName,
+		ConsumerName:   consumerName,
+		FilterSubject:  subject,
+		DeliverPolicy:  "new", // Only process new messages, don't replay old ones
+		AckPolicy:      "explicit",
+		MaxDeliver:     3,
+		AutoCreate:     false,
+		MessageTimeout: c.messageTimeout, // Use configured timeout for LLM calls
 	}
 
 	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
