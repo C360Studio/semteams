@@ -44,54 +44,6 @@ func getOrGenerateRequestID(r *http.Request) string {
 	return hex.EncodeToString(b)
 }
 
-// getOrCreateTraceContext extracts W3C trace context from HTTP headers or creates a new one
-func getOrCreateTraceContext(r *http.Request) *natsclient.TraceContext {
-	// Try to parse incoming traceparent header (W3C standard)
-	if traceparent := r.Header.Get("traceparent"); traceparent != "" {
-		if tc, err := natsclient.ParseTraceparent(traceparent); err == nil {
-			return tc
-		}
-	}
-
-	// Fall back to X-Request-ID if present, padding to 32 chars for trace ID
-	if reqID := r.Header.Get("X-Request-ID"); reqID != "" {
-		return &natsclient.TraceContext{
-			TraceID: padToTraceID(reqID),
-			SpanID:  generateSpanID(),
-			Sampled: true,
-		}
-	}
-
-	// Generate new trace context
-	return natsclient.NewTraceContext()
-}
-
-// padToTraceID pads or truncates a string to 32 hex chars for use as trace ID
-func padToTraceID(s string) string {
-	// Keep only hex characters
-	var hex strings.Builder
-	for _, c := range s {
-		if (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') {
-			hex.WriteRune(c)
-		}
-	}
-	result := strings.ToLower(hex.String())
-
-	if len(result) >= 32 {
-		return result[:32]
-	}
-
-	// Pad with zeros
-	return result + strings.Repeat("0", 32-len(result))
-}
-
-// generateSpanID generates a 16-character hex span ID
-func generateSpanID() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}
-
 // Gateway implements the Gateway interface for HTTP protocol
 type Gateway struct {
 	name       string
@@ -224,14 +176,11 @@ func (g *Gateway) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 // createRouteHandler creates an HTTP handler for a route mapping
 func (g *Gateway) createRouteHandler(route gateway.RouteMapping) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Get or create trace context for distributed tracing
-		tc := getOrCreateTraceContext(r)
-		w.Header().Set("X-Request-ID", tc.TraceID[:16]) // Keep backward compat with short request ID
-		w.Header().Set("traceparent", tc.FormatTraceparent())
-
-		// Add trace context to request context for propagation through NATS
-		ctx := natsclient.ContextWithTrace(r.Context(), tc)
-		r = r.WithContext(ctx)
+		// Get or generate request ID for distributed tracing
+		requestID := getOrGenerateRequestID(r)
+		w.Header().Set("X-Request-ID", requestID)
+		// TODO: Add request ID to context for structured logging when logger is available
+		// ctx := context.WithValue(r.Context(), "request_id", requestID)
 
 		// Record request
 		g.requestsTotal.Add(1)

@@ -722,7 +722,8 @@ func (m *Client) CreateStream(ctx context.Context, cfg jetstream.StreamConfig) (
 	return stream, nil
 }
 
-// PublishToStream publishes to a JetStream stream with optional trace context propagation
+// PublishToStream publishes to a JetStream stream with automatic trace context propagation.
+// If no trace context exists in ctx, one is auto-generated for distributed tracing.
 func (m *Client) PublishToStream(ctx context.Context, subject string, data []byte) error {
 	// Check circuit breaker first
 	if m.Status() == StatusCircuitOpen {
@@ -737,6 +738,11 @@ func (m *Client) PublishToStream(ctx context.Context, subject string, data []byt
 	if err != nil {
 		m.recordFailure()
 		return err
+	}
+
+	// Auto-generate trace context if none exists
+	if _, ok := TraceContextFromContext(ctx); !ok {
+		ctx = ContextWithTrace(ctx, NewTraceContext())
 	}
 
 	// Build message with headers for trace propagation

@@ -388,7 +388,7 @@ func deriveStreamSubject(filterSubject string) string {
 
 // PublishToStreamWithAck publishes a message to a JetStream subject with acknowledgment.
 // If AutoCreate is true and the stream doesn't exist, it will be created.
-// Trace context from the context is propagated via NATS message headers.
+// Trace context is auto-generated if not present, and propagated via NATS message headers.
 func (c *Client) PublishToStreamWithAck(
 	ctx context.Context,
 	subject string,
@@ -405,6 +405,11 @@ func (c *Client) PublishToStreamWithAck(
 	js, err := c.JetStream()
 	if err != nil {
 		return nil, err
+	}
+
+	// Auto-generate trace context if none exists
+	if _, ok := TraceContextFromContext(ctx); !ok {
+		ctx = ContextWithTrace(ctx, NewTraceContext())
 	}
 
 	// Build message with headers for trace propagation
