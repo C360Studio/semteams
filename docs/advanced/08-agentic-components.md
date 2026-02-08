@@ -148,16 +148,16 @@ states).
 
 **Pending Tool Tracking**:
 
-When a model requests multiple tool calls, the loop tracks each:
+When a model requests multiple tool calls, the loop tracks each with its result:
 
 ```go
 type LoopEntity struct {
-    ID             string
-    State          LoopState
-    PendingTools   []string    // Tool call IDs awaiting results
-    Messages       []ChatMessage
-    Iteration      int
-    StartedAt      time.Time
+    ID                 string
+    State              LoopState
+    PendingToolResults map[string]ToolResult  // Accumulated tool results by call ID
+    Iterations         int
+    MaxIterations      int
+    StartedAt          time.Time
 }
 ```
 
@@ -339,7 +339,7 @@ func init() {
 }
 ```
 
-2. **Per-component registration** (for component-specific tools):
+1. **Per-component registration** (for component-specific tools):
 
 ```go
 comp, _ := agentictools.NewComponent(rawConfig, deps)
@@ -422,21 +422,23 @@ Sent from agentic-model to agentic-loop:
 
 ```json
 {
-  "id": "resp_def456",
   "request_id": "req_abc123",
-  "loop_id": "loop_xyz789",
   "status": "tool_call",
-  "content": "",
-  "tool_calls": [
-    {
-      "id": "call_001",
-      "name": "read_file",
-      "arguments": "{\"path\": \"main.go\"}"
-    }
-  ],
-  "tokens_in": 150,
-  "tokens_out": 45,
-  "model": "gpt-4-turbo-preview"
+  "message": {
+    "role": "assistant",
+    "content": "",
+    "tool_calls": [
+      {
+        "id": "call_001",
+        "name": "read_file",
+        "arguments": {"path": "main.go"}
+      }
+    ]
+  },
+  "token_usage": {
+    "prompt_tokens": 150,
+    "completion_tokens": 45
+  }
 }
 ```
 
@@ -608,17 +610,19 @@ nats kv watch AGENT_TRAJECTORIES
 When a loop fails:
 
 1. **Check loop entity state**:
+
    ```bash
    nats kv get AGENT_LOOPS loop_xyz789
    ```
 
 2. **Review trajectory**:
+
    ```bash
    nats kv get AGENT_TRAJECTORIES loop_xyz789
    ```
 
 3. **Check for pending tools**:
-   Look at `pending_tools` in the loop entity — tools that never returned results indicate
+   Look at `pending_tool_results` in the loop entity — tools that never returned results indicate
    execution failures in agentic-tools.
 
 4. **Review model responses**:
@@ -758,7 +762,7 @@ the agentic system works without any rules configured.
 - Interrupt running agents (agents are autonomous once started)
 - Modify agent behavior mid-execution
 
-**Example: Trigger agent on graph event**
+#### Example: Trigger agent on graph event
 
 A rule can watch for entity changes and spawn an agent to investigate. The rule uses the `publish` action
 to send a TaskMessage to the agentic-loop:
@@ -946,11 +950,12 @@ func (e *SensitiveToolExecutor) Execute(ctx context.Context, call agentic.ToolCa
 **Symptoms**: Loop entity shows same state for extended period.
 
 **Diagnosis**:
+
 ```bash
 nats kv get AGENT_LOOPS <loop_id>
 ```
 
-Check `pending_tools` — if non-empty, tools haven't returned results.
+Check `pending_tool_results` — if non-empty, tools haven't returned results.
 
 **Common causes**:
 
@@ -980,6 +985,7 @@ Check `pending_tools` — if non-empty, tools haven't returned results.
 **Symptoms**: Tool result contains "tool not found" error.
 
 **Diagnosis**: Check registered tools:
+
 ```go
 registry.ListAllTools()
 ```
@@ -997,6 +1003,7 @@ registry.ListAllTools()
 **Symptoms**: Metrics show unexpectedly high token counts.
 
 **Diagnosis**: Review trajectories for patterns:
+
 ```bash
 nats kv get AGENT_TRAJECTORIES <loop_id>
 ```
