@@ -247,13 +247,22 @@ func (c *Component) handleToolCall(ctx context.Context, data []byte) {
 	c.lastActivity = time.Now()
 	c.mu.Unlock()
 
-	// Parse tool call
-	var call agentic.ToolCall
-	if err := json.Unmarshal(data, &call); err != nil {
-		c.logger.Error("Failed to unmarshal tool call", "error", err)
+	// Parse BaseMessage envelope
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
 		c.incrementErrors()
 		return
 	}
+
+	// Extract ToolCall from payload
+	callPtr, ok := baseMsg.Payload().(*agentic.ToolCall)
+	if !ok {
+		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
+		c.incrementErrors()
+		return
+	}
+	call := *callPtr
 
 	c.logger.Debug("Processing tool call",
 		slog.String("tool", call.Name),

@@ -266,13 +266,22 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 	c.lastActivity = time.Now()
 	c.mu.Unlock()
 
-	// Parse request
-	var req agentic.AgentRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		c.logger.Error("Failed to unmarshal agent request", "error", err)
+	// Parse BaseMessage envelope
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
 		c.incrementErrors()
 		return
 	}
+
+	// Extract AgentRequest from payload
+	reqPtr, ok := baseMsg.Payload().(*agentic.AgentRequest)
+	if !ok {
+		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
+		c.incrementErrors()
+		return
+	}
+	req := *reqPtr
 
 	c.logger.Info("Processing agent request",
 		slog.String("request_id", req.RequestID),

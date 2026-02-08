@@ -555,18 +555,20 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 
 // handleAgentComplete processes agent completion events
 func (c *Component) handleAgentComplete(ctx context.Context, data []byte) {
-	var completion struct {
-		LoopID  string `json:"loop_id"`
-		TaskID  string `json:"task_id"`
-		Outcome string `json:"outcome"`
-		Result  string `json:"result,omitempty"`
-		Error   string `json:"error,omitempty"`
-	}
-
-	if err := json.Unmarshal(data, &completion); err != nil {
-		c.logger.Error("Failed to unmarshal completion", slog.String("error", err.Error()))
+	// Parse BaseMessage envelope
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", slog.String("error", err.Error()))
 		return
 	}
+
+	// Extract LoopCompletedEvent from payload
+	completionPtr, ok := baseMsg.Payload().(*agentic.LoopCompletedEvent)
+	if !ok {
+		c.logger.Error("Unexpected payload type", slog.String("type", fmt.Sprintf("%T", baseMsg.Payload())))
+		return
+	}
+	completion := *completionPtr
 
 	// Get loop info
 	loopInfo := c.loopTracker.Get(completion.LoopID)
@@ -598,8 +600,9 @@ func (c *Component) handleAgentComplete(ctx context.Context, data []byte) {
 		respType = agentic.ResponseTypeStatus
 		content = fmt.Sprintf("Loop %s cancelled.", completion.LoopID)
 	case "failed":
+		// Note: Failed loops are handled by handleAgentFailed, but handle gracefully
 		respType = agentic.ResponseTypeError
-		content = fmt.Sprintf("Loop %s failed: %s", completion.LoopID, completion.Error)
+		content = fmt.Sprintf("Loop %s failed", completion.LoopID)
 	default:
 		respType = agentic.ResponseTypeStatus
 		content = fmt.Sprintf("Loop %s: %s", completion.LoopID, completion.Outcome)
@@ -624,20 +627,20 @@ func (c *Component) handleAgentComplete(ctx context.Context, data []byte) {
 
 // handleAgentCreated processes loop creation events for workflow context sync
 func (c *Component) handleAgentCreated(_ context.Context, data []byte) {
-	var created struct {
-		LoopID        string `json:"loop_id"`
-		TaskID        string `json:"task_id"`
-		Role          string `json:"role"`
-		Model         string `json:"model"`
-		WorkflowSlug  string `json:"workflow_slug"`
-		WorkflowStep  string `json:"workflow_step"`
-		MaxIterations int    `json:"max_iterations"`
-		CreatedAt     string `json:"created_at"`
-	}
-	if err := json.Unmarshal(data, &created); err != nil {
-		c.logger.Error("Failed to unmarshal agent created", slog.String("error", err.Error()))
+	// Parse BaseMessage envelope
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", slog.String("error", err.Error()))
 		return
 	}
+
+	// Extract LoopCreatedEvent from payload
+	createdPtr, ok := baseMsg.Payload().(*agentic.LoopCreatedEvent)
+	if !ok {
+		c.logger.Error("Unexpected payload type", slog.String("type", fmt.Sprintf("%T", baseMsg.Payload())))
+		return
+	}
+	created := *createdPtr
 
 	// Check if we already track this loop (we originated it)
 	if existing := c.loopTracker.Get(created.LoopID); existing != nil {
@@ -647,14 +650,6 @@ func (c *Component) handleAgentCreated(_ context.Context, data []byte) {
 	}
 
 	// New loop we didn't originate - track it
-	createdAt, err := time.Parse(time.RFC3339, created.CreatedAt)
-	if err != nil {
-		c.logger.Warn("Invalid created_at timestamp, using current time",
-			slog.String("loop_id", created.LoopID),
-			slog.String("raw_value", created.CreatedAt),
-			slog.String("error", err.Error()))
-		createdAt = time.Now()
-	}
 	c.loopTracker.Track(&LoopInfo{
 		LoopID:        created.LoopID,
 		TaskID:        created.TaskID,
@@ -662,7 +657,7 @@ func (c *Component) handleAgentCreated(_ context.Context, data []byte) {
 		MaxIterations: created.MaxIterations,
 		WorkflowSlug:  created.WorkflowSlug,
 		WorkflowStep:  created.WorkflowStep,
-		CreatedAt:     createdAt,
+		CreatedAt:     created.CreatedAt,
 	})
 
 	// Record external loop for metrics (will be decremented by handleAgentComplete)
@@ -676,20 +671,20 @@ func (c *Component) handleAgentCreated(_ context.Context, data []byte) {
 
 // handleAgentFailed processes loop failure events
 func (c *Component) handleAgentFailed(ctx context.Context, data []byte) {
-	var failure struct {
-		LoopID       string `json:"loop_id"`
-		TaskID       string `json:"task_id"`
-		Outcome      string `json:"outcome"`
-		Reason       string `json:"reason"`
-		Error        string `json:"error"`
-		WorkflowSlug string `json:"workflow_slug"`
-		WorkflowStep string `json:"workflow_step"`
-	}
-
-	if err := json.Unmarshal(data, &failure); err != nil {
-		c.logger.Error("Failed to unmarshal failure", slog.String("error", err.Error()))
+	// Parse BaseMessage envelope
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.Error("Failed to unmarshal BaseMessage", slog.String("error", err.Error()))
 		return
 	}
+
+	// Extract LoopFailedEvent from payload
+	failurePtr, ok := baseMsg.Payload().(*agentic.LoopFailedEvent)
+	if !ok {
+		c.logger.Error("Unexpected payload type", slog.String("type", fmt.Sprintf("%T", baseMsg.Payload())))
+		return
+	}
+	failure := *failurePtr
 
 	// Update loop state
 	c.loopTracker.UpdateState(failure.LoopID, "failed")
