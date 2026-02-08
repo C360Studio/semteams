@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/test/e2e/client"
 	"github.com/c360studio/semstreams/test/e2e/scenarios"
 )
@@ -61,14 +63,6 @@ func DefaultConfig() *Config {
 		CompleteTimeout:    60 * time.Second,
 		MinTrajectorySteps: 1,
 	}
-}
-
-// TaskMessage matches the agentic-loop expected format.
-type TaskMessage struct {
-	TaskID string `json:"task_id"`
-	Role   string `json:"role"`
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
 }
 
 // NewScenario creates a new agentic scenario.
@@ -241,14 +235,16 @@ func (s *Scenario) captureBaseline(ctx context.Context, result *scenarios.Result
 
 // injectTask publishes a task message to trigger an agentic loop.
 func (s *Scenario) injectTask(ctx context.Context, result *scenarios.Result) error {
-	task := TaskMessage{
+	task := agentic.TaskMessage{
 		TaskID: fmt.Sprintf("e2e-test-%d", time.Now().UnixNano()),
 		Role:   "general",
 		Model:  "mock", // Should match the configured endpoint name
 		Prompt: "Analyze the temperature sensor temp-sensor-001. Use the query_entity tool to retrieve sensor data, then provide an assessment.",
 	}
 
-	data, err := json.Marshal(task)
+	// Wrap task in BaseMessage envelope (required by agentic-loop)
+	baseMsg := message.NewBaseMessage(task.Schema(), &task, "e2e-test")
+	data, err := json.Marshal(baseMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal task: %w", err)
 	}

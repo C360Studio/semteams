@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/service"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
@@ -316,8 +317,9 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg agentic.U
 	// Record loop started
 	c.metrics.recordLoopStarted()
 
-	// Publish task
-	taskData, err := json.Marshal(task)
+	// Wrap task in BaseMessage envelope (required by agentic-loop)
+	baseMsg := message.NewBaseMessage(task.Schema(), &task, "agentic-dispatch-http")
+	taskData, err := json.Marshal(baseMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal task", slog.String("error", err.Error()))
 		return agentic.UserResponse{

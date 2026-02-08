@@ -11,6 +11,7 @@ import (
 
 	"log/slog"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 )
 
@@ -452,15 +453,6 @@ func substituteVariablesWithContext(template string, entity EntityContext, relat
 	return result
 }
 
-// TaskMessage represents a task message for triggering an agentic loop.
-// This matches the expected format of the agentic-loop component.
-type TaskMessage struct {
-	TaskID string `json:"task_id"`
-	Role   string `json:"role"`
-	Model  string `json:"model"`
-	Prompt string `json:"prompt"`
-}
-
 // executePublishAgent executes a publish_agent action, triggering an agentic loop.
 // It publishes a TaskMessage to the specified NATS subject.
 func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action, entityID, relatedID string) error {
@@ -498,7 +490,7 @@ func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action,
 	taskID := fmt.Sprintf("rule-%s-%d", entityID, time.Now().UnixNano())
 
 	// Build the TaskMessage
-	task := TaskMessage{
+	task := agentic.TaskMessage{
 		TaskID: taskID,
 		Role:   action.Role,
 		Model:  action.Model,
@@ -516,7 +508,9 @@ func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action,
 
 	// Publish via NATS if publisher is configured
 	if e.publisher != nil {
-		data, err := json.Marshal(task)
+		// Wrap task in BaseMessage envelope (required by agentic-loop)
+		baseMsg := message.NewBaseMessage(task.Schema(), &task, "rule-engine")
+		data, err := json.Marshal(baseMsg)
 		if err != nil {
 			return fmt.Errorf("marshal task message: %w", err)
 		}

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -904,10 +905,12 @@ func TestAction_PublishAgent_PayloadFormat(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mock.published, 1)
 
-	// Parse the published payload
-	var task TaskMessage
-	err = json.Unmarshal(mock.published[0].data, &task)
+	// Parse the published payload (BaseMessage envelope)
+	var baseMsg message.BaseMessage
+	err = json.Unmarshal(mock.published[0].data, &baseMsg)
 	require.NoError(t, err)
+	task, ok := baseMsg.Payload().(*agentic.TaskMessage)
+	require.True(t, ok, "expected *agentic.TaskMessage, got %T", baseMsg.Payload())
 
 	// Verify TaskMessage fields
 	assert.NotEmpty(t, task.TaskID, "task_id should be set")
