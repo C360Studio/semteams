@@ -568,7 +568,8 @@ func (ml *MessageLogger) GetEntriesByTrace(traceID string) []MessageLogEntry {
 		if seq < minValidSeq {
 			continue // Entry has been overwritten
 		}
-		idx := int(seq % bufferSize)
+		// Sequence starts at 1, index starts at 0, so subtract 1
+		idx := int((seq - 1) % bufferSize)
 		entry := ml.entries[idx]
 		if entry.Sequence == seq { // Verify not overwritten
 			results = append(results, entry)
