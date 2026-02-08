@@ -661,6 +661,74 @@ func TestCondition_WithRealEntities(t *testing.T) { ... }
 func BenchmarkCondition_Evaluate(b *testing.B) { ... }
 ```
 
+## Agentic E2E Tests
+
+The agentic tier validates the LLM-powered agent loop with tool execution.
+
+### Running Agentic Tests
+
+```bash
+# Run agentic tier (~30s)
+task e2e:agentic
+
+# Start services for manual testing
+task e2e:agentic:up
+
+# Run tests against already-running services
+task e2e:agentic:test
+
+# View logs
+task e2e:agentic:logs
+
+# Clean up
+task e2e:agentic:clean
+```
+
+### Mock LLM Server
+
+The agentic E2E tests use a mock LLM server that simulates OpenAI-compatible responses:
+
+- Responds to `/v1/chat/completions` with predetermined responses
+- Simulates tool calls when prompted
+- Returns configurable delays for latency testing
+
+### Test Scenarios
+
+The agentic tests validate:
+
+1. **Loop Creation**: Task message spawns new loop
+2. **Tool Execution**: Model requests tools, tools execute, results returned
+3. **State Machine**: Loop progresses through states correctly
+4. **Completion**: Loop completes and trajectory is saved
+5. **Rule Trigger**: Rules can spawn agent tasks
+
+### Debugging Agentic E2E Failures
+
+```bash
+# Check loop state
+nats kv get AGENT_LOOPS <loop_id>
+
+# Check trajectory
+nats kv get AGENT_TRAJECTORIES <loop_id>
+
+# View mock LLM logs
+docker logs mock-llm
+
+# View agentic component logs
+docker logs semstreams-agentic-app 2>&1 | grep agentic
+```
+
+### Common Issues
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| Loop never starts | Task message not published | Check rule trigger conditions |
+| Tool not found | Executor not registered | Verify tool registration in init() |
+| Model timeout | Mock LLM not responding | Restart mock-llm container |
+| State stuck | Pending tools never resolve | Check agentic-tools logs |
+
 ## Related Documentation
 
 - [E2E Tests](02-e2e-tests.md) - End-to-end testing
+- [Agentic Quickstart](../basics/07-agentic-quickstart.md) - Getting started with agents
+- [Troubleshooting](../operations/02-troubleshooting.md) - Common issues

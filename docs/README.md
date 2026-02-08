@@ -54,5 +54,20 @@
 
 Build LLM-powered autonomous agents with tool use:
 
+- [Agentic Quickstart](basics/07-agentic-quickstart.md) - Get started with agents
 - [Agentic Systems](concepts/11-agentic-systems.md) - Concepts: loops, state machine, tools, trajectories
 - [Agentic Components](advanced/08-agentic-components.md) - Reference: loop, model, and tools processors
+- [Payload Registry](concepts/13-payload-registry.md) - Polymorphic JSON serialization pattern
+
+## Workflow Orchestration
+
+Multi-step processes with loops, timeouts, and retries:
+
+- [Workflow Quickstart](basics/08-workflow-quickstart.md) - Get started with workflows
+- [Workflow Configuration](advanced/09-workflow-configuration.md) - Complete schema reference
+- [Orchestration Layers](concepts/12-orchestration-layers.md) - When to use rules vs. workflows
+
+## Operations
+
+- [Local Monitoring](operations/01-local-monitoring.md) - Prometheus + Grafana setup
+- [Troubleshooting](operations/02-troubleshooting.md) - Common issues and solutions

@@ -44,10 +44,11 @@ task test:race          # Tests with race detector
 task check              # Lint + test
 
 # E2E Tests (requires Docker)
-task e2e:core           # Health + dataflow
-task e2e:structural     # Rules + structural inference
-task e2e:statistical    # BM25 + community detection
-task e2e:semantic       # Neural embeddings + LLM
+task e2e:core           # Health + dataflow (~10s)
+task e2e:structural     # Rules + structural inference (~30s)
+task e2e:statistical    # BM25 + community detection (~60s)
+task e2e:semantic       # Neural embeddings + LLM (~90s)
+task e2e:agentic        # Agent loop + tools (~30s)
 task e2e:all            # All tiers sequentially
 
 # Other
@@ -134,6 +135,46 @@ Input → Processor → Storage → Graph → Gateway
 | Storage | ObjectStore | Persist to NATS JetStream |
 | Gateway | HTTP, GraphQL, MCP | Expose query APIs |
 
+## Agentic AI Orchestration
+
+SemStreams includes an optional agentic subsystem for LLM-powered autonomous task execution:
+
+```
+                    ┌─────────────────────────────────────────┐
+                    │           Agentic Components            │
+                    ├─────────────────────────────────────────┤
+User Message ───────► agentic-dispatch ─────► agentic-loop   │
+                    │       │                      │          │
+                    │       │              ┌───────┴───────┐  │
+                    │       │              ▼               ▼  │
+                    │       │        agentic-model   agentic-tools
+                    │       │              │               │  │
+                    │       │              ▼               │  │
+                    │       │           LLM API    ◄───────┘  │
+                    │       │                                 │
+                    │       ◄─────── agent.complete.* ────────│
+                    └─────────────────────────────────────────┘
+```
+
+**Key characteristics:**
+
+- **Optional**: Deploy only when you need LLM-powered automation
+- **Modular**: 6 components that can scale independently
+- **OpenAI-compatible**: Works with any OpenAI-compatible LLM endpoint
+- **Observable**: Full trajectory capture for debugging and analytics
+
+Quick example:
+
+```bash
+# Run agentic e2e tests (requires Docker)
+task e2e:agentic
+
+# Or start the full agentic stack
+./bin/semstreams --config configs/agentic.json
+```
+
+For details, see [Agentic Quickstart](docs/basics/07-agentic-quickstart.md).
+
 ## State: NATS KV Buckets
 
 All state lives in NATS JetStream KV buckets:
@@ -162,13 +203,15 @@ All state lives in NATS JetStream KV buckets:
 
 | Folder | Purpose |
 |--------|---------|
-| [docs/basics/](docs/basics/) | Getting started, core interfaces |
-| [docs/concepts/](docs/concepts/) | Background knowledge, algorithms |
-| [docs/architecture/](docs/architecture/) | System design, component diagrams |
-| [docs/advanced/](docs/advanced/) | Clustering, LLM, performance tuning |
-| [docs/operations/](docs/operations/) | Local monitoring, deployment |
+| [docs/basics/](docs/basics/) | Getting started, core interfaces, quickstart guides |
+| [docs/concepts/](docs/concepts/) | Background knowledge, algorithms, orchestration layers |
+| [docs/architecture/](docs/architecture/) | System design, ADRs, component diagrams |
+| [docs/advanced/](docs/advanced/) | Agentic components, clustering, performance tuning |
+| [docs/operations/](docs/operations/) | Local monitoring, troubleshooting, deployment |
 | [docs/contributing/](docs/contributing/) | Development, testing, CI |
 | [docs/agents/](docs/agents/) | Go patterns for agent workflows |
+
+**New to agentic systems?** Start with [Agentic Quickstart](docs/basics/07-agentic-quickstart.md).
 
 ## Requirements
 

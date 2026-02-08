@@ -25,14 +25,21 @@ Flow-based component architecture:
 
 | Package | Purpose |
 |---------|---------|
-| `component/` | Base component types, lifecycle, ports, schema |
-| `message/` | Message types, Graphable interface, Triple |
+| `component/` | Base component types, lifecycle, ports, schema, payload registry |
+| `message/` | Message types, Graphable interface, Triple, BaseMessage |
 | `graph/` | Knowledge graph operations, queries |
 | `natsclient/` | NATS connection, KV buckets, JetStream |
 | `processor/` | Data transformation processors |
 | `config/` | Configuration loading and validation |
 | `health/` | Health monitoring and status |
 | `service/` | Flow service, component orchestration |
+| `agentic/` | Agentic types, payload registrations, state machine |
+| `processor/agentic-loop/` | Loop orchestrator, state machine, trajectory |
+| `processor/agentic-model/` | LLM endpoint caller, retry logic |
+| `processor/agentic-tools/` | Tool dispatch, executor registry |
+| `processor/agentic-dispatch/` | User message routing, commands |
+| `processor/agentic-memory/` | Graph-backed persistent memory |
+| `processor/agentic-governance/` | PII filtering, rate limiting, content governance |
 
 ## Core Interface
 
@@ -67,10 +74,11 @@ task check              # Run lint + test
 E2E tests are tiered and require Docker infrastructure:
 
 ```bash
-task e2e:core           # Health + dataflow (~30s)
+task e2e:core           # Health + dataflow (~10s)
 task e2e:structural     # Rules + structural inference (~30s)
 task e2e:statistical    # BM25 + community detection (~60s)
 task e2e:semantic       # Neural embeddings + LLM (~90s)
+task e2e:agentic        # Agent loop + tools (~30s)
 task e2e:all            # Run all tiers sequentially
 ```
 
@@ -122,3 +130,66 @@ SemStreams uses three orchestration layers. Respecting layer boundaries prevents
 | Execute LLM call, process tools | Component |
 
 See [Orchestration Layers](docs/concepts/12-orchestration-layers.md) for details.
+
+## Payload Registry Pattern
+
+**Critical pattern for polymorphic JSON deserialization.** When adding new message types to the agentic system:
+
+### Registration (in init())
+
+Register payload types in an `init()` function within the package's `payload_registry.go`:
+
+```go
+func init() {
+    err := component.RegisterPayload(&component.PayloadRegistration{
+        Domain:      "agentic",           // Message domain
+        Category:    "task",              // Message category
+        Version:     "v1",                // Schema version
+        Description: "Agent task request",
+        Factory:     func() any { return &TaskMessage{} },
+    })
+    if err != nil {
+        panic("failed to register payload: " + err.Error())
+    }
+}
+```
+
+### Required MarshalJSON Method
+
+**Every payload type MUST implement MarshalJSON that wraps in BaseMessage:**
+
+```go
+func (t *TaskMessage) MarshalJSON() ([]byte, error) {
+    type Alias TaskMessage
+    return json.Marshal(&message.BaseMessage{
+        Type: message.MessageType{
+            Domain:   agentic.Domain,
+            Category: agentic.CategoryTask,
+            Version:  agentic.SchemaVersion,
+        },
+        Payload: (*Alias)(t),
+    })
+}
+```
+
+### Common Mistakes
+
+1. **Missing MarshalJSON**: Payload serializes without type wrapper, deserialization fails
+2. **Wrong type fields**: Domain/Category/Version don't match registration
+3. **Forgotten import**: Package not imported, `init()` never runs
+
+### Debugging Serialization Issues
+
+```go
+// Check if payload is registered
+payloads := component.GlobalPayloadRegistry().ListPayloads()
+for msgType := range payloads {
+    fmt.Println(msgType)  // e.g., "agentic.task.v1"
+}
+
+// Verify JSON structure
+data, _ := json.Marshal(msg)
+fmt.Println(string(data))  // Should show {"type":{"domain":"..."},"payload":{...}}
+```
+
+See [Payload Registry Guide](docs/concepts/13-payload-registry.md) for complete documentation.

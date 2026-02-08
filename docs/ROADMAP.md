@@ -63,25 +63,41 @@ Complete PathRAG and GraphRAG with missing documented features:
 Current state: PathRAG only supports outgoing traversal. GraphRAG doesn't include relationships or source attribution.
 
 ### Rules Processor Completion
-**Status:** Needs Implementation | **ADR:** [ADR-010](architecture/adr-010-rules-processor-completion.md)
+**Status:** Partial Implementation | **ADR:** [ADR-010](architecture/adr-010-rules-processor-completion.md)
 
 Complete stubbed action implementations in rules processor:
-- ActionTypePublish: Actual NATS publish (currently logging only)
-- ActionTypeUpdateTriple: Triple metadata updates
+- ActionTypePublish: Implemented for agentic workflows
+- ActionTypePublishAgent: Implemented for spawning agent tasks
+- ActionTypeUpdateTriple: Triple metadata updates (partial)
 - Dynamic watch pattern reloading without restart
 
-Current state: Stateful ECA rules work, but publish/update actions are stubs that only log.
+Current state: Stateful ECA rules work. Publish actions implemented for agentic system integration. Update triple actions partially implemented.
 
 ### Workflow Processor
-**Status:** Needs Implementation | **ADR:** [ADR-011](architecture/adr-011-workflow-processor.md) | **Depends:** ADR-010
+**Status:** Implemented (Minimal) | **ADR:** [ADR-011](architecture/adr-011-workflow-processor.md)
 
 Durable multi-step workflow execution bridging reactive rules and orchestration:
 - Declarative JSON workflow definitions
 - Rule-triggered, scheduled, or manual execution
-- Retry with backoff, step/workflow timeouts
-- Timer service for wait actions and schedules
+- Step tracking and sequencing
+- Loop limits (max_iterations)
+- Workflow timeout enforcement
+- Basic actions: call, publish, set_state
 
-Current state: Detailed spec complete, implementation not started. Blocked by rules processor completion.
+Current state: Minimal implementation complete (Phases 1-2). Supports semspec-driven development and multi-agent workflows. Advanced features (retry with backoff, HTTP action, wait action, secrets management) deferred to future phases.
+
+### Agentic Components
+**Status:** Implemented | **ADR:** [ADR-018](architecture/adr-018-agentic-workflow-orchestration.md)
+
+LLM-powered autonomous task execution with six specialized components:
+- agentic-loop: State machine, orchestration, trajectory capture
+- agentic-model: OpenAI-compatible LLM endpoint caller
+- agentic-tools: Tool dispatch with executor registry
+- agentic-dispatch: User message routing, commands, permissions
+- agentic-memory: Graph-backed persistent memory
+- agentic-governance: PII filtering, rate limiting, content governance
+
+Current state: Fully operational. Run `task e2e:agentic` for validation.
 
 ---
 
