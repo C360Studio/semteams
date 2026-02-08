@@ -1,23 +1,19 @@
 # SemStreams
 
-## WORK IN PROGRESS - Expect breaking changes and large refactors. 
+> A composable stream processing framework designed to run anywhere.
 
-A stream processor that builds semantic knowledge graphs from event data, with automatic community detection and progressive AI enhancement.
-
-## Overview
-
-SemStreams transforms event streams into a living knowledge graph stored in NATS KV. You define a vocabulary of predicates, implement a simple interface, and the system maintains entities, relationships, indexes, and communities automatically.
+SemStreams is a flow based framework that turns streaming data into a semantic knowledge graph, runs reactive rules, executes workflows, and orchestrates LLM-powered agents. One binary. NATS as the only dependency. Works offline, syncs when connected.
 
 ```
-Events → Graphable Interface → Knowledge Graph → Queries
+Sensors/Events → Knowledge Graph → Rules, Workflows, Agents → Action
 ```
 
-**Key characteristics:**
+**Built for the edge:**
 
-- **Edge-first**: Deploy on a Raspberry Pi with just NATS, or scale to clusters
-- **Offline-capable**: NATS JetStream provides local persistence and sync
-- **Progressive**: Start with rules, add search, then embeddings and LLM as needed
-- **Domain-driven**: No mandatory AI dependencies—you enable what you need
+- **Simple deployment** — single binary, ships as a Docker image
+- **Progressive AI** — start with rules, add LLMs when you're ready. Or run both: deterministic where it matters, intelligent where it helps
+- **Offline-first** — works disconnected, syncs when connectivity allows
+- **Edge to cluster** — runs on a Raspberry Pi, scales when needed
 
 ## Quick Start
 
@@ -32,89 +28,38 @@ task test
 ./bin/semstreams --config configs/protocol-flow.json
 ```
 
-## Development
-
 Run `task --list` to see all available commands.
 
-```bash
-# Testing
-task test               # Unit tests
-task test:integration   # Integration tests (uses testcontainers)
-task test:race          # Tests with race detector
-task check              # Lint + test
+## How It Works: Continuous Intelligence
 
-# E2E Tests (requires Docker)
-task e2e:core           # Health + dataflow (~10s)
-task e2e:structural     # Rules + structural inference (~30s)
-task e2e:statistical    # BM25 + community detection (~60s)
-task e2e:semantic       # Neural embeddings + LLM (~90s)
-task e2e:agentic        # Agent loop + tools (~30s)
-task e2e:all            # All tiers sequentially
+SemStreams implements the **OODA loop** — a decision-making cycle from military strategy (Boyd, 1986) that also appears in robotics as Sense-Think-Act:
 
-# Other
-task lint               # Run linters
-task schema:generate    # Generate component schemas
-task services:start:all # Start optional services
-```
+| OODA | Sense-Think-Act | SemStreams |
+|------|-----------------|------------|
+| Observe | Sense | **Ingest** — events via UDP, WebSocket, file, API |
+| Orient | Think | **Graph** — entities with typed relationships |
+| Decide | Act | **React** — rules evaluate conditions |
+| Act | Act | **Act** — rules fire, workflows orchestrate, agents reason |
 
-## The Graphable Interface
+The graph builds situational awareness; rules and agents close the loop.
 
-Your domain types implement `Graphable` to become graph entities:
+Two core patterns power this:
+- **Graphable** — Your types become graph entities ([docs](docs/basics/03-graphable-interface.md))
+- **Payload Registry** — Messages serialize with type discrimination ([docs](docs/concepts/13-payload-registry.md))
 
-```go
-type Graphable interface {
-    EntityID() string          // 6-part federated identifier
-    Triples() []message.Triple // Facts about this entity
-}
-```
+## Progressive Capabilities
 
-Example:
+Start simple, add capabilities as your needs grow:
 
-```go
-func (d *DroneTelemetry) EntityID() string {
-    return fmt.Sprintf("acme.ops.robotics.gcs.drone.%s", d.DroneID)
-}
+| Tier | What You Get | What You Need |
+|------|--------------|---------------|
+| **Structural** | Rules engine, explicit relationships, graph indexing | NATS only |
+| **Statistical** | + BM25 search, community detection | + Search index |
+| **Semantic** | + Neural embeddings, LLM-powered agents | + Embedding service, LLM |
 
-func (d *DroneTelemetry) Triples() []message.Triple {
-    id := d.EntityID()
-    return []message.Triple{
-        {Subject: id, Predicate: "drone.telemetry.battery", Object: d.Battery},
-        {Subject: id, Predicate: "fleet.membership.current", Object: d.FleetID},
-    }
-}
-```
+Most deployments start with Structural. Add capabilities when the problem demands it.
 
-## Entity IDs
-
-Use 6-part hierarchical identifiers:
-
-```
-org.platform.domain.system.type.instance
-```
-
-Example: `acme.ops.robotics.gcs.drone.001`
-
-## Predicates
-
-Predicates follow `domain.category.property` format:
-
-```
-sensor.measurement.celsius
-geo.location.zone
-fleet.membership.current
-```
-
-Dotted notation enables NATS wildcard queries (`sensor.measurement.*`).
-
-## Progressive Enhancement (Tiers)
-
-| Tier | Capabilities | Requirements |
-|------|--------------|--------------|
-| Structural | Rules engine, explicit relationships, structural indexing | NATS only |
-| Statistical | + BM25 search, statistical communities | + Search index |
-| Semantic | + Neural embeddings, LLM summaries | + Embedding service, LLM |
-
-Start with Structural. Add capabilities as resources allow.
+Tiers aren't just about resources. Use rules when you need deterministic, auditable outcomes. Use agents when you need judgment and reasoning. Run both in the same flow — each handles what it does best.
 
 ## Architecture
 
@@ -135,9 +80,11 @@ Input → Processor → Storage → Graph → Gateway
 | Storage | ObjectStore | Persist to NATS JetStream |
 | Gateway | HTTP, GraphQL, MCP | Expose query APIs |
 
-## Agentic AI Orchestration
+All state lives in NATS JetStream KV buckets—portable, syncable, queryable.
 
-SemStreams includes an optional agentic subsystem for LLM-powered autonomous task execution:
+## Agentic AI
+
+When you're ready for LLM-powered automation, SemStreams includes an optional agentic subsystem:
 
 ```
                     ┌─────────────────────────────────────────┐
@@ -156,48 +103,19 @@ User Message ───────► agentic-dispatch ─────► agenti
                     └─────────────────────────────────────────┘
 ```
 
-**Key characteristics:**
-
-- **Optional**: Deploy only when you need LLM-powered automation
-- **Modular**: 6 components that can scale independently
-- **OpenAI-compatible**: Works with any OpenAI-compatible LLM endpoint
-- **Observable**: Full trajectory capture for debugging and analytics
-
-Quick example:
+- **Modular** — 6 components that scale independently
+- **OpenAI-compatible** — works with any OpenAI-compatible endpoint
+- **Observable** — full trajectory capture for debugging
 
 ```bash
-# Run agentic e2e tests (requires Docker)
+# Run agentic e2e tests
 task e2e:agentic
 
 # Or start the full agentic stack
 ./bin/semstreams --config configs/agentic.json
 ```
 
-For details, see [Agentic Quickstart](docs/basics/07-agentic-quickstart.md).
-
-## State: NATS KV Buckets
-
-All state lives in NATS JetStream KV buckets:
-
-**Core buckets:**
-
-| Bucket | Contents |
-|--------|----------|
-| `ENTITY_STATES` | Entity records with triples and version |
-| `PREDICATE_INDEX` | Predicate → entity IDs |
-| `INCOMING_INDEX` | Entity ID → referencing entities |
-| `OUTGOING_INDEX` | Entity ID → referenced entities |
-| `ALIAS_INDEX` | Alias → entity ID |
-| `SPATIAL_INDEX` | Geohash → entity IDs |
-| `TEMPORAL_INDEX` | Time bucket → entity IDs |
-
-**Optional buckets:**
-
-| Bucket | Contents | Feature |
-|--------|----------|---------|
-| `STRUCTURAL_INDEX` | K-core levels and pivot distances | Structural indexing |
-| `EMBEDDING_INDEX` | Entity ID → embedding vector | Semantic search |
-| `COMMUNITY_INDEX` | Community records with summaries | Community detection |
+See [Agentic Quickstart](docs/basics/07-agentic-quickstart.md) to get started.
 
 ## Documentation
 
@@ -205,20 +123,39 @@ All state lives in NATS JetStream KV buckets:
 |--------|---------|
 | [docs/basics/](docs/basics/) | Getting started, core interfaces, quickstart guides |
 | [docs/concepts/](docs/concepts/) | Background knowledge, algorithms, orchestration layers |
-| [docs/architecture/](docs/architecture/) | System design, ADRs, component diagrams |
 | [docs/advanced/](docs/advanced/) | Agentic components, clustering, performance tuning |
-| [docs/operations/](docs/operations/) | Local monitoring, troubleshooting, deployment |
+| [docs/operations/](docs/operations/) | Monitoring, troubleshooting, deployment |
 | [docs/contributing/](docs/contributing/) | Development, testing, CI |
-| [docs/agents/](docs/agents/) | Go patterns for agent workflows |
 
-**New to agentic systems?** Start with [Agentic Quickstart](docs/basics/07-agentic-quickstart.md).
+## Development
+
+```bash
+# Testing
+task test               # Unit tests
+task test:integration   # Integration tests (uses testcontainers)
+task test:race          # Tests with race detector
+task check              # Lint + test
+
+# E2E Tests (requires Docker)
+task e2e:core           # Health + dataflow (~10s)
+task e2e:structural     # Rules + structural inference (~30s)
+task e2e:statistical    # BM25 + community detection (~60s)
+task e2e:semantic       # Neural embeddings + LLM (~90s)
+task e2e:agentic        # Agent loop + tools (~30s)
+task e2e:all            # All tiers sequentially
+```
 
 ## Requirements
 
 - Go 1.25+
 - NATS Server with JetStream enabled
+- Docker (for deployment and e2e tests)
 - (Optional) Embedding service for Statistical/Semantic tiers
-- (Optional) LLM service for Semantic tier
+- (Optional) LLM service for Semantic tier and agentic system
+
+## Status
+
+This project is under active development. Expect breaking changes.
 
 ## License
 
