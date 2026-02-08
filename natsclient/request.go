@@ -34,19 +34,29 @@ func (c *Client) Request(ctx context.Context, subject string, data []byte, timeo
 		timeout = DefaultRequestTimeout
 	}
 
+	// Auto-generate trace if none exists
+	if _, ok := TraceContextFromContext(ctx); !ok {
+		ctx = ContextWithTrace(ctx, NewTraceContext())
+	}
+
 	// Create a context with timeout if not already set
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// Build message with trace headers
+	msg := nats.NewMsg(subject)
+	msg.Data = data
+	InjectTrace(ctx, msg)
+
 	// Perform the request using NATS request/reply
-	msg, err := conn.RequestWithContext(reqCtx, subject, data)
+	reply, err := conn.RequestMsgWithContext(reqCtx, msg)
 	if err != nil {
 		c.recordFailure()
 		return nil, err
 	}
 
 	c.resetCircuit()
-	return msg.Data, nil
+	return reply.Data, nil
 }
 
 // RequestWithHeaders performs a request/reply operation with custom headers.
@@ -77,6 +87,11 @@ func (c *Client) RequestWithHeaders(
 		timeout = DefaultRequestTimeout
 	}
 
+	// Auto-generate trace if none exists
+	if _, ok := TraceContextFromContext(ctx); !ok {
+		ctx = ContextWithTrace(ctx, NewTraceContext())
+	}
+
 	// Create a context with timeout
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
@@ -92,6 +107,9 @@ func (c *Client) RequestWithHeaders(
 			msg.Header.Set(key, value)
 		}
 	}
+
+	// Inject trace headers (in addition to user headers)
+	InjectTrace(ctx, msg)
 
 	// Perform the request
 	reply, err := conn.RequestMsgWithContext(reqCtx, msg)
@@ -232,15 +250,26 @@ func (c *Client) RequestWithRetry(
 		timeout = DefaultRequestTimeout
 	}
 
+	// Auto-generate trace if none exists (once for all retries)
+	if _, ok := TraceContextFromContext(ctx); !ok {
+		ctx = ContextWithTrace(ctx, NewTraceContext())
+	}
+
 	var lastErr error
 	for attempt := 0; attempt <= retry.MaxRetries; attempt++ {
 		reqCtx, cancel := context.WithTimeout(ctx, timeout)
-		msg, err := conn.RequestWithContext(reqCtx, subject, data)
+
+		// Build message with trace headers
+		msg := nats.NewMsg(subject)
+		msg.Data = data
+		InjectTrace(ctx, msg)
+
+		reply, err := conn.RequestMsgWithContext(reqCtx, msg)
 		cancel()
 
 		if err == nil {
 			c.resetCircuit()
-			return msg.Data, nil
+			return reply.Data, nil
 		}
 
 		lastErr = err

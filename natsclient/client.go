@@ -664,7 +664,7 @@ func (m *Client) Subscribe(ctx context.Context, subject string, handler func(con
 }
 
 // Publish publishes a message to a NATS subject
-func (m *Client) Publish(_ context.Context, subject string, data []byte) error {
+func (m *Client) Publish(ctx context.Context, subject string, data []byte) error {
 	m.mu.RLock()
 	conn := m.conn
 	m.mu.RUnlock()
@@ -673,7 +673,15 @@ func (m *Client) Publish(_ context.Context, subject string, data []byte) error {
 		return ErrNotConnected
 	}
 
-	return conn.Publish(subject, data)
+	// Auto-generate trace if none exists
+	if _, ok := TraceContextFromContext(ctx); !ok {
+		ctx = ContextWithTrace(ctx, NewTraceContext())
+	}
+
+	msg := &nats.Msg{Subject: subject, Data: data}
+	InjectTrace(ctx, msg)
+
+	return conn.PublishMsg(msg)
 }
 
 // JetStream returns the JetStream context
