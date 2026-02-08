@@ -30,13 +30,23 @@ func NewMessageLoggerClient(baseURL string) *MessageLoggerClient {
 
 // MessageEntry represents a logged message from the MessageLogger service
 type MessageEntry struct {
+	Sequence    uint64          `json:"sequence"`
 	Timestamp   time.Time       `json:"timestamp"`
 	Subject     string          `json:"subject"`
 	MessageType string          `json:"message_type,omitempty"`
 	MessageID   string          `json:"message_id,omitempty"`
+	TraceID     string          `json:"trace_id,omitempty"`
+	SpanID      string          `json:"span_id,omitempty"`
 	Summary     string          `json:"summary"`
 	RawData     json.RawMessage `json:"raw_data,omitempty"`
 	Metadata    map[string]any  `json:"metadata,omitempty"`
+}
+
+// TraceResponse represents the response from the trace query endpoint
+type TraceResponse struct {
+	TraceID string         `json:"trace_id"`
+	Count   int            `json:"count"`
+	Entries []MessageEntry `json:"entries"`
 }
 
 // LoggerStats represents statistics from the MessageLogger service
@@ -103,6 +113,33 @@ func (c *MessageLoggerClient) GetEntries(ctx context.Context, limit int, subject
 	}
 
 	return entries, nil
+}
+
+// GetEntriesByTrace fetches all entries for a specific W3C trace ID
+func (c *MessageLoggerClient) GetEntriesByTrace(ctx context.Context, traceID string) (*TraceResponse, error) {
+	reqURL := fmt.Sprintf("%s/message-logger/trace/%s", c.baseURL, traceID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("executing request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var result TraceResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("decoding response: %w", err)
+	}
+
+	return &result, nil
 }
 
 // GetStats returns message logger statistics
