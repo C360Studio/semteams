@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/message"
 	"github.com/google/uuid"
 )
 
@@ -112,12 +113,13 @@ func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result 
 		}
 	}
 
-	// Marshal task to JSON
-	payload, err := json.Marshal(task)
+	// Wrap task in BaseMessage envelope (required by agentic-loop)
+	baseMsg := message.NewBaseMessage(task.Schema(), &task, "workflow")
+	payload, err := json.Marshal(baseMsg)
 	if err != nil {
 		return Result{
 			Success:  false,
-			Error:    fmt.Sprintf("failed to marshal task: %v", err),
+			Error:    fmt.Sprintf("failed to marshal message: %v", err),
 			Duration: time.Since(start),
 		}
 	}
