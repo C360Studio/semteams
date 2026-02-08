@@ -133,8 +133,7 @@ func (c *Client) Reply(ctx context.Context, replyTo string, data []byte) error {
 }
 
 // ReplyWithHeaders sends a reply with custom headers.
-// Note: ctx is accepted for API consistency but not currently used.
-func (c *Client) ReplyWithHeaders(_ context.Context, replyTo string, data []byte, headers map[string]string) error {
+func (c *Client) ReplyWithHeaders(ctx context.Context, replyTo string, data []byte, headers map[string]string) error {
 	if replyTo == "" {
 		return nil // No reply requested
 	}
@@ -147,6 +146,11 @@ func (c *Client) ReplyWithHeaders(_ context.Context, replyTo string, data []byte
 		return ErrNotConnected
 	}
 
+	// Auto-generate trace if none exists
+	if _, ok := TraceContextFromContext(ctx); !ok {
+		ctx = ContextWithTrace(ctx, NewTraceContext())
+	}
+
 	// Build the reply message with headers
 	msg := nats.NewMsg(replyTo)
 	msg.Data = data
@@ -157,6 +161,9 @@ func (c *Client) ReplyWithHeaders(_ context.Context, replyTo string, data []byte
 			msg.Header.Set(key, value)
 		}
 	}
+
+	// Inject trace headers
+	InjectTrace(ctx, msg)
 
 	return conn.PublishMsg(msg)
 }
@@ -178,8 +185,14 @@ func (c *Client) SubscribeForRequests(
 	}
 
 	sub, err := c.conn.Subscribe(subject, func(msg *nats.Msg) {
+		// Extract trace from incoming request
+		msgCtx := ctx
+		if tc := ExtractTrace(msg); tc != nil {
+			msgCtx = ContextWithTrace(ctx, tc)
+		}
+
 		// Create per-message context with timeout
-		msgCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		msgCtx, cancel := context.WithTimeout(msgCtx, 30*time.Second)
 		defer cancel()
 
 		// Call the handler

@@ -264,12 +264,6 @@ func (g *Gateway) createRouteHandler(route gateway.RouteMapping) http.HandlerFun
 
 // sendNATSRequest sends a request to NATS and waits for a reply
 func (g *Gateway) sendNATSRequest(ctx context.Context, subject string, data []byte) ([]byte, error) {
-	nc := g.natsClient.GetConnection()
-	if nc == nil {
-		return nil, errs.WrapTransient(nil, "Gateway", "sendNATSRequest",
-			"NATS connection not available")
-	}
-
 	// Determine timeout from context
 	deadline, ok := ctx.Deadline()
 	if !ok {
@@ -277,14 +271,14 @@ func (g *Gateway) sendNATSRequest(ctx context.Context, subject string, data []by
 	}
 	timeout := time.Until(deadline)
 
-	// Send request and wait for reply
-	msg, err := nc.Request(subject, data, timeout)
+	// Use natsclient.Request which auto-generates and propagates trace
+	resp, err := g.natsClient.Request(ctx, subject, data, timeout)
 	if err != nil {
 		return nil, errs.WrapTransient(err, "Gateway", "sendNATSRequest",
 			fmt.Sprintf("NATS request to %s failed", subject))
 	}
 
-	return msg.Data, nil
+	return resp, nil
 }
 
 // applyCORS applies CORS headers to the response

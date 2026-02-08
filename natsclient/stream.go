@@ -192,8 +192,14 @@ func (c *Client) ConsumeStreamWithConfig(
 
 	// Start consuming
 	consumeCtx, err := consumer.Consume(func(msg jetstream.Msg) {
+		// Extract trace from JetStream message headers
+		msgCtx := ctx
+		if tc := ExtractTraceFromJetStream(msg.Headers()); tc != nil {
+			msgCtx = ContextWithTrace(ctx, tc)
+		}
+
 		// Create per-message context with configurable timeout
-		msgCtx, cancel := context.WithTimeout(ctx, messageTimeout)
+		msgCtx, cancel := context.WithTimeout(msgCtx, messageTimeout)
 		defer cancel()
 
 		// Wrap handler with panic recovery and default Nak
