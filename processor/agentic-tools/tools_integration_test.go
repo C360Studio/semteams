@@ -15,6 +15,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 )
@@ -57,6 +58,16 @@ func getSharedNATSClient(t *testing.T) *natsclient.Client {
 		t.Fatal("Shared NATS client not initialized")
 	}
 	return sharedNATSClient
+}
+
+// publishToolCallMessage publishes a ToolCall wrapped in a BaseMessage envelope
+func publishToolCallMessage(t *testing.T, natsClient *natsclient.Client, subject string, call *agentic.ToolCall) {
+	t.Helper()
+	baseMsg := message.NewBaseMessage(call.Schema(), call, "integration-test")
+	msgData, err := json.Marshal(baseMsg)
+	require.NoError(t, err, "Failed to marshal BaseMessage")
+	err = natsClient.PublishToStream(context.Background(), subject, msgData)
+	require.NoError(t, err, "Failed to publish tool call message")
 }
 
 // integrationMockExecutor implements a simple test tool executor for integration tests
@@ -170,31 +181,28 @@ func TestIntegration_ToolExecution(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
-		var result agentic.ToolResult
-		if err := json.Unmarshal(msg.Data, &result); err == nil {
-			receiveMu.Lock()
-			receivedResults = append(receivedResults, result)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
+				receiveMu.Lock()
+				receivedResults = append(receivedResults, *result)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Publish tool call
-	toolCall := agentic.ToolCall{
+	// Publish tool call (wrapped in BaseMessage)
+	toolCall := &agentic.ToolCall{
 		ID:   "call_123",
 		Name: "echo",
 		Arguments: map[string]any{
 			"input": "test",
 		},
 	}
-
-	callData, err := json.Marshal(toolCall)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "tool.execute.echo", callData)
-	require.NoError(t, err)
+	publishToolCallMessage(t, natsClient, "tool.execute.echo", toolCall)
 
 	// Wait for result
 	time.Sleep(500 * time.Millisecond)
@@ -288,31 +296,28 @@ func TestIntegration_ToolAllowedList(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
-		var result agentic.ToolResult
-		if err := json.Unmarshal(msg.Data, &result); err == nil {
-			receiveMu.Lock()
-			receivedResults = append(receivedResults, result)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
+				receiveMu.Lock()
+				receivedResults = append(receivedResults, *result)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Try to execute blocked tool
-	blockedCall := agentic.ToolCall{
+	// Try to execute blocked tool (wrapped in BaseMessage)
+	blockedCall := &agentic.ToolCall{
 		ID:   "call_blocked",
 		Name: "blocked_tool",
 		Arguments: map[string]any{
 			"input": "test",
 		},
 	}
-
-	callData, err := json.Marshal(blockedCall)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "tool.execute.blocked", callData)
-	require.NoError(t, err)
+	publishToolCallMessage(t, natsClient, "tool.execute.blocked", blockedCall)
 
 	time.Sleep(500 * time.Millisecond)
 
@@ -399,31 +404,28 @@ func TestIntegration_ToolTimeout(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
-		var result agentic.ToolResult
-		if err := json.Unmarshal(msg.Data, &result); err == nil {
-			receiveMu.Lock()
-			receivedResults = append(receivedResults, result)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
+				receiveMu.Lock()
+				receivedResults = append(receivedResults, *result)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Execute slow tool
-	slowCall := agentic.ToolCall{
+	// Execute slow tool (wrapped in BaseMessage)
+	slowCall := &agentic.ToolCall{
 		ID:   "call_slow",
 		Name: "slow_tool",
 		Arguments: map[string]any{
 			"input": "test",
 		},
 	}
-
-	callData, err := json.Marshal(slowCall)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "tool.execute.slow", callData)
-	require.NoError(t, err)
+	publishToolCallMessage(t, natsClient, "tool.execute.slow", slowCall)
 
 	// Wait for timeout to occur
 	time.Sleep(1 * time.Second)
@@ -525,11 +527,13 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
-		var result agentic.ToolResult
-		if err := json.Unmarshal(msg.Data, &result); err == nil {
-			receiveMu.Lock()
-			receivedResults = append(receivedResults, result)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
+				receiveMu.Lock()
+				receivedResults = append(receivedResults, *result)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
@@ -539,17 +543,14 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 	// Execute all tools concurrently
 	startTime := time.Now()
 
-	calls := []agentic.ToolCall{
+	calls := []*agentic.ToolCall{
 		{ID: "call_1", Name: "tool1", Arguments: map[string]any{"input": "1"}},
 		{ID: "call_2", Name: "tool2", Arguments: map[string]any{"input": "2"}},
 		{ID: "call_3", Name: "tool3", Arguments: map[string]any{"input": "3"}},
 	}
 
 	for _, call := range calls {
-		callData, err := json.Marshal(call)
-		require.NoError(t, err)
-		err = natsClient.PublishToStream(ctx, "tool.execute."+call.Name, callData)
-		require.NoError(t, err)
+		publishToolCallMessage(t, natsClient, "tool.execute."+call.Name, call)
 	}
 
 	// Wait for all results - should complete faster than sequential time
@@ -829,31 +830,28 @@ func TestIntegration_GlobalRegistryExecution(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
-		var result agentic.ToolResult
-		if err := json.Unmarshal(msg.Data, &result); err == nil {
-			receiveMu.Lock()
-			receivedResults = append(receivedResults, result)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
+				receiveMu.Lock()
+				receivedResults = append(receivedResults, *result)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Execute the globally registered tool
-	toolCall := agentic.ToolCall{
+	// Execute the globally registered tool (wrapped in BaseMessage)
+	toolCall := &agentic.ToolCall{
 		ID:   "call_global_exec",
 		Name: "global_exec_tool",
 		Arguments: map[string]any{
 			"input": "test",
 		},
 	}
-
-	callData, err := json.Marshal(toolCall)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "tool.execute.global_exec_tool", callData)
-	require.NoError(t, err)
+	publishToolCallMessage(t, natsClient, "tool.execute.global_exec_tool", toolCall)
 
 	// Wait for result
 	time.Sleep(500 * time.Millisecond)

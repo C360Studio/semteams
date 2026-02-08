@@ -21,6 +21,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
 )
@@ -63,6 +64,16 @@ func getSharedNATSClient(t *testing.T) *natsclient.Client {
 		t.Fatal("Shared NATS client not initialized")
 	}
 	return sharedNATSClient
+}
+
+// publishAgentRequestMessage publishes an AgentRequest wrapped in a BaseMessage envelope
+func publishAgentRequestMessage(t *testing.T, natsClient *natsclient.Client, subject string, req *agentic.AgentRequest) {
+	t.Helper()
+	baseMsg := message.NewBaseMessage(req.Schema(), req, "integration-test")
+	msgData, err := json.Marshal(baseMsg)
+	require.NoError(t, err, "Failed to marshal BaseMessage")
+	err = natsClient.PublishToStream(context.Background(), subject, msgData)
+	require.NoError(t, err, "Failed to publish agent request message")
 }
 
 // TestIntegration_ModelCompleteResponse tests that a complete response is published correctly
@@ -153,19 +164,21 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
-		var resp agentic.AgentResponse
-		if err := json.Unmarshal(msg.Data, &resp); err == nil {
-			receiveMu.Lock()
-			receivedResponses = append(receivedResponses, resp)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
+				receiveMu.Lock()
+				receivedResponses = append(receivedResponses, *resp)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Publish agent request
-	request := agentic.AgentRequest{
+	// Publish agent request (wrapped in BaseMessage)
+	request := &agentic.AgentRequest{
 		RequestID: "req_123",
 		LoopID:    "loop_456",
 		Role:      "general",
@@ -177,11 +190,7 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 			},
 		},
 	}
-
-	reqData, err := json.Marshal(request)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.request.test", reqData)
+	publishAgentRequestMessage(t, natsClient, "agent.request.test", request)
 	require.NoError(t, err)
 
 	// Wait for response
@@ -298,19 +307,21 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
-		var resp agentic.AgentResponse
-		if err := json.Unmarshal(msg.Data, &resp); err == nil {
-			receiveMu.Lock()
-			receivedResponses = append(receivedResponses, resp)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
+				receiveMu.Lock()
+				receivedResponses = append(receivedResponses, *resp)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Publish agent request with tools
-	request := agentic.AgentRequest{
+	// Publish agent request with tools (wrapped in BaseMessage)
+	request := &agentic.AgentRequest{
 		RequestID: "req_tool_001",
 		LoopID:    "loop_tool",
 		Role:      "general",
@@ -334,12 +345,7 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 			},
 		},
 	}
-
-	reqData, err := json.Marshal(request)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.request.tool", reqData)
-	require.NoError(t, err)
+	publishAgentRequestMessage(t, natsClient, "agent.request.tool", request)
 
 	// Wait for response
 	time.Sleep(1 * time.Second)
@@ -478,19 +484,21 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
-		var resp agentic.AgentResponse
-		if err := json.Unmarshal(msg.Data, &resp); err == nil {
-			receiveMu.Lock()
-			receivedResponses = append(receivedResponses, resp)
-			receiveMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
+				receiveMu.Lock()
+				receivedResponses = append(receivedResponses, *resp)
+				receiveMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Send request to model-a
-	request1 := agentic.AgentRequest{
+	// Send request to model-a (wrapped in BaseMessage)
+	request1 := &agentic.AgentRequest{
 		RequestID: "req_a",
 		LoopID:    "loop_a",
 		Role:      "general",
@@ -499,16 +507,12 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 			{Role: "user", Content: "Test A"},
 		},
 	}
-
-	reqData1, err := json.Marshal(request1)
-	require.NoError(t, err)
-	err = natsClient.PublishToStream(ctx, "agent.request.a", reqData1)
-	require.NoError(t, err)
+	publishAgentRequestMessage(t, natsClient, "agent.request.a", request1)
 
 	time.Sleep(500 * time.Millisecond)
 
-	// Send request to model-b
-	request2 := agentic.AgentRequest{
+	// Send request to model-b (wrapped in BaseMessage)
+	request2 := &agentic.AgentRequest{
 		RequestID: "req_b",
 		LoopID:    "loop_b",
 		Role:      "general",
@@ -517,11 +521,7 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 			{Role: "user", Content: "Test B"},
 		},
 	}
-
-	reqData2, err := json.Marshal(request2)
-	require.NoError(t, err)
-	err = natsClient.PublishToStream(ctx, "agent.request.b", reqData2)
-	require.NoError(t, err)
+	publishAgentRequestMessage(t, natsClient, "agent.request.b", request2)
 
 	time.Sleep(500 * time.Millisecond)
 

@@ -165,16 +165,18 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	// Subscribe to model requests
+	// Subscribe to model requests (extract from BaseMessage envelope)
 	receivedRequests := make([]agentic.AgentRequest, 0)
 	var requestMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
-		var req agentic.AgentRequest
-		if err := json.Unmarshal(msg.Data, &req); err == nil {
-			requestMu.Lock()
-			receivedRequests = append(receivedRequests, req)
-			requestMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
+				requestMu.Lock()
+				receivedRequests = append(receivedRequests, *req)
+				requestMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
@@ -322,30 +324,34 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	// Track model requests
+	// Track model requests (extract from BaseMessage envelope)
 	var currentRequestID string
 	var requestMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
-		var req agentic.AgentRequest
-		if err := json.Unmarshal(msg.Data, &req); err == nil {
-			requestMu.Lock()
-			currentRequestID = req.RequestID
-			requestMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
+				requestMu.Lock()
+				currentRequestID = req.RequestID
+				requestMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
 
-	// Track tool calls
+	// Track tool calls (extract from BaseMessage envelope)
 	receivedToolCalls := make([]agentic.ToolCall, 0)
 	var toolMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.execute.>", func(_ context.Context, msg *nats.Msg) {
-		var call agentic.ToolCall
-		if err := json.Unmarshal(msg.Data, &call); err == nil {
-			toolMu.Lock()
-			receivedToolCalls = append(receivedToolCalls, call)
-			toolMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if call, ok := baseMsg.Payload().(*agentic.ToolCall); ok {
+				toolMu.Lock()
+				receivedToolCalls = append(receivedToolCalls, *call)
+				toolMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
@@ -488,18 +494,20 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	// Track requests to count iterations
+	// Track requests to count iterations (extract from BaseMessage envelope)
 	requestCount := 0
 	var requestMu sync.Mutex
 	var lastRequestID string
 
 	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
-		var req agentic.AgentRequest
-		if err := json.Unmarshal(msg.Data, &req); err == nil {
-			requestMu.Lock()
-			requestCount++
-			lastRequestID = req.RequestID
-			requestMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
+				requestMu.Lock()
+				requestCount++
+				lastRequestID = req.RequestID
+				requestMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
@@ -735,16 +743,18 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	// Track request ID
+	// Track request ID (extract from BaseMessage envelope)
 	var requestID string
 	var requestMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
-		var req agentic.AgentRequest
-		if err := json.Unmarshal(msg.Data, &req); err == nil {
-			requestMu.Lock()
-			requestID = req.RequestID
-			requestMu.Unlock()
+		var baseMsg message.BaseMessage
+		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
+				requestMu.Lock()
+				requestID = req.RequestID
+				requestMu.Unlock()
+			}
 		}
 	})
 	require.NoError(t, err)
