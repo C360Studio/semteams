@@ -310,6 +310,41 @@
 // Connection Lifecycle: Reconnection uses exponential backoff to avoid overwhelming the
 // server during failures. Maximum backoff is configurable (default: 1 minute).
 //
+// # Distributed Tracing
+//
+// The package provides W3C-compliant trace context propagation for distributed tracing.
+// All publish and request methods automatically generate trace context if none exists,
+// ensuring complete observability across the message flow.
+//
+// Trace headers are injected into all outbound NATS messages:
+//   - traceparent: W3C Trace Context header (00-{trace_id}-{span_id}-{flags})
+//   - X-Trace-ID: Simplified trace ID header
+//   - X-Span-ID: Current span identifier
+//   - X-Parent-Span-ID: Parent span for nested operations
+//
+// Using trace context:
+//
+//	// Traces are auto-generated if not present
+//	err := client.Publish(ctx, "subject", data)
+//
+//	// Or provide explicit trace context
+//	tc := natsclient.NewTraceContext()
+//	ctx = natsclient.ContextWithTrace(ctx, tc)
+//	err := client.Publish(ctx, "subject", data)
+//
+//	// Extract trace from received message
+//	tc := natsclient.ExtractTrace(msg)
+//	if tc != nil {
+//	    log.Printf("Trace ID: %s, Span ID: %s", tc.TraceID, tc.SpanID)
+//	}
+//
+// Creating child spans for nested operations:
+//
+//	parentTC, _ := natsclient.TraceContextFromContext(ctx)
+//	childTC := parentTC.NewSpan()
+//	childCtx := natsclient.ContextWithTrace(ctx, childTC)
+//	err := client.Request(childCtx, "service.action", data, timeout)
+//
 // # Architecture Integration
 //
 // The natsclient package integrates with StreamKit components:

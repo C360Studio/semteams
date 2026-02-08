@@ -28,6 +28,14 @@ Connection states transition through: Disconnected → Connecting → Connected 
 
 A high-level abstraction over NATS KV providing automatic CAS (Compare-And-Swap) retry logic, JSON helpers, and consistent error handling for configuration management scenarios.
 
+### Distributed Tracing
+
+All publish and request methods automatically propagate W3C-compliant trace context. If no trace exists in the context, one is auto-generated, ensuring every message can be correlated across services.
+
+**Headers injected:**
+- `traceparent` - W3C Trace Context format (`00-{trace_id}-{span_id}-{flags}`)
+- `X-Trace-ID`, `X-Span-ID`, `X-Parent-Span-ID` - Simplified headers for compatibility
+
 ## Usage
 
 ### Basic Example
@@ -89,6 +97,26 @@ err = kvStore.UpdateJSON(ctx, "service.config", func(config map[string]any) erro
     config["enabled"] = true
     return nil
 })
+```
+
+### Tracing
+
+```go
+// Traces are auto-generated - no action needed for basic tracing
+err := client.Publish(ctx, "events.user", data)
+
+// Explicit trace context
+tc := natsclient.NewTraceContext()
+ctx = natsclient.ContextWithTrace(ctx, tc)
+err = client.Request(ctx, "service.action", data, 5*time.Second)
+
+// Extract trace from incoming message
+tc = natsclient.ExtractTrace(msg)
+if tc != nil {
+    // Create child span for downstream calls
+    childCtx := natsclient.ContextWithTrace(ctx, tc.NewSpan())
+    err = client.Publish(childCtx, "downstream.subject", response)
+}
 ```
 
 ## API Reference
