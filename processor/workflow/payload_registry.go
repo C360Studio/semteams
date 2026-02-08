@@ -30,15 +30,15 @@ func init() {
 		panic("failed to register StepCompleteMessage: " + err.Error())
 	}
 
-	// Register Event factory
+	// Register event factory
 	err = component.RegisterPayload(&component.PayloadRegistration{
 		Domain:      "workflow",
 		Category:    "event",
 		Version:     "v1",
 		Description: "Workflow lifecycle event",
-		Factory:     func() any { return &Event{} },
+		Factory:     func() any { return &event{} },
 	})
 	if err != nil {
-		panic("failed to register Event: " + err.Error())
+		panic("failed to register event: " + err.Error())
 	}
 }

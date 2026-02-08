@@ -594,7 +594,7 @@ func (c *Component) handleStepCompleteMessage(ctx context.Context, data []byte) 
 	}
 
 	// Build step result from message fields
-	stepResult := StepResult{
+	StepResult := StepResult{
 		StepName:    msg.StepName,
 		Status:      msg.Status,
 		Output:      msg.Output,
@@ -606,7 +606,7 @@ func (c *Component) handleStepCompleteMessage(ctx context.Context, data []byte) 
 	}
 
 	// Continue execution
-	if err := c.executor.ContinueExecution(ctx, workflow, exec, stepResult); err != nil {
+	if err := c.executor.ContinueExecution(ctx, workflow, exec, StepResult); err != nil {
 		c.logger.Error("Failed to continue execution", "error", err)
 	}
 
@@ -663,8 +663,8 @@ func (c *Component) handleAgentCompleteMessage(ctx context.Context, data []byte)
 }
 
 // publishEvent publishes a workflow event
-func (c *Component) publishEvent(ctx context.Context, event Event) error {
-	data, err := json.Marshal(event)
+func (c *Component) publishEvent(ctx context.Context, ev event) error {
+	data, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}

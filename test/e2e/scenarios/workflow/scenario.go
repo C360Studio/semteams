@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/c360studio/semstreams/processor/workflow"
+	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 	"github.com/c360studio/semstreams/test/e2e/client"
 	"github.com/c360studio/semstreams/test/e2e/mock"
 	"github.com/c360studio/semstreams/test/e2e/scenarios"
@@ -55,18 +55,18 @@ func DefaultConfig() *Config {
 
 // ContentModerationWorkflow is the test workflow definition.
 // It validates: triggers, steps, publish_agent, conditions, loops.
-var ContentModerationWorkflow = workflow.Definition{
+var ContentModerationWorkflow = wfschema.Definition{
 	ID:            "content-moderation-review",
 	Name:          "Content Moderation Review",
 	Description:   "E2E test workflow for validating workflow + agentic integration",
 	Enabled:       true,
 	MaxIterations: 3,
 	Timeout:       "60s",
-	Trigger:       workflow.TriggerDef{Subject: "workflow.trigger.content-review"},
-	Steps: []workflow.StepDef{
+	Trigger:       wfschema.TriggerDef{Subject: "workflow.trigger.content-review"},
+	Steps: []wfschema.StepDef{
 		{
 			Name: "analyze_content",
-			Action: workflow.ActionDef{
+			Action: wfschema.ActionDef{
 				Type:    "publish_agent",
 				Subject: "agent.task.content-review",
 				Role:    "reviewer",
@@ -77,12 +77,12 @@ var ContentModerationWorkflow = workflow.Definition{
 		},
 		{
 			Name: "evaluate_result",
-			Condition: &workflow.ConditionDef{
+			Condition: &wfschema.ConditionDef{
 				Field:    "steps.analyze_content.output.issues_found",
 				Operator: "eq",
 				Value:    0,
 			},
-			Action: workflow.ActionDef{
+			Action: wfschema.ActionDef{
 				Type:    "publish",
 				Subject: "workflow.content.approved",
 				Payload: json.RawMessage(`{"status": "approved"}`),
@@ -92,7 +92,7 @@ var ContentModerationWorkflow = workflow.Definition{
 		},
 		{
 			Name: "suggest_fixes",
-			Action: workflow.ActionDef{
+			Action: wfschema.ActionDef{
 				Type:    "publish_agent",
 				Subject: "agent.task.content-fix",
 				Role:    "editor",
@@ -102,7 +102,7 @@ var ContentModerationWorkflow = workflow.Definition{
 			OnSuccess: "analyze_content", // Loop back for re-review
 		},
 	},
-	OnComplete: []workflow.ActionDef{
+	OnComplete: []wfschema.ActionDef{
 		{
 			Type:    "publish",
 			Subject: "workflow.content.disposition",

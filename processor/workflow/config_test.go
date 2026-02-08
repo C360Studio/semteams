@@ -3,6 +3,8 @@ package workflow
 import (
 	"encoding/json"
 	"testing"
+
+	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
 
 func TestConfigValidation(t *testing.T) {
@@ -103,21 +105,21 @@ func TestConfigValidation(t *testing.T) {
 func TestDefinitionValidation(t *testing.T) {
 	tests := []struct {
 		name    string
-		def     Definition
+		def     wfschema.Definition
 		wantErr bool
 		errMsg  string
 	}{
 		{
 			name: "valid workflow",
-			def: Definition{
+			def: wfschema.Definition{
 				ID:      "test-workflow",
 				Name:    "Test Workflow",
 				Enabled: true,
-				Trigger: TriggerDef{Subject: "workflow.trigger.test"},
-				Steps: []StepDef{
+				Trigger: wfschema.TriggerDef{Subject: "workflow.trigger.test"},
+				Steps: []wfschema.StepDef{
 					{
 						Name:   "step1",
-						Action: ActionDef{Type: "publish", Subject: "test.subject"},
+						Action: wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 					},
 				},
 			},
@@ -125,13 +127,13 @@ func TestDefinitionValidation(t *testing.T) {
 		},
 		{
 			name: "missing id",
-			def: Definition{
+			def: wfschema.Definition{
 				Name:    "Test Workflow",
-				Trigger: TriggerDef{Subject: "workflow.trigger.test"},
-				Steps: []StepDef{
+				Trigger: wfschema.TriggerDef{Subject: "workflow.trigger.test"},
+				Steps: []wfschema.StepDef{
 					{
 						Name:   "step1",
-						Action: ActionDef{Type: "publish", Subject: "test.subject"},
+						Action: wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 					},
 				},
 			},
@@ -140,13 +142,13 @@ func TestDefinitionValidation(t *testing.T) {
 		},
 		{
 			name: "missing name",
-			def: Definition{
+			def: wfschema.Definition{
 				ID:      "test-workflow",
-				Trigger: TriggerDef{Subject: "workflow.trigger.test"},
-				Steps: []StepDef{
+				Trigger: wfschema.TriggerDef{Subject: "workflow.trigger.test"},
+				Steps: []wfschema.StepDef{
 					{
 						Name:   "step1",
-						Action: ActionDef{Type: "publish", Subject: "test.subject"},
+						Action: wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 					},
 				},
 			},
@@ -155,14 +157,14 @@ func TestDefinitionValidation(t *testing.T) {
 		},
 		{
 			name: "missing trigger subject",
-			def: Definition{
+			def: wfschema.Definition{
 				ID:      "test-workflow",
 				Name:    "Test Workflow",
-				Trigger: TriggerDef{},
-				Steps: []StepDef{
+				Trigger: wfschema.TriggerDef{},
+				Steps: []wfschema.StepDef{
 					{
 						Name:   "step1",
-						Action: ActionDef{Type: "publish", Subject: "test.subject"},
+						Action: wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 					},
 				},
 			},
@@ -171,29 +173,29 @@ func TestDefinitionValidation(t *testing.T) {
 		},
 		{
 			name: "no steps",
-			def: Definition{
+			def: wfschema.Definition{
 				ID:      "test-workflow",
 				Name:    "Test Workflow",
-				Trigger: TriggerDef{Subject: "workflow.trigger.test"},
-				Steps:   []StepDef{},
+				Trigger: wfschema.TriggerDef{Subject: "workflow.trigger.test"},
+				Steps:   []wfschema.StepDef{},
 			},
 			wantErr: true,
 			errMsg:  "workflow must have at least one step",
 		},
 		{
 			name: "duplicate step names",
-			def: Definition{
+			def: wfschema.Definition{
 				ID:      "test-workflow",
 				Name:    "Test Workflow",
-				Trigger: TriggerDef{Subject: "workflow.trigger.test"},
-				Steps: []StepDef{
+				Trigger: wfschema.TriggerDef{Subject: "workflow.trigger.test"},
+				Steps: []wfschema.StepDef{
 					{
 						Name:   "step1",
-						Action: ActionDef{Type: "publish", Subject: "test.subject"},
+						Action: wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 					},
 					{
 						Name:   "step1",
-						Action: ActionDef{Type: "publish", Subject: "test.subject"},
+						Action: wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 					},
 				},
 			},
@@ -202,14 +204,14 @@ func TestDefinitionValidation(t *testing.T) {
 		},
 		{
 			name: "invalid on_success reference",
-			def: Definition{
+			def: wfschema.Definition{
 				ID:      "test-workflow",
 				Name:    "Test Workflow",
-				Trigger: TriggerDef{Subject: "workflow.trigger.test"},
-				Steps: []StepDef{
+				Trigger: wfschema.TriggerDef{Subject: "workflow.trigger.test"},
+				Steps: []wfschema.StepDef{
 					{
 						Name:      "step1",
-						Action:    ActionDef{Type: "publish", Subject: "test.subject"},
+						Action:    wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 						OnSuccess: "nonexistent",
 					},
 				},
@@ -219,14 +221,14 @@ func TestDefinitionValidation(t *testing.T) {
 		},
 		{
 			name: "valid on_success to complete",
-			def: Definition{
+			def: wfschema.Definition{
 				ID:      "test-workflow",
 				Name:    "Test Workflow",
-				Trigger: TriggerDef{Subject: "workflow.trigger.test"},
-				Steps: []StepDef{
+				Trigger: wfschema.TriggerDef{Subject: "workflow.trigger.test"},
+				Steps: []wfschema.StepDef{
 					{
 						Name:      "step1",
-						Action:    ActionDef{Type: "publish", Subject: "test.subject"},
+						Action:    wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 						OnSuccess: "complete",
 					},
 				},
@@ -235,15 +237,15 @@ func TestDefinitionValidation(t *testing.T) {
 		},
 		{
 			name: "invalid timeout",
-			def: Definition{
+			def: wfschema.Definition{
 				ID:      "test-workflow",
 				Name:    "Test Workflow",
-				Trigger: TriggerDef{Subject: "workflow.trigger.test"},
+				Trigger: wfschema.TriggerDef{Subject: "workflow.trigger.test"},
 				Timeout: "invalid",
-				Steps: []StepDef{
+				Steps: []wfschema.StepDef{
 					{
 						Name:   "step1",
-						Action: ActionDef{Type: "publish", Subject: "test.subject"},
+						Action: wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 					},
 				},
 			},
@@ -252,15 +254,15 @@ func TestDefinitionValidation(t *testing.T) {
 		},
 		{
 			name: "negative max iterations",
-			def: Definition{
+			def: wfschema.Definition{
 				ID:            "test-workflow",
 				Name:          "Test Workflow",
-				Trigger:       TriggerDef{Subject: "workflow.trigger.test"},
+				Trigger:       wfschema.TriggerDef{Subject: "workflow.trigger.test"},
 				MaxIterations: -1,
-				Steps: []StepDef{
+				Steps: []wfschema.StepDef{
 					{
 						Name:   "step1",
-						Action: ActionDef{Type: "publish", Subject: "test.subject"},
+						Action: wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 					},
 				},
 			},
@@ -290,69 +292,69 @@ func TestDefinitionValidation(t *testing.T) {
 func TestActionDefValidation(t *testing.T) {
 	tests := []struct {
 		name    string
-		action  ActionDef
+		action  wfschema.ActionDef
 		wantErr bool
 		errMsg  string
 	}{
 		{
 			name:    "valid call action",
-			action:  ActionDef{Type: "call", Subject: "test.subject"},
+			action:  wfschema.ActionDef{Type: "call", Subject: "test.subject"},
 			wantErr: false,
 		},
 		{
 			name:    "valid publish action",
-			action:  ActionDef{Type: "publish", Subject: "test.subject"},
+			action:  wfschema.ActionDef{Type: "publish", Subject: "test.subject"},
 			wantErr: false,
 		},
 		{
 			name:    "valid publish_agent action",
-			action:  ActionDef{Type: "publish_agent", Subject: "agent.task.test", Role: "reviewer", Model: "claude-sonnet", Prompt: "Review this"},
+			action:  wfschema.ActionDef{Type: "publish_agent", Subject: "agent.task.test", Role: "reviewer", Model: "claude-sonnet", Prompt: "Review this"},
 			wantErr: false,
 		},
 		{
 			name:    "publish_agent action without role",
-			action:  ActionDef{Type: "publish_agent", Subject: "agent.task.test", Model: "claude-sonnet", Prompt: "Review this"},
+			action:  wfschema.ActionDef{Type: "publish_agent", Subject: "agent.task.test", Model: "claude-sonnet", Prompt: "Review this"},
 			wantErr: true,
 			errMsg:  "publish_agent action requires role",
 		},
 		{
 			name:    "publish_agent action without model",
-			action:  ActionDef{Type: "publish_agent", Subject: "agent.task.test", Role: "reviewer", Prompt: "Review this"},
+			action:  wfschema.ActionDef{Type: "publish_agent", Subject: "agent.task.test", Role: "reviewer", Prompt: "Review this"},
 			wantErr: true,
 			errMsg:  "publish_agent action requires model",
 		},
 		{
 			name:    "publish_agent action without prompt",
-			action:  ActionDef{Type: "publish_agent", Subject: "agent.task.test", Role: "reviewer", Model: "claude-sonnet"},
+			action:  wfschema.ActionDef{Type: "publish_agent", Subject: "agent.task.test", Role: "reviewer", Model: "claude-sonnet"},
 			wantErr: true,
 			errMsg:  "publish_agent action requires prompt",
 		},
 		{
 			name:    "valid set_state action",
-			action:  ActionDef{Type: "set_state", Entity: "test.entity"},
+			action:  wfschema.ActionDef{Type: "set_state", Entity: "test.entity"},
 			wantErr: false,
 		},
 		{
 			name:    "invalid action type",
-			action:  ActionDef{Type: "unknown"},
+			action:  wfschema.ActionDef{Type: "unknown"},
 			wantErr: true,
 			errMsg:  "invalid action type: unknown",
 		},
 		{
 			name:    "call action without subject",
-			action:  ActionDef{Type: "call"},
+			action:  wfschema.ActionDef{Type: "call"},
 			wantErr: true,
 			errMsg:  "call action requires subject",
 		},
 		{
 			name:    "set_state action without entity",
-			action:  ActionDef{Type: "set_state"},
+			action:  wfschema.ActionDef{Type: "set_state"},
 			wantErr: true,
 			errMsg:  "set_state action requires entity",
 		},
 		{
 			name:    "invalid timeout",
-			action:  ActionDef{Type: "call", Subject: "test", Timeout: "invalid"},
+			action:  wfschema.ActionDef{Type: "call", Subject: "test", Timeout: "invalid"},
 			wantErr: true,
 			errMsg:  "invalid action timeout",
 		},
@@ -376,27 +378,27 @@ func TestActionDefValidation(t *testing.T) {
 func TestConditionDefValidation(t *testing.T) {
 	tests := []struct {
 		name      string
-		condition ConditionDef
+		condition wfschema.ConditionDef
 		wantErr   bool
 	}{
 		{
 			name:      "valid eq condition",
-			condition: ConditionDef{Field: "steps.review.output.count", Operator: "eq", Value: 0},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.count", Operator: "eq", Value: 0},
 			wantErr:   false,
 		},
 		{
 			name:      "valid exists condition",
-			condition: ConditionDef{Field: "steps.review.output", Operator: "exists"},
+			condition: wfschema.ConditionDef{Field: "steps.review.output", Operator: "exists"},
 			wantErr:   false,
 		},
 		{
 			name:      "missing field",
-			condition: ConditionDef{Operator: "eq", Value: 0},
+			condition: wfschema.ConditionDef{Operator: "eq", Value: 0},
 			wantErr:   true,
 		},
 		{
 			name:      "invalid operator",
-			condition: ConditionDef{Field: "test", Operator: "invalid"},
+			condition: wfschema.ConditionDef{Field: "test", Operator: "invalid"},
 			wantErr:   true,
 		},
 	}
@@ -438,7 +440,7 @@ func TestConfigJSONRoundTrip(t *testing.T) {
 }
 
 func TestDefinitionJSONRoundTrip(t *testing.T) {
-	original := Definition{
+	original := wfschema.Definition{
 		ID:            "review-fix-cycle",
 		Name:          "Review and Fix Loop",
 		Description:   "Iterative review and fix workflow",
@@ -446,11 +448,11 @@ func TestDefinitionJSONRoundTrip(t *testing.T) {
 		Enabled:       true,
 		MaxIterations: 3,
 		Timeout:       "10m",
-		Trigger:       TriggerDef{Subject: "workflow.trigger.review-fix-cycle"},
-		Steps: []StepDef{
+		Trigger:       wfschema.TriggerDef{Subject: "workflow.trigger.review-fix-cycle"},
+		Steps: []wfschema.StepDef{
 			{
 				Name: "review",
-				Action: ActionDef{
+				Action: wfschema.ActionDef{
 					Type:    "publish_agent",
 					Subject: "agent.task.${execution.id}.reviewer",
 					Role:    "reviewer",
@@ -461,11 +463,11 @@ func TestDefinitionJSONRoundTrip(t *testing.T) {
 			},
 			{
 				Name: "check-issues",
-				Action: ActionDef{
+				Action: wfschema.ActionDef{
 					Type:    "publish",
 					Subject: "workflow.internal.check",
 				},
-				Condition: &ConditionDef{
+				Condition: &wfschema.ConditionDef{
 					Field:    "steps.review.output.issues_count",
 					Operator: "eq",
 					Value:    0,
@@ -475,7 +477,7 @@ func TestDefinitionJSONRoundTrip(t *testing.T) {
 			},
 			{
 				Name: "fix",
-				Action: ActionDef{
+				Action: wfschema.ActionDef{
 					Type:    "publish_agent",
 					Subject: "agent.task.${execution.id}.fixer",
 					Role:    "fixer",
@@ -485,7 +487,7 @@ func TestDefinitionJSONRoundTrip(t *testing.T) {
 				OnSuccess: "review",
 			},
 		},
-		OnComplete: []ActionDef{
+		OnComplete: []wfschema.ActionDef{
 			{Type: "publish", Subject: "workflow.events.completed"},
 		},
 	}
@@ -495,7 +497,7 @@ func TestDefinitionJSONRoundTrip(t *testing.T) {
 		t.Fatalf("failed to marshal workflow: %v", err)
 	}
 
-	var decoded Definition
+	var decoded wfschema.Definition
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("failed to unmarshal workflow: %v", err)
 	}

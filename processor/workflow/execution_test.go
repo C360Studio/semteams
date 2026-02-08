@@ -236,7 +236,7 @@ func TestExecutionJSONRoundTrip(t *testing.T) {
 }
 
 func TestEvent(t *testing.T) {
-	event := Event{
+	ev := event{
 		Type:        "completed",
 		ExecutionID: "exec_123",
 		WorkflowID:  "workflow_abc",
@@ -246,24 +246,24 @@ func TestEvent(t *testing.T) {
 		Timestamp:   time.Now(),
 	}
 
-	data, err := json.Marshal(event)
+	data, err := json.Marshal(ev)
 	if err != nil {
 		t.Fatalf("failed to marshal event: %v", err)
 	}
 
-	var decoded Event
+	var decoded event
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("failed to unmarshal event: %v", err)
 	}
 
-	if decoded.Type != event.Type {
-		t.Errorf("Type = %q, want %q", decoded.Type, event.Type)
+	if decoded.Type != ev.Type {
+		t.Errorf("Type = %q, want %q", decoded.Type, ev.Type)
 	}
-	if decoded.ExecutionID != event.ExecutionID {
-		t.Errorf("ExecutionID = %q, want %q", decoded.ExecutionID, event.ExecutionID)
+	if decoded.ExecutionID != ev.ExecutionID {
+		t.Errorf("ExecutionID = %q, want %q", decoded.ExecutionID, ev.ExecutionID)
 	}
-	if decoded.Iteration != event.Iteration {
-		t.Errorf("Iteration = %d, want %d", decoded.Iteration, event.Iteration)
+	if decoded.Iteration != ev.Iteration {
+		t.Errorf("Iteration = %d, want %d", decoded.Iteration, ev.Iteration)
 	}
 }
 

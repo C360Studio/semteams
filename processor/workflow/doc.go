@@ -136,8 +136,8 @@
 //
 // # Variable Interpolation
 //
-// Variables use ${path.to.value} syntax. The Interpolator resolves paths from
-// three roots:
+// Variables use ${path.to.value} syntax. The workflow engine automatically
+// resolves these variables from three roots:
 //
 // **execution.*** - Current execution state:
 //
@@ -165,18 +165,13 @@
 //   - ${steps.{name}.duration} - Execution duration
 //   - ${steps.{name}.iteration} - Which iteration the step ran
 //
-// Example usage:
+// Example in workflow definition:
 //
-//	interpolator := workflow.NewInterpolator(execution)
-//
-//	// Interpolate a string
-//	result, err := interpolator.InterpolateString("Process: ${trigger.payload.name}")
-//
-//	// Interpolate JSON payload
-//	result, err := interpolator.InterpolateJSON(payload)
-//
-//	// Evaluate a condition
-//	matches, err := interpolator.EvaluateCondition(&condition)
+//	Action: ActionDef{
+//	    Type:    "publish",
+//	    Subject: "process.${trigger.payload.type}",
+//	    Payload: json.RawMessage(`{"name": "${trigger.payload.name}"}`),
+//	}
 //
 // # Execution Lifecycle
 //

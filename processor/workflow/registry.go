@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -18,7 +19,7 @@ type Registry struct {
 	logger *slog.Logger
 
 	mu        sync.RWMutex
-	workflows map[string]*Definition
+	workflows map[string]*wfschema.Definition
 	byTrigger map[string]string // subject -> workflow ID
 
 	// Watch lifecycle management
@@ -31,7 +32,7 @@ func NewRegistry(bucket jetstream.KeyValue, logger *slog.Logger) *Registry {
 	return &Registry{
 		bucket:    bucket,
 		logger:    logger,
-		workflows: make(map[string]*Definition),
+		workflows: make(map[string]*wfschema.Definition),
 		byTrigger: make(map[string]string),
 	}
 }
@@ -42,7 +43,7 @@ func (r *Registry) Load(ctx context.Context) error {
 	defer r.mu.Unlock()
 
 	// Clear existing
-	r.workflows = make(map[string]*Definition)
+	r.workflows = make(map[string]*wfschema.Definition)
 	r.byTrigger = make(map[string]string)
 
 	// List all keys
@@ -63,7 +64,7 @@ func (r *Registry) Load(ctx context.Context) error {
 			continue
 		}
 
-		var workflow Definition
+		var workflow wfschema.Definition
 		if err := json.Unmarshal(entry.Value(), &workflow); err != nil {
 			r.logger.Warn("Failed to unmarshal workflow definition", "key", key, "error", err)
 			continue
@@ -99,7 +100,7 @@ func isNoKeysFoundError(err error) bool {
 }
 
 // Get retrieves a workflow by ID
-func (r *Registry) Get(id string) (*Definition, bool) {
+func (r *Registry) Get(id string) (*wfschema.Definition, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -108,7 +109,7 @@ func (r *Registry) Get(id string) (*Definition, bool) {
 }
 
 // GetByTrigger retrieves a workflow by trigger subject
-func (r *Registry) GetByTrigger(subject string) (*Definition, bool) {
+func (r *Registry) GetByTrigger(subject string) (*wfschema.Definition, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -122,11 +123,11 @@ func (r *Registry) GetByTrigger(subject string) (*Definition, bool) {
 }
 
 // List returns all workflow definitions
-func (r *Registry) List() []*Definition {
+func (r *Registry) List() []*wfschema.Definition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	workflows := make([]*Definition, 0, len(r.workflows))
+	workflows := make([]*wfschema.Definition, 0, len(r.workflows))
 	for _, w := range r.workflows {
 		workflows = append(workflows, w)
 	}
@@ -134,11 +135,11 @@ func (r *Registry) List() []*Definition {
 }
 
 // ListEnabled returns all enabled workflow definitions
-func (r *Registry) ListEnabled() []*Definition {
+func (r *Registry) ListEnabled() []*wfschema.Definition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	workflows := make([]*Definition, 0)
+	workflows := make([]*wfschema.Definition, 0)
 	for _, w := range r.workflows {
 		if w.Enabled {
 			workflows = append(workflows, w)
@@ -162,7 +163,7 @@ func (r *Registry) TriggerSubjects() []string {
 }
 
 // Register adds or updates a workflow definition
-func (r *Registry) Register(ctx context.Context, workflow *Definition) error {
+func (r *Registry) Register(ctx context.Context, workflow *wfschema.Definition) error {
 	if err := workflow.Validate(); err != nil {
 		return fmt.Errorf("invalid workflow: %w", err)
 	}
@@ -279,7 +280,7 @@ func (r *Registry) handleWatchUpdate(entry jetstream.KeyValueEntry) {
 		return
 	}
 
-	var workflow Definition
+	var workflow wfschema.Definition
 	if err := json.Unmarshal(entry.Value(), &workflow); err != nil {
 		r.logger.Warn("Failed to unmarshal workflow from watch", "key", key, "error", err)
 		return

@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
 
 // maxWorkflowFileSize is the maximum allowed size for a workflow definition file (1MB)
@@ -15,8 +17,8 @@ const maxWorkflowFileSize = 1 * 1024 * 1024
 // loadWorkflowDefinitionsFromFiles loads workflow definitions from JSON files.
 // Supports glob patterns in file paths. Supports both single definition and
 // array of definitions per file.
-func (c *Component) loadWorkflowDefinitionsFromFiles() ([]Definition, error) {
-	var allDefinitions []Definition
+func (c *Component) loadWorkflowDefinitionsFromFiles() ([]wfschema.Definition, error) {
+	var allDefinitions []wfschema.Definition
 	seenIDs := make(map[string]string) // workflow_id -> source_path
 
 	for _, pattern := range c.config.WorkflowFiles {
@@ -55,15 +57,15 @@ func (c *Component) loadWorkflowDefinitionsFromFiles() ([]Definition, error) {
 			}
 
 			// Parse JSON - support both single definition and array
-			var definitions []Definition
+			var definitions []wfschema.Definition
 			if err := json.Unmarshal(data, &definitions); err != nil {
 				// Try parsing as single definition
-				var singleDef Definition
+				var singleDef wfschema.Definition
 				if err2 := json.Unmarshal(data, &singleDef); err2 != nil {
 					return nil, fmt.Errorf("failed to parse workflow file %s (tried array and object): array error: %v, object error: %w",
 						path, err, err2)
 				}
-				definitions = []Definition{singleDef}
+				definitions = []wfschema.Definition{singleDef}
 			}
 
 			// Validate each definition and check for duplicates

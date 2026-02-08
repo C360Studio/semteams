@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/processor/workflow/actions"
+	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
 
 // Default timeout when parsing fails
@@ -21,7 +22,7 @@ type Executor struct {
 	logger         *slog.Logger
 	config         Config
 	metrics        *workflowMetrics
-	eventPublisher func(context.Context, Event) error
+	eventPublisher func(context.Context, event) error
 }
 
 // NewExecutor creates a new step executor
@@ -31,7 +32,7 @@ func NewExecutor(
 	logger *slog.Logger,
 	config Config,
 	metrics *workflowMetrics,
-	eventPublisher func(context.Context, Event) error,
+	eventPublisher func(context.Context, event) error,
 ) *Executor {
 	return &Executor{
 		natsClient:     natsClient,
@@ -44,7 +45,7 @@ func NewExecutor(
 }
 
 // StartExecution begins executing a workflow
-func (e *Executor) StartExecution(ctx context.Context, workflow *Definition, exec *Execution) error {
+func (e *Executor) StartExecution(ctx context.Context, workflow *wfschema.Definition, exec *Execution) error {
 	// Mark as running
 	exec.MarkRunning()
 	if err := e.execStore.Save(ctx, exec); err != nil {
@@ -52,7 +53,7 @@ func (e *Executor) StartExecution(ctx context.Context, workflow *Definition, exe
 	}
 
 	// Publish started event
-	e.publishEvent(ctx, Event{
+	e.publishEvent(ctx, event{
 		Type:        "started",
 		ExecutionID: exec.ID,
 		WorkflowID:  exec.WorkflowID,
@@ -65,31 +66,31 @@ func (e *Executor) StartExecution(ctx context.Context, workflow *Definition, exe
 }
 
 // ContinueExecution continues a workflow after a step completion
-func (e *Executor) ContinueExecution(ctx context.Context, workflow *Definition, exec *Execution, stepResult StepResult) error {
+func (e *Executor) ContinueExecution(ctx context.Context, workflow *wfschema.Definition, exec *Execution, StepResult StepResult) error {
 	// Record step result
-	exec.RecordStepResult(stepResult.StepName, stepResult)
+	exec.RecordStepResult(StepResult.StepName, StepResult)
 	if err := e.execStore.Save(ctx, exec); err != nil {
 		e.logger.Error("Failed to save execution after step", "error", err)
 	}
 
 	// Publish step completed event
-	e.publishEvent(ctx, Event{
+	e.publishEvent(ctx, event{
 		Type:        "step_completed",
 		ExecutionID: exec.ID,
 		WorkflowID:  exec.WorkflowID,
-		StepName:    stepResult.StepName,
+		StepName:    StepResult.StepName,
 		Iteration:   exec.GetIteration(),
 		Timestamp:   time.Now(),
 	})
 
 	// Determine next step based on result
-	currentStep := e.findStepByName(workflow.Steps, stepResult.StepName)
+	currentStep := e.findStepByName(workflow.Steps, StepResult.StepName)
 	if currentStep == nil {
-		return e.failExecution(ctx, workflow, exec, fmt.Sprintf("step not found: %s", stepResult.StepName))
+		return e.failExecution(ctx, workflow, exec, fmt.Sprintf("step not found: %s", StepResult.StepName))
 	}
 
 	var nextStepName string
-	if stepResult.Status == "success" {
+	if StepResult.Status == "success" {
 		nextStepName = currentStep.OnSuccess
 	} else {
 		nextStepName = currentStep.OnFail
@@ -98,16 +99,16 @@ func (e *Executor) ContinueExecution(ctx context.Context, workflow *Definition, 
 	// Handle special next step values using constants
 	switch nextStepName {
 	case StepNameComplete, "":
-		if stepResult.Status == "success" {
+		if StepResult.Status == "success" {
 			return e.completeExecution(ctx, workflow, exec)
 		}
-		return e.failExecution(ctx, workflow, exec, stepResult.Error)
+		return e.failExecution(ctx, workflow, exec, StepResult.Error)
 	case StepNameFail:
-		return e.failExecution(ctx, workflow, exec, stepResult.Error)
+		return e.failExecution(ctx, workflow, exec, StepResult.Error)
 	}
 
 	// Check for loop back
-	if e.isLoopBack(workflow.Steps, stepResult.StepName, nextStepName) {
+	if e.isLoopBack(workflow.Steps, StepResult.StepName, nextStepName) {
 		return e.handleLoopIteration(ctx, workflow, exec, nextStepName)
 	}
 
@@ -116,7 +117,7 @@ func (e *Executor) ContinueExecution(ctx context.Context, workflow *Definition, 
 }
 
 // executeNextStep executes the next step in sequence
-func (e *Executor) executeNextStep(ctx context.Context, workflow *Definition, exec *Execution) error {
+func (e *Executor) executeNextStep(ctx context.Context, workflow *wfschema.Definition, exec *Execution) error {
 	// Get a snapshot for reading
 	snapshot := exec.Clone()
 
@@ -129,7 +130,7 @@ func (e *Executor) executeNextStep(ctx context.Context, workflow *Definition, ex
 }
 
 // executeStep executes a specific step
-func (e *Executor) executeStep(ctx context.Context, workflow *Definition, exec *Execution, stepName string) error {
+func (e *Executor) executeStep(ctx context.Context, workflow *wfschema.Definition, exec *Execution, stepName string) error {
 	// Check timeout
 	if exec.IsTimedOut() {
 		return e.timeoutExecution(ctx, workflow, exec)
@@ -153,7 +154,7 @@ func (e *Executor) executeStep(ctx context.Context, workflow *Definition, exec *
 	}
 
 	// Evaluate condition using a clone for safe reading
-	interpolator := NewInterpolator(exec.Clone())
+	interpolator := newInterpolator(exec.Clone())
 	conditionMet, err := interpolator.EvaluateCondition(step.Condition)
 	if err != nil {
 		// Fail-safe: condition evaluation errors default to false (skip the step)
@@ -178,7 +179,7 @@ func (e *Executor) executeStep(ctx context.Context, workflow *Definition, exec *
 	}
 
 	// Publish step started event
-	e.publishEvent(ctx, Event{
+	e.publishEvent(ctx, event{
 		Type:        "step_started",
 		ExecutionID: exec.ID,
 		WorkflowID:  exec.WorkflowID,
@@ -198,7 +199,7 @@ func (e *Executor) executeStep(ctx context.Context, workflow *Definition, exec *
 
 // buildStepResult creates a StepResult from an action result
 func buildStepResult(stepName string, result actions.Result, start time.Time, iteration int) StepResult {
-	stepResult := StepResult{
+	StepResult := StepResult{
 		StepName:    stepName,
 		Status:      "success",
 		Output:      result.Output,
@@ -208,14 +209,14 @@ func buildStepResult(stepName string, result actions.Result, start time.Time, it
 		Iteration:   iteration,
 	}
 	if !result.Success {
-		stepResult.Status = "failed"
-		stepResult.Error = result.Error
+		StepResult.Status = "failed"
+		StepResult.Error = result.Error
 	}
-	return stepResult
+	return StepResult
 }
 
 // executeAction executes the action for a step
-func (e *Executor) executeAction(ctx context.Context, workflow *Definition, exec *Execution, step *StepDef, interpolator *Interpolator) error {
+func (e *Executor) executeAction(ctx context.Context, workflow *wfschema.Definition, exec *Execution, step *wfschema.StepDef, interpolator *interpolator) error {
 	start := time.Now()
 
 	// Interpolate all action fields at once
@@ -256,7 +257,7 @@ func (e *Executor) executeAction(ctx context.Context, workflow *Definition, exec
 }
 
 // handleLoopIteration handles a loop back to an earlier step
-func (e *Executor) handleLoopIteration(ctx context.Context, workflow *Definition, exec *Execution, nextStepName string) error {
+func (e *Executor) handleLoopIteration(ctx context.Context, workflow *wfschema.Definition, exec *Execution, nextStepName string) error {
 	maxIterations := workflow.MaxIterations
 	if maxIterations == 0 {
 		maxIterations = e.config.DefaultMaxIterations
@@ -293,7 +294,7 @@ func (e *Executor) handleLoopIteration(ctx context.Context, workflow *Definition
 }
 
 // isLoopBack checks if transitioning to nextStep creates a loop
-func (e *Executor) isLoopBack(steps []StepDef, currentStep, nextStep string) bool {
+func (e *Executor) isLoopBack(steps []wfschema.StepDef, currentStep, nextStep string) bool {
 	currentIdx := -1
 	nextIdx := -1
 
@@ -310,20 +311,20 @@ func (e *Executor) isLoopBack(steps []StepDef, currentStep, nextStep string) boo
 }
 
 // completeExecution marks the workflow as completed
-func (e *Executor) completeExecution(ctx context.Context, workflow *Definition, exec *Execution) error {
+func (e *Executor) completeExecution(ctx context.Context, workflow *wfschema.Definition, exec *Execution) error {
 	exec.MarkCompleted()
 	if err := e.execStore.Save(ctx, exec); err != nil {
 		e.logger.Error("Failed to save completed execution", "error", err)
 	}
 
 	// Execute on_complete actions using a clone for interpolation
-	interpolator := NewInterpolator(exec.Clone())
+	interpolator := newInterpolator(exec.Clone())
 	for _, action := range workflow.OnComplete {
 		e.executeCompletionAction(ctx, interpolator, action)
 	}
 
 	// Publish completed event
-	e.publishEvent(ctx, Event{
+	e.publishEvent(ctx, event{
 		Type:        "completed",
 		ExecutionID: exec.ID,
 		WorkflowID:  exec.WorkflowID,
@@ -348,20 +349,20 @@ func (e *Executor) completeExecution(ctx context.Context, workflow *Definition, 
 }
 
 // failExecution marks the workflow as failed
-func (e *Executor) failExecution(ctx context.Context, workflow *Definition, exec *Execution, errMsg string) error {
+func (e *Executor) failExecution(ctx context.Context, workflow *wfschema.Definition, exec *Execution, errMsg string) error {
 	exec.MarkFailed(errMsg)
 	if err := e.execStore.Save(ctx, exec); err != nil {
 		e.logger.Error("Failed to save failed execution", "error", err)
 	}
 
 	// Execute on_fail actions using a clone for interpolation
-	interpolator := NewInterpolator(exec.Clone())
+	interpolator := newInterpolator(exec.Clone())
 	for _, action := range workflow.OnFail {
 		e.executeCompletionAction(ctx, interpolator, action)
 	}
 
 	// Publish failed event
-	e.publishEvent(ctx, Event{
+	e.publishEvent(ctx, event{
 		Type:        "failed",
 		ExecutionID: exec.ID,
 		WorkflowID:  exec.WorkflowID,
@@ -387,20 +388,20 @@ func (e *Executor) failExecution(ctx context.Context, workflow *Definition, exec
 }
 
 // timeoutExecution marks the workflow as timed out
-func (e *Executor) timeoutExecution(ctx context.Context, workflow *Definition, exec *Execution) error {
+func (e *Executor) timeoutExecution(ctx context.Context, workflow *wfschema.Definition, exec *Execution) error {
 	exec.MarkTimedOut()
 	if err := e.execStore.Save(ctx, exec); err != nil {
 		e.logger.Error("Failed to save timed out execution", "error", err)
 	}
 
 	// Execute on_fail actions using a clone for interpolation
-	interpolator := NewInterpolator(exec.Clone())
+	interpolator := newInterpolator(exec.Clone())
 	for _, action := range workflow.OnFail {
 		e.executeCompletionAction(ctx, interpolator, action)
 	}
 
 	// Publish timed_out event
-	e.publishEvent(ctx, Event{
+	e.publishEvent(ctx, event{
 		Type:        "timed_out",
 		ExecutionID: exec.ID,
 		WorkflowID:  exec.WorkflowID,
@@ -425,7 +426,7 @@ func (e *Executor) timeoutExecution(ctx context.Context, workflow *Definition, e
 }
 
 // executeCompletionAction executes an on_complete or on_fail action
-func (e *Executor) executeCompletionAction(ctx context.Context, interpolator *Interpolator, actionDef ActionDef) {
+func (e *Executor) executeCompletionAction(ctx context.Context, interpolator *interpolator, actionDef wfschema.ActionDef) {
 	// Interpolate all action fields at once
 	action := interpolator.InterpolateActionDef(actionDef)
 
@@ -454,7 +455,7 @@ func (e *Executor) executeCompletionAction(ctx context.Context, interpolator *In
 }
 
 // findStepByName finds a step by name in the step list
-func (e *Executor) findStepByName(steps []StepDef, name string) *StepDef {
+func (e *Executor) findStepByName(steps []wfschema.StepDef, name string) *wfschema.StepDef {
 	for i := range steps {
 		if steps[i].Name == name {
 			return &steps[i]
@@ -491,7 +492,7 @@ func (e *Executor) parseTimeout(timeout string, defaultTimeout string, context s
 }
 
 // publishEvent publishes a workflow event
-func (e *Executor) publishEvent(ctx context.Context, event Event) {
+func (e *Executor) publishEvent(ctx context.Context, event event) {
 	if e.eventPublisher != nil {
 		if err := e.eventPublisher(ctx, event); err != nil {
 			e.logger.Warn("Failed to publish workflow event", "type", event.Type, "error", err)
@@ -518,7 +519,7 @@ func (e *Executor) HandleAgentComplete(ctx context.Context, registry *Registry, 
 	}
 
 	// Build step result
-	stepResult := StepResult{
+	StepResult := StepResult{
 		StepName:    exec.GetCurrentName(),
 		Status:      "success",
 		Output:      output,
@@ -529,9 +530,9 @@ func (e *Executor) HandleAgentComplete(ctx context.Context, registry *Registry, 
 	}
 
 	if agentError != "" {
-		stepResult.Status = "failed"
-		stepResult.Error = agentError
+		StepResult.Status = "failed"
+		StepResult.Error = agentError
 	}
 
-	return e.ContinueExecution(ctx, workflow, exec, stepResult)
+	return e.ContinueExecution(ctx, workflow, exec, StepResult)
 }

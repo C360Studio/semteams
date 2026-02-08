@@ -6,28 +6,30 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
 
 // interpolationPattern matches ${path.to.value} patterns
 var interpolationPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 
-// Interpolator handles variable interpolation in workflow data
-type Interpolator struct {
+// interpolator handles variable interpolation in workflow data
+type interpolator struct {
 	execution *Execution
 }
 
-// NewInterpolator creates a new interpolator for an execution
-func NewInterpolator(exec *Execution) *Interpolator {
-	return &Interpolator{execution: exec}
+// newInterpolator creates a new interpolator for an execution
+func newInterpolator(exec *Execution) *interpolator {
+	return &interpolator{execution: exec}
 }
 
 // InterpolateString interpolates variables in a string
-func (i *Interpolator) InterpolateString(input string) (string, error) {
+func (i *interpolator) InterpolateString(input string) (string, error) {
 	return i.interpolate(input)
 }
 
 // InterpolateJSON interpolates variables in a JSON structure
-func (i *Interpolator) InterpolateJSON(input json.RawMessage) (json.RawMessage, error) {
+func (i *interpolator) InterpolateJSON(input json.RawMessage) (json.RawMessage, error) {
 	if input == nil {
 		return nil, nil
 	}
@@ -42,7 +44,7 @@ func (i *Interpolator) InterpolateJSON(input json.RawMessage) (json.RawMessage, 
 }
 
 // interpolateStringWithFallback interpolates a string, returning the original on error
-func (i *Interpolator) interpolateStringWithFallback(input string) string {
+func (i *interpolator) interpolateStringWithFallback(input string) string {
 	if input == "" {
 		return input
 	}
@@ -54,7 +56,7 @@ func (i *Interpolator) interpolateStringWithFallback(input string) string {
 }
 
 // interpolateJSONWithFallback interpolates JSON, returning the original on error
-func (i *Interpolator) interpolateJSONWithFallback(input json.RawMessage) json.RawMessage {
+func (i *interpolator) interpolateJSONWithFallback(input json.RawMessage) json.RawMessage {
 	if input == nil {
 		return nil
 	}
@@ -67,8 +69,8 @@ func (i *Interpolator) interpolateJSONWithFallback(input json.RawMessage) json.R
 
 // InterpolateActionDef returns a copy of the ActionDef with all fields interpolated.
 // On interpolation errors, the original field value is preserved.
-func (i *Interpolator) InterpolateActionDef(action ActionDef) ActionDef {
-	return ActionDef{
+func (i *interpolator) InterpolateActionDef(action wfschema.ActionDef) wfschema.ActionDef {
+	return wfschema.ActionDef{
 		Type:    action.Type,
 		Subject: i.interpolateStringWithFallback(action.Subject),
 		Payload: i.interpolateJSONWithFallback(action.Payload),
@@ -83,7 +85,7 @@ func (i *Interpolator) InterpolateActionDef(action ActionDef) ActionDef {
 }
 
 // interpolate replaces ${...} patterns with their values
-func (i *Interpolator) interpolate(input string) (string, error) {
+func (i *interpolator) interpolate(input string) (string, error) {
 	var lastErr error
 
 	result := interpolationPattern.ReplaceAllStringFunc(input, func(match string) string {
@@ -104,7 +106,7 @@ func (i *Interpolator) interpolate(input string) (string, error) {
 }
 
 // resolvePath resolves a dot-notation path to a value
-func (i *Interpolator) resolvePath(path string) (any, error) {
+func (i *interpolator) resolvePath(path string) (any, error) {
 	parts := strings.Split(path, ".")
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("empty path")
@@ -123,7 +125,7 @@ func (i *Interpolator) resolvePath(path string) (any, error) {
 }
 
 // resolveExecutionPath resolves paths under execution.*
-func (i *Interpolator) resolveExecutionPath(parts []string) (any, error) {
+func (i *interpolator) resolveExecutionPath(parts []string) (any, error) {
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("execution path requires field")
 	}
@@ -149,7 +151,7 @@ func (i *Interpolator) resolveExecutionPath(parts []string) (any, error) {
 }
 
 // resolveTriggerPath resolves paths under trigger.*
-func (i *Interpolator) resolveTriggerPath(parts []string) (any, error) {
+func (i *interpolator) resolveTriggerPath(parts []string) (any, error) {
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("trigger path requires field")
 	}
@@ -172,7 +174,7 @@ func (i *Interpolator) resolveTriggerPath(parts []string) (any, error) {
 }
 
 // resolveTriggerPayloadPath resolves paths into the trigger payload JSON
-func (i *Interpolator) resolveTriggerPayloadPath(parts []string) (any, error) {
+func (i *interpolator) resolveTriggerPayloadPath(parts []string) (any, error) {
 	if i.execution.Trigger.Payload == nil {
 		return nil, fmt.Errorf("trigger payload is empty")
 	}
@@ -186,7 +188,7 @@ func (i *Interpolator) resolveTriggerPayloadPath(parts []string) (any, error) {
 }
 
 // resolveStepsPath resolves paths under steps.*
-func (i *Interpolator) resolveStepsPath(parts []string) (any, error) {
+func (i *interpolator) resolveStepsPath(parts []string) (any, error) {
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("steps path requires step name")
 	}
@@ -218,7 +220,7 @@ func (i *Interpolator) resolveStepsPath(parts []string) (any, error) {
 }
 
 // resolveStepOutputPath resolves paths into a step's output JSON
-func (i *Interpolator) resolveStepOutputPath(result StepResult, parts []string) (any, error) {
+func (i *interpolator) resolveStepOutputPath(result StepResult, parts []string) (any, error) {
 	if result.Output == nil {
 		return nil, fmt.Errorf("step output is empty")
 	}
@@ -284,7 +286,7 @@ func resolveMapPath(data map[string]any, parts []string) (any, error) {
 }
 
 // valueToString converts a value to its string representation
-func (i *Interpolator) valueToString(value any) string {
+func (i *interpolator) valueToString(value any) string {
 	switch v := value.(type) {
 	case string:
 		return v
@@ -309,7 +311,7 @@ func (i *Interpolator) valueToString(value any) string {
 }
 
 // EvaluateCondition evaluates a condition against the current execution state
-func (i *Interpolator) EvaluateCondition(cond *ConditionDef) (bool, error) {
+func (i *interpolator) EvaluateCondition(cond *wfschema.ConditionDef) (bool, error) {
 	if cond == nil {
 		return true, nil
 	}

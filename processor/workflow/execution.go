@@ -306,8 +306,8 @@ func generateExecutionID() string {
 	return fmt.Sprintf("exec_%d_%s", timestamp, hex.EncodeToString(randomBytes))
 }
 
-// Event represents a workflow lifecycle event
-type Event struct {
+// event represents a workflow lifecycle event
+type event struct {
 	Type        string         `json:"type"` // started, step_started, step_completed, completed, failed, timed_out
 	ExecutionID string         `json:"execution_id"`
 	WorkflowID  string         `json:"workflow_id"`
@@ -390,7 +390,7 @@ func (m *StepCompleteMessage) UnmarshalJSON(data []byte) error {
 }
 
 // Validate checks if the Event is valid
-func (e Event) Validate() error {
+func (e event) Validate() error {
 	if e.Type == "" {
 		return fmt.Errorf("type required")
 	}
@@ -404,19 +404,19 @@ func (e Event) Validate() error {
 }
 
 // Schema implements message.Payload
-func (e *Event) Schema() message.Type {
+func (e *event) Schema() message.Type {
 	return message.Type{Domain: "workflow", Category: "event", Version: "v1"}
 }
 
 // MarshalJSON implements json.Marshaler
-func (e *Event) MarshalJSON() ([]byte, error) {
-	type Alias Event
+func (e *event) MarshalJSON() ([]byte, error) {
+	type Alias event
 	return json.Marshal((*Alias)(e))
 }
 
 // UnmarshalJSON implements json.Unmarshaler
-func (e *Event) UnmarshalJSON(data []byte) error {
-	type Alias Event
+func (e *event) UnmarshalJSON(data []byte) error {
+	type Alias event
 	return json.Unmarshal(data, (*Alias)(e))
 }
 

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
+
+	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
 
 func TestInterpolateString(t *testing.T) {
@@ -31,7 +33,7 @@ func TestInterpolateString(t *testing.T) {
 		},
 	}
 
-	interpolator := NewInterpolator(exec)
+	interpolator := newInterpolator(exec)
 
 	tests := []struct {
 		name     string
@@ -126,7 +128,7 @@ func TestInterpolateJSON(t *testing.T) {
 		},
 	}
 
-	interpolator := NewInterpolator(exec)
+	interpolator := newInterpolator(exec)
 
 	input := json.RawMessage(`{"task_id": "${execution.id}", "code": "${trigger.payload.code}"}`)
 
@@ -162,97 +164,97 @@ func TestEvaluateCondition(t *testing.T) {
 		},
 	}
 
-	interpolator := NewInterpolator(exec)
+	interpolator := newInterpolator(exec)
 
 	tests := []struct {
 		name      string
-		condition ConditionDef
+		condition wfschema.ConditionDef
 		expected  bool
 		wantErr   bool
 	}{
 		{
 			name:      "eq true - number zero",
-			condition: ConditionDef{Field: "steps.review.output.issues_count", Operator: "eq", Value: 0},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.issues_count", Operator: "eq", Value: 0},
 			expected:  true,
 		},
 		{
 			name:      "eq false - number mismatch",
-			condition: ConditionDef{Field: "steps.review.output.issues_count", Operator: "eq", Value: 5},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.issues_count", Operator: "eq", Value: 5},
 			expected:  false,
 		},
 		{
 			name:      "eq true - string",
-			condition: ConditionDef{Field: "steps.review.output.severity", Operator: "eq", Value: "low"},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.severity", Operator: "eq", Value: "low"},
 			expected:  true,
 		},
 		{
 			name:      "ne true",
-			condition: ConditionDef{Field: "steps.review.output.issues_count", Operator: "ne", Value: 5},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.issues_count", Operator: "ne", Value: 5},
 			expected:  true,
 		},
 		{
 			name:      "gt true",
-			condition: ConditionDef{Field: "steps.review.output.score", Operator: "gt", Value: 80},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "gt", Value: 80},
 			expected:  true,
 		},
 		{
 			name:      "gt false",
-			condition: ConditionDef{Field: "steps.review.output.score", Operator: "gt", Value: 90},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "gt", Value: 90},
 			expected:  false,
 		},
 		{
 			name:      "lt true",
-			condition: ConditionDef{Field: "steps.review.output.score", Operator: "lt", Value: 90},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "lt", Value: 90},
 			expected:  true,
 		},
 		{
 			name:      "gte true - equal",
-			condition: ConditionDef{Field: "steps.review.output.score", Operator: "gte", Value: 85},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "gte", Value: 85},
 			expected:  true,
 		},
 		{
 			name:      "gte true - greater",
-			condition: ConditionDef{Field: "steps.review.output.score", Operator: "gte", Value: 80},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "gte", Value: 80},
 			expected:  true,
 		},
 		{
 			name:      "lte true",
-			condition: ConditionDef{Field: "steps.review.output.score", Operator: "lte", Value: 85},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "lte", Value: 85},
 			expected:  true,
 		},
 		{
 			name:      "exists true",
-			condition: ConditionDef{Field: "steps.review.output.score", Operator: "exists"},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "exists"},
 			expected:  true,
 		},
 		{
 			name:      "exists false - missing field",
-			condition: ConditionDef{Field: "steps.review.output.missing", Operator: "exists"},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.missing", Operator: "exists"},
 			expected:  false,
 		},
 		{
 			name:      "not_exists true - missing field",
-			condition: ConditionDef{Field: "steps.review.output.missing", Operator: "not_exists"},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.missing", Operator: "not_exists"},
 			expected:  true,
 		},
 		{
 			name:      "not_exists false - field exists",
-			condition: ConditionDef{Field: "steps.review.output.score", Operator: "not_exists"},
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "not_exists"},
 			expected:  false,
 		},
 		{
 			name:      "eq true - boolean",
-			condition: ConditionDef{Field: "steps.analysis.output.has_errors", Operator: "eq", Value: true},
+			condition: wfschema.ConditionDef{Field: "steps.analysis.output.has_errors", Operator: "eq", Value: true},
 			expected:  true,
 		},
 		{
 			name:      "execution iteration",
-			condition: ConditionDef{Field: "execution.iteration", Operator: "eq", Value: 2},
+			condition: wfschema.ConditionDef{Field: "execution.iteration", Operator: "eq", Value: 2},
 			expected:  true,
 		},
 		{
 			name:      "missing step",
-			condition: ConditionDef{Field: "steps.nonexistent.status", Operator: "eq", Value: "success"},
+			condition: wfschema.ConditionDef{Field: "steps.nonexistent.status", Operator: "eq", Value: "success"},
 			expected:  false,
 			wantErr:   true,
 		},
@@ -277,7 +279,7 @@ func TestEvaluateCondition(t *testing.T) {
 
 func TestNilCondition(t *testing.T) {
 	exec := &Execution{ID: "test"}
-	interpolator := NewInterpolator(exec)
+	interpolator := newInterpolator(exec)
 
 	result, err := interpolator.EvaluateCondition(nil)
 	if err != nil {
@@ -303,7 +305,7 @@ func TestNestedPathResolution(t *testing.T) {
 		},
 	}
 
-	interpolator := NewInterpolator(exec)
+	interpolator := newInterpolator(exec)
 
 	tests := []struct {
 		name     string
@@ -332,7 +334,7 @@ func TestNestedPathResolution(t *testing.T) {
 
 func TestValueToString(t *testing.T) {
 	exec := &Execution{ID: "test"}
-	interpolator := NewInterpolator(exec)
+	interpolator := newInterpolator(exec)
 
 	tests := []struct {
 		name     string
@@ -391,7 +393,7 @@ func TestInterpolateTriggerPayloadStructFields(t *testing.T) {
 		StepResults: make(map[string]StepResult),
 	}
 
-	interpolator := NewInterpolator(exec)
+	interpolator := newInterpolator(exec)
 
 	tests := []struct {
 		name     string
