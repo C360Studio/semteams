@@ -60,17 +60,25 @@ log.Printf("Trace: %s, Span: %s", tc.TraceID, tc.SpanID)
 
 ### Extracting from Messages
 
+When using `SubscribeForRequests`, trace extraction is automatic:
+
 ```go
-// In message handler
+// Trace is automatically extracted and added to ctx
+client.SubscribeForRequests(ctx, "service.action", func(ctx context.Context, data []byte) ([]byte, error) {
+    // ctx already contains trace from incoming request
+    // Downstream calls automatically inherit the trace
+    return client.Request(ctx, "downstream.service", data, timeout)
+})
+```
+
+For custom handlers using raw `Subscribe`, extract manually:
+
+```go
 func handleMessage(ctx context.Context, msg *nats.Msg) {
     tc := natsclient.ExtractTrace(msg)
-    if tc == nil {
-        // No trace context in message
-        return
+    if tc != nil {
+        ctx = natsclient.ContextWithTrace(ctx, tc)
     }
-
-    // Continue with same trace
-    ctx = natsclient.ContextWithTrace(ctx, tc)
 
     // All downstream calls inherit trace
     client.Publish(ctx, "next.subject", response)
@@ -97,10 +105,22 @@ client.Request(childCtx, "service.action", data, timeout)
 
 ### JetStream Messages
 
-For JetStream consumers, use `ExtractTraceFromJetStream`:
+When using `ConsumeStream` or `ConsumeStreamWithConfig`, trace extraction is automatic:
 
 ```go
-func handleJetStreamMessage(msg jetstream.Msg) {
+// Trace is automatically extracted and added to ctx
+client.ConsumeStreamWithConfig(ctx, cfg, func(ctx context.Context, msg jetstream.Msg) {
+    // ctx already contains trace from message headers
+    // Downstream calls automatically inherit the trace
+    client.Publish(ctx, "processed.event", result)
+    msg.Ack()
+})
+```
+
+For custom JetStream handlers, extract manually:
+
+```go
+func handleJetStreamMessage(ctx context.Context, msg jetstream.Msg) {
     tc := natsclient.ExtractTraceFromJetStream(msg.Headers())
     if tc != nil {
         ctx = natsclient.ContextWithTrace(ctx, tc)
@@ -111,7 +131,7 @@ func handleJetStreamMessage(msg jetstream.Msg) {
 
 ## Methods with Trace Propagation
 
-All these methods auto-generate and inject trace context:
+### Outbound (auto-generate and inject)
 
 | Method | Behavior |
 |--------|----------|
@@ -119,7 +139,17 @@ All these methods auto-generate and inject trace context:
 | `Request` | Auto-generates trace, injects into request message |
 | `RequestWithHeaders` | Auto-generates trace, merges with user headers |
 | `RequestWithRetry` | Same trace across all retry attempts |
+| `ReplyWithHeaders` | Auto-generates trace, injects into reply message |
 | `PublishToStream` | Auto-generates trace for JetStream publish |
+
+### Inbound (auto-extract to context)
+
+| Method | Behavior |
+|--------|----------|
+| `Subscribe` | Extracts trace from message, adds to handler context |
+| `SubscribeForRequests` | Extracts trace from request, adds to handler context |
+| `ConsumeStream` | Extracts trace from JetStream message headers |
+| `ConsumeStreamWithConfig` | Extracts trace from JetStream message headers |
 
 ## Integration with Tracing Backends
 
