@@ -636,3 +636,98 @@ func TestMessageLogger_GetStatistics_IncludesSampling(t *testing.T) {
 	assert.Contains(t, stats, "sampled_messages")
 	assert.Contains(t, stats, "sample_rate")
 }
+
+// TestMessageLogger_TraceIndexing tests that trace IDs are indexed and retrievable
+func TestMessageLogger_TraceIndexing(t *testing.T) {
+	ml, err := createTestMessageLogger()
+	require.NoError(t, err)
+
+	// Simulate adding entries with trace IDs (mimics handleMessage behavior)
+	traceID1 := "aaaabbbbccccdddd1111222233334444"
+	traceID2 := "55556666777788889999aaaabbbbcccc"
+
+	// Add entries for trace 1
+	for i := 0; i < 3; i++ {
+		seq := ml.nextSequence.Add(1)
+		entry := MessageLogEntry{
+			Sequence: seq,
+			Subject:  "test.subject",
+			TraceID:  traceID1,
+			Summary:  "trace1 entry",
+		}
+		ml.storeEntry(entry)
+		ml.indexTrace(traceID1, seq)
+	}
+
+	// Add entries for trace 2
+	for i := 0; i < 2; i++ {
+		seq := ml.nextSequence.Add(1)
+		entry := MessageLogEntry{
+			Sequence: seq,
+			Subject:  "test.subject",
+			TraceID:  traceID2,
+			Summary:  "trace2 entry",
+		}
+		ml.storeEntry(entry)
+		ml.indexTrace(traceID2, seq)
+	}
+
+	// Verify trace 1 entries
+	entries1 := ml.GetEntriesByTrace(traceID1)
+	assert.Len(t, entries1, 3, "Should have 3 entries for trace 1")
+	for _, e := range entries1 {
+		assert.Equal(t, traceID1, e.TraceID)
+		assert.Equal(t, "trace1 entry", e.Summary)
+	}
+
+	// Verify trace 2 entries
+	entries2 := ml.GetEntriesByTrace(traceID2)
+	assert.Len(t, entries2, 2, "Should have 2 entries for trace 2")
+	for _, e := range entries2 {
+		assert.Equal(t, traceID2, e.TraceID)
+		assert.Equal(t, "trace2 entry", e.Summary)
+	}
+
+	// Verify unknown trace returns empty
+	entriesUnknown := ml.GetEntriesByTrace("00000000000000000000000000000000")
+	assert.Nil(t, entriesUnknown, "Unknown trace should return nil")
+}
+
+// TestMessageLogger_TraceIndexing_CircularBuffer tests trace retrieval with buffer wraparound
+func TestMessageLogger_TraceIndexing_CircularBuffer(t *testing.T) {
+	// Create logger with small buffer to test wraparound
+	natsClient := &natsclient.Client{}
+	loggerConfig := &MessageLoggerConfig{
+		MonitorSubjects: []string{"test.>"},
+		MaxEntries:      10, // Small buffer
+		OutputToStdout:  false,
+	}
+	ml, err := NewMessageLogger(loggerConfig, natsClient)
+	require.NoError(t, err)
+
+	traceID := "aaaabbbbccccdddd1111222233334444"
+
+	// Add entry that will be overwritten
+	seq1 := ml.nextSequence.Add(1)
+	entry1 := MessageLogEntry{Sequence: seq1, TraceID: traceID, Summary: "old"}
+	ml.storeEntry(entry1)
+	ml.indexTrace(traceID, seq1)
+
+	// Fill buffer to overwrite first entry
+	for i := 0; i < 10; i++ {
+		seq := ml.nextSequence.Add(1)
+		entry := MessageLogEntry{Sequence: seq, Summary: "filler"}
+		ml.storeEntry(entry)
+	}
+
+	// Add new entry with same trace
+	seq2 := ml.nextSequence.Add(1)
+	entry2 := MessageLogEntry{Sequence: seq2, TraceID: traceID, Summary: "new"}
+	ml.storeEntry(entry2)
+	ml.indexTrace(traceID, seq2)
+
+	// Should only get the new entry (old one was overwritten)
+	entries := ml.GetEntriesByTrace(traceID)
+	assert.Len(t, entries, 1, "Should only have 1 entry (old one overwritten)")
+	assert.Equal(t, "new", entries[0].Summary)
+}
