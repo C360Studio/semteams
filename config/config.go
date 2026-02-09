@@ -340,6 +340,60 @@ func (l *Loader) Load() (*Config, error) {
 	return cfg, nil
 }
 
+// LoadFromBytes loads configuration from JSON bytes.
+// This is useful when you need to pre-process the configuration (e.g., environment
+// variable expansion) before loading.
+//
+// The data is validated and merged with defaults, just like LoadFile.
+func (l *Loader) LoadFromBytes(data []byte) (*Config, error) {
+	// Start with defaults
+	cfg := l.getDefaults()
+
+	// Parse and merge the provided JSON data
+	rawConfig, err := l.loadRawJSONFromBytes(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+	cfg = l.mergeFromMap(cfg, rawConfig)
+
+	// Apply environment overrides
+	l.applyEnvOverrides(cfg)
+
+	// Validate if enabled
+	if l.validation {
+		if err := l.validate(cfg); err != nil {
+			return nil, err
+		}
+	}
+
+	return cfg, nil
+}
+
+// loadRawJSONFromBytes parses JSON bytes into a configuration map.
+// This follows the same validation as loadRawJSON but without file I/O.
+func (l *Loader) loadRawJSONFromBytes(data []byte) (map[string]any, error) {
+	// Validate size to prevent DoS
+	if len(data) > maxConfigSize {
+		return nil, fmt.Errorf("config data too large: %d bytes > %d", len(data), maxConfigSize)
+	}
+
+	// Validate JSON depth to prevent DoS
+	if err := validateJSONDepth(data); err != nil {
+		return nil, fmt.Errorf("invalid JSON structure: %w", err)
+	}
+
+	// Unmarshal into map
+	var rawConfig map[string]any
+	if err := json.Unmarshal(data, &rawConfig); err != nil {
+		return nil, err
+	}
+
+	// Convert duration strings
+	l.parseDurations(rawConfig)
+
+	return rawConfig, nil
+}
+
 // getDefaults returns default configuration
 func (l *Loader) getDefaults() *Config {
 	return &Config{
