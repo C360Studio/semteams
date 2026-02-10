@@ -307,16 +307,24 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 	resp, err := c.executeRequest(ctx, client, req)
 	duration := time.Since(startTime).Seconds()
 
-	if err != nil {
-		c.logger.Error("Failed to complete chat", "error", err, "model", req.Model)
+	// Check for error response (ChatCompletion returns nil err with error status)
+	if err != nil || resp.Status == "error" {
+		errorMsg := ""
+		if err != nil {
+			errorMsg = err.Error()
+		} else {
+			errorMsg = resp.Error
+		}
+
+		c.logger.Error("Failed to complete chat", "error", errorMsg, "model", req.Model)
 
 		// Determine error type
 		errorType := "unknown"
 		if ctx.Err() != nil {
 			errorType = "timeout"
-		} else if strings.Contains(err.Error(), "connection") {
+		} else if strings.Contains(errorMsg, "connection") {
 			errorType = "connection"
-		} else if strings.Contains(err.Error(), "rate limit") {
+		} else if strings.Contains(errorMsg, "rate limit") {
 			errorType = "rate_limit"
 		}
 
@@ -324,7 +332,10 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 			c.metrics.recordRequestError(req.Model, errorType, duration)
 		}
 
-		c.publishErrorResponse(ctx, req.RequestID, err.Error())
+		// Use detached context preserving trace for error publish
+		errorCtx, cancel := natsclient.DetachContextWithTrace(ctx, 5*time.Second)
+		defer cancel()
+		c.publishErrorResponse(errorCtx, req.RequestID, errorMsg)
 		c.incrementErrors()
 		return
 	}

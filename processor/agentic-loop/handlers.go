@@ -535,6 +535,12 @@ func (h *MessageHandler) handleToolsComplete(
 	return *result, nil
 }
 
+// BuildFailureEvent creates a failure event for publishing (public wrapper).
+// Used by the component to publish failure events when handler returns errors.
+func (h *MessageHandler) BuildFailureEvent(loopID, reason, errorMsg string) (PublishedMessage, error) {
+	return h.buildFailureEvent(loopID, reason, errorMsg)
+}
+
 // buildFailureEvent creates a failure event for publishing
 func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (PublishedMessage, error) {
 	entity, err := h.loopManager.GetLoop(loopID)

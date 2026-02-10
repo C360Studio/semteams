@@ -521,6 +521,18 @@ func (c *Component) handleResponseMessage(ctx context.Context, data []byte) {
 			duration := time.Since(startTime).Seconds()
 			c.metrics.recordLoopFailed("handler_error", entity.Iterations, duration)
 		}
+
+		// Publish failure event so UI gets notified
+		// Use detached context preserving trace for error publish
+		errorCtx, cancel := natsclient.DetachContextWithTrace(ctx, 5*time.Second)
+		defer cancel()
+		if failMsg, fErr := c.handler.BuildFailureEvent(loopID, "handler_error", err.Error()); fErr == nil {
+			if pubErr := c.natsClient.PublishToStream(errorCtx, failMsg.Subject, failMsg.Data); pubErr != nil {
+				c.logger.Error("Failed to publish failure event", "error", pubErr, "loop_id", loopID)
+			}
+		} else {
+			c.logger.Warn("Failed to build failure event", "error", fErr, "loop_id", loopID)
+		}
 		return
 	}
 
@@ -795,18 +807,20 @@ func (c *Component) finalizeTrajectory(ctx context.Context, loopID string, state
 	}
 }
 
-// findLoopIDForRequest finds the loop ID associated with a request ID
+// findLoopIDForRequest finds the loop ID associated with a request ID,
+// attempting recovery from structured ID if not found in cache.
 func (c *Component) findLoopIDForRequest(requestID string) string {
-	loopID, exists := c.handler.loopManager.GetLoopForRequest(requestID)
+	loopID, exists := c.handler.loopManager.GetLoopForRequestWithRecovery(requestID)
 	if !exists {
 		return ""
 	}
 	return loopID
 }
 
-// findLoopIDForToolCall finds the loop ID associated with a tool call ID
+// findLoopIDForToolCall finds the loop ID associated with a tool call ID,
+// attempting recovery from structured ID if not found in cache.
 func (c *Component) findLoopIDForToolCall(callID string) string {
-	loopID, exists := c.handler.loopManager.GetLoopForToolCall(callID)
+	loopID, exists := c.handler.loopManager.GetLoopForToolCallWithRecovery(callID)
 	if !exists {
 		return ""
 	}
