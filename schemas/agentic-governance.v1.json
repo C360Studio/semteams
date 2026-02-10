@@ -19,7 +19,316 @@
           "type": "array",
           "description": "Ordered list of filters to apply",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "content_config": {
+                "type": "object",
+                "description": "Content filter configuration",
+                "category": "advanced",
+                "properties": {
+                  "block_threshold": {
+                    "type": "number",
+                    "description": "Block threshold (0.0-1.0)",
+                    "default": 0.9,
+                    "category": "basic"
+                  },
+                  "enabled_default": {
+                    "type": "array",
+                    "description": "Default policies to enable",
+                    "items": {
+                      "type": "string"
+                    },
+                    "category": "basic"
+                  },
+                  "policies": {
+                    "type": "array",
+                    "description": "Content policies",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "type": "string",
+                          "description": "Action on violation",
+                          "default": "block",
+                          "category": "basic"
+                        },
+                        "categories": {
+                          "type": "array",
+                          "description": "Policy categories",
+                          "items": {
+                            "type": "string"
+                          },
+                          "category": "advanced"
+                        },
+                        "keywords": {
+                          "type": "array",
+                          "description": "Keywords to match",
+                          "items": {
+                            "type": "string"
+                          },
+                          "category": "basic"
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "Policy identifier",
+                          "category": "basic"
+                        },
+                        "patterns": {
+                          "type": "array",
+                          "description": "Regex patterns",
+                          "items": {
+                            "type": "string"
+                          },
+                          "category": "basic"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "description": "Violation severity",
+                          "default": "high",
+                          "category": "basic"
+                        }
+                      }
+                    },
+                    "category": "basic"
+                  },
+                  "warn_threshold": {
+                    "type": "number",
+                    "description": "Warning threshold (0.0-1.0)",
+                    "default": 0.7,
+                    "category": "basic"
+                  }
+                }
+              },
+              "enabled": {
+                "type": "boolean",
+                "description": "Whether this filter is enabled",
+                "default": true,
+                "category": "basic"
+              },
+              "injection_config": {
+                "type": "object",
+                "description": "Injection filter configuration",
+                "category": "advanced",
+                "properties": {
+                  "confidence_threshold": {
+                    "type": "number",
+                    "description": "Confidence threshold for blocking (0.0-1.0)",
+                    "default": 0.8,
+                    "category": "basic"
+                  },
+                  "enabled_patterns": {
+                    "type": "array",
+                    "description": "Built-in pattern names to enable",
+                    "items": {
+                      "type": "string"
+                    },
+                    "category": "basic"
+                  },
+                  "patterns": {
+                    "type": "array",
+                    "description": "Injection patterns to detect",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "description": "Detection confidence",
+                          "default": 0.9,
+                          "category": "advanced"
+                        },
+                        "description": {
+                          "type": "string",
+                          "description": "Pattern description",
+                          "category": "basic"
+                        },
+                        "name": {
+                          "type": "string",
+                          "description": "Pattern identifier",
+                          "category": "basic"
+                        },
+                        "pattern": {
+                          "type": "string",
+                          "description": "Regex pattern",
+                          "category": "basic"
+                        },
+                        "severity": {
+                          "type": "string",
+                          "description": "Violation severity",
+                          "default": "high",
+                          "category": "basic"
+                        }
+                      }
+                    },
+                    "category": "advanced"
+                  }
+                }
+              },
+              "name": {
+                "type": "string",
+                "description": "Filter name (pii_redaction injection_detection content_moderation rate_limiting)",
+                "category": "basic"
+              },
+              "pii_config": {
+                "type": "object",
+                "description": "PII filter configuration",
+                "category": "advanced",
+                "properties": {
+                  "allowed_types": {
+                    "type": "array",
+                    "description": "PII types allowed through without redaction",
+                    "items": {
+                      "type": "string"
+                    },
+                    "category": "advanced"
+                  },
+                  "confidence_threshold": {
+                    "type": "number",
+                    "description": "Confidence threshold (0.0-1.0)",
+                    "default": 0.85,
+                    "category": "advanced"
+                  },
+                  "custom_patterns": {
+                    "type": "array",
+                    "description": "Custom PII patterns",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "confidence": {
+                          "type": "number",
+                          "description": "Detection confidence",
+                          "default": 0.9,
+                          "category": "advanced"
+                        },
+                        "pattern": {
+                          "type": "string",
+                          "description": "Regex pattern",
+                          "category": "basic"
+                        },
+                        "replacement": {
+                          "type": "string",
+                          "description": "Replacement text",
+                          "category": "basic"
+                        },
+                        "type": {
+                          "type": "string",
+                          "description": "PII type identifier",
+                          "category": "basic"
+                        }
+                      }
+                    },
+                    "category": "advanced"
+                  },
+                  "mask_char": {
+                    "type": "string",
+                    "description": "Masking character for mask strategy",
+                    "default": "*",
+                    "category": "advanced"
+                  },
+                  "strategy": {
+                    "type": "string",
+                    "description": "Redaction strategy (mask hash remove label)",
+                    "default": "label",
+                    "category": "basic"
+                  },
+                  "types": {
+                    "type": "array",
+                    "description": "PII types to detect",
+                    "items": {
+                      "type": "string"
+                    },
+                    "category": "basic"
+                  }
+                }
+              },
+              "rate_limit_config": {
+                "type": "object",
+                "description": "Rate limit filter configuration",
+                "category": "advanced",
+                "properties": {
+                  "algorithm": {
+                    "type": "string",
+                    "description": "Rate limiting algorithm",
+                    "default": "token_bucket",
+                    "category": "advanced"
+                  },
+                  "global": {
+                    "type": "object",
+                    "description": "Global rate limits",
+                    "category": "basic",
+                    "properties": {
+                      "requests_per_minute": {
+                        "type": "number",
+                        "description": "Maximum requests per minute",
+                        "default": 60,
+                        "category": "basic"
+                      },
+                      "tokens_per_hour": {
+                        "type": "number",
+                        "description": "Maximum tokens per hour",
+                        "default": 100000,
+                        "category": "basic"
+                      }
+                    }
+                  },
+                  "per_session": {
+                    "type": "object",
+                    "description": "Per-session rate limits",
+                    "category": "basic",
+                    "properties": {
+                      "requests_per_minute": {
+                        "type": "number",
+                        "description": "Maximum requests per minute",
+                        "default": 60,
+                        "category": "basic"
+                      },
+                      "tokens_per_hour": {
+                        "type": "number",
+                        "description": "Maximum tokens per hour",
+                        "default": 100000,
+                        "category": "basic"
+                      }
+                    }
+                  },
+                  "per_user": {
+                    "type": "object",
+                    "description": "Per-user rate limits",
+                    "category": "basic",
+                    "properties": {
+                      "requests_per_minute": {
+                        "type": "number",
+                        "description": "Maximum requests per minute",
+                        "default": 60,
+                        "category": "basic"
+                      },
+                      "tokens_per_hour": {
+                        "type": "number",
+                        "description": "Maximum tokens per hour",
+                        "default": 100000,
+                        "category": "basic"
+                      }
+                    }
+                  },
+                  "storage": {
+                    "type": "object",
+                    "description": "Storage configuration",
+                    "category": "advanced",
+                    "properties": {
+                      "bucket": {
+                        "type": "string",
+                        "description": "KV bucket name",
+                        "category": "advanced"
+                      },
+                      "type": {
+                        "type": "string",
+                        "description": "Storage type (memory kv)",
+                        "default": "memory",
+                        "category": "advanced"
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "category": "basic"
         },

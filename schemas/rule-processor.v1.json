@@ -29,6 +29,11 @@
       "default": true,
       "category": "basic"
     },
+    "entity_watch_buckets": {
+      "type": "object",
+      "description": "Map of bucket names to watch patterns for multi-bucket observability",
+      "category": "advanced"
+    },
     "entity_watch_patterns": {
       "type": "array",
       "description": "NATS KV patterns to watch for entity changes (e.g. 'telemetry.robotics.\u003e')",

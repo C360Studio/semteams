@@ -388,8 +388,24 @@ func extractSchemaFromRegistration(name string, reg *component.Registration) map
 		}
 		// Handle array types - add items schema
 		if propSchema.Type == "array" {
-			prop["items"] = map[string]interface{}{
-				"type": "string", // Default to string items
+			if propSchema.Items != nil {
+				prop["items"] = convertPropertySchemaToMap(propSchema.Items)
+			} else {
+				prop["items"] = map[string]interface{}{
+					"type": "string",
+				}
+			}
+		}
+
+		// Handle nested object types - add properties
+		if propSchema.Type == "object" && len(propSchema.Properties) > 0 {
+			prop["properties"] = convertPropertiesToMap(propSchema.Properties)
+			if len(propSchema.Required) > 0 {
+				reqAny := make([]any, len(propSchema.Required))
+				for i, r := range propSchema.Required {
+					reqAny[i] = r
+				}
+				prop["required"] = reqAny
 			}
 		}
 
@@ -432,4 +448,108 @@ func mapTypeToJSONSchema(goType string) string {
 	default:
 		return "string" // Default to string for unknown types
 	}
+}
+
+// convertPropertySchemaToMap converts a PropertySchema pointer to a map for JSON comparison
+func convertPropertySchemaToMap(src *component.PropertySchema) map[string]interface{} {
+	if src == nil {
+		return nil
+	}
+	result := make(map[string]interface{})
+	result["type"] = mapTypeToJSONSchema(src.Type)
+
+	if src.Description != "" {
+		result["description"] = src.Description
+	}
+	if src.Default != nil {
+		switch v := src.Default.(type) {
+		case int:
+			result["default"] = float64(v)
+		default:
+			result["default"] = v
+		}
+	}
+	if src.Minimum != nil {
+		result["minimum"] = float64(*src.Minimum)
+	}
+	if src.Maximum != nil {
+		result["maximum"] = float64(*src.Maximum)
+	}
+	if len(src.Enum) > 0 {
+		enumAny := make([]any, len(src.Enum))
+		for i, e := range src.Enum {
+			enumAny[i] = e
+		}
+		result["enum"] = enumAny
+	}
+	if src.Category != "" {
+		result["category"] = src.Category
+	}
+	if len(src.Properties) > 0 {
+		result["properties"] = convertPropertiesToMap(src.Properties)
+	}
+	if len(src.Required) > 0 {
+		reqAny := make([]any, len(src.Required))
+		for i, r := range src.Required {
+			reqAny[i] = r
+		}
+		result["required"] = reqAny
+	}
+	if src.Items != nil {
+		result["items"] = convertPropertySchemaToMap(src.Items)
+	}
+	return result
+}
+
+// convertPropertiesToMap converts a PropertySchema map to interface map for JSON comparison
+func convertPropertiesToMap(props map[string]component.PropertySchema) map[string]interface{} {
+	result := make(map[string]interface{})
+	for name, prop := range props {
+		propMap := make(map[string]interface{})
+		propMap["type"] = mapTypeToJSONSchema(prop.Type)
+
+		if prop.Description != "" {
+			propMap["description"] = prop.Description
+		}
+		if prop.Default != nil {
+			switch v := prop.Default.(type) {
+			case int:
+				propMap["default"] = float64(v)
+			default:
+				propMap["default"] = v
+			}
+		}
+		if prop.Minimum != nil {
+			propMap["minimum"] = float64(*prop.Minimum)
+		}
+		if prop.Maximum != nil {
+			propMap["maximum"] = float64(*prop.Maximum)
+		}
+		if len(prop.Enum) > 0 {
+			enumAny := make([]any, len(prop.Enum))
+			for i, e := range prop.Enum {
+				enumAny[i] = e
+			}
+			propMap["enum"] = enumAny
+		}
+		if prop.Category != "" {
+			propMap["category"] = prop.Category
+		}
+		if len(prop.Properties) > 0 {
+			propMap["properties"] = convertPropertiesToMap(prop.Properties)
+		}
+		if len(prop.Required) > 0 {
+			reqAny := make([]any, len(prop.Required))
+			for i, r := range prop.Required {
+				reqAny[i] = r
+			}
+			propMap["required"] = reqAny
+		}
+		if prop.Items != nil {
+			propMap["items"] = convertPropertySchemaToMap(prop.Items)
+		}
+
+		result[name] = propMap
+	}
+	return result
 }

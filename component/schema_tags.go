@@ -509,6 +509,17 @@ func generateNestedSchema(structType reflect.Type) ConfigSchema {
 					}
 				}
 
+				// Generate items schema for arrays
+				if directives.Type == "array" {
+					fieldType := field.Type
+					if fieldType.Kind() == reflect.Ptr {
+						fieldType = fieldType.Elem()
+					}
+					if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
+						propSchema.Items = generateItemSchema(fieldType.Elem())
+					}
+				}
+
 				if directives.Required {
 					schema.Required = append(schema.Required, fieldName)
 				}
@@ -529,6 +540,43 @@ func generateNestedSchema(structType reflect.Type) ConfigSchema {
 	}
 
 	return schema
+}
+
+// generateItemSchema creates a PropertySchema for array element types
+func generateItemSchema(elemType reflect.Type) *PropertySchema {
+	// Handle pointer types
+	if elemType.Kind() == reflect.Ptr {
+		elemType = elemType.Elem()
+	}
+
+	switch elemType.Kind() {
+	case reflect.Struct:
+		nested := generateNestedSchema(elemType)
+		return &PropertySchema{
+			Type:       "object",
+			Properties: nested.Properties,
+			Required:   nested.Required,
+		}
+	case reflect.String:
+		return &PropertySchema{Type: "string"}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return &PropertySchema{Type: "integer"}
+	case reflect.Float32, reflect.Float64:
+		return &PropertySchema{Type: "number"}
+	case reflect.Bool:
+		return &PropertySchema{Type: "boolean"}
+	case reflect.Slice, reflect.Array:
+		// Nested array - recurse
+		return &PropertySchema{
+			Type:  "array",
+			Items: generateItemSchema(elemType.Elem()),
+		}
+	case reflect.Map:
+		return &PropertySchema{Type: "object"}
+	default:
+		return &PropertySchema{Type: "string"}
+	}
 }
 
 // inferPropertyFromType infers a PropertySchema from a struct field's Go type.
@@ -555,6 +603,7 @@ func inferPropertyFromType(field reflect.StructField) PropertySchema {
 		propSchema.Type = "bool"
 	case reflect.Slice, reflect.Array:
 		propSchema.Type = "array"
+		propSchema.Items = generateItemSchema(fieldType.Elem())
 	case reflect.Map:
 		propSchema.Type = "object"
 	case reflect.Struct:

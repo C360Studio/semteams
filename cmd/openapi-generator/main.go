@@ -184,8 +184,10 @@ func convertProperties(props map[string]component.PropertySchema) map[string]Pro
 
 		// Handle array types
 		if propSchema.Type == "array" {
-			jsonSchemaProp.Items = &PropertySchema{
-				Type: "string", // Default to string items, can be enhanced later
+			if propSchema.Items != nil {
+				jsonSchemaProp.Items = convertPropertySchemaPtr(propSchema.Items)
+			} else {
+				jsonSchemaProp.Items = &PropertySchema{Type: "string"}
 			}
 		}
 
@@ -198,6 +200,31 @@ func convertProperties(props map[string]component.PropertySchema) map[string]Pro
 		}
 
 		result[propName] = jsonSchemaProp
+	}
+	return result
+}
+
+// convertPropertySchemaPtr converts a component.PropertySchema pointer to local PropertySchema
+func convertPropertySchemaPtr(src *component.PropertySchema) *PropertySchema {
+	if src == nil {
+		return nil
+	}
+	result := &PropertySchema{
+		Type:        mapTypeToJSONSchema(src.Type),
+		Description: src.Description,
+		Default:     src.Default,
+		Enum:        src.Enum,
+		Minimum:     src.Minimum,
+		Maximum:     src.Maximum,
+	}
+	if len(src.Properties) > 0 {
+		result.Properties = convertProperties(src.Properties)
+	}
+	if len(src.Required) > 0 {
+		result.Required = src.Required
+	}
+	if src.Items != nil {
+		result.Items = convertPropertySchemaPtr(src.Items)
 	}
 	return result
 }
