@@ -46,7 +46,225 @@
       "type": "array",
       "description": "Inline rule definitions (alternative to files)",
       "items": {
-        "type": "string"
+        "type": "object",
+        "properties": {
+          "conditions": {
+            "type": "array",
+            "description": "conditions",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "description": "field"
+                },
+                "operator": {
+                  "type": "string",
+                  "description": "operator"
+                },
+                "required": {
+                  "type": "boolean",
+                  "description": "required"
+                },
+                "value": {
+                  "type": "string",
+                  "description": "value"
+                }
+              }
+            }
+          },
+          "cooldown": {
+            "type": "string",
+            "description": "cooldown"
+          },
+          "description": {
+            "type": "string",
+            "description": "description"
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "enabled"
+          },
+          "entity": {
+            "type": "object",
+            "description": "entity",
+            "properties": {
+              "pattern": {
+                "type": "string",
+                "description": "pattern"
+              },
+              "watch_buckets": {
+                "type": "array",
+                "description": "watch_buckets",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "id": {
+            "type": "string",
+            "description": "id"
+          },
+          "logic": {
+            "type": "string",
+            "description": "logic"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "metadata"
+          },
+          "name": {
+            "type": "string",
+            "description": "name"
+          },
+          "on_enter": {
+            "type": "array",
+            "description": "on_enter",
+            "items": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string",
+                  "description": "model"
+                },
+                "object": {
+                  "type": "string",
+                  "description": "object"
+                },
+                "predicate": {
+                  "type": "string",
+                  "description": "predicate"
+                },
+                "prompt": {
+                  "type": "string",
+                  "description": "prompt"
+                },
+                "properties": {
+                  "type": "object",
+                  "description": "properties"
+                },
+                "role": {
+                  "type": "string",
+                  "description": "role"
+                },
+                "subject": {
+                  "type": "string",
+                  "description": "subject"
+                },
+                "ttl": {
+                  "type": "string",
+                  "description": "ttl"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "type"
+                }
+              }
+            }
+          },
+          "on_exit": {
+            "type": "array",
+            "description": "on_exit",
+            "items": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string",
+                  "description": "model"
+                },
+                "object": {
+                  "type": "string",
+                  "description": "object"
+                },
+                "predicate": {
+                  "type": "string",
+                  "description": "predicate"
+                },
+                "prompt": {
+                  "type": "string",
+                  "description": "prompt"
+                },
+                "properties": {
+                  "type": "object",
+                  "description": "properties"
+                },
+                "role": {
+                  "type": "string",
+                  "description": "role"
+                },
+                "subject": {
+                  "type": "string",
+                  "description": "subject"
+                },
+                "ttl": {
+                  "type": "string",
+                  "description": "ttl"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "type"
+                }
+              }
+            }
+          },
+          "related_patterns": {
+            "type": "array",
+            "description": "related_patterns",
+            "items": {
+              "type": "string"
+            }
+          },
+          "type": {
+            "type": "string",
+            "description": "type"
+          },
+          "while_true": {
+            "type": "array",
+            "description": "while_true",
+            "items": {
+              "type": "object",
+              "properties": {
+                "model": {
+                  "type": "string",
+                  "description": "model"
+                },
+                "object": {
+                  "type": "string",
+                  "description": "object"
+                },
+                "predicate": {
+                  "type": "string",
+                  "description": "predicate"
+                },
+                "prompt": {
+                  "type": "string",
+                  "description": "prompt"
+                },
+                "properties": {
+                  "type": "object",
+                  "description": "properties"
+                },
+                "role": {
+                  "type": "string",
+                  "description": "role"
+                },
+                "subject": {
+                  "type": "string",
+                  "description": "subject"
+                },
+                "ttl": {
+                  "type": "string",
+                  "description": "ttl"
+                },
+                "type": {
+                  "type": "string",
+                  "description": "type"
+                }
+              }
+            }
+          }
+        }
       },
       "category": "basic"
     },

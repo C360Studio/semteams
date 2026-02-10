@@ -433,6 +433,17 @@ func GenerateConfigSchema(configType reflect.Type) ConfigSchema {
 			}
 		}
 
+		// Special handling for "array" type - generate item schema from Go type
+		if directives.Type == "array" {
+			fieldType := field.Type
+			if fieldType.Kind() == reflect.Ptr {
+				fieldType = fieldType.Elem()
+			}
+			if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
+				propSchema.Items = generateItemSchema(fieldType.Elem())
+			}
+		}
+
 		schema.Properties[fieldName] = propSchema
 
 		// Add to required list if needed

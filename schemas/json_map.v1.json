@@ -13,7 +13,19 @@
       "type": "array",
       "description": "Field mappings",
       "items": {
-        "type": "string"
+        "type": "object",
+        "properties": {
+          "transform": {
+            "type": "string",
+            "description": "Type",
+            "enum": [
+              "copy",
+              "uppercase",
+              "lowercase",
+              "trim"
+            ]
+          }
+        }
       },
       "category": "basic"
     },

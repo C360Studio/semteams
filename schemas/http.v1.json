@@ -27,7 +27,35 @@
       "type": "array",
       "description": "Route mappings",
       "items": {
-        "type": "string"
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Route description",
+            "category": "advanced"
+          },
+          "method": {
+            "type": "string",
+            "description": "HTTP method",
+            "category": "basic"
+          },
+          "nats_subject": {
+            "type": "string",
+            "description": "NATS request subject",
+            "category": "basic"
+          },
+          "path": {
+            "type": "string",
+            "description": "HTTP route path",
+            "category": "basic"
+          },
+          "timeout": {
+            "type": "string",
+            "description": "Request timeout",
+            "default": "5s",
+            "category": "advanced"
+          }
+        }
       },
       "category": "basic"
     }
