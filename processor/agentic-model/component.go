@@ -266,29 +266,18 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 	c.lastActivity = time.Now()
 	c.mu.Unlock()
 
-	// Parse BaseMessage envelope
-	var baseMsg message.BaseMessage
-	if err := json.Unmarshal(data, &baseMsg); err != nil {
-		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
+	req, err := c.parseAgentRequest(data)
+	if err != nil {
+		c.logger.Error("Failed to parse agent request", "error", err)
 		c.incrementErrors()
 		return
 	}
-
-	// Extract AgentRequest from payload
-	reqPtr, ok := baseMsg.Payload().(*agentic.AgentRequest)
-	if !ok {
-		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
-		c.incrementErrors()
-		return
-	}
-	req := *reqPtr
 
 	c.logger.Info("Processing agent request",
 		slog.String("request_id", req.RequestID),
 		slog.String("model", req.Model),
 		slog.String("role", req.Role))
 
-	// Resolve endpoint and get client
 	client, err := c.getClientForRequest(req)
 	if err != nil {
 		c.logger.Error("Failed to resolve endpoint", "error", err, "model", req.Model)
@@ -297,55 +286,77 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 		return
 	}
 
-	// Record request start
 	startTime := time.Now()
 	if c.metrics != nil {
 		c.metrics.recordRequestStart(req.Model)
 	}
 
-	// Execute request with timeout
 	resp, err := c.executeRequest(ctx, client, req)
 	duration := time.Since(startTime).Seconds()
 
-	// Check for error response (ChatCompletion returns nil err with error status)
 	if err != nil || resp.Status == "error" {
-		errorMsg := ""
-		if err != nil {
-			errorMsg = err.Error()
-		} else {
-			errorMsg = resp.Error
-		}
-
-		c.logger.Error("Failed to complete chat", "error", errorMsg, "model", req.Model)
-
-		// Determine error type
-		errorType := "unknown"
-		if ctx.Err() != nil {
-			errorType = "timeout"
-		} else if strings.Contains(errorMsg, "connection") {
-			errorType = "connection"
-		} else if strings.Contains(errorMsg, "rate limit") {
-			errorType = "rate_limit"
-		}
-
-		if c.metrics != nil {
-			c.metrics.recordRequestError(req.Model, errorType, duration)
-		}
-
-		// Use detached context preserving trace for error publish
-		errorCtx, cancel := natsclient.DetachContextWithTrace(ctx, 5*time.Second)
-		defer cancel()
-		c.publishErrorResponse(errorCtx, req.RequestID, errorMsg)
-		c.incrementErrors()
+		c.handleModelError(ctx, req, err, resp.Error, duration)
 		return
 	}
 
-	// Record successful completion
+	c.handleModelSuccess(ctx, req, resp, duration)
+}
+
+// parseAgentRequest extracts an AgentRequest from raw message data
+func (c *Component) parseAgentRequest(data []byte) (agentic.AgentRequest, error) {
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		return agentic.AgentRequest{}, fmt.Errorf("unmarshal BaseMessage: %w", err)
+	}
+
+	reqPtr, ok := baseMsg.Payload().(*agentic.AgentRequest)
+	if !ok {
+		return agentic.AgentRequest{}, fmt.Errorf("unexpected payload type: %T", baseMsg.Payload())
+	}
+
+	return *reqPtr, nil
+}
+
+// handleModelError processes and publishes error responses with metrics
+func (c *Component) handleModelError(ctx context.Context, req agentic.AgentRequest, err error, respError string, duration float64) {
+	errorMsg := respError
+	if err != nil {
+		errorMsg = err.Error()
+	}
+
+	c.logger.Error("Failed to complete chat", "error", errorMsg, "model", req.Model)
+
+	errorType := classifyError(ctx, errorMsg)
+	if c.metrics != nil {
+		c.metrics.recordRequestError(req.Model, errorType, duration)
+	}
+
+	errorCtx, cancel := natsclient.DetachContextWithTrace(ctx, 5*time.Second)
+	defer cancel()
+	c.publishErrorResponse(errorCtx, req.RequestID, errorMsg)
+	c.incrementErrors()
+}
+
+// classifyError determines the error type for metrics categorization
+func classifyError(ctx context.Context, errorMsg string) string {
+	if ctx.Err() != nil {
+		return "timeout"
+	}
+	if strings.Contains(errorMsg, "connection") {
+		return "connection"
+	}
+	if strings.Contains(errorMsg, "rate limit") {
+		return "rate_limit"
+	}
+	return "unknown"
+}
+
+// handleModelSuccess processes successful responses with metrics and publishing
+func (c *Component) handleModelSuccess(ctx context.Context, req agentic.AgentRequest, resp agentic.AgentResponse, duration float64) {
 	toolCallCount := len(resp.Message.ToolCalls)
+
 	if c.metrics != nil {
 		c.metrics.recordRequestComplete(req.Model, duration, toolCallCount)
-
-		// Record token usage if available
 		if resp.TokenUsage.PromptTokens > 0 || resp.TokenUsage.CompletionTokens > 0 {
 			c.metrics.recordTokenUsage(req.Model, resp.TokenUsage.PromptTokens, resp.TokenUsage.CompletionTokens)
 		}
@@ -359,7 +370,6 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 		slog.Int("prompt_tokens", resp.TokenUsage.PromptTokens),
 		slog.Int("completion_tokens", resp.TokenUsage.CompletionTokens))
 
-	// Publish response
 	if err := c.publishResponse(ctx, resp); err != nil {
 		c.logger.Error("Failed to publish response", "error", err)
 		c.incrementErrors()
