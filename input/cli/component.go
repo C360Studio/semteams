@@ -18,9 +18,10 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/google/uuid"
-	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 // Component implements the CLI input processor
@@ -239,18 +240,36 @@ func (c *Component) Stop(timeout time.Duration) error {
 	return nil
 }
 
-// setupSubscriptions sets up NATS subscriptions for responses
+// setupSubscriptions sets up JetStream subscriptions for responses
 func (c *Component) setupSubscriptions(ctx context.Context) error {
-	// Subscribe to responses for this CLI session
+	// Subscribe to responses for this CLI session via JetStream
 	subject := fmt.Sprintf("user.response.cli.%s", c.config.SessionID)
-	_, err := c.natsClient.Subscribe(ctx, subject, func(ctx context.Context, msg *nats.Msg) {
-		c.handleResponse(ctx, msg.Data)
-	})
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to %s: %w", subject, err)
+
+	// Create JetStream consumer for USER stream
+	consumerName := fmt.Sprintf("cli-response-%s", c.config.SessionID)
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    c.config.StreamName, // USER stream
+		ConsumerName:  consumerName,
+		FilterSubject: subject,
+		DeliverPolicy: "new",
+		AckPolicy:     "explicit",
+		MaxDeliver:    3,
+		AutoCreate:    false,
 	}
 
-	c.logger.Debug("Subscribed to responses", slog.String("subject", subject))
+	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		c.handleResponse(msgCtx, msg.Data())
+		if ackErr := msg.Ack(); ackErr != nil {
+			c.logger.Error("Failed to ack response message", slog.String("error", ackErr.Error()))
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("failed to setup JetStream consumer for %s: %w", subject, err)
+	}
+
+	c.logger.Debug("Subscribed to responses via JetStream",
+		slog.String("subject", subject),
+		slog.String("stream", c.config.StreamName))
 	return nil
 }
 
@@ -284,7 +303,7 @@ func (c *Component) handleCtrlC(ctx context.Context) {
 	c.logger.Info("Ctrl+C detected, sending cancel signal",
 		slog.String("loop_id", loopID))
 
-	signal := agentic.UserSignal{
+	sig := &agentic.UserSignal{
 		SignalID:    uuid.New().String(),
 		Type:        agentic.SignalCancel,
 		LoopID:      loopID,
@@ -294,7 +313,9 @@ func (c *Component) handleCtrlC(ctx context.Context) {
 		Timestamp:   time.Now(),
 	}
 
-	data, err := json.Marshal(signal)
+	// Wrap in BaseMessage for consistency
+	baseMsg := message.NewBaseMessage(sig.Schema(), sig, "cli-input")
+	data, err := json.Marshal(baseMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal cancel signal", slog.String("error", err.Error()))
 		return
@@ -368,9 +389,9 @@ func (c *Component) handleLocalCommand(line string) bool {
 	return false
 }
 
-// publishMessage publishes a user message to NATS
+// publishMessage publishes a user message to NATS wrapped in BaseMessage
 func (c *Component) publishMessage(ctx context.Context, content string) {
-	msg := agentic.UserMessage{
+	msg := &agentic.UserMessage{
 		MessageID:   uuid.New().String(),
 		ChannelType: "cli",
 		ChannelID:   c.config.SessionID,
@@ -386,7 +407,9 @@ func (c *Component) publishMessage(ctx context.Context, content string) {
 	}
 	c.mu.RUnlock()
 
-	data, err := json.Marshal(msg)
+	// Wrap in BaseMessage for agentic-dispatch compatibility
+	baseMsg := message.NewBaseMessage(msg.Schema(), msg, "cli-input")
+	data, err := json.Marshal(baseMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal message", slog.String("error", err.Error()))
 		return
@@ -407,11 +430,19 @@ func (c *Component) publishMessage(ctx context.Context, content string) {
 		slog.String("subject", subject))
 }
 
-// handleResponse processes responses from the router
+// handleResponse processes responses from the router (wrapped in BaseMessage)
 func (c *Component) handleResponse(ctx context.Context, data []byte) {
-	var resp agentic.UserResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
-		c.logger.ErrorContext(ctx, "Failed to unmarshal response", slog.String("error", err.Error()))
+	// Responses are wrapped in BaseMessage by agentic-dispatch
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err != nil {
+		c.logger.ErrorContext(ctx, "Failed to unmarshal BaseMessage", slog.String("error", err.Error()))
+		return
+	}
+
+	resp, ok := baseMsg.Payload().(*agentic.UserResponse)
+	if !ok {
+		c.logger.ErrorContext(ctx, "Unexpected payload type",
+			slog.String("type", fmt.Sprintf("%T", baseMsg.Payload())))
 		return
 	}
 
@@ -431,7 +462,7 @@ func (c *Component) handleResponse(ctx context.Context, data []byte) {
 	}
 
 	// Display response based on type
-	c.displayResponse(resp)
+	c.displayResponse(*resp)
 }
 
 // displayResponse formats and displays a response to the user

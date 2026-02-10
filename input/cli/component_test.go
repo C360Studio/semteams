@@ -8,6 +8,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -222,13 +223,14 @@ func TestComponent_HandleResponse_TracksActiveLoop(t *testing.T) {
 	// Initially no active loop
 	assert.Empty(t, cliComp.GetActiveLoop())
 
-	// Simulate receiving a response with InReplyTo
-	resp := agentic.UserResponse{
+	// Simulate receiving a response with InReplyTo (wrapped in BaseMessage)
+	resp := &agentic.UserResponse{
 		Type:      agentic.ResponseTypeStatus,
 		Content:   "Loop started",
 		InReplyTo: "loop-xyz",
 	}
-	respData, _ := json.Marshal(resp)
+	baseMsg := message.NewBaseMessage(resp.Schema(), resp, "test")
+	respData, _ := json.Marshal(baseMsg)
 
 	cliComp.handleResponse(nil, respData)
 
