@@ -17,12 +17,13 @@ const defaultFallbackTimeout = 30 * time.Second
 
 // Executor handles step execution for workflows
 type Executor struct {
-	natsClient     *natsclient.Client
-	execStore      *ExecutionStore
-	logger         *slog.Logger
-	config         Config
-	metrics        *workflowMetrics
-	eventPublisher func(context.Context, event) error
+	natsClient          *natsclient.Client
+	execStore           *ExecutionStore
+	logger              *slog.Logger
+	config              Config
+	metrics             *workflowMetrics
+	eventPublisher      func(context.Context, event) error
+	completionPublisher func(context.Context, *Execution, string) // for rules engine observability
 }
 
 // NewExecutor creates a new step executor
@@ -33,14 +34,16 @@ func NewExecutor(
 	config Config,
 	metrics *workflowMetrics,
 	eventPublisher func(context.Context, event) error,
+	completionPublisher func(context.Context, *Execution, string),
 ) *Executor {
 	return &Executor{
-		natsClient:     natsClient,
-		execStore:      execStore,
-		logger:         logger,
-		config:         config,
-		metrics:        metrics,
-		eventPublisher: eventPublisher,
+		natsClient:          natsClient,
+		execStore:           execStore,
+		logger:              logger,
+		config:              config,
+		metrics:             metrics,
+		eventPublisher:      eventPublisher,
+		completionPublisher: completionPublisher,
 	}
 }
 
@@ -333,6 +336,11 @@ func (e *Executor) completeExecution(ctx context.Context, workflow *wfschema.Def
 		Timestamp:   time.Now(),
 	})
 
+	// Persist completion state for rules engine observability
+	if e.completionPublisher != nil {
+		e.completionPublisher(ctx, exec, "completed")
+	}
+
 	// Record metrics
 	if e.metrics != nil {
 		snapshot := exec.Clone()
@@ -372,6 +380,11 @@ func (e *Executor) failExecution(ctx context.Context, workflow *wfschema.Definit
 		Timestamp:   time.Now(),
 	})
 
+	// Persist completion state for rules engine observability
+	if e.completionPublisher != nil {
+		e.completionPublisher(ctx, exec, "failed")
+	}
+
 	// Record metrics
 	if e.metrics != nil {
 		snapshot := exec.Clone()
@@ -410,6 +423,11 @@ func (e *Executor) timeoutExecution(ctx context.Context, workflow *wfschema.Defi
 		Iteration:   exec.GetIteration(),
 		Timestamp:   time.Now(),
 	})
+
+	// Persist completion state for rules engine observability
+	if e.completionPublisher != nil {
+		e.completionPublisher(ctx, exec, "timed_out")
+	}
 
 	// Record metrics
 	if e.metrics != nil {

@@ -30,7 +30,15 @@ type Config struct {
 	EnableGraphIntegration bool `json:"enable_graph_integration" schema:"type:bool,description:Enable graph entity creation from rules,default:true,category:basic"`
 
 	// NATS KV patterns to watch for entity changes (e.g., 'telemetry.robotics.>')
+	// DEPRECATED: Use EntityWatchBuckets for multi-bucket support. This field is still
+	// supported for backwards compatibility and applies to ENTITY_STATES bucket.
 	EntityWatchPatterns []string `json:"entity_watch_patterns" schema:"type:array,description:NATS KV patterns to watch for entity changes (e.g. 'telemetry.robotics.>'),category:advanced"`
+
+	// EntityWatchBuckets maps bucket names to watch patterns.
+	// This enables rules to observe operational results from multiple components.
+	// Example: {"ENTITY_STATES": ["telemetry.>"], "WORKFLOW_EXECUTIONS": ["COMPLETE_*"]}
+	// If not specified, falls back to EntityWatchPatterns for ENTITY_STATES bucket.
+	EntityWatchBuckets map[string][]string `json:"entity_watch_buckets" schema:"type:object,description:Map of bucket names to watch patterns for multi-bucket observability,category:advanced"`
 
 	// Debounce delay for rule evaluation (settling time for entity state)
 	// Default is 0 (disabled) to ensure rules evaluate against each state change.

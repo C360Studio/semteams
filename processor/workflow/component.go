@@ -226,6 +226,7 @@ func (c *Component) Start(ctx context.Context) error {
 			c.config,
 			c.metrics,
 			c.publishEvent,
+			c.persistCompletionState,
 		)
 
 		// Start watching for definition changes
@@ -675,6 +676,46 @@ func (c *Component) publishEvent(ctx context.Context, ev event) error {
 	}
 
 	return nil
+}
+
+// persistCompletionState writes completion state for rules engine observability.
+// Key pattern: COMPLETE_{executionID} in WORKFLOW_EXECUTIONS bucket.
+// Rules can watch this bucket to trigger follow-up actions based on workflow outcomes.
+func (c *Component) persistCompletionState(ctx context.Context, exec *Execution, state string) {
+	if c.executionsBucket == nil {
+		return
+	}
+
+	snapshot := exec.Clone()
+	completion := map[string]any{
+		"workflow_id":   snapshot.WorkflowID,
+		"workflow_name": snapshot.WorkflowName,
+		"execution_id":  snapshot.ID,
+		"state":         state,
+		"iteration":     snapshot.Iteration,
+		"step_results":  snapshot.StepResults,
+		"error":         snapshot.Error,
+		"started_at":    snapshot.StartedAt,
+		"completed_at":  time.Now(),
+	}
+
+	data, err := json.Marshal(completion)
+	if err != nil {
+		c.logger.Error("Failed to marshal completion state", "error", err, "execution_id", snapshot.ID)
+		return
+	}
+
+	// Key pattern: COMPLETE_{executionID} for rules engine to watch
+	key := fmt.Sprintf("COMPLETE_%s", snapshot.ID)
+	if _, err := c.executionsBucket.Put(ctx, key, data); err != nil {
+		c.logger.Error("Failed to persist completion state", "error", err, "execution_id", snapshot.ID)
+		return
+	}
+
+	c.logger.Debug("Persisted completion state",
+		slog.String("execution_id", snapshot.ID),
+		slog.String("key", key),
+		slog.String("state", state))
 }
 
 // buildDefaultInputPorts creates default input ports

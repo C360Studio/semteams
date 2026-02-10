@@ -316,6 +316,74 @@ Ingest data, validate, retry if malformed, fail after 3 attempts:
 
 **Fix**: Remove caller awareness; component behavior should be input-determined only.
 
+## State Storage Boundaries
+
+The system distinguishes between three categories of data with different storage patterns:
+
+| Category | Storage | Rules Observable? | In Knowledge Graph? |
+|----------|---------|-------------------|---------------------|
+| **Domain Entities** | `ENTITY_STATES` KV | Yes | Yes (Graphable) |
+| **Operational Results** | Component-specific KV | Yes | No |
+| **Events** | JetStream streams | No | No |
+
+### Domain Entities (ENTITY_STATES)
+
+Semantic domain objects that implement the `Graphable` interface:
+- Have 6-part hierarchical entity IDs (e.g., `acme.ops.robotics.gcs.drone.001`)
+- Persist across multiple events
+- Queryable in knowledge graph
+- Examples: sensors, documents, zones, relationships
+
+**Only `graph-ingest` writes to ENTITY_STATES.**
+
+### Operational Results (Component KV)
+
+Execution outcomes that are NOT semantic entities:
+- Use `COMPLETE_{id}` key pattern for rules observability
+- Stored in component-specific buckets:
+  - `AGENT_LOOPS`: Agent completion state (`COMPLETE_{loopID}`)
+  - `WORKFLOW_EXECUTIONS`: Workflow completion state (`COMPLETE_{executionID}`)
+- Transient — represent what happened, not what exists
+- Examples: agent completion, workflow completion, step results
+
+**Rules can watch these buckets using `entity_watch_buckets` config:**
+
+```json
+{
+  "entity_watch_buckets": {
+    "ENTITY_STATES": ["telemetry.>"],
+    "WORKFLOW_EXECUTIONS": ["COMPLETE_*"],
+    "AGENT_LOOPS": ["COMPLETE_*"]
+  }
+}
+```
+
+### Events (JetStream)
+
+Immediate notifications for downstream processing:
+- Published to streams for subscribers
+- Not directly observable by rules (rules watch KV, not streams)
+- Examples: `agent.complete.*`, `workflow.events`
+
+### Anti-Pattern: Mixing Categories
+
+Do NOT write operational results to ENTITY_STATES:
+- Pollutes knowledge graph with non-semantic data
+- Breaks Graphable contract (no entity ID, no triples)
+- Makes graph queries less meaningful
+
+**Example anti-pattern**:
+```go
+// WRONG: Writing workflow completion to ENTITY_STATES
+entityBucket.Put(ctx, "workflow.review.exec123", completionData)
+```
+
+**Correct pattern**:
+```go
+// RIGHT: Writing to component-specific bucket with COMPLETE_ prefix
+executionsBucket.Put(ctx, "COMPLETE_exec123", completionData)
+```
+
 ## References
 
 - [ADR-010: Rules Processor Completion](../architecture/adr-010-rules-processor-completion.md) — Rules engine design
