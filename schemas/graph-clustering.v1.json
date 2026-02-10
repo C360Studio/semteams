@@ -8,7 +8,238 @@
     "anomaly_config": {
       "type": "object",
       "description": "Configuration for anomaly detection",
-      "category": "advanced"
+      "category": "advanced",
+      "properties": {
+        "core_anomaly": {
+          "type": "object",
+          "description": "core_anomaly",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "enabled"
+            },
+            "hub_isolation_threshold": {
+              "type": "number",
+              "description": "hub_isolation_threshold"
+            },
+            "min_core_for_hub_analysis": {
+              "type": "number",
+              "description": "min_core_for_hub_analysis"
+            },
+            "min_demotion_delta": {
+              "type": "number",
+              "description": "min_demotion_delta"
+            },
+            "track_core_demotions": {
+              "type": "boolean",
+              "description": "track_core_demotions"
+            }
+          }
+        },
+        "detection_timeout": {
+          "type": "number",
+          "description": "detection_timeout"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "enabled"
+        },
+        "max_anomalies_per_run": {
+          "type": "number",
+          "description": "max_anomalies_per_run"
+        },
+        "review": {
+          "type": "object",
+          "description": "review",
+          "properties": {
+            "auto_approve_threshold": {
+              "type": "number",
+              "description": "auto_approve_threshold"
+            },
+            "auto_reject_threshold": {
+              "type": "number",
+              "description": "auto_reject_threshold"
+            },
+            "batch_size": {
+              "type": "number",
+              "description": "batch_size"
+            },
+            "enabled": {
+              "type": "boolean",
+              "description": "enabled"
+            },
+            "fallback_to_human": {
+              "type": "boolean",
+              "description": "fallback_to_human"
+            },
+            "llm": {
+              "type": "object",
+              "description": "llm",
+              "properties": {
+                "api_key": {
+                  "type": "string",
+                  "description": "api_key"
+                },
+                "base_url": {
+                  "type": "string",
+                  "description": "base_url"
+                },
+                "domain": {
+                  "type": "string",
+                  "description": "domain"
+                },
+                "max_retries": {
+                  "type": "number",
+                  "description": "max_retries"
+                },
+                "model": {
+                  "type": "string",
+                  "description": "model"
+                },
+                "prompts_file": {
+                  "type": "string",
+                  "description": "prompts_file"
+                },
+                "provider": {
+                  "type": "string",
+                  "description": "provider"
+                },
+                "timeout_seconds": {
+                  "type": "number",
+                  "description": "timeout_seconds"
+                }
+              }
+            },
+            "review_timeout": {
+              "type": "number",
+              "description": "review_timeout"
+            },
+            "workers": {
+              "type": "number",
+              "description": "workers"
+            }
+          }
+        },
+        "run_with_community_detection": {
+          "type": "boolean",
+          "description": "run_with_community_detection"
+        },
+        "semantic_gap": {
+          "type": "object",
+          "description": "semantic_gap",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "enabled"
+            },
+            "max_candidates_per_entity": {
+              "type": "number",
+              "description": "max_candidates_per_entity"
+            },
+            "max_gaps_per_entity": {
+              "type": "number",
+              "description": "max_gaps_per_entity"
+            },
+            "min_semantic_similarity": {
+              "type": "number",
+              "description": "min_semantic_similarity"
+            },
+            "min_structural_distance": {
+              "type": "number",
+              "description": "min_structural_distance"
+            }
+          }
+        },
+        "storage": {
+          "type": "object",
+          "description": "storage",
+          "properties": {
+            "bucket_name": {
+              "type": "string",
+              "description": "bucket_name"
+            },
+            "cleanup_interval": {
+              "type": "number",
+              "description": "cleanup_interval"
+            },
+            "retention_days": {
+              "type": "number",
+              "description": "retention_days"
+            }
+          }
+        },
+        "transitivity": {
+          "type": "object",
+          "description": "transitivity",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "enabled"
+            },
+            "max_intermediate_hops": {
+              "type": "number",
+              "description": "max_intermediate_hops"
+            },
+            "min_expected_transitivity": {
+              "type": "number",
+              "description": "min_expected_transitivity"
+            },
+            "transitive_predicates": {
+              "type": "array",
+              "description": "transitive_predicates",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "virtual_edges": {
+          "type": "object",
+          "description": "virtual_edges",
+          "properties": {
+            "auto_apply": {
+              "type": "object",
+              "description": "auto_apply",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "enabled"
+                },
+                "min_confidence": {
+                  "type": "number",
+                  "description": "min_confidence"
+                },
+                "predicate_template": {
+                  "type": "string",
+                  "description": "predicate_template"
+                }
+              }
+            },
+            "review_queue": {
+              "type": "object",
+              "description": "review_queue",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "enabled"
+                },
+                "max_confidence": {
+                  "type": "number",
+                  "description": "max_confidence"
+                },
+                "min_confidence": {
+                  "type": "number",
+                  "description": "min_confidence"
+                },
+                "require_llm_classification": {
+                  "type": "boolean",
+                  "description": "require_llm_classification"
+                }
+              }
+            }
+          }
+        }
+      }
     },
     "batch_size": {
       "type": "number",

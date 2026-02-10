@@ -12,8 +12,34 @@
     },
     "context": {
       "type": "object",
-      "description": "Context window configuration",
-      "category": "advanced"
+      "description": "Context window management. model_limits maps model names to context window sizes in tokens",
+      "category": "advanced",
+      "properties": {
+        "compact_threshold": {
+          "type": "number",
+          "description": "Utilization threshold (0.01-1.0) that triggers context compaction"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable context memory management"
+        },
+        "headroom_tokens": {
+          "type": "number",
+          "description": "Token headroom to reserve for model responses"
+        },
+        "model_limits": {
+          "type": "object",
+          "description": "Map of model name to context window size in tokens. Must include 'default' key for fallback."
+        },
+        "summarization_model": {
+          "type": "string",
+          "description": "Model alias to use for context summarization"
+        },
+        "tool_result_max_age": {
+          "type": "number",
+          "description": "Maximum age in iterations before tool results are garbage collected"
+        }
+      }
     },
     "loops_bucket": {
       "type": "string",

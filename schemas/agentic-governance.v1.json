@@ -13,7 +13,23 @@
     "filter_chain": {
       "type": "object",
       "description": "Filter chain configuration",
-      "category": "basic"
+      "category": "basic",
+      "properties": {
+        "filters": {
+          "type": "array",
+          "description": "Ordered list of filters to apply",
+          "items": {
+            "type": "string"
+          },
+          "category": "basic"
+        },
+        "policy": {
+          "type": "string",
+          "description": "Violation handling policy (fail_fast continue log_only)",
+          "default": "fail_fast",
+          "category": "basic"
+        }
+      }
     },
     "ports": {
       "type": "string",
@@ -29,7 +45,41 @@
     "violations": {
       "type": "object",
       "description": "Violation handling configuration",
-      "category": "basic"
+      "category": "basic",
+      "properties": {
+        "admin_subject": {
+          "type": "string",
+          "description": "NATS subject for admin alerts",
+          "default": "admin.governance.alert",
+          "category": "advanced"
+        },
+        "notify_admin_severity": {
+          "type": "array",
+          "description": "Severity levels that trigger admin alerts",
+          "items": {
+            "type": "string"
+          },
+          "category": "basic"
+        },
+        "notify_user": {
+          "type": "boolean",
+          "description": "Send error messages to users",
+          "default": true,
+          "category": "basic"
+        },
+        "retention_days": {
+          "type": "number",
+          "description": "Violation retention in days",
+          "default": 90,
+          "category": "basic"
+        },
+        "store": {
+          "type": "string",
+          "description": "KV bucket for violations",
+          "default": "GOVERNANCE_VIOLATIONS",
+          "category": "basic"
+        }
+      }
     }
   },
   "required": [],

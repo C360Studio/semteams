@@ -28,7 +28,25 @@
     "retry": {
       "type": "object",
       "description": "Retry configuration",
-      "category": "advanced"
+      "category": "advanced",
+      "properties": {
+        "backoff": {
+          "type": "string",
+          "description": "Backoff strategy",
+          "default": "exponential",
+          "enum": [
+            "exponential",
+            "linear"
+          ],
+          "category": "advanced"
+        },
+        "max_attempts": {
+          "type": "number",
+          "description": "Maximum retry attempts",
+          "default": 3,
+          "category": "advanced"
+        }
+      }
     },
     "stream_name": {
       "type": "string",

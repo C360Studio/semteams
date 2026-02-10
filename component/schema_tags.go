@@ -420,6 +420,19 @@ func GenerateConfigSchema(configType reflect.Type) ConfigSchema {
 			propSchema.CacheFields = GenerateCacheFieldSchema()
 		}
 
+		// Special handling for "object" type - recursively expand nested struct
+		if directives.Type == "object" {
+			fieldType := field.Type
+			if fieldType.Kind() == reflect.Ptr {
+				fieldType = fieldType.Elem()
+			}
+			if fieldType.Kind() == reflect.Struct {
+				nestedSchema := generateNestedSchema(fieldType)
+				propSchema.Properties = nestedSchema.Properties
+				propSchema.Required = nestedSchema.Required
+			}
+		}
+
 		schema.Properties[fieldName] = propSchema
 
 		// Add to required list if needed
@@ -429,6 +442,132 @@ func GenerateConfigSchema(configType reflect.Type) ConfigSchema {
 	}
 
 	return schema
+}
+
+// generateNestedSchema generates a ConfigSchema from a nested struct type.
+// This supports both `schema:` tags (preferred) and `description:` tags (fallback).
+// Type is inferred from Go field types when using `description:` tags.
+func generateNestedSchema(structType reflect.Type) ConfigSchema {
+	schema := ConfigSchema{
+		Properties: make(map[string]PropertySchema),
+		Required:   []string{},
+	}
+
+	// Handle pointer types
+	if structType.Kind() == reflect.Ptr {
+		structType = structType.Elem()
+	}
+
+	// Ensure we're working with a struct
+	if structType.Kind() != reflect.Struct {
+		return schema
+	}
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+
+		// Get json tag for field name
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "" || jsonTag == "-" {
+			continue
+		}
+
+		// Parse json tag to get field name
+		jsonParts := strings.Split(jsonTag, ",")
+		fieldName := jsonParts[0]
+		if fieldName == "" {
+			continue
+		}
+
+		var propSchema PropertySchema
+
+		// Try schema: tag first (full directive parsing)
+		schemaTag := field.Tag.Get("schema")
+		if schemaTag != "" {
+			directives, err := ParseSchemaTag(schemaTag)
+			if err == nil {
+				propSchema = PropertySchema{
+					Type:        directives.Type,
+					Description: directives.Description,
+					Category:    directives.Category,
+					Default:     convertDefault(directives.Default, directives.Type),
+					Minimum:     directives.Min,
+					Maximum:     directives.Max,
+					Enum:        directives.Enum,
+				}
+
+				// Recursively handle nested objects
+				if directives.Type == "object" {
+					fieldType := field.Type
+					if fieldType.Kind() == reflect.Ptr {
+						fieldType = fieldType.Elem()
+					}
+					if fieldType.Kind() == reflect.Struct {
+						nestedSchema := generateNestedSchema(fieldType)
+						propSchema.Properties = nestedSchema.Properties
+						propSchema.Required = nestedSchema.Required
+					}
+				}
+
+				if directives.Required {
+					schema.Required = append(schema.Required, fieldName)
+				}
+			} else {
+				continue // Skip fields with invalid schema tags
+			}
+		} else {
+			// Fallback: infer type from Go type, use description: tag
+			propSchema = inferPropertyFromType(field)
+		}
+
+		// Use field name as description fallback
+		if propSchema.Description == "" {
+			propSchema.Description = fieldName
+		}
+
+		schema.Properties[fieldName] = propSchema
+	}
+
+	return schema
+}
+
+// inferPropertyFromType infers a PropertySchema from a struct field's Go type.
+// Uses the `description:` tag for documentation.
+func inferPropertyFromType(field reflect.StructField) PropertySchema {
+	propSchema := PropertySchema{
+		Description: field.Tag.Get("description"),
+	}
+
+	fieldType := field.Type
+	if fieldType.Kind() == reflect.Ptr {
+		fieldType = fieldType.Elem()
+	}
+
+	switch fieldType.Kind() {
+	case reflect.String:
+		propSchema.Type = "string"
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		propSchema.Type = "int"
+	case reflect.Float32, reflect.Float64:
+		propSchema.Type = "float"
+	case reflect.Bool:
+		propSchema.Type = "bool"
+	case reflect.Slice, reflect.Array:
+		propSchema.Type = "array"
+	case reflect.Map:
+		propSchema.Type = "object"
+	case reflect.Struct:
+		propSchema.Type = "object"
+		// Recursively expand nested struct
+		nestedSchema := generateNestedSchema(fieldType)
+		propSchema.Properties = nestedSchema.Properties
+		propSchema.Required = nestedSchema.Required
+	default:
+		propSchema.Type = "string" // Fallback
+	}
+
+	return propSchema
 }
 
 // convertDefault converts a default value string to the appropriate type

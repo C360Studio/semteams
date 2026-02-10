@@ -8,6 +8,18 @@ import (
 	"github.com/c360studio/semstreams/component"
 )
 
+// Context configuration constants
+const (
+	// DefaultModelKey is the key used in ModelLimits for the fallback context limit
+	DefaultModelKey = "default"
+
+	// MaxReasonableContextLimit is the maximum allowed token limit (2M tokens, future-proof)
+	MaxReasonableContextLimit = 2_000_000
+
+	// MinContextLimit is the minimum allowed token limit (sanity check)
+	MinContextLimit = 1024
+)
+
 // Config represents the configuration for the agentic-loop processor
 type Config struct {
 	MaxIterations      int                   `json:"max_iterations" schema:"type:int,description:Maximum number of iterations before loop terminates,default:20,min:1,max:1000,category:basic,required"`
@@ -16,18 +28,20 @@ type Config struct {
 	ConsumerNameSuffix string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix for consumer names,category:advanced"`
 	LoopsBucket        string                `json:"loops_bucket" schema:"type:string,description:NATS KV bucket name for storing loop state,default:AGENT_LOOPS,category:advanced,required"`
 	TrajectoriesBucket string                `json:"trajectories_bucket" schema:"type:string,description:NATS KV bucket name for storing trajectories,default:AGENT_TRAJECTORIES,category:advanced,required"`
-	Context            ContextConfig         `json:"context" schema:"type:object,description:Context window configuration,category:advanced"`
+	Context            ContextConfig         `json:"context" schema:"type:object,description:Context window management. model_limits maps model names to context window sizes in tokens,category:advanced"`
 	Ports              *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
 }
 
-// ContextConfig represents configuration for context memory management
+// ContextConfig represents configuration for context memory management.
+// ModelLimits maps model names (e.g., "llama3.2:8b", "mistral-7b-instruct") to their
+// context window sizes in tokens. Must include a "default" key for unknown models.
 type ContextConfig struct {
-	Enabled            bool           `json:"enabled"`
-	CompactThreshold   float64        `json:"compact_threshold"`
-	ToolResultMaxAge   int            `json:"tool_result_max_age"`
-	HeadroomTokens     int            `json:"headroom_tokens"`
-	SummarizationModel string         `json:"summarization_model"`
-	ModelLimits        map[string]int `json:"model_limits"`
+	Enabled            bool           `json:"enabled" description:"Enable context memory management"`
+	CompactThreshold   float64        `json:"compact_threshold" description:"Utilization threshold (0.01-1.0) that triggers context compaction"`
+	ToolResultMaxAge   int            `json:"tool_result_max_age" description:"Maximum age in iterations before tool results are garbage collected"`
+	HeadroomTokens     int            `json:"headroom_tokens" description:"Token headroom to reserve for model responses"`
+	SummarizationModel string         `json:"summarization_model" description:"Model alias to use for context summarization"`
+	ModelLimits        map[string]int `json:"model_limits" description:"Map of model name to context window size in tokens. Must include 'default' key for fallback."`
 }
 
 // Validate validates the configuration
@@ -93,16 +107,22 @@ func (c ContextConfig) Validate() error {
 		return fmt.Errorf("summarization_model is required when context management is enabled")
 	}
 
-	// Validate ModelLimits: must have "default" key, all values > 0
+	// Validate ModelLimits: must have "default" key, all values within bounds
 	if c.ModelLimits == nil || len(c.ModelLimits) == 0 {
 		return fmt.Errorf("model_limits cannot be empty")
 	}
-	if _, hasDefault := c.ModelLimits["default"]; !hasDefault {
-		return fmt.Errorf("model_limits must contain 'default' entry")
+	if _, hasDefault := c.ModelLimits[DefaultModelKey]; !hasDefault {
+		return fmt.Errorf("model_limits must contain %q entry", DefaultModelKey)
 	}
 	for model, limit := range c.ModelLimits {
 		if limit <= 0 {
 			return fmt.Errorf("model_limits for %q must be greater than 0", model)
+		}
+		if limit < MinContextLimit {
+			return fmt.Errorf("model_limits[%q] = %d is below minimum %d", model, limit, MinContextLimit)
+		}
+		if limit > MaxReasonableContextLimit {
+			return fmt.Errorf("model_limits[%q] = %d exceeds maximum %d", model, limit, MaxReasonableContextLimit)
 		}
 	}
 

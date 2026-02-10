@@ -101,6 +101,24 @@ func ValidateConfig(config map[string]any, schema ConfigSchema) []ValidationErro
 				}
 			}
 		}
+
+		// Recursive validation for nested objects
+		if propSchema.Type == "object" && len(propSchema.Properties) > 0 {
+			if nestedConfig, ok := value.(map[string]any); ok {
+				nestedSchema := ConfigSchema{
+					Properties: propSchema.Properties,
+					Required:   propSchema.Required,
+				}
+				nestedErrors := ValidateConfig(nestedConfig, nestedSchema)
+				for _, err := range nestedErrors {
+					errors = append(errors, ValidationError{
+						Field:   fieldName + "." + err.Field,
+						Message: err.Message,
+						Code:    err.Code,
+					})
+				}
+			}
+		}
 	}
 
 	return errors

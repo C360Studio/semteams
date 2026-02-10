@@ -2,6 +2,7 @@ package agenticloop
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"github.com/c360studio/semstreams/agentic"
@@ -37,27 +38,43 @@ type contextMessage struct {
 // ContextManager manages conversation context with memory optimization
 type ContextManager struct {
 	loopID           string
+	model            string
 	modelLimit       int
 	config           ContextConfig
 	regions          map[RegionType][]contextMessage
 	mu               sync.RWMutex
 	currentIteration int
+	logger           *slog.Logger
+}
+
+// ContextManagerOption is a functional option for configuring ContextManager
+type ContextManagerOption func(*ContextManager)
+
+// WithLogger sets the logger for the ContextManager
+func WithLogger(logger *slog.Logger) ContextManagerOption {
+	return func(cm *ContextManager) {
+		cm.logger = logger
+	}
 }
 
 // NewContextManager creates a new context manager
-func NewContextManager(loopID, model string, config ContextConfig) *ContextManager {
-	limit := config.ModelLimits["default"]
-	if l, ok := config.ModelLimits[model]; ok {
-		limit = l
-	}
-
+func NewContextManager(loopID, model string, config ContextConfig, opts ...ContextManagerOption) *ContextManager {
 	cm := &ContextManager{
 		loopID:           loopID,
-		modelLimit:       limit,
+		model:            model,
 		config:           config,
 		regions:          make(map[RegionType][]contextMessage),
 		currentIteration: 1,
+		logger:           slog.Default(),
 	}
+
+	// Apply functional options
+	for _, opt := range opts {
+		opt(cm)
+	}
+
+	// Resolve model limit with logging
+	cm.modelLimit = cm.resolveModelLimit(model)
 
 	// Initialize empty regions
 	for rt := range regionPriorities {
@@ -65,6 +82,22 @@ func NewContextManager(loopID, model string, config ContextConfig) *ContextManag
 	}
 
 	return cm
+}
+
+// resolveModelLimit looks up the model limit with fallback logging
+func (cm *ContextManager) resolveModelLimit(model string) int {
+	if limit, ok := cm.config.ModelLimits[model]; ok {
+		return limit
+	}
+
+	defaultLimit := cm.config.ModelLimits[DefaultModelKey]
+	cm.logger.Warn("model not in config, using default context limit",
+		"loop_id", cm.loopID,
+		"model", model,
+		"default_limit", defaultLimit,
+		"hint", "add to model_limits config for explicit limit",
+	)
+	return defaultLimit
 }
 
 // Utilization returns the current context utilization (0.0 to 1.0)

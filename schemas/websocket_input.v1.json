@@ -8,12 +8,26 @@
     "backpressure": {
       "type": "object",
       "description": "Backpressure handling configuration",
-      "category": "advanced"
+      "category": "advanced",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable backpressure handling",
+          "category": "basic"
+        }
+      }
     },
     "bidirectional": {
       "type": "object",
       "description": "Bidirectional request/reply configuration",
-      "category": "advanced"
+      "category": "advanced",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Enable request/reply patterns",
+          "category": "basic"
+        }
+      }
     },
     "mode": {
       "type": "string",

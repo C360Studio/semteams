@@ -127,40 +127,22 @@ type ComponentMetadata struct {
 
 // PropertySchema represents a JSON Schema property definition
 type PropertySchema struct {
-	Type        string          `json:"type"`
-	Description string          `json:"description,omitempty"`
-	Default     any             `json:"default,omitempty"`
-	Enum        []string        `json:"enum,omitempty"`
-	Minimum     *int            `json:"minimum,omitempty"`
-	Maximum     *int            `json:"maximum,omitempty"`
-	Items       *PropertySchema `json:"items,omitempty"`    // For array types
-	Category    string          `json:"category,omitempty"` // UI organization: "basic" or "advanced"
+	Type        string                    `json:"type"`
+	Description string                    `json:"description,omitempty"`
+	Default     any                       `json:"default,omitempty"`
+	Enum        []string                  `json:"enum,omitempty"`
+	Minimum     *int                      `json:"minimum,omitempty"`
+	Maximum     *int                      `json:"maximum,omitempty"`
+	Items       *PropertySchema           `json:"items,omitempty"`      // For array types
+	Category    string                    `json:"category,omitempty"`   // UI organization: "basic" or "advanced"
+	Properties  map[string]PropertySchema `json:"properties,omitempty"` // Nested properties for object types
+	Required    []string                  `json:"required,omitempty"`   // Required nested fields for object types
 }
 
 // extractSchema converts a component registration to a JSON Schema
 func extractSchema(name string, registration *component.Registration) ComponentSchema {
 	// Convert component.PropertySchema to JSON Schema PropertySchema
-	properties := make(map[string]PropertySchema)
-	for propName, propSchema := range registration.Schema.Properties {
-		jsonSchemaProp := PropertySchema{
-			Type:        mapTypeToJSONSchema(propSchema.Type),
-			Description: propSchema.Description,
-			Default:     propSchema.Default,
-			Enum:        propSchema.Enum,
-			Minimum:     propSchema.Minimum,
-			Maximum:     propSchema.Maximum,
-			Category:    propSchema.Category,
-		}
-
-		// Handle array types
-		if propSchema.Type == "array" {
-			jsonSchemaProp.Items = &PropertySchema{
-				Type: "string", // Default to string items, can be enhanced later
-			}
-		}
-
-		properties[propName] = jsonSchemaProp
-	}
+	properties := convertProperties(registration.Schema.Properties)
 
 	// Ensure Required is an empty array instead of nil
 	required := registration.Schema.Required
@@ -184,6 +166,40 @@ func extractSchema(name string, registration *component.Registration) ComponentS
 			Version:  registration.Version,
 		},
 	}
+}
+
+// convertProperties recursively converts component PropertySchema to JSON Schema PropertySchema
+func convertProperties(props map[string]component.PropertySchema) map[string]PropertySchema {
+	result := make(map[string]PropertySchema)
+	for propName, propSchema := range props {
+		jsonSchemaProp := PropertySchema{
+			Type:        mapTypeToJSONSchema(propSchema.Type),
+			Description: propSchema.Description,
+			Default:     propSchema.Default,
+			Enum:        propSchema.Enum,
+			Minimum:     propSchema.Minimum,
+			Maximum:     propSchema.Maximum,
+			Category:    propSchema.Category,
+		}
+
+		// Handle array types
+		if propSchema.Type == "array" {
+			jsonSchemaProp.Items = &PropertySchema{
+				Type: "string", // Default to string items, can be enhanced later
+			}
+		}
+
+		// Handle nested object types - recursively convert properties
+		if propSchema.Type == "object" && len(propSchema.Properties) > 0 {
+			jsonSchemaProp.Properties = convertProperties(propSchema.Properties)
+			if len(propSchema.Required) > 0 {
+				jsonSchemaProp.Required = propSchema.Required
+			}
+		}
+
+		result[propName] = jsonSchemaProp
+	}
+	return result
 }
 
 // mapTypeToJSONSchema maps component property types to JSON Schema types

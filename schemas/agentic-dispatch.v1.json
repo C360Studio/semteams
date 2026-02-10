@@ -26,7 +26,41 @@
     "permissions": {
       "type": "object",
       "description": "Permission configuration",
-      "category": "advanced"
+      "category": "advanced",
+      "properties": {
+        "approve": {
+          "type": "array",
+          "description": "approve",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cancel_any": {
+          "type": "array",
+          "description": "cancel_any",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cancel_own": {
+          "type": "boolean",
+          "description": "cancel_own"
+        },
+        "submit_task": {
+          "type": "array",
+          "description": "submit_task",
+          "items": {
+            "type": "string"
+          }
+        },
+        "view": {
+          "type": "array",
+          "description": "view",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     },
     "ports": {
       "type": "string",

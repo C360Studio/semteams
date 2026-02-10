@@ -2,6 +2,7 @@ package agenticloop
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -18,31 +19,52 @@ type LoopManager struct {
 	requestToLoop   map[string]string          // requestID -> loopID
 	toolCallToLoop  map[string]string          // callID -> loopID
 	contextConfig   ContextConfig              // shared context config
+	logger          *slog.Logger               // logger for context managers
 	mu              sync.RWMutex
 }
 
+// LoopManagerOption is a functional option for configuring LoopManager
+type LoopManagerOption func(*LoopManager)
+
+// WithLoopManagerLogger sets the logger for the LoopManager and its context managers
+func WithLoopManagerLogger(logger *slog.Logger) LoopManagerOption {
+	return func(lm *LoopManager) {
+		lm.logger = logger
+	}
+}
+
 // NewLoopManager creates a new LoopManager
-func NewLoopManager() *LoopManager {
-	return &LoopManager{
+func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
+	lm := &LoopManager{
 		loops:           make(map[string]*agentic.LoopEntity),
 		contextManagers: make(map[string]*ContextManager),
 		pendingTools:    make(map[string]map[string]bool),
 		requestToLoop:   make(map[string]string),
 		toolCallToLoop:  make(map[string]string),
 		contextConfig:   DefaultContextConfig(),
+		logger:          slog.Default(),
 	}
+	for _, opt := range opts {
+		opt(lm)
+	}
+	return lm
 }
 
 // NewLoopManagerWithConfig creates a new LoopManager with custom context config
-func NewLoopManagerWithConfig(contextConfig ContextConfig) *LoopManager {
-	return &LoopManager{
+func NewLoopManagerWithConfig(contextConfig ContextConfig, opts ...LoopManagerOption) *LoopManager {
+	lm := &LoopManager{
 		loops:           make(map[string]*agentic.LoopEntity),
 		contextManagers: make(map[string]*ContextManager),
 		pendingTools:    make(map[string]map[string]bool),
 		requestToLoop:   make(map[string]string),
 		toolCallToLoop:  make(map[string]string),
 		contextConfig:   contextConfig,
+		logger:          slog.Default(),
 	}
+	for _, opt := range opts {
+		opt(lm)
+	}
+	return lm
 }
 
 // CreateLoop creates a new loop entity with a generated UUID
@@ -69,7 +91,7 @@ func (m *LoopManager) CreateLoopWithID(loopID, taskID, role, model string, maxIt
 
 	// Create context manager for this loop if context management is enabled
 	if m.contextConfig.Enabled {
-		m.contextManagers[loopID] = NewContextManager(loopID, model, m.contextConfig)
+		m.contextManagers[loopID] = NewContextManager(loopID, model, m.contextConfig, WithLogger(m.logger))
 	}
 
 	return loopID, nil
