@@ -69,6 +69,13 @@ type LoopEntity struct {
 	// Workflow context (for loops created by workflow commands)
 	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
 	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
+
+	// Completion data (populated when loop completes)
+	// These fields enable SSE delivery of results via KV watch
+	Outcome     string    `json:"outcome,omitempty"`      // success, failed, cancelled
+	Result      string    `json:"result,omitempty"`       // LLM response content
+	Error       string    `json:"error,omitempty"`        // Error message on failure
+	CompletedAt time.Time `json:"completed_at,omitempty"` // When the loop completed
 }
 
 // Validate checks if the LoopEntity is valid

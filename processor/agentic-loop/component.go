@@ -890,6 +890,11 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 	entity.CancelledBy = signal.UserID
 	entity.CancelledAt = now
 
+	// Populate completion data for KV persistence (enables SSE delivery)
+	entity.Outcome = string(agentic.OutcomeCancelled)
+	entity.CompletedAt = now
+	entity.Error = "cancelled by user"
+
 	// Update in handler
 	if err := c.handler.UpdateLoop(entity); err != nil {
 		c.logger.Error("Failed to update loop state",

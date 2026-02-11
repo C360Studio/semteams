@@ -28,6 +28,12 @@ type LoopInfo struct {
 	// Workflow context (for loops created by workflow commands)
 	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
 	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
+
+	// Completion data (populated when loop completes)
+	Outcome     string    `json:"outcome,omitempty"`      // success, failed, cancelled
+	Result      string    `json:"result,omitempty"`       // LLM response content
+	Error       string    `json:"error,omitempty"`        // Error message on failure
+	CompletedAt time.Time `json:"completed_at,omitempty"` // When the loop completed
 }
 
 // LoopTracker tracks active loops per user and channel
@@ -156,6 +162,36 @@ func (t *LoopTracker) UpdateIterations(loopID string, iterations int) {
 				slog.Int("iterations", iterations),
 				slog.Int("max_iterations", info.MaxIterations))
 		}
+	}
+}
+
+// UpdateCompletion updates a loop with completion data (outcome, result, error).
+// This is called when a loop finishes to populate fields for SSE delivery.
+func (t *LoopTracker) UpdateCompletion(loopID, outcome, result, errMsg string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	info, ok := t.loops[loopID]
+	if !ok {
+		if t.logger != nil {
+			t.logger.Warn("attempted to update completion for unknown loop",
+				slog.String("loop_id", loopID),
+				slog.String("outcome", outcome))
+		}
+		return
+	}
+
+	info.Outcome = outcome
+	info.Result = result
+	info.Error = errMsg
+	info.CompletedAt = time.Now()
+
+	if t.logger != nil {
+		t.logger.Info("loop completion updated",
+			slog.String("loop_id", loopID),
+			slog.String("outcome", outcome),
+			slog.Int("result_len", len(result)),
+			slog.Bool("has_error", errMsg != ""))
 	}
 }
 

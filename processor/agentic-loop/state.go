@@ -466,3 +466,21 @@ func (m *LoopManager) GetLoopForToolCallWithRecovery(toolCallID string) (string,
 
 	return "", false
 }
+
+// UpdateCompletion updates a loop with completion data (outcome, result, error).
+// This is called when a loop finishes to populate fields for SSE delivery via KV watch.
+func (m *LoopManager) UpdateCompletion(loopID, outcome, result, errMsg string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entity, exists := m.loops[loopID]
+	if !exists {
+		return fmt.Errorf("loop %s not found", loopID)
+	}
+
+	entity.Outcome = outcome
+	entity.Result = result
+	entity.Error = errMsg
+	entity.CompletedAt = time.Now()
+	return nil
+}

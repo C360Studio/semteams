@@ -210,6 +210,7 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	// Check for timeout before processing
 	if h.loopManager.IsTimedOut(loopID) {
 		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
+		_ = h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeFailed), "", "loop timeout exceeded")
 		result := HandlerResult{
 			LoopID: loopID,
 			State:  agentic.LoopStateFailed,
@@ -299,6 +300,9 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 		}
 		result.State = agentic.LoopStateFailed
 
+		// Update entity with completion data for KV persistence (enables SSE delivery)
+		_ = h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeFailed), "", response.Error)
+
 		// Publish failure event
 		if failMsg, err := h.buildFailureEvent(loopID, "model_error", response.Error); err == nil {
 			result.PublishedMessages = append(result.PublishedMessages, failMsg)
@@ -337,6 +341,11 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 		return err
 	}
 	result.State = agentic.LoopStateComplete
+
+	// Update entity with completion data for KV persistence (enables SSE delivery)
+	if err := h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeSuccess), responseContent, ""); err != nil {
+		return err
+	}
 
 	// Enriched completion event for rules-based orchestration.
 	// Rules engine watches COMPLETE_* keys in KV and can trigger
@@ -380,6 +389,7 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 	// Check for timeout before processing
 	if h.loopManager.IsTimedOut(loopID) {
 		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
+		_ = h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeFailed), "", "loop timeout exceeded")
 		result := HandlerResult{
 			LoopID: loopID,
 			State:  agentic.LoopStateFailed,
@@ -467,8 +477,11 @@ func (h *MessageHandler) handleToolsComplete(
 		result.State = agentic.LoopStateFailed
 		result.MaxIterationsReached = true
 
-		// Publish failure event
+		// Update entity with completion data for KV persistence (enables SSE delivery)
 		errorMsg := fmt.Sprintf("max iterations (%d) reached", entity.MaxIterations)
+		_ = h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeFailed), "", errorMsg)
+
+		// Publish failure event
 		if failMsg, fErr := h.buildFailureEvent(loopID, "max_iterations", errorMsg); fErr == nil {
 			result.PublishedMessages = append(result.PublishedMessages, failMsg)
 		}
