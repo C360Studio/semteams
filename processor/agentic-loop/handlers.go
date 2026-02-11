@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
@@ -58,6 +59,7 @@ type MessageHandler struct {
 	loopManager       *LoopManager
 	trajectoryManager *TrajectoryManager
 	compactor         *Compactor
+	logger            *slog.Logger
 }
 
 // NewMessageHandler creates a new MessageHandler
@@ -68,7 +70,13 @@ func NewMessageHandler(config Config) *MessageHandler {
 		loopManager:       loopManager,
 		trajectoryManager: NewTrajectoryManager(),
 		compactor:         NewCompactor(config.Context),
+		logger:            slog.Default(),
 	}
+}
+
+// SetLogger sets the logger for the handler
+func (h *MessageHandler) SetLogger(logger *slog.Logger) {
+	h.logger = logger
 }
 
 // HandleTask processes an incoming task message and creates a new loop
@@ -210,7 +218,11 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	// Check for timeout before processing
 	if h.loopManager.IsTimedOut(loopID) {
 		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
-		_ = h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeFailed), "", "loop timeout exceeded")
+		if err := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", "loop timeout exceeded"); err != nil {
+			h.logger.Warn("failed to update completion for timed out loop",
+				slog.String("loop_id", loopID),
+				slog.String("error", err.Error()))
+		}
 		result := HandlerResult{
 			LoopID: loopID,
 			State:  agentic.LoopStateFailed,
@@ -301,7 +313,11 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 		result.State = agentic.LoopStateFailed
 
 		// Update entity with completion data for KV persistence (enables SSE delivery)
-		_ = h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeFailed), "", response.Error)
+		if err := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", response.Error); err != nil {
+			h.logger.Warn("failed to update completion for model error",
+				slog.String("loop_id", loopID),
+				slog.String("error", err.Error()))
+		}
 
 		// Publish failure event
 		if failMsg, err := h.buildFailureEvent(loopID, "model_error", response.Error); err == nil {
@@ -343,7 +359,7 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 	result.State = agentic.LoopStateComplete
 
 	// Update entity with completion data for KV persistence (enables SSE delivery)
-	if err := h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeSuccess), responseContent, ""); err != nil {
+	if err := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeSuccess, responseContent, ""); err != nil {
 		return err
 	}
 
@@ -389,7 +405,11 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 	// Check for timeout before processing
 	if h.loopManager.IsTimedOut(loopID) {
 		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
-		_ = h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeFailed), "", "loop timeout exceeded")
+		if err := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", "loop timeout exceeded"); err != nil {
+			h.logger.Warn("failed to update completion for timed out loop",
+				slog.String("loop_id", loopID),
+				slog.String("error", err.Error()))
+		}
 		result := HandlerResult{
 			LoopID: loopID,
 			State:  agentic.LoopStateFailed,
@@ -479,7 +499,11 @@ func (h *MessageHandler) handleToolsComplete(
 
 		// Update entity with completion data for KV persistence (enables SSE delivery)
 		errorMsg := fmt.Sprintf("max iterations (%d) reached", entity.MaxIterations)
-		_ = h.loopManager.UpdateCompletion(loopID, string(agentic.OutcomeFailed), "", errorMsg)
+		if updateErr := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", errorMsg); updateErr != nil {
+			h.logger.Warn("failed to update completion for max iterations",
+				slog.String("loop_id", loopID),
+				slog.String("error", updateErr.Error()))
+		}
 
 		// Publish failure event
 		if failMsg, fErr := h.buildFailureEvent(loopID, "max_iterations", errorMsg); fErr == nil {
@@ -599,4 +623,9 @@ func (h *MessageHandler) GetLoop(loopID string) (agentic.LoopEntity, error) {
 // UpdateLoop updates a loop entity
 func (h *MessageHandler) UpdateLoop(entity agentic.LoopEntity) error {
 	return h.loopManager.UpdateLoop(entity)
+}
+
+// CancelLoop atomically cancels a loop and populates completion data.
+func (h *MessageHandler) CancelLoop(loopID, cancelledBy string) (agentic.LoopEntity, error) {
+	return h.loopManager.CancelLoop(loopID, cancelledBy)
 }

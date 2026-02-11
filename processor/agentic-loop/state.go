@@ -470,6 +470,10 @@ func (m *LoopManager) GetLoopForToolCallWithRecovery(toolCallID string) (string,
 // UpdateCompletion updates a loop with completion data (outcome, result, error).
 // This is called when a loop finishes to populate fields for SSE delivery via KV watch.
 func (m *LoopManager) UpdateCompletion(loopID, outcome, result, errMsg string) error {
+	if !isValidOutcome(outcome) {
+		return fmt.Errorf("invalid outcome: %s", outcome)
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -483,4 +487,41 @@ func (m *LoopManager) UpdateCompletion(loopID, outcome, result, errMsg string) e
 	entity.Error = errMsg
 	entity.CompletedAt = time.Now()
 	return nil
+}
+
+// isValidOutcome checks if the outcome is one of the valid constants.
+func isValidOutcome(outcome string) bool {
+	switch outcome {
+	case agentic.OutcomeSuccess, agentic.OutcomeFailed, agentic.OutcomeCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// CancelLoop atomically cancels a loop and populates completion data.
+// Returns the updated entity for further processing, or an error if the loop
+// cannot be cancelled (not found or already terminal).
+func (m *LoopManager) CancelLoop(loopID, cancelledBy string) (agentic.LoopEntity, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entity, exists := m.loops[loopID]
+	if !exists {
+		return agentic.LoopEntity{}, fmt.Errorf("loop %s not found", loopID)
+	}
+
+	if entity.State.IsTerminal() {
+		return agentic.LoopEntity{}, fmt.Errorf("cannot cancel terminal loop %s in state %s", loopID, entity.State)
+	}
+
+	now := time.Now()
+	entity.State = agentic.LoopStateCancelled
+	entity.CancelledBy = cancelledBy
+	entity.CancelledAt = now
+	entity.Outcome = agentic.OutcomeCancelled
+	entity.CompletedAt = now
+	entity.Error = "cancelled by user"
+
+	return *entity, nil
 }

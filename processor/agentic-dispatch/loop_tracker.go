@@ -167,31 +167,59 @@ func (t *LoopTracker) UpdateIterations(loopID string, iterations int) {
 
 // UpdateCompletion updates a loop with completion data (outcome, result, error).
 // This is called when a loop finishes to populate fields for SSE delivery.
-func (t *LoopTracker) UpdateCompletion(loopID, outcome, result, errMsg string) {
+// It also updates the State field to match the terminal state implied by the outcome.
+func (t *LoopTracker) UpdateCompletion(loopID, outcome, result, errMsg string) error {
+	if !isValidOutcome(outcome) {
+		return fmt.Errorf("invalid outcome: %s", outcome)
+	}
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	info, ok := t.loops[loopID]
 	if !ok {
-		if t.logger != nil {
-			t.logger.Warn("attempted to update completion for unknown loop",
-				slog.String("loop_id", loopID),
-				slog.String("outcome", outcome))
-		}
-		return
+		return fmt.Errorf("loop %s not found", loopID)
 	}
 
 	info.Outcome = outcome
 	info.Result = result
 	info.Error = errMsg
 	info.CompletedAt = time.Now()
+	info.State = outcomeToState(outcome)
 
 	if t.logger != nil {
 		t.logger.Info("loop completion updated",
 			slog.String("loop_id", loopID),
 			slog.String("outcome", outcome),
+			slog.String("state", info.State),
 			slog.Int("result_len", len(result)),
 			slog.Bool("has_error", errMsg != ""))
+	}
+
+	return nil
+}
+
+// isValidOutcome checks if the outcome is one of the valid constants.
+func isValidOutcome(outcome string) bool {
+	switch outcome {
+	case agentic.OutcomeSuccess, agentic.OutcomeFailed, agentic.OutcomeCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// outcomeToState maps an outcome to its corresponding terminal state.
+func outcomeToState(outcome string) string {
+	switch outcome {
+	case agentic.OutcomeSuccess:
+		return "complete"
+	case agentic.OutcomeFailed:
+		return "failed"
+	case agentic.OutcomeCancelled:
+		return "cancelled"
+	default:
+		return "failed"
 	}
 }
 

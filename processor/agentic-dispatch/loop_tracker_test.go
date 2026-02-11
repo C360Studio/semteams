@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -449,4 +450,100 @@ func TestLoopTracker_SendSignal_NoClient(t *testing.T) {
 	err := tracker.SendSignal(ctx, nil, "loop-1", "cancel", "test reason")
 	assert.Error(t, err)
 	assert.Equal(t, ErrNATSClientNil, err)
+}
+
+func TestLoopTracker_UpdateCompletion(t *testing.T) {
+	tests := []struct {
+		name      string
+		outcome   string
+		result    string
+		errMsg    string
+		wantErr   bool
+		wantState string
+	}{
+		{
+			name:      "success completion",
+			outcome:   agentic.OutcomeSuccess,
+			result:    "Task completed successfully",
+			errMsg:    "",
+			wantErr:   false,
+			wantState: "complete",
+		},
+		{
+			name:      "failed completion",
+			outcome:   agentic.OutcomeFailed,
+			result:    "",
+			errMsg:    "max iterations reached",
+			wantErr:   false,
+			wantState: "failed",
+		},
+		{
+			name:      "cancelled completion",
+			outcome:   agentic.OutcomeCancelled,
+			result:    "",
+			errMsg:    "cancelled by user",
+			wantErr:   false,
+			wantState: "cancelled",
+		},
+		{
+			name:    "invalid outcome",
+			outcome: "invalid",
+			result:  "",
+			errMsg:  "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tracker := NewLoopTracker()
+
+			// Track a loop first
+			info := &LoopInfo{
+				LoopID:        "loop-123",
+				TaskID:        "task-456",
+				UserID:        "user-789",
+				ChannelType:   "cli",
+				ChannelID:     "session-1",
+				State:         "executing",
+				Iterations:    5,
+				MaxIterations: 10,
+				CreatedAt:     time.Now(),
+			}
+			tracker.Track(info)
+
+			err := tracker.UpdateCompletion("loop-123", tt.outcome, tt.result, tt.errMsg)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			// Verify the info was updated
+			updated := tracker.Get("loop-123")
+			require.NotNil(t, updated)
+			assert.Equal(t, tt.outcome, updated.Outcome)
+			assert.Equal(t, tt.result, updated.Result)
+			assert.Equal(t, tt.errMsg, updated.Error)
+			assert.Equal(t, tt.wantState, updated.State)
+			assert.False(t, updated.CompletedAt.IsZero())
+		})
+	}
+}
+
+func TestLoopTracker_UpdateCompletion_NotFound(t *testing.T) {
+	tracker := NewLoopTracker()
+
+	err := tracker.UpdateCompletion("non-existent", agentic.OutcomeSuccess, "result", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestLoopTracker_UpdateCompletion_InvalidOutcome(t *testing.T) {
+	tracker := NewLoopTracker()
+
+	// Even without tracking a loop, invalid outcome should fail first
+	err := tracker.UpdateCompletion("any-loop", "bogus", "result", "")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid outcome")
 }

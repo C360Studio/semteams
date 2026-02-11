@@ -867,37 +867,10 @@ func (c *Component) handleSignalMessage(ctx context.Context, data []byte) {
 func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserSignal) {
 	loopID := signal.LoopID
 
-	// Get current loop state
-	entity, err := c.handler.GetLoop(loopID)
+	// Atomically cancel the loop and get the updated entity
+	entity, err := c.handler.CancelLoop(loopID, signal.UserID)
 	if err != nil {
-		c.logger.Error("Failed to get loop for cancel",
-			slog.String("error", err.Error()),
-			slog.String("loop_id", loopID))
-		return
-	}
-
-	// Check if loop is already terminal
-	if entity.State.IsTerminal() {
-		c.logger.Warn("Cannot cancel terminal loop",
-			slog.String("loop_id", loopID),
-			slog.String("state", string(entity.State)))
-		return
-	}
-
-	// Update loop state to cancelled
-	now := time.Now()
-	entity.State = agentic.LoopStateCancelled
-	entity.CancelledBy = signal.UserID
-	entity.CancelledAt = now
-
-	// Populate completion data for KV persistence (enables SSE delivery)
-	entity.Outcome = string(agentic.OutcomeCancelled)
-	entity.CompletedAt = now
-	entity.Error = "cancelled by user"
-
-	// Update in handler
-	if err := c.handler.UpdateLoop(entity); err != nil {
-		c.logger.Error("Failed to update loop state",
+		c.logger.Error("Failed to cancel loop",
 			slog.String("error", err.Error()),
 			slog.String("loop_id", loopID))
 		return
@@ -918,7 +891,7 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 		TaskID:      entity.TaskID,
 		Outcome:     agentic.OutcomeCancelled,
 		CancelledBy: signal.UserID,
-		CancelledAt: now,
+		CancelledAt: entity.CancelledAt,
 	}
 
 	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "agentic-loop")

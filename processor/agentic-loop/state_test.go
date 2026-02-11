@@ -599,3 +599,189 @@ func TestLoopManager_ConcurrentPendingTools(t *testing.T) {
 
 	// Race detector will catch any concurrency issues
 }
+
+func TestLoopManager_UpdateCompletion(t *testing.T) {
+	manager := agenticloop.NewLoopManager()
+	loopID, _ := manager.CreateLoop("task-001", "general", "qwen-32b", 10)
+
+	tests := []struct {
+		name      string
+		loopID    string
+		outcome   string
+		result    string
+		errMsg    string
+		wantErr   bool
+		errSubstr string
+	}{
+		{
+			name:    "success completion",
+			loopID:  loopID,
+			outcome: agentic.OutcomeSuccess,
+			result:  "Task completed successfully",
+			errMsg:  "",
+			wantErr: false,
+		},
+		{
+			name:    "failed completion",
+			loopID:  loopID,
+			outcome: agentic.OutcomeFailed,
+			result:  "",
+			errMsg:  "max iterations reached",
+			wantErr: false,
+		},
+		{
+			name:    "cancelled completion",
+			loopID:  loopID,
+			outcome: agentic.OutcomeCancelled,
+			result:  "",
+			errMsg:  "cancelled by user",
+			wantErr: false,
+		},
+		{
+			name:      "invalid outcome",
+			loopID:    loopID,
+			outcome:   "invalid",
+			result:    "",
+			errMsg:    "",
+			wantErr:   true,
+			errSubstr: "invalid outcome",
+		},
+		{
+			name:      "non-existent loop",
+			loopID:    "non-existent",
+			outcome:   agentic.OutcomeSuccess,
+			result:    "test",
+			errMsg:    "",
+			wantErr:   true,
+			errSubstr: "not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := manager.UpdateCompletion(tt.loopID, tt.outcome, tt.result, tt.errMsg)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("UpdateCompletion() expected error, got nil")
+				} else if tt.errSubstr != "" && !contains(err.Error(), tt.errSubstr) {
+					t.Errorf("UpdateCompletion() error = %v, want substring %q", err, tt.errSubstr)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("UpdateCompletion() unexpected error: %v", err)
+				return
+			}
+
+			// Verify the entity was updated
+			entity, _ := manager.GetLoop(tt.loopID)
+			if entity.Outcome != tt.outcome {
+				t.Errorf("Outcome = %v, want %v", entity.Outcome, tt.outcome)
+			}
+			if entity.Result != tt.result {
+				t.Errorf("Result = %v, want %v", entity.Result, tt.result)
+			}
+			if entity.Error != tt.errMsg {
+				t.Errorf("Error = %v, want %v", entity.Error, tt.errMsg)
+			}
+			if entity.CompletedAt.IsZero() {
+				t.Error("CompletedAt should be set")
+			}
+		})
+	}
+}
+
+func TestLoopManager_CancelLoop(t *testing.T) {
+	tests := []struct {
+		name        string
+		setupState  agentic.LoopState
+		cancelledBy string
+		wantErr     bool
+		errSubstr   string
+	}{
+		{
+			name:        "cancel exploring loop",
+			setupState:  agentic.LoopStateExploring,
+			cancelledBy: "user-123",
+			wantErr:     false,
+		},
+		{
+			name:        "cancel executing loop",
+			setupState:  agentic.LoopStateExecuting,
+			cancelledBy: "user-456",
+			wantErr:     false,
+		},
+		{
+			name:        "cannot cancel completed loop",
+			setupState:  agentic.LoopStateComplete,
+			cancelledBy: "user-789",
+			wantErr:     true,
+			errSubstr:   "cannot cancel terminal",
+		},
+		{
+			name:        "cannot cancel failed loop",
+			setupState:  agentic.LoopStateFailed,
+			cancelledBy: "user-abc",
+			wantErr:     true,
+			errSubstr:   "cannot cancel terminal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := agenticloop.NewLoopManager()
+			loopID, _ := manager.CreateLoop("task-001", "general", "qwen-32b", 10)
+
+			// Set up the loop state
+			if tt.setupState != agentic.LoopStateExploring {
+				_ = manager.TransitionLoop(loopID, tt.setupState)
+			}
+
+			entity, err := manager.CancelLoop(loopID, tt.cancelledBy)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("CancelLoop() expected error, got nil")
+				} else if tt.errSubstr != "" && !contains(err.Error(), tt.errSubstr) {
+					t.Errorf("CancelLoop() error = %v, want substring %q", err, tt.errSubstr)
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("CancelLoop() unexpected error: %v", err)
+				return
+			}
+
+			// Verify the entity was updated atomically
+			if entity.State != agentic.LoopStateCancelled {
+				t.Errorf("State = %v, want %v", entity.State, agentic.LoopStateCancelled)
+			}
+			if entity.CancelledBy != tt.cancelledBy {
+				t.Errorf("CancelledBy = %v, want %v", entity.CancelledBy, tt.cancelledBy)
+			}
+			if entity.CancelledAt.IsZero() {
+				t.Error("CancelledAt should be set")
+			}
+			if entity.Outcome != agentic.OutcomeCancelled {
+				t.Errorf("Outcome = %v, want %v", entity.Outcome, agentic.OutcomeCancelled)
+			}
+			if entity.CompletedAt.IsZero() {
+				t.Error("CompletedAt should be set")
+			}
+			if entity.Error != "cancelled by user" {
+				t.Errorf("Error = %v, want %v", entity.Error, "cancelled by user")
+			}
+		})
+	}
+}
+
+func TestLoopManager_CancelLoop_NotFound(t *testing.T) {
+	manager := agenticloop.NewLoopManager()
+
+	_, err := manager.CancelLoop("non-existent", "user-123")
+	if err == nil {
+		t.Error("CancelLoop() expected error for non-existent loop")
+	}
+	if !contains(err.Error(), "not found") {
+		t.Errorf("CancelLoop() error = %v, want substring 'not found'", err)
+	}
+}
