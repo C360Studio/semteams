@@ -629,20 +629,44 @@ func (c *Component) handleStepCompleteMessage(ctx context.Context, data []byte) 
 
 // handleAgentCompleteMessage processes agent.complete messages
 func (c *Component) handleAgentCompleteMessage(ctx context.Context, data []byte) {
+	// First, try to unwrap BaseMessage envelope
+	// Agentic-loop publishes messages wrapped in BaseMessage format:
+	// {"type": {...}, "payload": {...}}
+	var envelope struct {
+		Type    json.RawMessage `json:"type"`
+		Payload json.RawMessage `json:"payload"`
+	}
+
+	var payloadData []byte
+	if err := json.Unmarshal(data, &envelope); err == nil && len(envelope.Payload) > 0 {
+		// Message is wrapped in BaseMessage envelope
+		payloadData = envelope.Payload
+	} else {
+		// Message might be raw (for backwards compatibility)
+		payloadData = data
+	}
+
+	// Now unmarshal the actual payload
 	var msg struct {
 		LoopID     string          `json:"loop_id"`
 		TaskID     string          `json:"task_id"`
 		Outcome    string          `json:"outcome"`
 		Output     json.RawMessage `json:"output,omitempty"`
+		Result     json.RawMessage `json:"result,omitempty"` // agentic uses "result" not "output"
 		Error      string          `json:"error,omitempty"`
 		Role       string          `json:"role,omitempty"`
 		WorkflowID string          `json:"workflow_id,omitempty"`
 		ExecID     string          `json:"execution_id,omitempty"`
 	}
 
-	if err := json.Unmarshal(data, &msg); err != nil {
+	if err := json.Unmarshal(payloadData, &msg); err != nil {
 		c.logger.Error("Failed to unmarshal agent complete message", "error", err)
 		return
+	}
+
+	// Use "result" field if "output" is empty (agentic-loop uses "result")
+	if len(msg.Output) == 0 && len(msg.Result) > 0 {
+		msg.Output = msg.Result
 	}
 
 	// Try to find execution ID from message or by task correlation
