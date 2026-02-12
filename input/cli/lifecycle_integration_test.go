@@ -15,7 +15,15 @@ var sharedLifecycleNATSClient *natsclient.TestClient
 
 func TestMain(m *testing.M) {
 	t := &testing.T{}
-	sharedLifecycleNATSClient = natsclient.NewTestClient(t, natsclient.WithKV())
+	streams := []natsclient.TestStreamConfig{
+		{Name: "USER", Subjects: []string{"user.>"}},
+		{Name: "AGENT", Subjects: []string{"agent.>"}},
+	}
+	sharedLifecycleNATSClient = natsclient.NewTestClient(t,
+		natsclient.WithJetStream(),
+		natsclient.WithKV(),
+		natsclient.WithStreams(streams...),
+	)
 	code := m.Run()
 	if sharedLifecycleNATSClient != nil {
 		sharedLifecycleNATSClient.Terminate()

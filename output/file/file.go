@@ -215,6 +215,11 @@ func (f *Output) Start(ctx context.Context) error {
 		return errs.WrapFatal(errs.ErrMissingConfig, "Output", "Start", "NATS client required")
 	}
 
+	// Recreate shutdown/done channels for restart support
+	f.shutdown = make(chan struct{})
+	f.done = make(chan struct{})
+	f.wg = &sync.WaitGroup{}
+
 	// Open output file
 	filename := filepath.Join(f.directory, fmt.Sprintf("%s.%s", f.filePrefix, f.format))
 	var err error

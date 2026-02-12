@@ -251,6 +251,11 @@ func (h *Output) Start(ctx context.Context) error {
 		return errs.WrapFatal(errs.ErrMissingConfig, "Output", "Start", "NATS client required")
 	}
 
+	// Recreate shutdown/done channels for restart support
+	h.shutdown = make(chan struct{})
+	h.done = make(chan struct{})
+	h.wg = &sync.WaitGroup{}
+
 	// Subscribe to input ports based on port type
 	if err := h.setupSubscriptions(ctx); err != nil {
 		return err
