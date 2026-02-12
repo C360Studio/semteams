@@ -173,6 +173,18 @@ func (c *Client) ConsumeStreamWithConfig(
 			"failed to get stream "+cfg.StreamName)
 	}
 
+	// Stop any existing consumer context for this key BEFORE creating new one
+	consumerKey := cfg.StreamName + ":" + cfg.ConsumerName
+	c.consumersMu.Lock()
+	if c.consumers != nil {
+		if existingConsumer, exists := c.consumers[consumerKey]; exists {
+			existingConsumer.Stop()
+			delete(c.consumers, consumerKey)
+			c.logger.Debugf("Stopped existing consumer for %s before recreation", consumerKey)
+		}
+	}
+	c.consumersMu.Unlock()
+
 	// Build consumer configuration
 	consumerCfg := c.buildConsumerConfig(cfg)
 
@@ -216,14 +228,6 @@ func (c *Client) ConsumeStreamWithConfig(
 	if c.consumers == nil {
 		c.consumers = make(map[string]jetstream.ConsumeContext)
 	}
-	consumerKey := cfg.StreamName + ":" + cfg.ConsumerName
-
-	// Stop any existing consumer for this key to prevent goroutine leaks
-	if existingConsumer, exists := c.consumers[consumerKey]; exists {
-		existingConsumer.Stop()
-		c.logger.Debugf("Replaced existing consumer for %s", consumerKey)
-	}
-
 	c.consumers[consumerKey] = consumeCtx
 	c.consumersMu.Unlock()
 
