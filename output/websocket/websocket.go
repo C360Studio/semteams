@@ -148,11 +148,11 @@ type Output struct {
 	// Message ID generation
 	messageIDCounter atomic.Uint64
 
-	// Metrics
-	messagesSent int64
-	bytesSent    int64
-	errors       int64
-	lastActivity time.Time
+	// Metrics (atomic access)
+	messagesSent atomic.Int64
+	bytesSent    atomic.Int64
+	errors       atomic.Int64
+	lastActivity atomic.Int64 // Unix timestamp in nanoseconds
 
 	// Prometheus metrics
 	metrics *Metrics
@@ -435,8 +435,8 @@ func (w *Output) Health() component.HealthStatus {
 	serverRunning := w.server != nil
 	w.mu.RUnlock()
 
-	// Read error counter atomically (matches atomic writes in broadcastToClients)
-	errCount := atomic.LoadInt64(&w.errors)
+	// Read error counter atomically
+	errCount := w.errors.Load()
 
 	healthy := running && serverRunning
 
@@ -451,12 +451,11 @@ func (w *Output) Health() component.HealthStatus {
 
 // DataFlow returns the current data flow metrics
 func (w *Output) DataFlow() component.FlowMetrics {
-	w.mu.RLock()
-	messages := w.messagesSent
-	bytes := w.bytesSent
-	errCount := w.errors
-	lastActivity := w.lastActivity
-	w.mu.RUnlock()
+	// Read metrics atomically (no lock needed)
+	messages := w.messagesSent.Load()
+	bytes := w.bytesSent.Load()
+	errCount := w.errors.Load()
+	lastActivityNanos := w.lastActivity.Load()
 
 	var messagesPerSecond float64
 	var bytesPerSecond float64
@@ -469,6 +468,12 @@ func (w *Output) DataFlow() component.FlowMetrics {
 
 	if messages > 0 {
 		errorRate = float64(errCount) / float64(messages)
+	}
+
+	// Convert nanoseconds back to time.Time
+	var lastActivity time.Time
+	if lastActivityNanos > 0 {
+		lastActivity = time.Unix(0, lastActivityNanos)
 	}
 
 	return component.FlowMetrics{
@@ -873,10 +878,8 @@ func (w *Output) handleNATSMessageData(ctx context.Context, data []byte, subject
 	// Report sending stage for lifecycle observability
 	w.reportSending(ctx)
 
-	// Update activity timestamp
-	w.mu.Lock()
-	w.lastActivity = time.Now()
-	w.mu.Unlock()
+	// Update activity timestamp atomically
+	w.lastActivity.Store(time.Now().UnixNano())
 
 	// Parse the message data as JSON to validate it
 	var msgData map[string]any
@@ -901,9 +904,7 @@ func (w *Output) handleNATSMessageData(ctx context.Context, data []byte, subject
 	// Marshal back to JSON for WebSocket transmission
 	jsonData, err := json.Marshal(msgData)
 	if err != nil {
-		w.mu.Lock()
-		w.errors++
-		w.mu.Unlock()
+		w.errors.Add(1)
 		// Update metrics
 		if w.metrics != nil {
 			w.metrics.errorsTotal.WithLabelValues("json_marshal").Inc()
@@ -938,10 +939,8 @@ func (w *Output) handleNATSMessage(ctx context.Context, msg *natspkg.Msg) {
 	}
 	w.mu.RUnlock()
 
-	// Update activity timestamp
-	w.mu.Lock()
-	w.lastActivity = time.Now()
-	w.mu.Unlock()
+	// Update activity timestamp atomically
+	w.lastActivity.Store(time.Now().UnixNano())
 
 	// Parse the message data as JSON to validate it
 	var msgData map[string]any
@@ -966,9 +965,7 @@ func (w *Output) handleNATSMessage(ctx context.Context, msg *natspkg.Msg) {
 	// Marshal back to JSON for WebSocket transmission
 	data, err := json.Marshal(msgData)
 	if err != nil {
-		w.mu.Lock()
-		w.errors++
-		w.mu.Unlock()
+		w.errors.Add(1)
 		// Update metrics
 		if w.metrics != nil {
 			w.metrics.errorsTotal.WithLabelValues("json_marshal").Inc()
@@ -1014,9 +1011,7 @@ func (w *Output) runServer(_ context.Context) {
 	if err != nil && err != http.ErrServerClosed {
 		// Only log real errors, not graceful shutdown
 		fmt.Printf("[ERROR] HTTP server failed: %v\n", err)
-		w.mu.Lock()
-		w.errors++
-		w.mu.Unlock()
+		w.errors.Add(1)
 	}
 	// http.ErrServerClosed is expected during graceful shutdown
 }
@@ -1026,9 +1021,7 @@ func (w *Output) handleWebSocket(wr http.ResponseWriter, r *http.Request) {
 	// Upgrade HTTP connection to WebSocket
 	conn, err := w.upgrader.Upgrade(wr, r, nil)
 	if err != nil {
-		w.mu.Lock()
-		w.errors++
-		w.mu.Unlock()
+		w.errors.Add(1)
 		// Update metrics
 		if w.metrics != nil {
 			w.metrics.errorsTotal.WithLabelValues("connection_upgrade").Inc()
@@ -1044,9 +1037,7 @@ func (w *Output) handleWebSocket(wr http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// Should not happen with valid config, but handle gracefully
 		_ = conn.Close()
-		w.mu.Lock()
-		w.errors++
-		w.mu.Unlock()
+		w.errors.Add(1)
 		if w.metrics != nil {
 			w.metrics.errorsTotal.WithLabelValues("buffer_creation").Inc()
 		}
@@ -1259,9 +1250,7 @@ func (w *Output) prepareMessageEnvelope(data []byte) (string, []byte) {
 	if err != nil {
 		// Failed to marshal envelope, fallback to raw data
 		envelopeData = data
-		w.mu.Lock()
-		w.errors++
-		w.mu.Unlock()
+		w.errors.Add(1)
 		if w.metrics != nil {
 			w.metrics.errorsTotal.WithLabelValues("envelope_marshal").Inc()
 		}
@@ -1350,7 +1339,7 @@ func (w *Output) setupPendingMessage(i *clientInfo, messageID, subject string, e
 // handleSendError processes errors that occur during message sending
 func (w *Output) handleSendError(c *websocket.Conn, i *clientInfo, messageID string) {
 	w.removeClient(c, i)
-	atomic.AddInt64(&w.errors, 1)
+	w.errors.Add(1)
 	if w.metrics != nil {
 		w.metrics.errorsTotal.WithLabelValues("client_send").Inc()
 	}
@@ -1364,9 +1353,9 @@ func (w *Output) handleSendError(c *websocket.Conn, i *clientInfo, messageID str
 
 // handleSendSuccess processes successful message sends and waits for acks
 func (w *Output) handleSendSuccess(i *clientInfo, messageID, subject string, envelopeData []byte, ackChan chan bool) {
-	// Success - use atomic operations for counters
-	atomic.AddInt64(&w.messagesSent, 1)
-	atomic.AddInt64(&w.bytesSent, int64(len(envelopeData)))
+	// Success - update counters atomically
+	w.messagesSent.Add(1)
+	w.bytesSent.Add(int64(len(envelopeData)))
 	if w.metrics != nil {
 		w.metrics.messagesSent.WithLabelValues(subject).Inc()
 		w.metrics.bytesSent.Add(float64(len(envelopeData)))
@@ -1407,7 +1396,7 @@ func (w *Output) waitForAck(i *clientInfo, messageID string, ackChan chan bool) 
 // handleSendTimeout processes timeouts that occur during message sending
 func (w *Output) handleSendTimeout(c *websocket.Conn, i *clientInfo, messageID string) {
 	w.removeClient(c, i)
-	atomic.AddInt64(&w.errors, 1)
+	w.errors.Add(1)
 	if w.metrics != nil {
 		w.metrics.errorsTotal.WithLabelValues("client_timeout").Inc()
 	}
@@ -1484,9 +1473,7 @@ func (w *Output) pingClients(ctx context.Context) {
 		if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 			// Client error, remove client
 			w.removeClient(conn, info)
-			w.mu.Lock()
-			w.errors++
-			w.mu.Unlock()
+			w.errors.Add(1)
 		}
 	}
 }

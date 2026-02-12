@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,7 +38,10 @@ type Component struct {
 	// Component metadata
 	instanceName string
 	enabled      bool
-	started      bool
+
+	// Mutex to protect concurrent access to state fields
+	mu      sync.RWMutex
+	started bool
 
 	// core dependencies
 	store           *Store
@@ -141,6 +145,9 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 
 // Start initializes the ObjectStore and sets up NATS handlers
 func (c *Component) Start(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if c.started {
 		c.logger.Debug("ObjectStore already started", "name", c.instanceName)
 		return nil
@@ -260,6 +267,9 @@ func (c *Component) Start(ctx context.Context) error {
 
 // Stop cleanly shuts down the component
 func (c *Component) Stop(_ time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if !c.started {
 		return nil
 	}
@@ -290,6 +300,8 @@ func (c *Component) Stop(_ time.Duration) error {
 
 // IsStarted returns whether the component is running
 func (c *Component) IsStarted() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.started
 }
 
@@ -868,13 +880,17 @@ func (c *Component) ConfigSchema() component.ConfigSchema {
 
 // Health returns current health status
 func (c *Component) Health() component.HealthStatus {
+	c.mu.RLock()
+	started := c.started
+	c.mu.RUnlock()
+
 	var lastAct time.Time
 	if v := c.lastActivity.Load(); v != nil {
 		lastAct = v.(time.Time)
 	}
 
 	return component.HealthStatus{
-		Healthy:    c.started,
+		Healthy:    started,
 		LastCheck:  time.Now(),
 		ErrorCount: 0, // Would need error tracking
 		LastError:  "",

@@ -691,11 +691,9 @@ func TestWebSocketOutput_MessageHandling(t *testing.T) {
 			ws.handleNATSMessage(ctx, msg)
 
 			// Verify lastActivity was updated
-			ws.mu.RLock()
-			lastActivity := ws.lastActivity
-			ws.mu.RUnlock()
+			lastActivityNanos := ws.lastActivity.Load()
 
-			if lastActivity.IsZero() {
+			if lastActivityNanos == 0 {
 				t.Error("lastActivity was not updated after handling message")
 			}
 		})
@@ -721,9 +719,7 @@ func TestWebSocketOutput_ClientManagement(t *testing.T) {
 	ws.broadcastToClients(ctx, "test.subject", testData)
 
 	// Verify no errors occurred
-	ws.mu.RLock()
-	errors := ws.errors
-	ws.mu.RUnlock()
+	errors := ws.errors.Load()
 
 	if errors != 0 {
 		t.Errorf("Broadcast with no clients caused %d errors, want 0", errors)

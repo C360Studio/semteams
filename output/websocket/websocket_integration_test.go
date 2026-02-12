@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -104,7 +103,7 @@ func TestWebSocketFederation_AckFlow(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Verify Output sent message to WebSocket clients
-	outputSent := atomic.LoadInt64(&wsOutput.messagesSent)
+	outputSent := wsOutput.messagesSent.Load()
 	assert.Greater(t, outputSent, int64(0), "Output should have sent message to WebSocket clients")
 
 	// Verify Output has no pending messages (ack was received)
