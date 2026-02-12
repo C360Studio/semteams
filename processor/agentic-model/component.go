@@ -265,11 +265,17 @@ func (c *Component) Stop(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Stop all JetStream consumers explicitly
-	// This is necessary for tests where context cancellation may not happen
+	// Stop all JetStream consumers and delete them from the server
+	// This ensures complete cleanup for test isolation
 	for _, info := range c.consumerInfos {
-		c.natsClient.StopConsumer(info.streamName, info.consumerName)
-		c.logger.Debug("Stopped consumer", "stream", info.streamName, "consumer", info.consumerName)
+		// Use background context with caller's timeout since the original context may be cancelled
+		deleteCtx, cancel := context.WithTimeout(context.Background(), timeout)
+		if err := c.natsClient.StopAndDeleteConsumer(deleteCtx, info.streamName, info.consumerName); err != nil {
+			c.logger.Debug("Failed to delete consumer (may not exist)", "stream", info.streamName, "consumer", info.consumerName, "error", err)
+		} else {
+			c.logger.Debug("Stopped and deleted consumer", "stream", info.streamName, "consumer", info.consumerName)
+		}
+		cancel()
 	}
 	c.consumerInfos = nil
 

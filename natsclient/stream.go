@@ -449,6 +449,7 @@ func (c *Client) PublishToStreamWithAck(
 }
 
 // StopConsumer stops a specific consumer by stream and consumer name.
+// This stops the local consume context but does not delete the durable consumer from the server.
 func (c *Client) StopConsumer(streamName, consumerName string) {
 	c.consumersMu.Lock()
 	defer c.consumersMu.Unlock()
@@ -458,6 +459,32 @@ func (c *Client) StopConsumer(streamName, consumerName string) {
 		consumeCtx.Stop()
 		delete(c.consumers, key)
 	}
+}
+
+// StopAndDeleteConsumer stops a specific consumer and deletes the durable consumer from the server.
+// This is useful for test cleanup to ensure complete isolation between test runs.
+func (c *Client) StopAndDeleteConsumer(ctx context.Context, streamName, consumerName string) error {
+	// First stop the local consume context
+	c.consumersMu.Lock()
+	key := streamName + ":" + consumerName
+	if consumeCtx, ok := c.consumers[key]; ok {
+		consumeCtx.Stop()
+		delete(c.consumers, key)
+	}
+	c.consumersMu.Unlock()
+
+	// Then delete the durable consumer from the server
+	js, err := c.JetStream()
+	if err != nil {
+		return err
+	}
+
+	stream, err := js.Stream(ctx, streamName)
+	if err != nil {
+		return err
+	}
+
+	return stream.DeleteConsumer(ctx, consumerName)
 }
 
 // StopAllConsumers stops all active consumers.
