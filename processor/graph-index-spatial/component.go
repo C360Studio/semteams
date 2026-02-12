@@ -389,6 +389,44 @@ func (c *Component) Initialize() error {
 	return nil
 }
 
+// waitForEntityBucket waits for the ENTITY_STATES bucket to be available and returns it
+func (c *Component) waitForEntityBucket(ctx context.Context) (jetstream.KeyValue, error) {
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return nil, errs.Wrap(err, "Component", "waitForEntityBucket", "JetStream connection")
+	}
+
+	// Report waiting stage
+	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketEntityStates); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketEntityStates), slog.Any("error", err))
+	}
+
+	// Configure resource watcher for bounded startup attempts
+	watcherCfg := resource.DefaultConfig()
+	watcherCfg.StartupAttempts = c.config.StartupAttempts
+	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
+	watcherCfg.Logger = c.logger
+
+	entityWatcher := resource.NewWatcher(
+		graph.BucketEntityStates,
+		func(checkCtx context.Context) error {
+			_, err := js.KeyValue(checkCtx, graph.BucketEntityStates)
+			return err
+		},
+		watcherCfg,
+	)
+
+	if !entityWatcher.WaitForStartup(ctx) {
+		return nil, errs.WrapTransient(
+			errs.ErrStorageUnavailable,
+			"Component", "waitForEntityBucket",
+			fmt.Sprintf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
+		)
+	}
+
+	return js.KeyValue(ctx, graph.BucketEntityStates)
+}
+
 // Start begins processing (must be initialized first)
 func (c *Component) Start(ctx context.Context) error {
 	c.mu.Lock()
@@ -416,12 +454,6 @@ func (c *Component) Start(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
 	c.cancel = cancel
 
-	// Check context before proceeding
-	if err := ctx.Err(); err != nil {
-		cancel()
-		return errs.Wrap(err, "Component", "Start", "context cancelled")
-	}
-
 	// Create SPATIAL_INDEX bucket (we are the WRITER)
 	spatialBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
 		Bucket:      graph.BucketSpatialIndex,
@@ -445,46 +477,11 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "setup query handlers")
 	}
 
-	// Get JetStream for bucket access
-	js, err := c.natsClient.JetStream()
+	// Wait for entity states bucket
+	entityBucket, err := c.waitForEntityBucket(ctx)
 	if err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "JetStream connection")
-	}
-
-	// Report waiting stage before dependency check
-	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketEntityStates); err != nil {
-		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketEntityStates), slog.Any("error", err))
-	}
-
-	// Configure resource watcher for bounded startup attempts
-	watcherCfg := resource.DefaultConfig()
-	watcherCfg.StartupAttempts = c.config.StartupAttempts
-	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
-	watcherCfg.Logger = c.logger
-
-	entityWatcher := resource.NewWatcher(
-		graph.BucketEntityStates,
-		func(checkCtx context.Context) error {
-			_, err := js.KeyValue(checkCtx, graph.BucketEntityStates)
-			return err
-		},
-		watcherCfg,
-	)
-
-	if !entityWatcher.WaitForStartup(ctx) {
-		cancel()
-		return errs.WrapTransient(
-			errs.ErrStorageUnavailable,
-			"Component", "Start",
-			fmt.Sprintf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
-		)
-	}
-
-	entityBucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
-	if err != nil {
-		cancel()
-		return errs.Wrap(err, "Component", "Start", fmt.Sprintf("get %s bucket", graph.BucketEntityStates))
+		return err
 	}
 
 	// Start entity watcher goroutine

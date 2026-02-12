@@ -773,7 +773,7 @@ func (c *Component) waitForBucket(ctx context.Context, js jetstream.JetStream, b
 
 	if !watcher.WaitForStartup(ctx) {
 		return nil, errs.WrapTransient(
-			errors.New(fmt.Sprintf("bucket %s not available after %d attempts", bucketName, c.config.StartupAttempts)),
+			fmt.Errorf("bucket %s not available after %d attempts", bucketName, c.config.StartupAttempts),
 			"Component", "waitForBucket", "dependency not available",
 		)
 	}

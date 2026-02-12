@@ -304,6 +304,34 @@ func (c *Component) Initialize() error {
 	return nil
 }
 
+// initLifecycleReporter initializes the lifecycle reporter for status tracking
+func (c *Component) initLifecycleReporter(ctx context.Context) {
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		c.logger.Warn("Failed to get JetStream, lifecycle reporting disabled", slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		return
+	}
+
+	statusBucket, err := js.CreateOrUpdateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMPONENT_STATUS",
+		Description: "Component lifecycle status tracking",
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
+			slog.Any("error", err))
+		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
+		return
+	}
+
+	c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
+		KV:               statusBucket,
+		ComponentName:    "graph-query",
+		Logger:           c.logger,
+		EnableThrottling: true,
+	})
+}
+
 // Start starts the component
 func (c *Component) Start(ctx context.Context) error {
 	// Validate context
@@ -335,28 +363,7 @@ func (c *Component) Start(ctx context.Context) error {
 	}
 
 	// Initialize lifecycle reporter (throttled for high-throughput queries)
-	js, err := c.natsClient.JetStream()
-	if err != nil {
-		c.logger.Warn("Failed to get JetStream, lifecycle reporting disabled", slog.Any("error", err))
-		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
-	} else {
-		statusBucket, err := js.CreateOrUpdateKeyValue(componentCtx, jetstream.KeyValueConfig{
-			Bucket:      "COMPONENT_STATUS",
-			Description: "Component lifecycle status tracking",
-		})
-		if err != nil {
-			c.logger.Warn("Failed to create COMPONENT_STATUS bucket, lifecycle reporting disabled",
-				slog.Any("error", err))
-			c.lifecycleReporter = component.NewNoOpLifecycleReporter()
-		} else {
-			c.lifecycleReporter = component.NewLifecycleReporterFromConfig(component.LifecycleReporterConfig{
-				KV:               statusBucket,
-				ComponentName:    "graph-query",
-				Logger:           c.logger,
-				EnableThrottling: true,
-			})
-		}
-	}
+	c.initLifecycleReporter(componentCtx)
 
 	// Create router for static routing
 	c.router = NewStaticRouter(c.logger)
