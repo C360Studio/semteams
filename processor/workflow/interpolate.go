@@ -317,7 +317,13 @@ func (i *interpolator) EvaluateCondition(cond *wfschema.ConditionDef) (bool, err
 		return true, nil
 	}
 
-	value, err := i.resolvePath(cond.Field)
+	// Strip ${...} wrapper if present for consistent UX
+	field := cond.Field
+	if strings.HasPrefix(field, "${") && strings.HasSuffix(field, "}") {
+		field = field[2 : len(field)-1]
+	}
+
+	value, err := i.resolvePath(field)
 	if err != nil {
 		// exists/not_exists operators handle missing values
 		if cond.Operator == "not_exists" {
