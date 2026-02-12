@@ -39,11 +39,20 @@ type Component struct {
 	startTime time.Time
 	mu        sync.RWMutex
 
+	// Track consumers for cleanup
+	consumerInfos []consumerInfo
+
 	// Metrics
 	requestsProcessed int64
 	errors            int64
 	lastActivity      time.Time
 	metrics           *modelMetrics
+}
+
+// consumerInfo tracks JetStream consumer details for cleanup
+type consumerInfo struct {
+	streamName   string
+	consumerName string
 }
 
 // NewComponent creates a new agentic-model processor component
@@ -193,6 +202,12 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 		return errs.WrapTransient(err, "Component", "setupConsumer", fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
+	// Track consumer for cleanup in Stop()
+	c.consumerInfos = append(c.consumerInfos, consumerInfo{
+		streamName:   streamName,
+		consumerName: consumerName,
+	})
+
 	c.logger.Info("Subscribed to agent requests (JetStream)",
 		"subject", port.Subject,
 		"stream", streamName,
@@ -250,9 +265,13 @@ func (c *Component) Stop(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// JetStream consumers are cleaned up automatically when their context is cancelled
-	// The ConsumeStreamWithConfig uses the context passed to Start(), which is managed
-	// by the flow runtime. No explicit unsubscribe needed for JetStream consumers.
+	// Stop all JetStream consumers explicitly
+	// This is necessary for tests where context cancellation may not happen
+	for _, info := range c.consumerInfos {
+		c.natsClient.StopConsumer(info.streamName, info.consumerName)
+		c.logger.Debug("Stopped consumer", "stream", info.streamName, "consumer", info.consumerName)
+	}
+	c.consumerInfos = nil
 
 	// Close all HTTP clients
 	for name, client := range c.clients {

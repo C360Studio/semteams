@@ -36,6 +36,15 @@ type Component struct {
 	// Ports
 	inputPorts  []component.Port
 	outputPorts []component.Port
+
+	// Track consumers for cleanup
+	consumerInfos []consumerInfo
+}
+
+// consumerInfo tracks JetStream consumer details for cleanup
+type consumerInfo struct {
+	streamName   string
+	consumerName string
 }
 
 // NewComponent creates a new router component
@@ -197,27 +206,21 @@ func (c *Component) Start(ctx context.Context) error {
 }
 
 // Stop halts processing with graceful shutdown
-func (c *Component) Stop(timeout time.Duration) error {
+func (c *Component) Stop(_ time.Duration) error {
 	c.mu.Lock()
 	if !c.started {
 		c.mu.Unlock()
 		return nil
 	}
-	c.mu.Unlock()
 
-	// Create timeout context for graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	// Wait for graceful shutdown or timeout
-	select {
-	case <-ctx.Done():
-		c.logger.Warn("Router stop timed out", slog.Duration("timeout", timeout))
-	default:
-		// Immediate shutdown (no long-running operations to wait for)
+	// Stop all JetStream consumers explicitly
+	// This is necessary for tests where context cancellation may not happen
+	for _, info := range c.consumerInfos {
+		c.natsClient.StopConsumer(info.streamName, info.consumerName)
+		c.logger.Debug("Stopped consumer", "stream", info.streamName, "consumer", info.consumerName)
 	}
+	c.consumerInfos = nil
 
-	c.mu.Lock()
 	c.started = false
 	c.mu.Unlock()
 
@@ -255,6 +258,10 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupSubscriptions", "subscribe to user.message")
 	}
+	c.consumerInfos = append(c.consumerInfos, consumerInfo{
+		streamName:   userMsgCfg.StreamName,
+		consumerName: userMsgCfg.ConsumerName,
+	})
 
 	// Subscribe to agent completions via JetStream
 	agentCompleteCfg := natsclient.StreamConsumerConfig{
@@ -275,6 +282,10 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupSubscriptions", "subscribe to agent.complete")
 	}
+	c.consumerInfos = append(c.consumerInfos, consumerInfo{
+		streamName:   agentCompleteCfg.StreamName,
+		consumerName: agentCompleteCfg.ConsumerName,
+	})
 
 	// Subscribe to loop created events for workflow context sync
 	agentCreatedCfg := natsclient.StreamConsumerConfig{
@@ -295,6 +306,10 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupSubscriptions", "subscribe to agent.created")
 	}
+	c.consumerInfos = append(c.consumerInfos, consumerInfo{
+		streamName:   agentCreatedCfg.StreamName,
+		consumerName: agentCreatedCfg.ConsumerName,
+	})
 
 	// Subscribe to loop failed events
 	agentFailedCfg := natsclient.StreamConsumerConfig{
@@ -315,6 +330,10 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupSubscriptions", "subscribe to agent.failed")
 	}
+	c.consumerInfos = append(c.consumerInfos, consumerInfo{
+		streamName:   agentFailedCfg.StreamName,
+		consumerName: agentFailedCfg.ConsumerName,
+	})
 
 	return nil
 }

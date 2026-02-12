@@ -45,8 +45,17 @@ type Component struct {
 	inputPorts  []component.Port
 	outputPorts []component.Port
 
+	// Track consumers for cleanup
+	consumerInfos []consumerInfo
+
 	// Metrics
 	metrics *loopMetrics
+}
+
+// consumerInfo tracks JetStream consumer details for cleanup
+type consumerInfo struct {
+	streamName   string
+	consumerName string
 }
 
 // NewComponent creates a new agentic-loop component
@@ -219,9 +228,13 @@ func (c *Component) Stop(_ time.Duration) error {
 		return nil
 	}
 
-	// JetStream consumers are cleaned up automatically when their context is cancelled
-	// The ConsumeStreamWithConfig uses the context passed to Start(), which is managed
-	// by the flow runtime. No explicit unsubscribe needed for JetStream consumers.
+	// Stop all JetStream consumers explicitly
+	// This is necessary for tests where context cancellation may not happen
+	for _, info := range c.consumerInfos {
+		c.natsClient.StopConsumer(info.streamName, info.consumerName)
+		c.logger.Debug("Stopped consumer", "stream", info.streamName, "consumer", info.consumerName)
+	}
+	c.consumerInfos = nil
 
 	c.started = false
 	return nil
@@ -394,6 +407,12 @@ func (c *Component) setupConsumer(ctx context.Context, port component.Port, subj
 	if err != nil {
 		return errs.Wrap(err, "agentic-loop", "setupConsumer", fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
+
+	// Track consumer for cleanup in Stop()
+	c.consumerInfos = append(c.consumerInfos, consumerInfo{
+		streamName:   streamName,
+		consumerName: consumerName,
+	})
 
 	c.logger.Info("Subscribed (JetStream)",
 		"subject", subject,

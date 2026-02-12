@@ -45,6 +45,15 @@ type Component struct {
 
 	// Subscriptions (for cleanup)
 	toolListSub *natsclient.Subscription
+
+	// Track consumers for cleanup
+	consumerInfos []consumerInfo
+}
+
+// consumerInfo tracks JetStream consumer details for cleanup
+type consumerInfo struct {
+	streamName   string
+	consumerName string
 }
 
 // NewComponent creates a new agentic-tools processor component
@@ -198,6 +207,12 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 		return errs.WrapTransient(err, "Component", "setupConsumer", fmt.Sprintf("consumer setup for stream %s", streamName))
 	}
 
+	// Track consumer for cleanup in Stop()
+	c.consumerInfos = append(c.consumerInfos, consumerInfo{
+		streamName:   streamName,
+		consumerName: consumerName,
+	})
+
 	c.logger.Info("Subscribed to tool calls (JetStream)",
 		"subject", port.Subject,
 		"stream", streamName,
@@ -259,9 +274,13 @@ func (c *Component) Stop(_ time.Duration) error {
 		c.toolListSub = nil
 	}
 
-	// JetStream consumers are cleaned up automatically when their context is cancelled
-	// The ConsumeStreamWithConfig uses the context passed to Start(), which is managed
-	// by the flow runtime. No explicit unsubscribe needed for JetStream consumers.
+	// Stop all JetStream consumers explicitly
+	// This is necessary for tests where context cancellation may not happen
+	for _, info := range c.consumerInfos {
+		c.natsClient.StopConsumer(info.streamName, info.consumerName)
+		c.logger.Debug("Stopped consumer", "stream", info.streamName, "consumer", info.consumerName)
+	}
+	c.consumerInfos = nil
 
 	c.running = false
 	return nil
