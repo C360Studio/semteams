@@ -13,6 +13,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -58,12 +59,12 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 
 	// Parse configuration
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+		return nil, errs.WrapInvalid(err, "workflow-processor", "NewComponent", "parse config")
 	}
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
+		return nil, errs.WrapInvalid(err, "workflow-processor", "NewComponent", "validate config")
 	}
 
 	// Merge ports with defaults
@@ -177,13 +178,13 @@ func (c *Component) Start(ctx context.Context) error {
 	defer c.mu.Unlock()
 
 	if c.started {
-		return fmt.Errorf("component already started")
+		return errs.ErrAlreadyStarted
 	}
 
 	// Initialize KV buckets
 	if c.natsClient != nil {
 		if err := c.initializeKVBuckets(ctx); err != nil {
-			return fmt.Errorf("failed to initialize KV buckets: %w", err)
+			return errs.WrapTransient(err, "workflow-processor", "Start", "initialize KV buckets")
 		}
 
 		// Create registry
@@ -193,7 +194,7 @@ func (c *Component) Start(ctx context.Context) error {
 		if len(c.config.WorkflowFiles) > 0 {
 			fileDefinitions, err := c.loadWorkflowDefinitionsFromFiles()
 			if err != nil {
-				return fmt.Errorf("failed to load workflow files: %w", err)
+				return errs.WrapInvalid(err, "workflow-processor", "Start", "load workflow files")
 			}
 
 			for i := range fileDefinitions {
@@ -236,7 +237,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 		// Set up NATS subscriptions
 		if err := c.setupSubscriptions(ctx); err != nil {
-			return fmt.Errorf("failed to setup subscriptions: %w", err)
+			return errs.WrapTransient(err, "workflow-processor", "Start", "setup subscriptions")
 		}
 	}
 
@@ -278,7 +279,7 @@ func (c *Component) Stop(_ time.Duration) error {
 func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream: %w", err)
+		return errs.WrapTransient(err, "workflow-processor", "initializeKVBuckets", "get JetStream")
 	}
 
 	// Initialize definitions bucket
@@ -288,7 +289,7 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 			Bucket: c.config.DefinitionsBucket,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to create definitions bucket: %w", err)
+			return errs.WrapTransient(err, "workflow-processor", "initializeKVBuckets", "create definitions bucket")
 		}
 	}
 	c.definitionsBucket = definitionsBucket
@@ -301,7 +302,7 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 			TTL:    7 * 24 * time.Hour, // 7 days
 		})
 		if err != nil {
-			return fmt.Errorf("failed to create executions bucket: %w", err)
+			return errs.WrapTransient(err, "workflow-processor", "initializeKVBuckets", "create executions bucket")
 		}
 	}
 	c.executionsBucket = executionsBucket
@@ -341,7 +342,7 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 
 		for _, subject := range subjects {
 			if err := c.setupConsumer(ctx, port.Name, subject, handler); err != nil {
-				return fmt.Errorf("failed to setup consumer for %s: %w", subject, err)
+				return errs.WrapTransient(err, "workflow-processor", "setupSubscriptions", fmt.Sprintf("setup consumer for %s", subject))
 			}
 		}
 	}
@@ -359,7 +360,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 
 	// Wait for stream to be available
 	if err := c.waitForStream(ctx, streamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", streamName, err)
+		return errs.WrapTransient(err, "workflow-processor", "setupConsumer", fmt.Sprintf("wait for stream %s", streamName))
 	}
 
 	// Create durable consumer name
@@ -391,7 +392,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+		return errs.WrapTransient(err, "workflow-processor", "setupConsumer", fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
 	c.logger.Info("Subscribed (JetStream)",
@@ -406,7 +407,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 func (c *Component) waitForStream(ctx context.Context, streamName string) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "workflow-processor", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -428,7 +429,7 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 		}
 	}
 
-	return fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries), "workflow-processor", "waitForStream", "wait for stream availability")
 }
 
 // buildMergedPayload creates a JSON blob with struct fields merged with Data.
@@ -638,10 +639,22 @@ func (c *Component) handleAgentCompleteMessage(ctx context.Context, data []byte)
 
 	// Try to find execution ID from message or by task correlation
 	execID := msg.ExecID
-	if execID == "" {
-		// Try to find by task ID correlation
-		// This would need a task_id -> exec_id mapping in practice
-		c.logger.Debug("No execution ID in agent complete, skipping", "loop_id", msg.LoopID)
+	if execID == "" && msg.TaskID != "" {
+		// Look up execution by task_id using secondary index
+		exec, err := c.executor.execStore.GetByTaskID(ctx, msg.TaskID)
+		if err != nil {
+			c.logger.Debug("No execution found for task completion",
+				slog.String("task_id", msg.TaskID),
+				slog.String("loop_id", msg.LoopID))
+			return
+		}
+		execID = exec.ID
+		c.logger.Debug("Found execution by task_id correlation",
+			slog.String("execution_id", execID),
+			slog.String("task_id", msg.TaskID))
+	} else if execID == "" {
+		c.logger.Debug("No execution ID or task ID in agent complete, skipping",
+			slog.String("loop_id", msg.LoopID))
 		return
 	}
 
@@ -667,12 +680,12 @@ func (c *Component) handleAgentCompleteMessage(ctx context.Context, data []byte)
 func (c *Component) publishEvent(ctx context.Context, ev event) error {
 	data, err := json.Marshal(ev)
 	if err != nil {
-		return fmt.Errorf("failed to marshal event: %w", err)
+		return errs.WrapInvalid(err, "workflow-processor", "publishEvent", "marshal event")
 	}
 
 	subject := "workflow.events"
 	if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
-		return fmt.Errorf("failed to publish event: %w", err)
+		return errs.WrapTransient(err, "workflow-processor", "publishEvent", "publish to stream")
 	}
 
 	return nil

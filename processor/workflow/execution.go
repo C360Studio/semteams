@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -40,20 +41,21 @@ func (s ExecutionState) IsTerminal() bool {
 type Execution struct {
 	mu sync.RWMutex `json:"-"` // Protects all fields
 
-	ID           string                `json:"id"`
-	WorkflowID   string                `json:"workflow_id"`
-	WorkflowName string                `json:"workflow_name,omitempty"`
-	State        ExecutionState        `json:"state"`
-	CurrentStep  int                   `json:"current_step"`
-	CurrentName  string                `json:"current_name,omitempty"`
-	Iteration    int                   `json:"iteration"`
-	Trigger      TriggerContext        `json:"trigger"`
-	StepResults  map[string]StepResult `json:"step_results"`
-	StartedAt    time.Time             `json:"started_at"`
-	UpdatedAt    time.Time             `json:"updated_at"`
-	CompletedAt  *time.Time            `json:"completed_at,omitempty"`
-	Deadline     time.Time             `json:"deadline"`
-	Error        string                `json:"error,omitempty"`
+	ID            string                `json:"id"`
+	WorkflowID    string                `json:"workflow_id"`
+	WorkflowName  string                `json:"workflow_name,omitempty"`
+	State         ExecutionState        `json:"state"`
+	CurrentStep   int                   `json:"current_step"`
+	CurrentName   string                `json:"current_name,omitempty"`
+	Iteration     int                   `json:"iteration"`
+	Trigger       TriggerContext        `json:"trigger"`
+	StepResults   map[string]StepResult `json:"step_results"`
+	StartedAt     time.Time             `json:"started_at"`
+	UpdatedAt     time.Time             `json:"updated_at"`
+	CompletedAt   *time.Time            `json:"completed_at,omitempty"`
+	Deadline      time.Time             `json:"deadline"`
+	Error         string                `json:"error,omitempty"`
+	PendingTaskID string                `json:"pending_task_id,omitempty"` // Task ID waiting for agent completion
 }
 
 // NewExecution creates a new workflow execution
@@ -167,6 +169,29 @@ func (e *Execution) SetCurrentStep(index int, name string) {
 	e.UpdatedAt = time.Now()
 }
 
+// SetPendingTaskID sets the task ID that this execution is waiting for
+func (e *Execution) SetPendingTaskID(taskID string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.PendingTaskID = taskID
+	e.UpdatedAt = time.Now()
+}
+
+// ClearPendingTaskID clears the pending task ID after completion
+func (e *Execution) ClearPendingTaskID() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.PendingTaskID = ""
+	e.UpdatedAt = time.Now()
+}
+
+// GetPendingTaskID returns the pending task ID
+func (e *Execution) GetPendingTaskID() string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.PendingTaskID
+}
+
 // GetStepResult returns the result for a specific step
 func (e *Execution) GetStepResult(stepName string) (StepResult, bool) {
 	e.mu.RLock()
@@ -222,7 +247,7 @@ const MaxPayloadSize = 1024 * 1024
 // ValidatePayloadSize checks if the payload is within acceptable limits
 func (t *TriggerContext) ValidatePayloadSize() error {
 	if len(t.Payload) > MaxPayloadSize {
-		return fmt.Errorf("payload size %d exceeds maximum %d bytes", len(t.Payload), MaxPayloadSize)
+		return errs.WrapInvalid(fmt.Errorf("payload size %d exceeds maximum %d bytes", len(t.Payload), MaxPayloadSize), "workflow-execution", "ValidatePayloadSize", "check payload size")
 	}
 	return nil
 }
@@ -256,11 +281,11 @@ func (s *ExecutionStore) Save(ctx context.Context, exec *Execution) error {
 
 	data, err := json.Marshal(snapshot)
 	if err != nil {
-		return fmt.Errorf("failed to marshal execution: %w", err)
+		return errs.WrapInvalid(err, "workflow-execution", "Save", "marshal execution")
 	}
 
 	if _, err := s.bucket.Put(ctx, snapshot.ID, data); err != nil {
-		return fmt.Errorf("failed to save execution: %w", err)
+		return errs.WrapTransient(err, "workflow-execution", "Save", "save to KV bucket")
 	}
 
 	return nil
@@ -270,12 +295,12 @@ func (s *ExecutionStore) Save(ctx context.Context, exec *Execution) error {
 func (s *ExecutionStore) Get(ctx context.Context, execID string) (*Execution, error) {
 	entry, err := s.bucket.Get(ctx, execID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get execution: %w", err)
+		return nil, errs.WrapTransient(err, "workflow-execution", "Get", "get from KV bucket")
 	}
 
 	var exec Execution
 	if err := json.Unmarshal(entry.Value(), &exec); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal execution: %w", err)
+		return nil, errs.WrapInvalid(err, "workflow-execution", "Get", "unmarshal execution")
 	}
 
 	// Initialize the map if nil (for executions created before map was initialized)
@@ -289,8 +314,36 @@ func (s *ExecutionStore) Get(ctx context.Context, execID string) (*Execution, er
 // Delete removes an execution from KV
 func (s *ExecutionStore) Delete(ctx context.Context, execID string) error {
 	if err := s.bucket.Delete(ctx, execID); err != nil {
-		return fmt.Errorf("failed to delete execution: %w", err)
+		return errs.WrapTransient(err, "workflow-execution", "Delete", "delete from KV bucket")
 	}
+	return nil
+}
+
+// SaveTaskIndex stores a task_id -> execution_id mapping for completion correlation
+func (s *ExecutionStore) SaveTaskIndex(ctx context.Context, taskID, execID string) error {
+	key := "TASK_" + taskID
+	if _, err := s.bucket.Put(ctx, key, []byte(execID)); err != nil {
+		return errs.WrapTransient(err, "workflow-execution", "SaveTaskIndex", "save task index")
+	}
+	return nil
+}
+
+// GetByTaskID finds an execution by its pending task ID using the secondary index
+func (s *ExecutionStore) GetByTaskID(ctx context.Context, taskID string) (*Execution, error) {
+	key := "TASK_" + taskID
+	entry, err := s.bucket.Get(ctx, key)
+	if err != nil {
+		return nil, errs.Wrap(err, "workflow-execution", "GetByTaskID", "get task index")
+	}
+
+	execID := string(entry.Value())
+	return s.Get(ctx, execID)
+}
+
+// DeleteTaskIndex removes the task_id -> execution_id mapping
+func (s *ExecutionStore) DeleteTaskIndex(ctx context.Context, taskID string) error {
+	key := "TASK_" + taskID
+	_ = s.bucket.Delete(ctx, key) // Ignore error if key doesn't exist
 	return nil
 }
 
@@ -341,33 +394,33 @@ type StepCompleteMessage struct {
 // Validate checks if the StepCompleteMessage is valid
 func (m StepCompleteMessage) Validate() error {
 	if m.ExecutionID == "" {
-		return fmt.Errorf("execution_id required")
+		return errs.WrapInvalid(fmt.Errorf("execution_id required"), "workflow-execution", "StepCompleteMessage.Validate", "validate execution_id")
 	}
 	if m.StepName == "" {
-		return fmt.Errorf("step_name required")
+		return errs.WrapInvalid(fmt.Errorf("step_name required"), "workflow-execution", "StepCompleteMessage.Validate", "validate step_name")
 	}
 	if m.Status != "success" && m.Status != "failed" {
-		return fmt.Errorf("status must be one of: success, failed")
+		return errs.WrapInvalid(fmt.Errorf("status must be one of: success, failed"), "workflow-execution", "StepCompleteMessage.Validate", "validate status")
 	}
 	// Timing fields are required
 	if m.StartedAt.IsZero() {
-		return fmt.Errorf("started_at required")
+		return errs.WrapInvalid(fmt.Errorf("started_at required"), "workflow-execution", "StepCompleteMessage.Validate", "validate started_at")
 	}
 	if m.CompletedAt.IsZero() {
-		return fmt.Errorf("completed_at required")
+		return errs.WrapInvalid(fmt.Errorf("completed_at required"), "workflow-execution", "StepCompleteMessage.Validate", "validate completed_at")
 	}
 	if m.CompletedAt.Before(m.StartedAt) {
-		return fmt.Errorf("completed_at cannot be before started_at")
+		return errs.WrapInvalid(fmt.Errorf("completed_at cannot be before started_at"), "workflow-execution", "StepCompleteMessage.Validate", "validate timing")
 	}
 	if m.Duration == "" {
-		return fmt.Errorf("duration required")
+		return errs.WrapInvalid(fmt.Errorf("duration required"), "workflow-execution", "StepCompleteMessage.Validate", "validate duration")
 	}
 	if _, err := time.ParseDuration(m.Duration); err != nil {
-		return fmt.Errorf("duration must be valid: %w", err)
+		return errs.WrapInvalid(err, "workflow-execution", "StepCompleteMessage.Validate", "parse duration")
 	}
 	// Iteration must be positive (starts at 1)
 	if m.Iteration < 1 {
-		return fmt.Errorf("iteration must be >= 1")
+		return errs.WrapInvalid(fmt.Errorf("iteration must be >= 1"), "workflow-execution", "StepCompleteMessage.Validate", "validate iteration")
 	}
 	return nil
 }
@@ -392,13 +445,13 @@ func (m *StepCompleteMessage) UnmarshalJSON(data []byte) error {
 // Validate checks if the Event is valid
 func (e event) Validate() error {
 	if e.Type == "" {
-		return fmt.Errorf("type required")
+		return errs.WrapInvalid(fmt.Errorf("type required"), "workflow-execution", "event.Validate", "validate type")
 	}
 	if e.ExecutionID == "" {
-		return fmt.Errorf("execution_id required")
+		return errs.WrapInvalid(fmt.Errorf("execution_id required"), "workflow-execution", "event.Validate", "validate execution_id")
 	}
 	if e.WorkflowID == "" {
-		return fmt.Errorf("workflow_id required")
+		return errs.WrapInvalid(fmt.Errorf("workflow_id required"), "workflow-execution", "event.Validate", "validate workflow_id")
 	}
 	return nil
 }
@@ -445,13 +498,13 @@ type TriggerPayload struct {
 // Validate checks if the TriggerPayload is valid
 func (p TriggerPayload) Validate() error {
 	if p.WorkflowID == "" {
-		return fmt.Errorf("workflow_id required")
+		return errs.WrapInvalid(fmt.Errorf("workflow_id required"), "workflow-execution", "TriggerPayload.Validate", "validate workflow_id")
 	}
 	// Validate Data is valid JSON if present
 	if p.Data != nil && len(p.Data) > 0 {
 		var temp any
 		if err := json.Unmarshal(p.Data, &temp); err != nil {
-			return fmt.Errorf("data must be valid JSON: %w", err)
+			return errs.WrapInvalid(err, "workflow-execution", "TriggerPayload.Validate", "validate data JSON")
 		}
 	}
 	return nil

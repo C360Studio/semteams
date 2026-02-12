@@ -133,8 +133,11 @@ func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result 
 		}
 	}
 
+	// Return task_id in output for correlation when agent completes
+	output, _ := json.Marshal(map[string]string{"task_id": task.TaskID})
 	return Result{
 		Success:  true,
+		Output:   output,
 		Duration: time.Since(start),
 	}
 }

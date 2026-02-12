@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/processor/workflow/actions"
 	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
@@ -52,7 +53,7 @@ func (e *Executor) StartExecution(ctx context.Context, workflow *wfschema.Defini
 	// Mark as running
 	exec.MarkRunning()
 	if err := e.execStore.Save(ctx, exec); err != nil {
-		return fmt.Errorf("failed to save execution: %w", err)
+		return errs.WrapTransient(err, "workflow-executor", "StartExecution", "save execution")
 	}
 
 	// Publish started event
@@ -246,7 +247,27 @@ func (e *Executor) executeAction(ctx context.Context, workflow *wfschema.Definit
 		if !result.Success {
 			return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
 		}
-		e.logger.Info("Waiting for agent completion", "step", step.Name, "execution_id", exec.ID)
+
+		// Store task_id for correlation when agent completes
+		var taskInfo struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.Unmarshal(result.Output, &taskInfo); err == nil && taskInfo.TaskID != "" {
+			exec.SetPendingTaskID(taskInfo.TaskID)
+			if err := e.execStore.Save(ctx, exec); err != nil {
+				e.logger.Error("Failed to save execution with pending task", "error", err)
+			}
+			// Store secondary index for task_id -> execution_id lookup
+			if err := e.execStore.SaveTaskIndex(ctx, taskInfo.TaskID, exec.ID); err != nil {
+				e.logger.Error("Failed to save task index", "error", err)
+			}
+			e.logger.Info("Waiting for agent completion",
+				slog.String("step", step.Name),
+				slog.String("execution_id", exec.ID),
+				slog.String("task_id", taskInfo.TaskID))
+		} else {
+			e.logger.Info("Waiting for agent completion", "step", step.Name, "execution_id", exec.ID)
+		}
 		return nil
 
 	case "set_state":
@@ -523,17 +544,23 @@ func (e *Executor) HandleAgentComplete(ctx context.Context, registry *Registry, 
 	// Get execution
 	exec, err := e.execStore.Get(ctx, execID)
 	if err != nil {
-		return fmt.Errorf("execution not found: %w", err)
+		return errs.WrapTransient(err, "workflow-executor", "HandleAgentComplete", "get execution")
 	}
 
 	if exec.GetState().IsTerminal() {
 		return nil // Already completed
 	}
 
+	// Clear pending task ID and secondary index
+	if exec.PendingTaskID != "" {
+		_ = e.execStore.DeleteTaskIndex(ctx, exec.PendingTaskID)
+		exec.ClearPendingTaskID()
+	}
+
 	// Get workflow
 	workflow, ok := registry.Get(exec.WorkflowID)
 	if !ok {
-		return fmt.Errorf("workflow not found: %s", exec.WorkflowID)
+		return errs.WrapInvalid(fmt.Errorf("workflow not found: %s", exec.WorkflowID), "workflow-executor", "HandleAgentComplete", "get workflow")
 	}
 
 	// Build step result
