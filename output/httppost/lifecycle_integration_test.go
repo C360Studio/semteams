@@ -1,34 +1,44 @@
 //go:build integration
 
-package file
+package httppost_test
 
 import (
 	"encoding/json"
 	"testing"
 
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/output/httppost"
 )
 
 // createTestComponent creates a test instance for lifecycle testing.
+// Uses the shared NATS client from httppost_integration_test.go TestMain.
 func createTestComponent() component.LifecycleComponent {
-	mockClient := &natsclient.Client{}
+	if sharedNATSClient == nil {
+		panic("shared NATS client not initialized")
+	}
 
-	config := Config{
-		Directory:  "/tmp/test-output",
-		FilePrefix: "test",
-		Format:     "jsonl",
-		Append:     true,
-		BufferSize: 100,
+	config := httppost.Config{
+		URL:         "http://localhost:8080/test",
+		Headers:     map[string]string{"X-Test": "value"},
+		Timeout:     30,
+		RetryCount:  3,
+		ContentType: "application/json",
 		Ports: &component.PortConfig{
 			Inputs: []component.PortDefinition{
 				{
 					Name:     "nats_input",
 					Type:     "nats",
-					Subject:  "test.file.output",
+					Subject:  "test.httppost.output",
 					Required: true,
 				},
 			},
+		},
+	}
+	deps := component.Dependencies{
+		NATSClient: sharedNATSClient,
+		Platform: component.PlatformMeta{
+			Org:      "test",
+			Platform: "test-platform",
 		},
 	}
 
@@ -37,15 +47,7 @@ func createTestComponent() component.LifecycleComponent {
 		panic("failed to marshal config: " + err.Error())
 	}
 
-	deps := component.Dependencies{
-		NATSClient: mockClient,
-		Platform: component.PlatformMeta{
-			Org:      "test",
-			Platform: "test-platform",
-		},
-	}
-
-	output, err := NewOutput(rawConfig, deps)
+	output, err := httppost.NewOutput(rawConfig, deps)
 	if err != nil {
 		panic("failed to create test component: " + err.Error())
 	}
@@ -58,7 +60,7 @@ func createTestComponent() component.LifecycleComponent {
 	return lifecycleComp
 }
 
-// TestFileOutput_ComprehensiveLifecycle runs the complete lifecycle test suite
-func TestFileOutput_ComprehensiveLifecycle(t *testing.T) {
+// TestHTTPPostOutput_ComprehensiveLifecycle runs the complete lifecycle test suite
+func TestHTTPPostOutput_ComprehensiveLifecycle(t *testing.T) {
 	component.StandardLifecycleTests(t, createTestComponent)
 }

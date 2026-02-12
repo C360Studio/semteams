@@ -11,16 +11,20 @@ import (
 )
 
 // createTestComponentForLifecycle creates a test instance for lifecycle testing.
+// Uses the shared NATS client from tools_integration_test.go TestMain.
 func createTestComponentForLifecycle() component.LifecycleComponent {
+	if sharedNATSClient == nil {
+		panic("shared NATS client not initialized")
+	}
+
 	config := agentictools.DefaultConfig()
+	deps := component.Dependencies{
+		NATSClient: sharedNATSClient,
+	}
 
 	rawConfig, err := json.Marshal(config)
 	if err != nil {
 		panic("failed to marshal config: " + err.Error())
-	}
-
-	deps := component.Dependencies{
-		NATSClient: nil, // Lifecycle tests don't require real NATS
 	}
 
 	discoverable, err := agentictools.NewComponent(rawConfig, deps)
@@ -28,7 +32,6 @@ func createTestComponentForLifecycle() component.LifecycleComponent {
 		panic("failed to create component: " + err.Error())
 	}
 
-	// Type assert to concrete Component type which implements LifecycleComponent
 	comp, ok := discoverable.(component.LifecycleComponent)
 	if !ok {
 		panic("component does not implement LifecycleComponent")
