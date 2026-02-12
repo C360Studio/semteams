@@ -11,6 +11,11 @@
       "default": true,
       "category": "basic"
     },
+    "consumer_name_suffix": {
+      "type": "string",
+      "description": "Suffix appended to consumer names for uniqueness",
+      "category": "advanced"
+    },
     "default_model": {
       "type": "string",
       "description": "Default model for new tasks",
@@ -22,6 +27,12 @@
       "description": "Default role for new tasks",
       "default": "general",
       "category": "basic"
+    },
+    "delete_consumer_on_stop": {
+      "type": "boolean",
+      "description": "Delete durable consumers on Stop (use for tests only)",
+      "default": false,
+      "category": "advanced"
     },
     "permissions": {
       "type": "object",
