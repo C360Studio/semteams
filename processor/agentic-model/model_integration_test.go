@@ -123,8 +123,9 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 				},
 			},
 		},
-		StreamName:         "AGENT",
-		ConsumerNameSuffix: "complete-test",
+		StreamName:           "AGENT",
+		ConsumerNameSuffix:   "complete-test",
+		DeleteConsumerOnStop: true,
 		Endpoints: map[string]agenticmodel.Endpoint{
 			"test-model": {
 				URL:   mockServer.URL + "/v1/chat/completions",
@@ -163,7 +164,7 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
+	sub, err := natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
@@ -174,6 +175,7 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 		}
 	})
 	require.NoError(t, err)
+	defer sub.Unsubscribe()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -266,8 +268,9 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 				},
 			},
 		},
-		StreamName:         "AGENT",
-		ConsumerNameSuffix: "toolcall-test",
+		StreamName:           "AGENT",
+		ConsumerNameSuffix:   "toolcall-test",
+		DeleteConsumerOnStop: true,
 		Endpoints: map[string]agenticmodel.Endpoint{
 			"tool-model": {
 				URL:   mockServer.URL + "/v1/chat/completions",
@@ -306,7 +309,7 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
+	sub, err := natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
@@ -317,6 +320,7 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 		}
 	})
 	require.NoError(t, err)
+	defer sub.Unsubscribe()
 
 	time.Sleep(100 * time.Millisecond)
 
@@ -439,8 +443,9 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 				},
 			},
 		},
-		StreamName:         "AGENT",
-		ConsumerNameSuffix: "endpoint-test",
+		StreamName:           "AGENT",
+		ConsumerNameSuffix:   "endpoint-test",
+		DeleteConsumerOnStop: true,
 		Endpoints: map[string]agenticmodel.Endpoint{
 			"model-a": {
 				URL:   mockServer1.URL + "/v1/chat/completions",
@@ -483,7 +488,7 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
-	_, err = natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
+	sub, err := natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
 			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
@@ -494,6 +499,7 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 		}
 	})
 	require.NoError(t, err)
+	defer sub.Unsubscribe()
 
 	time.Sleep(100 * time.Millisecond)
 

@@ -23,14 +23,15 @@ const (
 
 // Config represents the configuration for the agentic-loop processor
 type Config struct {
-	MaxIterations      int                   `json:"max_iterations" schema:"type:int,description:Maximum number of iterations before loop terminates,default:20,min:1,max:1000,category:basic,required"`
-	Timeout            string                `json:"timeout" schema:"type:string,description:Timeout duration for loop execution (e.g. 120s or 5m),default:120s,category:basic,required"`
-	StreamName         string                `json:"stream_name" schema:"type:string,description:JetStream stream name,default:AGENT,category:advanced"`
-	ConsumerNameSuffix string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix for consumer names,category:advanced"`
-	LoopsBucket        string                `json:"loops_bucket" schema:"type:string,description:NATS KV bucket name for storing loop state,default:AGENT_LOOPS,category:advanced,required"`
-	TrajectoriesBucket string                `json:"trajectories_bucket" schema:"type:string,description:NATS KV bucket name for storing trajectories,default:AGENT_TRAJECTORIES,category:advanced,required"`
-	Context            ContextConfig         `json:"context" schema:"type:object,description:Context window management. model_limits maps model names to context window sizes in tokens,category:advanced"`
-	Ports              *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
+	MaxIterations        int                   `json:"max_iterations" schema:"type:int,description:Maximum number of iterations before loop terminates,default:20,min:1,max:1000,category:basic,required"`
+	Timeout              string                `json:"timeout" schema:"type:string,description:Timeout duration for loop execution (e.g. 120s or 5m),default:120s,category:basic,required"`
+	StreamName           string                `json:"stream_name" schema:"type:string,description:JetStream stream name,default:AGENT,category:advanced"`
+	ConsumerNameSuffix   string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix for consumer names,category:advanced"`
+	DeleteConsumerOnStop bool                  `json:"delete_consumer_on_stop,omitempty" schema:"type:bool,description:Delete durable consumers on Stop (use for tests only),category:advanced,default:false"`
+	LoopsBucket          string                `json:"loops_bucket" schema:"type:string,description:NATS KV bucket name for storing loop state,default:AGENT_LOOPS,category:advanced,required"`
+	TrajectoriesBucket   string                `json:"trajectories_bucket" schema:"type:string,description:NATS KV bucket name for storing trajectories,default:AGENT_TRAJECTORIES,category:advanced,required"`
+	Context              ContextConfig         `json:"context" schema:"type:object,description:Context window management. model_limits maps model names to context window sizes in tokens,category:advanced"`
+	Ports                *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
 }
 
 // ContextConfig represents configuration for context memory management.

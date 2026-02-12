@@ -462,16 +462,11 @@ func (c *Client) StopConsumer(streamName, consumerName string) {
 }
 
 // StopAndDeleteConsumer stops a specific consumer and deletes the durable consumer from the server.
-// This is useful for test cleanup to ensure complete isolation between test runs.
+// WARNING: This permanently removes the consumer's position. Use only for test cleanup
+// or when you intentionally want to reset consumer state.
 func (c *Client) StopAndDeleteConsumer(ctx context.Context, streamName, consumerName string) error {
 	// First stop the local consume context
-	c.consumersMu.Lock()
-	key := streamName + ":" + consumerName
-	if consumeCtx, ok := c.consumers[key]; ok {
-		consumeCtx.Stop()
-		delete(c.consumers, key)
-	}
-	c.consumersMu.Unlock()
+	c.StopConsumer(streamName, consumerName)
 
 	// Then delete the durable consumer from the server
 	js, err := c.JetStream()

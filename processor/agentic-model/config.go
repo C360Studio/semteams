@@ -10,13 +10,14 @@ import (
 
 // Config holds configuration for agentic-model processor component
 type Config struct {
-	Ports              *component.PortConfig `json:"ports"                schema:"type:ports,description:Port configuration,category:basic"`
-	Endpoints          map[string]Endpoint   `json:"endpoints"            schema:"type:object,description:Model endpoints,category:basic"`
-	ModelAliases       map[string]string     `json:"model_aliases,omitempty" schema:"type:object,description:Semantic model aliases mapping to endpoint names,category:basic"`
-	StreamName         string                `json:"stream_name"          schema:"type:string,description:JetStream stream name for agentic messages,category:basic,default:AGENT"`
-	ConsumerNameSuffix string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix appended to consumer names for uniqueness,category:advanced"`
-	Timeout            string                `json:"timeout"              schema:"type:string,description:Request timeout,category:advanced,default:120s"`
-	Retry              RetryConfig           `json:"retry"                schema:"type:object,description:Retry configuration,category:advanced"`
+	Ports                *component.PortConfig `json:"ports"                schema:"type:ports,description:Port configuration,category:basic"`
+	Endpoints            map[string]Endpoint   `json:"endpoints"            schema:"type:object,description:Model endpoints,category:basic"`
+	ModelAliases         map[string]string     `json:"model_aliases,omitempty" schema:"type:object,description:Semantic model aliases mapping to endpoint names,category:basic"`
+	StreamName           string                `json:"stream_name"          schema:"type:string,description:JetStream stream name for agentic messages,category:basic,default:AGENT"`
+	ConsumerNameSuffix   string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix appended to consumer names for uniqueness,category:advanced"`
+	DeleteConsumerOnStop bool                  `json:"delete_consumer_on_stop,omitempty" schema:"type:bool,description:Delete durable consumers on Stop (use for tests only),category:advanced,default:false"`
+	Timeout              string                `json:"timeout"              schema:"type:string,description:Request timeout,category:advanced,default:120s"`
+	Retry                RetryConfig           `json:"retry"                schema:"type:object,description:Retry configuration,category:advanced"`
 }
 
 // Endpoint represents a single model endpoint configuration

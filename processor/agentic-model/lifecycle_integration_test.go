@@ -25,6 +25,9 @@ func createTestComponentForLifecycle() component.LifecycleComponent {
 			Model: "gpt-4",
 		},
 	}
+	// Use unique consumer suffix and delete on stop for test isolation
+	config.ConsumerNameSuffix = "lifecycle"
+	config.DeleteConsumerOnStop = true
 	deps := component.Dependencies{
 		NATSClient: sharedNATSClient,
 	}
