@@ -15,24 +15,32 @@ import (
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to community query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.community", c.handleQueryCommunityNATS); err != nil {
+	sub1, err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.community", c.handleQueryCommunityNATS)
+	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe community query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub1)
 
 	// Subscribe to members query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.members", c.handleQueryMembersNATS); err != nil {
+	sub2, err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.members", c.handleQueryMembersNATS)
+	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe members query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub2)
 
 	// Subscribe to entity community query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.entity", c.handleQueryEntityNATS); err != nil {
+	sub3, err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.entity", c.handleQueryEntityNATS)
+	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe entity query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub3)
 
 	// Subscribe to level query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.level", c.handleQueryLevelNATS); err != nil {
+	sub4, err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.level", c.handleQueryLevelNATS)
+	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe level query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub4)
 
 	c.logger.Info("query handlers registered",
 		"subjects", []string{

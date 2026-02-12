@@ -190,6 +190,9 @@ type Component struct {
 	// Port definitions
 	inputPorts  []component.Port
 	outputPorts []component.Port
+
+	// Query subscriptions (for cleanup)
+	querySubscriptions []*natsclient.Subscription
 }
 
 // CreateGraphIndexSpatial is the factory function for creating graph-index-spatial components
@@ -515,6 +518,16 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.mu.Unlock()
 		return nil // Already stopped
 	}
+
+	// Unsubscribe from query handlers
+	for _, sub := range c.querySubscriptions {
+		if sub != nil {
+			if err := sub.Unsubscribe(); err != nil {
+				c.logger.Warn("query subscription unsubscribe error", slog.Any("error", err))
+			}
+		}
+	}
+	c.querySubscriptions = nil
 
 	// Cancel context
 	if c.cancel != nil {

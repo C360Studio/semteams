@@ -87,7 +87,7 @@ func TestIntegration_QueryHandlers(t *testing.T) {
 	t.Run("query single entity with real NATS", func(t *testing.T) {
 		// Subscribe to handle query requests
 		querySubject := "graph.ingest.query.entity"
-		err := natsClient.SubscribeForRequests(ctx, querySubject, func(reqCtx context.Context, data []byte) ([]byte, error) {
+		_, err := natsClient.SubscribeForRequests(ctx, querySubject, func(reqCtx context.Context, data []byte) ([]byte, error) {
 			// Create mock message for handler
 			mockMsg := &mockNATSMsg{data: data}
 			component.handleQueryEntity(mockMsg)
@@ -141,7 +141,7 @@ func TestIntegration_QueryHandlers(t *testing.T) {
 
 	t.Run("concurrent query requests", func(t *testing.T) {
 		querySubject := "graph.ingest.query.concurrent"
-		err := natsClient.SubscribeForRequests(ctx, querySubject, func(reqCtx context.Context, data []byte) ([]byte, error) {
+		_, err := natsClient.SubscribeForRequests(ctx, querySubject, func(reqCtx context.Context, data []byte) ([]byte, error) {
 			mockMsg := &mockNATSMsg{data: data}
 			component.handleQueryEntity(mockMsg)
 			return mockMsg.response, nil
@@ -175,7 +175,7 @@ func TestIntegration_QueryHandlers(t *testing.T) {
 		// it doesn't hang indefinitely
 
 		querySubject := "graph.ingest.query.timeout"
-		err := natsClient.SubscribeForRequests(ctx, querySubject, func(reqCtx context.Context, data []byte) ([]byte, error) {
+		_, err := natsClient.SubscribeForRequests(ctx, querySubject, func(reqCtx context.Context, data []byte) ([]byte, error) {
 			mockMsg := &mockNATSMsg{data: data}
 			component.handleQueryEntity(mockMsg)
 			return mockMsg.response, nil

@@ -217,6 +217,13 @@ func (c *Client) ConsumeStreamWithConfig(
 		c.consumers = make(map[string]jetstream.ConsumeContext)
 	}
 	consumerKey := cfg.StreamName + ":" + cfg.ConsumerName
+
+	// Stop any existing consumer for this key to prevent goroutine leaks
+	if existingConsumer, exists := c.consumers[consumerKey]; exists {
+		existingConsumer.Stop()
+		c.logger.Debugf("Replaced existing consumer for %s", consumerKey)
+	}
+
 	c.consumers[consumerKey] = consumeCtx
 	c.consumersMu.Unlock()
 

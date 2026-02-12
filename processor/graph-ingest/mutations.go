@@ -21,13 +21,17 @@ const (
 // These handlers allow the rule processor (and other components) to modify
 // entity triples via NATS request/reply.
 func (c *Component) setupMutationHandlers(ctx context.Context) error {
-	if err := c.natsClient.SubscribeForRequests(ctx, SubjectTripleAdd, c.handleTripleAdd); err != nil {
+	sub, err := c.natsClient.SubscribeForRequests(ctx, SubjectTripleAdd, c.handleTripleAdd)
+	if err != nil {
 		return fmt.Errorf("subscribe triple add: %w", err)
 	}
+	c.subscriptions = append(c.subscriptions, sub)
 
-	if err := c.natsClient.SubscribeForRequests(ctx, SubjectTripleRemove, c.handleTripleRemove); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, SubjectTripleRemove, c.handleTripleRemove)
+	if err != nil {
 		return fmt.Errorf("subscribe triple remove: %w", err)
 	}
+	c.subscriptions = append(c.subscriptions, sub)
 
 	c.logger.Info("mutation handlers registered",
 		"subjects", []string{SubjectTripleAdd, SubjectTripleRemove})

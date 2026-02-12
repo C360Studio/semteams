@@ -29,7 +29,7 @@ import (
 // *natsclient.Client satisfies this interface, and tests can provide mocks.
 type natsRequester interface {
 	Request(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error)
-	SubscribeForRequests(ctx context.Context, subject string, handler func(ctx context.Context, data []byte) ([]byte, error)) error
+	SubscribeForRequests(ctx context.Context, subject string, handler func(ctx context.Context, data []byte) ([]byte, error)) (*natsclient.Subscription, error)
 	Status() natsclient.ConnectionStatus
 	Connect(ctx context.Context) error
 	WaitForConnection(ctx context.Context) error
@@ -129,6 +129,9 @@ type Component struct {
 
 	// Lifecycle reporting
 	lifecycleReporter component.LifecycleReporter
+
+	// Query subscriptions (for cleanup)
+	querySubscriptions []*natsclient.Subscription
 }
 
 // Ensure Component implements required interfaces
@@ -436,6 +439,16 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.mu.Unlock()
 		return nil // Not started - safe to stop
 	}
+
+	// Unsubscribe from query handlers
+	for _, sub := range c.querySubscriptions {
+		if sub != nil {
+			if err := sub.Unsubscribe(); err != nil {
+				c.logger.Warn("query subscription unsubscribe error", slog.Any("error", err))
+			}
+		}
+	}
+	c.querySubscriptions = nil
 
 	if c.cancel != nil {
 		c.cancel()

@@ -13,9 +13,11 @@ import (
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to temporal range query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.temporal.query.range", c.handleQueryRangeNATS); err != nil {
+	sub, err := c.natsClient.SubscribeForRequests(ctx, "graph.temporal.query.range", c.handleQueryRangeNATS)
+	if err != nil {
 		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe range query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	c.logger.Info("query handlers registered",
 		"subjects", []string{"graph.temporal.query.range"})

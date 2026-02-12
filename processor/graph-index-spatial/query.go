@@ -12,9 +12,11 @@ import (
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to spatial bounds query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.spatial.query.bounds", c.handleQueryBoundsNATS); err != nil {
+	sub, err := c.natsClient.SubscribeForRequests(ctx, "graph.spatial.query.bounds", c.handleQueryBoundsNATS)
+	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe bounds query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	c.logger.Info("query handlers registered",
 		"subjects", []string{"graph.spatial.query.bounds"})

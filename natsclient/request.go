@@ -171,17 +171,18 @@ func (c *Client) ReplyWithHeaders(ctx context.Context, replyTo string, data []by
 // SubscribeForRequests subscribes to a subject and handles request/reply patterns.
 // The handler receives the message data and reply subject, and should return
 // the response data or an error.
+// Returns the Subscription so the caller can unsubscribe when done.
 // This is a convenience method for implementing request/reply services.
 func (c *Client) SubscribeForRequests(
 	ctx context.Context,
 	subject string,
 	handler func(ctx context.Context, data []byte) ([]byte, error),
-) error {
+) (*Subscription, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	if c.conn == nil || !c.conn.IsConnected() {
-		return ErrNotConnected
+		return nil, ErrNotConnected
 	}
 
 	sub, err := c.conn.Subscribe(subject, func(msg *nats.Msg) {
@@ -212,11 +213,12 @@ func (c *Client) SubscribeForRequests(
 		}
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
+	wrappedSub := &Subscription{sub: sub}
 	c.subs = append(c.subs, sub)
-	return nil
+	return wrappedSub, nil
 }
 
 // RetryConfig configures retry behavior for requests.

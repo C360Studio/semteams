@@ -103,14 +103,18 @@ type CommunitySummary struct {
 // setupGraphRAGHandlers registers the GraphRAG NATS request handlers
 func (c *Component) setupGraphRAGHandlers(ctx context.Context) error {
 	// Subscribe to local search
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.localSearch", c.handleLocalSearch); err != nil {
+	sub, err := c.natsClient.SubscribeForRequests(ctx, "graph.query.localSearch", c.handleLocalSearch)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupGraphRAGHandlers", "subscribe to localSearch")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to global search
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.globalSearch", c.handleGlobalSearch); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.globalSearch", c.handleGlobalSearch)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupGraphRAGHandlers", "subscribe to globalSearch")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	c.logger.Info("GraphRAG handlers registered",
 		"subjects", []string{"graph.query.localSearch", "graph.query.globalSearch"})

@@ -15,24 +15,32 @@ import (
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to entity query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.ingest.query.entity", c.handleQueryEntityNATS); err != nil {
+	sub, err := c.natsClient.SubscribeForRequests(ctx, "graph.ingest.query.entity", c.handleQueryEntityNATS)
+	if err != nil {
 		return fmt.Errorf("subscribe entity query: %w", err)
 	}
+	c.subscriptions = append(c.subscriptions, sub)
 
 	// Subscribe to batch query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.ingest.query.batch", c.handleQueryBatchNATS); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.ingest.query.batch", c.handleQueryBatchNATS)
+	if err != nil {
 		return fmt.Errorf("subscribe batch query: %w", err)
 	}
+	c.subscriptions = append(c.subscriptions, sub)
 
 	// Subscribe to prefix query (for hierarchy listing)
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.ingest.query.prefix", c.handleQueryPrefixNATS); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.ingest.query.prefix", c.handleQueryPrefixNATS)
+	if err != nil {
 		return fmt.Errorf("subscribe prefix query: %w", err)
 	}
+	c.subscriptions = append(c.subscriptions, sub)
 
 	// Subscribe to suffix query (for partial entity ID resolution)
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.ingest.query.suffix", c.handleQuerySuffixNATS); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.ingest.query.suffix", c.handleQuerySuffixNATS)
+	if err != nil {
 		return fmt.Errorf("subscribe suffix query: %w", err)
 	}
+	c.subscriptions = append(c.subscriptions, sub)
 
 	c.logger.Info("query handlers registered",
 		"subjects", []string{"graph.ingest.query.entity", "graph.ingest.query.batch", "graph.ingest.query.prefix", "graph.ingest.query.suffix"})

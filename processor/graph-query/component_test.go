@@ -49,9 +49,10 @@ func (m *mockNATSClient) Request(ctx context.Context, subject string, data []byt
 	return nil, errors.New("no mock response configured")
 }
 
-func (m *mockNATSClient) SubscribeForRequests(_ context.Context, subject string, _ func(ctx context.Context, data []byte) ([]byte, error)) error {
+func (m *mockNATSClient) SubscribeForRequests(_ context.Context, subject string, _ func(ctx context.Context, data []byte) ([]byte, error)) (*natsclient.Subscription, error) {
 	m.subscribed[subject] = true
-	return nil
+	// Return a nil subscription since the mock doesn't actually subscribe
+	return nil, nil
 }
 
 func (m *mockNATSClient) Status() natsclient.ConnectionStatus {

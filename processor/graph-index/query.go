@@ -15,24 +15,32 @@ import (
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to outgoing query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.index.query.outgoing", c.handleQueryOutgoingNATS); err != nil {
+	sub, err := c.natsClient.SubscribeForRequests(ctx, "graph.index.query.outgoing", c.handleQueryOutgoingNATS)
+	if err != nil {
 		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe outgoing query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to incoming query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.index.query.incoming", c.handleQueryIncomingNATS); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.index.query.incoming", c.handleQueryIncomingNATS)
+	if err != nil {
 		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe incoming query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to alias query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.index.query.alias", c.handleQueryAliasNATS); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.index.query.alias", c.handleQueryAliasNATS)
+	if err != nil {
 		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe alias query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to predicate query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.index.query.predicate", c.handleQueryPredicateNATS); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.index.query.predicate", c.handleQueryPredicateNATS)
+	if err != nil {
 		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe predicate query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	c.logger.Info("query handlers registered",
 		slog.Any("subjects", []string{"graph.index.query.outgoing", "graph.index.query.incoming", "graph.index.query.alias", "graph.index.query.predicate"}))

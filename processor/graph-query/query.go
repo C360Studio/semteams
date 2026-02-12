@@ -16,59 +16,81 @@ import (
 // setupQueryHandlers subscribes to all query request subjects
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to entity query passthrough
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.entity", c.handleQueryEntity); err != nil {
+	sub, err := c.natsClient.SubscribeForRequests(ctx, "graph.query.entity", c.handleQueryEntity)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to entity query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to entity by alias query (resolves alias then fetches entity)
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.entityByAlias", c.handleQueryEntityByAlias); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.entityByAlias", c.handleQueryEntityByAlias)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to entityByAlias query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to relationships query passthrough
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.relationships", c.handleQueryRelationships); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.relationships", c.handleQueryRelationships)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to relationships query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to path search orchestration
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.pathSearch", c.handlePathSearch); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.pathSearch", c.handlePathSearch)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to path search")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to hierarchy stats (orchestrates prefix query to graph-ingest)
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.hierarchyStats", c.handleQueryHierarchyStats); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.hierarchyStats", c.handleQueryHierarchyStats)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to hierarchy stats")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to prefix query (passthrough to graph-ingest)
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.prefix", c.handleQueryPrefix); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.prefix", c.handleQueryPrefix)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to prefix query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to spatial query passthrough
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.spatial", c.handleQuerySpatial); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.spatial", c.handleQuerySpatial)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to spatial query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to temporal query passthrough
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.temporal", c.handleQueryTemporal); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.temporal", c.handleQueryTemporal)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to temporal query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to semantic search (passthrough to graph-embedding)
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.semantic", c.handleQuerySemantic); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.semantic", c.handleQuerySemantic)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to semantic query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to similar entity search (passthrough to graph-embedding)
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.similar", c.handleQuerySimilar); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.similar", c.handleQuerySimilar)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to similar query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to globalSearch - the main NL query handler with classifier routing
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.globalSearch", c.handleGlobalSearch); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.query.globalSearch", c.handleGlobalSearch)
+	if err != nil {
 		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to globalSearch query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	c.logger.Info("query handlers registered",
 		"subjects", []string{"graph.query.entity", "graph.query.entityByAlias", "graph.query.relationships", "graph.query.pathSearch", "graph.query.hierarchyStats", "graph.query.prefix", "graph.query.spatial", "graph.query.temporal", "graph.query.semantic", "graph.query.similar", "graph.query.globalSearch"})

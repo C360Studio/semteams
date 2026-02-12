@@ -15,14 +15,18 @@ import (
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to similar entity query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.embedding.query.similar", c.handleQuerySimilarNATS); err != nil {
+	sub, err := c.natsClient.SubscribeForRequests(ctx, "graph.embedding.query.similar", c.handleQuerySimilarNATS)
+	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe similar query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	// Subscribe to text search query
-	if err := c.natsClient.SubscribeForRequests(ctx, "graph.embedding.query.search", c.handleQuerySearchNATS); err != nil {
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.embedding.query.search", c.handleQuerySearchNATS)
+	if err != nil {
 		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe search query")
 	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
 
 	c.logger.Info("query handlers registered",
 		"subjects", []string{"graph.embedding.query.similar", "graph.embedding.query.search"})

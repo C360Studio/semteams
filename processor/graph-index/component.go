@@ -227,6 +227,9 @@ type Component struct {
 
 	// Alias predicates from vocabulary (cached at startup for performance)
 	aliasPredicates map[string]int
+
+	// Query subscriptions (for cleanup)
+	querySubscriptions []*natsclient.Subscription
 }
 
 // CreateGraphIndex is the factory function for creating graph-index components
@@ -546,6 +549,16 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.mu.Unlock()
 		return nil // Already stopped
 	}
+
+	// Unsubscribe from query handlers
+	for _, sub := range c.querySubscriptions {
+		if sub != nil {
+			if err := sub.Unsubscribe(); err != nil {
+				c.logger.Warn("query subscription unsubscribe error", slog.Any("error", err))
+			}
+		}
+	}
+	c.querySubscriptions = nil
 
 	// Cancel context
 	if c.cancel != nil {
