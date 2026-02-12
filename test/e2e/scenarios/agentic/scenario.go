@@ -10,6 +10,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
+	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 	"github.com/c360studio/semstreams/test/e2e/client"
 	"github.com/c360studio/semstreams/test/e2e/scenarios"
 )
@@ -65,6 +66,56 @@ func DefaultConfig() *Config {
 	}
 }
 
+// TestWorkflowID is the ID of the test workflow for agentic integration
+const TestWorkflowID = "e2e-agentic-integration-test"
+
+// TestWorkflow is a workflow that tests the full agentic integration path.
+// It uses ${...} syntax in conditions to ensure the interpolation fix is working.
+var TestWorkflow = wfschema.Definition{
+	ID:            TestWorkflowID,
+	Name:          "E2E Agentic Integration Test",
+	Description:   "Tests workflow -> agent -> workflow completion path",
+	Enabled:       true,
+	MaxIterations: 1,
+	Timeout:       "30s",
+	Trigger:       wfschema.TriggerDef{Subject: "workflow.trigger.e2e-agentic"},
+	Steps: []wfschema.StepDef{
+		{
+			Name: "analyze_request",
+			Action: wfschema.ActionDef{
+				Type:    "publish_agent",
+				Subject: "agent.task.e2e-agentic",
+				Role:    "analyzer",
+				Model:   "mock",
+				Prompt:  "Analyze the request: ${trigger.payload.content}. Respond with JSON: {\"valid\": true, \"summary\": \"analysis complete\"}",
+			},
+			OnSuccess: "publish_result",
+		},
+		{
+			Name: "publish_result",
+			// Use ${...} syntax to catch the condition wrapper bug
+			Condition: &wfschema.ConditionDef{
+				Field:    "${steps.analyze_request.output.valid}",
+				Operator: "eq",
+				Value:    true,
+			},
+			Action: wfschema.ActionDef{
+				Type:    "publish",
+				Subject: "workflow.result.e2e-agentic",
+				Payload: json.RawMessage(`{"status": "completed", "step": "publish_result"}`),
+			},
+			OnSuccess: "complete",
+		},
+	},
+	OnComplete: []wfschema.ActionDef{
+		{
+			Type:    "publish",
+			Subject: "workflow.complete.e2e-agentic",
+			Payload: json.RawMessage(`{"workflow": "e2e-agentic-integration-test", "status": "success"}`),
+		},
+	},
+}
+
 // NewScenario creates a new agentic scenario.
 func NewScenario(
 	obs *client.ObservabilityClient,
@@ -81,7 +132,7 @@ func NewScenario(
 
 	return &Scenario{
 		name:        "agentic",
-		description: "Validates agentic components (loop, model, tools) work together end-to-end",
+		description: "Validates agentic components and workflow integration end-to-end",
 		natsURL:     config.NATSURL,
 		obs:         obs,
 		config:      config,
@@ -147,6 +198,7 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		fn   func(context.Context, *scenarios.Result) error
 	}{
 		{"verify-components", s.verifyComponents},
+		{"register-workflow", s.registerWorkflow},
 		{"capture-baseline", s.captureBaseline},
 		{"inject-task", s.injectTask},
 		{"wait-for-completion", s.waitForCompletion},
@@ -175,8 +227,11 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 }
 
 // Teardown cleans up after the scenario.
-func (s *Scenario) Teardown(_ context.Context) error {
-	// Docker compose manages the mock-llm lifecycle, nothing to clean up here
+func (s *Scenario) Teardown(ctx context.Context) error {
+	// Clean up test workflow definition
+	if s.nats != nil {
+		_ = s.nats.DeleteKV(ctx, client.BucketWorkflowDefinitions, TestWorkflowID)
+	}
 	return nil
 }
 
@@ -187,8 +242,8 @@ func (s *Scenario) verifyComponents(ctx context.Context, result *scenarios.Resul
 		return fmt.Errorf("failed to get components: %w", err)
 	}
 
-	// Check for required agentic components
-	required := []string{"agentic-loop", "agentic-model", "agentic-tools"}
+	// Check for required agentic components AND workflow processor
+	required := []string{"agentic-loop", "agentic-model", "workflow-processor"}
 	found := make(map[string]bool)
 
 	for _, comp := range components {
@@ -210,13 +265,39 @@ func (s *Scenario) verifyComponents(ctx context.Context, result *scenarios.Resul
 	result.Details["agentic_components"] = found
 
 	if len(missing) > 0 {
+		// Workflow component is required for this test
+		for _, m := range missing {
+			if m == "workflow-processor" {
+				return fmt.Errorf("workflow-processor component is required for agentic integration test but not found")
+			}
+		}
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Missing agentic components: %v (may not be configured)", missing))
-		// Don't fail - components may not be in this flow config
 	}
 
 	if len(unhealthy) > 0 {
-		return fmt.Errorf("unhealthy agentic components: %v", unhealthy)
+		return fmt.Errorf("unhealthy components: %v", unhealthy)
 	}
+
+	return nil
+}
+
+// registerWorkflow registers the test workflow definition
+func (s *Scenario) registerWorkflow(ctx context.Context, result *scenarios.Result) error {
+	data, err := json.Marshal(TestWorkflow)
+	if err != nil {
+		return fmt.Errorf("failed to marshal workflow: %w", err)
+	}
+
+	if err := s.nats.PutKV(ctx, client.BucketWorkflowDefinitions, TestWorkflowID, data); err != nil {
+		return fmt.Errorf("failed to register workflow: %w", err)
+	}
+
+	result.Details["workflow_id"] = TestWorkflowID
+	result.Details["workflow_registered"] = true
+	result.Details["condition_uses_wrapper"] = true // ${...} syntax
+
+	// Give workflow processor time to pick up the new definition
+	time.Sleep(500 * time.Millisecond)
 
 	return nil
 }
@@ -233,74 +314,159 @@ func (s *Scenario) captureBaseline(ctx context.Context, result *scenarios.Result
 	return nil
 }
 
-// injectTask publishes a task message to trigger an agentic loop.
+// injectTask triggers the workflow (which will spawn an agent task)
 func (s *Scenario) injectTask(ctx context.Context, result *scenarios.Result) error {
-	task := agentic.TaskMessage{
-		TaskID: fmt.Sprintf("e2e-test-%d", time.Now().UnixNano()),
-		Role:   "general",
-		Model:  "mock", // Should match the configured endpoint name
-		Prompt: "Analyze the temperature sensor temp-sensor-001. Use the query_entity tool to retrieve sensor data, then provide an assessment.",
+	// Trigger the workflow instead of directly injecting an agent task
+	// This tests the full integration path: workflow -> agent -> workflow completion
+	trigger := map[string]any{
+		"content":    "E2E test request for agentic integration validation",
+		"request_id": fmt.Sprintf("e2e-test-%d", time.Now().UnixNano()),
 	}
 
-	// Wrap task in BaseMessage envelope (required by agentic-loop)
+	data, err := json.Marshal(trigger)
+	if err != nil {
+		return fmt.Errorf("failed to marshal trigger: %w", err)
+	}
+
+	result.Details["trigger_request_id"] = trigger["request_id"]
+	result.Details["trigger_subject"] = "workflow.trigger.e2e-agentic"
+
+	// Publish workflow trigger
+	if err := s.nats.Publish(ctx, "workflow.trigger.e2e-agentic", data); err != nil {
+		return fmt.Errorf("failed to publish workflow trigger: %w", err)
+	}
+
+	// Also inject a direct task for backwards compatibility testing
+	task := agentic.TaskMessage{
+		TaskID: fmt.Sprintf("e2e-direct-%d", time.Now().UnixNano()),
+		Role:   "general",
+		Model:  "mock",
+		Prompt: "Analyze the temperature sensor temp-sensor-001. Respond with a brief assessment.",
+	}
+
 	baseMsg := message.NewBaseMessage(task.Schema(), &task, "e2e-test")
-	data, err := json.Marshal(baseMsg)
+	taskData, err := json.Marshal(baseMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal task: %w", err)
 	}
 
-	result.Details["task_id"] = task.TaskID
-	result.Details["task_role"] = task.Role
-	result.Details["task_model"] = task.Model
+	result.Details["direct_task_id"] = task.TaskID
 
-	// Publish to agent.task subject
-	if err := s.nats.Publish(ctx, "agent.task.e2e", data); err != nil {
-		return fmt.Errorf("failed to publish task: %w", err)
+	if err := s.nats.Publish(ctx, "agent.task.e2e", taskData); err != nil {
+		return fmt.Errorf("failed to publish direct task: %w", err)
 	}
 
 	return nil
 }
 
-// waitForCompletion waits for the agent loop to complete.
+// waitForCompletion waits for BOTH agent loop completion AND workflow completion
 func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Result) error {
-	taskID, ok := result.Details["task_id"].(string)
-	if !ok {
-		return fmt.Errorf("task_id not found in result details")
-	}
-
-	// Poll for loop completion via KV bucket or metrics
-	// For now, just wait a bit and check metrics
 	timeout := s.config.CompleteTimeout
 	deadline := time.Now().Add(timeout)
+
+	var loopsCompleted float64
+	var workflowCompleted bool
+	var lastExec *client.WorkflowExecution
 
 	for time.Now().Before(deadline) {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(500 * time.Millisecond):
-			// Check if loop completed via metrics
-			loopsCompleted, err := s.metrics.SumMetricsByName(ctx, "semstreams_agentic_loop_loops_completed_total")
-			if err == nil && loopsCompleted > 0 {
+			// Check agent loop completion via metrics
+			loops, err := s.metrics.SumMetricsByName(ctx, "semstreams_agentic_loop_loops_completed_total")
+			if err == nil && loops > loopsCompleted {
+				loopsCompleted = loops
 				result.Metrics["loops_completed"] = loopsCompleted
-				result.Details["completion_method"] = "metrics"
+			}
+
+			// Check workflow completion via KV state
+			exec, err := s.nats.WaitForWorkflowState(ctx, TestWorkflowID, []string{"completed", "failed"}, 100*time.Millisecond)
+			if err == nil && exec != nil {
+				lastExec = exec
+				if exec.State == "completed" {
+					workflowCompleted = true
+					result.Metrics["workflow_state"] = exec.State
+					result.Details["workflow_execution"] = exec
+					result.Details["workflow_steps_completed"] = len(exec.StepResults)
+				} else if exec.State == "failed" {
+					// Workflow failed - this is an error
+					result.Details["workflow_execution"] = exec
+					result.Details["workflow_error"] = exec.Error
+					return fmt.Errorf("workflow failed: %s (current step: %s)", exec.Error, exec.CurrentName)
+				}
+			}
+
+			// Success: both agent loops completed AND workflow completed
+			if loopsCompleted >= 2 && workflowCompleted {
+				result.Details["completion_method"] = "workflow_and_metrics"
 				return nil
 			}
 		}
 	}
 
-	result.Details["task_id_checked"] = taskID
-	return fmt.Errorf("timeout waiting for agent loop completion after %v", timeout)
+	// Timeout - provide diagnostic info
+	result.Details["timeout_loops_completed"] = loopsCompleted
+	result.Details["timeout_workflow_completed"] = workflowCompleted
+	if lastExec != nil {
+		result.Details["timeout_workflow_state"] = lastExec.State
+		result.Details["timeout_workflow_step"] = lastExec.CurrentName
+		result.Details["timeout_workflow_error"] = lastExec.Error
+	}
+
+	if !workflowCompleted {
+		return fmt.Errorf("timeout: workflow did not complete (loops_completed=%v, workflow_state=%v)",
+			loopsCompleted, func() string {
+				if lastExec != nil {
+					return lastExec.State
+				}
+				return "unknown"
+			}())
+	}
+
+	return fmt.Errorf("timeout waiting for completion after %v", timeout)
 }
 
-// validateResults validates the scenario results.
+// validateResults validates the scenario results - checks full integration path
 func (s *Scenario) validateResults(_ context.Context, result *scenarios.Result) error {
-	// The Docker compose mock-llm handles LLM requests.
-	// Validation relies on metrics since we can't directly query the Docker mock server.
-	// Check that loops were completed
+	// Validate agent loops completed
 	loopsCompleted, ok := result.Metrics["loops_completed"].(float64)
-	if !ok || loopsCompleted == 0 {
-		result.Warnings = append(result.Warnings, "No completed loops found in metrics")
+	if !ok || loopsCompleted < 2 {
+		return fmt.Errorf("expected at least 2 agent loops (direct + workflow), got %v", loopsCompleted)
 	}
+
+	// Validate workflow reached completion state
+	workflowState, ok := result.Metrics["workflow_state"].(string)
+	if !ok || workflowState != "completed" {
+		return fmt.Errorf("workflow did not complete successfully, state: %v", workflowState)
+	}
+
+	// Validate workflow steps were executed
+	exec, ok := result.Details["workflow_execution"].(*client.WorkflowExecution)
+	if !ok || exec == nil {
+		return fmt.Errorf("workflow execution details not found")
+	}
+
+	// Check that the analyze_request step completed successfully
+	analyzeResult, hasAnalyze := exec.StepResults["analyze_request"]
+	if !hasAnalyze {
+		return fmt.Errorf("analyze_request step not found in results - agent completion may not have been correlated")
+	}
+	if analyzeResult.Status != "success" {
+		return fmt.Errorf("analyze_request step failed: %s (this may indicate outcome value mismatch)", analyzeResult.Error)
+	}
+
+	// Check that the publish_result step completed (validates condition evaluation)
+	publishResult, hasPublish := exec.StepResults["publish_result"]
+	if !hasPublish {
+		return fmt.Errorf("publish_result step not found - condition evaluation may have failed (check ${...} wrapper handling)")
+	}
+	if publishResult.Status != "success" {
+		return fmt.Errorf("publish_result step failed: %s", publishResult.Error)
+	}
+
+	result.Details["validation_passed"] = true
+	result.Details["steps_validated"] = []string{"analyze_request", "publish_result"}
 
 	return nil
 }

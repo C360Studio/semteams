@@ -221,6 +221,77 @@
         ]
       }
     },
+    "workflow-processor": {
+      "type": "processor",
+      "name": "workflow-processor",
+      "enabled": true,
+      "config": {
+        "definitions_bucket": "WORKFLOW_DEFINITIONS",
+        "executions_bucket": "WORKFLOW_EXECUTIONS",
+        "stream_name": "WORKFLOW",
+        "default_timeout": "60s",
+        "default_max_iterations": 3,
+        "request_timeout": "30s",
+        "ports": {
+          "inputs": [
+            {
+              "name": "workflow.trigger",
+              "type": "jetstream",
+              "subject": "workflow.trigger.>",
+              "stream_name": "WORKFLOW",
+              "required": true,
+              "description": "Workflow trigger events"
+            },
+            {
+              "name": "workflow.step.complete",
+              "type": "jetstream",
+              "subject": "workflow.step.complete.>",
+              "stream_name": "WORKFLOW",
+              "required": true,
+              "description": "Step completion events"
+            },
+            {
+              "name": "agent.complete",
+              "type": "jetstream",
+              "subject": "agent.complete.>",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent completion events"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "workflow.events",
+              "type": "jetstream",
+              "subject": "workflow.events",
+              "stream_name": "WORKFLOW",
+              "description": "Workflow lifecycle events"
+            },
+            {
+              "name": "agent.task",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "description": "Agent task spawning"
+            }
+          ],
+          "kv_write": [
+            {
+              "name": "definitions",
+              "type": "kv-write",
+              "bucket": "WORKFLOW_DEFINITIONS",
+              "description": "Workflow definition storage"
+            },
+            {
+              "name": "executions",
+              "type": "kv-write",
+              "bucket": "WORKFLOW_EXECUTIONS",
+              "description": "Workflow execution state storage"
+            }
+          ]
+        }
+      }
+    },
     "agentic-loop": {
       "type": "processor",
       "name": "agentic-loop",

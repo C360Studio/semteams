@@ -1502,3 +1502,202 @@ func (c *NATSValidationClient) GetAllComponentStatuses(ctx context.Context) (map
 
 	return statuses, nil
 }
+
+// ============================================================================
+// Workflow Execution Validation (for agentic integration testing)
+// ============================================================================
+
+// BucketWorkflowExecutions is the KV bucket for workflow executions
+const BucketWorkflowExecutions = "WORKFLOW_EXECUTIONS"
+
+// BucketWorkflowDefinitions is the KV bucket for workflow definitions
+const BucketWorkflowDefinitions = "WORKFLOW_DEFINITIONS"
+
+// WorkflowExecution represents a workflow execution state from KV
+type WorkflowExecution struct {
+	ID           string                 `json:"id"`
+	WorkflowID   string                 `json:"workflow_id"`
+	WorkflowName string                 `json:"workflow_name"`
+	State        string                 `json:"state"`
+	CurrentStep  int                    `json:"current_step"`
+	CurrentName  string                 `json:"current_name"`
+	Iteration    int                    `json:"iteration"`
+	StepResults  map[string]StepResult  `json:"step_results,omitempty"`
+	Error        string                 `json:"error,omitempty"`
+	Trigger      map[string]interface{} `json:"trigger,omitempty"`
+	CreatedAt    string                 `json:"created_at"`
+	UpdatedAt    string                 `json:"updated_at"`
+}
+
+// StepResult represents a workflow step result
+type StepResult struct {
+	StepName  string `json:"step_name"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
+	Iteration int    `json:"iteration"`
+}
+
+// GetWorkflowExecution retrieves a workflow execution by ID
+func (c *NATSValidationClient) GetWorkflowExecution(ctx context.Context, execID string) (*WorkflowExecution, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, BucketWorkflowExecutions)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get workflow executions bucket: %w", err)
+	}
+
+	entry, err := bucket.Get(ctx, execID)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get workflow execution: %w", err)
+	}
+
+	var exec WorkflowExecution
+	if err := json.Unmarshal(entry.Value(), &exec); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal workflow execution: %w", err)
+	}
+
+	return &exec, nil
+}
+
+// GetAllWorkflowExecutions retrieves all workflow executions
+func (c *NATSValidationClient) GetAllWorkflowExecutions(ctx context.Context) ([]*WorkflowExecution, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, BucketWorkflowExecutions)
+	if err != nil {
+		if isBucketNotFoundError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get workflow executions bucket: %w", err)
+	}
+
+	keys, err := bucket.Keys(ctx)
+	if err != nil {
+		if isNoKeysError(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list workflow execution keys: %w", err)
+	}
+
+	var executions []*WorkflowExecution
+	for _, key := range keys {
+		entry, err := bucket.Get(ctx, key)
+		if err != nil {
+			continue
+		}
+
+		var exec WorkflowExecution
+		if err := json.Unmarshal(entry.Value(), &exec); err != nil {
+			continue
+		}
+
+		executions = append(executions, &exec)
+	}
+
+	return executions, nil
+}
+
+// WaitForWorkflowState waits for any workflow to reach a terminal state (completed or failed)
+// Returns the execution that reached terminal state, or nil on timeout
+func (c *NATSValidationClient) WaitForWorkflowState(
+	ctx context.Context,
+	workflowID string,
+	targetStates []string,
+	timeout time.Duration,
+) (*WorkflowExecution, error) {
+	const pollInterval = 200 * time.Millisecond
+	deadline := time.Now().Add(timeout)
+
+	targetSet := make(map[string]bool)
+	for _, s := range targetStates {
+		targetSet[s] = true
+	}
+
+	for time.Now().Before(deadline) {
+		executions, err := c.GetAllWorkflowExecutions(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, exec := range executions {
+			if workflowID != "" && exec.WorkflowID != workflowID {
+				continue
+			}
+			if targetSet[exec.State] {
+				return exec, nil
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+
+	// Timeout - return latest execution state for diagnostics
+	executions, _ := c.GetAllWorkflowExecutions(ctx)
+	if len(executions) > 0 {
+		return executions[len(executions)-1], nil
+	}
+	return nil, nil
+}
+
+// WaitForWorkflowCompletion waits for a workflow to complete successfully
+func (c *NATSValidationClient) WaitForWorkflowCompletion(
+	ctx context.Context,
+	workflowID string,
+	timeout time.Duration,
+) (*WorkflowExecution, error) {
+	return c.WaitForWorkflowState(ctx, workflowID, []string{"completed"}, timeout)
+}
+
+// WaitForWorkflowTerminal waits for a workflow to reach any terminal state
+func (c *NATSValidationClient) WaitForWorkflowTerminal(
+	ctx context.Context,
+	workflowID string,
+	timeout time.Duration,
+) (*WorkflowExecution, error) {
+	return c.WaitForWorkflowState(ctx, workflowID, []string{"completed", "failed", "cancelled"}, timeout)
+}
+
+// GetWorkflowExecutionsByState returns executions filtered by state
+func (c *NATSValidationClient) GetWorkflowExecutionsByState(ctx context.Context, state string) ([]*WorkflowExecution, error) {
+	executions, err := c.GetAllWorkflowExecutions(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var filtered []*WorkflowExecution
+	for _, exec := range executions {
+		if exec.State == state {
+			filtered = append(filtered, exec)
+		}
+	}
+
+	return filtered, nil
+}
+
+// DeleteKV deletes a key from a KV bucket (for test cleanup)
+func (c *NATSValidationClient) DeleteKV(ctx context.Context, bucket, key string) error {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return fmt.Errorf("client is closed")
+	}
+	c.mu.Unlock()
+
+	js, err := c.client.JetStream()
+	if err != nil {
+		return fmt.Errorf("failed to get JetStream: %w", err)
+	}
+
+	kv, err := js.KeyValue(ctx, bucket)
+	if err != nil {
+		return fmt.Errorf("failed to get bucket %s: %w", bucket, err)
+	}
+
+	return kv.Delete(ctx, key)
+}
