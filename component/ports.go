@@ -12,6 +12,9 @@ type PortDefinition struct {
 	Timeout     string `json:"timeout,omitempty"     schema:"editable,type:string,description:Request timeout for request/reply ports"`
 	StreamName  string `json:"stream_name,omitempty" schema:"editable,type:string,description:JetStream stream name"`
 	Bucket      string `json:"bucket,omitempty"      schema:"editable,type:string,description:KV bucket name for KV ports"`
+
+	// Config holds type-specific port configuration (e.g., JetStreamPort for consumer settings)
+	Config any `json:"config,omitempty" schema:"editable,type:object,description:Type-specific port configuration"`
 }
 
 // PortConfig represents port configuration in component config
@@ -76,10 +79,26 @@ func BuildPortFromDefinition(def PortDefinition, direction Direction) Port {
 			Interface: iface,
 		}
 	case "jetstream":
-		port.Config = JetStreamPort{
+		jsPort := JetStreamPort{
 			StreamName: def.StreamName,
 			Subjects:   []string{def.Subject}, // Convert single subject to array
 		}
+		// Merge additional config if provided
+		if configPort, ok := def.Config.(JetStreamPort); ok {
+			if configPort.DeliverPolicy != "" {
+				jsPort.DeliverPolicy = configPort.DeliverPolicy
+			}
+			if configPort.AckPolicy != "" {
+				jsPort.AckPolicy = configPort.AckPolicy
+			}
+			if configPort.MaxDeliver > 0 {
+				jsPort.MaxDeliver = configPort.MaxDeliver
+			}
+			if configPort.ConsumerName != "" {
+				jsPort.ConsumerName = configPort.ConsumerName
+			}
+		}
+		port.Config = jsPort
 	case "nats-request":
 		timeout := def.Timeout
 		if timeout == "" {

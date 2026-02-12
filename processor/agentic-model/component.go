@@ -168,13 +168,17 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 		"consumer", consumerName,
 		"filter_subject", port.Subject)
 
+	// Get consumer config from port definition (allows user configuration)
+	// Defaults to "new" - only process new requests, don't replay old ones
+	consumerCfg := component.GetConsumerConfigFromDefinition(port)
+
 	cfg := natsclient.StreamConsumerConfig{
 		StreamName:     streamName,
 		ConsumerName:   consumerName,
 		FilterSubject:  port.Subject,
-		DeliverPolicy:  "new", // Only process new requests, don't replay old ones
-		AckPolicy:      "explicit",
-		MaxDeliver:     3,
+		DeliverPolicy:  consumerCfg.DeliverPolicy,
+		AckPolicy:      consumerCfg.AckPolicy,
+		MaxDeliver:     consumerCfg.MaxDeliver,
 		AutoCreate:     false,
 		MessageTimeout: c.messageTimeout, // Use configured timeout for LLM calls
 	}

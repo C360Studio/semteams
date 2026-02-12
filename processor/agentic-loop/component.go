@@ -337,7 +337,7 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 			continue
 		}
 
-		if err := c.setupConsumer(ctx, port.Name, subject, handler); err != nil {
+		if err := c.setupConsumer(ctx, port, subject, handler); err != nil {
 			return errs.Wrap(err, "agentic-loop", "setupSubscriptions", fmt.Sprintf("setup consumer for %s", subject))
 		}
 	}
@@ -346,7 +346,7 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 }
 
 // setupConsumer sets up a JetStream consumer for an input port
-func (c *Component) setupConsumer(ctx context.Context, portName, subject string, handler func(context.Context, []byte)) error {
+func (c *Component) setupConsumer(ctx context.Context, port component.Port, subject string, handler func(context.Context, []byte)) error {
 	// Determine stream name
 	streamName := c.config.StreamName
 	if streamName == "" {
@@ -368,15 +368,19 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 		"stream", streamName,
 		"consumer", consumerName,
 		"filter_subject", subject,
-		"port", portName)
+		"port", port.Name)
+
+	// Get consumer config from port (allows user configuration)
+	// Defaults to "new" - only process new messages, don't replay old ones
+	consumerCfg := component.GetConsumerConfig(port)
 
 	cfg := natsclient.StreamConsumerConfig{
 		StreamName:     streamName,
 		ConsumerName:   consumerName,
 		FilterSubject:  subject,
-		DeliverPolicy:  "new", // Only process new messages, don't replay old ones
-		AckPolicy:      "explicit",
-		MaxDeliver:     3,
+		DeliverPolicy:  consumerCfg.DeliverPolicy,
+		AckPolicy:      consumerCfg.AckPolicy,
+		MaxDeliver:     consumerCfg.MaxDeliver,
 		AutoCreate:     false,
 		MessageTimeout: c.messageTimeout, // Use configured timeout for LLM calls
 	}
@@ -395,7 +399,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 		"subject", subject,
 		"stream", streamName,
 		"consumer", consumerName,
-		"port", portName)
+		"port", port.Name)
 	return nil
 }
 

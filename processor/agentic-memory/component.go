@@ -149,7 +149,7 @@ func (c *Component) setupInputConsumers(ctx context.Context) error {
 			continue
 		}
 
-		if err := c.setupConsumer(ctx, port.Name, subject, handler); err != nil {
+		if err := c.setupConsumer(ctx, port, handler); err != nil {
 			return errs.Wrap(err, "Component", "setupInputConsumers", fmt.Sprintf("setup consumer for %s", port.Name))
 		}
 	}
@@ -158,7 +158,7 @@ func (c *Component) setupInputConsumers(ctx context.Context) error {
 }
 
 // setupConsumer sets up a JetStream consumer for an input port
-func (c *Component) setupConsumer(ctx context.Context, portName, subject string, handler func(context.Context, []byte)) error {
+func (c *Component) setupConsumer(ctx context.Context, port component.PortDefinition, handler func(context.Context, []byte)) error {
 	// Determine stream name
 	streamName := c.config.StreamName
 	if streamName == "" {
@@ -171,7 +171,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 	}
 
 	// Create durable consumer name
-	consumerName := fmt.Sprintf("agentic-memory-%s", sanitizeSubject(subject))
+	consumerName := fmt.Sprintf("agentic-memory-%s", sanitizeSubject(port.Subject))
 	if c.config.ConsumerNameSuffix != "" {
 		consumerName = consumerName + "-" + c.config.ConsumerNameSuffix
 	}
@@ -179,16 +179,20 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 	c.logger.Info("Setting up JetStream consumer",
 		"stream", streamName,
 		"consumer", consumerName,
-		"filter_subject", subject,
-		"port", portName)
+		"filter_subject", port.Subject,
+		"port", port.Name)
+
+	// Get consumer config from port definition (allows user configuration)
+	// Defaults to "new" - only process new messages, don't replay old ones
+	consumerCfg := component.GetConsumerConfigFromDefinition(port)
 
 	cfg := natsclient.StreamConsumerConfig{
 		StreamName:    streamName,
 		ConsumerName:  consumerName,
-		FilterSubject: subject,
-		DeliverPolicy: "new",
-		AckPolicy:     "explicit",
-		MaxDeliver:    3,
+		FilterSubject: port.Subject,
+		DeliverPolicy: consumerCfg.DeliverPolicy,
+		AckPolicy:     consumerCfg.AckPolicy,
+		MaxDeliver:    consumerCfg.MaxDeliver,
 		AutoCreate:    false,
 	}
 
@@ -203,10 +207,10 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 	}
 
 	c.logger.Info("Subscribed (JetStream)",
-		"subject", subject,
+		"subject", port.Subject,
 		"stream", streamName,
 		"consumer", consumerName,
-		"port", portName)
+		"port", port.Name)
 	return nil
 }
 

@@ -349,13 +349,16 @@ func (f *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 		"consumer", consumerName,
 		"filter_subject", port.Subject)
 
+	// Get consumer config from port definition (allows user configuration)
+	consumerCfg := component.GetConsumerConfigFromDefinition(port)
+
 	cfg := natsclient.StreamConsumerConfig{
 		StreamName:    streamName,
 		ConsumerName:  consumerName,
 		FilterSubject: port.Subject,
-		DeliverPolicy: "all",
-		AckPolicy:     "explicit",
-		MaxDeliver:    5,
+		DeliverPolicy: consumerCfg.DeliverPolicy,
+		AckPolicy:     consumerCfg.AckPolicy,
+		MaxDeliver:    consumerCfg.MaxDeliver,
 		AutoCreate:    false,
 	}
 

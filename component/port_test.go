@@ -793,3 +793,217 @@ func TestKVWritePortJSONSerialization(t *testing.T) {
 		}
 	}
 }
+
+func TestGetConsumerConfig(t *testing.T) {
+	tests := []struct {
+		name           string
+		port           Port
+		wantDeliverPol string
+		wantAckPol     string
+		wantMaxDeliver int
+	}{
+		{
+			name: "JetStream port with all values",
+			port: Port{
+				Name:      "test_input",
+				Direction: DirectionInput,
+				Config: JetStreamPort{
+					DeliverPolicy: "all",
+					AckPolicy:     "none",
+					MaxDeliver:    10,
+				},
+			},
+			wantDeliverPol: "all",
+			wantAckPol:     "none",
+			wantMaxDeliver: 10,
+		},
+		{
+			name: "JetStream port with partial values",
+			port: Port{
+				Name:      "test_input",
+				Direction: DirectionInput,
+				Config: JetStreamPort{
+					DeliverPolicy: "last",
+					// AckPolicy and MaxDeliver not set
+				},
+			},
+			wantDeliverPol: "last",
+			wantAckPol:     "explicit", // default
+			wantMaxDeliver: 3,          // default
+		},
+		{
+			name: "JetStream port with no values (defaults)",
+			port: Port{
+				Name:      "test_input",
+				Direction: DirectionInput,
+				Config:    JetStreamPort{},
+			},
+			wantDeliverPol: "new",      // default
+			wantAckPol:     "explicit", // default
+			wantMaxDeliver: 3,          // default
+		},
+		{
+			name: "Non-JetStream port (NATS)",
+			port: Port{
+				Name:      "test_input",
+				Direction: DirectionInput,
+				Config:    NATSPort{Subject: "test.subject"},
+			},
+			wantDeliverPol: "new",      // default
+			wantAckPol:     "explicit", // default
+			wantMaxDeliver: 3,          // default
+		},
+		{
+			name: "Non-JetStream port (KVWatch)",
+			port: Port{
+				Name:      "test_input",
+				Direction: DirectionInput,
+				Config:    KVWatchPort{Bucket: "TEST"},
+			},
+			wantDeliverPol: "new",      // default
+			wantAckPol:     "explicit", // default
+			wantMaxDeliver: 3,          // default
+		},
+		{
+			name: "Port with nil config",
+			port: Port{
+				Name:      "test_input",
+				Direction: DirectionInput,
+				Config:    nil,
+			},
+			wantDeliverPol: "new",      // default
+			wantAckPol:     "explicit", // default
+			wantMaxDeliver: 3,          // default
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := GetConsumerConfig(tt.port)
+
+			if cfg.DeliverPolicy != tt.wantDeliverPol {
+				t.Errorf("DeliverPolicy = %q, want %q", cfg.DeliverPolicy, tt.wantDeliverPol)
+			}
+			if cfg.AckPolicy != tt.wantAckPol {
+				t.Errorf("AckPolicy = %q, want %q", cfg.AckPolicy, tt.wantAckPol)
+			}
+			if cfg.MaxDeliver != tt.wantMaxDeliver {
+				t.Errorf("MaxDeliver = %d, want %d", cfg.MaxDeliver, tt.wantMaxDeliver)
+			}
+		})
+	}
+}
+
+func TestGetConsumerConfigFromDefinition(t *testing.T) {
+	tests := []struct {
+		name           string
+		portDef        PortDefinition
+		wantDeliverPol string
+		wantAckPol     string
+		wantMaxDeliver int
+	}{
+		{
+			name: "PortDefinition with JetStreamPort config",
+			portDef: PortDefinition{
+				Name:    "entity_watch",
+				Type:    "jetstream",
+				Subject: "events.graph.entity.>",
+				Config: JetStreamPort{
+					DeliverPolicy: "all",
+					AckPolicy:     "explicit",
+					MaxDeliver:    5,
+				},
+			},
+			wantDeliverPol: "all",
+			wantAckPol:     "explicit",
+			wantMaxDeliver: 5,
+		},
+		{
+			name: "PortDefinition with partial JetStreamPort config",
+			portDef: PortDefinition{
+				Name:    "entity_watch",
+				Type:    "jetstream",
+				Subject: "events.graph.entity.>",
+				Config: JetStreamPort{
+					DeliverPolicy: "new",
+				},
+			},
+			wantDeliverPol: "new",
+			wantAckPol:     "explicit", // default
+			wantMaxDeliver: 3,          // default
+		},
+		{
+			name: "PortDefinition with empty JetStreamPort config",
+			portDef: PortDefinition{
+				Name:    "entity_watch",
+				Type:    "jetstream",
+				Subject: "events.graph.entity.>",
+				Config:  JetStreamPort{},
+			},
+			wantDeliverPol: "new",      // default
+			wantAckPol:     "explicit", // default
+			wantMaxDeliver: 3,          // default
+		},
+		{
+			name: "PortDefinition with nil config",
+			portDef: PortDefinition{
+				Name:    "entity_watch",
+				Type:    "jetstream",
+				Subject: "events.graph.entity.>",
+				Config:  nil,
+			},
+			wantDeliverPol: "new",      // default
+			wantAckPol:     "explicit", // default
+			wantMaxDeliver: 3,          // default
+		},
+		{
+			name: "PortDefinition with non-JetStream config type",
+			portDef: PortDefinition{
+				Name:    "nats_port",
+				Type:    "nats",
+				Subject: "test.subject",
+				Config:  NATSPort{Subject: "test.subject"},
+			},
+			wantDeliverPol: "new",      // default
+			wantAckPol:     "explicit", // default
+			wantMaxDeliver: 3,          // default
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := GetConsumerConfigFromDefinition(tt.portDef)
+
+			if cfg.DeliverPolicy != tt.wantDeliverPol {
+				t.Errorf("DeliverPolicy = %q, want %q", cfg.DeliverPolicy, tt.wantDeliverPol)
+			}
+			if cfg.AckPolicy != tt.wantAckPol {
+				t.Errorf("AckPolicy = %q, want %q", cfg.AckPolicy, tt.wantAckPol)
+			}
+			if cfg.MaxDeliver != tt.wantMaxDeliver {
+				t.Errorf("MaxDeliver = %d, want %d", cfg.MaxDeliver, tt.wantMaxDeliver)
+			}
+		})
+	}
+}
+
+func TestConsumerConfigDefaults(t *testing.T) {
+	// Test that default values are safe for production use
+	emptyPort := Port{Name: "test", Direction: DirectionInput}
+	cfg := GetConsumerConfig(emptyPort)
+
+	// "new" is the safe default - doesn't replay historical messages
+	if cfg.DeliverPolicy != "new" {
+		t.Errorf("Default DeliverPolicy should be 'new' (safe), got %q", cfg.DeliverPolicy)
+	}
+
+	// "explicit" requires ack - prevents message loss
+	if cfg.AckPolicy != "explicit" {
+		t.Errorf("Default AckPolicy should be 'explicit' (safe), got %q", cfg.AckPolicy)
+	}
+
+	// 3 retries is a reasonable default
+	if cfg.MaxDeliver != 3 {
+		t.Errorf("Default MaxDeliver should be 3, got %d", cfg.MaxDeliver)
+	}
+}

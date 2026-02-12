@@ -99,6 +99,9 @@ func DefaultConfig() Config {
 					Name:    "entity_stream",
 					Type:    "jetstream",
 					Subject: "entity.>",
+					Config: component.JetStreamPort{
+						DeliverPolicy: "all", // Idempotent: catch up on historical entities
+					},
 				},
 			},
 			Outputs: []component.PortDefinition{
@@ -208,6 +211,9 @@ type Component struct {
 	// Port definitions
 	inputPorts  []component.Port
 	outputPorts []component.Port
+
+	// Query and mutation subscriptions (for cleanup)
+	subscriptions []*natsclient.Subscription
 }
 
 // CreateGraphIngest is the factory function for creating graph-ingest components
@@ -518,6 +524,16 @@ func (c *Component) Stop(timeout time.Duration) error {
 		return nil // Already stopped
 	}
 
+	// Unsubscribe from query and mutation handlers
+	for _, sub := range c.subscriptions {
+		if sub != nil {
+			if err := sub.Unsubscribe(); err != nil {
+				c.logger.Warn("subscription unsubscribe error", slog.Any("error", err))
+			}
+		}
+	}
+	c.subscriptions = nil
+
 	// Cancel context
 	if c.cancel != nil {
 		c.cancel()
@@ -638,13 +654,17 @@ func (c *Component) setupJetStreamConsumer(ctx context.Context, port component.P
 		slog.String("consumer", consumerName),
 		slog.String("filter_subject", port.Subject))
 
+	// Get consumer config from port definition (allows user configuration)
+	// graph-ingest defaults to "all" since it's idempotent (KV overwrites)
+	consumerCfg := component.GetConsumerConfigFromDefinition(port)
+
 	cfg := natsclient.StreamConsumerConfig{
 		StreamName:    streamName,
 		ConsumerName:  consumerName,
 		FilterSubject: port.Subject,
-		DeliverPolicy: "all",
-		AckPolicy:     "explicit",
-		MaxDeliver:    5,
+		DeliverPolicy: consumerCfg.DeliverPolicy,
+		AckPolicy:     consumerCfg.AckPolicy,
+		MaxDeliver:    consumerCfg.MaxDeliver,
 		AutoCreate:    false,
 	}
 

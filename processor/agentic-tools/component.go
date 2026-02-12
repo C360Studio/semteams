@@ -42,6 +42,9 @@ type Component struct {
 	errors            int64
 	lastActivity      time.Time
 	metrics           *toolsMetrics
+
+	// Subscriptions (for cleanup)
+	toolListSub *natsclient.Subscription
 }
 
 // NewComponent creates a new agentic-tools processor component
@@ -130,9 +133,11 @@ func (c *Component) Start(ctx context.Context) error {
 			break
 		}
 	}
-	if err := c.natsClient.SubscribeForRequests(ctx, toolListSubject, c.handleToolListRequest); err != nil {
+	sub, err := c.natsClient.SubscribeForRequests(ctx, toolListSubject, c.handleToolListRequest)
+	if err != nil {
 		c.logger.Warn("Failed to subscribe to tool.list", "error", err, "subject", toolListSubject)
 	} else {
+		c.toolListSub = sub
 		c.logger.Info("Subscribed to tool.list", "subject", toolListSubject)
 	}
 
@@ -169,13 +174,17 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 		"consumer", consumerName,
 		"filter_subject", port.Subject)
 
+	// Get consumer config from port definition (allows user configuration)
+	// Defaults to "new" - only process new tool calls, don't replay old ones
+	consumerCfg := component.GetConsumerConfigFromDefinition(port)
+
 	cfg := natsclient.StreamConsumerConfig{
 		StreamName:    streamName,
 		ConsumerName:  consumerName,
 		FilterSubject: port.Subject,
-		DeliverPolicy: "new", // Only process new tool calls, don't replay old ones
-		AckPolicy:     "explicit",
-		MaxDeliver:    3,
+		DeliverPolicy: consumerCfg.DeliverPolicy,
+		AckPolicy:     consumerCfg.AckPolicy,
+		MaxDeliver:    consumerCfg.MaxDeliver,
 		AutoCreate:    false,
 	}
 
@@ -240,6 +249,14 @@ func (c *Component) Stop(_ time.Duration) error {
 
 	if !c.running {
 		return nil
+	}
+
+	// Unsubscribe from tool.list request handler
+	if c.toolListSub != nil {
+		if err := c.toolListSub.Unsubscribe(); err != nil {
+			c.logger.Warn("tool list subscription unsubscribe error", slog.Any("error", err))
+		}
+		c.toolListSub = nil
 	}
 
 	// JetStream consumers are cleaned up automatically when their context is cancelled

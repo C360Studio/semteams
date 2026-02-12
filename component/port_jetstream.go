@@ -44,3 +44,59 @@ func (j JetStreamPort) IsExclusive() bool {
 func (j JetStreamPort) Type() string {
 	return "jetstream"
 }
+
+// ConsumerConfig holds extracted JetStream consumer configuration.
+type ConsumerConfig struct {
+	DeliverPolicy string
+	AckPolicy     string
+	MaxDeliver    int
+}
+
+// GetConsumerConfig extracts JetStream consumer configuration from a port.
+// Returns safe defaults if port doesn't have JetStream config:
+// - DeliverPolicy: "new" (safe default - don't replay historical messages)
+// - AckPolicy: "explicit"
+// - MaxDeliver: 3
+func GetConsumerConfig(port Port) ConsumerConfig {
+	cfg := ConsumerConfig{
+		DeliverPolicy: "new",     // Safe default
+		AckPolicy:     "explicit",
+		MaxDeliver:    3,
+	}
+
+	if jsPort, ok := port.Config.(JetStreamPort); ok {
+		if jsPort.DeliverPolicy != "" {
+			cfg.DeliverPolicy = jsPort.DeliverPolicy
+		}
+		if jsPort.AckPolicy != "" {
+			cfg.AckPolicy = jsPort.AckPolicy
+		}
+		if jsPort.MaxDeliver > 0 {
+			cfg.MaxDeliver = jsPort.MaxDeliver
+		}
+	}
+	return cfg
+}
+
+// GetConsumerConfigFromDefinition extracts JetStream consumer configuration from a port definition.
+// This is a convenience wrapper for use with PortDefinition instead of Port.
+func GetConsumerConfigFromDefinition(portDef PortDefinition) ConsumerConfig {
+	cfg := ConsumerConfig{
+		DeliverPolicy: "new",     // Safe default
+		AckPolicy:     "explicit",
+		MaxDeliver:    3,
+	}
+
+	if jsPort, ok := portDef.Config.(JetStreamPort); ok {
+		if jsPort.DeliverPolicy != "" {
+			cfg.DeliverPolicy = jsPort.DeliverPolicy
+		}
+		if jsPort.AckPolicy != "" {
+			cfg.AckPolicy = jsPort.AckPolicy
+		}
+		if jsPort.MaxDeliver > 0 {
+			cfg.MaxDeliver = jsPort.MaxDeliver
+		}
+	}
+	return cfg
+}

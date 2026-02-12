@@ -671,13 +671,17 @@ func (c *Component) setupJetStreamConsumer(ctx context.Context, portName, subjec
 		"consumer", consumerName,
 		"filter_subject", subject)
 
+	// Get consumer config from port definition (allows user configuration)
+	// objectstore defaults to "all" since it's idempotent (KV overwrites)
+	consumerCfg := component.GetConsumerConfigFromDefinition(*portDef)
+
 	cfg := natsclient.StreamConsumerConfig{
 		StreamName:    streamName,
 		ConsumerName:  consumerName,
 		FilterSubject: subject,
-		DeliverPolicy: "all",
-		AckPolicy:     "explicit",
-		MaxDeliver:    5,
+		DeliverPolicy: consumerCfg.DeliverPolicy,
+		AckPolicy:     consumerCfg.AckPolicy,
+		MaxDeliver:    consumerCfg.MaxDeliver,
 		AutoCreate:    false,
 	}
 
