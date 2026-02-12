@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Publisher defines the interface for publishing messages
@@ -43,10 +44,20 @@ type CheckpointEventMessage struct {
 func (c *Component) publishInjectedContext(ctx context.Context, loopID, source string, hydrated *HydratedContext) error {
 	// Validate inputs
 	if loopID == "" {
-		return fmt.Errorf("loopID cannot be empty")
+		return errs.WrapInvalid(
+			fmt.Errorf("loopID cannot be empty"),
+			"Component",
+			"publishInjectedContext",
+			"validate loopID",
+		)
 	}
 	if hydrated == nil {
-		return fmt.Errorf("hydrated context cannot be nil")
+		return errs.WrapInvalid(
+			fmt.Errorf("hydrated context cannot be nil"),
+			"Component",
+			"publishInjectedContext",
+			"validate hydrated context",
+		)
 	}
 
 	// Check context cancellation
@@ -66,7 +77,7 @@ func (c *Component) publishInjectedContext(ctx context.Context, loopID, source s
 	// Marshal to JSON
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal injected context message: %w", err)
+		return errs.Wrap(err, "Component", "publishInjectedContext", "marshal injected context message")
 	}
 
 	// Build subject: agent.context.injected.{loopID}
@@ -75,7 +86,7 @@ func (c *Component) publishInjectedContext(ctx context.Context, loopID, source s
 	// Publish if NATS client available
 	if c.natsClient != nil {
 		if err := c.natsClient.Publish(ctx, subject, data); err != nil {
-			return fmt.Errorf("failed to publish injected context: %w", err)
+			return errs.WrapTransient(err, "Component", "publishInjectedContext", "publish injected context")
 		}
 		c.logger.Debug("Published injected context",
 			"loop_id", loopID,
@@ -90,7 +101,12 @@ func (c *Component) publishInjectedContext(ctx context.Context, loopID, source s
 func (c *Component) publishGraphMutations(ctx context.Context, loopID, operation string, triples []message.Triple) error {
 	// Validate inputs
 	if loopID == "" {
-		return fmt.Errorf("loopID cannot be empty")
+		return errs.WrapInvalid(
+			fmt.Errorf("loopID cannot be empty"),
+			"Component",
+			"publishGraphMutations",
+			"validate loopID",
+		)
 	}
 
 	// Check context cancellation
@@ -109,7 +125,7 @@ func (c *Component) publishGraphMutations(ctx context.Context, loopID, operation
 	// Marshal to JSON
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal graph mutation message: %w", err)
+		return errs.Wrap(err, "Component", "publishGraphMutations", "marshal graph mutation message")
 	}
 
 	// Build subject: graph.mutation.{loopID}
@@ -118,7 +134,7 @@ func (c *Component) publishGraphMutations(ctx context.Context, loopID, operation
 	// Publish if NATS client available
 	if c.natsClient != nil {
 		if err := c.natsClient.Publish(ctx, subject, data); err != nil {
-			return fmt.Errorf("failed to publish graph mutation: %w", err)
+			return errs.WrapTransient(err, "Component", "publishGraphMutations", "publish graph mutation")
 		}
 		c.logger.Debug("Published graph mutation",
 			"loop_id", loopID,
@@ -134,10 +150,20 @@ func (c *Component) publishGraphMutations(ctx context.Context, loopID, operation
 func (c *Component) publishCheckpointEvent(ctx context.Context, loopID, checkpointID string) error {
 	// Validate inputs
 	if loopID == "" {
-		return fmt.Errorf("loopID cannot be empty")
+		return errs.WrapInvalid(
+			fmt.Errorf("loopID cannot be empty"),
+			"Component",
+			"publishCheckpointEvent",
+			"validate loopID",
+		)
 	}
 	if checkpointID == "" {
-		return fmt.Errorf("checkpointID cannot be empty")
+		return errs.WrapInvalid(
+			fmt.Errorf("checkpointID cannot be empty"),
+			"Component",
+			"publishCheckpointEvent",
+			"validate checkpointID",
+		)
 	}
 
 	// Check context cancellation
@@ -156,7 +182,7 @@ func (c *Component) publishCheckpointEvent(ctx context.Context, loopID, checkpoi
 	// Marshal to JSON
 	data, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal checkpoint event message: %w", err)
+		return errs.Wrap(err, "Component", "publishCheckpointEvent", "marshal checkpoint event message")
 	}
 
 	// Build subject: memory.checkpoint.created.{loopID}
@@ -165,7 +191,7 @@ func (c *Component) publishCheckpointEvent(ctx context.Context, loopID, checkpoi
 	// Publish if NATS client available
 	if c.natsClient != nil {
 		if err := c.natsClient.Publish(ctx, subject, data); err != nil {
-			return fmt.Errorf("failed to publish checkpoint event: %w", err)
+			return errs.WrapTransient(err, "Component", "publishCheckpointEvent", "publish checkpoint event")
 		}
 		c.logger.Debug("Published checkpoint event",
 			"loop_id", loopID,

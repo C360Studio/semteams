@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // FilterChain orchestrates multiple filters in sequence
@@ -78,7 +80,7 @@ func (fc *FilterChain) Process(ctx context.Context, msg *Message) (*ChainResult,
 
 		filterResult, err := filter.Process(ctx, result.ModifiedMessage)
 		if err != nil {
-			return nil, fmt.Errorf("filter %s failed: %w", filter.Name(), err)
+			return nil, errs.Wrap(err, "FilterChain", "Process", fmt.Sprintf("process filter %s", filter.Name()))
 		}
 
 		// Record metrics
@@ -224,7 +226,7 @@ func BuildFromConfig(config FilterChainConfig, metrics *governanceMetrics) (*Fil
 
 		filter, err := createFilter(filterConfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create filter %s: %w", filterConfig.Name, err)
+			return nil, errs.WrapInvalid(err, "FilterChain", "BuildFromConfig", fmt.Sprintf("create filter %s", filterConfig.Name))
 		}
 
 		chain.AddFilter(filter)
@@ -265,6 +267,6 @@ func createFilter(config FilterConfig) (Filter, error) {
 		return NewRateLimiter(rateLimitConfig)
 
 	default:
-		return nil, fmt.Errorf("unknown filter: %s", config.Name)
+		return nil, errs.WrapInvalid(fmt.Errorf("unknown filter: %s", config.Name), "FilterChain", "createFilter", "validate filter name")
 	}
 }

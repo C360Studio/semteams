@@ -5,69 +5,69 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go"
 )
 
 // setupQueryHandlers subscribes to all query request subjects
-func (c *Component) setupQueryHandlers() error {
+func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to entity query passthrough
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.entity", c.handleQueryEntity); err != nil {
-		return fmt.Errorf("subscribe to entity query: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.entity", c.handleQueryEntity); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to entity query")
 	}
 
 	// Subscribe to entity by alias query (resolves alias then fetches entity)
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.entityByAlias", c.handleQueryEntityByAlias); err != nil {
-		return fmt.Errorf("subscribe to entityByAlias query: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.entityByAlias", c.handleQueryEntityByAlias); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to entityByAlias query")
 	}
 
 	// Subscribe to relationships query passthrough
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.relationships", c.handleQueryRelationships); err != nil {
-		return fmt.Errorf("subscribe to relationships query: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.relationships", c.handleQueryRelationships); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to relationships query")
 	}
 
 	// Subscribe to path search orchestration
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.pathSearch", c.handlePathSearch); err != nil {
-		return fmt.Errorf("subscribe to path search: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.pathSearch", c.handlePathSearch); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to path search")
 	}
 
 	// Subscribe to hierarchy stats (orchestrates prefix query to graph-ingest)
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.hierarchyStats", c.handleQueryHierarchyStats); err != nil {
-		return fmt.Errorf("subscribe to hierarchy stats: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.hierarchyStats", c.handleQueryHierarchyStats); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to hierarchy stats")
 	}
 
 	// Subscribe to prefix query (passthrough to graph-ingest)
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.prefix", c.handleQueryPrefix); err != nil {
-		return fmt.Errorf("subscribe to prefix query: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.prefix", c.handleQueryPrefix); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to prefix query")
 	}
 
 	// Subscribe to spatial query passthrough
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.spatial", c.handleQuerySpatial); err != nil {
-		return fmt.Errorf("subscribe to spatial query: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.spatial", c.handleQuerySpatial); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to spatial query")
 	}
 
 	// Subscribe to temporal query passthrough
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.temporal", c.handleQueryTemporal); err != nil {
-		return fmt.Errorf("subscribe to temporal query: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.temporal", c.handleQueryTemporal); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to temporal query")
 	}
 
 	// Subscribe to semantic search (passthrough to graph-embedding)
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.semantic", c.handleQuerySemantic); err != nil {
-		return fmt.Errorf("subscribe to semantic query: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.semantic", c.handleQuerySemantic); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to semantic query")
 	}
 
 	// Subscribe to similar entity search (passthrough to graph-embedding)
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.similar", c.handleQuerySimilar); err != nil {
-		return fmt.Errorf("subscribe to similar query: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.similar", c.handleQuerySimilar); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to similar query")
 	}
 
 	// Subscribe to globalSearch - the main NL query handler with classifier routing
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.globalSearch", c.handleGlobalSearch); err != nil {
-		return fmt.Errorf("subscribe to globalSearch query: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.globalSearch", c.handleGlobalSearch); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupQueryHandlers", "subscribe to globalSearch query")
 	}
 
 	c.logger.Info("query handlers registered",
@@ -84,25 +84,25 @@ func (c *Component) handleQueryEntity(ctx context.Context, data []byte) ([]byte,
 	// Parse and validate request
 	var req map[string]string
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryEntity", "parse request")
 	}
 
 	if req["id"] == "" {
-		return nil, errors.New("invalid request: empty id")
+		return nil, errs.WrapInvalid(errors.New("empty id"), "GraphQuery", "handleQueryEntity", "validate request")
 	}
 
 	// Route to entity query
 	subject := c.router.Route("entity")
 	if subject == "" {
-		return nil, errors.New("entity query routing not available")
+		return nil, errs.WrapTransient(errors.New("entity query routing not available"), "GraphQuery", "handleQueryEntity", "route query")
 	}
 	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
-			return nil, fmt.Errorf("timeout: %w", err)
+			return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryEntity", "request timeout")
 		}
-		return nil, fmt.Errorf("query entity failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryEntity", "query entity")
 	}
 
 	c.recordSuccess(len(data), len(response))
@@ -119,11 +119,11 @@ func (c *Component) handleQueryEntityByAlias(ctx context.Context, data []byte) (
 		AliasOrID string `json:"aliasOrID"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryEntityByAlias", "parse request")
 	}
 
 	if req.AliasOrID == "" {
-		return nil, errors.New("invalid request: empty aliasOrID")
+		return nil, errs.WrapInvalid(errors.New("empty aliasOrID"), "GraphQuery", "handleQueryEntityByAlias", "validate request")
 	}
 
 	entityID := req.AliasOrID // Default to using input as entity ID
@@ -134,7 +134,7 @@ func (c *Component) handleQueryEntityByAlias(ctx context.Context, data []byte) (
 
 	aliasSubject := c.router.Route("alias")
 	if aliasSubject == "" {
-		return nil, errors.New("alias query routing not available")
+		return nil, errs.WrapTransient(errors.New("alias query routing not available"), "GraphQuery", "handleQueryEntityByAlias", "route alias query")
 	}
 	aliasResp, err := c.natsClient.Request(ctx, aliasSubject, aliasReqData, c.config.QueryTimeout)
 	if err == nil {
@@ -152,15 +152,15 @@ func (c *Component) handleQueryEntityByAlias(ctx context.Context, data []byte) (
 
 	entitySubject := c.router.Route("entity")
 	if entitySubject == "" {
-		return nil, errors.New("entity query routing not available")
+		return nil, errs.WrapTransient(errors.New("entity query routing not available"), "GraphQuery", "handleQueryEntityByAlias", "route entity query")
 	}
 	response, err := c.natsClient.Request(ctx, entitySubject, entityReqData, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
-			return nil, fmt.Errorf("timeout: %w", err)
+			return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryEntityByAlias", "request timeout")
 		}
-		return nil, fmt.Errorf("query entity failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryEntityByAlias", "query entity")
 	}
 
 	c.recordSuccess(len(data), len(response))
@@ -172,15 +172,15 @@ func (c *Component) handleQueryPrefix(ctx context.Context, data []byte) ([]byte,
 	// Forward to graph-ingest
 	subject := c.router.Route("entityPrefix")
 	if subject == "" {
-		return nil, errors.New("entityPrefix query routing not available")
+		return nil, errs.WrapTransient(errors.New("entityPrefix query routing not available"), "GraphQuery", "handleQueryPrefix", "route query")
 	}
 	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
-			return nil, fmt.Errorf("timeout: %w", err)
+			return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryPrefix", "request timeout")
 		}
-		return nil, fmt.Errorf("query prefix failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryPrefix", "query prefix")
 	}
 
 	c.recordSuccess(len(data), len(response))
@@ -198,11 +198,11 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 		Direction string `json:"direction"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryRelationships", "parse request")
 	}
 
 	if req.EntityID == "" {
-		return nil, errors.New("invalid request: empty entity_id")
+		return nil, errs.WrapInvalid(errors.New("empty entity_id"), "GraphQuery", "handleQueryRelationships", "validate request")
 	}
 
 	// Route based on direction
@@ -213,12 +213,12 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 	}
 	subject := c.router.Route(queryType)
 	if subject == "" {
-		return nil, fmt.Errorf("%s query routing not available", queryType)
+		return nil, errs.WrapTransient(errors.New(queryType+" query routing not available"), "GraphQuery", "handleQueryRelationships", "route query")
 	}
 	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
-		return nil, fmt.Errorf("query relationships failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryRelationships", "query relationships")
 	}
 
 	// Transform envelope response to normalized relationship format
@@ -230,10 +230,10 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 		// Parse incoming relationships from envelope
 		var envelope graph.IncomingQueryResponse
 		if err := json.Unmarshal(response, &envelope); err != nil {
-			return nil, fmt.Errorf("parse incoming entries: %w", err)
+			return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryRelationships", "parse incoming entries")
 		}
 		if envelope.Error != nil {
-			return nil, fmt.Errorf("incoming query error: %s", *envelope.Error)
+			return nil, errs.WrapTransient(errors.New(*envelope.Error), "GraphQuery", "handleQueryRelationships", "incoming query error")
 		}
 		relationships = make([]map[string]any, len(envelope.Data.Relationships))
 		for i, e := range envelope.Data.Relationships {
@@ -247,10 +247,10 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 		// Parse outgoing relationships from envelope
 		var envelope graph.OutgoingQueryResponse
 		if err := json.Unmarshal(response, &envelope); err != nil {
-			return nil, fmt.Errorf("parse outgoing entries: %w", err)
+			return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryRelationships", "parse outgoing entries")
 		}
 		if envelope.Error != nil {
-			return nil, fmt.Errorf("outgoing query error: %s", *envelope.Error)
+			return nil, errs.WrapTransient(errors.New(*envelope.Error), "GraphQuery", "handleQueryRelationships", "outgoing query error")
 		}
 		relationships = make([]map[string]any, len(envelope.Data.Relationships))
 		for i, e := range envelope.Data.Relationships {
@@ -265,7 +265,7 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 	// Return just the array - gateway will wrap in {"data": {"relationships": ...}}
 	responseData, err := json.Marshal(relationships)
 	if err != nil {
-		return nil, fmt.Errorf("marshal response: %w", err)
+		return nil, errs.Wrap(err, "GraphQuery", "handleQueryRelationships", "marshal response")
 	}
 
 	c.recordSuccess(len(data), len(responseData))
@@ -279,7 +279,7 @@ func (c *Component) handlePathSearch(ctx context.Context, data []byte) ([]byte, 
 
 	var req PathSearchRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "handlePathSearch", "parse request")
 	}
 
 	// Ensure pathSearcher is initialized (for testing with direct component construction)
@@ -298,7 +298,7 @@ func (c *Component) handlePathSearch(ctx context.Context, data []byte) ([]byte, 
 	responseData, err := json.Marshal(result)
 	if err != nil {
 		c.recordError(err)
-		return nil, fmt.Errorf("marshal response: %w", err)
+		return nil, errs.Wrap(err, "GraphQuery", "handlePathSearch", "marshal response")
 	}
 
 	c.recordSuccess(len(data), len(responseData))
@@ -319,26 +319,26 @@ func (c *Component) handleQueryHierarchyStats(ctx context.Context, data []byte) 
 		Prefix string `json:"prefix"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryHierarchyStats", "parse request")
 	}
 
 	// Get all entity IDs with prefix from graph-ingest
 	prefixReq, err := json.Marshal(map[string]any{"prefix": req.Prefix, "limit": 10000})
 	if err != nil {
-		return nil, fmt.Errorf("marshal prefix request: %w", err)
+		return nil, errs.Wrap(err, "GraphQuery", "handleQueryHierarchyStats", "marshal prefix request")
 	}
 
 	subject := c.router.Route("entityPrefix")
 	if subject == "" {
-		return nil, errors.New("entityPrefix query routing not available")
+		return nil, errs.WrapTransient(errors.New("entityPrefix query routing not available"), "GraphQuery", "handleQueryHierarchyStats", "route query")
 	}
 	response, err := c.natsClient.Request(ctx, subject, prefixReq, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
-			return nil, fmt.Errorf("timeout: %w", err)
+			return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryHierarchyStats", "request timeout")
 		}
-		return nil, fmt.Errorf("query prefix failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryHierarchyStats", "query prefix")
 	}
 
 	// Parse prefix response (uses GraphQL-compatible field names)
@@ -347,7 +347,7 @@ func (c *Component) handleQueryHierarchyStats(ctx context.Context, data []byte) 
 		TotalCount int      `json:"totalCount"`
 	}
 	if err := json.Unmarshal(response, &prefixResp); err != nil {
-		return nil, fmt.Errorf("parse prefix response: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryHierarchyStats", "parse prefix response")
 	}
 
 	// Group by next hierarchy level
@@ -372,7 +372,7 @@ func (c *Component) handleQueryHierarchyStats(ctx context.Context, data []byte) 
 	responseData, err := json.Marshal(result)
 	if err != nil {
 		c.recordError(err)
-		return nil, fmt.Errorf("marshal response: %w", err)
+		return nil, errs.Wrap(err, "GraphQuery", "handleQueryHierarchyStats", "marshal response")
 	}
 
 	c.recordSuccess(len(data), len(responseData))
@@ -454,15 +454,15 @@ func (c *Component) handleQuerySpatial(ctx context.Context, data []byte) ([]byte
 	// Route to spatial query
 	subject := c.router.Route("spatial")
 	if subject == "" {
-		return nil, errors.New("spatial query routing not available")
+		return nil, errs.WrapTransient(errors.New("spatial query routing not available"), "GraphQuery", "handleQuerySpatial", "route query")
 	}
 	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
-			return nil, fmt.Errorf("timeout: %w", err)
+			return nil, errs.WrapTransient(err, "GraphQuery", "handleQuerySpatial", "request timeout")
 		}
-		return nil, fmt.Errorf("query spatial failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleQuerySpatial", "query spatial")
 	}
 
 	c.recordSuccess(len(data), len(response))
@@ -474,15 +474,15 @@ func (c *Component) handleQueryTemporal(ctx context.Context, data []byte) ([]byt
 	// Route to temporal query
 	subject := c.router.Route("temporal")
 	if subject == "" {
-		return nil, errors.New("temporal query routing not available")
+		return nil, errs.WrapTransient(errors.New("temporal query routing not available"), "GraphQuery", "handleQueryTemporal", "route query")
 	}
 	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
-			return nil, fmt.Errorf("timeout: %w", err)
+			return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryTemporal", "request timeout")
 		}
-		return nil, fmt.Errorf("query temporal failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryTemporal", "query temporal")
 	}
 
 	c.recordSuccess(len(data), len(response))
@@ -494,15 +494,15 @@ func (c *Component) handleQuerySemantic(ctx context.Context, data []byte) ([]byt
 	// Route to semantic query
 	subject := c.router.Route("semantic")
 	if subject == "" {
-		return nil, errors.New("semantic query routing not available")
+		return nil, errs.WrapTransient(errors.New("semantic query routing not available"), "GraphQuery", "handleQuerySemantic", "route query")
 	}
 	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
-			return nil, fmt.Errorf("timeout: %w", err)
+			return nil, errs.WrapTransient(err, "GraphQuery", "handleQuerySemantic", "request timeout")
 		}
-		return nil, fmt.Errorf("query semantic failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleQuerySemantic", "query semantic")
 	}
 
 	c.recordSuccess(len(data), len(response))
@@ -514,15 +514,15 @@ func (c *Component) handleQuerySimilar(ctx context.Context, data []byte) ([]byte
 	// Forward to graph-embedding's similar handler
 	subject := c.router.Route("similar")
 	if subject == "" {
-		return nil, errors.New("similar query routing not available")
+		return nil, errs.WrapTransient(errors.New("similar query routing not available"), "GraphQuery", "handleQuerySimilar", "route query")
 	}
 	response, err := c.natsClient.Request(ctx, subject, data, c.config.QueryTimeout)
 	if err != nil {
 		c.recordError(err)
 		if errors.Is(err, nats.ErrTimeout) {
-			return nil, fmt.Errorf("timeout: %w", err)
+			return nil, errs.WrapTransient(err, "GraphQuery", "handleQuerySimilar", "request timeout")
 		}
-		return nil, fmt.Errorf("query similar failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleQuerySimilar", "query similar")
 	}
 
 	c.recordSuccess(len(data), len(response))

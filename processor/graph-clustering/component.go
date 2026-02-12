@@ -526,7 +526,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	// Check initialization
 	if !c.initialized {
-		return errs.WrapFatal(fmt.Errorf("component not initialized"), "Component", "Start", "initialization check")
+		return errs.WrapFatal(errs.ErrInvalidConfig, "Component", "Start", "component not initialized")
 	}
 
 	// Idempotent - already running
@@ -680,7 +680,7 @@ func (c *Component) Stop(timeout time.Duration) error {
 		return nil
 	case <-time.After(timeout):
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-clustering"))
-		return fmt.Errorf("stop timeout after %v", timeout)
+		return errs.WrapTransient(errors.New("timeout"), "Component", "Stop", "graceful shutdown timeout")
 	}
 }
 
@@ -752,7 +752,7 @@ func (c *Component) waitForBucket(ctx context.Context, js jetstream.JetStream, b
 
 	if !watcher.WaitForStartup(ctx) {
 		return nil, errs.WrapTransient(
-			fmt.Errorf("bucket %s not available after %d attempts", bucketName, c.config.StartupAttempts),
+			errors.New(fmt.Sprintf("bucket %s not available after %d attempts", bucketName, c.config.StartupAttempts)),
 			"Component", "waitForBucket", "dependency not available",
 		)
 	}

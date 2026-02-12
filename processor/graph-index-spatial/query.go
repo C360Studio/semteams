@@ -4,15 +4,16 @@ package graphindexspatial
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to spatial bounds query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.spatial.query.bounds", c.handleQueryBoundsNATS); err != nil {
-		return fmt.Errorf("subscribe bounds query: %w", err)
+		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe bounds query")
 	}
 
 	c.logger.Info("query handlers registered",
@@ -42,7 +43,7 @@ func (c *Component) handleQueryBoundsNATS(_ context.Context, data []byte) ([]byt
 		Limit int     `json:"limit"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "handleQueryBoundsNATS", "invalid request")
 	}
 
 	// Apply default limit

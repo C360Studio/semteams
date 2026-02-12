@@ -9,18 +9,19 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/graph/embedding"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to similar entity query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.embedding.query.similar", c.handleQuerySimilarNATS); err != nil {
-		return fmt.Errorf("subscribe similar query: %w", err)
+		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe similar query")
 	}
 
 	// Subscribe to text search query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.embedding.query.search", c.handleQuerySearchNATS); err != nil {
-		return fmt.Errorf("subscribe search query: %w", err)
+		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe search query")
 	}
 
 	c.logger.Info("query handlers registered",
@@ -78,12 +79,12 @@ func (c *Component) handleQuerySimilarNATS(_ context.Context, data []byte) ([]by
 	// Parse request
 	var req SimilarRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "handleQuerySimilarNATS", "handler", "request unmarshal")
 	}
 
 	// Validate request
 	if req.EntityID == "" {
-		return nil, fmt.Errorf("invalid request: empty entity_id")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "handleQuerySimilarNATS", "handler", "empty entity_id")
 	}
 
 	// Apply defaults
@@ -97,27 +98,27 @@ func (c *Component) handleQuerySimilarNATS(_ context.Context, data []byte) ([]by
 
 	// Get source entity embedding
 	if c.storage == nil {
-		return nil, fmt.Errorf("storage not initialized")
+		return nil, errs.WrapFatal(errs.ErrInvalidConfig, "handleQuerySimilarNATS", "handler", "storage not initialized")
 	}
 
 	sourceRecord, err := c.storage.GetEmbedding(ctx, req.EntityID)
 	if err != nil {
-		return nil, fmt.Errorf("get source embedding: %w", err)
+		return nil, errs.Wrap(err, "handleQuerySimilarNATS", "handler", "get source embedding")
 	}
 	if sourceRecord == nil {
-		return nil, fmt.Errorf("not found: %s", req.EntityID)
+		return nil, errs.WrapInvalid(errs.ErrKeyNotFound, "handleQuerySimilarNATS", "handler", fmt.Sprintf("entity not found: %s", req.EntityID))
 	}
 	if sourceRecord.Status != embedding.StatusGenerated {
-		return nil, fmt.Errorf("embedding not ready for %s: status=%s", req.EntityID, sourceRecord.Status)
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "handleQuerySimilarNATS", "handler", fmt.Sprintf("embedding not ready for %s: status=%s", req.EntityID, sourceRecord.Status))
 	}
 	if len(sourceRecord.Vector) == 0 {
-		return nil, fmt.Errorf("no vector for entity %s", req.EntityID)
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "handleQuerySimilarNATS", "handler", fmt.Sprintf("no vector for entity %s", req.EntityID))
 	}
 
 	// Find similar entities by scanning all embeddings
 	similar, err := c.findSimilarEntities(ctx, req.EntityID, sourceRecord.Vector, limit)
 	if err != nil {
-		return nil, fmt.Errorf("find similar: %w", err)
+		return nil, errs.Wrap(err, "handleQuerySimilarNATS", "handler", "find similar entities")
 	}
 
 	response := SimilarResponse{
@@ -140,12 +141,12 @@ func (c *Component) handleQuerySearchNATS(_ context.Context, data []byte) ([]byt
 	// Parse request
 	var req SearchRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "handleQuerySearchNATS", "handler", "request unmarshal")
 	}
 
 	// Validate request
 	if req.Query == "" {
-		return nil, fmt.Errorf("invalid request: empty query")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "handleQuerySearchNATS", "handler", "empty query")
 	}
 
 	// Apply defaults
@@ -159,16 +160,16 @@ func (c *Component) handleQuerySearchNATS(_ context.Context, data []byte) ([]byt
 
 	// Check embedder is available
 	if c.embedder == nil {
-		return nil, fmt.Errorf("embedder not initialized")
+		return nil, errs.WrapFatal(errs.ErrInvalidConfig, "handleQuerySearchNATS", "handler", "embedder not initialized")
 	}
 
 	// Generate embedding for query text
 	vectors, err := c.embedder.Generate(ctx, []string{req.Query})
 	if err != nil {
-		return nil, fmt.Errorf("generate query embedding: %w", err)
+		return nil, errs.Wrap(err, "handleQuerySearchNATS", "handler", "generate query embedding")
 	}
 	if len(vectors) == 0 || len(vectors[0]) == 0 {
-		return nil, fmt.Errorf("empty query embedding")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "handleQuerySearchNATS", "handler", "empty query embedding")
 	}
 
 	queryVector := vectors[0]
@@ -176,7 +177,7 @@ func (c *Component) handleQuerySearchNATS(_ context.Context, data []byte) ([]byt
 	// Find similar entities
 	results, err := c.findSimilarEntities(ctx, "", queryVector, limit)
 	if err != nil {
-		return nil, fmt.Errorf("find similar: %w", err)
+		return nil, errs.Wrap(err, "handleQuerySearchNATS", "handler", "find similar entities")
 	}
 
 	// Convert to search results
@@ -200,13 +201,13 @@ func (c *Component) handleQuerySearchNATS(_ context.Context, data []byte) ([]byt
 // findSimilarEntities finds entities similar to the given vector
 func (c *Component) findSimilarEntities(ctx context.Context, excludeID string, queryVector []float32, limit int) ([]SimilarEntity, error) {
 	if c.storage == nil {
-		return nil, fmt.Errorf("storage not initialized")
+		return nil, errs.WrapFatal(errs.ErrInvalidConfig, "findSimilarEntities", "helper", "storage not initialized")
 	}
 
 	// List all entity IDs with embeddings
 	entityIDs, err := c.storage.ListGeneratedEntityIDs(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list entity IDs: %w", err)
+		return nil, errs.Wrap(err, "findSimilarEntities", "helper", "list entity IDs")
 	}
 
 	// Calculate similarities

@@ -4,10 +4,11 @@ package graphindex
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -15,33 +16,33 @@ import (
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to outgoing query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.index.query.outgoing", c.handleQueryOutgoingNATS); err != nil {
-		return fmt.Errorf("subscribe outgoing query: %w", err)
+		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe outgoing query")
 	}
 
 	// Subscribe to incoming query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.index.query.incoming", c.handleQueryIncomingNATS); err != nil {
-		return fmt.Errorf("subscribe incoming query: %w", err)
+		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe incoming query")
 	}
 
 	// Subscribe to alias query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.index.query.alias", c.handleQueryAliasNATS); err != nil {
-		return fmt.Errorf("subscribe alias query: %w", err)
+		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe alias query")
 	}
 
 	// Subscribe to predicate query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.index.query.predicate", c.handleQueryPredicateNATS); err != nil {
-		return fmt.Errorf("subscribe predicate query: %w", err)
+		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe predicate query")
 	}
 
 	c.logger.Info("query handlers registered",
-		"subjects", []string{"graph.index.query.outgoing", "graph.index.query.incoming", "graph.index.query.alias", "graph.index.query.predicate"})
+		slog.Any("subjects", []string{"graph.index.query.outgoing", "graph.index.query.incoming", "graph.index.query.alias", "graph.index.query.predicate"}))
 
 	return nil
 }
 
 // handleQueryOutgoingNATS handles outgoing relationship query requests via NATS request/reply
-func (c *Component) handleQueryOutgoingNATS(_ context.Context, data []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (c *Component) handleQueryOutgoingNATS(ctx context.Context, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	var req struct {
@@ -76,8 +77,8 @@ func (c *Component) handleQueryOutgoingNATS(_ context.Context, data []byte) ([]b
 }
 
 // handleQueryIncomingNATS handles incoming relationship query requests via NATS request/reply
-func (c *Component) handleQueryIncomingNATS(_ context.Context, data []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (c *Component) handleQueryIncomingNATS(ctx context.Context, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	var req struct {
@@ -112,8 +113,8 @@ func (c *Component) handleQueryIncomingNATS(_ context.Context, data []byte) ([]b
 }
 
 // handleQueryAliasNATS handles alias resolution query requests via NATS request/reply
-func (c *Component) handleQueryAliasNATS(_ context.Context, data []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (c *Component) handleQueryAliasNATS(ctx context.Context, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	var req struct {
@@ -144,8 +145,8 @@ func (c *Component) handleQueryAliasNATS(_ context.Context, data []byte) ([]byte
 }
 
 // handleQueryPredicateNATS handles predicate entity query requests via NATS request/reply
-func (c *Component) handleQueryPredicateNATS(_ context.Context, data []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (c *Component) handleQueryPredicateNATS(ctx context.Context, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	var req struct {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Violation represents a detected policy violation
@@ -127,11 +128,11 @@ func (h *ViolationHandler) Handle(ctx context.Context, violation *Violation) err
 	subject := fmt.Sprintf("governance.violation.%s.%s", violation.FilterName, violation.UserID)
 	violationJSON, err := json.Marshal(violation)
 	if err != nil {
-		return fmt.Errorf("failed to marshal violation: %w", err)
+		return errs.Wrap(err, "ViolationHandler", "Handle", "marshal violation")
 	}
 
 	if err := h.natsClient.Publish(ctx, subject, violationJSON); err != nil {
-		return fmt.Errorf("failed to publish violation: %w", err)
+		return errs.WrapTransient(err, "ViolationHandler", "Handle", "publish violation")
 	}
 
 	return nil
@@ -141,13 +142,13 @@ func (h *ViolationHandler) Handle(ctx context.Context, violation *Violation) err
 func (h *ViolationHandler) storeViolation(ctx context.Context, violation *Violation) error {
 	kv, err := h.natsClient.GetKeyValueBucket(ctx, h.config.Store)
 	if err != nil {
-		return fmt.Errorf("failed to get KV bucket: %w", err)
+		return errs.WrapTransient(err, "ViolationHandler", "storeViolation", "get KV bucket")
 	}
 
 	key := fmt.Sprintf("violation:%s", violation.ID)
 	value, err := json.Marshal(violation)
 	if err != nil {
-		return fmt.Errorf("failed to marshal violation: %w", err)
+		return errs.Wrap(err, "ViolationHandler", "storeViolation", "marshal violation")
 	}
 
 	_, err = kv.Put(ctx, key, value)
@@ -169,11 +170,11 @@ func (h *ViolationHandler) notifyUser(ctx context.Context, violation *Violation)
 
 	notificationJSON, err := json.Marshal(notification)
 	if err != nil {
-		return fmt.Errorf("failed to marshal notification: %w", err)
+		return errs.Wrap(err, "ViolationHandler", "notifyUser", "marshal notification")
 	}
 
 	subject := fmt.Sprintf("user.response.%s.%s", violation.ChannelID, violation.UserID)
-	return h.natsClient.Publish(ctx, subject, notificationJSON)
+	return errs.WrapTransient(h.natsClient.Publish(ctx, subject, notificationJSON), "ViolationHandler", "notifyUser", "publish notification")
 }
 
 // formatUserMessage creates user-friendly error message
@@ -208,7 +209,7 @@ func (h *ViolationHandler) alertAdmin(ctx context.Context, violation *Violation)
 
 	alertJSON, err := json.Marshal(alert)
 	if err != nil {
-		return fmt.Errorf("failed to marshal alert: %w", err)
+		return errs.Wrap(err, "ViolationHandler", "alertAdmin", "marshal alert")
 	}
 
 	subject := h.config.AdminSubject
@@ -216,7 +217,7 @@ func (h *ViolationHandler) alertAdmin(ctx context.Context, violation *Violation)
 		subject = "admin.governance.alert"
 	}
 
-	return h.natsClient.Publish(ctx, subject, alertJSON)
+	return errs.WrapTransient(h.natsClient.Publish(ctx, subject, alertJSON), "ViolationHandler", "alertAdmin", "publish alert")
 }
 
 // shouldAlertAdmin checks if severity requires admin notification

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/google/uuid"
 )
 
@@ -119,12 +120,12 @@ func (c *Component) handleCancelCommand(ctx context.Context, msg agentic.UserMes
 
 	signalData, err := json.Marshal(signal)
 	if err != nil {
-		return agentic.UserResponse{}, fmt.Errorf("failed to marshal signal: %w", err)
+		return agentic.UserResponse{}, errs.Wrap(err, "Component", "handleCancelCommand", "marshal signal")
 	}
 
 	subject := fmt.Sprintf("agent.signal.%s", targetLoopID)
 	if err := c.natsClient.Publish(ctx, subject, signalData); err != nil {
-		return agentic.UserResponse{}, fmt.Errorf("failed to publish signal: %w", err)
+		return agentic.UserResponse{}, errs.WrapTransient(err, "Component", "handleCancelCommand", "publish signal")
 	}
 
 	return agentic.UserResponse{

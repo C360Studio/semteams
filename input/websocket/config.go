@@ -44,12 +44,13 @@ type Config struct {
 
 // ServerConfig holds server mode configuration
 type ServerConfig struct {
-	HTTPPort          int    `json:"http_port" schema:"type:int,description:HTTP port to listen on,category:basic"`
-	Path              string `json:"path" schema:"type:string,description:WebSocket endpoint path,category:basic"`
-	MaxConnections    int    `json:"max_connections" schema:"type:int,description:Maximum concurrent connections,category:limits"`
-	ReadBufferSize    int    `json:"read_buffer_size" schema:"type:int,description:WebSocket read buffer size,category:advanced"`
-	WriteBufferSize   int    `json:"write_buffer_size" schema:"type:int,description:WebSocket write buffer size,category:advanced"`
-	EnableCompression bool   `json:"enable_compression" schema:"type:bool,description:Enable per-message compression,category:advanced"`
+	HTTPPort          int      `json:"http_port" schema:"type:int,description:HTTP port to listen on,category:basic"`
+	Path              string   `json:"path" schema:"type:string,description:WebSocket endpoint path,category:basic"`
+	MaxConnections    int      `json:"max_connections" schema:"type:int,description:Maximum concurrent connections,category:limits"`
+	ReadBufferSize    int      `json:"read_buffer_size" schema:"type:int,description:WebSocket read buffer size,category:advanced"`
+	WriteBufferSize   int      `json:"write_buffer_size" schema:"type:int,description:WebSocket write buffer size,category:advanced"`
+	EnableCompression bool     `json:"enable_compression" schema:"type:bool,description:Enable per-message compression,category:advanced"`
+	AllowedOrigins    []string `json:"allowed_origins" schema:"type:array,description:Allowed origins for CORS (empty=same-origin only),category:security"`
 }
 
 // ClientConfig holds client mode configuration

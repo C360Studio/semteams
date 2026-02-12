@@ -993,8 +993,13 @@ components:
                     type: string
                 channel_type:
                     type: string
+                completed_at:
+                    format: date-time
+                    type: string
                 created_at:
                     format: date-time
+                    type: string
+                error:
                     type: string
                 iterations:
                     type: integer
@@ -1002,6 +1007,10 @@ components:
                     type: string
                 max_iterations:
                     type: integer
+                outcome:
+                    type: string
+                result:
+                    type: string
                 state:
                     type: string
                 task_id:

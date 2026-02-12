@@ -14,6 +14,7 @@ import (
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/storage"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -59,7 +60,7 @@ func NewStoreWithConfigAndMetrics(
 
 	js, err := client.JetStream()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get JetStream context: %w", err)
+		return nil, errs.WrapTransient(err, "Store", "NewStoreWithConfigAndMetrics", "get JetStream context")
 	}
 
 	storeConfig := jetstream.ObjectStoreConfig{
@@ -74,7 +75,7 @@ func NewStoreWithConfigAndMetrics(
 		// Try to get existing store
 		store, err = js.ObjectStore(ctx, bucketName)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create/get object store: %w", err)
+			return nil, errs.WrapTransient(err, "Store", "NewStoreWithConfigAndMetrics", "create/get object store")
 		}
 	}
 
@@ -83,7 +84,7 @@ func NewStoreWithConfigAndMetrics(
 		cache.WithMetrics[[]byte](metricsRegistry, "objectstore"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create data cache: %w", err)
+		return nil, errs.WrapInvalid(err, "Store", "NewStoreWithConfigAndMetrics", "create data cache")
 	}
 
 	// Use provided generators or defaults
@@ -98,7 +99,7 @@ func NewStoreWithConfigAndMetrics(
 	// Initialize metrics if registry provided
 	metrics, err := newStoreMetrics(metricsRegistry, bucketName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to initialize metrics: %w", err)
+		return nil, errs.WrapInvalid(err, "Store", "NewStoreWithConfigAndMetrics", "initialize metrics")
 	}
 
 	return &Store{
@@ -123,7 +124,7 @@ func (s *Store) Put(ctx context.Context, key string, data []byte) error {
 	_, err := s.store.PutBytes(ctx, key, data)
 	if err != nil {
 		s.metrics.recordError("put")
-		return fmt.Errorf("failed to put data: %w", err)
+		return errs.WrapTransient(err, "Store", "Put", "put data")
 	}
 
 	s.metrics.recordWriteLatency("put", time.Since(start).Seconds())
@@ -165,7 +166,7 @@ func (s *Store) Store(ctx context.Context, msg any) (string, error) {
 		data, err = json.Marshal(msg)
 		if err != nil {
 			s.metrics.recordError("store")
-			return "", fmt.Errorf("failed to marshal message: %w", err)
+			return "", errs.WrapInvalid(err, "Store", "Store", "marshal message")
 		}
 	}
 
@@ -188,7 +189,7 @@ func (s *Store) Store(ctx context.Context, msg any) (string, error) {
 
 	if err != nil {
 		s.metrics.recordError("store")
-		return "", fmt.Errorf("failed to store message: %w", err)
+		return "", errs.WrapTransient(err, "Store", "Store", "store message")
 	}
 
 	s.metrics.recordWriteLatency("store", time.Since(start).Seconds())
@@ -221,7 +222,7 @@ func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
 	data, err := s.store.GetBytes(ctx, key)
 	if err != nil {
 		s.metrics.recordError("get")
-		return nil, fmt.Errorf("failed to get message: %w", err)
+		return nil, errs.WrapTransient(err, "Store", "Get", "get message")
 	}
 
 	s.metrics.recordReadLatency("get", time.Since(start).Seconds())
@@ -267,7 +268,7 @@ func (s *Store) List(ctx context.Context, prefix string) ([]string, error) {
 	entries, err := s.store.List(ctx)
 	if err != nil {
 		s.metrics.recordError("list")
-		return nil, fmt.Errorf("failed to list objects: %w", err)
+		return nil, errs.WrapTransient(err, "Store", "List", "list objects")
 	}
 
 	for _, entry := range entries {
@@ -290,7 +291,7 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (map[string][]strin
 	info, err := s.store.GetInfo(ctx, key)
 	if err != nil {
 		s.metrics.recordError("get_metadata")
-		return nil, fmt.Errorf("failed to get object info: %w", err)
+		return nil, errs.WrapTransient(err, "Store", "GetMetadata", "get object info")
 	}
 
 	s.metrics.recordReadLatency("get_metadata", time.Since(start).Seconds())
@@ -335,7 +336,7 @@ func (s *Store) StoreContent(ctx context.Context, cs message.ContentStorable) (*
 			_, err := s.store.PutBytes(ctx, binKey, bin.Data)
 			if err != nil {
 				s.metrics.recordError("store_content")
-				return nil, fmt.Errorf("failed to store binary %s: %w", fieldName, err)
+				return nil, errs.WrapTransient(err, "Store", "StoreContent", fmt.Sprintf("store binary %s", fieldName))
 			}
 
 			binaryRefs[fieldName] = BinaryRef{
@@ -370,14 +371,14 @@ func (s *Store) StoreContent(ctx context.Context, cs message.ContentStorable) (*
 	data, err := json.Marshal(stored)
 	if err != nil {
 		s.metrics.recordError("store_content")
-		return nil, fmt.Errorf("failed to marshal content: %w", err)
+		return nil, errs.WrapInvalid(err, "Store", "StoreContent", "marshal content")
 	}
 
 	// Store in ObjectStore
 	_, err = s.store.PutBytes(ctx, key, data)
 	if err != nil {
 		s.metrics.recordError("store_content")
-		return nil, fmt.Errorf("failed to store content: %w", err)
+		return nil, errs.WrapTransient(err, "Store", "StoreContent", "store content")
 	}
 
 	s.metrics.recordWriteLatency("store_content", time.Since(start).Seconds())
@@ -400,7 +401,7 @@ func (s *Store) StoreContent(ctx context.Context, cs message.ContentStorable) (*
 // Returns the StoredContent with fields and content mapping.
 func (s *Store) FetchContent(ctx context.Context, ref *message.StorageReference) (*StoredContent, error) {
 	if ref == nil {
-		return nil, fmt.Errorf("storage reference is nil")
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "Store", "FetchContent", "storage reference is nil")
 	}
 
 	start := time.Now()
@@ -425,7 +426,7 @@ func (s *Store) FetchContent(ctx context.Context, ref *message.StorageReference)
 		data, err = s.store.GetBytes(ctx, ref.Key)
 		if err != nil {
 			s.metrics.recordError("fetch_content")
-			return nil, fmt.Errorf("failed to fetch content: %w", err)
+			return nil, errs.WrapTransient(err, "Store", "FetchContent", "fetch content")
 		}
 
 		// Add to cache
@@ -457,31 +458,32 @@ func (s *Store) extractContentFromBaseMessage(data []byte) (*StoredContent, erro
 		if len(prefix) > 100 {
 			prefix = prefix[:100] + "..."
 		}
-		return nil, fmt.Errorf("failed to parse as BaseMessage (len=%d, prefix=%q): %w",
-			len(data), prefix, err)
+		return nil, errs.WrapInvalid(err, "Store", "extractContentFromBaseMessage",
+			fmt.Sprintf("parse as BaseMessage (len=%d, prefix=%q)", len(data), prefix))
 	}
 
 	payload := baseMsg.Payload()
 	if payload == nil {
-		return nil, fmt.Errorf("BaseMessage has nil payload")
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "Store", "extractContentFromBaseMessage", "BaseMessage has nil payload")
 	}
 
 	// Check if payload implements ContentStorable
 	contentStorable, ok := payload.(message.ContentStorable)
 	if !ok {
-		return nil, fmt.Errorf("payload does not implement ContentStorable: %T", payload)
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "Store", "extractContentFromBaseMessage",
+			fmt.Sprintf("payload does not implement ContentStorable: %T", payload))
 	}
 
 	// Get content fields mapping
 	contentFields := contentStorable.ContentFields()
 	if len(contentFields) == 0 {
-		return nil, fmt.Errorf("ContentStorable has no content fields")
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "Store", "extractContentFromBaseMessage", "ContentStorable has no content fields")
 	}
 
 	// Get entity ID
 	graphable, ok := payload.(interface{ EntityID() string })
 	if !ok {
-		return nil, fmt.Errorf("payload does not have EntityID")
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "Store", "extractContentFromBaseMessage", "payload does not have EntityID")
 	}
 
 	// Extract content text from Graphable's triples or properties
@@ -563,7 +565,7 @@ func (s *Store) generateBinaryKey(entityID, fieldName string) string {
 // Returns the raw binary data (no JSON, no base64 - direct bytes).
 func (s *Store) FetchBinary(ctx context.Context, ref BinaryRef) ([]byte, error) {
 	if ref.Key == "" {
-		return nil, fmt.Errorf("binary reference has empty key")
+		return nil, errs.WrapInvalid(errs.ErrInvalidData, "Store", "FetchBinary", "binary reference has empty key")
 	}
 
 	start := time.Now()
@@ -583,7 +585,7 @@ func (s *Store) FetchBinary(ctx context.Context, ref BinaryRef) ([]byte, error) 
 	data, err := s.store.GetBytes(ctx, ref.Key)
 	if err != nil {
 		s.metrics.recordError("fetch_binary")
-		return nil, fmt.Errorf("failed to fetch binary: %w", err)
+		return nil, errs.WrapTransient(err, "Store", "FetchBinary", "fetch binary")
 	}
 
 	s.metrics.recordReadLatency("fetch_binary", time.Since(start).Seconds())

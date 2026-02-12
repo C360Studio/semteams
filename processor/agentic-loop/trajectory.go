@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // TrajectoryManager manages trajectory capture and persistence
@@ -39,7 +40,7 @@ func (m *TrajectoryManager) AddStep(loopID string, step agentic.TrajectoryStep) 
 
 	traj, exists := m.trajectories[loopID]
 	if !exists {
-		return agentic.Trajectory{}, fmt.Errorf("trajectory for loop %s not found", loopID)
+		return agentic.Trajectory{}, errs.Wrap(fmt.Errorf("trajectory for loop %s not found", loopID), "TrajectoryManager", "operation", "find trajectory")
 	}
 
 	traj.AddStep(step)
@@ -54,7 +55,7 @@ func (m *TrajectoryManager) CompleteTrajectory(loopID, outcome string) (agentic.
 
 	traj, exists := m.trajectories[loopID]
 	if !exists {
-		return agentic.Trajectory{}, fmt.Errorf("trajectory for loop %s not found", loopID)
+		return agentic.Trajectory{}, errs.Wrap(fmt.Errorf("trajectory for loop %s not found", loopID), "TrajectoryManager", "operation", "find trajectory")
 	}
 
 	traj.Complete(outcome)
@@ -69,7 +70,7 @@ func (m *TrajectoryManager) GetTrajectory(loopID string) (agentic.Trajectory, er
 
 	traj, exists := m.trajectories[loopID]
 	if !exists {
-		return agentic.Trajectory{}, fmt.Errorf("trajectory for loop %s not found", loopID)
+		return agentic.Trajectory{}, errs.Wrap(fmt.Errorf("trajectory for loop %s not found", loopID), "TrajectoryManager", "operation", "find trajectory")
 	}
 
 	return *traj, nil

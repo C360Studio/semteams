@@ -11,6 +11,7 @@ import (
 
 	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -149,7 +150,7 @@ func (rcm *ConfigManager) SaveRule(ctx context.Context, ruleID string, ruleDef D
 	// Convert to JSON
 	data, err := json.Marshal(ruleDef)
 	if err != nil {
-		return fmt.Errorf("failed to marshal rule definition: %w", err)
+		return errs.WrapInvalid(err, "ConfigManager", "SaveRule", "marshal rule definition")
 	}
 
 	// Use KVStore for safe CAS operations if available
@@ -166,7 +167,7 @@ func (rcm *ConfigManager) SaveRule(ctx context.Context, ruleID string, ruleDef D
 func (rcm *ConfigManager) saveViaConfigManager(_ context.Context, _ string, _ Definition) error {
 	// This would typically be exposed by ConfigManager
 	// For now, we'll return an error indicating this needs implementation
-	return fmt.Errorf("direct KV save not yet implemented - use ConfigManager.Update()")
+	return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigManager", "saveViaConfigManager", "direct KV save not implemented")
 }
 
 // DeleteRule removes a rule configuration from NATS KV
@@ -182,7 +183,7 @@ func (rcm *ConfigManager) DeleteRule(ctx context.Context, ruleID string) error {
 
 // deleteViaConfigManager deletes through the ConfigManager's KV bucket
 func (rcm *ConfigManager) deleteViaConfigManager(_ context.Context, _ string) error {
-	return fmt.Errorf("direct KV delete not yet implemented - use ConfigManager.Update()")
+	return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigManager", "deleteViaConfigManager", "direct KV delete not implemented")
 }
 
 // GetRule retrieves a rule configuration from NATS KV
@@ -193,14 +194,14 @@ func (rcm *ConfigManager) GetRule(ctx context.Context, ruleID string) (*Definiti
 		entry, err := rcm.kvStore.Get(ctx, key)
 		if err != nil {
 			if err == jetstream.ErrKeyNotFound {
-				return nil, fmt.Errorf("rule not found: %s", ruleID)
+				return nil, errs.WrapInvalid(errs.ErrKeyNotFound, "ConfigManager", "GetRule", fmt.Sprintf("rule not found: %s", ruleID))
 			}
-			return nil, fmt.Errorf("failed to get rule: %w", err)
+			return nil, errs.WrapTransient(err, "ConfigManager", "GetRule", "get rule from KV")
 		}
 
 		var ruleDef Definition
 		if err := json.Unmarshal(entry.Value, &ruleDef); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal rule definition: %w", err)
+			return nil, errs.WrapInvalid(err, "ConfigManager", "GetRule", "unmarshal rule definition")
 		}
 
 		return &ruleDef, nil
@@ -227,7 +228,7 @@ func (rcm *ConfigManager) getRuleViaConfigManager(_ context.Context, ruleID stri
 		}
 	}
 
-	return nil, fmt.Errorf("rule not found: %s", ruleID)
+	return nil, errs.WrapInvalid(errs.ErrKeyNotFound, "ConfigManager", "getRuleViaConfigManager", fmt.Sprintf("rule not found: %s", ruleID))
 }
 
 // ListRules returns all rule configurations
@@ -261,7 +262,7 @@ func (rcm *ConfigManager) WatchRules(_ context.Context, _ func(ruleID string, ru
 	// The callback would be invoked from handleConfigUpdate
 	// when rules are added/updated/deleted
 
-	return fmt.Errorf("watch rules not yet implemented")
+	return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigManager", "WatchRules", "watch rules not implemented")
 }
 
 // InitializeKVStore initializes the KVStore for direct KV operations
@@ -270,7 +271,7 @@ func (rcm *ConfigManager) InitializeKVStore(natsClient *natsclient.Client) error
 	defer rcm.mu.Unlock()
 
 	if natsClient == nil {
-		return fmt.Errorf("NATS client is required")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "ConfigManager", "InitializeKVStore", "NATS client is required")
 	}
 
 	// Get or create the config KV bucket
@@ -280,7 +281,7 @@ func (rcm *ConfigManager) InitializeKVStore(natsClient *natsclient.Client) error
 		History:     5,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create/get KV bucket: %w", err)
+		return errs.WrapTransient(err, "ConfigManager", "InitializeKVStore", "create/get KV bucket")
 	}
 
 	// Create KVStore for the config bucket

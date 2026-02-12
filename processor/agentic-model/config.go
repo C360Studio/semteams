@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Config holds configuration for agentic-model processor component
@@ -34,12 +35,12 @@ type RetryConfig struct {
 // Validate checks the configuration for errors
 func (c *Config) Validate() error {
 	if c.Endpoints == nil || len(c.Endpoints) == 0 {
-		return fmt.Errorf("endpoints cannot be empty")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Config", "Validate", "check endpoints")
 	}
 
 	for name, endpoint := range c.Endpoints {
 		if err := endpoint.Validate(); err != nil {
-			return fmt.Errorf("endpoint %q: %w", name, err)
+			return errs.WrapInvalid(err, "Config", "Validate", fmt.Sprintf("validate endpoint %q", name))
 		}
 	}
 
@@ -48,24 +49,24 @@ func (c *Config) Validate() error {
 		for alias, target := range c.ModelAliases {
 			// Empty target is not allowed
 			if target == "" {
-				return fmt.Errorf("alias %q has empty target", alias)
+				return errs.WrapInvalid(fmt.Errorf("alias %q has empty target", alias), "Config", "Validate", "check alias target")
 			}
 
 			// Target must exist in Endpoints
 			if _, exists := c.Endpoints[target]; !exists {
-				return fmt.Errorf("alias %q points to non-existent endpoint %q", alias, target)
+				return errs.WrapInvalid(fmt.Errorf("alias %q points to non-existent endpoint %q", alias, target), "Config", "Validate", "check alias endpoint exists")
 			}
 
 			// No alias chaining: target cannot be another alias
 			if _, isAlias := c.ModelAliases[target]; isAlias {
-				return fmt.Errorf("alias %q points to another alias %q, chaining not supported", alias, target)
+				return errs.WrapInvalid(fmt.Errorf("alias %q points to another alias %q, chaining not supported", alias, target), "Config", "Validate", "check alias chaining")
 			}
 		}
 	}
 
 	if c.Timeout != "" {
 		if _, err := time.ParseDuration(c.Timeout); err != nil {
-			return fmt.Errorf("invalid timeout format: %w", err)
+			return errs.WrapInvalid(err, "Config", "Validate", "parse timeout")
 		}
 	}
 
@@ -78,7 +79,7 @@ func (c *Config) Validate() error {
 	}
 
 	if err := c.Retry.Validate(); err != nil {
-		return fmt.Errorf("retry config: %w", err)
+		return errs.WrapInvalid(err, "Config", "Validate", "validate retry config")
 	}
 
 	return nil
@@ -87,10 +88,10 @@ func (c *Config) Validate() error {
 // Validate checks the endpoint configuration for errors
 func (e *Endpoint) Validate() error {
 	if e.URL == "" {
-		return fmt.Errorf("url is required")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Endpoint", "Validate", "check url")
 	}
 	if e.Model == "" {
-		return fmt.Errorf("model is required")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Endpoint", "Validate", "check model")
 	}
 	return nil
 }
@@ -98,7 +99,7 @@ func (e *Endpoint) Validate() error {
 // Validate checks the retry configuration for errors
 func (r *RetryConfig) Validate() error {
 	if r.MaxAttempts < 1 {
-		return fmt.Errorf("max_attempts must be at least 1")
+		return errs.WrapInvalid(fmt.Errorf("max_attempts must be at least 1"), "RetryConfig", "Validate", "check max_attempts")
 	}
 
 	// Empty backoff defaults to exponential
@@ -107,7 +108,7 @@ func (r *RetryConfig) Validate() error {
 	}
 
 	if r.Backoff != "exponential" && r.Backoff != "linear" {
-		return fmt.Errorf("backoff must be 'exponential' or 'linear'")
+		return errs.WrapInvalid(fmt.Errorf("backoff must be 'exponential' or 'linear'"), "RetryConfig", "Validate", "check backoff type")
 	}
 
 	return nil

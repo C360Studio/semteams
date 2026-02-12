@@ -13,6 +13,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -42,7 +43,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// Parse configuration
 	var config Config
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "NewComponent", "parse config")
 	}
 
 	// Apply defaults for empty values
@@ -58,7 +59,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "NewComponent", "validate config")
 	}
 
 	// Build ports
@@ -165,7 +166,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.mu.Lock()
 	if c.started {
 		c.mu.Unlock()
-		return fmt.Errorf("router already started")
+		return errs.ErrAlreadyStarted
 	}
 	c.started = true
 	c.startTime = time.Now()
@@ -178,7 +179,7 @@ func (c *Component) Start(ctx context.Context) error {
 		c.mu.Lock()
 		c.started = false
 		c.mu.Unlock()
-		return fmt.Errorf("failed to setup subscriptions: %w", err)
+		return errs.Wrap(err, "Component", "Start", "setup subscriptions")
 	}
 
 	c.logger.Info("Router component started",
@@ -220,10 +221,10 @@ func (c *Component) Stop(timeout time.Duration) error {
 func (c *Component) setupSubscriptions(ctx context.Context) error {
 	// Wait for streams to be available
 	if err := c.waitForStream(ctx, c.config.StreamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", c.config.StreamName, err)
+		return errs.WrapTransient(err, "Component", "setupSubscriptions", fmt.Sprintf("wait for stream %s", c.config.StreamName))
 	}
 	if err := c.waitForStream(ctx, "AGENT"); err != nil {
-		return fmt.Errorf("stream AGENT not available: %w", err)
+		return errs.WrapTransient(err, "Component", "setupSubscriptions", "wait for stream AGENT")
 	}
 
 	// Subscribe to user messages via JetStream
@@ -244,7 +245,7 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to user.message: %w", err)
+		return errs.WrapTransient(err, "Component", "setupSubscriptions", "subscribe to user.message")
 	}
 
 	// Subscribe to agent completions via JetStream
@@ -264,7 +265,7 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to agent.complete: %w", err)
+		return errs.WrapTransient(err, "Component", "setupSubscriptions", "subscribe to agent.complete")
 	}
 
 	// Subscribe to loop created events for workflow context sync
@@ -284,7 +285,7 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to agent.created: %w", err)
+		return errs.WrapTransient(err, "Component", "setupSubscriptions", "subscribe to agent.created")
 	}
 
 	// Subscribe to loop failed events
@@ -304,7 +305,7 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to agent.failed: %w", err)
+		return errs.WrapTransient(err, "Component", "setupSubscriptions", "subscribe to agent.failed")
 	}
 
 	return nil
@@ -314,7 +315,7 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 func (c *Component) waitForStream(ctx context.Context, streamName string) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "Component", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -336,7 +337,7 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 		}
 	}
 
-	return fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries), "Component", "waitForStream", "find stream")
 }
 
 // handleUserMessage processes incoming user messages

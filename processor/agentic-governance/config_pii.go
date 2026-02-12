@@ -3,6 +3,8 @@ package agenticgovernance
 import (
 	"fmt"
 	"regexp"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // PIIFilterConfig holds PII redaction filter configuration
@@ -57,13 +59,13 @@ const (
 // Validate checks PII filter configuration
 func (c *PIIFilterConfig) Validate() error {
 	if c.ConfidenceThreshold < 0 || c.ConfidenceThreshold > 1 {
-		return fmt.Errorf("confidence_threshold must be between 0.0 and 1.0")
+		return errs.WrapInvalid(fmt.Errorf("confidence_threshold must be between 0.0 and 1.0"), "PIIFilterConfig", "Validate", "validate confidence_threshold")
 	}
 
 	// Validate custom patterns compile
 	for i, pattern := range c.CustomPatterns {
 		if _, err := regexp.Compile(pattern.Pattern); err != nil {
-			return fmt.Errorf("custom_patterns[%d]: invalid regex: %w", i, err)
+			return errs.WrapInvalid(err, "PIIFilterConfig", "Validate", fmt.Sprintf("validate custom_patterns[%d] regex", i))
 		}
 	}
 

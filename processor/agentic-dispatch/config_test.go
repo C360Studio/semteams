@@ -71,7 +71,7 @@ func TestConfig_Validate(t *testing.T) {
 			if tt.wantErr == "" {
 				assert.NoError(t, err)
 			} else {
-				assert.EqualError(t, err, tt.wantErr)
+				assert.ErrorContains(t, err, tt.wantErr)
 			}
 		})
 	}

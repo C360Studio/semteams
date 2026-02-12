@@ -74,7 +74,7 @@ func TestCommandRegistry_Register_InvalidPattern(t *testing.T) {
 
 	err := registry.Register("test", config, emptyHandler())
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid pattern")
+	assert.Contains(t, err.Error(), "compile pattern")
 }
 
 func TestCommandRegistry_Register_Duplicate(t *testing.T) {

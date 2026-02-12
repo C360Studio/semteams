@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Config holds configuration for agentic-governance processor component
@@ -67,11 +68,11 @@ type ViolationConfig struct {
 // Validate checks the configuration for errors
 func (c *Config) Validate() error {
 	if err := c.FilterChain.Validate(); err != nil {
-		return fmt.Errorf("filter_chain: %w", err)
+		return errs.WrapInvalid(err, "Config", "Validate", "validate filter_chain")
 	}
 
 	if err := c.Violations.Validate(); err != nil {
-		return fmt.Errorf("violations: %w", err)
+		return errs.WrapInvalid(err, "Config", "Validate", "validate violations")
 	}
 
 	return nil
@@ -84,13 +85,13 @@ func (fc *FilterChainConfig) Validate() error {
 	case PolicyFailFast, PolicyContinue, PolicyLogOnly, "":
 		// Valid
 	default:
-		return fmt.Errorf("invalid policy: %s", fc.Policy)
+		return errs.WrapInvalid(fmt.Errorf("invalid policy: %s", fc.Policy), "FilterChainConfig", "Validate", "validate policy")
 	}
 
 	// Validate each filter
 	for i, filter := range fc.Filters {
 		if err := filter.Validate(); err != nil {
-			return fmt.Errorf("filters[%d]: %w", i, err)
+			return errs.WrapInvalid(err, "FilterChainConfig", "Validate", fmt.Sprintf("validate filters[%d]", i))
 		}
 	}
 
@@ -100,7 +101,7 @@ func (fc *FilterChainConfig) Validate() error {
 // Validate checks filter configuration
 func (f *FilterConfig) Validate() error {
 	if f.Name == "" {
-		return fmt.Errorf("name is required")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "FilterConfig", "Validate", "validate name")
 	}
 
 	// Validate filter-specific config based on name
@@ -108,29 +109,29 @@ func (f *FilterConfig) Validate() error {
 	case "pii_redaction":
 		if f.PIIConfig != nil {
 			if err := f.PIIConfig.Validate(); err != nil {
-				return fmt.Errorf("pii_config: %w", err)
+				return errs.WrapInvalid(err, "FilterConfig", "Validate", "validate pii_config")
 			}
 		}
 	case "injection_detection":
 		if f.InjectionConfig != nil {
 			if err := f.InjectionConfig.Validate(); err != nil {
-				return fmt.Errorf("injection_config: %w", err)
+				return errs.WrapInvalid(err, "FilterConfig", "Validate", "validate injection_config")
 			}
 		}
 	case "content_moderation":
 		if f.ContentConfig != nil {
 			if err := f.ContentConfig.Validate(); err != nil {
-				return fmt.Errorf("content_config: %w", err)
+				return errs.WrapInvalid(err, "FilterConfig", "Validate", "validate content_config")
 			}
 		}
 	case "rate_limiting":
 		if f.RateLimitConfig != nil {
 			if err := f.RateLimitConfig.Validate(); err != nil {
-				return fmt.Errorf("rate_limit_config: %w", err)
+				return errs.WrapInvalid(err, "FilterConfig", "Validate", "validate rate_limit_config")
 			}
 		}
 	default:
-		return fmt.Errorf("unknown filter name: %s", f.Name)
+		return errs.WrapInvalid(fmt.Errorf("unknown filter name: %s", f.Name), "FilterConfig", "Validate", "validate filter name")
 	}
 
 	return nil
@@ -139,7 +140,7 @@ func (f *FilterConfig) Validate() error {
 // Validate checks violation configuration
 func (c *ViolationConfig) Validate() error {
 	if c.RetentionDays < 0 {
-		return fmt.Errorf("retention_days cannot be negative")
+		return errs.WrapInvalid(fmt.Errorf("retention_days cannot be negative"), "ViolationConfig", "Validate", "validate retention_days")
 	}
 
 	return nil

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Config represents the configuration for the router processor
@@ -28,10 +29,10 @@ type PermissionConfig struct {
 // Validate validates the configuration
 func (c Config) Validate() error {
 	if c.DefaultRole == "" {
-		return fmt.Errorf("default_role is required")
+		return errs.WrapInvalid(fmt.Errorf("default_role is required"), "Config", "Validate", "check default_role")
 	}
 	if c.DefaultModel == "" {
-		return fmt.Errorf("default_model is required")
+		return errs.WrapInvalid(fmt.Errorf("default_model is required"), "Config", "Validate", "check default_model")
 	}
 	return nil
 }

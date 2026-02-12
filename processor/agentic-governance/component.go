@@ -16,6 +16,7 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -54,7 +55,7 @@ type Component struct {
 func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	var config Config
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "NewComponent", "unmarshal config")
 	}
 
 	// Use default config if ports not set
@@ -70,7 +71,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "NewComponent", "validate config")
 	}
 
 	logger := deps.GetLogger()
@@ -85,7 +86,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// Build filter chain
 	chain, err := BuildFromConfig(config.FilterChain, metrics)
 	if err != nil {
-		return nil, fmt.Errorf("failed to build filter chain: %w", err)
+		return nil, errs.Wrap(err, "Component", "NewComponent", "build filter chain")
 	}
 
 	// Create violation handler
@@ -112,7 +113,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.mu.Lock()
 	if c.running {
 		c.mu.Unlock()
-		return fmt.Errorf("component already running")
+		return errs.ErrAlreadyStarted
 	}
 	c.running = true
 	c.mu.Unlock()
@@ -123,7 +124,7 @@ func (c *Component) Start(ctx context.Context) error {
 			c.mu.Lock()
 			c.running = false
 			c.mu.Unlock()
-			return fmt.Errorf("failed to setup input consumers: %w", err)
+			return errs.Wrap(err, "Component", "Start", "setup input consumers")
 		}
 	}
 
@@ -167,7 +168,7 @@ func (c *Component) setupInputConsumers(ctx context.Context) error {
 
 		handler := c.createHandler(msgType, outputSubjectPrefix)
 		if err := c.setupConsumer(ctx, port.Name, port.Subject, handler); err != nil {
-			return fmt.Errorf("failed to setup consumer for %s: %w", port.Name, err)
+			return errs.Wrap(err, "Component", "setupInputConsumers", fmt.Sprintf("setup consumer for %s", port.Name))
 		}
 	}
 
@@ -283,7 +284,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 
 	// Wait for stream to be available
 	if err := c.waitForStream(ctx, streamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", streamName, err)
+		return errs.WrapTransient(err, "Component", "setupConsumer", fmt.Sprintf("wait for stream %s", streamName))
 	}
 
 	// Create durable consumer name
@@ -315,7 +316,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+		return errs.WrapTransient(err, "Component", "setupConsumer", fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
 	c.logger.Info("Subscribed (JetStream)",
@@ -330,7 +331,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 func (c *Component) waitForStream(ctx context.Context, streamName string) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "Component", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -352,7 +353,7 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 		}
 	}
 
-	return fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries), "Component", "waitForStream", "find stream")
 }
 
 // sanitizeSubject converts a subject pattern to a valid consumer name suffix

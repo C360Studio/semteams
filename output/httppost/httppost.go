@@ -326,11 +326,17 @@ func (h *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 		streamName = h.deriveStreamName(port.Subject)
 	}
 	if streamName == "" {
-		return fmt.Errorf("could not derive stream name for subject %s", port.Subject)
+		return errs.WrapInvalid(
+			errs.ErrInvalidConfig,
+			"Output",
+			"setupJetStreamConsumer",
+			fmt.Sprintf("could not derive stream name for subject %s", port.Subject),
+		)
 	}
 
 	if err := h.waitForStream(ctx, streamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", streamName, err)
+		return errs.WrapTransient(err, "Output", "setupJetStreamConsumer",
+			fmt.Sprintf("stream %s not available", streamName))
 	}
 
 	sanitizedSubject := strings.ReplaceAll(port.Subject, ".", "-")
@@ -360,7 +366,8 @@ func (h *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+		return errs.WrapTransient(err, "Output", "setupJetStreamConsumer",
+			fmt.Sprintf("consumer setup for stream %s", streamName))
 	}
 
 	h.logger.Info("HTTP POST output subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
@@ -371,7 +378,7 @@ func (h *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 func (h *Output) waitForStream(ctx context.Context, streamName string) error {
 	js, err := h.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "Output", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -392,7 +399,12 @@ func (h *Output) waitForStream(ctx context.Context, streamName string) error {
 			}
 		}
 	}
-	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(
+		errs.ErrConnectionTimeout,
+		"Output",
+		"waitForStream",
+		fmt.Sprintf("stream %s not available after %d retries", streamName, maxRetries),
+	)
 }
 
 // deriveStreamName extracts stream name from subject convention
@@ -439,7 +451,12 @@ func (h *Output) Stop(timeout time.Duration) error {
 	case <-waitCh:
 		// Clean shutdown
 	case <-time.After(timeout):
-		return errs.WrapTransient(fmt.Errorf("shutdown timeout after %v", timeout), "Output", "Stop", "shutdown")
+		return errs.WrapTransient(
+			errs.ErrConnectionTimeout,
+			"Output",
+			"Stop",
+			fmt.Sprintf("shutdown timeout after %v", timeout),
+		)
 	}
 
 	// Stop ACME renewal loop if active
@@ -532,7 +549,13 @@ func (h *Output) sendHTTPPost(ctx context.Context, data []byte) error {
 
 	// Check status code
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status)
+		// HTTP errors are transient and should be retried
+		return errs.WrapTransient(
+			fmt.Errorf("HTTP %d: %s", resp.StatusCode, resp.Status),
+			"Output",
+			"sendHTTPPost",
+			"HTTP request",
+		)
 	}
 
 	return nil

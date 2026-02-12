@@ -143,16 +143,16 @@ type Config struct {
 // Validate implements component.Validatable interface
 func (c *Config) Validate() error {
 	if c.Path == "" {
-		return errs.WrapInvalid(fmt.Errorf("path is required"), "Config", "Validate", "path validation")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "Config", "Validate", "path is required")
 	}
 
 	if c.Format != "" && c.Format != "jsonl" && c.Format != "json" {
-		return errs.WrapInvalid(fmt.Errorf("format must be 'jsonl' or 'json'"), "Config", "Validate", "format validation")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "format must be 'jsonl' or 'json'")
 	}
 
 	if c.Interval != "" {
 		if _, err := time.ParseDuration(c.Interval); err != nil {
-			return errs.WrapInvalid(fmt.Errorf("invalid interval: %w", err), "Config", "Validate", "interval validation")
+			return errs.WrapInvalid(err, "Config", "Validate", "invalid interval")
 		}
 	}
 
@@ -160,7 +160,7 @@ func (c *Config) Validate() error {
 	if c.Ports != nil {
 		for _, output := range c.Ports.Outputs {
 			if (output.Type == "nats" || output.Type == "jetstream") && output.Subject == "" {
-				return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "NATS output subject validation")
+				return errs.WrapInvalid(errs.ErrMissingConfig, "Config", "Validate", "NATS output subject is required")
 			}
 		}
 	}
@@ -348,24 +348,24 @@ func (f *Input) Initialize() error {
 	defer f.mu.Unlock()
 
 	if f.path == "" {
-		return errs.WrapInvalid(fmt.Errorf("empty path"), "file-input", "Initialize", "path validation")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "file-input", "Initialize", "path is required")
 	}
 
 	if f.subject == "" {
-		return errs.WrapInvalid(fmt.Errorf("empty subject"), "file-input", "Initialize", "subject validation")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "file-input", "Initialize", "subject is required")
 	}
 
 	if f.natsClient == nil {
-		return errs.WrapInvalid(fmt.Errorf("nil NATS client"), "file-input", "Initialize", "NATS client validation")
+		return errs.WrapInvalid(errs.ErrMissingConfig, "file-input", "Initialize", "NATS client is required")
 	}
 
 	// Verify file exists (or glob pattern matches)
 	matches, err := filepath.Glob(f.path)
 	if err != nil {
-		return errs.WrapInvalid(fmt.Errorf("invalid path pattern: %w", err), "file-input", "Initialize", "path pattern validation")
+		return errs.WrapInvalid(err, "file-input", "Initialize", "invalid path pattern")
 	}
 	if len(matches) == 0 {
-		return errs.WrapInvalid(fmt.Errorf("no files match path: %s", f.path), "file-input", "Initialize", "file existence validation")
+		return errs.WrapInvalid(errs.ErrConfigNotFound, "file-input", "Initialize", "no files match path")
 	}
 
 	return nil
@@ -520,7 +520,7 @@ func (f *Input) processFile(ctx context.Context, filePath string) error {
 
 	file, err := os.Open(filePath)
 	if err != nil {
-		return fmt.Errorf("open file: %w", err)
+		return errs.WrapTransient(err, "Input", "processFile", "open file")
 	}
 	defer file.Close()
 
@@ -590,7 +590,7 @@ func (f *Input) processFile(ctx context.Context, filePath string) error {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("scan file: %w", err)
+		return errs.WrapTransient(err, "Input", "processFile", "scan file")
 	}
 
 	return nil
@@ -648,7 +648,7 @@ func (f *Input) publishToNATS(ctx context.Context, data []byte) error {
 	// Fallback to core NATS for non-JetStream ports
 	nc := f.natsClient.GetConnection()
 	if nc == nil {
-		return errs.WrapTransient(fmt.Errorf("NATS connection not available"), "file-input", "publishToNATS", "NATS connection check")
+		return errs.WrapTransient(errs.ErrNoConnection, "file-input", "publishToNATS", "NATS connection check")
 	}
 
 	if err := nc.Publish(f.subject, data); err != nil {
@@ -685,7 +685,7 @@ func CreateInput(rawConfig json.RawMessage, deps component.Dependencies) (compon
 	}
 
 	if deps.NATSClient == nil {
-		return nil, errs.WrapInvalid(fmt.Errorf("NATS client is required"), "file-input-factory", "create", "NATS client validation")
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "file-input-factory", "CreateInput", "NATS client is required")
 	}
 
 	inputDeps := InputDeps{

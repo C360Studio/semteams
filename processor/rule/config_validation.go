@@ -64,23 +64,31 @@ func (rp *Processor) validateSingleRuleConfig(ruleID string, ruleConfig any) err
 	// Convert to map
 	ruleMap, ok := ruleConfig.(map[string]any)
 	if !ok {
-		return fmt.Errorf("rule %s configuration must be an object, got %T", ruleID, ruleConfig)
+		return errs.WrapInvalid(
+			fmt.Errorf("rule %s configuration must be an object, got %T", ruleID, ruleConfig),
+			"RuleProcessor", "validateSingleRuleConfig", "check config type")
 	}
 
 	// Validate required fields
 	ruleType, ok := ruleMap["type"]
 	if !ok {
-		return fmt.Errorf("rule %s missing required field 'type'", ruleID)
+		return errs.WrapInvalid(
+			fmt.Errorf("rule %s missing required field 'type'", ruleID),
+			"RuleProcessor", "validateSingleRuleConfig", "check type field")
 	}
 
 	ruleTypeStr, ok := ruleType.(string)
 	if !ok {
-		return fmt.Errorf("rule %s type must be string, got %T", ruleID, ruleType)
+		return errs.WrapInvalid(
+			fmt.Errorf("rule %s type must be string, got %T", ruleID, ruleType),
+			"RuleProcessor", "validateSingleRuleConfig", "check type value")
 	}
 
 	// Validate rule type is supported (check if factory exists)
 	if !rp.isKnownRuleType(ruleTypeStr) {
-		return fmt.Errorf("rule %s has unknown type: %s (no factory registered)", ruleID, ruleTypeStr)
+		return errs.WrapInvalid(
+			fmt.Errorf("rule %s has unknown type: %s (no factory registered)", ruleID, ruleTypeStr),
+			"RuleProcessor", "validateSingleRuleConfig", "check rule type")
 	}
 
 	// Validate expression-based rules if conditions are present
@@ -98,36 +106,48 @@ func (rp *Processor) validateExpressionRule(ruleID string, ruleMap map[string]an
 	// Check for conditions
 	conditionsVal, ok := ruleMap["conditions"]
 	if !ok {
-		return fmt.Errorf("rule %s missing required 'conditions' field", ruleID)
+		return errs.WrapInvalid(
+			fmt.Errorf("rule %s missing required 'conditions' field", ruleID),
+			"RuleProcessor", "validateExpressionRule", "check conditions field")
 	}
 
 	conditionsSlice, ok := conditionsVal.([]any)
 	if !ok {
-		return fmt.Errorf("rule %s conditions must be array, got %T", ruleID, conditionsVal)
+		return errs.WrapInvalid(
+			fmt.Errorf("rule %s conditions must be array, got %T", ruleID, conditionsVal),
+			"RuleProcessor", "validateExpressionRule", "check conditions type")
 	}
 
 	if len(conditionsSlice) == 0 {
-		return fmt.Errorf("rule %s must have at least one condition", ruleID)
+		return errs.WrapInvalid(
+			fmt.Errorf("rule %s must have at least one condition", ruleID),
+			"RuleProcessor", "validateExpressionRule", "check conditions count")
 	}
 
 	// Validate each condition
 	for i, condVal := range conditionsSlice {
 		condMap, ok := condVal.(map[string]any)
 		if !ok {
-			return fmt.Errorf("rule %s condition[%d] must be object, got %T", ruleID, i, condVal)
+			return errs.WrapInvalid(
+				fmt.Errorf("rule %s condition[%d] must be object, got %T", ruleID, i, condVal),
+				"RuleProcessor", "validateExpressionRule", "check condition type")
 		}
 
 		// Check required condition fields
 		for _, field := range []string{"field", "operator", "value"} {
 			if _, ok := condMap[field]; !ok {
-				return fmt.Errorf("rule %s condition[%d] missing required field '%s'", ruleID, i, field)
+				return errs.WrapInvalid(
+					fmt.Errorf("rule %s condition[%d] missing required field '%s'", ruleID, i, field),
+					"RuleProcessor", "validateExpressionRule", "check condition field")
 			}
 		}
 
 		// Validate operator
 		operator, _ := condMap["operator"].(string)
 		if !rp.isValidOperator(operator) {
-			return fmt.Errorf("rule %s condition[%d] has invalid operator: %s", ruleID, i, operator)
+			return errs.WrapInvalid(
+				fmt.Errorf("rule %s condition[%d] has invalid operator: %s", ruleID, i, operator),
+				"RuleProcessor", "validateExpressionRule", "check operator")
 		}
 	}
 
@@ -135,10 +155,14 @@ func (rp *Processor) validateExpressionRule(ruleID string, ruleMap map[string]an
 	if logicVal, ok := ruleMap["logic"]; ok {
 		logic, ok := logicVal.(string)
 		if !ok {
-			return fmt.Errorf("rule %s logic must be string, got %T", ruleID, logicVal)
+			return errs.WrapInvalid(
+				fmt.Errorf("rule %s logic must be string, got %T", ruleID, logicVal),
+				"RuleProcessor", "validateExpressionRule", "check logic type")
 		}
 		if logic != "and" && logic != "or" {
-			return fmt.Errorf("rule %s logic must be 'and' or 'or', got: %s", ruleID, logic)
+			return errs.WrapInvalid(
+				fmt.Errorf("rule %s logic must be 'and' or 'or', got: %s", ruleID, logic),
+				"RuleProcessor", "validateExpressionRule", "check logic value")
 		}
 	}
 

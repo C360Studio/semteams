@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // KVGetter defines the minimal interface needed to query entities from a KV store.
@@ -22,7 +23,7 @@ type KVEntry interface {
 }
 
 // ErrKeyNotFound is returned when a key is not found in the KV store.
-var ErrKeyNotFound = fmt.Errorf("key not found")
+var ErrKeyNotFound = errs.ErrKeyNotFound
 
 // GraphQueryExecutor executes graph queries against the ENTITY_STATES KV bucket.
 type GraphQueryExecutor struct {
@@ -65,7 +66,7 @@ func (e *GraphQueryExecutor) Execute(ctx context.Context, call agentic.ToolCall)
 		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("unknown tool: %s", call.Name),
-		}, fmt.Errorf("unknown tool: %s", call.Name)
+		}, errs.WrapInvalid(fmt.Errorf("unknown tool: %s", call.Name), "GraphQueryExecutor", "Execute", "find tool")
 	}
 }
 
@@ -92,7 +93,7 @@ func (e *GraphQueryExecutor) queryEntity(ctx context.Context, call agentic.ToolC
 		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("failed to query entity: %v", err),
-		}, err
+		}, errs.WrapTransient(err, "GraphQueryExecutor", "queryEntity", "get entity from KV")
 	}
 
 	// Return the entity data as content

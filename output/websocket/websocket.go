@@ -1580,14 +1580,14 @@ func CreateOutput(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// Validate port range (allow 0 for random port in tests)
 	// Ports below 1024 are reserved system ports
 	if port != 0 && (port < 1024 || port > 65535) {
-		return nil, errs.WrapInvalid(fmt.Errorf("port %d out of range", port),
-			"websocket-output-factory", "create", "port range validation")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig,
+			"websocket-output-factory", "create", fmt.Sprintf("port %d out of range (1024-65535)", port))
 	}
 
 	// Validate required dependencies
 	if deps.NATSClient == nil {
-		return nil, errs.WrapInvalid(fmt.Errorf("NATS client is required"),
-			"websocket-output-factory", "create", "NATS client validation")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig,
+			"websocket-output-factory", "create", "NATS client is required")
 	}
 
 	// Create constructor config

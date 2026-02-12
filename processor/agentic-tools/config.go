@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Config holds configuration for agentic-tools processor component
@@ -20,18 +21,18 @@ type Config struct {
 func (c *Config) Validate() error {
 	// Validate timeout
 	if c.Timeout == "" {
-		return fmt.Errorf("timeout is required")
+		return errs.WrapInvalid(fmt.Errorf("timeout is required"), "Config", "Validate", "check timeout")
 	}
 
 	// Parse timeout to ensure it's valid
 	duration, err := time.ParseDuration(c.Timeout)
 	if err != nil {
-		return fmt.Errorf("invalid timeout format: %w", err)
+		return errs.WrapInvalid(err, "Config", "Validate", "parse timeout format")
 	}
 
 	// Timeout must be positive
 	if duration <= 0 {
-		return fmt.Errorf("timeout must be positive")
+		return errs.WrapInvalid(fmt.Errorf("timeout must be positive"), "Config", "Validate", "check timeout value")
 	}
 
 	// AllowedTools can be nil or empty (both mean allow all tools)

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Definition defines a workflow
@@ -27,28 +29,28 @@ type Definition struct {
 // Validate validates the workflow definition
 func (w *Definition) Validate() error {
 	if strings.TrimSpace(w.ID) == "" {
-		return fmt.Errorf("workflow id is required")
+		return errs.WrapInvalid(fmt.Errorf("workflow id is required"), "workflow-schema", "Validate", "validate id")
 	}
 
 	if strings.TrimSpace(w.Name) == "" {
-		return fmt.Errorf("workflow name is required")
+		return errs.WrapInvalid(fmt.Errorf("workflow name is required"), "workflow-schema", "Validate", "validate name")
 	}
 
 	if err := w.Trigger.Validate(); err != nil {
-		return fmt.Errorf("invalid trigger: %w", err)
+		return errs.WrapInvalid(err, "workflow-schema", "Validate", "validate trigger")
 	}
 
 	if len(w.Steps) == 0 {
-		return fmt.Errorf("workflow must have at least one step")
+		return errs.WrapInvalid(fmt.Errorf("workflow must have at least one step"), "workflow-schema", "Validate", "validate steps")
 	}
 
 	stepNames := make(map[string]bool)
 	for i, step := range w.Steps {
 		if err := step.Validate(); err != nil {
-			return fmt.Errorf("invalid step[%d]: %w", i, err)
+			return errs.WrapInvalid(err, "workflow-schema", "Validate", fmt.Sprintf("validate step[%d]", i))
 		}
 		if stepNames[step.Name] {
-			return fmt.Errorf("duplicate step name: %s", step.Name)
+			return errs.WrapInvalid(fmt.Errorf("duplicate step name: %s", step.Name), "workflow-schema", "Validate", "check duplicate step names")
 		}
 		stepNames[step.Name] = true
 	}
@@ -56,32 +58,32 @@ func (w *Definition) Validate() error {
 	// Validate step references
 	for _, step := range w.Steps {
 		if step.OnSuccess != "" && !stepNames[step.OnSuccess] && step.OnSuccess != "complete" {
-			return fmt.Errorf("step %s references unknown on_success step: %s", step.Name, step.OnSuccess)
+			return errs.WrapInvalid(fmt.Errorf("step %s references unknown on_success step: %s", step.Name, step.OnSuccess), "workflow-schema", "Validate", "validate on_success reference")
 		}
 		if step.OnFail != "" && !stepNames[step.OnFail] && step.OnFail != "fail" {
-			return fmt.Errorf("step %s references unknown on_fail step: %s", step.Name, step.OnFail)
+			return errs.WrapInvalid(fmt.Errorf("step %s references unknown on_fail step: %s", step.Name, step.OnFail), "workflow-schema", "Validate", "validate on_fail reference")
 		}
 	}
 
 	if w.Timeout != "" {
 		if _, err := time.ParseDuration(w.Timeout); err != nil {
-			return fmt.Errorf("invalid timeout: %w", err)
+			return errs.WrapInvalid(err, "workflow-schema", "Validate", "parse timeout")
 		}
 	}
 
 	if w.MaxIterations < 0 {
-		return fmt.Errorf("max_iterations cannot be negative")
+		return errs.WrapInvalid(fmt.Errorf("max_iterations cannot be negative"), "workflow-schema", "Validate", "validate max_iterations")
 	}
 
 	for i, action := range w.OnComplete {
 		if err := action.Validate(); err != nil {
-			return fmt.Errorf("invalid on_complete[%d]: %w", i, err)
+			return errs.WrapInvalid(err, "workflow-schema", "Validate", fmt.Sprintf("validate on_complete[%d]", i))
 		}
 	}
 
 	for i, action := range w.OnFail {
 		if err := action.Validate(); err != nil {
-			return fmt.Errorf("invalid on_fail[%d]: %w", i, err)
+			return errs.WrapInvalid(err, "workflow-schema", "Validate", fmt.Sprintf("validate on_fail[%d]", i))
 		}
 	}
 
@@ -96,7 +98,7 @@ type TriggerDef struct {
 // Validate validates the trigger definition
 func (t *TriggerDef) Validate() error {
 	if strings.TrimSpace(t.Subject) == "" {
-		return fmt.Errorf("trigger subject is required")
+		return errs.WrapInvalid(fmt.Errorf("trigger subject is required"), "workflow-schema", "TriggerDef.Validate", "validate subject")
 	}
 	return nil
 }
@@ -114,22 +116,22 @@ type StepDef struct {
 // Validate validates the step definition
 func (s *StepDef) Validate() error {
 	if strings.TrimSpace(s.Name) == "" {
-		return fmt.Errorf("step name is required")
+		return errs.WrapInvalid(fmt.Errorf("step name is required"), "workflow-schema", "StepDef.Validate", "validate name")
 	}
 
 	if err := s.Action.Validate(); err != nil {
-		return fmt.Errorf("invalid action: %w", err)
+		return errs.WrapInvalid(err, "workflow-schema", "StepDef.Validate", "validate action")
 	}
 
 	if s.Condition != nil {
 		if err := s.Condition.Validate(); err != nil {
-			return fmt.Errorf("invalid condition: %w", err)
+			return errs.WrapInvalid(err, "workflow-schema", "StepDef.Validate", "validate condition")
 		}
 	}
 
 	if s.Timeout != "" {
 		if _, err := time.ParseDuration(s.Timeout); err != nil {
-			return fmt.Errorf("invalid step timeout: %w", err)
+			return errs.WrapInvalid(err, "workflow-schema", "StepDef.Validate", "parse step timeout")
 		}
 	}
 
@@ -162,36 +164,36 @@ func (a *ActionDef) Validate() error {
 	}
 
 	if !validTypes[a.Type] {
-		return fmt.Errorf("invalid action type: %s (valid: call, publish, publish_agent, set_state)", a.Type)
+		return errs.WrapInvalid(fmt.Errorf("invalid action type: %s (valid: call, publish, publish_agent, set_state)", a.Type), "workflow-schema", "ActionDef.Validate", "validate type")
 	}
 
 	switch a.Type {
 	case "call", "publish":
 		if strings.TrimSpace(a.Subject) == "" {
-			return fmt.Errorf("%s action requires subject", a.Type)
+			return errs.WrapInvalid(fmt.Errorf("%s action requires subject", a.Type), "workflow-schema", "ActionDef.Validate", "validate subject")
 		}
 	case "publish_agent":
 		if strings.TrimSpace(a.Subject) == "" {
-			return fmt.Errorf("publish_agent action requires subject")
+			return errs.WrapInvalid(fmt.Errorf("publish_agent action requires subject"), "workflow-schema", "ActionDef.Validate", "validate subject")
 		}
 		if strings.TrimSpace(a.Role) == "" {
-			return fmt.Errorf("publish_agent action requires role")
+			return errs.WrapInvalid(fmt.Errorf("publish_agent action requires role"), "workflow-schema", "ActionDef.Validate", "validate role")
 		}
 		if strings.TrimSpace(a.Model) == "" {
-			return fmt.Errorf("publish_agent action requires model")
+			return errs.WrapInvalid(fmt.Errorf("publish_agent action requires model"), "workflow-schema", "ActionDef.Validate", "validate model")
 		}
 		if strings.TrimSpace(a.Prompt) == "" {
-			return fmt.Errorf("publish_agent action requires prompt")
+			return errs.WrapInvalid(fmt.Errorf("publish_agent action requires prompt"), "workflow-schema", "ActionDef.Validate", "validate prompt")
 		}
 	case "set_state":
 		if strings.TrimSpace(a.Entity) == "" {
-			return fmt.Errorf("set_state action requires entity")
+			return errs.WrapInvalid(fmt.Errorf("set_state action requires entity"), "workflow-schema", "ActionDef.Validate", "validate entity")
 		}
 	}
 
 	if a.Timeout != "" {
 		if _, err := time.ParseDuration(a.Timeout); err != nil {
-			return fmt.Errorf("invalid action timeout: %w", err)
+			return errs.WrapInvalid(err, "workflow-schema", "ActionDef.Validate", "parse action timeout")
 		}
 	}
 
@@ -208,7 +210,7 @@ type ConditionDef struct {
 // Validate validates the condition definition
 func (c *ConditionDef) Validate() error {
 	if strings.TrimSpace(c.Field) == "" {
-		return fmt.Errorf("condition field is required")
+		return errs.WrapInvalid(fmt.Errorf("condition field is required"), "workflow-schema", "ConditionDef.Validate", "validate field")
 	}
 
 	validOperators := map[string]bool{
@@ -223,7 +225,7 @@ func (c *ConditionDef) Validate() error {
 	}
 
 	if !validOperators[c.Operator] {
-		return fmt.Errorf("invalid condition operator: %s", c.Operator)
+		return errs.WrapInvalid(fmt.Errorf("invalid condition operator: %s", c.Operator), "workflow-schema", "ConditionDef.Validate", "validate operator")
 	}
 
 	return nil

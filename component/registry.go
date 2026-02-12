@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math"
 	"strings"
@@ -98,16 +99,36 @@ type Registry struct {
 	natsClient         *natsclient.Client // NATS client for capability operations
 	heartbeatCancel    context.CancelFunc // Cancel heartbeat goroutine
 	instanceFactories  map[string]string  // instance name → factory name mapping
+	logger             *slog.Logger       // Logger for non-fatal operations
 }
 
 // NewRegistry creates a new empty component registry
-func NewRegistry() *Registry {
-	return &Registry{
+// Optionally accepts a logger; defaults to slog.Default() if none provided.
+// This maintains backwards compatibility with existing callers.
+func NewRegistry(opts ...func(*Registry)) *Registry {
+	r := &Registry{
 		factories:         make(map[string]*Registration),
 		instances:         make(map[string]Discoverable),
 		payloadRegistry:   NewPayloadRegistry(),
 		resourceTracker:   make(map[string]string),
 		instanceFactories: make(map[string]string),
+		logger:            slog.Default(),
+	}
+
+	// Apply optional configuration
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r
+}
+
+// WithLogger sets a custom logger for the registry
+func WithLogger(logger *slog.Logger) func(*Registry) {
+	return func(r *Registry) {
+		if logger != nil {
+			r.logger = logger
+		}
 	}
 }
 
@@ -252,8 +273,7 @@ func (r *Registry) RegisterInstance(name string, component Discoverable) error {
 		go func() {
 			if err := r.publishCapabilities(context.Background(), name, component); err != nil {
 				// Log warning but don't fail registration - NATS publish is non-fatal
-				// TODO: add logger field to registry
-				_ = err
+				r.logger.Debug("failed to publish capabilities", "component", name, "error", err)
 			}
 		}()
 	}
@@ -1075,8 +1095,7 @@ func (r *Registry) republishAllCapabilities(ctx context.Context) {
 	for name, component := range instances {
 		if err := r.publishCapabilities(ctx, name, component); err != nil {
 			// Log warning but continue - NATS publish is non-fatal
-			// TODO: add logger field to registry
-			_ = err
+			r.logger.Debug("failed to publish capabilities", "component", name, "error", err)
 		}
 	}
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -49,7 +50,7 @@ type Component struct {
 func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
 	var config Config
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "NewComponent", "unmarshal config")
 	}
 
 	// Use default config if ports not set
@@ -57,13 +58,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		config = DefaultConfig()
 		// Re-unmarshal to get user-provided values
 		if err := json.Unmarshal(rawConfig, &config); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+			return nil, errs.WrapInvalid(err, "Component", "NewComponent", "unmarshal config")
 		}
 	}
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "NewComponent", "validate config")
 	}
 
 	// Parse timeout for message processing
@@ -72,7 +73,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		var err error
 		messageTimeout, err = time.ParseDuration(config.Timeout)
 		if err != nil {
-			return nil, fmt.Errorf("invalid timeout format: %w", err)
+			return nil, errs.WrapInvalid(err, "Component", "NewComponent", "parse timeout")
 		}
 	}
 
@@ -81,7 +82,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	for name, endpoint := range config.Endpoints {
 		client, err := NewClient(endpoint)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create client for endpoint %q: %w", name, err)
+			return nil, errs.Wrap(err, "Component", "NewComponent", fmt.Sprintf("create client for endpoint %q", name))
 		}
 		clients[name] = client
 	}
@@ -108,11 +109,11 @@ func (c *Component) Start(ctx context.Context) error {
 	defer c.mu.Unlock()
 
 	if c.running {
-		return fmt.Errorf("component already running")
+		return errs.ErrAlreadyStarted
 	}
 
 	if c.natsClient == nil {
-		return fmt.Errorf("NATS client required")
+		return errs.WrapFatal(errs.ErrNoConnection, "Component", "Start", "check NATS client")
 	}
 
 	// Set up consumers for input ports
@@ -122,7 +123,7 @@ func (c *Component) Start(ctx context.Context) error {
 		}
 
 		if err := c.setupConsumer(ctx, port); err != nil {
-			return fmt.Errorf("failed to setup consumer for %s: %w", port.Subject, err)
+			return errs.Wrap(err, "Component", "Start", fmt.Sprintf("setup consumer for %s", port.Subject))
 		}
 	}
 
@@ -145,7 +146,7 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 
 	// Wait for stream to be available
 	if err := c.waitForStream(ctx, streamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", streamName, err)
+		return errs.WrapTransient(err, "Component", "setupConsumer", fmt.Sprintf("wait for stream %s", streamName))
 	}
 
 	// Create durable consumer name (with optional suffix for uniqueness in tests)
@@ -177,7 +178,7 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+		return errs.WrapTransient(err, "Component", "setupConsumer", fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
 	c.logger.Info("Subscribed to agent requests (JetStream)",
@@ -191,7 +192,7 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 func (c *Component) waitForStream(ctx context.Context, streamName string) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "Component", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -213,7 +214,7 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 		}
 	}
 
-	return fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries), "Component", "waitForStream", "find stream")
 }
 
 // sanitizeSubject converts a subject pattern to a valid consumer name suffix
@@ -306,12 +307,12 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 func (c *Component) parseAgentRequest(data []byte) (agentic.AgentRequest, error) {
 	var baseMsg message.BaseMessage
 	if err := json.Unmarshal(data, &baseMsg); err != nil {
-		return agentic.AgentRequest{}, fmt.Errorf("unmarshal BaseMessage: %w", err)
+		return agentic.AgentRequest{}, errs.WrapInvalid(err, "Component", "parseAgentRequest", "unmarshal BaseMessage")
 	}
 
 	reqPtr, ok := baseMsg.Payload().(*agentic.AgentRequest)
 	if !ok {
-		return agentic.AgentRequest{}, fmt.Errorf("unexpected payload type: %T", baseMsg.Payload())
+		return agentic.AgentRequest{}, errs.WrapInvalid(fmt.Errorf("unexpected payload type: %T", baseMsg.Payload()), "Component", "parseAgentRequest", "check payload type")
 	}
 
 	return *reqPtr, nil
@@ -397,7 +398,7 @@ func (c *Component) getClientForRequest(req agentic.AgentRequest) (*Client, erro
 	}
 
 	c.logger.Error("No client found for endpoint", "model", req.Model)
-	return nil, fmt.Errorf("no client for model %s", req.Model)
+	return nil, errs.WrapInvalid(fmt.Errorf("no client for model %s", req.Model), "Component", "getClientForRequest", "find client")
 }
 
 // executeRequest executes the chat completion with timeout
@@ -450,7 +451,7 @@ func (c *Component) ResolveEndpoint(modelName string) (Endpoint, error) {
 	}
 
 	// Step 4: No resolution found
-	return Endpoint{}, fmt.Errorf("no endpoint found for model %q", modelName)
+	return Endpoint{}, errs.WrapInvalid(fmt.Errorf("no endpoint found for model %q", modelName), "Component", "ResolveEndpoint", "resolve model")
 }
 
 // publishResponse publishes an agent response to JetStream
@@ -458,7 +459,7 @@ func (c *Component) publishResponse(ctx context.Context, resp agentic.AgentRespo
 	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "agentic-model")
 	data, err := json.Marshal(respMsg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal response: %w", err)
+		return errs.WrapInvalid(err, "Component", "publishResponse", "marshal response")
 	}
 
 	// Publish to output subjects
@@ -475,7 +476,7 @@ func (c *Component) publishResponse(ctx context.Context, resp agentic.AgentRespo
 
 		// Use JetStream for publishing to ensure delivery
 		if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
-			return fmt.Errorf("failed to publish to %s: %w", subject, err)
+			return errs.WrapTransient(err, "Component", "publishResponse", fmt.Sprintf("publish to %s", subject))
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // FlowGraph represents a directed graph of component connections
@@ -62,6 +63,15 @@ const (
 	PatternNetwork InteractionPattern = "network"
 )
 
+// Issue type constants for orphaned port classification
+const (
+	IssueNoPublishers            = "no_publishers"
+	IssueNoSubscribers           = "no_subscribers"
+	IssueOptionalAPIUnused       = "optional_api_unused"
+	IssueOptionalIndexUnwatched  = "optional_index_unwatched"
+	IssueOptionalInterfaceUnused = "optional_interface_unused"
+)
+
 // EdgeMetadata contains pattern-specific metadata
 type EdgeMetadata struct {
 	InterfaceContract *component.InterfaceContract `json:"interface_contract,omitempty"`
@@ -111,13 +121,13 @@ func (g *FlowGraph) GetEdges() []FlowEdge {
 // AddComponentNode adds a component as a node in the graph
 func (g *FlowGraph) AddComponentNode(name string, comp component.Discoverable) error {
 	if name == "" {
-		return fmt.Errorf("component name cannot be empty")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "FlowGraph", "AddComponentNode", "component name cannot be empty")
 	}
 	if comp == nil {
-		return fmt.Errorf("component cannot be nil")
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "FlowGraph", "AddComponentNode", "component cannot be nil")
 	}
 	if _, exists := g.nodes[name]; exists {
-		return fmt.Errorf("component %s already exists in graph", name)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "FlowGraph", "AddComponentNode", fmt.Sprintf("component %s already exists", name))
 	}
 
 	node := &ComponentNode{
@@ -196,7 +206,6 @@ func (g *FlowGraph) classifyInteractionPattern(portConfig component.Portable) In
 	case component.FilePort:
 		return PatternNetwork // File I/O is external like network
 	default:
-		// Log warning for unknown types
 		return PatternStream // Safe default
 	}
 }
@@ -251,7 +260,6 @@ func (g *FlowGraph) extractConnectionID(portConfig component.Portable) string {
 		}
 		return "file_unknown"
 	default:
-		// Log warning for unknown types (better than silent failure)
 		return fmt.Sprintf("unknown_type_%T", config)
 	}
 }
@@ -278,7 +286,7 @@ func (g *FlowGraph) ConnectComponentsByPatterns() error {
 
 	// Return error if there are critical warnings
 	if len(warnings) > 0 {
-		return fmt.Errorf("flow graph validation warnings: %v", warnings)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "FlowGraph", "ConnectComponentsByPatterns", fmt.Sprintf("validation warnings: %v", warnings))
 	}
 
 	return nil
@@ -480,7 +488,7 @@ func (g *FlowGraph) connectWatchPorts(publishers, subscribers map[string][]Compo
 			// Warning: Multiple writers to same KV bucket
 			if warnings != nil {
 				*warnings = append(*warnings,
-					fmt.Sprintf("Multiple writers to KV bucket %s: %v", connectionID, pubs))
+					fmt.Sprintf("multiple writers to KV bucket %s: %v", connectionID, pubs))
 			}
 		}
 		if subs, exists := subscribers[connectionID]; exists {
@@ -511,7 +519,7 @@ func (g *FlowGraph) validateNetworkPorts(publishers, subscribers map[string][]Co
 	for connID, ports := range publishers {
 		if len(ports) > 1 {
 			conflicts = append(conflicts,
-				fmt.Sprintf("Network port conflict on %s: multiple components binding: %v", connID, ports))
+				fmt.Sprintf("network port conflict on %s: multiple components binding: %v", connID, ports))
 		}
 		allPorts[connID] = ports
 	}
@@ -520,10 +528,10 @@ func (g *FlowGraph) validateNetworkPorts(publishers, subscribers map[string][]Co
 	for connID, ports := range subscribers {
 		if existing, exists := allPorts[connID]; exists {
 			conflicts = append(conflicts,
-				fmt.Sprintf("Network port conflict on %s: %v and %v both trying to bind", connID, existing, ports))
+				fmt.Sprintf("network port conflict on %s: %v and %v both trying to bind", connID, existing, ports))
 		} else if len(ports) > 1 {
 			conflicts = append(conflicts,
-				fmt.Sprintf("Network port conflict on %s: multiple components binding: %v", connID, ports))
+				fmt.Sprintf("network port conflict on %s: multiple components binding: %v", connID, ports))
 		}
 	}
 
@@ -565,8 +573,8 @@ func (g *FlowGraph) AnalyzeConnectivity() *FlowAnalysisResult {
 		if !hasConnection {
 			result.DisconnectedNodes = append(result.DisconnectedNodes, DisconnectedNode{
 				ComponentName: name,
-				Issue:         "Component has no connections",
-				Suggestions:   []string{"Connect to other components", "Verify component configuration"},
+				Issue:         "component has no connections",
+				Suggestions:   []string{"connect to other components", "verify component configuration"},
 			})
 		}
 	}
@@ -575,7 +583,7 @@ func (g *FlowGraph) AnalyzeConnectivity() *FlowAnalysisResult {
 	hasCriticalIssues := false
 	for _, port := range result.OrphanedPorts {
 		// Check if this is a critical issue
-		if port.Issue == "no_publishers" || port.Issue == "no_subscribers" {
+		if port.Issue == IssueNoPublishers || port.Issue == IssueNoSubscribers {
 			// Only required stream connections are critical
 			// Optional ports without connections are acceptable
 			if port.Pattern == PatternStream && port.Required {
@@ -665,12 +673,12 @@ func (g *FlowGraph) findOrphanedPorts() []OrphanedPort {
 				}
 
 				// Determine issue type based on pattern
-				issue := "no_publishers"
+				issue := IssueNoPublishers
 				if port.Pattern == PatternRequest {
-					issue = "optional_api_unused" // Request APIs are optional
+					issue = IssueOptionalAPIUnused // Request APIs are optional
 				} else if g.isInterfaceAlternativePort(port) {
 					// Interface-specific alternatives are optional specialized paths
-					issue = "optional_interface_unused"
+					issue = IssueOptionalInterfaceUnused
 				}
 
 				orphaned = append(orphaned, OrphanedPort{
@@ -694,12 +702,12 @@ func (g *FlowGraph) findOrphanedPorts() []OrphanedPort {
 				}
 
 				// Determine issue type based on pattern
-				issue := "no_subscribers"
+				issue := IssueNoSubscribers
 				if port.Pattern == PatternRequest {
-					issue = "optional_api_unused" // Request APIs are optional
+					issue = IssueOptionalAPIUnused // Request APIs are optional
 				}
 				if port.Pattern == PatternWatch {
-					issue = "optional_index_unwatched" // KV indexes may be intentionally unwatched
+					issue = IssueOptionalIndexUnwatched // KV indexes may be intentionally unwatched
 				}
 
 				orphaned = append(orphaned, OrphanedPort{

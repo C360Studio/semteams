@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -103,7 +104,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if len(rawConfig) > 0 {
 		var userConfig Config
 		if err := json.Unmarshal(rawConfig, &userConfig); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+			return nil, errs.WrapInvalid(err, "Component", "NewComponent", "unmarshal config")
 		}
 
 		// Apply user overrides
@@ -159,7 +160,7 @@ func (c *Component) Start(ctx context.Context) error {
 			"error",
 			err,
 		)
-		return fmt.Errorf("failed to create object store: %w", err)
+		return errs.WrapTransient(err, "Component", "Start", "create object store")
 	}
 	c.store = store
 
@@ -201,7 +202,7 @@ func (c *Component) Start(ctx context.Context) error {
 				"error",
 				err,
 			)
-			return fmt.Errorf("failed to subscribe to API subject %s: %w", apiSubject, err)
+			return errs.WrapTransient(err, "Component", "Start", fmt.Sprintf("subscribe to API subject %s", apiSubject))
 		}
 	}
 
@@ -214,7 +215,7 @@ func (c *Component) Start(ctx context.Context) error {
 		if c.isJetStreamInputPort("write") {
 			// JetStream subscription - use durable consumer
 			if err := c.setupJetStreamConsumer(ctx, "write", writeSubject); err != nil {
-				return fmt.Errorf("failed to setup JetStream consumer for write: %w", err)
+				return errs.WrapTransient(err, "Component", "Start", "setup JetStream consumer for write")
 			}
 		} else {
 			// Core NATS subscription
@@ -229,7 +230,7 @@ func (c *Component) Start(ctx context.Context) error {
 					"error",
 					err,
 				)
-				return fmt.Errorf("failed to subscribe to write subject %s: %w", writeSubject, err)
+				return errs.WrapTransient(err, "Component", "Start", fmt.Sprintf("subscribe to write subject %s", writeSubject))
 			}
 		}
 	}
@@ -261,20 +262,20 @@ func (c *Component) Stop(_ time.Duration) error {
 	// Close underlying store first to clean up cache resources
 	if c.store != nil {
 		if err := c.store.Close(); err != nil {
-			return fmt.Errorf("failed to close store: %w", err)
+			return errs.WrapTransient(err, "Component", "Stop", "close store")
 		}
 	}
 
 	// Then unsubscribe from NATS
 	if c.apiSub != nil {
 		if err := c.apiSub.Unsubscribe(); err != nil {
-			return fmt.Errorf("failed to unsubscribe from API: %w", err)
+			return errs.WrapTransient(err, "Component", "Stop", "unsubscribe from API")
 		}
 	}
 
 	if c.writeSub != nil {
 		if err := c.writeSub.Unsubscribe(); err != nil {
-			return fmt.Errorf("failed to unsubscribe from write: %w", err)
+			return errs.WrapTransient(err, "Component", "Stop", "unsubscribe from write")
 		}
 	}
 
@@ -294,7 +295,7 @@ func (c *Component) handleAPIRequest(msg *nats.Msg) {
 
 	var req Request
 	if err := json.Unmarshal(msg.Data, &req); err != nil {
-		c.respondWithError(msg, fmt.Errorf("invalid request: %w", err))
+		c.respondWithError(msg, errs.WrapInvalid(err, "Component", "handleAPIRequest", "unmarshal request"))
 		return
 	}
 
@@ -320,7 +321,7 @@ func (c *Component) handleAPIRequest(msg *nats.Msg) {
 	case "store":
 		var msgData any
 		if err := json.Unmarshal(req.Data, &msgData); err != nil {
-			c.respondWithError(msg, fmt.Errorf("invalid data: %w", err))
+			c.respondWithError(msg, errs.WrapInvalid(err, "Component", "handleAPIRequest", "unmarshal data"))
 			return
 		}
 
@@ -361,7 +362,7 @@ func (c *Component) handleAPIRequest(msg *nats.Msg) {
 		c.respond(msg, resp)
 
 	default:
-		c.respondWithError(msg, fmt.Errorf("unknown action: %s", req.Action))
+		c.respondWithError(msg, errs.WrapInvalid(errs.ErrInvalidData, "Component", "handleAPIRequest", fmt.Sprintf("unknown action: %s", req.Action)))
 	}
 }
 
@@ -625,7 +626,7 @@ func (c *Component) getInputPortDef(portName string) *component.PortDefinition {
 func (c *Component) setupJetStreamConsumer(ctx context.Context, portName, subject string) error {
 	portDef := c.getInputPortDef(portName)
 	if portDef == nil {
-		return fmt.Errorf("port %s not found", portName)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "setupJetStreamConsumer", fmt.Sprintf("port %s not found", portName))
 	}
 
 	// Derive stream name from subject or use explicit stream name
@@ -634,12 +635,12 @@ func (c *Component) setupJetStreamConsumer(ctx context.Context, portName, subjec
 		streamName = config.DeriveStreamName(subject)
 	}
 	if streamName == "" {
-		return fmt.Errorf("could not derive stream name for subject %s", subject)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "setupJetStreamConsumer", fmt.Sprintf("could not derive stream name for subject %s", subject))
 	}
 
 	// Wait for stream to be available
 	if err := c.waitForStream(ctx, streamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", streamName, err)
+		return errs.WrapTransient(err, "Component", "setupJetStreamConsumer", fmt.Sprintf("stream %s not available", streamName))
 	}
 
 	// Generate unique consumer name
@@ -667,7 +668,7 @@ func (c *Component) setupJetStreamConsumer(ctx context.Context, portName, subjec
 		c.handleJetStreamWriteRequest(msgCtx, msg)
 	})
 	if err != nil {
-		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+		return errs.WrapTransient(err, "Component", "setupJetStreamConsumer", fmt.Sprintf("consumer setup failed for stream %s", streamName))
 	}
 
 	return nil
@@ -677,7 +678,7 @@ func (c *Component) setupJetStreamConsumer(ctx context.Context, portName, subjec
 func (c *Component) waitForStream(ctx context.Context, streamName string) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "Component", "waitForStream", "get JetStream context")
 	}
 
 	// Retry with backoff
@@ -702,7 +703,7 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 		}
 	}
 
-	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(errs.ErrStorageUnavailable, "Component", "waitForStream", fmt.Sprintf("stream %s not available after %d retries", streamName, maxRetries))
 }
 
 // handleJetStreamWriteRequest handles JetStream messages for write operations

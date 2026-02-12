@@ -21,6 +21,8 @@ package agenticdispatch
 import (
 	"fmt"
 	"sync"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 var (
@@ -36,13 +38,13 @@ func RegisterCommand(name string, executor CommandExecutor) error {
 	defer globalMu.Unlock()
 
 	if name == "" {
-		return fmt.Errorf("register global command: name cannot be empty")
+		return errs.WrapInvalid(fmt.Errorf("name cannot be empty"), "GlobalRegistry", "RegisterCommand", "validate command name")
 	}
 	if executor == nil {
 		panic("RegisterCommand: executor cannot be nil")
 	}
 	if _, exists := globalCommands[name]; exists {
-		return fmt.Errorf("register global command: command %q already registered", name)
+		return errs.WrapInvalid(fmt.Errorf("command %q already registered", name), "GlobalRegistry", "RegisterCommand", "check duplicate command")
 	}
 	globalCommands[name] = executor
 	return nil

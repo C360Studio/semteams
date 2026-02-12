@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // NewExpressionEvaluator creates a new expression evaluator with all supported operators
@@ -247,7 +248,7 @@ func operatorRegex(fieldValue, compareValue interface{}) (bool, error) {
 
 	pattern, ok := compareValue.(string)
 	if !ok {
-		return false, fmt.Errorf("regex pattern must be a string")
+		return false, errs.WrapInvalid(errs.ErrInvalidData, "Evaluator", "operatorRegex", "regex pattern must be a string")
 	}
 
 	// Use cached regex compilation for better performance
@@ -372,7 +373,7 @@ func (e *Evaluator) GetOutgoing(entity *gtypes.EntityState, predicate string) []
 // Position is now extracted from geo.location.* triples (single source of truth).
 func (e *Evaluator) Distance(entity1, entity2 *gtypes.EntityState) (float64, error) {
 	if entity1 == nil || entity2 == nil {
-		return 0, fmt.Errorf("both entities must be non-nil")
+		return 0, errs.WrapInvalid(errs.ErrInvalidData, "Evaluator", "Distance", "both entities must be non-nil")
 	}
 
 	// Extract position from triples
@@ -380,10 +381,10 @@ func (e *Evaluator) Distance(entity1, entity2 *gtypes.EntityState) (float64, err
 	lat2, lon2 := extractLatLonFromTriples(entity2)
 
 	if lat1 == 0 && lon1 == 0 {
-		return 0, fmt.Errorf("entity1 must have position data in triples")
+		return 0, errs.WrapInvalid(errs.ErrInvalidData, "Evaluator", "Distance", "entity1 must have position data in triples")
 	}
 	if lat2 == 0 && lon2 == 0 {
-		return 0, fmt.Errorf("entity2 must have position data in triples")
+		return 0, errs.WrapInvalid(errs.ErrInvalidData, "Evaluator", "Distance", "entity2 must have position data in triples")
 	}
 
 	return haversineDistance(lat1, lon1, lat2, lon2), nil

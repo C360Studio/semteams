@@ -107,7 +107,7 @@ func TestFlowGraphPatterns(t *testing.T) {
 		err := graph.ConnectComponentsByPatterns()
 		assert.Error(t, err, "Should warn about multiple writers")
 		if err != nil {
-			assert.Contains(t, err.Error(), "Multiple writers to KV bucket")
+			assert.Contains(t, err.Error(), "multiple writers to KV bucket")
 		}
 
 		// But edges should still be created
@@ -148,7 +148,7 @@ func TestFlowGraphPatterns(t *testing.T) {
 		err := graph.ConnectComponentsByPatterns()
 		assert.Error(t, err, "Should detect network port conflict")
 		if err != nil {
-			assert.Contains(t, err.Error(), "Network port conflict")
+			assert.Contains(t, err.Error(), "network port conflict")
 			assert.Contains(t, err.Error(), "tcp:0.0.0.0:8080")
 		}
 

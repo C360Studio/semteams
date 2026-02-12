@@ -14,6 +14,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -53,12 +54,12 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// Parse configuration
 	var config Config
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
-		return nil, fmt.Errorf("failed to parse config: %w", err)
+		return nil, errs.WrapInvalid(err, "agentic-loop", "NewComponent", "parse config")
 	}
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
+		return nil, errs.WrapInvalid(err, "agentic-loop", "NewComponent", "validate config")
 	}
 
 	// Merge ports with defaults
@@ -88,7 +89,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	// Parse timeout for message processing
 	messageTimeout, err := time.ParseDuration(config.Timeout)
 	if err != nil {
-		return nil, fmt.Errorf("invalid timeout format: %w", err)
+		return nil, errs.WrapInvalid(err, "agentic-loop", "NewComponent", "parse timeout format")
 	}
 
 	// Create handler
@@ -185,18 +186,18 @@ func (c *Component) Start(ctx context.Context) error {
 	defer c.mu.Unlock()
 
 	if c.started {
-		return fmt.Errorf("component already started")
+		return errs.ErrAlreadyStarted
 	}
 
 	// Initialize KV buckets if NATS client available
 	if c.natsClient != nil {
 		if err := c.initializeKVBuckets(ctx); err != nil {
-			return fmt.Errorf("failed to initialize KV buckets: %w", err)
+			return errs.Wrap(err, "agentic-loop", "Start", "initialize KV buckets")
 		}
 
 		// Set up NATS subscriptions for input ports
 		if err := c.setupSubscriptions(ctx); err != nil {
-			return fmt.Errorf("failed to setup subscriptions: %w", err)
+			return errs.Wrap(err, "agentic-loop", "Start", "setup subscriptions")
 		}
 	}
 
@@ -265,7 +266,7 @@ func buildDefaultOutputPorts() []component.Port {
 func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream: %w", err)
+		return errs.WrapTransient(err, "agentic-loop", "initializeKVBuckets", "get JetStream")
 	}
 
 	// Initialize loops bucket
@@ -276,7 +277,7 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 			Bucket: c.config.LoopsBucket,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to create loops bucket: %w", err)
+			return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create loops bucket")
 		}
 	}
 	c.loopsBucket = loopsBucket
@@ -289,7 +290,7 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 			Bucket: c.config.TrajectoriesBucket,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to create trajectories bucket: %w", err)
+			return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create trajectories bucket")
 		}
 	}
 	c.trajectoriesBucket = trajectoriesBucket
@@ -334,7 +335,7 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 		}
 
 		if err := c.setupConsumer(ctx, port.Name, subject, handler); err != nil {
-			return fmt.Errorf("failed to setup consumer for %s: %w", subject, err)
+			return errs.Wrap(err, "agentic-loop", "setupSubscriptions", fmt.Sprintf("setup consumer for %s", subject))
 		}
 	}
 
@@ -351,7 +352,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 
 	// Wait for stream to be available
 	if err := c.waitForStream(ctx, streamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", streamName, err)
+		return errs.WrapTransient(err, "agentic-loop", "setupConsumer", fmt.Sprintf("wait for stream %s", streamName))
 	}
 
 	// Create durable consumer name
@@ -384,7 +385,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+		return errs.Wrap(err, "agentic-loop", "setupConsumer", fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
 	c.logger.Info("Subscribed (JetStream)",
@@ -399,7 +400,7 @@ func (c *Component) setupConsumer(ctx context.Context, portName, subject string,
 func (c *Component) waitForStream(ctx context.Context, streamName string) error {
 	js, err := c.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "agentic-loop", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -421,7 +422,12 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 		}
 	}
 
-	return fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(
+		fmt.Errorf("stream %s not found after %d retries", streamName, maxRetries),
+		"agentic-loop",
+		"waitForStream",
+		"find stream",
+	)
 }
 
 // sanitizeSubject converts a subject pattern to a valid consumer name suffix

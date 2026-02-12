@@ -393,7 +393,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	// Check initialization
 	if !c.initialized {
-		return errs.WrapFatal(fmt.Errorf("component not initialized"), "Component", "Start", "initialization check")
+		return errs.WrapFatal(errs.ErrNotStarted, "Component", "Start", "component not initialized")
 	}
 
 	// Idempotent - already running
@@ -464,8 +464,9 @@ func (c *Component) Start(ctx context.Context) error {
 	if !entityWatcher.WaitForStartup(ctx) {
 		cancel()
 		return errs.WrapTransient(
-			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
-			"Component", "Start", "dependency not available",
+			errs.ErrStorageUnavailable,
+			"Component", "Start",
+			fmt.Sprintf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
 		)
 	}
 
@@ -528,7 +529,7 @@ func (c *Component) Stop(timeout time.Duration) error {
 		return nil
 	case <-time.After(timeout):
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-index-spatial"))
-		return fmt.Errorf("stop timeout after %v", timeout)
+		return errs.WrapTransient(errs.ErrConnectionTimeout, "Component", "Stop", fmt.Sprintf("timeout after %v", timeout))
 	}
 }
 

@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
@@ -57,7 +58,7 @@ func TestConfigValidation(t *testing.T) {
 				return c
 			}(),
 			wantErr: true,
-			errMsg:  "invalid default_timeout format",
+			errMsg:  "invalid duration",
 		},
 		{
 			name: "zero default max iterations",
@@ -77,7 +78,7 @@ func TestConfigValidation(t *testing.T) {
 				return c
 			}(),
 			wantErr: true,
-			errMsg:  "invalid request_timeout format",
+			errMsg:  "invalid duration",
 		},
 	}
 
@@ -89,11 +90,8 @@ func TestConfigValidation(t *testing.T) {
 					t.Errorf("expected error containing %q, got nil", tt.errMsg)
 					return
 				}
-				if tt.errMsg != "" && err.Error() != tt.errMsg {
-					// Check if error contains the expected message
-					if err.Error()[:len(tt.errMsg)] != tt.errMsg[:min(len(err.Error()), len(tt.errMsg))] {
-						t.Errorf("error message = %q, want containing %q", err.Error(), tt.errMsg)
-					}
+				if tt.errMsg != "" && !strings.Contains(err.Error(), tt.errMsg) {
+					t.Errorf("error message = %q, want containing %q", err.Error(), tt.errMsg)
 				}
 			} else if err != nil {
 				t.Errorf("unexpected error: %v", err)

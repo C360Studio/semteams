@@ -241,11 +241,14 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 		streamName = p.deriveStreamName(port.Subject)
 	}
 	if streamName == "" {
-		return fmt.Errorf("could not derive stream name for subject %s", port.Subject)
+		return errs.WrapInvalid(
+			errs.ErrInvalidConfig, "JSONGenericProcessor", "setupJetStreamConsumer",
+			fmt.Sprintf("derive stream name for subject %s", port.Subject))
 	}
 
 	if err := p.waitForStream(ctx, streamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", streamName, err)
+		return errs.WrapTransient(err, "JSONGenericProcessor", "setupJetStreamConsumer",
+			fmt.Sprintf("stream %s availability", streamName))
 	}
 
 	sanitizedSubject := strings.ReplaceAll(port.Subject, ".", "-")
@@ -275,7 +278,8 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+		return errs.WrapTransient(err, "JSONGenericProcessor", "setupJetStreamConsumer",
+			fmt.Sprintf("consumer setup for stream %s", streamName))
 	}
 
 	p.logger.Info("JSON generic subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
@@ -286,7 +290,7 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 func (p *Processor) waitForStream(ctx context.Context, streamName string) error {
 	js, err := p.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "JSONGenericProcessor", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -307,7 +311,9 @@ func (p *Processor) waitForStream(ctx context.Context, streamName string) error 
 			}
 		}
 	}
-	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(
+		errs.ErrStorageUnavailable, "JSONGenericProcessor", "waitForStream",
+		fmt.Sprintf("stream %s availability after %d retries", streamName, maxRetries))
 }
 
 // deriveStreamName extracts stream name from subject convention
@@ -355,8 +361,8 @@ func (p *Processor) Stop(timeout time.Duration) error {
 		// Clean shutdown
 	case <-time.After(timeout):
 		return errs.WrapTransient(
-			fmt.Errorf("shutdown timeout after %v", timeout),
-			"JSONGenericProcessor", "Stop", "graceful shutdown")
+			errs.ErrConnectionTimeout, "JSONGenericProcessor", "Stop",
+			fmt.Sprintf("graceful shutdown (timeout after %v)", timeout))
 	}
 
 	p.mu.Lock()

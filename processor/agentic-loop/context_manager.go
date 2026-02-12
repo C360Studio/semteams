@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // RegionType defines the type of context region
@@ -148,7 +149,7 @@ func (cm *ContextManager) GetContext() []agentic.ChatMessage {
 // AddMessage adds a message to a specific region
 func (cm *ContextManager) AddMessage(region RegionType, msg agentic.ChatMessage) error {
 	if _, valid := regionPriorities[region]; !valid {
-		return fmt.Errorf("invalid region type: %s", region)
+		return errs.WrapInvalid(fmt.Errorf("invalid region type: %s", region), "ContextManager", "AddMessage", "validate region type")
 	}
 
 	cm.mu.Lock()

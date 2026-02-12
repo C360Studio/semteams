@@ -6,13 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to temporal range query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.temporal.query.range", c.handleQueryRangeNATS); err != nil {
-		return fmt.Errorf("subscribe range query: %w", err)
+		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe range query")
 	}
 
 	c.logger.Info("query handlers registered",
@@ -40,17 +42,17 @@ func (c *Component) handleQueryRangeNATS(_ context.Context, data []byte) ([]byte
 		Limit     int    `json:"limit"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "handleQueryRangeNATS", "invalid request JSON")
 	}
 
 	// Parse time strings (RFC3339 format)
 	startTime, err := time.Parse(time.RFC3339, req.StartTime)
 	if err != nil {
-		return nil, fmt.Errorf("invalid startTime format: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "handleQueryRangeNATS", "invalid startTime format")
 	}
 	endTime, err := time.Parse(time.RFC3339, req.EndTime)
 	if err != nil {
-		return nil, fmt.Errorf("invalid endTime format: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "handleQueryRangeNATS", "invalid endTime format")
 	}
 
 	// Apply default limit

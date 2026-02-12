@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/c360studio/semstreams/pkg/errs"
 	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
 
@@ -25,7 +26,7 @@ func (c *Component) loadWorkflowDefinitionsFromFiles() ([]wfschema.Definition, e
 		// Expand glob pattern
 		matches, err := filepath.Glob(pattern)
 		if err != nil {
-			return nil, fmt.Errorf("invalid glob pattern %q: %w", pattern, err)
+			return nil, errs.WrapInvalid(err, "workflow-loader", "loadWorkflowDefinitionsFromFiles", fmt.Sprintf("expand glob pattern %q", pattern))
 		}
 
 		// If no matches and pattern has no glob chars, treat as literal path
@@ -44,16 +45,15 @@ func (c *Component) loadWorkflowDefinitionsFromFiles() ([]wfschema.Definition, e
 			// Check file size before reading
 			fi, err := os.Stat(path)
 			if err != nil {
-				return nil, fmt.Errorf("failed to stat workflow file %s: %w", path, err)
+				return nil, errs.WrapInvalid(err, "workflow-loader", "loadWorkflowDefinitionsFromFiles", fmt.Sprintf("stat workflow file %s", path))
 			}
 			if fi.Size() > maxWorkflowFileSize {
-				return nil, fmt.Errorf("workflow file %s exceeds maximum size (%d > %d bytes)",
-					path, fi.Size(), maxWorkflowFileSize)
+				return nil, errs.WrapInvalid(fmt.Errorf("workflow file %s exceeds maximum size (%d > %d bytes)", path, fi.Size(), maxWorkflowFileSize), "workflow-loader", "loadWorkflowDefinitionsFromFiles", "check file size")
 			}
 
 			data, err := os.ReadFile(path)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read workflow file %s: %w", path, err)
+				return nil, errs.WrapInvalid(err, "workflow-loader", "loadWorkflowDefinitionsFromFiles", fmt.Sprintf("read workflow file %s", path))
 			}
 
 			// Parse JSON - support both single definition and array
@@ -62,8 +62,7 @@ func (c *Component) loadWorkflowDefinitionsFromFiles() ([]wfschema.Definition, e
 				// Try parsing as single definition
 				var singleDef wfschema.Definition
 				if err2 := json.Unmarshal(data, &singleDef); err2 != nil {
-					return nil, fmt.Errorf("failed to parse workflow file %s (tried array and object): array error: %v, object error: %w",
-						path, err, err2)
+					return nil, errs.WrapInvalid(fmt.Errorf("failed to parse workflow file %s (tried array and object): array error: %v, object error: %w", path, err, err2), "workflow-loader", "loadWorkflowDefinitionsFromFiles", "parse JSON")
 				}
 				definitions = []wfschema.Definition{singleDef}
 			}
@@ -71,13 +70,12 @@ func (c *Component) loadWorkflowDefinitionsFromFiles() ([]wfschema.Definition, e
 			// Validate each definition and check for duplicates
 			for i := range definitions {
 				if err := definitions[i].Validate(); err != nil {
-					return nil, fmt.Errorf("validation failed for workflow in %s: %w", path, err)
+					return nil, errs.WrapInvalid(err, "workflow-loader", "loadWorkflowDefinitionsFromFiles", fmt.Sprintf("validate workflow in %s", path))
 				}
 
 				// Check for duplicate workflow IDs
 				if existingPath, exists := seenIDs[definitions[i].ID]; exists {
-					return nil, fmt.Errorf("duplicate workflow ID %q: found in both %s and %s",
-						definitions[i].ID, existingPath, path)
+					return nil, errs.WrapInvalid(fmt.Errorf("duplicate workflow ID %q: found in both %s and %s", definitions[i].ID, existingPath, path), "workflow-loader", "loadWorkflowDefinitionsFromFiles", "check duplicate IDs")
 				}
 				seenIDs[definitions[i].ID] = path
 			}

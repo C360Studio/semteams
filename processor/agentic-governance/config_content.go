@@ -3,6 +3,8 @@ package agenticgovernance
 import (
 	"fmt"
 	"regexp"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // ContentFilterConfig holds content moderation filter configuration
@@ -36,18 +38,18 @@ const (
 // Validate checks content filter configuration
 func (c *ContentFilterConfig) Validate() error {
 	if c.BlockThreshold < 0 || c.BlockThreshold > 1 {
-		return fmt.Errorf("block_threshold must be between 0.0 and 1.0")
+		return errs.WrapInvalid(fmt.Errorf("block_threshold must be between 0.0 and 1.0"), "ContentFilterConfig", "Validate", "validate block_threshold")
 	}
 
 	if c.WarnThreshold < 0 || c.WarnThreshold > 1 {
-		return fmt.Errorf("warn_threshold must be between 0.0 and 1.0")
+		return errs.WrapInvalid(fmt.Errorf("warn_threshold must be between 0.0 and 1.0"), "ContentFilterConfig", "Validate", "validate warn_threshold")
 	}
 
 	// Validate policy patterns compile
 	for i, policy := range c.Policies {
 		for j, pattern := range policy.Patterns {
 			if _, err := regexp.Compile(pattern); err != nil {
-				return fmt.Errorf("policies[%d].patterns[%d]: invalid regex: %w", i, j, err)
+				return errs.WrapInvalid(err, "ContentFilterConfig", "Validate", fmt.Sprintf("validate policies[%d].patterns[%d] regex", i, j))
 			}
 		}
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // CommandConfig defines a command's configuration
@@ -65,12 +66,12 @@ func (r *CommandRegistry) Register(name string, config CommandConfig, handler Co
 	defer r.mu.Unlock()
 
 	if _, exists := r.commands[name]; exists {
-		return fmt.Errorf("command %s already registered", name)
+		return errs.WrapInvalid(fmt.Errorf("command %s already registered", name), "CommandRegistry", "Register", "check duplicate command")
 	}
 
 	pattern, err := regexp.Compile(config.Pattern)
 	if err != nil {
-		return fmt.Errorf("invalid pattern for command %s: %w", name, err)
+		return errs.WrapInvalid(err, "CommandRegistry", "Register", fmt.Sprintf("compile pattern for command %s", name))
 	}
 
 	r.commands[name] = &RegisteredCommand{

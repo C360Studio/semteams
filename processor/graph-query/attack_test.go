@@ -148,7 +148,7 @@ func TestAttack_MissingEntityID(t *testing.T) {
 
 	assert.Error(t, err)
 	assert.Nil(t, response)
-	assert.Contains(t, err.Error(), "invalid request")
+	assert.Contains(t, err.Error(), "empty id")
 }
 
 func TestAttack_MissingStartEntity(t *testing.T) {

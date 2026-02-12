@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/c360studio/semstreams/pkg/errs"
 	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -54,7 +55,7 @@ func (r *Registry) Load(ctx context.Context) error {
 			r.logger.Info("No workflow definitions found in bucket")
 			return nil
 		}
-		return fmt.Errorf("failed to list workflow keys: %w", err)
+		return errs.WrapTransient(err, "workflow-registry", "Load", "list workflow keys")
 	}
 
 	for _, key := range keys {
@@ -165,16 +166,16 @@ func (r *Registry) TriggerSubjects() []string {
 // Register adds or updates a workflow definition
 func (r *Registry) Register(ctx context.Context, workflow *wfschema.Definition) error {
 	if err := workflow.Validate(); err != nil {
-		return fmt.Errorf("invalid workflow: %w", err)
+		return errs.WrapInvalid(err, "workflow-registry", "Register", "validate workflow")
 	}
 
 	data, err := json.Marshal(workflow)
 	if err != nil {
-		return fmt.Errorf("failed to marshal workflow: %w", err)
+		return errs.WrapInvalid(err, "workflow-registry", "Register", "marshal workflow")
 	}
 
 	if _, err := r.bucket.Put(ctx, workflow.ID, data); err != nil {
-		return fmt.Errorf("failed to save workflow: %w", err)
+		return errs.WrapTransient(err, "workflow-registry", "Register", "save workflow to KV bucket")
 	}
 
 	r.mu.Lock()
@@ -203,11 +204,11 @@ func (r *Registry) Unregister(ctx context.Context, id string) error {
 
 	workflow, ok := r.workflows[id]
 	if !ok {
-		return fmt.Errorf("workflow not found: %s", id)
+		return errs.WrapInvalid(fmt.Errorf("workflow not found: %s", id), "workflow-registry", "Unregister", "find workflow")
 	}
 
 	if err := r.bucket.Delete(ctx, id); err != nil {
-		return fmt.Errorf("failed to delete workflow: %w", err)
+		return errs.WrapTransient(err, "workflow-registry", "Unregister", "delete from KV bucket")
 	}
 
 	delete(r.workflows, id)
@@ -222,7 +223,7 @@ func (r *Registry) Unregister(ctx context.Context, id string) error {
 func (r *Registry) Watch(ctx context.Context) error {
 	watcher, err := r.bucket.Watch(ctx, ">")
 	if err != nil {
-		return fmt.Errorf("failed to create watcher: %w", err)
+		return errs.WrapTransient(err, "workflow-registry", "Watch", "create KV watcher")
 	}
 
 	// Create a cancellable context for the watch goroutine

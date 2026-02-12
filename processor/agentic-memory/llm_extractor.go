@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // LLMClient defines the interface for LLM operations
@@ -30,7 +31,12 @@ func NewLLMExtractor(config ExtractionConfig, llmClient LLMClient) (*LLMExtracto
 func (e *LLMExtractor) ExtractFacts(ctx context.Context, loopID, responseContent string) ([]message.Triple, error) {
 	// Validate inputs
 	if loopID == "" {
-		return nil, fmt.Errorf("loopID cannot be empty")
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("loopID cannot be empty"),
+			"LLMExtractor",
+			"ExtractFacts",
+			"validate loopID",
+		)
 	}
 
 	// Check context cancellation
@@ -52,7 +58,7 @@ func (e *LLMExtractor) ExtractFacts(ctx context.Context, loopID, responseContent
 			e.config.LLMAssisted.MaxTokens,
 		)
 		if err != nil {
-			return nil, fmt.Errorf("llm extraction failed: %w", err)
+			return nil, errs.WrapTransient(err, "LLMExtractor", "ExtractFacts", "llm extraction")
 		}
 		return triples, nil
 	}

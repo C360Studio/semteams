@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/c360studio/semstreams/pkg/errs"
 	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
 
@@ -109,7 +110,7 @@ func (i *interpolator) interpolate(input string) (string, error) {
 func (i *interpolator) resolvePath(path string) (any, error) {
 	parts := strings.Split(path, ".")
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("empty path")
+		return nil, errs.WrapInvalid(fmt.Errorf("empty path"), "interpolator", "resolvePath", "parse path")
 	}
 
 	switch parts[0] {
@@ -120,14 +121,14 @@ func (i *interpolator) resolvePath(path string) (any, error) {
 	case "steps":
 		return i.resolveStepsPath(parts[1:])
 	default:
-		return nil, fmt.Errorf("unknown path root: %s", parts[0])
+		return nil, errs.WrapInvalid(fmt.Errorf("unknown path root: %s", parts[0]), "interpolator", "resolvePath", "resolve path root")
 	}
 }
 
 // resolveExecutionPath resolves paths under execution.*
 func (i *interpolator) resolveExecutionPath(parts []string) (any, error) {
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("execution path requires field")
+		return nil, errs.WrapInvalid(fmt.Errorf("execution path requires field"), "interpolator", "resolveExecutionPath", "validate path")
 	}
 
 	switch parts[0] {
@@ -146,14 +147,14 @@ func (i *interpolator) resolveExecutionPath(parts []string) (any, error) {
 	case "current_name":
 		return i.execution.CurrentName, nil
 	default:
-		return nil, fmt.Errorf("unknown execution field: %s", parts[0])
+		return nil, errs.WrapInvalid(fmt.Errorf("unknown execution field: %s", parts[0]), "interpolator", "resolveExecutionPath", "resolve field")
 	}
 }
 
 // resolveTriggerPath resolves paths under trigger.*
 func (i *interpolator) resolveTriggerPath(parts []string) (any, error) {
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("trigger path requires field")
+		return nil, errs.WrapInvalid(fmt.Errorf("trigger path requires field"), "interpolator", "resolveTriggerPath", "validate path")
 	}
 
 	switch parts[0] {
@@ -169,19 +170,19 @@ func (i *interpolator) resolveTriggerPath(parts []string) (any, error) {
 		}
 		return i.execution.Trigger.Headers, nil
 	default:
-		return nil, fmt.Errorf("unknown trigger field: %s", parts[0])
+		return nil, errs.WrapInvalid(fmt.Errorf("unknown trigger field: %s", parts[0]), "interpolator", "resolveTriggerPath", "resolve field")
 	}
 }
 
 // resolveTriggerPayloadPath resolves paths into the trigger payload JSON
 func (i *interpolator) resolveTriggerPayloadPath(parts []string) (any, error) {
 	if i.execution.Trigger.Payload == nil {
-		return nil, fmt.Errorf("trigger payload is empty")
+		return nil, errs.WrapInvalid(fmt.Errorf("trigger payload is empty"), "interpolator", "resolveTriggerPayloadPath", "access payload")
 	}
 
 	var payload map[string]any
 	if err := json.Unmarshal(i.execution.Trigger.Payload, &payload); err != nil {
-		return nil, fmt.Errorf("failed to parse trigger payload: %w", err)
+		return nil, errs.WrapInvalid(err, "interpolator", "resolveTriggerPayloadPath", "parse trigger payload")
 	}
 
 	return resolveMapPath(payload, parts)
@@ -190,13 +191,13 @@ func (i *interpolator) resolveTriggerPayloadPath(parts []string) (any, error) {
 // resolveStepsPath resolves paths under steps.*
 func (i *interpolator) resolveStepsPath(parts []string) (any, error) {
 	if len(parts) == 0 {
-		return nil, fmt.Errorf("steps path requires step name")
+		return nil, errs.WrapInvalid(fmt.Errorf("steps path requires step name"), "interpolator", "resolveStepsPath", "validate path")
 	}
 
 	stepName := parts[0]
 	result, ok := i.execution.StepResults[stepName]
 	if !ok {
-		return nil, fmt.Errorf("step not found: %s", stepName)
+		return nil, errs.WrapInvalid(fmt.Errorf("step not found: %s", stepName), "interpolator", "resolveStepsPath", "find step")
 	}
 
 	if len(parts) == 1 {
@@ -215,14 +216,14 @@ func (i *interpolator) resolveStepsPath(parts []string) (any, error) {
 	case "output":
 		return i.resolveStepOutputPath(result, parts[2:])
 	default:
-		return nil, fmt.Errorf("unknown step field: %s", parts[1])
+		return nil, errs.WrapInvalid(fmt.Errorf("unknown step field: %s", parts[1]), "interpolator", "resolveStepsPath", "resolve field")
 	}
 }
 
 // resolveStepOutputPath resolves paths into a step's output JSON
 func (i *interpolator) resolveStepOutputPath(result StepResult, parts []string) (any, error) {
 	if result.Output == nil {
-		return nil, fmt.Errorf("step output is empty")
+		return nil, errs.WrapInvalid(fmt.Errorf("step output is empty"), "interpolator", "resolveStepOutputPath", "access output")
 	}
 
 	var output map[string]any
@@ -232,7 +233,7 @@ func (i *interpolator) resolveStepOutputPath(result StepResult, parts []string) 
 		if err2 := json.Unmarshal(result.Output, &simpleOutput); err2 == nil && len(parts) == 0 {
 			return simpleOutput, nil
 		}
-		return nil, fmt.Errorf("failed to parse step output: %w", err)
+		return nil, errs.WrapInvalid(err, "interpolator", "resolveStepOutputPath", "parse step output")
 	}
 
 	if len(parts) == 0 {
@@ -251,7 +252,7 @@ func resolveMapPath(data map[string]any, parts []string) (any, error) {
 	key := parts[0]
 	value, ok := data[key]
 	if !ok {
-		return nil, fmt.Errorf("key not found: %s", key)
+		return nil, errs.WrapInvalid(fmt.Errorf("key not found: %s", key), "interpolator", "resolveMapPath", "find key")
 	}
 
 	if len(parts) == 1 {
@@ -262,10 +263,10 @@ func resolveMapPath(data map[string]any, parts []string) (any, error) {
 	if idx, err := strconv.Atoi(parts[1]); err == nil {
 		arr, ok := value.([]any)
 		if !ok {
-			return nil, fmt.Errorf("expected array for index: %s", parts[1])
+			return nil, errs.WrapInvalid(fmt.Errorf("expected array for index: %s", parts[1]), "interpolator", "resolveMapPath", "access array")
 		}
 		if idx < 0 || idx >= len(arr) {
-			return nil, fmt.Errorf("array index out of bounds: %d", idx)
+			return nil, errs.WrapInvalid(fmt.Errorf("array index out of bounds: %d", idx), "interpolator", "resolveMapPath", "validate index")
 		}
 		if len(parts) == 2 {
 			return arr[idx], nil
@@ -273,13 +274,13 @@ func resolveMapPath(data map[string]any, parts []string) (any, error) {
 		if nestedMap, ok := arr[idx].(map[string]any); ok {
 			return resolveMapPath(nestedMap, parts[2:])
 		}
-		return nil, fmt.Errorf("cannot traverse into non-object array element")
+		return nil, errs.WrapInvalid(fmt.Errorf("cannot traverse into non-object array element"), "interpolator", "resolveMapPath", "traverse array")
 	}
 
 	// Handle nested object
 	nestedMap, ok := value.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("cannot traverse into non-object: %s", key)
+		return nil, errs.WrapInvalid(fmt.Errorf("cannot traverse into non-object: %s", key), "interpolator", "resolveMapPath", "traverse object")
 	}
 
 	return resolveMapPath(nestedMap, parts[1:])
@@ -325,7 +326,7 @@ func (i *interpolator) EvaluateCondition(cond *wfschema.ConditionDef) (bool, err
 		if cond.Operator == "exists" {
 			return false, nil
 		}
-		return false, fmt.Errorf("failed to resolve field %s: %w", cond.Field, err)
+		return false, errs.WrapInvalid(err, "interpolator", "EvaluateCondition", fmt.Sprintf("resolve field %s", cond.Field))
 	}
 
 	switch cond.Operator {
@@ -346,7 +347,7 @@ func (i *interpolator) EvaluateCondition(cond *wfschema.ConditionDef) (bool, err
 	case "lte":
 		return compareEqual(value, cond.Value) || compareLess(value, cond.Value), nil
 	default:
-		return false, fmt.Errorf("unknown operator: %s", cond.Operator)
+		return false, errs.WrapInvalid(fmt.Errorf("unknown operator: %s", cond.Operator), "interpolator", "EvaluateCondition", "validate operator")
 	}
 }
 

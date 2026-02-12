@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/c360studio/semstreams/pkg/cache"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // globalRegexCache is the LRU cache for compiled regular expressions
@@ -44,7 +45,7 @@ func compileRegex(pattern string) (*regexp.Regexp, error) {
 	// Not in cache, compile it
 	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return nil, fmt.Errorf("invalid regex pattern '%s': %w", pattern, err)
+		return nil, errs.WrapInvalid(err, "RegexCache", "compileRegex", fmt.Sprintf("invalid regex pattern '%s'", pattern))
 	}
 
 	// Add to cache - the cache package handles LRU eviction automatically
@@ -58,7 +59,7 @@ func compileRegex(pattern string) (*regexp.Regexp, error) {
 func validateRegexComplexity(pattern string) error {
 	// Check pattern length
 	if len(pattern) > 500 {
-		return fmt.Errorf("regex pattern too long (max 500 chars): %d chars", len(pattern))
+		return errs.WrapInvalid(errs.ErrInvalidData, "RegexCache", "validateRegexComplexity", fmt.Sprintf("regex pattern too long (max 500 chars): %d chars", len(pattern)))
 	}
 
 	// List of dangerous pattern fragments that indicate potential exponential backtracking
@@ -78,7 +79,7 @@ func validateRegexComplexity(pattern string) error {
 	// Note: This is a heuristic check, not exhaustive
 	for _, fragment := range dangerousFragments {
 		if strings.Contains(pattern, fragment) {
-			return fmt.Errorf("regex pattern contains potentially dangerous construct: nested quantifiers that may cause exponential backtracking")
+			return errs.WrapInvalid(errs.ErrInvalidData, "RegexCache", "validateRegexComplexity", "regex pattern contains potentially dangerous construct: nested quantifiers that may cause exponential backtracking")
 		}
 	}
 
@@ -88,14 +89,14 @@ func validateRegexComplexity(pattern string) error {
 		// Simple check for large numbers in repetition
 		for i := 1000; i <= 9999; i++ {
 			if strings.Contains(pattern, fmt.Sprintf("{%d", i)) {
-				return fmt.Errorf("regex pattern contains excessive repetition count (>= 1000)")
+				return errs.WrapInvalid(errs.ErrInvalidData, "RegexCache", "validateRegexComplexity", "regex pattern contains excessive repetition count (>= 1000)")
 			}
 		}
 	}
 
 	// Additional checks for other dangerous constructs
 	if strings.Count(pattern, "(") > 20 {
-		return fmt.Errorf("regex pattern has too many capture groups (max 20)")
+		return errs.WrapInvalid(errs.ErrInvalidData, "RegexCache", "validateRegexComplexity", "regex pattern has too many capture groups (max 20)")
 	}
 
 	// Check for deeply nested groups
@@ -112,7 +113,7 @@ func validateRegexComplexity(pattern string) error {
 		}
 	}
 	if maxNest > 5 {
-		return fmt.Errorf("regex pattern has excessive nesting depth (max 5 levels)")
+		return errs.WrapInvalid(errs.ErrInvalidData, "RegexCache", "validateRegexComplexity", "regex pattern has excessive nesting depth (max 5 levels)")
 	}
 
 	return nil

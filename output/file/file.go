@@ -317,11 +317,13 @@ func (f *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 		streamName = f.deriveStreamName(port.Subject)
 	}
 	if streamName == "" {
-		return fmt.Errorf("could not derive stream name for subject %s", port.Subject)
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "setupJetStreamConsumer",
+			fmt.Sprintf("derive stream name for subject %s", port.Subject))
 	}
 
 	if err := f.waitForStream(ctx, streamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", streamName, err)
+		return errs.WrapTransient(err, "Output", "setupJetStreamConsumer",
+			fmt.Sprintf("wait for stream %s", streamName))
 	}
 
 	sanitizedSubject := strings.ReplaceAll(port.Subject, ".", "-")
@@ -351,7 +353,8 @@ func (f *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+		return errs.WrapTransient(err, "Output", "setupJetStreamConsumer",
+			fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
 	f.logger.Info("File output subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
@@ -362,7 +365,7 @@ func (f *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 func (f *Output) waitForStream(ctx context.Context, streamName string) error {
 	js, err := f.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "Output", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -383,7 +386,8 @@ func (f *Output) waitForStream(ctx context.Context, streamName string) error {
 			}
 		}
 	}
-	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(errs.ErrStorageUnavailable, "Output", "waitForStream",
+		fmt.Sprintf("stream %s not available after %d retries", streamName, maxRetries))
 }
 
 // deriveStreamName extracts stream name from subject convention
@@ -430,7 +434,8 @@ func (f *Output) Stop(timeout time.Duration) error {
 	case <-waitCh:
 		// Clean shutdown
 	case <-time.After(timeout):
-		return errs.WrapTransient(fmt.Errorf("shutdown timeout after %v", timeout), "Output", "Stop", "shutdown")
+		return errs.WrapTransient(context.DeadlineExceeded, "Output", "Stop",
+			fmt.Sprintf("shutdown timeout after %v", timeout))
 	}
 
 	// Flush remaining buffer

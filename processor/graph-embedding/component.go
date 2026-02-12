@@ -421,7 +421,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	// Check initialization
 	if !c.initialized {
-		return errs.WrapFatal(fmt.Errorf("component not initialized"), "Component", "Start", "initialization check")
+		return errs.WrapFatal(errs.ErrInvalidConfig, "Component", "Start", "component not initialized")
 	}
 
 	// Idempotent - already running
@@ -548,7 +548,7 @@ func (c *Component) Stop(timeout time.Duration) error {
 		return nil
 	case <-time.After(timeout):
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-embedding"))
-		return fmt.Errorf("stop timeout after %v", timeout)
+		return errs.WrapTransient(errs.ErrConnectionTimeout, "Component", "Stop", fmt.Sprintf("stop timeout after %v", timeout))
 	}
 }
 

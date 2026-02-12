@@ -1,6 +1,10 @@
 package agenticgovernance
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/c360studio/semstreams/pkg/errs"
+)
 
 // RateLimitFilterConfig holds rate limiting filter configuration
 type RateLimitFilterConfig struct {
@@ -35,11 +39,11 @@ type RateLimitStorage struct {
 // Validate checks rate limit filter configuration
 func (c *RateLimitFilterConfig) Validate() error {
 	if c.PerUser.RequestsPerMinute < 0 {
-		return fmt.Errorf("per_user.requests_per_minute cannot be negative")
+		return errs.WrapInvalid(fmt.Errorf("per_user.requests_per_minute cannot be negative"), "RateLimitFilterConfig", "Validate", "validate per_user.requests_per_minute")
 	}
 
 	if c.PerUser.TokensPerHour < 0 {
-		return fmt.Errorf("per_user.tokens_per_hour cannot be negative")
+		return errs.WrapInvalid(fmt.Errorf("per_user.tokens_per_hour cannot be negative"), "RateLimitFilterConfig", "Validate", "validate per_user.tokens_per_hour")
 	}
 
 	return nil

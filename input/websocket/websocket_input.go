@@ -352,12 +352,30 @@ func NewInput(
 
 	// Configure WebSocket upgrader for server mode
 	if config.Mode == ModeServer {
+		allowedOrigins := config.ServerConfig.AllowedOrigins
 		input.upgrader = websocket.Upgrader{
 			ReadBufferSize:  config.ServerConfig.ReadBufferSize,
 			WriteBufferSize: config.ServerConfig.WriteBufferSize,
-			CheckOrigin: func(_ *http.Request) bool {
-				// TODO: Implement proper origin checking based on auth config
-				return true
+			CheckOrigin: func(r *http.Request) bool {
+				origin := r.Header.Get("Origin")
+				// If no origin header, allow (same-origin request)
+				if origin == "" {
+					return true
+				}
+				// If no allowed origins configured, reject cross-origin requests
+				if len(allowedOrigins) == 0 {
+					return false
+				}
+				// Check if origin matches any allowed origin
+				for _, allowed := range allowedOrigins {
+					if allowed == "*" {
+						return true
+					}
+					if allowed == origin {
+						return true
+					}
+				}
+				return false
 			},
 			EnableCompression: config.ServerConfig.EnableCompression,
 		}

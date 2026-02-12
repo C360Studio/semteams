@@ -270,11 +270,16 @@ func (f *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 		streamName = f.deriveStreamName(port.Subject)
 	}
 	if streamName == "" {
-		return fmt.Errorf("could not derive stream name for subject %s", port.Subject)
+		return errs.WrapInvalid(
+			errs.ErrInvalidConfig,
+			"JSONFilterProcessor",
+			"setupJetStreamConsumer",
+			fmt.Sprintf("derive stream name for subject %s", port.Subject))
 	}
 
 	if err := f.waitForStream(ctx, streamName); err != nil {
-		return fmt.Errorf("stream %s not available: %w", streamName, err)
+		return errs.WrapTransient(err, "JSONFilterProcessor", "setupJetStreamConsumer",
+			fmt.Sprintf("wait for stream %s", streamName))
 	}
 
 	sanitizedSubject := sanitizeSubject(port.Subject)
@@ -302,7 +307,8 @@ func (f *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 		}
 	})
 	if err != nil {
-		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
+		return errs.WrapTransient(err, "JSONFilterProcessor", "setupJetStreamConsumer",
+			fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
 	f.logger.Info("JSON filter subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
@@ -313,7 +319,7 @@ func (f *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 func (f *Processor) waitForStream(ctx context.Context, streamName string) error {
 	js, err := f.natsClient.JetStream()
 	if err != nil {
-		return fmt.Errorf("failed to get JetStream context: %w", err)
+		return errs.WrapTransient(err, "JSONFilterProcessor", "waitForStream", "get JetStream context")
 	}
 
 	maxRetries := 30
@@ -334,7 +340,11 @@ func (f *Processor) waitForStream(ctx context.Context, streamName string) error 
 			}
 		}
 	}
-	return fmt.Errorf("stream %s not available after %d retries", streamName, maxRetries)
+	return errs.WrapTransient(
+		errs.ErrStorageUnavailable,
+		"JSONFilterProcessor",
+		"waitForStream",
+		fmt.Sprintf("stream %s not available after %d retries", streamName, maxRetries))
 }
 
 // deriveStreamName extracts stream name from subject convention
@@ -401,8 +411,9 @@ func (f *Processor) Stop(timeout time.Duration) error {
 		// Clean shutdown
 	case <-time.After(timeout):
 		return errs.WrapTransient(
-			fmt.Errorf("shutdown timeout after %v", timeout),
-			"JSONFilterProcessor", "Stop", "graceful shutdown")
+			errs.ErrConnectionTimeout,
+			"JSONFilterProcessor", "Stop",
+			fmt.Sprintf("graceful shutdown timeout after %v", timeout))
 	}
 
 	f.mu.Lock()

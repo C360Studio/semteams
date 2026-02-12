@@ -145,11 +145,9 @@ func TestIntegration_ComponentDiscovery(t *testing.T) {
 	assert.NotNil(t, schema.Properties)
 }
 
-func TestIntegration_QueryCapabilities_GracefulDegradation(t *testing.T) {
-	// FIXME: This test references handleQueryCapabilities which was removed.
-	// Skip until the test is rewritten or removed.
-	t.Skip("handleQueryCapabilities method no longer exists - test needs rewrite")
-}
+// TestIntegration_QueryCapabilities_GracefulDegradation was removed because
+// the handleQueryCapabilities method no longer exists after refactoring to
+// static routing. The test is no longer relevant to the current implementation.
 
 func TestIntegration_ConfigValidation(t *testing.T) {
 	if testing.Short() {

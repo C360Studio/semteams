@@ -11,6 +11,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // LoopInfo contains information about an active loop
@@ -170,7 +171,7 @@ func (t *LoopTracker) UpdateIterations(loopID string, iterations int) {
 // It also updates the State field to match the terminal state implied by the outcome.
 func (t *LoopTracker) UpdateCompletion(loopID, outcome, result, errMsg string) error {
 	if !isValidOutcome(outcome) {
-		return fmt.Errorf("invalid outcome: %s", outcome)
+		return errs.WrapInvalid(fmt.Errorf("invalid outcome: %s", outcome), "LoopTracker", "UpdateCompletion", "validate outcome")
 	}
 
 	t.mu.Lock()
@@ -178,7 +179,7 @@ func (t *LoopTracker) UpdateCompletion(loopID, outcome, result, errMsg string) e
 
 	info, ok := t.loops[loopID]
 	if !ok {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.WrapInvalid(fmt.Errorf("loop %s not found", loopID), "LoopTracker", "UpdateCompletion", "find loop")
 	}
 
 	info.Outcome = outcome
@@ -375,12 +376,12 @@ func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, loo
 	signalMsg := message.NewBaseMessage(signal.Schema(), &signal, "agentic-dispatch")
 	data, err := json.Marshal(signalMsg)
 	if err != nil {
-		return fmt.Errorf("marshal signal for loop %s: %w", loopID, err)
+		return errs.Wrap(err, "LoopTracker", "SendSignal", fmt.Sprintf("marshal signal for loop %s", loopID))
 	}
 
 	subject := "agent.signal." + loopID
 	if err := nc.PublishToStream(ctx, subject, data); err != nil {
-		return fmt.Errorf("publish signal %s to loop %s on subject %s: %w", signalType, loopID, subject, err)
+		return errs.WrapTransient(err, "LoopTracker", "SendSignal", fmt.Sprintf("publish signal %s to loop %s on subject %s", signalType, loopID, subject))
 	}
 
 	if t.logger != nil {
@@ -395,4 +396,4 @@ func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, loo
 }
 
 // ErrNATSClientNil is returned when NATS client is nil.
-var ErrNATSClientNil = fmt.Errorf("NATS client is nil")
+var ErrNATSClientNil = errs.ErrNoConnection

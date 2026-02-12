@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/graph/clustering"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -15,22 +16,22 @@ import (
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	// Subscribe to community query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.community", c.handleQueryCommunityNATS); err != nil {
-		return fmt.Errorf("subscribe community query: %w", err)
+		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe community query")
 	}
 
 	// Subscribe to members query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.members", c.handleQueryMembersNATS); err != nil {
-		return fmt.Errorf("subscribe members query: %w", err)
+		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe members query")
 	}
 
 	// Subscribe to entity community query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.entity", c.handleQueryEntityNATS); err != nil {
-		return fmt.Errorf("subscribe entity query: %w", err)
+		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe entity query")
 	}
 
 	// Subscribe to level query
 	if err := c.natsClient.SubscribeForRequests(ctx, "graph.clustering.query.level", c.handleQueryLevelNATS); err != nil {
-		return fmt.Errorf("subscribe level query: %w", err)
+		return errs.WrapTransient(err, "Component", "setupQueryHandlers", "subscribe level query")
 	}
 
 	c.logger.Info("query handlers registered",
@@ -100,12 +101,12 @@ func (c *Component) handleQueryCommunityNATS(_ context.Context, data []byte) ([]
 	// Parse request
 	var req CommunityRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "handleQueryCommunityNATS", "request unmarshal")
 	}
 
 	// Validate request
 	if req.ID == "" {
-		return nil, fmt.Errorf("invalid request: empty id")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "handleQueryCommunityNATS", "empty community id")
 	}
 
 	// Get community from bucket
@@ -130,12 +131,12 @@ func (c *Component) handleQueryMembersNATS(_ context.Context, data []byte) ([]by
 	// Parse request
 	var req MembersRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "handleQueryMembersNATS", "request unmarshal")
 	}
 
 	// Validate request
 	if req.CommunityID == "" {
-		return nil, fmt.Errorf("invalid request: empty community_id")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "handleQueryMembersNATS", "empty community id")
 	}
 
 	// Get community
@@ -162,12 +163,12 @@ func (c *Component) handleQueryEntityNATS(_ context.Context, data []byte) ([]byt
 	// Parse request
 	var req EntityRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "handleQueryEntityNATS", "request unmarshal")
 	}
 
 	// Validate request
 	if req.EntityID == "" {
-		return nil, fmt.Errorf("invalid request: empty entity_id")
+		return nil, errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "handleQueryEntityNATS", "empty entity id")
 	}
 
 	// Apply defaults
@@ -200,7 +201,7 @@ func (c *Component) handleQueryLevelNATS(_ context.Context, data []byte) ([]byte
 	// Parse request
 	var req LevelRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "Component", "handleQueryLevelNATS", "request unmarshal")
 	}
 
 	// Apply defaults
@@ -227,20 +228,20 @@ func (c *Component) handleQueryLevelNATS(_ context.Context, data []byte) ([]byte
 // getCommunity retrieves a community by ID from the KV bucket
 func (c *Component) getCommunity(ctx context.Context, id string) (*clustering.Community, error) {
 	if c.communityBucket == nil {
-		return nil, fmt.Errorf("community bucket not initialized")
+		return nil, errs.WrapFatal(errs.ErrInvalidConfig, "Component", "getCommunity", "community bucket not initialized")
 	}
 
 	entry, err := c.communityBucket.Get(ctx, id)
 	if err != nil {
 		if err == jetstream.ErrKeyNotFound {
-			return nil, fmt.Errorf("not found: %s", id)
+			return nil, errs.WrapInvalid(errs.ErrKeyNotFound, "Component", "getCommunity", fmt.Sprintf("community not found: %s", id))
 		}
-		return nil, fmt.Errorf("get community: %w", err)
+		return nil, errs.WrapTransient(err, "Component", "getCommunity", "KV bucket read")
 	}
 
 	var community clustering.Community
 	if err := json.Unmarshal(entry.Value(), &community); err != nil {
-		return nil, fmt.Errorf("unmarshal community: %w", err)
+		return nil, errs.Wrap(err, "Component", "getCommunity", "community unmarshal")
 	}
 
 	return &community, nil
@@ -250,7 +251,7 @@ func (c *Component) getCommunity(ctx context.Context, id string) (*clustering.Co
 // Uses the indexed entity mapping (entity.{level}.{entity_id} -> community_id) for O(1) lookup
 func (c *Component) getEntityCommunity(ctx context.Context, entityID string, level int) (*clustering.Community, error) {
 	if c.communityBucket == nil {
-		return nil, fmt.Errorf("community bucket not initialized")
+		return nil, errs.WrapFatal(errs.ErrInvalidConfig, "Component", "getEntityCommunity", "community bucket not initialized")
 	}
 
 	// Use indexed entity -> community mapping for O(1) lookup
@@ -260,7 +261,7 @@ func (c *Component) getEntityCommunity(ctx context.Context, entityID string, lev
 		if err == jetstream.ErrKeyNotFound {
 			return nil, nil // Entity not in any community at this level
 		}
-		return nil, fmt.Errorf("get entity mapping: %w", err)
+		return nil, errs.WrapTransient(err, "Component", "getEntityCommunity", "get entity mapping")
 	}
 
 	communityID := string(entry.Value())
@@ -272,12 +273,12 @@ func (c *Component) getEntityCommunity(ctx context.Context, entityID string, lev
 		if err == jetstream.ErrKeyNotFound {
 			return nil, nil // Mapping exists but community was deleted
 		}
-		return nil, fmt.Errorf("get community: %w", err)
+		return nil, errs.WrapTransient(err, "Component", "getEntityCommunity", "get community")
 	}
 
 	var community clustering.Community
 	if err := json.Unmarshal(communityEntry.Value(), &community); err != nil {
-		return nil, fmt.Errorf("unmarshal community: %w", err)
+		return nil, errs.Wrap(err, "Component", "getEntityCommunity", "community unmarshal")
 	}
 
 	return &community, nil
@@ -286,13 +287,13 @@ func (c *Component) getEntityCommunity(ctx context.Context, entityID string, lev
 // getCommunitiesByLevel retrieves all communities at a given level
 func (c *Component) getCommunitiesByLevel(ctx context.Context, level int) ([]*clustering.Community, error) {
 	if c.communityBucket == nil {
-		return nil, fmt.Errorf("community bucket not initialized")
+		return nil, errs.WrapFatal(errs.ErrInvalidConfig, "Component", "getCommunitiesByLevel", "community bucket not initialized")
 	}
 
 	// List all keys and filter by level
 	keys, err := c.communityBucket.Keys(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("list keys: %w", err)
+		return nil, errs.WrapTransient(err, "Component", "getCommunitiesByLevel", "list keys")
 	}
 
 	var communities []*clustering.Community

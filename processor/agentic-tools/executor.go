@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // ToolExecutor defines the interface for tool executors
@@ -31,17 +32,17 @@ func NewExecutorRegistry() *ExecutorRegistry {
 // Returns an error if a tool with the same name is already registered
 func (r *ExecutorRegistry) RegisterTool(name string, executor ToolExecutor) error {
 	if name == "" {
-		return fmt.Errorf("tool name cannot be empty")
+		return errs.WrapInvalid(fmt.Errorf("tool name cannot be empty"), "ExecutorRegistry", "RegisterTool", "validate name")
 	}
 	if executor == nil {
-		return fmt.Errorf("executor cannot be nil")
+		return errs.WrapInvalid(fmt.Errorf("executor cannot be nil"), "ExecutorRegistry", "RegisterTool", "validate executor")
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	if _, exists := r.executors[name]; exists {
-		return fmt.Errorf("tool %q is already registered", name)
+		return errs.WrapInvalid(fmt.Errorf("tool %q is already registered", name), "ExecutorRegistry", "RegisterTool", "check duplicate")
 	}
 
 	r.executors[name] = executor
@@ -84,7 +85,7 @@ func (r *ExecutorRegistry) Execute(ctx context.Context, call agentic.ToolCall) (
 			CallID: call.ID,
 			Error:  fmt.Sprintf("tool %q not found", call.Name),
 		}
-		return result, fmt.Errorf("tool %q not found", call.Name)
+		return result, errs.WrapInvalid(fmt.Errorf("tool %q not found", call.Name), "ExecutorRegistry", "Execute", "find tool")
 	}
 
 	// Execute with context (supports timeout/cancellation)

@@ -64,7 +64,7 @@ func getEntitiesUpdatedMetric(registry *metric.MetricsRegistry) prometheus.Count
 // Config holds configuration for graph-ingest component
 type Config struct {
 	Ports              *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
-	EnableHierarchy    bool                  `json:"enable_hierarchy" schema:"type:bool,description:Enable hierarchy inference,category:advanced"`
+	EnableHierarchy    bool                  `json:"enable_hierarchy" schema:"type:bool,description:Enable hierarchy inference,default:false,category:advanced"`
 	EnableTypeSiblings *bool                 `json:"enable_type_siblings" schema:"type:bool,description:Enable sibling edges between same-type entities (default true when hierarchy enabled),category:advanced"`
 }
 
@@ -625,7 +625,7 @@ func (c *Component) setupJetStreamConsumer(ctx context.Context, port component.P
 	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
 	consumerName := fmt.Sprintf("graph-ingest-%s", sanitizedSubject)
 
-	c.logger.Info("Setting up JetStream consumer",
+	c.logger.Debug("Setting up JetStream consumer",
 		slog.String("stream", streamName),
 		slog.String("consumer", consumerName),
 		slog.String("filter_subject", port.Subject))
@@ -651,7 +651,7 @@ func (c *Component) setupJetStreamConsumer(ctx context.Context, port component.P
 		return fmt.Errorf("consumer setup failed for stream %s: %w", streamName, err)
 	}
 
-	c.logger.Info("graph-ingest subscribed (JetStream)",
+	c.logger.Debug("graph-ingest subscribed (JetStream)",
 		slog.String("subject", subject),
 		slog.String("stream", streamName))
 	return nil

@@ -38,21 +38,12 @@ type natsRequester interface {
 
 // Config defines the configuration for the graph-query coordinator component
 type Config struct {
-	Ports        *component.PortConfig `json:"ports,omitempty"`
-	QueryTimeout time.Duration         `json:"query_timeout,omitempty"`
-	MaxDepth     int                   `json:"max_depth,omitempty"`
-
-	// Resource startup settings for optional KV bucket dependencies (e.g., COMMUNITY_INDEX).
-	// These control how long Start() waits for optional features to become available.
-	// Production: use defaults (10 attempts × 500ms = 5s total).
-	// Tests: use 1 attempt with 1ms interval for instant failure on missing buckets.
-	StartupAttempts int           `json:"startup_attempts,omitempty"`
-	StartupInterval time.Duration `json:"startup_interval,omitempty"`
-
-	// RecheckInterval controls how often to check for bucket availability after startup timeout.
-	// If bucket doesn't exist at startup, the component will recheck at this interval.
-	// Default: 5s (allows recovery within reasonable time for distributed startup).
-	RecheckInterval time.Duration `json:"recheck_interval,omitempty"`
+	Ports           *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration,category:basic"`
+	QueryTimeout    time.Duration         `json:"query_timeout,omitempty" schema:"type:duration,description:Timeout for query operations,default:5s,category:basic"`
+	MaxDepth        int                   `json:"max_depth,omitempty" schema:"type:int,description:Maximum traversal depth for path search,default:10,min:1,max:100,category:basic"`
+	StartupAttempts int                   `json:"startup_attempts,omitempty" schema:"type:int,description:Max attempts for startup dependency checks,default:10,min:1,category:advanced"`
+	StartupInterval time.Duration         `json:"startup_interval,omitempty" schema:"type:duration,description:Interval between startup attempts,default:500ms,category:advanced"`
+	RecheckInterval time.Duration         `json:"recheck_interval,omitempty" schema:"type:duration,description:Interval for rechecking missing buckets,default:5s,category:advanced"`
 }
 
 // Validate validates the configuration
@@ -118,7 +109,6 @@ type Component struct {
 	wg          sync.WaitGroup
 	initialized bool
 	started     bool
-	ctx         context.Context
 	cancel      context.CancelFunc
 
 	// Health tracking
@@ -323,11 +313,12 @@ func (c *Component) Start(ctx context.Context) error {
 		return nil // Already started - idempotent
 	}
 
-	// Create component context
-	c.ctx, c.cancel = context.WithCancel(ctx)
+	// Create component context for lifecycle management
+	componentCtx, cancel := context.WithCancel(ctx)
+	c.cancel = cancel
 
 	// Wait for NATS connection
-	if err := c.natsClient.WaitForConnection(c.ctx); err != nil {
+	if err := c.natsClient.WaitForConnection(componentCtx); err != nil {
 		return fmt.Errorf("wait for NATS connection: %w", err)
 	}
 
@@ -337,7 +328,7 @@ func (c *Component) Start(ctx context.Context) error {
 		c.logger.Warn("Failed to get JetStream, lifecycle reporting disabled", slog.Any("error", err))
 		c.lifecycleReporter = component.NewNoOpLifecycleReporter()
 	} else {
-		statusBucket, err := js.CreateOrUpdateKeyValue(c.ctx, jetstream.KeyValueConfig{
+		statusBucket, err := js.CreateOrUpdateKeyValue(componentCtx, jetstream.KeyValueConfig{
 			Bucket:      "COMPONENT_STATUS",
 			Description: "Component lifecycle status tracking",
 		})
@@ -359,7 +350,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.router = NewStaticRouter(c.logger)
 
 	// Subscribe to query subjects
-	if err := c.setupQueryHandlers(); err != nil {
+	if err := c.setupQueryHandlers(componentCtx); err != nil {
 		return fmt.Errorf("subscribe to queries: %w", err)
 	}
 
@@ -374,16 +365,16 @@ func (c *Component) Start(ctx context.Context) error {
 	watcherCfg.RecheckInterval = c.config.RecheckInterval
 	watcherCfg.Logger = c.logger
 	watcherCfg.OnAvailable = func() {
-		c.enableGraphRAG()
+		c.enableGraphRAG(componentCtx)
 		// Report recovery from degraded state
-		if err := c.lifecycleReporter.ReportStage(c.ctx, "idle"); err != nil {
+		if err := c.lifecycleReporter.ReportStage(componentCtx, "idle"); err != nil {
 			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
 		}
 	}
 	watcherCfg.OnLost = func() {
 		c.disableGraphRAG()
 		// Report degraded state due to missing dependency
-		if err := c.lifecycleReporter.ReportStage(c.ctx, "degraded_missing_"+graph.BucketCommunityIndex); err != nil {
+		if err := c.lifecycleReporter.ReportStage(componentCtx, "degraded_missing_"+graph.BucketCommunityIndex); err != nil {
 			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "degraded_missing_"+graph.BucketCommunityIndex), slog.Any("error", err))
 		}
 	}
@@ -398,22 +389,22 @@ func (c *Component) Start(ctx context.Context) error {
 	)
 
 	// Report waiting stage before dependency check (COMMUNITY_INDEX is optional but we report waiting)
-	if err := c.lifecycleReporter.ReportStage(c.ctx, "waiting_for_"+graph.BucketCommunityIndex); err != nil {
+	if err := c.lifecycleReporter.ReportStage(componentCtx, "waiting_for_"+graph.BucketCommunityIndex); err != nil {
 		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketCommunityIndex), slog.Any("error", err))
 	}
 
 	// Try to get bucket during startup
-	if c.communityWatcher.WaitForStartup(c.ctx) {
+	if c.communityWatcher.WaitForStartup(componentCtx) {
 		// Bucket available - enable GraphRAG immediately
-		if err := c.startGraphRAGWatcher(); err != nil {
+		if err := c.startGraphRAGWatcher(componentCtx); err != nil {
 			return fmt.Errorf("start GraphRAG watcher: %w", err)
 		}
 	} else {
 		// Bucket not available - start background checking
 		c.logger.Info("COMMUNITY_INDEX bucket not available at startup, GraphRAG disabled (will retry)")
-		c.communityWatcher.StartBackgroundCheck(c.ctx)
+		c.communityWatcher.StartBackgroundCheck(componentCtx)
 		// Report degraded state due to missing optional dependency
-		if err := c.lifecycleReporter.ReportStage(c.ctx, "degraded_missing_"+graph.BucketCommunityIndex); err != nil {
+		if err := c.lifecycleReporter.ReportStage(componentCtx, "degraded_missing_"+graph.BucketCommunityIndex); err != nil {
 			c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "degraded_missing_"+graph.BucketCommunityIndex), slog.Any("error", err))
 		}
 	}
@@ -421,7 +412,7 @@ func (c *Component) Start(ctx context.Context) error {
 	c.started = true
 
 	// Report initial idle state
-	if err := c.lifecycleReporter.ReportStage(c.ctx, "idle"); err != nil {
+	if err := c.lifecycleReporter.ReportStage(componentCtx, "idle"); err != nil {
 		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "idle"), slog.Any("error", err))
 	}
 
@@ -476,8 +467,8 @@ func (c *Component) Stop(timeout time.Duration) error {
 
 // startGraphRAGWatcher initializes and starts the community cache KV watcher.
 // Called when COMMUNITY_INDEX bucket is available at startup.
-func (c *Component) startGraphRAGWatcher() error {
-	communityBucket, err := c.natsClient.GetKeyValueBucket(c.ctx, graph.BucketCommunityIndex)
+func (c *Component) startGraphRAGWatcher(ctx context.Context) error {
+	communityBucket, err := c.natsClient.GetKeyValueBucket(ctx, graph.BucketCommunityIndex)
 	if err != nil {
 		return fmt.Errorf("get COMMUNITY_INDEX bucket: %w", err)
 	}
@@ -486,15 +477,15 @@ func (c *Component) startGraphRAGWatcher() error {
 	c.wg.Add(1)
 	go func() {
 		defer c.wg.Done()
-		if err := c.communityCache.WatchAndSync(c.ctx, communityBucket); err != nil {
-			if c.ctx.Err() == nil {
+		if err := c.communityCache.WatchAndSync(ctx, communityBucket); err != nil {
+			if ctx.Err() == nil {
 				c.logger.Error("community cache watcher failed", "error", err)
 			}
 		}
 	}()
 
 	// Register GraphRAG handlers
-	if err := c.setupGraphRAGHandlers(); err != nil {
+	if err := c.setupGraphRAGHandlers(ctx); err != nil {
 		return fmt.Errorf("setup GraphRAG handlers: %w", err)
 	}
 
@@ -504,15 +495,15 @@ func (c *Component) startGraphRAGWatcher() error {
 
 // enableGraphRAG is called when COMMUNITY_INDEX bucket becomes available after being unavailable.
 // This is the OnAvailable callback for the resource watcher.
-func (c *Component) enableGraphRAG() {
+func (c *Component) enableGraphRAG(ctx context.Context) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.ctx == nil || c.ctx.Err() != nil {
+	if ctx.Err() != nil {
 		return // Component shutting down
 	}
 
-	if err := c.startGraphRAGWatcher(); err != nil {
+	if err := c.startGraphRAGWatcher(ctx); err != nil {
 		c.logger.Error("failed to enable GraphRAG after bucket became available", "error", err)
 	}
 }

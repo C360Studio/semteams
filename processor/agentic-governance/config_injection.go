@@ -3,6 +3,8 @@ package agenticgovernance
 import (
 	"fmt"
 	"regexp"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // InjectionFilterConfig holds injection detection filter configuration
@@ -35,13 +37,13 @@ const (
 // Validate checks injection filter configuration
 func (c *InjectionFilterConfig) Validate() error {
 	if c.ConfidenceThreshold < 0 || c.ConfidenceThreshold > 1 {
-		return fmt.Errorf("confidence_threshold must be between 0.0 and 1.0")
+		return errs.WrapInvalid(fmt.Errorf("confidence_threshold must be between 0.0 and 1.0"), "InjectionFilterConfig", "Validate", "validate confidence_threshold")
 	}
 
 	// Validate patterns compile
 	for i, pattern := range c.Patterns {
 		if _, err := regexp.Compile(pattern.Pattern); err != nil {
-			return fmt.Errorf("patterns[%d]: invalid regex: %w", i, err)
+			return errs.WrapInvalid(err, "InjectionFilterConfig", "Validate", fmt.Sprintf("validate patterns[%d] regex", i))
 		}
 	}
 

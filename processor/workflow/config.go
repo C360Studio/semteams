@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Config represents the configuration for the workflow processor
@@ -43,45 +44,45 @@ type Config struct {
 // Validate validates the configuration
 func (c Config) Validate() error {
 	if strings.TrimSpace(c.DefinitionsBucket) == "" {
-		return fmt.Errorf("definitions_bucket is required")
+		return errs.WrapInvalid(fmt.Errorf("definitions_bucket is required"), "workflow-config", "Validate", "validate definitions_bucket")
 	}
 
 	if strings.TrimSpace(c.ExecutionsBucket) == "" {
-		return fmt.Errorf("executions_bucket is required")
+		return errs.WrapInvalid(fmt.Errorf("executions_bucket is required"), "workflow-config", "Validate", "validate executions_bucket")
 	}
 
 	if strings.TrimSpace(c.StreamName) == "" {
-		return fmt.Errorf("stream_name is required")
+		return errs.WrapInvalid(fmt.Errorf("stream_name is required"), "workflow-config", "Validate", "validate stream_name")
 	}
 
 	if strings.TrimSpace(c.DefaultTimeout) == "" {
-		return fmt.Errorf("default_timeout is required")
+		return errs.WrapInvalid(fmt.Errorf("default_timeout is required"), "workflow-config", "Validate", "validate default_timeout")
 	}
 
 	// Parse default timeout to ensure it's valid
 	duration, err := time.ParseDuration(c.DefaultTimeout)
 	if err != nil {
-		return fmt.Errorf("invalid default_timeout format: %w", err)
+		return errs.WrapInvalid(err, "workflow-config", "Validate", "parse default_timeout")
 	}
 	if duration <= 0 {
-		return fmt.Errorf("default_timeout must be positive")
+		return errs.WrapInvalid(fmt.Errorf("default_timeout must be positive"), "workflow-config", "Validate", "validate default_timeout value")
 	}
 
 	if c.DefaultMaxIterations <= 0 {
-		return fmt.Errorf("default_max_iterations must be greater than 0")
+		return errs.WrapInvalid(fmt.Errorf("default_max_iterations must be greater than 0"), "workflow-config", "Validate", "validate default_max_iterations")
 	}
 
 	if strings.TrimSpace(c.RequestTimeout) != "" {
 		_, err := time.ParseDuration(c.RequestTimeout)
 		if err != nil {
-			return fmt.Errorf("invalid request_timeout format: %w", err)
+			return errs.WrapInvalid(err, "workflow-config", "Validate", "parse request_timeout")
 		}
 	}
 
 	// Validate glob patterns in workflow files
 	for _, pattern := range c.WorkflowFiles {
 		if _, err := filepath.Match(pattern, ""); err != nil {
-			return fmt.Errorf("invalid workflow_files pattern %q: %w", pattern, err)
+			return errs.WrapInvalid(err, "workflow-config", "Validate", fmt.Sprintf("validate workflow_files pattern %q", pattern))
 		}
 	}
 

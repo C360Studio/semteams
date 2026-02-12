@@ -53,8 +53,8 @@ func TestComponent_Start_AlreadyRunning(t *testing.T) {
 	if err == nil {
 		t.Fatal("Start() should fail when already running")
 	}
-	if !containsIgnoreCase(err.Error(), "already running") {
-		t.Errorf("Start() error = %v, want 'already running' message", err)
+	if !containsIgnoreCase(err.Error(), "already started") {
+		t.Errorf("Start() error = %v, want 'already started' message", err)
 	}
 }
 

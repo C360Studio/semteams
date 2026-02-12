@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"strings"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // PIIFilter detects and redacts personally identifiable information
@@ -67,7 +69,7 @@ func NewPIIFilter(config *PIIFilterConfig) (*PIIFilter, error) {
 	for _, def := range config.CustomPatterns {
 		pattern, err := CompileCustomPattern(def)
 		if err != nil {
-			return nil, fmt.Errorf("failed to compile custom pattern %s: %w", def.Type, err)
+			return nil, errs.WrapInvalid(err, "PIIFilter", "NewPIIFilter", fmt.Sprintf("compile custom pattern %s", def.Type))
 		}
 		filter.Patterns[def.Type] = pattern
 	}

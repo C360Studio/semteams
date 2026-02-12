@@ -84,7 +84,7 @@ func (rp *Processor) getOrCreateBucket(ctx context.Context, bucketName string) (
 
 	// For other buckets (WORKFLOW_EXECUTIONS, AGENT_LOOPS), they should already exist
 	// Return the error to indicate the bucket isn't available
-	return nil, fmt.Errorf("bucket %s not found: %w", bucketName, err)
+	return nil, errs.WrapTransient(err, "Processor", "getOrCreateBucket", fmt.Sprintf("bucket %s not found", bucketName))
 }
 
 // getOrCreateEntityBucket gets or creates the ENTITY_STATES KV bucket
@@ -131,7 +131,7 @@ func (rp *Processor) startWatcherForBucketPatternLocked(ctx context.Context, buc
 	// Get bucket
 	bucket, err := rp.getOrCreateBucket(ctx, bucketName)
 	if err != nil {
-		return fmt.Errorf("failed to get bucket %s: %w", bucketName, err)
+		return errs.WrapTransient(err, "Processor", "startWatcherForBucketPatternLocked", fmt.Sprintf("get bucket %s", bucketName))
 	}
 
 	watcher, err := bucket.Watch(ctx, pattern)
@@ -419,7 +419,7 @@ func (rp *Processor) fetchCurrentEntityState(ctx context.Context, entityID strin
 	// Get ENTITY_STATES bucket (should already be available from watchEntityStates)
 	entityBucket, err := rp.natsClient.GetKeyValueBucket(ctx, "ENTITY_STATES")
 	if err != nil {
-		return nil, "", fmt.Errorf("get ENTITY_STATES bucket: %w", err)
+		return nil, "", errs.WrapTransient(err, "Processor", "fetchCurrentEntityState", "get ENTITY_STATES bucket")
 	}
 
 	entry, err := entityBucket.Get(ctx, entityID)
@@ -428,12 +428,12 @@ func (rp *Processor) fetchCurrentEntityState(ctx context.Context, entityID strin
 			// Entity was deleted between add and evaluation
 			return nil, "DELETED", nil
 		}
-		return nil, "", fmt.Errorf("get entity state: %w", err)
+		return nil, "", errs.WrapTransient(err, "Processor", "fetchCurrentEntityState", "get entity state")
 	}
 
 	var state gtypes.EntityState
 	if err := json.Unmarshal(entry.Value(), &state); err != nil {
-		return nil, "", fmt.Errorf("unmarshal entity state: %w", err)
+		return nil, "", errs.WrapInvalid(err, "Processor", "fetchCurrentEntityState", "unmarshal entity state")
 	}
 
 	action := "UPDATED"

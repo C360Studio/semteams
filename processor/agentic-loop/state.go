@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/google/uuid"
 )
 
@@ -103,12 +104,12 @@ func (m *LoopManager) GetLoop(loopID string) (agentic.LoopEntity, error) {
 	defer m.mu.RUnlock()
 
 	if loopID == "" {
-		return agentic.LoopEntity{}, fmt.Errorf("loop ID cannot be empty")
+		return agentic.LoopEntity{}, errs.WrapInvalid(fmt.Errorf("loop ID cannot be empty"), "LoopManager", "GetLoop", "validate loop ID")
 	}
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return agentic.LoopEntity{}, fmt.Errorf("loop %s not found", loopID)
+		return agentic.LoopEntity{}, errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "GetLoop", "find loop")
 	}
 
 	return *entity, nil
@@ -120,7 +121,7 @@ func (m *LoopManager) UpdateLoop(entity agentic.LoopEntity) error {
 	defer m.mu.Unlock()
 
 	if _, exists := m.loops[entity.ID]; !exists {
-		return fmt.Errorf("loop %s not found", entity.ID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", entity.ID), "LoopManager", "UpdateLoop", "find loop")
 	}
 
 	m.loops[entity.ID] = &entity
@@ -164,7 +165,7 @@ func (m *LoopManager) TransitionLoop(loopID string, newState agentic.LoopState) 
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
 	}
 
 	return entity.TransitionTo(newState)
@@ -177,7 +178,7 @@ func (m *LoopManager) IncrementIteration(loopID string) error {
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
 	}
 
 	return entity.IncrementIteration()
@@ -189,7 +190,7 @@ func (m *LoopManager) AddPendingTool(loopID, callID string) error {
 	defer m.mu.Unlock()
 
 	if _, exists := m.loops[loopID]; !exists {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
 	}
 
 	if m.pendingTools[loopID] == nil {
@@ -276,7 +277,7 @@ func (m *LoopManager) StoreToolResult(loopID string, result agentic.ToolResult) 
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
 	}
 
 	if entity.PendingToolResults == nil {
@@ -311,7 +312,7 @@ func (m *LoopManager) SetTimeout(loopID string, timeout time.Duration) error {
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
 	}
 
 	now := time.Now()
@@ -345,7 +346,7 @@ func (m *LoopManager) SetParentLoop(loopID, parentLoopID string) error {
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
 	}
 
 	entity.ParentLoopID = parentLoopID
@@ -359,7 +360,7 @@ func (m *LoopManager) SetWorkflowContext(loopID, workflowSlug, workflowStep stri
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
 	}
 
 	entity.WorkflowSlug = workflowSlug
@@ -374,7 +375,7 @@ func (m *LoopManager) SetUserContext(loopID, channelType, channelID, userID stri
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
 	}
 
 	entity.ChannelType = channelType
@@ -471,7 +472,7 @@ func (m *LoopManager) GetLoopForToolCallWithRecovery(toolCallID string) (string,
 // This is called when a loop finishes to populate fields for SSE delivery via KV watch.
 func (m *LoopManager) UpdateCompletion(loopID, outcome, result, errMsg string) error {
 	if !isValidOutcome(outcome) {
-		return fmt.Errorf("invalid outcome: %s", outcome)
+		return errs.WrapInvalid(fmt.Errorf("invalid outcome: %s", outcome), "LoopManager", "UpdateCompletion", "validate outcome")
 	}
 
 	m.mu.Lock()
@@ -479,7 +480,7 @@ func (m *LoopManager) UpdateCompletion(loopID, outcome, result, errMsg string) e
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return fmt.Errorf("loop %s not found", loopID)
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
 	}
 
 	entity.Outcome = outcome
@@ -508,11 +509,16 @@ func (m *LoopManager) CancelLoop(loopID, cancelledBy string) (agentic.LoopEntity
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return agentic.LoopEntity{}, fmt.Errorf("loop %s not found", loopID)
+		return agentic.LoopEntity{}, errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "CancelLoop", "find loop")
 	}
 
 	if entity.State.IsTerminal() {
-		return agentic.LoopEntity{}, fmt.Errorf("cannot cancel terminal loop %s in state %s", loopID, entity.State)
+		return agentic.LoopEntity{}, errs.WrapInvalid(
+			fmt.Errorf("cannot cancel terminal loop %s in state %s", loopID, entity.State),
+			"LoopManager",
+			"CancelLoop",
+			"check loop state",
+		)
 	}
 
 	now := time.Now()

@@ -3,6 +3,8 @@ package agenticmemory
 import (
 	"context"
 	"fmt"
+
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // GraphClient defines the interface for graph operations
@@ -34,7 +36,12 @@ func NewHydrator(config HydrationConfig, graphClient GraphClient) (*Hydrator, er
 func (h *Hydrator) HydratePostCompaction(ctx context.Context, loopID string) (*HydratedContext, error) {
 	// Validate input
 	if loopID == "" {
-		return nil, fmt.Errorf("loopID cannot be empty")
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("loopID cannot be empty"),
+			"Hydrator",
+			"HydratePostCompaction",
+			"validate loopID",
+		)
 	}
 
 	// Check context cancellation
@@ -78,10 +85,20 @@ func (h *Hydrator) HydratePostCompaction(ctx context.Context, loopID string) (*H
 func (h *Hydrator) HydratePreTask(ctx context.Context, loopID, taskDescription string) (*HydratedContext, error) {
 	// Validate inputs
 	if loopID == "" {
-		return nil, fmt.Errorf("loopID cannot be empty")
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("loopID cannot be empty"),
+			"Hydrator",
+			"HydratePreTask",
+			"validate loopID",
+		)
 	}
 	if taskDescription == "" {
-		return nil, fmt.Errorf("taskDescription cannot be empty")
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("taskDescription cannot be empty"),
+			"Hydrator",
+			"HydratePreTask",
+			"validate taskDescription",
+		)
 	}
 
 	// Check context cancellation

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Context configuration constants
@@ -48,33 +49,33 @@ type ContextConfig struct {
 func (c Config) Validate() error {
 	// Validate max_iterations
 	if c.MaxIterations <= 0 {
-		return fmt.Errorf("max_iterations must be greater than 0")
+		return errs.WrapInvalid(fmt.Errorf("max_iterations must be greater than 0"), "Config", "Validate", "check max_iterations")
 	}
 
 	// Validate timeout
 	if strings.TrimSpace(c.Timeout) == "" {
-		return fmt.Errorf("timeout is required")
+		return errs.WrapInvalid(fmt.Errorf("timeout is required"), "Config", "Validate", "check timeout")
 	}
 
 	// Parse timeout to ensure it's valid
 	duration, err := time.ParseDuration(c.Timeout)
 	if err != nil {
-		return fmt.Errorf("invalid timeout format: %w", err)
+		return errs.WrapInvalid(err, "Config", "Validate", "parse timeout format")
 	}
 
 	// Ensure timeout is positive
 	if duration <= 0 {
-		return fmt.Errorf("timeout must be positive")
+		return errs.WrapInvalid(fmt.Errorf("timeout must be positive"), "Config", "Validate", "check timeout value")
 	}
 
 	// Validate loops_bucket
 	if strings.TrimSpace(c.LoopsBucket) == "" {
-		return fmt.Errorf("loops_bucket is required")
+		return errs.WrapInvalid(fmt.Errorf("loops_bucket is required"), "Config", "Validate", "check loops_bucket")
 	}
 
 	// Validate trajectories_bucket
 	if strings.TrimSpace(c.TrajectoriesBucket) == "" {
-		return fmt.Errorf("trajectories_bucket is required")
+		return errs.WrapInvalid(fmt.Errorf("trajectories_bucket is required"), "Config", "Validate", "check trajectories_bucket")
 	}
 
 	// Validate context config
@@ -89,40 +90,40 @@ func (c ContextConfig) Validate() error {
 
 	// Validate threshold: must be 0.01-1.0
 	if c.CompactThreshold < 0.01 || c.CompactThreshold > 1.0 {
-		return fmt.Errorf("compact_threshold must be between 0.01 and 1.0")
+		return errs.WrapInvalid(fmt.Errorf("compact_threshold must be between 0.01 and 1.0"), "ContextConfig", "Validate", "check compact_threshold")
 	}
 
 	// Validate ToolResultMaxAge: must be > 0
 	if c.ToolResultMaxAge <= 0 {
-		return fmt.Errorf("tool_result_max_age must be greater than 0")
+		return errs.WrapInvalid(fmt.Errorf("tool_result_max_age must be greater than 0"), "ContextConfig", "Validate", "check tool_result_max_age")
 	}
 
 	// Validate HeadroomTokens: must be >= 0
 	if c.HeadroomTokens < 0 {
-		return fmt.Errorf("headroom_tokens must be non-negative")
+		return errs.WrapInvalid(fmt.Errorf("headroom_tokens must be non-negative"), "ContextConfig", "Validate", "check headroom_tokens")
 	}
 
 	// Validate SummarizationModel: must not be empty
 	if c.SummarizationModel == "" {
-		return fmt.Errorf("summarization_model is required when context management is enabled")
+		return errs.WrapInvalid(fmt.Errorf("summarization_model is required when context management is enabled"), "ContextConfig", "Validate", "check summarization_model")
 	}
 
 	// Validate ModelLimits: must have "default" key, all values within bounds
 	if c.ModelLimits == nil || len(c.ModelLimits) == 0 {
-		return fmt.Errorf("model_limits cannot be empty")
+		return errs.WrapInvalid(fmt.Errorf("model_limits cannot be empty"), "ContextConfig", "Validate", "check model_limits")
 	}
 	if _, hasDefault := c.ModelLimits[DefaultModelKey]; !hasDefault {
-		return fmt.Errorf("model_limits must contain %q entry", DefaultModelKey)
+		return errs.WrapInvalid(fmt.Errorf("model_limits must contain %q entry", DefaultModelKey), "ContextConfig", "Validate", "check default model")
 	}
 	for model, limit := range c.ModelLimits {
 		if limit <= 0 {
-			return fmt.Errorf("model_limits for %q must be greater than 0", model)
+			return errs.WrapInvalid(fmt.Errorf("model_limits for %q must be greater than 0", model), "ContextConfig", "Validate", "check model limit")
 		}
 		if limit < MinContextLimit {
-			return fmt.Errorf("model_limits[%q] = %d is below minimum %d", model, limit, MinContextLimit)
+			return errs.WrapInvalid(fmt.Errorf("model_limits[%q] = %d is below minimum %d", model, limit, MinContextLimit), "ContextConfig", "Validate", "check minimum limit")
 		}
 		if limit > MaxReasonableContextLimit {
-			return fmt.Errorf("model_limits[%q] = %d exceeds maximum %d", model, limit, MaxReasonableContextLimit)
+			return errs.WrapInvalid(fmt.Errorf("model_limits[%q] = %d exceeds maximum %d", model, limit, MaxReasonableContextLimit), "ContextConfig", "Validate", "check maximum limit")
 		}
 	}
 

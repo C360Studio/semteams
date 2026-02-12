@@ -528,7 +528,7 @@ func (c *Component) Stop(timeout time.Duration) error {
 		return nil
 	case <-time.After(timeout):
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-index-temporal"))
-		return fmt.Errorf("stop timeout after %v", timeout)
+		return errs.WrapTransient(fmt.Errorf("timeout after %v", timeout), "Component", "Stop", "graceful shutdown timeout")
 	}
 }
 

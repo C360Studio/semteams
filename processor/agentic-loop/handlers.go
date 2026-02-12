@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Subject patterns for NATS publishing (concrete subjects, no wildcards).
@@ -231,7 +232,7 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 		if failMsg, err := h.buildFailureEvent(loopID, "timeout", "loop timeout exceeded"); err == nil {
 			result.PublishedMessages = []PublishedMessage{failMsg}
 		}
-		return result, fmt.Errorf("loop timeout exceeded")
+		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "agentic-loop", "HandleModelResponse", "check timeout")
 	}
 
 	entity, err := h.loopManager.GetLoop(loopID)
@@ -241,7 +242,12 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 
 	// Check if max iterations reached
 	if entity.Iterations >= entity.MaxIterations {
-		return HandlerResult{}, fmt.Errorf("max iterations (%d) reached", entity.MaxIterations)
+		return HandlerResult{}, errs.WrapFatal(
+			fmt.Errorf("max iterations (%d) reached", entity.MaxIterations),
+			"agentic-loop",
+			"HandleModelResponse",
+			"check max iterations",
+		)
 	}
 
 	result := HandlerResult{
@@ -418,7 +424,7 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		if failMsg, err := h.buildFailureEvent(loopID, "timeout", "loop timeout exceeded"); err == nil {
 			result.PublishedMessages = []PublishedMessage{failMsg}
 		}
-		return result, fmt.Errorf("loop timeout exceeded")
+		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "agentic-loop", "HandleModelResponse", "check timeout")
 	}
 
 	entity, err := h.loopManager.GetLoop(loopID)
@@ -492,7 +498,7 @@ func (h *MessageHandler) handleToolsComplete(
 	if err != nil {
 		// Max iterations reached - mark as failed
 		if transitionErr := h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed); transitionErr != nil {
-			return *result, fmt.Errorf("failed to transition loop to failed state: %w (original error: %v)", transitionErr, err)
+			return *result, errs.Wrap(transitionErr, "agentic-loop", "handleToolsComplete", fmt.Sprintf("transition loop to failed state (original error: %v)", err))
 		}
 		result.State = agentic.LoopStateFailed
 		result.MaxIterationsReached = true

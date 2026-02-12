@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Config holds configuration for agentic-memory processor component
@@ -63,27 +64,27 @@ func (c *Config) Validate() error {
 	// Validate extraction config only if enabled
 	if c.Extraction.LLMAssisted.Enabled {
 		if err := c.Extraction.LLMAssisted.Validate(); err != nil {
-			return fmt.Errorf("extraction config: %w", err)
+			return errs.WrapInvalid(err, "Config", "Validate", "validate extraction config")
 		}
 	}
 
 	// Validate hydration config
 	if c.Hydration.PreTask.Enabled {
 		if err := c.Hydration.PreTask.Validate(); err != nil {
-			return fmt.Errorf("hydration.pre_task: %w", err)
+			return errs.WrapInvalid(err, "Config", "Validate", "validate hydration.pre_task")
 		}
 	}
 
 	if c.Hydration.PostCompaction.Enabled {
 		if err := c.Hydration.PostCompaction.Validate(); err != nil {
-			return fmt.Errorf("hydration.post_compaction: %w", err)
+			return errs.WrapInvalid(err, "Config", "Validate", "validate hydration.post_compaction")
 		}
 	}
 
 	// Validate checkpoint config only if enabled
 	if c.Checkpoint.Enabled {
 		if err := c.Checkpoint.Validate(); err != nil {
-			return fmt.Errorf("checkpoint config: %w", err)
+			return errs.WrapInvalid(err, "Config", "Validate", "validate checkpoint config")
 		}
 	}
 
@@ -94,20 +95,40 @@ func (c *Config) Validate() error {
 func (l *LLMAssistedConfig) Validate() error {
 	// Check model first
 	if l.Model == "" {
-		return fmt.Errorf("model cannot be empty when extraction is enabled")
+		return errs.WrapInvalid(
+			fmt.Errorf("model cannot be empty when extraction is enabled"),
+			"LLMAssistedConfig",
+			"Validate",
+			"validate model",
+		)
 	}
 
 	// Check each field independently (order doesn't matter for error reporting)
 	if l.MaxTokens < 0 {
-		return fmt.Errorf("max_tokens cannot be negative")
+		return errs.WrapInvalid(
+			fmt.Errorf("max_tokens cannot be negative"),
+			"LLMAssistedConfig",
+			"Validate",
+			"validate max_tokens",
+		)
 	}
 
 	if l.TriggerContextThreshold < 0.0 || l.TriggerContextThreshold > 1.0 {
-		return fmt.Errorf("trigger_context_threshold must be between 0.0 and 1.0")
+		return errs.WrapInvalid(
+			fmt.Errorf("trigger_context_threshold must be between 0.0 and 1.0"),
+			"LLMAssistedConfig",
+			"Validate",
+			"validate trigger_context_threshold",
+		)
 	}
 
 	if l.TriggerIterationInterval <= 0 {
-		return fmt.Errorf("trigger_iteration_interval must be greater than 0")
+		return errs.WrapInvalid(
+			fmt.Errorf("trigger_iteration_interval must be greater than 0"),
+			"LLMAssistedConfig",
+			"Validate",
+			"validate trigger_iteration_interval",
+		)
 	}
 
 	return nil
@@ -116,7 +137,12 @@ func (l *LLMAssistedConfig) Validate() error {
 // Validate checks the pre-task hydration configuration
 func (p *PreTaskConfig) Validate() error {
 	if p.MaxContextTokens < 0 {
-		return fmt.Errorf("max_context_tokens cannot be negative")
+		return errs.WrapInvalid(
+			fmt.Errorf("max_context_tokens cannot be negative"),
+			"PreTaskConfig",
+			"Validate",
+			"validate max_context_tokens",
+		)
 	}
 
 	return nil
@@ -125,7 +151,12 @@ func (p *PreTaskConfig) Validate() error {
 // Validate checks the post-compaction hydration configuration
 func (p *PostCompactionConfig) Validate() error {
 	if p.MaxRecoveryTokens < 0 {
-		return fmt.Errorf("max_recovery_tokens cannot be negative")
+		return errs.WrapInvalid(
+			fmt.Errorf("max_recovery_tokens cannot be negative"),
+			"PostCompactionConfig",
+			"Validate",
+			"validate max_recovery_tokens",
+		)
 	}
 
 	return nil
@@ -134,11 +165,21 @@ func (p *PostCompactionConfig) Validate() error {
 // Validate checks the checkpoint configuration
 func (c *CheckpointConfig) Validate() error {
 	if c.StorageBucket == "" {
-		return fmt.Errorf("storage_bucket cannot be empty when checkpointing is enabled")
+		return errs.WrapInvalid(
+			fmt.Errorf("storage_bucket cannot be empty when checkpointing is enabled"),
+			"CheckpointConfig",
+			"Validate",
+			"validate storage_bucket",
+		)
 	}
 
 	if c.RetentionDays <= 0 {
-		return fmt.Errorf("retention_days must be greater than 0")
+		return errs.WrapInvalid(
+			fmt.Errorf("retention_days must be greater than 0"),
+			"CheckpointConfig",
+			"Validate",
+			"validate retention_days",
+		)
 	}
 
 	return nil

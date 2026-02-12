@@ -344,7 +344,7 @@ func TestTriggerPayloadValidation(t *testing.T) {
 			name:    "invalid data json",
 			payload: TriggerPayload{WorkflowID: "test", Data: json.RawMessage(`{invalid}`)},
 			wantErr: true,
-			errMsg:  "data must be valid JSON",
+			errMsg:  "validate data JSON",
 		},
 	}
 
@@ -504,7 +504,7 @@ func TestStepCompleteMessageValidation(t *testing.T) {
 				Iteration:   1,
 			},
 			wantErr: true,
-			errMsg:  "duration must be valid",
+			errMsg:  "parse duration",
 		},
 		{
 			name: "zero iteration",

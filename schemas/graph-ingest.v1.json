@@ -8,6 +8,7 @@
     "enable_hierarchy": {
       "type": "boolean",
       "description": "Enable hierarchy inference",
+      "default": false,
       "category": "advanced"
     },
     "enable_type_siblings": {

@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/graph/clustering"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // GraphRAG search constants
@@ -101,15 +101,15 @@ type CommunitySummary struct {
 }
 
 // setupGraphRAGHandlers registers the GraphRAG NATS request handlers
-func (c *Component) setupGraphRAGHandlers() error {
+func (c *Component) setupGraphRAGHandlers(ctx context.Context) error {
 	// Subscribe to local search
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.localSearch", c.handleLocalSearch); err != nil {
-		return fmt.Errorf("subscribe to localSearch: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.localSearch", c.handleLocalSearch); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupGraphRAGHandlers", "subscribe to localSearch")
 	}
 
 	// Subscribe to global search
-	if err := c.natsClient.SubscribeForRequests(c.ctx, "graph.query.globalSearch", c.handleGlobalSearch); err != nil {
-		return fmt.Errorf("subscribe to globalSearch: %w", err)
+	if err := c.natsClient.SubscribeForRequests(ctx, "graph.query.globalSearch", c.handleGlobalSearch); err != nil {
+		return errs.WrapTransient(err, "GraphQuery", "setupGraphRAGHandlers", "subscribe to globalSearch")
 	}
 
 	c.logger.Info("GraphRAG handlers registered",
@@ -125,20 +125,20 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 	// Parse request
 	var req LocalSearchRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "handleLocalSearch", "parse request")
 	}
 
 	// Validate request
 	if req.EntityID == "" {
-		return nil, fmt.Errorf("invalid request: empty entity_id")
+		return nil, errs.WrapInvalid(errors.New("empty entity_id"), "GraphQuery", "handleLocalSearch", "validate entity_id")
 	}
 	if req.Query == "" {
-		return nil, fmt.Errorf("invalid request: empty query")
+		return nil, errs.WrapInvalid(errors.New("empty query"), "GraphQuery", "handleLocalSearch", "validate query")
 	}
 
 	// Check if community cache is available
 	if c.communityCache == nil {
-		return nil, fmt.Errorf("community cache not available")
+		return nil, errs.WrapTransient(errors.New("community cache not available"), "GraphQuery", "handleLocalSearch", "check cache")
 	}
 
 	// Tiered community lookup with fallback
@@ -165,13 +165,13 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 				return json.Marshal(response)
 			}
 		}
-		return nil, fmt.Errorf("entity %s not in a community at level %d", req.EntityID, req.Level)
+		return nil, errs.WrapInvalid(errors.New("entity not in a community at level"), "GraphQuery", "handleLocalSearch", "find community")
 	}
 
 	// Load entities from community via graph-ingest
 	entities, err := c.loadEntities(ctx, community.Members)
 	if err != nil {
-		return nil, fmt.Errorf("load entities: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "handleLocalSearch", "load entities")
 	}
 
 	// Filter entities based on query
@@ -266,12 +266,12 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 	// Parse request
 	var req GlobalSearchRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		return nil, fmt.Errorf("invalid request: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "handleGlobalSearch", "parse request")
 	}
 
 	// Validate request
 	if req.Query == "" {
-		return nil, fmt.Errorf("invalid request: empty query")
+		return nil, errs.WrapInvalid(errors.New("empty query"), "GraphQuery", "handleGlobalSearch", "validate query")
 	}
 
 	// Apply defaults
@@ -287,7 +287,7 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 
 	// Check if community cache is available for Tier 1/2
 	if c.communityCache == nil {
-		return nil, fmt.Errorf("community cache not available")
+		return nil, errs.WrapTransient(errors.New("community cache not available"), "GraphQuery", "handleGlobalSearch", "check cache")
 	}
 
 	// Tier 1: Try semantic search first (via graph-embedding)
@@ -402,7 +402,7 @@ func (c *Component) globalSearchTextBased(ctx context.Context, req GlobalSearchR
 	// Load entities via graph-ingest
 	entities, err := c.loadEntities(ctx, entityIDs)
 	if err != nil {
-		return nil, fmt.Errorf("load entities: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "globalSearchTextBased", "load entities")
 	}
 
 	// Filter entities based on query
@@ -466,17 +466,17 @@ func (c *Component) loadEntities(ctx context.Context, entityIDs []string) ([]*gt
 		"ids": entityIDs,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, errs.Wrap(err, "GraphQuery", "loadEntities", "marshal request")
 	}
 
 	// Request entities from graph-ingest
 	subject := c.router.Route("entityBatch")
 	if subject == "" {
-		return nil, errors.New("entityBatch query routing not available")
+		return nil, errs.WrapTransient(errors.New("entityBatch query routing not available"), "GraphQuery", "loadEntities", "route query")
 	}
 	respData, err := c.natsClient.Request(ctx, subject, reqData, c.config.QueryTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("request entities: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "loadEntities", "request entities")
 	}
 
 	// Parse response
@@ -484,7 +484,7 @@ func (c *Component) loadEntities(ctx context.Context, entityIDs []string) ([]*gt
 		Entities []*gtypes.EntityState `json:"entities"`
 	}
 	if err := json.Unmarshal(respData, &resp); err != nil {
-		return nil, fmt.Errorf("unmarshal response: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "loadEntities", "unmarshal response")
 	}
 
 	return resp.Entities, nil
@@ -501,12 +501,12 @@ func (c *Component) searchEntitiesSemantic(ctx context.Context, query string, li
 
 	data, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("marshal request: %w", err)
+		return nil, errs.Wrap(err, "GraphQuery", "searchEntitiesSemantic", "marshal request")
 	}
 
 	resp, err := c.natsClient.Request(ctx, "graph.embedding.query.search", data, 30*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("semantic search request failed: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "searchEntitiesSemantic", "semantic search request")
 	}
 
 	// Response format from graph-embedding/query.go:SearchResponse
@@ -519,7 +519,7 @@ func (c *Component) searchEntitiesSemantic(ctx context.Context, query string, li
 		Duration string `json:"duration"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
-		return nil, fmt.Errorf("unmarshal search response: %w", err)
+		return nil, errs.WrapInvalid(err, "GraphQuery", "searchEntitiesSemantic", "unmarshal search response")
 	}
 
 	hits := make([]SemanticHit, len(result.Results))
@@ -922,7 +922,7 @@ func (c *Component) executePathSearchForGlobal(ctx context.Context, startEntityI
 	// Load full entity data via graph-ingest
 	entities, err := c.loadEntities(ctx, entityIDs)
 	if err != nil {
-		return nil, fmt.Errorf("load entities: %w", err)
+		return nil, errs.WrapTransient(err, "GraphQuery", "executePathSearchForGlobal", "load entities")
 	}
 
 	return &PathRAGResult{

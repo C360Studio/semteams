@@ -173,7 +173,7 @@ func TestLoadWorkflowDefinitionsFromFiles_ValidationFailure(t *testing.T) {
 
 	_, err = c.loadWorkflowDefinitionsFromFiles()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "validation failed")
+	assert.Contains(t, err.Error(), "validate workflow")
 }
 
 func TestLoadWorkflowDefinitionsFromFiles_NonExistentFile(t *testing.T) {
@@ -186,7 +186,7 @@ func TestLoadWorkflowDefinitionsFromFiles_NonExistentFile(t *testing.T) {
 
 	_, err := c.loadWorkflowDefinitionsFromFiles()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to stat workflow file")
+	assert.Contains(t, err.Error(), "stat workflow file")
 }
 
 func TestLoadWorkflowDefinitionsFromFiles_EmptyPatterns(t *testing.T) {
@@ -266,7 +266,7 @@ func TestLoadWorkflowDefinitionsFromFiles_InvalidGlobPattern(t *testing.T) {
 
 	_, err := c.loadWorkflowDefinitionsFromFiles()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid glob pattern")
+	assert.Contains(t, err.Error(), "expand glob pattern")
 }
 
 func TestLoadWorkflowDefinitionsFromFiles_WrongJSONStructure(t *testing.T) {
@@ -287,7 +287,7 @@ func TestLoadWorkflowDefinitionsFromFiles_WrongJSONStructure(t *testing.T) {
 	// This should fail validation because required fields are missing
 	_, err = c.loadWorkflowDefinitionsFromFiles()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "validation failed")
+	assert.Contains(t, err.Error(), "validate workflow")
 }
 
 func TestLoadWorkflowDefinitionsFromFiles_DuplicateWorkflowIDs(t *testing.T) {
@@ -400,5 +400,5 @@ func TestConfigValidate_InvalidGlobPattern(t *testing.T) {
 
 	err := cfg.Validate()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid workflow_files pattern")
+	assert.Contains(t, err.Error(), "validate workflow_files pattern")
 }

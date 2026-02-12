@@ -3,11 +3,11 @@ package agenticmodel
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/pkg/errs"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -20,7 +20,7 @@ type Client struct {
 // NewClient creates a new client for the given endpoint
 func NewClient(endpoint Endpoint) (*Client, error) {
 	if err := endpoint.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid endpoint: %w", err)
+		return nil, errs.WrapInvalid(err, "Client", "NewClient", "validate endpoint")
 	}
 
 	// Get API key from environment if specified
