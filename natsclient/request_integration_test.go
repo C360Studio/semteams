@@ -30,7 +30,7 @@ func TestIntegration_Request(t *testing.T) {
 	subject := "test.request"
 	expectedResponse := []byte("pong")
 
-	err = client.SubscribeForRequests(ctx, subject, func(_ context.Context, data []byte) ([]byte, error) {
+	_, err = client.SubscribeForRequests(ctx, subject, func(_ context.Context, data []byte) ([]byte, error) {
 		assert.Equal(t, []byte("ping"), data)
 		return expectedResponse, nil
 	})
@@ -116,7 +116,7 @@ func TestIntegration_RequestWithHeaders(t *testing.T) {
 	// Set up responder using SubscribeForRequests
 	// Note: Headers are preserved in the underlying message
 	subject := "test.headers"
-	err = client.SubscribeForRequests(ctx, subject, func(_ context.Context, _ []byte) ([]byte, error) {
+	_, err = client.SubscribeForRequests(ctx, subject, func(_ context.Context, _ []byte) ([]byte, error) {
 		// Return a fixed response
 		return []byte("headers-response"), nil
 	})
@@ -222,7 +222,7 @@ func TestIntegration_SubscribeForRequests(t *testing.T) {
 	subject := "test.service"
 	handlerCalled := make(chan bool, 1)
 
-	err = client.SubscribeForRequests(ctx, subject, func(_ context.Context, _ []byte) ([]byte, error) {
+	_, err = client.SubscribeForRequests(ctx, subject, func(_ context.Context, _ []byte) ([]byte, error) {
 		handlerCalled <- true
 		return []byte("response"), nil
 	})
@@ -261,7 +261,7 @@ func TestIntegration_SubscribeForRequests_Error(t *testing.T) {
 
 	// Subscribe with handler that returns error
 	subject := "test.error"
-	err = client.SubscribeForRequests(ctx, subject, func(_ context.Context, _ []byte) ([]byte, error) {
+	_, err = client.SubscribeForRequests(ctx, subject, func(_ context.Context, _ []byte) ([]byte, error) {
 		return nil, assert.AnError
 	})
 	require.NoError(t, err)
@@ -281,7 +281,7 @@ func TestIntegration_SubscribeForRequests_NotConnected(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	err = client.SubscribeForRequests(ctx, "test.subject", func(_ context.Context, _ []byte) ([]byte, error) {
+	_, err = client.SubscribeForRequests(ctx, "test.subject", func(_ context.Context, _ []byte) ([]byte, error) {
 		return nil, nil
 	})
 	assert.Equal(t, ErrNotConnected, err)
@@ -308,7 +308,7 @@ func TestIntegration_RequestWithRetry_Success(t *testing.T) {
 	// Start responder after a delay to simulate "not ready yet" scenario
 	go func() {
 		time.Sleep(150 * time.Millisecond)
-		err := client.SubscribeForRequests(ctx, subject, func(_ context.Context, data []byte) ([]byte, error) {
+		_, err := client.SubscribeForRequests(ctx, subject, func(_ context.Context, data []byte) ([]byte, error) {
 			return expectedResponse, nil
 		})
 		if err != nil {
