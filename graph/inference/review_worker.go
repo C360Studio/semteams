@@ -4,16 +4,29 @@ package inference
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/c360studio/semstreams/graph/llm"
 	"github.com/c360studio/semstreams/pkg/errs"
 )
+
+// isExpectedShutdownError returns true if the error is expected during component shutdown.
+func isExpectedShutdownError(err error) bool {
+	if errors.Is(err, nats.ErrBadSubscription) || errors.Is(err, jetstream.ErrConsumerNotFound) {
+		return true
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "invalid subscription") ||
+		strings.Contains(errStr, "consumer not found")
+}
 
 // ReviewWorker watches ANOMALY_INDEX and processes pending anomalies.
 // Follows enhancement_worker.go patterns for lifecycle management.
@@ -151,7 +164,9 @@ func (w *ReviewWorker) Stop() error {
 
 	if w.watcher != nil {
 		if err := w.watcher.Stop(); err != nil {
-			w.logger.Warn("KV watcher stop error", "error", err)
+			if !isExpectedShutdownError(err) {
+				w.logger.Warn("KV watcher stop error", "error", err)
+			}
 		}
 	}
 

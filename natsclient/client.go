@@ -519,69 +519,15 @@ func (m *Client) Close(ctx context.Context) error {
 	// Collect all errors during cleanup
 	var closeErrs []error
 
-	// Stop all consumers with proper error tracking
-	m.consumersMu.Lock()
-	for name, consumer := range m.consumers {
-		consumer.Stop()
-		// Note: Stop() doesn't return error in the interface
-		m.logger.Debugf("Stopped consumer: %s", name)
-	}
-	m.consumers = nil
-	m.consumersMu.Unlock()
+	// Stop all consumers
+	m.stopAllConsumers()
 
-	// Unsubscribe all with error tracking
-	for _, sub := range m.subs {
-		if err := sub.Unsubscribe(); err != nil {
-			closeErrs = append(closeErrs, errs.Wrap(err, "Client", "Close", "unsubscribe"))
-			m.logger.Errorf("Failed to unsubscribe: %v", err)
-		}
-	}
-	m.subs = nil
+	// Unsubscribe all subscriptions
+	closeErrs = append(closeErrs, m.unsubscribeAll()...)
 
-	// Close connection with drain timeout from context or default
-	var drainErr error
-	if m.conn != nil {
-		// Use context deadline for drain timeout if available
-		drainTimeout := m.drainTimeout
-		if deadline, ok := ctx.Deadline(); ok {
-			if remaining := time.Until(deadline); remaining > 0 && remaining < drainTimeout {
-				drainTimeout = remaining
-			}
-		}
-
-		// Drain connection with timeout
-		drainDone := make(chan error, 1)
-		go func() {
-			drainDone <- m.conn.Drain()
-		}()
-
-		select {
-		case err := <-drainDone:
-			if err != nil {
-				drainErr = errs.Wrap(err, "Client", "Close", "drain connection")
-				m.logger.Errorf("Drain error: %v", err)
-			}
-		case <-time.After(drainTimeout):
-			// Drain timeout, force close
-			drainErr = errs.WrapTransient(
-				fmt.Errorf("drain timeout after %v", drainTimeout),
-				"Client",
-				"Close",
-				"drain timeout",
-			)
-			m.logger.Errorf("Drain timeout after %v, force closing", drainTimeout)
-		case <-ctx.Done():
-			// Context cancelled, force close
-			drainErr = errs.Wrap(ctx.Err(), "Client", "Close", "context cancelled during drain")
-			m.logger.Errorf("Context cancelled during drain, force closing")
-		}
-
-		if drainErr != nil {
-			closeErrs = append(closeErrs, drainErr)
-		}
-
-		m.conn.Close()
-		m.conn = nil
+	// Drain and close connection
+	if err := m.drainAndCloseConnection(ctx); err != nil {
+		closeErrs = append(closeErrs, err)
 	}
 
 	// Clear sensitive credentials from memory
@@ -593,7 +539,6 @@ func (m *Client) Close(ctx context.Context) error {
 
 	// Combine all errors
 	if len(closeErrs) > 0 {
-		// Return a combined error message
 		errMsg := "cleanup errors:"
 		for i, err := range closeErrs {
 			errMsg += fmt.Sprintf("\n  [%d] %v", i+1, err)
@@ -602,6 +547,83 @@ func (m *Client) Close(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// stopAllConsumers stops all JetStream consumers.
+func (m *Client) stopAllConsumers() {
+	m.consumersMu.Lock()
+	defer m.consumersMu.Unlock()
+
+	for name, consumer := range m.consumers {
+		consumer.Stop()
+		m.logger.Debugf("Stopped consumer: %s", name)
+	}
+	m.consumers = nil
+}
+
+// unsubscribeAll unsubscribes from all subscriptions, returning any errors.
+func (m *Client) unsubscribeAll() []error {
+	var errs []error
+	for _, sub := range m.subs {
+		// Skip invalid subscriptions - they're already cleaned up
+		if !sub.IsValid() {
+			continue
+		}
+		if err := sub.Unsubscribe(); err != nil {
+			// ErrBadSubscription means subscription is already gone - not a real error
+			if stderrors.Is(err, nats.ErrBadSubscription) {
+				m.logger.Debugf("Subscription already cleaned up: %v", err)
+				continue
+			}
+			errs = append(errs, err)
+			m.logger.Errorf("Failed to unsubscribe: %v", err)
+		}
+	}
+	m.subs = nil
+	return errs
+}
+
+// drainAndCloseConnection drains and closes the NATS connection.
+func (m *Client) drainAndCloseConnection(ctx context.Context) error {
+	if m.conn == nil {
+		return nil
+	}
+
+	// Use context deadline for drain timeout if available
+	drainTimeout := m.drainTimeout
+	if deadline, ok := ctx.Deadline(); ok {
+		if remaining := time.Until(deadline); remaining > 0 && remaining < drainTimeout {
+			drainTimeout = remaining
+		}
+	}
+
+	// Drain connection with timeout
+	drainDone := make(chan error, 1)
+	go func() {
+		drainDone <- m.conn.Drain()
+	}()
+
+	var drainErr error
+	select {
+	case err := <-drainDone:
+		if err != nil {
+			drainErr = errs.Wrap(err, "Client", "Close", "drain connection")
+			m.logger.Errorf("Drain error: %v", err)
+		}
+	case <-time.After(drainTimeout):
+		drainErr = errs.WrapTransient(
+			fmt.Errorf("drain timeout after %v", drainTimeout),
+			"Client", "Close", "drain timeout",
+		)
+		m.logger.Errorf("Drain timeout after %v, force closing", drainTimeout)
+	case <-ctx.Done():
+		drainErr = errs.Wrap(ctx.Err(), "Client", "Close", "context cancelled during drain")
+		m.logger.Errorf("Context cancelled during drain, force closing")
+	}
+
+	m.conn.Close()
+	m.conn = nil
+	return drainErr
 }
 
 // RTT returns the round-trip time to the NATS server

@@ -4,6 +4,7 @@ package clustering
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -13,8 +14,19 @@ import (
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+// isExpectedShutdownError returns true if the error is expected during component shutdown.
+func isExpectedShutdownError(err error) bool {
+	if errors.Is(err, nats.ErrBadSubscription) || errors.Is(err, jetstream.ErrConsumerNotFound) {
+		return true
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "invalid subscription") ||
+		strings.Contains(errStr, "consumer not found")
+}
 
 // EntityQuerier provides minimal interface for querying entities.
 // This interface exists to avoid import cycle with querymanager package.
@@ -393,7 +405,9 @@ func (w *EnhancementWorker) Stop() error {
 	// Stop the watcher after workers have exited
 	if w.watcher != nil {
 		if err := w.watcher.Stop(); err != nil {
-			w.logger.Warn("KV watcher stop error", "error", err)
+			if !isExpectedShutdownError(err) {
+				w.logger.Warn("KV watcher stop error", "error", err)
+			}
 		}
 	}
 

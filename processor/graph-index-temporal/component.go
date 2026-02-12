@@ -4,6 +4,7 @@ package graphindextemporal
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"reflect"
@@ -580,6 +581,12 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 
 	watcher, err := bucket.WatchAll(ctx)
 	if err != nil {
+		// Context cancellation during shutdown is expected, not an error
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			c.logger.Debug("entity watcher stopped due to context cancellation",
+				slog.String("bucket", graph.BucketEntityStates))
+			return
+		}
 		c.logger.Error("failed to start entity watcher",
 			slog.String("bucket", graph.BucketEntityStates),
 			slog.Any("error", err))

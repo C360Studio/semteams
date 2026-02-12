@@ -3,17 +3,35 @@ package embedding
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/storage/objectstore"
 )
+
+// isExpectedShutdownError returns true if the error is expected during component shutdown.
+// These include subscription cleanup errors and consumer not found errors which occur
+// when NATS resources are cleaned up before or during Stop().
+func isExpectedShutdownError(err error) bool {
+	if errors.Is(err, nats.ErrBadSubscription) {
+		return true
+	}
+	if errors.Is(err, jetstream.ErrConsumerNotFound) {
+		return true
+	}
+	// Also check error string for cases where errors.Is doesn't match
+	errStr := err.Error()
+	return strings.Contains(errStr, "invalid subscription") ||
+		strings.Contains(errStr, "consumer not found")
+}
 
 // GeneratedCallback is called when an embedding is successfully generated.
 // The callback receives the entity ID and the generated embedding vector.
@@ -165,7 +183,10 @@ func (w *Worker) Stop() error {
 	// Stop the watcher
 	if w.watcher != nil {
 		if err := w.watcher.Stop(); err != nil {
-			w.logger.Warn("KV watcher stop error", "error", err)
+			// Expected errors during shutdown: subscription already cleaned up or consumer deleted
+			if !isExpectedShutdownError(err) {
+				w.logger.Warn("KV watcher stop error", "error", err)
+			}
 		}
 	}
 
