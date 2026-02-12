@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
@@ -696,7 +697,7 @@ func (c *Component) handleAgentCompleteMessage(ctx context.Context, data []byte)
 		slog.String("outcome", msg.Outcome))
 
 	var agentError string
-	if msg.Outcome != "complete" {
+	if msg.Outcome != agentic.OutcomeSuccess {
 		agentError = msg.Error
 		if agentError == "" {
 			agentError = fmt.Sprintf("agent outcome: %s", msg.Outcome)
