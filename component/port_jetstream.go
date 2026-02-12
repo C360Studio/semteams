@@ -59,7 +59,7 @@ type ConsumerConfig struct {
 // - MaxDeliver: 3
 func GetConsumerConfig(port Port) ConsumerConfig {
 	cfg := ConsumerConfig{
-		DeliverPolicy: "new",     // Safe default
+		DeliverPolicy: "new", // Safe default
 		AckPolicy:     "explicit",
 		MaxDeliver:    3,
 	}
@@ -82,7 +82,7 @@ func GetConsumerConfig(port Port) ConsumerConfig {
 // This is a convenience wrapper for use with PortDefinition instead of Port.
 func GetConsumerConfigFromDefinition(portDef PortDefinition) ConsumerConfig {
 	cfg := ConsumerConfig{
-		DeliverPolicy: "new",     // Safe default
+		DeliverPolicy: "new", // Safe default
 		AckPolicy:     "explicit",
 		MaxDeliver:    3,
 	}

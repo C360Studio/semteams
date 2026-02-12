@@ -50,3 +50,4 @@ coverage/
 cmd/e2e/e2e
 cmd/semstreams/semstreams
 bin/
+openapi-generator
