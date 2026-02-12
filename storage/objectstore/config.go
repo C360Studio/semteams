@@ -3,6 +3,8 @@
 package objectstore
 
 import (
+	"time"
+
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/pkg/cache"
 	"github.com/c360studio/semstreams/storage"
@@ -99,9 +101,11 @@ func DefaultConfig() Config {
 		},
 		BucketName: "MESSAGES",
 		DataCache: cache.Config{
-			Enabled: true,
-			MaxSize: 1000,
-			TTL:     300, // 5 minutes
+			Enabled:         true,
+			Strategy:        cache.StrategyLRU,
+			MaxSize:         1000,
+			TTL:             5 * time.Minute,
+			CleanupInterval: 1 * time.Minute,
 		},
 		KeyGenerator:      nil, // Use default time-based generator
 		MetadataExtractor: nil, // No metadata extraction

@@ -373,6 +373,14 @@ func (f *Input) Initialize() error {
 
 // Start begins reading files and publishing to NATS
 func (f *Input) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Input", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "Input", "Start", "context already cancelled")
+	}
+
 	f.lifecycleMu.Lock()
 	defer f.lifecycleMu.Unlock()
 
@@ -429,6 +437,9 @@ func (f *Input) Stop(timeout time.Duration) error {
 		return nil
 	}
 
+	// Set running to false first to prevent concurrent stops
+	f.running.Store(false)
+
 	// Signal shutdown - safe to close channel here
 	close(f.shutdown)
 	f.lifecycleMu.Unlock()
@@ -447,7 +458,6 @@ func (f *Input) Stop(timeout time.Duration) error {
 		f.logger.Warn("File input stop timed out")
 	}
 
-	f.running.Store(false)
 	return nil
 }
 

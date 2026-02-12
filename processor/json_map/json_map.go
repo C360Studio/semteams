@@ -178,6 +178,14 @@ func (m *Processor) Initialize() error {
 
 // Start begins transforming messages
 func (m *Processor) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "JSONMapProcessor", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "JSONMapProcessor", "Start", "context already cancelled")
+	}
+
 	m.lifecycleMu.Lock()
 	defer m.lifecycleMu.Unlock()
 
@@ -188,6 +196,10 @@ func (m *Processor) Start(ctx context.Context) error {
 	if m.natsClient == nil {
 		return errs.WrapFatal(errs.ErrMissingConfig, "JSONMapProcessor", "Start", "NATS client required")
 	}
+
+	// Recreate channels if component is being restarted
+	m.shutdown = make(chan struct{})
+	m.done = make(chan struct{})
 
 	// Subscribe to input ports based on port type
 	if err := m.setupSubscriptions(ctx); err != nil {
@@ -379,6 +391,11 @@ func (m *Processor) Stop(timeout time.Duration) error {
 		return nil
 	}
 
+	// Mark as not running first to prevent concurrent operations
+	m.mu.Lock()
+	m.running = false
+	m.mu.Unlock()
+
 	// Signal shutdown
 	close(m.shutdown)
 
@@ -406,10 +423,8 @@ func (m *Processor) Stop(timeout time.Duration) error {
 			fmt.Sprintf("graceful shutdown timeout after %v", timeout))
 	}
 
-	m.mu.Lock()
-	m.running = false
+	// Close done channel to signal completion
 	close(m.done)
-	m.mu.Unlock()
 
 	return nil
 }

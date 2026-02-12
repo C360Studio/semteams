@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	errs "github.com/c360studio/semstreams/pkg/errs"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -172,6 +173,14 @@ func (c *Component) Initialize() error {
 
 // Start begins the CLI input loop
 func (c *Component) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "Component", "Start", "context already cancelled")
+	}
+
 	c.mu.Lock()
 	if c.started {
 		c.mu.Unlock()

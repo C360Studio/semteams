@@ -146,6 +146,11 @@ func (c *Component) Start(ctx context.Context) error {
 		return nil
 	}
 
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "Start", "context cannot be nil")
+	}
+
 	c.logger.Debug("Creating ObjectStore", "name", c.instanceName, "bucket", c.config.BucketName)
 
 	// Create the underlying ObjectStore with metrics support

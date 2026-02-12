@@ -232,6 +232,14 @@ func (h *Output) Initialize() error {
 
 // Start begins sending messages via HTTP POST
 func (h *Output) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "Output", "Start", "context already cancelled")
+	}
+
 	h.lifecycleMu.Lock()
 	defer h.lifecycleMu.Unlock()
 

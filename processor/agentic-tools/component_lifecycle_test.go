@@ -1,3 +1,5 @@
+//go:build integration
+
 package agentictools_test
 
 import (

@@ -389,6 +389,14 @@ func (rp *Processor) initializeStateTracker(ctx context.Context) error {
 
 // Start begins processing messages through rules
 func (rp *Processor) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "RuleProcessor", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "RuleProcessor", "Start", "context already cancelled")
+	}
+
 	rp.mu.Lock()
 	defer rp.mu.Unlock()
 

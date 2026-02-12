@@ -1,3 +1,5 @@
+//go:build integration
+
 package agenticloop_test
 
 import (

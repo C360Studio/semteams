@@ -1,24 +1,21 @@
-package jsonfilter
+//go:build integration
+
+package jsonfilter_test
 
 import (
 	"encoding/json"
 	"testing"
 
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/natsclient"
+	jsonfilter "github.com/c360studio/semstreams/processor/json_filter"
 )
 
 // createTestJSONFilterComponent creates a test instance for lifecycle testing.
+// Uses the shared NATS client from json_filter_integration_test.go TestMain.
 func createTestJSONFilterComponent() component.LifecycleComponent {
-	// Create unconnected NATS client (won't actually connect)
-	natsClient, err := natsclient.NewClient("nats://localhost:4222")
-	if err != nil {
-		panic("failed to create NATS client: " + err.Error())
-	}
-
-	config := DefaultConfig()
+	config := jsonfilter.DefaultConfig()
 	deps := component.Dependencies{
-		NATSClient: natsClient,
+		NATSClient: getSharedNATSClient(&testing.T{}),
 	}
 
 	configJSON, err := json.Marshal(config)
@@ -26,7 +23,7 @@ func createTestJSONFilterComponent() component.LifecycleComponent {
 		panic("failed to marshal config: " + err.Error())
 	}
 
-	comp, err := NewProcessor(configJSON, deps)
+	comp, err := jsonfilter.NewProcessor(configJSON, deps)
 	if err != nil {
 		panic("failed to create component: " + err.Error())
 	}

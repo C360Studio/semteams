@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/resource"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -302,6 +303,14 @@ func (c *Component) Initialize() error {
 
 // Start starts the component
 func (c *Component) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "graph-query", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "graph-query", "Start", "context already cancelled")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 

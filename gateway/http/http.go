@@ -107,6 +107,14 @@ func (g *Gateway) Initialize() error {
 
 // Start begins the HTTP gateway operation
 func (g *Gateway) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Gateway", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "Gateway", "Start", "context already cancelled")
+	}
+
 	if g.running.Load() {
 		return errs.WrapFatal(errs.ErrAlreadyStarted, "Gateway", "Start",
 			"gateway already running")

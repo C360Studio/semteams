@@ -170,8 +170,12 @@ func (c *Component) Initialize() error {
 
 // Start starts the component
 func (c *Component) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "workflow-processor", "Start", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return errs.WrapInvalid(err, "workflow-processor", "Start", "context already cancelled")
 	}
 
 	c.mu.Lock()

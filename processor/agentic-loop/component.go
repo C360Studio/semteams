@@ -177,9 +177,12 @@ func (c *Component) Initialize() error {
 // Start starts the component.
 // The context is used for cancellation during startup operations.
 func (c *Component) Start(ctx context.Context) error {
-	// Check for cancellation before acquiring lock
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "agentic-loop", "Start", "context cannot be nil")
+	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return errs.WrapInvalid(err, "agentic-loop", "Start", "context already cancelled")
 	}
 
 	c.mu.Lock()

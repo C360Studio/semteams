@@ -168,6 +168,14 @@ func (f *Processor) Initialize() error {
 
 // Start begins filtering messages
 func (f *Processor) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "JSONFilterProcessor", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "JSONFilterProcessor", "Start", "context already cancelled")
+	}
+
 	f.lifecycleMu.Lock()
 	defer f.lifecycleMu.Unlock()
 
@@ -178,6 +186,10 @@ func (f *Processor) Start(ctx context.Context) error {
 	if f.natsClient == nil {
 		return errs.WrapFatal(errs.ErrMissingConfig, "JSONFilterProcessor", "Start", "NATS client required")
 	}
+
+	// Recreate channels if component is being restarted
+	f.shutdown = make(chan struct{})
+	f.done = make(chan struct{})
 
 	// Subscribe to input ports based on port type
 	if err := f.setupSubscriptions(ctx); err != nil {

@@ -1,3 +1,5 @@
+//go:build integration
+
 package agenticmodel_test
 
 import (

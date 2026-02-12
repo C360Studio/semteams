@@ -501,6 +501,14 @@ func (i *Input) Initialize() error {
 
 // Start starts the WebSocket input component
 func (i *Input) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "websocket_input", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "websocket_input", "Start", "context already cancelled")
+	}
+
 	i.lifecycleMu.Lock()
 	defer i.lifecycleMu.Unlock()
 

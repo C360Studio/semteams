@@ -38,11 +38,11 @@ func TestAttack_NilContext(t *testing.T) {
 	comp := createTestComponent(t)
 	require.NoError(t, comp.Initialize())
 
-	// Nil context should be handled (though not recommended)
-	// Go's context package will panic if nil, so this tests our error handling
-	require.Panics(t, func() {
-		comp.Start(nil)
-	}, "nil context should panic (expected Go behavior)")
+	// Nil context should return an error, not panic
+	// This validates proper context validation before use
+	err := comp.Start(nil)
+	require.Error(t, err, "nil context should return error")
+	assert.Contains(t, err.Error(), "context cannot be nil", "error should indicate nil context")
 }
 
 func TestAttack_ZeroTimeout(t *testing.T) {

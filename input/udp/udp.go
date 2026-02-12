@@ -476,6 +476,14 @@ func (u *Input) Initialize() error {
 
 // Start begins listening for UDP packets and publishing to NATS
 func (u *Input) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "udp-input", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "udp-input", "Start", "context already cancelled")
+	}
+
 	u.mu.Lock()
 	defer u.mu.Unlock()
 

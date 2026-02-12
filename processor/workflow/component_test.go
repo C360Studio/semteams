@@ -304,3 +304,28 @@ func TestInitializeWithoutNATSClient(t *testing.T) {
 		t.Errorf("Initialize failed: %v", err)
 	}
 }
+
+func TestStartWithNilContext(t *testing.T) {
+	config := DefaultConfig()
+	configJSON, _ := json.Marshal(config)
+	deps := component.Dependencies{}
+
+	comp, err := NewComponent(configJSON, deps)
+	if err != nil {
+		t.Fatalf("failed to create component: %v", err)
+	}
+
+	wfComp := comp.(*Component)
+	if err := wfComp.Initialize(); err != nil {
+		t.Fatalf("Initialize failed: %v", err)
+	}
+
+	// Start with nil context should return error
+	err = wfComp.Start(nil)
+	if err == nil {
+		t.Error("Start with nil context should return error")
+	}
+	if err != nil && err.Error() == "" {
+		t.Error("Error message should not be empty")
+	}
+}

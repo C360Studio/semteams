@@ -144,6 +144,13 @@ func (p *Processor) Start(ctx context.Context) error {
 	p.lifecycleMu.Lock()
 	defer p.lifecycleMu.Unlock()
 
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "JSONGenericProcessor", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "JSONGenericProcessor", "Start", "context already cancelled")
+	}
+
 	if p.running {
 		return errs.WrapFatal(errs.ErrAlreadyStarted, "JSONGenericProcessor", "Start", "check running state")
 	}
@@ -151,6 +158,10 @@ func (p *Processor) Start(ctx context.Context) error {
 	if p.natsClient == nil {
 		return errs.WrapFatal(errs.ErrMissingConfig, "JSONGenericProcessor", "Start", "NATS client required")
 	}
+
+	// Recreate channels if component is being restarted
+	p.shutdown = make(chan struct{})
+	p.done = make(chan struct{})
 
 	// Subscribe to input ports based on port type
 	if err := p.setupSubscriptions(ctx); err != nil {

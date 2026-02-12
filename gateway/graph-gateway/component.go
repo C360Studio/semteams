@@ -387,6 +387,14 @@ func (c *Component) Initialize() error {
 
 // Start begins processing (must be initialized first)
 func (c *Component) Start(ctx context.Context) error {
+	// Validate context
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "Start", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.WrapInvalid(err, "Component", "Start", "context already cancelled")
+	}
+
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
