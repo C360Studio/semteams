@@ -51,3 +51,7 @@ cmd/e2e/e2e
 cmd/semstreams/semstreams
 bin/
 openapi-generator
+
+# Test profile output
+test/e2e/results/profiles/
+cmd/e2e/test/e2e/results/profiles/
