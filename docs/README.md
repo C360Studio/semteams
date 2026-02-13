@@ -71,3 +71,14 @@ Multi-step processes with loops, timeouts, and retries:
 
 - [Local Monitoring](operations/01-local-monitoring.md) - Prometheus + Grafana setup
 - [Troubleshooting](operations/02-troubleshooting.md) - Common issues and solutions
+
+## External Integrations
+
+Optional bridges for connecting SemStreams to external systems:
+
+| Integration | Purpose | Documentation |
+|-------------|---------|---------------|
+| **AGNTCY** | Agent discovery, A2A protocol, OTEL export | [Concepts Guide](concepts/20-agntcy-integration.md) |
+| **TrustGraph** | Document knowledge import/export, GraphRAG queries | [Integration Guide](integration/trustgraph-integration.md) |
+
+These integrations are optional components that can be enabled based on deployment needs. See individual guides for configuration and deployment patterns.
