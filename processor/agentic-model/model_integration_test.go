@@ -124,7 +124,7 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 			},
 		},
 		StreamName:           "AGENT",
-		ConsumerNameSuffix:   "complete-test",
+		ConsumerNameSuffix:   "test-" + t.Name(),
 		DeleteConsumerOnStop: true,
 		Endpoints: map[string]agenticmodel.Endpoint{
 			"test-model": {
@@ -269,7 +269,7 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 			},
 		},
 		StreamName:           "AGENT",
-		ConsumerNameSuffix:   "toolcall-test",
+		ConsumerNameSuffix:   "test-" + t.Name(),
 		DeleteConsumerOnStop: true,
 		Endpoints: map[string]agenticmodel.Endpoint{
 			"tool-model": {
@@ -444,7 +444,7 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 			},
 		},
 		StreamName:           "AGENT",
-		ConsumerNameSuffix:   "endpoint-test",
+		ConsumerNameSuffix:   "test-" + t.Name(),
 		DeleteConsumerOnStop: true,
 		Endpoints: map[string]agenticmodel.Endpoint{
 			"model-a": {
