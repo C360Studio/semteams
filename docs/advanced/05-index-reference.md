@@ -75,6 +75,79 @@ func (p *SemanticGraphProvider) GetEdgeWeight(ctx context.Context, fromID, toID 
 **Created by:** Any triple
 **Used for:** "Find all sensors" → query predicate `entity.type` value `sensor`
 
+#### Predicate Query API
+
+The predicate index is exposed via GraphQL for programmatic access:
+
+| Query | Purpose | Example |
+|-------|---------|---------|
+| `predicates` | List all predicates with entity counts | Discovery, schema exploration |
+| `predicateStats` | Get detailed stats for one predicate | Predicate analysis, sampling |
+| `entitiesByPredicate` | Find entities by predicate | Batch entity lookup |
+| `compoundPredicateQuery` | AND/OR logic across predicates | Complex filtering |
+
+**GraphQL Examples:**
+
+```graphql
+# List all predicates
+query {
+  predicates {
+    predicates {
+      predicate
+      entityCount
+    }
+    total
+  }
+}
+
+# Get stats for a specific predicate
+query {
+  predicateStats(predicate: "controls", sampleLimit: 5) {
+    predicate
+    entityCount
+    sampleEntities
+  }
+}
+
+# Find entities by predicate
+query {
+  entitiesByPredicate(predicate: "located_in", limit: 100)
+}
+
+# Compound query: entities with BOTH predicates (AND)
+query {
+  compoundPredicateQuery(
+    predicates: ["controls", "located_in"]
+    operator: "AND"
+    limit: 50
+  ) {
+    entities
+    operator
+    matched
+  }
+}
+
+# Compound query: entities with EITHER predicate (OR)
+query {
+  compoundPredicateQuery(
+    predicates: ["temperature", "humidity"]
+    operator: "OR"
+  ) {
+    entities
+    matched
+  }
+}
+```
+
+**NATS Subjects:**
+
+| Subject | Purpose |
+|---------|---------|
+| `graph.index.query.predicate` | Single predicate lookup |
+| `graph.index.query.predicateList` | List all predicates |
+| `graph.index.query.predicateStats` | Predicate statistics |
+| `graph.index.query.predicateCompound` | Compound AND/OR queries |
+
 ### INCOMING_INDEX
 
 **Key pattern:** `{entity_id}`
