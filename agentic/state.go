@@ -5,6 +5,8 @@ package agentic
 import (
 	"fmt"
 	"time"
+
+	"github.com/c360studio/semstreams/agentic/identity"
 )
 
 // LoopState represents the current state of an agentic loop
@@ -81,6 +83,10 @@ type LoopEntity struct {
 	Result      string    `json:"result,omitempty"`       // LLM response content
 	Error       string    `json:"error,omitempty"`        // Error message on failure
 	CompletedAt time.Time `json:"completed_at,omitempty"` // When the loop completed
+
+	// AGNTCY identity (Phase 2 AGNTCY integration)
+	// When set, provides DID-based cryptographic identity for this agent loop.
+	Identity *identity.AgentIdentity `json:"identity,omitempty"`
 }
 
 // Validate checks if the LoopEntity is valid

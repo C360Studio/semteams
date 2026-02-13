@@ -300,3 +300,43 @@ const (
 	// DataType: string
 	TaskStatus = "agent.task.status"
 )
+
+// Identity Predicates
+//
+// Express DID-based cryptographic identity for agents, including
+// decentralized identifiers, verifiable credentials, and issuers.
+const (
+	// IdentityDID is the decentralized identifier for an agent.
+	// Example: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+	// DataType: string
+	// IRI: agent-ontology:Identity
+	IdentityDID = "agent.identity.did"
+
+	// IdentityCredential is a verifiable credential held by the agent.
+	// Example: entity ID of the credential
+	// DataType: string (entity ID)
+	// IRI: agent-ontology:hasCredential
+	IdentityCredential = "agent.identity.credential"
+
+	// IdentityIssuer is the DID of an entity that issued a credential.
+	// Example: "did:key:z6MkIssuer..."
+	// DataType: string
+	// IRI: agent-ontology:issuedBy
+	IdentityIssuer = "agent.identity.issuer"
+
+	// IdentityVerified indicates if the identity has been verified.
+	// Example: true
+	// DataType: bool
+	// IRI: agent-ontology:verified
+	IdentityVerified = "agent.identity.verified"
+
+	// IdentityDisplayName is the human-readable name for the agent.
+	// Example: "Code Review Agent"
+	// DataType: string
+	IdentityDisplayName = "agent.identity.display_name"
+
+	// IdentityRole is the agent's role in the system.
+	// Example: "architect", "editor", "reviewer"
+	// DataType: string
+	IdentityRole = "agent.identity.role"
+)
