@@ -1454,3 +1454,366 @@ func (s *TieredScenario) executeTestNLTemporalIntent(ctx context.Context, result
 
 	return nil
 }
+
+// === Predicate Query Tests ===
+
+// predicateListResponse represents the GraphQL response for predicates query.
+type predicateListResponse struct {
+	Data struct {
+		Predicates struct {
+			Predicates []struct {
+				Predicate   string `json:"predicate"`
+				EntityCount int    `json:"entityCount"`
+			} `json:"predicates"`
+			Total int `json:"total"`
+		} `json:"predicates"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+// predicateStatsResponse represents the GraphQL response for predicateStats query.
+type predicateStatsResponse struct {
+	Data struct {
+		PredicateStats struct {
+			Predicate      string   `json:"predicate"`
+			EntityCount    int      `json:"entityCount"`
+			SampleEntities []string `json:"sampleEntities"`
+		} `json:"predicateStats"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+// compoundPredicateResponse represents the GraphQL response for compoundPredicateQuery.
+type compoundPredicateResponse struct {
+	Data struct {
+		CompoundPredicateQuery struct {
+			Entities []string `json:"entities"`
+			Operator string   `json:"operator"`
+			Matched  int      `json:"matched"`
+		} `json:"compoundPredicateQuery"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
+// executeTestPredicateList validates the predicates GraphQL query.
+// Tests that we can list all predicates in the graph with their entity counts.
+func (s *TieredScenario) executeTestPredicateList(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+
+	graphqlQuery := map[string]any{
+		"query": `{
+			predicates {
+				predicates { predicate entityCount }
+				total
+			}
+		}`,
+	}
+
+	queryJSON, err := json.Marshal(graphqlQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal predicates query: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(queryJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create predicates request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := http.DefaultClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("predicates request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read predicates response: %w", err)
+	}
+
+	var predicatesResp predicateListResponse
+	if err := json.Unmarshal(bodyBytes, &predicatesResp); err != nil {
+		return fmt.Errorf("failed to parse predicates response: %w", err)
+	}
+
+	if len(predicatesResp.Errors) > 0 {
+		return fmt.Errorf("predicates query error: %s", predicatesResp.Errors[0].Message)
+	}
+
+	predicateCount := len(predicatesResp.Data.Predicates.Predicates)
+	total := predicatesResp.Data.Predicates.Total
+
+	result.Metrics["predicate_list_count"] = predicateCount
+	result.Metrics["predicate_list_total"] = total
+	result.Metrics["predicate_list_latency_ms"] = latency.Milliseconds()
+
+	// Build summary of predicates found
+	predicateSummary := make([]map[string]any, 0, predicateCount)
+	for _, p := range predicatesResp.Data.Predicates.Predicates {
+		predicateSummary = append(predicateSummary, map[string]any{
+			"predicate":    p.Predicate,
+			"entity_count": p.EntityCount,
+		})
+	}
+
+	result.Details["predicate_list_test"] = map[string]any{
+		"predicate_count": predicateCount,
+		"total":           total,
+		"latency_ms":      latency.Milliseconds(),
+		"predicates":      predicateSummary,
+		"success":         predicateCount > 0,
+		"message":         fmt.Sprintf("Found %d predicates in graph", predicateCount),
+	}
+
+	if predicateCount == 0 {
+		result.Warnings = append(result.Warnings,
+			"No predicates found - graph may be empty or PREDICATE_INDEX not populated")
+	}
+
+	return nil
+}
+
+// executeTestPredicateStats validates the predicateStats GraphQL query.
+// Tests that we can get detailed stats for a specific predicate.
+func (s *TieredScenario) executeTestPredicateStats(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+
+	// First, get a predicate to query stats for
+	listQuery := map[string]any{
+		"query": `{ predicates { predicates { predicate } } }`,
+	}
+	listJSON, _ := json.Marshal(listQuery)
+
+	listReq, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(listJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create predicate list request: %w", err)
+	}
+	listReq.Header.Set("Content-Type", "application/json")
+
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to list predicates: %v", err))
+		return nil
+	}
+	defer listResp.Body.Close()
+
+	listBody, _ := io.ReadAll(listResp.Body)
+	var predicatesResp predicateListResponse
+	if err := json.Unmarshal(listBody, &predicatesResp); err != nil || len(predicatesResp.Data.Predicates.Predicates) == 0 {
+		result.Warnings = append(result.Warnings, "No predicates available for stats test")
+		return nil
+	}
+
+	// Pick the first predicate
+	targetPredicate := predicatesResp.Data.Predicates.Predicates[0].Predicate
+
+	// Query stats for this predicate
+	statsQuery := map[string]any{
+		"query": `query($predicate: String!, $sampleLimit: Int) {
+			predicateStats(predicate: $predicate, sampleLimit: $sampleLimit) {
+				predicate entityCount sampleEntities
+			}
+		}`,
+		"variables": map[string]any{
+			"predicate":   targetPredicate,
+			"sampleLimit": 5,
+		},
+	}
+
+	statsJSON, err := json.Marshal(statsQuery)
+	if err != nil {
+		return fmt.Errorf("failed to marshal predicateStats query: %w", err)
+	}
+
+	statsReq, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(statsJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create predicateStats request: %w", err)
+	}
+	statsReq.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := http.DefaultClient.Do(statsReq)
+	latency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("predicateStats request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read predicateStats response: %w", err)
+	}
+
+	var statsResp predicateStatsResponse
+	if err := json.Unmarshal(bodyBytes, &statsResp); err != nil {
+		return fmt.Errorf("failed to parse predicateStats response: %w", err)
+	}
+
+	if len(statsResp.Errors) > 0 {
+		return fmt.Errorf("predicateStats query error: %s", statsResp.Errors[0].Message)
+	}
+
+	entityCount := statsResp.Data.PredicateStats.EntityCount
+	sampleCount := len(statsResp.Data.PredicateStats.SampleEntities)
+
+	result.Metrics["predicate_stats_entity_count"] = entityCount
+	result.Metrics["predicate_stats_sample_count"] = sampleCount
+	result.Metrics["predicate_stats_latency_ms"] = latency.Milliseconds()
+
+	result.Details["predicate_stats_test"] = map[string]any{
+		"predicate":       targetPredicate,
+		"entity_count":    entityCount,
+		"sample_count":    sampleCount,
+		"sample_entities": statsResp.Data.PredicateStats.SampleEntities,
+		"latency_ms":      latency.Milliseconds(),
+		"success":         entityCount > 0,
+		"message":         fmt.Sprintf("Predicate '%s' has %d entities", targetPredicate, entityCount),
+	}
+
+	return nil
+}
+
+// executeTestPredicateCompound validates the compoundPredicateQuery GraphQL query.
+// Tests AND/OR logic across multiple predicates.
+func (s *TieredScenario) executeTestPredicateCompound(ctx context.Context, result *Result) error {
+	gatewayURL := s.config.GraphQLURL
+
+	// First, get predicates to use in compound query
+	listQuery := map[string]any{
+		"query": `{ predicates { predicates { predicate entityCount } } }`,
+	}
+	listJSON, _ := json.Marshal(listQuery)
+
+	listReq, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(listJSON))
+	if err != nil {
+		return fmt.Errorf("failed to create predicate list request: %w", err)
+	}
+	listReq.Header.Set("Content-Type", "application/json")
+
+	listResp, err := http.DefaultClient.Do(listReq)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to list predicates: %v", err))
+		return nil
+	}
+	defer listResp.Body.Close()
+
+	listBody, _ := io.ReadAll(listResp.Body)
+	var predicatesResp predicateListResponse
+	if err := json.Unmarshal(listBody, &predicatesResp); err != nil || len(predicatesResp.Data.Predicates.Predicates) < 2 {
+		result.Warnings = append(result.Warnings, "Not enough predicates for compound query test (need at least 2)")
+		return nil
+	}
+
+	// Pick two predicates for testing
+	pred1 := predicatesResp.Data.Predicates.Predicates[0].Predicate
+	pred2 := predicatesResp.Data.Predicates.Predicates[1].Predicate
+
+	// Test OR query (union)
+	orQuery := map[string]any{
+		"query": `query($predicates: [String!]!, $operator: String!, $limit: Int) {
+			compoundPredicateQuery(predicates: $predicates, operator: $operator, limit: $limit) {
+				entities operator matched
+			}
+		}`,
+		"variables": map[string]any{
+			"predicates": []string{pred1, pred2},
+			"operator":   "OR",
+			"limit":      100,
+		},
+	}
+
+	orJSON, _ := json.Marshal(orQuery)
+	orReq, _ := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(orJSON))
+	orReq.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	orResp, err := http.DefaultClient.Do(orReq)
+	orLatency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("compound OR query failed: %w", err)
+	}
+	defer orResp.Body.Close()
+
+	orBody, _ := io.ReadAll(orResp.Body)
+	var orResult compoundPredicateResponse
+	if err := json.Unmarshal(orBody, &orResult); err != nil {
+		return fmt.Errorf("failed to parse compound OR response: %w", err)
+	}
+
+	if len(orResult.Errors) > 0 {
+		return fmt.Errorf("compound OR query error: %s", orResult.Errors[0].Message)
+	}
+
+	orMatched := orResult.Data.CompoundPredicateQuery.Matched
+
+	// Test AND query (intersection)
+	andQuery := map[string]any{
+		"query": `query($predicates: [String!]!, $operator: String!, $limit: Int) {
+			compoundPredicateQuery(predicates: $predicates, operator: $operator, limit: $limit) {
+				entities operator matched
+			}
+		}`,
+		"variables": map[string]any{
+			"predicates": []string{pred1, pred2},
+			"operator":   "AND",
+			"limit":      100,
+		},
+	}
+
+	andJSON, _ := json.Marshal(andQuery)
+	andReq, _ := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(andJSON))
+	andReq.Header.Set("Content-Type", "application/json")
+
+	start = time.Now()
+	andResp, err := http.DefaultClient.Do(andReq)
+	andLatency := time.Since(start)
+	if err != nil {
+		return fmt.Errorf("compound AND query failed: %w", err)
+	}
+	defer andResp.Body.Close()
+
+	andBody, _ := io.ReadAll(andResp.Body)
+	var andResult compoundPredicateResponse
+	if err := json.Unmarshal(andBody, &andResult); err != nil {
+		return fmt.Errorf("failed to parse compound AND response: %w", err)
+	}
+
+	if len(andResult.Errors) > 0 {
+		return fmt.Errorf("compound AND query error: %s", andResult.Errors[0].Message)
+	}
+
+	andMatched := andResult.Data.CompoundPredicateQuery.Matched
+
+	result.Metrics["predicate_compound_or_matched"] = orMatched
+	result.Metrics["predicate_compound_and_matched"] = andMatched
+	result.Metrics["predicate_compound_or_latency_ms"] = orLatency.Milliseconds()
+	result.Metrics["predicate_compound_and_latency_ms"] = andLatency.Milliseconds()
+
+	// Validate set theory: AND <= OR (intersection is subset of union)
+	setTheoryValid := andMatched <= orMatched
+
+	result.Details["predicate_compound_test"] = map[string]any{
+		"predicates_tested":  []string{pred1, pred2},
+		"or_matched":         orMatched,
+		"and_matched":        andMatched,
+		"or_latency_ms":      orLatency.Milliseconds(),
+		"and_latency_ms":     andLatency.Milliseconds(),
+		"set_theory_valid":   setTheoryValid,
+		"success":            setTheoryValid,
+		"message":            fmt.Sprintf("Compound query: OR=%d, AND=%d (set theory %v)", orMatched, andMatched, setTheoryValid),
+	}
+
+	if !setTheoryValid {
+		return fmt.Errorf("set theory violation: AND (%d) > OR (%d)", andMatched, orMatched)
+	}
+
+	return nil
+}

@@ -276,6 +276,10 @@ func (s *TieredScenario) getStagesForVariant(variant string) []stage {
 		{"test-nl-temporal-intent", s.executeTestNLTemporalIntent, []string{"statistical", "semantic"}},
 		// Alias resolution via ALIAS_INDEX (structural - no ML)
 		{"test-entity-by-alias", s.executeTestEntityByAlias, nil},
+		// Predicate query API (structural - direct index queries)
+		{"test-predicate-list", s.executeTestPredicateList, nil},
+		{"test-predicate-stats", s.executeTestPredicateStats, nil},
+		{"test-predicate-compound", s.executeTestPredicateCompound, nil},
 
 		// === Tier 0 ONLY: Zero-ML constraint validation ===
 		// These verify structural tier has NO ML inference

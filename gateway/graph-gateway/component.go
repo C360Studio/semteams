@@ -1381,6 +1381,25 @@ func (c *Component) handleNATSResponse(w http.ResponseWriter, subject string, re
 		}
 	}
 
+	// Unwrap QueryResponse envelope for graph.index.query.* subjects
+	// These handlers return QueryResponse[T] with {data: T, error: string, timestamp: time}
+	// We need to extract just the data field for the GraphQL response
+	if strings.HasPrefix(subject, "graph.index.query.") {
+		var envelope struct {
+			Data  json.RawMessage `json:"data"`
+			Error string          `json:"error,omitempty"`
+		}
+		if err := json.Unmarshal(resp, &envelope); err == nil {
+			if envelope.Error != "" {
+				c.writeGraphQLError(w, http.StatusOK, envelope.Error)
+				return
+			}
+			if len(envelope.Data) > 0 {
+				resp = envelope.Data
+			}
+		}
+	}
+
 	c.writeGraphQLSuccess(w, subject, resp)
 }
 
