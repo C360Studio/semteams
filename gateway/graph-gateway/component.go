@@ -688,6 +688,20 @@ func (c *Component) mapGraphQLQueryToNATSSubject(query string) string {
 		return "graph.query.globalSearch"
 	}
 
+	// Predicate queries - must come before generic "entity" check
+	if strings.Contains(query, "compoundpredicatequery") || strings.Contains(query, "compoundpredicate") {
+		return "graph.index.query.predicateCompound"
+	}
+	if strings.Contains(query, "predicatestats") {
+		return "graph.index.query.predicateStats"
+	}
+	if strings.Contains(query, "predicates") && !strings.Contains(query, "entitiesbypredicate") {
+		return "graph.index.query.predicateList"
+	}
+	if strings.Contains(query, "entitiesbypredicate") {
+		return "graph.index.query.predicate"
+	}
+
 	// Generic "entity" check MUST come last
 	if strings.Contains(query, "entity") {
 		return "graph.query.entity"
@@ -725,6 +739,14 @@ func (c *Component) subjectToGraphQLField(subject string) string {
 		return "localSearch"
 	case "graph.query.globalSearch":
 		return "globalSearch"
+	case "graph.index.query.predicate":
+		return "entitiesByPredicate"
+	case "graph.index.query.predicateList":
+		return "predicates"
+	case "graph.index.query.predicateStats":
+		return "predicateStats"
+	case "graph.index.query.predicateCompound":
+		return "compoundPredicateQuery"
 	default:
 		return ""
 	}
@@ -757,6 +779,14 @@ func (c *Component) transformVariablesToNATSPayload(variables map[string]interfa
 		return c.transformLocalSearchVars(variables)
 	case "graph.query.globalSearch":
 		return c.transformGlobalSearchVars(variables)
+	case "graph.index.query.predicate":
+		return extractVars(variables, "predicate", "limit")
+	case "graph.index.query.predicateList":
+		return map[string]interface{}{}
+	case "graph.index.query.predicateStats":
+		return c.transformPredicateStatsVars(variables)
+	case "graph.index.query.predicateCompound":
+		return c.transformCompoundPredicateVars(variables)
 	default:
 		return variables
 	}
@@ -851,6 +881,36 @@ func (c *Component) transformGlobalSearchVars(variables map[string]interface{}) 
 	}
 	if maxCommunities, ok := variables["maxCommunities"]; ok {
 		payload["max_communities"] = maxCommunities
+	}
+	return payload
+}
+
+// transformPredicateStatsVars transforms predicate stats query variables.
+func (c *Component) transformPredicateStatsVars(variables map[string]interface{}) map[string]interface{} {
+	payload := make(map[string]interface{})
+	if predicate, ok := variables["predicate"]; ok {
+		payload["predicate"] = predicate
+	}
+	// Handle multiple possible names for sample_limit
+	for _, key := range []string{"sampleLimit", "sample_limit"} {
+		if val, ok := variables[key]; ok {
+			payload["sample_limit"] = val
+		}
+	}
+	return payload
+}
+
+// transformCompoundPredicateVars transforms compound predicate query variables.
+func (c *Component) transformCompoundPredicateVars(variables map[string]interface{}) map[string]interface{} {
+	payload := make(map[string]interface{})
+	if predicates, ok := variables["predicates"]; ok {
+		payload["predicates"] = predicates
+	}
+	if operator, ok := variables["operator"]; ok {
+		payload["operator"] = operator
+	}
+	if limit, ok := variables["limit"]; ok {
+		payload["limit"] = limit
 	}
 	return payload
 }
@@ -1224,6 +1284,11 @@ func buildIntrospectionSchema() map[string]interface{} {
 					fieldDef("localSearch", "SearchResult", argDef("entityId", "String!"), argDef("query", "String"), argDef("level", "Int")),
 					fieldDef("globalSearch", "SearchResult", argDef("query", "String!"), argDef("level", "Int"), argDef("maxCommunities", "Int")),
 					fieldDef("capabilities", "Capabilities"),
+					// Predicate queries
+					fieldDef("entitiesByPredicate", "[String]", argDef("predicate", "String!"), argDef("limit", "Int")),
+					fieldDef("predicates", "PredicateListResult"),
+					fieldDef("predicateStats", "PredicateStatsResult", argDef("predicate", "String!"), argDef("sampleLimit", "Int")),
+					fieldDef("compoundPredicateQuery", "CompoundPredicateResult", argDef("predicates", "[String!]!"), argDef("operator", "String!"), argDef("limit", "Int")),
 				},
 			},
 			typeDef("OBJECT", "Entity", "id", "triples"),
@@ -1233,6 +1298,11 @@ func buildIntrospectionSchema() map[string]interface{} {
 			typeDef("OBJECT", "PathSearchResult", "entities", "edges", "paths"),
 			typeDef("OBJECT", "SearchResult", "results", "score"),
 			typeDef("OBJECT", "Capabilities", "queries", "mutations"),
+			// Predicate types
+			typeDef("OBJECT", "PredicateSummary", "predicate", "entityCount"),
+			typeDef("OBJECT", "PredicateListResult", "predicates", "total"),
+			typeDef("OBJECT", "PredicateStatsResult", "predicate", "entityCount", "sampleEntities"),
+			typeDef("OBJECT", "CompoundPredicateResult", "entities", "operator", "matched"),
 			typeDef("SCALAR", "String"),
 			typeDef("SCALAR", "Int"),
 			typeDef("SCALAR", "Float"),

@@ -42,8 +42,37 @@ func (c *Component) setupQueryHandlers(ctx context.Context) error {
 	}
 	c.querySubscriptions = append(c.querySubscriptions, sub)
 
+	// Subscribe to predicate list query
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.index.query.predicateList", c.handleQueryPredicateListNATS)
+	if err != nil {
+		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe predicateList query")
+	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
+
+	// Subscribe to predicate stats query
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.index.query.predicateStats", c.handleQueryPredicateStatsNATS)
+	if err != nil {
+		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe predicateStats query")
+	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
+
+	// Subscribe to compound predicate query
+	sub, err = c.natsClient.SubscribeForRequests(ctx, "graph.index.query.predicateCompound", c.handleQueryPredicateCompoundNATS)
+	if err != nil {
+		return errs.Wrap(err, "Component", "setupQueryHandlers", "subscribe predicateCompound query")
+	}
+	c.querySubscriptions = append(c.querySubscriptions, sub)
+
 	c.logger.Info("query handlers registered",
-		slog.Any("subjects", []string{"graph.index.query.outgoing", "graph.index.query.incoming", "graph.index.query.alias", "graph.index.query.predicate"}))
+		slog.Any("subjects", []string{
+			"graph.index.query.outgoing",
+			"graph.index.query.incoming",
+			"graph.index.query.alias",
+			"graph.index.query.predicate",
+			"graph.index.query.predicateList",
+			"graph.index.query.predicateStats",
+			"graph.index.query.predicateCompound",
+		}))
 
 	return nil
 }
@@ -390,4 +419,204 @@ func (c *Component) respondJSON(msg queryMsg, payload any) {
 	if err := msg.Respond(data); err != nil {
 		c.logger.Error("failed to respond with JSON", "error", err)
 	}
+}
+
+// handleQueryPredicateListNATS handles predicate list query requests via NATS request/reply.
+// Returns all predicates with their entity counts.
+func (c *Component) handleQueryPredicateListNATS(ctx context.Context, _ []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	// Get all predicate keys from the bucket
+	keys, err := c.predicateBucket.Keys(ctx)
+	if err != nil {
+		if err == jetstream.ErrNoKeysFound {
+			return json.Marshal(graph.NewQueryResponse(graph.PredicateListData{
+				Predicates: []graph.PredicateSummary{},
+				Total:      0,
+			}))
+		}
+		return json.Marshal(graph.NewQueryError[graph.PredicateListData]("internal error"))
+	}
+
+	predicates := make([]graph.PredicateSummary, 0, len(keys))
+	for _, predicate := range keys {
+		entry, err := c.predicateBucket.Get(ctx, predicate)
+		if err != nil {
+			continue // Skip predicates we can't read
+		}
+
+		var indexEntry graph.PredicateIndexEntry
+		if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+			continue // Skip malformed entries
+		}
+
+		predicates = append(predicates, graph.PredicateSummary{
+			Predicate:   predicate,
+			EntityCount: len(indexEntry.Entities),
+		})
+	}
+
+	return json.Marshal(graph.NewQueryResponse(graph.PredicateListData{
+		Predicates: predicates,
+		Total:      len(predicates),
+	}))
+}
+
+// handleQueryPredicateStatsNATS handles predicate stats query requests via NATS request/reply.
+// Returns detailed statistics for a single predicate including sample entities.
+func (c *Component) handleQueryPredicateStatsNATS(ctx context.Context, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var req struct {
+		Predicate   string `json:"predicate"`
+		SampleLimit int    `json:"sample_limit"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil {
+		return json.Marshal(graph.NewQueryError[graph.PredicateStatsData]("invalid request"))
+	}
+
+	if req.Predicate == "" {
+		return json.Marshal(graph.NewQueryError[graph.PredicateStatsData]("invalid request: empty predicate"))
+	}
+
+	// Default sample limit
+	if req.SampleLimit <= 0 {
+		req.SampleLimit = 10
+	}
+
+	entry, err := c.predicateBucket.Get(ctx, req.Predicate)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return json.Marshal(graph.NewQueryResponse(graph.PredicateStatsData{
+				Predicate:      req.Predicate,
+				EntityCount:    0,
+				SampleEntities: []string{},
+			}))
+		}
+		return json.Marshal(graph.NewQueryError[graph.PredicateStatsData]("internal error"))
+	}
+
+	var indexEntry graph.PredicateIndexEntry
+	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+		return json.Marshal(graph.NewQueryError[graph.PredicateStatsData]("internal error"))
+	}
+
+	// Get sample entities
+	sampleEntities := indexEntry.Entities
+	if len(sampleEntities) > req.SampleLimit {
+		sampleEntities = sampleEntities[:req.SampleLimit]
+	}
+
+	return json.Marshal(graph.NewQueryResponse(graph.PredicateStatsData{
+		Predicate:      req.Predicate,
+		EntityCount:    len(indexEntry.Entities),
+		SampleEntities: sampleEntities,
+	}))
+}
+
+// handleQueryPredicateCompoundNATS handles compound predicate query requests via NATS request/reply.
+// Performs set intersection (AND) or union (OR) across multiple predicates.
+func (c *Component) handleQueryPredicateCompoundNATS(ctx context.Context, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	var req graph.CompoundPredicateQuery
+	if err := json.Unmarshal(data, &req); err != nil {
+		return json.Marshal(graph.NewQueryError[graph.CompoundPredicateData]("invalid request"))
+	}
+
+	if len(req.Predicates) == 0 {
+		return json.Marshal(graph.NewQueryError[graph.CompoundPredicateData]("invalid request: empty predicates"))
+	}
+
+	operator := req.Operator
+	if operator != "AND" && operator != "OR" {
+		return json.Marshal(graph.NewQueryError[graph.CompoundPredicateData]("invalid request: operator must be AND or OR"))
+	}
+
+	// Collect entity sets for each predicate
+	entitySets := make([]map[string]struct{}, 0, len(req.Predicates))
+	for _, predicate := range req.Predicates {
+		entry, err := c.predicateBucket.Get(ctx, predicate)
+		if err != nil {
+			if err == jetstream.ErrKeyNotFound {
+				// Predicate not found - empty set
+				entitySets = append(entitySets, make(map[string]struct{}))
+				continue
+			}
+			return json.Marshal(graph.NewQueryError[graph.CompoundPredicateData]("internal error"))
+		}
+
+		var indexEntry graph.PredicateIndexEntry
+		if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+			return json.Marshal(graph.NewQueryError[graph.CompoundPredicateData]("internal error"))
+		}
+
+		entitySet := make(map[string]struct{}, len(indexEntry.Entities))
+		for _, e := range indexEntry.Entities {
+			entitySet[e] = struct{}{}
+		}
+		entitySets = append(entitySets, entitySet)
+	}
+
+	var result map[string]struct{}
+	if operator == "AND" {
+		result = intersectSets(entitySets)
+	} else {
+		result = unionSets(entitySets)
+	}
+
+	// Convert to slice
+	entities := make([]string, 0, len(result))
+	for e := range result {
+		entities = append(entities, e)
+	}
+
+	// Apply limit if specified
+	if req.Limit > 0 && len(entities) > req.Limit {
+		entities = entities[:req.Limit]
+	}
+
+	return json.Marshal(graph.NewQueryResponse(graph.CompoundPredicateData{
+		Entities: entities,
+		Operator: operator,
+		Matched:  len(result),
+	}))
+}
+
+// intersectSets returns the intersection of all entity sets.
+func intersectSets(sets []map[string]struct{}) map[string]struct{} {
+	if len(sets) == 0 {
+		return make(map[string]struct{})
+	}
+
+	// Start with the first set
+	result := make(map[string]struct{})
+	for e := range sets[0] {
+		result[e] = struct{}{}
+	}
+
+	// Intersect with remaining sets
+	for i := 1; i < len(sets); i++ {
+		for e := range result {
+			if _, exists := sets[i][e]; !exists {
+				delete(result, e)
+			}
+		}
+	}
+
+	return result
+}
+
+// unionSets returns the union of all entity sets.
+func unionSets(sets []map[string]struct{}) map[string]struct{} {
+	result := make(map[string]struct{})
+	for _, set := range sets {
+		for e := range set {
+			result[e] = struct{}{}
+		}
+	}
+	return result
 }

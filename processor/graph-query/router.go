@@ -21,10 +21,13 @@ func NewStaticRouter(logger *slog.Logger) *StaticRouter {
 			"entityPrefix": "graph.ingest.query.prefix",
 
 			// Relationship queries -> graph-index
-			"outgoing":  "graph.index.query.outgoing",
-			"incoming":  "graph.index.query.incoming",
-			"alias":     "graph.index.query.alias",
-			"predicate": "graph.index.query.predicate",
+			"outgoing":          "graph.index.query.outgoing",
+			"incoming":          "graph.index.query.incoming",
+			"alias":             "graph.index.query.alias",
+			"predicate":         "graph.index.query.predicate",
+			"predicateList":     "graph.index.query.predicateList",
+			"predicateStats":    "graph.index.query.predicateStats",
+			"predicateCompound": "graph.index.query.predicateCompound",
 
 			// Spatial/Temporal -> specialized indexes
 			"spatial":  "graph.spatial.query.bounds",

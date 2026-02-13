@@ -162,7 +162,7 @@ func (c *Component) handleQueryEntityByAlias(ctx context.Context, data []byte) (
 	if err == nil {
 		// Parse alias response from envelope format
 		var aliasResult graph.AliasQueryResponse
-		if json.Unmarshal(aliasResp, &aliasResult) == nil && aliasResult.Error == nil && aliasResult.Data.CanonicalID != nil {
+		if json.Unmarshal(aliasResp, &aliasResult) == nil && aliasResult.Error == "" && aliasResult.Data.CanonicalID != nil {
 			entityID = *aliasResult.Data.CanonicalID
 		}
 	}
@@ -254,8 +254,8 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 		if err := json.Unmarshal(response, &envelope); err != nil {
 			return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryRelationships", "parse incoming entries")
 		}
-		if envelope.Error != nil {
-			return nil, errs.WrapTransient(errors.New(*envelope.Error), "GraphQuery", "handleQueryRelationships", "incoming query error")
+		if envelope.Error != "" {
+			return nil, errs.WrapTransient(errors.New(envelope.Error), "GraphQuery", "handleQueryRelationships", "incoming query error")
 		}
 		relationships = make([]map[string]any, len(envelope.Data.Relationships))
 		for i, e := range envelope.Data.Relationships {
@@ -271,8 +271,8 @@ func (c *Component) handleQueryRelationships(ctx context.Context, data []byte) (
 		if err := json.Unmarshal(response, &envelope); err != nil {
 			return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryRelationships", "parse outgoing entries")
 		}
-		if envelope.Error != nil {
-			return nil, errs.WrapTransient(errors.New(*envelope.Error), "GraphQuery", "handleQueryRelationships", "outgoing query error")
+		if envelope.Error != "" {
+			return nil, errs.WrapTransient(errors.New(envelope.Error), "GraphQuery", "handleQueryRelationships", "outgoing query error")
 		}
 		relationships = make([]map[string]any, len(envelope.Data.Relationships))
 		for i, e := range envelope.Data.Relationships {

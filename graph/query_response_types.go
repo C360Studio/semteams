@@ -14,3 +14,12 @@ type AliasQueryResponse = QueryResponse[AliasData]
 
 // PredicateQueryResponse is the response type for predicate queries.
 type PredicateQueryResponse = QueryResponse[PredicateData]
+
+// PredicateListQueryResponse is the response type for predicate list queries.
+type PredicateListQueryResponse = QueryResponse[PredicateListData]
+
+// PredicateStatsQueryResponse is the response type for predicate stats queries.
+type PredicateStatsQueryResponse = QueryResponse[PredicateStatsData]
+
+// CompoundPredicateQueryResponse is the response type for compound predicate queries.
+type CompoundPredicateQueryResponse = QueryResponse[CompoundPredicateData]

@@ -69,13 +69,13 @@ func (c *Component) resolveViaAlias(ctx context.Context, alias string) string {
 		Data struct {
 			CanonicalID *string `json:"canonical_id"`
 		} `json:"data"`
-		Error *string `json:"error"`
+		Error string `json:"error"`
 	}
 	if err := json.Unmarshal(respData, &resp); err != nil {
 		return ""
 	}
 
-	if resp.Error != nil || resp.Data.CanonicalID == nil {
+	if resp.Error != "" || resp.Data.CanonicalID == nil {
 		return ""
 	}
 

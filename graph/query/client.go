@@ -810,3 +810,126 @@ func (qc *natsClient) entityMatchesCriteria(entity *gtypes.EntityState, criteria
 
 	return true
 }
+
+// GetEntitiesByPredicate returns entity IDs that have a specific predicate.
+func (qc *natsClient) GetEntitiesByPredicate(ctx context.Context, predicate string) ([]string, error) {
+	if predicate == "" {
+		return nil, fmt.Errorf("predicate cannot be empty")
+	}
+
+	atomic.AddInt64(&qc.queryCount, 1)
+
+	req := struct {
+		Predicate string `json:"predicate"`
+	}{Predicate: predicate}
+
+	reqData, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	respData, err := qc.natsClient.Request(ctx, "graph.index.query.predicate", reqData, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query predicate: %w", err)
+	}
+
+	var resp gtypes.PredicateQueryResponse
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if resp.Error != "" {
+		return nil, fmt.Errorf("query error: %s", resp.Error)
+	}
+
+	return resp.Data.Entities, nil
+}
+
+// ListPredicates returns all predicates with their entity counts.
+func (qc *natsClient) ListPredicates(ctx context.Context) ([]gtypes.PredicateSummary, error) {
+	atomic.AddInt64(&qc.queryCount, 1)
+
+	respData, err := qc.natsClient.Request(ctx, "graph.index.query.predicateList", []byte("{}"), 30*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query predicates: %w", err)
+	}
+
+	var resp gtypes.PredicateListQueryResponse
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if resp.Error != "" {
+		return nil, fmt.Errorf("query error: %s", resp.Error)
+	}
+
+	return resp.Data.Predicates, nil
+}
+
+// GetPredicateStats returns detailed statistics for a predicate.
+func (qc *natsClient) GetPredicateStats(ctx context.Context, predicate string, sampleLimit int) (*gtypes.PredicateStatsData, error) {
+	if predicate == "" {
+		return nil, fmt.Errorf("predicate cannot be empty")
+	}
+
+	atomic.AddInt64(&qc.queryCount, 1)
+
+	req := struct {
+		Predicate   string `json:"predicate"`
+		SampleLimit int    `json:"sample_limit"`
+	}{Predicate: predicate, SampleLimit: sampleLimit}
+
+	reqData, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	respData, err := qc.natsClient.Request(ctx, "graph.index.query.predicateStats", reqData, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query predicate stats: %w", err)
+	}
+
+	var resp gtypes.PredicateStatsQueryResponse
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if resp.Error != "" {
+		return nil, fmt.Errorf("query error: %s", resp.Error)
+	}
+
+	return &resp.Data, nil
+}
+
+// QueryCompoundPredicates performs a compound predicate query with AND/OR logic.
+func (qc *natsClient) QueryCompoundPredicates(ctx context.Context, query gtypes.CompoundPredicateQuery) ([]string, error) {
+	if len(query.Predicates) == 0 {
+		return nil, fmt.Errorf("predicates cannot be empty")
+	}
+	if query.Operator != "AND" && query.Operator != "OR" {
+		return nil, fmt.Errorf("operator must be AND or OR")
+	}
+
+	atomic.AddInt64(&qc.queryCount, 1)
+
+	reqData, err := json.Marshal(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	respData, err := qc.natsClient.Request(ctx, "graph.index.query.predicateCompound", reqData, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query compound predicates: %w", err)
+	}
+
+	var resp gtypes.CompoundPredicateQueryResponse
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if resp.Error != "" {
+		return nil, fmt.Errorf("query error: %s", resp.Error)
+	}
+
+	return resp.Data.Entities, nil
+}

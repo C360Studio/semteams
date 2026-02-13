@@ -37,6 +37,12 @@ type Client interface {
 	// Spatial queries
 	GetEntitiesInRegion(ctx context.Context, geohash string) ([]*gtypes.EntityState, error)
 
+	// Predicate queries
+	GetEntitiesByPredicate(ctx context.Context, predicate string) ([]string, error)
+	ListPredicates(ctx context.Context) ([]gtypes.PredicateSummary, error)
+	GetPredicateStats(ctx context.Context, predicate string, sampleLimit int) (*gtypes.PredicateStatsData, error)
+	QueryCompoundPredicates(ctx context.Context, query gtypes.CompoundPredicateQuery) ([]string, error)
+
 	// Cache and metrics
 	GetCacheStats() CacheStats
 	Clear() error

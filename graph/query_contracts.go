@@ -9,7 +9,7 @@ import "time"
 // Uses generics for compile-time type safety.
 type QueryResponse[T any] struct {
 	Data      T         `json:"data"`
-	Error     *string   `json:"error,omitempty"`
+	Error     string    `json:"error,omitempty"`
 	RequestID string    `json:"request_id,omitempty"`
 	Timestamp time.Time `json:"timestamp"`
 }
@@ -25,7 +25,7 @@ func NewQueryResponse[T any](data T) QueryResponse[T] {
 // NewQueryError creates an error response with the given message.
 func NewQueryError[T any](msg string) QueryResponse[T] {
 	return QueryResponse[T]{
-		Error:     &msg,
+		Error:     msg,
 		Timestamp: time.Now(),
 	}
 }

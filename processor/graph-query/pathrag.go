@@ -214,7 +214,7 @@ func (p *PathSearcher) getOutgoingRelationships(ctx context.Context, entityID st
 	}
 
 	var envelope graph.OutgoingQueryResponse
-	if err := json.Unmarshal(relsResponse, &envelope); err != nil || envelope.Error != nil {
+	if err := json.Unmarshal(relsResponse, &envelope); err != nil || envelope.Error != "" {
 		return nil
 	}
 
@@ -237,7 +237,7 @@ func (p *PathSearcher) getIncomingRelationships(ctx context.Context, entityID st
 	}
 
 	var envelope graph.IncomingQueryResponse
-	if err := json.Unmarshal(relsResponse, &envelope); err != nil || envelope.Error != nil {
+	if err := json.Unmarshal(relsResponse, &envelope); err != nil || envelope.Error != "" {
 		return nil
 	}
 
