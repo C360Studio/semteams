@@ -1,0 +1,107 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "trustgraph_output.v1.json",
+  "type": "object",
+  "title": "trustgraph_output Configuration",
+  "description": "Exports SemStreams entities to TrustGraph knowledge cores via REST API",
+  "properties": {
+    "api_key": {
+      "type": "string",
+      "description": "API key for TrustGraph (optional)"
+    },
+    "api_key_env": {
+      "type": "string",
+      "description": "Env var containing API key"
+    },
+    "batch_size": {
+      "type": "number",
+      "description": "Triples per batch",
+      "default": 100,
+      "minimum": 1,
+      "maximum": 5000
+    },
+    "collection": {
+      "type": "string",
+      "description": "TrustGraph collection name",
+      "default": "operational"
+    },
+    "endpoint": {
+      "type": "string",
+      "description": "TrustGraph API base URL",
+      "default": "http://localhost:8088"
+    },
+    "entity_prefixes": {
+      "type": "array",
+      "description": "Entity ID prefixes to export (empty = all)",
+      "items": {
+        "type": "string"
+      }
+    },
+    "exclude_sources": {
+      "type": "array",
+      "description": "Source names to exclude (prevents re-export loops)",
+      "items": {
+        "type": "string"
+      }
+    },
+    "flush_interval": {
+      "type": "string",
+      "description": "Max time before flush",
+      "default": "5s"
+    },
+    "kg_core_id": {
+      "type": "string",
+      "description": "Knowledge core ID to write to",
+      "default": "semstreams-operational"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    },
+    "timeout": {
+      "type": "string",
+      "description": "HTTP request timeout",
+      "default": "30s"
+    },
+    "user": {
+      "type": "string",
+      "description": "TrustGraph user for knowledge core",
+      "default": "semstreams"
+    },
+    "vocab": {
+      "type": "object",
+      "description": "Vocabulary translation settings",
+      "properties": {
+        "default_org": {
+          "type": "string",
+          "description": "default_org"
+        },
+        "default_uri_base": {
+          "type": "string",
+          "description": "default_uri_base"
+        },
+        "org_mappings": {
+          "type": "object",
+          "description": "org_mappings"
+        },
+        "predicate_mappings": {
+          "type": "object",
+          "description": "predicate_mappings"
+        },
+        "uri_mappings": {
+          "type": "object",
+          "description": "uri_mappings"
+        }
+      }
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "trustgraph_output",
+    "type": "output",
+    "protocol": "trustgraph",
+    "domain": "bridge",
+    "version": "1.0.0"
+  }
+}

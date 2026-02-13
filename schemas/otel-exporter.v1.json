@@ -1,0 +1,115 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "otel-exporter.v1.json",
+  "type": "object",
+  "title": "otel-exporter Configuration",
+  "description": "Exports agent telemetry to OpenTelemetry collectors",
+  "properties": {
+    "batch_timeout": {
+      "type": "string",
+      "description": "Batch export timeout",
+      "default": "5s",
+      "category": "advanced"
+    },
+    "consumer_name_suffix": {
+      "type": "string",
+      "description": "Suffix for consumer names",
+      "category": "advanced"
+    },
+    "delete_consumer_on_stop": {
+      "type": "boolean",
+      "description": "Delete consumers on Stop",
+      "default": false,
+      "category": "advanced"
+    },
+    "endpoint": {
+      "type": "string",
+      "description": "OTEL collector endpoint",
+      "default": "localhost:4317",
+      "category": "basic"
+    },
+    "export_logs": {
+      "type": "boolean",
+      "description": "Enable log export",
+      "default": false,
+      "category": "basic"
+    },
+    "export_metrics": {
+      "type": "boolean",
+      "description": "Enable metric export",
+      "default": true,
+      "category": "basic"
+    },
+    "export_timeout": {
+      "type": "string",
+      "description": "Export operation timeout",
+      "default": "30s",
+      "category": "advanced"
+    },
+    "export_traces": {
+      "type": "boolean",
+      "description": "Enable trace export",
+      "default": true,
+      "category": "basic"
+    },
+    "headers": {
+      "type": "object",
+      "description": "Additional export headers",
+      "category": "advanced"
+    },
+    "max_batch_size": {
+      "type": "number",
+      "description": "Maximum batch size",
+      "default": 512,
+      "category": "advanced"
+    },
+    "max_export_batch_size": {
+      "type": "number",
+      "description": "Max export batch size",
+      "default": 512,
+      "category": "advanced"
+    },
+    "ports": {
+      "type": "string",
+      "description": "Port configuration",
+      "category": "basic"
+    },
+    "protocol": {
+      "type": "string",
+      "description": "Export protocol",
+      "default": "grpc",
+      "category": "basic"
+    },
+    "resource_attributes": {
+      "type": "object",
+      "description": "Resource attributes",
+      "category": "advanced"
+    },
+    "sampling_rate": {
+      "type": "number",
+      "description": "Trace sampling rate",
+      "default": 1,
+      "category": "advanced"
+    },
+    "service_name": {
+      "type": "string",
+      "description": "Service name for traces",
+      "default": "semstreams",
+      "category": "basic"
+    },
+    "service_version": {
+      "type": "string",
+      "description": "Service version",
+      "default": "1.0.0",
+      "category": "basic"
+    }
+  },
+  "required": [],
+  "x-component-metadata": {
+    "name": "otel-exporter",
+    "type": "output",
+    "protocol": "",
+    "domain": "",
+    "version": "1.0.0"
+  }
+}

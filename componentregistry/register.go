@@ -5,8 +5,6 @@ package componentregistry
 import (
 	"errors"
 
-	trustgraphinput "github.com/c360studio/semstreams/bridge/trustgraph/input"
-	trustgraphoutput "github.com/c360studio/semstreams/bridge/trustgraph/output"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/examples/processors/document"
 	iotsensor "github.com/c360studio/semstreams/examples/processors/iot_sensor"
@@ -15,12 +13,14 @@ import (
 	a2ainput "github.com/c360studio/semstreams/input/a2a"
 	fileinput "github.com/c360studio/semstreams/input/file"
 	slimbridgeinput "github.com/c360studio/semstreams/input/slim"
+	trustgraphinput "github.com/c360studio/semstreams/input/trustgraph"
 	"github.com/c360studio/semstreams/input/udp"
 	websocketinput "github.com/c360studio/semstreams/input/websocket"
 	directorybridge "github.com/c360studio/semstreams/output/directory-bridge"
 	"github.com/c360studio/semstreams/output/file"
 	"github.com/c360studio/semstreams/output/httppost"
 	otelexporter "github.com/c360studio/semstreams/output/otel"
+	trustgraphoutput "github.com/c360studio/semstreams/output/trustgraph"
 	"github.com/c360studio/semstreams/output/websocket"
 	pkgerrs "github.com/c360studio/semstreams/pkg/errs"
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
@@ -42,9 +42,6 @@ import (
 	"github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/processor/workflow"
 	"github.com/c360studio/semstreams/storage/objectstore"
-
-	// Import trustgraph query package to register the tool via init()
-	_ "github.com/c360studio/semstreams/bridge/trustgraph/query"
 )
 
 // Register registers all SemStreams framework components with the provided registry.
@@ -96,7 +93,6 @@ import (
 // Bridge Layer - External system integration:
 //   - trustgraph-input (imports entities from TrustGraph knowledge graph)
 //   - trustgraph-output (exports entities to TrustGraph knowledge cores)
-//   - trustgraph-query tool (GraphRAG queries via agentic-tools)
 //
 // Domain Layer (example processors):
 //   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
@@ -291,9 +287,6 @@ func registerBridgeLayer(registry *component.Registry) error {
 	if err := trustgraphoutput.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "trustgraph-output component registration")
 	}
-
-	// Note: trustgraph-query tool is registered via init() in the query package
-	// which is imported above with _ import
 
 	return nil
 }
