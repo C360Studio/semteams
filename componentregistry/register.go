@@ -5,6 +5,8 @@ package componentregistry
 import (
 	"errors"
 
+	trustgraphinput "github.com/c360studio/semstreams/bridge/trustgraph/input"
+	trustgraphoutput "github.com/c360studio/semstreams/bridge/trustgraph/output"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/examples/processors/document"
 	iotsensor "github.com/c360studio/semstreams/examples/processors/iot_sensor"
@@ -40,6 +42,9 @@ import (
 	"github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/processor/workflow"
 	"github.com/c360studio/semstreams/storage/objectstore"
+
+	// Import trustgraph query package to register the tool via init()
+	_ "github.com/c360studio/semstreams/bridge/trustgraph/query"
 )
 
 // Register registers all SemStreams framework components with the provided registry.
@@ -88,6 +93,11 @@ import (
 //   - a2a-adapter (receives A2A task requests from external agents)
 //   - otel-exporter (exports agent telemetry to OpenTelemetry collectors)
 //
+// Bridge Layer - External system integration:
+//   - trustgraph-input (imports entities from TrustGraph knowledge graph)
+//   - trustgraph-output (exports entities to TrustGraph knowledge cores)
+//   - trustgraph-query tool (GraphRAG queries via agentic-tools)
+//
 // Domain Layer (example processors):
 //   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
 //   - Document processor (document processing)
@@ -111,6 +121,10 @@ func Register(registry *component.Registry) error {
 	}
 
 	if err := registerAgenticLayer(registry); err != nil {
+		return err
+	}
+
+	if err := registerBridgeLayer(registry); err != nil {
 		return err
 	}
 
@@ -263,6 +277,23 @@ func registerAgenticLayer(registry *component.Registry) error {
 	if err := otelexporter.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "otel-exporter component registration")
 	}
+
+	return nil
+}
+
+// registerBridgeLayer registers bridge components for external system integration.
+func registerBridgeLayer(registry *component.Registry) error {
+	// TrustGraph bridge components
+	if err := trustgraphinput.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "trustgraph-input component registration")
+	}
+
+	if err := trustgraphoutput.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "trustgraph-output component registration")
+	}
+
+	// Note: trustgraph-query tool is registered via init() in the query package
+	// which is imported above with _ import
 
 	return nil
 }
