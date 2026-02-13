@@ -483,13 +483,17 @@ func TestIntegration_RejectsInvalidJSON(t *testing.T) {
 	err = natsClient.Publish(ctx, "test.jsonfilter.reject.input", validMsg)
 	require.NoError(t, err)
 
-	// Publish GenericJSON with nil data (should be rejected due to validation)
+	// Verify that invalid payloads fail at serialize time (contract enforcement)
+	// This is the correct behavior - invalid messages can't be created
 	invalidPayload := &message.GenericJSONPayload{Data: nil}
 	msgType := message.Type{Domain: "core", Category: "json", Version: "v1"}
 	invalidMsg := message.NewBaseMessage(msgType, invalidPayload, "test-source")
-	invalidJSON, err := json.Marshal(invalidMsg)
-	require.NoError(t, err)
-	err = natsClient.Publish(ctx, "test.jsonfilter.reject.input", invalidJSON)
+	_, err = json.Marshal(invalidMsg)
+	require.Error(t, err, "Invalid payload should fail at serialize time")
+	assert.Contains(t, err.Error(), "validation failed", "Error should mention validation")
+
+	// Publish raw invalid JSON (not a valid BaseMessage) - should be rejected by component
+	err = natsClient.Publish(ctx, "test.jsonfilter.reject.input", []byte(`{"not": "a base message"}`))
 	require.NoError(t, err)
 
 	time.Sleep(500 * time.Millisecond)
@@ -502,7 +506,7 @@ func TestIntegration_RejectsInvalidJSON(t *testing.T) {
 	}
 	receiveMu.Unlock()
 
-	// Check error metrics increased for invalid message
+	// Check error metrics increased for invalid message (raw JSON that's not a BaseMessage)
 	health := filterComp.Health()
 	assert.Greater(t, health.ErrorCount, 0, "Error count should increase for invalid messages")
 }
