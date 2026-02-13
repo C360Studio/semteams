@@ -329,3 +329,108 @@ func (c *A2AClient) GetTask(ctx context.Context, taskID string) (*A2ATask, error
 
 	return result.Result, nil
 }
+
+// AGNTCYMockClient provides HTTP client for testing the AGNTCY mock server.
+type AGNTCYMockClient struct {
+	baseURL    string
+	httpClient *http.Client
+}
+
+// NewAGNTCYMockClient creates a new client for the AGNTCY mock server.
+func NewAGNTCYMockClient(baseURL string) *AGNTCYMockClient {
+	return &AGNTCYMockClient{
+		baseURL: strings.TrimSuffix(baseURL, "/"),
+		httpClient: &http.Client{
+			Timeout: 10 * time.Second,
+		},
+	}
+}
+
+// DirectoryRegistration represents an agent registration in the mock directory.
+type DirectoryRegistration struct {
+	AgentID       string         `json:"agent_id"`
+	OASFRecord    map[string]any `json:"oasf_record"`
+	RegisteredAt  string         `json:"registered_at"`
+	LastHeartbeat string         `json:"last_heartbeat"`
+	TTL           string         `json:"ttl"`
+}
+
+// Health checks if the AGNTCY mock server is healthy.
+func (c *AGNTCYMockClient) Health(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/health", nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("health check failed: %s", resp.Status)
+	}
+
+	return nil
+}
+
+// ListRegistrations returns all agent registrations from the mock directory.
+func (c *AGNTCYMockClient) ListRegistrations(ctx context.Context) ([]DirectoryRegistration, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/agents", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("list registrations failed: %s - %s", resp.Status, string(body))
+	}
+
+	var result struct {
+		Agents []DirectoryRegistration `json:"agents"`
+		Count  int                     `json:"count"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return result.Agents, nil
+}
+
+// WaitForRegistration waits for an agent to be registered in the directory.
+func (c *AGNTCYMockClient) WaitForRegistration(
+	ctx context.Context,
+	agentIDSubstring string,
+	timeout time.Duration,
+) (*DirectoryRegistration, error) {
+	const pollInterval = 500 * time.Millisecond
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		registrations, err := c.ListRegistrations(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, reg := range registrations {
+			if strings.Contains(reg.AgentID, agentIDSubstring) {
+				return &reg, nil
+			}
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pollInterval):
+		}
+	}
+
+	return nil, nil
+}

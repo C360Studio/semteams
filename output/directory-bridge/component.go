@@ -12,6 +12,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/retry"
 	oasfgenerator "github.com/c360studio/semstreams/processor/oasf-generator"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -151,28 +152,53 @@ func (c *Component) Start(ctx context.Context) error {
 }
 
 // startKVWatcher starts watching the OASF KV bucket for changes.
+// If the bucket doesn't exist yet, it starts a background retry loop using pkg/retry.
 func (c *Component) startKVWatcher(ctx context.Context) error {
-	// Get the OASF KV bucket
-	kv, err := c.natsClient.GetKeyValueBucket(ctx, c.config.OASFKVBucket)
+	// Start background goroutine to wait for bucket and watch
+	go c.watchWithRetry(ctx)
+	return nil
+}
+
+// watchWithRetry waits for the OASF KV bucket to exist, then watches it.
+func (c *Component) watchWithRetry(ctx context.Context) {
+	// Use Persistent config for long-running retry (30 attempts over ~60s)
+	cfg := retry.Persistent()
+
+	kv, err := retry.DoWithResult(ctx, cfg, func() (jetstream.KeyValue, error) {
+		bucket, err := c.natsClient.GetKeyValueBucket(ctx, c.config.OASFKVBucket)
+		if err != nil {
+			c.logger.Debug("OASF KV bucket not available yet, retrying",
+				slog.String("bucket", c.config.OASFKVBucket))
+			return nil, err
+		}
+		return bucket, nil
+	})
+
 	if err != nil {
-		// Bucket might not exist yet, which is OK
-		c.logger.Warn("OASF KV bucket not found, will retry",
+		c.logger.Error("Failed to connect to OASF KV bucket after retries",
 			slog.String("bucket", c.config.OASFKVBucket),
 			slog.Any("error", err))
-		return nil
+		return
 	}
 
 	// Create watcher for all keys
 	watcher, err := kv.Watch(ctx, ">", jetstream.IgnoreDeletes())
 	if err != nil {
-		return errs.Wrap(err, "Component", "startKVWatcher", "create KV watcher")
+		c.logger.Error("Failed to create KV watcher",
+			slog.String("bucket", c.config.OASFKVBucket),
+			slog.Any("error", err))
+		return
 	}
+
+	c.mu.Lock()
 	c.kvWatcher = watcher
+	c.mu.Unlock()
 
-	// Start background goroutine to process updates
-	go c.watchLoop(ctx)
+	c.logger.Info("Successfully connected to OASF KV bucket",
+		slog.String("bucket", c.config.OASFKVBucket))
 
-	return nil
+	// Start watch loop
+	c.watchLoop(ctx)
 }
 
 // watchLoop processes OASF record updates in a background goroutine.

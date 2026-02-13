@@ -209,6 +209,7 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		{"validate-results", s.validateResults},
 		// AGNTCY integration stages (optional, skip if not configured)
 		{"verify-oasf-generation", s.verifyOASFGeneration},
+		{"verify-directory-bridge", s.verifyDirectoryBridge},
 		{"verify-a2a-adapter", s.verifyA2AAdapter},
 	}
 

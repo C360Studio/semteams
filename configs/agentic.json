@@ -492,6 +492,99 @@
           ]
         }
       }
+    },
+    "directory-bridge": {
+      "type": "output",
+      "name": "directory-bridge",
+      "enabled": true,
+      "config": {
+        "directory_url": "http://mock-llm:8081",
+        "heartbeat_interval": "30s",
+        "registration_ttl": "5m",
+        "identity_provider": "local",
+        "oasf_kv_bucket": "OASF_RECORDS",
+        "retry_count": 3,
+        "retry_delay": "1s",
+        "ports": {
+          "inputs": [
+            {
+              "name": "oasf_records",
+              "subject": "oasf.record.generated.>",
+              "type": "kv-watch",
+              "required": true,
+              "description": "Watch for generated OASF records"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "registration_events",
+              "subject": "directory.registration.*",
+              "type": "jetstream",
+              "stream_name": "DIRECTORY",
+              "required": false,
+              "description": "Registration events"
+            }
+          ]
+        }
+      }
+    },
+    "a2a-adapter": {
+      "type": "input",
+      "name": "a2a-adapter",
+      "enabled": true,
+      "config": {
+        "transport": "http",
+        "listen_address": ":8282",
+        "agent_card_path": "/.well-known/agent.json",
+        "request_timeout": "30s",
+        "max_concurrent_tasks": 10,
+        "enable_authentication": false,
+        "oasf_bucket": "OASF_RECORDS",
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "task_messages",
+              "subject": "agent.task.a2a.*",
+              "type": "jetstream",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Task messages to agent dispatch"
+            }
+          ]
+        }
+      }
+    },
+    "otel-exporter": {
+      "type": "output",
+      "name": "otel-exporter",
+      "enabled": true,
+      "config": {
+        "endpoint": "http://mock-llm:8081",
+        "protocol": "http",
+        "service_name": "semstreams-agentic",
+        "service_version": "1.0.0",
+        "export_traces": true,
+        "export_metrics": true,
+        "export_logs": false,
+        "batch_timeout": "2s",
+        "max_batch_size": 100,
+        "insecure": true,
+        "sampling_rate": 1.0,
+        "ports": {
+          "inputs": [
+            {
+              "name": "agent_events",
+              "subject": "agent.>",
+              "type": "jetstream",
+              "stream_name": "AGENT",
+              "required": true,
+              "description": "Agent lifecycle events for span collection"
+            }
+          ],
+          "outputs": []
+        }
+      }
     }
   }
 }

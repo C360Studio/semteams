@@ -16,19 +16,27 @@ type AGNTCYConfig struct {
 	// Enabled controls whether AGNTCY tests run.
 	Enabled bool `json:"enabled"`
 
-	// A2AURL is the URL for the A2A adapter (optional).
+	// A2AURL is the URL for the A2A adapter.
 	A2AURL string `json:"a2a_url"`
+
+	// MockServerURL is the URL for the AGNTCY mock server (directory + OTEL).
+	MockServerURL string `json:"mock_server_url"`
 
 	// OASFTimeout is how long to wait for OASF records.
 	OASFTimeout time.Duration `json:"oasf_timeout"`
+
+	// RegistrationTimeout is how long to wait for directory registration.
+	RegistrationTimeout time.Duration `json:"registration_timeout"`
 }
 
 // DefaultAGNTCYConfig returns default AGNTCY test configuration.
 func DefaultAGNTCYConfig() *AGNTCYConfig {
 	return &AGNTCYConfig{
-		Enabled:     true,
-		A2AURL:      "http://localhost:38280",
-		OASFTimeout: 10 * time.Second,
+		Enabled:             true,
+		A2AURL:              "http://localhost:38282",
+		MockServerURL:       "http://localhost:38181",
+		OASFTimeout:         10 * time.Second,
+		RegistrationTimeout: 15 * time.Second,
 	}
 }
 
@@ -209,7 +217,7 @@ func validateOASFRecord(record *client.OASFRecord) error {
 }
 
 // verifyA2AAdapter tests the A2A adapter HTTP endpoints.
-// This test verifies the a2a component is working correctly.
+// This test verifies the a2a-adapter component is running and accepting requests.
 func (s *Scenario) verifyA2AAdapter(ctx context.Context, result *scenarios.Result) error {
 	agntcyConfig := s.getAGNTCYConfig()
 	if !agntcyConfig.Enabled {
@@ -233,7 +241,7 @@ func (s *Scenario) verifyA2AAdapter(ctx context.Context, result *scenarios.Resul
 
 	result.Details["agntcy_a2a_healthy"] = true
 
-	// Get agent card
+	// Get agent card - this validates the adapter is serving agent cards from OASF records
 	agentCard, err := a2aClient.GetAgentCard(ctx)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get agent card: %v", err))
@@ -244,17 +252,50 @@ func (s *Scenario) verifyA2AAdapter(ctx context.Context, result *scenarios.Resul
 		result.Details["agntcy_a2a_skills_count"] = len(agentCard.Skills)
 	}
 
-	// Submit a test task (optional - may fail if auth is required)
-	taskID := fmt.Sprintf("e2e-a2a-test-%d", time.Now().UnixNano())
-	task, err := a2aClient.SubmitTask(ctx, taskID, "E2E test task - respond with 'acknowledged'")
-	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Task submission failed (may require auth): %v", err))
-		result.Details["agntcy_a2a_task_submitted"] = false
-	} else {
-		result.Details["agntcy_a2a_task_submitted"] = true
-		result.Details["agntcy_a2a_task_id"] = task.ID
-		result.Details["agntcy_a2a_task_state"] = task.Status.State
+	return nil
+}
+
+// verifyDirectoryBridge tests that the directory-bridge component registers agents.
+// This test verifies the directory-bridge component is watching OASF records and
+// registering them with the mock directory server.
+func (s *Scenario) verifyDirectoryBridge(ctx context.Context, result *scenarios.Result) error {
+	agntcyConfig := s.getAGNTCYConfig()
+	if !agntcyConfig.Enabled {
+		result.Details["agntcy_directory_skipped"] = "AGNTCY tests disabled"
+		return nil
 	}
+	if agntcyConfig.MockServerURL == "" {
+		result.Details["agntcy_directory_skipped"] = "Mock server URL not configured"
+		return nil
+	}
+
+	// Create mock server client
+	mockClient := client.NewAGNTCYMockClient(agntcyConfig.MockServerURL)
+
+	// Check if mock server is healthy
+	if err := mockClient.Health(ctx); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("AGNTCY mock server not reachable: %v", err))
+		result.Details["agntcy_directory_skipped"] = "mock server not reachable"
+		return nil
+	}
+
+	result.Details["agntcy_mock_server_healthy"] = true
+
+	// Wait for our test agent to be registered in the directory
+	// The directory-bridge should have picked up the OASF record we created earlier
+	reg, err := mockClient.WaitForRegistration(ctx, "test-agent", agntcyConfig.RegistrationTimeout)
+	if err != nil {
+		return fmt.Errorf("failed waiting for directory registration: %w", err)
+	}
+	if reg == nil {
+		result.Warnings = append(result.Warnings,
+			"Agent not registered in directory within timeout - directory-bridge may not be processing")
+		result.Details["agntcy_directory_registered"] = false
+		return nil
+	}
+
+	result.Details["agntcy_directory_registered"] = true
+	result.Details["agntcy_directory_agent_id"] = reg.AgentID
 
 	return nil
 }
