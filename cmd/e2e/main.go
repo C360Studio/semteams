@@ -350,14 +350,11 @@ func createScenario(
 				cfg.Variant = flags.scenarioName
 			}
 		}
-		// Set GraphQL URL based on variant (different ports per docker profile)
+		// Set GraphQL URL (all profiles use host port 38082)
 		// Also set longer timeout for semantic tier (neural embeddings are slower)
-		switch cfg.Variant {
-		case "semantic":
-			cfg.GraphQLURL = "http://localhost:8182/graphql"
+		cfg.GraphQLURL = "http://localhost:38082/graphql"
+		if cfg.Variant == "semantic" {
 			cfg.ValidationTimeout = 60 * time.Second // Neural embeddings need more time
-		default:
-			cfg.GraphQLURL = "http://localhost:8082/graphql"
 		}
 		return scenarios.NewTieredScenario(edgeClient, flags.udpEndpoint, cfg)
 

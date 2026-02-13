@@ -20,7 +20,8 @@ func main() {
 
 	server := mock.NewOpenAIServer().
 		WithToolArgs("query_entity", `{"entity_id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001"}`).
-		WithCompletionContent("Analysis complete. The temperature sensor reading exceeds the threshold. This requires monitoring but is not critical. Recommend checking HVAC system and ensuring proper airflow in the storage area.")
+		// Return JSON format for workflow condition evaluation
+		WithCompletionContent(`{"valid": true, "summary": "Analysis complete. Temperature sensor reading exceeds threshold. Recommend monitoring HVAC system."}`)
 
 	if err := server.Start(addr); err != nil {
 		log.Fatalf("Failed to start server: %v", err)

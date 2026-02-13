@@ -10,6 +10,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/processor/workflow"
 	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 	"github.com/c360studio/semstreams/test/e2e/client"
 	"github.com/c360studio/semstreams/test/e2e/scenarios"
@@ -85,7 +86,7 @@ var TestWorkflow = wfschema.Definition{
 			Action: wfschema.ActionDef{
 				Type:    "publish_agent",
 				Subject: "agent.task.e2e-agentic",
-				Role:    "analyzer",
+				Role:    "general", // Valid roles: architect, editor, general
 				Model:   "mock",
 				Prompt:  "Analyze the request: ${trigger.payload.content}. Respond with JSON: {\"valid\": true, \"summary\": \"analysis complete\"}",
 			},
@@ -316,19 +317,25 @@ func (s *Scenario) captureBaseline(ctx context.Context, result *scenarios.Result
 
 // injectTask triggers the workflow (which will spawn an agent task)
 func (s *Scenario) injectTask(ctx context.Context, result *scenarios.Result) error {
-	// Trigger the workflow instead of directly injecting an agent task
+	// Trigger the workflow using proper TriggerPayload wrapped in BaseMessage
 	// This tests the full integration path: workflow -> agent -> workflow completion
-	trigger := map[string]any{
-		"content":    "E2E test request for agentic integration validation",
-		"request_id": fmt.Sprintf("e2e-test-%d", time.Now().UnixNano()),
+	requestID := fmt.Sprintf("e2e-test-%d", time.Now().UnixNano())
+
+	// Create TriggerPayload with workflow_id and custom data
+	triggerPayload := &workflow.TriggerPayload{
+		WorkflowID: TestWorkflowID,
+		RequestID:  requestID,
+		Data:       json.RawMessage(`{"content": "E2E test request for agentic integration validation"}`),
 	}
 
-	data, err := json.Marshal(trigger)
+	// Wrap in BaseMessage envelope (required by workflow processor)
+	baseMsg := message.NewBaseMessage(triggerPayload.Schema(), triggerPayload, "e2e-test")
+	data, err := json.Marshal(baseMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal trigger: %w", err)
 	}
 
-	result.Details["trigger_request_id"] = trigger["request_id"]
+	result.Details["trigger_request_id"] = requestID
 	result.Details["trigger_subject"] = "workflow.trigger.e2e-agentic"
 
 	// Publish workflow trigger
@@ -344,8 +351,8 @@ func (s *Scenario) injectTask(ctx context.Context, result *scenarios.Result) err
 		Prompt: "Analyze the temperature sensor temp-sensor-001. Respond with a brief assessment.",
 	}
 
-	baseMsg := message.NewBaseMessage(task.Schema(), &task, "e2e-test")
-	taskData, err := json.Marshal(baseMsg)
+	taskMsg := message.NewBaseMessage(task.Schema(), &task, "e2e-test")
+	taskData, err := json.Marshal(taskMsg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal task: %w", err)
 	}

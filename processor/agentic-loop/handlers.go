@@ -695,6 +695,7 @@ func (h *MessageHandler) BuildFailureEventWithCallback(loopID, reason, errorMsg 
 
 // buildCallbackResult creates a generic async step result for workflow consumption.
 // Uses workflow.AsyncStepResult with message.NewBaseMessage for payload registry compatibility.
+// If the output is valid JSON, it's stored directly. Otherwise, it's wrapped as {"content": "..."}.
 func (h *MessageHandler) buildCallbackResult(taskID, status, output, errorMsg string) []byte {
 	result := &workflow.AsyncStepResult{
 		TaskID: taskID,
@@ -702,8 +703,14 @@ func (h *MessageHandler) buildCallbackResult(taskID, status, output, errorMsg st
 		Error:  errorMsg,
 	}
 	if output != "" {
-		outputWrapper := map[string]string{"result": output}
-		result.Output, _ = json.Marshal(outputWrapper)
+		// Try to use output directly if it's valid JSON
+		if json.Valid([]byte(output)) {
+			result.Output = json.RawMessage(output)
+		} else {
+			// Wrap non-JSON content
+			wrapper := map[string]string{"content": output}
+			result.Output, _ = json.Marshal(wrapper)
+		}
 	}
 	msg := message.NewBaseMessage(result.Schema(), result, "agentic-loop")
 	data, _ := json.Marshal(msg)

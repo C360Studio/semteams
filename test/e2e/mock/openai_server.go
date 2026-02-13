@@ -107,9 +107,8 @@ func NewOpenAIServer() *OpenAIServer {
 		toolArgs: map[string]string{
 			"query_entity": `{"entity_id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001"}`,
 		},
-		completionContent: "Analysis complete. Based on the sensor data, the temperature reading " +
-			"exceeds the threshold. This requires attention but is not critical. " +
-			"Recommend monitoring for further increases.",
+		// Return JSON for workflow condition evaluation
+		completionContent: `{"valid": true, "summary": "Analysis complete. Temperature sensor reading exceeds threshold. Recommend monitoring."}`,
 	}
 }
 
