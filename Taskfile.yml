@@ -16,6 +16,9 @@ includes:
     taskfile: ./taskfiles/schema.yml
   services:
     taskfile: ./taskfiles/services.yml
+  dev:
+    taskfile: ./taskfiles/dev.yml
+    aliases: [d]
 
   # E2E test taskfiles
   e2e:

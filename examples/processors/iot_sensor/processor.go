@@ -159,11 +159,11 @@ func (p *Processor) Process(input map[string]any) (*SensorReading, error) {
 func getString(m map[string]any, key string) (string, error) {
 	v, ok := m[key]
 	if !ok {
-		return "", fmt.Errorf("field %q not found", key)
+		return "", fieldNotFoundError(m, key)
 	}
 	s, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf("field %q is not a string: %T", key, v)
+		return "", fmt.Errorf("field %q is not a string: got %T", key, v)
 	}
 	return s, nil
 }
@@ -171,7 +171,7 @@ func getString(m map[string]any, key string) (string, error) {
 func getFloat64(m map[string]any, key string) (float64, error) {
 	v, ok := m[key]
 	if !ok {
-		return 0, fmt.Errorf("field %q not found", key)
+		return 0, fieldNotFoundError(m, key)
 	}
 	switch val := v.(type) {
 	case float64:
@@ -183,8 +183,89 @@ func getFloat64(m map[string]any, key string) (float64, error) {
 	case int64:
 		return float64(val), nil
 	default:
-		return 0, fmt.Errorf("field %q is not a number: %T", key, v)
+		return 0, fmt.Errorf("field %q is not a number: got %T", key, v)
 	}
+}
+
+// fieldNotFoundError returns a helpful error message when a required field is missing.
+// It suggests similar field names if found and lists all available fields.
+func fieldNotFoundError(m map[string]any, key string) error {
+	// Collect available keys
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+
+	// Check for similar field names (common mistakes)
+	suggestions := findSimilarFields(key, keys)
+
+	if len(suggestions) > 0 {
+		return fmt.Errorf("field %q not found (did you mean %q?), available fields: %v", key, suggestions[0], keys)
+	}
+	return fmt.Errorf("field %q not found, available fields: %v", key, keys)
+}
+
+// findSimilarFields returns field names that are similar to the expected key.
+// It checks for common variations like underscores, prefixes, and substrings.
+func findSimilarFields(expected string, available []string) []string {
+	var similar []string
+
+	// Common field name mappings (expected -> common mistakes)
+	commonMistakes := map[string][]string{
+		"type":      {"sensor_type", "sensorType", "kind", "sensor_kind"},
+		"reading":   {"value", "val", "measurement", "data", "sensor_value"},
+		"location":  {"zone_id", "zoneId", "zone", "loc", "place", "area"},
+		"device_id": {"deviceId", "id", "sensor_id", "sensorId"},
+		"unit":      {"units", "uom", "measure_unit"},
+	}
+
+	// Check common mistakes first
+	if mistakes, ok := commonMistakes[expected]; ok {
+		for _, mistake := range mistakes {
+			for _, avail := range available {
+				if avail == mistake {
+					similar = append(similar, avail)
+				}
+			}
+		}
+	}
+
+	// Also check if expected is a substring or available is a substring
+	for _, avail := range available {
+		// Skip if already found
+		alreadyFound := false
+		for _, s := range similar {
+			if s == avail {
+				alreadyFound = true
+				break
+			}
+		}
+		if alreadyFound {
+			continue
+		}
+
+		// Check substring matches (e.g., "type" in "sensor_type")
+		if len(expected) >= 3 && len(avail) >= 3 {
+			if contains(avail, expected) || contains(expected, avail) {
+				similar = append(similar, avail)
+			}
+		}
+	}
+
+	return similar
+}
+
+// contains checks if s contains substr (case-insensitive for flexibility)
+func contains(s, substr string) bool {
+	if len(substr) > len(s) {
+		return false
+	}
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 // ParseZoneEntityID extracts zone type and zone ID from a full zone entity ID.

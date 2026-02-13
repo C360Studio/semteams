@@ -1,0 +1,174 @@
+version: '3'
+
+# Development workflow tasks for local development
+# These tasks help new developers get started quickly
+
+tasks:
+  # NATS Server Management
+  nats:start:
+    desc: Start NATS server for local development
+    cmds:
+      - |
+        echo "[DEV] Starting NATS server with JetStream..."
+        if docker ps -a --format '{{.Names}}' | grep -q '^semstreams-nats$'; then
+          docker start semstreams-nats 2>/dev/null || true
+        else
+          docker run -d --name semstreams-nats -p 4222:4222 -p 8222:8222 nats:2.12-alpine -js -m 8222
+        fi
+        echo "[OK] NATS running at nats://localhost:4222"
+        echo "     Monitor at http://localhost:8222"
+
+  nats:stop:
+    desc: Stop local NATS server
+    cmds:
+      - |
+        echo "[DEV] Stopping NATS server..."
+        docker stop semstreams-nats 2>/dev/null || true
+        echo "[OK] NATS stopped"
+
+  nats:clean:
+    desc: Stop and remove local NATS server (clears all data)
+    cmds:
+      - |
+        echo "[DEV] Removing NATS server..."
+        docker stop semstreams-nats 2>/dev/null || true
+        docker rm semstreams-nats 2>/dev/null || true
+        echo "[OK] NATS removed"
+
+  nats:status:
+    desc: Check NATS server status
+    cmds:
+      - |
+        if docker ps --format '{{.Names}}' | grep -q '^semstreams-nats$'; then
+          echo "[OK] NATS is running"
+          docker ps --filter name=semstreams-nats --format "table {{.Status}}\t{{.Ports}}"
+        else
+          echo "[--] NATS is not running"
+          echo "     Start with: task dev:nats:start"
+        fi
+
+  # Combined Development Workflow
+  start:
+    desc: Start NATS + SemStreams with hello-world config
+    deps:
+      - nats:start
+    cmds:
+      - go build -o bin/semstreams ./cmd/semstreams
+      - |
+        echo ""
+        echo "[DEV] Starting SemStreams with hello-world config..."
+        echo ""
+        echo "============================================"
+        echo "  SemStreams Hello World"
+        echo "============================================"
+        echo ""
+        echo "  UDP Input:    localhost:14550"
+        echo "  GraphQL:      http://localhost:8084/graphql"
+        echo "  Health:       http://localhost:8080/readyz"
+        echo "  Metrics:      http://localhost:9090/metrics"
+        echo ""
+        echo "  Send test data:"
+        echo '    task dev:send'
+        echo ""
+        echo "  Query the graph:"
+        echo '    curl -s http://localhost:8084/graphql -H "Content-Type: application/json" -d '"'"'{"query":"{ entitiesByPrefix(prefix: \"demo\", limit: 10) { entityIds } }"}'"'"' | jq'
+        echo ""
+        echo "  Debug commands:"
+        echo '    task dev:messages   # View recent messages'
+        echo '    task dev:trace      # Trace message flow'
+        echo '    task dev:stats      # View statistics'
+        echo ""
+        echo "  Press Ctrl+C to stop"
+        echo "============================================"
+        echo ""
+      - ./bin/semstreams --config configs/hello-world.json
+
+  stop:
+    desc: Stop SemStreams and NATS
+    cmds:
+      - |
+        echo "[DEV] Stopping SemStreams..."
+        pkill -f 'semstreams.*hello-world' 2>/dev/null || true
+        pkill -f 'bin/semstreams' 2>/dev/null || true
+      - task: nats:stop
+      - echo "[OK] All stopped"
+
+  # Prerequisites Check
+  check:prerequisites:
+    desc: Verify development environment is ready
+    cmds:
+      - |
+        echo "Checking development prerequisites..."
+        echo ""
+        echo "Go:"
+        go version || (echo "  [FAIL] Go not found. Install from https://go.dev/dl/" && exit 1)
+        echo ""
+        echo "Docker:"
+        docker --version || (echo "  [FAIL] Docker not found. Install from https://docker.com" && exit 1)
+        docker info > /dev/null 2>&1 || (echo "  [FAIL] Docker daemon not running. Start Docker Desktop." && exit 1)
+        echo ""
+        echo "Task:"
+        task --version || (echo "  [FAIL] Task not found. Install with: go install github.com/go-task/task/v3/cmd/task@latest" && exit 1)
+        echo ""
+        echo "============================================"
+        echo "  All prerequisites OK!"
+        echo "  Run 'task dev:start' to begin"
+        echo "============================================"
+
+  # Quick test data sender
+  send:
+    desc: Send a test sensor reading to the running instance
+    cmds:
+      - |
+        echo '{"device_id":"sensor-001","type":"temperature","reading":23.5,"unit":"celsius","location":"warehouse-7","zone_type":"cold-storage"}' | nc -u localhost 14550
+        echo "[OK] Sent test sensor reading"
+        echo '     Query with: curl -s http://localhost:8084/graphql -H "Content-Type: application/json" -d '"'"'{"query":"{ entitiesByPrefix(prefix: \"demo\", limit: 10) { entityIds } }"}'"'"''
+
+  # Debugging Tools
+  messages:
+    desc: View recent messages flowing through the system
+    cmds:
+      - |
+        echo "=== Recent Messages ==="
+        curl -s "http://localhost:8080/message-logger/entries?limit=20" | jq '.[] | {timestamp: .timestamp, subject: .subject, type: .message_type, trace: .trace_id}' 2>/dev/null || echo "SemStreams not running. Start with: task dev:start"
+
+  stats:
+    desc: View message flow statistics
+    cmds:
+      - |
+        echo "=== Message Statistics ==="
+        curl -s "http://localhost:8080/message-logger/stats" | jq . 2>/dev/null || echo "SemStreams not running"
+        echo ""
+        echo "=== JetStream Streams ==="
+        curl -s "http://localhost:8222/jsz?streams=1" | jq '[.account_details[0].stream_detail[] | {name, messages: .state.messages}]' 2>/dev/null || echo "NATS not running"
+
+  trace:
+    desc: Trace a message through the pipeline (use TRACE_ID env var)
+    cmds:
+      - |
+        if [ -z "$TRACE_ID" ]; then
+          echo "Getting most recent trace ID..."
+          TRACE_ID=$(curl -s "http://localhost:8080/message-logger/entries?limit=1" | jq -r '.[0].trace_id' 2>/dev/null)
+        fi
+        if [ -z "$TRACE_ID" ] || [ "$TRACE_ID" = "null" ]; then
+          echo "No messages found. Send some data first: task dev:send"
+          exit 1
+        fi
+        echo "=== Trace: $TRACE_ID ==="
+        curl -s "http://localhost:8080/message-logger/trace/$TRACE_ID" | jq '.entries[] | {timestamp: .timestamp, subject: .subject, type: .message_type}' 2>/dev/null
+
+  watch:entities:
+    desc: Watch entity state changes in real-time (Ctrl+C to stop)
+    cmds:
+      - |
+        echo "Watching ENTITY_STATES bucket for changes... (Ctrl+C to stop)"
+        curl -N "http://localhost:8080/message-logger/kv/ENTITY_STATES/watch" 2>/dev/null || echo "SemStreams not running"
+
+  kv:
+    desc: Query a KV bucket (use BUCKET and PATTERN env vars)
+    cmds:
+      - |
+        BUCKET=${BUCKET:-ENTITY_STATES}
+        PATTERN=${PATTERN:-*}
+        echo "=== KV Bucket: $BUCKET (pattern: $PATTERN) ==="
+        curl -s "http://localhost:8080/message-logger/kv/$BUCKET?pattern=$PATTERN&limit=20" | jq '.entries[] | {key: .key, revision: .revision}' 2>/dev/null || echo "SemStreams not running"

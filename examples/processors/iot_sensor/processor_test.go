@@ -210,6 +210,88 @@ func TestProcessor_Process_ZoneEntityID(t *testing.T) {
 	}
 }
 
+// TestProcessor_Process_HelpfulErrors verifies that error messages suggest correct field names.
+func TestProcessor_Process_HelpfulErrors(t *testing.T) {
+	p := NewProcessor(Config{OrgID: "acme", Platform: "logistics"})
+
+	tests := []struct {
+		name           string
+		input          map[string]any
+		wantErrContain []string // All of these substrings should appear in the error
+	}{
+		{
+			name: "sensor_type instead of type",
+			input: map[string]any{
+				"device_id":   "sensor-001",
+				"sensor_type": "temperature", // Wrong! Should be "type"
+				"reading":     23.5,
+				"unit":        "celsius",
+				"location":    "warehouse-7",
+			},
+			wantErrContain: []string{"type", "sensor_type", "did you mean"},
+		},
+		{
+			name: "value instead of reading",
+			input: map[string]any{
+				"device_id": "sensor-001",
+				"type":      "temperature",
+				"value":     23.5, // Wrong! Should be "reading"
+				"unit":      "celsius",
+				"location":  "warehouse-7",
+			},
+			wantErrContain: []string{"reading", "value", "did you mean"},
+		},
+		{
+			name: "zone_id instead of location",
+			input: map[string]any{
+				"device_id": "sensor-001",
+				"type":      "temperature",
+				"reading":   23.5,
+				"unit":      "celsius",
+				"zone_id":   "warehouse-7", // Wrong! Should be "location"
+			},
+			wantErrContain: []string{"location", "zone_id", "did you mean"},
+		},
+		{
+			name: "completely wrong field shows available fields",
+			input: map[string]any{
+				"device_id": "sensor-001",
+				"foo":       "bar", // Random wrong field
+			},
+			wantErrContain: []string{"type", "not found", "available fields"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := p.Process(tt.input)
+			if err == nil {
+				t.Fatal("Process() expected error, got nil")
+			}
+
+			errStr := err.Error()
+			for _, want := range tt.wantErrContain {
+				if !containsString(errStr, want) {
+					t.Errorf("error %q should contain %q", errStr, want)
+				}
+			}
+		})
+	}
+}
+
+func containsString(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsStringHelper(s, substr))
+}
+
+func containsStringHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 // TestConfig_Validation verifies Config validation.
 func TestConfig_Validation(t *testing.T) {
 	tests := []struct {

@@ -1,0 +1,220 @@
+{
+  "version": "1.1.0",
+  "platform": {
+    "org": "demo",
+    "id": "hello-world",
+    "type": "quickstart",
+    "region": "local",
+    "instance_id": "hello-001",
+    "environment": "development"
+  },
+  "tier": "rules",
+  "nats": {
+    "urls": ["nats://localhost:4222"]
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemStreams Hello World",
+          "description": "Quickstart example: UDP -> Graph -> GraphQL",
+          "version": "0.1.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": false
+      }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "buffer_size": 1000,
+        "monitor_subjects": ["*"],
+        "enable_kv_query": true,
+        "log_level": "INFO"
+      }
+    },
+    "log-forwarder": {
+      "name": "log-forwarder",
+      "enabled": true,
+      "config": {
+        "min_level": "INFO"
+      }
+    }
+  },
+  "components": {
+    "udp": {
+      "type": "input",
+      "name": "udp",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "udp_out",
+              "subject": "raw.sensor.udp",
+              "type": "jetstream"
+            }
+          ]
+        },
+        "bind": "0.0.0.0",
+        "port": 14550,
+        "buffer_size": 65536
+      }
+    },
+
+    "iot_sensor": {
+      "type": "processor",
+      "name": "iot_sensor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "sensor_in",
+              "subject": "raw.sensor.>",
+              "type": "jetstream"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "sensor_out",
+              "subject": "sensor.processed.entity",
+              "type": "jetstream",
+              "interface": "iot.sensor.v1"
+            }
+          ]
+        },
+        "org_id": "demo",
+        "platform": "hello"
+      }
+    },
+
+    "graph-ingest": {
+      "type": "processor",
+      "name": "graph-ingest",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "sensor_in",
+              "subject": "sensor.processed.entity",
+              "type": "jetstream",
+              "interface": "iot.sensor.v1"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "entity_states",
+              "subject": "ENTITY_STATES",
+              "type": "kv-write"
+            }
+          ]
+        },
+        "enable_hierarchy": true
+      }
+    },
+
+    "graph-index": {
+      "type": "processor",
+      "name": "graph-index",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_watch",
+              "subject": "ENTITY_STATES",
+              "type": "kv-watch"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "outgoing_index",
+              "subject": "OUTGOING_INDEX",
+              "type": "kv"
+            },
+            {
+              "name": "incoming_index",
+              "subject": "INCOMING_INDEX",
+              "type": "kv"
+            },
+            {
+              "name": "predicate_index",
+              "subject": "PREDICATE_INDEX",
+              "type": "kv"
+            }
+          ]
+        },
+        "workers": 2,
+        "batch_size": 10
+      }
+    },
+
+    "graph-query": {
+      "type": "processor",
+      "name": "graph-query",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "query_requests",
+              "subject": "graph.query.>",
+              "type": "nats-request"
+            }
+          ],
+          "outputs": []
+        },
+        "request_timeout": "30s",
+        "max_traversal_depth": 5,
+        "max_traversal_nodes": 100
+      }
+    },
+
+    "graph-gateway": {
+      "type": "gateway",
+      "name": "graph-gateway",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {
+              "name": "http",
+              "subject": ":8084",
+              "type": "http"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "mutations",
+              "subject": "graph.mutation.*",
+              "type": "nats-request"
+            }
+          ]
+        },
+        "graphql_path": "/graphql",
+        "bind_address": ":8084",
+        "enable_playground": true
+      }
+    }
+  }
+}
