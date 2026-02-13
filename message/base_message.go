@@ -207,7 +207,15 @@ type wireFormat struct {
 // MarshalJSON implements json.Marshaler for BaseMessage.
 // This allows BaseMessage to be serialized to JSON even though
 // its fields are private.
+//
+// Validation is performed before serialization to ensure invalid
+// messages cannot be serialized and published to the message bus.
 func (m *BaseMessage) MarshalJSON() ([]byte, error) {
+	// Validate before serializing - invalid messages cannot be published
+	if err := m.Validate(); err != nil {
+		return nil, errs.WrapInvalid(err, "BaseMessage", "MarshalJSON", "payload validation failed")
+	}
+
 	// Marshal the payload using its MarshalJSON method
 	payloadData, err := m.payload.MarshalJSON()
 	if err != nil {

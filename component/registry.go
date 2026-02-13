@@ -760,6 +760,12 @@ func CreatePayload(domain, category, version string) any {
 	return globalPayloadRegistry.CreatePayload(domain, category, version)
 }
 
+// GlobalPayloadRegistry returns the global payload registry.
+// This is useful for introspection, such as listing all registered payloads.
+func GlobalPayloadRegistry() *PayloadRegistry {
+	return globalPayloadRegistry
+}
+
 // matchesPattern checks if subject matches NATS-style pattern with wildcards.
 // "*" matches exactly one token, ">" matches one or more tokens (only at end).
 // Returns true if subject matches pattern, false otherwise.

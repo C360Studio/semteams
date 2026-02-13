@@ -225,9 +225,12 @@ func TestComponent_HandleResponse_TracksActiveLoop(t *testing.T) {
 
 	// Simulate receiving a response with InReplyTo (wrapped in BaseMessage)
 	resp := &agentic.UserResponse{
-		Type:      agentic.ResponseTypeStatus,
-		Content:   "Loop started",
-		InReplyTo: "loop-xyz",
+		ResponseID:  "resp-test-123",
+		ChannelType: "cli",
+		ChannelID:   "test-session",
+		Type:        agentic.ResponseTypeStatus,
+		Content:     "Loop started",
+		InReplyTo:   "loop-xyz",
 	}
 	baseMsg := message.NewBaseMessage(resp.Schema(), resp, "test")
 	respData, _ := json.Marshal(baseMsg)

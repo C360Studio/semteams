@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/types"
 )
 
 // PayloadFactory creates a payload instance for a specific message type.
@@ -80,6 +81,11 @@ func (pr *PayloadRegistry) RegisterPayload(registration *PayloadRegistration) er
 
 	if registration.Version == "" {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "PayloadRegistry", "RegisterPayload", "version validation")
+	}
+
+	// Verify factory produces payload with matching Schema()
+	if err := validateSchemaConsistency(registration); err != nil {
+		return err
 	}
 
 	msgType := registration.MessageType()
@@ -186,4 +192,51 @@ func (pr *PayloadRegistry) ListByDomain(domain string) []*PayloadRegistration {
 	}
 
 	return result
+}
+
+// schemaProvider is an interface for payloads that provide schema information.
+// This matches the message.Payload interface's Schema() method signature.
+type schemaProvider interface {
+	Schema() types.Type
+}
+
+// validateSchemaConsistency checks that a factory-produced payload's Schema()
+// method returns values matching the registration. This catches mismatches
+// between Schema() implementation and PayloadRegistration at init() time,
+// preventing runtime deserialization failures.
+func validateSchemaConsistency(reg *PayloadRegistration) error {
+	testPayload := reg.Factory()
+	if testPayload == nil {
+		return errs.WrapInvalid(
+			errs.ErrInvalidConfig,
+			"PayloadRegistry",
+			"RegisterPayload",
+			"factory returned nil payload",
+		)
+	}
+
+	// Check if payload implements Schema() method
+	sp, ok := testPayload.(schemaProvider)
+	if !ok {
+		// Payload doesn't implement Schema() - skip validation
+		// This allows non-message.Payload types to be registered
+		return nil
+	}
+
+	// Verify Schema() returns matching values
+	schema := sp.Schema()
+	if schema.Domain != reg.Domain || schema.Category != reg.Category || schema.Version != reg.Version {
+		return errs.WrapInvalid(
+			fmt.Errorf(
+				"Schema() returns {Domain:%q Category:%q Version:%q} but registration expects {Domain:%q Category:%q Version:%q}",
+				schema.Domain, schema.Category, schema.Version,
+				reg.Domain, reg.Category, reg.Version,
+			),
+			"PayloadRegistry",
+			"RegisterPayload",
+			"schema consistency check",
+		)
+	}
+
+	return nil
 }
