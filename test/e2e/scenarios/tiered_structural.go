@@ -1681,18 +1681,65 @@ func (s *TieredScenario) executeTestPredicateStats(ctx context.Context, result *
 	return nil
 }
 
+// compoundQueryResult holds the result of a compound predicate query.
+type compoundQueryResult struct {
+	matched int
+	latency time.Duration
+}
+
+// sendCompoundPredicateQuery executes a compound predicate query and returns the result.
+func (s *TieredScenario) sendCompoundPredicateQuery(ctx context.Context, predicates []string, operator string) (*compoundQueryResult, error) {
+	query := map[string]any{
+		"query": `query($predicates: [String!]!, $operator: String!, $limit: Int) {
+			compoundPredicateQuery(predicates: $predicates, operator: $operator, limit: $limit) {
+				entities operator matched
+			}
+		}`,
+		"variables": map[string]any{
+			"predicates": predicates,
+			"operator":   operator,
+			"limit":      100,
+		},
+	}
+
+	queryJSON, _ := json.Marshal(query)
+	req, _ := http.NewRequestWithContext(ctx, "POST", s.config.GraphQLURL, bytes.NewReader(queryJSON))
+	req.Header.Set("Content-Type", "application/json")
+
+	start := time.Now()
+	resp, err := http.DefaultClient.Do(req)
+	latency := time.Since(start)
+	if err != nil {
+		return nil, fmt.Errorf("compound %s query failed: %w", operator, err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	var result compoundPredicateResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse compound %s response: %w", operator, err)
+	}
+
+	if len(result.Errors) > 0 {
+		return nil, fmt.Errorf("compound %s query error: %s", operator, result.Errors[0].Message)
+	}
+
+	return &compoundQueryResult{
+		matched: result.Data.CompoundPredicateQuery.Matched,
+		latency: latency,
+	}, nil
+}
+
 // executeTestPredicateCompound validates the compoundPredicateQuery GraphQL query.
 // Tests AND/OR logic across multiple predicates.
 func (s *TieredScenario) executeTestPredicateCompound(ctx context.Context, result *Result) error {
-	gatewayURL := s.config.GraphQLURL
-
 	// First, get predicates to use in compound query
 	listQuery := map[string]any{
 		"query": `{ predicates { predicates { predicate entityCount } } }`,
 	}
 	listJSON, _ := json.Marshal(listQuery)
 
-	listReq, err := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(listJSON))
+	listReq, err := http.NewRequestWithContext(ctx, "POST", s.config.GraphQLURL, bytes.NewReader(listJSON))
 	if err != nil {
 		return fmt.Errorf("failed to create predicate list request: %w", err)
 	}
@@ -1715,104 +1762,41 @@ func (s *TieredScenario) executeTestPredicateCompound(ctx context.Context, resul
 	// Pick two predicates for testing
 	pred1 := predicatesResp.Data.Predicates.Predicates[0].Predicate
 	pred2 := predicatesResp.Data.Predicates.Predicates[1].Predicate
+	predicates := []string{pred1, pred2}
 
 	// Test OR query (union)
-	orQuery := map[string]any{
-		"query": `query($predicates: [String!]!, $operator: String!, $limit: Int) {
-			compoundPredicateQuery(predicates: $predicates, operator: $operator, limit: $limit) {
-				entities operator matched
-			}
-		}`,
-		"variables": map[string]any{
-			"predicates": []string{pred1, pred2},
-			"operator":   "OR",
-			"limit":      100,
-		},
-	}
-
-	orJSON, _ := json.Marshal(orQuery)
-	orReq, _ := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(orJSON))
-	orReq.Header.Set("Content-Type", "application/json")
-
-	start := time.Now()
-	orResp, err := http.DefaultClient.Do(orReq)
-	orLatency := time.Since(start)
+	orResult, err := s.sendCompoundPredicateQuery(ctx, predicates, "OR")
 	if err != nil {
-		return fmt.Errorf("compound OR query failed: %w", err)
+		return err
 	}
-	defer orResp.Body.Close()
-
-	orBody, _ := io.ReadAll(orResp.Body)
-	var orResult compoundPredicateResponse
-	if err := json.Unmarshal(orBody, &orResult); err != nil {
-		return fmt.Errorf("failed to parse compound OR response: %w", err)
-	}
-
-	if len(orResult.Errors) > 0 {
-		return fmt.Errorf("compound OR query error: %s", orResult.Errors[0].Message)
-	}
-
-	orMatched := orResult.Data.CompoundPredicateQuery.Matched
 
 	// Test AND query (intersection)
-	andQuery := map[string]any{
-		"query": `query($predicates: [String!]!, $operator: String!, $limit: Int) {
-			compoundPredicateQuery(predicates: $predicates, operator: $operator, limit: $limit) {
-				entities operator matched
-			}
-		}`,
-		"variables": map[string]any{
-			"predicates": []string{pred1, pred2},
-			"operator":   "AND",
-			"limit":      100,
-		},
-	}
-
-	andJSON, _ := json.Marshal(andQuery)
-	andReq, _ := http.NewRequestWithContext(ctx, "POST", gatewayURL, bytes.NewReader(andJSON))
-	andReq.Header.Set("Content-Type", "application/json")
-
-	start = time.Now()
-	andResp, err := http.DefaultClient.Do(andReq)
-	andLatency := time.Since(start)
+	andResult, err := s.sendCompoundPredicateQuery(ctx, predicates, "AND")
 	if err != nil {
-		return fmt.Errorf("compound AND query failed: %w", err)
-	}
-	defer andResp.Body.Close()
-
-	andBody, _ := io.ReadAll(andResp.Body)
-	var andResult compoundPredicateResponse
-	if err := json.Unmarshal(andBody, &andResult); err != nil {
-		return fmt.Errorf("failed to parse compound AND response: %w", err)
+		return err
 	}
 
-	if len(andResult.Errors) > 0 {
-		return fmt.Errorf("compound AND query error: %s", andResult.Errors[0].Message)
-	}
-
-	andMatched := andResult.Data.CompoundPredicateQuery.Matched
-
-	result.Metrics["predicate_compound_or_matched"] = orMatched
-	result.Metrics["predicate_compound_and_matched"] = andMatched
-	result.Metrics["predicate_compound_or_latency_ms"] = orLatency.Milliseconds()
-	result.Metrics["predicate_compound_and_latency_ms"] = andLatency.Milliseconds()
+	result.Metrics["predicate_compound_or_matched"] = orResult.matched
+	result.Metrics["predicate_compound_and_matched"] = andResult.matched
+	result.Metrics["predicate_compound_or_latency_ms"] = orResult.latency.Milliseconds()
+	result.Metrics["predicate_compound_and_latency_ms"] = andResult.latency.Milliseconds()
 
 	// Validate set theory: AND <= OR (intersection is subset of union)
-	setTheoryValid := andMatched <= orMatched
+	setTheoryValid := andResult.matched <= orResult.matched
 
 	result.Details["predicate_compound_test"] = map[string]any{
-		"predicates_tested":  []string{pred1, pred2},
-		"or_matched":         orMatched,
-		"and_matched":        andMatched,
-		"or_latency_ms":      orLatency.Milliseconds(),
-		"and_latency_ms":     andLatency.Milliseconds(),
-		"set_theory_valid":   setTheoryValid,
-		"success":            setTheoryValid,
-		"message":            fmt.Sprintf("Compound query: OR=%d, AND=%d (set theory %v)", orMatched, andMatched, setTheoryValid),
+		"predicates_tested": predicates,
+		"or_matched":        orResult.matched,
+		"and_matched":       andResult.matched,
+		"or_latency_ms":     orResult.latency.Milliseconds(),
+		"and_latency_ms":    andResult.latency.Milliseconds(),
+		"set_theory_valid":  setTheoryValid,
+		"success":           setTheoryValid,
+		"message":           fmt.Sprintf("Compound query: OR=%d, AND=%d (set theory %v)", orResult.matched, andResult.matched, setTheoryValid),
 	}
 
 	if !setTheoryValid {
-		return fmt.Errorf("set theory violation: AND (%d) > OR (%d)", andMatched, orMatched)
+		return fmt.Errorf("set theory violation: AND (%d) > OR (%d)", andResult.matched, orResult.matched)
 	}
 
 	return nil
