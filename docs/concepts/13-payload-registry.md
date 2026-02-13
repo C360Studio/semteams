@@ -87,6 +87,12 @@ func init() {
 }
 ```
 
+### Schema Consistency Validation
+
+At registration time, the registry validates that the factory produces payloads with a `Schema()` method matching the registration. If a payload's `Schema()` returns different domain/category/version values than the registration specifies, the application will panic at startup during `init()`. This catches mismatches early rather than at runtime when messages fail to deserialize.
+
+See `component/payload_registry.go` for the `validateSchemaConsistency` implementation.
+
 ### Serialization (MarshalJSON)
 
 Every payload type MUST implement `MarshalJSON` that wraps the payload in a `BaseMessage`:
@@ -108,6 +114,12 @@ func (t *TaskMessage) MarshalJSON() ([]byte, error) {
 ```
 
 **Why the type alias?** Calling `json.Marshal(t)` would invoke `MarshalJSON` again, causing infinite recursion. The alias creates a new type without the method.
+
+### Contract Enforcement
+
+`BaseMessage.MarshalJSON` enforces validation before serialization. Invalid messages cannot be published - they fail immediately at the source rather than being silently dropped at the consumer. This catches missing required fields, invalid enum values, and other validation errors at serialize time.
+
+See `message/base_message.go` for the implementation.
 
 ### Deserialization (UnmarshalJSON)
 
@@ -428,3 +440,4 @@ func TestTaskMessage_RoundTrip(t *testing.T) {
 - [Agentic Components](../advanced/08-agentic-components.md) — Uses payload registry for all message types
 - [Agentic Systems Concepts](./11-agentic-systems.md) — Foundational concepts
 - [Component Registry](../basics/02-architecture.md) — Similar pattern for components
+- [Contract Testing](../contributing/04-contract-testing.md) — Message contract tests validate all payloads

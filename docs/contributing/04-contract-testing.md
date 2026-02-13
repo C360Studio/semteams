@@ -28,7 +28,31 @@ Contract testing ensures that schemas, OpenAPI specifications, and TypeScript ty
 
 ## Test Categories
 
-### 1. Schema Contract Tests (semstreams)
+### 1. Message Contract Tests (semstreams)
+
+**File**: `semstreams/test/contract/message_contract_test.go`
+
+**Purpose**: Validate that all registered message payloads serialize correctly and maintain consistency between their `Schema()` methods and registry entries.
+
+**Tests**:
+- `TestSchemaRegistrationConsistency`: Verifies payload `Schema()` methods match their registry registration
+- `TestBaseMessageRoundTrip`: Validates messages can marshal/unmarshal without data loss
+- `TestPayloadValidation`: Ensures `Validate()` doesn't panic on registered payloads
+- `TestPayloadMarshalJSON`: Validates `MarshalJSON()` produces valid output
+
+**How to Run**:
+```bash
+cd semstreams
+go test ./test/contract -v -run Message
+```
+
+**Why Important**:
+- Catches Schema/Registration mismatches that cause deserialization failures
+- Validates the contract enforcement in `BaseMessage.MarshalJSON` (invalid payloads fail at serialize time)
+- Ensures all registered payloads can round-trip through JSON without data loss
+- Prevents silent message drops due to format mismatches
+
+### 2. Component Schema Contract Tests (semstreams)
 
 **File**: `semstreams/test/contract/schema_contract_test.go`
 
@@ -50,7 +74,7 @@ go test ./test/contract -v
 - Catches when developers forget to run `task schema:generate` after changing components
 - Ensures all schemas have valid structure
 
-### 2. OpenAPI Spec Tests (semstreams)
+### 3. OpenAPI Spec Tests (semstreams)
 
 **File**: `semstreams/test/contract/openapi_contract_test.go`
 
@@ -73,7 +97,7 @@ go test ./test/contract -v -run TestOpenAPI
 - Validates API contract is complete and correct
 - Catches broken schema references
 
-### 3. Cross-Repo Validation Tests (semmem)
+### 4. Cross-Repo Validation Tests (semmem)
 
 **File**: `semmem/test/contract/cross_repo_test.go`
 
@@ -96,7 +120,7 @@ go test ./test/contract -v
 
 **Note**: These tests require both semstreams and semmem to be in sibling directories.
 
-### 4. UI Contract Tests (semstreams-ui)
+### 5. UI Contract Tests (semstreams-ui)
 
 **File**: `semstreams-ui/src/lib/contract/openapi.contract.test.ts`
 
@@ -120,7 +144,7 @@ npm test -- src/lib/contract/openapi.contract.test.ts
 - Catches OpenAPI spec issues early in development
 - Validates schema files exist and are valid JSON
 
-### 5. TypeScript Type Validation (semstreams-ui)
+### 6. TypeScript Type Validation (semstreams-ui)
 
 **File**: `semstreams-ui/src/lib/contract/types.contract.test.ts`
 
@@ -383,7 +407,9 @@ git commit --amend
 ## Summary
 
 Contract testing ensures:
-- ✅ Committed schemas match source code
+- ✅ Message payloads serialize/deserialize correctly
+- ✅ Payload Schema() methods match registry entries
+- ✅ Committed component schemas match source code
 - ✅ OpenAPI specs are complete and valid
 - ✅ TypeScript types are synchronized
 - ✅ Cross-repo compatibility maintained
