@@ -248,15 +248,15 @@
               "subject": "workflow.step.complete.>",
               "stream_name": "WORKFLOW",
               "required": true,
-              "description": "Step completion events"
+              "description": "Step completion events from external sources"
             },
             {
-              "name": "agent.complete",
+              "name": "workflow.step.result",
               "type": "jetstream",
-              "subject": "agent.complete.>",
-              "stream_name": "AGENT",
+              "subject": "workflow.step.result.>",
+              "stream_name": "WORKFLOW",
               "required": true,
-              "description": "Agent completion events"
+              "description": "Async step results from any executor (agentic, HTTP, custom)"
             }
           ],
           "outputs": [

@@ -227,7 +227,11 @@ func (e *Executor) executeAction(ctx context.Context, workflow *wfschema.Definit
 	action := interpolator.InterpolateActionDef(step.Action)
 
 	timeout := e.parseTimeout(action.Timeout, e.config.RequestTimeout, step.Name)
-	actx := &actions.Context{NATSClient: e.natsClient, Timeout: timeout}
+	actx := &actions.Context{
+		NATSClient:  e.natsClient,
+		Timeout:     timeout,
+		ExecutionID: exec.ID, // Pass execution ID for callback correlation
+	}
 	iteration := exec.GetIteration()
 
 	switch action.Type {
@@ -539,12 +543,13 @@ func (e *Executor) publishEvent(ctx context.Context, event event) {
 	}
 }
 
-// HandleAgentComplete handles an agent.complete message
-func (e *Executor) HandleAgentComplete(ctx context.Context, registry *Registry, execID string, output json.RawMessage, agentError string) error {
+// HandleAsyncStepResult handles an async step result message from any executor.
+// This is the generic callback handler that works with agentic, HTTP, or custom executors.
+func (e *Executor) HandleAsyncStepResult(ctx context.Context, registry *Registry, execID string, output json.RawMessage, stepError string) error {
 	// Get execution
 	exec, err := e.execStore.Get(ctx, execID)
 	if err != nil {
-		return errs.WrapTransient(err, "workflow-executor", "HandleAgentComplete", "get execution")
+		return errs.WrapTransient(err, "workflow-executor", "HandleAsyncStepResult", "get execution")
 	}
 
 	if exec.GetState().IsTerminal() {
@@ -574,9 +579,9 @@ func (e *Executor) HandleAgentComplete(ctx context.Context, registry *Registry, 
 		Iteration:   exec.GetIteration(),
 	}
 
-	if agentError != "" {
+	if stepError != "" {
 		StepResult.Status = "failed"
-		StepResult.Error = agentError
+		StepResult.Error = stepError
 	}
 
 	return e.ContinueExecution(ctx, workflow, exec, StepResult)

@@ -70,6 +70,11 @@ type LoopEntity struct {
 	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
 	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
 
+	// Callback subject for async result delivery (set by workflow)
+	// When present, the loop publishes completion to this subject
+	// in addition to the default agent.complete subject.
+	Callback string `json:"callback,omitempty"` // e.g., "workflow.step.result.{exec_id}"
+
 	// Completion data (populated when loop completes)
 	// These fields enable SSE delivery of results via KV watch
 	Outcome     string    `json:"outcome,omitempty"`      // success, failed, cancelled

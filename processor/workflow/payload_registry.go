@@ -41,4 +41,16 @@ func init() {
 	if err != nil {
 		panic("failed to register event: " + err.Error())
 	}
+
+	// Register AsyncStepResult factory for generic async callback handling
+	err = component.RegisterPayload(&component.PayloadRegistration{
+		Domain:      "workflow",
+		Category:    "step_result",
+		Version:     "v1",
+		Description: "Async step result from any executor",
+		Factory:     func() any { return &AsyncStepResult{} },
+	})
+	if err != nil {
+		panic("failed to register AsyncStepResult: " + err.Error())
+	}
 }

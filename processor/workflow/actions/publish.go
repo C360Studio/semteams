@@ -58,7 +58,9 @@ func (a *PublishAction) Execute(ctx context.Context, actx *Context) Result {
 	}
 }
 
-// PublishAgentAction publishes a task to an agent using structured fields
+// PublishAgentAction publishes a task to an agent using structured fields.
+// When ExecutionID is available in the action context, it sets a callback subject
+// so the executor can publish results back to the workflow.
 type PublishAgentAction struct {
 	Subject string
 	Role    string
@@ -93,6 +95,12 @@ func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result 
 	// Auto-generate task_id if not provided
 	if task.TaskID == "" {
 		task.TaskID = uuid.New().String()
+	}
+
+	// Set callback subject if execution ID is available
+	// This enables generic async result handling via workflow.step.result subject
+	if actx.ExecutionID != "" {
+		task.Callback = fmt.Sprintf("workflow.step.result.%s", actx.ExecutionID)
 	}
 
 	// Validate using agentic.TaskMessage.Validate()

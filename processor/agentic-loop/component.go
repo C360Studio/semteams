@@ -522,117 +522,131 @@ func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
 
 // handleResponseMessage processes incoming agent response messages
 func (c *Component) handleResponseMessage(ctx context.Context, data []byte) {
+	response, loopID, ok := c.extractAgentResponse(data)
+	if !ok {
+		return
+	}
+
+	entity, _ := c.handler.GetLoop(loopID)
+
+	result, err := c.handler.HandleModelResponse(ctx, loopID, *response)
+	if err != nil {
+		c.handleLoopFailure(ctx, loopID, entity, "handler_error", err)
+		return
+	}
+
+	c.recordResponseMetrics(response, result, entity)
+	c.persistHandlerResult(ctx, result)
+}
+
+// extractAgentResponse parses an agent response message and finds its loop.
+// Returns the response, loop ID, and success flag.
+func (c *Component) extractAgentResponse(data []byte) (*agentic.AgentResponse, string, bool) {
 	var baseMsg message.BaseMessage
 	if err := json.Unmarshal(data, &baseMsg); err != nil {
 		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
-		return
+		return nil, "", false
 	}
 
 	responsePtr, ok := baseMsg.Payload().(*agentic.AgentResponse)
 	if !ok {
 		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
-		return
+		return nil, "", false
 	}
-	response := *responsePtr
 
-	// Try to find loop ID by checking all loops
-	loopID := c.findLoopIDForRequest(response.RequestID)
+	loopID := c.findLoopIDForRequest(responsePtr.RequestID)
 	if loopID == "" {
-		c.logger.Warn("No loop found for request", "request_id", response.RequestID)
-		return
+		c.logger.Warn("No loop found for request", "request_id", responsePtr.RequestID)
+		return nil, "", false
 	}
 
 	c.logger.Debug("Processing model response",
 		slog.String("loop_id", loopID),
-		slog.String("request_id", response.RequestID),
-		slog.String("status", response.Status))
+		slog.String("request_id", responsePtr.RequestID),
+		slog.String("status", responsePtr.Status))
 
-	// Get loop entity to track iterations and duration
-	entity, err := c.handler.GetLoop(loopID)
-	if err != nil {
-		c.logger.Error("Failed to get loop for metrics", "error", err, "loop_id", loopID)
+	return responsePtr, loopID, true
+}
+
+// handleLoopFailure records failure metrics and publishes failure events.
+func (c *Component) handleLoopFailure(ctx context.Context, loopID string, entity agentic.LoopEntity, reason string, err error) {
+	c.logger.Error("Loop processing failed", "error", err, "loop_id", loopID, "reason", reason)
+
+	if c.metrics != nil && entity.ID != "" {
+		duration := time.Since(entity.StartedAt).Seconds()
+		c.metrics.recordLoopFailed(reason, entity.Iterations, duration)
 	}
-	startTime := entity.StartedAt
 
-	// Handle the response using the message handler
-	result, err := c.handler.HandleModelResponse(ctx, loopID, response)
+	c.publishFailureEvents(ctx, loopID, reason, err.Error())
+}
+
+// publishFailureEvents publishes failure events including workflow callback.
+func (c *Component) publishFailureEvents(ctx context.Context, loopID, reason, errorMsg string) {
+	errorCtx, cancel := natsclient.DetachContextWithTrace(ctx, 5*time.Second)
+	defer cancel()
+
+	failMsgs, err := c.handler.BuildFailureEventWithCallback(loopID, reason, errorMsg)
 	if err != nil {
-		c.logger.Error("Failed to handle model response", "error", err, "loop_id", loopID)
-
-		// Record failed loop metrics
-		if c.metrics != nil && entity.ID != "" {
-			duration := time.Since(startTime).Seconds()
-			c.metrics.recordLoopFailed("handler_error", entity.Iterations, duration)
-		}
-
-		// Publish failure event so UI gets notified
-		// Use detached context preserving trace for error publish
-		errorCtx, cancel := natsclient.DetachContextWithTrace(ctx, 5*time.Second)
-		defer cancel()
-		if failMsg, fErr := c.handler.BuildFailureEvent(loopID, "handler_error", err.Error()); fErr == nil {
-			if pubErr := c.natsClient.PublishToStream(errorCtx, failMsg.Subject, failMsg.Data); pubErr != nil {
-				c.logger.Error("Failed to publish failure event", "error", pubErr, "loop_id", loopID)
-			}
-		} else {
-			c.logger.Warn("Failed to build failure event", "error", fErr, "loop_id", loopID)
-		}
+		c.logger.Warn("Failed to build failure event", "error", err, "loop_id", loopID)
 		return
 	}
 
-	// Record iteration
-	if c.metrics != nil {
-		c.metrics.recordIteration()
-		c.metrics.recordTrajectoryStep("model_call")
+	for _, msg := range failMsgs {
+		if pubErr := c.natsClient.PublishToStream(errorCtx, msg.Subject, msg.Data); pubErr != nil {
+			c.logger.Error("Failed to publish failure event", "error", pubErr, "loop_id", loopID)
+		}
+	}
+}
+
+// recordResponseMetrics records metrics and logs for a successful response.
+func (c *Component) recordResponseMetrics(response *agentic.AgentResponse, result HandlerResult, entity agentic.LoopEntity) {
+	if c.metrics == nil {
+		return
 	}
 
-	// Record tool calls if any
-	if response.Status == "tool_call" && c.metrics != nil {
+	c.metrics.recordIteration()
+	c.metrics.recordTrajectoryStep("model_call")
+
+	// Record dispatched tool calls
+	if response.Status == "tool_call" {
 		for _, toolCall := range response.Message.ToolCalls {
 			c.metrics.recordToolCallDispatched(toolCall.Name)
-			c.logger.Debug("Tool call dispatched",
-				slog.String("loop_id", loopID),
-				slog.String("tool", toolCall.Name),
-				slog.String("call_id", toolCall.ID))
 		}
 	}
 
-	// Record completion or failure
-	if result.State == agentic.LoopStateComplete {
-		if c.metrics != nil && entity.ID != "" {
-			duration := time.Since(startTime).Seconds()
-			c.metrics.recordLoopCompleted(entity.Iterations, duration)
-		}
+	// Record terminal state metrics
+	if entity.ID == "" {
+		return
+	}
+	duration := time.Since(entity.StartedAt).Seconds()
+
+	switch result.State {
+	case agentic.LoopStateComplete:
+		c.metrics.recordLoopCompleted(entity.Iterations, duration)
 		c.logger.Info("Loop completed",
-			slog.String("loop_id", loopID),
+			slog.String("loop_id", result.LoopID),
 			slog.Int("iterations", entity.Iterations))
-	} else if result.State == agentic.LoopStateFailed {
-		if c.metrics != nil && entity.ID != "" {
-			duration := time.Since(startTime).Seconds()
-			reason := "unknown"
-			if response.Status == "error" {
-				reason = "model_error"
-			}
-			c.metrics.recordLoopFailed(reason, entity.Iterations, duration)
+	case agentic.LoopStateFailed:
+		reason := "model_error"
+		if response.Status != "error" {
+			reason = "unknown"
 		}
+		c.metrics.recordLoopFailed(reason, entity.Iterations, duration)
 		c.logger.Warn("Loop failed",
-			slog.String("loop_id", loopID),
+			slog.String("loop_id", result.LoopID),
 			slog.Int("iterations", entity.Iterations))
 	}
+}
 
-	// Publish output messages
+// persistHandlerResult publishes messages and persists state from a handler result.
+func (c *Component) persistHandlerResult(ctx context.Context, result HandlerResult) {
 	c.publishResults(ctx, result)
-
-	// Persist loop state to KV
 	c.persistLoopState(ctx, result.LoopID)
-
-	// Persist trajectory steps
 	c.persistTrajectorySteps(ctx, result.LoopID, result.TrajectorySteps)
 
-	// If loop completed, finalize trajectory and persist completion state
+	// Finalize terminal states
 	if result.State == agentic.LoopStateComplete || result.State == agentic.LoopStateFailed {
 		c.finalizeTrajectory(ctx, result.LoopID, result.State)
-
-		// Persist enriched completion state for rules engine
 		if result.CompletionState != nil {
 			c.persistCompletionState(ctx, result.LoopID, result.CompletionState)
 		}

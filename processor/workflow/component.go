@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
@@ -338,8 +337,8 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 			handler = c.handleTriggerMessage
 		case "workflow.step.complete":
 			handler = c.handleStepCompleteMessage
-		case "agent.complete":
-			handler = c.handleAgentCompleteMessage
+		case "workflow.step.result":
+			handler = c.handleAsyncStepResult
 		default:
 			c.logger.Warn("Unknown input port", "port", port.Name)
 			continue
@@ -357,10 +356,10 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 
 // setupConsumer sets up a JetStream consumer for an input port
 func (c *Component) setupConsumer(ctx context.Context, port component.Port, subject string, handler func(context.Context, []byte)) error {
-	// Determine stream name based on subject
+	// Determine stream name from port config, falling back to workflow default
 	streamName := c.config.StreamName
-	if strings.HasPrefix(subject, "agent.") {
-		streamName = "AGENT"
+	if p, ok := port.Config.(component.JetStreamPort); ok && p.StreamName != "" {
+		streamName = p.StreamName
 	}
 
 	// Wait for stream to be available
@@ -628,84 +627,68 @@ func (c *Component) handleStepCompleteMessage(ctx context.Context, data []byte) 
 	}
 }
 
-// handleAgentCompleteMessage processes agent.complete messages
-func (c *Component) handleAgentCompleteMessage(ctx context.Context, data []byte) {
-	// First, try to unwrap BaseMessage envelope
-	// Agentic-loop publishes messages wrapped in BaseMessage format:
-	// {"type": {...}, "payload": {...}}
-	var envelope struct {
-		Type    json.RawMessage `json:"type"`
-		Payload json.RawMessage `json:"payload"`
+// handleAsyncStepResult processes workflow.step.result messages from any async executor.
+// This is the generic callback handler that replaces the agentic-specific handleAgentCompleteMessage.
+func (c *Component) handleAsyncStepResult(ctx context.Context, data []byte) {
+	// Try to unwrap BaseMessage envelope first
+	var baseMsg message.BaseMessage
+	if err := json.Unmarshal(data, &baseMsg); err == nil {
+		// Try to get the payload as AsyncStepResult
+		if result, ok := baseMsg.Payload().(*AsyncStepResult); ok {
+			c.processAsyncStepResult(ctx, result)
+			return
+		}
 	}
 
-	var payloadData []byte
-	if err := json.Unmarshal(data, &envelope); err == nil && len(envelope.Payload) > 0 {
-		// Message is wrapped in BaseMessage envelope
-		payloadData = envelope.Payload
-	} else {
-		// Message might be raw (for backwards compatibility)
-		payloadData = data
-	}
-
-	// Now unmarshal the actual payload
-	var msg struct {
-		LoopID     string          `json:"loop_id"`
-		TaskID     string          `json:"task_id"`
-		Outcome    string          `json:"outcome"`
-		Output     json.RawMessage `json:"output,omitempty"`
-		Result     json.RawMessage `json:"result,omitempty"` // agentic uses "result" not "output"
-		Error      string          `json:"error,omitempty"`
-		Role       string          `json:"role,omitempty"`
-		WorkflowID string          `json:"workflow_id,omitempty"`
-		ExecID     string          `json:"execution_id,omitempty"`
-	}
-
-	if err := json.Unmarshal(payloadData, &msg); err != nil {
-		c.logger.Error("Failed to unmarshal agent complete message", "error", err)
+	// Fallback: try direct unmarshaling (for backwards compatibility)
+	var result AsyncStepResult
+	if err := json.Unmarshal(data, &result); err != nil {
+		c.logger.Error("Failed to unmarshal async step result", "error", err)
 		return
 	}
 
-	// Use "result" field if "output" is empty (agentic-loop uses "result")
-	if len(msg.Output) == 0 && len(msg.Result) > 0 {
-		msg.Output = msg.Result
-	}
+	c.processAsyncStepResult(ctx, &result)
+}
 
+// processAsyncStepResult handles the actual processing of an async step result.
+func (c *Component) processAsyncStepResult(ctx context.Context, result *AsyncStepResult) {
 	// Try to find execution ID from message or by task correlation
-	execID := msg.ExecID
-	if execID == "" && msg.TaskID != "" {
+	execID := result.ExecutionID
+	if execID == "" && result.TaskID != "" {
 		// Look up execution by task_id using secondary index
-		exec, err := c.executor.execStore.GetByTaskID(ctx, msg.TaskID)
+		exec, err := c.executor.execStore.GetByTaskID(ctx, result.TaskID)
 		if err != nil {
-			c.logger.Debug("No execution found for task completion",
-				slog.String("task_id", msg.TaskID),
-				slog.String("loop_id", msg.LoopID))
+			c.logger.Debug("No execution found for async step result",
+				slog.String("task_id", result.TaskID))
 			return
 		}
 		execID = exec.ID
 		c.logger.Debug("Found execution by task_id correlation",
 			slog.String("execution_id", execID),
-			slog.String("task_id", msg.TaskID))
-	} else if execID == "" {
-		c.logger.Debug("No execution ID or task ID in agent complete, skipping",
-			slog.String("loop_id", msg.LoopID))
+			slog.String("task_id", result.TaskID))
+	}
+
+	if execID == "" {
+		c.logger.Debug("No execution ID or task ID in async step result, skipping")
 		return
 	}
 
-	c.logger.Debug("Received agent complete for workflow",
+	c.logger.Debug("Received async step result for workflow",
 		slog.String("execution_id", execID),
-		slog.String("loop_id", msg.LoopID),
-		slog.String("outcome", msg.Outcome))
+		slog.String("task_id", result.TaskID),
+		slog.String("status", result.Status))
 
-	var agentError string
-	if msg.Outcome != agentic.OutcomeSuccess {
-		agentError = msg.Error
-		if agentError == "" {
-			agentError = fmt.Sprintf("agent outcome: %s", msg.Outcome)
+	// Determine error from status
+	var stepError string
+	if !result.IsSuccess() {
+		stepError = result.Error
+		if stepError == "" {
+			stepError = fmt.Sprintf("async step %s", result.Status)
 		}
 	}
 
-	if err := c.executor.HandleAgentComplete(ctx, c.registry, execID, msg.Output, agentError); err != nil {
-		c.logger.Error("Failed to handle agent complete", "error", err)
+	if err := c.executor.HandleAsyncStepResult(ctx, c.registry, execID, result.Output, stepError); err != nil {
+		c.logger.Error("Failed to handle async step result", "error", err)
 	}
 }
 

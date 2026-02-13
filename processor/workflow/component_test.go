@@ -98,7 +98,7 @@ func TestComponentPorts(t *testing.T) {
 		inputNames[p.Name] = true
 	}
 
-	expectedInputs := []string{"workflow.trigger", "workflow.step.complete", "agent.complete"}
+	expectedInputs := []string{"workflow.trigger", "workflow.step.complete", "workflow.step.result"}
 	for _, name := range expectedInputs {
 		if !inputNames[name] {
 			t.Errorf("missing expected input port: %s", name)

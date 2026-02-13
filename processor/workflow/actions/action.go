@@ -19,8 +19,9 @@ type Result struct {
 
 // Context provides dependencies for action execution
 type Context struct {
-	NATSClient *natsclient.Client
-	Timeout    time.Duration
+	NATSClient  *natsclient.Client
+	Timeout     time.Duration
+	ExecutionID string // Workflow execution ID for callback correlation
 }
 
 // Action is the interface for executable actions
