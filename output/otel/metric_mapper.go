@@ -8,6 +8,7 @@ import (
 // MetricType represents the type of metric.
 type MetricType string
 
+// MetricType constants for supported OTEL metric types.
 const (
 	MetricTypeCounter   MetricType = "counter"
 	MetricTypeGauge     MetricType = "gauge"
@@ -237,7 +238,7 @@ func (mm *MetricMapper) Stats() map[string]int64 {
 	}
 }
 
-// MapPrometheusMetric maps a Prometheus-style metric to OTEL format.
+// PrometheusMetric represents a Prometheus-style metric for mapping to OTEL format.
 type PrometheusMetric struct {
 	Name   string
 	Help   string

@@ -34,6 +34,9 @@ type Scenario struct {
 
 	// Configuration
 	config *Config
+
+	// AGNTCY integration configuration
+	agntcyConfig *AGNTCYConfig
 }
 
 // Config holds configuration for the agentic scenario.
@@ -204,6 +207,9 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		{"inject-task", s.injectTask},
 		{"wait-for-completion", s.waitForCompletion},
 		{"validate-results", s.validateResults},
+		// AGNTCY integration stages (optional, skip if not configured)
+		{"verify-oasf-generation", s.verifyOASFGeneration},
+		{"verify-a2a-adapter", s.verifyA2AAdapter},
 	}
 
 	for _, stage := range stages {
@@ -233,6 +239,10 @@ func (s *Scenario) Teardown(ctx context.Context) error {
 	if s.nats != nil {
 		_ = s.nats.DeleteKV(ctx, client.BucketWorkflowDefinitions, TestWorkflowID)
 	}
+
+	// Clean up AGNTCY test resources
+	_ = s.cleanupAGNTCY(ctx)
+
 	return nil
 }
 
