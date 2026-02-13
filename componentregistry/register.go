@@ -10,11 +10,15 @@ import (
 	iotsensor "github.com/c360studio/semstreams/examples/processors/iot_sensor"
 	graphgateway "github.com/c360studio/semstreams/gateway/graph-gateway"
 	gatewayhttp "github.com/c360studio/semstreams/gateway/http"
+	a2ainput "github.com/c360studio/semstreams/input/a2a"
 	fileinput "github.com/c360studio/semstreams/input/file"
+	slimbridgeinput "github.com/c360studio/semstreams/input/slim"
 	"github.com/c360studio/semstreams/input/udp"
 	websocketinput "github.com/c360studio/semstreams/input/websocket"
+	directorybridge "github.com/c360studio/semstreams/output/directory-bridge"
 	"github.com/c360studio/semstreams/output/file"
 	"github.com/c360studio/semstreams/output/httppost"
+	otelexporter "github.com/c360studio/semstreams/output/otel"
 	"github.com/c360studio/semstreams/output/websocket"
 	pkgerrs "github.com/c360studio/semstreams/pkg/errs"
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
@@ -76,6 +80,13 @@ import (
 //   - agentic-tools (tool execution dispatcher)
 //   - agentic-loop (state machine orchestrator with trajectory capture)
 //   - workflow-processor (multi-step workflow orchestration with loops and timeouts)
+//
+// AGNTCY Integration Layer - Internet of Agents interoperability:
+//   - oasf-generator (generates OASF records from agent capabilities)
+//   - directory-bridge (registers agents with AGNTCY directories)
+//   - slim-bridge (receives messages from SLIM groups via MLS)
+//   - a2a-adapter (receives A2A task requests from external agents)
+//   - otel-exporter (exports agent telemetry to OpenTelemetry collectors)
 //
 // Domain Layer (example processors):
 //   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
@@ -235,6 +246,22 @@ func registerAgenticLayer(registry *component.Registry) error {
 	// AGNTCY integration components
 	if err := oasfgenerator.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "oasf-generator component registration")
+	}
+
+	if err := directorybridge.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "directory-bridge component registration")
+	}
+
+	if err := slimbridgeinput.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "slim-bridge component registration")
+	}
+
+	if err := a2ainput.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "a2a-adapter component registration")
+	}
+
+	if err := otelexporter.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "otel-exporter component registration")
 	}
 
 	return nil
