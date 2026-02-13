@@ -41,7 +41,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # Mock OpenAI Server + AGNTCY Server (deterministic responses for testing)
+  # Mock OpenAI Server + AGNTCY Server + TrustGraph Server (deterministic responses for testing)
   mock-llm:
     build:
       context: ../..
@@ -50,10 +50,11 @@ services:
     ports:
       - "38180:8080" # Mock LLM (3xxxx range)
       - "38181:8081" # Mock AGNTCY (directory + OTEL)
+      - "38182:8082" # Mock TrustGraph
     networks:
       - semstreams-agentic-net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:8080/health && curl -f http://localhost:8082/health"]
       interval: 5s
       timeout: 3s
       retries: 5

@@ -37,6 +37,9 @@ type Scenario struct {
 
 	// AGNTCY integration configuration
 	agntcyConfig *AGNTCYConfig
+
+	// TrustGraph integration configuration
+	trustgraphConfig *TrustGraphConfig
 }
 
 // Config holds configuration for the agentic scenario.
@@ -211,6 +214,11 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		{"verify-oasf-generation", s.verifyOASFGeneration},
 		{"verify-directory-bridge", s.verifyDirectoryBridge},
 		{"verify-a2a-adapter", s.verifyA2AAdapter},
+		// TrustGraph integration stages (optional, skip if not configured)
+		{"verify-trustgraph-import", s.verifyTrustGraphImport},
+		{"inject-export-entity", s.injectExportEntity},
+		{"verify-trustgraph-export", s.verifyTrustGraphExport},
+		{"verify-loop-prevention", s.verifyLoopPrevention},
 	}
 
 	for _, stage := range stages {
@@ -243,6 +251,9 @@ func (s *Scenario) Teardown(ctx context.Context) error {
 
 	// Clean up AGNTCY test resources
 	_ = s.cleanupAGNTCY(ctx)
+
+	// Clean up TrustGraph test resources
+	_ = s.cleanupTrustGraph(ctx)
 
 	return nil
 }
