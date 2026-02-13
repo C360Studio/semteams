@@ -32,6 +32,7 @@ import (
 	jsonfilter "github.com/c360studio/semstreams/processor/json_filter"
 	jsongeneric "github.com/c360studio/semstreams/processor/json_generic"
 	jsonmap "github.com/c360studio/semstreams/processor/json_map"
+	oasfgenerator "github.com/c360studio/semstreams/processor/oasf-generator"
 	"github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/processor/workflow"
 	"github.com/c360studio/semstreams/storage/objectstore"
@@ -229,6 +230,11 @@ func registerAgenticLayer(registry *component.Registry) error {
 
 	if err := workflow.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "workflow-processor component registration")
+	}
+
+	// AGNTCY integration components
+	if err := oasfgenerator.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "oasf-generator component registration")
 	}
 
 	return nil

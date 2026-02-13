@@ -22,8 +22,9 @@ type Config struct {
 	OASFKVBucket string `json:"oasf_kv_bucket" schema:"type:string,description:KV bucket for OASF records,category:basic,default:OASF_RECORDS"`
 
 	// WatchPattern is the key pattern to watch in the entity KV bucket.
-	// Use "*" for all keys or a specific pattern like "*.agent.*" for agent entities.
-	WatchPattern string `json:"watch_pattern" schema:"type:string,description:Key pattern to watch for entity changes,category:advanced,default:*"`
+	// Use ">" for all keys (including those with dots) or a specific pattern.
+	// Note: "*" only matches single tokens without dots, ">" matches any depth.
+	WatchPattern string `json:"watch_pattern" schema:"type:string,description:Key pattern to watch for entity changes,category:advanced,default:>"`
 
 	// GenerationDebounce is the debounce duration for OASF generation after entity changes.
 	GenerationDebounce string `json:"generation_debounce" schema:"type:string,description:Debounce duration for generation,category:advanced,default:1s"`
@@ -77,7 +78,7 @@ func DefaultConfig() Config {
 		StreamName:          "ENTITY",
 		EntityKVBucket:      "ENTITY_STATES",
 		OASFKVBucket:        "OASF_RECORDS",
-		WatchPattern:        "*",
+		WatchPattern:        ">",
 		GenerationDebounce:  "1s",
 		DefaultAgentVersion: "1.0.0",
 		IncludeExtensions:   true,

@@ -449,6 +449,49 @@
           ]
         }
       }
+    },
+    "oasf-generator": {
+      "type": "processor",
+      "name": "oasf-generator",
+      "enabled": true,
+      "config": {
+        "entity_kv_bucket": "ENTITY_STATES",
+        "oasf_kv_bucket": "OASF_RECORDS",
+        "watch_pattern": ">",
+        "generation_debounce": "500ms",
+        "default_agent_version": "1.0.0",
+        "default_authors": ["SemStreams"],
+        "include_extensions": true,
+        "ports": {
+          "inputs": [
+            {
+              "name": "entity_changes",
+              "subject": "entity.state.>",
+              "type": "kv-watch",
+              "required": true,
+              "description": "Watch for agent entity state changes"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "oasf_records",
+              "subject": "oasf.record.generated.*",
+              "type": "jetstream",
+              "stream_name": "OASF",
+              "required": true,
+              "description": "Generated OASF records"
+            }
+          ],
+          "kv_write": [
+            {
+              "name": "oasf_kv",
+              "type": "kv-write",
+              "bucket": "OASF_RECORDS",
+              "description": "OASF record storage"
+            }
+          ]
+        }
+      }
     }
   }
 }
