@@ -146,7 +146,7 @@ func NewTieredScenario(
 	}
 
 	// Set GraphQL URL if not explicitly configured
-	// Docker compose maps all profiles to host port 8082 for GraphQL
+	// Docker compose maps statistical/structural to 38082, semantic to 38182
 	if cfg.GraphQLURL == "" {
 		cfg.GraphQLURL = "http://localhost:38082/graphql"
 	}
