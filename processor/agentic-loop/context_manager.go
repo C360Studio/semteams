@@ -3,6 +3,7 @@ package agenticloop
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/c360studio/semstreams/agentic"
@@ -19,15 +20,18 @@ const (
 	RegionRecentHistory    RegionType = "recent_history"    // Recent uncompacted messages
 	RegionToolResults      RegionType = "tool_results"      // Tool execution results
 	RegionHydratedContext  RegionType = "hydrated_context"  // Retrieved context from memory
+	RegionGraphEntities    RegionType = "graph_entities"    // Graph entity context (multi-agent)
 )
 
 // Region priorities (higher = more important, evict lower first)
+// Graph-aware slicing adjusts these based on EntityPriority config
 var regionPriorities = map[RegionType]int{
 	RegionToolResults:      1, // Evict first
 	RegionRecentHistory:    2,
 	RegionHydratedContext:  3,
-	RegionCompactedHistory: 4,
-	RegionSystemPrompt:     5, // Never evict
+	RegionGraphEntities:    4, // Entity context (adjustable via EntityPriority)
+	RegionCompactedHistory: 5,
+	RegionSystemPrompt:     6, // Never evict
 }
 
 type contextMessage struct {
@@ -219,4 +223,197 @@ func (cm *ContextManager) GCToolResults(currentIteration int) int {
 // Uses a simple heuristic of ~4 characters per token
 func estimateTokens(content string) int {
 	return (len(content) + 3) / 4 // Round up
+}
+
+// ContextSlice defines which regions to include when slicing context
+type ContextSlice struct {
+	IncludeRegions   []RegionType // Regions to include
+	ExcludeRegions   []RegionType // Regions to exclude (takes precedence)
+	PreserveEntities []string     // Entity IDs to always keep
+}
+
+// CheckBudget checks if current context is within the token budget.
+// Returns (withinBudget, currentTokens).
+func (cm *ContextManager) CheckBudget(budgetTokens int) (bool, int) {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if budgetTokens <= 0 {
+		// No budget limit
+		return true, cm.getTotalTokensLocked()
+	}
+
+	current := cm.getTotalTokensLocked()
+	return current <= budgetTokens, current
+}
+
+// getTotalTokensLocked returns total tokens (must hold read lock)
+func (cm *ContextManager) getTotalTokensLocked() int {
+	total := 0
+	for _, messages := range cm.regions {
+		for _, m := range messages {
+			total += m.Tokens
+		}
+	}
+	return total
+}
+
+// SliceForBudget removes content to fit within the budget.
+// Uses graph-aware slicing that preserves entity context when EntityPriority is set.
+func (cm *ContextManager) SliceForBudget(budget int, slice ContextSlice) error {
+	if budget <= 0 {
+		return nil // No budget limit
+	}
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	current := cm.getTotalTokensLocked()
+	if current <= budget {
+		return nil // Already within budget
+	}
+
+	toEvict := current - budget
+	evicted := 0
+
+	// Get effective priorities (adjusted for entity priority if set)
+	priorities := cm.getEffectivePriorities()
+
+	// Build eviction order (lowest priority first)
+	order := cm.buildEvictionOrder(priorities, slice)
+
+	// Evict messages until we're within budget
+	for _, region := range order {
+		if evicted >= toEvict {
+			break
+		}
+
+		messages := cm.regions[region]
+		if len(messages) == 0 {
+			continue
+		}
+
+		// Evict from the end (oldest first for most regions)
+		newMessages := []contextMessage{}
+		for i := len(messages) - 1; i >= 0 && evicted < toEvict; i-- {
+			msg := messages[i]
+
+			// Check if this message is for a preserved entity
+			if cm.shouldPreserve(msg, slice.PreserveEntities) {
+				newMessages = append([]contextMessage{msg}, newMessages...)
+				continue
+			}
+
+			evicted += msg.Tokens
+		}
+
+		// Keep non-evicted messages
+		for i := 0; i < len(messages)-len(newMessages); i++ {
+			if i < len(messages) {
+				msg := messages[i]
+				if cm.shouldPreserve(msg, slice.PreserveEntities) {
+					newMessages = append([]contextMessage{msg}, newMessages...)
+				}
+			}
+		}
+
+		cm.regions[region] = newMessages
+	}
+
+	cm.logger.Info("Context sliced for budget",
+		"loop_id", cm.loopID,
+		"budget", budget,
+		"evicted_tokens", evicted,
+		"new_total", cm.getTotalTokensLocked())
+
+	return nil
+}
+
+// getEffectivePriorities returns region priorities adjusted for entity priority
+func (cm *ContextManager) getEffectivePriorities() map[RegionType]int {
+	priorities := make(map[RegionType]int)
+	for k, v := range regionPriorities {
+		priorities[k] = v
+	}
+
+	// Adjust entity priority based on config
+	if cm.config.EntityPriority > 0 {
+		// Higher EntityPriority = higher priority for graph entities
+		// Scale: 1-10 maps to priority adjustment of 0-5
+		adjustment := cm.config.EntityPriority / 2
+		priorities[RegionGraphEntities] += adjustment
+	}
+
+	return priorities
+}
+
+// buildEvictionOrder builds the order in which to evict regions
+func (cm *ContextManager) buildEvictionOrder(priorities map[RegionType]int, slice ContextSlice) []RegionType {
+	// Collect regions that can be evicted
+	var evictable []RegionType
+	excludeSet := make(map[RegionType]bool)
+	for _, r := range slice.ExcludeRegions {
+		excludeSet[r] = true
+	}
+
+	for region := range cm.regions {
+		// Never evict system prompt
+		if region == RegionSystemPrompt {
+			continue
+		}
+		// Skip excluded regions
+		if excludeSet[region] {
+			continue
+		}
+		evictable = append(evictable, region)
+	}
+
+	// Sort by priority (lowest first)
+	for i := 0; i < len(evictable)-1; i++ {
+		for j := i + 1; j < len(evictable); j++ {
+			if priorities[evictable[i]] > priorities[evictable[j]] {
+				evictable[i], evictable[j] = evictable[j], evictable[i]
+			}
+		}
+	}
+
+	return evictable
+}
+
+// shouldPreserve checks if a message should be preserved based on entity IDs
+func (cm *ContextManager) shouldPreserve(msg contextMessage, preserveEntities []string) bool {
+	if len(preserveEntities) == 0 {
+		return false
+	}
+
+	// Check if message content contains any preserved entity ID
+	content := msg.Message.Content
+	for _, entityID := range preserveEntities {
+		if strings.Contains(content, entityID) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// AddGraphEntityContext adds context from graph entities to the dedicated region
+func (cm *ContextManager) AddGraphEntityContext(entityID string, content string) error {
+	msg := agentic.ChatMessage{
+		Role:    "system",
+		Content: fmt.Sprintf("[Entity: %s]\n%s", entityID, content),
+	}
+	return cm.AddMessage(RegionGraphEntities, msg)
+}
+
+// GetGraphEntityTokens returns the total tokens in the graph entities region
+func (cm *ContextManager) GetGraphEntityTokens() int {
+	return cm.GetRegionTokens(RegionGraphEntities)
+}
+
+// ClearGraphEntities clears the graph entities region
+func (cm *ContextManager) ClearGraphEntities() {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	cm.regions[RegionGraphEntities] = []contextMessage{}
 }

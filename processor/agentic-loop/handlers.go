@@ -88,6 +88,16 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		return HandlerResult{}, err
 	}
 
+	// Check depth limit before creating loop
+	if task.MaxDepth > 0 && task.Depth >= task.MaxDepth {
+		return HandlerResult{}, errs.WrapInvalid(
+			fmt.Errorf("max agent depth (%d) reached, cannot spawn child agent", task.MaxDepth),
+			"agentic-loop",
+			"HandleTask",
+			"check depth limit",
+		)
+	}
+
 	// Use provided loop_id if present, otherwise create new one
 	var loopID string
 	var err error
@@ -103,6 +113,16 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		if err != nil {
 			return HandlerResult{}, err
 		}
+	}
+
+	// Set depth tracking on the loop entity
+	if task.Depth > 0 || task.MaxDepth > 0 {
+		_ = h.loopManager.SetDepth(loopID, task.Depth+1, task.MaxDepth)
+	}
+
+	// Set parent loop ID if provided
+	if task.ParentLoopID != "" {
+		_ = h.loopManager.SetParentLoopID(loopID, task.ParentLoopID)
 	}
 
 	// Set workflow context if provided (for loops created by workflow commands)
@@ -141,12 +161,45 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	}
 
 	// Add user prompt to context manager if enabled
-	if cm := h.loopManager.GetContextManager(loopID); cm != nil {
+	cm := h.loopManager.GetContextManager(loopID)
+	if cm != nil {
 		_ = cm.AddMessage(RegionRecentHistory, agentic.ChatMessage{
 			Role:    "user",
 			Content: task.Prompt,
 		})
 	}
+
+	// If embedded context is present, add it directly (skips hydration)
+	if task.Context != nil && task.Context.Content != "" {
+		if cm != nil {
+			// Add pre-constructed context as graph entities
+			_ = cm.AddMessage(RegionGraphEntities, agentic.ChatMessage{
+				Role:    "system",
+				Content: task.Context.Content,
+			})
+		}
+		h.logger.Debug("Using embedded context",
+			slog.String("loop_id", loopID),
+			slog.Int("token_count", task.Context.TokenCount),
+			slog.Int("entity_count", len(task.Context.Entities)))
+	}
+
+	// Build messages for initial request
+	var messages []agentic.ChatMessage
+
+	// If embedded context exists, include it as system message first
+	if task.Context != nil && task.Context.Content != "" {
+		messages = append(messages, agentic.ChatMessage{
+			Role:    "system",
+			Content: fmt.Sprintf("[Context]\n%s", task.Context.Content),
+		})
+	}
+
+	// Add user prompt
+	messages = append(messages, agentic.ChatMessage{
+		Role:    "user",
+		Content: task.Prompt,
+	})
 
 	// Create initial agent request with structured ID for recovery
 	request := agentic.AgentRequest{
@@ -154,12 +207,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		LoopID:    loopID,
 		Role:      task.Role,
 		Model:     task.Model,
-		Messages: []agentic.ChatMessage{
-			{
-				Role:    "user",
-				Content: task.Prompt,
-			},
-		},
+		Messages:  messages,
 	}
 
 	// Track request ID to loop ID mapping (cache for fast lookup)

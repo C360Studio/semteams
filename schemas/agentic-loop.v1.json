@@ -23,13 +23,32 @@
           "type": "boolean",
           "description": "Enable context memory management"
         },
+        "entity_priority": {
+          "type": "number",
+          "description": "Priority for entity context vs conversation (1-10, higher = more entity context)"
+        },
         "headroom_tokens": {
           "type": "number",
           "description": "Token headroom to reserve for model responses"
         },
+        "max_budget_tokens": {
+          "type": "number",
+          "description": "Hard token limit for context budget (overrides model limits when set)"
+        },
         "model_limits": {
           "type": "object",
           "description": "Map of model name to context window size in tokens. Must include 'default' key for fallback."
+        },
+        "preserve_entities": {
+          "type": "array",
+          "description": "Entity IDs to always keep in context during slicing",
+          "items": {
+            "type": "string"
+          }
+        },
+        "slice_on_budget": {
+          "type": "boolean",
+          "description": "Enable context slicing when budget is exceeded"
         },
         "summarization_model": {
           "type": "string",

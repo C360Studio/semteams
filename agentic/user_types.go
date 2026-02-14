@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/types"
 )
 
 // Signal type constants for user control signals
@@ -261,7 +262,28 @@ type TaskMessage struct {
 	ChannelType string `json:"channel_type,omitempty"` // e.g., "http", "cli", "slack"
 	ChannelID   string `json:"channel_id,omitempty"`   // session/channel identifier
 	UserID      string `json:"user_id,omitempty"`      // user who initiated the request
+
+	// Multi-agent hierarchy (optional, for parallel/nested agents)
+	ParentLoopID string `json:"parent_loop_id,omitempty"` // Parent loop ID for nested agents
+	Depth        int    `json:"depth,omitempty"`          // Current depth in agent tree (0 = root)
+	MaxDepth     int    `json:"max_depth,omitempty"`      // Maximum allowed depth
+
+	// Pre-constructed context (optional, skips discovery if present)
+	// When set, the agent loop uses this context directly instead of hydrating
+	Context *types.ConstructedContext `json:"context,omitempty"`
 }
+
+// ConstructedContext is an alias for types.ConstructedContext.
+// The canonical type is defined in pkg/types/context.go.
+type ConstructedContext = types.ConstructedContext
+
+// ContextSource is an alias for types.ContextSource.
+// The canonical type is defined in pkg/types/context.go.
+type ContextSource = types.ContextSource
+
+// GraphContextSpec is an alias for types.GraphContextSpec.
+// The canonical type is defined in pkg/types/context.go.
+type GraphContextSpec = types.GraphContextSpec
 
 // Validate checks if the TaskMessage is valid
 func (t TaskMessage) Validate() error {

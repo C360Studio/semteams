@@ -56,6 +56,10 @@ type LoopEntity struct {
 	TimeoutAt          time.Time             `json:"timeout_at,omitempty"`           // When the loop should timeout
 	ParentLoopID       string                `json:"parent_loop_id,omitempty"`       // Parent loop ID for architect->editor relationship
 
+	// Multi-agent depth tracking
+	Depth    int `json:"depth,omitempty"`     // Current depth in agent tree (0 = root)
+	MaxDepth int `json:"max_depth,omitempty"` // Maximum allowed depth for spawned agents
+
 	// Signal support fields
 	PauseRequested   bool      `json:"pause_requested,omitempty"`    // Pause requested, will pause at next checkpoint
 	PauseRequestedBy string    `json:"pause_requested_by,omitempty"` // User who requested pause

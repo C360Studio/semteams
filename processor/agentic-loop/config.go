@@ -44,6 +44,12 @@ type ContextConfig struct {
 	HeadroomTokens     int            `json:"headroom_tokens" description:"Token headroom to reserve for model responses"`
 	SummarizationModel string         `json:"summarization_model" description:"Model alias to use for context summarization"`
 	ModelLimits        map[string]int `json:"model_limits" description:"Map of model name to context window size in tokens. Must include 'default' key for fallback."`
+
+	// Multi-agent context budget fields
+	MaxBudgetTokens  int      `json:"max_budget_tokens,omitempty" description:"Hard token limit for context budget (overrides model limits when set)"`
+	SliceOnBudget    bool     `json:"slice_on_budget,omitempty" description:"Enable context slicing when budget is exceeded"`
+	PreserveEntities []string `json:"preserve_entities,omitempty" description:"Entity IDs to always keep in context during slicing"`
+	EntityPriority   int      `json:"entity_priority,omitempty" description:"Priority for entity context vs conversation (1-10, higher = more entity context)"`
 }
 
 // Validate validates the configuration

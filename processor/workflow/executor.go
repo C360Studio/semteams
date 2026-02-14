@@ -25,6 +25,7 @@ type Executor struct {
 	metrics             *workflowMetrics
 	eventPublisher      func(context.Context, event) error
 	completionPublisher func(context.Context, *Execution, string) // for rules engine observability
+	parallelExecutor    *ParallelStepExecutor
 }
 
 // NewExecutor creates a new step executor
@@ -45,6 +46,7 @@ func NewExecutor(
 		metrics:             metrics,
 		eventPublisher:      eventPublisher,
 		completionPublisher: completionPublisher,
+		parallelExecutor:    NewParallelStepExecutor(natsClient, execStore, logger),
 	}
 }
 
@@ -222,6 +224,11 @@ func buildStepResult(stepName string, result actions.Result, start time.Time, it
 // executeAction executes the action for a step
 func (e *Executor) executeAction(ctx context.Context, workflow *wfschema.Definition, exec *Execution, step *wfschema.StepDef, interpolator *interpolator) error {
 	start := time.Now()
+
+	// Check if this is a parallel step
+	if IsParallelStep(step) {
+		return e.parallelExecutor.ExecuteParallelStep(ctx, exec, step, interpolator)
+	}
 
 	// Interpolate all action fields at once
 	action := interpolator.InterpolateActionDef(step.Action)
@@ -585,4 +592,50 @@ func (e *Executor) HandleAsyncStepResult(ctx context.Context, registry *Registry
 	}
 
 	return e.ContinueExecution(ctx, workflow, exec, StepResult)
+}
+
+// HandleParallelStepResult handles a result from a parallel sub-task.
+// Returns true if the parallel step is complete and workflow should continue.
+func (e *Executor) HandleParallelStepResult(ctx context.Context, registry *Registry, taskID string, output json.RawMessage, stepError string) error {
+	// Look up execution by task ID
+	exec, err := e.execStore.GetByTaskID(ctx, taskID)
+	if err != nil {
+		return errs.WrapTransient(err, "workflow-executor", "HandleParallelStepResult", "get execution by task")
+	}
+
+	if exec.GetState().IsTerminal() {
+		return nil // Already completed
+	}
+
+	// Handle the parallel result
+	parentStepName, allComplete, err := e.parallelExecutor.HandleParallelResult(ctx, exec, taskID, output, stepError)
+	if err != nil {
+		return err
+	}
+
+	if !allComplete {
+		// Still waiting for more results
+		return nil
+	}
+
+	// Get workflow
+	workflow, ok := registry.Get(exec.WorkflowID)
+	if !ok {
+		return errs.WrapInvalid(fmt.Errorf("workflow not found: %s", exec.WorkflowID), "workflow-executor", "HandleParallelStepResult", "get workflow")
+	}
+
+	// Find the parallel step definition
+	step := e.findStepByName(workflow.Steps, parentStepName)
+	if step == nil {
+		return fmt.Errorf("parallel step not found: %s", parentStepName)
+	}
+
+	// Aggregate results
+	stepResult, err := e.parallelExecutor.AggregateResults(ctx, exec, step)
+	if err != nil {
+		return e.failExecution(ctx, workflow, exec, fmt.Sprintf("aggregation failed: %v", err))
+	}
+
+	// Continue workflow
+	return e.ContinueExecution(ctx, workflow, exec, stepResult)
 }

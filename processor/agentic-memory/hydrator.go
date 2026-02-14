@@ -138,6 +138,76 @@ func (h *Hydrator) HydratePreTask(ctx context.Context, loopID, taskDescription s
 	}, nil
 }
 
+// HydrateForEntities hydrates context for specific entity IDs.
+// This supports explicit entity-based hydration for the embedded context pattern.
+func (h *Hydrator) HydrateForEntities(ctx context.Context, loopID string, entityIDs []string, depth int) (*HydratedContext, error) {
+	// Validate inputs
+	if loopID == "" {
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("loopID cannot be empty"),
+			"Hydrator",
+			"HydrateForEntities",
+			"validate loopID",
+		)
+	}
+	if len(entityIDs) == 0 {
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("entityIDs cannot be empty"),
+			"Hydrator",
+			"HydrateForEntities",
+			"validate entityIDs",
+		)
+	}
+
+	// Check context cancellation
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	// Build query for entities
+	var contextStr string
+	if h.graphClient != nil {
+		// Query each entity and concatenate results
+		var parts []string
+		for _, entityID := range entityIDs {
+			query := fmt.Sprintf("entity:%s:depth:%d", entityID, depth)
+			result, err := h.graphClient.Query(ctx, query)
+			if err != nil {
+				// Don't fail on individual query errors
+				continue
+			}
+			if result != "" {
+				parts = append(parts, result)
+			}
+		}
+
+		// Join entity contexts
+		for i, part := range parts {
+			if i > 0 {
+				contextStr += "\n---\n"
+			}
+			contextStr += part
+		}
+	}
+
+	// Estimate token count (rough approximation: 4 chars per token)
+	tokenCount := len(contextStr) / 4
+
+	// Respect max context tokens if configured
+	if h.config.PreTask.MaxContextTokens > 0 && tokenCount > h.config.PreTask.MaxContextTokens {
+		maxChars := h.config.PreTask.MaxContextTokens * 4
+		if len(contextStr) > maxChars {
+			contextStr = contextStr[:maxChars]
+			tokenCount = h.config.PreTask.MaxContextTokens
+		}
+	}
+
+	return &HydratedContext{
+		Context:    contextStr,
+		TokenCount: tokenCount,
+	}, nil
+}
+
 // FormatContext formats context from graph query results
 func (h *Hydrator) FormatContext(ctx context.Context, decisionsJSON, filesJSON, toolsJSON string, maxTokens int) (string, error) {
 	// Check context cancellation

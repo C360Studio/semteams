@@ -103,6 +103,20 @@ func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result 
 		task.Callback = fmt.Sprintf("workflow.step.result.%s", actx.ExecutionID)
 	}
 
+	// Propagate multi-agent hierarchy from action context
+	if actx.ParentLoopID != "" {
+		task.ParentLoopID = actx.ParentLoopID
+	}
+	if actx.Depth > 0 || actx.MaxDepth > 0 {
+		task.Depth = actx.Depth + 1 // Increment depth for child agent
+		task.MaxDepth = actx.MaxDepth
+	}
+
+	// Embed pre-constructed context if available
+	if actx.EmbeddedContext != nil {
+		task.Context = actx.EmbeddedContext
+	}
+
 	// Validate using agentic.TaskMessage.Validate()
 	if err := task.Validate(); err != nil {
 		return Result{

@@ -106,11 +106,17 @@ func (t *TriggerDef) Validate() error {
 // StepDef defines a workflow step
 type StepDef struct {
 	Name      string        `json:"name"`
-	Action    ActionDef     `json:"action"`
+	Type      string        `json:"type,omitempty"`   // "action" (default) or "parallel"
+	Action    ActionDef     `json:"action,omitempty"` // For action steps
 	Condition *ConditionDef `json:"condition,omitempty"`
 	OnSuccess string        `json:"on_success,omitempty"` // Next step name or "complete"
 	OnFail    string        `json:"on_fail,omitempty"`    // Next step name or "fail"
 	Timeout   string        `json:"timeout,omitempty"`    // Step-specific timeout
+
+	// Parallel step fields
+	Steps      []StepDef `json:"steps,omitempty"`      // Nested steps for parallel execution
+	Wait       string    `json:"wait,omitempty"`       // "all", "any", or "majority"
+	Aggregator string    `json:"aggregator,omitempty"` // Aggregation strategy for results
 }
 
 // Validate validates the step definition
@@ -119,8 +125,26 @@ func (s *StepDef) Validate() error {
 		return errs.WrapInvalid(fmt.Errorf("step name is required"), "workflow-schema", "StepDef.Validate", "validate name")
 	}
 
-	if err := s.Action.Validate(); err != nil {
-		return errs.WrapInvalid(err, "workflow-schema", "StepDef.Validate", "validate action")
+	// Determine step type (default to "action")
+	stepType := s.Type
+	if stepType == "" {
+		stepType = "action"
+	}
+
+	// Validate step type
+	if stepType != "action" && stepType != "parallel" {
+		return errs.WrapInvalid(fmt.Errorf("invalid step type: %s (valid: action, parallel)", stepType), "workflow-schema", "StepDef.Validate", "validate type")
+	}
+
+	// Type-specific validation
+	if stepType == "parallel" {
+		if err := s.validateParallelStep(); err != nil {
+			return err
+		}
+	} else {
+		if err := s.Action.Validate(); err != nil {
+			return errs.WrapInvalid(err, "workflow-schema", "StepDef.Validate", "validate action")
+		}
 	}
 
 	if s.Condition != nil {
@@ -138,9 +162,36 @@ func (s *StepDef) Validate() error {
 	return nil
 }
 
+// validateParallelStep validates parallel step specific fields
+func (s *StepDef) validateParallelStep() error {
+	if len(s.Steps) == 0 {
+		return errs.WrapInvalid(fmt.Errorf("parallel step must have at least one nested step"), "workflow-schema", "StepDef.Validate", "validate parallel steps")
+	}
+
+	// Validate wait semantics
+	validWait := map[string]bool{"all": true, "any": true, "majority": true, "": true}
+	if !validWait[s.Wait] {
+		return errs.WrapInvalid(fmt.Errorf("invalid wait value: %s (valid: all, any, majority)", s.Wait), "workflow-schema", "StepDef.Validate", "validate wait")
+	}
+
+	// Validate nested steps
+	nestedNames := make(map[string]bool)
+	for i, nested := range s.Steps {
+		if err := nested.Validate(); err != nil {
+			return errs.WrapInvalid(err, "workflow-schema", "StepDef.Validate", fmt.Sprintf("validate nested step[%d]", i))
+		}
+		if nestedNames[nested.Name] {
+			return errs.WrapInvalid(fmt.Errorf("duplicate nested step name: %s", nested.Name), "workflow-schema", "StepDef.Validate", "check duplicate nested step names")
+		}
+		nestedNames[nested.Name] = true
+	}
+
+	return nil
+}
+
 // ActionDef defines an action to execute
 type ActionDef struct {
-	Type    string          `json:"type"` // call, publish, publish_agent, set_state
+	Type    string          `json:"type"` // call, publish, publish_agent, set_state, tool_batch, graph_query
 	Subject string          `json:"subject,omitempty"`
 	Payload json.RawMessage `json:"payload,omitempty"`
 	Entity  string          `json:"entity,omitempty"`  // For set_state
@@ -152,6 +203,16 @@ type ActionDef struct {
 	Model  string `json:"model,omitempty"`
 	Prompt string `json:"prompt,omitempty"`
 	TaskID string `json:"task_id,omitempty"` // Optional, auto-generated if empty
+
+	// For tool_batch action
+	Tools    []string `json:"tools,omitempty"`     // Tool calls to execute in batch
+	FailFast bool     `json:"fail_fast,omitempty"` // Stop on first failure
+
+	// For graph_query action
+	Entities      []string `json:"entities,omitempty"`      // Entity IDs to query
+	Relationships bool     `json:"relationships,omitempty"` // Include relationships
+	Depth         int      `json:"depth,omitempty"`         // Traversal depth
+	Include       []string `json:"include,omitempty"`       // What to include: properties, triples, neighbors
 }
 
 // Validate validates the action definition
@@ -161,10 +222,12 @@ func (a *ActionDef) Validate() error {
 		"publish":       true,
 		"publish_agent": true,
 		"set_state":     true,
+		"tool_batch":    true,
+		"graph_query":   true,
 	}
 
 	if !validTypes[a.Type] {
-		return errs.WrapInvalid(fmt.Errorf("invalid action type: %s (valid: call, publish, publish_agent, set_state)", a.Type), "workflow-schema", "ActionDef.Validate", "validate type")
+		return errs.WrapInvalid(fmt.Errorf("invalid action type: %s (valid: call, publish, publish_agent, set_state, tool_batch, graph_query)", a.Type), "workflow-schema", "ActionDef.Validate", "validate type")
 	}
 
 	switch a.Type {
@@ -188,6 +251,17 @@ func (a *ActionDef) Validate() error {
 	case "set_state":
 		if strings.TrimSpace(a.Entity) == "" {
 			return errs.WrapInvalid(fmt.Errorf("set_state action requires entity"), "workflow-schema", "ActionDef.Validate", "validate entity")
+		}
+	case "tool_batch":
+		if len(a.Tools) == 0 {
+			return errs.WrapInvalid(fmt.Errorf("tool_batch action requires at least one tool"), "workflow-schema", "ActionDef.Validate", "validate tools")
+		}
+	case "graph_query":
+		if len(a.Entities) == 0 {
+			return errs.WrapInvalid(fmt.Errorf("graph_query action requires at least one entity"), "workflow-schema", "ActionDef.Validate", "validate entities")
+		}
+		if a.Depth < 0 {
+			return errs.WrapInvalid(fmt.Errorf("graph_query depth cannot be negative"), "workflow-schema", "ActionDef.Validate", "validate depth")
 		}
 	}
 

@@ -353,6 +353,39 @@ func (m *LoopManager) SetParentLoop(loopID, parentLoopID string) error {
 	return nil
 }
 
+// SetParentLoopID is an alias for SetParentLoop for consistency with TaskMessage field names
+func (m *LoopManager) SetParentLoopID(loopID, parentLoopID string) error {
+	return m.SetParentLoop(loopID, parentLoopID)
+}
+
+// SetDepth sets the depth tracking for a loop in the multi-agent hierarchy
+func (m *LoopManager) SetDepth(loopID string, depth, maxDepth int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entity, exists := m.loops[loopID]
+	if !exists {
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
+	}
+
+	entity.Depth = depth
+	entity.MaxDepth = maxDepth
+	return nil
+}
+
+// GetDepth returns the current depth and max depth for a loop
+func (m *LoopManager) GetDepth(loopID string) (depth, maxDepth int, err error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	entity, exists := m.loops[loopID]
+	if !exists {
+		return 0, 0, errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
+	}
+
+	return entity.Depth, entity.MaxDepth, nil
+}
+
 // SetWorkflowContext sets the workflow slug and step for loops created by workflow commands
 func (m *LoopManager) SetWorkflowContext(loopID, workflowSlug, workflowStep string) error {
 	m.mu.Lock()

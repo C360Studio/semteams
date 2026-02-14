@@ -687,6 +687,27 @@ func (c *Component) processAsyncStepResult(ctx context.Context, result *AsyncSte
 		}
 	}
 
+	// Check if this is a parallel step result by looking for the task in parallel tracking
+	exec, err := c.executor.execStore.Get(ctx, execID)
+	if err != nil {
+		c.logger.Error("Failed to get execution for async result", "error", err)
+		return
+	}
+
+	// Check if this task is part of a parallel step
+	if taskState, ok := exec.GetParallelTaskState(result.TaskID); ok {
+		c.logger.Debug("Processing parallel step result",
+			slog.String("parent_step", taskState.ParentStepName),
+			slog.String("nested_step", taskState.NestedStepName),
+			slog.String("task_id", result.TaskID))
+
+		if err := c.executor.HandleParallelStepResult(ctx, c.registry, result.TaskID, result.Output, stepError); err != nil {
+			c.logger.Error("Failed to handle parallel step result", "error", err)
+		}
+		return
+	}
+
+	// Not a parallel task, handle as regular async step result
 	if err := c.executor.HandleAsyncStepResult(ctx, c.registry, execID, result.Output, stepError); err != nil {
 		c.logger.Error("Failed to handle async step result", "error", err)
 	}

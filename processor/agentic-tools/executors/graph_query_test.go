@@ -47,21 +47,39 @@ func TestGraphQueryExecutor_ListTools(t *testing.T) {
 
 	tools := executor.ListTools()
 
-	if len(tools) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(tools))
+	// Should have 5 tools: query_entity, query_entities, query_relationships, query_neighbors, query_by_type
+	if len(tools) != 5 {
+		t.Fatalf("expected 5 tools, got %d", len(tools))
 	}
 
-	tool := tools[0]
-	if tool.Name != "query_entity" {
-		t.Errorf("expected tool name query_entity, got %s", tool.Name)
+	// Verify tool names
+	expectedNames := map[string]bool{
+		"query_entity":        true,
+		"query_entities":      true,
+		"query_relationships": true,
+		"query_neighbors":     true,
+		"query_by_type":       true,
 	}
 
-	if tool.Description == "" {
-		t.Error("expected non-empty description")
+	for _, tool := range tools {
+		if !expectedNames[tool.Name] {
+			t.Errorf("unexpected tool name: %s", tool.Name)
+		}
+		delete(expectedNames, tool.Name)
+
+		if tool.Description == "" {
+			t.Errorf("expected non-empty description for tool %s", tool.Name)
+		}
+
+		if tool.Parameters == nil {
+			t.Errorf("expected non-nil parameters for tool %s", tool.Name)
+		}
 	}
 
-	if tool.Parameters == nil {
-		t.Error("expected non-nil parameters")
+	if len(expectedNames) > 0 {
+		for name := range expectedNames {
+			t.Errorf("missing expected tool: %s", name)
+		}
 	}
 }
 

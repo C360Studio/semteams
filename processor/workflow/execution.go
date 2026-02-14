@@ -56,6 +56,30 @@ type Execution struct {
 	Deadline      time.Time             `json:"deadline"`
 	Error         string                `json:"error,omitempty"`
 	PendingTaskID string                `json:"pending_task_id,omitempty"` // Task ID waiting for agent completion
+
+	// Parallel step tracking
+	PendingParallelTasks map[string]ParallelTaskState `json:"pending_parallel_tasks,omitempty"` // Tracks parallel sub-tasks
+	ParallelResults      map[string][]ParallelResult  `json:"parallel_results,omitempty"`       // Results by parent step name
+}
+
+// ParallelTaskState tracks the state of a parallel sub-task
+type ParallelTaskState struct {
+	ParentStepName string    `json:"parent_step_name"`
+	NestedStepName string    `json:"nested_step_name"`
+	TaskID         string    `json:"task_id"`
+	Status         string    `json:"status"` // pending, complete, failed
+	StartedAt      time.Time `json:"started_at"`
+}
+
+// ParallelResult represents a result from a parallel sub-task
+type ParallelResult struct {
+	StepName string          `json:"step_name"`
+	Status   string          `json:"status"` // success, failed
+	Output   json.RawMessage `json:"output,omitempty"`
+	Error    string          `json:"error,omitempty"`
+	TaskID   string          `json:"task_id,omitempty"`
+	Entities []string        `json:"entities,omitempty"`
+	Duration time.Duration   `json:"duration"`
 }
 
 // NewExecution creates a new workflow execution
@@ -200,6 +224,115 @@ func (e *Execution) GetStepResult(stepName string) (StepResult, bool) {
 	return result, ok
 }
 
+// AddPendingParallelTask adds a parallel sub-task to track
+func (e *Execution) AddPendingParallelTask(taskID, parentStepName, nestedStepName string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.PendingParallelTasks == nil {
+		e.PendingParallelTasks = make(map[string]ParallelTaskState)
+	}
+	e.PendingParallelTasks[taskID] = ParallelTaskState{
+		ParentStepName: parentStepName,
+		NestedStepName: nestedStepName,
+		TaskID:         taskID,
+		Status:         "pending",
+		StartedAt:      time.Now(),
+	}
+	e.UpdatedAt = time.Now()
+}
+
+// RecordParallelResult records a parallel sub-task result
+func (e *Execution) RecordParallelResult(taskID string, result ParallelResult) (parentStepName string, allComplete bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Find the task state
+	state, ok := e.PendingParallelTasks[taskID]
+	if !ok {
+		return "", false
+	}
+
+	parentStepName = state.ParentStepName
+
+	// Initialize results map if needed
+	if e.ParallelResults == nil {
+		e.ParallelResults = make(map[string][]ParallelResult)
+	}
+
+	// Add result
+	result.StepName = state.NestedStepName
+	result.TaskID = taskID
+	// Calculate duration from task start time
+	result.Duration = time.Since(state.StartedAt)
+	e.ParallelResults[parentStepName] = append(e.ParallelResults[parentStepName], result)
+
+	// Mark task as complete
+	state.Status = "complete"
+	e.PendingParallelTasks[taskID] = state
+	e.UpdatedAt = time.Now()
+
+	// Check if all tasks for this parent step are complete
+	allComplete = true
+	for _, taskState := range e.PendingParallelTasks {
+		if taskState.ParentStepName == parentStepName && taskState.Status == "pending" {
+			allComplete = false
+			break
+		}
+	}
+
+	return parentStepName, allComplete
+}
+
+// GetParallelResults returns all results for a parallel step
+func (e *Execution) GetParallelResults(parentStepName string) []ParallelResult {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	if e.ParallelResults == nil {
+		return nil
+	}
+	return e.ParallelResults[parentStepName]
+}
+
+// ClearParallelState cleans up parallel tracking state for a step
+func (e *Execution) ClearParallelState(parentStepName string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	// Remove tasks for this parent
+	for taskID, state := range e.PendingParallelTasks {
+		if state.ParentStepName == parentStepName {
+			delete(e.PendingParallelTasks, taskID)
+		}
+	}
+
+	// Clear results
+	if e.ParallelResults != nil {
+		delete(e.ParallelResults, parentStepName)
+	}
+
+	e.UpdatedAt = time.Now()
+}
+
+// HasPendingParallelTasks returns true if there are pending parallel tasks
+func (e *Execution) HasPendingParallelTasks() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	for _, state := range e.PendingParallelTasks {
+		if state.Status == "pending" {
+			return true
+		}
+	}
+	return false
+}
+
+// GetParallelTaskState returns the state of a parallel task
+func (e *Execution) GetParallelTaskState(taskID string) (ParallelTaskState, bool) {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	state, ok := e.PendingParallelTasks[taskID]
+	return state, ok
+}
+
 // Clone returns a deep copy of the execution for safe reading
 func (e *Execution) Clone() *Execution {
 	e.mu.RLock()
@@ -228,6 +361,22 @@ func (e *Execution) Clone() *Execution {
 
 	for k, v := range e.StepResults {
 		clone.StepResults[k] = v
+	}
+
+	// Clone parallel state
+	if e.PendingParallelTasks != nil {
+		clone.PendingParallelTasks = make(map[string]ParallelTaskState, len(e.PendingParallelTasks))
+		for k, v := range e.PendingParallelTasks {
+			clone.PendingParallelTasks[k] = v
+		}
+	}
+	if e.ParallelResults != nil {
+		clone.ParallelResults = make(map[string][]ParallelResult, len(e.ParallelResults))
+		for k, v := range e.ParallelResults {
+			results := make([]ParallelResult, len(v))
+			copy(results, v)
+			clone.ParallelResults[k] = results
+		}
 	}
 
 	return clone
