@@ -1,6 +1,19 @@
 # SemStreams Multi-Agent Specification
 
-> **Status**: Planned (not yet implemented)
+> **Status**: Partially Implemented
+>
+> **Implemented** (as of multiagent branch merge):
+> - Parallel step execution in workflow processor
+> - Result aggregation framework (union, first, majority, merge, entity_merge)
+> - Context construction building blocks (`pkg/context/`)
+> - Depth tracking for nested agent spawns
+> - E2E tests for parallel agent execution
+>
+> **Planned** (not yet implemented):
+> - Agent router (tiered routing: pattern → statistical → LLM)
+> - Agent registry (agent definitions, status, capabilities)
+> - Per-agent training data partitioning
+> - Component model selection
 >
 > **Core Integration**: This spec should integrate with the existing `ClassifierChain`
 > in `graph/query/classifier_chain.go` rather than duplicating classification logic.

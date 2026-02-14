@@ -347,6 +347,145 @@ Pause execution:
 
 **Behavior**: Schedules timer, execution becomes "waiting". Resumes when timer fires. Step output: `{"waited": "5m"}`.
 
+### tool_batch
+
+Execute multiple tools concurrently:
+
+```json
+{
+  "type": "tool_batch",
+  "tools": [
+    "query_entity:drone.001",
+    "query_entity:drone.002",
+    "query_entity:mission.current"
+  ],
+  "fail_fast": false
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | Yes | Must be "tool_batch" |
+| `tools` | array | Yes | Tool invocations (name:args format) |
+| `fail_fast` | bool | No | Stop on first failure (default: false) |
+
+**Behavior**: Executes all tools concurrently. Graph tools (query_entity) are automatically batched into a single query. Step output includes all tool results.
+
+### graph_query
+
+Batch graph query for entities and relationships:
+
+```json
+{
+  "type": "graph_query",
+  "entities": ["${trigger.entity_id}", "related.entity.001"],
+  "relationships": true,
+  "depth": 2
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | string | Yes | Must be "graph_query" |
+| `entities` | array | Yes | Entity IDs to query |
+| `relationships` | bool | No | Include relationships (default: false) |
+| `depth` | int | No | Relationship traversal depth (default: 1) |
+
+**Behavior**: Queries multiple entities efficiently. Returns JSON with entities map and relationships array. Step output includes token count estimate.
+
+## Parallel Steps
+
+Parallel steps execute multiple nested steps concurrently and aggregate their results.
+
+### Parallel Step Configuration
+
+```json
+{
+  "name": "parallel_review",
+  "type": "parallel",
+  "steps": [
+    {
+      "name": "security_review",
+      "action": {"type": "publish_agent", "role": "security", "prompt": "..."}
+    },
+    {
+      "name": "style_review",
+      "action": {"type": "publish_agent", "role": "style", "prompt": "..."}
+    }
+  ],
+  "wait": "all",
+  "aggregator": "union"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `name` | string | Yes | Step identifier |
+| `type` | string | Yes | Must be "parallel" |
+| `steps` | array | Yes | Nested steps to execute concurrently |
+| `wait` | string | No | Wait semantics: "all", "any", "majority" (default: "all") |
+| `aggregator` | string | No | Result aggregator (default: "union") |
+
+### Wait Semantics
+
+| Wait | Behavior |
+|------|----------|
+| `all` | Wait for all nested steps to complete |
+| `any` | Continue when first step succeeds |
+| `majority` | Wait for >50% to complete |
+
+### Depth Tracking
+
+Parallel steps that spawn agents can track recursion depth:
+
+```json
+{
+  "action": {
+    "type": "publish_agent",
+    "max_depth": 3
+  }
+}
+```
+
+When an agent at `depth == max_depth` tries to spawn a sub-agent, the spawn is rejected.
+
+## Result Aggregation
+
+Aggregators combine results from parallel steps into a single output.
+
+### Built-in Aggregators
+
+| Aggregator | Success Condition | Output Format |
+|------------|-------------------|---------------|
+| `union` | All succeed | Array of all outputs |
+| `first` | Any succeed | First successful output |
+| `majority` | >50% succeed | Array of successful outputs |
+| `merge` | Any succeed | Deep-merged JSON object |
+| `entity_merge` | Any succeed | Entity-keyed merged object |
+
+### Aggregator Examples
+
+**union** - Combine all outputs:
+
+```json
+// Input: [{"score": 8}, {"score": 9}]
+// Output: [{"score": 8}, {"score": 9}]
+```
+
+**merge** - Deep merge JSON objects:
+
+```json
+// Input: [{"a": 1}, {"b": 2}]
+// Output: {"a": 1, "b": 2}
+```
+
+**entity_merge** - Deduplicate by entity:
+
+```json
+// Input: [{"entity_id": "x", "score": 8}, {"entity_id": "x", "style": "ok"}]
+// Output: {"entities": {"x": {"entity_id": "x", "score": 8, "style": "ok"}}}
+```
+
 ## Variable Interpolation
 
 ### Available Variables
@@ -643,5 +782,8 @@ Published to `workflow.events`:
 
 - [Workflow Quickstart](../basics/08-workflow-quickstart.md) — Getting started
 - [Orchestration Layers](../concepts/12-orchestration-layers.md) — Rules vs. workflows
+- [Parallel Agents](../concepts/23-parallel-agents.md) — Parallel execution patterns
+- [Context Construction](../concepts/22-context-construction.md) — Building agent context
 - [Agentic Components](08-agentic-components.md) — Agent integration
+- [Aggregation Package](../../processor/workflow/aggregation/README.md) — Aggregator details
 - [Workflow Processor Spec](../architecture/specs/workflow-processor-spec.md) — Full specification
