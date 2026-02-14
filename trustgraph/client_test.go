@@ -179,7 +179,7 @@ func TestClient_GraphRAG(t *testing.T) {
 func TestClient_RetryOn5xx(t *testing.T) {
 	var attempts int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		count := atomic.AddInt32(&attempts, 1)
 
 		if count < 3 {
@@ -216,7 +216,7 @@ func TestClient_RetryOn5xx(t *testing.T) {
 func TestClient_NoRetryOn4xx(t *testing.T) {
 	var attempts int32
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		atomic.AddInt32(&attempts, 1)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("bad request"))
@@ -249,7 +249,7 @@ func TestClient_RetryAfter(t *testing.T) {
 	var attempts int32
 	var retryWaited bool
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		count := atomic.AddInt32(&attempts, 1)
 
 		if count == 1 {
@@ -292,7 +292,7 @@ func TestClient_RetryAfter(t *testing.T) {
 }
 
 func TestClient_ContextCancellation(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// Simulate slow response
 		time.Sleep(5 * time.Second)
 		resp := TriplesQueryResponse{Complete: true}
@@ -339,7 +339,7 @@ func TestClient_APIKeyHeader(t *testing.T) {
 }
 
 func TestClient_APIErrorResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := TriplesQueryResponse{
 			Error: "invalid query parameters",
 		}

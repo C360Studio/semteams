@@ -87,93 +87,79 @@ func New(cfg Config) *Client {
 	}
 }
 
+// waitForBackoff waits for the retry backoff delay.
+func (c *Client) waitForBackoff(ctx context.Context, attempt int) error {
+	delay := c.retryBaseDelay * time.Duration(1<<(attempt-1)) // Exponential backoff
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(delay):
+		return nil
+	}
+}
+
+// handleRateLimitResponse handles 429 rate limit responses.
+// Returns true if the request should be retried after waiting.
+func (c *Client) handleRateLimitResponse(ctx context.Context, resp *http.Response, apiErr *APIError) (bool, error) {
+	retryAfter := resp.Header.Get("Retry-After")
+	if retryAfter == "" {
+		return false, nil
+	}
+
+	seconds, parseErr := strconv.Atoi(retryAfter)
+	if parseErr != nil {
+		return false, nil
+	}
+
+	apiErr.RetryAfter = seconds
+	waitDuration := time.Duration(seconds) * time.Second
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case <-time.After(waitDuration):
+		return true, nil
+	}
+}
+
 // doRequest performs an HTTP request with retry logic.
 func (c *Client) doRequest(ctx context.Context, method, path string, body any) ([]byte, error) {
-	var bodyReader io.Reader
+	var bodyBytes []byte
 	if body != nil {
-		bodyBytes, err := json.Marshal(body)
+		var err error
+		bodyBytes, err = json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("marshal request body: %w", err)
 		}
-		bodyReader = bytes.NewReader(bodyBytes)
 	}
 
 	url := c.endpoint + path
-
 	var lastErr error
+
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
-			// Calculate backoff delay
-			delay := c.retryBaseDelay * time.Duration(1<<(attempt-1)) // Exponential backoff
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(delay):
-			}
-
-			// Reset body reader for retry
-			if body != nil {
-				bodyBytes, _ := json.Marshal(body)
-				bodyReader = bytes.NewReader(bodyBytes)
+			if err := c.waitForBackoff(ctx, attempt); err != nil {
+				return nil, err
 			}
 		}
 
-		req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+		var bodyReader io.Reader
+		if bodyBytes != nil {
+			bodyReader = bytes.NewReader(bodyBytes)
+		}
+
+		respBody, apiErr, retry, err := c.executeRequest(ctx, method, url, bodyReader)
 		if err != nil {
-			return nil, fmt.Errorf("create request: %w", err)
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json")
-
-		if c.apiKey != "" {
-			req.Header.Set("Authorization", "Bearer "+c.apiKey)
-		}
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			lastErr = fmt.Errorf("http request failed: %w", err)
-			continue // Retry on network errors
-		}
-
-		respBody, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			lastErr = fmt.Errorf("read response body: %w", err)
-			continue
-		}
-
-		// Check for errors
-		if resp.StatusCode >= 400 {
-			apiErr := &APIError{
-				StatusCode: resp.StatusCode,
-				Message:    string(respBody),
-			}
-
-			// Handle rate limiting
-			if resp.StatusCode == 429 {
-				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
-					if seconds, parseErr := strconv.Atoi(retryAfter); parseErr == nil {
-						apiErr.RetryAfter = seconds
-						// Wait for the specified duration
-						waitDuration := time.Duration(seconds) * time.Second
-						select {
-						case <-ctx.Done():
-							return nil, ctx.Err()
-						case <-time.After(waitDuration):
-						}
-						continue // Retry after waiting
-					}
-				}
-			}
-
-			// Retry on 5xx errors
-			if resp.StatusCode >= 500 {
-				lastErr = apiErr
+			lastErr = err
+			if retry {
 				continue
 			}
-
-			// Don't retry 4xx errors (except 429 which is handled above)
+			return nil, err
+		}
+		if apiErr != nil {
+			lastErr = apiErr
+			if retry {
+				continue
+			}
 			return nil, apiErr
 		}
 
@@ -184,6 +170,50 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body any) (
 		return nil, fmt.Errorf("request failed after %d attempts: %w", c.maxRetries+1, lastErr)
 	}
 	return nil, fmt.Errorf("request failed after %d attempts", c.maxRetries+1)
+}
+
+// executeRequest performs a single HTTP request attempt.
+// Returns: response body, API error (if any), should retry, error
+func (c *Client) executeRequest(ctx context.Context, method, url string, body io.Reader) ([]byte, *APIError, bool, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, nil, true, fmt.Errorf("http request failed: %w", err) // Retry on network errors
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		return nil, nil, true, fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode < 400 {
+		return respBody, nil, false, nil
+	}
+
+	// Handle error responses
+	apiErr := &APIError{StatusCode: resp.StatusCode, Message: string(respBody)}
+
+	if resp.StatusCode == 429 {
+		shouldRetry, waitErr := c.handleRateLimitResponse(ctx, resp, apiErr)
+		if waitErr != nil {
+			return nil, nil, false, waitErr
+		}
+		return nil, apiErr, shouldRetry, nil
+	}
+
+	// Retry on 5xx errors, don't retry other 4xx
+	return nil, apiErr, resp.StatusCode >= 500, nil
 }
 
 // post performs a POST request to the given path.
