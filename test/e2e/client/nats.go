@@ -1531,10 +1531,11 @@ type WorkflowExecution struct {
 
 // StepResult represents a workflow step result
 type StepResult struct {
-	StepName  string `json:"step_name"`
-	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
-	Iteration int    `json:"iteration"`
+	StepName  string          `json:"step_name"`
+	Status    string          `json:"status"`
+	Output    json.RawMessage `json:"output,omitempty"`
+	Error     string          `json:"error,omitempty"`
+	Iteration int             `json:"iteration"`
 }
 
 // GetWorkflowExecution retrieves a workflow execution by ID

@@ -76,6 +76,69 @@ func DefaultConfig() *Config {
 // TestWorkflowID is the ID of the test workflow for agentic integration
 const TestWorkflowID = "e2e-agentic-integration-test"
 
+// TestParallelWorkflowID is the ID of the parallel agents test workflow
+const TestParallelWorkflowID = "e2e-parallel-agents-test"
+
+// TestParallelWorkflow tests parallel agent execution with aggregation.
+// It launches 3 parallel review agents and validates result aggregation.
+var TestParallelWorkflow = wfschema.Definition{
+	ID:            TestParallelWorkflowID,
+	Name:          "E2E Parallel Agents Test",
+	Description:   "Tests parallel step execution with multiple agents and result aggregation",
+	Enabled:       true,
+	MaxIterations: 1,
+	Timeout:       "60s",
+	Trigger:       wfschema.TriggerDef{Subject: "workflow.trigger.e2e-parallel"},
+	Steps: []wfschema.StepDef{
+		{
+			Name: "parallel_review",
+			Type: "parallel",
+			Steps: []wfschema.StepDef{
+				{
+					Name: "reviewer1",
+					Action: wfschema.ActionDef{
+						Type:    "publish_agent",
+						Subject: "agent.task.e2e-parallel",
+						Role:    "general",
+						Model:   "mock",
+						Prompt:  "Review aspect 1 of the request. Respond with JSON: {\"aspect\": \"performance\", \"score\": 8}",
+					},
+				},
+				{
+					Name: "reviewer2",
+					Action: wfschema.ActionDef{
+						Type:    "publish_agent",
+						Subject: "agent.task.e2e-parallel",
+						Role:    "general",
+						Model:   "mock",
+						Prompt:  "Review aspect 2 of the request. Respond with JSON: {\"aspect\": \"security\", \"score\": 9}",
+					},
+				},
+				{
+					Name: "reviewer3",
+					Action: wfschema.ActionDef{
+						Type:    "publish_agent",
+						Subject: "agent.task.e2e-parallel",
+						Role:    "general",
+						Model:   "mock",
+						Prompt:  "Review aspect 3 of the request. Respond with JSON: {\"aspect\": \"quality\", \"score\": 7}",
+					},
+				},
+			},
+			Wait:       "all",
+			Aggregator: "union",
+			OnSuccess:  "complete",
+		},
+	},
+	OnComplete: []wfschema.ActionDef{
+		{
+			Type:    "publish",
+			Subject: "workflow.complete.e2e-parallel",
+			Payload: json.RawMessage(`{"workflow": "e2e-parallel-agents-test", "status": "success"}`),
+		},
+	},
+}
+
 // TestWorkflow is a workflow that tests the full agentic integration path.
 // It uses ${...} syntax in conditions to ensure the interpolation fix is working.
 var TestWorkflow = wfschema.Definition{
@@ -210,6 +273,9 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		{"inject-task", s.injectTask},
 		{"wait-for-completion", s.waitForCompletion},
 		{"validate-results", s.validateResults},
+		// Parallel agent execution stages
+		{"register-parallel-workflow", s.registerParallelWorkflow},
+		{"test-parallel-agents", s.testParallelAgents},
 		// AGNTCY integration stages (optional, skip if not configured)
 		{"verify-oasf-generation", s.verifyOASFGeneration},
 		{"verify-directory-bridge", s.verifyDirectoryBridge},
@@ -244,9 +310,10 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 
 // Teardown cleans up after the scenario.
 func (s *Scenario) Teardown(ctx context.Context) error {
-	// Clean up test workflow definition
+	// Clean up test workflow definitions
 	if s.nats != nil {
 		_ = s.nats.DeleteKV(ctx, client.BucketWorkflowDefinitions, TestWorkflowID)
+		_ = s.nats.DeleteKV(ctx, client.BucketWorkflowDefinitions, TestParallelWorkflowID)
 	}
 
 	// Clean up AGNTCY test resources
