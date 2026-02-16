@@ -794,6 +794,225 @@ func TestComponent_HandleQuerySuffix_PartialSuffixNoMatch(t *testing.T) {
 }
 
 // ====================================================================================
+// Query Handler: handleQueryPrefixNATS Tests
+// ====================================================================================
+
+func TestComponent_HandleQueryPrefix_Success(t *testing.T) {
+	tests := []struct {
+		name              string
+		storedIDs         []string
+		prefix            string
+		limit             int
+		expectedCount     int
+		expectedContained []string
+	}{
+		{
+			name: "match by org prefix",
+			storedIDs: []string{
+				"acme.ops.logistics.warehouse.robot.robot-001",
+				"acme.ops.logistics.warehouse.robot.robot-002",
+				"c360.platform.robotics.mav1.drone.001",
+			},
+			prefix:        "acme",
+			limit:         10,
+			expectedCount: 2,
+			expectedContained: []string{
+				"acme.ops.logistics.warehouse.robot.robot-001",
+				"acme.ops.logistics.warehouse.robot.robot-002",
+			},
+		},
+		{
+			name: "match by full prefix path",
+			storedIDs: []string{
+				"c360.platform.robotics.mav1.drone.001",
+				"c360.platform.robotics.mav1.drone.002",
+				"c360.platform.robotics.mav2.drone.001",
+			},
+			prefix:        "c360.platform.robotics.mav1",
+			limit:         10,
+			expectedCount: 2,
+			expectedContained: []string{
+				"c360.platform.robotics.mav1.drone.001",
+				"c360.platform.robotics.mav1.drone.002",
+			},
+		},
+		{
+			name: "empty prefix returns all",
+			storedIDs: []string{
+				"acme.ops.logistics.warehouse.robot.robot-001",
+				"c360.platform.robotics.mav1.drone.001",
+			},
+			prefix:        "",
+			limit:         10,
+			expectedCount: 2,
+			expectedContained: []string{
+				"acme.ops.logistics.warehouse.robot.robot-001",
+				"c360.platform.robotics.mav1.drone.001",
+			},
+		},
+		{
+			name: "limit restricts count",
+			storedIDs: []string{
+				"c360.platform.robotics.mav1.drone.001",
+				"c360.platform.robotics.mav1.drone.002",
+				"c360.platform.robotics.mav1.drone.003",
+			},
+			prefix:        "c360",
+			limit:         2,
+			expectedCount: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			comp := createTestComponentWithMockKV(t)
+			ctx := context.Background()
+
+			// Store entities
+			for _, id := range tt.storedIDs {
+				entity := &graph.EntityState{
+					ID: id,
+					Triples: []message.Triple{
+						{
+							Subject:   id,
+							Predicate: "test.predicate",
+							Object:    "test-value",
+							Timestamp: time.Now(),
+						},
+					},
+					Version:   1,
+					UpdatedAt: time.Now(),
+				}
+				require.NoError(t, comp.CreateEntity(ctx, entity))
+			}
+
+			// Create request
+			request := map[string]any{
+				"prefix": tt.prefix,
+				"limit":  tt.limit,
+			}
+			requestJSON, err := json.Marshal(request)
+			require.NoError(t, err)
+
+			// Call handler
+			responseJSON, err := comp.handleQueryPrefixNATS(ctx, requestJSON)
+			require.NoError(t, err)
+
+			// Parse response - should be array of entities (not entityIds)
+			var entities []graph.EntityState
+			err = json.Unmarshal(responseJSON, &entities)
+			require.NoError(t, err, "response should be valid EntityState array JSON")
+
+			assert.Equal(t, tt.expectedCount, len(entities), "should return expected count")
+
+			// Verify expected entities are contained
+			entityIDs := make(map[string]bool)
+			for _, e := range entities {
+				entityIDs[e.ID] = true
+				// Verify entity has triples (full entity, not just ID)
+				assert.NotEmpty(t, e.Triples, "entity %s should have triples", e.ID)
+			}
+
+			for _, expectedID := range tt.expectedContained {
+				assert.True(t, entityIDs[expectedID], "should contain entity %s", expectedID)
+			}
+		})
+	}
+}
+
+func TestComponent_HandleQueryPrefix_ReturnsFullEntities(t *testing.T) {
+	// This test specifically verifies that the response contains full entity data
+	// not just entity IDs (the bug that was fixed)
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	// Create entity with triples
+	entity := &graph.EntityState{
+		ID: "c360.platform.robotics.mav1.drone.001",
+		Triples: []message.Triple{
+			{
+				Subject:   "c360.platform.robotics.mav1.drone.001",
+				Predicate: "robotics.status.armed",
+				Object:    true,
+				Timestamp: time.Now(),
+			},
+			{
+				Subject:   "c360.platform.robotics.mav1.drone.001",
+				Predicate: "robotics.battery.level",
+				Object:    85.5,
+				Timestamp: time.Now(),
+			},
+		},
+		Version:   1,
+		UpdatedAt: time.Now(),
+	}
+	require.NoError(t, comp.CreateEntity(ctx, entity))
+
+	// Query by prefix
+	request := map[string]any{
+		"prefix": "c360",
+		"limit":  10,
+	}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	responseJSON, err := comp.handleQueryPrefixNATS(ctx, requestJSON)
+	require.NoError(t, err)
+
+	// Parse response as array of entities
+	var entities []graph.EntityState
+	err = json.Unmarshal(responseJSON, &entities)
+	require.NoError(t, err, "response should be valid EntityState array")
+
+	require.Len(t, entities, 1, "should return 1 entity")
+
+	// Verify it's a full entity with all data
+	assert.Equal(t, entity.ID, entities[0].ID)
+	assert.Len(t, entities[0].Triples, 2, "should have 2 triples")
+	assert.Equal(t, "robotics.status.armed", entities[0].Triples[0].Predicate)
+}
+
+func TestComponent_HandleQueryPrefix_InvalidRequest(t *testing.T) {
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	// Malformed JSON
+	_, err := comp.handleQueryPrefixNATS(ctx, []byte(`{invalid json}`))
+	assert.Error(t, err, "should return error for invalid JSON")
+}
+
+func TestComponent_HandleQueryPrefix_NoMatches(t *testing.T) {
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	// Store some entities
+	entity := &graph.EntityState{
+		ID:        "c360.platform.robotics.mav1.drone.001",
+		Triples:   []message.Triple{},
+		Version:   1,
+		UpdatedAt: time.Now(),
+	}
+	require.NoError(t, comp.CreateEntity(ctx, entity))
+
+	// Query with non-matching prefix
+	request := map[string]any{
+		"prefix": "nonexistent",
+		"limit":  10,
+	}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	responseJSON, err := comp.handleQueryPrefixNATS(ctx, requestJSON)
+	require.NoError(t, err)
+
+	var entities []graph.EntityState
+	err = json.Unmarshal(responseJSON, &entities)
+	require.NoError(t, err)
+
+	assert.Empty(t, entities, "should return empty array when no matches")
+}
+
+// ====================================================================================
 // Helper Functions
 // ====================================================================================
 

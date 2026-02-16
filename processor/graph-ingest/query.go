@@ -148,7 +148,6 @@ func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byt
 	}
 
 	// Filter by prefix
-	var matched []string
 	prefixDot := req.Prefix
 	if req.Prefix != "" {
 		prefixDot = req.Prefix + "."
@@ -159,6 +158,8 @@ func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byt
 		limit = 1000 // Default limit
 	}
 
+	// Collect matching IDs
+	var matched []string
 	for _, key := range keys {
 		// Match if prefix is empty (all entities) or key starts with prefix.
 		if req.Prefix == "" || strings.HasPrefix(key, prefixDot) || key == req.Prefix {
@@ -169,14 +170,24 @@ func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byt
 		}
 	}
 
-	// Return response in GraphQL-compatible format
-	response := map[string]any{
-		"entityIds":  matched,
-		"totalCount": len(matched),
-		"truncated":  len(matched) >= limit,
-		"prefix":     req.Prefix,
+	// Fetch full entities for matched IDs
+	entities := make([]graph.EntityState, 0, len(matched))
+	for _, id := range matched {
+		entry, err := c.entityBucket.Get(ctx, id)
+		if err != nil {
+			continue // Skip entities that can't be fetched
+		}
+
+		var entity graph.EntityState
+		if err := json.Unmarshal(entry.Value, &entity); err != nil {
+			continue // Skip entities that fail to unmarshal
+		}
+
+		entities = append(entities, entity)
 	}
-	return json.Marshal(response)
+
+	// Return entities array directly (matches GraphQL schema [Entity])
+	return json.Marshal(entities)
 }
 
 // handleQuerySuffixNATS handles suffix-based entity ID resolution.
