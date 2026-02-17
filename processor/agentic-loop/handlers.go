@@ -240,14 +240,15 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 
 	// Build loop created event for dispatch sync
 	created := agentic.LoopCreatedEvent{
-		LoopID:        loopID,
-		TaskID:        task.TaskID,
-		Role:          task.Role,
-		Model:         task.Model,
-		WorkflowSlug:  task.WorkflowSlug,
-		WorkflowStep:  task.WorkflowStep,
-		MaxIterations: entity.MaxIterations,
-		CreatedAt:     time.Now(),
+		LoopID:           loopID,
+		TaskID:           task.TaskID,
+		Role:             task.Role,
+		Model:            task.Model,
+		WorkflowSlug:     task.WorkflowSlug,
+		WorkflowStep:     task.WorkflowStep,
+		ContextRequestID: task.ContextRequestID,
+		MaxIterations:    entity.MaxIterations,
+		CreatedAt:        time.Now(),
 	}
 	createdMsg := message.NewBaseMessage(created.Schema(), &created, "agentic-loop")
 	createdData, err := json.Marshal(createdMsg)

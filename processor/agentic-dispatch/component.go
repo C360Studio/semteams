@@ -526,23 +526,25 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 
 	// Create task message
 	task := agentic.TaskMessage{
-		LoopID: loopID,
-		TaskID: taskID,
-		Role:   c.config.DefaultRole,
-		Model:  c.config.DefaultModel,
-		Prompt: msg.Content,
+		LoopID:           loopID,
+		TaskID:           taskID,
+		Role:             c.config.DefaultRole,
+		Model:            c.config.DefaultModel,
+		Prompt:           msg.Content,
+		ContextRequestID: msg.ContextRequestID,
 	}
 
 	// Track the loop
 	c.loopTracker.Track(&LoopInfo{
-		LoopID:        loopID,
-		TaskID:        taskID,
-		UserID:        msg.UserID,
-		ChannelType:   msg.ChannelType,
-		ChannelID:     msg.ChannelID,
-		State:         "pending",
-		MaxIterations: 20,
-		CreatedAt:     time.Now(),
+		LoopID:           loopID,
+		TaskID:           taskID,
+		UserID:           msg.UserID,
+		ChannelType:      msg.ChannelType,
+		ChannelID:        msg.ChannelID,
+		State:            "pending",
+		MaxIterations:    20,
+		ContextRequestID: msg.ContextRequestID,
+		CreatedAt:        time.Now(),
 	})
 
 	// Record loop started
@@ -685,18 +687,21 @@ func (c *Component) handleAgentCreated(_ context.Context, data []byte) {
 	if existing := c.loopTracker.Get(created.LoopID); existing != nil {
 		// Atomically update workflow context if missing
 		c.loopTracker.UpdateWorkflowContext(created.LoopID, created.WorkflowSlug, created.WorkflowStep)
+		// Atomically update context request ID if missing
+		c.loopTracker.UpdateContextRequestID(created.LoopID, created.ContextRequestID)
 		return
 	}
 
 	// New loop we didn't originate - track it
 	c.loopTracker.Track(&LoopInfo{
-		LoopID:        created.LoopID,
-		TaskID:        created.TaskID,
-		State:         "executing",
-		MaxIterations: created.MaxIterations,
-		WorkflowSlug:  created.WorkflowSlug,
-		WorkflowStep:  created.WorkflowStep,
-		CreatedAt:     created.CreatedAt,
+		LoopID:           created.LoopID,
+		TaskID:           created.TaskID,
+		State:            "executing",
+		MaxIterations:    created.MaxIterations,
+		WorkflowSlug:     created.WorkflowSlug,
+		WorkflowStep:     created.WorkflowStep,
+		ContextRequestID: created.ContextRequestID,
+		CreatedAt:        created.CreatedAt,
 	})
 
 	// Record external loop for metrics (will be decremented by handleAgentComplete)

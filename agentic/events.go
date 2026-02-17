@@ -10,14 +10,15 @@ import (
 
 // LoopCreatedEvent is published when a new agentic loop is created.
 type LoopCreatedEvent struct {
-	LoopID        string    `json:"loop_id"`
-	TaskID        string    `json:"task_id"`
-	Role          string    `json:"role"`
-	Model         string    `json:"model"`
-	WorkflowSlug  string    `json:"workflow_slug,omitempty"`
-	WorkflowStep  string    `json:"workflow_step,omitempty"`
-	MaxIterations int       `json:"max_iterations"`
-	CreatedAt     time.Time `json:"created_at"`
+	LoopID           string    `json:"loop_id"`
+	TaskID           string    `json:"task_id"`
+	Role             string    `json:"role"`
+	Model            string    `json:"model"`
+	WorkflowSlug     string    `json:"workflow_slug,omitempty"`
+	WorkflowStep     string    `json:"workflow_step,omitempty"`
+	ContextRequestID string    `json:"context_request_id,omitempty"`
+	MaxIterations    int       `json:"max_iterations"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // Validate implements message.Payload

@@ -295,23 +295,25 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg agentic.U
 
 	// Create task message
 	task := agentic.TaskMessage{
-		LoopID: loopID,
-		TaskID: taskID,
-		Role:   c.config.DefaultRole,
-		Model:  c.config.DefaultModel,
-		Prompt: msg.Content,
+		LoopID:           loopID,
+		TaskID:           taskID,
+		Role:             c.config.DefaultRole,
+		Model:            c.config.DefaultModel,
+		Prompt:           msg.Content,
+		ContextRequestID: msg.ContextRequestID,
 	}
 
 	// Track the loop
 	c.loopTracker.Track(&LoopInfo{
-		LoopID:        loopID,
-		TaskID:        taskID,
-		UserID:        msg.UserID,
-		ChannelType:   msg.ChannelType,
-		ChannelID:     msg.ChannelID,
-		State:         "pending",
-		MaxIterations: 20,
-		CreatedAt:     time.Now(),
+		LoopID:           loopID,
+		TaskID:           taskID,
+		UserID:           msg.UserID,
+		ChannelType:      msg.ChannelType,
+		ChannelID:        msg.ChannelID,
+		State:            "pending",
+		MaxIterations:    20,
+		ContextRequestID: msg.ContextRequestID,
+		CreatedAt:        time.Now(),
 	})
 
 	// Record loop started

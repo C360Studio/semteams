@@ -33,9 +33,10 @@ type UserMessage struct {
 	Attachments []Attachment `json:"attachments,omitempty"`
 
 	// Context
-	ReplyTo  string            `json:"reply_to,omitempty"`  // loop_id if continuing
-	ThreadID string            `json:"thread_id,omitempty"` // for threaded channels
-	Metadata map[string]string `json:"metadata,omitempty"`  // channel-specific
+	ReplyTo          string            `json:"reply_to,omitempty"`           // loop_id if continuing
+	ThreadID         string            `json:"thread_id,omitempty"`          // for threaded channels
+	Metadata         map[string]string `json:"metadata,omitempty"`           // channel-specific
+	ContextRequestID string            `json:"context_request_id,omitempty"` // links to assembled context
 
 	// Timing
 	Timestamp time.Time `json:"timestamp"`
@@ -271,6 +272,9 @@ type TaskMessage struct {
 	// Pre-constructed context (optional, skips discovery if present)
 	// When set, the agent loop uses this context directly instead of hydrating
 	Context *types.ConstructedContext `json:"context,omitempty"`
+
+	// Context assembly reference (links to assembled context)
+	ContextRequestID string `json:"context_request_id,omitempty"`
 }
 
 // ConstructedContext is an alias for types.ConstructedContext.
