@@ -231,6 +231,35 @@ func TestLoopTracker_UpdateWorkflowContext_EmptySlug(t *testing.T) {
 	assert.Empty(t, retrieved.WorkflowSlug)
 }
 
+func TestLoopTracker_UpdateContextRequestID(t *testing.T) {
+	tracker := NewLoopTracker()
+	info := &LoopInfo{
+		LoopID:    "loop-123",
+		TaskID:    "task-456",
+		UserID:    "user-789",
+		State:     "running",
+		CreatedAt: time.Now(),
+	}
+	tracker.Track(info)
+
+	// Should return false for unknown loop
+	assert.False(t, tracker.UpdateContextRequestID("unknown", "ctx-001"))
+
+	// Should update when missing
+	assert.True(t, tracker.UpdateContextRequestID("loop-123", "ctx-001"))
+	assert.Equal(t, "ctx-001", tracker.Get("loop-123").ContextRequestID)
+
+	// Should not overwrite existing
+	assert.False(t, tracker.UpdateContextRequestID("loop-123", "ctx-002"))
+	assert.Equal(t, "ctx-001", tracker.Get("loop-123").ContextRequestID)
+
+	// Should not update with empty string
+	tracker2 := NewLoopTracker()
+	info2 := &LoopInfo{LoopID: "loop-2", UserID: "u", CreatedAt: time.Now()}
+	tracker2.Track(info2)
+	assert.False(t, tracker2.UpdateContextRequestID("loop-2", ""))
+}
+
 func TestLoopTracker_Remove(t *testing.T) {
 	tracker := NewLoopTracker()
 

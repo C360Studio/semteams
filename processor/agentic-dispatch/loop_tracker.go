@@ -30,6 +30,9 @@ type LoopInfo struct {
 	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
 	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
 
+	// Context assembly reference (links to assembled context)
+	ContextRequestID string `json:"context_request_id,omitempty"`
+
 	// Completion data (populated when loop completes)
 	Outcome     string    `json:"outcome,omitempty"`      // success, failed, cancelled
 	Result      string    `json:"result,omitempty"`       // LLM response content
@@ -245,6 +248,31 @@ func (t *LoopTracker) UpdateWorkflowContext(loopID, workflowSlug, workflowStep s
 				slog.String("loop_id", loopID),
 				slog.String("workflow_slug", workflowSlug),
 				slog.String("workflow_step", workflowStep))
+		}
+		return true
+	}
+	return false
+}
+
+// UpdateContextRequestID atomically updates the context request ID for a loop.
+// Returns true if the update was applied (loop exists and had no context request ID).
+func (t *LoopTracker) UpdateContextRequestID(loopID, contextRequestID string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	info, ok := t.loops[loopID]
+	if !ok {
+		return false
+	}
+
+	// Only update if context request ID is missing
+	if info.ContextRequestID == "" && contextRequestID != "" {
+		info.ContextRequestID = contextRequestID
+
+		if t.logger != nil {
+			t.logger.Debug("loop context request ID updated",
+				slog.String("loop_id", loopID),
+				slog.String("context_request_id", contextRequestID))
 		}
 		return true
 	}
