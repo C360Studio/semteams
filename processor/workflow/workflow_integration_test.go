@@ -88,6 +88,22 @@ func publishTriggerMessage(t *testing.T, testClient *natsclient.TestClient, subj
 	require.NoError(t, err, "Failed to publish trigger message")
 }
 
+// extractPayloadData extracts the data field from a BaseMessage-wrapped GenericJSONPayload.
+// This is used by tests to unwrap messages published by the publish and call actions.
+func extractPayloadData(raw map[string]any) map[string]any {
+	// Check if this is a BaseMessage envelope
+	if payload, ok := raw["payload"].(map[string]any); ok {
+		// Check if it's a GenericJSONPayload (has "data" field)
+		if data, ok := payload["data"].(map[string]any); ok {
+			return data
+		}
+		// Return the payload itself if no "data" field
+		return payload
+	}
+	// Not a BaseMessage envelope, return as-is
+	return raw
+}
+
 // publishStepCompleteMessage publishes a step complete message wrapped in a BaseMessage envelope
 func publishStepCompleteMessage(t *testing.T, testClient *natsclient.TestClient, subject string, stepComplete *workflow.StepCompleteMessage) {
 	t.Helper()
@@ -570,7 +586,8 @@ func TestIntegration_PublishAction(t *testing.T) {
 	notifMu.Lock()
 	assert.Greater(t, len(receivedNotifications), 0, "Should have received published notification")
 	if len(receivedNotifications) > 0 {
-		notif := receivedNotifications[0]
+		// Extract data from BaseMessage envelope (publish action wraps in GenericJSONPayload)
+		notif := extractPayloadData(receivedNotifications[0])
 		assert.Equal(t, "test", notif["type"])
 		assert.Equal(t, "Hello from workflow", notif["message"])
 	}
@@ -1148,17 +1165,20 @@ func TestIntegration_VariableInterpolation(t *testing.T) {
 	defer notifMu.Unlock()
 
 	if receivedNotification != nil {
+		// Extract data from BaseMessage envelope (publish action wraps in GenericJSONPayload)
+		notif := extractPayloadData(receivedNotification)
+
 		// Check trigger.payload interpolation
-		assert.Equal(t, "user_action", receivedNotification["request_type"], "Should interpolate trigger.payload.type")
+		assert.Equal(t, "user_action", notif["request_type"], "Should interpolate trigger.payload.type")
 
 		// Check steps output interpolation
-		assert.Equal(t, "John Doe", receivedNotification["user_name"], "Should interpolate steps.get_user.output.user_name")
+		assert.Equal(t, "John Doe", notif["user_name"], "Should interpolate steps.get_user.output.user_name")
 
 		// Check execution context interpolation
-		assert.NotEmpty(t, receivedNotification["execution_id"], "Should interpolate execution.id")
+		assert.NotEmpty(t, notif["execution_id"], "Should interpolate execution.id")
 
 		// Check iteration (preserved as number with type-aware interpolation)
-		assert.Equal(t, float64(1), receivedNotification["iteration"], "Should interpolate execution.iteration")
+		assert.Equal(t, float64(1), notif["iteration"], "Should interpolate execution.iteration")
 	} else {
 		t.Error("Should have received interpolated notification")
 	}
