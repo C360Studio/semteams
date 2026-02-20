@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/c360studio/semstreams/message"
 )
 
 // CallAction performs a NATS request/response
@@ -33,23 +35,32 @@ func (a *CallAction) Execute(ctx context.Context, actx *Context) Result {
 	if actx.NATSClient == nil {
 		return Result{
 			Success:  false,
-			Error:    "NATS client not available",
+			Error:    "call: NATS client not available",
 			Duration: time.Since(start),
 		}
 	}
 
-	// Prepare payload
-	payload := a.Payload
-	if payload == nil {
-		payload = []byte("{}")
-	}
+	// Parse payload into map for GenericJSONPayload
+	dataMap := parsePayloadToMap(a.Payload)
 
-	// Perform request with timeout
-	response, err := actx.NATSClient.Request(ctx, a.Subject, payload, a.Timeout)
+	// Wrap in GenericJSONPayload + BaseMessage envelope
+	genericPayload := message.NewGenericJSON(dataMap)
+	baseMsg := message.NewBaseMessage(genericPayload.Schema(), genericPayload, "workflow")
+	requestPayload, err := json.Marshal(baseMsg)
 	if err != nil {
 		return Result{
 			Success:  false,
-			Error:    fmt.Sprintf("request failed: %v", err),
+			Error:    fmt.Sprintf("call: marshal failed: %v", err),
+			Duration: time.Since(start),
+		}
+	}
+
+	// Perform request with timeout
+	response, err := actx.NATSClient.Request(ctx, a.Subject, requestPayload, a.Timeout)
+	if err != nil {
+		return Result{
+			Success:  false,
+			Error:    fmt.Sprintf("call: request failed: %v", err),
 			Duration: time.Since(start),
 		}
 	}

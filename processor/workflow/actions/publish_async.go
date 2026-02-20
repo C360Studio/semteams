@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/c360studio/semstreams/message"
 	"github.com/google/uuid"
 )
 
@@ -35,7 +36,7 @@ func (a *PublishAsyncAction) Execute(ctx context.Context, actx *Context) Result 
 	if actx.NATSClient == nil {
 		return Result{
 			Success:  false,
-			Error:    "NATS client not available",
+			Error:    "publish_async: NATS client not available",
 			Duration: time.Since(start),
 		}
 	}
@@ -52,40 +53,38 @@ func (a *PublishAsyncAction) Execute(ctx context.Context, actx *Context) Result 
 		callbackSubject = fmt.Sprintf("workflow.step.result.%s", actx.ExecutionID)
 	}
 
-	// Parse the original payload to inject callback fields
-	var payloadMap map[string]any
-	if len(a.Payload) > 0 {
-		if err := json.Unmarshal(a.Payload, &payloadMap); err != nil {
-			// If payload isn't a JSON object, wrap it
-			payloadMap = map[string]any{
-				"data": json.RawMessage(a.Payload),
-			}
+	// Build AsyncTaskPayload with correlation fields
+	asyncTask := &AsyncTaskPayload{
+		TaskID:          taskID,
+		CallbackSubject: callbackSubject,
+		Data:            a.Payload,
+	}
+
+	// Validate payload (defense-in-depth, consistent with PublishAgentAction)
+	if err := asyncTask.Validate(); err != nil {
+		return Result{
+			Success:  false,
+			Error:    fmt.Sprintf("publish_async: invalid payload: %v", err),
+			Duration: time.Since(start),
 		}
-	} else {
-		payloadMap = make(map[string]any)
 	}
 
-	// Inject callback fields
-	payloadMap["task_id"] = taskID
-	if callbackSubject != "" {
-		payloadMap["callback_subject"] = callbackSubject
-	}
-
-	// Marshal the enriched payload
-	enrichedPayload, err := json.Marshal(payloadMap)
+	// Wrap in BaseMessage envelope for proper type handling
+	baseMsg := message.NewBaseMessage(asyncTask.Schema(), asyncTask, "workflow")
+	payload, err := json.Marshal(baseMsg)
 	if err != nil {
 		return Result{
 			Success:  false,
-			Error:    fmt.Sprintf("failed to marshal enriched payload: %v", err),
+			Error:    fmt.Sprintf("publish_async: marshal failed: %v", err),
 			Duration: time.Since(start),
 		}
 	}
 
 	// Publish to the stream
-	if err := actx.NATSClient.PublishToStream(ctx, a.Subject, enrichedPayload); err != nil {
+	if err := actx.NATSClient.PublishToStream(ctx, a.Subject, payload); err != nil {
 		return Result{
 			Success:  false,
-			Error:    fmt.Sprintf("publish_async failed: %v", err),
+			Error:    fmt.Sprintf("publish_async: send failed: %v", err),
 			Duration: time.Since(start),
 		}
 	}

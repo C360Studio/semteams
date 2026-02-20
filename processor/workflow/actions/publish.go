@@ -32,22 +32,31 @@ func (a *PublishAction) Execute(ctx context.Context, actx *Context) Result {
 	if actx.NATSClient == nil {
 		return Result{
 			Success:  false,
-			Error:    "NATS client not available",
+			Error:    "publish: NATS client not available",
 			Duration: time.Since(start),
 		}
 	}
 
-	// Prepare payload
-	payload := a.Payload
-	if payload == nil {
-		payload = []byte("{}")
+	// Parse payload into map for GenericJSONPayload
+	dataMap := parsePayloadToMap(a.Payload)
+
+	// Wrap in GenericJSONPayload + BaseMessage envelope
+	genericPayload := message.NewGenericJSON(dataMap)
+	baseMsg := message.NewBaseMessage(genericPayload.Schema(), genericPayload, "workflow")
+	payload, err := json.Marshal(baseMsg)
+	if err != nil {
+		return Result{
+			Success:  false,
+			Error:    fmt.Sprintf("publish: marshal failed: %v", err),
+			Duration: time.Since(start),
+		}
 	}
 
 	// Publish to JetStream for durability
 	if err := actx.NATSClient.PublishToStream(ctx, a.Subject, payload); err != nil {
 		return Result{
 			Success:  false,
-			Error:    fmt.Sprintf("publish failed: %v", err),
+			Error:    fmt.Sprintf("publish: send failed: %v", err),
 			Duration: time.Since(start),
 		}
 	}
@@ -56,6 +65,32 @@ func (a *PublishAction) Execute(ctx context.Context, actx *Context) Result {
 		Success:  true,
 		Duration: time.Since(start),
 	}
+}
+
+// parsePayloadToMap converts a JSON payload to a map suitable for GenericJSONPayload.
+// - JSON objects are returned as-is
+// - JSON primitives/arrays are wrapped under "value" key
+// - Invalid JSON is wrapped under "raw" key as a string
+func parsePayloadToMap(payload json.RawMessage) map[string]any {
+	if len(payload) == 0 {
+		return make(map[string]any)
+	}
+
+	// First try to unmarshal as any to check the JSON type
+	var rawValue any
+	if err := json.Unmarshal(payload, &rawValue); err != nil {
+		// Invalid JSON - wrap raw bytes as string
+		return map[string]any{"raw": string(payload)}
+	}
+
+	// Check if it's already a map (JSON object)
+	if dataMap, ok := rawValue.(map[string]any); ok {
+		return dataMap
+	}
+
+	// Valid JSON but not an object (string, number, array, bool, null)
+	// Wrap under "value" key to preserve the actual value
+	return map[string]any{"value": rawValue}
 }
 
 // PublishAgentAction publishes a task to an agent using structured fields.
@@ -121,7 +156,7 @@ func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result 
 	if err := task.Validate(); err != nil {
 		return Result{
 			Success:  false,
-			Error:    fmt.Sprintf("invalid task: %v", err),
+			Error:    fmt.Sprintf("publish_agent: invalid task: %v", err),
 			Duration: time.Since(start),
 		}
 	}
@@ -130,7 +165,7 @@ func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result 
 	if actx.NATSClient == nil {
 		return Result{
 			Success:  false,
-			Error:    "NATS client not available",
+			Error:    "publish_agent: NATS client not available",
 			Duration: time.Since(start),
 		}
 	}
@@ -141,7 +176,7 @@ func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result 
 	if err != nil {
 		return Result{
 			Success:  false,
-			Error:    fmt.Sprintf("failed to marshal message: %v", err),
+			Error:    fmt.Sprintf("publish_agent: marshal failed: %v", err),
 			Duration: time.Since(start),
 		}
 	}
@@ -150,7 +185,7 @@ func (a *PublishAgentAction) Execute(ctx context.Context, actx *Context) Result 
 	if err := actx.NATSClient.PublishToStream(ctx, a.Subject, payload); err != nil {
 		return Result{
 			Success:  false,
-			Error:    fmt.Sprintf("publish_agent failed: %v", err),
+			Error:    fmt.Sprintf("publish_agent: send failed: %v", err),
 			Duration: time.Since(start),
 		}
 	}
