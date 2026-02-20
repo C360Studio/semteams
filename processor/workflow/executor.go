@@ -258,27 +258,7 @@ func (e *Executor) executeAction(ctx context.Context, workflow *wfschema.Definit
 		if !result.Success {
 			return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
 		}
-
-		// Store task_id for correlation when agent completes
-		var taskInfo struct {
-			TaskID string `json:"task_id"`
-		}
-		if err := json.Unmarshal(result.Output, &taskInfo); err == nil && taskInfo.TaskID != "" {
-			exec.SetPendingTaskID(taskInfo.TaskID)
-			if err := e.execStore.Save(ctx, exec); err != nil {
-				e.logger.Error("Failed to save execution with pending task", "error", err)
-			}
-			// Store secondary index for task_id -> execution_id lookup
-			if err := e.execStore.SaveTaskIndex(ctx, taskInfo.TaskID, exec.ID); err != nil {
-				e.logger.Error("Failed to save task index", "error", err)
-			}
-			e.logger.Info("Waiting for agent completion",
-				slog.String("step", step.Name),
-				slog.String("execution_id", exec.ID),
-				slog.String("task_id", taskInfo.TaskID))
-		} else {
-			e.logger.Info("Waiting for agent completion", "step", step.Name, "execution_id", exec.ID)
-		}
+		e.parkForAsyncResult(ctx, exec, step.Name, result.Output)
 		return nil
 
 	case "set_state":
@@ -286,8 +266,43 @@ func (e *Executor) executeAction(ctx context.Context, workflow *wfschema.Definit
 		result := a.Execute(ctx, actx)
 		return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
 
+	case "publish_async":
+		a := actions.NewPublishAsyncAction(action.Subject, action.Payload, action.TaskID)
+		result := a.Execute(ctx, actx)
+		if !result.Success {
+			return e.ContinueExecution(ctx, workflow, exec, buildStepResult(step.Name, result, start, iteration))
+		}
+		e.parkForAsyncResult(ctx, exec, step.Name, result.Output)
+		return nil
+
 	default:
 		return e.failExecution(ctx, workflow, exec, fmt.Sprintf("unknown action type: %s", action.Type))
+	}
+}
+
+// parkForAsyncResult stores task_id for correlation and parks the workflow
+// waiting for an async response via HandleAsyncStepResult.
+func (e *Executor) parkForAsyncResult(ctx context.Context, exec *Execution, stepName string, output json.RawMessage) {
+	var taskInfo struct {
+		TaskID string `json:"task_id"`
+	}
+	if err := json.Unmarshal(output, &taskInfo); err == nil && taskInfo.TaskID != "" {
+		exec.SetPendingTaskID(taskInfo.TaskID)
+		if err := e.execStore.Save(ctx, exec); err != nil {
+			e.logger.Error("Failed to save execution with pending task", "error", err)
+		}
+		// Store secondary index for task_id -> execution_id lookup
+		if err := e.execStore.SaveTaskIndex(ctx, taskInfo.TaskID, exec.ID); err != nil {
+			e.logger.Error("Failed to save task index", "error", err)
+		}
+		e.logger.Info("Waiting for async response",
+			slog.String("step", stepName),
+			slog.String("execution_id", exec.ID),
+			slog.String("task_id", taskInfo.TaskID))
+	} else {
+		e.logger.Info("Waiting for async response",
+			slog.String("step", stepName),
+			slog.String("execution_id", exec.ID))
 	}
 }
 

@@ -352,6 +352,28 @@ func (i *interpolator) EvaluateCondition(cond *wfschema.ConditionDef) (bool, err
 		return compareEqual(value, cond.Value) || compareGreater(value, cond.Value), nil
 	case "lte":
 		return compareEqual(value, cond.Value) || compareLess(value, cond.Value), nil
+	case "in":
+		arr, ok := cond.Value.([]any)
+		if !ok {
+			return false, errs.WrapInvalid(fmt.Errorf("in operator requires array value"), "interpolator", "EvaluateCondition", "validate in operator")
+		}
+		for _, item := range arr {
+			if compareEqual(value, item) {
+				return true, nil
+			}
+		}
+		return false, nil
+	case "not_in":
+		arr, ok := cond.Value.([]any)
+		if !ok {
+			return false, errs.WrapInvalid(fmt.Errorf("not_in operator requires array value"), "interpolator", "EvaluateCondition", "validate not_in operator")
+		}
+		for _, item := range arr {
+			if compareEqual(value, item) {
+				return false, nil
+			}
+		}
+		return true, nil
 	default:
 		return false, errs.WrapInvalid(fmt.Errorf("unknown operator: %s", cond.Operator), "interpolator", "EvaluateCondition", "validate operator")
 	}

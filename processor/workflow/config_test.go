@@ -356,6 +356,18 @@ func TestActionDefValidation(t *testing.T) {
 			wantErr: true,
 			errMsg:  "invalid action timeout",
 		},
+		// publish_async tests
+		{
+			name:    "valid publish_async action",
+			action:  wfschema.ActionDef{Type: "publish_async", Subject: "async.task"},
+			wantErr: false,
+		},
+		{
+			name:    "publish_async action without subject",
+			action:  wfschema.ActionDef{Type: "publish_async"},
+			wantErr: true,
+			errMsg:  "publish_async action requires subject",
+		},
 	}
 
 	for _, tt := range tests {
@@ -397,6 +409,37 @@ func TestConditionDefValidation(t *testing.T) {
 		{
 			name:      "invalid operator",
 			condition: wfschema.ConditionDef{Field: "test", Operator: "invalid"},
+			wantErr:   true,
+		},
+		// in/not_in operator validation
+		{
+			name:      "valid in condition",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.type", Operator: "in", Value: []any{"a", "b"}},
+			wantErr:   false,
+		},
+		{
+			name:      "valid not_in condition",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.type", Operator: "not_in", Value: []any{"x", "y"}},
+			wantErr:   false,
+		},
+		{
+			name:      "in operator with nil value",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.type", Operator: "in", Value: nil},
+			wantErr:   true,
+		},
+		{
+			name:      "in operator with non-array value",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.type", Operator: "in", Value: "not-an-array"},
+			wantErr:   true,
+		},
+		{
+			name:      "not_in operator with nil value",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.type", Operator: "not_in", Value: nil},
+			wantErr:   true,
+		},
+		{
+			name:      "not_in operator with non-array value",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.type", Operator: "not_in", Value: 123},
 			wantErr:   true,
 		},
 	}

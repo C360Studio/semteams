@@ -155,7 +155,7 @@ func TestEvaluateCondition(t *testing.T) {
 		StepResults: map[string]StepResult{
 			"review": {
 				Status: "success",
-				Output: json.RawMessage(`{"issues_count": 0, "severity": "low", "score": 85}`),
+				Output: json.RawMessage(`{"issues_count": 0, "severity": "low", "score": 85, "rejection_type": "misscoped"}`),
 			},
 			"analysis": {
 				Status: "success",
@@ -258,6 +258,66 @@ func TestEvaluateCondition(t *testing.T) {
 			expected:  false,
 			wantErr:   true,
 		},
+		// in operator tests
+		{
+			name:      "in true - value in array",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.rejection_type", Operator: "in", Value: []any{"misscoped", "architectural"}},
+			expected:  true,
+		},
+		{
+			name:      "in false - value not in array",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.rejection_type", Operator: "in", Value: []any{"invalid", "incomplete"}},
+			expected:  false,
+		},
+		{
+			name:      "in true - string in array",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.severity", Operator: "in", Value: []any{"low", "medium", "high"}},
+			expected:  true,
+		},
+		{
+			name:      "in false - empty array",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.severity", Operator: "in", Value: []any{}},
+			expected:  false,
+		},
+		{
+			name:      "in error - non-array value",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.severity", Operator: "in", Value: "not-an-array"},
+			expected:  false,
+			wantErr:   true,
+		},
+		// not_in operator tests
+		{
+			name:      "not_in true - value not in array",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.rejection_type", Operator: "not_in", Value: []any{"invalid", "incomplete"}},
+			expected:  true,
+		},
+		{
+			name:      "not_in false - value in array",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.rejection_type", Operator: "not_in", Value: []any{"misscoped", "architectural"}},
+			expected:  false,
+		},
+		{
+			name:      "not_in true - empty array",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.severity", Operator: "not_in", Value: []any{}},
+			expected:  true,
+		},
+		{
+			name:      "not_in error - non-array value",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.severity", Operator: "not_in", Value: "not-an-array"},
+			expected:  false,
+			wantErr:   true,
+		},
+		// numeric in/not_in tests
+		{
+			name:      "in true - numeric value in array",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "in", Value: []any{80, 85, 90}},
+			expected:  true,
+		},
+		{
+			name:      "in false - numeric value not in array",
+			condition: wfschema.ConditionDef{Field: "steps.review.output.score", Operator: "in", Value: []any{80, 90, 95}},
+			expected:  false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -265,7 +325,7 @@ func TestEvaluateCondition(t *testing.T) {
 			result, err := interpolator.EvaluateCondition(&tt.condition)
 			if tt.wantErr {
 				if err == nil {
-					t.Log("expected error but evaluation succeeded")
+					t.Error("expected error but evaluation succeeded")
 				}
 			} else if err != nil {
 				t.Errorf("unexpected error: %v", err)

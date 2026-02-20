@@ -221,17 +221,18 @@ func (a *ActionDef) Validate() error {
 		"call":          true,
 		"publish":       true,
 		"publish_agent": true,
+		"publish_async": true,
 		"set_state":     true,
 		"tool_batch":    true,
 		"graph_query":   true,
 	}
 
 	if !validTypes[a.Type] {
-		return errs.WrapInvalid(fmt.Errorf("invalid action type: %s (valid: call, publish, publish_agent, set_state, tool_batch, graph_query)", a.Type), "workflow-schema", "ActionDef.Validate", "validate type")
+		return errs.WrapInvalid(fmt.Errorf("invalid action type: %s (valid: call, publish, publish_agent, publish_async, set_state, tool_batch, graph_query)", a.Type), "workflow-schema", "ActionDef.Validate", "validate type")
 	}
 
 	switch a.Type {
-	case "call", "publish":
+	case "call", "publish", "publish_async":
 		if strings.TrimSpace(a.Subject) == "" {
 			return errs.WrapInvalid(fmt.Errorf("%s action requires subject", a.Type), "workflow-schema", "ActionDef.Validate", "validate subject")
 		}
@@ -296,10 +297,22 @@ func (c *ConditionDef) Validate() error {
 		"lte":        true,
 		"exists":     true,
 		"not_exists": true,
+		"in":         true,
+		"not_in":     true,
 	}
 
 	if !validOperators[c.Operator] {
 		return errs.WrapInvalid(fmt.Errorf("invalid condition operator: %s", c.Operator), "workflow-schema", "ConditionDef.Validate", "validate operator")
+	}
+
+	// Validate that in/not_in operators have array values
+	if c.Operator == "in" || c.Operator == "not_in" {
+		if c.Value == nil {
+			return errs.WrapInvalid(fmt.Errorf("%s operator requires array value", c.Operator), "workflow-schema", "ConditionDef.Validate", "validate operator value")
+		}
+		if _, ok := c.Value.([]any); !ok {
+			return errs.WrapInvalid(fmt.Errorf("%s operator requires array value, got %T", c.Operator, c.Value), "workflow-schema", "ConditionDef.Validate", "validate operator value type")
+		}
 	}
 
 	return nil
