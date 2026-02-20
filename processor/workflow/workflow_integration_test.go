@@ -5,6 +5,8 @@ package workflow_test
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -39,6 +41,11 @@ func getTestNATSClient(t *testing.T) *natsclient.TestClient {
 	)
 
 	return testClient
+}
+
+// testLogger returns a no-op logger for tests
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
 // registerTestWorkflow registers a workflow definition directly in the KV bucket
@@ -1210,4 +1217,203 @@ func TestIntegration_RegistryWatchUpdates(t *testing.T) {
 	// Verify the component is still healthy
 	health := comp.Health()
 	assert.True(t, health.Healthy, "Component should remain healthy after workflow update")
+}
+
+// TestIntegration_VersionAwareRegistration tests that workflow registration respects version comparison
+func TestIntegration_VersionAwareRegistration(t *testing.T) {
+	testClient := getTestNATSClient(t)
+	ctx := context.Background()
+
+	js, err := testClient.Client.JetStream()
+	require.NoError(t, err)
+
+	defKV, err := js.KeyValue(ctx, "WORKFLOW_DEFINITIONS")
+	require.NoError(t, err)
+
+	// Create a registry directly for testing
+	registry := workflow.NewRegistry(defKV, testLogger())
+
+	t.Run("new workflow is registered", func(t *testing.T) {
+		wf := &schema.Definition{
+			ID:      "version-test-new",
+			Name:    "New Workflow",
+			Version: "1.0.0",
+			Enabled: true,
+			Trigger: schema.TriggerDef{Subject: "workflow.trigger.version-test-new"},
+			Steps: []schema.StepDef{
+				{Name: "step1", Action: schema.ActionDef{Type: "publish", Subject: "test.output"}},
+			},
+		}
+
+		err := registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Verify it's in KV
+		entry, err := defKV.Get(ctx, "version-test-new")
+		require.NoError(t, err)
+
+		var stored schema.Definition
+		err = json.Unmarshal(entry.Value(), &stored)
+		require.NoError(t, err)
+		assert.Equal(t, "1.0.0", stored.Version)
+	})
+
+	t.Run("newer version overwrites existing", func(t *testing.T) {
+		// First, register version 1.0.0
+		wf := &schema.Definition{
+			ID:      "version-test-update",
+			Name:    "Updatable Workflow v1",
+			Version: "1.0.0",
+			Enabled: true,
+			Trigger: schema.TriggerDef{Subject: "workflow.trigger.version-test-update"},
+			Steps: []schema.StepDef{
+				{Name: "step1", Action: schema.ActionDef{Type: "publish", Subject: "test.output"}},
+			},
+		}
+		err := registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Now register version 2.0.0
+		wf.Version = "2.0.0"
+		wf.Name = "Updatable Workflow v2"
+		err = registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Verify KV has the newer version
+		entry, err := defKV.Get(ctx, "version-test-update")
+		require.NoError(t, err)
+
+		var stored schema.Definition
+		err = json.Unmarshal(entry.Value(), &stored)
+		require.NoError(t, err)
+		assert.Equal(t, "2.0.0", stored.Version)
+		assert.Equal(t, "Updatable Workflow v2", stored.Name)
+	})
+
+	t.Run("older version does not overwrite existing", func(t *testing.T) {
+		// First, register version 3.0.0
+		wf := &schema.Definition{
+			ID:      "version-test-skip",
+			Name:    "Workflow v3",
+			Version: "3.0.0",
+			Enabled: true,
+			Trigger: schema.TriggerDef{Subject: "workflow.trigger.version-test-skip"},
+			Steps: []schema.StepDef{
+				{Name: "step1", Action: schema.ActionDef{Type: "publish", Subject: "test.output"}},
+			},
+		}
+		err := registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Try to register version 1.0.0 (older)
+		wf.Version = "1.0.0"
+		wf.Name = "Workflow v1 (should be skipped)"
+		err = registry.Register(ctx, wf)
+		require.NoError(t, err) // Should succeed (no error, just skipped)
+
+		// Verify KV still has version 3.0.0
+		entry, err := defKV.Get(ctx, "version-test-skip")
+		require.NoError(t, err)
+
+		var stored schema.Definition
+		err = json.Unmarshal(entry.Value(), &stored)
+		require.NoError(t, err)
+		assert.Equal(t, "3.0.0", stored.Version)
+		assert.Equal(t, "Workflow v3", stored.Name) // Name should not have changed
+	})
+
+	t.Run("same version does not overwrite existing", func(t *testing.T) {
+		// First, register version 1.0.0
+		wf := &schema.Definition{
+			ID:      "version-test-same",
+			Name:    "Workflow Original",
+			Version: "1.0.0",
+			Enabled: true,
+			Trigger: schema.TriggerDef{Subject: "workflow.trigger.version-test-same"},
+			Steps: []schema.StepDef{
+				{Name: "step1", Action: schema.ActionDef{Type: "publish", Subject: "test.output"}},
+			},
+		}
+		err := registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Try to register same version with different name
+		wf.Name = "Workflow Modified (should be skipped)"
+		err = registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Verify KV still has original name
+		entry, err := defKV.Get(ctx, "version-test-same")
+		require.NoError(t, err)
+
+		var stored schema.Definition
+		err = json.Unmarshal(entry.Value(), &stored)
+		require.NoError(t, err)
+		assert.Equal(t, "1.0.0", stored.Version)
+		assert.Equal(t, "Workflow Original", stored.Name)
+	})
+
+	t.Run("empty file version does not overwrite versioned KV entry", func(t *testing.T) {
+		// Register with version 1.0.0
+		wf := &schema.Definition{
+			ID:      "version-test-empty-file",
+			Name:    "Versioned Workflow",
+			Version: "1.0.0",
+			Enabled: true,
+			Trigger: schema.TriggerDef{Subject: "workflow.trigger.version-test-empty-file"},
+			Steps: []schema.StepDef{
+				{Name: "step1", Action: schema.ActionDef{Type: "publish", Subject: "test.output"}},
+			},
+		}
+		err := registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Try to register with empty version (should not overwrite)
+		wf.Version = ""
+		wf.Name = "Should not overwrite"
+		err = registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Verify KV still has 1.0.0
+		entry, err := defKV.Get(ctx, "version-test-empty-file")
+		require.NoError(t, err)
+
+		var stored schema.Definition
+		err = json.Unmarshal(entry.Value(), &stored)
+		require.NoError(t, err)
+		assert.Equal(t, "1.0.0", stored.Version)
+		assert.Equal(t, "Versioned Workflow", stored.Name)
+	})
+
+	t.Run("empty version treated as 0.0.0", func(t *testing.T) {
+		// Register with no version (empty)
+		wf := &schema.Definition{
+			ID:      "version-test-empty",
+			Name:    "No Version Workflow",
+			Version: "", // Empty version
+			Enabled: true,
+			Trigger: schema.TriggerDef{Subject: "workflow.trigger.version-test-empty"},
+			Steps: []schema.StepDef{
+				{Name: "step1", Action: schema.ActionDef{Type: "publish", Subject: "test.output"}},
+			},
+		}
+		err := registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Register with 0.0.1 (should overwrite since 0.0.1 > 0.0.0)
+		wf.Version = "0.0.1"
+		wf.Name = "Versioned Workflow"
+		err = registry.Register(ctx, wf)
+		require.NoError(t, err)
+
+		// Verify KV has 0.0.1
+		entry, err := defKV.Get(ctx, "version-test-empty")
+		require.NoError(t, err)
+
+		var stored schema.Definition
+		err = json.Unmarshal(entry.Value(), &stored)
+		require.NoError(t, err)
+		assert.Equal(t, "0.0.1", stored.Version)
+		assert.Equal(t, "Versioned Workflow", stored.Name)
+	})
 }

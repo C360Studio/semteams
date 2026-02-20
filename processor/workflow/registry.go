@@ -163,11 +163,42 @@ func (r *Registry) TriggerSubjects() []string {
 	return subjects
 }
 
-// Register adds or updates a workflow definition
+// Register adds or updates a workflow definition.
+// If the workflow already exists in KV, it only updates if the new version is newer.
+// This ensures file-based definitions don't overwrite newer versions that may have
+// been updated at runtime via KV.
 func (r *Registry) Register(ctx context.Context, workflow *wfschema.Definition) error {
 	if err := workflow.Validate(); err != nil {
 		return errs.WrapInvalid(err, "workflow-registry", "Register", "validate workflow")
 	}
+
+	// Check if workflow already exists in KV
+	existing, err := r.bucket.Get(ctx, workflow.ID)
+	if err == nil {
+		// Entry exists - compare versions
+		var existingDef wfschema.Definition
+		if unmarshalErr := json.Unmarshal(existing.Value(), &existingDef); unmarshalErr != nil {
+			r.logger.Warn("Failed to unmarshal existing workflow definition, will overwrite",
+				slog.String("workflow_id", workflow.ID),
+				slog.String("error", unmarshalErr.Error()))
+			// Fall through to Put()
+		} else {
+			if !IsNewerVersion(workflow.Version, existingDef.Version) {
+				r.logger.Debug("Skipping registration - existing version is same or newer",
+					slog.String("workflow_id", workflow.ID),
+					slog.String("existing_version", existingDef.Version),
+					slog.String("new_version", workflow.Version))
+				// Update in-memory map from existing KV data (don't overwrite KV)
+				r.updateInMemory(&existingDef)
+				return nil
+			}
+			r.logger.Info("Updating workflow to newer version",
+				slog.String("workflow_id", workflow.ID),
+				slog.String("old_version", existingDef.Version),
+				slog.String("new_version", workflow.Version))
+		}
+	}
+	// If Get() failed with key not found, proceed with registration
 
 	data, err := json.Marshal(workflow)
 	if err != nil {
@@ -178,6 +209,20 @@ func (r *Registry) Register(ctx context.Context, workflow *wfschema.Definition) 
 		return errs.WrapTransient(err, "workflow-registry", "Register", "save workflow to KV bucket")
 	}
 
+	r.updateInMemory(workflow)
+
+	r.logger.Info("Registered workflow",
+		slog.String("id", workflow.ID),
+		slog.String("name", workflow.Name),
+		slog.String("version", workflow.Version),
+		slog.String("trigger", workflow.Trigger.Subject))
+
+	return nil
+}
+
+// updateInMemory updates the in-memory workflow maps.
+// Caller must not hold the mutex.
+func (r *Registry) updateInMemory(workflow *wfschema.Definition) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -188,13 +233,6 @@ func (r *Registry) Register(ctx context.Context, workflow *wfschema.Definition) 
 
 	r.workflows[workflow.ID] = workflow
 	r.byTrigger[workflow.Trigger.Subject] = workflow.ID
-
-	r.logger.Info("Registered workflow",
-		slog.String("id", workflow.ID),
-		slog.String("name", workflow.Name),
-		slog.String("trigger", workflow.Trigger.Subject))
-
-	return nil
 }
 
 // Unregister removes a workflow definition

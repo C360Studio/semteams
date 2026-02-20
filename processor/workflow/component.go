@@ -194,7 +194,13 @@ func (c *Component) Start(ctx context.Context) error {
 		// Create registry
 		c.registry = NewRegistry(c.definitionsBucket, c.logger)
 
-		// Load workflow definitions from files (if configured)
+		// Load existing definitions from KV FIRST to get current state
+		// This ensures we know the current versions before registering file-based definitions
+		if err := c.registry.Load(ctx); err != nil {
+			c.logger.Warn("Failed to load workflow definitions from KV", "error", err)
+		}
+
+		// Register file definitions (version-aware - only updates KV if file version is newer)
 		if len(c.config.WorkflowFiles) > 0 {
 			fileDefinitions, err := c.loadWorkflowDefinitionsFromFiles()
 			if err != nil {
@@ -207,17 +213,8 @@ func (c *Component) Start(ctx context.Context) error {
 					c.logger.Warn("Failed to register workflow from file",
 						slog.String("id", def.ID),
 						slog.String("error", err.Error()))
-				} else {
-					c.logger.Info("Loaded workflow from file",
-						slog.String("id", def.ID),
-						slog.String("name", def.Name))
 				}
 			}
-		}
-
-		// Load additional workflow definitions from KV bucket
-		if err := c.registry.Load(ctx); err != nil {
-			c.logger.Warn("Failed to load workflow definitions from KV", "error", err)
 		}
 
 		// Create execution store
