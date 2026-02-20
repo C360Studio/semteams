@@ -73,13 +73,14 @@ type ParallelTaskState struct {
 
 // ParallelResult represents a result from a parallel sub-task
 type ParallelResult struct {
-	StepName string          `json:"step_name"`
-	Status   string          `json:"status"` // success, failed
-	Output   json.RawMessage `json:"output,omitempty"`
-	Error    string          `json:"error,omitempty"`
-	TaskID   string          `json:"task_id,omitempty"`
-	Entities []string        `json:"entities,omitempty"`
-	Duration time.Duration   `json:"duration"`
+	StepName   string          `json:"step_name"`
+	Status     string          `json:"status"` // success, failed
+	Output     json.RawMessage `json:"output,omitempty"`
+	OutputType *message.Type   `json:"output_type,omitempty"` // Type info if output was from a registered payload
+	Error      string          `json:"error,omitempty"`
+	TaskID     string          `json:"task_id,omitempty"`
+	Entities   []string        `json:"entities,omitempty"`
+	Duration   time.Duration   `json:"duration"`
 }
 
 // NewExecution creates a new workflow execution
@@ -406,6 +407,7 @@ type StepResult struct {
 	StepName    string          `json:"step_name"`
 	Status      string          `json:"status"` // success, failed, skipped
 	Output      json.RawMessage `json:"output,omitempty"`
+	OutputType  *message.Type   `json:"output_type,omitempty"` // Type info if output was from a registered payload
 	Error       string          `json:"error,omitempty"`
 	StartedAt   time.Time       `json:"started_at"`
 	CompletedAt time.Time       `json:"completed_at"`

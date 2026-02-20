@@ -550,3 +550,109 @@ func TestStepCompleteMessageValidation(t *testing.T) {
 		})
 	}
 }
+
+// TestTryUnwrapBaseMessage tests the BaseMessage unwrapping helper.
+func TestTryUnwrapBaseMessage(t *testing.T) {
+	tests := []struct {
+		name         string
+		input        json.RawMessage
+		wantPayload  string // expected payload JSON (empty if should match input)
+		wantHasType  bool
+		wantDomain   string
+		wantCategory string
+		wantVersion  string
+	}{
+		{
+			name:        "not JSON",
+			input:       json.RawMessage(`not json`),
+			wantHasType: false,
+		},
+		{
+			name:        "empty",
+			input:       json.RawMessage(``),
+			wantHasType: false,
+		},
+		{
+			name:        "nil",
+			input:       nil,
+			wantHasType: false,
+		},
+		{
+			name:        "plain object (no type)",
+			input:       json.RawMessage(`{"key": "value"}`),
+			wantHasType: false,
+		},
+		{
+			name:        "object with empty type",
+			input:       json.RawMessage(`{"type": {}, "payload": {"data": 1}}`),
+			wantHasType: false,
+		},
+		{
+			name:         "valid BaseMessage",
+			input:        json.RawMessage(`{"type": {"domain": "agentic", "category": "response", "version": "v1"}, "payload": {"result": "success"}}`),
+			wantPayload:  `{"result": "success"}`,
+			wantHasType:  true,
+			wantDomain:   "agentic",
+			wantCategory: "response",
+			wantVersion:  "v1",
+		},
+		{
+			name:         "BaseMessage with nested payload",
+			input:        json.RawMessage(`{"id": "msg-123", "type": {"domain": "workflow", "category": "step_result", "version": "v1"}, "payload": {"items": [1, 2, 3], "config": {"enabled": true}}, "meta": {"source": "test"}}`),
+			wantPayload:  `{"items": [1, 2, 3], "config": {"enabled": true}}`,
+			wantHasType:  true,
+			wantDomain:   "workflow",
+			wantCategory: "step_result",
+			wantVersion:  "v1",
+		},
+		{
+			name:        "type without payload",
+			input:       json.RawMessage(`{"type": {"domain": "test", "category": "empty", "version": "v1"}}`),
+			wantHasType: false, // No payload to extract
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			payload, msgType := tryUnwrapBaseMessage(tt.input)
+
+			if tt.wantHasType {
+				if msgType == nil {
+					t.Fatal("expected type info, got nil")
+				}
+				if msgType.Domain != tt.wantDomain {
+					t.Errorf("domain = %q, want %q", msgType.Domain, tt.wantDomain)
+				}
+				if msgType.Category != tt.wantCategory {
+					t.Errorf("category = %q, want %q", msgType.Category, tt.wantCategory)
+				}
+				if msgType.Version != tt.wantVersion {
+					t.Errorf("version = %q, want %q", msgType.Version, tt.wantVersion)
+				}
+
+				// Verify payload was extracted correctly
+				var expected, actual any
+				if err := json.Unmarshal([]byte(tt.wantPayload), &expected); err != nil {
+					t.Fatalf("invalid expected payload: %v", err)
+				}
+				if err := json.Unmarshal(payload, &actual); err != nil {
+					t.Fatalf("failed to parse actual payload: %v", err)
+				}
+				// Compare as JSON (to ignore formatting differences)
+				expectedJSON, _ := json.Marshal(expected)
+				actualJSON, _ := json.Marshal(actual)
+				if string(expectedJSON) != string(actualJSON) {
+					t.Errorf("payload = %s, want %s", actualJSON, expectedJSON)
+				}
+			} else {
+				if msgType != nil {
+					t.Errorf("expected no type info, got %+v", msgType)
+				}
+				// Payload should be unchanged (or nil for nil input)
+				if tt.input != nil && string(payload) != string(tt.input) {
+					t.Errorf("payload should be unchanged, got %s, want %s", payload, tt.input)
+				}
+			}
+		})
+	}
+}

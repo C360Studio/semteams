@@ -159,11 +159,15 @@ func (e *ParallelStepExecutor) HandleParallelResult(
 	output json.RawMessage,
 	stepError string,
 ) (parentStepName string, allComplete bool, err error) {
+	// Try to extract type info from BaseMessage wrapper
+	unwrappedOutput, outputType := tryUnwrapBaseMessage(output)
+
 	// Build the result
 	result := ParallelResult{
-		Status:   "success",
-		Output:   output,
-		Duration: 0, // Duration is calculated in RecordParallelResult using task StartedAt
+		Status:     "success",
+		Output:     unwrappedOutput,
+		OutputType: outputType,
+		Duration:   0, // Duration is calculated in RecordParallelResult using task StartedAt
 	}
 	if stepError != "" {
 		result.Status = "failed"

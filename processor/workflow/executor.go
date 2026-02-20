@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/processor/workflow/actions"
@@ -15,6 +16,42 @@ import (
 
 // Default timeout when parsing fails
 const defaultFallbackTimeout = 30 * time.Second
+
+// baseMessageWireFormat is the JSON structure used to detect BaseMessage-wrapped responses.
+// This is a simplified version that only extracts type info without full deserialization.
+type baseMessageWireFormat struct {
+	Type    message.Type    `json:"type"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+// tryUnwrapBaseMessage attempts to extract type info and payload from a BaseMessage-wrapped response.
+// If the data is a valid BaseMessage with type info, returns (payload, type).
+// If not a BaseMessage or type info is missing, returns (original data, nil).
+// This enables type-aware interpolation for component responses while gracefully handling
+// untyped responses (like LLM outputs).
+func tryUnwrapBaseMessage(data json.RawMessage) (json.RawMessage, *message.Type) {
+	if len(data) == 0 {
+		return data, nil
+	}
+
+	var wire baseMessageWireFormat
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return data, nil // Not valid JSON or not our format
+	}
+
+	// Check if we have valid type info (domain is required)
+	if wire.Type.Domain == "" {
+		return data, nil // No type info present
+	}
+
+	// Check if we have a payload (type without payload is unusual but possible)
+	if len(wire.Payload) == 0 {
+		return data, nil // No payload to extract
+	}
+
+	// Return the unwrapped payload with its type
+	return wire.Payload, &wire.Type
+}
 
 // Executor handles step execution for workflows
 type Executor struct {
@@ -203,22 +240,27 @@ func (e *Executor) executeStep(ctx context.Context, workflow *wfschema.Definitio
 	return e.executeAction(ctx, workflow, exec, step, interpolator)
 }
 
-// buildStepResult creates a StepResult from an action result
+// buildStepResult creates a StepResult from an action result.
+// If the output is a BaseMessage-wrapped response, extracts the payload and type info.
 func buildStepResult(stepName string, result actions.Result, start time.Time, iteration int) StepResult {
-	StepResult := StepResult{
+	// Try to extract type info from BaseMessage wrapper
+	output, outputType := tryUnwrapBaseMessage(result.Output)
+
+	stepResult := StepResult{
 		StepName:    stepName,
 		Status:      "success",
-		Output:      result.Output,
+		Output:      output,
+		OutputType:  outputType,
 		StartedAt:   start,
 		CompletedAt: time.Now(),
 		Duration:    result.Duration,
 		Iteration:   iteration,
 	}
 	if !result.Success {
-		StepResult.Status = "failed"
-		StepResult.Error = result.Error
+		stepResult.Status = "failed"
+		stepResult.Error = result.Error
 	}
-	return StepResult
+	return stepResult
 }
 
 // executeAction executes the action for a step
@@ -590,11 +632,15 @@ func (e *Executor) HandleAsyncStepResult(ctx context.Context, registry *Registry
 		return errs.WrapInvalid(fmt.Errorf("workflow not found: %s", exec.WorkflowID), "workflow-executor", "HandleAgentComplete", "get workflow")
 	}
 
+	// Try to extract type info from BaseMessage wrapper
+	unwrappedOutput, outputType := tryUnwrapBaseMessage(output)
+
 	// Build step result
-	StepResult := StepResult{
+	stepResult := StepResult{
 		StepName:    exec.GetCurrentName(),
 		Status:      "success",
-		Output:      output,
+		Output:      unwrappedOutput,
+		OutputType:  outputType,
 		StartedAt:   exec.UpdatedAt,
 		CompletedAt: time.Now(),
 		Duration:    time.Since(exec.UpdatedAt),
@@ -602,11 +648,11 @@ func (e *Executor) HandleAsyncStepResult(ctx context.Context, registry *Registry
 	}
 
 	if stepError != "" {
-		StepResult.Status = "failed"
-		StepResult.Error = stepError
+		stepResult.Status = "failed"
+		stepResult.Error = stepError
 	}
 
-	return e.ContinueExecution(ctx, workflow, exec, StepResult)
+	return e.ContinueExecution(ctx, workflow, exec, stepResult)
 }
 
 // HandleParallelStepResult handles a result from a parallel sub-task.

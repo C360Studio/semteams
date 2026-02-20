@@ -585,3 +585,245 @@ func TestBuildMergedPayload(t *testing.T) {
 		})
 	}
 }
+
+// TestInterpolateJSONTypePreservation tests that non-scalar values (arrays, objects)
+// are preserved as proper JSON types when using pure interpolation (entire string is ${...}).
+func TestInterpolateJSONTypePreservation(t *testing.T) {
+	exec := &Execution{
+		ID:         "exec_123",
+		WorkflowID: "workflow_abc",
+		Trigger: TriggerContext{
+			Payload: json.RawMessage(`{"items": ["a", "b", "c"], "config": {"timeout": 30}}`),
+		},
+		StepResults: map[string]StepResult{
+			"step1": {
+				Output: json.RawMessage(`{
+					"issues": ["bug1", "bug2", "bug3"],
+					"count": 3,
+					"settings": {"enabled": true, "threshold": 0.5},
+					"nested": {"deep": {"value": 42}}
+				}`),
+			},
+		},
+	}
+
+	interpolator := newInterpolator(exec)
+
+	tests := []struct {
+		name     string
+		input    json.RawMessage
+		validate func(t *testing.T, result json.RawMessage)
+	}{
+		{
+			name:  "pure array interpolation preserves array",
+			input: json.RawMessage(`{"items": "${steps.step1.output.issues}"}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				items, ok := parsed["items"].([]any)
+				if !ok {
+					t.Fatalf("expected items to be an array, got %T", parsed["items"])
+				}
+				if len(items) != 3 {
+					t.Errorf("expected 3 items, got %d", len(items))
+				}
+				if items[0] != "bug1" || items[1] != "bug2" || items[2] != "bug3" {
+					t.Errorf("unexpected items: %v", items)
+				}
+			},
+		},
+		{
+			name:  "pure object interpolation preserves object",
+			input: json.RawMessage(`{"config": "${steps.step1.output.settings}"}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				config, ok := parsed["config"].(map[string]any)
+				if !ok {
+					t.Fatalf("expected config to be an object, got %T", parsed["config"])
+				}
+				if config["enabled"] != true {
+					t.Errorf("expected enabled=true, got %v", config["enabled"])
+				}
+				if config["threshold"] != 0.5 {
+					t.Errorf("expected threshold=0.5, got %v", config["threshold"])
+				}
+			},
+		},
+		{
+			name:  "pure number interpolation preserves number",
+			input: json.RawMessage(`{"total": "${steps.step1.output.count}"}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				// JSON numbers unmarshal as float64
+				total, ok := parsed["total"].(float64)
+				if !ok {
+					t.Fatalf("expected total to be a number, got %T", parsed["total"])
+				}
+				if total != 3 {
+					t.Errorf("expected total=3, got %v", total)
+				}
+			},
+		},
+		{
+			name:  "embedded interpolation stays as string",
+			input: json.RawMessage(`{"message": "Found ${steps.step1.output.count} issues"}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				msg, ok := parsed["message"].(string)
+				if !ok {
+					t.Fatalf("expected message to be a string, got %T", parsed["message"])
+				}
+				if msg != "Found 3 issues" {
+					t.Errorf("expected 'Found 3 issues', got %q", msg)
+				}
+			},
+		},
+		{
+			name:  "nested structure with pure interpolation",
+			input: json.RawMessage(`{"data": {"list": "${steps.step1.output.issues}"}}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				data, ok := parsed["data"].(map[string]any)
+				if !ok {
+					t.Fatalf("expected data to be an object, got %T", parsed["data"])
+				}
+				list, ok := data["list"].([]any)
+				if !ok {
+					t.Fatalf("expected list to be an array, got %T", data["list"])
+				}
+				if len(list) != 3 {
+					t.Errorf("expected 3 items, got %d", len(list))
+				}
+			},
+		},
+		{
+			name:  "array containing pure interpolations",
+			input: json.RawMessage(`{"values": ["${steps.step1.output.count}", "static", "${steps.step1.output.count}"]}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				values, ok := parsed["values"].([]any)
+				if !ok {
+					t.Fatalf("expected values to be an array, got %T", parsed["values"])
+				}
+				if len(values) != 3 {
+					t.Errorf("expected 3 values, got %d", len(values))
+				}
+				// First and third should be numbers, second should be string
+				if values[0] != float64(3) {
+					t.Errorf("expected values[0]=3, got %v (%T)", values[0], values[0])
+				}
+				if values[1] != "static" {
+					t.Errorf("expected values[1]='static', got %v", values[1])
+				}
+				if values[2] != float64(3) {
+					t.Errorf("expected values[2]=3, got %v (%T)", values[2], values[2])
+				}
+			},
+		},
+		{
+			name:  "mixed pure and embedded interpolations",
+			input: json.RawMessage(`{"items": "${steps.step1.output.issues}", "summary": "Count: ${steps.step1.output.count}"}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				// items should be an array
+				items, ok := parsed["items"].([]any)
+				if !ok {
+					t.Fatalf("expected items to be an array, got %T", parsed["items"])
+				}
+				if len(items) != 3 {
+					t.Errorf("expected 3 items, got %d", len(items))
+				}
+				// summary should be a string
+				summary, ok := parsed["summary"].(string)
+				if !ok {
+					t.Fatalf("expected summary to be a string, got %T", parsed["summary"])
+				}
+				if summary != "Count: 3" {
+					t.Errorf("expected 'Count: 3', got %q", summary)
+				}
+			},
+		},
+		{
+			name:  "deep nested path preserves type",
+			input: json.RawMessage(`{"value": "${steps.step1.output.nested.deep.value}"}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				value, ok := parsed["value"].(float64)
+				if !ok {
+					t.Fatalf("expected value to be a number, got %T", parsed["value"])
+				}
+				if value != 42 {
+					t.Errorf("expected value=42, got %v", value)
+				}
+			},
+		},
+		{
+			name:  "trigger payload array preservation",
+			input: json.RawMessage(`{"triggerItems": "${trigger.payload.items}"}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				items, ok := parsed["triggerItems"].([]any)
+				if !ok {
+					t.Fatalf("expected triggerItems to be an array, got %T", parsed["triggerItems"])
+				}
+				if len(items) != 3 {
+					t.Errorf("expected 3 items, got %d", len(items))
+				}
+			},
+		},
+		{
+			name:  "error path keeps original string",
+			input: json.RawMessage(`{"missing": "${steps.nonexistent.output.field}"}`),
+			validate: func(t *testing.T, result json.RawMessage) {
+				var parsed map[string]any
+				if err := json.Unmarshal(result, &parsed); err != nil {
+					t.Fatalf("failed to parse result: %v", err)
+				}
+				// On error, should keep original interpolation string
+				missing, ok := parsed["missing"].(string)
+				if !ok {
+					t.Fatalf("expected missing to be a string, got %T", parsed["missing"])
+				}
+				if missing != "${steps.nonexistent.output.field}" {
+					t.Errorf("expected original pattern preserved, got %q", missing)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := interpolator.InterpolateJSON(tt.input)
+			if err != nil {
+				t.Logf("interpolation had error: %v", err)
+			}
+			tt.validate(t, result)
+		})
+	}
+}

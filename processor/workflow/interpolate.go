@@ -14,6 +14,9 @@ import (
 // interpolationPattern matches ${path.to.value} patterns
 var interpolationPattern = regexp.MustCompile(`\$\{([^}]+)\}`)
 
+// pureInterpolationPattern matches strings that are exactly one ${...} pattern (no surrounding text)
+var pureInterpolationPattern = regexp.MustCompile(`^\$\{([^}]+)\}$`)
+
 // interpolator handles variable interpolation in workflow data
 type interpolator struct {
 	execution *Execution
@@ -29,19 +32,35 @@ func (i *interpolator) InterpolateString(input string) (string, error) {
 	return i.interpolate(input)
 }
 
-// InterpolateJSON interpolates variables in a JSON structure
+// InterpolateJSON interpolates variables in a JSON structure with type preservation.
+// For "pure" interpolations where a string value is exactly "${path}", the resolved
+// value's type is preserved (arrays stay arrays, objects stay objects).
+// For embedded interpolations like "prefix ${path} suffix", string interpolation is used.
 func (i *interpolator) InterpolateJSON(input json.RawMessage) (json.RawMessage, error) {
 	if input == nil {
 		return nil, nil
 	}
 
-	str := string(input)
-	result, err := i.interpolate(str)
+	// Parse JSON into a generic structure
+	var raw any
+	if err := json.Unmarshal(input, &raw); err != nil {
+		// If not valid JSON, fall back to string-based interpolation
+		str := string(input)
+		result, interpolateErr := i.interpolate(str)
+		if interpolateErr != nil {
+			return input, interpolateErr
+		}
+		return json.RawMessage(result), nil
+	}
+
+	// Walk and interpolate with type preservation
+	result, err := i.walkAndInterpolate(raw)
 	if err != nil {
 		return nil, err
 	}
 
-	return json.RawMessage(result), nil
+	// Marshal back to JSON
+	return json.Marshal(result)
 }
 
 // interpolateStringWithFallback interpolates a string, returning the original on error
@@ -309,6 +328,79 @@ func (i *interpolator) valueToString(value any) string {
 		}
 		return string(data)
 	}
+}
+
+// walkAndInterpolate recursively walks a JSON value and performs type-aware interpolation.
+// For strings, it detects pure vs embedded interpolations and handles them appropriately.
+func (i *interpolator) walkAndInterpolate(value any) (any, error) {
+	switch v := value.(type) {
+	case map[string]any:
+		return i.walkMap(v)
+	case []any:
+		return i.walkArray(v)
+	case string:
+		return i.interpolateStringValue(v)
+	default:
+		// Numbers, bools, null - pass through unchanged
+		return v, nil
+	}
+}
+
+// walkMap processes each entry in a map, interpolating values recursively.
+func (i *interpolator) walkMap(m map[string]any) (map[string]any, error) {
+	result := make(map[string]any, len(m))
+	for k, v := range m {
+		interpolated, err := i.walkAndInterpolate(v)
+		if err != nil {
+			return nil, err
+		}
+		result[k] = interpolated
+	}
+	return result, nil
+}
+
+// walkArray processes each element in an array, interpolating values recursively.
+func (i *interpolator) walkArray(arr []any) ([]any, error) {
+	result := make([]any, len(arr))
+	for idx, v := range arr {
+		interpolated, err := i.walkAndInterpolate(v)
+		if err != nil {
+			return nil, err
+		}
+		result[idx] = interpolated
+	}
+	return result, nil
+}
+
+// interpolateStringValue handles string interpolation with type preservation.
+// For "pure" interpolations (entire string is one ${...}), the resolved value's
+// native type is preserved. For embedded interpolations, string replacement is used.
+func (i *interpolator) interpolateStringValue(s string) (any, error) {
+	// Check for pure interpolation (entire string is exactly one ${...})
+	if match := pureInterpolationPattern.FindStringSubmatch(s); match != nil {
+		path := match[1]
+		value, err := i.resolvePath(path)
+		if err != nil {
+			// On error, return original string (fail-safe behavior)
+			return s, nil
+		}
+		// Return the resolved value with its native type
+		return value, nil
+	}
+
+	// Check if string contains any interpolation patterns
+	if !interpolationPattern.MatchString(s) {
+		// No interpolation needed, return as-is
+		return s, nil
+	}
+
+	// Embedded interpolation - use existing string replacement
+	result, err := i.interpolate(s)
+	if err != nil {
+		// On error, return original string (fail-safe behavior)
+		return s, nil
+	}
+	return result, nil
 }
 
 // EvaluateCondition evaluates a condition against the current execution state

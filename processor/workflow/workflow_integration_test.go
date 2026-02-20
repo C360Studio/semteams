@@ -1157,8 +1157,8 @@ func TestIntegration_VariableInterpolation(t *testing.T) {
 		// Check execution context interpolation
 		assert.NotEmpty(t, receivedNotification["execution_id"], "Should interpolate execution.id")
 
-		// Check iteration (should be "1" as a string for first run)
-		assert.Equal(t, "1", receivedNotification["iteration"], "Should interpolate execution.iteration")
+		// Check iteration (preserved as number with type-aware interpolation)
+		assert.Equal(t, float64(1), receivedNotification["iteration"], "Should interpolate execution.iteration")
 	} else {
 		t.Error("Should have received interpolated notification")
 	}
