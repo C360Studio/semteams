@@ -798,20 +798,13 @@ func TestInterpolateJSONTypePreservation(t *testing.T) {
 			},
 		},
 		{
-			name:  "error path keeps original string",
+			name:  "error path returns nil and propagates error",
 			input: json.RawMessage(`{"missing": "${steps.nonexistent.output.field}"}`),
 			validate: func(t *testing.T, result json.RawMessage) {
-				var parsed map[string]any
-				if err := json.Unmarshal(result, &parsed); err != nil {
-					t.Fatalf("failed to parse result: %v", err)
-				}
-				// On error, should keep original interpolation string
-				missing, ok := parsed["missing"].(string)
-				if !ok {
-					t.Fatalf("expected missing to be a string, got %T", parsed["missing"])
-				}
-				if missing != "${steps.nonexistent.output.field}" {
-					t.Errorf("expected original pattern preserved, got %q", missing)
+				// With error propagation, result should be nil when interpolation fails
+				// Callers should use interpolateJSONWithFallback if they want original preserved
+				if result != nil {
+					t.Errorf("expected nil result on error, got %s", string(result))
 				}
 			},
 		},

@@ -381,8 +381,8 @@ func (i *interpolator) interpolateStringValue(s string) (any, error) {
 		path := match[1]
 		value, err := i.resolvePath(path)
 		if err != nil {
-			// On error, return original string (fail-safe behavior)
-			return s, nil
+			// Return nil and error - let caller decide how to handle
+			return nil, err
 		}
 		// Return the resolved value with its native type
 		return value, nil
@@ -397,8 +397,8 @@ func (i *interpolator) interpolateStringValue(s string) (any, error) {
 	// Embedded interpolation - use existing string replacement
 	result, err := i.interpolate(s)
 	if err != nil {
-		// On error, return original string (fail-safe behavior)
-		return s, nil
+		// Return empty string and error - let caller decide how to handle
+		return "", err
 	}
 	return result, nil
 }
