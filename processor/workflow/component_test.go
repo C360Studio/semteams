@@ -1,10 +1,16 @@
 package workflow
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/processor/workflow/actions"
 )
 
 func TestNewComponent(t *testing.T) {
@@ -327,5 +333,174 @@ func TestStartWithNilContext(t *testing.T) {
 	}
 	if err != nil && err.Error() == "" {
 		t.Error("Error message should not be empty")
+	}
+}
+
+func TestHandleTriggerMessage_WarnsOnAsyncTaskPayload(t *testing.T) {
+	// Setup: Create component with a log capture buffer
+	config := DefaultConfig()
+	configJSON, _ := json.Marshal(config)
+	deps := component.Dependencies{}
+
+	comp, err := NewComponent(configJSON, deps)
+	if err != nil {
+		t.Fatalf("failed to create component: %v", err)
+	}
+
+	wfComp := comp.(*Component)
+
+	// Replace logger with one that captures output
+	var logBuf bytes.Buffer
+	wfComp.logger = slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	// Create an AsyncTaskPayload wrapped in BaseMessage
+	asyncPayload := &actions.AsyncTaskPayload{
+		TaskID:          "test-task-123",
+		CallbackSubject: "workflow.step.result.exec-456",
+		Data:            json.RawMessage(`{"key": "value"}`),
+	}
+
+	baseMsg := message.NewBaseMessage(
+		message.Type{Domain: "workflow", Category: "async_task", Version: "v1"},
+		asyncPayload,
+		"test-source",
+	)
+
+	data, err := json.Marshal(baseMsg)
+	if err != nil {
+		t.Fatalf("failed to marshal message: %v", err)
+	}
+
+	// Act: Call handler with AsyncTaskPayload
+	ctx := context.Background()
+	wfComp.handleTriggerMessage(ctx, data)
+
+	// Assert: Should log WARNING, not ERROR
+	logOutput := logBuf.String()
+
+	if strings.Contains(logOutput, `"level":"ERROR"`) {
+		t.Errorf("should not log ERROR for AsyncTaskPayload; log output: %s", logOutput)
+	}
+
+	if !strings.Contains(logOutput, `"level":"WARN"`) {
+		t.Errorf("should log WARN for AsyncTaskPayload on trigger subject; log output: %s", logOutput)
+	}
+
+	if !strings.Contains(logOutput, "use workflow.async.* instead") {
+		t.Errorf("warning should mention correct namespace; log output: %s", logOutput)
+	}
+}
+
+func TestHandleTriggerMessage_SkipsOtherTypes(t *testing.T) {
+	// Setup: Create component with a log capture buffer
+	config := DefaultConfig()
+	configJSON, _ := json.Marshal(config)
+	deps := component.Dependencies{}
+
+	comp, err := NewComponent(configJSON, deps)
+	if err != nil {
+		t.Fatalf("failed to create component: %v", err)
+	}
+
+	wfComp := comp.(*Component)
+
+	// Replace logger with one that captures output
+	var logBuf bytes.Buffer
+	wfComp.logger = slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	// Create an AsyncStepResult (another workflow type, but not trigger or async_task)
+	stepResult := &AsyncStepResult{
+		TaskID: "task-123",
+		Status: "success",
+	}
+
+	baseMsg := message.NewBaseMessage(
+		message.Type{Domain: "workflow", Category: "step_result", Version: "v1"},
+		stepResult,
+		"test-source",
+	)
+
+	data, err := json.Marshal(baseMsg)
+	if err != nil {
+		t.Fatalf("failed to marshal message: %v", err)
+	}
+
+	// Act: Call handler with non-trigger, non-async_task type
+	ctx := context.Background()
+	wfComp.handleTriggerMessage(ctx, data)
+
+	// Assert: Should log DEBUG, not ERROR or WARN
+	logOutput := logBuf.String()
+
+	if strings.Contains(logOutput, `"level":"ERROR"`) {
+		t.Errorf("should not log ERROR for step_result on trigger subject; log output: %s", logOutput)
+	}
+
+	if strings.Contains(logOutput, `"level":"WARN"`) {
+		t.Errorf("should not log WARN for step_result (only async_task gets WARN); log output: %s", logOutput)
+	}
+
+	if !strings.Contains(logOutput, `"level":"DEBUG"`) {
+		t.Errorf("should log DEBUG for non-trigger message; log output: %s", logOutput)
+	}
+
+	if !strings.Contains(logOutput, "Skipping non-trigger message") {
+		t.Errorf("debug should mention skipping; log output: %s", logOutput)
+	}
+}
+
+func TestHandleTriggerMessage_ProcessesTriggerPayload(t *testing.T) {
+	// Setup: Create component with a log capture buffer
+	config := DefaultConfig()
+	configJSON, _ := json.Marshal(config)
+	deps := component.Dependencies{}
+
+	comp, err := NewComponent(configJSON, deps)
+	if err != nil {
+		t.Fatalf("failed to create component: %v", err)
+	}
+
+	wfComp := comp.(*Component)
+
+	// Initialize a minimal registry (with nil bucket - it will fail on Get but that's fine)
+	wfComp.registry = &Registry{
+		logger: slog.Default(),
+	}
+
+	// Replace logger with one that captures output
+	var logBuf bytes.Buffer
+	wfComp.logger = slog.New(slog.NewJSONHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+	// Create a TriggerPayload (correct type for this handler)
+	trigger := &TriggerPayload{
+		WorkflowID: "test-workflow",
+	}
+
+	baseMsg := message.NewBaseMessage(
+		message.Type{Domain: "workflow", Category: "trigger", Version: "v1"},
+		trigger,
+		"test-source",
+	)
+
+	data, err := json.Marshal(baseMsg)
+	if err != nil {
+		t.Fatalf("failed to marshal message: %v", err)
+	}
+
+	// Act: Call handler with TriggerPayload
+	ctx := context.Background()
+	wfComp.handleTriggerMessage(ctx, data)
+
+	// Assert: Should NOT log "Skipping" or WARN for async_task
+	// The key point is that TriggerPayload passes the type filter.
+	// It may error later (Workflow not found) but that's not what we're testing.
+	logOutput := logBuf.String()
+
+	if strings.Contains(logOutput, "Skipping non-trigger message") {
+		t.Errorf("should not skip TriggerPayload; log output: %s", logOutput)
+	}
+
+	if strings.Contains(logOutput, "use workflow.async.* instead") {
+		t.Errorf("should not warn about namespace for TriggerPayload; log output: %s", logOutput)
 	}
 }

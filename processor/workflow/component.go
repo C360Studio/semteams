@@ -487,9 +487,28 @@ func (c *Component) handleTriggerMessage(ctx context.Context, data []byte) {
 		return
 	}
 
+	// Filter by message type - only process workflow.trigger.v1 messages.
+	// Other types (e.g., workflow.async_task.v1) may arrive on this subject
+	// but are intended for other subscribers, not the workflow-processor.
+	expectedType := message.Type{Domain: "workflow", Category: "trigger", Version: "v1"}
+	if !baseMsg.Type().Equal(expectedType) {
+		// Warn if AsyncTaskPayload lands on trigger subject - should use workflow.async.* instead
+		if baseMsg.Type().Category == "async_task" {
+			c.logger.Warn("AsyncTaskPayload received on trigger subject; use workflow.async.* instead",
+				slog.String("type", baseMsg.Type().String()))
+		} else {
+			c.logger.Debug("Skipping non-trigger message on trigger subject",
+				slog.String("type", baseMsg.Type().String()))
+		}
+		return
+	}
+
 	trigger, ok := baseMsg.Payload().(*TriggerPayload)
 	if !ok {
-		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
+		// Defensive check - should not fire if type matches
+		c.logger.Error("Payload type mismatch after type check",
+			slog.String("expected_type", expectedType.String()),
+			slog.String("actual_payload", fmt.Sprintf("%T", baseMsg.Payload())))
 		return
 	}
 
