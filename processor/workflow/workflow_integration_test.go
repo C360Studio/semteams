@@ -326,7 +326,7 @@ func TestIntegration_SimpleWorkflowTrigger(t *testing.T) {
 	var receivedEvents []map[string]any
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
@@ -444,7 +444,7 @@ func TestIntegration_CallActionWithResponse(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
@@ -552,7 +552,7 @@ func TestIntegration_PublishAction(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
@@ -661,7 +661,7 @@ func TestIntegration_LoopWorkflowMaxIterations(t *testing.T) {
 	var iterations []int
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
@@ -790,7 +790,7 @@ func TestIntegration_ConditionEvaluation(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
@@ -890,7 +890,7 @@ func TestIntegration_StepCompleteMessage(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
@@ -994,7 +994,7 @@ func TestIntegration_WorkflowTimeout(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()
@@ -1127,7 +1127,7 @@ func TestIntegration_VariableInterpolation(t *testing.T) {
 	var execID string
 	var eventsMu sync.Mutex
 
-	_, err = testClient.Client.Subscribe(testCtx, "workflow.events", func(_ context.Context, msg *nats.Msg) {
+	_, err = testClient.Client.Subscribe(testCtx, "workflow.events.>", func(_ context.Context, msg *nats.Msg) {
 		var event map[string]any
 		if err := json.Unmarshal(msg.Data, &event); err == nil {
 			eventsMu.Lock()

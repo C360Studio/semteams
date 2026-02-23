@@ -131,16 +131,6 @@ func TestPayloadRegistry_RegisterPayload_Validation(t *testing.T) {
 			expectError: "factory",
 		},
 		{
-			name: "nil builder",
-			registration: &PayloadRegistration{
-				Factory:  PayloadTestFactory,
-				Domain:   "test",
-				Category: "sample",
-				Version:  "v1",
-			},
-			expectError: "builder",
-		},
-		{
 			name: "empty domain",
 			registration: &PayloadRegistration{
 				Factory:  PayloadTestFactory,
@@ -458,24 +448,45 @@ func TestPayloadRegistration_MessageType(t *testing.T) {
 	}
 }
 
-func TestPayloadRegistry_RegisterPayload_RequiresBuilder(t *testing.T) {
+func TestPayloadRegistry_RegisterPayload_BuilderOptional(t *testing.T) {
 	registry := NewPayloadRegistry()
 
+	// Registration without Builder should succeed - Builder is optional
 	registration := &PayloadRegistration{
 		Factory:  PayloadTestFactory,
-		Builder:  nil, // Missing builder
+		Builder:  nil, // Builder is optional
 		Domain:   "test",
 		Category: "sample",
 		Version:  "v1",
 	}
 
 	err := registry.RegisterPayload(registration)
-	if err == nil {
-		t.Fatal("expected error when Builder is nil")
+	if err != nil {
+		t.Fatalf("registration without Builder should succeed: %v", err)
 	}
 
-	if !strings.Contains(err.Error(), "builder") {
-		t.Errorf("expected error to mention 'builder', got: %v", err)
+	// Verify payload can still be built using JSON fallback
+	fields := map[string]any{
+		"message": "fallback test",
+		"value":   99,
+	}
+
+	payload, err := registry.BuildPayload("test", "sample", "v1", fields)
+	if err != nil {
+		t.Fatalf("BuildPayload() should use JSON fallback: %v", err)
+	}
+
+	testPayload, ok := payload.(*TestPayload)
+	if !ok {
+		t.Fatalf("payload should be *TestPayload, got %T", payload)
+	}
+
+	if testPayload.Message != "fallback test" {
+		t.Errorf("expected message 'fallback test', got %q", testPayload.Message)
+	}
+
+	if testPayload.Value != 99 {
+		t.Errorf("expected value 99, got %d", testPayload.Value)
 	}
 }
 

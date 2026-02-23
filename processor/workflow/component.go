@@ -14,6 +14,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/subjects"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -729,16 +730,68 @@ func (c *Component) processAsyncStepResult(ctx context.Context, result *AsyncSte
 	}
 }
 
-// publishEvent publishes a workflow event
+// publishEvent publishes a workflow event using typed subjects.
+// Events are published to specific subjects like workflow.events.started,
+// workflow.events.completed, etc. for type-safe consumption.
 func (c *Component) publishEvent(ctx context.Context, ev event) error {
-	data, err := json.Marshal(ev)
-	if err != nil {
-		return errs.WrapInvalid(err, "workflow-processor", "publishEvent", "marshal event")
+	var err error
+
+	switch ev.Type {
+	case "started":
+		err = subjects.WorkflowStarted.Publish(ctx, c.natsClient, subjects.WorkflowStartedEvent{
+			ExecutionID:  ev.ExecutionID,
+			WorkflowID:   ev.WorkflowID,
+			WorkflowName: "", // Not available in current event struct
+			StartedAt:    ev.Timestamp,
+		})
+	case "completed":
+		err = subjects.WorkflowCompleted.Publish(ctx, c.natsClient, subjects.WorkflowCompletedEvent{
+			ExecutionID:  ev.ExecutionID,
+			WorkflowID:   ev.WorkflowID,
+			WorkflowName: "",
+			Iterations:   ev.Iteration,
+			CompletedAt:  ev.Timestamp,
+		})
+	case "failed":
+		err = subjects.WorkflowFailed.Publish(ctx, c.natsClient, subjects.WorkflowFailedEvent{
+			ExecutionID:  ev.ExecutionID,
+			WorkflowID:   ev.WorkflowID,
+			WorkflowName: "",
+			Error:        ev.Error,
+			Iterations:   ev.Iteration,
+			FailedAt:     ev.Timestamp,
+		})
+	case "timed_out":
+		err = subjects.WorkflowTimedOut.Publish(ctx, c.natsClient, subjects.WorkflowTimedOutEvent{
+			ExecutionID:  ev.ExecutionID,
+			WorkflowID:   ev.WorkflowID,
+			WorkflowName: "",
+			Iterations:   ev.Iteration,
+			TimedOutAt:   ev.Timestamp,
+		})
+	case "step_started":
+		err = subjects.StepStarted.Publish(ctx, c.natsClient, subjects.StepStartedEvent{
+			ExecutionID: ev.ExecutionID,
+			WorkflowID:  ev.WorkflowID,
+			StepName:    ev.StepName,
+			Iteration:   ev.Iteration,
+			StartedAt:   ev.Timestamp,
+		})
+	case "step_completed":
+		err = subjects.StepCompleted.Publish(ctx, c.natsClient, subjects.StepCompletedEvent{
+			ExecutionID: ev.ExecutionID,
+			WorkflowID:  ev.WorkflowID,
+			StepName:    ev.StepName,
+			Status:      "success", // Current event doesn't carry status
+			Iteration:   ev.Iteration,
+			CompletedAt: ev.Timestamp,
+		})
+	default:
+		return errs.WrapInvalid(fmt.Errorf("unknown event type: %s", ev.Type), "workflow-processor", "publishEvent", "event type validation")
 	}
 
-	subject := "workflow.events"
-	if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
-		return errs.WrapTransient(err, "workflow-processor", "publishEvent", "publish to stream")
+	if err != nil {
+		return errs.WrapTransient(err, "workflow-processor", "publishEvent", "publish typed event")
 	}
 
 	return nil

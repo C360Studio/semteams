@@ -108,9 +108,24 @@ func (e *ParallelStepExecutor) executeNestedStep(
 	nested *wfschema.StepDef,
 	interpolator *interpolator,
 ) error {
-	// Interpolate action fields (nested steps in parallel don't have input_type)
+	// Resolve inputs and interpolate action fields (ADR-020)
 	payloadRegistry := component.GlobalPayloadRegistry()
-	action := interpolator.InterpolateActionDef(nested.Action, nested.InputType, payloadRegistry)
+	var resolvedPayload json.RawMessage
+	if len(nested.Inputs) > 0 {
+		var interfaceType string
+		for _, input := range nested.Inputs {
+			if input.Interface != "" {
+				interfaceType = input.Interface
+				break
+			}
+		}
+		var err error
+		resolvedPayload, err = interpolator.ResolveInputs(nested.Inputs, interfaceType, payloadRegistry)
+		if err != nil {
+			return fmt.Errorf("failed to resolve nested step inputs: %w", err)
+		}
+	}
+	action := interpolator.InterpolateActionDef(nested.Action, resolvedPayload)
 
 	// Build action context
 	actx := &actions.Context{

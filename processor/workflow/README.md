@@ -4,7 +4,9 @@ Multi-step workflow orchestration processor for the agentic processing system.
 
 ## Overview
 
-The `workflow` processor orchestrates multi-step agentic patterns that require loops, limits, and timeouts beyond what the rules engine can handle. It manages workflow definitions, executes steps with variable interpolation, tracks execution state, and enforces timeout/iteration constraints.
+The `workflow` processor orchestrates multi-step agentic patterns that require loops, limits, and timeouts beyond what the rules engine can handle. It manages workflow definitions, executes steps with data references, tracks execution state, and enforces timeout/iteration constraints.
+
+**Note**: This processor uses the unified dataflow pattern from [ADR-020](../../docs/architecture/adr-020-unified-dataflow-patterns.md). Steps declare explicit `inputs` and `outputs` instead of string interpolation with `payload_mapping`.
 
 ## Architecture
 
@@ -106,31 +108,34 @@ Workflows are defined in JSON and stored in the WORKFLOW_DEFINITIONS bucket:
   "steps": [
     {
       "name": "review",
+      "inputs": {
+        "code": {"from": "trigger.payload.code"}
+      },
+      "outputs": {
+        "issues": {"interface": "review.issues.v1"},
+        "issues_count": {}
+      },
       "action": {
         "type": "publish_agent",
-        "subject": "agent.task.review",
-        "payload": {
-          "role": "reviewer",
-          "model": "gpt-4",
-          "prompt": "Review the code: ${trigger.payload.code}"
-        }
+        "subject": "agent.task.review"
       },
       "on_success": "fix",
       "on_fail": "fail"
     },
     {
       "name": "fix",
+      "inputs": {
+        "issues": {"from": "review.issues"}
+      },
+      "outputs": {
+        "fixed_code": {}
+      },
       "action": {
         "type": "publish_agent",
-        "subject": "agent.task.fix",
-        "payload": {
-          "role": "editor",
-          "model": "gpt-4",
-          "prompt": "Fix issues: ${steps.review.output.issues}"
-        }
+        "subject": "agent.task.fix"
       },
       "condition": {
-        "field": "steps.review.output.issues_count",
+        "field": "review.issues_count",
         "operator": "gt",
         "value": 0
       },
@@ -142,7 +147,9 @@ Workflows are defined in JSON and stored in the WORKFLOW_DEFINITIONS bucket:
     {
       "type": "publish",
       "subject": "code.review.complete",
-      "payload": {"result": "${steps.fix.output}"}
+      "inputs": {
+        "result": {"from": "fix.fixed_code"}
+      }
     }
   ],
   "timeout": "30m",
@@ -168,15 +175,22 @@ Workflows are defined in JSON and stored in the WORKFLOW_DEFINITIONS bucket:
 
 ## Step Definition
 
-Each step defines an action and transitions:
+Each step defines inputs, outputs, an action, and transitions:
 
 ```json
 {
   "name": "process",
+  "inputs": {
+    "data": {"from": "fetch.result"},
+    "user_id": {"from": "trigger.payload.user_id"},
+    "exec_id": {"from": "execution.id"}
+  },
+  "outputs": {
+    "processed": {"interface": "processor.result.v1"}
+  },
   "action": {
     "type": "call",
     "subject": "service.process",
-    "payload": {"data": "${trigger.payload.input}"},
     "timeout": "30s"
   },
   "condition": {
@@ -195,103 +209,165 @@ Each step defines an action and transitions:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | yes | Unique step name |
+| `inputs` | object | no | Input declarations with `from` references |
+| `outputs` | object | no | Output declarations with optional `interface` types |
 | `action` | object | yes | Action to execute |
 | `condition` | object | no | Condition for execution |
 | `on_success` | string | no | Next step on success |
 | `on_fail` | string | no | Next step on failure |
 | `timeout` | string | no | Step-specific timeout |
 
+### Inputs and Outputs
+
+Steps use explicit input/output declarations following the unified dataflow pattern from [ADR-020](../../docs/architecture/adr-020-unified-dataflow-patterns.md):
+
+**Inputs** - Reference data from previous steps, trigger, or execution context:
+
+```json
+{
+  "inputs": {
+    "data": {"from": "fetch.result", "interface": "data.response.v1"},
+    "user_id": {"from": "trigger.payload.user_id"},
+    "exec_id": {"from": "execution.id"}
+  }
+}
+```
+
+**Outputs** - Declare what the step produces:
+
+```json
+{
+  "outputs": {
+    "result": {"interface": "processor.result.v1"},
+    "status": {}
+  }
+}
+```
+
+**`from` Reference Syntax**:
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `step_name.output_name` | Reference another step's output | `"fetch.result"` |
+| `step_name.output_name.field` | Deep field reference | `"fetch.result.items"` |
+| `trigger.payload.field` | Trigger data reference | `"trigger.payload.user_id"` |
+| `execution.id` | Execution context reference | `"execution.id"` |
+
+The `interface` field is optional but enables load-time validation against the PayloadRegistry.
+
 ## Action Types
 
 ### call
 
-NATS request/response with timeout:
+NATS request/response with timeout. Step inputs are assembled into the request payload:
 
 ```json
 {
-  "type": "call",
-  "subject": "service.request",
-  "payload": {"key": "value"},
-  "timeout": "30s"
+  "name": "fetch",
+  "inputs": {
+    "id": {"from": "trigger.payload.entity_id"}
+  },
+  "outputs": {
+    "data": {"interface": "entity.data.v1"}
+  },
+  "action": {
+    "type": "call",
+    "subject": "service.request",
+    "timeout": "30s"
+  }
 }
 ```
 
 ### publish
 
-Fire-and-forget NATS publish:
+Fire-and-forget NATS publish. Step inputs are assembled into the message payload:
 
 ```json
 {
-  "type": "publish",
-  "subject": "events.notification",
-  "payload": {"message": "Step complete"}
+  "name": "notify",
+  "inputs": {
+    "message": {"from": "process.result.summary"}
+  },
+  "action": {
+    "type": "publish",
+    "subject": "events.notification"
+  }
 }
 ```
 
 ### publish_agent
 
-Spawn an agentic task:
+Spawn an agentic task. Step inputs are assembled into the agent task payload:
 
 ```json
 {
-  "type": "publish_agent",
-  "subject": "agent.task.analyze",
-  "payload": {
-    "task_id": "${execution.id}",
-    "role": "general",
-    "model": "gpt-4",
-    "prompt": "Analyze: ${trigger.payload.content}"
+  "name": "analyze",
+  "inputs": {
+    "content": {"from": "trigger.payload.content"},
+    "task_id": {"from": "execution.id"}
+  },
+  "action": {
+    "type": "publish_agent",
+    "subject": "agent.task.analyze"
   }
 }
 ```
 
 ### set_state
 
-Mutate entity state via graph processor:
+Mutate entity state via graph processor. Step inputs define the entity and state:
 
 ```json
 {
-  "type": "set_state",
-  "entity": "entity:${trigger.payload.entity_id}",
-  "state": {"status": "processed"}
+  "name": "update_status",
+  "inputs": {
+    "entity": {"from": "trigger.payload.entity_id"},
+    "status": {"value": "processed"}
+  },
+  "action": {
+    "type": "set_state"
+  }
 }
 ```
 
-## Variable Interpolation
+## Data References
 
-Variables use `${path.to.value}` syntax with these roots:
+Steps reference data using the `from` field in input declarations (see [ADR-020](../../docs/architecture/adr-020-unified-dataflow-patterns.md)):
 
-### execution.*
+### Step Outputs
 
-| Path | Description |
-|------|-------------|
-| `${execution.id}` | Execution ID |
-| `${execution.workflow_id}` | Workflow ID |
-| `${execution.workflow_name}` | Workflow name |
-| `${execution.state}` | Current state |
-| `${execution.iteration}` | Current iteration |
-| `${execution.current_step}` | Current step index |
-| `${execution.current_name}` | Current step name |
+Reference data produced by previous steps:
 
-### trigger.*
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `step_name.output_name` | Named output from step | `"fetch.result"` |
+| `step_name.output_name.field` | Deep field access | `"fetch.result.items"` |
+| `step_name.output_name.field.nested` | Nested field access | `"fetch.result.data.id"` |
 
-| Path | Description |
-|------|-------------|
-| `${trigger.subject}` | Trigger subject |
-| `${trigger.payload.*}` | Trigger payload fields |
-| `${trigger.timestamp}` | Trigger timestamp |
-| `${trigger.headers.*}` | Trigger headers |
+### Trigger Data
 
-### steps.*
+Reference data from the workflow trigger:
 
 | Path | Description |
 |------|-------------|
-| `${steps.{name}.status}` | Step status (success/failed/skipped) |
-| `${steps.{name}.output}` | Step output (full object) |
-| `${steps.{name}.output.*}` | Step output fields |
-| `${steps.{name}.error}` | Step error message |
-| `${steps.{name}.duration}` | Step duration |
-| `${steps.{name}.iteration}` | Iteration when step ran |
+| `trigger.subject` | Trigger subject |
+| `trigger.payload.{field}` | Trigger payload fields |
+| `trigger.timestamp` | Trigger timestamp |
+| `trigger.headers.{key}` | Trigger headers |
+
+### Execution Context
+
+Reference workflow execution metadata:
+
+| Path | Description |
+|------|-------------|
+| `execution.id` | Execution ID |
+| `execution.workflow_id` | Workflow ID |
+| `execution.workflow_name` | Workflow name |
+| `execution.state` | Current state |
+| `execution.iteration` | Current iteration |
+| `execution.current_step` | Current step index |
+| `execution.current_name` | Current step name |
 
 ## Condition Operators
 

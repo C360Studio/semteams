@@ -2,6 +2,8 @@
 
 Complete reference for workflow processor configuration and definition schemas.
 
+**Note**: This document describes the unified dataflow pattern from [ADR-020](../architecture/adr-020-unified-dataflow-patterns.md). Workflows use explicit `inputs` and `outputs` declarations instead of string interpolation with `payload_mapping`.
+
 ## Processor Configuration
 
 ### Component Config
@@ -167,12 +169,56 @@ Examples:
 |-------|------|----------|-------------|
 | `name` | string | Yes | Step identifier (unique within workflow) |
 | `description` | string | No | Step purpose |
+| `inputs` | object | No | Input declarations with `from` references |
+| `outputs` | object | No | Output declarations with optional `interface` types |
 | `action` | object | Yes | Action to execute |
 | `on_success` | string | No | Next step, "next", or "complete" |
 | `on_fail` | string | No | Step name or "abort" |
 | `retry` | object | No | Retry policy |
 | `timeout` | duration | No | Step timeout |
 | `condition` | object | No | Skip condition |
+
+#### Inputs and Outputs (ADR-020)
+
+Steps use explicit input/output declarations following the unified dataflow pattern from [ADR-020](../architecture/adr-020-unified-dataflow-patterns.md):
+
+**Input Declaration:**
+
+```json
+{
+  "inputs": {
+    "data": {"from": "fetch.result", "interface": "data.response.v1"},
+    "user_id": {"from": "trigger.payload.user_id"},
+    "exec_id": {"from": "execution.id"}
+  }
+}
+```
+
+**Output Declaration:**
+
+```json
+{
+  "outputs": {
+    "result": {"interface": "processor.result.v1"},
+    "status": {},
+    "metadata": {"interface": "common.metadata.v1"}
+  }
+}
+```
+
+**`from` Reference Patterns:**
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `step_name.output_name` | Reference another step's output | `"fetch.result"` |
+| `step_name.output_name.field` | Deep field reference | `"fetch.result.items"` |
+| `trigger.payload.field` | Trigger data reference | `"trigger.payload.user_id"` |
+| `execution.field` | Execution context reference | `"execution.id"` |
+
+The `interface` field is optional but enables:
+- Load-time validation against the PayloadRegistry
+- Type reconstruction for downstream steps
+- Self-documenting step contracts
 
 #### Retry Policy
 
@@ -210,15 +256,21 @@ Backoff calculation: `delay = min(initial_backoff * multiplier^(attempt-1), max_
 
 ### call
 
-Request/response NATS call:
+Request/response NATS call. Step inputs are assembled into the request payload:
 
 ```json
 {
-  "type": "call",
-  "subject": "service.action",
-  "payload": {
-    "id": "${trigger.entity_id}",
-    "data": "${steps.previous.output}"
+  "name": "process",
+  "inputs": {
+    "id": {"from": "trigger.entity_id"},
+    "data": {"from": "fetch.result"}
+  },
+  "outputs": {
+    "result": {"interface": "service.result.v1"}
+  },
+  "action": {
+    "type": "call",
+    "subject": "service.action"
   }
 }
 ```
@@ -227,21 +279,24 @@ Request/response NATS call:
 |-------|------|----------|-------------|
 | `type` | string | Yes | Must be "call" |
 | `subject` | string | Yes | NATS subject to call |
-| `payload` | object | No | Request payload |
 
-**Behavior**: Sends request, waits for response. Response becomes step output. Non-response or error = step failure.
+**Behavior**: Assembles payload from step inputs, sends request, waits for response. Response becomes step output. Non-response or error = step failure.
 
 ### publish
 
-Fire-and-forget NATS publish:
+Fire-and-forget NATS publish. Step inputs are assembled into the message payload:
 
 ```json
 {
-  "type": "publish",
-  "subject": "events.workflow.step-complete",
-  "payload": {
-    "workflow": "${execution.workflow_id}",
-    "step": "extract-tasks"
+  "name": "notify",
+  "inputs": {
+    "workflow": {"from": "execution.workflow_id"},
+    "step": {"value": "extract-tasks"},
+    "result": {"from": "extract.tasks"}
+  },
+  "action": {
+    "type": "publish",
+    "subject": "events.workflow.step-complete"
   }
 }
 ```
@@ -250,21 +305,28 @@ Fire-and-forget NATS publish:
 |-------|------|----------|-------------|
 | `type` | string | Yes | Must be "publish" |
 | `subject` | string | Yes | NATS subject |
-| `payload` | object | No | Message payload |
 
-**Behavior**: Publishes immediately, no response expected. Step output: `{"published": true}`.
+**Behavior**: Assembles payload from step inputs, publishes immediately. No response expected. Step output: `{"published": true}`.
 
 ### publish_agent
 
-Spawn agentic loop task:
+Spawn agentic loop task. Step inputs are assembled into the agent task payload:
 
 ```json
 {
-  "type": "publish_agent",
-  "subject": "agent.task.reviewer",
-  "role": "reviewer",
-  "model": "gpt-4",
-  "prompt": "Review:\n${steps.load-code.output}"
+  "name": "review",
+  "inputs": {
+    "code": {"from": "load-code.output"},
+    "role": {"value": "reviewer"},
+    "model": {"value": "gpt-4"}
+  },
+  "outputs": {
+    "review_result": {"interface": "agent.result.v1"}
+  },
+  "action": {
+    "type": "publish_agent",
+    "subject": "agent.task.reviewer"
+  }
 }
 ```
 
@@ -272,49 +334,55 @@ Spawn agentic loop task:
 |-------|------|----------|-------------|
 | `type` | string | Yes | Must be "publish_agent" |
 | `subject` | string | Yes | Agent task subject |
-| `role` | string | No | Agent role (general, architect, editor) |
-| `model` | string | No | LLM model to use |
-| `prompt` | string | Yes | Task prompt |
 
-**Behavior**: Publishes task message to agentic-loop. Waits for completion on `agent.complete.*`. Step output includes agent result.
+**Behavior**: Assembles task payload from step inputs (role, model, prompt, etc.). Publishes task message to agentic-loop. Waits for completion on `agent.complete.*`. Step output includes agent result.
 
 ### set_state
 
-Update entity state via graph processor:
+Update entity state via graph processor. Step inputs define the entity and state:
 
 ```json
 {
-  "type": "set_state",
-  "entity_id": "${trigger.entity_id}",
-  "predicate": "workflow.status",
-  "object": "in-progress"
+  "name": "update_status",
+  "inputs": {
+    "entity_id": {"from": "trigger.entity_id"},
+    "predicate": {"value": "workflow.status"},
+    "object": {"value": "in-progress"}
+  },
+  "action": {
+    "type": "set_state"
+  }
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | string | Yes | Must be "set_state" |
-| `entity_id` | string | Yes | Target entity ID |
-| `predicate` | string | Yes | Predicate to set |
-| `object` | any | Yes | Value to set |
 
-**Behavior**: Publishes triple update to graph processor. Waits for confirmation. Step output is the triple.
+**Behavior**: Reads `entity_id`, `predicate`, and `object` from step inputs. Publishes triple update to graph processor. Waits for confirmation. Step output is the triple.
 
 ### http
 
-External HTTP request:
+External HTTP request. Step inputs are assembled into the request body and headers:
 
 ```json
 {
-  "type": "http",
-  "method": "POST",
-  "url": "https://api.example.com/action",
-  "headers": {
-    "Authorization": "Bearer ${secrets.api_token}",
-    "Content-Type": "application/json"
+  "name": "call_api",
+  "inputs": {
+    "data": {"from": "prepare.output"},
+    "auth_token": {"from": "secrets.api_token"}
   },
-  "body": {
-    "data": "${steps.prepare.output}"
+  "outputs": {
+    "response": {"interface": "http.response.v1"}
+  },
+  "action": {
+    "type": "http",
+    "method": "POST",
+    "url": "https://api.example.com/action",
+    "headers": {
+      "Authorization": "Bearer {{auth_token}}",
+      "Content-Type": "application/json"
+    }
   }
 }
 ```
@@ -324,10 +392,9 @@ External HTTP request:
 | `type` | string | Yes | Must be "http" |
 | `method` | string | Yes | HTTP method (GET, POST, PUT, DELETE) |
 | `url` | string | Yes | Request URL |
-| `headers` | object | No | Request headers |
-| `body` | any | No | Request body |
+| `headers` | object | No | Request headers (supports `{{input_name}}` placeholders) |
 
-**Behavior**: Makes HTTP request. Response body becomes step output. Non-2xx status = step failure.
+**Behavior**: Assembles request body from step inputs. Headers support `{{input_name}}` placeholders for resolved inputs. Makes HTTP request. Response body becomes step output. Non-2xx status = step failure.
 
 ### wait
 
@@ -486,40 +553,63 @@ Aggregators combine results from parallel steps into a single output.
 // Output: {"entities": {"x": {"entity_id": "x", "score": 8, "style": "ok"}}}
 ```
 
-## Variable Interpolation
+## Data References (ADR-020)
 
-### Available Variables
+Workflows use the unified dataflow pattern from [ADR-020](../architecture/adr-020-unified-dataflow-patterns.md). Data is referenced via `from` fields in step inputs rather than string interpolation.
 
-| Variable | Description |
-|----------|-------------|
-| `${trigger.entity_id}` | Entity that triggered workflow |
-| `${trigger.payload}` | Full trigger payload object |
-| `${trigger.payload.X}` | Field from trigger payload |
-| `${trigger.type}` | Trigger type (rule, subject, cron, manual) |
-| `${trigger.source}` | Trigger source (rule ID, subject, cron expression) |
-| `${execution.id}` | Current execution ID |
-| `${execution.workflow_id}` | Workflow definition ID |
-| `${execution.error}` | Error message (in on_fail) |
-| `${steps.X.output}` | Output from completed step X |
-| `${steps.X.output.field}` | Field from step output |
-| `${steps.X.state}` | Step state (completed, failed, skipped) |
-| `${timestamp}` | Current ISO timestamp |
-| `${uuid}` | Generate new UUID |
-| `${secrets.name}` | Resolved secret value |
+### Available References
 
-### Interpolation Examples
+**Step Outputs:**
+
+| Pattern | Description |
+|---------|-------------|
+| `step_name.output_name` | Named output from step |
+| `step_name.output_name.field` | Deep field access |
+
+**Trigger Data:**
+
+| Reference | Description |
+|-----------|-------------|
+| `trigger.entity_id` | Entity that triggered workflow |
+| `trigger.payload` | Full trigger payload object |
+| `trigger.payload.field` | Field from trigger payload |
+| `trigger.type` | Trigger type (rule, subject, cron, manual) |
+| `trigger.source` | Trigger source (rule ID, subject, cron expression) |
+
+**Execution Context:**
+
+| Reference | Description |
+|-----------|-------------|
+| `execution.id` | Current execution ID |
+| `execution.workflow_id` | Workflow definition ID |
+| `execution.error` | Error message (in on_fail) |
+| `execution.iteration` | Current iteration count |
+
+**Special Values:**
+
+| Reference | Description |
+|-----------|-------------|
+| `timestamp` | Current ISO timestamp |
+| `uuid` | Generate new UUID |
+| `secrets.name` | Resolved secret value |
+
+### Reference Examples
 
 ```json
 {
+  "name": "process",
+  "inputs": {
+    "entity": {"from": "trigger.entity_id"},
+    "data": {"from": "fetch-data.items"},
+    "timestamp": {"from": "timestamp"},
+    "request_id": {"from": "uuid"}
+  },
+  "outputs": {
+    "result": {"interface": "service.result.v1"}
+  },
   "action": {
     "type": "call",
-    "subject": "service.process",
-    "payload": {
-      "entity": "${trigger.entity_id}",
-      "data": "${steps.fetch-data.output.items}",
-      "timestamp": "${timestamp}",
-      "request_id": "${uuid}"
-    }
+    "subject": "service.process"
   }
 }
 ```
@@ -657,37 +747,51 @@ Published to `workflow.events`:
   "steps": [
     {
       "name": "load-spec",
+      "inputs": {
+        "id": {"from": "trigger.entity_id"}
+      },
+      "outputs": {
+        "spec": {"interface": "spec.data.v1"}
+      },
       "action": {
         "type": "call",
-        "subject": "spec.get",
-        "payload": {"id": "${trigger.entity_id}"}
+        "subject": "spec.get"
       },
       "timeout": "10s"
     },
     {
       "name": "extract-tasks",
+      "inputs": {
+        "spec": {"from": "load-spec.spec"}
+      },
+      "outputs": {
+        "tasks": {"interface": "spec.tasks.v1"}
+      },
       "action": {
         "type": "call",
-        "subject": "spec.extract-tasks",
-        "payload": {"spec": "${steps.load-spec.output}"}
+        "subject": "spec.extract-tasks"
       },
       "condition": {
-        "field": "steps.load-spec.output.has_tasks",
+        "field": "load-spec.spec.has_tasks",
         "operator": "eq",
         "value": true
       }
     },
     {
       "name": "create-issues",
+      "inputs": {
+        "tasks": {"from": "extract-tasks.tasks"},
+        "github_token": {"from": "secrets.github_token"}
+      },
+      "outputs": {
+        "issue_ids": {}
+      },
       "action": {
         "type": "http",
         "method": "POST",
         "url": "https://api.github.com/repos/org/repo/issues",
         "headers": {
-          "Authorization": "Bearer ${secrets.github_token}"
-        },
-        "body": {
-          "tasks": "${steps.extract-tasks.output.tasks}"
+          "Authorization": "Bearer {{github_token}}"
         }
       },
       "retry": {
@@ -698,11 +802,13 @@ Published to `workflow.events`:
     },
     {
       "name": "mark-blocked",
+      "inputs": {
+        "entity_id": {"from": "trigger.entity_id"},
+        "predicate": {"value": "spec.status"},
+        "object": {"value": "blocked"}
+      },
       "action": {
-        "type": "set_state",
-        "entity_id": "${trigger.entity_id}",
-        "predicate": "spec.status",
-        "object": "blocked"
+        "type": "set_state"
       },
       "on_success": "complete"
     }
@@ -711,9 +817,11 @@ Published to `workflow.events`:
   "on_complete": [
     {
       "type": "set_state",
-      "entity_id": "${trigger.entity_id}",
-      "predicate": "spec.status",
-      "object": "implementing"
+      "inputs": {
+        "entity_id": {"from": "trigger.entity_id"},
+        "predicate": {"value": "spec.status"},
+        "object": {"value": "implementing"}
+      }
     }
   ],
 
@@ -737,35 +845,44 @@ Published to `workflow.events`:
   "steps": [
     {
       "name": "collect-metrics",
+      "inputs": {
+        "period": {"value": "24h"}
+      },
+      "outputs": {
+        "metrics": {"interface": "metrics.data.v1"}
+      },
       "action": {
         "type": "call",
-        "subject": "metrics.collect",
-        "payload": {"period": "24h"}
+        "subject": "metrics.collect"
       }
     },
     {
       "name": "generate-summary",
+      "inputs": {
+        "template": {"value": "daily-progress"},
+        "data": {"from": "collect-metrics.metrics"}
+      },
+      "outputs": {
+        "summary": {}
+      },
       "action": {
         "type": "call",
-        "subject": "report.generate",
-        "payload": {
-          "template": "daily-progress",
-          "data": "${steps.collect-metrics.output}"
-        }
+        "subject": "report.generate"
       }
     },
     {
       "name": "send-notification",
+      "inputs": {
+        "channel": {"value": "#engineering"},
+        "text": {"from": "generate-summary.summary"},
+        "slack_token": {"from": "secrets.slack_token"}
+      },
       "action": {
         "type": "http",
         "method": "POST",
         "url": "https://slack.com/api/chat.postMessage",
         "headers": {
-          "Authorization": "Bearer ${secrets.slack_token}"
-        },
-        "body": {
-          "channel": "#engineering",
-          "text": "${steps.generate-summary.output.summary}"
+          "Authorization": "Bearer {{slack_token}}"
         }
       },
       "retry": {

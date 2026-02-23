@@ -374,56 +374,130 @@ func (r *Registry) handleWatchUpdate(entry jetstream.KeyValueEntry) {
 		slog.String("name", workflow.Name))
 }
 
-// validateWorkflowTypes checks that all input_type and output_type declarations
-// in workflow steps are registered in the payload registry.
-// Returns a slice of warning messages for any unregistered types.
+// validateWorkflowTypes checks workflow type annotations and payload mappings at load time.
+// This includes:
+// 1. Validating input_type and output_type are registered in the payload registry
+// 2. Validating payload_mapping paths have valid format (root.field.subfield...)
+//
+// Returns a slice of warning messages for any issues found.
 // This is non-blocking validation to allow gradual adoption of typed payloads.
 func validateWorkflowTypes(def *wfschema.Definition, payloadRegistry *component.PayloadRegistry) []string {
 	var warnings []string
 
 	// Validate types for each step
 	for _, step := range def.Steps {
-		warnings = append(warnings, validateStepTypes(&step, payloadRegistry)...)
+		warnings = append(warnings, validateStepTypes(&step, def, payloadRegistry)...)
 	}
 
 	return warnings
 }
 
-// validateStepTypes validates input_type and output_type for a single step
+// validateStepTypes validates inputs and outputs for a single step
 // and recursively validates nested parallel steps.
-func validateStepTypes(step *wfschema.StepDef, payloadRegistry *component.PayloadRegistry) []string {
+func validateStepTypes(step *wfschema.StepDef, def *wfschema.Definition, payloadRegistry *component.PayloadRegistry) []string {
 	var warnings []string
 
-	// Validate input_type
-	if step.InputType != "" {
-		domain, category, version, err := ParseTypeString(step.InputType)
-		if err != nil {
-			// ParseTypeString error means the format is invalid
-			// This should have been caught by schema validation, but double-check
-			warnings = append(warnings, fmt.Sprintf("step %q has invalid input_type format: %v", step.Name, err))
-		} else if payload := payloadRegistry.CreatePayload(domain, category, version); payload == nil {
-			warnings = append(warnings, fmt.Sprintf("step %q declares input_type %q which is not registered in payload registry", step.Name, step.InputType))
+	// Validate input interfaces
+	for inputName, inputRef := range step.Inputs {
+		if inputRef.Interface != "" {
+			domain, category, version, err := ParseTypeString(inputRef.Interface)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("step %q input %q has invalid interface format: %v", step.Name, inputName, err))
+			} else if payload := payloadRegistry.CreatePayload(domain, category, version); payload == nil {
+				warnings = append(warnings, fmt.Sprintf("step %q input %q declares interface %q which is not registered in payload registry", step.Name, inputName, inputRef.Interface))
+			}
 		}
+
+		// Validate 'from' reference
+		fromWarnings := validateFromReference(inputRef.From, step.Name, inputName, def)
+		warnings = append(warnings, fromWarnings...)
 	}
 
-	// Validate output_type
-	if step.OutputType != "" {
-		domain, category, version, err := ParseTypeString(step.OutputType)
-		if err != nil {
-			// ParseTypeString error means the format is invalid
-			// This should have been caught by schema validation, but double-check
-			warnings = append(warnings, fmt.Sprintf("step %q has invalid output_type format: %v", step.Name, err))
-		} else if payload := payloadRegistry.CreatePayload(domain, category, version); payload == nil {
-			warnings = append(warnings, fmt.Sprintf("step %q declares output_type %q which is not registered in payload registry", step.Name, step.OutputType))
+	// Validate output interfaces
+	for outputName, outputDef := range step.Outputs {
+		if outputDef.Interface != "" {
+			domain, category, version, err := ParseTypeString(outputDef.Interface)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("step %q output %q has invalid interface format: %v", step.Name, outputName, err))
+			} else if payload := payloadRegistry.CreatePayload(domain, category, version); payload == nil {
+				warnings = append(warnings, fmt.Sprintf("step %q output %q declares interface %q which is not registered in payload registry", step.Name, outputName, outputDef.Interface))
+			}
 		}
 	}
 
 	// Recursively validate nested parallel steps
 	if step.Type == "parallel" {
 		for _, nested := range step.Steps {
-			warnings = append(warnings, validateStepTypes(&nested, payloadRegistry)...)
+			warnings = append(warnings, validateStepTypes(&nested, def, payloadRegistry)...)
 		}
 	}
 
 	return warnings
+}
+
+// validateFromReference validates a 'from' reference in an input declaration.
+// It checks:
+// 1. Reference format is valid (root.field.subfield...)
+// 2. Root segment is valid (execution, trigger, steps)
+// 3. For steps.* paths, the referenced step exists
+func validateFromReference(fromRef, stepName, inputName string, def *wfschema.Definition) []string {
+	var warnings []string
+
+	// Empty reference is invalid
+	if fromRef == "" {
+		warnings = append(warnings, fmt.Sprintf("step %q input %q has empty 'from' reference", stepName, inputName))
+		return warnings
+	}
+
+	// Split reference into parts
+	parts := strings.Split(fromRef, ".")
+	if len(parts) == 0 {
+		warnings = append(warnings, fmt.Sprintf("step %q input %q has malformed 'from' reference: %q", stepName, inputName, fromRef))
+		return warnings
+	}
+
+	// Validate root segment
+	root := parts[0]
+	validRoots := map[string]bool{
+		"execution": true,
+		"trigger":   true,
+		"steps":     true,
+	}
+	if !validRoots[root] {
+		warnings = append(warnings, fmt.Sprintf("step %q input %q has invalid 'from' root %q (valid: execution, trigger, steps)", stepName, inputName, root))
+		return warnings
+	}
+
+	// For steps.* paths, validate the step name exists
+	if root == "steps" {
+		if len(parts) < 2 {
+			warnings = append(warnings, fmt.Sprintf("step %q input %q has incomplete steps reference %q (requires step name)", stepName, inputName, fromRef))
+			return warnings
+		}
+
+		refStepName := parts[1]
+		if !stepExistsInWorkflow(refStepName, def) {
+			warnings = append(warnings, fmt.Sprintf("step %q input %q references non-existent step %q", stepName, inputName, refStepName))
+		}
+	}
+
+	return warnings
+}
+
+// stepExistsInWorkflow checks if a step with the given name exists in the workflow definition.
+func stepExistsInWorkflow(stepName string, def *wfschema.Definition) bool {
+	for _, step := range def.Steps {
+		if step.Name == stepName {
+			return true
+		}
+		// Check nested parallel steps
+		if step.Type == "parallel" {
+			for _, nested := range step.Steps {
+				if nested.Name == stepName {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }

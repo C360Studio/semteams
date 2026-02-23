@@ -129,9 +129,9 @@ func DefaultConfig() Config {
 				{
 					Name:        "workflow.events",
 					Type:        "jetstream",
-					Subject:     "workflow.events",
+					Subject:     "workflow.events.*",
 					StreamName:  "WORKFLOW",
-					Description: "Workflow lifecycle events",
+					Description: "Workflow lifecycle events (started, completed, failed, timed_out, step.*)",
 				},
 				{
 					Name:        "agent.task",

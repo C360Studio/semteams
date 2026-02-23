@@ -273,9 +273,26 @@ func (e *Executor) executeAction(ctx context.Context, workflow *wfschema.Definit
 		return e.parallelExecutor.ExecuteParallelStep(ctx, exec, step, interpolator)
 	}
 
-	// Interpolate all action fields at once, using typed payload assembly if configured
+	// Resolve inputs and interpolate action fields (ADR-020)
 	payloadRegistry := component.GlobalPayloadRegistry()
-	action := interpolator.InterpolateActionDef(step.Action, step.InputType, payloadRegistry)
+	var resolvedPayload json.RawMessage
+	if len(step.Inputs) > 0 {
+		// Get interface type from first input that has one (if any)
+		var interfaceType string
+		for _, input := range step.Inputs {
+			if input.Interface != "" {
+				interfaceType = input.Interface
+				break
+			}
+		}
+		var err error
+		resolvedPayload, err = interpolator.ResolveInputs(step.Inputs, interfaceType, payloadRegistry)
+		if err != nil {
+			e.logger.Warn("Failed to resolve step inputs, falling back to action payload",
+				"step", step.Name, "error", err)
+		}
+	}
+	action := interpolator.InterpolateActionDef(step.Action, resolvedPayload)
 
 	timeout := e.parseTimeout(action.Timeout, e.config.RequestTimeout, step.Name)
 	actx := &actions.Context{
@@ -536,10 +553,8 @@ func (e *Executor) timeoutExecution(ctx context.Context, workflow *wfschema.Defi
 
 // executeCompletionAction executes an on_complete or on_fail action
 func (e *Executor) executeCompletionAction(ctx context.Context, interpolator *interpolator, actionDef wfschema.ActionDef) {
-	// Interpolate all action fields at once
-	// Note: completion actions don't have step context, so inputType is empty
-	payloadRegistry := component.GlobalPayloadRegistry()
-	action := interpolator.InterpolateActionDef(actionDef, "", payloadRegistry)
+	// Interpolate action fields - completion actions don't have step inputs
+	action := interpolator.InterpolateActionDef(actionDef, nil)
 
 	timeout := e.parseTimeout(action.Timeout, e.config.RequestTimeout, "completion_action")
 

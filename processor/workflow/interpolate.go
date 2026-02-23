@@ -88,37 +88,82 @@ func (i *interpolator) interpolateJSONWithFallback(input json.RawMessage) json.R
 	return result
 }
 
+// ResolveInputs resolves all inputs for a step and returns the payload as JSON.
+// This implements the ADR-020 inputs/outputs pattern.
+//
+// The 'from' reference syntax:
+//   - "step_name.field" - references step output (shorthand for steps.step_name.output.field)
+//   - "trigger.payload.field" - references trigger data
+//   - "trigger.subject" - references trigger subject
+//   - "execution.id" - references execution context
+//
+// If the step has an interface declared, uses PayloadRegistry to build a typed payload.
+// Otherwise returns the resolved values as a JSON object.
+func (i *interpolator) ResolveInputs(inputs map[string]wfschema.InputRef, interfaceType string, payloadRegistry *component.PayloadRegistry) (json.RawMessage, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+
+	// Resolve all input values
+	fields := make(map[string]any, len(inputs))
+	for name, ref := range inputs {
+		value, err := i.resolveFromReference(ref.From)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve input %q from %q: %w", name, ref.From, err)
+		}
+		fields[name] = value
+	}
+
+	// If interface type specified, use PayloadRegistry for typed assembly
+	if interfaceType != "" && payloadRegistry != nil {
+		domain, category, version, err := ParseTypeString(interfaceType)
+		if err == nil {
+			payload, buildErr := payloadRegistry.BuildPayload(domain, category, version, fields)
+			if buildErr == nil {
+				return json.Marshal(payload)
+			}
+			// Fall through to generic JSON on build error
+		}
+	}
+
+	// Return as generic JSON object
+	return json.Marshal(fields)
+}
+
+// resolveFromReference resolves a 'from' reference to a value.
+// Handles both shorthand step references and full paths.
+func (i *interpolator) resolveFromReference(from string) (any, error) {
+	parts := strings.Split(from, ".")
+	if len(parts) == 0 {
+		return nil, fmt.Errorf("empty from reference")
+	}
+
+	// Check if it's a full path (trigger.*, execution.*, steps.*)
+	switch parts[0] {
+	case "trigger", "execution", "steps":
+		return i.resolvePath(from)
+	default:
+		// Shorthand: assume it's a step reference
+		// "fetch.result" -> "steps.fetch.output.result"
+		if len(parts) < 2 {
+			return nil, fmt.Errorf("invalid step reference %q: requires step_name.field", from)
+		}
+		fullPath := fmt.Sprintf("steps.%s.output.%s", parts[0], strings.Join(parts[1:], "."))
+		return i.resolvePath(fullPath)
+	}
+}
+
 // InterpolateActionDef returns a copy of the ActionDef with all fields interpolated.
 // On interpolation errors, the original field value is preserved.
 //
-// If both payload_mapping and inputType are provided, uses typed payload assembly.
-// Otherwise falls back to existing JSON interpolation of the payload field.
-func (i *interpolator) InterpolateActionDef(action wfschema.ActionDef, inputType string, payloadRegistry *component.PayloadRegistry) wfschema.ActionDef {
+// If the step has Inputs defined (ADR-020 pattern), those take precedence over action.Payload.
+// Pass resolvedPayload from ResolveInputs() if inputs were resolved, otherwise nil.
+func (i *interpolator) InterpolateActionDef(action wfschema.ActionDef, resolvedPayload json.RawMessage) wfschema.ActionDef {
+	// Use resolved inputs payload if provided, otherwise interpolate action.Payload
 	var payload json.RawMessage
-
-	// Determine payload: use typed assembly if both mapping and inputType are present
-	if len(action.PayloadMapping) > 0 && inputType != "" && payloadRegistry != nil {
-		// Use typed payload assembly
-		resolvePath := func(path string) (any, error) {
-			return i.resolvePath(path)
-		}
-
-		typedPayload, err := AssemblePayload(payloadRegistry, inputType, action.PayloadMapping, action.PassThrough, resolvePath)
-		if err != nil {
-			// Fall back to original payload on assembly error.
-			// The executor will handle any downstream validation issues.
-			payload = action.Payload
-		} else {
-			// Marshal the typed payload to JSON
-			data, err := json.Marshal(typedPayload)
-			if err != nil {
-				payload = action.Payload
-			} else {
-				payload = data
-			}
-		}
+	if resolvedPayload != nil {
+		payload = resolvedPayload
 	} else {
-		// Use existing JSON interpolation
 		payload = i.interpolateJSONWithFallback(action.Payload)
 	}
 

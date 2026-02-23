@@ -1,8 +1,10 @@
 # Workflow Processor Specification
 
-**Version**: 1.0.0  
-**Status**: Draft  
+**Version**: 1.0.0
+**Status**: Draft
 **Last Updated**: 2025-01-01
+
+**Note**: This specification uses the unified dataflow pattern from [ADR-020](../adr-020-unified-dataflow-patterns.md). Steps declare explicit `inputs` and `outputs` instead of string interpolation with `payload_mapping`.
 
 ---
 
@@ -223,19 +225,34 @@ type TriggerConfig struct {
 type StepDef struct {
     Name        string       `json:"name"`
     Description string       `json:"description,omitempty"`
-    
+
+    // Data contracts (ADR-020)
+    Inputs      map[string]InputDef  `json:"inputs,omitempty"`
+    Outputs     map[string]OutputDef `json:"outputs,omitempty"`
+
     Action      ActionDef    `json:"action"`
-    
+
     // Flow control
     OnSuccess   string       `json:"on_success,omitempty"` // Step name, "next", or "complete"
     OnFail      string       `json:"on_fail,omitempty"`    // Step name or "abort"
-    
+
     // Reliability
     Retry       *RetryPolicy `json:"retry,omitempty"`
     Timeout     string       `json:"timeout,omitempty"`
-    
+
     // Conditions
     Condition   *Condition   `json:"condition,omitempty"`  // Skip step if false
+}
+
+// InputDef defines a step input with reference to source data (ADR-020)
+type InputDef struct {
+    From      string `json:"from"`                 // Reference: "step.output", "trigger.payload.field", "execution.id"
+    Interface string `json:"interface,omitempty"`  // Optional type annotation for validation
+}
+
+// OutputDef defines a step output with optional type annotation (ADR-020)
+type OutputDef struct {
+    Interface string `json:"interface,omitempty"`  // Optional type annotation for validation
 }
 
 // RetryPolicy configures step retry behavior
@@ -248,7 +265,7 @@ type RetryPolicy struct {
 
 // Condition for conditional step execution
 type Condition struct {
-    Field    string `json:"field"`    // JSONPath into execution context
+    Field    string `json:"field"`    // Reference into execution context (uses same syntax as InputDef.From)
     Operator string `json:"operator"` // eq, ne, gt, lt, contains, exists
     Value    any    `json:"value"`
 }
@@ -257,28 +274,27 @@ type Condition struct {
 ### 4.4 Action Definition
 
 ```go
-// ActionDef defines what a step does
+// ActionDef defines what a step does (ADR-020 unified dataflow)
 type ActionDef struct {
     Type string `json:"type"` // call, publish, set_state, http, wait
-    
+
     // For "call" (request/response)
+    // Payload assembled from step inputs
     Subject  string         `json:"subject,omitempty"`
-    Payload  map[string]any `json:"payload,omitempty"`
-    
+
     // For "publish" (fire-and-forget)
-    // Uses Subject and Payload above
-    
+    // Payload assembled from step inputs
+    // Uses Subject above
+
     // For "set_state" (entity mutation)
-    EntityID  string `json:"entity_id,omitempty"`  // Or "${trigger.entity_id}"
-    Predicate string `json:"predicate,omitempty"`
-    Object    any    `json:"object,omitempty"`
-    
+    // EntityID, Predicate, Object read from step inputs
+
     // For "http"
+    // Request body assembled from step inputs
     Method   string            `json:"method,omitempty"`
     URL      string            `json:"url,omitempty"`
-    Headers  map[string]string `json:"headers,omitempty"`
-    Body     any               `json:"body,omitempty"`
-    
+    Headers  map[string]string `json:"headers,omitempty"` // Supports {{input_name}} placeholders
+
     // For "wait" (pause execution)
     Duration string `json:"duration,omitempty"`
 }
@@ -619,34 +635,40 @@ func (e *Executor) executeStep(ctx context.Context, exec *Execution, step *StepD
 }
 ```
 
-### 6.3 Variable Interpolation
+### 6.3 Data References (ADR-020)
 
-Workflow definitions support variable interpolation using `${...}` syntax:
+Workflows use the unified dataflow pattern from [ADR-020](../adr-020-unified-dataflow-patterns.md). Data is referenced via `from` fields in step inputs rather than string interpolation:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `${trigger.entity_id}` | Entity that triggered workflow | `acme.ops.specs.core.spec.auth` |
-| `${trigger.payload.X}` | Field from trigger payload | `${trigger.payload.status}` |
-| `${steps.X.output}` | Output from completed step | `${steps.load-spec.output}` |
-| `${steps.X.output.field}` | Field from step output | `${steps.extract.output.tasks}` |
-| `${execution.id}` | Current execution ID | `exec-abc123` |
-| `${timestamp}` | Current ISO timestamp | `2025-01-01T12:00:00Z` |
-| `${uuid}` | Generate new UUID | `550e8400-e29b-41d4-a716...` |
+| Reference Pattern | Description | Example |
+|-------------------|-------------|---------|
+| `step_name.output_name` | Named output from step | `"fetch.result"` |
+| `step_name.output_name.field` | Deep field access | `"extract.tasks.items"` |
+| `trigger.entity_id` | Entity that triggered workflow | `acme.ops.specs.core.spec.auth` |
+| `trigger.payload.field` | Field from trigger payload | `"trigger.payload.status"` |
+| `execution.id` | Current execution ID | `exec-abc123` |
+| `timestamp` | Current ISO timestamp | `2025-01-01T12:00:00Z` |
+| `uuid` | Generate new UUID | `550e8400-e29b-41d4-a716...` |
 
 Example usage:
 ```json
 {
+  "name": "create-issues",
+  "inputs": {
+    "spec_id": {"from": "trigger.entity_id"},
+    "tasks": {"from": "extract-tasks.tasks"},
+    "created_at": {"from": "timestamp"}
+  },
+  "outputs": {
+    "issue_ids": {"interface": "github.issues.v1"}
+  },
   "action": {
     "type": "call",
-    "subject": "github.issues.create",
-    "payload": {
-      "spec_id": "${trigger.entity_id}",
-      "tasks": "${steps.extract-tasks.output.tasks}",
-      "created_at": "${timestamp}"
-    }
+    "subject": "github.issues.create"
   }
 }
 ```
+
+**Validation**: The workflow loader validates all `from` references at load time, ensuring referenced steps and outputs exist before execution.
 
 ### 6.4 Error Handling
 
@@ -687,19 +709,26 @@ Step Failure
 
 ### 7.1 Call (Request/Response)
 
-Executes a NATS request and waits for response.
+Executes a NATS request and waits for response. Request payload is assembled from step inputs.
 
 ```json
 {
-  "type": "call",
-  "subject": "semmem.spec.get",
-  "payload": {
-    "id": "${trigger.entity_id}"
+  "name": "get-spec",
+  "inputs": {
+    "id": {"from": "trigger.entity_id"}
+  },
+  "outputs": {
+    "spec": {"interface": "spec.data.v1"}
+  },
+  "action": {
+    "type": "call",
+    "subject": "semmem.spec.get"
   }
 }
 ```
 
 **Behavior:**
+- Assembles request payload from step inputs
 - Sends request to specified subject
 - Waits for response (respects step timeout)
 - Response becomes step output
@@ -707,63 +736,82 @@ Executes a NATS request and waits for response.
 
 ### 7.2 Publish (Fire-and-Forget)
 
-Publishes a message without waiting for response.
+Publishes a message without waiting for response. Message payload is assembled from step inputs.
 
 ```json
 {
-  "type": "publish",
-  "subject": "events.spec.approved",
-  "payload": {
-    "spec_id": "${trigger.entity_id}",
-    "approved_at": "${timestamp}"
+  "name": "notify-approval",
+  "inputs": {
+    "spec_id": {"from": "trigger.entity_id"},
+    "approved_at": {"from": "timestamp"}
+  },
+  "action": {
+    "type": "publish",
+    "subject": "events.spec.approved"
   }
 }
 ```
 
 **Behavior:**
+- Assembles message payload from step inputs
 - Publishes to subject
 - Immediately succeeds (no response expected)
 - Step output is `{"published": true}`
 
 ### 7.3 Set State (Entity Mutation)
 
-Updates entity state via graph processor.
+Updates entity state via graph processor. Entity and state data are read from step inputs.
 
 ```json
 {
-  "type": "set_state",
-  "entity_id": "${trigger.entity_id}",
-  "predicate": "spec.status.current",
-  "object": "implementing"
+  "name": "update-status",
+  "inputs": {
+    "entity_id": {"from": "trigger.entity_id"},
+    "predicate": {"value": "spec.status.current"},
+    "object": {"value": "implementing"}
+  },
+  "action": {
+    "type": "set_state"
+  }
 }
 ```
 
 **Behavior:**
+- Reads `entity_id`, `predicate`, and `object` from step inputs
 - Publishes triple to graph processor
 - Waits for confirmation
 - Step output is the triple
 
 ### 7.4 HTTP (External Call)
 
-Makes HTTP request to external service.
+Makes HTTP request to external service. Request body is assembled from step inputs, headers support placeholders.
 
 ```json
 {
-  "type": "http",
-  "method": "POST",
-  "url": "https://api.github.com/repos/${repo}/issues",
-  "headers": {
-    "Authorization": "Bearer ${secrets.github_token}",
-    "Content-Type": "application/json"
+  "name": "create-issue",
+  "inputs": {
+    "title": {"from": "extract.title"},
+    "body": {"from": "extract.description"},
+    "github_token": {"from": "secrets.github_token"}
   },
-  "body": {
-    "title": "${steps.extract.output.title}",
-    "body": "${steps.extract.output.description}"
+  "outputs": {
+    "issue": {"interface": "github.issue.v1"}
+  },
+  "action": {
+    "type": "http",
+    "method": "POST",
+    "url": "https://api.github.com/repos/org/repo/issues",
+    "headers": {
+      "Authorization": "Bearer {{github_token}}",
+      "Content-Type": "application/json"
+    }
   }
 }
 ```
 
 **Behavior:**
+- Assembles request body from step inputs
+- Resolves header placeholders (`{{input_name}}`) from step inputs
 - Makes HTTP request
 - Response body becomes step output
 - Non-2xx status = step failure
@@ -1188,26 +1236,34 @@ Workflow A triggers Workflow B:
     {
       "name": "load-spec",
       "description": "Load the approved spec",
+      "inputs": {
+        "id": {"from": "trigger.entity_id"}
+      },
+      "outputs": {
+        "spec": {"interface": "spec.data.v1"}
+      },
       "action": {
         "type": "call",
-        "subject": "semmem.spec.get",
-        "payload": {"id": "${trigger.entity_id}"}
+        "subject": "semmem.spec.get"
       },
       "timeout": "10s"
     },
     {
       "name": "extract-tasks",
       "description": "Parse spec for task definitions",
+      "inputs": {
+        "spec": {"from": "load-spec.spec"}
+      },
+      "outputs": {
+        "tasks": {"interface": "spec.tasks.v1"}
+      },
       "action": {
         "type": "call",
-        "subject": "semmem.spec.extract-tasks",
-        "payload": {
-          "spec": "${steps.load-spec.output}"
-        }
+        "subject": "semmem.spec.extract-tasks"
       },
       "timeout": "30s",
       "condition": {
-        "field": "steps.load-spec.output.has_tasks",
+        "field": "load-spec.spec.has_tasks",
         "operator": "eq",
         "value": true
       }
@@ -1215,13 +1271,17 @@ Workflow A triggers Workflow B:
     {
       "name": "create-issues",
       "description": "Create GitHub issues for each task",
+      "inputs": {
+        "spec_id": {"from": "trigger.entity_id"},
+        "tasks": {"from": "extract-tasks.tasks"}
+      },
+      "outputs": {
+        "issue_ids": {},
+        "count": {}
+      },
       "action": {
         "type": "call",
-        "subject": "semmem.github.create-issues",
-        "payload": {
-          "spec_id": "${trigger.entity_id}",
-          "tasks": "${steps.extract-tasks.output.tasks}"
-        }
+        "subject": "semmem.github.create-issues"
       },
       "retry": {
         "max_attempts": 3,
@@ -1234,59 +1294,65 @@ Workflow A triggers Workflow B:
     {
       "name": "link-issues",
       "description": "Link created issues to spec entity",
+      "inputs": {
+        "spec_id": {"from": "trigger.entity_id"},
+        "issue_ids": {"from": "create-issues.issue_ids"}
+      },
       "action": {
         "type": "call",
-        "subject": "semmem.spec.link-tasks",
-        "payload": {
-          "spec_id": "${trigger.entity_id}",
-          "issue_ids": "${steps.create-issues.output.issue_ids}"
-        }
+        "subject": "semmem.spec.link-tasks"
       }
     },
     {
       "name": "mark-blocked",
       "description": "Mark spec as blocked if issue creation failed",
+      "inputs": {
+        "entity_id": {"from": "trigger.entity_id"},
+        "predicate": {"value": "spec.status.current"},
+        "object": {"value": "blocked"}
+      },
       "action": {
-        "type": "set_state",
-        "entity_id": "${trigger.entity_id}",
-        "predicate": "spec.status.current",
-        "object": "blocked"
+        "type": "set_state"
       },
       "on_success": "complete"
     }
   ],
-  
+
   "on_complete": [
     {
       "type": "set_state",
-      "entity_id": "${trigger.entity_id}",
-      "predicate": "spec.status.current",
-      "object": "implementing"
+      "inputs": {
+        "entity_id": {"from": "trigger.entity_id"},
+        "predicate": {"value": "spec.status.current"},
+        "object": {"value": "implementing"}
+      }
     },
     {
       "type": "publish",
       "subject": "semmem.events.spec.implementing",
-      "payload": {
-        "spec_id": "${trigger.entity_id}",
-        "issue_count": "${steps.create-issues.output.count}"
+      "inputs": {
+        "spec_id": {"from": "trigger.entity_id"},
+        "issue_count": {"from": "create-issues.count"}
       }
     }
   ],
-  
+
   "on_fail": [
     {
       "type": "set_state",
-      "entity_id": "${trigger.entity_id}",
-      "predicate": "workflow.state.current",
-      "object": "failed"
+      "inputs": {
+        "entity_id": {"from": "trigger.entity_id"},
+        "predicate": {"value": "workflow.state.current"},
+        "object": {"value": "failed"}
+      }
     },
     {
       "type": "publish",
       "subject": "semmem.events.workflow.failed",
-      "payload": {
-        "workflow_id": "spec-approval",
-        "entity_id": "${trigger.entity_id}",
-        "error": "${execution.error}"
+      "inputs": {
+        "workflow_id": {"value": "spec-approval"},
+        "entity_id": {"from": "trigger.entity_id"},
+        "error": {"from": "execution.error"}
       }
     }
   ],
@@ -1322,89 +1388,100 @@ Workflow A triggers Workflow B:
   "steps": [
     {
       "name": "preflight-check",
+      "inputs": {
+        "drone_id": {"from": "trigger.payload.drone_id"}
+      },
       "action": {
         "type": "call",
-        "subject": "drone.preflight.check",
-        "payload": {"drone_id": "${trigger.payload.drone_id}"}
+        "subject": "drone.preflight.check"
       },
       "timeout": "30s"
     },
     {
       "name": "arm-and-takeoff",
+      "inputs": {
+        "drone_id": {"from": "trigger.payload.drone_id"},
+        "altitude": {"from": "trigger.payload.altitude"}
+      },
       "action": {
         "type": "call",
-        "subject": "drone.takeoff",
-        "payload": {
-          "drone_id": "${trigger.payload.drone_id}",
-          "altitude": "${trigger.payload.altitude}"
-        }
+        "subject": "drone.takeoff"
       },
       "timeout": "2m",
       "on_fail": "abort"
     },
     {
       "name": "navigate-to-area",
+      "inputs": {
+        "drone_id": {"from": "trigger.payload.drone_id"},
+        "waypoint": {"from": "trigger.payload.area.start"}
+      },
       "action": {
         "type": "call",
-        "subject": "drone.goto",
-        "payload": {
-          "drone_id": "${trigger.payload.drone_id}",
-          "waypoint": "${trigger.payload.area.start}"
-        }
+        "subject": "drone.goto"
       },
       "timeout": "5m",
       "on_fail": "emergency-rtl"
     },
     {
       "name": "execute-survey",
+      "inputs": {
+        "drone_id": {"from": "trigger.payload.drone_id"},
+        "pattern": {"from": "trigger.payload.area.pattern"}
+      },
+      "outputs": {
+        "survey_data": {"interface": "drone.survey.result.v1"}
+      },
       "action": {
         "type": "call",
-        "subject": "drone.survey.execute",
-        "payload": {
-          "drone_id": "${trigger.payload.drone_id}",
-          "pattern": "${trigger.payload.area.pattern}"
-        }
+        "subject": "drone.survey.execute"
       },
       "timeout": "30m",
       "on_fail": "emergency-rtl"
     },
     {
       "name": "return-to-launch",
+      "inputs": {
+        "drone_id": {"from": "trigger.payload.drone_id"}
+      },
       "action": {
         "type": "call",
-        "subject": "drone.rtl",
-        "payload": {"drone_id": "${trigger.payload.drone_id}"}
+        "subject": "drone.rtl"
       },
       "timeout": "10m"
     },
     {
       "name": "land",
+      "inputs": {
+        "drone_id": {"from": "trigger.payload.drone_id"}
+      },
       "action": {
         "type": "call",
-        "subject": "drone.land",
-        "payload": {"drone_id": "${trigger.payload.drone_id}"}
+        "subject": "drone.land"
       },
       "timeout": "2m"
     },
     {
       "name": "emergency-rtl",
       "description": "Emergency return to launch",
+      "inputs": {
+        "drone_id": {"from": "trigger.payload.drone_id"}
+      },
       "action": {
         "type": "call",
-        "subject": "drone.emergency.rtl",
-        "payload": {"drone_id": "${trigger.payload.drone_id}"}
+        "subject": "drone.emergency.rtl"
       },
       "on_success": "complete"
     }
   ],
-  
+
   "on_complete": [
     {
       "type": "publish",
       "subject": "missions.survey.completed",
-      "payload": {
-        "drone_id": "${trigger.payload.drone_id}",
-        "survey_data": "${steps.execute-survey.output}"
+      "inputs": {
+        "drone_id": {"from": "trigger.payload.drone_id"},
+        "survey_data": {"from": "execute-survey.survey_data"}
       }
     }
   ],
@@ -1430,37 +1507,43 @@ Workflow A triggers Workflow B:
   "steps": [
     {
       "name": "collect-metrics",
+      "inputs": {
+        "period": {"value": "24h"},
+        "types": {"value": ["specs", "tasks", "commits"]}
+      },
+      "outputs": {
+        "metrics": {"interface": "metrics.data.v1"}
+      },
       "action": {
         "type": "call",
-        "subject": "semmem.metrics.collect",
-        "payload": {
-          "period": "24h",
-          "types": ["specs", "tasks", "commits"]
-        }
+        "subject": "semmem.metrics.collect"
       },
       "timeout": "2m"
     },
     {
       "name": "generate-summary",
+      "inputs": {
+        "template": {"value": "daily-progress"},
+        "data": {"from": "collect-metrics.metrics"}
+      },
+      "outputs": {
+        "summary": {}
+      },
       "action": {
         "type": "call",
-        "subject": "semmem.report.generate",
-        "payload": {
-          "template": "daily-progress",
-          "data": "${steps.collect-metrics.output}"
-        }
+        "subject": "semmem.report.generate"
       },
       "timeout": "1m"
     },
     {
       "name": "send-notifications",
+      "inputs": {
+        "channel": {"value": "engineering"},
+        "message": {"from": "generate-summary.summary"}
+      },
       "action": {
         "type": "call",
-        "subject": "semmem.notify.team",
-        "payload": {
-          "channel": "engineering",
-          "message": "${steps.generate-summary.output.summary}"
-        }
+        "subject": "semmem.notify.team"
       },
       "retry": {
         "max_attempts": 3,
@@ -1468,14 +1551,14 @@ Workflow A triggers Workflow B:
       }
     }
   ],
-  
+
   "on_complete": [
     {
       "type": "publish",
       "subject": "semmem.events.report.sent",
-      "payload": {
-        "report_type": "daily-progress",
-        "sent_at": "${timestamp}"
+      "inputs": {
+        "report_type": {"value": "daily-progress"},
+        "sent_at": {"from": "timestamp"}
       }
     }
   ],
@@ -2105,15 +2188,33 @@ paths:
 
 ---
 
-## Appendix A: Migration from Go-code Workflows
+## Appendix A: Migration from Pre-ADR-020 Workflows
+
+For workflows using the old string interpolation pattern:
+
+| Old Pattern | New Pattern (ADR-020) |
+|-------------|----------------------|
+| `"payload": {"id": "${trigger.entity_id}"}` | `"inputs": {"id": {"from": "trigger.entity_id"}}` |
+| `"payload_mapping": {"data": "steps.fetch.output"}` | `"inputs": {"data": {"from": "fetch.result"}}` |
+| `"input_type": "request.v1"` | `"inputs": {"data": {"interface": "request.v1"}}` |
+| `"output_type": "response.v1"` | `"outputs": {"result": {"interface": "response.v1"}}` |
+| `"pass_through": true` | Explicit input/output declarations |
+
+**Key Changes:**
+- Remove `payload` field from actions - data comes from `inputs`
+- Remove `payload_mapping` - use `inputs` with `from` references
+- Remove `input_type`/`output_type` - use `interface` on inputs/outputs
+- Remove `pass_through` - declare what you need explicitly
+
+## Appendix B: Migration from Go-code Workflows
 
 For existing SemMem Go-code workflows, migration path:
 
 | Go Code Pattern | Workflow Equivalent |
 |-----------------|---------------------|
-| `w.store.Get(ctx, id)` | `{"type": "call", "subject": "semmem.spec.get"}` |
-| `w.github.CreateIssue(...)` | `{"type": "call", "subject": "semmem.github.create-issues"}` |
-| `w.store.AddTriple(...)` | `{"type": "set_state", ...}` |
+| `w.store.Get(ctx, id)` | Step with `{"type": "call", "subject": "semmem.spec.get"}` |
+| `w.github.CreateIssue(...)` | Step with `{"type": "call", "subject": "semmem.github.create-issues"}` |
+| `w.store.AddTriple(...)` | Step with `{"type": "set_state"}` |
 | `for i := 0; i < retries; i++` | `"retry": {"max_attempts": N}` |
 | `time.Sleep(backoff)` | Automatic with retry policy |
 | Error handling | `"on_fail": "step-name"` or `"abort"` |
@@ -2122,7 +2223,7 @@ The domain-specific logic (parsing specs, GitHub API calls) remains in Go servic
 
 ---
 
-## Appendix B: Future Extensions
+## Appendix C: Future Extensions
 
 Reserved for post-MVP development:
 

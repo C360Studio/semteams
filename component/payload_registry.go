@@ -1,6 +1,7 @@
 package component
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -18,6 +19,10 @@ type PayloadFactory func() any
 // from step output maps. Returns error if required fields are missing
 // or field values cannot be converted to the target type.
 // Returns any to avoid import cycles - the actual payload should implement message.Payload.
+//
+// OPTIONAL: If not provided, BuildPayload falls back to JSON marshal/unmarshal
+// using the Factory to create the target type. Custom builders are only needed
+// for performance optimization of high-frequency payload types.
 type PayloadBuilder func(fields map[string]any) (any, error)
 
 // PayloadRegistration holds factory and metadata for a payload type.
@@ -79,14 +84,7 @@ func (pr *PayloadRegistry) RegisterPayload(registration *PayloadRegistration) er
 		)
 	}
 
-	if registration.Builder == nil {
-		return errs.WrapInvalid(
-			errs.ErrInvalidConfig,
-			"PayloadRegistry",
-			"RegisterPayload",
-			"builder function validation",
-		)
-	}
+	// Builder is optional - see BuildPayload for fallback behavior
 
 	if registration.Domain == "" {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "PayloadRegistry", "RegisterPayload", "domain validation")
@@ -141,8 +139,11 @@ func (pr *PayloadRegistry) CreatePayload(domain, category, version string) any {
 	return registration.Factory()
 }
 
-// BuildPayload creates a typed payload from field mappings using the registered builder.
-// Returns an error if the message type is not registered or if the builder fails.
+// BuildPayload creates a typed payload from field mappings.
+// If a custom Builder is registered, it is used for efficient field mapping.
+// Otherwise, falls back to JSON marshal/unmarshal using the Factory.
+//
+// Returns an error if the message type is not registered or if building fails.
 // This is used by workflow variable interpolation to construct typed payloads
 // from step output maps.
 // Returns any to avoid import cycles - the actual payload implements message.Payload.
@@ -157,7 +158,24 @@ func (pr *PayloadRegistry) BuildPayload(domain, category, version string, fields
 		return nil, fmt.Errorf("payload type %q not registered", typeStr)
 	}
 
-	return registration.Builder(fields)
+	// Use custom builder if available (optimization path)
+	if registration.Builder != nil {
+		return registration.Builder(fields)
+	}
+
+	// Fallback: JSON round-trip using Factory
+	// This works for any payload type without requiring custom builder code
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal fields for %s: %w", typeStr, err)
+	}
+
+	payload := registration.Factory()
+	if err := json.Unmarshal(data, payload); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal into %s: %w", typeStr, err)
+	}
+
+	return payload, nil
 }
 
 // GetRegistration returns the payload registration for a specific message type.
