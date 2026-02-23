@@ -440,6 +440,7 @@ func validateStepTypes(step *wfschema.StepDef, def *wfschema.Definition, payload
 // 1. Reference format is valid (root.field.subfield...)
 // 2. Root segment is valid (execution, trigger, steps)
 // 3. For steps.* paths, the referenced step exists
+// 4. For steps.* paths with outputs declared, the referenced output exists
 func validateFromReference(fromRef, stepName, inputName string, def *wfschema.Definition) []string {
 	var warnings []string
 
@@ -463,12 +464,22 @@ func validateFromReference(fromRef, stepName, inputName string, def *wfschema.De
 		"trigger":   true,
 		"steps":     true,
 	}
+
+	// Handle shorthand step references (e.g., "fetch.result" instead of "steps.fetch.output.result")
+	isShorthand := !validRoots[root] && len(parts) >= 2
+	if isShorthand {
+		// Treat as shorthand step reference
+		root = "steps"
+		// Expand: "fetch.result" -> ["steps", "fetch", "output", "result"]
+		parts = append([]string{"steps", parts[0], "output"}, parts[1:]...)
+	}
+
 	if !validRoots[root] {
-		warnings = append(warnings, fmt.Sprintf("step %q input %q has invalid 'from' root %q (valid: execution, trigger, steps)", stepName, inputName, root))
+		warnings = append(warnings, fmt.Sprintf("step %q input %q has invalid 'from' root %q (valid: execution, trigger, steps, or step shorthand)", stepName, inputName, root))
 		return warnings
 	}
 
-	// For steps.* paths, validate the step name exists
+	// For steps.* paths, validate the step name exists and output is declared
 	if root == "steps" {
 		if len(parts) < 2 {
 			warnings = append(warnings, fmt.Sprintf("step %q input %q has incomplete steps reference %q (requires step name)", stepName, inputName, fromRef))
@@ -476,8 +487,27 @@ func validateFromReference(fromRef, stepName, inputName string, def *wfschema.De
 		}
 
 		refStepName := parts[1]
-		if !stepExistsInWorkflow(refStepName, def) {
+		refStep := findStepByName(refStepName, def)
+		if refStep == nil {
 			warnings = append(warnings, fmt.Sprintf("step %q input %q references non-existent step %q", stepName, inputName, refStepName))
+			return warnings
+		}
+
+		// If the referenced step has outputs declared, validate the output field
+		if len(refStep.Outputs) > 0 && len(parts) >= 4 {
+			// parts[2] should be "output", parts[3] is the output field name
+			// "steps.fetch.output.result" -> outputName = "result"
+			// "steps.fetch.output.data.nested" -> outputName = "data"
+			outputName := parts[3]
+			if _, declared := refStep.Outputs[outputName]; !declared {
+				declaredOutputs := make([]string, 0, len(refStep.Outputs))
+				for name := range refStep.Outputs {
+					declaredOutputs = append(declaredOutputs, name)
+				}
+				warnings = append(warnings, fmt.Sprintf(
+					"step %q input %q references output %q from step %q, but step only declares: %v",
+					stepName, inputName, outputName, refStepName, declaredOutputs))
+			}
 		}
 	}
 
@@ -486,18 +516,26 @@ func validateFromReference(fromRef, stepName, inputName string, def *wfschema.De
 
 // stepExistsInWorkflow checks if a step with the given name exists in the workflow definition.
 func stepExistsInWorkflow(stepName string, def *wfschema.Definition) bool {
-	for _, step := range def.Steps {
+	return findStepByName(stepName, def) != nil
+}
+
+// findStepByName returns the step definition for a given step name, or nil if not found.
+// It searches both top-level steps and nested parallel steps.
+func findStepByName(stepName string, def *wfschema.Definition) *wfschema.StepDef {
+	for i := range def.Steps {
+		step := &def.Steps[i]
 		if step.Name == stepName {
-			return true
+			return step
 		}
 		// Check nested parallel steps
 		if step.Type == "parallel" {
-			for _, nested := range step.Steps {
+			for j := range step.Steps {
+				nested := &step.Steps[j]
 				if nested.Name == stepName {
-					return true
+					return nested
 				}
 			}
 		}
 	}
-	return false
+	return nil
 }

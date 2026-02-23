@@ -80,3 +80,138 @@ func TestStepExistsInWorkflow(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateFromReference(t *testing.T) {
+	def := &wfschema.Definition{
+		Steps: []wfschema.StepDef{
+			{
+				Name: "fetch",
+				Outputs: map[string]wfschema.OutputDef{
+					"result":  {},
+					"details": {},
+				},
+			},
+			{
+				Name: "process",
+				// No outputs declared - validation should skip output checking
+			},
+			{
+				Name: "parallel-container",
+				Type: "parallel",
+				Steps: []wfschema.StepDef{
+					{
+						Name: "nested-fetch",
+						Outputs: map[string]wfschema.OutputDef{
+							"data": {},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name         string
+		fromRef      string
+		stepName     string
+		inputName    string
+		wantWarnings int
+		wantContains string
+	}{
+		// Valid references
+		{
+			name:         "valid full path to declared output",
+			fromRef:      "steps.fetch.output.result",
+			stepName:     "consumer",
+			inputName:    "data",
+			wantWarnings: 0,
+		},
+		{
+			name:         "valid shorthand to declared output",
+			fromRef:      "fetch.result",
+			stepName:     "consumer",
+			inputName:    "data",
+			wantWarnings: 0,
+		},
+		{
+			name:         "valid trigger reference",
+			fromRef:      "trigger.payload.field",
+			stepName:     "consumer",
+			inputName:    "data",
+			wantWarnings: 0,
+		},
+		{
+			name:         "valid execution reference",
+			fromRef:      "execution.id",
+			stepName:     "consumer",
+			inputName:    "data",
+			wantWarnings: 0,
+		},
+		{
+			name:         "valid reference to step without outputs (skip validation)",
+			fromRef:      "process.something",
+			stepName:     "consumer",
+			inputName:    "data",
+			wantWarnings: 0, // No outputs declared = skip output validation
+		},
+		// Invalid references
+		{
+			name:         "reference to undeclared output",
+			fromRef:      "steps.fetch.output.missing",
+			stepName:     "consumer",
+			inputName:    "data",
+			wantWarnings: 1,
+			wantContains: "references output \"missing\"",
+		},
+		{
+			name:         "shorthand reference to undeclared output",
+			fromRef:      "fetch.missing",
+			stepName:     "consumer",
+			inputName:    "data",
+			wantWarnings: 1,
+			wantContains: "references output \"missing\"",
+		},
+		{
+			name:         "reference to non-existent step",
+			fromRef:      "steps.nonexistent.output.field",
+			stepName:     "consumer",
+			inputName:    "data",
+			wantWarnings: 1,
+			wantContains: "non-existent step",
+		},
+		{
+			name:         "empty reference",
+			fromRef:      "",
+			stepName:     "consumer",
+			inputName:    "data",
+			wantWarnings: 1,
+			wantContains: "empty 'from' reference",
+		},
+		// Nested step references
+		{
+			name:         "valid nested step reference",
+			fromRef:      "nested-fetch.data",
+			stepName:     "consumer",
+			inputName:    "input",
+			wantWarnings: 0,
+		},
+		{
+			name:         "nested step reference to undeclared output",
+			fromRef:      "nested-fetch.missing",
+			stepName:     "consumer",
+			inputName:    "input",
+			wantWarnings: 1,
+			wantContains: "references output \"missing\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := validateFromReference(tt.fromRef, tt.stepName, tt.inputName, def)
+			assert.Equal(t, tt.wantWarnings, len(warnings), "unexpected warning count: %v", warnings)
+			if tt.wantContains != "" && len(warnings) > 0 {
+				assert.Contains(t, warnings[0], tt.wantContains)
+			}
+		})
+	}
+}
