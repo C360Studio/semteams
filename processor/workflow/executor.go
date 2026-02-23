@@ -133,6 +133,11 @@ func (e *Executor) ContinueExecution(ctx context.Context, workflow *wfschema.Def
 		return e.failExecution(ctx, workflow, exec, fmt.Sprintf("step not found: %s", StepResult.StepName))
 	}
 
+	// Validate step outputs match declarations (non-blocking warnings)
+	if StepResult.Status == "success" {
+		e.validateStepOutputs(currentStep, StepResult)
+	}
+
 	var nextStepName string
 	if StepResult.Status == "success" {
 		nextStepName = currentStep.OnSuccess
@@ -718,4 +723,48 @@ func (e *Executor) HandleParallelStepResult(ctx context.Context, registry *Regis
 
 	// Continue workflow
 	return e.ContinueExecution(ctx, workflow, exec, stepResult)
+}
+
+// validateStepOutputs checks that a step's result contains all declared outputs.
+// This is a non-blocking validation that logs warnings for missing outputs.
+func (e *Executor) validateStepOutputs(step *wfschema.StepDef, result StepResult) {
+	// Skip if no outputs declared
+	if len(step.Outputs) == 0 {
+		return
+	}
+
+	// Skip if no output data
+	if len(result.Output) == 0 {
+		e.logger.Warn("Step declares outputs but result has no output data",
+			slog.String("step", step.Name),
+			slog.Any("declared_outputs", mapKeys(step.Outputs)))
+		return
+	}
+
+	// Try to unmarshal output as a map
+	var outputMap map[string]any
+	if err := json.Unmarshal(result.Output, &outputMap); err != nil {
+		// Output is not an object - can't validate field names
+		e.logger.Debug("Step output is not an object, skipping output validation",
+			slog.String("step", step.Name))
+		return
+	}
+
+	// Check each declared output exists in result
+	for name := range step.Outputs {
+		if _, exists := outputMap[name]; !exists {
+			e.logger.Warn("Declared output missing from step result",
+				slog.String("step", step.Name),
+				slog.String("output", name))
+		}
+	}
+}
+
+// mapKeys returns the keys of a map as a slice.
+func mapKeys[K comparable, V any](m map[K]V) []K {
+	keys := make([]K, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
