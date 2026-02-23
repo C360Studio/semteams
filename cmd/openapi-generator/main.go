@@ -13,6 +13,7 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
+	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 	"github.com/c360studio/semstreams/service"
 )
 
@@ -76,6 +77,12 @@ func main() {
 
 		log.Printf("  ✓ Generated component schema: %s", outFile)
 	}
+
+	// Generate workflow definition schema from Go structs
+	if err := generateWorkflowDefinitionSchema(*outDir); err != nil {
+		log.Fatalf("Failed to generate workflow definition schema: %v", err)
+	}
+	log.Printf("  ✓ Generated workflow definition schema")
 
 	// Get all registered service OpenAPI specs
 	serviceSpecs := service.GetAllOpenAPISpecs()
@@ -274,4 +281,170 @@ func collectResponseTypes(specs map[string]*service.OpenAPISpec) []reflect.Type 
 	}
 
 	return types
+}
+
+// generateWorkflowDefinitionSchema generates JSON Schema for workflow definitions.
+// This includes the Definition, StepDef, ActionDef, InputRef, and OutputDef types.
+// Uses $defs and $ref to handle recursive types (StepDef contains Steps []StepDef).
+func generateWorkflowDefinitionSchema(outDir string) error {
+	// Build schema with definitions for all types to handle recursion
+	defs := make(map[string]any)
+
+	// Known types that should use $ref when encountered as fields
+	knownTypeNames := map[string]string{
+		"Definition":   "#/$defs/Definition",
+		"TriggerDef":   "#/$defs/TriggerDef",
+		"StepDef":      "#/$defs/StepDef",
+		"ActionDef":    "#/$defs/ActionDef",
+		"ConditionDef": "#/$defs/ConditionDef",
+		"InputRef":     "#/$defs/InputRef",
+		"OutputDef":    "#/$defs/OutputDef",
+	}
+
+	// Generate schemas for all workflow types
+	types := []struct {
+		name string
+		typ  reflect.Type
+	}{
+		{"Definition", reflect.TypeOf(wfschema.Definition{})},
+		{"TriggerDef", reflect.TypeOf(wfschema.TriggerDef{})},
+		{"StepDef", reflect.TypeOf(wfschema.StepDef{})},
+		{"ActionDef", reflect.TypeOf(wfschema.ActionDef{})},
+		{"ConditionDef", reflect.TypeOf(wfschema.ConditionDef{})},
+		{"InputRef", reflect.TypeOf(wfschema.InputRef{})},
+		{"OutputDef", reflect.TypeOf(wfschema.OutputDef{})},
+	}
+
+	for _, t := range types {
+		// Generate full struct schema directly (not via schemaFromTypeWithRefs)
+		// to avoid returning $ref for top-level definitions
+		defs[t.name] = schemaFromStructWithRefs(t.typ, knownTypeNames)
+	}
+
+	// Build full schema with $defs
+	fullSchema := map[string]any{
+		"$schema":     "http://json-schema.org/draft-07/schema#",
+		"$id":         "workflow-definition.v1.json",
+		"title":       "Workflow Definition",
+		"description": "Schema for SemStreams workflow definitions (ADR-020)",
+		"$ref":        "#/$defs/Definition",
+		"$defs":       defs,
+	}
+
+	// Write to file
+	outFile := filepath.Join(outDir, "workflow-definition.v1.json")
+	data, err := json.MarshalIndent(fullSchema, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal workflow schema: %w", err)
+	}
+
+	if err := os.WriteFile(outFile, data, 0644); err != nil {
+		return fmt.Errorf("failed to write workflow schema: %w", err)
+	}
+
+	return nil
+}
+
+// schemaFromTypeWithRefs generates JSON Schema but uses $ref for known workflow types
+// to avoid infinite recursion with self-referencing types like StepDef.
+func schemaFromTypeWithRefs(t reflect.Type, knownTypeNames map[string]string) map[string]any {
+	// Handle pointers
+	if t.Kind() == reflect.Pointer {
+		schema := schemaFromTypeWithRefs(t.Elem(), knownTypeNames)
+		schema["nullable"] = true
+		return schema
+	}
+
+	// For struct types, check if we should use a $ref
+	if t.Kind() == reflect.Struct {
+		typeName := t.Name()
+		// If this is a known type, return $ref instead of expanding
+		if ref, ok := knownTypeNames[typeName]; ok {
+			return map[string]any{"$ref": ref}
+		}
+
+		// Generate struct schema inline (not a known type)
+		return schemaFromStructWithRefs(t, knownTypeNames)
+	}
+
+	// For slices, check element type
+	if t.Kind() == reflect.Slice {
+		elemSchema := schemaFromTypeWithRefs(t.Elem(), knownTypeNames)
+		return map[string]any{
+			"type":  "array",
+			"items": elemSchema,
+		}
+	}
+
+	// For maps, check value type
+	if t.Kind() == reflect.Map {
+		valueSchema := schemaFromTypeWithRefs(t.Elem(), knownTypeNames)
+		return map[string]any{
+			"type":                 "object",
+			"additionalProperties": valueSchema,
+		}
+	}
+
+	// Fall back to basic type handling
+	return schemaFromType(t)
+}
+
+// schemaFromStructWithRefs generates a struct schema using $refs for known types.
+func schemaFromStructWithRefs(t reflect.Type, knownTypeNames map[string]string) map[string]any {
+	properties := make(map[string]any)
+	required := []string{}
+
+	for i := range t.NumField() {
+		field := t.Field(i)
+
+		if !field.IsExported() {
+			continue
+		}
+
+		jsonTag := field.Tag.Get("json")
+		if jsonTag == "-" {
+			continue
+		}
+
+		name, opts := parseJSONTag(jsonTag)
+		if name == "" {
+			name = field.Name
+		}
+
+		fieldSchema := schemaFromTypeWithRefs(field.Type, knownTypeNames)
+
+		if desc := field.Tag.Get("description"); desc != "" {
+			fieldSchema["description"] = desc
+		}
+
+		properties[name] = fieldSchema
+
+		if !contains(opts, "omitempty") && field.Type.Kind() != reflect.Pointer {
+			required = append(required, name)
+		}
+	}
+
+	schema := map[string]any{
+		"type":       "object",
+		"properties": properties,
+	}
+
+	if len(required) > 0 {
+		schema["required"] = required
+	}
+
+	return schema
+}
+
+func contains(s, substr string) bool {
+	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))
+}
+
+func containsMiddle(s, substr string) bool {
+	for i := 1; i < len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
