@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -821,6 +822,136 @@ func TestInterpolateJSONTypePreservation(t *testing.T) {
 				t.Logf("interpolation had error: %v", err)
 			}
 			tt.validate(t, result)
+		})
+	}
+}
+
+// TestResolveInputs tests the ResolveInputs function with both from and template sources.
+func TestResolveInputs(t *testing.T) {
+	exec := &Execution{
+		ID:           "exec_123",
+		WorkflowID:   "workflow_abc",
+		WorkflowName: "Test Workflow",
+		State:        ExecutionStateRunning,
+		Iteration:    2,
+		CurrentStep:  1,
+		CurrentName:  "step2",
+		Trigger: TriggerContext{
+			Subject:   "workflow.trigger.test",
+			Payload:   json.RawMessage(`{"name": "Alice", "count": 5, "items": ["a", "b", "c"]}`),
+			Timestamp: time.Now(),
+		},
+		StepResults: map[string]StepResult{
+			"fetch": {
+				StepName:  "fetch",
+				Status:    "success",
+				Output:    json.RawMessage(`{"result": "fetched_data", "details": {"type": "json"}}`),
+				Iteration: 1,
+			},
+		},
+	}
+
+	interpolator := newInterpolator(exec)
+
+	tests := []struct {
+		name        string
+		inputs      map[string]wfschema.InputRef
+		checkField  string
+		expected    any
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name: "from source - simple value",
+			inputs: map[string]wfschema.InputRef{
+				"data": {From: "fetch.result"},
+			},
+			checkField: "data",
+			expected:   "fetched_data",
+		},
+		{
+			name: "from source - array preserved",
+			inputs: map[string]wfschema.InputRef{
+				"items": {From: "trigger.payload.items"},
+			},
+			checkField: "items",
+			expected:   []any{"a", "b", "c"},
+		},
+		{
+			name: "from source - number preserved",
+			inputs: map[string]wfschema.InputRef{
+				"count": {From: "trigger.payload.count"},
+			},
+			checkField: "count",
+			expected:   float64(5), // JSON numbers are float64
+		},
+		{
+			name: "template source - string interpolation",
+			inputs: map[string]wfschema.InputRef{
+				"message": {Template: "Hello ${trigger.payload.name}!"},
+			},
+			checkField: "message",
+			expected:   "Hello Alice!",
+		},
+		{
+			name: "template source - multiple interpolations",
+			inputs: map[string]wfschema.InputRef{
+				"prompt": {Template: "Process ${steps.fetch.output.result} for ${trigger.payload.name}"},
+			},
+			checkField: "prompt",
+			expected:   "Process fetched_data for Alice",
+		},
+		{
+			name: "mixed from and template sources",
+			inputs: map[string]wfschema.InputRef{
+				"data":    {From: "fetch.result"},
+				"message": {Template: "Working on: ${trigger.payload.name}"},
+				"count":   {From: "trigger.payload.count"},
+			},
+			checkField: "message",
+			expected:   "Working on: Alice",
+		},
+		{
+			name: "neither from nor template - error",
+			inputs: map[string]wfschema.InputRef{
+				"invalid": {},
+			},
+			wantErr:     true,
+			errContains: "requires either 'from' or 'template'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := interpolator.ResolveInputs(tt.inputs, "", nil)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				} else if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("error %q does not contain %q", err.Error(), tt.errContains)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// Parse result
+			var parsed map[string]any
+			if err := json.Unmarshal(result, &parsed); err != nil {
+				t.Fatalf("failed to parse result: %v", err)
+			}
+
+			got := parsed[tt.checkField]
+
+			// Deep compare for slices
+			gotJSON, _ := json.Marshal(got)
+			expectedJSON, _ := json.Marshal(tt.expected)
+			if string(gotJSON) != string(expectedJSON) {
+				t.Errorf("%s = %v (%s), want %v (%s)", tt.checkField, got, gotJSON, tt.expected, expectedJSON)
+			}
 		})
 	}
 }

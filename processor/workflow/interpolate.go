@@ -91,6 +91,10 @@ func (i *interpolator) interpolateJSONWithFallback(input json.RawMessage) json.R
 // ResolveInputs resolves all inputs for a step and returns the payload as JSON.
 // This implements the ADR-020 inputs/outputs pattern.
 //
+// Input sources:
+//   - 'from' reference: resolves to native type (preserves arrays, objects, etc.)
+//   - 'template' string: interpolates ${...} placeholders, returns string
+//
 // The 'from' reference syntax:
 //   - "step_name.field" - references step output (shorthand for steps.step_name.output.field)
 //   - "trigger.payload.field" - references trigger data
@@ -107,10 +111,25 @@ func (i *interpolator) ResolveInputs(inputs map[string]wfschema.InputRef, interf
 	// Resolve all input values
 	fields := make(map[string]any, len(inputs))
 	for name, ref := range inputs {
-		value, err := i.resolveFromReference(ref.From)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve input %q from %q: %w", name, ref.From, err)
+		var value any
+		var err error
+
+		if ref.Template != "" {
+			// Template source: interpolate string, always returns string
+			value, err = i.InterpolateString(ref.Template)
+			if err != nil {
+				return nil, fmt.Errorf("failed to interpolate input %q template: %w", name, err)
+			}
+		} else if ref.From != "" {
+			// From source: resolve reference (preserves native type)
+			value, err = i.resolveFromReference(ref.From)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve input %q from %q: %w", name, ref.From, err)
+			}
+		} else {
+			return nil, fmt.Errorf("input %q requires either 'from' or 'template'", name)
 		}
+
 		fields[name] = value
 	}
 

@@ -67,7 +67,7 @@ func TestInputRef_Validate(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "valid input with interface",
+			name: "valid input with from and interface",
 			input: InputRef{
 				From:      "trigger.payload.data",
 				Interface: "agentic.task.v1",
@@ -75,24 +75,54 @@ func TestInputRef_Validate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid input without interface",
+			name: "valid input with from only",
 			input: InputRef{
 				From: "steps.previous.output",
 			},
 			wantErr: false,
 		},
 		{
-			name: "empty from is invalid",
+			name: "valid input with template only",
 			input: InputRef{
-				From:      "",
+				Template: "Hello ${trigger.payload.name}",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid input with template and interface",
+			input: InputRef{
+				Template:  "Process: ${steps.fetch.result}",
+				Interface: "agentic.task.v1",
+			},
+			wantErr: false,
+		},
+		{
+			name: "neither from nor template is invalid",
+			input: InputRef{
 				Interface: "agentic.task.v1",
 			},
 			wantErr: true,
 		},
 		{
-			name: "invalid interface format",
+			name: "both from and template is invalid",
+			input: InputRef{
+				From:     "trigger.payload.data",
+				Template: "Hello ${name}",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid interface format with from",
 			input: InputRef{
 				From:      "trigger.payload",
+				Interface: "invalid",
+			},
+			wantErr: true,
+		},
+		{
+			name: "invalid interface format with template",
+			input: InputRef{
+				Template:  "Hello",
 				Interface: "invalid",
 			},
 			wantErr: true,

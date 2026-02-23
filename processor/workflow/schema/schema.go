@@ -103,16 +103,25 @@ func (t *TriggerDef) Validate() error {
 	return nil
 }
 
-// InputRef declares an input to a step with a reference to its source
+// InputRef declares an input to a step with a reference to its source.
+// Exactly one of From or Template must be specified.
 type InputRef struct {
-	From      string `json:"from"`                // Reference: "step.output", "trigger.payload.field", "execution.id"
+	From      string `json:"from,omitempty"`      // Reference: "step.output", "trigger.payload.field", "execution.id"
+	Template  string `json:"template,omitempty"`  // Template with ${...} interpolation
 	Interface string `json:"interface,omitempty"` // Optional type: "agentic.task.v1"
 }
 
 // Validate validates the input reference
 func (i *InputRef) Validate() error {
-	if strings.TrimSpace(i.From) == "" {
-		return errs.WrapInvalid(fmt.Errorf("input 'from' is required"), "workflow-schema", "InputRef.Validate", "validate from")
+	hasFrom := strings.TrimSpace(i.From) != ""
+	hasTemplate := strings.TrimSpace(i.Template) != ""
+
+	// Exactly one of From or Template must be specified
+	if !hasFrom && !hasTemplate {
+		return errs.WrapInvalid(fmt.Errorf("input requires either 'from' or 'template'"), "workflow-schema", "InputRef.Validate", "validate source")
+	}
+	if hasFrom && hasTemplate {
+		return errs.WrapInvalid(fmt.Errorf("input cannot have both 'from' and 'template'"), "workflow-schema", "InputRef.Validate", "validate source")
 	}
 
 	if err := validateInterfaceString(i.Interface); err != nil {

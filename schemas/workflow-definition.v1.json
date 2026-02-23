@@ -138,11 +138,11 @@
         },
         "interface": {
           "type": "string"
+        },
+        "template": {
+          "type": "string"
         }
       },
-      "required": [
-        "from"
-      ],
       "type": "object"
     },
     "OutputDef": {
