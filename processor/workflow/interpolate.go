@@ -105,10 +105,8 @@ func (i *interpolator) InterpolateActionDef(action wfschema.ActionDef, inputType
 
 		typedPayload, err := AssemblePayload(payloadRegistry, inputType, action.PayloadMapping, action.PassThrough, resolvePath)
 		if err != nil {
-			// Log error and fall back to original payload
-			i.execution.mu.RLock()
-			i.execution.mu.RUnlock()
-			// Can't log here without a logger reference, so just use fallback
+			// Fall back to original payload on assembly error.
+			// The executor will handle any downstream validation issues.
 			payload = action.Payload
 		} else {
 			// Marshal the typed payload to JSON

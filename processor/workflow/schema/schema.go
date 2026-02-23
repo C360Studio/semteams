@@ -313,6 +313,16 @@ func (a *ActionDef) Validate() error {
 		}
 	}
 
+	// Validate PassThrough entries
+	for i, field := range a.PassThrough {
+		if strings.TrimSpace(field) == "" {
+			return errs.WrapInvalid(
+				fmt.Errorf("pass_through[%d] cannot be empty", i),
+				"workflow-schema", "ActionDef.Validate", "validate pass_through",
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -366,7 +376,7 @@ func validateTypeString(typeStr string) error {
 		return nil // Empty is valid (type not specified)
 	}
 
-	parts := strings.SplitN(typeStr, ".", 3)
+	parts := strings.Split(typeStr, ".")
 	if len(parts) != 3 {
 		return fmt.Errorf("type string must be in format 'domain.category.version', got %q", typeStr)
 	}

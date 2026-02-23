@@ -2,10 +2,10 @@ package workflow
 
 import (
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 // Builder functions for workflow payload types
@@ -46,7 +46,7 @@ func buildTriggerPayload(fields map[string]any) (any, error) {
 	}
 
 	if err := msg.Validate(); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
+		return nil, errs.Wrap(err, "TriggerPayload", "buildTriggerPayload", "validation failed")
 	}
 
 	return msg, nil
@@ -100,7 +100,7 @@ func buildStepCompleteMessage(fields map[string]any) (any, error) {
 	}
 
 	if err := msg.Validate(); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
+		return nil, errs.Wrap(err, "StepCompleteMessage", "buildStepCompleteMessage", "validation failed")
 	}
 
 	return msg, nil
@@ -144,6 +144,10 @@ func buildEvent(fields map[string]any) (any, error) {
 		}
 	}
 
+	if err := msg.Validate(); err != nil {
+		return nil, errs.Wrap(err, "event", "buildEvent", "validation failed")
+	}
+
 	return msg, nil
 }
 
@@ -171,7 +175,7 @@ func buildAsyncStepResult(fields map[string]any) (any, error) {
 	}
 
 	if err := msg.Validate(); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
+		return nil, errs.Wrap(err, "AsyncStepResult", "buildAsyncStepResult", "validation failed")
 	}
 
 	return msg, nil

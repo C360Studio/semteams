@@ -45,6 +45,22 @@ func buildTaskMessage(fields map[string]any) (any, error) {
 	if v, ok := fields["user_id"].(string); ok {
 		msg.UserID = v
 	}
+	if v, ok := fields["parent_loop_id"].(string); ok {
+		msg.ParentLoopID = v
+	}
+	if v, ok := fields["depth"].(int); ok {
+		msg.Depth = v
+	} else if v, ok := fields["depth"].(float64); ok {
+		msg.Depth = int(v)
+	}
+	if v, ok := fields["max_depth"].(int); ok {
+		msg.MaxDepth = v
+	} else if v, ok := fields["max_depth"].(float64); ok {
+		msg.MaxDepth = int(v)
+	}
+	if v, ok := fields["context_request_id"].(string); ok {
+		msg.ContextRequestID = v
+	}
 
 	if err := msg.Validate(); err != nil {
 		return nil, fmt.Errorf("validation failed: %w", err)

@@ -260,6 +260,28 @@ func TestAssemblePayload_Success(t *testing.T) {
 	}
 }
 
+func TestAssemblePayload_NilRegistry(t *testing.T) {
+	resolvePath := func(path string) (any, error) {
+		return "value", nil
+	}
+
+	_, err := AssemblePayload(
+		nil, // nil registry
+		"test.type.v1",
+		map[string]string{"field": "trigger.payload.value"},
+		nil,
+		resolvePath,
+	)
+
+	if err == nil {
+		t.Fatal("AssemblePayload() expected error for nil registry, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "payload registry cannot be nil") {
+		t.Errorf("AssemblePayload() error = %v, want error containing 'payload registry cannot be nil'", err)
+	}
+}
+
 func TestAssemblePayload_UnknownType(t *testing.T) {
 	registry := component.NewPayloadRegistry()
 

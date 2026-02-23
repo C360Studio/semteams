@@ -60,7 +60,7 @@ func TestStepDef_ValidateTypeStrings(t *testing.T) {
 		{
 			name:      "too many parts",
 			inputType: "agentic.task.v1.extra",
-			wantErr:   false, // SplitN(3) will treat "v1.extra" as version
+			wantErr:   true,
 		},
 	}
 
@@ -237,6 +237,66 @@ func TestActionDef_PayloadMapping(t *testing.T) {
 				Type:           "publish",
 				Subject:        "test.subject",
 				PayloadMapping: tt.payloadMapping,
+			}
+
+			err := action.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ActionDef.Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestActionDef_PassThrough tests PassThrough field validation
+func TestActionDef_PassThrough(t *testing.T) {
+	tests := []struct {
+		name        string
+		passThrough []string
+		wantErr     bool
+	}{
+		{
+			name:        "empty array is valid",
+			passThrough: []string{},
+			wantErr:     false,
+		},
+		{
+			name:        "nil array is valid",
+			passThrough: nil,
+			wantErr:     false,
+		},
+		{
+			name:        "valid fields",
+			passThrough: []string{"session_id", "user_id", "request_id"},
+			wantErr:     false,
+		},
+		{
+			name:        "empty string is invalid",
+			passThrough: []string{"session_id", "", "user_id"},
+			wantErr:     true,
+		},
+		{
+			name:        "whitespace string is invalid",
+			passThrough: []string{"session_id", "   ", "user_id"},
+			wantErr:     true,
+		},
+		{
+			name:        "first element empty",
+			passThrough: []string{"", "user_id"},
+			wantErr:     true,
+		},
+		{
+			name:        "last element empty",
+			passThrough: []string{"session_id", ""},
+			wantErr:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			action := &ActionDef{
+				Type:        "publish",
+				Subject:     "test.subject",
+				PassThrough: tt.passThrough,
 			}
 
 			err := action.Validate()

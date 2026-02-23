@@ -6,6 +6,7 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/pkg/errs"
 )
 
 func buildAsyncTaskPayload(fields map[string]any) (any, error) {
@@ -26,7 +27,7 @@ func buildAsyncTaskPayload(fields map[string]any) (any, error) {
 	}
 
 	if err := msg.Validate(); err != nil {
-		return nil, fmt.Errorf("validation failed: %w", err)
+		return nil, errs.Wrap(err, "AsyncTaskPayload", "buildAsyncTaskPayload", "validation failed")
 	}
 
 	return msg, nil

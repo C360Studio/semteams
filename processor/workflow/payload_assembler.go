@@ -57,6 +57,10 @@ func AssemblePayload(
 	passThrough []string,
 	resolvePath func(path string) (any, error),
 ) (any, error) {
+	if payloadRegistry == nil {
+		return nil, fmt.Errorf("payload registry cannot be nil")
+	}
+
 	// Parse the target type string
 	domain, category, version, err := ParseTypeString(targetType)
 	if err != nil {
