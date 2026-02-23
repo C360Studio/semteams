@@ -8,6 +8,30 @@ import (
 	"github.com/c360studio/semstreams/message"
 )
 
+func buildAsyncTaskPayload(fields map[string]any) (any, error) {
+	msg := &AsyncTaskPayload{}
+
+	if v, ok := fields["task_id"].(string); ok {
+		msg.TaskID = v
+	}
+	if v, ok := fields["callback_subject"].(string); ok {
+		msg.CallbackSubject = v
+	}
+
+	// Handle data (json.RawMessage)
+	if v, ok := fields["data"]; ok {
+		if data, err := json.Marshal(v); err == nil {
+			msg.Data = data
+		}
+	}
+
+	if err := msg.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return msg, nil
+}
+
 func init() {
 	// Register AsyncTaskPayload factory for publish_async action
 	err := component.RegisterPayload(&component.PayloadRegistration{
@@ -16,6 +40,7 @@ func init() {
 		Version:     "v1",
 		Description: "Async task payload with callback correlation",
 		Factory:     func() any { return &AsyncTaskPayload{} },
+		Builder:     buildAsyncTaskPayload,
 	})
 	if err != nil {
 		panic("failed to register AsyncTaskPayload: " + err.Error())

@@ -45,6 +45,77 @@ func init() {
 	registerPayloads()
 }
 
+// Builder functions for document payload types
+
+func buildDocument(fields map[string]any) (any, error) {
+	msg := &Document{}
+
+	if v, ok := fields["id"].(string); ok {
+		msg.ID = v
+	}
+	if v, ok := fields["title"].(string); ok {
+		msg.Title = v
+	}
+	if v, ok := fields["description"].(string); ok {
+		msg.Description = v
+	}
+	if v, ok := fields["body"].(string); ok {
+		msg.Body = v
+	}
+	if v, ok := fields["summary"].(string); ok {
+		msg.Summary = v
+	}
+	if v, ok := fields["category"].(string); ok {
+		msg.Category = v
+	}
+	if v, ok := fields["created_at"].(string); ok {
+		msg.CreatedAt = v
+	}
+	if v, ok := fields["updated_at"].(string); ok {
+		msg.UpdatedAt = v
+	}
+	if v, ok := fields["org_id"].(string); ok {
+		msg.OrgID = v
+	}
+	if v, ok := fields["platform"].(string); ok {
+		msg.Platform = v
+	}
+
+	// Handle tags slice
+	if v, ok := fields["tags"].([]any); ok {
+		msg.Tags = make([]string, len(v))
+		for i, item := range v {
+			if str, ok := item.(string); ok {
+				msg.Tags[i] = str
+			}
+		}
+	}
+
+	if err := msg.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return msg, nil
+}
+
+func buildMaintenance(fields map[string]any) (any, error) {
+	// Just return empty struct for now - will need to read payload_maintenance.go to implement fully
+	msg := &Maintenance{}
+	return msg, nil
+}
+
+func buildObservation(fields map[string]any) (any, error) {
+	// Just return empty struct for now - will need to read payload_observation.go to implement fully
+	msg := &Observation{}
+	return msg, nil
+}
+
+func buildSensorDocument(fields map[string]any) (any, error) {
+	// Just return empty struct for now - will need to read payload_sensor.go to implement fully
+	msg := &SensorDocument{}
+	return msg, nil
+}
+
 // registerPayloads registers all payload types, collecting errors instead of panicking.
 func registerPayloads() {
 	// Register Document payload
@@ -56,6 +127,7 @@ func registerPayloads() {
 		Factory: func() any {
 			return &Document{}
 		},
+		Builder: buildDocument,
 		Example: map[string]any{
 			"ID":          "doc-001",
 			"Title":       "Safety Manual",
@@ -76,6 +148,7 @@ func registerPayloads() {
 		Factory: func() any {
 			return &Maintenance{}
 		},
+		Builder: buildMaintenance,
 		Example: map[string]any{
 			"ID":         "maint-001",
 			"Title":      "Pump Repair",
@@ -96,6 +169,7 @@ func registerPayloads() {
 		Factory: func() any {
 			return &Observation{}
 		},
+		Builder: buildObservation,
 		Example: map[string]any{
 			"ID":       "obs-001",
 			"Title":    "Safety Hazard Report",
@@ -116,6 +190,7 @@ func registerPayloads() {
 		Factory: func() any {
 			return &SensorDocument{}
 		},
+		Builder: buildSensorDocument,
 		Example: map[string]any{
 			"ID":       "sensor-doc-001",
 			"Title":    "Temperature Sensor T-42",

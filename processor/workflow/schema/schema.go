@@ -113,6 +113,10 @@ type StepDef struct {
 	OnFail    string        `json:"on_fail,omitempty"`    // Next step name or "fail"
 	Timeout   string        `json:"timeout,omitempty"`    // Step-specific timeout
 
+	// Typed payload fields (ADR-006)
+	InputType  string `json:"input_type,omitempty"`  // Expected input type (e.g., "agentic.task.v1")
+	OutputType string `json:"output_type,omitempty"` // Declared output type
+
 	// Parallel step fields
 	Steps      []StepDef `json:"steps,omitempty"`      // Nested steps for parallel execution
 	Wait       string    `json:"wait,omitempty"`       // "all", "any", or "majority"
@@ -159,6 +163,14 @@ func (s *StepDef) Validate() error {
 		}
 	}
 
+	// Validate typed payload fields (ADR-006)
+	if err := validateTypeString(s.InputType); err != nil {
+		return errs.WrapInvalid(err, "workflow-schema", "StepDef.Validate", "validate input_type")
+	}
+	if err := validateTypeString(s.OutputType); err != nil {
+		return errs.WrapInvalid(err, "workflow-schema", "StepDef.Validate", "validate output_type")
+	}
+
 	return nil
 }
 
@@ -197,6 +209,10 @@ type ActionDef struct {
 	Entity  string          `json:"entity,omitempty"`  // For set_state
 	State   json.RawMessage `json:"state,omitempty"`   // For set_state
 	Timeout string          `json:"timeout,omitempty"` // For call action
+
+	// Typed payload assembly (ADR-006)
+	PayloadMapping map[string]string `json:"payload_mapping,omitempty"` // target_field -> source_path
+	PassThrough    []string          `json:"pass_through,omitempty"`    // fields forwarded from trigger
 
 	// For publish_agent action
 	Role   string `json:"role,omitempty"`
@@ -272,6 +288,31 @@ func (a *ActionDef) Validate() error {
 		}
 	}
 
+	// Validate PayloadMapping (ADR-006)
+	// Payload and PayloadMapping are mutually exclusive
+	if len(a.Payload) > 0 && len(a.PayloadMapping) > 0 {
+		return errs.WrapInvalid(
+			fmt.Errorf("action cannot specify both 'payload' and 'payload_mapping'"),
+			"workflow-schema", "ActionDef.Validate", "validate payload exclusivity",
+		)
+	}
+
+	// Validate PayloadMapping entries
+	for key, value := range a.PayloadMapping {
+		if strings.TrimSpace(key) == "" {
+			return errs.WrapInvalid(
+				fmt.Errorf("payload_mapping key cannot be empty"),
+				"workflow-schema", "ActionDef.Validate", "validate payload_mapping key",
+			)
+		}
+		if strings.TrimSpace(value) == "" {
+			return errs.WrapInvalid(
+				fmt.Errorf("payload_mapping value for key %q cannot be empty", key),
+				"workflow-schema", "ActionDef.Validate", "validate payload_mapping value",
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -313,6 +354,31 @@ func (c *ConditionDef) Validate() error {
 		if _, ok := c.Value.([]any); !ok {
 			return errs.WrapInvalid(fmt.Errorf("%s operator requires array value, got %T", c.Operator, c.Value), "workflow-schema", "ConditionDef.Validate", "validate operator value type")
 		}
+	}
+
+	return nil
+}
+
+// validateTypeString validates a type string format (domain.category.version).
+// Empty strings are allowed (optional type annotation).
+func validateTypeString(typeStr string) error {
+	if typeStr == "" {
+		return nil // Empty is valid (type not specified)
+	}
+
+	parts := strings.SplitN(typeStr, ".", 3)
+	if len(parts) != 3 {
+		return fmt.Errorf("type string must be in format 'domain.category.version', got %q", typeStr)
+	}
+
+	if strings.TrimSpace(parts[0]) == "" {
+		return fmt.Errorf("type string domain cannot be empty: %q", typeStr)
+	}
+	if strings.TrimSpace(parts[1]) == "" {
+		return fmt.Errorf("type string category cannot be empty: %q", typeStr)
+	}
+	if strings.TrimSpace(parts[2]) == "" {
+		return fmt.Errorf("type string version cannot be empty: %q", typeStr)
 	}
 
 	return nil

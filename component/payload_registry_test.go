@@ -38,6 +38,24 @@ func PayloadTestFactory() any {
 	return &TestPayload{}
 }
 
+// testBuilder creates a test payload from field mappings
+func testBuilder(fields map[string]any) (any, error) {
+	payload := &TestPayload{}
+
+	if msg, ok := fields["message"].(string); ok {
+		payload.Message = msg
+	}
+
+	if val, ok := fields["value"].(int); ok {
+		payload.Value = val
+	} else if val, ok := fields["value"].(float64); ok {
+		// JSON numbers decode as float64
+		payload.Value = int(val)
+	}
+
+	return payload, nil
+}
+
 func TestPayloadRegistry_NewPayloadRegistry(t *testing.T) {
 	registry := NewPayloadRegistry()
 	if registry == nil {
@@ -58,6 +76,7 @@ func TestPayloadRegistry_RegisterPayload_Success(t *testing.T) {
 
 	registration := &PayloadRegistration{
 		Factory:     PayloadTestFactory,
+		Builder:     testBuilder,
 		Domain:      "test",
 		Category:    "sample",
 		Version:     "v1",
@@ -104,6 +123,7 @@ func TestPayloadRegistry_RegisterPayload_Validation(t *testing.T) {
 		{
 			name: "nil factory",
 			registration: &PayloadRegistration{
+				Builder:  testBuilder,
 				Domain:   "test",
 				Category: "sample",
 				Version:  "v1",
@@ -111,9 +131,20 @@ func TestPayloadRegistry_RegisterPayload_Validation(t *testing.T) {
 			expectError: "factory",
 		},
 		{
+			name: "nil builder",
+			registration: &PayloadRegistration{
+				Factory:  PayloadTestFactory,
+				Domain:   "test",
+				Category: "sample",
+				Version:  "v1",
+			},
+			expectError: "builder",
+		},
+		{
 			name: "empty domain",
 			registration: &PayloadRegistration{
 				Factory:  PayloadTestFactory,
+				Builder:  testBuilder,
 				Category: "sample",
 				Version:  "v1",
 			},
@@ -123,6 +154,7 @@ func TestPayloadRegistry_RegisterPayload_Validation(t *testing.T) {
 			name: "empty category",
 			registration: &PayloadRegistration{
 				Factory: PayloadTestFactory,
+				Builder: testBuilder,
 				Domain:  "test",
 				Version: "v1",
 			},
@@ -132,6 +164,7 @@ func TestPayloadRegistry_RegisterPayload_Validation(t *testing.T) {
 			name: "empty version",
 			registration: &PayloadRegistration{
 				Factory:  PayloadTestFactory,
+				Builder:  testBuilder,
 				Domain:   "test",
 				Category: "sample",
 			},
@@ -159,6 +192,7 @@ func TestPayloadRegistry_RegisterPayload_DuplicateError(t *testing.T) {
 
 	registration := &PayloadRegistration{
 		Factory:  PayloadTestFactory,
+		Builder:  testBuilder,
 		Domain:   "test",
 		Category: "sample",
 		Version:  "v1",
@@ -187,6 +221,7 @@ func TestPayloadRegistry_CreatePayload_Success(t *testing.T) {
 
 	registration := &PayloadRegistration{
 		Factory:  PayloadTestFactory,
+		Builder:  testBuilder,
 		Domain:   "test",
 		Category: "sample",
 		Version:  "v1",
@@ -228,6 +263,7 @@ func TestPayloadRegistry_GetRegistration(t *testing.T) {
 
 	registration := &PayloadRegistration{
 		Factory:     PayloadTestFactory,
+		Builder:     testBuilder,
 		Domain:      "test",
 		Category:    "sample",
 		Version:     "v1",
@@ -274,18 +310,21 @@ func TestPayloadRegistry_ListPayloads(t *testing.T) {
 	registrations := []*PayloadRegistration{
 		{
 			Factory:  PayloadTestFactory,
+			Builder:  testBuilder,
 			Domain:   "test",
 			Category: "sample1",
 			Version:  "v1",
 		},
 		{
 			Factory:  PayloadTestFactory,
+			Builder:  testBuilder,
 			Domain:   "test",
 			Category: "sample2",
 			Version:  "v1",
 		},
 		{
 			Factory:  PayloadTestFactory,
+			Builder:  testBuilder,
 			Domain:   "other",
 			Category: "sample",
 			Version:  "v2",
@@ -324,9 +363,9 @@ func TestPayloadRegistry_ListByDomain(t *testing.T) {
 
 	// Register payloads in different domains
 	registrations := []*PayloadRegistration{
-		{Factory: PayloadTestFactory, Domain: "test", Category: "sample1", Version: "v1"},
-		{Factory: PayloadTestFactory, Domain: "test", Category: "sample2", Version: "v1"},
-		{Factory: PayloadTestFactory, Domain: "other", Category: "sample", Version: "v1"},
+		{Factory: PayloadTestFactory, Builder: testBuilder, Domain: "test", Category: "sample1", Version: "v1"},
+		{Factory: PayloadTestFactory, Builder: testBuilder, Domain: "test", Category: "sample2", Version: "v1"},
+		{Factory: PayloadTestFactory, Builder: testBuilder, Domain: "other", Category: "sample", Version: "v1"},
 	}
 
 	for _, reg := range registrations {
@@ -367,6 +406,7 @@ func TestPayloadRegistry_ThreadSafety(t *testing.T) {
 
 			registration := &PayloadRegistration{
 				Factory:  PayloadTestFactory,
+				Builder:  testBuilder,
 				Domain:   "test",
 				Category: fmt.Sprintf("sample%d", id),
 				Version:  "v1",
@@ -415,5 +455,93 @@ func TestPayloadRegistration_MessageType(t *testing.T) {
 
 	if actual != expected {
 		t.Errorf("MessageType() = %q, expected %q", actual, expected)
+	}
+}
+
+func TestPayloadRegistry_RegisterPayload_RequiresBuilder(t *testing.T) {
+	registry := NewPayloadRegistry()
+
+	registration := &PayloadRegistration{
+		Factory:  PayloadTestFactory,
+		Builder:  nil, // Missing builder
+		Domain:   "test",
+		Category: "sample",
+		Version:  "v1",
+	}
+
+	err := registry.RegisterPayload(registration)
+	if err == nil {
+		t.Fatal("expected error when Builder is nil")
+	}
+
+	if !strings.Contains(err.Error(), "builder") {
+		t.Errorf("expected error to mention 'builder', got: %v", err)
+	}
+}
+
+func TestPayloadRegistry_BuildPayload_Success(t *testing.T) {
+	registry := NewPayloadRegistry()
+
+	registration := &PayloadRegistration{
+		Factory:  PayloadTestFactory,
+		Builder:  testBuilder,
+		Domain:   "test",
+		Category: "sample",
+		Version:  "v1",
+	}
+
+	err := registry.RegisterPayload(registration)
+	if err != nil {
+		t.Fatalf("RegisterPayload() failed: %v", err)
+	}
+
+	fields := map[string]any{
+		"message": "hello",
+		"value":   42,
+	}
+
+	payload, err := registry.BuildPayload("test", "sample", "v1", fields)
+	if err != nil {
+		t.Fatalf("BuildPayload() failed: %v", err)
+	}
+
+	if payload == nil {
+		t.Fatal("BuildPayload() returned nil payload")
+	}
+
+	testPayload, ok := payload.(*TestPayload)
+	if !ok {
+		t.Fatalf("payload is not a TestPayload, got %T", payload)
+	}
+
+	if testPayload.Message != "hello" {
+		t.Errorf("expected message 'hello', got %q", testPayload.Message)
+	}
+
+	if testPayload.Value != 42 {
+		t.Errorf("expected value 42, got %d", testPayload.Value)
+	}
+}
+
+func TestPayloadRegistry_BuildPayload_UnknownType(t *testing.T) {
+	registry := NewPayloadRegistry()
+
+	fields := map[string]any{
+		"message": "hello",
+		"value":   42,
+	}
+
+	payload, err := registry.BuildPayload("unknown", "type", "v1", fields)
+	if err == nil {
+		t.Fatal("expected error for unknown payload type")
+	}
+
+	if payload != nil {
+		t.Error("expected nil payload for unknown type")
+	}
+
+	expectedError := "payload type \"unknown.type.v1\" not registered"
+	if err.Error() != expectedError {
+		t.Errorf("expected error %q, got %q", expectedError, err.Error())
 	}
 }

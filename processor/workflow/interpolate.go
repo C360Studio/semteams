@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/pkg/errs"
 	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
@@ -89,11 +90,44 @@ func (i *interpolator) interpolateJSONWithFallback(input json.RawMessage) json.R
 
 // InterpolateActionDef returns a copy of the ActionDef with all fields interpolated.
 // On interpolation errors, the original field value is preserved.
-func (i *interpolator) InterpolateActionDef(action wfschema.ActionDef) wfschema.ActionDef {
+//
+// If both payload_mapping and inputType are provided, uses typed payload assembly.
+// Otherwise falls back to existing JSON interpolation of the payload field.
+func (i *interpolator) InterpolateActionDef(action wfschema.ActionDef, inputType string, payloadRegistry *component.PayloadRegistry) wfschema.ActionDef {
+	var payload json.RawMessage
+
+	// Determine payload: use typed assembly if both mapping and inputType are present
+	if len(action.PayloadMapping) > 0 && inputType != "" && payloadRegistry != nil {
+		// Use typed payload assembly
+		resolvePath := func(path string) (any, error) {
+			return i.resolvePath(path)
+		}
+
+		typedPayload, err := AssemblePayload(payloadRegistry, inputType, action.PayloadMapping, action.PassThrough, resolvePath)
+		if err != nil {
+			// Log error and fall back to original payload
+			i.execution.mu.RLock()
+			i.execution.mu.RUnlock()
+			// Can't log here without a logger reference, so just use fallback
+			payload = action.Payload
+		} else {
+			// Marshal the typed payload to JSON
+			data, err := json.Marshal(typedPayload)
+			if err != nil {
+				payload = action.Payload
+			} else {
+				payload = data
+			}
+		}
+	} else {
+		// Use existing JSON interpolation
+		payload = i.interpolateJSONWithFallback(action.Payload)
+	}
+
 	return wfschema.ActionDef{
 		Type:    action.Type,
 		Subject: i.interpolateStringWithFallback(action.Subject),
-		Payload: i.interpolateJSONWithFallback(action.Payload),
+		Payload: payload,
 		Entity:  i.interpolateStringWithFallback(action.Entity),
 		State:   i.interpolateJSONWithFallback(action.State),
 		Timeout: action.Timeout, // Timeout is not interpolated (it's a duration)

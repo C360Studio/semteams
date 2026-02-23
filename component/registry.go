@@ -760,6 +760,14 @@ func CreatePayload(domain, category, version string) any {
 	return globalPayloadRegistry.CreatePayload(domain, category, version)
 }
 
+// BuildPayload creates a typed payload from field mappings using the globally registered builder.
+// Returns an error if the payload type is not registered or if the builder fails.
+// This is used by workflow variable interpolation to construct typed payloads from step output maps.
+// Returns any to avoid import cycles - the actual payload implements message.Payload.
+func BuildPayload(domain, category, version string, fields map[string]any) (any, error) {
+	return globalPayloadRegistry.BuildPayload(domain, category, version, fields)
+}
+
 // GlobalPayloadRegistry returns the global payload registry.
 // This is useful for introspection, such as listing all registered payloads.
 func GlobalPayloadRegistry() *PayloadRegistry {

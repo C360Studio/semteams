@@ -13,11 +13,19 @@ import (
 // The actual payload should implement the message.Payload interface.
 type PayloadFactory func() any
 
+// PayloadBuilder creates a typed payload from field mappings.
+// Used by workflow variable interpolation to construct typed payloads
+// from step output maps. Returns error if required fields are missing
+// or field values cannot be converted to the target type.
+// Returns any to avoid import cycles - the actual payload should implement message.Payload.
+type PayloadBuilder func(fields map[string]any) (any, error)
+
 // PayloadRegistration holds factory and metadata for a payload type.
 // This follows the same pattern as component Registration but is specific
 // to message payload types.
 type PayloadRegistration struct {
 	Factory     PayloadFactory `json:"-"`           // Factory function (not serializable)
+	Builder     PayloadBuilder `json:"-"`           // Builder function (not serializable)
 	Domain      string         `json:"domain"`      // Message domain (e.g., "robotics", "sensors")
 	Category    string         `json:"category"`    // Message category (e.g., "heartbeat", "gps")
 	Version     string         `json:"version"`     // Schema version (e.g., "v1", "v2")
@@ -68,6 +76,15 @@ func (pr *PayloadRegistry) RegisterPayload(registration *PayloadRegistration) er
 			"PayloadRegistry",
 			"RegisterPayload",
 			"factory function validation",
+		)
+	}
+
+	if registration.Builder == nil {
+		return errs.WrapInvalid(
+			errs.ErrInvalidConfig,
+			"PayloadRegistry",
+			"RegisterPayload",
+			"builder function validation",
 		)
 	}
 
@@ -122,6 +139,25 @@ func (pr *PayloadRegistry) CreatePayload(domain, category, version string) any {
 	}
 
 	return registration.Factory()
+}
+
+// BuildPayload creates a typed payload from field mappings using the registered builder.
+// Returns an error if the message type is not registered or if the builder fails.
+// This is used by workflow variable interpolation to construct typed payloads
+// from step output maps.
+// Returns any to avoid import cycles - the actual payload implements message.Payload.
+func (pr *PayloadRegistry) BuildPayload(domain, category, version string, fields map[string]any) (any, error) {
+	typeStr := fmt.Sprintf("%s.%s.%s", domain, category, version)
+
+	pr.mu.RLock()
+	registration, exists := pr.registrations[typeStr]
+	pr.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("payload type %q not registered", typeStr)
+	}
+
+	return registration.Builder(fields)
 }
 
 // GetRegistration returns the payload registration for a specific message type.

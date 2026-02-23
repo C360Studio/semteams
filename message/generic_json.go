@@ -8,6 +8,20 @@ import (
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
+func buildGenericJSONPayload(fields map[string]any) (any, error) {
+	msg := &GenericJSONPayload{}
+
+	if v, ok := fields["data"].(map[string]any); ok {
+		msg.Data = v
+	}
+
+	if err := msg.Validate(); err != nil {
+		return nil, errs.Wrap(err, "GenericJSONPayload", "buildGenericJSONPayload", "validation failed")
+	}
+
+	return msg, nil
+}
+
 // init registers the GenericJSON payload type with the global PayloadRegistry.
 // This enables BaseMessage.UnmarshalJSON to recreate GenericJSON payloads
 // from JSON when the message type is "core.json.v1".
@@ -21,6 +35,7 @@ func init() {
 		Factory: func() any {
 			return &GenericJSONPayload{}
 		},
+		Builder: buildGenericJSONPayload,
 		Example: map[string]any{
 			"data": map[string]any{
 				"sensor_id":   "temp-001",

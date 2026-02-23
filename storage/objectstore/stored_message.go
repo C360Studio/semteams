@@ -10,6 +10,81 @@ import (
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
+func buildStoredMessage(fields map[string]any) (any, error) {
+	msg := &StoredMessage{}
+
+	if v, ok := fields["entity_id"].(string); ok {
+		msg.entityID = v
+	}
+	if v, ok := fields["message_type"].(string); ok {
+		msg.messageType = v
+	}
+
+	// Handle triples slice
+	if v, ok := fields["triples"].([]any); ok {
+		msg.triples = make([]message.Triple, len(v))
+		for i, item := range v {
+			if tripleMap, ok := item.(map[string]any); ok {
+				if subj, ok := tripleMap["subject"].(string); ok {
+					msg.triples[i].Subject = subj
+				}
+				if pred, ok := tripleMap["predicate"].(string); ok {
+					msg.triples[i].Predicate = pred
+				}
+				if obj, ok := tripleMap["object"]; ok {
+					msg.triples[i].Object = obj
+				}
+				if source, ok := tripleMap["source"].(string); ok {
+					msg.triples[i].Source = source
+				}
+				// Handle timestamp
+				if ts, ok := tripleMap["timestamp"].(string); ok {
+					if t, err := time.Parse(time.RFC3339, ts); err == nil {
+						msg.triples[i].Timestamp = t
+					}
+				}
+				// Handle confidence
+				if conf, ok := tripleMap["confidence"].(float64); ok {
+					msg.triples[i].Confidence = conf
+				}
+			}
+		}
+	}
+
+	// Handle storage_ref
+	if v, ok := fields["storage_ref"].(map[string]any); ok {
+		ref := &message.StorageReference{}
+		if instance, ok := v["storage_instance"].(string); ok {
+			ref.StorageInstance = instance
+		}
+		if key, ok := v["key"].(string); ok {
+			ref.Key = key
+		}
+		if contentType, ok := v["content_type"].(string); ok {
+			ref.ContentType = contentType
+		}
+		if size, ok := v["size"].(float64); ok {
+			ref.Size = int64(size)
+		} else if size, ok := v["size"].(int64); ok {
+			ref.Size = size
+		}
+		msg.storageRef = ref
+	}
+
+	// Handle stored_at
+	if v, ok := fields["stored_at"].(string); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			msg.storedAt = t
+		}
+	}
+
+	if err := msg.Validate(); err != nil {
+		return nil, errs.Wrap(err, "StoredMessage", "buildStoredMessage", "validation failed")
+	}
+
+	return msg, nil
+}
+
 func init() {
 	// Register StoredMessage for proper unmarshaling in graph processors
 	component.RegisterPayload(&component.PayloadRegistration{
@@ -20,6 +95,7 @@ func init() {
 		Category:    "stored",
 		Version:     "v1",
 		Description: "Message with semantic data and storage reference",
+		Builder:     buildStoredMessage,
 	})
 }
 

@@ -9,6 +9,51 @@ import (
 	"github.com/c360studio/semstreams/message"
 )
 
+func buildWeatherReading(fields map[string]any) (any, error) {
+	msg := &WeatherReading{}
+
+	if v, ok := fields["station_id"].(string); ok {
+		msg.StationID = v
+	}
+	if v, ok := fields["temperature"].(float64); ok {
+		msg.Temperature = v
+	}
+	if v, ok := fields["humidity"].(float64); ok {
+		msg.Humidity = v
+	}
+	if v, ok := fields["wind_speed"].(float64); ok {
+		msg.WindSpeed = v
+	}
+	if v, ok := fields["condition"].(string); ok {
+		msg.Condition = v
+	}
+	if v, ok := fields["city"].(string); ok {
+		msg.City = v
+	}
+	if v, ok := fields["country"].(string); ok {
+		msg.Country = v
+	}
+	if v, ok := fields["org_id"].(string); ok {
+		msg.OrgID = v
+	}
+	if v, ok := fields["platform"].(string); ok {
+		msg.Platform = v
+	}
+
+	// Handle observed_at timestamp
+	if v, ok := fields["observed_at"].(string); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			msg.ObservedAt = t
+		}
+	}
+
+	if err := msg.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return msg, nil
+}
+
 // init registers the WeatherReading payload type with the global PayloadRegistry.
 // This enables BaseMessage.UnmarshalJSON to recreate WeatherReading payloads
 // from JSON when the message type is "weather.station.v1".
@@ -23,6 +68,7 @@ func init() {
 		Factory: func() any {
 			return &WeatherReading{}
 		},
+		Builder: buildWeatherReading,
 		Example: map[string]any{
 			"StationID":   "ws-001",
 			"Temperature": 22.5,

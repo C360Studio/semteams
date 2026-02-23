@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
@@ -272,8 +273,9 @@ func (e *Executor) executeAction(ctx context.Context, workflow *wfschema.Definit
 		return e.parallelExecutor.ExecuteParallelStep(ctx, exec, step, interpolator)
 	}
 
-	// Interpolate all action fields at once
-	action := interpolator.InterpolateActionDef(step.Action)
+	// Interpolate all action fields at once, using typed payload assembly if configured
+	payloadRegistry := component.GlobalPayloadRegistry()
+	action := interpolator.InterpolateActionDef(step.Action, step.InputType, payloadRegistry)
 
 	timeout := e.parseTimeout(action.Timeout, e.config.RequestTimeout, step.Name)
 	actx := &actions.Context{
@@ -535,7 +537,9 @@ func (e *Executor) timeoutExecution(ctx context.Context, workflow *wfschema.Defi
 // executeCompletionAction executes an on_complete or on_fail action
 func (e *Executor) executeCompletionAction(ctx context.Context, interpolator *interpolator, actionDef wfschema.ActionDef) {
 	// Interpolate all action fields at once
-	action := interpolator.InterpolateActionDef(actionDef)
+	// Note: completion actions don't have step context, so inputType is empty
+	payloadRegistry := component.GlobalPayloadRegistry()
+	action := interpolator.InterpolateActionDef(actionDef, "", payloadRegistry)
 
 	timeout := e.parseTimeout(action.Timeout, e.config.RequestTimeout, "completion_action")
 

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/component"
 	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 )
 
@@ -582,6 +583,269 @@ func TestBuildMergedPayload(t *testing.T) {
 			if result[tt.checkKey] != tt.expected {
 				t.Errorf("got %v, want %v", result[tt.checkKey], tt.expected)
 			}
+		})
+	}
+}
+
+// TestInterpolateActionDefWithPayloadMapping tests that payload_mapping with input_type
+// uses typed payload assembly instead of JSON interpolation.
+func TestInterpolateActionDefWithPayloadMapping(t *testing.T) {
+	// Register a test payload type
+	registry := component.NewPayloadRegistry()
+	err := registry.RegisterPayload(&component.PayloadRegistration{
+		Domain:      "test",
+		Category:    "message",
+		Version:     "v1",
+		Description: "Test message type",
+		Factory:     func() any { return &TestPayload{} },
+		Builder: func(fields map[string]any) (any, error) {
+			msg := &TestPayload{}
+			if userID, ok := fields["user_id"].(string); ok {
+				msg.UserID = userID
+			}
+			if taskID, ok := fields["task_id"].(string); ok {
+				msg.TaskID = taskID
+			}
+			if count, ok := fields["count"].(float64); ok {
+				msg.Count = int(count)
+			}
+			return msg, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to register test payload: %v", err)
+	}
+
+	exec := &Execution{
+		ID:         "exec_123",
+		WorkflowID: "workflow_abc",
+		Trigger: TriggerContext{
+			Payload: json.RawMessage(`{"user_id": "user-456", "task_id": "task-789", "extra": "data"}`),
+		},
+		StepResults: map[string]StepResult{
+			"step1": {
+				Output: json.RawMessage(`{"count": 42, "status": "success"}`),
+			},
+		},
+	}
+
+	interpolator := newInterpolator(exec)
+
+	tests := []struct {
+		name           string
+		action         wfschema.ActionDef
+		inputType      string
+		payloadReg     *component.PayloadRegistry
+		validateResult func(t *testing.T, action wfschema.ActionDef)
+	}{
+		{
+			name: "payload_mapping with input_type uses typed assembly",
+			action: wfschema.ActionDef{
+				Type:    "call",
+				Subject: "test.subject",
+				PayloadMapping: map[string]string{
+					"user_id": "trigger.payload.user_id",
+					"count":   "steps.step1.output.count",
+				},
+				PassThrough: []string{"task_id"},
+			},
+			inputType:  "test.message.v1",
+			payloadReg: registry,
+			validateResult: func(t *testing.T, action wfschema.ActionDef) {
+				if action.Payload == nil {
+					t.Fatal("expected payload to be set")
+				}
+
+				// Unmarshal and verify the payload structure
+				var result map[string]any
+				if err := json.Unmarshal(action.Payload, &result); err != nil {
+					t.Fatalf("failed to unmarshal payload: %v", err)
+				}
+
+				if result["user_id"] != "user-456" {
+					t.Errorf("expected user_id=user-456, got %v", result["user_id"])
+				}
+				if result["task_id"] != "task-789" {
+					t.Errorf("expected task_id=task-789, got %v", result["task_id"])
+				}
+				// JSON numbers unmarshal as float64
+				if result["count"] != float64(42) {
+					t.Errorf("expected count=42, got %v", result["count"])
+				}
+			},
+		},
+		{
+			name: "payload_mapping without input_type falls back to empty payload",
+			action: wfschema.ActionDef{
+				Type:    "call",
+				Subject: "test.subject",
+				PayloadMapping: map[string]string{
+					"user_id": "trigger.payload.user_id",
+				},
+			},
+			inputType:  "", // No input type
+			payloadReg: registry,
+			validateResult: func(t *testing.T, action wfschema.ActionDef) {
+				// Should not use typed assembly, payload should be empty
+				if len(action.Payload) > 0 {
+					t.Errorf("expected empty payload when input_type is missing, got %s", string(action.Payload))
+				}
+			},
+		},
+		{
+			name: "payload field without payload_mapping uses JSON interpolation",
+			action: wfschema.ActionDef{
+				Type:    "call",
+				Subject: "test.subject",
+				Payload: json.RawMessage(`{"user_id": "${trigger.payload.user_id}", "count": "${steps.step1.output.count}"}`),
+			},
+			inputType:  "test.message.v1", // input_type present but no mapping
+			payloadReg: registry,
+			validateResult: func(t *testing.T, action wfschema.ActionDef) {
+				if action.Payload == nil {
+					t.Fatal("expected payload to be set")
+				}
+
+				var result map[string]any
+				if err := json.Unmarshal(action.Payload, &result); err != nil {
+					t.Fatalf("failed to unmarshal payload: %v", err)
+				}
+
+				// Should use JSON interpolation, preserving types
+				if result["user_id"] != "user-456" {
+					t.Errorf("expected user_id=user-456, got %v", result["user_id"])
+				}
+				if result["count"] != float64(42) {
+					t.Errorf("expected count=42, got %v", result["count"])
+				}
+			},
+		},
+		{
+			name: "nil payload registry falls back to JSON interpolation",
+			action: wfschema.ActionDef{
+				Type:    "call",
+				Subject: "test.subject",
+				PayloadMapping: map[string]string{
+					"user_id": "trigger.payload.user_id",
+				},
+			},
+			inputType:  "test.message.v1",
+			payloadReg: nil, // No registry
+			validateResult: func(t *testing.T, action wfschema.ActionDef) {
+				// Should fall back to original payload (empty in this case)
+				if len(action.Payload) > 0 {
+					t.Errorf("expected empty payload when registry is nil, got %s", string(action.Payload))
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := interpolator.InterpolateActionDef(tt.action, tt.inputType, tt.payloadReg)
+			tt.validateResult(t, result)
+		})
+	}
+}
+
+// TestPayload is a test payload type for testing typed payload assembly
+type TestPayload struct {
+	UserID string `json:"user_id"`
+	TaskID string `json:"task_id"`
+	Count  int    `json:"count"`
+}
+
+// TestInterpolateActionDefErrorHandling tests that payload assembly errors are handled gracefully
+func TestInterpolateActionDefErrorHandling(t *testing.T) {
+	registry := component.NewPayloadRegistry()
+
+	exec := &Execution{
+		ID: "exec_123",
+		Trigger: TriggerContext{
+			Payload: json.RawMessage(`{"user_id": "user-456"}`),
+		},
+	}
+
+	interpolator := newInterpolator(exec)
+
+	tests := []struct {
+		name           string
+		action         wfschema.ActionDef
+		inputType      string
+		validateResult func(t *testing.T, action wfschema.ActionDef)
+	}{
+		{
+			name: "invalid type string falls back to original payload",
+			action: wfschema.ActionDef{
+				Type:    "call",
+				Subject: "test.subject",
+				Payload: json.RawMessage(`{"fallback": "data"}`),
+				PayloadMapping: map[string]string{
+					"user_id": "trigger.payload.user_id",
+				},
+			},
+			inputType: "invalid-type-format", // No dots
+			validateResult: func(t *testing.T, action wfschema.ActionDef) {
+				// Should fall back to original payload on error
+				var result map[string]any
+				if err := json.Unmarshal(action.Payload, &result); err != nil {
+					t.Fatalf("failed to unmarshal payload: %v", err)
+				}
+				if result["fallback"] != "data" {
+					t.Errorf("expected fallback payload to be preserved, got %v", result)
+				}
+			},
+		},
+		{
+			name: "unregistered type falls back to original payload",
+			action: wfschema.ActionDef{
+				Type:    "call",
+				Subject: "test.subject",
+				Payload: json.RawMessage(`{"original": "data"}`),
+				PayloadMapping: map[string]string{
+					"user_id": "trigger.payload.user_id",
+				},
+			},
+			inputType: "unregistered.type.v1",
+			validateResult: func(t *testing.T, action wfschema.ActionDef) {
+				// Should fall back to original payload when type not registered
+				var result map[string]any
+				if err := json.Unmarshal(action.Payload, &result); err != nil {
+					t.Fatalf("failed to unmarshal payload: %v", err)
+				}
+				if result["original"] != "data" {
+					t.Errorf("expected original payload to be preserved, got %v", result)
+				}
+			},
+		},
+		{
+			name: "invalid path reference falls back to original payload",
+			action: wfschema.ActionDef{
+				Type:    "call",
+				Subject: "test.subject",
+				Payload: json.RawMessage(`{"safe": "data"}`),
+				PayloadMapping: map[string]string{
+					"user_id": "nonexistent.path.field",
+				},
+			},
+			inputType: "test.message.v1",
+			validateResult: func(t *testing.T, action wfschema.ActionDef) {
+				// Should fall back to original payload when path resolution fails
+				var result map[string]any
+				if err := json.Unmarshal(action.Payload, &result); err != nil {
+					t.Fatalf("failed to unmarshal payload: %v", err)
+				}
+				if result["safe"] != "data" {
+					t.Errorf("expected safe payload to be preserved, got %v", result)
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := interpolator.InterpolateActionDef(tt.action, tt.inputType, registry)
+			tt.validateResult(t, result)
 		})
 	}
 }

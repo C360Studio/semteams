@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/pkg/errs"
 	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 	"github.com/nats-io/nats.go/jetstream"
@@ -74,6 +75,15 @@ func (r *Registry) Load(ctx context.Context) error {
 		if err := workflow.Validate(); err != nil {
 			r.logger.Warn("Invalid workflow definition", "key", key, "error", err)
 			continue
+		}
+
+		// Validate workflow types against the global payload registry
+		// This is a non-blocking validation to allow gradual adoption
+		warnings := validateWorkflowTypes(&workflow, component.GlobalPayloadRegistry())
+		for _, warning := range warnings {
+			r.logger.Warn(warning,
+				slog.String("workflow_id", workflow.ID),
+				slog.String("workflow_name", workflow.Name))
 		}
 
 		r.workflows[workflow.ID] = &workflow
@@ -170,6 +180,15 @@ func (r *Registry) TriggerSubjects() []string {
 func (r *Registry) Register(ctx context.Context, workflow *wfschema.Definition) error {
 	if err := workflow.Validate(); err != nil {
 		return errs.WrapInvalid(err, "workflow-registry", "Register", "validate workflow")
+	}
+
+	// Validate workflow types against the global payload registry
+	// This is a non-blocking validation to allow gradual adoption
+	warnings := validateWorkflowTypes(workflow, component.GlobalPayloadRegistry())
+	for _, warning := range warnings {
+		r.logger.Warn(warning,
+			slog.String("workflow_id", workflow.ID),
+			slog.String("workflow_name", workflow.Name))
 	}
 
 	// Check if workflow already exists in KV
@@ -330,6 +349,15 @@ func (r *Registry) handleWatchUpdate(entry jetstream.KeyValueEntry) {
 		return
 	}
 
+	// Validate workflow types against the global payload registry
+	// This is a non-blocking validation to allow gradual adoption
+	warnings := validateWorkflowTypes(&workflow, component.GlobalPayloadRegistry())
+	for _, warning := range warnings {
+		r.logger.Warn(warning,
+			slog.String("workflow_id", workflow.ID),
+			slog.String("workflow_name", workflow.Name))
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -344,4 +372,58 @@ func (r *Registry) handleWatchUpdate(entry jetstream.KeyValueEntry) {
 	r.logger.Info("Workflow updated via watch",
 		slog.String("id", workflow.ID),
 		slog.String("name", workflow.Name))
+}
+
+// validateWorkflowTypes checks that all input_type and output_type declarations
+// in workflow steps are registered in the payload registry.
+// Returns a slice of warning messages for any unregistered types.
+// This is non-blocking validation to allow gradual adoption of typed payloads.
+func validateWorkflowTypes(def *wfschema.Definition, payloadRegistry *component.PayloadRegistry) []string {
+	var warnings []string
+
+	// Validate types for each step
+	for _, step := range def.Steps {
+		warnings = append(warnings, validateStepTypes(&step, payloadRegistry)...)
+	}
+
+	return warnings
+}
+
+// validateStepTypes validates input_type and output_type for a single step
+// and recursively validates nested parallel steps.
+func validateStepTypes(step *wfschema.StepDef, payloadRegistry *component.PayloadRegistry) []string {
+	var warnings []string
+
+	// Validate input_type
+	if step.InputType != "" {
+		domain, category, version, err := ParseTypeString(step.InputType)
+		if err != nil {
+			// ParseTypeString error means the format is invalid
+			// This should have been caught by schema validation, but double-check
+			warnings = append(warnings, fmt.Sprintf("step %q has invalid input_type format: %v", step.Name, err))
+		} else if payload := payloadRegistry.CreatePayload(domain, category, version); payload == nil {
+			warnings = append(warnings, fmt.Sprintf("step %q declares input_type %q which is not registered in payload registry", step.Name, step.InputType))
+		}
+	}
+
+	// Validate output_type
+	if step.OutputType != "" {
+		domain, category, version, err := ParseTypeString(step.OutputType)
+		if err != nil {
+			// ParseTypeString error means the format is invalid
+			// This should have been caught by schema validation, but double-check
+			warnings = append(warnings, fmt.Sprintf("step %q has invalid output_type format: %v", step.Name, err))
+		} else if payload := payloadRegistry.CreatePayload(domain, category, version); payload == nil {
+			warnings = append(warnings, fmt.Sprintf("step %q declares output_type %q which is not registered in payload registry", step.Name, step.OutputType))
+		}
+	}
+
+	// Recursively validate nested parallel steps
+	if step.Type == "parallel" {
+		for _, nested := range step.Steps {
+			warnings = append(warnings, validateStepTypes(&nested, payloadRegistry)...)
+		}
+	}
+
+	return warnings
 }

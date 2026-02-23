@@ -25,6 +25,62 @@ import (
 	"github.com/c360studio/semstreams/message"
 )
 
+func buildSensorReading(fields map[string]any) (any, error) {
+	msg := &SensorReading{}
+
+	if v, ok := fields["DeviceID"].(string); ok {
+		msg.DeviceID = v
+	}
+	if v, ok := fields["SensorType"].(string); ok {
+		msg.SensorType = v
+	}
+	if v, ok := fields["Value"].(float64); ok {
+		msg.Value = v
+	}
+	if v, ok := fields["Unit"].(string); ok {
+		msg.Unit = v
+	}
+	if v, ok := fields["SerialNumber"].(string); ok {
+		msg.SerialNumber = v
+	}
+	if v, ok := fields["ZoneEntityID"].(string); ok {
+		msg.ZoneEntityID = v
+	}
+	if v, ok := fields["OrgID"].(string); ok {
+		msg.OrgID = v
+	}
+	if v, ok := fields["Platform"].(string); ok {
+		msg.Platform = v
+	}
+
+	// Handle optional float64 pointers for geospatial fields
+	if v, ok := fields["Latitude"].(float64); ok {
+		lat := v
+		msg.Latitude = &lat
+	}
+	if v, ok := fields["Longitude"].(float64); ok {
+		lon := v
+		msg.Longitude = &lon
+	}
+	if v, ok := fields["Altitude"].(float64); ok {
+		alt := v
+		msg.Altitude = &alt
+	}
+
+	// Handle ObservedAt timestamp
+	if v, ok := fields["ObservedAt"].(string); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			msg.ObservedAt = t
+		}
+	}
+
+	if err := msg.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
+
+	return msg, nil
+}
+
 // init registers the SensorReading payload type with the global PayloadRegistry.
 // This enables BaseMessage.UnmarshalJSON to recreate SensorReading payloads
 // from JSON when the message type is "iot.sensor.v1".
@@ -40,6 +96,7 @@ func init() {
 		Factory: func() any {
 			return &SensorReading{}
 		},
+		Builder: buildSensorReading,
 		Example: map[string]any{
 			"DeviceID":   "sensor-042",
 			"SensorType": "temperature",

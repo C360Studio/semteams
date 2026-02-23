@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/processor/workflow/actions"
 	"github.com/c360studio/semstreams/processor/workflow/aggregation"
@@ -107,8 +108,9 @@ func (e *ParallelStepExecutor) executeNestedStep(
 	nested *wfschema.StepDef,
 	interpolator *interpolator,
 ) error {
-	// Interpolate action fields
-	action := interpolator.InterpolateActionDef(nested.Action)
+	// Interpolate action fields (nested steps in parallel don't have input_type)
+	payloadRegistry := component.GlobalPayloadRegistry()
+	action := interpolator.InterpolateActionDef(nested.Action, nested.InputType, payloadRegistry)
 
 	// Build action context
 	actx := &actions.Context{
