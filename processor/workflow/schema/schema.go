@@ -105,9 +105,13 @@ func (t *TriggerDef) Validate() error {
 
 // InputRef declares an input to a step with a reference to its source.
 // Exactly one of From or Template must be specified.
+//
+// Type behavior:
+//   - From: Preserves native types (objects, arrays, numbers, booleans)
+//   - Template: Always produces a string after ${...} interpolation
 type InputRef struct {
 	From      string `json:"from,omitempty"`      // Reference: "step.output", "trigger.payload.field", "execution.id"
-	Template  string `json:"template,omitempty"`  // Template with ${...} interpolation
+	Template  string `json:"template,omitempty"`  // Template with ${...} interpolation (always returns string)
 	Interface string `json:"interface,omitempty"` // Optional type: "agentic.task.v1"
 }
 
@@ -124,8 +128,42 @@ func (i *InputRef) Validate() error {
 		return errs.WrapInvalid(fmt.Errorf("input cannot have both 'from' and 'template'"), "workflow-schema", "InputRef.Validate", "validate source")
 	}
 
+	// Validate template syntax if present
+	if hasTemplate {
+		if err := validateTemplateSyntax(i.Template); err != nil {
+			return errs.WrapInvalid(err, "workflow-schema", "InputRef.Validate", "validate template syntax")
+		}
+	}
+
 	if err := validateInterfaceString(i.Interface); err != nil {
 		return errs.WrapInvalid(err, "workflow-schema", "InputRef.Validate", "validate interface")
+	}
+
+	return nil
+}
+
+// validateTemplateSyntax checks that template strings have balanced ${...} pairs.
+func validateTemplateSyntax(template string) error {
+	openCount := strings.Count(template, "${")
+	closeCount := strings.Count(template, "}")
+
+	// Check for unbalanced delimiters (simple heuristic)
+	if openCount > closeCount {
+		return fmt.Errorf("template has unclosed ${: %q", template)
+	}
+
+	// Check for nested or malformed patterns
+	depth := 0
+	for i := 0; i < len(template); i++ {
+		if i+1 < len(template) && template[i] == '$' && template[i+1] == '{' {
+			depth++
+			i++ // skip the '{'
+		} else if template[i] == '}' && depth > 0 {
+			depth--
+		}
+	}
+	if depth != 0 {
+		return fmt.Errorf("template has unbalanced delimiters: %q", template)
 	}
 
 	return nil

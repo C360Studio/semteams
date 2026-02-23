@@ -520,20 +520,22 @@ func stepExistsInWorkflow(stepName string, def *wfschema.Definition) bool {
 }
 
 // findStepByName returns the step definition for a given step name, or nil if not found.
-// It searches both top-level steps and nested parallel steps.
+// It searches top-level steps and recursively searches nested parallel steps at any depth.
 func findStepByName(stepName string, def *wfschema.Definition) *wfschema.StepDef {
-	for i := range def.Steps {
-		step := &def.Steps[i]
+	return findStepInSlice(stepName, def.Steps)
+}
+
+// findStepInSlice recursively searches for a step by name in a slice of steps.
+func findStepInSlice(stepName string, steps []wfschema.StepDef) *wfschema.StepDef {
+	for i := range steps {
+		step := &steps[i]
 		if step.Name == stepName {
 			return step
 		}
-		// Check nested parallel steps
-		if step.Type == "parallel" {
-			for j := range step.Steps {
-				nested := &step.Steps[j]
-				if nested.Name == stepName {
-					return nested
-				}
+		// Recursively check nested parallel steps
+		if step.Type == "parallel" && len(step.Steps) > 0 {
+			if found := findStepInSlice(stepName, step.Steps); found != nil {
+				return found
 			}
 		}
 	}

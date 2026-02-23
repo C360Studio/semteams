@@ -81,6 +81,84 @@ func TestStepExistsInWorkflow(t *testing.T) {
 	}
 }
 
+func TestFindStepByName_DeepNested(t *testing.T) {
+	// Test deeply nested parallel steps (parallel within parallel)
+	def := &wfschema.Definition{
+		Steps: []wfschema.StepDef{
+			{Name: "top-level"},
+			{
+				Name: "outer-parallel",
+				Type: "parallel",
+				Steps: []wfschema.StepDef{
+					{Name: "level-1-step"},
+					{
+						Name: "inner-parallel",
+						Type: "parallel",
+						Steps: []wfschema.StepDef{
+							{Name: "deeply-nested-step"},
+							{Name: "another-deep-step"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		stepName string
+		found    bool
+	}{
+		{
+			name:     "top level step",
+			stepName: "top-level",
+			found:    true,
+		},
+		{
+			name:     "outer parallel container",
+			stepName: "outer-parallel",
+			found:    true,
+		},
+		{
+			name:     "level 1 nested step",
+			stepName: "level-1-step",
+			found:    true,
+		},
+		{
+			name:     "inner parallel container",
+			stepName: "inner-parallel",
+			found:    true,
+		},
+		{
+			name:     "deeply nested step (level 2)",
+			stepName: "deeply-nested-step",
+			found:    true,
+		},
+		{
+			name:     "another deeply nested step",
+			stepName: "another-deep-step",
+			found:    true,
+		},
+		{
+			name:     "non-existent step",
+			stepName: "does-not-exist",
+			found:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findStepByName(tt.stepName, def)
+			if tt.found {
+				assert.NotNil(t, result, "expected to find step %q", tt.stepName)
+				assert.Equal(t, tt.stepName, result.Name)
+			} else {
+				assert.Nil(t, result, "expected not to find step %q", tt.stepName)
+			}
+		})
+	}
+}
+
 func TestValidateFromReference(t *testing.T) {
 	def := &wfschema.Definition{
 		Steps: []wfschema.StepDef{

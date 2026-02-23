@@ -127,6 +127,42 @@ func TestInputRef_Validate(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		// Template syntax validation tests
+		{
+			name: "template with multiple interpolations",
+			input: InputRef{
+				Template: "Hello ${trigger.payload.first} ${trigger.payload.last}",
+			},
+			wantErr: false,
+		},
+		{
+			name: "template with no interpolation (static string)",
+			input: InputRef{
+				Template: "Hello World",
+			},
+			wantErr: false,
+		},
+		{
+			name: "template with unclosed interpolation",
+			input: InputRef{
+				Template: "Hello ${trigger.payload.name",
+			},
+			wantErr: true,
+		},
+		{
+			name: "template with unbalanced braces",
+			input: InputRef{
+				Template: "Hello ${trigger.payload.name}}",
+			},
+			wantErr: false, // Extra } after valid interpolation is OK (not inside ${})
+		},
+		{
+			name: "template with nested braces in path",
+			input: InputRef{
+				Template: "Value: ${steps.fetch.output.data}",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -134,6 +170,75 @@ func TestInputRef_Validate(t *testing.T) {
 			err := tt.input.Validate()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("InputRef.Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidateTemplateSyntax tests the template syntax validation helper function.
+func TestValidateTemplateSyntax(t *testing.T) {
+	tests := []struct {
+		name     string
+		template string
+		wantErr  bool
+	}{
+		{
+			name:     "empty template",
+			template: "",
+			wantErr:  false,
+		},
+		{
+			name:     "static string no interpolation",
+			template: "Hello World",
+			wantErr:  false,
+		},
+		{
+			name:     "single interpolation",
+			template: "Hello ${name}",
+			wantErr:  false,
+		},
+		{
+			name:     "multiple interpolations",
+			template: "${first} ${last}",
+			wantErr:  false,
+		},
+		{
+			name:     "interpolation only",
+			template: "${trigger.payload.data}",
+			wantErr:  false,
+		},
+		{
+			name:     "unclosed interpolation",
+			template: "Hello ${name",
+			wantErr:  true,
+		},
+		{
+			name:     "unclosed at end",
+			template: "Value: ${",
+			wantErr:  true,
+		},
+		{
+			name:     "multiple unclosed",
+			template: "${foo ${bar",
+			wantErr:  true,
+		},
+		{
+			name:     "dollar without brace is ok",
+			template: "Price: $100",
+			wantErr:  false,
+		},
+		{
+			name:     "closing brace without open is ok",
+			template: "JSON: }",
+			wantErr:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateTemplateSyntax(tt.template)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("validateTemplateSyntax() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
