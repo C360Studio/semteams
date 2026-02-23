@@ -564,11 +564,12 @@ func (s *TieredScenario) executeTestEntitiesByPrefix(ctx context.Context, result
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 
 	// Test: Query entities by prefix (all temperature sensors)
+	// entitiesByPrefix returns [Entity] - an array of full entity objects
 	prefix := "c360.logistics.environmental.sensor.temperature"
 	prefixQuery := map[string]any{
 		"query": `query($prefix: String!, $limit: Int) {
 			entitiesByPrefix(prefix: $prefix, limit: $limit) {
-				entityIds totalCount truncated prefix
+				id
 			}}`,
 		"variables": map[string]any{"prefix": prefix, "limit": 100},
 	}
@@ -604,11 +605,8 @@ func (s *TieredScenario) executeTestEntitiesByPrefix(ctx context.Context, result
 
 	var prefixResp struct {
 		Data struct {
-			EntitiesByPrefix struct {
-				EntityIDs  []string `json:"entityIds"`
-				TotalCount int      `json:"totalCount"`
-				Truncated  bool     `json:"truncated"`
-				Prefix     string   `json:"prefix"`
+			EntitiesByPrefix []struct {
+				ID string `json:"id"`
 			} `json:"entitiesByPrefix"`
 		} `json:"data"`
 		Errors []struct {
@@ -624,14 +622,15 @@ func (s *TieredScenario) executeTestEntitiesByPrefix(ctx context.Context, result
 		return fmt.Errorf("prefix query GraphQL error: %s", prefixResp.Errors[0].Message)
 	}
 
-	prefixResult := prefixResp.Data.EntitiesByPrefix
+	entities := prefixResp.Data.EntitiesByPrefix
+	totalCount := len(entities)
 
-	result.Metrics["prefix_query_total_count"] = prefixResult.TotalCount
-	result.Metrics["prefix_query_returned"] = len(prefixResult.EntityIDs)
+	result.Metrics["prefix_query_total_count"] = totalCount
+	result.Metrics["prefix_query_returned"] = totalCount
 	result.Metrics["prefix_query_latency_ms"] = latency.Milliseconds()
 
 	// We expect at least 1 temperature sensor from the test data
-	if prefixResult.TotalCount == 0 {
+	if totalCount == 0 {
 		result.Details["entities_by_prefix_test"] = map[string]any{
 			"prefix":      prefix,
 			"total_count": 0,
@@ -641,25 +640,24 @@ func (s *TieredScenario) executeTestEntitiesByPrefix(ctx context.Context, result
 	}
 
 	// Verify all returned entity IDs match the prefix
-	for _, entityID := range prefixResult.EntityIDs {
-		if !strings.HasPrefix(entityID, prefix) {
+	for _, entity := range entities {
+		if !strings.HasPrefix(entity.ID, prefix) {
 			result.Details["entities_by_prefix_test"] = map[string]any{
 				"prefix":    prefix,
-				"entity_id": entityID,
+				"entity_id": entity.ID,
 				"error":     "Entity ID does not match prefix",
 			}
-			return fmt.Errorf("entity %s does not match prefix %s", entityID, prefix)
+			return fmt.Errorf("entity %s does not match prefix %s", entity.ID, prefix)
 		}
 	}
 
 	result.Details["entities_by_prefix_test"] = map[string]any{
 		"prefix":      prefix,
-		"total_count": prefixResult.TotalCount,
-		"returned":    len(prefixResult.EntityIDs),
-		"truncated":   prefixResult.Truncated,
-		"entity_ids":  prefixResult.EntityIDs,
+		"total_count": totalCount,
+		"returned":    totalCount,
+		"truncated":   false, // Array response doesn't indicate truncation
 		"latency_ms":  latency.Milliseconds(),
-		"message":     fmt.Sprintf("Prefix query successful: found %d temperature sensors", prefixResult.TotalCount),
+		"message":     fmt.Sprintf("Prefix query successful: found %d temperature sensors", totalCount),
 	}
 
 	return nil

@@ -363,19 +363,18 @@ func (c *Component) handleQueryHierarchyStats(ctx context.Context, data []byte) 
 		return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryHierarchyStats", "query prefix")
 	}
 
-	// Parse prefix response (uses GraphQL-compatible field names)
-	var prefixResp struct {
-		EntityIDs  []string `json:"entityIds"`
-		TotalCount int      `json:"totalCount"`
+	// Parse prefix response (array of entities from graph-ingest)
+	var entities []struct {
+		ID string `json:"id"`
 	}
-	if err := json.Unmarshal(response, &prefixResp); err != nil {
+	if err := json.Unmarshal(response, &entities); err != nil {
 		return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryHierarchyStats", "parse prefix response")
 	}
 
-	// Group by next hierarchy level
+	// Extract entity IDs and group by next hierarchy level
 	childCounts := make(map[string]int)
-	for _, id := range prefixResp.EntityIDs {
-		nextLevel := extractNextLevel(id, req.Prefix)
+	for _, entity := range entities {
+		nextLevel := extractNextLevel(entity.ID, req.Prefix)
 		if nextLevel != "" {
 			childCounts[nextLevel]++
 		}
@@ -387,7 +386,7 @@ func (c *Component) handleQueryHierarchyStats(ctx context.Context, data []byte) 
 	// Build response
 	result := map[string]any{
 		"prefix":        req.Prefix,
-		"totalEntities": prefixResp.TotalCount,
+		"totalEntities": len(entities),
 		"children":      children,
 	}
 
