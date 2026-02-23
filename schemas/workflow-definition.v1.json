@@ -26,13 +26,7 @@
         "model": {
           "type": "string"
         },
-        "payload": {
-          "items": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": "array"
-        },
+        "payload": {},
         "prompt": {
           "type": "string"
         },
@@ -42,13 +36,7 @@
         "role": {
           "type": "string"
         },
-        "state": {
-          "items": {
-            "minimum": 0,
-            "type": "integer"
-          },
-          "type": "array"
-        },
+        "state": {},
         "subject": {
           "type": "string"
         },
@@ -174,8 +162,14 @@
           "type": "string"
         },
         "condition": {
-          "$ref": "#/$defs/ConditionDef",
-          "nullable": true
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConditionDef"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "inputs": {
           "additionalProperties": {

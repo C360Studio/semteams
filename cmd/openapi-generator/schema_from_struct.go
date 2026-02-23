@@ -9,11 +9,15 @@ import (
 // schemaFromType generates a JSON Schema from a reflect.Type.
 // It handles primitives, structs, slices, maps, pointers, and time.Time.
 func schemaFromType(t reflect.Type) map[string]any {
-	// Handle pointers by dereferencing
-	if t.Kind() == reflect.Ptr {
-		schema := schemaFromType(t.Elem())
-		schema["nullable"] = true
-		return schema
+	// Handle pointers - use JSON Schema Draft-07 anyOf pattern for nullable
+	if t.Kind() == reflect.Pointer {
+		elemSchema := schemaFromType(t.Elem())
+		return map[string]any{
+			"anyOf": []any{
+				elemSchema,
+				map[string]any{"type": "null"},
+			},
+		}
 	}
 
 	switch t.Kind() {
@@ -100,7 +104,7 @@ func schemaFromStruct(t reflect.Type) map[string]any {
 		properties[name] = fieldSchema
 
 		// Field is required if not omitempty and not a pointer
-		if !strings.Contains(opts, "omitempty") && field.Type.Kind() != reflect.Ptr {
+		if !strings.Contains(opts, "omitempty") && field.Type.Kind() != reflect.Pointer {
 			required = append(required, name)
 		}
 	}
@@ -137,7 +141,7 @@ func parseJSONTag(tag string) (name string, opts string) {
 // For example: "service.RuntimeHealthResponse" -> "RuntimeHealthResponse"
 func typeNameFromReflect(t reflect.Type) string {
 	// Handle pointers
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		return typeNameFromReflect(t.Elem())
 	}
 

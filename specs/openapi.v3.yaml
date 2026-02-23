@@ -871,9 +871,10 @@ components:
                 created_by:
                     type: string
                 deployed_at:
-                    format: date-time
-                    nullable: true
-                    type: string
+                    anyOf:
+                        - format: date-time
+                          type: string
+                        - type: "null"
                 description:
                     type: string
                 id:
@@ -919,13 +920,15 @@ components:
                 runtime_state:
                     type: string
                 started_at:
-                    format: date-time
-                    nullable: true
-                    type: string
+                    anyOf:
+                        - format: date-time
+                          type: string
+                        - type: "null"
                 stopped_at:
-                    format: date-time
-                    nullable: true
-                    type: string
+                    anyOf:
+                        - format: date-time
+                          type: string
+                        - type: "null"
                 updated_at:
                     format: date-time
                     type: string
@@ -1130,24 +1133,27 @@ components:
                             healthy:
                                 type: boolean
                             last_activity:
-                                format: date-time
-                                nullable: true
-                                type: string
+                                anyOf:
+                                    - format: date-time
+                                      type: string
+                                    - type: "null"
                             message:
                                 type: string
                             name:
                                 type: string
                             start_time:
-                                format: date-time
-                                nullable: true
-                                type: string
+                                anyOf:
+                                    - format: date-time
+                                      type: string
+                                    - type: "null"
                             status:
                                 type: string
                             type:
                                 type: string
                             uptime_seconds:
-                                nullable: true
-                                type: number
+                                anyOf:
+                                    - type: number
+                                    - type: "null"
                         required:
                             - name
                             - component
@@ -1235,24 +1241,28 @@ components:
                             component:
                                 type: string
                             error_rate:
-                                nullable: true
-                                type: number
+                                anyOf:
+                                    - type: number
+                                    - type: "null"
                             name:
                                 type: string
                             queue_depth:
-                                nullable: true
-                                type: number
+                                anyOf:
+                                    - type: number
+                                    - type: "null"
                             raw_counters:
-                                additionalProperties:
-                                    minimum: 0
-                                    type: integer
-                                nullable: true
-                                type: object
+                                anyOf:
+                                    - additionalProperties:
+                                        minimum: 0
+                                        type: integer
+                                      type: object
+                                    - type: "null"
                             status:
                                 type: string
                             throughput:
-                                nullable: true
-                                type: number
+                                anyOf:
+                                    - type: number
+                                    - type: "null"
                             type:
                                 type: string
                         required:
@@ -1396,33 +1406,35 @@ components:
                 review_notes:
                     type: string
                 reviewed_at:
-                    format: date-time
-                    nullable: true
-                    type: string
+                    anyOf:
+                        - format: date-time
+                          type: string
+                        - type: "null"
                 reviewed_by:
                     type: string
                 status:
                     type: string
                 suggestion:
-                    nullable: true
-                    properties:
-                        confidence:
-                            type: number
-                        from_entity:
-                            type: string
-                        predicate:
-                            type: string
-                        reasoning:
-                            type: string
-                        to_entity:
-                            type: string
-                    required:
-                        - from_entity
-                        - to_entity
-                        - predicate
-                        - confidence
-                        - reasoning
-                    type: object
+                    anyOf:
+                        - properties:
+                            confidence:
+                                type: number
+                            from_entity:
+                                type: string
+                            predicate:
+                                type: string
+                            reasoning:
+                                type: string
+                            to_entity:
+                                type: string
+                          required:
+                            - from_entity
+                            - to_entity
+                            - predicate
+                            - confidence
+                            - reasoning
+                          type: object
+                        - type: "null"
                 type:
                     type: string
             required:

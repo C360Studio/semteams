@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
+	"time"
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
@@ -339,7 +341,7 @@ func generateWorkflowDefinitionSchema(outDir string) error {
 	}
 
 	if err := os.WriteFile(outFile, data, 0644); err != nil {
-		return fmt.Errorf("failed to write workflow schema: %w", err)
+		return fmt.Errorf("failed to write workflow schema to %s: %w", outFile, err)
 	}
 
 	return nil
@@ -348,15 +350,24 @@ func generateWorkflowDefinitionSchema(outDir string) error {
 // schemaFromTypeWithRefs generates JSON Schema but uses $ref for known workflow types
 // to avoid infinite recursion with self-referencing types like StepDef.
 func schemaFromTypeWithRefs(t reflect.Type, knownTypeNames map[string]string) map[string]any {
-	// Handle pointers
+	// Handle pointers - use JSON Schema Draft-07 anyOf pattern for nullable
 	if t.Kind() == reflect.Pointer {
-		schema := schemaFromTypeWithRefs(t.Elem(), knownTypeNames)
-		schema["nullable"] = true
-		return schema
+		elemSchema := schemaFromTypeWithRefs(t.Elem(), knownTypeNames)
+		return map[string]any{
+			"anyOf": []any{
+				elemSchema,
+				map[string]any{"type": "null"},
+			},
+		}
 	}
 
 	// For struct types, check if we should use a $ref
 	if t.Kind() == reflect.Struct {
+		// Special case: time.Time should be date-time string
+		if t == reflect.TypeOf(time.Time{}) {
+			return map[string]any{"type": "string", "format": "date-time"}
+		}
+
 		typeName := t.Name()
 		// If this is a known type, return $ref instead of expanding
 		if ref, ok := knownTypeNames[typeName]; ok {
@@ -369,6 +380,15 @@ func schemaFromTypeWithRefs(t reflect.Type, knownTypeNames map[string]string) ma
 
 	// For slices, check element type
 	if t.Kind() == reflect.Slice {
+		// Special case: json.RawMessage ([]byte) should allow any JSON value
+		if t == reflect.TypeOf(json.RawMessage{}) {
+			return map[string]any{} // any JSON value
+		}
+		// Special case: []byte should be base64 string
+		if t.Elem().Kind() == reflect.Uint8 {
+			return map[string]any{"type": "string", "format": "byte"}
+		}
+
 		elemSchema := schemaFromTypeWithRefs(t.Elem(), knownTypeNames)
 		return map[string]any{
 			"type":  "array",
@@ -419,7 +439,7 @@ func schemaFromStructWithRefs(t reflect.Type, knownTypeNames map[string]string) 
 
 		properties[name] = fieldSchema
 
-		if !contains(opts, "omitempty") && field.Type.Kind() != reflect.Pointer {
+		if !strings.Contains(opts, "omitempty") && field.Type.Kind() != reflect.Pointer {
 			required = append(required, name)
 		}
 	}
@@ -434,17 +454,4 @@ func schemaFromStructWithRefs(t reflect.Type, knownTypeNames map[string]string) 
 	}
 
 	return schema
-}
-
-func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || containsMiddle(s, substr)))
-}
-
-func containsMiddle(s, substr string) bool {
-	for i := 1; i < len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
 }
