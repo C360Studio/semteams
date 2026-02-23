@@ -99,20 +99,146 @@ func buildDocument(fields map[string]any) (any, error) {
 }
 
 func buildMaintenance(fields map[string]any) (any, error) {
-	// Just return empty struct for now - will need to read payload_maintenance.go to implement fully
 	msg := &Maintenance{}
+
+	if v, ok := fields["id"].(string); ok {
+		msg.ID = v
+	}
+	if v, ok := fields["title"].(string); ok {
+		msg.Title = v
+	}
+	if v, ok := fields["description"].(string); ok {
+		msg.Description = v
+	}
+	if v, ok := fields["body"].(string); ok {
+		msg.Body = v
+	}
+	if v, ok := fields["technician"].(string); ok {
+		msg.Technician = v
+	}
+	if v, ok := fields["status"].(string); ok {
+		msg.Status = v
+	}
+	if v, ok := fields["completion_date"].(string); ok {
+		msg.CompletionDate = v
+	}
+	if v, ok := fields["category"].(string); ok {
+		msg.Category = v
+	}
+	if v, ok := fields["org_id"].(string); ok {
+		msg.OrgID = v
+	}
+	if v, ok := fields["platform"].(string); ok {
+		msg.Platform = v
+	}
+	if v, ok := fields["tags"].([]any); ok {
+		msg.Tags = make([]string, 0, len(v))
+		for _, tag := range v {
+			if s, ok := tag.(string); ok {
+				msg.Tags = append(msg.Tags, s)
+			}
+		}
+	}
+
+	if err := msg.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
 	return msg, nil
 }
 
 func buildObservation(fields map[string]any) (any, error) {
-	// Just return empty struct for now - will need to read payload_observation.go to implement fully
 	msg := &Observation{}
+
+	if v, ok := fields["id"].(string); ok {
+		msg.ID = v
+	}
+	if v, ok := fields["title"].(string); ok {
+		msg.Title = v
+	}
+	if v, ok := fields["description"].(string); ok {
+		msg.Description = v
+	}
+	if v, ok := fields["body"].(string); ok {
+		msg.Body = v
+	}
+	if v, ok := fields["observer"].(string); ok {
+		msg.Observer = v
+	}
+	if v, ok := fields["severity"].(string); ok {
+		msg.Severity = v
+	}
+	if v, ok := fields["observed_at"].(string); ok {
+		msg.ObservedAt = v
+	}
+	if v, ok := fields["category"].(string); ok {
+		msg.Category = v
+	}
+	if v, ok := fields["org_id"].(string); ok {
+		msg.OrgID = v
+	}
+	if v, ok := fields["platform"].(string); ok {
+		msg.Platform = v
+	}
+	if v, ok := fields["tags"].([]any); ok {
+		msg.Tags = make([]string, 0, len(v))
+		for _, tag := range v {
+			if s, ok := tag.(string); ok {
+				msg.Tags = append(msg.Tags, s)
+			}
+		}
+	}
+
+	if err := msg.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
 	return msg, nil
 }
 
 func buildSensorDocument(fields map[string]any) (any, error) {
-	// Just return empty struct for now - will need to read payload_sensor.go to implement fully
 	msg := &SensorDocument{}
+
+	if v, ok := fields["id"].(string); ok {
+		msg.ID = v
+	}
+	if v, ok := fields["title"].(string); ok {
+		msg.Title = v
+	}
+	if v, ok := fields["description"].(string); ok {
+		msg.Description = v
+	}
+	if v, ok := fields["body"].(string); ok {
+		msg.Body = v
+	}
+	if v, ok := fields["location"].(string); ok {
+		msg.Location = v
+	}
+	if v, ok := fields["reading"].(float64); ok {
+		msg.Reading = v
+	}
+	if v, ok := fields["unit"].(string); ok {
+		msg.Unit = v
+	}
+	if v, ok := fields["category"].(string); ok {
+		msg.Category = v
+	}
+	if v, ok := fields["org_id"].(string); ok {
+		msg.OrgID = v
+	}
+	if v, ok := fields["platform"].(string); ok {
+		msg.Platform = v
+	}
+	if v, ok := fields["tags"].([]any); ok {
+		msg.Tags = make([]string, 0, len(v))
+		for _, tag := range v {
+			if s, ok := tag.(string); ok {
+				msg.Tags = append(msg.Tags, s)
+			}
+		}
+	}
+
+	if err := msg.Validate(); err != nil {
+		return nil, fmt.Errorf("validation failed: %w", err)
+	}
 	return msg, nil
 }
 

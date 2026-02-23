@@ -73,8 +73,8 @@ func TestValidateWorkflowTypes(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name            string
-		workflow        *wfschema.Definition
+		name             string
+		workflow         *wfschema.Definition
 		expectedWarnings int
 		warningContains  []string
 	}{
@@ -370,11 +370,11 @@ func TestRegistry_ValidateTypesOnRegister(t *testing.T) {
 	}()
 
 	tests := []struct {
-		name              string
-		workflow          *wfschema.Definition
-		expectValidation  bool // Should Register succeed?
-		expectedLogWarn   bool // Should warnings be logged?
-		warningContains   string
+		name             string
+		workflow         *wfschema.Definition
+		expectValidation bool // Should Register succeed?
+		expectedLogWarn  bool // Should warnings be logged?
+		warningContains  string
 	}{
 		{
 			name: "workflow with registered types - no warnings",

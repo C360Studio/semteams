@@ -261,7 +261,8 @@ func TestAssemblePayload_Success(t *testing.T) {
 }
 
 func TestAssemblePayload_NilRegistry(t *testing.T) {
-	resolvePath := func(path string) (any, error) {
+	// Resolver is never called - error occurs before path resolution
+	resolvePath := func(_ string) (any, error) {
 		return "value", nil
 	}
 
@@ -285,7 +286,8 @@ func TestAssemblePayload_NilRegistry(t *testing.T) {
 func TestAssemblePayload_UnknownType(t *testing.T) {
 	registry := component.NewPayloadRegistry()
 
-	resolvePath := func(path string) (any, error) {
+	// Resolver is never called - error occurs when looking up unregistered type
+	resolvePath := func(_ string) (any, error) {
 		return "value", nil
 	}
 
@@ -309,7 +311,8 @@ func TestAssemblePayload_UnknownType(t *testing.T) {
 func TestAssemblePayload_InvalidTypeString(t *testing.T) {
 	registry := component.NewPayloadRegistry()
 
-	resolvePath := func(path string) (any, error) {
+	// Resolver is never called - error occurs when parsing invalid type string
+	resolvePath := func(_ string) (any, error) {
 		return "value", nil
 	}
 
@@ -448,7 +451,8 @@ func TestAssemblePayload_EmptyMappingAndPassThrough(t *testing.T) {
 		t.Fatalf("Failed to register test payload: %v", err)
 	}
 
-	resolvePath := func(path string) (any, error) {
+	// Resolver is never called when mapping and pass-through are both empty
+	resolvePath := func(_ string) (any, error) {
 		return nil, fmt.Errorf("should not be called")
 	}
 
@@ -456,8 +460,8 @@ func TestAssemblePayload_EmptyMappingAndPassThrough(t *testing.T) {
 	result, err := AssemblePayload(
 		registry,
 		"test.workflow.v1",
-		nil,   // no mapping
-		nil,   // no pass-through
+		nil, // no mapping
+		nil, // no pass-through
 		resolvePath,
 	)
 
