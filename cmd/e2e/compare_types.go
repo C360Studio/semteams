@@ -88,16 +88,16 @@ type SearchQueryDiff struct {
 	Insight    string  `json:"insight"`
 }
 
-// RuleDiff compares rule evaluation results
+// RuleDiff compares reactive workflow evaluation results
 type RuleDiff struct {
 	BaselineEvaluated int  `json:"baseline_evaluated"`
 	TargetEvaluated   int  `json:"target_evaluated"`
-	BaselineTriggered int  `json:"baseline_triggered"`
-	TargetTriggered   int  `json:"target_triggered"`
-	BaselineOnEnter   int  `json:"baseline_on_enter"`
-	TargetOnEnter     int  `json:"target_on_enter"`
-	BaselineOnExit    int  `json:"baseline_on_exit"`
-	TargetOnExit      int  `json:"target_on_exit"`
+	BaselineFirings   int  `json:"baseline_firings"`
+	TargetFirings     int  `json:"target_firings"`
+	BaselineActions   int  `json:"baseline_actions"`
+	TargetActions     int  `json:"target_actions"`
+	BaselineExecs     int  `json:"baseline_executions"`
+	TargetExecs       int  `json:"target_executions"`
 	BaselinePassed    bool `json:"baseline_passed"`
 	TargetPassed      bool `json:"target_passed"`
 }

@@ -519,144 +519,144 @@ func (s *TieredScenario) executeTestEmbeddingFallback(ctx context.Context, resul
 // executeValidateRules validates that rules are being evaluated and triggered
 // using MetricsClient for consistent metric access
 func (s *TieredScenario) executeValidateRules(ctx context.Context, result *Result) error {
-	// Capture baseline metrics using MetricsClient
+	// Capture baseline metrics
 	baselineMetrics, err := s.metrics.ExtractRuleMetrics(ctx)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture baseline rule metrics: %v", err))
-		// Initialize with zeros
 		baselineMetrics = &client.RuleMetrics{}
 	}
 
-	// Check for rule metrics presence via raw fetch (for metric presence validation)
-	metricsRaw, err := s.metrics.FetchRaw(ctx)
-	ruleMetricsPresent := map[string]bool{
-		"semstreams_rule_messages_received_total": err == nil && strings.Contains(metricsRaw, "semstreams_rule_messages_received_total"),
-		"semstreams_rule_evaluations_total":       err == nil && strings.Contains(metricsRaw, "semstreams_rule_evaluations_total"),
-		"semstreams_rule_triggers_total":          err == nil && strings.Contains(metricsRaw, "semstreams_rule_triggers_total"),
-		"semstreams_rule_active_rules":            err == nil && strings.Contains(metricsRaw, "semstreams_rule_active_rules"),
-	}
+	// Check for reactive workflow metrics presence
+	ruleMetricsPresent, foundCount := s.checkReactiveMetricsPresence(ctx)
 
-	foundRuleMetrics := 0
-	for _, found := range ruleMetricsPresent {
-		if found {
-			foundRuleMetrics++
-		}
-	}
+	// Send test messages
+	sentCount := s.sendRuleTestMessages(result)
 
-	// Send data that should trigger rules
-	conn, err := net.Dial("udp", s.udpAddr)
-	if err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to connect for rule test: %v", err))
-		return nil
-	}
-	defer conn.Close()
+	// Wait for rule evaluations if needed
+	s.waitForRuleEvaluations(ctx, baselineMetrics, sentCount, result)
 
-	// Messages designed to trigger specific rules
-	ruleTestMessages := []map[string]any{
-		// Should trigger low-battery-alert
-		{
-			"type":      "telemetry",
-			"entity_id": "battery-test-device",
-			"battery":   map[string]any{"level": 15.0},
-			"timestamp": time.Now().Unix(),
-		},
-		// Should trigger high-temperature-alert
-		{
-			"type":      "telemetry",
-			"entity_id": "temp-test-device",
-			"data":      map[string]any{"temperature": 55.0},
-			"timestamp": time.Now().Unix(),
-		},
-	}
-
-	sentCount := 0
-	for _, msg := range ruleTestMessages {
-		msgBytes, err := json.Marshal(msg)
-		if err != nil {
-			continue
-		}
-		if _, err := conn.Write(msgBytes); err == nil {
-			sentCount++
-		}
-	}
-
-	result.Metrics["rule_test_messages_sent"] = sentCount
-
-	// Rules are primarily evaluated on pre-loaded test data, so baseline evaluations
-	// are usually high. Check if we already have significant evaluations before waiting.
-	if baselineMetrics.Evaluations >= 100 {
-		// Already have many evaluations from test data, skip waiting for delta
-		// (UDP rule test messages may not be processed due to json_generic disabled)
-		result.Details["rules_already_evaluated"] = true
-	} else {
-		// Wait for rules to process using event-driven wait
-		waitOpts := client.WaitOpts{
-			Timeout:      s.config.ValidationTimeout,
-			PollInterval: s.config.PollInterval,
-			Comparator:   ">=",
-		}
-
-		// Wait for at least one evaluation to occur per sent message
-		expectedEvaluations := baselineMetrics.Evaluations + float64(sentCount)
-		if err := s.metrics.WaitForMetric(ctx, "semstreams_rule_evaluations_total", expectedEvaluations, waitOpts); err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Rule evaluation wait: %v", err))
-		}
-	}
-
-	// Get final metrics using ExtractRuleMetrics helper
+	// Get final metrics
 	finalMetrics, err := s.metrics.ExtractRuleMetrics(ctx)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to get final rule metrics: %v", err))
 		return nil
 	}
 
-	// Calculate deltas
-	triggeredDelta := int(finalMetrics.Triggers - baselineMetrics.Triggers)
-	evaluatedDelta := int(finalMetrics.Evaluations - baselineMetrics.Evaluations)
+	// Record validation results
+	s.recordRuleValidationResults(result, baselineMetrics, finalMetrics, ruleMetricsPresent, foundCount, sentCount)
 
-	// Record metrics
-	result.Metrics["rules_triggered_count"] = int(finalMetrics.Triggers)
-	result.Metrics["rules_evaluated_count"] = int(finalMetrics.Evaluations)
-	result.Metrics["rules_triggered_delta"] = triggeredDelta
-	result.Metrics["rules_evaluated_delta"] = evaluatedDelta
-	result.Metrics["rule_metrics_found"] = foundRuleMetrics
+	return nil
+}
 
-	// Add state transition metrics
-	result.Metrics["on_enter_fired"] = int(finalMetrics.OnEnterFired)
-	result.Metrics["on_exit_fired"] = int(finalMetrics.OnExitFired)
-
-	// Validate rules actually triggered (check absolute count, not delta)
-	// Rules may have already triggered from file input before baseline was captured
-	if finalMetrics.Triggers < 1 {
-		result.Warnings = append(result.Warnings,
-			"No rules triggered - check rule configuration and test data")
+// checkReactiveMetricsPresence checks for reactive workflow metrics and returns presence map and count.
+func (s *TieredScenario) checkReactiveMetricsPresence(ctx context.Context) (map[string]bool, int) {
+	metricsRaw, err := s.metrics.FetchRaw(ctx)
+	metricNames := []string{
+		"semstreams_reactive_workflow_rule_evaluations_total",
+		"semstreams_reactive_workflow_rule_firings_total",
+		"semstreams_reactive_workflow_actions_dispatched_total",
+		"semstreams_reactive_workflow_executions_created_total",
 	}
 
-	// Consider validation passed if we have rule metrics and some evaluation happened
-	validationPassed := foundRuleMetrics >= 2 && finalMetrics.Evaluations > 0
+	presence := make(map[string]bool, len(metricNames))
+	count := 0
+	for _, name := range metricNames {
+		found := err == nil && strings.Contains(metricsRaw, name)
+		presence[name] = found
+		if found {
+			count++
+		}
+	}
+	return presence, count
+}
+
+// sendRuleTestMessages sends test messages via UDP and returns the count sent.
+func (s *TieredScenario) sendRuleTestMessages(result *Result) int {
+	conn, err := net.Dial("udp", s.udpAddr)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to connect for rule test: %v", err))
+		return 0
+	}
+	defer conn.Close()
+
+	messages := []map[string]any{
+		{"type": "telemetry", "entity_id": "battery-test-device", "battery": map[string]any{"level": 15.0}, "timestamp": time.Now().Unix()},
+		{"type": "telemetry", "entity_id": "temp-test-device", "data": map[string]any{"temperature": 55.0}, "timestamp": time.Now().Unix()},
+	}
+
+	sentCount := 0
+	for _, msg := range messages {
+		if msgBytes, err := json.Marshal(msg); err == nil {
+			if _, err := conn.Write(msgBytes); err == nil {
+				sentCount++
+			}
+		}
+	}
+	result.Metrics["rule_test_messages_sent"] = sentCount
+	return sentCount
+}
+
+// waitForRuleEvaluations waits for rule evaluations if baseline count is low.
+func (s *TieredScenario) waitForRuleEvaluations(ctx context.Context, baseline *client.RuleMetrics, sentCount int, result *Result) {
+	if baseline.Evaluations >= 100 {
+		result.Details["rules_already_evaluated"] = true
+		return
+	}
+
+	waitOpts := client.WaitOpts{
+		Timeout:      s.config.ValidationTimeout,
+		PollInterval: s.config.PollInterval,
+		Comparator:   ">=",
+	}
+	expected := baseline.Evaluations + float64(sentCount)
+	if err := s.metrics.WaitForMetric(ctx, "semstreams_reactive_workflow_rule_evaluations_total", expected, waitOpts); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Rule evaluation wait: %v", err))
+	}
+}
+
+// recordRuleValidationResults records all rule validation metrics and details.
+func (s *TieredScenario) recordRuleValidationResults(result *Result, baseline, final *client.RuleMetrics, metricsPresent map[string]bool, foundCount, sentCount int) {
+	firingsDelta := int(final.Firings - baseline.Firings)
+	evaluatedDelta := int(final.Evaluations - baseline.Evaluations)
+	actionsDelta := int(final.ActionsDispatched - baseline.ActionsDispatched)
+
+	// Record metrics
+	result.Metrics["rules_firings_count"] = int(final.Firings)
+	result.Metrics["rules_evaluated_count"] = int(final.Evaluations)
+	result.Metrics["rules_firings_delta"] = firingsDelta
+	result.Metrics["rules_evaluated_delta"] = evaluatedDelta
+	result.Metrics["rule_metrics_found"] = foundCount
+	result.Metrics["actions_dispatched"] = int(final.ActionsDispatched)
+	result.Metrics["executions_created"] = int(final.ExecutionsCreated)
+	result.Metrics["executions_completed"] = int(final.ExecutionsCompleted)
+
+	if final.Firings < 1 {
+		result.Warnings = append(result.Warnings, "No rules fired - check workflow configuration and test data")
+	}
+
+	validationPassed := foundCount >= 2 && final.Evaluations > 0
 	if validationPassed {
 		result.Metrics["rules_validation_passed"] = 1
 	}
 
 	result.Details["rule_validation"] = map[string]any{
-		"metrics_present":    ruleMetricsPresent,
-		"metrics_found":      foundRuleMetrics,
-		"triggered_before":   int(baselineMetrics.Triggers),
-		"triggered_after":    int(finalMetrics.Triggers),
-		"triggered_delta":    triggeredDelta,
-		"evaluated_before":   int(baselineMetrics.Evaluations),
-		"evaluated_after":    int(finalMetrics.Evaluations),
-		"evaluated_delta":    evaluatedDelta,
-		"on_enter_fired":     int(finalMetrics.OnEnterFired),
-		"on_exit_fired":      int(finalMetrics.OnExitFired),
-		"test_messages_sent": sentCount,
-		"validation_passed":  validationPassed,
-		"message": fmt.Sprintf("Rules: %d triggered, %d evaluated (delta: +%d triggered, +%d evaluated), state transitions: %d enter, %d exit",
-			int(finalMetrics.Triggers), int(finalMetrics.Evaluations), triggeredDelta, evaluatedDelta,
-			int(finalMetrics.OnEnterFired), int(finalMetrics.OnExitFired)),
+		"metrics_present":      metricsPresent,
+		"metrics_found":        foundCount,
+		"firings_before":       int(baseline.Firings),
+		"firings_after":        int(final.Firings),
+		"firings_delta":        firingsDelta,
+		"evaluated_before":     int(baseline.Evaluations),
+		"evaluated_after":      int(final.Evaluations),
+		"evaluated_delta":      evaluatedDelta,
+		"actions_dispatched":   int(final.ActionsDispatched),
+		"actions_delta":        actionsDelta,
+		"executions_created":   int(final.ExecutionsCreated),
+		"executions_completed": int(final.ExecutionsCompleted),
+		"test_messages_sent":   sentCount,
+		"validation_passed":    validationPassed,
+		"message": fmt.Sprintf("Reactive workflow: %d firings, %d evaluations (delta: +%d firings, +%d evaluations), %d actions dispatched",
+			int(final.Firings), int(final.Evaluations), firingsDelta, evaluatedDelta, int(final.ActionsDispatched)),
 	}
-
-	return nil
 }
 
 // executeValidateMetrics validates Prometheus metrics exposure
@@ -794,11 +794,11 @@ func (s *TieredScenario) executeWaitForRuleStabilization(ctx context.Context, re
 				stableCount++
 				if stableCount >= requiredStablePolls {
 					result.Details["rule_stabilization"] = map[string]any{
-						"stabilized":    true,
-						"final_count":   currentMetrics.Evaluations,
-						"wait_duration": time.Since(startTime).String(),
-						"on_enter":      currentMetrics.OnEnterFired,
-						"on_exit":       currentMetrics.OnExitFired,
+						"stabilized":         true,
+						"final_count":        currentMetrics.Evaluations,
+						"wait_duration":      time.Since(startTime).String(),
+						"firings":            currentMetrics.Firings,
+						"actions_dispatched": currentMetrics.ActionsDispatched,
 					}
 					return nil
 				}

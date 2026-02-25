@@ -17,25 +17,25 @@ type RulesValidator struct {
 	PollInterval      time.Duration
 }
 
-// RulesValidationResult contains results from rule validation
+// RulesValidationResult contains results from reactive workflow validation
 type RulesValidationResult struct {
 	MetricsPresent    map[string]bool `json:"metrics_present"`
 	MetricsFoundCount int             `json:"metrics_found_count"`
-	TriggeredBefore   int             `json:"triggered_before"`
-	TriggeredAfter    int             `json:"triggered_after"`
-	TriggeredDelta    int             `json:"triggered_delta"`
+	FiringsBefore     int             `json:"firings_before"`
+	FiringsAfter      int             `json:"firings_after"`
+	FiringsDelta      int             `json:"firings_delta"`
 	EvaluatedBefore   int             `json:"evaluated_before"`
 	EvaluatedAfter    int             `json:"evaluated_after"`
 	EvaluatedDelta    int             `json:"evaluated_delta"`
-	OnEnterFired      int             `json:"on_enter_fired"`
-	OnExitFired       int             `json:"on_exit_fired"`
+	ActionsDispatched int             `json:"actions_dispatched"`
+	ExecutionsCreated int             `json:"executions_created"`
 	TestMessagesSent  int             `json:"test_messages_sent"`
 	ValidationPassed  bool            `json:"validation_passed"`
 	AlreadyEvaluated  bool            `json:"already_evaluated,omitempty"`
 	Warnings          []string        `json:"warnings,omitempty"`
 }
 
-// ValidateRules validates that rules are being evaluated and triggered
+// ValidateRules validates that reactive workflow rules are being evaluated and fired
 func (v *RulesValidator) ValidateRules(ctx context.Context) (*RulesValidationResult, error) {
 	result := &RulesValidationResult{
 		MetricsPresent: make(map[string]bool),
@@ -49,13 +49,13 @@ func (v *RulesValidator) ValidateRules(ctx context.Context) (*RulesValidationRes
 		baselineMetrics = &client.RuleMetrics{}
 	}
 
-	// Check for rule metrics presence
+	// Check for reactive workflow metrics presence
 	metricsRaw, err := v.Metrics.FetchRaw(ctx)
 	ruleMetricNames := []string{
-		"semstreams_rule_messages_received_total",
-		"semstreams_rule_evaluations_total",
-		"semstreams_rule_triggers_total",
-		"semstreams_rule_active_rules",
+		"semstreams_reactive_workflow_rule_evaluations_total",
+		"semstreams_reactive_workflow_rule_firings_total",
+		"semstreams_reactive_workflow_actions_dispatched_total",
+		"semstreams_reactive_workflow_executions_created_total",
 	}
 
 	for _, name := range ruleMetricNames {
@@ -84,41 +84,39 @@ func (v *RulesValidator) ValidateRules(ctx context.Context) (*RulesValidationRes
 	}
 
 	// Calculate results
-	result.TriggeredBefore = int(baselineMetrics.Triggers)
-	result.TriggeredAfter = int(finalMetrics.Triggers)
-	result.TriggeredDelta = int(finalMetrics.Triggers - baselineMetrics.Triggers)
+	result.FiringsBefore = int(baselineMetrics.Firings)
+	result.FiringsAfter = int(finalMetrics.Firings)
+	result.FiringsDelta = int(finalMetrics.Firings - baselineMetrics.Firings)
 	result.EvaluatedBefore = int(baselineMetrics.Evaluations)
 	result.EvaluatedAfter = int(finalMetrics.Evaluations)
 	result.EvaluatedDelta = int(finalMetrics.Evaluations - baselineMetrics.Evaluations)
-	result.OnEnterFired = int(finalMetrics.OnEnterFired)
-	result.OnExitFired = int(finalMetrics.OnExitFired)
+	result.ActionsDispatched = int(finalMetrics.ActionsDispatched)
+	result.ExecutionsCreated = int(finalMetrics.ExecutionsCreated)
 
-	// Validate - rules should trigger from baseline test data
-	// OnEnter/OnExit should fire based on threshold crossings in sensors.jsonl
-
+	// Validate - rules should fire from baseline test data
 	result.ValidationPassed = result.MetricsFoundCount >= 2 && finalMetrics.Evaluations > 0
 
 	return result, nil
 }
 
-// StructuralRulesResult contains results for structural tier rule validation
+// StructuralRulesResult contains results for structural tier reactive workflow validation
 type StructuralRulesResult struct {
-	RulesEvaluated int      `json:"rules_evaluated"`
-	OnEnterFired   int      `json:"on_enter_fired"`
-	OnExitFired    int      `json:"on_exit_fired"`
-	MinEvaluated   int      `json:"min_evaluated"`
-	MinOnEnter     int      `json:"min_on_enter"`
-	MinOnExit      int      `json:"min_on_exit"`
-	Passed         bool     `json:"passed"`
-	Warnings       []string `json:"warnings,omitempty"`
+	RulesEvaluated    int      `json:"rules_evaluated"`
+	RuleFirings       int      `json:"rule_firings"`
+	ActionsDispatched int      `json:"actions_dispatched"`
+	MinEvaluated      int      `json:"min_evaluated"`
+	MinFirings        int      `json:"min_firings"`
+	MinActions        int      `json:"min_actions"`
+	Passed            bool     `json:"passed"`
+	Warnings          []string `json:"warnings,omitempty"`
 }
 
-// ValidateRuleTransitions validates OnEnter/OnExit state transitions for structural tier
-func (v *RulesValidator) ValidateRuleTransitions(ctx context.Context, minEvaluated, minOnEnter, minOnExit int) (*StructuralRulesResult, error) {
+// ValidateRuleTransitions validates reactive workflow activity for structural tier
+func (v *RulesValidator) ValidateRuleTransitions(ctx context.Context, minEvaluated, minFirings, minActions int) (*StructuralRulesResult, error) {
 	result := &StructuralRulesResult{
 		MinEvaluated: minEvaluated,
-		MinOnEnter:   minOnEnter,
-		MinOnExit:    minOnExit,
+		MinFirings:   minFirings,
+		MinActions:   minActions,
 	}
 
 	metrics, err := v.Metrics.ExtractRuleMetrics(ctx)
@@ -127,8 +125,8 @@ func (v *RulesValidator) ValidateRuleTransitions(ctx context.Context, minEvaluat
 	}
 
 	result.RulesEvaluated = int(metrics.Evaluations)
-	result.OnEnterFired = int(metrics.OnEnterFired)
-	result.OnExitFired = int(metrics.OnExitFired)
+	result.RuleFirings = int(metrics.Firings)
+	result.ActionsDispatched = int(metrics.ActionsDispatched)
 
 	// Check minimums
 	if result.RulesEvaluated < minEvaluated {
@@ -136,19 +134,19 @@ func (v *RulesValidator) ValidateRuleTransitions(ctx context.Context, minEvaluat
 			fmt.Sprintf("Rules evaluated %d < minimum %d", result.RulesEvaluated, minEvaluated))
 	}
 
-	if result.OnEnterFired < minOnEnter {
+	if result.RuleFirings < minFirings {
 		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("OnEnter fired %d < minimum %d", result.OnEnterFired, minOnEnter))
+			fmt.Sprintf("Rule firings %d < minimum %d", result.RuleFirings, minFirings))
 	}
 
-	if result.OnExitFired < minOnExit {
+	if result.ActionsDispatched < minActions {
 		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("OnExit fired %d < minimum %d", result.OnExitFired, minOnExit))
+			fmt.Sprintf("Actions dispatched %d < minimum %d", result.ActionsDispatched, minActions))
 	}
 
 	result.Passed = result.RulesEvaluated >= minEvaluated &&
-		result.OnEnterFired >= minOnEnter &&
-		result.OnExitFired >= minOnExit
+		result.RuleFirings >= minFirings &&
+		result.ActionsDispatched >= minActions
 
 	return result, nil
 }

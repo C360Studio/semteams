@@ -62,47 +62,49 @@ func (s *TieredScenario) executeValidateZeroClusters(ctx context.Context, result
 	return nil
 }
 
-// executeValidateRuleTransitions validates stateful rule OnEnter/OnExit transitions (structural tier)
+// executeValidateRuleTransitions validates reactive workflow rule firings and actions (structural tier)
 func (s *TieredScenario) executeValidateRuleTransitions(ctx context.Context, result *Result) error {
-	// Get rule metrics using MetricsClient
+	// Get reactive workflow metrics using MetricsClient
 	ruleMetrics, err := s.metrics.ExtractRuleMetrics(ctx)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to extract rule metrics: %v", err))
 		return nil
 	}
 
-	onEnterFired := int(ruleMetrics.OnEnterFired)
-	onExitFired := int(ruleMetrics.OnExitFired)
+	firings := int(ruleMetrics.Firings)
+	actionsDispatched := int(ruleMetrics.ActionsDispatched)
+	evaluations := int(ruleMetrics.Evaluations)
 
-	result.Metrics["on_enter_fired"] = onEnterFired
-	result.Metrics["on_exit_fired"] = onExitFired
+	result.Metrics["rule_firings"] = firings
+	result.Metrics["actions_dispatched"] = actionsDispatched
+	result.Metrics["rule_evaluations"] = evaluations
 
-	// Validate minimum state transitions
+	// Validate minimum rule activity
 	violations := []string{}
-	if onEnterFired < s.config.MinOnEnterFired {
+	if firings < s.config.MinRuleFirings {
 		violations = append(violations,
-			fmt.Sprintf("OnEnter: %d < %d (expected)", onEnterFired, s.config.MinOnEnterFired))
+			fmt.Sprintf("Rule firings: %d < %d (expected)", firings, s.config.MinRuleFirings))
 	}
-	if onExitFired < s.config.MinOnExitFired {
+	if actionsDispatched < s.config.MinActionsDispatched {
 		violations = append(violations,
-			fmt.Sprintf("OnExit: %d < %d (expected)", onExitFired, s.config.MinOnExitFired))
+			fmt.Sprintf("Actions dispatched: %d < %d (expected)", actionsDispatched, s.config.MinActionsDispatched))
 	}
 
 	result.Details["rule_transitions_validation"] = map[string]any{
-		"on_enter_fired":    onEnterFired,
-		"on_exit_fired":     onExitFired,
-		"min_on_enter":      s.config.MinOnEnterFired,
-		"min_on_exit":       s.config.MinOnExitFired,
-		"violations":        violations,
-		"validation_passed": len(violations) == 0,
-		"stateful_behavior": onEnterFired > 0 || onExitFired > 0,
-		"dynamic_graph":     onExitFired > 0, // OnExit removes triples = dynamic graph
-		"message":           fmt.Sprintf("Rule transitions: %d OnEnter, %d OnExit", onEnterFired, onExitFired),
+		"rule_firings":       firings,
+		"actions_dispatched": actionsDispatched,
+		"evaluations":        evaluations,
+		"min_firings":        s.config.MinRuleFirings,
+		"min_actions":        s.config.MinActionsDispatched,
+		"violations":         violations,
+		"validation_passed":  len(violations) == 0,
+		"reactive_behavior":  firings > 0 || actionsDispatched > 0,
+		"message":            fmt.Sprintf("Reactive workflow: %d firings, %d actions dispatched, %d evaluations", firings, actionsDispatched, evaluations),
 	}
 
 	if len(violations) > 0 {
 		result.Warnings = append(result.Warnings,
-			fmt.Sprintf("Rule transition validation issues: %v", violations))
+			fmt.Sprintf("Reactive workflow validation issues: %v", violations))
 	}
 
 	return nil

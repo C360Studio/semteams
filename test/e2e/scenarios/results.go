@@ -147,17 +147,17 @@ type RuleResults struct {
 	// EvaluatedCount is total rules evaluated
 	EvaluatedCount int `json:"evaluated_count"`
 
-	// TriggeredCount is rules that fired
-	TriggeredCount int `json:"triggered_count"`
+	// FiringsCount is rules that fired (conditions met)
+	FiringsCount int `json:"firings_count"`
 
 	// ValidationPassed indicates if rule validation passed
 	ValidationPassed bool `json:"validation_passed"`
 
-	// OnEnterFired is count of OnEnter transitions (structural)
-	OnEnterFired int `json:"on_enter_fired,omitempty"`
+	// ActionsDispatched is count of actions dispatched by reactive workflow
+	ActionsDispatched int `json:"actions_dispatched,omitempty"`
 
-	// OnExitFired is count of OnExit transitions (structural)
-	OnExitFired int `json:"on_exit_fired,omitempty"`
+	// ExecutionsCreated is count of workflow executions created
+	ExecutionsCreated int `json:"executions_created,omitempty"`
 }
 
 // CommunityResults contains community detection results.
@@ -338,11 +338,11 @@ func buildCoreResults(tr *TieredResults, result *Result, searchStats *search.Sta
 		}
 	}
 	tr.Rules = RuleResults{
-		EvaluatedCount:   getIntMetric(result, "rules_evaluated_count"),
-		TriggeredCount:   getIntMetric(result, "rules_triggered_count"),
-		ValidationPassed: getIntMetric(result, "rules_validation_passed") == 1,
-		OnEnterFired:     getIntMetric(result, "on_enter_fired"),
-		OnExitFired:      getIntMetric(result, "on_exit_fired"),
+		EvaluatedCount:    getIntMetric(result, "rules_evaluated_count"),
+		FiringsCount:      getIntMetric(result, "rules_firings_count"),
+		ValidationPassed:  getIntMetric(result, "rules_validation_passed") == 1,
+		ActionsDispatched: getIntMetric(result, "actions_dispatched"),
+		ExecutionsCreated: getIntMetric(result, "executions_created"),
 	}
 }
 

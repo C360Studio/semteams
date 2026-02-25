@@ -92,11 +92,11 @@ type TieredConfig struct {
 	MaxRegressionPercent float64 `json:"max_regression_percent"`  // Default 20%
 
 	// Structural tier config (rules-only, no ML dependencies)
-	ExpectedEmbeddings int `json:"expected_embeddings"` // 0 for structural variant
-	ExpectedClusters   int `json:"expected_clusters"`   // 0 for structural variant
-	MinRulesEvaluated  int `json:"min_rules_evaluated"` // Min rules evaluated for structural
-	MinOnEnterFired    int `json:"min_on_enter_fired"`  // Min OnEnter transitions
-	MinOnExitFired     int `json:"min_on_exit_fired"`   // Min OnExit transitions
+	ExpectedEmbeddings   int `json:"expected_embeddings"`    // 0 for structural variant
+	ExpectedClusters     int `json:"expected_clusters"`      // 0 for structural variant
+	MinRulesEvaluated    int `json:"min_rules_evaluated"`    // Min rules evaluated for structural
+	MinRuleFirings       int `json:"min_rule_firings"`       // Min rule firings (conditions met)
+	MinActionsDispatched int `json:"min_actions_dispatched"` // Min actions dispatched
 }
 
 // DefaultTieredConfig returns default configuration
@@ -120,11 +120,11 @@ func DefaultTieredConfig() *TieredConfig {
 		OutputDir:            "test/e2e/results",
 		MaxRegressionPercent: 20.0, // 20% regression threshold
 		// Structural tier defaults (rules-only, no ML)
-		ExpectedEmbeddings: 0, // Structural: NO embeddings
-		ExpectedClusters:   0, // Structural: NO clustering
-		MinRulesEvaluated:  5,
-		MinOnEnterFired:    2, // Expect at least 2 OnEnter transitions
-		MinOnExitFired:     1, // Expect at least 1 OnExit transition
+		ExpectedEmbeddings:   0, // Structural: NO embeddings
+		ExpectedClusters:     0, // Structural: NO clustering
+		MinRulesEvaluated:    5,
+		MinRuleFirings:       2, // Expect at least 2 rule firings
+		MinActionsDispatched: 1, // Expect at least 1 action dispatched
 	}
 }
 

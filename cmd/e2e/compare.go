@@ -93,16 +93,16 @@ func compareResults(baseline, target *scenarios.TieredResults, baselineFile, tar
 	// Search diff
 	report.Sections.Search = compareSearch(baseline.Search, target.Search)
 
-	// Rule diff
+	// Rule diff (reactive workflow metrics)
 	report.Sections.Rules = RuleDiff{
 		BaselineEvaluated: baseline.Rules.EvaluatedCount,
 		TargetEvaluated:   target.Rules.EvaluatedCount,
-		BaselineTriggered: baseline.Rules.TriggeredCount,
-		TargetTriggered:   target.Rules.TriggeredCount,
-		BaselineOnEnter:   baseline.Rules.OnEnterFired,
-		TargetOnEnter:     target.Rules.OnEnterFired,
-		BaselineOnExit:    baseline.Rules.OnExitFired,
-		TargetOnExit:      target.Rules.OnExitFired,
+		BaselineFirings:   baseline.Rules.FiringsCount,
+		TargetFirings:     target.Rules.FiringsCount,
+		BaselineActions:   baseline.Rules.ActionsDispatched,
+		TargetActions:     target.Rules.ActionsDispatched,
+		BaselineExecs:     baseline.Rules.ExecutionsCreated,
+		TargetExecs:       target.Rules.ExecutionsCreated,
 		BaselinePassed:    baseline.Rules.ValidationPassed,
 		TargetPassed:      target.Rules.ValidationPassed,
 	}
@@ -670,15 +670,15 @@ func printRulesSection(report *ComparisonReport) {
 	fmt.Printf("  Evaluated: %d → %d\n",
 		report.Sections.Rules.BaselineEvaluated,
 		report.Sections.Rules.TargetEvaluated)
-	fmt.Printf("  Triggered: %d → %d\n",
-		report.Sections.Rules.BaselineTriggered,
-		report.Sections.Rules.TargetTriggered)
-	fmt.Printf("  OnEnter: %d → %d\n",
-		report.Sections.Rules.BaselineOnEnter,
-		report.Sections.Rules.TargetOnEnter)
-	fmt.Printf("  OnExit: %d → %d\n",
-		report.Sections.Rules.BaselineOnExit,
-		report.Sections.Rules.TargetOnExit)
+	fmt.Printf("  Firings: %d → %d\n",
+		report.Sections.Rules.BaselineFirings,
+		report.Sections.Rules.TargetFirings)
+	fmt.Printf("  Actions: %d → %d\n",
+		report.Sections.Rules.BaselineActions,
+		report.Sections.Rules.TargetActions)
+	fmt.Printf("  Executions: %d → %d\n",
+		report.Sections.Rules.BaselineExecs,
+		report.Sections.Rules.TargetExecs)
 }
 
 func printCommunitiesSection(report *ComparisonReport) {

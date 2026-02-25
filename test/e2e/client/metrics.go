@@ -606,45 +606,67 @@ func (c *MetricsClient) GetMetricByLabels(ctx context.Context, metricName string
 	return results, nil
 }
 
-// RuleMetrics holds common rule validation metrics for E2E tests
+// RuleMetrics holds reactive workflow metrics for E2E tests.
+// These map to the semstreams_reactive_workflow_* Prometheus metrics.
 type RuleMetrics struct {
-	Evaluations    float64 `json:"evaluations"`
-	Triggers       float64 `json:"triggers"`
-	OnEnterFired   float64 `json:"on_enter_fired"`
-	OnExitFired    float64 `json:"on_exit_fired"`
-	WhileTrueFired float64 `json:"while_true_fired"`
+	// Rule evaluation metrics
+	Evaluations float64 `json:"evaluations"` // Total rule evaluations
+	Firings     float64 `json:"firings"`     // Rules that fired (conditions met)
+
+	// Action metrics
+	ActionsDispatched float64 `json:"actions_dispatched"` // Total actions dispatched
+
+	// Execution lifecycle metrics
+	ExecutionsCreated   float64 `json:"executions_created"`   // Workflow executions started
+	ExecutionsCompleted float64 `json:"executions_completed"` // Workflow executions completed
+	ExecutionsFailed    float64 `json:"executions_failed"`    // Workflow executions failed
+
+	// Callback metrics
+	CallbacksReceived float64 `json:"callbacks_received"` // Async callbacks received
 }
 
-// ExtractRuleMetrics gets all rule-related metrics in a single call.
+// ExtractRuleMetrics gets all reactive workflow metrics in a single call.
 // This enables consistent rule validation across E2E scenarios.
 func (c *MetricsClient) ExtractRuleMetrics(ctx context.Context) (*RuleMetrics, error) {
 	metrics := &RuleMetrics{}
 
-	// Get evaluation and trigger counts
-	evaluations, err := c.SumMetricsByName(ctx, "semstreams_rule_evaluations_total")
+	// Rule evaluation metrics
+	evaluations, err := c.SumMetricsByName(ctx, "semstreams_reactive_workflow_rule_evaluations_total")
 	if err == nil {
 		metrics.Evaluations = evaluations
 	}
 
-	triggers, err := c.SumMetricsByName(ctx, "semstreams_rule_triggers_total")
+	firings, err := c.SumMetricsByName(ctx, "semstreams_reactive_workflow_rule_firings_total")
 	if err == nil {
-		metrics.Triggers = triggers
+		metrics.Firings = firings
 	}
 
-	// Extract state transition metrics
-	// Note: transition label values are "entered", "exited", "while_true" per state_tracker.go
-	transitions, err := c.GetMetricByLabels(ctx, "semstreams_rule_state_transitions_total", nil)
+	// Action metrics
+	actions, err := c.SumMetricsByName(ctx, "semstreams_reactive_workflow_actions_dispatched_total")
 	if err == nil {
-		for _, t := range transitions {
-			switch t.Labels["transition"] {
-			case "entered":
-				metrics.OnEnterFired += t.Value
-			case "exited":
-				metrics.OnExitFired += t.Value
-			case "while_true":
-				metrics.WhileTrueFired += t.Value
-			}
-		}
+		metrics.ActionsDispatched = actions
+	}
+
+	// Execution lifecycle metrics
+	created, err := c.SumMetricsByName(ctx, "semstreams_reactive_workflow_executions_created_total")
+	if err == nil {
+		metrics.ExecutionsCreated = created
+	}
+
+	completed, err := c.SumMetricsByName(ctx, "semstreams_reactive_workflow_executions_completed_total")
+	if err == nil {
+		metrics.ExecutionsCompleted = completed
+	}
+
+	failed, err := c.SumMetricsByName(ctx, "semstreams_reactive_workflow_executions_failed_total")
+	if err == nil {
+		metrics.ExecutionsFailed = failed
+	}
+
+	// Callback metrics
+	callbacks, err := c.SumMetricsByName(ctx, "semstreams_reactive_workflow_callbacks_received_total")
+	if err == nil {
+		metrics.CallbacksReceived = callbacks
 	}
 
 	return metrics, nil
