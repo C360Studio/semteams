@@ -52,8 +52,9 @@ func (v *ComponentVerifier) VerifyComponents(ctx context.Context) (*ComponentRes
 // getRequiredComponents returns the list of required components for the variant
 func (v *ComponentVerifier) getRequiredComponents() []string {
 	if v.Variant == "structural" {
-		// Minimal components for structural/rules-only testing
-		return []string{"udp", "iot_sensor", "rule", "graph", "file"}
+		// Components for structural testing with reactive workflow engine and rule processor
+		// Note: "rule" is the instance name (config key), "rule-processor" is the factory name
+		return []string{"udp", "iot_sensor", "rule", "reactive-workflow", "graph-ingest", "file"}
 	}
 
 	// Full components for statistical/semantic tiers
@@ -63,7 +64,7 @@ func (v *ComponentVerifier) getRequiredComponents() []string {
 		// Domain processors
 		"document_processor", "iot_sensor",
 		// Semantic components
-		"rule", "graph",
+		"reactive-workflow", "graph-ingest",
 		// Output/storage
 		"file", "objectstore",
 	}

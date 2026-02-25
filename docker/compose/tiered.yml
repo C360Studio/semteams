@@ -174,17 +174,17 @@ services:
       retries: 10
 
   # SemStreams Application (structural tier config)
-  # Structural variant - rules-only, no embeddings or clustering
+  # Structural variant - uses e2e-semstreams binary with reactive workflow engine
   # PROFILE: structural - Only started when --profile structural is specified
   semstreams-structural:
     build:
       context: ../..
       dockerfile: docker/Dockerfile
-      target: production
+      target: e2e
     container_name: semstreams-tiered-app-structural
     profiles:
       - structural
-    command: ["--config", "/app/configs/structural.json"]
+    command: ["--config", "/app/configs/e2e-structural.json"]
     depends_on:
       nats:
         condition: service_healthy

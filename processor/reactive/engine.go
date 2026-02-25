@@ -100,6 +100,11 @@ func (e *Engine) Registry() *WorkflowRegistry {
 	return e.registry
 }
 
+// StateBucket returns the configured KV bucket name for workflow state.
+func (e *Engine) StateBucket() string {
+	return e.config.StateBucket
+}
+
 // RegisterWorkflow registers a workflow definition.
 func (e *Engine) RegisterWorkflow(def *Definition) error {
 	return e.registry.Register(def)

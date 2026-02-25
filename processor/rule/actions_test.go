@@ -1112,3 +1112,154 @@ func TestSubstituteVariablesWithContext_EmptyFields(t *testing.T) {
 	// Empty strings and zero values should substitute correctly
 	assert.Equal(t, "ID: loop-123, Parent: , Iterations: 0", result)
 }
+
+// T057: Test ActionTypeTriggerWorkflow constant
+func TestActionConstant_TriggerWorkflow(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "trigger_workflow", ActionTypeTriggerWorkflow)
+}
+
+// T058: Test TriggerWorkflow action publishes to correct subject
+func TestAction_TriggerWorkflow(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	tests := []struct {
+		name        string
+		action      Action
+		entityID    string
+		relatedID   string
+		wantSubject string
+		wantErr     bool
+		errMsg      string
+	}{
+		{
+			name: "trigger workflow with workflow_id",
+			action: Action{
+				Type:       ActionTypeTriggerWorkflow,
+				WorkflowID: "notify-technician",
+			},
+			entityID:    "c360.platform.sensor.temp.001",
+			wantSubject: "workflow.trigger.notify-technician",
+			wantErr:     false,
+		},
+		{
+			name: "trigger workflow with context data",
+			action: Action{
+				Type:       ActionTypeTriggerWorkflow,
+				WorkflowID: "escalate-alert",
+				ContextData: map[string]any{
+					"severity": "critical",
+					"zone":     "cold-storage",
+				},
+			},
+			entityID:    "c360.platform.sensor.temp.001",
+			relatedID:   "c360.platform.zone.cold-storage",
+			wantSubject: "workflow.trigger.escalate-alert",
+			wantErr:     false,
+		},
+		{
+			name: "missing workflow_id should fail",
+			action: Action{
+				Type: ActionTypeTriggerWorkflow,
+			},
+			entityID: "c360.platform.sensor.temp.001",
+			wantErr:  true,
+			errMsg:   "workflow_id is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mock := &mockPublisher{}
+			executor := NewActionExecutorFull(nil, nil, mock)
+
+			err := executor.Execute(ctx, tt.action, tt.entityID, tt.relatedID)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+				require.Len(t, mock.published, 1)
+				assert.Equal(t, tt.wantSubject, mock.published[0].subject)
+			}
+		})
+	}
+}
+
+// T059: Test TriggerWorkflow payload format
+func TestAction_TriggerWorkflow_PayloadFormat(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mock := &mockPublisher{}
+	executor := NewActionExecutorFull(nil, nil, mock)
+
+	action := Action{
+		Type:       ActionTypeTriggerWorkflow,
+		WorkflowID: "notify-technician",
+		ContextData: map[string]any{
+			"alert_type": "temperature",
+		},
+	}
+
+	err := executor.Execute(ctx, action, "sensor.temp.001", "zone.cold-storage")
+	require.NoError(t, err)
+	require.Len(t, mock.published, 1)
+
+	// Parse the published payload
+	var payload map[string]any
+	err = json.Unmarshal(mock.published[0].data, &payload)
+	require.NoError(t, err)
+
+	// Verify payload fields
+	assert.Equal(t, "notify-technician", payload["workflow_id"])
+	assert.Equal(t, "sensor.temp.001", payload["entity_id"])
+	assert.Equal(t, "zone.cold-storage", payload["related_id"])
+	assert.NotEmpty(t, payload["triggered_at"])
+
+	// Verify context data is included
+	contextData, ok := payload["context"].(map[string]any)
+	require.True(t, ok, "context should be a map")
+	assert.Equal(t, "temperature", contextData["alert_type"])
+}
+
+// T060: Test TriggerWorkflow without publisher (no-op)
+func TestAction_TriggerWorkflow_NoPublisher(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	executor := NewActionExecutor(nil) // No publisher configured
+
+	action := Action{
+		Type:       ActionTypeTriggerWorkflow,
+		WorkflowID: "notify-technician",
+	}
+
+	// Should not error, just log and return
+	err := executor.Execute(ctx, action, "entity.001", "")
+	require.NoError(t, err)
+}
+
+// T061: Test TriggerWorkflow error handling
+func TestAction_TriggerWorkflow_ErrorHandling(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	expectedErr := assert.AnError
+	mock := &mockPublisher{err: expectedErr}
+	executor := NewActionExecutorFull(nil, nil, mock)
+
+	action := Action{
+		Type:       ActionTypeTriggerWorkflow,
+		WorkflowID: "notify-technician",
+	}
+
+	err := executor.Execute(ctx, action, "entity.001", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "publish workflow trigger to workflow.trigger.notify-technician")
+}

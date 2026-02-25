@@ -823,6 +823,7 @@ components:
                         - $ref: ../schemas/oasf-generator.v1.json
                         - $ref: ../schemas/objectstore.v1.json
                         - $ref: ../schemas/otel-exporter.v1.json
+                        - $ref: ../schemas/reactive-workflow.v1.json
                         - $ref: ../schemas/rule-processor.v1.json
                         - $ref: ../schemas/slim-bridge.v1.json
                         - $ref: ../schemas/trustgraph_input.v1.json

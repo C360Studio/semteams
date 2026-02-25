@@ -1,0 +1,348 @@
+{
+  "version": "1.1.0",
+  "platform": {
+    "org": "c360",
+    "id": "semstreams-e2e-structural",
+    "type": "reactive-e2e",
+    "region": "local",
+    "instance_id": "e2e-structural-001",
+    "environment": "test"
+  },
+  "tier": "rules",
+  "nats": {
+    "urls": ["nats://localhost:4222"]
+  },
+  "services": {
+    "service-manager": {
+      "name": "service-manager",
+      "enabled": true,
+      "config": {
+        "http_port": 8080,
+        "swagger_ui": true,
+        "server_info": {
+          "title": "SemStreams E2E Structural Tier",
+          "description": "E2E test application with reactive workflow engine",
+          "version": "0.7.0"
+        }
+      }
+    },
+    "component-manager": {
+      "name": "component-manager",
+      "enabled": true,
+      "config": {}
+    },
+    "metrics": {
+      "name": "metrics",
+      "enabled": true,
+      "config": {
+        "port": 9090,
+        "path": "/metrics",
+        "include_go_metrics": true
+      }
+    },
+    "message-logger": {
+      "name": "message-logger",
+      "enabled": true,
+      "config": {
+        "buffer_size": 10000,
+        "monitor_subjects": ["*"],
+        "enable_kv_query": true,
+        "log_level": "INFO"
+      }
+    },
+    "log-forwarder": {
+      "name": "log-forwarder",
+      "enabled": true,
+      "config": {
+        "min_level": "DEBUG",
+        "exclude_sources": ["flow-service.websocket"]
+      }
+    },
+    "metrics-forwarder": {
+      "name": "metrics-forwarder",
+      "enabled": true,
+      "config": {
+        "push_interval": "5s",
+        "include_go_metrics": false,
+        "include_proc_metrics": false
+      }
+    }
+  },
+  "components": {
+    "file_sensors": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [{"name": "file_out", "subject": "raw.sensor.file", "type": "jetstream"}]
+        },
+        "path": "/data/testdata/semantic/sensors.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
+        "loop": false
+      }
+    },
+    "file_documents": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [{"name": "file_out", "subject": "raw.document.corpus", "type": "jetstream"}]
+        },
+        "path": "/data/testdata/semantic/documents.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
+        "loop": false
+      }
+    },
+    "file_maintenance": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [{"name": "file_out", "subject": "raw.document.corpus", "type": "jetstream"}]
+        },
+        "path": "/data/testdata/semantic/maintenance.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
+        "loop": false
+      }
+    },
+    "file_observations": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [{"name": "file_out", "subject": "raw.document.corpus", "type": "jetstream"}]
+        },
+        "path": "/data/testdata/semantic/observations.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
+        "loop": false
+      }
+    },
+    "file_sensor_docs": {
+      "type": "input",
+      "name": "file_input",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [{"name": "file_out", "subject": "raw.document.corpus", "type": "jetstream"}]
+        },
+        "path": "/data/testdata/semantic/sensor_docs.jsonl",
+        "format": "jsonl",
+        "interval": "10ms",
+        "loop": false
+      }
+    },
+    "udp": {
+      "type": "input",
+      "name": "udp",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [],
+          "outputs": [{"name": "udp_out", "subject": "raw.sensor.udp", "type": "jetstream"}]
+        },
+        "bind": "0.0.0.0",
+        "port": 14550,
+        "buffer_size": 65536
+      }
+    },
+    "iot_sensor": {
+      "type": "processor",
+      "name": "iot_sensor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "sensor_in", "subject": "raw.sensor.>", "type": "jetstream"}],
+          "outputs": [{"name": "sensor_out", "subject": "sensor.processed.entity", "type": "jetstream", "interface": "iot.sensor.v1"}]
+        },
+        "org_id": "c360",
+        "platform": "logistics"
+      }
+    },
+    "document_processor": {
+      "type": "processor",
+      "name": "document_processor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "doc_in", "subject": "raw.document.corpus", "type": "jetstream"}],
+          "outputs": [{"name": "doc_out", "subject": "document.processed.entity", "type": "jetstream", "interface": "content.document.v1"}]
+        },
+        "org_id": "c360",
+        "platform": "logistics"
+      }
+    },
+    "objectstore": {
+      "type": "storage",
+      "name": "objectstore",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "write", "subject": "document.processed.entity", "type": "jetstream"}],
+          "outputs": [{"name": "stored", "subject": "objectstore.stored.entity", "type": "jetstream"}]
+        },
+        "bucket_name": "semstreams_e2e_structural_store",
+        "data_cache": {"enabled": true, "strategy": "hybrid", "max_size": 5000, "ttl": "1h", "cleanup_interval": "5m"}
+      }
+    },
+    "reactive-workflow": {
+      "type": "processor",
+      "name": "reactive-workflow",
+      "enabled": true,
+      "config": {
+        "enable_metrics": true,
+        "state_bucket": "REACTIVE_WORKFLOW_STATE",
+        "callback_stream_name": "WORKFLOW_CALLBACKS",
+        "event_stream_name": "WORKFLOW_EVENTS",
+        "default_timeout": "10m",
+        "default_max_iterations": 10
+      }
+    },
+    "rule": {
+      "type": "processor",
+      "name": "rule-processor",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}],
+          "outputs": [{"name": "workflow_triggers", "subject": "workflow.trigger.*", "type": "jetstream"}]
+        },
+        "entity_watch_patterns": [">"],
+        "inline_rules": [
+          {
+            "id": "cold-storage-temp-violation",
+            "type": "expression",
+            "name": "Cold Storage Temperature Violation",
+            "enabled": true,
+            "conditions": [
+              {"field": "sensor.measurement.fahrenheit", "operator": "gte", "value": 40},
+              {"field": "geo.location.zone", "operator": "contains", "value": "cold-storage"}
+            ],
+            "on_enter": [
+              {
+                "type": "trigger_workflow",
+                "workflow_id": "notify-technician"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "graph-ingest": {
+      "type": "processor",
+      "name": "graph-ingest",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [
+            {"name": "objectstore_in", "subject": "objectstore.stored.entity", "type": "jetstream", "interface": "storage.stored.v1"},
+            {"name": "sensor_in", "subject": "sensor.processed.entity", "type": "jetstream", "interface": "iot.sensor.v1"}
+          ],
+          "outputs": [{"name": "entity_states", "subject": "ENTITY_STATES", "type": "kv-write"}]
+        },
+        "enable_hierarchy": true
+      }
+    },
+    "graph-index": {
+      "type": "processor",
+      "name": "graph-index",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}],
+          "outputs": [
+            {"name": "outgoing_index", "subject": "OUTGOING_INDEX", "type": "kv"},
+            {"name": "incoming_index", "subject": "INCOMING_INDEX", "type": "kv"},
+            {"name": "alias_index", "subject": "ALIAS_INDEX", "type": "kv"},
+            {"name": "predicate_index", "subject": "PREDICATE_INDEX", "type": "kv"}
+          ]
+        },
+        "workers": 4,
+        "batch_size": 50
+      }
+    },
+    "graph-index-spatial": {
+      "type": "processor",
+      "name": "graph-index-spatial",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}],
+          "outputs": [{"name": "spatial_index", "subject": "SPATIAL_INDEX", "type": "kv"}]
+        },
+        "geohash_precision": 6,
+        "workers": 2,
+        "batch_size": 50
+      }
+    },
+    "graph-index-temporal": {
+      "type": "processor",
+      "name": "graph-index-temporal",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "entity_watch", "subject": "ENTITY_STATES", "type": "kv-watch"}],
+          "outputs": [{"name": "temporal_index", "subject": "TEMPORAL_INDEX", "type": "kv"}]
+        },
+        "time_resolution": "hour",
+        "workers": 2,
+        "batch_size": 50
+      }
+    },
+    "graph-query": {
+      "type": "processor",
+      "name": "graph-query",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "query_requests", "subject": "graph.query.>", "type": "nats-request"}],
+          "outputs": []
+        },
+        "request_timeout": "30s",
+        "max_traversal_depth": 5,
+        "max_traversal_nodes": 100
+      }
+    },
+    "graph-gateway": {
+      "type": "gateway",
+      "name": "graph-gateway",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "http", "subject": ":8082", "type": "http"}],
+          "outputs": [{"name": "mutations", "subject": "graph.mutation.*", "type": "nats-request"}]
+        },
+        "graphql_path": "/graphql",
+        "mcp_path": "/mcp",
+        "bind_address": ":8082",
+        "enable_playground": true
+      }
+    },
+    "file": {
+      "type": "output",
+      "name": "file",
+      "enabled": true,
+      "config": {
+        "ports": {
+          "inputs": [{"name": "file_in", "subject": "objectstore.stored.entity", "type": "jetstream"}],
+          "outputs": []
+        },
+        "directory": "/tmp",
+        "file_prefix": "semstreams-e2e-structural",
+        "format": "jsonl"
+      }
+    }
+  }
+}

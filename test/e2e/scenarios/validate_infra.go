@@ -26,11 +26,12 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 
 	var allRequired []string
 
-	// Structural tier uses minimal structural.json config
+	// Structural tier uses e2e-structural.json config with reactive-workflow and rule processor
 	if s.config.Variant == "structural" {
-		// Minimal components for structural/rules-only testing
+		// Components for structural testing with reactive workflow engine and rule processor
 		// Graph components are now modular: graph-ingest, graph-index, graph-gateway
-		allRequired = []string{"udp", "iot_sensor", "rule", "graph-ingest", "graph-index", "graph-gateway", "file"}
+		// Note: "rule" is the instance name (config key), "rule-processor" is the factory name
+		allRequired = []string{"udp", "iot_sensor", "rule", "reactive-workflow", "graph-ingest", "graph-index", "graph-gateway", "file"}
 	} else {
 		// Full components for statistical/semantic tiers
 		// Input components
@@ -38,7 +39,7 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 		// Domain processors (document_processor, iot_sensor handle domain-specific data)
 		domainProcessors := []string{"document_processor", "iot_sensor"}
 		// Graph components (modular: ingest, index, gateway + optional embedding/clustering)
-		graphComponents := []string{"rule", "graph-ingest", "graph-index", "graph-gateway"}
+		graphComponents := []string{"reactive-workflow", "graph-ingest", "graph-index", "graph-gateway"}
 		// Output/storage components
 		outputComponents := []string{"file", "objectstore"}
 

@@ -12,3 +12,9 @@ tasks:
     cmds:
       - cd cmd/e2e && go build -o e2e .
       - echo "Built cmd/e2e/e2e"
+
+  e2e-semstreams:
+    desc: Build E2E SemStreams application (with test workflows)
+    cmds:
+      - go build -o bin/e2e-semstreams ./cmd/e2e-semstreams
+      - echo "Built bin/e2e-semstreams"

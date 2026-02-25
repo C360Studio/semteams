@@ -27,6 +27,8 @@ const (
 	ActionTypeUpdateTriple = "update_triple"
 	// ActionTypePublishAgent triggers an agentic loop by publishing a TaskMessage
 	ActionTypePublishAgent = "publish_agent"
+	// ActionTypeTriggerWorkflow triggers a reactive workflow by publishing to workflow.trigger.<workflow_id>
+	ActionTypeTriggerWorkflow = "trigger_workflow"
 )
 
 // Action represents an action to execute when a rule fires.
@@ -60,6 +62,12 @@ type Action struct {
 	// Prompt is the task prompt template for publish_agent actions
 	// Supports variable substitution: $entity.id, $related.id
 	Prompt string `json:"prompt,omitempty"`
+
+	// WorkflowID is the workflow identifier for trigger_workflow actions
+	WorkflowID string `json:"workflow_id,omitempty"`
+
+	// ContextData provides additional context passed to the workflow
+	ContextData map[string]any `json:"context_data,omitempty"`
 }
 
 // ParseTTL parses the TTL string into a duration.
@@ -161,6 +169,8 @@ func (e *ActionExecutor) Execute(ctx context.Context, action Action, entityID st
 		return e.executeUpdateTriple(ctx, action, entityID, relatedID)
 	case ActionTypePublishAgent:
 		return e.executePublishAgent(ctx, action, entityID, relatedID)
+	case ActionTypeTriggerWorkflow:
+		return e.executeTriggerWorkflow(ctx, action, entityID, relatedID)
 	default:
 		return fmt.Errorf("unknown action type: %s", action.Type)
 	}
@@ -529,6 +539,69 @@ func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action,
 		e.logger.Debug("Agent task not published (no publisher configured)",
 			"subject", subject,
 			"task_id", taskID)
+	}
+
+	return nil
+}
+
+// executeTriggerWorkflow triggers a reactive workflow by publishing to workflow.trigger.<workflow_id>.
+// This enables rules to initiate complex orchestration workflows while keeping rules simple.
+// The payload is wrapped in a BaseMessage for proper deserialization by the reactive workflow engine.
+func (e *ActionExecutor) executeTriggerWorkflow(ctx context.Context, action Action, entityID, relatedID string) error {
+	if action.WorkflowID == "" {
+		return errors.New("workflow_id is required for trigger_workflow action")
+	}
+
+	// Build typed trigger payload (implements message.Payload)
+	payload := &WorkflowTriggerPayload{
+		WorkflowID:  action.WorkflowID,
+		EntityID:    entityID,
+		TriggeredAt: time.Now().UTC(),
+		RelatedID:   relatedID,
+		Context:     action.ContextData,
+	}
+
+	subject := fmt.Sprintf("workflow.trigger.%s", action.WorkflowID)
+
+	if e.logger != nil {
+		e.logger.Info("Triggering workflow",
+			"workflow_id", action.WorkflowID,
+			"subject", subject,
+			"entity_id", entityID)
+	}
+
+	// Publish via NATS if publisher is configured
+	if e.publisher != nil {
+		// Create BaseMessage with proper type info for deserialization
+		msgType := message.Type{
+			Domain:   WorkflowTriggerDomain,
+			Category: WorkflowTriggerCategory,
+			Version:  WorkflowTriggerVersion,
+		}
+		baseMsg := message.NewBaseMessage(msgType, payload, "rule-processor")
+
+		// BaseMessage.MarshalJSON handles the wire format
+		data, err := json.Marshal(baseMsg)
+		if err != nil {
+			return fmt.Errorf("marshal workflow trigger message: %w", err)
+		}
+
+		if err := e.publisher.Publish(ctx, subject, data); err != nil {
+			return fmt.Errorf("publish workflow trigger to %s: %w", subject, err)
+		}
+
+		if e.logger != nil {
+			e.logger.Info("Workflow trigger published",
+				"workflow_id", action.WorkflowID,
+				"subject", subject,
+				"entity_id", entityID,
+				"size", len(data))
+		}
+	} else if e.logger != nil {
+		e.logger.Debug("Workflow trigger not published (no publisher configured)",
+			"workflow_id", action.WorkflowID,
+			"subject", subject,
+			"entity_id", entityID)
 	}
 
 	return nil

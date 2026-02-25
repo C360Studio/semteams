@@ -42,7 +42,7 @@ ARG BUILD_DATE
 ARG TARGETOS
 ARG TARGETARCH
 
-# Build binary with version information
+# Build main binary with version information
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s \
       -X main.version=${VERSION} \
@@ -50,6 +50,14 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
       -X main.buildDate=${BUILD_DATE}" \
     -o /build/semstreams-bin \
     ./cmd/semstreams
+
+# Build e2e-semstreams binary (for e2e tests with reactive workflows)
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
+    -ldflags="-w -s \
+      -X main.Version=${VERSION} \
+      -X main.BuildTime=${BUILD_DATE}" \
+    -o /build/e2e-semstreams-bin \
+    ./cmd/e2e-semstreams
 
 # ============================================================================
 # Production Stage
@@ -102,6 +110,56 @@ ENTRYPOINT ["/app/semstreams"]
 # Default command: use mounted config or fall back to example
 # Users should mount their config at /etc/semstreams/config.json
 CMD ["--config", "/etc/semstreams/config.json"]
+
+# ============================================================================
+# E2E Test Stage - Uses e2e-semstreams binary with reactive workflow support
+# ============================================================================
+FROM alpine:latest AS e2e
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    wget
+
+# Create non-root user and group
+RUN addgroup -S -g 1000 semstreams && \
+    adduser -S -u 1000 -G semstreams -h /app semstreams
+
+# Set working directory
+WORKDIR /app
+
+# Copy e2e binary from builder
+COPY --from=builder --chown=semstreams:semstreams /build/e2e-semstreams-bin /app/semstreams
+
+# Copy configs
+COPY --from=builder --chown=semstreams:semstreams /build/configs /app/configs
+
+# Create config directory for mounted configs
+RUN mkdir -p /etc/semstreams && \
+    chown semstreams:semstreams /etc/semstreams
+
+# Create data directory
+RUN mkdir -p /data && \
+    chown semstreams:semstreams /data
+
+# Switch to non-root user
+USER semstreams
+
+# Expose ports
+EXPOSE 8080
+EXPOSE 9090
+EXPOSE 14550/udp
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
+
+# Set entrypoint
+ENTRYPOINT ["/app/semstreams"]
+
+# Default command: use e2e-structural config
+CMD ["--config", "/app/configs/e2e-structural.json"]
 
 # Labels
 ARG VERSION

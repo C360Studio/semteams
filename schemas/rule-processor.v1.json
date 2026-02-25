@@ -124,6 +124,10 @@
             "items": {
               "type": "object",
               "properties": {
+                "context_data": {
+                  "type": "object",
+                  "description": "context_data"
+                },
                 "model": {
                   "type": "string",
                   "description": "model"
@@ -159,6 +163,10 @@
                 "type": {
                   "type": "string",
                   "description": "type"
+                },
+                "workflow_id": {
+                  "type": "string",
+                  "description": "workflow_id"
                 }
               }
             }
@@ -169,6 +177,10 @@
             "items": {
               "type": "object",
               "properties": {
+                "context_data": {
+                  "type": "object",
+                  "description": "context_data"
+                },
                 "model": {
                   "type": "string",
                   "description": "model"
@@ -204,6 +216,10 @@
                 "type": {
                   "type": "string",
                   "description": "type"
+                },
+                "workflow_id": {
+                  "type": "string",
+                  "description": "workflow_id"
                 }
               }
             }
@@ -225,6 +241,10 @@
             "items": {
               "type": "object",
               "properties": {
+                "context_data": {
+                  "type": "object",
+                  "description": "context_data"
+                },
                 "model": {
                   "type": "string",
                   "description": "model"
@@ -260,6 +280,10 @@
                 "type": {
                   "type": "string",
                   "description": "type"
+                },
+                "workflow_id": {
+                  "type": "string",
+                  "description": "workflow_id"
                 }
               }
             }

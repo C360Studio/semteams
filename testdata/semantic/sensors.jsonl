@@ -30,7 +30,7 @@
 {"device_id":"temp-sensor-001","type":"temperature","reading":48.2,"unit":"fahrenheit","location":"cold-storage-1","timestamp":"2024-11-15T08:50:00Z","serial":"SN-TEMP-2024-001","latitude":37.7749,"longitude":-122.4194}
 {"device_id":"temp-sensor-001","type":"temperature","reading":39.1,"unit":"fahrenheit","location":"cold-storage-1","timestamp":"2024-11-15T08:55:00Z","serial":"SN-TEMP-2024-001","latitude":37.7749,"longitude":-122.4194}
 {"device_id":"temp-sensor-001","type":"temperature","reading":37.5,"unit":"fahrenheit","location":"cold-storage-1","timestamp":"2024-11-15T09:00:00Z","serial":"SN-TEMP-2024-001","latitude":37.7749,"longitude":-122.4194}
-{"device_id":"temp-sensor-001","type":"temperature","reading":36.0,"unit":"fahrenheit","location":"cold-storage-1","timestamp":"2024-11-15T09:05:00Z","serial":"SN-TEMP-2024-001","latitude":37.7749,"longitude":-122.4194}
+{"device_id":"temp-sensor-001","type":"temperature","reading":42.0,"unit":"fahrenheit","location":"cold-storage-1","timestamp":"2024-11-15T09:05:00Z","serial":"SN-TEMP-2024-001","latitude":37.7749,"longitude":-122.4194}
 {"device_id":"humid-sensor-001","type":"humidity","reading":52.8,"unit":"percent","location":"zone-a","timestamp":"2024-11-15T09:10:00Z","serial":"SN-HUM-2024-001","latitude":37.7751,"longitude":-122.4196}
 {"device_id":"humid-sensor-001","type":"humidity","reading":58.2,"unit":"percent","location":"zone-a","timestamp":"2024-11-15T09:15:00Z","serial":"SN-HUM-2024-001","latitude":37.7751,"longitude":-122.4196}
 {"device_id":"humid-sensor-001","type":"humidity","reading":48.1,"unit":"percent","location":"zone-a","timestamp":"2024-11-15T09:20:00Z","serial":"SN-HUM-2024-001","latitude":37.7751,"longitude":-122.4196}
