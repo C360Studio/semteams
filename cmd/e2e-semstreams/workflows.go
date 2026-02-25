@@ -243,7 +243,7 @@ func buildNotifyTechnicianWorkflow() *reactive.Definition {
 		WithStateFactory(func() any { return &TechAlertState{} }).
 		WithTimeout(1 * time.Minute).
 		AddRule(reactive.NewRule("handle-trigger").
-			OnSubject("workflow.trigger.notify-technician", func() any { return &rule.WorkflowTriggerPayload{} }).
+			OnJetStreamSubject("WORKFLOW_EVENTS", "workflow.trigger.notify-technician", func() any { return &rule.WorkflowTriggerPayload{} }).
 			When("new trigger", func(ctx *reactive.RuleContext) bool {
 				// Always handle incoming triggers - the rule processor already validated conditions
 				return ctx.Message != nil
