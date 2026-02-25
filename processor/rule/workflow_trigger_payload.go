@@ -9,10 +9,11 @@ import (
 	"github.com/c360studio/semstreams/message"
 )
 
-// Workflow trigger payload type constants
+// Workflow trigger payload type constants.
+// Uses "rule" domain to avoid conflict with processor/workflow's workflow.trigger.v1
 const (
-	WorkflowTriggerDomain   = "workflow"
-	WorkflowTriggerCategory = "trigger"
+	WorkflowTriggerDomain   = "rule"
+	WorkflowTriggerCategory = "workflow_trigger"
 	WorkflowTriggerVersion  = "v1"
 )
 
