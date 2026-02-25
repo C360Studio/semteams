@@ -13,7 +13,7 @@ import (
 )
 
 // Engine orchestrates the reactive workflow engine.
-// It manages all sub-components: triggers, evaluator, dispatcher, callback handler, and store.
+// It manages all sub-components: triggers, evaluator, and dispatcher.
 type Engine struct {
 	logger     *slog.Logger
 	config     Config
@@ -23,15 +23,11 @@ type Engine struct {
 	registry        *WorkflowRegistry
 	evaluator       *Evaluator
 	dispatcher      *Dispatcher
-	callbackHandler *CallbackHandler
 	subjectConsumer *SubjectConsumer
 	kvWatcher       *KVWatcher
 
 	// KV bucket for execution state
 	stateBucket jetstream.KeyValue
-
-	// Execution store
-	store *ExecutionStore
 
 	// Lifecycle
 	mu        sync.RWMutex
@@ -105,9 +101,32 @@ func (e *Engine) StateBucket() string {
 	return e.config.StateBucket
 }
 
-// RegisterWorkflow registers a workflow definition.
+// RegisterWorkflow registers a workflow and starts its triggers if the engine is running.
+// This enables registering workflows after the engine has started.
 func (e *Engine) RegisterWorkflow(def *Definition) error {
-	return e.registry.Register(def)
+	// Register with the registry first
+	if err := e.registry.Register(def); err != nil {
+		return err
+	}
+
+	// If the engine is running, start triggers for this workflow
+	e.mu.RLock()
+	started := e.started
+	e.mu.RUnlock()
+
+	if started {
+		if err := e.startWorkflowTriggers(e.ctx, def); err != nil {
+			// Unregister on failure to maintain consistency
+			e.registry.Unregister(def.ID)
+			return &EngineError{
+				Op:      "register_workflow",
+				Message: "failed to start triggers for workflow " + def.ID,
+				Cause:   err,
+			}
+		}
+	}
+
+	return nil
 }
 
 // Initialize prepares the engine for starting.
@@ -153,9 +172,6 @@ func (e *Engine) Initialize(ctx context.Context) error {
 		WithKVWatcher(e.kvWatcher),
 		WithSource("reactive-workflow-engine"),
 	)
-
-	// Create callback handler
-	e.callbackHandler = NewCallbackHandler(e.logger, e.subjectConsumer, e.dispatcher, stateStore)
 
 	e.logger.Info("Engine initialized",
 		"state_bucket", e.config.StateBucket,
@@ -220,11 +236,6 @@ func (e *Engine) Stop() {
 		close(e.cleanupDone)
 	}
 
-	// Stop callback handler
-	if e.callbackHandler != nil {
-		e.callbackHandler.Stop()
-	}
-
 	// Stop KV watcher
 	if e.kvWatcher != nil {
 		e.kvWatcher.StopAll()
@@ -245,6 +256,101 @@ func (e *Engine) IsRunning() bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 	return e.started
+}
+
+// startWorkflowTriggers starts all triggers for a single workflow definition.
+// This is called when registering a workflow after the engine has started.
+func (e *Engine) startWorkflowTriggers(ctx context.Context, def *Definition) error {
+	js, err := e.natsClient.JetStream()
+	if err != nil {
+		return err
+	}
+
+	for i := range def.Rules {
+		rule := &def.Rules[i]
+		mode := rule.Trigger.Mode()
+
+		// Start KV triggers
+		if mode == TriggerStateOnly || mode == TriggerMessageAndState {
+			watchBucket, err := js.KeyValue(ctx, rule.Trigger.WatchBucket)
+			if err != nil {
+				// Try to create the bucket if it doesn't exist
+				watchBucket, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+					Bucket:      rule.Trigger.WatchBucket,
+					Description: "KV bucket for reactive workflow triggers",
+					TTL:         0, // No automatic expiration
+				})
+				if err != nil {
+					return &EngineError{
+						Op:      "start_kv_trigger",
+						Message: "failed to get/create watch bucket: " + rule.Trigger.WatchBucket,
+						Cause:   err,
+					}
+				}
+				e.logger.Info("Created KV watch bucket",
+					"bucket", rule.Trigger.WatchBucket)
+			}
+
+			capturedRule := rule
+			capturedDef := def
+
+			err = e.kvWatcher.StartWatch(
+				ctx,
+				watchBucket,
+				rule.Trigger.WatchPattern,
+				func(ctx context.Context, event KVWatchEvent) {
+					e.handleKVEvent(ctx, event, capturedRule, capturedDef)
+				},
+			)
+			if err != nil {
+				return &EngineError{
+					Op:      "start_kv_trigger",
+					Message: "failed to start KV watch for rule " + rule.ID,
+					Cause:   err,
+				}
+			}
+
+			e.logger.Debug("Started KV trigger for late-registered workflow",
+				"workflow", def.ID,
+				"rule", rule.ID,
+				"bucket", rule.Trigger.WatchBucket,
+				"pattern", rule.Trigger.WatchPattern)
+		}
+
+		// Start subject triggers
+		if mode == TriggerMessageOnly || mode == TriggerMessageAndState {
+			consumerName := e.config.ConsumerNamePrefix + def.ID + "-" + rule.ID
+
+			capturedRule := rule
+			capturedDef := def
+
+			err = e.subjectConsumer.StartConsumer(
+				ctx,
+				js,
+				rule.Trigger.StreamName,
+				rule.Trigger.Subject,
+				consumerName,
+				func(ctx context.Context, event SubjectMessageEvent, msg jetstream.Msg) {
+					e.handleSubjectEvent(ctx, event, msg, capturedRule, capturedDef)
+				},
+			)
+			if err != nil {
+				return &EngineError{
+					Op:      "start_subject_trigger",
+					Message: "failed to start subject consumer for rule " + rule.ID,
+					Cause:   err,
+				}
+			}
+
+			e.logger.Debug("Started subject trigger for late-registered workflow",
+				"workflow", def.ID,
+				"rule", rule.ID,
+				"stream", rule.Trigger.StreamName,
+				"subject", rule.Trigger.Subject)
+		}
+	}
+
+	return nil
 }
 
 // Uptime returns how long the engine has been running.
@@ -277,11 +383,21 @@ func (e *Engine) startKVTriggers(ctx context.Context) error {
 			// Get or create the watch bucket
 			watchBucket, err := js.KeyValue(ctx, rule.Trigger.WatchBucket)
 			if err != nil {
-				return &EngineError{
-					Op:      "start_kv_trigger",
-					Message: "failed to get watch bucket: " + rule.Trigger.WatchBucket,
-					Cause:   err,
+				// Try to create the bucket if it doesn't exist
+				watchBucket, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+					Bucket:      rule.Trigger.WatchBucket,
+					Description: "KV bucket for reactive workflow triggers",
+					TTL:         0, // No automatic expiration
+				})
+				if err != nil {
+					return &EngineError{
+						Op:      "start_kv_trigger",
+						Message: "failed to get/create watch bucket: " + rule.Trigger.WatchBucket,
+						Cause:   err,
+					}
 				}
+				e.logger.Info("Created KV watch bucket",
+					"bucket", rule.Trigger.WatchBucket)
 			}
 
 			// Capture rule and def for the closure
@@ -534,24 +650,6 @@ func (e *Engine) evaluateAndFire(ctx context.Context, ruleCtx *RuleContext, rule
 		e.metrics.RecordActionDispatch(def.ID, rule.ID, rule.Action.Type.String())
 	}
 
-	// If this was an async action, register for callback
-	if rule.Action.Type == ActionPublishAsync && dispatchResult.TaskID != "" {
-		timeout := e.config.GetTaskTimeoutDefault()
-		timeoutAt := time.Now().Add(timeout)
-
-		reg := &TaskRegistration{
-			TaskID:             dispatchResult.TaskID,
-			ExecutionKey:       ruleCtx.KVKey,
-			ExecutionID:        executionID,
-			WorkflowID:         def.ID,
-			RuleID:             rule.ID,
-			ExpectedResultType: rule.Action.ExpectedResultType,
-			RegisteredAt:       time.Now(),
-			Timeout:            &timeoutAt,
-		}
-		e.callbackHandler.RegisterTask(reg, rule, def)
-	}
-
 	e.logger.Info("Rule fired",
 		"workflow", def.ID,
 		"rule", rule.ID,
@@ -580,66 +678,13 @@ func (e *Engine) startCleanup() {
 
 // runCleanup performs periodic cleanup tasks.
 func (e *Engine) runCleanup() {
-	// Cleanup expired task registrations
-	if e.callbackHandler != nil {
-		expired := e.callbackHandler.CleanupExpiredTasks()
-		if expired > 0 {
-			e.logger.Info("Cleaned up expired task registrations", "count", expired)
+	// Cleanup expired cooldowns (entries older than 24 hours)
+	if e.evaluator != nil {
+		cleaned := e.evaluator.CleanupExpiredCooldowns(24 * time.Hour)
+		if cleaned > 0 {
+			e.logger.Debug("Cleaned up expired cooldowns", "count", cleaned)
 		}
 	}
-
-	// Note: ExecutionStore cleanup would go here if we had an active store instance
-}
-
-// CreateExecution creates a new workflow execution.
-func (e *Engine) CreateExecution(ctx context.Context, workflowID, executionID string) (*ExecutionEntry, error) {
-	def := e.registry.Get(workflowID)
-	if def == nil {
-		return nil, &EngineError{
-			Op:      "create_execution",
-			Message: "workflow not found: " + workflowID,
-		}
-	}
-
-	// Create state using the workflow's factory
-	state := def.StateFactory()
-
-	// Initialize the execution
-	timeout := def.Timeout
-	if timeout == 0 {
-		timeout = e.config.GetDefaultTimeout()
-	}
-	InitializeExecution(state, executionID, workflowID, timeout)
-
-	// Build the key
-	key := workflowID + "." + executionID
-
-	// Serialize and store
-	data, err := json.Marshal(state)
-	if err != nil {
-		return nil, &EngineError{Op: "create_execution", Message: "failed to marshal state", Cause: err}
-	}
-
-	rev, err := e.stateBucket.Create(ctx, key, data)
-	if err != nil {
-		return nil, &EngineError{Op: "create_execution", Message: "failed to create execution", Cause: err}
-	}
-
-	if e.metrics != nil {
-		e.metrics.RecordExecutionCreated(workflowID)
-	}
-
-	e.logger.Info("Created execution",
-		"workflow", workflowID,
-		"execution", executionID,
-		"key", key)
-
-	return &ExecutionEntry{
-		State:    state,
-		Key:      key,
-		Revision: rev,
-		Created:  time.Now(),
-	}, nil
 }
 
 // EngineError represents an error from the engine.

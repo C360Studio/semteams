@@ -207,7 +207,8 @@
         "callback_stream_name": "WORKFLOW_CALLBACKS",
         "event_stream_name": "WORKFLOW_EVENTS",
         "default_timeout": "10m",
-        "default_max_iterations": 10
+        "default_max_iterations": 10,
+        "consumer_name_prefix": "e2e-"
       }
     },
     "rule": {

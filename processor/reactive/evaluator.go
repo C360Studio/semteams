@@ -2,6 +2,7 @@ package reactive
 
 import (
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 )
@@ -208,10 +209,28 @@ func (e *Evaluator) ClearExecutionState(executionID string) {
 
 	// Remove all entries for this execution
 	for key := range e.firingCounts {
-		if hasPrefix(key, executionID+":") {
+		if strings.HasPrefix(key, executionID+":") {
 			delete(e.firingCounts, key)
 		}
 	}
+}
+
+// CleanupExpiredCooldowns removes cooldown entries older than maxAge.
+// This prevents unbounded memory growth in long-running engines.
+// Returns the number of entries cleaned up.
+func (e *Evaluator) CleanupExpiredCooldowns(maxAge time.Duration) int {
+	e.cooldownMu.Lock()
+	defer e.cooldownMu.Unlock()
+
+	cleaned := 0
+	now := time.Now()
+	for key, lastFire := range e.cooldowns {
+		if now.Sub(lastFire) > maxAge {
+			delete(e.cooldowns, key)
+			cleaned++
+		}
+	}
+	return cleaned
 }
 
 // isOnCooldown checks if a rule is currently on cooldown.
@@ -242,11 +261,6 @@ func cooldownKey(workflowID, ruleID string) string {
 // firingKey creates a key for the firingCounts map.
 func firingKey(executionID, ruleID string) string {
 	return executionID + ":" + ruleID
-}
-
-// hasPrefix is a simple string prefix check (avoiding strings import for this small use).
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
 }
 
 // ConditionHelpers provides common condition functions for use in rule definitions.
@@ -410,4 +424,76 @@ func getExecutionStateViaReflection(_ any) *ExecutionState {
 	// For now, we'll require explicit interface implementation
 	// This can be enhanced later if needed
 	return nil
+}
+
+// Condition helper functions for building rules.
+// These provide simple, reusable conditions for common patterns.
+
+// Always returns a condition that always evaluates to true.
+func Always() ConditionFunc {
+	return func(_ *RuleContext) bool {
+		return true
+	}
+}
+
+// Never returns a condition that always evaluates to false.
+func Never() ConditionFunc {
+	return func(_ *RuleContext) bool {
+		return false
+	}
+}
+
+// HasState returns a condition that checks if state is present.
+func HasState() ConditionFunc {
+	return func(ctx *RuleContext) bool {
+		return ctx.State != nil
+	}
+}
+
+// HasMessage returns a condition that checks if a message is present.
+func HasMessage() ConditionFunc {
+	return func(ctx *RuleContext) bool {
+		return ctx.Message != nil
+	}
+}
+
+// PhaseIs returns a condition that checks if the execution phase matches.
+func PhaseIs(phase string) ConditionFunc {
+	return ConditionHelpers.PhaseIs(phase)
+}
+
+// StatusIs returns a condition that checks if the execution status matches.
+func StatusIs(status ExecutionStatus) ConditionFunc {
+	return ConditionHelpers.StatusIs(status)
+}
+
+// And combines multiple conditions with logical AND.
+func And(conditions ...ConditionFunc) ConditionFunc {
+	return func(ctx *RuleContext) bool {
+		for _, cond := range conditions {
+			if !cond(ctx) {
+				return false
+			}
+		}
+		return true
+	}
+}
+
+// Or combines multiple conditions with logical OR.
+func Or(conditions ...ConditionFunc) ConditionFunc {
+	return func(ctx *RuleContext) bool {
+		for _, cond := range conditions {
+			if cond(ctx) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+// Not negates a condition.
+func Not(condition ConditionFunc) ConditionFunc {
+	return func(ctx *RuleContext) bool {
+		return !condition(ctx)
+	}
 }

@@ -10,8 +10,6 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/processor/workflow"
-	wfschema "github.com/c360studio/semstreams/processor/workflow/schema"
 	"github.com/c360studio/semstreams/test/e2e/client"
 	"github.com/c360studio/semstreams/test/e2e/scenarios"
 )
@@ -73,119 +71,6 @@ func DefaultConfig() *Config {
 	}
 }
 
-// TestWorkflowID is the ID of the test workflow for agentic integration
-const TestWorkflowID = "e2e-agentic-integration-test"
-
-// TestParallelWorkflowID is the ID of the parallel agents test workflow
-const TestParallelWorkflowID = "e2e-parallel-agents-test"
-
-// TestParallelWorkflow tests parallel agent execution with aggregation.
-// It launches 3 parallel review agents and validates result aggregation.
-var TestParallelWorkflow = wfschema.Definition{
-	ID:            TestParallelWorkflowID,
-	Name:          "E2E Parallel Agents Test",
-	Description:   "Tests parallel step execution with multiple agents and result aggregation",
-	Enabled:       true,
-	MaxIterations: 1,
-	Timeout:       "60s",
-	Trigger:       wfschema.TriggerDef{Subject: "workflow.trigger.e2e-parallel"},
-	Steps: []wfschema.StepDef{
-		{
-			Name: "parallel_review",
-			Type: "parallel",
-			Steps: []wfschema.StepDef{
-				{
-					Name: "reviewer1",
-					Action: wfschema.ActionDef{
-						Type:    "publish_agent",
-						Subject: "agent.task.e2e-parallel",
-						Role:    "general",
-						Model:   "mock",
-						Prompt:  "Review aspect 1 of the request. Respond with JSON: {\"aspect\": \"performance\", \"score\": 8}",
-					},
-				},
-				{
-					Name: "reviewer2",
-					Action: wfschema.ActionDef{
-						Type:    "publish_agent",
-						Subject: "agent.task.e2e-parallel",
-						Role:    "general",
-						Model:   "mock",
-						Prompt:  "Review aspect 2 of the request. Respond with JSON: {\"aspect\": \"security\", \"score\": 9}",
-					},
-				},
-				{
-					Name: "reviewer3",
-					Action: wfschema.ActionDef{
-						Type:    "publish_agent",
-						Subject: "agent.task.e2e-parallel",
-						Role:    "general",
-						Model:   "mock",
-						Prompt:  "Review aspect 3 of the request. Respond with JSON: {\"aspect\": \"quality\", \"score\": 7}",
-					},
-				},
-			},
-			Wait:       "all",
-			Aggregator: "union",
-			OnSuccess:  "complete",
-		},
-	},
-	OnComplete: []wfschema.ActionDef{
-		{
-			Type:    "publish",
-			Subject: "workflow.complete.e2e-parallel",
-			Payload: json.RawMessage(`{"workflow": "e2e-parallel-agents-test", "status": "success"}`),
-		},
-	},
-}
-
-// TestWorkflow is a workflow that tests the full agentic integration path.
-// It uses ${...} syntax in conditions to ensure the interpolation fix is working.
-var TestWorkflow = wfschema.Definition{
-	ID:            TestWorkflowID,
-	Name:          "E2E Agentic Integration Test",
-	Description:   "Tests workflow -> agent -> workflow completion path",
-	Enabled:       true,
-	MaxIterations: 1,
-	Timeout:       "30s",
-	Trigger:       wfschema.TriggerDef{Subject: "workflow.trigger.e2e-agentic"},
-	Steps: []wfschema.StepDef{
-		{
-			Name: "analyze_request",
-			Action: wfschema.ActionDef{
-				Type:    "publish_agent",
-				Subject: "agent.task.e2e-agentic",
-				Role:    "general", // Valid roles: architect, editor, general
-				Model:   "mock",
-				Prompt:  "Analyze the request: ${trigger.payload.content}. Respond with JSON: {\"valid\": true, \"summary\": \"analysis complete\"}",
-			},
-			OnSuccess: "publish_result",
-		},
-		{
-			Name: "publish_result",
-			// Use ${...} syntax to catch the condition wrapper bug
-			Condition: &wfschema.ConditionDef{
-				Field:    "${steps.analyze_request.output.valid}",
-				Operator: "eq",
-				Value:    true,
-			},
-			Action: wfschema.ActionDef{
-				Type:    "publish",
-				Subject: "workflow.result.e2e-agentic",
-				Payload: json.RawMessage(`{"status": "completed", "step": "publish_result"}`),
-			},
-			OnSuccess: "complete",
-		},
-	},
-	OnComplete: []wfschema.ActionDef{
-		{
-			Type:    "publish",
-			Subject: "workflow.complete.e2e-agentic",
-			Payload: json.RawMessage(`{"workflow": "e2e-agentic-integration-test", "status": "success"}`),
-		},
-	},
-}
-
 // NewScenario creates a new agentic scenario.
 func NewScenario(
 	obs *client.ObservabilityClient,
@@ -202,7 +87,7 @@ func NewScenario(
 
 	return &Scenario{
 		name:        "agentic",
-		description: "Validates agentic components and workflow integration end-to-end",
+		description: "Validates agentic components (loop, model, tools) end-to-end",
 		natsURL:     config.NATSURL,
 		obs:         obs,
 		config:      config,
@@ -268,14 +153,10 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		fn   func(context.Context, *scenarios.Result) error
 	}{
 		{"verify-components", s.verifyComponents},
-		{"register-workflow", s.registerWorkflow},
 		{"capture-baseline", s.captureBaseline},
 		{"inject-task", s.injectTask},
 		{"wait-for-completion", s.waitForCompletion},
 		{"validate-results", s.validateResults},
-		// Parallel agent execution stages
-		{"register-parallel-workflow", s.registerParallelWorkflow},
-		{"test-parallel-agents", s.testParallelAgents},
 		// AGNTCY integration stages (optional, skip if not configured)
 		{"verify-oasf-generation", s.verifyOASFGeneration},
 		{"verify-directory-bridge", s.verifyDirectoryBridge},
@@ -310,12 +191,6 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 
 // Teardown cleans up after the scenario.
 func (s *Scenario) Teardown(ctx context.Context) error {
-	// Clean up test workflow definitions
-	if s.nats != nil {
-		_ = s.nats.DeleteKV(ctx, client.BucketWorkflowDefinitions, TestWorkflowID)
-		_ = s.nats.DeleteKV(ctx, client.BucketWorkflowDefinitions, TestParallelWorkflowID)
-	}
-
 	// Clean up AGNTCY test resources
 	_ = s.cleanupAGNTCY(ctx)
 
@@ -332,8 +207,8 @@ func (s *Scenario) verifyComponents(ctx context.Context, result *scenarios.Resul
 		return fmt.Errorf("failed to get components: %w", err)
 	}
 
-	// Check for required agentic components AND workflow processor
-	required := []string{"agentic-loop", "agentic-model", "workflow-processor"}
+	// Check for required agentic components
+	required := []string{"agentic-loop", "agentic-model"}
 	found := make(map[string]bool)
 
 	for _, comp := range components {
@@ -355,39 +230,12 @@ func (s *Scenario) verifyComponents(ctx context.Context, result *scenarios.Resul
 	result.Details["agentic_components"] = found
 
 	if len(missing) > 0 {
-		// Workflow component is required for this test
-		for _, m := range missing {
-			if m == "workflow-processor" {
-				return fmt.Errorf("workflow-processor component is required for agentic integration test but not found")
-			}
-		}
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Missing agentic components: %v (may not be configured)", missing))
 	}
 
 	if len(unhealthy) > 0 {
 		return fmt.Errorf("unhealthy components: %v", unhealthy)
 	}
-
-	return nil
-}
-
-// registerWorkflow registers the test workflow definition
-func (s *Scenario) registerWorkflow(ctx context.Context, result *scenarios.Result) error {
-	data, err := json.Marshal(TestWorkflow)
-	if err != nil {
-		return fmt.Errorf("failed to marshal workflow: %w", err)
-	}
-
-	if err := s.nats.PutKV(ctx, client.BucketWorkflowDefinitions, TestWorkflowID, data); err != nil {
-		return fmt.Errorf("failed to register workflow: %w", err)
-	}
-
-	result.Details["workflow_id"] = TestWorkflowID
-	result.Details["workflow_registered"] = true
-	result.Details["condition_uses_wrapper"] = true // ${...} syntax
-
-	// Give workflow processor time to pick up the new definition
-	time.Sleep(500 * time.Millisecond)
 
 	return nil
 }
@@ -404,40 +252,14 @@ func (s *Scenario) captureBaseline(ctx context.Context, result *scenarios.Result
 	return nil
 }
 
-// injectTask triggers the workflow (which will spawn an agent task)
+// injectTask publishes a direct agent task for testing
 func (s *Scenario) injectTask(ctx context.Context, result *scenarios.Result) error {
-	// Trigger the workflow using proper TriggerPayload wrapped in BaseMessage
-	// This tests the full integration path: workflow -> agent -> workflow completion
-	requestID := fmt.Sprintf("e2e-test-%d", time.Now().UnixNano())
-
-	// Create TriggerPayload with workflow_id and custom data
-	triggerPayload := &workflow.TriggerPayload{
-		WorkflowID: TestWorkflowID,
-		RequestID:  requestID,
-		Data:       json.RawMessage(`{"content": "E2E test request for agentic integration validation"}`),
-	}
-
-	// Wrap in BaseMessage envelope (required by workflow processor)
-	baseMsg := message.NewBaseMessage(triggerPayload.Schema(), triggerPayload, "e2e-test")
-	data, err := json.Marshal(baseMsg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal trigger: %w", err)
-	}
-
-	result.Details["trigger_request_id"] = requestID
-	result.Details["trigger_subject"] = "workflow.trigger.e2e-agentic"
-
-	// Publish workflow trigger
-	if err := s.nats.Publish(ctx, "workflow.trigger.e2e-agentic", data); err != nil {
-		return fmt.Errorf("failed to publish workflow trigger: %w", err)
-	}
-
-	// Also inject a direct task for backwards compatibility testing
+	// Inject a direct task to test agentic loop
 	task := agentic.TaskMessage{
-		TaskID: fmt.Sprintf("e2e-direct-%d", time.Now().UnixNano()),
+		TaskID: fmt.Sprintf("e2e-agentic-%d", time.Now().UnixNano()),
 		Role:   "general",
 		Model:  "mock",
-		Prompt: "Analyze the temperature sensor temp-sensor-001. Respond with a brief assessment.",
+		Prompt: "Analyze the temperature sensor temp-sensor-001. Respond with a brief assessment including valid JSON in your response.",
 	}
 
 	taskMsg := message.NewBaseMessage(task.Schema(), &task, "e2e-test")
@@ -446,23 +268,22 @@ func (s *Scenario) injectTask(ctx context.Context, result *scenarios.Result) err
 		return fmt.Errorf("failed to marshal task: %w", err)
 	}
 
-	result.Details["direct_task_id"] = task.TaskID
+	result.Details["task_id"] = task.TaskID
+	result.Details["task_subject"] = "agent.task.e2e"
 
 	if err := s.nats.Publish(ctx, "agent.task.e2e", taskData); err != nil {
-		return fmt.Errorf("failed to publish direct task: %w", err)
+		return fmt.Errorf("failed to publish task: %w", err)
 	}
 
 	return nil
 }
 
-// waitForCompletion waits for BOTH agent loop completion AND workflow completion
+// waitForCompletion waits for agent loop completion
 func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Result) error {
 	timeout := s.config.CompleteTimeout
 	deadline := time.Now().Add(timeout)
 
 	var loopsCompleted float64
-	var workflowCompleted bool
-	var lastExec *client.WorkflowExecution
 
 	for time.Now().Before(deadline) {
 		select {
@@ -476,26 +297,9 @@ func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Resu
 				result.Metrics["loops_completed"] = loopsCompleted
 			}
 
-			// Check workflow completion via KV state
-			exec, err := s.nats.WaitForWorkflowState(ctx, TestWorkflowID, []string{"completed", "failed"}, 100*time.Millisecond)
-			if err == nil && exec != nil {
-				lastExec = exec
-				if exec.State == "completed" {
-					workflowCompleted = true
-					result.Metrics["workflow_state"] = exec.State
-					result.Details["workflow_execution"] = exec
-					result.Details["workflow_steps_completed"] = len(exec.StepResults)
-				} else if exec.State == "failed" {
-					// Workflow failed - this is an error
-					result.Details["workflow_execution"] = exec
-					result.Details["workflow_error"] = exec.Error
-					return fmt.Errorf("workflow failed: %s (current step: %s)", exec.Error, exec.CurrentName)
-				}
-			}
-
-			// Success: both agent loops completed AND workflow completed
-			if loopsCompleted >= 2 && workflowCompleted {
-				result.Details["completion_method"] = "workflow_and_metrics"
+			// Success: at least one agent loop completed
+			if loopsCompleted >= 1 {
+				result.Details["completion_method"] = "metrics"
 				return nil
 			}
 		}
@@ -503,66 +307,18 @@ func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Resu
 
 	// Timeout - provide diagnostic info
 	result.Details["timeout_loops_completed"] = loopsCompleted
-	result.Details["timeout_workflow_completed"] = workflowCompleted
-	if lastExec != nil {
-		result.Details["timeout_workflow_state"] = lastExec.State
-		result.Details["timeout_workflow_step"] = lastExec.CurrentName
-		result.Details["timeout_workflow_error"] = lastExec.Error
-	}
 
-	if !workflowCompleted {
-		return fmt.Errorf("timeout: workflow did not complete (loops_completed=%v, workflow_state=%v)",
-			loopsCompleted, func() string {
-				if lastExec != nil {
-					return lastExec.State
-				}
-				return "unknown"
-			}())
-	}
-
-	return fmt.Errorf("timeout waiting for completion after %v", timeout)
+	return fmt.Errorf("timeout waiting for agent loop completion after %v (loops_completed=%v)", timeout, loopsCompleted)
 }
 
-// validateResults validates the scenario results - checks full integration path
+// validateResults validates the scenario results
 func (s *Scenario) validateResults(_ context.Context, result *scenarios.Result) error {
 	// Validate agent loops completed
 	loopsCompleted, ok := result.Metrics["loops_completed"].(float64)
-	if !ok || loopsCompleted < 2 {
-		return fmt.Errorf("expected at least 2 agent loops (direct + workflow), got %v", loopsCompleted)
-	}
-
-	// Validate workflow reached completion state
-	workflowState, ok := result.Metrics["workflow_state"].(string)
-	if !ok || workflowState != "completed" {
-		return fmt.Errorf("workflow did not complete successfully, state: %v", workflowState)
-	}
-
-	// Validate workflow steps were executed
-	exec, ok := result.Details["workflow_execution"].(*client.WorkflowExecution)
-	if !ok || exec == nil {
-		return fmt.Errorf("workflow execution details not found")
-	}
-
-	// Check that the analyze_request step completed successfully
-	analyzeResult, hasAnalyze := exec.StepResults["analyze_request"]
-	if !hasAnalyze {
-		return fmt.Errorf("analyze_request step not found in results - agent completion may not have been correlated")
-	}
-	if analyzeResult.Status != "success" {
-		return fmt.Errorf("analyze_request step failed: %s (this may indicate outcome value mismatch)", analyzeResult.Error)
-	}
-
-	// Check that the publish_result step completed (validates condition evaluation)
-	publishResult, hasPublish := exec.StepResults["publish_result"]
-	if !hasPublish {
-		return fmt.Errorf("publish_result step not found - condition evaluation may have failed (check ${...} wrapper handling)")
-	}
-	if publishResult.Status != "success" {
-		return fmt.Errorf("publish_result step failed: %s", publishResult.Error)
+	if !ok || loopsCompleted < 1 {
+		return fmt.Errorf("expected at least 1 agent loop completion, got %v", loopsCompleted)
 	}
 
 	result.Details["validation_passed"] = true
-	result.Details["steps_validated"] = []string{"analyze_request", "publish_result"}
-
 	return nil
 }

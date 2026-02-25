@@ -1211,10 +1211,21 @@ func TestAction_TriggerWorkflow_PayloadFormat(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, mock.published, 1)
 
-	// Parse the published payload
-	var payload map[string]any
-	err = json.Unmarshal(mock.published[0].data, &payload)
+	// Parse the published BaseMessage (trigger_workflow wraps payload in BaseMessage)
+	var baseMsg map[string]any
+	err = json.Unmarshal(mock.published[0].data, &baseMsg)
 	require.NoError(t, err)
+
+	// Verify BaseMessage type field
+	msgType, ok := baseMsg["type"].(map[string]any)
+	require.True(t, ok, "type field should be a map")
+	assert.Equal(t, WorkflowTriggerDomain, msgType["domain"])
+	assert.Equal(t, WorkflowTriggerCategory, msgType["category"])
+	assert.Equal(t, WorkflowTriggerVersion, msgType["version"])
+
+	// Extract payload from BaseMessage
+	payload, ok := baseMsg["payload"].(map[string]any)
+	require.True(t, ok, "payload should be a map")
 
 	// Verify payload fields
 	assert.Equal(t, "notify-technician", payload["workflow_id"])

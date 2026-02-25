@@ -21,7 +21,6 @@ import (
 	scenarios "github.com/c360studio/semstreams/test/e2e/scenarios"
 	"github.com/c360studio/semstreams/test/e2e/scenarios/agentic"
 	"github.com/c360studio/semstreams/test/e2e/scenarios/throughput"
-	workflowscenario "github.com/c360studio/semstreams/test/e2e/scenarios/workflow"
 )
 
 var (
@@ -215,11 +214,6 @@ func handleListCommand(listScenarios bool) bool {
 	fmt.Println("                      Uses mock LLM by default (CI-friendly)")
 	fmt.Println("                      Override with AGENTIC_LLM_URL for real LLM")
 	fmt.Println("")
-	fmt.Println("  Workflow + Agentic:")
-	fmt.Println("    workflow-agentic - Workflow orchestration with publish_agent")
-	fmt.Println("                       Tests: triggers, steps, conditions, loops")
-	fmt.Println("                       Uses mock LLM by default")
-	fmt.Println("")
 	fmt.Println("  Throughput (for profiling):")
 	fmt.Println("    throughput       - High-volume stress test (10,000+ messages)")
 	fmt.Println("                       Captures pprof profiles when SEMSTREAMS_DEBUG=true")
@@ -365,12 +359,6 @@ func createScenario(
 		cfg := agentic.DefaultConfig()
 		cfg.MetricsURL = flags.metricsURL
 		return agentic.NewScenario(edgeClient, cfg)
-
-	// Workflow + Agentic scenario (workflow orchestration with agent tasks)
-	case "workflow-agentic", "workflow":
-		cfg := workflowscenario.DefaultConfig()
-		cfg.MetricsURL = flags.metricsURL
-		return workflowscenario.NewScenario(edgeClient, cfg)
 
 	// Throughput scenario (high-volume stress test with profiling)
 	case "throughput":

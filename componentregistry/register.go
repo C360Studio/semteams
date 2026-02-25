@@ -41,7 +41,6 @@ import (
 	oasfgenerator "github.com/c360studio/semstreams/processor/oasf-generator"
 	reactive "github.com/c360studio/semstreams/processor/reactive"
 	"github.com/c360studio/semstreams/processor/rule"
-	"github.com/c360studio/semstreams/processor/workflow"
 	"github.com/c360studio/semstreams/storage/objectstore"
 )
 
@@ -82,7 +81,7 @@ import (
 //   - agentic-model (OpenAI-compatible LLM endpoint caller)
 //   - agentic-tools (tool execution dispatcher)
 //   - agentic-loop (state machine orchestrator with trajectory capture)
-//   - workflow-processor (multi-step workflow orchestration with loops and timeouts)
+//   - reactive-workflow (reactive rules engine for KV watch and subject-triggered workflows)
 //
 // AGNTCY Integration Layer - Internet of Agents interoperability:
 //   - oasf-generator (generates OASF records from agent capabilities)
@@ -248,10 +247,6 @@ func registerAgenticLayer(registry *component.Registry) error {
 
 	if err := agenticloop.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-loop component registration")
-	}
-
-	if err := workflow.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "workflow-processor component registration")
 	}
 
 	if err := reactive.Register(registry); err != nil {
