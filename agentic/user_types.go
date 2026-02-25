@@ -253,12 +253,6 @@ type TaskMessage struct {
 	WorkflowSlug string `json:"workflow_slug,omitempty"` // e.g., "add-user-auth"
 	WorkflowStep string `json:"workflow_step,omitempty"` // e.g., "design"
 
-	// Callback subject for async results (optional).
-	// When set, the executor publishes completion results to this subject
-	// instead of or in addition to the default agent.complete subject.
-	// Used by workflow engine for generic async step handling.
-	Callback string `json:"callback,omitempty"` // e.g., "workflow.step.result.{exec_id}"
-
 	// User routing info (optional, for error notifications)
 	ChannelType string `json:"channel_type,omitempty"` // e.g., "http", "cli", "slack"
 	ChannelID   string `json:"channel_id,omitempty"`   // session/channel identifier

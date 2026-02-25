@@ -10,7 +10,6 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semstreams/processor/workflow"
 )
 
 // Subject patterns for NATS publishing (concrete subjects, no wildcards).
@@ -82,37 +81,53 @@ func (h *MessageHandler) SetLogger(logger *slog.Logger) {
 }
 
 // configureLoopMetadata sets optional metadata on a newly created loop.
+// Logs warnings if any metadata configuration fails, but does not fail the loop creation.
 func (h *MessageHandler) configureLoopMetadata(loopID string, task TaskMessage) {
 	// Set depth tracking on the loop entity
 	if task.Depth > 0 || task.MaxDepth > 0 {
-		_ = h.loopManager.SetDepth(loopID, task.Depth+1, task.MaxDepth)
+		if err := h.loopManager.SetDepth(loopID, task.Depth+1, task.MaxDepth); err != nil {
+			h.logger.Warn("failed to set depth",
+				slog.String("loop_id", loopID),
+				slog.String("error", err.Error()))
+		}
 	}
 
 	// Set parent loop ID if provided
 	if task.ParentLoopID != "" {
-		_ = h.loopManager.SetParentLoopID(loopID, task.ParentLoopID)
+		if err := h.loopManager.SetParentLoopID(loopID, task.ParentLoopID); err != nil {
+			h.logger.Warn("failed to set parent loop ID",
+				slog.String("loop_id", loopID),
+				slog.String("error", err.Error()))
+		}
 	}
 
 	// Set workflow context if provided (for loops created by workflow commands)
 	if task.WorkflowSlug != "" || task.WorkflowStep != "" {
-		_ = h.loopManager.SetWorkflowContext(loopID, task.WorkflowSlug, task.WorkflowStep)
-	}
-
-	// Set callback if provided (for async result delivery to workflow)
-	if task.Callback != "" {
-		_ = h.loopManager.SetCallback(loopID, task.Callback)
+		if err := h.loopManager.SetWorkflowContext(loopID, task.WorkflowSlug, task.WorkflowStep); err != nil {
+			h.logger.Warn("failed to set workflow context",
+				slog.String("loop_id", loopID),
+				slog.String("error", err.Error()))
+		}
 	}
 
 	// Set user context if provided (for error notification routing)
 	if task.ChannelType != "" || task.UserID != "" {
-		_ = h.loopManager.SetUserContext(loopID, task.ChannelType, task.ChannelID, task.UserID)
+		if err := h.loopManager.SetUserContext(loopID, task.ChannelType, task.ChannelID, task.UserID); err != nil {
+			h.logger.Warn("failed to set user context",
+				slog.String("loop_id", loopID),
+				slog.String("error", err.Error()))
+		}
 	}
 
 	// Set timeout if configured
 	if h.config.Timeout != "" {
 		timeout, parseErr := time.ParseDuration(h.config.Timeout)
 		if parseErr == nil {
-			_ = h.loopManager.SetTimeout(loopID, timeout)
+			if err := h.loopManager.SetTimeout(loopID, timeout); err != nil {
+				h.logger.Warn("failed to set timeout",
+					slog.String("loop_id", loopID),
+					slog.String("error", err.Error()))
+			}
 		}
 	}
 }
@@ -171,7 +186,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		}
 	}
 
-	// Configure optional loop metadata (depth, workflow context, callbacks, etc.)
+	// Configure optional loop metadata (depth, workflow context, user context, etc.)
 	h.configureLoopMetadata(loopID, task)
 
 	// Start trajectory
@@ -294,8 +309,8 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 			LoopID: loopID,
 			State:  agentic.LoopStateFailed,
 		}
-		// Publish failure events (including callback for workflow notification)
-		if failMsgs, err := h.buildFailureMessages(loopID, "timeout", "loop timeout exceeded"); err == nil {
+		// Publish failure events for reactive workflows to observe
+		if failMsgs, err := h.BuildFailureMessages(loopID, "timeout", "loop timeout exceeded"); err == nil {
 			result.PublishedMessages = failMsgs
 		}
 		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "agentic-loop", "HandleModelResponse", "check timeout")
@@ -391,8 +406,8 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 				slog.String("error", err.Error()))
 		}
 
-		// Publish failure events (including callback for workflow notification)
-		if failMsgs, err := h.buildFailureMessages(loopID, "model_error", response.Error); err == nil {
+		// Publish failure events for reactive workflows to observe
+		if failMsgs, err := h.BuildFailureMessages(loopID, "model_error", response.Error); err == nil {
 			result.PublishedMessages = failMsgs
 		}
 	}
@@ -447,6 +462,8 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 		Model:        entity.Model,
 		Iterations:   entity.Iterations,
 		ParentLoopID: entity.ParentLoopID,
+		WorkflowSlug: entity.WorkflowSlug,
+		WorkflowStep: entity.WorkflowStep,
 		CompletedAt:  time.Now(),
 	}
 
@@ -459,16 +476,6 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 		Subject: subjectAgentComplete + "." + loopID,
 		Data:    completionData,
 	})
-
-	// If callback is set, publish a generic step result for workflow consumption.
-	// This decouples agentic-loop from workflow-specific message formats.
-	if entity.Callback != "" {
-		callbackResult := h.buildCallbackResult(entity.TaskID, "success", responseContent, "")
-		result.PublishedMessages = append(result.PublishedMessages, PublishedMessage{
-			Subject: entity.Callback,
-			Data:    callbackResult,
-		})
-	}
 
 	// Pass completion state to component for KV write.
 	// Component will write this to COMPLETE_{loopID} key for rules engine.
@@ -496,8 +503,8 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 			LoopID: loopID,
 			State:  agentic.LoopStateFailed,
 		}
-		// Publish failure events (including callback for workflow notification)
-		if failMsgs, err := h.buildFailureMessages(loopID, "timeout", "loop timeout exceeded"); err == nil {
+		// Publish failure events for reactive workflows to observe
+		if failMsgs, err := h.BuildFailureMessages(loopID, "timeout", "loop timeout exceeded"); err == nil {
 			result.PublishedMessages = failMsgs
 		}
 		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "agentic-loop", "HandleToolResult", "check timeout")
@@ -587,8 +594,8 @@ func (h *MessageHandler) handleToolsComplete(
 				slog.String("error", updateErr.Error()))
 		}
 
-		// Publish failure events (including callback for workflow notification)
-		if failMsgs, fErr := h.buildFailureMessages(loopID, "max_iterations", errorMsg); fErr == nil {
+		// Publish failure events for reactive workflows to observe
+		if failMsgs, fErr := h.BuildFailureMessages(loopID, "max_iterations", errorMsg); fErr == nil {
 			result.PublishedMessages = failMsgs
 		}
 
@@ -661,7 +668,7 @@ func (h *MessageHandler) BuildFailureEvent(loopID, reason, errorMsg string) (Pub
 }
 
 // buildFailureEvent creates a failure event for publishing.
-// Returns a slice of messages: the standard failure event and optionally a callback result.
+// Returns a single failure event for reactive workflows to observe.
 func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (PublishedMessage, error) {
 	entity, err := h.loopManager.GetLoop(loopID)
 	if err != nil {
@@ -698,16 +705,9 @@ func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (Pub
 	}, nil
 }
 
-// buildFailureMessages creates failure events including callback message if configured.
-// Returns the standard failure event plus a callback result for workflow consumption.
-// This is the internal version used by handler methods.
-func (h *MessageHandler) buildFailureMessages(loopID, reason, errorMsg string) ([]PublishedMessage, error) {
-	return h.BuildFailureEventWithCallback(loopID, reason, errorMsg)
-}
-
-// BuildFailureEventWithCallback creates failure events including callback message if configured.
-// Returns the standard failure event plus a callback result for workflow consumption.
-func (h *MessageHandler) BuildFailureEventWithCallback(loopID, reason, errorMsg string) ([]PublishedMessage, error) {
+// BuildFailureMessages creates failure events for publishing.
+// Returns the standard failure event for reactive workflows to observe via KV watch or subject subscription.
+func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) ([]PublishedMessage, error) {
 	entity, err := h.loopManager.GetLoop(loopID)
 	if err != nil {
 		return nil, err
@@ -736,45 +736,10 @@ func (h *MessageHandler) BuildFailureEventWithCallback(loopID, reason, errorMsg 
 		return nil, err
 	}
 
-	messages := []PublishedMessage{{
+	return []PublishedMessage{{
 		Subject: subjectAgentFailed + "." + loopID,
 		Data:    data,
-	}}
-
-	// If callback is set, also publish a failed step result for workflow consumption
-	if entity.Callback != "" {
-		callbackResult := h.buildCallbackResult(entity.TaskID, "failed", "", errorMsg)
-		messages = append(messages, PublishedMessage{
-			Subject: entity.Callback,
-			Data:    callbackResult,
-		})
-	}
-
-	return messages, nil
-}
-
-// buildCallbackResult creates a generic async step result for workflow consumption.
-// Uses workflow.AsyncStepResult with message.NewBaseMessage for payload registry compatibility.
-// If the output is valid JSON, it's stored directly. Otherwise, it's wrapped as {"content": "..."}.
-func (h *MessageHandler) buildCallbackResult(taskID, status, output, errorMsg string) []byte {
-	result := &workflow.AsyncStepResult{
-		TaskID: taskID,
-		Status: status,
-		Error:  errorMsg,
-	}
-	if output != "" {
-		// Try to use output directly if it's valid JSON
-		if json.Valid([]byte(output)) {
-			result.Output = json.RawMessage(output)
-		} else {
-			// Wrap non-JSON content
-			wrapper := map[string]string{"content": output}
-			result.Output, _ = json.Marshal(wrapper)
-		}
-	}
-	msg := message.NewBaseMessage(result.Schema(), result, "agentic-loop")
-	data, _ := json.Marshal(msg)
-	return data
+	}}, nil
 }
 
 // GetLoop retrieves a loop entity (for testing)

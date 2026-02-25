@@ -15,6 +15,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/workflow"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -585,7 +586,7 @@ func (c *Component) publishFailureEvents(ctx context.Context, loopID, reason, er
 	errorCtx, cancel := natsclient.DetachContextWithTrace(ctx, 5*time.Second)
 	defer cancel()
 
-	failMsgs, err := c.handler.BuildFailureEventWithCallback(loopID, reason, errorMsg)
+	failMsgs, err := c.handler.BuildFailureMessages(loopID, reason, errorMsg)
 	if err != nil {
 		c.logger.Warn("Failed to build failure event", "error", err, "loop_id", loopID)
 		return
@@ -942,13 +943,15 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 		c.metrics.recordLoopFailed("cancelled", entity.Iterations, duration)
 	}
 
-	// Publish completion event
+	// Publish completion event with workflow context for reactive workflows
 	completion := agentic.LoopCancelledEvent{
-		LoopID:      loopID,
-		TaskID:      entity.TaskID,
-		Outcome:     agentic.OutcomeCancelled,
-		CancelledBy: signal.UserID,
-		CancelledAt: entity.CancelledAt,
+		LoopID:       loopID,
+		TaskID:       entity.TaskID,
+		Outcome:      agentic.OutcomeCancelled,
+		CancelledBy:  signal.UserID,
+		WorkflowSlug: entity.WorkflowSlug,
+		WorkflowStep: entity.WorkflowStep,
+		CancelledAt:  entity.CancelledAt,
 	}
 
 	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "agentic-loop")
@@ -1055,4 +1058,24 @@ func (c *Component) handleResumeSignal(ctx context.Context, signal agentic.UserS
 	c.logger.Info("Loop resumed",
 		slog.String("loop_id", loopID),
 		slog.String("resumed_by", signal.UserID))
+}
+
+// WorkflowParticipant interface implementation.
+// Agentic-loop handles multiple workflows dynamically, so it returns empty WorkflowID.
+
+// WorkflowID returns empty string since this component handles multiple workflows dynamically.
+// The workflow context is tracked per-loop via WorkflowSlug/WorkflowStep fields.
+func (c *Component) WorkflowID() string {
+	return ""
+}
+
+// Phase returns the workflow phase this component represents.
+func (c *Component) Phase() string {
+	return "agentic-execution"
+}
+
+// StateManager returns nil since agentic-loop manages its own state internally.
+// Workflows interact with agentic-loop via events and KV watches, not direct state access.
+func (c *Component) StateManager() *workflow.StateManager {
+	return nil
 }

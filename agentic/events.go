@@ -59,6 +59,8 @@ type LoopCompletedEvent struct {
 	Model        string    `json:"model"`
 	Iterations   int       `json:"iterations"`
 	ParentLoopID string    `json:"parent_loop,omitempty"`
+	WorkflowSlug string    `json:"workflow_slug,omitempty"`
+	WorkflowStep string    `json:"workflow_step,omitempty"`
 	CompletedAt  time.Time `json:"completed_at"`
 }
 
@@ -139,11 +141,13 @@ func (e *LoopFailedEvent) UnmarshalJSON(data []byte) error {
 
 // LoopCancelledEvent is published when a loop is cancelled by user action.
 type LoopCancelledEvent struct {
-	LoopID      string    `json:"loop_id"`
-	TaskID      string    `json:"task_id"`
-	Outcome     string    `json:"outcome"` // OutcomeCancelled
-	CancelledBy string    `json:"cancelled_by"`
-	CancelledAt time.Time `json:"cancelled_at"`
+	LoopID       string    `json:"loop_id"`
+	TaskID       string    `json:"task_id"`
+	Outcome      string    `json:"outcome"` // OutcomeCancelled
+	CancelledBy  string    `json:"cancelled_by"`
+	WorkflowSlug string    `json:"workflow_slug,omitempty"`
+	WorkflowStep string    `json:"workflow_step,omitempty"`
+	CancelledAt  time.Time `json:"cancelled_at"`
 }
 
 // Validate implements message.Payload

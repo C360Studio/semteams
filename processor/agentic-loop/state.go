@@ -417,20 +417,6 @@ func (m *LoopManager) SetUserContext(loopID, channelType, channelID, userID stri
 	return nil
 }
 
-// SetCallback sets the callback subject for async result delivery
-func (m *LoopManager) SetCallback(loopID, callback string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	entity, exists := m.loops[loopID]
-	if !exists {
-		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
-	}
-
-	entity.Callback = callback
-	return nil
-}
-
 // GenerateRequestID creates a structured request ID that embeds the loop ID.
 // Format: loopID:req:shortUUID
 // This allows recovery of loop ID from request ID if in-memory maps are lost.

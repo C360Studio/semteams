@@ -14,7 +14,6 @@
 package reactive
 
 import (
-	"encoding/json"
 	"strconv"
 	"time"
 
@@ -173,7 +172,7 @@ type TriggerSource struct {
 	// StateKeyFunc extracts the KV key from the triggering message to load state.
 	// Required when Subject + StateBucket are both set.
 	// Example: func(msg any) string {
-	//     return "plan-review." + msg.(*AsyncStepResult).TaskID
+	//     return "plan-review." + msg.(*MyCallbackResult).TaskID
 	// }
 	StateKeyFunc func(msg any) string `json:"-"`
 }
@@ -477,63 +476,8 @@ func (e *ValidationError) Error() string {
 	return e.Field + ": " + e.Message
 }
 
-// AsyncStepResult is the standard result type for async callbacks.
-// Components publish this to the callback subject when they complete.
-type AsyncStepResult struct {
-	// TaskID correlates to the original request.
-	TaskID string `json:"task_id"`
-
-	// ExecutionID is a direct reference to the execution (optional).
-	ExecutionID string `json:"execution_id,omitempty"`
-
-	// Status is "success", "failed", or "cancelled".
-	Status string `json:"status"`
-
-	// Output is the executor's result payload (typed JSON).
-	Output json.RawMessage `json:"output,omitempty"`
-
-	// Error message if status is "failed".
-	Error string `json:"error,omitempty"`
-}
-
-// GetTaskID returns the task ID for callback correlation.
-func (r *AsyncStepResult) GetTaskID() string {
-	return r.TaskID
-}
-
-// Schema returns the message type for AsyncStepResult.
-func (r *AsyncStepResult) Schema() message.Type {
-	return message.Type{
-		Domain:   "workflow",
-		Category: "async-result",
-		Version:  "v1",
-	}
-}
-
-// Validate validates the async step result.
-func (r *AsyncStepResult) Validate() error {
-	if r.TaskID == "" {
-		return &ValidationError{Field: "task_id", Message: "required"}
-	}
-	if r.Status == "" {
-		return &ValidationError{Field: "status", Message: "required"}
-	}
-	return nil
-}
-
-// MarshalJSON implements json.Marshaler.
-func (r *AsyncStepResult) MarshalJSON() ([]byte, error) {
-	type Alias AsyncStepResult
-	return json.Marshal((*Alias)(r))
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
-func (r *AsyncStepResult) UnmarshalJSON(data []byte) error {
-	type Alias AsyncStepResult
-	return json.Unmarshal(data, (*Alias)(r))
-}
-
 // CallbackFields are injected into async task payloads for callback correlation.
+// Used by the reactive workflow engine to track async step execution.
 type CallbackFields struct {
 	// TaskID uniquely identifies this async task.
 	TaskID string `json:"task_id"`

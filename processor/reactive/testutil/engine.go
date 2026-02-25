@@ -85,7 +85,8 @@ func (e *TestEngine) TriggerMessage(ctx context.Context, subject string, payload
 }
 
 // HandleCallback simulates receiving an async callback result.
-func (e *TestEngine) HandleCallback(ctx context.Context, key string, result *reactive.AsyncStepResult) error {
+// The result must implement the message.Payload interface (have Schema() method).
+func (e *TestEngine) HandleCallback(ctx context.Context, key string, result message.Payload, taskID string) error {
 	// Get the current state
 	entry, err := e.kv.Get(ctx, key)
 	if err != nil {
@@ -101,7 +102,7 @@ func (e *TestEngine) HandleCallback(ctx context.Context, key string, result *rea
 	workflowID, _ := rawState["workflow_id"].(string)
 
 	// Build callback subject
-	subject := fmt.Sprintf("workflow.callback.%s.%s", workflowID, result.TaskID)
+	subject := fmt.Sprintf("workflow.callback.%s.%s", workflowID, taskID)
 
 	// Publish the callback result
 	baseMsg := message.NewBaseMessage(result.Schema(), result, "test")
