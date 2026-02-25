@@ -1,5 +1,14 @@
 # Workflow Configuration Reference
 
+> **DEPRECATED**: This document describes the legacy JSON-based workflow processor.
+> For new workflows, use the **Reactive Workflow Engine** documented in:
+>
+> - [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md)
+> - [Reactive Workflows Guide](./10-reactive-workflows.md)
+>
+> The JSON workflow processor will be removed in a future release. See the
+> [Migration to Reactive Workflows](#migration-to-reactive-workflows) section below for upgrade guidance.
+
 Complete reference for workflow processor configuration and definition schemas.
 
 **Note**: This document describes the unified dataflow pattern from [ADR-020](../architecture/adr-020-unified-dataflow-patterns.md). Workflows use explicit `inputs` and `outputs` declarations instead of string interpolation with `payload_mapping`.
@@ -895,12 +904,166 @@ Published to `workflow.events`:
 }
 ```
 
+## Migration to Reactive Workflows
+
+The JSON-based workflow processor is deprecated in favor of the reactive workflow engine. The new system provides:
+
+### Key Benefits
+
+| Aspect | JSON Workflows | Reactive Workflows |
+|--------|---------------|-------------------|
+| Type safety | Runtime errors | Compile-time errors |
+| Field references | String interpolation (`${steps.X.output.Y}`) | Go field access (`state.ReviewResult.Verdict`) |
+| Serialization | 9+ boundaries, `json.RawMessage` required | 2 boundaries, zero `json.RawMessage` |
+| Debugging | String inspection, runtime failures | Go debugger, stack traces |
+| Error detection | Load-time or runtime | Compile-time |
+
+### Before and After Example
+
+**JSON Workflow (Deprecated)**:
+
+```json
+{
+  "steps": [
+    {
+      "name": "review",
+      "inputs": {
+        "code": {"from": "trigger.payload.code"}
+      },
+      "outputs": {
+        "verdict": {"interface": "reviewer.verdict.v1"}
+      },
+      "action": {
+        "type": "call",
+        "subject": "reviewer.analyze"
+      }
+    },
+    {
+      "name": "fix",
+      "condition": {
+        "field": "review.verdict",
+        "operator": "eq",
+        "value": "needs_work"
+      },
+      "inputs": {
+        "issues": {"from": "review.issues"}
+      },
+      "action": {
+        "type": "call",
+        "subject": "fixer.repair"
+      }
+    }
+  ]
+}
+```
+
+**Reactive Workflow (Current)**:
+
+```go
+func ReviewFixCycleWorkflow() *reactive.Definition {
+    return reactive.NewWorkflow("review-fix-cycle").
+        WithDescription("Review and fix code until approved").
+        WithStateBucket("REVIEW_FIX_STATE").
+        WithStateFactory(func() any { return &ReviewFixState{} }).
+        WithMaxIterations(3).
+        WithTimeout(30 * time.Minute).
+
+        // Request review
+        AddRule(reactive.NewRule("request-review").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is reviewing", reactive.PhaseIs("reviewing")).
+            When("no pending task", reactive.NoPendingTask()).
+            PublishAsync(
+                "reviewer.analyze",
+                func(ctx *reactive.RuleContext) (message.Payload, error) {
+                    state := ctx.State.(*ReviewFixState)
+                    return &ReviewRequest{
+                        Code: state.Code,
+                    }, nil
+                },
+                "reviewer.verdict.v1",
+                func(ctx *reactive.RuleContext, result any) error {
+                    state := ctx.State.(*ReviewFixState)
+                    verdict := result.(*ReviewResult)
+                    state.Verdict = verdict.Verdict
+                    state.Issues = verdict.Issues
+                    state.Phase = "evaluated"
+                    return nil
+                },
+            ).
+            MustBuild()).
+
+        // Apply fixes if needed
+        AddRule(reactive.NewRule("apply-fixes").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is evaluated", reactive.PhaseIs("evaluated")).
+            When("verdict is needs_work", reactive.StateFieldEquals(
+                func(s any) string { return s.(*ReviewFixState).Verdict },
+                "needs_work",
+            )).
+            PublishAsync(
+                "fixer.repair",
+                func(ctx *reactive.RuleContext) (message.Payload, error) {
+                    state := ctx.State.(*ReviewFixState)
+                    return &FixRequest{
+                        Code:   state.Code,
+                        Issues: state.Issues,
+                    }, nil
+                },
+                "fixer.result.v1",
+                func(ctx *reactive.RuleContext, result any) error {
+                    state := ctx.State.(*ReviewFixState)
+                    fixed := result.(*FixResult)
+                    state.Code = fixed.Code
+                    state.Phase = "reviewing"  // Loop back
+                    state.Iteration++
+                    return nil
+                },
+            ).
+            MustBuild()).
+
+        // Complete on approval
+        AddRule(reactive.NewRule("complete-approved").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is evaluated", reactive.PhaseIs("evaluated")).
+            When("verdict is approved", reactive.StateFieldEquals(
+                func(s any) string { return s.(*ReviewFixState).Verdict },
+                "approved",
+            )).
+            CompleteWithMutation(func(ctx *reactive.RuleContext, _ any) error {
+                state := ctx.State.(*ReviewFixState)
+                state.Phase = "completed"
+                state.Status = reactive.StatusCompleted
+                return nil
+            }).
+            MustBuild()).
+
+        MustBuild()
+}
+```
+
+### Key Differences
+
+1. **Type Safety**: Field references like `state.Verdict` are validated at compile time
+2. **No String Interpolation**: Direct Go struct field access instead of `"${steps.X.output.Y}"`
+3. **Explicit State Management**: State struct accumulates all outputs in typed fields
+4. **Compile-Time Validation**: Typos and type mismatches caught by Go compiler
+5. **Better Debugging**: Full Go debugger support with breakpoints and stack traces
+
+### Migration Resources
+
+For complete migration guidance, see:
+
+- [Reactive Workflow Migration Guide](../architecture/specs/reactive-workflow-migration.md) — Step-by-step conversion instructions
+- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) — Architecture and design rationale
+- [Reactive Workflows Guide](./10-reactive-workflows.md) — Usage patterns and examples
+
 ## Related Documentation
 
-- [Workflow Quickstart](../basics/08-workflow-quickstart.md) — Getting started
+- [Workflow Quickstart](../basics/08-workflow-quickstart.md) — Getting started (deprecated)
 - [Orchestration Layers](../concepts/12-orchestration-layers.md) — Rules vs. workflows
 - [Parallel Agents](../concepts/23-parallel-agents.md) — Parallel execution patterns
 - [Context Construction](../concepts/22-context-construction.md) — Building agent context
 - [Agentic Components](08-agentic-components.md) — Agent integration
 - [Aggregation Package](../../processor/workflow/aggregation/README.md) — Aggregator details
-- [Workflow Processor Spec](../architecture/specs/workflow-processor-spec.md) — Full specification
+- [Workflow Processor Spec](../architecture/specs/workflow-processor-spec.md) — Full specification (deprecated)

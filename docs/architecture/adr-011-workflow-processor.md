@@ -2,26 +2,13 @@
 
 ## Status
 
-Accepted (Minimal)
+Superseded by ADR-021
 
-**Note**: Minimal implementation required for semspec-driven development and multi-agent workflows.
-The full specification remains valid but implementation is phased.
-
-**Initial scope (Phases 1-2)**:
-- Step tracking and sequencing
-- Loop limits (max_iterations)
-- Workflow timeout enforcement
-- Basic actions: call, publish, set_state
-
-**Deferred (Phases 3-4)**:
-- Retry with exponential backoff
-- HTTP action
-- Wait action
-- Secrets management
-- Timer service for scheduled triggers
-
-See [Orchestration Layers](../concepts/12-orchestration-layers.md) for how workflows fit into the
-three-layer orchestration model alongside rules and components.
+> **Note**: This ADR describes the original JSON-based workflow processor.
+> It has been superseded by [ADR-021: Reactive Workflow Engine](./adr-021-reactive-workflow-engine.md),
+> which provides compile-time type safety and eliminates serialization bugs.
+>
+> See [Reactive Workflows Guide](../advanced/10-reactive-workflows.md) for current documentation.
 
 ## Context
 

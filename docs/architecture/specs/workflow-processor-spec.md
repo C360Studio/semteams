@@ -1,8 +1,20 @@
 # Workflow Processor Specification
 
 **Version**: 1.0.0
-**Status**: Draft
+**Status**: Deprecated
 **Last Updated**: 2025-01-01
+
+> **⚠️ DEPRECATED SPECIFICATION**
+>
+> This specification describes the legacy JSON-based workflow processor which is being replaced
+> by the **Reactive Workflow Engine** (ADR-021).
+>
+> **For new development, use:**
+> - [ADR-021: Reactive Workflow Engine](../adr-021-reactive-workflow-engine.md) - Design rationale
+> - [Reactive Workflows Guide](../../advanced/10-reactive-workflows.md) - Usage documentation
+> - [Migration Guide](./reactive-workflow-migration.md) - Migration instructions
+>
+> This specification is retained for reference during the migration period.
 
 **Note**: This specification uses the unified dataflow pattern from [ADR-020](../adr-020-unified-dataflow-patterns.md). Steps declare explicit `inputs` and `outputs` instead of string interpolation with `payload_mapping`.
 

@@ -1,17 +1,18 @@
 # Workflow Quickstart
 
-Get started with SemStreams workflow orchestration for multi-step processes.
+Get started with SemStreams reactive workflow orchestration for multi-step processes.
 
-## What are Workflows?
+## What are Reactive Workflows?
 
-Workflows are declarative definitions for multi-step processes that need:
+Reactive workflows are Go-based definitions for multi-step processes that need:
 
-- **Sequential execution** with state between steps
+- **Typed state management** with compile-time safety
 - **Loop limits** to prevent runaway processes
-- **Timeouts** at step and workflow levels
-- **Retry logic** with configurable backoff
+- **Timeouts** at workflow level
+- **Event-driven coordination** using KV watches and NATS messages
 
-Workflows fill the gap between reactive rules (stateless, event-driven) and external orchestration systems like Temporal.
+Workflows are defined in Go code using a fluent builder API, providing type safety and eliminating
+serialization bugs that occur with JSON-based string interpolation.
 
 ## When to Use Workflows
 
@@ -25,476 +26,586 @@ Workflows fill the gap between reactive rules (stateless, event-driven) and exte
 
 ## Architecture
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│  RULES ENGINE (ECA)                                         │
-│  "When condition X, trigger workflow Y"                     │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼ triggers
-┌─────────────────────────────────────────────────────────────┐
-│  WORKFLOW PROCESSOR (multi-step orchestration)              │
-│  "Execute steps A → B → C with timeouts and loop limits"    │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼ spawns
-┌─────────────────────────────────────────────────────────────┐
-│  COMPONENTS (execution)                                     │
-│  - agentic-loop: execute agent turns                        │
-│  - graph: process triples                                   │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    A[KV State Change] --> B{Reactive Engine}
+    C[NATS Message] --> B
+    B --> D{Condition Evaluation}
+    D -->|All Pass| E[Action Dispatcher]
+    D -->|Any Fail| F[Skip]
+    E --> G[PublishAsync]
+    E --> H[Mutate State]
+    E --> I[Complete]
+    G --> J[Update KV with PendingTaskID]
+    J --> K[Publish Request]
+    K --> L[Component Processing]
+    L --> M[Callback Message]
+    M --> B
+    H --> N[Store in KV]
+    N --> B
 ```
 
 ## Your First Workflow
 
-### Example: Review-Fix Cycle
+### Example: Linear Processing Workflow
 
-A code review workflow that loops between reviewer and fixer agents:
+A simple workflow that processes input and produces output (pending → processing → completed):
 
-```json
-{
-  "id": "review-fix-cycle",
-  "name": "Review and Fix Cycle",
-  "description": "Review code, fix issues, re-review until clean or max attempts",
-  "version": "1.0.0",
-  "enabled": true,
+```go
+package main
 
-  "trigger": {
-    "subject": "workflow.trigger.review"
-  },
+import (
+    "time"
+    "github.com/c360studio/semstreams/message"
+    "github.com/c360studio/semstreams/processor/reactive"
+)
 
-  "steps": [
-    {
-      "name": "review",
-      "action": {
-        "type": "publish_agent",
-        "subject": "agent.task.reviewer",
-        "role": "reviewer",
-        "prompt": "Review the code for issues"
-      },
-      "on_complete": {
-        "condition": {"field": "issues_found", "operator": "eq", "value": 0},
-        "then": "complete",
-        "else": "fix"
-      },
-      "timeout": "60s"
-    },
-    {
-      "name": "fix",
-      "action": {
-        "type": "publish_agent",
-        "subject": "agent.task.fixer",
-        "role": "fixer",
-        "prompt": "Fix the issues:\n\n${steps.review.result}"
-      },
-      "on_complete": "review"
-    }
-  ],
+// Define typed state struct
+type LinearWorkflowState struct {
+    reactive.ExecutionState          // Embedded core state (ID, Phase, Status, Iteration)
+    Input  string `json:"input"`    // Custom fields
+    Output string `json:"output,omitempty"`
+}
 
-  "max_iterations": 3,
-  "timeout": "300s"
+// Define typed request/response payloads
+type ProcessRequest struct {
+    TaskID string `json:"task_id"`
+    Input  string `json:"input"`
+}
+
+func (r *ProcessRequest) Schema() message.Type {
+    return message.Type{Domain: "example", Category: "process-request", Version: "v1"}
+}
+
+type ProcessResult struct {
+    TaskID   string `json:"task_id"`
+    Computed string `json:"computed"`
+}
+
+func (r *ProcessResult) Schema() message.Type {
+    return message.Type{Domain: "example", Category: "process-result", Version: "v1"}
+}
+
+// Build workflow using fluent API
+func buildLinearWorkflow() *reactive.Definition {
+    return reactive.NewWorkflow("linear-example").
+        WithDescription("Simple linear workflow: start → process → complete").
+        WithStateBucket("EXAMPLE_STATE").
+        WithStateFactory(func() any { return &LinearWorkflowState{} }).
+        WithTimeout(5 * time.Minute).
+        // Rule 1: Start processing when in pending phase
+        AddRule(reactive.NewRule("start-processing").
+            WatchKV("EXAMPLE_STATE", "linear-example.*").
+            When("phase is pending", reactive.PhaseIs("pending")).
+            When("no pending task", reactive.NoPendingTask()).
+            PublishAsync(
+                "processor.input",
+                func(ctx *reactive.RuleContext) (message.Payload, error) {
+                    state := ctx.State.(*LinearWorkflowState)
+                    return &ProcessRequest{
+                        TaskID: state.ID,
+                        Input:  state.Input,
+                    }, nil
+                },
+                "example.process-result.v1",
+                func(ctx *reactive.RuleContext, result any) error {
+                    state := ctx.State.(*LinearWorkflowState)
+                    if res, ok := result.(*ProcessResult); ok {
+                        state.Output = res.Computed
+                    }
+                    state.Phase = "completed"
+                    state.Status = reactive.StatusCompleted
+                    return nil
+                },
+            ).
+            MustBuild()).
+        MustBuild()
 }
 ```
 
-**Why this needs a workflow**:
-- Loop between review and fix steps
-- Maximum 3 iterations to prevent infinite loops
-- Overall timeout of 5 minutes
-- Step results passed between iterations
+**Key benefits over JSON workflows**:
 
-## Workflow Definition Schema
+- **Type safety**: Compile-time checks catch field reference errors
+- **No string interpolation**: Direct Go field access instead of `${steps.X.output.Y}`
+- **Fewer serialization boundaries**: 2 instead of 9, eliminating corruption bugs
+- **Go debugger support**: Set breakpoints in condition and payload functions
+- **Refactoring friendly**: IDE renames propagate correctly
 
-### Core Structure
+## Workflow Building Blocks
 
-```json
-{
-  "id": "workflow-id",          // Unique identifier
-  "name": "Human Name",         // Display name
-  "description": "What it does",
-  "version": "1.0.0",
-  "enabled": true,
+### State Struct
 
-  "trigger": { ... },           // What starts the workflow
-  "input": { ... },             // Expected input schema (optional)
-  "steps": [ ... ],             // Ordered step definitions
+Every workflow needs a state struct that embeds `reactive.ExecutionState`:
 
-  "on_complete": [ ... ],       // Actions on success
-  "on_fail": [ ... ],           // Actions on failure
+```go
+type MyWorkflowState struct {
+    reactive.ExecutionState          // Core fields: ID, Phase, Status, Iteration, etc.
 
-  "timeout": "5m",              // Overall workflow timeout
-  "max_iterations": 10,         // Loop limit
-  "metadata": { ... }           // Custom metadata
+    // Add custom fields for your workflow
+    Input       string   `json:"input"`
+    Result      string   `json:"result,omitempty"`
+    ErrorDetail string   `json:"error_detail,omitempty"`
 }
 ```
 
-### Trigger Types
+### ExecutionState Core Fields
 
-```json
-// Rule-triggered (when a rule fires)
-{ "trigger": { "rule": "spec-approved-trigger" } }
+| Field | Type | Description |
+|-------|------|-------------|
+| `ID` | `string` | Unique execution identifier |
+| `WorkflowID` | `string` | Workflow definition ID |
+| `Phase` | `string` | Current execution phase (e.g., "pending", "processing") |
+| `Status` | `ExecutionStatus` | Running, Completed, Failed, Escalated |
+| `Iteration` | `int` | Loop counter for iterative workflows |
+| `PendingTaskID` | `string` | Active async task identifier |
+| `Error` | `string` | Error message if failed |
+| `CreatedAt` | `time.Time` | Workflow start time |
+| `UpdatedAt` | `time.Time` | Last state update |
+| `Deadline` | `*time.Time` | Timeout deadline |
 
-// Subject-triggered (on NATS message)
-{ "trigger": { "subject": "workflow.trigger.review" } }
+### Workflow Definition
 
-// Scheduled (cron expression)
-{ "trigger": { "cron": "0 9 * * *" } }
+Use the fluent builder API:
 
-// Manual (API only)
-{ "trigger": { "manual": true } }
+```go
+reactive.NewWorkflow("my-workflow").
+    WithDescription("Human-readable description").
+    WithStateBucket("MY_STATE").                          // KV bucket name
+    WithStateFactory(func() any { return &MyState{} }).   // State constructor
+    WithMaxIterations(5).                                 // Loop limit
+    WithTimeout(10 * time.Minute).                        // Overall timeout
+    AddRule(/* ... */).                                   // Add coordination rules
+    MustBuild()
 ```
 
-### Step Definition
+## Rules and Triggers
 
-```json
-{
-  "name": "step-name",
-  "description": "What this step does",
+### Rule Trigger Modes
 
-  "action": {
-    "type": "call",
-    "subject": "service.action",
-    "payload": { "key": "${trigger.entity_id}" }
-  },
+| Mode | Description | Use Case |
+|------|-------------|----------|
+| **KV Watch** | React to state changes in KV | Inter-rule coordination |
+| **Subject Consumer** | React to NATS messages | Entry points, external callbacks |
+| **Combined** | Message + state condition | Async callback with context |
 
-  "on_success": "next-step",     // Or "next", "complete"
-  "on_fail": "error-handler",    // Or "abort"
+### KV Watch Trigger
 
-  "retry": {
-    "max_attempts": 3,
-    "initial_backoff": "1s",
-    "max_backoff": "30s",
-    "multiplier": 2.0
-  },
+React when state in a KV bucket changes:
 
-  "timeout": "30s",
+```go
+reactive.NewRule("on-state-change").
+    WatchKV("WORKFLOW_STATE", "workflow.*").
+    When("phase is processing", reactive.PhaseIs("processing")).
+    // ... actions
+```
 
-  "condition": {                 // Skip if false
-    "field": "steps.previous.output.skip",
-    "operator": "eq",
-    "value": false
-  }
-}
+### Subject Trigger
+
+React to NATS messages:
+
+```go
+reactive.NewRule("on-message").
+    OnSubject("workflow.trigger.>", func() any { return &TriggerMessage{} }).
+    // ... actions
+```
+
+### Conditions
+
+Built-in condition helpers:
+
+```go
+// Phase and status checks
+reactive.PhaseIs("pending")
+reactive.StatusIs(reactive.StatusRunning)
+
+// Iteration limits
+reactive.IterationLessThan(3)
+
+// Task state
+reactive.NoPendingTask()
+reactive.HasPendingTask()
+
+// Custom field checks
+reactive.StateFieldEquals(
+    func(s any) string { return s.(*MyState).Verdict },
+    "approved",
+)
+
+// Combinators
+reactive.And(condA, condB)
+reactive.Or(condA, condB)
+reactive.Not(cond)
 ```
 
 ## Action Types
 
-### call (Request/Response)
+### PublishAsync (Request/Response)
 
-Executes a NATS request and waits for response:
+Publish a request and wait for callback:
 
-```json
-{
-  "type": "call",
-  "subject": "service.get-data",
-  "payload": {
-    "id": "${trigger.entity_id}"
-  }
+```go
+PublishAsync(
+    "processor.input",                              // Subject to publish to
+    func(ctx *reactive.RuleContext) (message.Payload, error) {
+        state := ctx.State.(*MyState)
+        return &ProcessRequest{
+            TaskID: state.ID,
+            Input:  state.Input,
+        }, nil
+    },
+    "example.process-result.v1",                    // Expected result type
+    func(ctx *reactive.RuleContext, result any) error {
+        state := ctx.State.(*MyState)
+        if res, ok := result.(*ProcessResult); ok {
+            state.Output = res.Computed
+        }
+        state.Phase = "completed"
+        return nil
+    },
+)
+```
+
+### Mutate (State Update)
+
+Update state without publishing:
+
+```go
+Mutate(func(ctx *reactive.RuleContext, _ any) error {
+    state := ctx.State.(*MyState)
+    state.Phase = "next-phase"
+    state.Iteration++
+    return nil
+})
+```
+
+Built-in mutators:
+
+```go
+reactive.IncrementIterationMutator()
+reactive.PhaseTransition("next-phase")
+reactive.ChainMutators(mutator1, mutator2)
+```
+
+### Complete
+
+Mark execution as complete:
+
+```go
+Complete()
+```
+
+### CompleteWithMutation
+
+Mutate state then mark complete:
+
+```go
+CompleteWithMutation(func(ctx *reactive.RuleContext, _ any) error {
+    state := ctx.State.(*MyState)
+    state.Phase = "finished"
+    state.Status = reactive.StatusCompleted
+    return nil
+})
+```
+
+## Loop Patterns
+
+For iterative workflows (review → fix → review...), use iteration tracking and max iteration limits:
+
+```go
+func buildReviewLoop() *reactive.Definition {
+    const maxIterations = 3
+
+    return reactive.NewWorkflow("review-loop").
+        WithMaxIterations(maxIterations).
+        // Rule 1: Request review (under max iterations)
+        AddRule(reactive.NewRule("request-review").
+            WatchKV("REVIEW_STATE", "review-loop.*").
+            When("phase is reviewing", reactive.PhaseIs("reviewing")).
+            When("under max iterations", reactive.IterationLessThan(maxIterations)).
+            PublishAsync(/* request review */).
+            MustBuild()).
+        // Rule 2: Handle "needs work" verdict - loop back
+        AddRule(reactive.NewRule("handle-needs-work").
+            When("verdict is needs_work", reactive.StateFieldEquals(
+                func(s any) string { return s.(*ReviewState).Verdict },
+                "needs_work",
+            )).
+            When("under max iterations", reactive.IterationLessThan(maxIterations)).
+            Mutate(reactive.ChainMutators(
+                reactive.IncrementIterationMutator(),
+                reactive.PhaseTransition("reviewing"),
+            )).
+            MustBuild()).
+        // Rule 3: Handle max iterations exceeded
+        AddRule(reactive.NewRule("handle-max-iterations").
+            When("verdict is needs_work", /* ... */).
+            When("at max iterations", reactive.Not(reactive.IterationLessThan(maxIterations))).
+            Mutate(func(ctx *reactive.RuleContext, _ any) error {
+                state := ctx.State.(*ReviewState)
+                state.Status = reactive.StatusEscalated
+                state.Error = "max iterations exceeded"
+                return nil
+            }).
+            MustBuild()).
+        MustBuild()
 }
 ```
 
-### publish (Fire-and-Forget)
+**Key loop mechanics**:
 
-Publishes a message without waiting:
+- Track iterations using `state.Iteration`
+- Check `reactive.IterationLessThan(N)` before looping
+- Use `reactive.IncrementIterationMutator()` when looping
+- Handle max iterations with separate rule (escalate, fail, or notify)
 
-```json
-{
-  "type": "publish",
-  "subject": "events.workflow.step-complete",
-  "payload": {
-    "step": "extract-tasks",
-    "timestamp": "${timestamp}"
-  }
-}
-```
+## Testing Workflows
 
-### publish_agent (Spawn Agent)
+Use the `testutil` package for unit tests without NATS infrastructure:
 
-Spawns an agentic loop task:
+```go
+func TestMyWorkflow(t *testing.T) {
+    // Create test engine
+    engine := testutil.NewTestEngine(t)
+    def := buildMyWorkflow()
 
-```json
-{
-  "type": "publish_agent",
-  "subject": "agent.task.reviewer",
-  "role": "reviewer",
-  "model": "gpt-4",
-  "prompt": "Review the following code:\n\n${steps.load-code.output}"
-}
-```
-
-### set_state (Entity Mutation)
-
-Updates entity state via graph processor:
-
-```json
-{
-  "type": "set_state",
-  "entity_id": "${trigger.entity_id}",
-  "predicate": "workflow.status",
-  "object": "in-progress"
-}
-```
-
-## Variable Interpolation
-
-Use `${...}` syntax to reference dynamic values:
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `${trigger.entity_id}` | Entity that triggered workflow | `acme.specs.auth` |
-| `${trigger.payload.X}` | Field from trigger payload | `${trigger.payload.status}` |
-| `${steps.X.output}` | Output from completed step | `${steps.load-spec.output}` |
-| `${steps.X.output.field}` | Field from step output | `${steps.extract.output.tasks}` |
-| `${execution.id}` | Current execution ID | `exec-abc123` |
-| `${timestamp}` | Current ISO timestamp | `2025-01-01T12:00:00Z` |
-
-### Example
-
-```json
-{
-  "action": {
-    "type": "call",
-    "subject": "github.issues.create",
-    "payload": {
-      "spec_id": "${trigger.entity_id}",
-      "tasks": "${steps.extract-tasks.output.tasks}",
-      "created_at": "${timestamp}"
+    // Register workflow
+    if err := engine.RegisterWorkflow(def); err != nil {
+        t.Fatalf("RegisterWorkflow failed: %v", err)
     }
-  }
-}
-```
 
-## Error Handling
-
-### Step-Level Retry
-
-```json
-{
-  "name": "create-issues",
-  "action": { ... },
-  "retry": {
-    "max_attempts": 3,
-    "initial_backoff": "5s",
-    "multiplier": 2.0,
-    "max_backoff": "1m"
-  }
-}
-```
-
-### Failure Routing
-
-```json
-{
-  "name": "risky-step",
-  "action": { ... },
-  "on_fail": "error-handler"
-},
-{
-  "name": "error-handler",
-  "action": {
-    "type": "set_state",
-    "entity_id": "${trigger.entity_id}",
-    "predicate": "workflow.status",
-    "object": "failed"
-  },
-  "on_success": "complete"
-}
-```
-
-### Workflow-Level Handlers
-
-```json
-{
-  "on_complete": [
-    {
-      "type": "set_state",
-      "entity_id": "${trigger.entity_id}",
-      "predicate": "workflow.status",
-      "object": "completed"
+    // Create initial state
+    state := &MyWorkflowState{
+        ExecutionState: reactive.ExecutionState{
+            ID:         "exec-001",
+            WorkflowID: "my-workflow",
+            Phase:      "pending",
+            Status:     reactive.StatusRunning,
+        },
+        Input: "test input",
     }
-  ],
-  "on_fail": [
-    {
-      "type": "publish",
-      "subject": "alerts.workflow.failed",
-      "payload": {
-        "workflow": "review-fix-cycle",
-        "error": "${execution.error}"
-      }
+
+    // Trigger by storing state in KV
+    key := "my-workflow.exec-001"
+    err := engine.TriggerKV(context.Background(), key, state)
+    if err != nil {
+        t.Fatalf("TriggerKV failed: %v", err)
     }
-  ]
+
+    // Assert state transitions
+    engine.AssertPhase(key, "pending")
+    engine.AssertStatus(key, reactive.StatusRunning)
+    engine.AssertIteration(key, 0)
+
+    // Wait for async operations
+    engine.WaitForPhase(key, "completed", 5*time.Second)
+
+    // Assert published messages
+    engine.AssertPublished("processor.input")
+    engine.AssertPublishedCount("processor.input", 1)
+
+    // Custom state assertions
+    engine.AssertStateAs(key, &MyWorkflowState{}, func(t *testing.T, state any) {
+        s := state.(*MyWorkflowState)
+        if s.Output == "" {
+            t.Error("expected output to be set")
+        }
+    })
 }
-```
-
-## Observability
-
-### NATS KV Storage
-
-```bash
-# List workflow executions
-nats kv list WORKFLOW_EXECUTIONS
-
-# Get execution state
-nats kv get WORKFLOW_EXECUTIONS exec-abc123
-
-# Watch for new executions
-nats kv watch WORKFLOW_EXECUTIONS
-```
-
-### Prometheus Metrics
-
-```
-workflow_executions_total{workflow_id="review-fix-cycle",status="completed"}
-workflow_execution_duration_seconds{workflow_id="..."}
-workflow_steps_total{workflow_id="...",step="review",status="completed"}
-workflow_step_retries_total{workflow_id="...",step="create-issues"}
 ```
 
 ## Common Patterns
 
-### Conditional Steps
+### Conditional State Transitions
 
-Skip steps based on previous output:
+Execute rules only when specific conditions are met:
 
-```json
-{
-  "name": "extract-tasks",
-  "action": { ... },
-  "condition": {
-    "field": "steps.load-spec.output.has_tasks",
-    "operator": "eq",
-    "value": true
-  }
-}
+```go
+AddRule(reactive.NewRule("conditional-step").
+    WatchKV("WORKFLOW_STATE", "workflow.*").
+    When("phase is check", reactive.PhaseIs("check")).
+    When("ready flag is true", reactive.StateFieldEquals(
+        func(s any) bool { return s.(*MyState).Ready },
+        true,
+    )).
+    Mutate(reactive.PhaseTransition("execute")).
+    MustBuild())
 ```
 
-### Loop with Termination
+### Multi-Phase Linear Pipeline
 
-Loop until condition met or max iterations:
+Chain multiple phases sequentially:
 
-```json
-{
-  "steps": [
-    {
-      "name": "check",
-      "action": { "type": "call", "subject": "service.check-status" },
-      "on_complete": {
-        "condition": {"field": "output.ready", "operator": "eq", "value": true},
-        "then": "complete",
-        "else": "wait"
-      }
-    },
-    {
-      "name": "wait",
-      "action": { "type": "wait", "duration": "30s" },
-      "on_complete": "check"
-    }
-  ],
-  "max_iterations": 10
-}
+```go
+reactive.NewWorkflow("pipeline").
+    AddRule(reactive.NewRule("phase-a").
+        WatchKV("STATE", "pipeline.*").
+        When("phase is pending", reactive.PhaseIs("pending")).
+        PublishAsync(/* do A */, func(ctx *reactive.RuleContext, result any) error {
+            ctx.State.(*PipelineState).Phase = "phase-b"
+            return nil
+        }).
+        MustBuild()).
+    AddRule(reactive.NewRule("phase-b").
+        WatchKV("STATE", "pipeline.*").
+        When("phase is phase-b", reactive.PhaseIs("phase-b")).
+        PublishAsync(/* do B */, func(ctx *reactive.RuleContext, result any) error {
+            ctx.State.(*PipelineState).Phase = "phase-c"
+            return nil
+        }).
+        MustBuild()).
+    AddRule(reactive.NewRule("phase-c").
+        WatchKV("STATE", "pipeline.*").
+        When("phase is phase-c", reactive.PhaseIs("phase-c")).
+        PublishAsync(/* do C */, func(ctx *reactive.RuleContext, result any) error {
+            ctx.State.(*PipelineState).Phase = "completed"
+            ctx.State.(*PipelineState).Status = reactive.StatusCompleted
+            return nil
+        }).
+        MustBuild()).
+    MustBuild()
 ```
 
-### Multi-Agent Pipeline
+### Branching Based on Results
 
-Chain multiple agents through workflow:
+Route to different phases based on async results:
 
-```json
-{
-  "steps": [
-    {
-      "name": "architect",
-      "action": {
-        "type": "publish_agent",
-        "role": "architect",
-        "prompt": "Design the solution"
-      }
-    },
-    {
-      "name": "editor",
-      "action": {
-        "type": "publish_agent",
-        "role": "editor",
-        "prompt": "Implement:\n${steps.architect.result}"
-      }
-    },
-    {
-      "name": "reviewer",
-      "action": {
-        "type": "publish_agent",
-        "role": "reviewer",
-        "prompt": "Review:\n${steps.editor.result}"
-      }
+```go
+// Callback mutator determines next phase
+func(ctx *reactive.RuleContext, result any) error {
+    state := ctx.State.(*ReviewState)
+    if res, ok := result.(*ReviewResult); ok {
+        switch res.Verdict {
+        case "approved":
+            state.Phase = "deploy"
+        case "needs_work":
+            state.Phase = "fixing"
+        case "rejected":
+            state.Phase = "failed"
+            state.Status = reactive.StatusFailed
+        }
     }
-  ]
+    return nil
 }
 ```
 
 ## Running Workflows
 
-### Manual Trigger
+### Initialize Execution State
+
+Create initial state and store in KV to trigger the workflow:
+
+```go
+// Create initial execution state
+state := &MyWorkflowState{
+    ExecutionState: reactive.ExecutionState{
+        ID:         "exec-" + uuid.New().String(),
+        WorkflowID: "my-workflow",
+        Phase:      "pending",
+        Status:     reactive.StatusRunning,
+        CreatedAt:  time.Now(),
+        UpdatedAt:  time.Now(),
+    },
+    Input: "user input data",
+}
+
+// Store in KV bucket to trigger workflow
+key := "my-workflow." + state.ID
+data, _ := json.Marshal(state)
+_, err := kv.Put(key, data)
+```
+
+### Trigger via NATS Message
+
+For workflows with subject triggers:
+
+```go
+// Define workflow with subject trigger
+reactive.NewRule("on-trigger").
+    OnSubject("workflow.trigger.my-workflow", func() any { return &TriggerMessage{} }).
+    Mutate(func(ctx *reactive.RuleContext, msg any) error {
+        trigger := msg.(*TriggerMessage)
+        // Initialize workflow state
+        state := &MyWorkflowState{
+            ExecutionState: reactive.ExecutionState{
+                ID:         "exec-" + uuid.New().String(),
+                WorkflowID: "my-workflow",
+                Phase:      "pending",
+                Status:     reactive.StatusRunning,
+            },
+            Input: trigger.Input,
+        }
+        // Store in KV
+        return ctx.Store(state)
+    }).
+    MustBuild()
+
+// Trigger by publishing message
+triggerMsg := &TriggerMessage{Input: "data"}
+nc.Publish("workflow.trigger.my-workflow", triggerMsg)
+```
+
+## Observability and Debugging
+
+### Inspect State in KV
 
 ```bash
-# Trigger via NATS
-nats pub workflow.trigger.review-fix-cycle '{"entity_id": "test-123"}'
+# List all executions for a workflow
+nats kv list MY_STATE
 
-# Trigger via HTTP API (if enabled)
-curl -X POST http://localhost:8080/api/workflow/review-fix-cycle/trigger \
-  -H "Content-Type: application/json" \
-  -d '{"entity_id": "test-123"}'
+# Get specific execution state
+nats kv get MY_STATE my-workflow.exec-001
+
+# Watch state changes in real-time
+nats kv watch MY_STATE
 ```
 
-### Rule-Triggered
+### Enable Debug Logging
 
-```json
-{
-  "id": "spec-approved-trigger",
-  "conditions": [
-    {"field": "spec.status.current", "operator": "eq", "value": "approved"}
-  ],
-  "on_enter": [
-    {
-      "type": "publish",
-      "subject": "workflow.trigger.spec-approval",
-      "payload": {"entity_id": "${entity_id}"}
-    }
-  ]
-}
-```
+Set log level to debug to see rule evaluation and action dispatch:
 
-## Debugging
+```go
+import "log/slog"
 
-### Check Execution State
+handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+    Level: slog.LevelDebug,
+})
+logger := slog.New(handler)
 
-```bash
-nats kv get WORKFLOW_EXECUTIONS exec-abc123
-```
-
-Output:
-```json
-{
-  "id": "exec-abc123",
-  "workflow_id": "review-fix-cycle",
-  "state": "running",
-  "current_step": 2,
-  "step_results": {
-    "review": {"state": "completed", "output": {...}, "attempts": 1},
-    "fix": {"state": "running", "attempts": 1}
-  },
-  "started_at": "2025-01-01T12:00:00Z"
-}
+engine := reactive.NewEngine(nc, logger)
 ```
 
 ### Common Issues
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Workflow never completes | Missing termination condition | Add `on_success: "complete"` to final step |
-| Step times out | Action taking too long | Increase `timeout` or optimize action |
-| Infinite loop | No `max_iterations` | Add `max_iterations` to workflow |
-| Variable not resolved | Wrong path | Check `${steps.X.output.Y}` syntax |
+| Rule never fires | Condition not met | Check condition logic with unit tests |
+| State not updating | KV watch pattern wrong | Verify bucket/pattern match state keys |
+| Type assertion panic | State factory returns wrong type | Check `WithStateFactory` returns correct type |
+| Infinite loop | No max iterations | Add `WithMaxIterations()` and check in rules |
+| Workflow stuck | No matching rule for phase | Add rule for current phase or check phase transitions |
+
+## Why Reactive Over JSON?
+
+The reactive workflow engine replaces JSON-based workflows to eliminate serialization bugs:
+
+| Aspect | JSON Workflows | Reactive Workflows |
+|--------|---------------|-------------------|
+| Type safety | Runtime (payload registry) | Compile-time (Go types) |
+| Field references | String interpolation `${steps.X.output.Y}` | Go field access `state.Output` |
+| Conditions | JSON expressions | Go functions |
+| Serialization | 9+ boundaries | 2 boundaries |
+| Error detection | Load/runtime | Compile time |
+| Debugging | String inspection | Go debugger |
+
+**Root cause eliminated**: JSON workflows treated data as opaque blobs flowing through string templates,
+causing typed Go structs to dissolve into `map[string]interface{}` at serialization boundaries.
+Reactive workflows keep data typed throughout execution, with state "at rest" in KV instead of
+"in flight" across message boundaries.
 
 ## Next Steps
 
+- [Reactive Workflows Guide](../advanced/10-reactive-workflows.md) — Comprehensive reference documentation
+- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) — Design rationale
 - [Orchestration Layers](../concepts/12-orchestration-layers.md) — When to use rules vs. workflows
-- [Workflow Configuration Reference](../advanced/09-workflow-configuration.md) — Complete schema reference
 - [Agentic Quickstart](07-agentic-quickstart.md) — LLM-powered agents
-- [Troubleshooting](../operations/02-troubleshooting.md) — Common issues and solutions
+- [processor/reactive/examples/](../../processor/reactive/examples/) — Example workflow implementations

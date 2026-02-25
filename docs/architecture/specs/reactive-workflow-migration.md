@@ -1,12 +1,25 @@
 # Reactive Workflow Migration Guide for Semspec
 
-**Status**: Ready for Migration
-**Branch**: `feat/reactive-workflow-engine`
-**Commit**: `91686c4`
+**Status**: Active - Migration In Progress
+**Branch**: `feat/reactive-workflow-engine` (current)
+**Commit**: `abb62a0` (latest: fix hierarchy stats response parsing mismatch)
 
 ## Executive Summary
 
-The reactive workflow engine (ADR-021) is now complete and ready for semspec workflow migration. This guide provides step-by-step instructions for migrating existing JSON workflows to typed Go definitions.
+The reactive workflow engine (ADR-021) is complete and production-ready. Migration is actively in progress. This guide provides step-by-step instructions for migrating existing JSON workflows to typed Go definitions. Teams should follow this guide when migrating their workflows to the new reactive engine.
+
+### Migration Status
+
+The reactive workflow engine has passed all quality gates:
+
+- **Engine Implementation**: Complete with full test coverage
+- **Validation Framework**: Runtime output declaration validation (ADR-020 feedback)
+- **Template Interpolation**: InputRef template support for workflow state access
+- **Reference Validation**: From-reference checking against declared outputs
+- **Graph Integration**: Hierarchy stats and entity relationship tracking
+- **Production Readiness**: All known issues resolved, comprehensive testing in place
+
+Teams can now confidently migrate workflows following the patterns in this guide.
 
 ### Key Benefits
 
@@ -562,6 +575,13 @@ During migration, both engines can run simultaneously:
 - **Builder API**: `/processor/reactive/builder.go`
 - **Condition Helpers**: `/processor/reactive/conditions.go`
 
-## Questions / Support
+## Migration Support
 
-Contact the semstreams team for migration support. The reactive workflow engine is fully tested and ready for production use.
+The reactive workflow engine is fully tested, production-ready, and actively being used for migrations. For migration support:
+
+1. **Review the examples**: Check `/processor/reactive/examples/` for reference implementations
+2. **Use test utilities**: Leverage `/processor/reactive/testutil/` for workflow testing
+3. **Follow validation patterns**: Ensure output declarations match component capabilities
+4. **Test incrementally**: Migrate one workflow at a time with comprehensive testing
+
+The engine has been validated through multiple feedback cycles (ADR-020) and includes robust error handling, template interpolation, and state management capabilities.

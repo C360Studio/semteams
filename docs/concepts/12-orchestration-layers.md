@@ -4,6 +4,11 @@ SemStreams uses a three-layer orchestration model that separates concerns betwee
 multi-step workflows, and component execution. Understanding these layers and their boundaries is
 essential for building maintainable, scalable systems.
 
+> **Note**: As of ADR-021, workflows are defined in type-safe Go code using the reactive workflow
+> engine, replacing the previous JSON-based workflow processor. The core orchestration concepts
+> remain the same, but workflows now benefit from compile-time verification, direct struct field
+> access, and standard Go debugging tools.
+
 ## The Three Layers
 
 ```text
@@ -17,11 +22,12 @@ essential for building maintainable, scalable systems.
                             │
                             ▼ triggers
 ┌─────────────────────────────────────────────────────────────┐
-│  WORKFLOW PROCESSOR (multi-step orchestration)              │
+│  REACTIVE WORKFLOW ENGINE (multi-step orchestration)        │
 │  "Execute steps A → B → C with timeouts and loop limits"    │
 │  - Owns workflow state (current step, iteration count)      │
 │  - Enforces timeouts, loop limits                           │
 │  - Spawns work via component subjects                       │
+│  - Type-safe Go definitions replace JSON workflows          │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼ spawns
@@ -92,8 +98,21 @@ This is appropriate because:
 
 ## Workflow Layer
 
-The workflow processor handles multi-step orchestration that requires state tracking, loop limits,
+The reactive workflow engine handles multi-step orchestration that requires state tracking, loop limits,
 and timeouts. It fills the gap between reactive rules and external orchestration systems like Temporal.
+
+### Go-Based Type-Safe Workflows
+
+Workflows are defined in type-safe Go code rather than JSON. This provides:
+
+- **Compile-time safety**: Field references and type mismatches are caught by the compiler
+- **IDE support**: Autocomplete, refactoring, and go-to-definition work naturally
+- **Zero `json.RawMessage`**: Direct struct field access replaces string interpolation
+- **Debuggability**: Standard Go debugging tools and stack traces
+- **2 serialization boundaries**: vs. 9+ in the previous JSON-based approach
+
+The reactive engine uses typed Go functions for conditions, payload building, and state mutations,
+eliminating the data corruption issues that plagued string-based template interpolation.
 
 ### What Workflows Do Well
 
@@ -109,51 +128,125 @@ and timeouts. It fills the gap between reactive rules and external orchestration
 - **Complex conditionals**: Use rules for condition evaluation, workflows for sequencing
 - **Human tasks**: Not a BPM engine; use external systems for human-in-the-loop
 
+### Workflow Definition Pattern
+
+Workflows are composed of typed rules that watch KV state and fire actions. Each rule:
+
+1. **Watches** a KV bucket pattern (e.g., `"review-fix.*"`)
+2. **Evaluates** conditions against typed state (e.g., `state.Phase == "reviewing"`)
+3. **Fires** an action when conditions match (e.g., publish async task)
+4. **Mutates** state when the action completes (e.g., update phase, increment iteration)
+
+The engine coordinates these rules through shared KV state, providing:
+
+- Automatic state persistence and recovery
+- Loop iteration tracking
+- Timeout enforcement
+- Concurrent execution safety with optimistic locking
+
 ### Example: Review-Fix Cycle with Loop Limit
 
 A workflow is required when there's iteration with a termination condition:
 
-```json
-{
-  "id": "review_fix_cycle",
-  "description": "Review code, fix issues, re-review until clean or max attempts",
-  "max_iterations": 3,
-  "timeout": "300s",
-  "steps": [
-    {
-      "id": "review",
-      "action": {
-        "type": "publish_agent",
-        "subject": "agent.task.$workflow.id.reviewer",
-        "role": "reviewer",
-        "prompt": "Review the code for issues"
-      },
-      "on_complete": {
-        "condition": {"field": "issues_found", "operator": "eq", "value": 0},
-        "then": "complete",
-        "else": "fix"
-      }
-    },
-    {
-      "id": "fix",
-      "action": {
-        "type": "publish_agent",
-        "subject": "agent.task.$workflow.id.fixer",
-        "role": "fixer",
-        "prompt": "Fix the issues:\n\n$steps.review.result"
-      },
-      "on_complete": "review"
-    }
-  ]
+```go
+func ReviewFixCycleWorkflow() *reactive.Definition {
+    const maxIterations = 3
+
+    return reactive.NewWorkflow("review-fix-cycle").
+        WithDescription("Review code, fix issues, re-review until clean or max attempts").
+        WithStateBucket("REVIEW_FIX_STATE").
+        WithStateFactory(func() any { return &ReviewFixState{} }).
+        WithMaxIterations(maxIterations).
+        WithTimeout(300 * time.Second).
+
+        // Rule 1: Request review
+        AddRule(reactive.NewRule("request-review").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is reviewing", reactive.PhaseIs("reviewing")).
+            When("under max iterations", reactive.IterationLessThan(maxIterations)).
+            When("no pending task", reactive.NoPendingTask()).
+            PublishAsync(
+                "agent.task.reviewer",
+                func(ctx *reactive.RuleContext) (message.Payload, error) {
+                    state := ctx.State.(*ReviewFixState)
+                    return &ReviewRequest{
+                        CodeID: state.CodeID,
+                        Prompt: "Review the code for issues",
+                    }, nil
+                },
+                "review.result.v1",
+                func(ctx *reactive.RuleContext, result any) error {
+                    state := ctx.State.(*ReviewFixState)
+                    reviewResult := result.(*ReviewResult)
+                    state.IssuesFound = reviewResult.IssuesCount
+                    state.ReviewFeedback = reviewResult.Feedback
+                    if reviewResult.IssuesCount == 0 {
+                        state.Phase = "completed"
+                        state.Status = reactive.StatusCompleted
+                    } else {
+                        state.Phase = "fixing"
+                    }
+                    return nil
+                },
+            ).
+            MustBuild()).
+
+        // Rule 2: Fix issues if found
+        AddRule(reactive.NewRule("fix-issues").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is fixing", reactive.PhaseIs("fixing")).
+            When("no pending task", reactive.NoPendingTask()).
+            PublishAsync(
+                "agent.task.fixer",
+                func(ctx *reactive.RuleContext) (message.Payload, error) {
+                    state := ctx.State.(*ReviewFixState)
+                    return &FixRequest{
+                        CodeID:   state.CodeID,
+                        Feedback: state.ReviewFeedback,
+                        Prompt:   "Fix the issues:\n\n" + state.ReviewFeedback,
+                    }, nil
+                },
+                "fix.result.v1",
+                func(ctx *reactive.RuleContext, result any) error {
+                    state := ctx.State.(*ReviewFixState)
+                    state.Phase = "reviewing"
+                    state.Iteration++
+                    return nil
+                },
+            ).
+            MustBuild()).
+
+        // Rule 3: Handle max iterations exceeded
+        AddRule(reactive.NewRule("max-iterations-exceeded").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is reviewing", reactive.PhaseIs("reviewing")).
+            When("at max iterations", reactive.Not(reactive.IterationLessThan(maxIterations))).
+            Mutate(func(ctx *reactive.RuleContext, _ any) error {
+                state := ctx.State.(*ReviewFixState)
+                state.Status = reactive.StatusEscalated
+                state.Error = "max review iterations exceeded"
+                return nil
+            }).
+            MustBuild()).
+
+        MustBuild()
+}
+
+// ReviewFixState tracks review-fix cycle execution
+type ReviewFixState struct {
+    reactive.ExecutionState
+    CodeID         string `json:"code_id"`
+    IssuesFound    int    `json:"issues_found"`
+    ReviewFeedback string `json:"review_feedback"`
 }
 ```
 
 This requires a workflow because:
-- Multiple steps with ordering
+- Multiple steps with ordering (review → fix → review)
 - Loop that can repeat (fix → review → fix → review)
-- Loop limit (max 3 iterations)
+- Loop limit (max 3 iterations with type-safe iteration tracking)
 - Workflow timeout (300 seconds total)
-- State tracking (which step, iteration count)
+- State tracking (which phase, iteration count, issues found)
 
 ## Component Layer
 
@@ -253,7 +346,7 @@ A semspec workflow involves multiple agent passes with iteration limits:
 ```
 
 **Layer mapping**:
-- **Workflow**: Owns the multi-step process, loop limits, overall timeout
+- **Reactive Workflow**: Owns the multi-step process, loop limits, overall timeout (Go definition)
 - **Rules**: Can trigger the workflow when semspec is approved
 - **Components**: agentic-loop executes each agent role
 
@@ -286,7 +379,7 @@ Ingest data, validate, retry if malformed, fail after 3 attempts:
 ```
 
 **Layer mapping**:
-- **Workflow**: Owns validation loop, attempt counter, timeout
+- **Reactive Workflow**: Owns validation loop, attempt counter, timeout (Go definition)
 - **Rules**: Can trigger workflow on new data arrival
 - **Components**: validator component, storage component
 
@@ -387,6 +480,9 @@ executionsBucket.Put(ctx, "COMPLETE_exec123", completionData)
 ## References
 
 - [ADR-010: Rules Processor Completion](../architecture/adr-010-rules-processor-completion.md) — Rules engine design
-- [ADR-011: Workflow Processor](../architecture/adr-011-workflow-processor.md) — Workflow processor design
+- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) — Type-safe Go workflow engine (current implementation)
+- [ADR-011: Workflow Processor](../architecture/adr-011-workflow-processor.md) — Original JSON-based workflow processor (superseded)
 - [ADR-018: Agentic Workflow Orchestration](../architecture/adr-018-agentic-workflow-orchestration.md) — Agent-specific orchestration
+- [Advanced Guide: Reactive Workflows](../advanced/10-reactive-workflows.md) — Usage guide and examples
+- [Reactive Workflow Migration](../architecture/specs/reactive-workflow-migration.md) — Migration from JSON to Go workflows
 - [Concept: Agentic Systems](./11-agentic-systems.md) — Agentic loop fundamentals
