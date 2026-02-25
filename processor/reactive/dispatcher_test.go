@@ -239,7 +239,7 @@ func TestDispatcher_DispatchPublish(t *testing.T) {
 		Action: Action{
 			Type:           ActionPublish,
 			PublishSubject: "test.output",
-			BuildPayload: func(ctx *RuleContext) (message.Payload, error) {
+			BuildPayload: func(_ *RuleContext) (message.Payload, error) {
 				return &TestPayload{
 					Content: "test-content",
 				}, nil
@@ -294,10 +294,10 @@ func TestDispatcher_DispatchPublish_WithMutation(t *testing.T) {
 		Action: Action{
 			Type:           ActionPublish,
 			PublishSubject: "test.output",
-			BuildPayload: func(ctx *RuleContext) (message.Payload, error) {
+			BuildPayload: func(_ *RuleContext) (message.Payload, error) {
 				return &TestPayload{Content: "content"}, nil
 			},
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(ctx *RuleContext, _ any) error {
 				state := ctx.State.(*TestDispatcherState)
 				state.Phase = "published"
 				return nil
@@ -352,7 +352,7 @@ func TestDispatcher_DispatchPublishAsync(t *testing.T) {
 			Type:               ActionPublishAsync,
 			PublishSubject:     "test.async.input",
 			ExpectedResultType: "test.result.v1",
-			BuildPayload: func(ctx *RuleContext) (message.Payload, error) {
+			BuildPayload: func(_ *RuleContext) (message.Payload, error) {
 				return &TestPayload{
 					Content: "async-task",
 				}, nil
@@ -418,7 +418,7 @@ func TestDispatcher_DispatchMutate(t *testing.T) {
 		ID: "mutate-rule",
 		Action: Action{
 			Type: ActionMutate,
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(ctx *RuleContext, _ any) error {
 				state := ctx.State.(*TestDispatcherState)
 				state.Phase = "mutated"
 				state.CustomField = "updated"
@@ -529,7 +529,7 @@ func TestDispatcher_HandleCallback(t *testing.T) {
 		Action: Action{
 			Type:               ActionPublishAsync,
 			ExpectedResultType: "test.result.v1",
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(ctx *RuleContext, _ any) error {
 				state := ctx.State.(*TestDispatcherState)
 				state.Phase = "callback-processed"
 				state.CustomField = "callback-value"
@@ -665,7 +665,7 @@ func TestDispatcher_NoPublisher(t *testing.T) {
 		Action: Action{
 			Type:           ActionPublish,
 			PublishSubject: "test.output",
-			BuildPayload: func(ctx *RuleContext) (message.Payload, error) {
+			BuildPayload: func(_ *RuleContext) (message.Payload, error) {
 				return &TestPayload{Content: "content"}, nil
 			},
 		},
@@ -699,7 +699,7 @@ func TestDispatcher_NoStateStore(t *testing.T) {
 		ID: "mutate-rule",
 		Action: Action{
 			Type: ActionMutate,
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(_ *RuleContext, _ any) error {
 				return nil
 			},
 		},
@@ -734,7 +734,7 @@ func TestDispatcher_BuildPayloadError(t *testing.T) {
 		Action: Action{
 			Type:           ActionPublish,
 			PublishSubject: "test.output",
-			BuildPayload: func(ctx *RuleContext) (message.Payload, error) {
+			BuildPayload: func(_ *RuleContext) (message.Payload, error) {
 				return nil, errors.New("payload build failed")
 			},
 		},
@@ -769,7 +769,7 @@ func TestDispatcher_PublishError(t *testing.T) {
 		Action: Action{
 			Type:           ActionPublish,
 			PublishSubject: "test.output",
-			BuildPayload: func(ctx *RuleContext) (message.Payload, error) {
+			BuildPayload: func(_ *RuleContext) (message.Payload, error) {
 				return &TestPayload{Content: "content"}, nil
 			},
 		},
@@ -807,7 +807,7 @@ func TestDispatcher_OptimisticConcurrencyFailure(t *testing.T) {
 		ID: "mutate-rule",
 		Action: Action{
 			Type: ActionMutate,
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(_ *RuleContext, _ any) error {
 				return nil
 			},
 		},
@@ -842,7 +842,7 @@ func TestDispatcher_StateMutationError(t *testing.T) {
 		ID: "mutate-rule",
 		Action: Action{
 			Type: ActionMutate,
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(_ *RuleContext, _ any) error {
 				return errors.New("mutation failed")
 			},
 		},
@@ -876,7 +876,7 @@ func TestDispatcher_WithKVWatcher(t *testing.T) {
 		ID: "mutate-rule",
 		Action: Action{
 			Type: ActionMutate,
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(_ *RuleContext, _ any) error {
 				return nil
 			},
 		},
@@ -912,7 +912,7 @@ func TestDispatcher_NoStateForMutate(t *testing.T) {
 		ID: "mutate-rule",
 		Action: Action{
 			Type: ActionMutate,
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(_ *RuleContext, _ any) error {
 				return nil
 			},
 		},
@@ -1032,7 +1032,7 @@ func TestDispatcher_PartialFailure_AsyncPublish(t *testing.T) {
 			Type:               ActionPublishAsync,
 			PublishSubject:     "test.async.input",
 			ExpectedResultType: "test.result.v1",
-			BuildPayload: func(ctx *RuleContext) (message.Payload, error) {
+			BuildPayload: func(_ *RuleContext) (message.Payload, error) {
 				return &TestPayload{Content: "async-task"}, nil
 			},
 		},
@@ -1112,7 +1112,7 @@ func TestDispatcher_HandleCallback_PartialSuccess(t *testing.T) {
 		Action: Action{
 			Type:               ActionPublishAsync,
 			ExpectedResultType: "test.result.v1",
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(_ *RuleContext, _ any) error {
 				return errors.New("mutation failed")
 			},
 		},

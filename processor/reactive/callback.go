@@ -309,10 +309,11 @@ func (h *CallbackHandler) handleCallbackMessage(
 }
 
 // handleFailedCallback processes a callback that indicates the async operation failed.
+// Note: rule is reserved for future rule-specific error handling.
 func (h *CallbackHandler) handleFailedCallback(
 	ctx context.Context,
 	ruleCtx *RuleContext,
-	rule *RuleDef,
+	_ *RuleDef,
 	def *Definition,
 	asyncResult *AsyncStepResult,
 	msg jetstream.Msg,

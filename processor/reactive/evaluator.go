@@ -404,7 +404,8 @@ func GetExecutionState(state any) *ExecutionState {
 
 // getExecutionStateViaReflection uses reflection to find embedded ExecutionState.
 // This is a fallback for structs that embed ExecutionState without implementing the interface.
-func getExecutionStateViaReflection(state any) *ExecutionState {
+// Note: Currently returns nil; requires explicit interface implementation.
+func getExecutionStateViaReflection(_ any) *ExecutionState {
 	// Import reflect only when needed
 	// For now, we'll require explicit interface implementation
 	// This can be enhanced later if needed

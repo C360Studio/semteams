@@ -179,7 +179,7 @@ func TestRuleBuilder_OnSubject(t *testing.T) {
 	rule, err := NewRule("subject-rule").
 		OnSubject("test.events.>", func() any { return &BuilderTestPayload{} }).
 		When("has message", HasMessage()).
-		Publish("test.output", func(ctx *RuleContext) (message.Payload, error) {
+		Publish("test.output", func(_ *RuleContext) (message.Payload, error) {
 			return &BuilderTestPayload{Value: "output"}, nil
 		}).
 		Build()
@@ -221,7 +221,7 @@ func TestRuleBuilder_OnJetStreamSubject(t *testing.T) {
 func TestRuleBuilder_CombinedTrigger(t *testing.T) {
 	rule, err := NewRule("combined-rule").
 		OnSubject("callback.>", func() any { return &BuilderTestPayload{} }).
-		WithStateLookup("STATE_BUCKET", func(msg any) string {
+		WithStateLookup("STATE_BUCKET", func(_ any) string {
 			return "state-key"
 		}).
 		When("has both", And(HasState(), HasMessage())).
@@ -253,7 +253,7 @@ func TestRuleBuilder_PublishAsync(t *testing.T) {
 				return &BuilderTestPayload{Value: "task"}, nil
 			},
 			"test.result.v1",
-			func(ctx *RuleContext, result any) error {
+			func(_ *RuleContext, _ any) error {
 				// Apply result
 				return nil
 			},

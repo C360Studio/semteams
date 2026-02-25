@@ -941,7 +941,7 @@ func TestWatchExecutions(t *testing.T) {
 		var received []*ExecutionEntry
 		var mu sync.Mutex
 
-		err := store.WatchExecutions(ctx, func(_ context.Context, entry *ExecutionEntry, op KVOperation) {
+		err := store.WatchExecutions(ctx, func(_ context.Context, entry *ExecutionEntry, _ KVOperation) {
 			mu.Lock()
 			received = append(received, entry)
 			mu.Unlock()
@@ -1061,7 +1061,7 @@ func TestStoreBuildKey(t *testing.T) {
 }
 
 func TestStoreConcurrentAccess(t *testing.T) {
-	t.Run("concurrent task index operations", func(t *testing.T) {
+	t.Run("concurrent task index operations", func(_ *testing.T) {
 		bucket := newStoreKVBucket()
 		store := NewExecutionStore(nil, bucket)
 

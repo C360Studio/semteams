@@ -87,7 +87,7 @@ func TestTriggerSourceMode(t *testing.T) {
 				StreamName:     "WORKFLOW",
 				MessageFactory: func() any { return &struct{}{} },
 				StateBucket:    "EXECUTIONS",
-				StateKeyFunc:   func(msg any) string { return "key" },
+				StateKeyFunc:   func(_ any) string { return "key" },
 			},
 			expected: TriggerMessageAndState,
 		},
@@ -169,7 +169,7 @@ func TestTriggerSourceValidate(t *testing.T) {
 				StreamName:     "WORKFLOW",
 				MessageFactory: func() any { return &struct{}{} },
 				StateBucket:    "EXECUTIONS",
-				StateKeyFunc:   func(msg any) string { return "key" },
+				StateKeyFunc:   func(_ any) string { return "key" },
 			},
 			expectError: false,
 		},
@@ -212,8 +212,8 @@ func TestActionTypeString(t *testing.T) {
 
 // TestActionValidate tests Action.Validate().
 func TestActionValidate(t *testing.T) {
-	dummyPayloadBuilder := func(ctx *RuleContext) (message.Payload, error) { return nil, nil }
-	dummyMutator := func(ctx *RuleContext, result any) error { return nil }
+	dummyPayloadBuilder := func(_ *RuleContext) (message.Payload, error) { return nil, nil }
+	dummyMutator := func(_ *RuleContext, _ any) error { return nil }
 
 	tests := []struct {
 		name        string
@@ -344,7 +344,7 @@ func TestRuleDefValidate(t *testing.T) {
 	}
 	validAction := Action{
 		Type:        ActionMutate,
-		MutateState: func(ctx *RuleContext, result any) error { return nil },
+		MutateState: func(_ *RuleContext, _ any) error { return nil },
 	}
 
 	tests := []struct {
@@ -447,7 +447,7 @@ func TestDefinitionValidate(t *testing.T) {
 		},
 		Action: Action{
 			Type:        ActionMutate,
-			MutateState: func(ctx *RuleContext, result any) error { return nil },
+			MutateState: func(_ *RuleContext, _ any) error { return nil },
 		},
 	}
 

@@ -166,7 +166,8 @@ func (r *WorkflowRegistry) GetResultTypeFactory(typeKey string) func() message.P
 
 // GetRulesForTrigger returns all rules across all workflows that match the given trigger.
 // This is used for routing incoming events to the appropriate rules.
-func (r *WorkflowRegistry) GetRulesForTrigger(triggerMode TriggerMode, bucket, keyPattern string) []*RuleWithWorkflow {
+// Note: keyPattern is reserved for future pattern-based filtering.
+func (r *WorkflowRegistry) GetRulesForTrigger(triggerMode TriggerMode, bucket, _ string) []*RuleWithWorkflow {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 

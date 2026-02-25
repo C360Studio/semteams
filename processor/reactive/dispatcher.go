@@ -423,10 +423,11 @@ func (d *Dispatcher) dispatchComplete(
 }
 
 // writeState serializes and writes the state to KV with optimistic concurrency.
+// Note: def is reserved for future workflow-specific write options.
 func (d *Dispatcher) writeState(
 	ctx context.Context,
 	ruleCtx *RuleContext,
-	def *Definition,
+	_ *Definition,
 ) (uint64, error) {
 	if d.store == nil {
 		return 0, &DispatchError{

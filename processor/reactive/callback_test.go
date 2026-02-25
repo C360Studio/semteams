@@ -76,7 +76,7 @@ func (m *mockJetStreamMsg) Ack() error {
 	return nil
 }
 
-func (m *mockJetStreamMsg) DoubleAck(ctx context.Context) error {
+func (m *mockJetStreamMsg) DoubleAck(_ context.Context) error {
 	return m.Ack()
 }
 
@@ -87,7 +87,7 @@ func (m *mockJetStreamMsg) Nak() error {
 	return nil
 }
 
-func (m *mockJetStreamMsg) NakWithDelay(delay time.Duration) error {
+func (m *mockJetStreamMsg) NakWithDelay(_ time.Duration) error {
 	return m.Nak()
 }
 
@@ -102,7 +102,7 @@ func (m *mockJetStreamMsg) Term() error {
 	return nil
 }
 
-func (m *mockJetStreamMsg) TermWithReason(reason string) error {
+func (m *mockJetStreamMsg) TermWithReason(_ string) error {
 	return m.Term()
 }
 
@@ -336,7 +336,7 @@ func TestCallbackHandler_HandleCallbackMessage_Success(t *testing.T) {
 		Action: Action{
 			Type:               ActionPublishAsync,
 			ExpectedResultType: "test.callback.v1",
-			MutateState: func(ctx *RuleContext, result any) error {
+			MutateState: func(ctx *RuleContext, _ any) error {
 				s := ctx.State.(*TestDispatcherState)
 				s.Phase = "callback-received"
 				s.CustomField = "updated-by-callback"
@@ -502,7 +502,7 @@ func TestCallbackHandler_HandleCallbackMessage_FailedCallback(t *testing.T) {
 	assert.Equal(t, "external service error", storedState.Error)
 }
 
-func TestCallbackHandler_Stop(t *testing.T) {
+func TestCallbackHandler_Stop(_ *testing.T) {
 	handler, _, _ := newTestCallbackHandler()
 
 	// Register some tasks
@@ -690,7 +690,7 @@ func TestAsyncStepResult_JSONRoundTrip(t *testing.T) {
 	assert.JSONEq(t, `{"key": "value"}`, string(decoded.Output))
 }
 
-func TestCallbackHandler_ConcurrentTaskOperations(t *testing.T) {
+func TestCallbackHandler_ConcurrentTaskOperations(_ *testing.T) {
 	handler, _, _ := newTestCallbackHandler()
 	defer handler.Stop()
 
