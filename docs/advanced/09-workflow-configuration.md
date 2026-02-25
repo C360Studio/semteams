@@ -1,926 +1,808 @@
-# Workflow Configuration Reference
+# Reactive Workflow Configuration Reference
 
-> **DEPRECATED**: This document describes the legacy JSON-based workflow processor.
-> For new workflows, use the **Reactive Workflow Engine** documented in:
->
-> - [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md)
-> - [Reactive Workflows Guide](./10-reactive-workflows.md)
->
-> The JSON workflow processor will be removed in a future release. See the
-> [Migration to Reactive Workflows](#migration-to-reactive-workflows) section below for upgrade guidance.
+Complete reference for configuring and building reactive workflows in SemStreams. The reactive workflow
+engine replaces JSON-based DAG workflows with Go code that provides compile-time type safety, direct field
+access, and standard Go tooling.
 
-Complete reference for workflow processor configuration and definition schemas.
+## Overview
 
-**Note**: This document describes the unified dataflow pattern from [ADR-020](../architecture/adr-020-unified-dataflow-patterns.md). Workflows use explicit `inputs` and `outputs` declarations instead of string interpolation with `payload_mapping`.
+Reactive workflows are defined in Go code using the builder pattern. Workflows react to state changes in
+NATS KV buckets and messages on JetStream subjects. Rules fire when conditions are met, executing actions
+that publish messages, mutate state, or complete execution.
 
-## Processor Configuration
+**Key Benefits:**
 
-### Component Config
+- **Compile-time validation**: Typos and type mismatches caught by the Go compiler
+- **Type-safe field access**: `state.Verdict` instead of `"${steps.review.verdict}"`
+- **Go debugging**: Full debugger support with breakpoints and stack traces
+- **Minimal serialization**: 2 boundaries instead of 9+, zero `json.RawMessage` needed
 
-```json
-{
-  "type": "processor",
-  "name": "workflow-processor",
-  "config": {
-    "definitions_bucket": "WORKFLOW_DEFINITIONS",
-    "executions_bucket": "WORKFLOW_EXECUTIONS",
-    "timers_bucket": "WORKFLOW_TIMERS",
-    "secrets_bucket": "WORKFLOW_SECRETS",
-    "idempotency_bucket": "WORKFLOW_IDEMPOTENCY",
+## Engine Configuration
 
-    "trigger_subject_prefix": "workflow.trigger",
-    "timer_subject": "workflow.timer.fire",
-    "events_subject": "workflow.events",
+### Config Structure
 
-    "default_step_timeout": "30s",
-    "default_workflow_timeout": "1h",
-    "max_concurrent_executions": 100,
+```go
+type Config struct {
+    // StateBucket is the KV bucket for workflow execution state
+    StateBucket string
 
-    "idempotency": {
-      "enabled": true,
-      "window": "1h"
+    // CallbackStreamName is the JetStream stream for callback messages
+    CallbackStreamName string
+
+    // EventStreamName is the JetStream stream for workflow events
+    EventStreamName string
+
+    // DefaultTimeout is the default timeout for workflows
+    DefaultTimeout string  // e.g., "10m"
+
+    // DefaultMaxIterations is the default max iterations for loop workflows
+    DefaultMaxIterations int
+
+    // CleanupRetention is how long to retain completed executions
+    CleanupRetention string  // e.g., "24h"
+
+    // CleanupInterval is how often to run cleanup
+    CleanupInterval string  // e.g., "1h"
+
+    // TaskTimeoutDefault is the default timeout for async tasks
+    TaskTimeoutDefault string  // e.g., "5m"
+
+    // ConsumerNamePrefix is prepended to consumer names
+    ConsumerNamePrefix string
+
+    // EnableMetrics enables Prometheus metrics
+    EnableMetrics bool
+}
+```
+
+### Default Configuration
+
+```go
+config := reactive.DefaultConfig()
+// Returns:
+// {
+//     StateBucket:          "REACTIVE_WORKFLOW_STATE",
+//     CallbackStreamName:   "WORKFLOW_CALLBACKS",
+//     EventStreamName:      "WORKFLOW_EVENTS",
+//     DefaultTimeout:       "10m",
+//     DefaultMaxIterations: 10,
+//     CleanupRetention:     "24h",
+//     CleanupInterval:      "1h",
+//     TaskTimeoutDefault:   "5m",
+//     EnableMetrics:        true,
+// }
+```
+
+### Creating the Engine
+
+```go
+import (
+    "github.com/c360studio/semstreams/processor/reactive"
+    "github.com/c360studio/semstreams/natsclient"
+)
+
+// Create engine with default config
+engine := reactive.NewEngine(
+    reactive.DefaultConfig(),
+    natsClient,
+    reactive.WithEngineLogger(logger),
+    reactive.WithEngineMetrics(metrics),
+)
+
+// Initialize the engine (creates KV buckets)
+if err := engine.Initialize(ctx); err != nil {
+    return err
+}
+
+// Register workflows
+if err := engine.RegisterWorkflow(myWorkflow); err != nil {
+    return err
+}
+
+// Start the engine (begins consuming messages and watching KV)
+if err := engine.Start(ctx); err != nil {
+    return err
+}
+
+// Later: stop the engine
+engine.Stop()
+```
+
+## Workflow Definition
+
+Workflows are built using the fluent builder API. Each workflow defines its ID, state type, rules, and
+lifecycle configuration.
+
+### Builder Pattern
+
+```go
+func ReviewFixCycleWorkflow() *reactive.Definition {
+    return reactive.NewWorkflow("review-fix-cycle").
+        WithDescription("Review and fix code until approved").
+        WithStateBucket("REVIEW_FIX_STATE").
+        WithStateFactory(func() any { return &ReviewFixState{} }).
+        WithMaxIterations(3).
+        WithTimeout(30 * time.Minute).
+        WithOnComplete("events.workflow.completed").
+        WithOnFail("events.workflow.failed").
+        WithOnEscalate("events.workflow.escalated").
+        AddRule(requestReviewRule()).
+        AddRule(applyFixesRule()).
+        AddRule(completeApprovedRule()).
+        MustBuild()
+}
+```
+
+### Workflow Fields
+
+| Method | Parameter | Description |
+|--------|-----------|-------------|
+| `NewWorkflow` | `id string` | Unique workflow identifier (required) |
+| `WithDescription` | `desc string` | Human-readable description |
+| `WithStateBucket` | `bucket string` | KV bucket for execution state (required) |
+| `WithStateFactory` | `func() any` | Factory for state instances (required) |
+| `WithMaxIterations` | `n int` | Maximum loop iterations (0 = unlimited) |
+| `WithTimeout` | `duration` | Maximum execution duration |
+| `WithOnComplete` | `subject string` | Subject to publish on completion |
+| `WithOnFail` | `subject string` | Subject to publish on failure |
+| `WithOnEscalate` | `subject string` | Subject to publish on escalation |
+| `AddRule` | `RuleDef` | Add a rule to the workflow |
+
+### State Types
+
+Each workflow defines its own state type that embeds `ExecutionState`:
+
+```go
+type ReviewFixState struct {
+    reactive.ExecutionState
+    Code    string        `json:"code"`
+    Verdict string        `json:"verdict"`
+    Issues  []Issue       `json:"issues"`
+}
+
+// StateFactory returns a zero-value instance
+func() any { return &ReviewFixState{} }
+```
+
+**ExecutionState Fields:**
+
+```go
+type ExecutionState struct {
+    ID              string            // Unique execution identifier
+    WorkflowID      string            // References workflow definition
+    Phase           string            // Current execution phase
+    Iteration       int               // Loop/retry counter
+    Status          ExecutionStatus   // Overall status
+    Error           string            // Last error message
+    PendingTaskID   string            // Set when waiting for callback
+    PendingRuleID   string            // Rule awaiting callback
+    CreatedAt       time.Time         // Execution start time
+    UpdatedAt       time.Time         // Last state update
+    CompletedAt     *time.Time        // Completion time
+    Deadline        *time.Time        // Timeout deadline
+    Timeline        []TimelineEntry   // Rule firing history
+}
+```
+
+**Execution Statuses:**
+
+- `StatusPending`: Created but not started
+- `StatusRunning`: Actively processing rules
+- `StatusWaiting`: Waiting for async callback
+- `StatusCompleted`: Finished successfully
+- `StatusFailed`: Failed with error
+- `StatusEscalated`: Escalated (e.g., max iterations exceeded)
+- `StatusTimedOut`: Exceeded timeout
+
+## Rule Definition
+
+Rules define reactive behavior: triggers, conditions, and actions. Built using the rule builder pattern.
+
+### Builder Pattern
+
+```go
+func requestReviewRule() reactive.RuleDef {
+    return reactive.NewRule("request-review").
+        WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+        When("phase is reviewing", reactive.PhaseIs("reviewing")).
+        When("no pending task", reactive.NoPendingTask()).
+        PublishAsync(
+            "reviewer.analyze",
+            buildReviewRequest,
+            "reviewer.verdict.v1",
+            applyReviewResult,
+        ).
+        WithCooldown(5 * time.Second).
+        WithMaxFirings(3).
+        MustBuild()
+}
+```
+
+### Rule Fields
+
+| Method | Parameters | Description |
+|--------|------------|-------------|
+| `NewRule` | `id string` | Unique rule identifier (required) |
+| `WatchKV` | `bucket, pattern` | Trigger on KV state changes |
+| `OnSubject` | `subject, factory` | Trigger on NATS messages (Core NATS) |
+| `OnJetStreamSubject` | `stream, subject, factory` | Trigger on JetStream messages |
+| `WithStateLookup` | `bucket, keyFunc` | Load state for message-triggered rules |
+| `When` | `description, condition` | Add condition (all must be true) |
+| `WhenAll` | | Use AND logic (default) |
+| `WhenAny` | | Use OR logic |
+| `WithCooldown` | `duration` | Prevent rapid re-firing |
+| `WithMaxFirings` | `n int` | Limit firings per execution |
+
+## Triggers
+
+Rules can be triggered by KV state changes, JetStream messages, or both.
+
+### KV Watch Trigger
+
+Triggers when a KV bucket key changes that matches the pattern:
+
+```go
+reactive.NewRule("check-temperature").
+    WatchKV("ENTITY_STATES", "c360.sensors.>").
+    When("temp >= 40F", func(ctx *reactive.RuleContext) bool {
+        entity, ok := ctx.State.(*graph.EntityState)
+        if !ok {
+            return false
+        }
+        temp, found := entity.GetPropertyValue("sensor.measurement.fahrenheit")
+        if !found {
+            return false
+        }
+        return temp.(float64) >= 40.0
+    }).
+    Publish("alerts.temperature", buildAlert).
+    MustBuild()
+```
+
+**Pattern Syntax:**
+
+- `foo.bar` - Exact match
+- `foo.*` - Single-level wildcard
+- `foo.>` - Multi-level wildcard
+- `c360.sensors.>` - All sensor keys under `c360.sensors.`
+
+### JetStream Subject Trigger
+
+Triggers when a message arrives on a JetStream subject:
+
+```go
+reactive.NewRule("handle-callback").
+    OnJetStreamSubject(
+        "WORKFLOW_CALLBACKS",
+        "workflow.callback.review.>",
+        func() any { return &ReviewResult{} },
+    ).
+    When("task_id matches", func(ctx *reactive.RuleContext) bool {
+        result := ctx.Message.(*ReviewResult)
+        state := ctx.State.(*ReviewState)
+        return result.TaskID == state.PendingTaskID
+    }).
+    PublishWithMutation("processor.apply", buildApplyRequest, updateState).
+    MustBuild()
+```
+
+**Message Factory:**
+
+The message factory creates a zero-value instance for deserialization:
+
+```go
+func() any { return &ReviewResult{} }
+```
+
+The engine uses the payload registry to deserialize `BaseMessage` wrappers into typed payloads.
+
+### Combined Trigger (Message + State)
+
+Triggers on message arrival but loads state for condition evaluation:
+
+```go
+reactive.NewRule("correlate-event").
+    OnJetStreamSubject(
+        "EVENTS",
+        "sensor.reading.*",
+        func() any { return &SensorReading{} },
+    ).
+    WithStateLookup(
+        "ENTITY_STATES",
+        func(msg any) string {
+            reading := msg.(*SensorReading)
+            return "sensor." + reading.SensorID
+        },
+    ).
+    When("reading exceeds threshold", func(ctx *reactive.RuleContext) bool {
+        reading := ctx.Message.(*SensorReading)
+        entity := ctx.State.(*graph.EntityState)
+        threshold, _ := entity.GetPropertyValue("threshold.max")
+        return reading.Value > threshold.(float64)
+    }).
+    Publish("alerts.threshold", buildThresholdAlert).
+    MustBuild()
+```
+
+This enables "event + state" patterns where the message is the trigger but conditions evaluate both
+message and accumulated state.
+
+## Conditions
+
+Conditions are type-safe Go functions that evaluate `RuleContext`. All conditions must be true for the rule
+to fire (AND logic by default).
+
+### Condition Function
+
+```go
+type ConditionFunc func(ctx *RuleContext) bool
+
+type RuleContext struct {
+    State      any     // Typed execution state (or nil)
+    Message    any     // Typed triggering message (or nil)
+    KVRevision uint64  // KV revision for optimistic concurrency
+    Subject    string  // NATS subject (for message triggers)
+    KVKey      string  // KV key (for KV triggers)
+}
+```
+
+### Common Conditions
+
+```go
+// Phase check
+When("phase is reviewing", func(ctx *reactive.RuleContext) bool {
+    state := ctx.State.(*ReviewFixState)
+    return state.Phase == "reviewing"
+})
+
+// Field comparison
+When("verdict is approved", func(ctx *reactive.RuleContext) bool {
+    state := ctx.State.(*ReviewFixState)
+    return state.Verdict == "approved"
+})
+
+// No pending async task
+When("no pending task", func(ctx *reactive.RuleContext) bool {
+    es := reactive.ExtractExecutionState(ctx.State)
+    return es == nil || es.PendingTaskID == ""
+})
+
+// Iteration limit
+When("under max iterations", func(ctx *reactive.RuleContext) bool {
+    es := reactive.ExtractExecutionState(ctx.State)
+    return es != nil && es.Iteration < 3
+})
+
+// Message field check
+When("task_id matches", func(ctx *reactive.RuleContext) bool {
+    result := ctx.Message.(*ReviewResult)
+    state := ctx.State.(*ReviewState)
+    return result.TaskID == state.PendingTaskID
+})
+```
+
+### Condition Logic
+
+By default, all conditions must be true (AND logic):
+
+```go
+WhenAll()  // Default, explicit
+```
+
+Use OR logic to fire when any condition is true:
+
+```go
+WhenAny()
+```
+
+## Actions
+
+Actions define what happens when a rule fires. The reactive engine supports four action types.
+
+### Publish (Fire-and-Forget)
+
+Publishes a message to NATS and immediately continues. No callback expected.
+
+```go
+Publish("alerts.temperature", func(ctx *reactive.RuleContext) (message.Payload, error) {
+    entity := ctx.State.(*graph.EntityState)
+    return &AlertPayload{
+        EntityID:  entity.ID,
+        AlertType: "cold-storage-violation",
+        Severity:  "critical",
+        Timestamp: time.Now(),
+        Message:   "Temperature exceeded 40F threshold",
+    }, nil
+})
+```
+
+### Publish with Mutation
+
+Publishes a message and mutates state immediately:
+
+```go
+PublishWithMutation(
+    "events.sensor.alert",
+    func(ctx *reactive.RuleContext) (message.Payload, error) {
+        state := ctx.State.(*SensorState)
+        return &AlertPayload{
+            SensorID: state.SensorID,
+            Value:    state.LastReading,
+        }, nil
     },
-
-    "retry_defaults": {
-      "initial_backoff": "1s",
-      "max_backoff": "1m",
-      "multiplier": 2.0
-    }
-  }
-}
-```
-
-### Configuration Options
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `definitions_bucket` | string | `WORKFLOW_DEFINITIONS` | KV bucket for workflow definitions |
-| `executions_bucket` | string | `WORKFLOW_EXECUTIONS` | KV bucket for execution state |
-| `timers_bucket` | string | `WORKFLOW_TIMERS` | KV bucket for scheduled timers |
-| `secrets_bucket` | string | `WORKFLOW_SECRETS` | KV bucket for encrypted secrets |
-| `idempotency_bucket` | string | `WORKFLOW_IDEMPOTENCY` | KV bucket for idempotency keys |
-| `trigger_subject_prefix` | string | `workflow.trigger` | NATS subject prefix for triggers |
-| `timer_subject` | string | `workflow.timer.fire` | NATS subject for timer events |
-| `events_subject` | string | `workflow.events` | NATS subject for execution events |
-| `default_step_timeout` | duration | `30s` | Default timeout per step |
-| `default_workflow_timeout` | duration | `1h` | Default overall timeout |
-| `max_concurrent_executions` | int | `100` | Maximum concurrent executions |
-| `idempotency.enabled` | bool | `true` | Enable duplicate detection |
-| `idempotency.window` | duration | `1h` | Deduplication window |
-
-### NATS Bucket Configuration
-
-| Bucket | TTL | Purpose |
-|--------|-----|---------|
-| `WORKFLOW_DEFINITIONS` | None | Workflow definitions (persistent) |
-| `WORKFLOW_EXECUTIONS` | 7d | Execution state and history |
-| `WORKFLOW_TIMERS` | None | Scheduled timers |
-| `WORKFLOW_SECRETS` | None | Encrypted secrets |
-| `WORKFLOW_IDEMPOTENCY` | 24h | Idempotency keys (auto-expire) |
-
-## Workflow Definition Schema
-
-### Complete Structure
-
-```json
-{
-  "id": "string",
-  "name": "string",
-  "description": "string",
-  "version": "string",
-  "enabled": true,
-
-  "trigger": {
-    "rule": "string",
-    "subject": "string",
-    "cron": "string",
-    "manual": false
-  },
-
-  "input": {
-    "type": "object",
-    "properties": {},
-    "required": []
-  },
-
-  "steps": [
-    {
-      "name": "string",
-      "description": "string",
-      "action": {},
-      "on_success": "string",
-      "on_fail": "string",
-      "retry": {},
-      "timeout": "string",
-      "condition": {}
-    }
-  ],
-
-  "on_complete": [],
-  "on_fail": [],
-
-  "timeout": "string",
-  "max_iterations": 10,
-  "metadata": {}
-}
-```
-
-### Field Reference
-
-#### Root Fields
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | Yes | Unique identifier (lowercase, alphanumeric, hyphens) |
-| `name` | string | Yes | Human-readable name |
-| `description` | string | No | Purpose and behavior description |
-| `version` | string | No | Semantic version (e.g., "1.0.0") |
-| `enabled` | bool | No | Accept new triggers (default: true) |
-| `trigger` | object | Yes | Trigger configuration |
-| `input` | object | No | Input validation schema |
-| `steps` | array | Yes | Step definitions (min 1) |
-| `on_complete` | array | No | Actions on successful completion |
-| `on_fail` | array | No | Actions on failure |
-| `timeout` | duration | No | Overall workflow timeout |
-| `max_iterations` | int | No | Maximum loop iterations |
-| `metadata` | object | No | Custom metadata |
-
-#### Trigger Configuration
-
-Exactly one trigger type must be specified:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `rule` | string | Rule ID that triggers workflow |
-| `subject` | string | NATS subject that triggers workflow |
-| `cron` | string | Cron expression for scheduled execution |
-| `manual` | bool | Only triggered via API |
-
-**Cron Expression Format**:
-```
-┌───────────── minute (0 - 59)
-│ ┌───────────── hour (0 - 23)
-│ │ ┌───────────── day of month (1 - 31)
-│ │ │ ┌───────────── month (1 - 12)
-│ │ │ │ ┌───────────── day of week (0 - 7, 0 and 7 are Sunday)
-│ │ │ │ │
-* * * * *
-```
-
-Examples:
-- `0 9 * * *` - Daily at 9:00 AM
-- `*/15 * * * *` - Every 15 minutes
-- `0 0 * * 0` - Weekly on Sunday at midnight
-
-#### Step Configuration
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | Step identifier (unique within workflow) |
-| `description` | string | No | Step purpose |
-| `inputs` | object | No | Input declarations with `from` references |
-| `outputs` | object | No | Output declarations with optional `interface` types |
-| `action` | object | Yes | Action to execute |
-| `on_success` | string | No | Next step, "next", or "complete" |
-| `on_fail` | string | No | Step name or "abort" |
-| `retry` | object | No | Retry policy |
-| `timeout` | duration | No | Step timeout |
-| `condition` | object | No | Skip condition |
-
-#### Inputs and Outputs (ADR-020)
-
-Steps use explicit input/output declarations following the unified dataflow pattern from [ADR-020](../architecture/adr-020-unified-dataflow-patterns.md):
-
-**Input Declaration:**
-
-```json
-{
-  "inputs": {
-    "data": {"from": "fetch.result", "interface": "data.response.v1"},
-    "user_id": {"from": "trigger.payload.user_id"},
-    "exec_id": {"from": "execution.id"}
-  }
-}
-```
-
-**Output Declaration:**
-
-```json
-{
-  "outputs": {
-    "result": {"interface": "processor.result.v1"},
-    "status": {},
-    "metadata": {"interface": "common.metadata.v1"}
-  }
-}
-```
-
-**`from` Reference Patterns:**
-
-| Pattern | Description | Example |
-|---------|-------------|---------|
-| `step_name.output_name` | Reference another step's output | `"fetch.result"` |
-| `step_name.output_name.field` | Deep field reference | `"fetch.result.items"` |
-| `trigger.payload.field` | Trigger data reference | `"trigger.payload.user_id"` |
-| `execution.field` | Execution context reference | `"execution.id"` |
-
-The `interface` field is optional but enables:
-- Load-time validation against the PayloadRegistry
-- Type reconstruction for downstream steps
-- Self-documenting step contracts
-
-#### Retry Policy
-
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `max_attempts` | int | 1 | Maximum retry attempts |
-| `initial_backoff` | duration | 1s | Initial delay between retries |
-| `max_backoff` | duration | 1m | Maximum delay between retries |
-| `multiplier` | float | 2.0 | Backoff multiplier |
-
-Backoff calculation: `delay = min(initial_backoff * multiplier^(attempt-1), max_backoff)`
-
-#### Condition
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `field` | string | Yes | JSONPath into execution context |
-| `operator` | string | Yes | Comparison operator |
-| `value` | any | Depends | Value to compare against |
-
-**Operators**:
-
-| Operator | Description | Value Required |
-|----------|-------------|----------------|
-| `eq` | Equals | Yes |
-| `ne` | Not equals | Yes |
-| `gt` | Greater than | Yes |
-| `gte` | Greater than or equal | Yes |
-| `lt` | Less than | Yes |
-| `lte` | Less than or equal | Yes |
-| `contains` | String contains | Yes |
-| `exists` | Field exists | No |
-
-## Action Types
-
-### call
-
-Request/response NATS call. Step inputs are assembled into the request payload:
-
-```json
-{
-  "name": "process",
-  "inputs": {
-    "id": {"from": "trigger.entity_id"},
-    "data": {"from": "fetch.result"}
-  },
-  "outputs": {
-    "result": {"interface": "service.result.v1"}
-  },
-  "action": {
-    "type": "call",
-    "subject": "service.action"
-  }
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | Must be "call" |
-| `subject` | string | Yes | NATS subject to call |
-
-**Behavior**: Assembles payload from step inputs, sends request, waits for response. Response becomes step output. Non-response or error = step failure.
-
-### publish
-
-Fire-and-forget NATS publish. Step inputs are assembled into the message payload:
-
-```json
-{
-  "name": "notify",
-  "inputs": {
-    "workflow": {"from": "execution.workflow_id"},
-    "step": {"value": "extract-tasks"},
-    "result": {"from": "extract.tasks"}
-  },
-  "action": {
-    "type": "publish",
-    "subject": "events.workflow.step-complete"
-  }
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | Must be "publish" |
-| `subject` | string | Yes | NATS subject |
-
-**Behavior**: Assembles payload from step inputs, publishes immediately. No response expected. Step output: `{"published": true}`.
-
-### publish_agent
-
-Spawn agentic loop task. Step inputs are assembled into the agent task payload:
-
-```json
-{
-  "name": "review",
-  "inputs": {
-    "code": {"from": "load-code.output"},
-    "role": {"value": "reviewer"},
-    "model": {"value": "gpt-4"}
-  },
-  "outputs": {
-    "review_result": {"interface": "agent.result.v1"}
-  },
-  "action": {
-    "type": "publish_agent",
-    "subject": "agent.task.reviewer"
-  }
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | Must be "publish_agent" |
-| `subject` | string | Yes | Agent task subject |
-
-**Behavior**: Assembles task payload from step inputs (role, model, prompt, etc.). Publishes task message to agentic-loop. Waits for completion on `agent.complete.*`. Step output includes agent result.
-
-### set_state
-
-Update entity state via graph processor. Step inputs define the entity and state:
-
-```json
-{
-  "name": "update_status",
-  "inputs": {
-    "entity_id": {"from": "trigger.entity_id"},
-    "predicate": {"value": "workflow.status"},
-    "object": {"value": "in-progress"}
-  },
-  "action": {
-    "type": "set_state"
-  }
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | Must be "set_state" |
-
-**Behavior**: Reads `entity_id`, `predicate`, and `object` from step inputs. Publishes triple update to graph processor. Waits for confirmation. Step output is the triple.
-
-### http
-
-External HTTP request. Step inputs are assembled into the request body and headers:
-
-```json
-{
-  "name": "call_api",
-  "inputs": {
-    "data": {"from": "prepare.output"},
-    "auth_token": {"from": "secrets.api_token"}
-  },
-  "outputs": {
-    "response": {"interface": "http.response.v1"}
-  },
-  "action": {
-    "type": "http",
-    "method": "POST",
-    "url": "https://api.example.com/action",
-    "headers": {
-      "Authorization": "Bearer {{auth_token}}",
-      "Content-Type": "application/json"
-    }
-  }
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | Must be "http" |
-| `method` | string | Yes | HTTP method (GET, POST, PUT, DELETE) |
-| `url` | string | Yes | Request URL |
-| `headers` | object | No | Request headers (supports `{{input_name}}` placeholders) |
-
-**Behavior**: Assembles request body from step inputs. Headers support `{{input_name}}` placeholders for resolved inputs. Makes HTTP request. Response body becomes step output. Non-2xx status = step failure.
-
-### wait
-
-Pause execution:
-
-```json
-{
-  "type": "wait",
-  "duration": "5m"
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | Must be "wait" |
-| `duration` | duration | Yes | Wait duration |
-
-**Behavior**: Schedules timer, execution becomes "waiting". Resumes when timer fires. Step output: `{"waited": "5m"}`.
-
-### tool_batch
-
-Execute multiple tools concurrently:
-
-```json
-{
-  "type": "tool_batch",
-  "tools": [
-    "query_entity:drone.001",
-    "query_entity:drone.002",
-    "query_entity:mission.current"
-  ],
-  "fail_fast": false
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | Must be "tool_batch" |
-| `tools` | array | Yes | Tool invocations (name:args format) |
-| `fail_fast` | bool | No | Stop on first failure (default: false) |
-
-**Behavior**: Executes all tools concurrently. Graph tools (query_entity) are automatically batched into a single query. Step output includes all tool results.
-
-### graph_query
-
-Batch graph query for entities and relationships:
-
-```json
-{
-  "type": "graph_query",
-  "entities": ["${trigger.entity_id}", "related.entity.001"],
-  "relationships": true,
-  "depth": 2
-}
-```
-
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | Must be "graph_query" |
-| `entities` | array | Yes | Entity IDs to query |
-| `relationships` | bool | No | Include relationships (default: false) |
-| `depth` | int | No | Relationship traversal depth (default: 1) |
-
-**Behavior**: Queries multiple entities efficiently. Returns JSON with entities map and relationships array. Step output includes token count estimate.
-
-## Parallel Steps
-
-Parallel steps execute multiple nested steps concurrently and aggregate their results.
-
-### Parallel Step Configuration
-
-```json
-{
-  "name": "parallel_review",
-  "type": "parallel",
-  "steps": [
-    {
-      "name": "security_review",
-      "action": {"type": "publish_agent", "role": "security", "prompt": "..."}
+    func(ctx *reactive.RuleContext, result any) error {
+        state := ctx.State.(*SensorState)
+        state.AlertCount++
+        state.LastAlertTime = time.Now()
+        return nil
     },
-    {
-      "name": "style_review",
-      "action": {"type": "publish_agent", "role": "style", "prompt": "..."}
+)
+```
+
+### PublishAsync (Request-Response)
+
+Publishes a message and waits for a callback result. The execution enters `StatusWaiting` until the
+callback arrives.
+
+```go
+PublishAsync(
+    "reviewer.analyze",
+    func(ctx *reactive.RuleContext) (message.Payload, error) {
+        state := ctx.State.(*ReviewFixState)
+        return &ReviewRequest{
+            Code: state.Code,
+        }, nil
+    },
+    "reviewer.verdict.v1",  // Expected callback payload type
+    func(ctx *reactive.RuleContext, result any) error {
+        state := ctx.State.(*ReviewFixState)
+        verdict := result.(*ReviewResult)
+        state.Verdict = verdict.Verdict
+        state.Issues = verdict.Issues
+        state.Phase = "evaluated"
+        return nil
+    },
+)
+```
+
+**Callback Correlation:**
+
+The engine automatically injects `CallbackFields` into the published payload:
+
+```go
+type CallbackFields struct {
+    TaskID          string  // Unique task identifier
+    CallbackSubject string  // Where to send the result
+    ExecutionID     string  // Workflow execution ID
+}
+```
+
+The executor must publish the result to the callback subject with the same `TaskID`.
+
+### Mutate (State Update Only)
+
+Updates state without publishing. The state change may trigger other rules via KV watch.
+
+```go
+Mutate(func(ctx *reactive.RuleContext, result any) error {
+    state := ctx.State.(*ReviewFixState)
+    state.Iteration++
+    state.Phase = "retrying"
+    return nil
+})
+```
+
+### Complete (Terminal Action)
+
+Marks the execution as completed. Optionally mutates state or publishes a completion event.
+
+```go
+// Simple completion
+Complete()
+
+// With final state mutation
+CompleteWithMutation(func(ctx *reactive.RuleContext, _ any) error {
+    state := ctx.State.(*ReviewFixState)
+    state.Phase = "completed"
+    state.Status = reactive.StatusCompleted
+    return nil
+})
+
+// With completion event
+CompleteWithEvent("events.workflow.completed", func(ctx *reactive.RuleContext) (message.Payload, error) {
+    state := ctx.State.(*ReviewFixState)
+    return &CompletionPayload{
+        WorkflowID: state.WorkflowID,
+        Duration:   time.Since(state.CreatedAt),
+    }, nil
+})
+```
+
+## State Management
+
+Execution state is stored in NATS KV buckets. State changes trigger KV watch loops for other rules.
+
+### State Lifecycle
+
+```mermaid
+flowchart LR
+    A[Create] --> B[Running]
+    B --> C[Waiting]
+    C --> B
+    B --> D[Completed]
+    B --> E[Failed]
+    B --> F[Escalated]
+    B --> G[Timed Out]
+```
+
+### State Helpers
+
+The `reactive` package provides helpers for accessing and modifying `ExecutionState`:
+
+```go
+// Extract ExecutionState from typed state
+es := reactive.ExtractExecutionState(ctx.State)
+
+// Update phase
+reactive.SetPhase(ctx.State, "reviewing", ruleID, triggerMode, triggerInfo, action)
+
+// Update status
+reactive.SetStatus(ctx.State, reactive.StatusRunning)
+
+// Increment iteration
+reactive.IncrementIteration(ctx.State)
+
+// Set error
+reactive.SetError(ctx.State, "validation failed")
+
+// Clear error
+reactive.ClearError(ctx.State)
+
+// Mark as waiting for callback
+reactive.SetPendingTask(ctx.State, taskID, ruleID)
+
+// Clear pending task
+reactive.ClearPendingTask(ctx.State)
+
+// Check if terminal
+if reactive.IsTerminal(ctx.State) {
+    // Execution is finished
+}
+
+// Check if expired
+if reactive.IsExpired(ctx.State) {
+    // Execution exceeded deadline
+}
+```
+
+### Custom State Accessor (Optional)
+
+For performance-critical workflows, implement the `StateAccessor` interface to avoid reflection:
+
+```go
+type ReviewFixState struct {
+    reactive.ExecutionState
+    Code    string
+    Verdict string
+}
+
+func (s *ReviewFixState) GetExecutionState() *reactive.ExecutionState {
+    return &s.ExecutionState
+}
+```
+
+## Integration with Agentic System
+
+Reactive workflows integrate with the agentic loop system for LLM-powered tasks.
+
+### Agent Completion Events
+
+Agentic loop processors publish completion events when agents finish tasks. Workflows can react to these
+via KV watch:
+
+```go
+reactive.NewRule("handle-agent-completion").
+    WatchKV("AGENT_LOOPS", "agent.task.*").
+    When("agent completed", func(ctx *reactive.RuleContext) bool {
+        state := ctx.State.(*AgentLoopState)
+        return state.Status == "completed"
+    }).
+    Publish("workflow.agent.result", buildResultPayload).
+    MustBuild()
+```
+
+The `AGENT_LOOPS` bucket stores agent execution state. When an agent completes, the KV entry is updated,
+triggering the workflow rule.
+
+### Workflow Triggers from Rules
+
+The rule processor can trigger workflows using the `trigger_workflow` action:
+
+```go
+// In rules configuration (JSON or component config)
+{
+    "action": {
+        "type": "trigger_workflow",
+        "workflow_id": "notify-technician",
+        "subject": "workflow.trigger.notify-technician"
     }
-  ],
-  "wait": "all",
-  "aggregator": "union"
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | string | Yes | Step identifier |
-| `type` | string | Yes | Must be "parallel" |
-| `steps` | array | Yes | Nested steps to execute concurrently |
-| `wait` | string | No | Wait semantics: "all", "any", "majority" (default: "all") |
-| `aggregator` | string | No | Result aggregator (default: "union") |
+The workflow handles the trigger message:
 
-### Wait Semantics
-
-| Wait | Behavior |
-|------|----------|
-| `all` | Wait for all nested steps to complete |
-| `any` | Continue when first step succeeds |
-| `majority` | Wait for >50% to complete |
-
-### Depth Tracking
-
-Parallel steps that spawn agents can track recursion depth:
-
-```json
-{
-  "action": {
-    "type": "publish_agent",
-    "max_depth": 3
-  }
-}
-```
-
-When an agent at `depth == max_depth` tries to spawn a sub-agent, the spawn is rejected.
-
-## Result Aggregation
-
-Aggregators combine results from parallel steps into a single output.
-
-### Built-in Aggregators
-
-| Aggregator | Success Condition | Output Format |
-|------------|-------------------|---------------|
-| `union` | All succeed | Array of all outputs |
-| `first` | Any succeed | First successful output |
-| `majority` | >50% succeed | Array of successful outputs |
-| `merge` | Any succeed | Deep-merged JSON object |
-| `entity_merge` | Any succeed | Entity-keyed merged object |
-
-### Aggregator Examples
-
-**union** - Combine all outputs:
-
-```json
-// Input: [{"score": 8}, {"score": 9}]
-// Output: [{"score": 8}, {"score": 9}]
-```
-
-**merge** - Deep merge JSON objects:
-
-```json
-// Input: [{"a": 1}, {"b": 2}]
-// Output: {"a": 1, "b": 2}
-```
-
-**entity_merge** - Deduplicate by entity:
-
-```json
-// Input: [{"entity_id": "x", "score": 8}, {"entity_id": "x", "style": "ok"}]
-// Output: {"entities": {"x": {"entity_id": "x", "score": 8, "style": "ok"}}}
-```
-
-## Data References (ADR-020)
-
-Workflows use the unified dataflow pattern from [ADR-020](../architecture/adr-020-unified-dataflow-patterns.md). Data is referenced via `from` fields in step inputs rather than string interpolation.
-
-### Available References
-
-**Step Outputs:**
-
-| Pattern | Description |
-|---------|-------------|
-| `step_name.output_name` | Named output from step |
-| `step_name.output_name.field` | Deep field access |
-
-**Trigger Data:**
-
-| Reference | Description |
-|-----------|-------------|
-| `trigger.entity_id` | Entity that triggered workflow |
-| `trigger.payload` | Full trigger payload object |
-| `trigger.payload.field` | Field from trigger payload |
-| `trigger.type` | Trigger type (rule, subject, cron, manual) |
-| `trigger.source` | Trigger source (rule ID, subject, cron expression) |
-
-**Execution Context:**
-
-| Reference | Description |
-|-----------|-------------|
-| `execution.id` | Current execution ID |
-| `execution.workflow_id` | Workflow definition ID |
-| `execution.error` | Error message (in on_fail) |
-| `execution.iteration` | Current iteration count |
-
-**Special Values:**
-
-| Reference | Description |
-|-----------|-------------|
-| `timestamp` | Current ISO timestamp |
-| `uuid` | Generate new UUID |
-| `secrets.name` | Resolved secret value |
-
-### Reference Examples
-
-```json
-{
-  "name": "process",
-  "inputs": {
-    "entity": {"from": "trigger.entity_id"},
-    "data": {"from": "fetch-data.items"},
-    "timestamp": {"from": "timestamp"},
-    "request_id": {"from": "uuid"}
-  },
-  "outputs": {
-    "result": {"interface": "service.result.v1"}
-  },
-  "action": {
-    "type": "call",
-    "subject": "service.process"
-  }
-}
-```
-
-### Secrets
-
-Secrets are stored in `WORKFLOW_SECRETS` bucket and resolved at execution time:
-
-```json
-{
-  "type": "http",
-  "headers": {
-    "Authorization": "Bearer ${secrets.github_token}"
-  }
-}
-```
-
-**Security**: Secrets are never logged or persisted to execution state.
-
-## Execution States
-
-| State | Terminal | Description |
-|-------|----------|-------------|
-| `pending` | No | Created, not yet started |
-| `running` | No | Actively executing steps |
-| `waiting` | No | Waiting for timer/callback |
-| `completed` | Yes | Successfully finished |
-| `failed` | Yes | Failed due to error |
-| `cancelled` | Yes | Cancelled by user |
-| `timed_out` | Yes | Exceeded workflow timeout |
-
-## Events
-
-Published to `workflow.events`:
-
-### execution.started
-
-```json
-{
-  "type": "execution.started",
-  "execution_id": "exec-abc123",
-  "workflow_id": "review-fix-cycle",
-  "trigger": {
-    "type": "subject",
-    "source": "workflow.trigger.review",
-    "entity_id": "test-123"
-  },
-  "timestamp": "2025-01-01T12:00:00Z"
-}
-```
-
-### step.completed
-
-```json
-{
-  "type": "step.completed",
-  "execution_id": "exec-abc123",
-  "step": "review",
-  "output": { "issues_found": 2 },
-  "duration_ms": 1500,
-  "attempts": 1,
-  "timestamp": "2025-01-01T12:00:01.500Z"
-}
-```
-
-### step.failed
-
-```json
-{
-  "type": "step.failed",
-  "execution_id": "exec-abc123",
-  "step": "create-issues",
-  "error": "connection timeout",
-  "attempts": 3,
-  "timestamp": "2025-01-01T12:00:30Z"
-}
-```
-
-### execution.completed
-
-```json
-{
-  "type": "execution.completed",
-  "execution_id": "exec-abc123",
-  "workflow_id": "review-fix-cycle",
-  "duration_ms": 5230,
-  "timestamp": "2025-01-01T12:00:05.230Z"
-}
-```
-
-### execution.failed
-
-```json
-{
-  "type": "execution.failed",
-  "execution_id": "exec-abc123",
-  "workflow_id": "review-fix-cycle",
-  "failed_step": "create-issues",
-  "error": "max retries exceeded",
-  "duration_ms": 35000,
-  "timestamp": "2025-01-01T12:00:35Z"
-}
+```go
+reactive.NewRule("handle-trigger").
+    OnJetStreamSubject(
+        "WORKFLOW",
+        "workflow.trigger.notify-technician",
+        func() any { return &rule.WorkflowTriggerPayload{} },
+    ).
+    When("new trigger", func(ctx *reactive.RuleContext) bool {
+        return ctx.Message != nil
+    }).
+    Publish("alerts.technician", buildAlertPayload).
+    Complete().
+    MustBuild()
 ```
 
 ## Prometheus Metrics
 
+The reactive engine exposes Prometheus metrics when `EnableMetrics` is true:
+
 | Metric | Type | Labels | Description |
 |--------|------|--------|-------------|
-| `workflow_executions_total` | counter | workflow_id, status | Total executions |
-| `workflow_execution_duration_seconds` | histogram | workflow_id, status | Execution duration |
-| `workflow_executions_active` | gauge | workflow_id | Active executions |
-| `workflow_steps_total` | counter | workflow_id, step, status | Total steps |
-| `workflow_step_duration_seconds` | histogram | workflow_id, step | Step duration |
-| `workflow_step_retries_total` | counter | workflow_id, step | Retry attempts |
-| `workflow_timers_active` | gauge | - | Scheduled timers |
-| `workflow_timers_fired_total` | counter | type | Timers fired |
-| `workflow_duplicate_triggers_total` | counter | workflow_id | Deduplicated triggers |
+| `reactive_workflow_rule_evaluations_total` | Counter | `workflow_id, rule_id, fired` | Rule evaluation count |
+| `reactive_workflow_actions_dispatched_total` | Counter | `workflow_id, rule_id, action_type` | Action dispatch count |
+| `reactive_workflow_executions_created_total` | Counter | `workflow_id` | Execution creation count |
+| `reactive_workflow_executions_completed_total` | Counter | `workflow_id, status` | Execution completion count |
+| `reactive_workflow_execution_duration_seconds` | Histogram | `workflow_id, status` | Execution duration |
 
-## Example Workflows
+## Complete Workflow Example
 
-### Spec Approval Pipeline
+```go
+package main
 
-```json
-{
-  "id": "spec-approval",
-  "name": "Spec Approval Workflow",
-  "description": "Creates GitHub issues when a spec is approved",
-  "version": "1.0.0",
-  "enabled": true,
+import (
+    "time"
+    "github.com/c360studio/semstreams/processor/reactive"
+    "github.com/c360studio/semstreams/message"
+)
 
-  "trigger": {
-    "rule": "spec-approved-trigger"
-  },
+// State definition
+type ReviewFixState struct {
+    reactive.ExecutionState
+    Code       string   `json:"code"`
+    Verdict    string   `json:"verdict"`
+    Issues     []string `json:"issues"`
+    FixAttempt int      `json:"fix_attempt"`
+}
 
-  "steps": [
-    {
-      "name": "load-spec",
-      "inputs": {
-        "id": {"from": "trigger.entity_id"}
-      },
-      "outputs": {
-        "spec": {"interface": "spec.data.v1"}
-      },
-      "action": {
-        "type": "call",
-        "subject": "spec.get"
-      },
-      "timeout": "10s"
-    },
-    {
-      "name": "extract-tasks",
-      "inputs": {
-        "spec": {"from": "load-spec.spec"}
-      },
-      "outputs": {
-        "tasks": {"interface": "spec.tasks.v1"}
-      },
-      "action": {
-        "type": "call",
-        "subject": "spec.extract-tasks"
-      },
-      "condition": {
-        "field": "load-spec.spec.has_tasks",
-        "operator": "eq",
-        "value": true
-      }
-    },
-    {
-      "name": "create-issues",
-      "inputs": {
-        "tasks": {"from": "extract-tasks.tasks"},
-        "github_token": {"from": "secrets.github_token"}
-      },
-      "outputs": {
-        "issue_ids": {}
-      },
-      "action": {
-        "type": "http",
-        "method": "POST",
-        "url": "https://api.github.com/repos/org/repo/issues",
-        "headers": {
-          "Authorization": "Bearer {{github_token}}"
-        }
-      },
-      "retry": {
-        "max_attempts": 3,
-        "initial_backoff": "5s"
-      },
-      "on_fail": "mark-blocked"
-    },
-    {
-      "name": "mark-blocked",
-      "inputs": {
-        "entity_id": {"from": "trigger.entity_id"},
-        "predicate": {"value": "spec.status"},
-        "object": {"value": "blocked"}
-      },
-      "action": {
-        "type": "set_state"
-      },
-      "on_success": "complete"
-    }
-  ],
+// Workflow definition
+func ReviewFixCycleWorkflow() *reactive.Definition {
+    return reactive.NewWorkflow("review-fix-cycle").
+        WithDescription("Review and fix code until approved").
+        WithStateBucket("REVIEW_FIX_STATE").
+        WithStateFactory(func() any { return &ReviewFixState{} }).
+        WithMaxIterations(3).
+        WithTimeout(30 * time.Minute).
+        WithOnComplete("events.workflow.completed").
+        WithOnEscalate("events.workflow.escalated").
 
-  "on_complete": [
-    {
-      "type": "set_state",
-      "inputs": {
-        "entity_id": {"from": "trigger.entity_id"},
-        "predicate": {"value": "spec.status"},
-        "object": {"value": "implementing"}
-      }
-    }
-  ],
+        // Rule 1: Request review when in reviewing phase
+        AddRule(reactive.NewRule("request-review").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is reviewing", func(ctx *reactive.RuleContext) bool {
+                state := ctx.State.(*ReviewFixState)
+                return state.Phase == "reviewing"
+            }).
+            When("no pending task", func(ctx *reactive.RuleContext) bool {
+                es := reactive.ExtractExecutionState(ctx.State)
+                return es.PendingTaskID == ""
+            }).
+            PublishAsync(
+                "reviewer.analyze",
+                func(ctx *reactive.RuleContext) (message.Payload, error) {
+                    state := ctx.State.(*ReviewFixState)
+                    return &ReviewRequest{
+                        Code: state.Code,
+                    }, nil
+                },
+                "reviewer.verdict.v1",
+                func(ctx *reactive.RuleContext, result any) error {
+                    state := ctx.State.(*ReviewFixState)
+                    verdict := result.(*ReviewResult)
+                    state.Verdict = verdict.Verdict
+                    state.Issues = verdict.Issues
+                    state.Phase = "evaluated"
+                    return nil
+                },
+            ).
+            WithCooldown(5 * time.Second).
+            MustBuild()).
 
-  "timeout": "5m"
+        // Rule 2: Apply fixes when verdict is needs_work
+        AddRule(reactive.NewRule("apply-fixes").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is evaluated", func(ctx *reactive.RuleContext) bool {
+                state := ctx.State.(*ReviewFixState)
+                return state.Phase == "evaluated"
+            }).
+            When("verdict is needs_work", func(ctx *reactive.RuleContext) bool {
+                state := ctx.State.(*ReviewFixState)
+                return state.Verdict == "needs_work"
+            }).
+            When("under max iterations", func(ctx *reactive.RuleContext) bool {
+                state := ctx.State.(*ReviewFixState)
+                return state.FixAttempt < 3
+            }).
+            PublishAsync(
+                "fixer.repair",
+                func(ctx *reactive.RuleContext) (message.Payload, error) {
+                    state := ctx.State.(*ReviewFixState)
+                    return &FixRequest{
+                        Code:   state.Code,
+                        Issues: state.Issues,
+                    }, nil
+                },
+                "fixer.result.v1",
+                func(ctx *reactive.RuleContext, result any) error {
+                    state := ctx.State.(*ReviewFixState)
+                    fixed := result.(*FixResult)
+                    state.Code = fixed.Code
+                    state.Phase = "reviewing"
+                    state.FixAttempt++
+                    reactive.IncrementIteration(ctx.State)
+                    return nil
+                },
+            ).
+            MustBuild()).
+
+        // Rule 3: Complete when approved
+        AddRule(reactive.NewRule("complete-approved").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is evaluated", func(ctx *reactive.RuleContext) bool {
+                state := ctx.State.(*ReviewFixState)
+                return state.Phase == "evaluated"
+            }).
+            When("verdict is approved", func(ctx *reactive.RuleContext) bool {
+                state := ctx.State.(*ReviewFixState)
+                return state.Verdict == "approved"
+            }).
+            CompleteWithMutation(func(ctx *reactive.RuleContext, _ any) error {
+                state := ctx.State.(*ReviewFixState)
+                state.Phase = "completed"
+                reactive.SetStatus(ctx.State, reactive.StatusCompleted)
+                return nil
+            }).
+            MustBuild()).
+
+        // Rule 4: Escalate when max iterations exceeded
+        AddRule(reactive.NewRule("escalate-max-attempts").
+            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+            When("phase is evaluated", func(ctx *reactive.RuleContext) bool {
+                state := ctx.State.(*ReviewFixState)
+                return state.Phase == "evaluated"
+            }).
+            When("max iterations exceeded", func(ctx *reactive.RuleContext) bool {
+                state := ctx.State.(*ReviewFixState)
+                return state.FixAttempt >= 3 && state.Verdict != "approved"
+            }).
+            CompleteWithMutation(func(ctx *reactive.RuleContext, _ any) error {
+                reactive.EscalateExecution(ctx.State, "max fix attempts exceeded")
+                return nil
+            }).
+            MustBuild()).
+
+        MustBuild()
 }
 ```
 
-### Daily Report
+## Migration from JSON Workflows
 
-```json
-{
-  "id": "daily-report",
-  "name": "Daily Progress Report",
-  "version": "1.0.0",
-  "enabled": true,
+The reactive workflow engine replaces the deprecated JSON-based DAG workflow processor. Key differences:
 
-  "trigger": {
-    "cron": "0 9 * * *"
-  },
-
-  "steps": [
-    {
-      "name": "collect-metrics",
-      "inputs": {
-        "period": {"value": "24h"}
-      },
-      "outputs": {
-        "metrics": {"interface": "metrics.data.v1"}
-      },
-      "action": {
-        "type": "call",
-        "subject": "metrics.collect"
-      }
-    },
-    {
-      "name": "generate-summary",
-      "inputs": {
-        "template": {"value": "daily-progress"},
-        "data": {"from": "collect-metrics.metrics"}
-      },
-      "outputs": {
-        "summary": {}
-      },
-      "action": {
-        "type": "call",
-        "subject": "report.generate"
-      }
-    },
-    {
-      "name": "send-notification",
-      "inputs": {
-        "channel": {"value": "#engineering"},
-        "text": {"from": "generate-summary.summary"},
-        "slack_token": {"from": "secrets.slack_token"}
-      },
-      "action": {
-        "type": "http",
-        "method": "POST",
-        "url": "https://slack.com/api/chat.postMessage",
-        "headers": {
-          "Authorization": "Bearer {{slack_token}}"
-        }
-      },
-      "retry": {
-        "max_attempts": 3
-      }
-    }
-  ],
-
-  "timeout": "10m"
-}
-```
-
-## Migration to Reactive Workflows
-
-The JSON-based workflow processor is deprecated in favor of the reactive workflow engine. The new system provides:
-
-### Key Benefits
-
-| Aspect | JSON Workflows | Reactive Workflows |
-|--------|---------------|-------------------|
-| Type safety | Runtime errors | Compile-time errors |
-| Field references | String interpolation (`${steps.X.output.Y}`) | Go field access (`state.ReviewResult.Verdict`) |
-| Serialization | 9+ boundaries, `json.RawMessage` required | 2 boundaries, zero `json.RawMessage` |
-| Debugging | String inspection, runtime failures | Go debugger, stack traces |
-| Error detection | Load-time or runtime | Compile-time |
-
-### Before and After Example
-
-**JSON Workflow (Deprecated)**:
+### Before (JSON Workflow)
 
 ```json
 {
@@ -957,113 +839,53 @@ The JSON-based workflow processor is deprecated in favor of the reactive workflo
 }
 ```
 
-**Reactive Workflow (Current)**:
+### After (Reactive Workflow)
 
 ```go
-func ReviewFixCycleWorkflow() *reactive.Definition {
-    return reactive.NewWorkflow("review-fix-cycle").
-        WithDescription("Review and fix code until approved").
-        WithStateBucket("REVIEW_FIX_STATE").
-        WithStateFactory(func() any { return &ReviewFixState{} }).
-        WithMaxIterations(3).
-        WithTimeout(30 * time.Minute).
-
-        // Request review
-        AddRule(reactive.NewRule("request-review").
-            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
-            When("phase is reviewing", reactive.PhaseIs("reviewing")).
-            When("no pending task", reactive.NoPendingTask()).
-            PublishAsync(
-                "reviewer.analyze",
-                func(ctx *reactive.RuleContext) (message.Payload, error) {
-                    state := ctx.State.(*ReviewFixState)
-                    return &ReviewRequest{
-                        Code: state.Code,
-                    }, nil
-                },
-                "reviewer.verdict.v1",
-                func(ctx *reactive.RuleContext, result any) error {
-                    state := ctx.State.(*ReviewFixState)
-                    verdict := result.(*ReviewResult)
-                    state.Verdict = verdict.Verdict
-                    state.Issues = verdict.Issues
-                    state.Phase = "evaluated"
-                    return nil
-                },
-            ).
-            MustBuild()).
-
-        // Apply fixes if needed
-        AddRule(reactive.NewRule("apply-fixes").
-            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
-            When("phase is evaluated", reactive.PhaseIs("evaluated")).
-            When("verdict is needs_work", reactive.StateFieldEquals(
-                func(s any) string { return s.(*ReviewFixState).Verdict },
-                "needs_work",
-            )).
-            PublishAsync(
-                "fixer.repair",
-                func(ctx *reactive.RuleContext) (message.Payload, error) {
-                    state := ctx.State.(*ReviewFixState)
-                    return &FixRequest{
-                        Code:   state.Code,
-                        Issues: state.Issues,
-                    }, nil
-                },
-                "fixer.result.v1",
-                func(ctx *reactive.RuleContext, result any) error {
-                    state := ctx.State.(*ReviewFixState)
-                    fixed := result.(*FixResult)
-                    state.Code = fixed.Code
-                    state.Phase = "reviewing"  // Loop back
-                    state.Iteration++
-                    return nil
-                },
-            ).
-            MustBuild()).
-
-        // Complete on approval
-        AddRule(reactive.NewRule("complete-approved").
-            WatchKV("REVIEW_FIX_STATE", "review-fix.*").
-            When("phase is evaluated", reactive.PhaseIs("evaluated")).
-            When("verdict is approved", reactive.StateFieldEquals(
-                func(s any) string { return s.(*ReviewFixState).Verdict },
-                "approved",
-            )).
-            CompleteWithMutation(func(ctx *reactive.RuleContext, _ any) error {
-                state := ctx.State.(*ReviewFixState)
-                state.Phase = "completed"
-                state.Status = reactive.StatusCompleted
-                return nil
-            }).
-            MustBuild()).
-
-        MustBuild()
-}
+reactive.NewRule("apply-fixes").
+    WatchKV("REVIEW_FIX_STATE", "review-fix.*").
+    When("phase is evaluated", func(ctx *reactive.RuleContext) bool {
+        state := ctx.State.(*ReviewFixState)
+        return state.Phase == "evaluated"
+    }).
+    When("verdict is needs_work", func(ctx *reactive.RuleContext) bool {
+        state := ctx.State.(*ReviewFixState)
+        return state.Verdict == "needs_work"
+    }).
+    PublishAsync(
+        "fixer.repair",
+        func(ctx *reactive.RuleContext) (message.Payload, error) {
+            state := ctx.State.(*ReviewFixState)
+            return &FixRequest{
+                Code:   state.Code,
+                Issues: state.Issues,
+            }, nil
+        },
+        "fixer.result.v1",
+        func(ctx *reactive.RuleContext, result any) error {
+            state := ctx.State.(*ReviewFixState)
+            fixed := result.(*FixResult)
+            state.Code = fixed.Code
+            state.Phase = "reviewing"
+            return nil
+        },
+    ).
+    MustBuild()
 ```
 
-### Key Differences
+**Key Benefits:**
 
-1. **Type Safety**: Field references like `state.Verdict` are validated at compile time
-2. **No String Interpolation**: Direct Go struct field access instead of `"${steps.X.output.Y}"`
-3. **Explicit State Management**: State struct accumulates all outputs in typed fields
-4. **Compile-Time Validation**: Typos and type mismatches caught by Go compiler
-5. **Better Debugging**: Full Go debugger support with breakpoints and stack traces
-
-### Migration Resources
-
-For complete migration guidance, see:
-
-- [Reactive Workflow Migration Guide](../architecture/specs/reactive-workflow-migration.md) — Step-by-step conversion instructions
-- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) — Architecture and design rationale
-- [Reactive Workflows Guide](./10-reactive-workflows.md) — Usage patterns and examples
+| Aspect | JSON Workflows | Reactive Workflows |
+|--------|---------------|-------------------|
+| Type safety | Runtime errors | Compile-time errors |
+| Field references | String interpolation (`${review.verdict}`) | Go field access (`state.Verdict`) |
+| Serialization | 9+ boundaries | 2 boundaries |
+| Debugging | String inspection | Go debugger with stack traces |
+| Error detection | Load-time or runtime | Compile-time |
 
 ## Related Documentation
 
-- [Workflow Quickstart](../basics/08-workflow-quickstart.md) — Getting started (deprecated)
-- [Orchestration Layers](../concepts/12-orchestration-layers.md) — Rules vs. workflows
-- [Parallel Agents](../concepts/23-parallel-agents.md) — Parallel execution patterns
-- [Context Construction](../concepts/22-context-construction.md) — Building agent context
-- [Agentic Components](08-agentic-components.md) — Agent integration
-- [Aggregation Package](../../processor/workflow/aggregation/README.md) — Aggregator details
-- [Workflow Processor Spec](../architecture/specs/workflow-processor-spec.md) — Full specification (deprecated)
+- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md)
+- [ADR-022: Workflow Engine Simplification](../architecture/adr-022-workflow-engine-simplification.md)
+- [Orchestration Layers](../concepts/12-orchestration-layers.md)
+- [Payload Registry Guide](../concepts/13-payload-registry.md)

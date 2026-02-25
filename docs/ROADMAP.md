@@ -74,17 +74,21 @@ Complete stubbed action implementations in rules processor:
 Current state: Stateful ECA rules work. Publish actions implemented for agentic system integration. Update triple actions partially implemented.
 
 ### Workflow Processor
-**Status:** Implemented (Minimal) | **ADR:** [ADR-011](architecture/adr-011-workflow-processor.md)
+**Status:** Implemented (Reactive Engine) | **ADRs:** [ADR-021](architecture/adr-021-reactive-workflow-engine.md),
+[ADR-022](architecture/adr-022-workflow-engine-simplification.md)
 
-Durable multi-step workflow execution bridging reactive rules and orchestration:
-- Declarative JSON workflow definitions
-- Rule-triggered, scheduled, or manual execution
-- Step tracking and sequencing
-- Loop limits (max_iterations)
-- Workflow timeout enforcement
-- Basic actions: call, publish, set_state
+Reactive workflow engine for stateless rules and stateful multi-step workflows:
+- KV watch and stream/subject-based triggers
+- Typed Go condition evaluation (no string interpolation)
+- Cooldown and debounce for temporal deduplication
+- Fire-and-forget publish actions
+- Optional stateful workflow support via `pkg/workflow/` participant pattern
 
-Current state: Minimal implementation complete (Phases 1-2). Supports semspec-driven development and multi-agent workflows. Advanced features (retry with backoff, HTTP action, wait action, secrets management) deferred to future phases.
+Current state: The original DAG-based workflow processor (`processor/workflow/`) was removed in favor of the reactive
+engine (`processor/reactive/`). The new engine aligns with semstreams' reactive philosophy where the message topology
+IS the execution graph. Components that need stateful workflows implement `WorkflowParticipant` and manage state via
+KV buckets as a side effect. This reduced code complexity by 55% (~1550 lines) while maintaining all required
+functionality. See [ADR-022](architecture/adr-022-workflow-engine-simplification.md) for migration details.
 
 ### Agentic Components
 **Status:** Implemented | **ADR:** [ADR-018](architecture/adr-018-agentic-workflow-orchestration.md)
@@ -131,9 +135,10 @@ LLM-powered analysis of operational documents to suggest rules and workflows:
 - **Use cases:** Early adopters uploading SOPs before field deployment
 - **Tier requirement:** Semantic (LLM required)
 - **Pattern:** KV-watching async worker (follows ADR-013)
-- **Depends on:** ADR-010 (rules completion), ADR-011 (workflow processor)
+- **Depends on:** ADR-010 (rules completion), reactive workflow engine (ADR-021/ADR-022)
 
-Current state: ADR and spec complete. Implementation blocked by rules and workflow processor completion.
+Current state: ADR and spec complete. Reactive workflow engine is implemented. Content analysis implementation
+can proceed when prioritized.
 
 ---
 

@@ -328,8 +328,26 @@ To migrate from JSON workflows to reactive workflows:
 6. **Convert state mutations** to `StateMutatorFunc`
 7. **Register workflow** with reactive engine
 
+## Working Examples
+
+See `/cmd/e2e-semstreams/workflows.go` for production-ready workflow examples including:
+
+- **Cold Storage Alert**: Multi-condition monitoring (temperature + zone checks)
+- **High Humidity Alert**: Threshold-based alerting with sensor type filtering
+- **Low Pressure Alert**: Critical system monitoring with cooldown periods
+- **Notify Technician**: Rule-triggered workflow demonstrating rule→workflow integration
+
+These examples show real-world patterns for:
+
+- KV watch triggers on entity states
+- JetStream subject consumers for workflow triggers
+- Composite conditions with property lookups
+- Publish actions with typed payload builders
+- Cooldown configuration to prevent alert flooding
+- Complete actions for terminal workflow states
+
 ## Detailed Reference
 
 - [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) - Design rationale
 - [processor/reactive/](../../processor/reactive/) - Package source code
-- [processor/reactive/examples/](../../processor/reactive/examples/) - Example workflows
+- [cmd/e2e-semstreams/workflows.go](../../cmd/e2e-semstreams/workflows.go) - Working examples

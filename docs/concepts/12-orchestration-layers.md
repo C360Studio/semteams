@@ -423,9 +423,14 @@ Execution outcomes that are NOT semantic entities:
 - Use `COMPLETE_{id}` key pattern for rules observability
 - Stored in component-specific buckets:
   - `AGENT_LOOPS`: Agent completion state (`COMPLETE_{loopID}`)
-  - `WORKFLOW_EXECUTIONS`: Workflow completion state (`COMPLETE_{executionID}`)
+  - `REACTIVE_WORKFLOW_STATE` (configurable): Workflow execution state managed by `pkg/workflow.StateManager`
 - Transient — represent what happened, not what exists
 - Examples: agent completion, workflow completion, step results
+
+**Reactive workflows use configurable state buckets:**
+
+The reactive workflow engine uses `pkg/workflow.StateManager` with configurable bucket names (default:
+`REACTIVE_WORKFLOW_STATE`). Each workflow definition specifies its state bucket via `WithStateBucket()`.
 
 **Rules can watch these buckets using `entity_watch_buckets` config:**
 
@@ -433,7 +438,7 @@ Execution outcomes that are NOT semantic entities:
 {
   "entity_watch_buckets": {
     "ENTITY_STATES": ["telemetry.>"],
-    "WORKFLOW_EXECUTIONS": ["COMPLETE_*"],
+    "REACTIVE_WORKFLOW_STATE": ["review-fix.*"],
     "AGENT_LOOPS": ["COMPLETE_*"]
   }
 }
@@ -461,15 +466,24 @@ entityBucket.Put(ctx, "workflow.review.exec123", completionData)
 
 **Correct pattern**:
 ```go
-// RIGHT: Writing to component-specific bucket with COMPLETE_ prefix
-executionsBucket.Put(ctx, "COMPLETE_exec123", completionData)
+// RIGHT: Writing to component-specific bucket
+// For reactive workflows, use StateManager
+stateManager.UpdateState(ctx, "review-fix.123", func(state any) error {
+    s := state.(*ReviewFixState)
+    s.Status = reactive.StatusCompleted
+    return nil
+})
+
+// For agent loops, use COMPLETE_ prefix
+agentLoopsBucket.Put(ctx, "COMPLETE_exec123", completionData)
 ```
 
 ## References
 
 - [ADR-010: Rules Processor Completion](../architecture/adr-010-rules-processor-completion.md) — Rules engine design
-- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) — Type-safe Go workflow engine (current implementation)
-- [ADR-011: Workflow Processor](../architecture/adr-011-workflow-processor.md) — Original JSON-based workflow processor (superseded)
+- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) — Type-safe Go workflow engine
+- [ADR-022: Workflow Engine Simplification](../architecture/adr-022-workflow-engine-simplification.md) — Simplified reactive workflow state management (current)
+- [ADR-011: Workflow Processor](../architecture/adr-011-workflow-processor.md) — Original JSON-based workflow processor (superseded by ADR-021/022)
 - [ADR-018: Agentic Workflow Orchestration](../architecture/adr-018-agentic-workflow-orchestration.md) — Agent-specific orchestration
 - [Advanced Guide: Reactive Workflows](../advanced/10-reactive-workflows.md) — Usage guide and examples
 - [Reactive Workflow Migration](../architecture/specs/reactive-workflow-migration.md) — Migration from JSON to Go workflows

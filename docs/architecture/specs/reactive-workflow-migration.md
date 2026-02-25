@@ -61,7 +61,7 @@ trigger → review → (issues_found > 0?) → fix → review...
 (max 3 iterations → escalate)
 ```
 
-**Migration Complexity**: Medium (requires iteration tracking, matches `loop_test.go` example)
+**Migration Complexity**: Medium (requires iteration tracking and verdict-based branching)
 
 ### 3. Plan Review Loop
 
@@ -491,7 +491,7 @@ func TestSpecApprovalWorkflow_HappyPath(t *testing.T) {
 
 ### Loop Workflow Pattern
 
-For review-fix cycles, use the pattern from `loop_test.go`:
+For review-fix cycles, use iteration tracking with max limits:
 
 ```go
 func ReviewFixCycleWorkflow() *reactive.Definition {
@@ -570,16 +570,20 @@ During migration, both engines can run simultaneously:
 
 - **ADR-021**: `/docs/architecture/adr-021-reactive-workflow-engine.md`
 - **Usage Guide**: `/docs/advanced/10-reactive-workflows.md`
-- **Example Workflows**: `/processor/reactive/examples/`
+- **Working Examples**: `/cmd/e2e-semstreams/workflows.go`
 - **Test Utilities**: `/processor/reactive/testutil/`
 - **Builder API**: `/processor/reactive/builder.go`
-- **Condition Helpers**: `/processor/reactive/conditions.go`
+- **Condition Helpers**: `/processor/reactive/evaluator.go`
 
 ## Migration Support
 
 The reactive workflow engine is fully tested, production-ready, and actively being used for migrations. For migration support:
 
-1. **Review the examples**: Check `/processor/reactive/examples/` for reference implementations
+1. **Review the examples**: Check `/cmd/e2e-semstreams/workflows.go` for production-ready implementations including:
+   - Multi-condition KV watch triggers (cold storage, humidity, pressure alerts)
+   - JetStream subject consumers (notify-technician workflow)
+   - Typed payload builders and state mutators
+   - Cooldown configuration and terminal state handling
 2. **Use test utilities**: Leverage `/processor/reactive/testutil/` for workflow testing
 3. **Follow validation patterns**: Ensure output declarations match component capabilities
 4. **Test incrementally**: Migrate one workflow at a time with comprehensive testing
