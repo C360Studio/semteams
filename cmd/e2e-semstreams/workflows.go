@@ -49,17 +49,21 @@ type AlertPayload struct {
 	Message   string    `json:"message"`
 }
 
+// Schema returns the message type for alert payloads.
 func (p *AlertPayload) Schema() message.Type {
 	return message.Type{Domain: "alerts", Category: "sensor", Version: "v1"}
 }
 
+// Validate checks the alert payload for required fields (currently accepts all).
 func (p *AlertPayload) Validate() error { return nil }
 
+// MarshalJSON serializes the alert payload to JSON.
 func (p *AlertPayload) MarshalJSON() ([]byte, error) {
 	type Alias AlertPayload
 	return json.Marshal((*Alias)(p))
 }
 
+// UnmarshalJSON deserializes the alert payload from JSON.
 func (p *AlertPayload) UnmarshalJSON(data []byte) error {
 	type Alias AlertPayload
 	return json.Unmarshal(data, (*Alias)(p))

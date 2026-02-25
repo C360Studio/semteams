@@ -28,7 +28,9 @@ import (
 )
 
 const (
-	Version   = "0.1.0-e2e"
+	// Version is the semantic version of the E2E test application.
+	Version = "0.1.0-e2e"
+	// BuildTime is the build timestamp, set during compilation.
 	BuildTime = "dev"
 	appName   = "e2e-semstreams"
 )
@@ -99,6 +101,13 @@ func run() error {
 	}
 	defer configManager.Stop(5 * time.Second)
 
+	// Create reactive workflow engine directly (app owns the engine)
+	// Config comes from the config file, but app manages the lifecycle
+	engine, err := createWorkflowEngine(ctx, cfg, natsClient, metricsRegistry, logger)
+	if err != nil {
+		return fmt.Errorf("create workflow engine: %w", err)
+	}
+
 	componentRegistry, manager, err := setupRegistriesAndManager(cfg)
 	if err != nil {
 		return err
@@ -110,44 +119,103 @@ func run() error {
 		return err
 	}
 
-	// Register component start hook for workflow registration
-	registerWorkflowHook(manager, logger)
-
-	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
+	return runWithSignalHandling(ctx, manager, engine, cliCfg.ShutdownTimeout)
 }
 
-// registerWorkflowHook sets up a hook to register e2e workflows when reactive-workflow starts.
-func registerWorkflowHook(manager *service.Manager, logger *slog.Logger) {
-	// Find the component-manager service
-	svc, ok := manager.GetService("component-manager")
-	if !ok || svc == nil {
-		logger.Warn("component-manager service not found, cannot register workflow hook")
-		return
+// createWorkflowEngine creates and starts the reactive workflow engine directly.
+// The app owns the engine lifecycle. Config is read from the app's config file.
+func createWorkflowEngine(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, metricsRegistry *metric.MetricsRegistry, logger *slog.Logger) (*reactive.Engine, error) {
+	// Extract reactive-workflow config from the app config
+	engineConfig, err := extractWorkflowConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("extract workflow config: %w", err)
 	}
 
-	cm, ok := svc.(*service.ComponentManager)
+	// Get metrics
+	metrics := reactive.GetMetrics(metricsRegistry)
+
+	// Create engine with metrics
+	engine := reactive.NewEngine(
+		engineConfig,
+		natsClient,
+		reactive.WithEngineLogger(logger),
+		reactive.WithEngineMetrics(metrics),
+	)
+
+	// Register all e2e workflows BEFORE initializing
+	if err := registerE2EWorkflows(engine); err != nil {
+		return nil, fmt.Errorf("register workflows: %w", err)
+	}
+	logger.Info("E2E workflows registered", "count", 4)
+
+	// Initialize the engine (creates KV buckets, etc.)
+	if err := engine.Initialize(ctx); err != nil {
+		return nil, fmt.Errorf("initialize engine: %w", err)
+	}
+
+	// Start the engine (begins watching triggers)
+	if err := engine.Start(ctx); err != nil {
+		return nil, fmt.Errorf("start engine: %w", err)
+	}
+
+	logger.Info("Reactive workflow engine started")
+	return engine, nil
+}
+
+// extractWorkflowConfig extracts the reactive-workflow config from the app config.
+func extractWorkflowConfig(cfg *config.Config) (reactive.Config, error) {
+	// Look for reactive-workflow in components
+	compCfg, ok := cfg.Components["reactive-workflow"]
 	if !ok {
-		logger.Warn("component-manager service is not a ComponentManager")
-		return
+		// Return sensible defaults if not configured
+		return reactive.Config{
+			StateBucket:          "REACTIVE_WORKFLOW_STATE",
+			CallbackStreamName:   "WORKFLOW_CALLBACKS",
+			EventStreamName:      "WORKFLOW_EVENTS",
+			DefaultTimeout:       "10m",
+			DefaultMaxIterations: 10,
+			CleanupRetention:     "24h",
+			CleanupInterval:      "1h",
+			ConsumerNamePrefix:   "e2e-",
+			EnableMetrics:        true,
+		}, nil
 	}
 
-	// Register hook for component start events
-	cm.RegisterComponentStartHook(func(ctx context.Context, name string, comp component.Discoverable) {
-		if name == "reactive-workflow" {
-			logger.Info("Reactive workflow component started, registering e2e workflows")
-			if rc, ok := comp.(*reactive.Component); ok {
-				if err := registerE2EWorkflows(rc.Engine()); err != nil {
-					logger.Error("Failed to register e2e workflows", "error", err)
-				} else {
-					logger.Info("E2E workflows registered successfully")
-				}
-			}
-		}
-	})
+	// Parse the config section
+	var engineConfig reactive.Config
+	if err := json.Unmarshal(compCfg.Config, &engineConfig); err != nil {
+		return reactive.Config{}, fmt.Errorf("parse reactive-workflow config: %w", err)
+	}
+
+	// Apply defaults for any missing fields
+	if engineConfig.StateBucket == "" {
+		engineConfig.StateBucket = "REACTIVE_WORKFLOW_STATE"
+	}
+	if engineConfig.CallbackStreamName == "" {
+		engineConfig.CallbackStreamName = "WORKFLOW_CALLBACKS"
+	}
+	if engineConfig.EventStreamName == "" {
+		engineConfig.EventStreamName = "WORKFLOW_EVENTS"
+	}
+	if engineConfig.DefaultTimeout == "" {
+		engineConfig.DefaultTimeout = "10m"
+	}
+	if engineConfig.DefaultMaxIterations == 0 {
+		engineConfig.DefaultMaxIterations = 10
+	}
+	if engineConfig.CleanupRetention == "" {
+		engineConfig.CleanupRetention = "24h"
+	}
+	if engineConfig.CleanupInterval == "" {
+		engineConfig.CleanupInterval = "1h"
+	}
+
+	return engineConfig, nil
 }
 
 // --- CLI and Config Functions (copied from semstreams main.go) ---
 
+// CLIConfig holds command-line configuration for the E2E application.
 type CLIConfig struct {
 	ConfigPath      string
 	LogLevel        string
@@ -476,7 +544,7 @@ func createServiceIfEnabled(
 	return nil
 }
 
-func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdownTimeout time.Duration) error {
+func runWithSignalHandling(ctx context.Context, manager *service.Manager, engine *reactive.Engine, shutdownTimeout time.Duration) error {
 	signalCtx, signalCancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer signalCancel()
 
@@ -491,6 +559,12 @@ func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdo
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
+
+	// Stop the workflow engine first
+	if engine != nil {
+		engine.Stop()
+		slog.Info("Reactive workflow engine stopped")
+	}
 
 	if err := shutdown(shutdownCtx, manager, shutdownTimeout); err != nil {
 		return fmt.Errorf("graceful shutdown failed: %w", err)
