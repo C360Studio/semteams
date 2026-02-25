@@ -831,7 +831,6 @@ components:
                         - $ref: ../schemas/udp.v1.json
                         - $ref: ../schemas/websocket.v1.json
                         - $ref: ../schemas/websocket_input.v1.json
-                        - $ref: ../schemas/workflow-processor.v1.json
                 type:
                     description: Component type (input/processor/output/storage)
                     type: string
