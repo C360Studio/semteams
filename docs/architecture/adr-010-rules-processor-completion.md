@@ -2,7 +2,13 @@
 
 ## Status
 
-Proposed
+Superseded by ADR-021
+
+> **Note**: This ADR describes completion work for the JSON-based rules processor.
+> The rules processor has been superseded by [ADR-021: Reactive Workflow Engine](./adr-021-reactive-workflow-engine.md),
+> which provides typed Go conditions, dual reactive primitives (KV + subject), and eliminates string interpolation.
+>
+> See [Reactive Workflows Guide](../advanced/10-reactive-workflows.md) for current documentation.
 
 ## Context
 

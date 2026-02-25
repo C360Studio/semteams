@@ -1,5 +1,22 @@
 # Rules Engine
 
+> **⚠️ DEPRECATED**
+>
+> The JSON-based rules engine is superseded by the **Reactive Workflow Engine** (ADR-021).
+> The reactive engine provides:
+> - Typed Go conditions (compile-time safety)
+> - Dual reactive primitives (KV watch + NATS subject consumers)
+> - Async callback correlation
+> - Combined message+state triggers
+>
+> **For new development, use:**
+> - [Reactive Workflows Guide](./10-reactive-workflows.md) - Usage documentation
+> - [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) - Design rationale
+>
+> This documentation is retained for reference during migration.
+
+---
+
 The rules engine evaluates conditions against entities and executes actions when conditions match. Rules can add or remove triples, publish messages, and build dynamic relationships that affect community detection.
 
 ## What Rules Do

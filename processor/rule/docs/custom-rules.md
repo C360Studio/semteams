@@ -1,5 +1,9 @@
 # Custom Rules
 
+> **⚠️ DEPRECATED**: The JSON-based rules engine is superseded by the Reactive Workflow Engine
+> (ADR-021). For custom logic, use typed `ConditionFunc` in Go code.
+> See [Reactive Workflows Guide](/docs/advanced/10-reactive-workflows.md).
+
 Extend the rules engine with custom rule types using the factory pattern.
 
 ## Architecture

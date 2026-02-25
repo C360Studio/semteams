@@ -1,33 +1,31 @@
 # Orchestration Layers
 
-SemStreams uses a three-layer orchestration model that separates concerns between reactive rules,
-multi-step workflows, and component execution. Understanding these layers and their boundaries is
+SemStreams uses a two-layer orchestration model that separates concerns between reactive
+orchestration and component execution. Understanding these layers and their boundaries is
 essential for building maintainable, scalable systems.
 
-> **Note**: As of ADR-021, workflows are defined in type-safe Go code using the reactive workflow
-> engine, replacing the previous JSON-based workflow processor. The core orchestration concepts
-> remain the same, but workflows now benefit from compile-time verification, direct struct field
-> access, and standard Go debugging tools.
+> **Note**: As of ADR-021, the **Reactive Workflow Engine** handles both rules-style single
+> triggers AND workflow-style multi-step orchestration using the same unified infrastructure.
+> Both are defined in type-safe Go code with compile-time verification.
 
-## The Three Layers
+## The Two Layers
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│  RULES ENGINE (ECA)                                         │
+│  REACTIVE ENGINE (unified orchestration)                    │
+│                                                             │
+│  Single triggers (rules pattern):                           │
 │  "When condition X, trigger action Y"                       │
-│  - Watches KV state                                         │
-│  - Fires single actions (publish, add_triple, etc.)         │
-│  - Can trigger: workflows OR direct component actions       │
-└─────────────────────────────────────────────────────────────┘
-                            │
-                            ▼ triggers
-┌─────────────────────────────────────────────────────────────┐
-│  REACTIVE WORKFLOW ENGINE (multi-step orchestration)        │
+│  - Watches KV state OR NATS subjects                        │
+│  - Fires single actions (publish, mutate, etc.)             │
+│                                                             │
+│  Multi-step workflows:                                      │
 │  "Execute steps A → B → C with timeouts and loop limits"    │
-│  - Owns workflow state (current step, iteration count)      │
+│  - Owns workflow state (phase, iteration count)             │
 │  - Enforces timeouts, loop limits                           │
-│  - Spawns work via component subjects                       │
-│  - Type-safe Go definitions replace JSON workflows          │
+│  - Async callback correlation                               │
+│                                                             │
+│  All defined as type-safe Go code with ConditionFunc        │
 └─────────────────────────────────────────────────────────────┘
                             │
                             ▼ spawns
@@ -43,58 +41,48 @@ essential for building maintainable, scalable systems.
 
 | Layer | Responsibility | Owns | Does NOT Own |
 |-------|---------------|------|--------------|
-| **Rules** | React to state, trigger workflows or actions | Conditions, single actions | Multi-step state, timeouts |
-| **Workflow** | Multi-step orchestration with state | Step sequence, loop limits, timeouts | Actual work execution |
+| **Reactive Engine** | State detection, multi-step orchestration | Conditions, actions, step sequence, timeouts | Actual work execution |
 | **Component** | Execute single units of work | Execution mechanics | Workflow awareness |
 
-## Rules Layer
+## Reactive Patterns
 
-The rules engine implements the Event-Condition-Action (ECA) pattern. Rules watch for state changes
-in NATS KV buckets and fire actions when conditions are met.
+The reactive engine supports two patterns through the same unified infrastructure:
 
-### What Rules Do Well
+### Single-Trigger Pattern (Rules-style)
 
-- **State detection**: React when an entity enters a specific state
-- **Single actions**: Publish a message, add a triple, update state
-- **Triggering workflows**: Start a multi-step process based on conditions
-- **Agent handoffs (simple)**: When architect completes, spawn editor
+For simple state-to-action reactions without multi-step coordination:
 
-### What Rules Should NOT Do
-
-- **Multi-step coordination**: Rules fire once; they don't track progress through steps
-- **Loop management**: Rules have no iteration counters or loop limits
-- **Timeout enforcement**: Rules react to state; they don't enforce time bounds
-- **Complex branching**: Rules handle if/then; they don't handle if/then/else/retry/timeout
-
-### Example: Simple Agent Handoff
-
-A rule-based handoff works when there's no loop or retry logic needed:
-
-```json
-{
-  "id": "architect_complete_spawn_editor",
-  "description": "When architect completes, spawn editor to implement",
-  "entity": {
-    "pattern": "LOOP_*"
-  },
-  "conditions": [
-    {"field": "role", "operator": "eq", "value": "architect"},
-    {"field": "outcome", "operator": "eq", "value": "success"}
-  ],
-  "on_enter": [{
-    "type": "publish_agent",
-    "subject": "agent.task.$entity.task_id.editor",
-    "role": "editor",
-    "prompt": "Implement the following architecture:\n\n$entity.result"
-  }]
-}
+```go
+// When architect completes, spawn editor
+reactive.NewRule("architect-complete-spawn-editor").
+    WatchKV("AGENT_LOOPS", "LOOP_*").
+    When("architect role", func(ctx *reactive.RuleContext) bool {
+        state := ctx.State.(*AgentLoopState)
+        return state.Role == "architect"
+    }).
+    When("completed successfully", func(ctx *reactive.RuleContext) bool {
+        state := ctx.State.(*AgentLoopState)
+        return state.Outcome == "success"
+    }).
+    Publish("agent.task.editor", func(ctx *reactive.RuleContext) (message.Payload, error) {
+        state := ctx.State.(*AgentLoopState)
+        return &EditorTask{
+            TaskID: state.TaskID,
+            Prompt: fmt.Sprintf("Implement: %s", state.Result),
+        }, nil
+    }).
+    Build()
 ```
 
-This is appropriate because:
+This is appropriate when:
 - Single condition triggers single action
 - No iteration tracking needed
 - No timeout enforcement required
 - Fire-and-forget semantics
+
+### Multi-Step Pattern (Workflow-style)
+
+For coordinated sequences with loop limits and timeouts, use workflow definitions (see below).
 
 ## Workflow Layer
 
