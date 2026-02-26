@@ -581,15 +581,20 @@ func (e *Engine) buildRuleContextFromMessage(
 
 			entry, err := bucket.Get(ctx, stateKey)
 			if err != nil {
-				// Key not found is not an error for combined triggers
-				if err != jetstream.ErrKeyNotFound {
+				// Key not found - create new empty state for accept-trigger pattern.
+				// This enables workflows to initialize state from the trigger message.
+				if err == jetstream.ErrKeyNotFound {
+					ruleCtx.State = def.StateFactory()
+					ruleCtx.KVKey = stateKey
+					ruleCtx.KVRevision = 0 // New state, no existing revision
+				} else {
 					return nil, &StateLoadError{
 						Key:   stateKey,
 						Cause: err,
 					}
 				}
 			} else {
-				// Deserialize state
+				// Deserialize existing state
 				state := def.StateFactory()
 				if err := json.Unmarshal(entry.Value(), state); err != nil {
 					return nil, &StateLoadError{
