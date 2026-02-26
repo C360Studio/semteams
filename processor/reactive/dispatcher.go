@@ -240,7 +240,9 @@ func (d *Dispatcher) dispatchPublishAsync(
 	return result, nil
 }
 
-// dispatchPublish publishes a message fire-and-forget, then optionally mutates state.
+// dispatchPublish writes state first (if mutator configured), then publishes message.
+// State is written BEFORE publish to prevent race conditions where downstream components
+// process the message and update state before the engine can claim the correct phase.
 func (d *Dispatcher) dispatchPublish(
 	ctx context.Context,
 	ruleCtx *RuleContext,
@@ -254,7 +256,32 @@ func (d *Dispatcher) dispatchPublish(
 		}
 	}
 
-	// Build the payload
+	result := &DispatchResult{}
+
+	// CRITICAL: Write state BEFORE publishing to prevent race conditions.
+	// If we publish first, downstream components may process the message and update
+	// state before the engine can write its state mutation. This causes "wrong last
+	// sequence" errors when the engine tries to update with a stale revision.
+	if action.MutateState != nil && ruleCtx.State != nil {
+		if err := action.MutateState(ruleCtx, nil); err != nil {
+			return nil, &DispatchError{
+				Action:  "publish",
+				Message: "state mutation failed: " + err.Error(),
+			}
+		}
+
+		newRev, err := d.writeState(ctx, ruleCtx, def)
+		if err != nil {
+			return nil, &DispatchError{
+				Action:  "publish",
+				Message: "failed to write state: " + err.Error(),
+			}
+		}
+		result.NewRevision = newRev
+		result.StateUpdated = true
+	}
+
+	// Build the payload (after state mutation so payload reflects updated state)
 	payload, err := action.BuildPayload(ruleCtx)
 	if err != nil {
 		return nil, &DispatchError{
@@ -278,7 +305,7 @@ func (d *Dispatcher) dispatchPublish(
 		}
 	}
 
-	// Publish to NATS
+	// Publish to NATS (state already claimed the correct phase)
 	if err := d.publisher.Publish(ctx, action.PublishSubject, data); err != nil {
 		return nil, &DispatchError{
 			Action:  "publish",
@@ -291,28 +318,7 @@ func (d *Dispatcher) dispatchPublish(
 		"subject", action.PublishSubject,
 		"execution_id", GetID(ruleCtx.State))
 
-	result := &DispatchResult{Published: true}
-
-	// If there's a state mutator, apply it and write to KV
-	if action.MutateState != nil && ruleCtx.State != nil {
-		if err := action.MutateState(ruleCtx, nil); err != nil {
-			return nil, &DispatchError{
-				Action:  "publish",
-				Message: "state mutation failed: " + err.Error(),
-			}
-		}
-
-		newRev, err := d.writeState(ctx, ruleCtx, def)
-		if err != nil {
-			return nil, &DispatchError{
-				Action:  "publish",
-				Message: "failed to write state: " + err.Error(),
-			}
-		}
-		result.NewRevision = newRev
-		result.StateUpdated = true
-	}
-
+	result.Published = true
 	return result, nil
 }
 
