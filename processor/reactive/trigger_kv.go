@@ -13,12 +13,18 @@ import (
 // NOTE: This implementation follows the reactive workflow engine design from ADR-021.
 // Critical: Use checkAndClearOwnRevision for atomic skip detection to prevent race conditions.
 
+// watcherEntry holds a KV watcher and all handlers registered for that bucket+pattern.
+type watcherEntry struct {
+	watcher  jetstream.KeyWatcher
+	handlers []WatchHandler
+}
+
 // KVWatcher manages KV watch operations for state-triggered rules.
 // It watches one or more KV buckets for state changes and triggers
 // rule evaluation when matching keys are updated.
 type KVWatcher struct {
 	logger   *slog.Logger
-	watchers map[string]jetstream.KeyWatcher // bucket:pattern -> watcher
+	watchers map[string]*watcherEntry // bucket:pattern -> watcher + handlers
 	mu       sync.RWMutex
 
 	// ownRevisions tracks revisions we wrote to prevent feedback loops.
@@ -35,7 +41,7 @@ type KVWatcher struct {
 func NewKVWatcher(logger *slog.Logger) *KVWatcher {
 	return &KVWatcher{
 		logger:       logger,
-		watchers:     make(map[string]jetstream.KeyWatcher),
+		watchers:     make(map[string]*watcherEntry),
 		ownRevisions: make(map[string]uint64),
 		shutdown:     make(chan struct{}),
 	}
@@ -89,7 +95,8 @@ func (op KVOperation) String() string {
 }
 
 // StartWatch starts watching a KV bucket for changes matching the pattern.
-// The handler is called for each matching update.
+// Multiple handlers can be registered for the same bucket+pattern; all will
+// be called when a matching update occurs.
 func (w *KVWatcher) StartWatch(
 	ctx context.Context,
 	bucket jetstream.KeyValue,
@@ -103,8 +110,13 @@ func (w *KVWatcher) StartWatch(
 	defer w.mu.Unlock()
 
 	// Check if already watching this bucket+pattern
-	if _, exists := w.watchers[key]; exists {
-		w.logger.Debug("Watcher already exists", "bucket", bucketName, "pattern", pattern)
+	if entry, exists := w.watchers[key]; exists {
+		// Add the new handler to existing watcher
+		entry.handlers = append(entry.handlers, handler)
+		w.logger.Debug("Added handler to existing watcher",
+			"bucket", bucketName,
+			"pattern", pattern,
+			"handler_count", len(entry.handlers))
 		return nil
 	}
 
@@ -114,10 +126,14 @@ func (w *KVWatcher) StartWatch(
 		return &WatchError{Bucket: bucketName, Pattern: pattern, Cause: err}
 	}
 
-	w.watchers[key] = watcher
+	entry := &watcherEntry{
+		watcher:  watcher,
+		handlers: []WatchHandler{handler},
+	}
+	w.watchers[key] = entry
 
 	// Start the goroutine to handle updates
-	go w.handleUpdates(ctx, bucketName, watcher, handler)
+	go w.handleUpdates(ctx, bucketName, key, watcher)
 
 	w.logger.Info("Started KV watcher", "bucket", bucketName, "pattern", pattern)
 	return nil
@@ -130,12 +146,12 @@ func (w *KVWatcher) StopWatch(bucketName, pattern string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	watcher, exists := w.watchers[key]
+	entry, exists := w.watchers[key]
 	if !exists {
 		return nil // Not watching, nothing to do
 	}
 
-	if err := watcher.Stop(); err != nil {
+	if err := entry.watcher.Stop(); err != nil {
 		w.logger.Warn("Error stopping watcher",
 			"bucket", bucketName,
 			"pattern", pattern,
@@ -157,13 +173,13 @@ func (w *KVWatcher) StopAll() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	for key, watcher := range w.watchers {
-		if err := watcher.Stop(); err != nil {
+	for key, entry := range w.watchers {
+		if err := entry.watcher.Stop(); err != nil {
 			w.logger.Warn("Error stopping watcher", "key", key, "error", err)
 		}
 	}
 
-	w.watchers = make(map[string]jetstream.KeyWatcher)
+	w.watchers = make(map[string]*watcherEntry)
 	w.logger.Info("Stopped all KV watchers")
 }
 
@@ -195,8 +211,8 @@ func (w *KVWatcher) checkAndClearOwnRevision(key string, revision uint64) bool {
 func (w *KVWatcher) handleUpdates(
 	ctx context.Context,
 	bucketName string,
+	watcherKey string,
 	watcher jetstream.KeyWatcher,
-	handler WatchHandler,
 ) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -246,7 +262,7 @@ func (w *KVWatcher) handleUpdates(
 				op = KVOperationDelete
 			}
 
-			// Build and dispatch event
+			// Build event
 			event := KVWatchEvent{
 				Bucket:    bucketName,
 				Key:       key,
@@ -256,7 +272,22 @@ func (w *KVWatcher) handleUpdates(
 				Timestamp: time.Now(),
 			}
 
-			handler(ctx, event)
+			// Get handlers under read lock
+			w.mu.RLock()
+			watchEntry, exists := w.watchers[watcherKey]
+			if !exists {
+				w.mu.RUnlock()
+				continue
+			}
+			// Make a copy of handlers to avoid holding lock during handler execution
+			handlers := make([]WatchHandler, len(watchEntry.handlers))
+			copy(handlers, watchEntry.handlers)
+			w.mu.RUnlock()
+
+			// Call all handlers
+			for _, handler := range handlers {
+				handler(ctx, event)
+			}
 		}
 	}
 }
