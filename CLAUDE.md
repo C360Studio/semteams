@@ -94,6 +94,31 @@ task e2e:all            # Run all tiers sequentially
 - E2E tests: Full Docker stack, tiered by capability
 - Always run with `-race` flag for concurrency checks
 
+## CI Requirements (IMPORTANT)
+
+**All CI checks must pass before pushing.** The CI workflow (`.github/workflows/ci.yml`) runs:
+
+1. **Lint** — `go vet`, `go fmt` (must be clean), `revive` (warnings = failure)
+2. **Test** — Unit tests with `-race`, integration tests with `-race`
+3. **Build** — Cross-compile Linux binary
+4. **Schema Validation** — `task schema:generate`, check for uncommitted changes
+
+Before pushing, run these locally:
+
+```bash
+task lint                    # Must pass with no warnings (revive warnings = CI fail)
+go test -race ./...          # Unit tests with race detector
+task schema:generate         # Generate schemas
+git diff schemas/ specs/     # Must show no changes (commit if there are)
+go test ./test/contract/...  # Contract tests
+```
+
+**Common CI failures:**
+- Revive lint warnings (fix all warnings, they indicate potential issues)
+- Uncommitted schema changes after `task schema:generate`
+- Race conditions detected in tests
+- Unformatted code (`go fmt` not run)
+
 ## Orchestration Boundaries
 
 SemStreams uses three orchestration layers. Respecting layer boundaries prevents design debt.
