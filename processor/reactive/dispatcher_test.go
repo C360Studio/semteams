@@ -867,9 +867,14 @@ func TestDispatcher_WithKVWatcher(t *testing.T) {
 
 	state := newTestDispatcherState()
 
+	// Pre-populate store with initial state (simulates existing state)
+	stateData, _ := json.Marshal(state)
+	rev, _ := store.Put(context.Background(), state.ID, stateData)
+
 	ruleCtx := &RuleContext{
-		State: state,
-		KVKey: state.ID,
+		State:      state,
+		KVKey:      state.ID,
+		KVRevision: rev, // Set revision to indicate this is an update, not initial creation
 	}
 
 	rule := &RuleDef{
@@ -888,7 +893,7 @@ func TestDispatcher_WithKVWatcher(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.StateUpdated)
 
-	// Verify the revision was recorded as our own
+	// Verify the revision was recorded as our own (only happens for updates, not initial creation)
 	kvWatcher.revisionMu.Lock()
 	_, recorded := kvWatcher.ownRevisions[state.ID]
 	kvWatcher.revisionMu.Unlock()
