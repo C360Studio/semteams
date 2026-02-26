@@ -146,7 +146,14 @@ type MyWorkflowState struct {
     Result      string   `json:"result,omitempty"`
     ErrorDetail string   `json:"error_detail,omitempty"`
 }
+
+// GetExecutionState implements reactive.StateAccessor to avoid reflection.
+func (s *MyWorkflowState) GetExecutionState() *reactive.ExecutionState {
+    return &s.ExecutionState
+}
 ```
+
+Always implement `GetExecutionState()` for your state types. This allows the engine to access the embedded `ExecutionState` without reflection overhead.
 
 ### ExecutionState Core Fields
 

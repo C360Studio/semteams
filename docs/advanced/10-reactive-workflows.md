@@ -188,7 +188,7 @@ func buildReviewLoop() *reactive.Definition {
 
 ## State Types
 
-Workflow states embed `reactive.ExecutionState`:
+Workflow states embed `reactive.ExecutionState` and implement `StateAccessor`:
 
 ```go
 type MyWorkflowState struct {
@@ -196,7 +196,14 @@ type MyWorkflowState struct {
     Input  string `json:"input"`    // Custom fields
     Output string `json:"output,omitempty"`
 }
+
+// GetExecutionState implements reactive.StateAccessor to avoid reflection.
+func (s *MyWorkflowState) GetExecutionState() *reactive.ExecutionState {
+    return &s.ExecutionState
+}
 ```
+
+Always implement `GetExecutionState()` for state types. Without it, the engine falls back to reflection on every state access.
 
 ### ExecutionState Fields
 
@@ -315,18 +322,6 @@ Engine
 | Serialization | 9+ boundaries | 2 boundaries |
 | Error detection | Load/runtime | Compile time |
 | Debugging | String inspection | Go debugger |
-
-## Migration Guide
-
-To migrate from JSON workflows to reactive workflows:
-
-1. **Define typed state struct** embedding `reactive.ExecutionState`
-2. **Define typed message structs** for inputs/outputs
-3. **Create workflow definition** using fluent builder
-4. **Convert conditions** from JSON expressions to `ConditionFunc`
-5. **Convert payload_mapping** to `PayloadBuilderFunc`
-6. **Convert state mutations** to `StateMutatorFunc`
-7. **Register workflow** with reactive engine
 
 ## Working Examples
 

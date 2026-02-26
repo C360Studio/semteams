@@ -575,9 +575,9 @@ if reactive.IsExpired(ctx.State) {
 }
 ```
 
-### Custom State Accessor (Optional)
+### State Accessor (Recommended)
 
-For performance-critical workflows, implement the `StateAccessor` interface to avoid reflection:
+Always implement the `StateAccessor` interface for custom state types. This avoids reflection overhead on every state access:
 
 ```go
 type ReviewFixState struct {
@@ -586,10 +586,13 @@ type ReviewFixState struct {
     Verdict string
 }
 
+// GetExecutionState implements reactive.StateAccessor to avoid reflection.
 func (s *ReviewFixState) GetExecutionState() *reactive.ExecutionState {
     return &s.ExecutionState
 }
 ```
+
+The engine falls back to reflection if `StateAccessor` is not implemented, but this adds overhead on every call to state functions like `SetPhase()`, `SetStatus()`, `IncrementIteration()`, etc.
 
 ## Integration with Agentic System
 
@@ -797,91 +800,6 @@ func ReviewFixCycleWorkflow() *reactive.Definition {
         MustBuild()
 }
 ```
-
-## Migration from JSON Workflows
-
-The reactive workflow engine replaces the deprecated JSON-based DAG workflow processor. Key differences:
-
-### Before (JSON Workflow)
-
-```json
-{
-  "steps": [
-    {
-      "name": "review",
-      "inputs": {
-        "code": {"from": "trigger.payload.code"}
-      },
-      "outputs": {
-        "verdict": {"interface": "reviewer.verdict.v1"}
-      },
-      "action": {
-        "type": "call",
-        "subject": "reviewer.analyze"
-      }
-    },
-    {
-      "name": "fix",
-      "condition": {
-        "field": "review.verdict",
-        "operator": "eq",
-        "value": "needs_work"
-      },
-      "inputs": {
-        "issues": {"from": "review.issues"}
-      },
-      "action": {
-        "type": "call",
-        "subject": "fixer.repair"
-      }
-    }
-  ]
-}
-```
-
-### After (Reactive Workflow)
-
-```go
-reactive.NewRule("apply-fixes").
-    WatchKV("REVIEW_FIX_STATE", "review-fix.*").
-    When("phase is evaluated", func(ctx *reactive.RuleContext) bool {
-        state := ctx.State.(*ReviewFixState)
-        return state.Phase == "evaluated"
-    }).
-    When("verdict is needs_work", func(ctx *reactive.RuleContext) bool {
-        state := ctx.State.(*ReviewFixState)
-        return state.Verdict == "needs_work"
-    }).
-    PublishAsync(
-        "fixer.repair",
-        func(ctx *reactive.RuleContext) (message.Payload, error) {
-            state := ctx.State.(*ReviewFixState)
-            return &FixRequest{
-                Code:   state.Code,
-                Issues: state.Issues,
-            }, nil
-        },
-        "fixer.result.v1",
-        func(ctx *reactive.RuleContext, result any) error {
-            state := ctx.State.(*ReviewFixState)
-            fixed := result.(*FixResult)
-            state.Code = fixed.Code
-            state.Phase = "reviewing"
-            return nil
-        },
-    ).
-    MustBuild()
-```
-
-**Key Benefits:**
-
-| Aspect | JSON Workflows | Reactive Workflows |
-|--------|---------------|-------------------|
-| Type safety | Runtime errors | Compile-time errors |
-| Field references | String interpolation (`${review.verdict}`) | Go field access (`state.Verdict`) |
-| Serialization | 9+ boundaries | 2 boundaries |
-| Debugging | String inspection | Go debugger with stack traces |
-| Error detection | Load-time or runtime | Compile-time |
 
 ## Related Documentation
 

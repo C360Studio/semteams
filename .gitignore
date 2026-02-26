@@ -59,4 +59,4 @@ cmd/e2e/test/e2e/results/profiles/
 # E2E test results
 cmd/e2e/test/e2e/results/*.json
 cmd/e2e/test/e2e/results/*.txt
-e2e-semstreams
+/e2e-semstreams

@@ -16,6 +16,11 @@ type BuilderTestState struct {
 	Counter     int    `json:"counter"`
 }
 
+// GetExecutionState implements StateAccessor to avoid reflection.
+func (s *BuilderTestState) GetExecutionState() *ExecutionState {
+	return &s.ExecutionState
+}
+
 // BuilderTestPayload is a test message payload.
 type BuilderTestPayload struct {
 	Value string `json:"value"`

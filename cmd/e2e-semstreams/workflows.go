@@ -40,6 +40,11 @@ type AlertState struct {
 	Severity  string `json:"severity"`
 }
 
+// GetExecutionState implements reactive.StateAccessor to avoid reflection in hotpath.
+func (s *AlertState) GetExecutionState() *reactive.ExecutionState {
+	return &s.ExecutionState
+}
+
 // AlertPayload is published when an alert fires.
 type AlertPayload struct {
 	EntityID  string    `json:"entity_id"`
@@ -234,6 +239,11 @@ func buildLowPressureAlertWorkflow() *reactive.Definition {
 type TechAlertState struct {
 	reactive.ExecutionState
 	EntityID string `json:"entity_id"`
+}
+
+// GetExecutionState implements reactive.StateAccessor to avoid reflection in hotpath.
+func (s *TechAlertState) GetExecutionState() *reactive.ExecutionState {
+	return &s.ExecutionState
 }
 
 // buildNotifyTechnicianWorkflow creates a workflow that responds to rule triggers.
