@@ -410,6 +410,12 @@ func (d *Dispatcher) dispatchComplete(
 	}
 
 	// Publish rule-specific completion event (from CompleteWithEvent builder)
+	d.logger.Info("dispatchComplete checking publish conditions",
+		"has_subject", action.PublishSubject != "",
+		"subject", action.PublishSubject,
+		"has_builder", action.BuildPayload != nil,
+		"has_publisher", d.publisher != nil)
+
 	if action.PublishSubject != "" && action.BuildPayload != nil && d.publisher != nil {
 		payload, err := action.BuildPayload(ruleCtx)
 		if err != nil {
@@ -430,6 +436,11 @@ func (d *Dispatcher) dispatchComplete(
 			}
 		}
 
+		d.logger.Info("Publishing completion event",
+			"subject", action.PublishSubject,
+			"payload_type", msgType.String(),
+			"data_len", len(data))
+
 		if err := d.publisher.Publish(ctx, action.PublishSubject, data); err != nil {
 			d.logger.Error("Failed to publish completion event",
 				"error", err,
@@ -437,7 +448,7 @@ func (d *Dispatcher) dispatchComplete(
 			// Don't fail the action - state was already updated
 		} else {
 			result.Published = true
-			d.logger.Debug("Published completion event",
+			d.logger.Info("Published completion event successfully",
 				"subject", action.PublishSubject,
 				"execution_id", GetID(ruleCtx.State))
 		}
