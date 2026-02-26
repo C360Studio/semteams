@@ -270,8 +270,9 @@ func (e *Engine) startWorkflowTriggers(ctx context.Context, def *Definition) err
 		rule := &def.Rules[i]
 		mode := rule.Trigger.Mode()
 
-		// Start KV triggers
-		if mode == TriggerStateOnly || mode == TriggerMessageAndState {
+		// Start KV triggers only for rules that explicitly watch a bucket.
+		// Rules with StateBucket (for state lookup) but no WatchBucket don't need KV watching.
+		if rule.Trigger.WatchBucket != "" {
 			watchBucket, err := js.KeyValue(ctx, rule.Trigger.WatchBucket)
 			if err != nil {
 				// Try to create the bucket if it doesn't exist
@@ -374,9 +375,10 @@ func (e *Engine) startKVTriggers(ctx context.Context) error {
 	for _, def := range e.registry.GetAll() {
 		for i := range def.Rules {
 			rule := &def.Rules[i]
-			mode := rule.Trigger.Mode()
 
-			if mode != TriggerStateOnly && mode != TriggerMessageAndState {
+			// Only start KV triggers for rules that explicitly watch a bucket.
+			// Rules with StateBucket (for state lookup) but no WatchBucket don't need KV watching.
+			if rule.Trigger.WatchBucket == "" {
 				continue
 			}
 

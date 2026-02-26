@@ -246,6 +246,13 @@ func TestRuleBuilder_CombinedTrigger(t *testing.T) {
 	if rule.Trigger.StateKeyFunc == nil {
 		t.Error("Expected StateKeyFunc to be set")
 	}
+
+	// Critical: WatchBucket should be empty when using StateLookup only.
+	// The engine must NOT try to start a KV watch for this rule.
+	// This prevents the "nats: invalid bucket name" error when WatchBucket is empty.
+	if rule.Trigger.WatchBucket != "" {
+		t.Errorf("Expected WatchBucket to be empty for StateLookup-only rule, got %q", rule.Trigger.WatchBucket)
+	}
 }
 
 func TestRuleBuilder_PublishAsync(t *testing.T) {
