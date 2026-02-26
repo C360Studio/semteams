@@ -409,14 +409,48 @@ func (d *Dispatcher) dispatchComplete(
 		result.StateUpdated = true
 	}
 
-	// Publish completion event if configured
+	// Publish rule-specific completion event (from CompleteWithEvent builder)
+	if action.PublishSubject != "" && action.BuildPayload != nil && d.publisher != nil {
+		payload, err := action.BuildPayload(ruleCtx)
+		if err != nil {
+			return nil, &DispatchError{
+				Action:  "complete",
+				Message: "failed to build completion event payload: " + err.Error(),
+			}
+		}
+
+		// Build message with proper wrapping (same pattern as dispatchPublish)
+		msgType := payload.Schema()
+		baseMsg := message.NewBaseMessage(msgType, payload, d.source)
+		data, err := json.Marshal(baseMsg)
+		if err != nil {
+			return nil, &DispatchError{
+				Action:  "complete",
+				Message: "failed to marshal completion event: " + err.Error(),
+			}
+		}
+
+		if err := d.publisher.Publish(ctx, action.PublishSubject, data); err != nil {
+			d.logger.Error("Failed to publish completion event",
+				"error", err,
+				"subject", action.PublishSubject)
+			// Don't fail the action - state was already updated
+		} else {
+			result.Published = true
+			d.logger.Debug("Published completion event",
+				"subject", action.PublishSubject,
+				"execution_id", GetID(ruleCtx.State))
+		}
+	}
+
+	// Publish workflow-level completion event if configured (different from rule event)
 	if def.Events.OnComplete != "" && d.publisher != nil {
 		if err := d.publishCompletionEvent(ctx, ruleCtx, def.Events.OnComplete); err != nil {
-			d.logger.Error("Failed to publish completion event",
+			d.logger.Error("Failed to publish workflow completion event",
 				"error", err,
 				"subject", def.Events.OnComplete)
 			// Don't fail the action - state was already updated
-		} else {
+		} else if !result.Published {
 			result.Published = true
 		}
 	}
