@@ -468,13 +468,18 @@ func (d *Dispatcher) writeState(
 		return 0, err
 	}
 
-	// Mark this revision as our own to prevent feedback loops.
-	// Only record for updates (KVRevision > 0), not initial state creation.
-	// Initial state writes should trigger KV watchers so subsequent rules
-	// can react to the new state (e.g., accept-trigger -> dispatch-generator).
-	if d.kvWatcher != nil && ruleCtx.KVRevision > 0 {
-		d.kvWatcher.RecordOwnRevision(key, newRev)
-	}
+	// NOTE: We intentionally DO NOT record own revisions here.
+	//
+	// Previously, we called d.kvWatcher.RecordOwnRevision(key, newRev) to prevent
+	// feedback loops. However, this blocked ALL rules from firing on engine writes,
+	// breaking workflow progression (e.g., generator-completed -> dispatch-reviewer).
+	//
+	// Workflow rules naturally prevent self-triggering through phase transitions:
+	// - dispatch-generator fires on phase="generating", writes phase="dispatched"
+	// - The new phase doesn't match "generating", so dispatch-generator won't re-fire
+	//
+	// If a workflow rule could re-trigger on its own write, that's a workflow design
+	// issue to be fixed in the rule conditions, not masked by skipping all handlers.
 
 	// Update the revision in context for subsequent operations
 	ruleCtx.KVRevision = newRev

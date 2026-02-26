@@ -893,11 +893,14 @@ func TestDispatcher_WithKVWatcher(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.StateUpdated)
 
-	// Verify the revision was recorded as our own (only happens for updates, not initial creation)
+	// Verify own revision is NOT recorded - we intentionally allow subsequent rules
+	// to fire on engine writes. Workflow rules prevent self-triggering through phase
+	// transitions (e.g., dispatch-generator fires on phase="generating" and writes
+	// phase="dispatched", so it won't re-trigger on its own write).
 	kvWatcher.revisionMu.Lock()
 	_, recorded := kvWatcher.ownRevisions[state.ID]
 	kvWatcher.revisionMu.Unlock()
-	assert.True(t, recorded)
+	assert.False(t, recorded, "own revision should NOT be recorded to allow workflow rule chaining")
 }
 
 func TestDispatcher_NoStateForMutate(t *testing.T) {
