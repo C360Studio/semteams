@@ -462,8 +462,11 @@ func (d *Dispatcher) writeState(
 		return 0, err
 	}
 
-	// Mark this revision as our own to prevent feedback loops
-	if d.kvWatcher != nil {
+	// Mark this revision as our own to prevent feedback loops.
+	// Only record for updates (KVRevision > 0), not initial state creation.
+	// Initial state writes should trigger KV watchers so subsequent rules
+	// can react to the new state (e.g., accept-trigger -> dispatch-generator).
+	if d.kvWatcher != nil && ruleCtx.KVRevision > 0 {
 		d.kvWatcher.RecordOwnRevision(key, newRev)
 	}
 
