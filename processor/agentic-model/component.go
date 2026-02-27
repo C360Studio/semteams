@@ -15,6 +15,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
@@ -25,11 +26,15 @@ var agenticModelSchema = component.GenerateConfigSchema(reflect.TypeOf(Config{})
 
 // Component implements the agentic-model processor
 type Component struct {
-	name       string
-	config     Config
-	clients    map[string]*Client // endpoint name -> client
-	natsClient *natsclient.Client
-	logger     *slog.Logger
+	name          string
+	config        Config
+	modelRegistry model.RegistryReader
+	natsClient    *natsclient.Client
+	logger        *slog.Logger
+
+	// Dynamic client cache — clients are created on-demand from registry endpoints
+	clientCache map[string]*Client // cache key -> client
+	clientMu    sync.Mutex
 
 	// Parsed timeout for message processing
 	messageTimeout time.Duration
@@ -76,6 +81,11 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, errs.WrapInvalid(err, "Component", "NewComponent", "validate config")
 	}
 
+	// Require model registry
+	if deps.ModelRegistry == nil {
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Component", "NewComponent", "model registry is required")
+	}
+
 	// Parse timeout for message processing
 	messageTimeout := 120 * time.Second // default
 	if config.Timeout != "" {
@@ -86,20 +96,11 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		}
 	}
 
-	// Create clients for each endpoint
-	clients := make(map[string]*Client)
-	for name, endpoint := range config.Endpoints {
-		client, err := NewClient(endpoint)
-		if err != nil {
-			return nil, errs.Wrap(err, "Component", "NewComponent", fmt.Sprintf("create client for endpoint %q", name))
-		}
-		clients[name] = client
-	}
-
 	return &Component{
 		name:           "agentic-model",
 		config:         config,
-		clients:        clients,
+		modelRegistry:  deps.ModelRegistry,
+		clientCache:    make(map[string]*Client),
 		natsClient:     deps.NATSClient,
 		logger:         deps.GetLogger(),
 		messageTimeout: messageTimeout,
@@ -282,12 +283,15 @@ func (c *Component) Stop(timeout time.Duration) error {
 	}
 	c.consumerInfos = nil
 
-	// Close all HTTP clients
-	for name, client := range c.clients {
+	// Close all cached clients
+	c.clientMu.Lock()
+	for key, client := range c.clientCache {
 		if err := client.Close(); err != nil {
-			c.logger.Warn("Failed to close client", "endpoint", name, "error", err)
+			c.logger.Warn("Failed to close client", "key", key, "error", err)
 		}
 	}
+	c.clientCache = make(map[string]*Client)
+	c.clientMu.Unlock()
 
 	// Check if we completed within timeout
 	select {
@@ -312,6 +316,17 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 		c.logger.Error("Failed to parse agent request", "error", err)
 		c.incrementErrors()
 		return
+	}
+
+	// Strip tools if endpoint doesn't support them
+	if len(req.Tools) > 0 {
+		ep := c.modelRegistry.GetEndpoint(req.Model)
+		if ep != nil && !ep.SupportsTools {
+			c.logger.Warn("Stripping tools from request: endpoint does not support tool calling",
+				"model", req.Model,
+				"tool_count", len(req.Tools))
+			req.Tools = nil
+		}
 	}
 
 	c.logger.Info("Processing agent request",
@@ -422,23 +437,40 @@ func (c *Component) handleModelSuccess(ctx context.Context, req agentic.AgentReq
 	c.mu.Unlock()
 }
 
-// getClientForRequest resolves endpoint and returns the appropriate client
+// getClientForRequest resolves endpoint from registry and returns a cached or new client
 func (c *Component) getClientForRequest(req agentic.AgentRequest) (*Client, error) {
-	endpoint, err := c.ResolveEndpoint(req.Model)
-	if err != nil {
-		c.logger.Error("Failed to resolve endpoint", "model", req.Model, "error", err)
-		return nil, err
-	}
-
-	// Get client for endpoint
-	for name, ep := range c.config.Endpoints {
-		if ep.URL == endpoint.URL && ep.Model == endpoint.Model {
-			return c.clients[name], nil
+	ep := c.modelRegistry.GetEndpoint(req.Model)
+	if ep == nil {
+		// Try the default endpoint
+		defaultName := c.modelRegistry.GetDefault()
+		if defaultName != "" {
+			ep = c.modelRegistry.GetEndpoint(defaultName)
+		}
+		if ep == nil {
+			return nil, errs.WrapInvalid(
+				fmt.Errorf("no endpoint found for model %q in registry", req.Model),
+				"Component", "getClientForRequest", "resolve endpoint",
+			)
 		}
 	}
 
-	c.logger.Error("No client found for endpoint", "model", req.Model)
-	return nil, errs.WrapInvalid(fmt.Errorf("no client for model %s", req.Model), "Component", "getClientForRequest", "find client")
+	// Cache key: URL + model name
+	cacheKey := ep.URL + "|" + ep.Model
+
+	c.clientMu.Lock()
+	defer c.clientMu.Unlock()
+
+	if client, ok := c.clientCache[cacheKey]; ok {
+		return client, nil
+	}
+
+	client, err := NewClient(ep)
+	if err != nil {
+		return nil, errs.Wrap(err, "Component", "getClientForRequest", fmt.Sprintf("create client for model %q", req.Model))
+	}
+
+	c.clientCache[cacheKey] = client
+	return client, nil
 }
 
 // executeRequest executes the chat completion with timeout
@@ -461,37 +493,6 @@ func (c *Component) incrementErrors() {
 	c.mu.Lock()
 	c.errors++
 	c.mu.Unlock()
-}
-
-// ResolveEndpoint resolves a model name to an endpoint
-func (c *Component) ResolveEndpoint(modelName string) (Endpoint, error) {
-	// Resolution priority:
-	// 1. Check if modelName is an alias -> resolve to alias target
-	// 2. Check if (resolved or original) name is in Endpoints -> return endpoint
-	// 3. Fall back to "default" endpoint if it exists
-	// 4. Error if no resolution found
-
-	resolvedName := modelName
-
-	// Step 1: Check if modelName is an alias
-	if c.config.ModelAliases != nil {
-		if target, isAlias := c.config.ModelAliases[modelName]; isAlias {
-			resolvedName = target
-		}
-	}
-
-	// Step 2: Check if resolved name is an endpoint
-	if endpoint, exists := c.config.Endpoints[resolvedName]; exists {
-		return endpoint, nil
-	}
-
-	// Step 3: Try to find "default" endpoint
-	if defaultEndpoint, exists := c.config.Endpoints["default"]; exists {
-		return defaultEndpoint, nil
-	}
-
-	// Step 4: No resolution found
-	return Endpoint{}, errs.WrapInvalid(fmt.Errorf("no endpoint found for model %q", modelName), "Component", "ResolveEndpoint", "resolve model")
 }
 
 // publishResponse publishes an agent response to JetStream

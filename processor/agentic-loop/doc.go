@@ -124,12 +124,11 @@
 //	    ToolResultMaxAge:   3,     // Evict tool results older than 3 iterations
 //	    HeadroomTokens:     6400,  // Reserve tokens for new content
 //	    SummarizationModel: "fast", // Model alias for summarization
-//	    ModelLimits: map[string]int{
-//	        "gpt-4o":        128000,
-//	        "claude-sonnet": 200000,
-//	        "default":       128000,
-//	    },
 //	}
+//
+// Model context limits are resolved from the unified model registry
+// (component.Dependencies.ModelRegistry). If a model is not found in
+// the registry, DefaultContextLimit (128000) is used as fallback.
 //
 // Context events are published to agent.context.compaction.*:
 //
@@ -213,8 +212,7 @@
 //	        "compact_threshold": 0.60,
 //	        "tool_result_max_age": 3,
 //	        "headroom_tokens": 6400,
-//	        "summarization_model": "fast",
-//	        "model_limits": {"default": 128000}
+//	        "summarization_model": "fast"
 //	    },
 //	    "ports": {
 //	        "inputs": [...],

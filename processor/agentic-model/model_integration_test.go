@@ -22,6 +22,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
 )
@@ -126,20 +127,25 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 		StreamName:           "AGENT",
 		ConsumerNameSuffix:   "test-" + t.Name(),
 		DeleteConsumerOnStop: true,
-		Endpoints: map[string]agenticmodel.Endpoint{
+		Timeout:              "5s",
+	}
+
+	registry := &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
 			"test-model": {
-				URL:   mockServer.URL + "/v1/chat/completions",
-				Model: "test-model",
+				URL:       mockServer.URL + "/v1/chat/completions",
+				Model:     "test-model",
+				MaxTokens: 128000,
 			},
 		},
-		Timeout: "5s",
 	}
 
 	rawConfig, err := json.Marshal(config)
 	require.NoError(t, err)
 
 	deps := component.Dependencies{
-		NATSClient: natsClient,
+		NATSClient:    natsClient,
+		ModelRegistry: registry,
 	}
 
 	comp, err := agenticmodel.NewComponent(rawConfig, deps)
@@ -271,20 +277,26 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 		StreamName:           "AGENT",
 		ConsumerNameSuffix:   "test-" + t.Name(),
 		DeleteConsumerOnStop: true,
-		Endpoints: map[string]agenticmodel.Endpoint{
+		Timeout:              "5s",
+	}
+
+	registry := &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
 			"tool-model": {
-				URL:   mockServer.URL + "/v1/chat/completions",
-				Model: "tool-model",
+				URL:           mockServer.URL + "/v1/chat/completions",
+				Model:         "tool-model",
+				MaxTokens:     128000,
+				SupportsTools: true,
 			},
 		},
-		Timeout: "5s",
 	}
 
 	rawConfig, err := json.Marshal(config)
 	require.NoError(t, err)
 
 	deps := component.Dependencies{
-		NATSClient: natsClient,
+		NATSClient:    natsClient,
+		ModelRegistry: registry,
 	}
 
 	comp, err := agenticmodel.NewComponent(rawConfig, deps)
@@ -446,24 +458,30 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 		StreamName:           "AGENT",
 		ConsumerNameSuffix:   "test-" + t.Name(),
 		DeleteConsumerOnStop: true,
-		Endpoints: map[string]agenticmodel.Endpoint{
+		Timeout:              "5s",
+	}
+
+	registry := &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
 			"model-a": {
-				URL:   mockServer1.URL + "/v1/chat/completions",
-				Model: "model-a",
+				URL:       mockServer1.URL + "/v1/chat/completions",
+				Model:     "model-a",
+				MaxTokens: 128000,
 			},
 			"model-b": {
-				URL:   mockServer2.URL + "/v1/chat/completions",
-				Model: "model-b",
+				URL:       mockServer2.URL + "/v1/chat/completions",
+				Model:     "model-b",
+				MaxTokens: 128000,
 			},
 		},
-		Timeout: "5s",
 	}
 
 	rawConfig, err := json.Marshal(config)
 	require.NoError(t, err)
 
 	deps := component.Dependencies{
-		NATSClient: natsClient,
+		NATSClient:    natsClient,
+		ModelRegistry: registry,
 	}
 
 	comp, err := agenticmodel.NewComponent(rawConfig, deps)

@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/security"
 	"github.com/c360studio/semstreams/types"
 )
@@ -32,14 +33,14 @@ type ComponentConfigs map[string]types.ComponentConfig
 // Config represents the complete application configuration
 // Simplified to 6 fields: Version (semver), Platform (identity), Security (TLS), NATS (connection), Services, Components
 type Config struct {
-	Version    string               `json:"version"` // Semantic version (e.g., "1.0.0") for KV sync control
-	Platform   PlatformConfig       `json:"platform"`
-	Security   security.Config      `json:"security,omitempty"` // Platform-wide security configuration
-	NATS       NATSConfig           `json:"nats"`
-	Services   types.ServiceConfigs `json:"services"`          // Map of service configs
-	Components ComponentConfigs     `json:"components"`        // Map of component instance configs
-	Streams    StreamConfigs        `json:"streams,omitempty"` // Optional explicit JetStream stream definitions
-	// Graph and ObjectStore moved to components (graph-processor and objectstore)
+	Version       string               `json:"version"` // Semantic version (e.g., "1.0.0") for KV sync control
+	Platform      PlatformConfig       `json:"platform"`
+	Security      security.Config      `json:"security,omitempty"` // Platform-wide security configuration
+	NATS          NATSConfig           `json:"nats"`
+	Services      types.ServiceConfigs `json:"services"`                 // Map of service configs
+	Components    ComponentConfigs     `json:"components"`               // Map of component instance configs
+	Streams       StreamConfigs        `json:"streams,omitempty"`        // Optional explicit JetStream stream definitions
+	ModelRegistry *model.Registry      `json:"model_registry,omitempty"` // Unified model endpoint registry
 }
 
 // SafeConfig provides thread-safe access to configuration
@@ -186,7 +187,12 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	// ObjectStore validation moved to objectstore component
+	// Validate model registry if present
+	if c.ModelRegistry != nil {
+		if err := c.ModelRegistry.Validate(); err != nil {
+			return fmt.Errorf("model_registry: %w", err)
+		}
+	}
 
 	return nil
 }

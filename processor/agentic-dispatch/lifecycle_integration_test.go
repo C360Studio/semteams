@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 )
 
@@ -41,6 +42,12 @@ func createTestComponentForLifecycle() component.LifecycleComponent {
 	config := DefaultConfig()
 	deps := component.Dependencies{
 		NATSClient: tc.Client,
+		ModelRegistry: &model.Registry{
+			Endpoints: map[string]*model.EndpointConfig{
+				"test-model": {Model: "test-model", MaxTokens: 128000},
+			},
+			Defaults: model.DefaultsConfig{Model: "test-model"},
+		},
 	}
 
 	rawConfig, err := json.Marshal(config)

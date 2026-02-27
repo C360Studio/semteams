@@ -298,7 +298,7 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg agentic.U
 		LoopID:           loopID,
 		TaskID:           taskID,
 		Role:             c.config.DefaultRole,
-		Model:            c.config.DefaultModel,
+		Model:            c.resolveModel(),
 		Prompt:           msg.Content,
 		ContextRequestID: msg.ContextRequestID,
 	}
@@ -837,7 +837,7 @@ type DebugState struct {
 // DebugConfig contains non-sensitive configuration for debugging.
 type DebugConfig struct {
 	DefaultRole  string `json:"default_role"`
-	DefaultModel string `json:"default_model"`
+	DefaultModel string `json:"default_model"` // Resolved from model registry
 	AutoContinue bool   `json:"auto_continue"`
 	StreamName   string `json:"stream_name"`
 }
@@ -877,7 +877,7 @@ func (c *Component) handleDebugState(w http.ResponseWriter, r *http.Request) {
 		Commands:     commandNames,
 		Config: DebugConfig{
 			DefaultRole:  c.config.DefaultRole,
-			DefaultModel: c.config.DefaultModel,
+			DefaultModel: c.resolveModel(),
 			AutoContinue: c.config.AutoContinue,
 			StreamName:   c.config.StreamName,
 		},

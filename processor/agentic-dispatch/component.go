@@ -12,6 +12,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/google/uuid"
@@ -20,13 +21,14 @@ import (
 
 // Component implements the router processor
 type Component struct {
-	config      Config
-	deps        component.Dependencies
-	natsClient  *natsclient.Client
-	logger      *slog.Logger
-	loopTracker *LoopTracker
-	registry    *CommandRegistry
-	metrics     *routerMetrics
+	config        Config
+	deps          component.Dependencies
+	natsClient    *natsclient.Client
+	logger        *slog.Logger
+	loopTracker   *LoopTracker
+	registry      *CommandRegistry
+	metrics       *routerMetrics
+	modelRegistry model.RegistryReader // Unified model registry for model selection
 
 	// Lifecycle state
 	mu        sync.RWMutex
@@ -55,12 +57,14 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, errs.WrapInvalid(err, "Component", "NewComponent", "parse config")
 	}
 
+	// Require model registry
+	if deps.ModelRegistry == nil {
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Component", "NewComponent", "deps.ModelRegistry is required")
+	}
+
 	// Apply defaults for empty values
 	if config.DefaultRole == "" {
 		config.DefaultRole = DefaultConfig().DefaultRole
-	}
-	if config.DefaultModel == "" {
-		config.DefaultModel = DefaultConfig().DefaultModel
 	}
 	if config.StreamName == "" {
 		config.StreamName = DefaultConfig().StreamName
@@ -86,15 +90,16 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 
 	logger := deps.GetLogger()
 	comp := &Component{
-		config:      config,
-		deps:        deps,
-		natsClient:  deps.NATSClient,
-		logger:      logger,
-		loopTracker: NewLoopTrackerWithLogger(logger),
-		registry:    NewCommandRegistry(),
-		metrics:     getMetrics(deps.MetricsRegistry),
-		inputPorts:  inputPorts,
-		outputPorts: outputPorts,
+		config:        config,
+		deps:          deps,
+		natsClient:    deps.NATSClient,
+		logger:        logger,
+		loopTracker:   NewLoopTrackerWithLogger(logger),
+		registry:      NewCommandRegistry(),
+		metrics:       getMetrics(deps.MetricsRegistry),
+		modelRegistry: deps.ModelRegistry,
+		inputPorts:    inputPorts,
+		outputPorts:   outputPorts,
 	}
 
 	// Register built-in commands
@@ -493,6 +498,11 @@ func (c *Component) handleCommand(ctx context.Context, msg agentic.UserMessage) 
 		slog.String("user_id", msg.UserID))
 }
 
+// resolveModel returns the default model from the model registry.
+func (c *Component) resolveModel() string {
+	return c.modelRegistry.GetDefault()
+}
+
 // handleTaskSubmission creates a new agent task
 func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMessage) {
 	// Check submit permission
@@ -529,7 +539,7 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 		LoopID:           loopID,
 		TaskID:           taskID,
 		Role:             c.config.DefaultRole,
-		Model:            c.config.DefaultModel,
+		Model:            c.resolveModel(),
 		Prompt:           msg.Content,
 		ContextRequestID: msg.ContextRequestID,
 	}

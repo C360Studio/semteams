@@ -74,8 +74,7 @@ func TestCompactor_ShouldCompact(t *testing.T) {
 
 			// Create context manager with target utilization
 			cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
-			modelLimit := config.ModelLimits["gpt-4o"]
-			targetTokens := int(float64(modelLimit) * tt.utilization)
+			targetTokens := int(float64(agenticloop.DefaultContextLimit) * tt.utilization)
 			fillContextToTokens(t, cm, targetTokens)
 
 			shouldCompact := compactor.ShouldCompact(cm)
@@ -366,8 +365,7 @@ func TestCompactor_Compact_NetTokenReduction(t *testing.T) {
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// Fill context to high utilization
-	modelLimit := config.ModelLimits["gpt-4o"]
-	targetTokens := int(float64(modelLimit) * 0.70)
+	targetTokens := int(float64(agenticloop.DefaultContextLimit) * 0.70)
 	fillContextToTokens(t, cm, targetTokens)
 
 	totalTokensBefore := 0

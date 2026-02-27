@@ -9,17 +9,8 @@ import (
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
-// Context configuration constants
-const (
-	// DefaultModelKey is the key used in ModelLimits for the fallback context limit
-	DefaultModelKey = "default"
-
-	// MaxReasonableContextLimit is the maximum allowed token limit (2M tokens, future-proof)
-	MaxReasonableContextLimit = 2_000_000
-
-	// MinContextLimit is the minimum allowed token limit (sanity check)
-	MinContextLimit = 1024
-)
+// DefaultContextLimit is the fallback context window size when the model is unknown.
+const DefaultContextLimit = 128000
 
 // Config represents the configuration for the agentic-loop processor
 type Config struct {
@@ -30,20 +21,18 @@ type Config struct {
 	DeleteConsumerOnStop bool                  `json:"delete_consumer_on_stop,omitempty" schema:"type:bool,description:Delete durable consumers on Stop (use for tests only),category:advanced,default:false"`
 	LoopsBucket          string                `json:"loops_bucket" schema:"type:string,description:NATS KV bucket name for storing loop state,default:AGENT_LOOPS,category:advanced,required"`
 	TrajectoriesBucket   string                `json:"trajectories_bucket" schema:"type:string,description:NATS KV bucket name for storing trajectories,default:AGENT_TRAJECTORIES,category:advanced,required"`
-	Context              ContextConfig         `json:"context" schema:"type:object,description:Context window management. model_limits maps model names to context window sizes in tokens,category:advanced"`
+	Context              ContextConfig         `json:"context" schema:"type:object,description:Context window management. Model limits are resolved from the model registry,category:advanced"`
 	Ports                *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
 }
 
 // ContextConfig represents configuration for context memory management.
-// ModelLimits maps model names (e.g., "llama3.2:8b", "mistral-7b-instruct") to their
-// context window sizes in tokens. Must include a "default" key for unknown models.
+// Model context limits are resolved from the unified model registry (component.Dependencies.ModelRegistry).
 type ContextConfig struct {
-	Enabled            bool           `json:"enabled" description:"Enable context memory management"`
-	CompactThreshold   float64        `json:"compact_threshold" description:"Utilization threshold (0.01-1.0) that triggers context compaction"`
-	ToolResultMaxAge   int            `json:"tool_result_max_age" description:"Maximum age in iterations before tool results are garbage collected"`
-	HeadroomTokens     int            `json:"headroom_tokens" description:"Token headroom to reserve for model responses"`
-	SummarizationModel string         `json:"summarization_model" description:"Model alias to use for context summarization"`
-	ModelLimits        map[string]int `json:"model_limits" description:"Map of model name to context window size in tokens. Must include 'default' key for fallback."`
+	Enabled            bool    `json:"enabled" description:"Enable context memory management"`
+	CompactThreshold   float64 `json:"compact_threshold" description:"Utilization threshold (0.01-1.0) that triggers context compaction"`
+	ToolResultMaxAge   int     `json:"tool_result_max_age" description:"Maximum age in iterations before tool results are garbage collected"`
+	HeadroomTokens     int     `json:"headroom_tokens" description:"Token headroom to reserve for model responses"`
+	SummarizationModel string  `json:"summarization_model" description:"Model alias to use for context summarization"`
 
 	// Multi-agent context budget fields
 	MaxBudgetTokens  int      `json:"max_budget_tokens,omitempty" description:"Hard token limit for context budget (overrides model limits when set)"`
@@ -115,25 +104,6 @@ func (c ContextConfig) Validate() error {
 		return errs.WrapInvalid(fmt.Errorf("summarization_model is required when context management is enabled"), "ContextConfig", "Validate", "check summarization_model")
 	}
 
-	// Validate ModelLimits: must have "default" key, all values within bounds
-	if c.ModelLimits == nil || len(c.ModelLimits) == 0 {
-		return errs.WrapInvalid(fmt.Errorf("model_limits cannot be empty"), "ContextConfig", "Validate", "check model_limits")
-	}
-	if _, hasDefault := c.ModelLimits[DefaultModelKey]; !hasDefault {
-		return errs.WrapInvalid(fmt.Errorf("model_limits must contain %q entry", DefaultModelKey), "ContextConfig", "Validate", "check default model")
-	}
-	for model, limit := range c.ModelLimits {
-		if limit <= 0 {
-			return errs.WrapInvalid(fmt.Errorf("model_limits for %q must be greater than 0", model), "ContextConfig", "Validate", "check model limit")
-		}
-		if limit < MinContextLimit {
-			return errs.WrapInvalid(fmt.Errorf("model_limits[%q] = %d is below minimum %d", model, limit, MinContextLimit), "ContextConfig", "Validate", "check minimum limit")
-		}
-		if limit > MaxReasonableContextLimit {
-			return errs.WrapInvalid(fmt.Errorf("model_limits[%q] = %d exceeds maximum %d", model, limit, MaxReasonableContextLimit), "ContextConfig", "Validate", "check maximum limit")
-		}
-	}
-
 	return nil
 }
 
@@ -145,13 +115,6 @@ func DefaultContextConfig() ContextConfig {
 		ToolResultMaxAge:   3,
 		HeadroomTokens:     6400,
 		SummarizationModel: "fast",
-		ModelLimits: map[string]int{
-			"gpt-4o":        128000,
-			"gpt-4o-mini":   128000,
-			"claude-sonnet": 200000,
-			"claude-opus":   200000,
-			"default":       128000,
-		},
 	}
 }
 

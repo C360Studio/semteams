@@ -7,10 +7,10 @@ import (
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
-// Config represents the configuration for the router processor
+// Config represents the configuration for the router processor.
+// Model selection is resolved from the unified model registry (component.Dependencies.ModelRegistry).
 type Config struct {
 	DefaultRole          string                `json:"default_role" schema:"type:string,description:Default role for new tasks,default:general,category:basic,required"`
-	DefaultModel         string                `json:"default_model" schema:"type:string,description:Default model for new tasks,default:qwen2.5-coder:32b,category:basic,required"`
 	AutoContinue         bool                  `json:"auto_continue" schema:"type:bool,description:Automatically continue last active loop,default:true,category:basic"` // Continue last loop if exists
 	Permissions          PermissionConfig      `json:"permissions" schema:"type:object,description:Permission configuration,category:advanced"`
 	StreamName           string                `json:"stream_name" schema:"type:string,description:NATS stream name for user messages,default:USER,category:advanced"`
@@ -33,9 +33,6 @@ func (c Config) Validate() error {
 	if c.DefaultRole == "" {
 		return errs.WrapInvalid(fmt.Errorf("default_role is required"), "Config", "Validate", "check default_role")
 	}
-	if c.DefaultModel == "" {
-		return errs.WrapInvalid(fmt.Errorf("default_model is required"), "Config", "Validate", "check default_model")
-	}
 	return nil
 }
 
@@ -43,7 +40,6 @@ func (c Config) Validate() error {
 func DefaultConfig() Config {
 	return Config{
 		DefaultRole:  "general",
-		DefaultModel: "qwen2.5-coder:32b",
 		AutoContinue: true,
 		StreamName:   "USER",
 		Permissions: PermissionConfig{

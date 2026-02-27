@@ -9,8 +9,16 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/model"
 	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
 )
+
+// newTestRegistry returns a minimal model.Registry for use in unit tests.
+func newTestRegistry(endpoints map[string]*model.EndpointConfig) *model.Registry {
+	return &model.Registry{
+		Endpoints: endpoints,
+	}
+}
 
 func TestComponent_Meta(t *testing.T) {
 	comp := createTestComponent(t)
@@ -103,15 +111,6 @@ func TestComponent_ConfigSchema(t *testing.T) {
 	if len(schema.Properties) == 0 {
 		t.Error("ConfigSchema().Properties should not be empty")
 	}
-
-	// Verify endpoints property exists
-	endpointsProp, ok := schema.Properties["endpoints"]
-	if !ok {
-		t.Fatal("ConfigSchema() should have 'endpoints' property")
-	}
-	if endpointsProp.Type != "object" {
-		t.Errorf("endpoints property type = %s, want object", endpointsProp.Type)
-	}
 }
 
 func TestComponent_Health_NotStarted(t *testing.T) {
@@ -134,12 +133,6 @@ func TestNewComponent_ValidConfig(t *testing.T) {
 				{Name: "output", Type: "nats", Subject: "agent.response.*", Required: true},
 			},
 		},
-		Endpoints: map[string]agenticmodel.Endpoint{
-			"default": {
-				URL:   "http://localhost:8080/v1",
-				Model: "gpt-4",
-			},
-		},
 		Timeout: "120s",
 	}
 
@@ -148,8 +141,17 @@ func TestNewComponent_ValidConfig(t *testing.T) {
 		t.Fatalf("Marshal config failed: %v", err)
 	}
 
+	registry := newTestRegistry(map[string]*model.EndpointConfig{
+		"default": {
+			URL:       "http://localhost:8080/v1",
+			Model:     "gpt-4",
+			MaxTokens: 128000,
+		},
+	})
+
 	deps := component.Dependencies{
-		NATSClient: nil, // Unit test doesn't need real NATS
+		NATSClient:    nil, // Unit test doesn't need real NATS
+		ModelRegistry: registry,
 	}
 
 	comp, err := agenticmodel.NewComponent(rawConfig, deps)
@@ -163,20 +165,23 @@ func TestNewComponent_ValidConfig(t *testing.T) {
 
 func TestNewComponent_MissingNATSClient(t *testing.T) {
 	config := agenticmodel.DefaultConfig()
-	config.Endpoints = map[string]agenticmodel.Endpoint{
-		"default": {
-			URL:   "http://localhost:8080/v1",
-			Model: "gpt-4",
-		},
-	}
 
 	rawConfig, err := json.Marshal(config)
 	if err != nil {
 		t.Fatalf("Marshal config failed: %v", err)
 	}
 
+	registry := newTestRegistry(map[string]*model.EndpointConfig{
+		"default": {
+			URL:       "http://localhost:8080/v1",
+			Model:     "gpt-4",
+			MaxTokens: 128000,
+		},
+	})
+
 	deps := component.Dependencies{
-		NATSClient: nil,
+		NATSClient:    nil,
+		ModelRegistry: registry,
 	}
 
 	// Component creation should succeed even without NATS client
@@ -206,9 +211,8 @@ func TestNewComponent_InvalidConfigJSON(t *testing.T) {
 	}
 }
 
-func TestNewComponent_MissingEndpoints(t *testing.T) {
+func TestNewComponent_MissingModelRegistry(t *testing.T) {
 	config := agenticmodel.DefaultConfig()
-	// Endpoints is empty map (invalid)
 
 	rawConfig, err := json.Marshal(config)
 	if err != nil {
@@ -216,216 +220,39 @@ func TestNewComponent_MissingEndpoints(t *testing.T) {
 	}
 
 	deps := component.Dependencies{
-		NATSClient: nil,
+		NATSClient:    nil,
+		ModelRegistry: nil, // missing registry
 	}
 
 	comp, err := agenticmodel.NewComponent(rawConfig, deps)
 	if err == nil {
-		t.Fatal("NewComponent() should fail with missing endpoints")
+		t.Fatal("NewComponent() should fail with missing model registry")
 	}
 	if comp != nil {
 		t.Error("NewComponent() should return nil on error")
 	}
 }
 
-func TestEndpointResolution_KnownModel(t *testing.T) {
-	config := agenticmodel.Config{
-		Ports: &component.PortConfig{
-			Inputs: []component.PortDefinition{
-				{Name: "input", Type: "nats", Subject: "agent.request.>", Required: true},
-			},
-			Outputs: []component.PortDefinition{
-				{Name: "output", Type: "nats", Subject: "agent.response.*", Required: true},
-			},
-		},
-		Endpoints: map[string]agenticmodel.Endpoint{
-			"qwen-32b": {
-				URL:   "http://ollama:11434/v1",
-				Model: "qwen2.5:32b",
-			},
-			"deepseek-16b": {
-				URL:   "http://lmstudio:1234/v1",
-				Model: "deepseek-coder-16b",
-			},
-		},
-		Timeout: "120s",
-	}
-
-	rawConfig, err := json.Marshal(config)
-	if err != nil {
-		t.Fatalf("Marshal config failed: %v", err)
-	}
-
-	deps := component.Dependencies{
-		NATSClient: nil,
-	}
-
-	comp, err := agenticmodel.NewComponent(rawConfig, deps)
-	if err != nil {
-		t.Fatalf("NewComponent() failed: %v", err)
-	}
-
-	// Test endpoint resolution
-	resolver, ok := comp.(interface {
-		ResolveEndpoint(modelName string) (agenticmodel.Endpoint, error)
-	})
-	if !ok {
-		t.Fatal("Component should implement ResolveEndpoint method")
-	}
-
-	// Resolve qwen-32b
-	endpoint, err := resolver.ResolveEndpoint("qwen-32b")
-	if err != nil {
-		t.Fatalf("ResolveEndpoint(qwen-32b) failed: %v", err)
-	}
-	if endpoint.URL != "http://ollama:11434/v1" {
-		t.Errorf("Endpoint URL = %s, want http://ollama:11434/v1", endpoint.URL)
-	}
-	if endpoint.Model != "qwen2.5:32b" {
-		t.Errorf("Endpoint Model = %s, want qwen2.5:32b", endpoint.Model)
-	}
-
-	// Resolve deepseek-16b
-	endpoint, err = resolver.ResolveEndpoint("deepseek-16b")
-	if err != nil {
-		t.Fatalf("ResolveEndpoint(deepseek-16b) failed: %v", err)
-	}
-	if endpoint.URL != "http://lmstudio:1234/v1" {
-		t.Errorf("Endpoint URL = %s, want http://lmstudio:1234/v1", endpoint.URL)
-	}
-	if endpoint.Model != "deepseek-coder-16b" {
-		t.Errorf("Endpoint Model = %s, want deepseek-coder-16b", endpoint.Model)
-	}
-}
-
-func TestEndpointResolution_UnknownModel(t *testing.T) {
-	config := agenticmodel.Config{
-		Ports: &component.PortConfig{
-			Inputs: []component.PortDefinition{
-				{Name: "input", Type: "nats", Subject: "agent.request.>", Required: true},
-			},
-			Outputs: []component.PortDefinition{
-				{Name: "output", Type: "nats", Subject: "agent.response.*", Required: true},
-			},
-		},
-		Endpoints: map[string]agenticmodel.Endpoint{
-			"qwen-32b": {
-				URL:   "http://ollama:11434/v1",
-				Model: "qwen2.5:32b",
-			},
-		},
-		Timeout: "120s",
-	}
-
-	rawConfig, err := json.Marshal(config)
-	if err != nil {
-		t.Fatalf("Marshal config failed: %v", err)
-	}
-
-	deps := component.Dependencies{
-		NATSClient: nil,
-	}
-
-	comp, err := agenticmodel.NewComponent(rawConfig, deps)
-	if err != nil {
-		t.Fatalf("NewComponent() failed: %v", err)
-	}
-
-	resolver, ok := comp.(interface {
-		ResolveEndpoint(modelName string) (agenticmodel.Endpoint, error)
-	})
-	if !ok {
-		t.Fatal("Component should implement ResolveEndpoint method")
-	}
-
-	// Try to resolve unknown model
-	_, err = resolver.ResolveEndpoint("unknown-model")
-	if err == nil {
-		t.Fatal("ResolveEndpoint(unknown-model) should return error")
-	}
-
-	// Error message should mention the unknown model
-	if !containsIgnoreCase(err.Error(), "unknown") && !containsIgnoreCase(err.Error(), "not found") {
-		t.Errorf("Error message = %v, should mention unknown/not found", err)
-	}
-}
-
-func TestEndpointResolution_DefaultFallback(t *testing.T) {
-	config := agenticmodel.Config{
-		Ports: &component.PortConfig{
-			Inputs: []component.PortDefinition{
-				{Name: "input", Type: "nats", Subject: "agent.request.>", Required: true},
-			},
-			Outputs: []component.PortDefinition{
-				{Name: "output", Type: "nats", Subject: "agent.response.*", Required: true},
-			},
-		},
-		Endpoints: map[string]agenticmodel.Endpoint{
-			"default": {
-				URL:   "http://localhost:8080/v1",
-				Model: "gpt-4",
-			},
-			"qwen-32b": {
-				URL:   "http://ollama:11434/v1",
-				Model: "qwen2.5:32b",
-			},
-		},
-		Timeout: "120s",
-	}
-
-	rawConfig, err := json.Marshal(config)
-	if err != nil {
-		t.Fatalf("Marshal config failed: %v", err)
-	}
-
-	deps := component.Dependencies{
-		NATSClient: nil,
-	}
-
-	comp, err := agenticmodel.NewComponent(rawConfig, deps)
-	if err != nil {
-		t.Fatalf("NewComponent() failed: %v", err)
-	}
-
-	resolver, ok := comp.(interface {
-		ResolveEndpoint(modelName string) (agenticmodel.Endpoint, error)
-	})
-	if !ok {
-		t.Fatal("Component should implement ResolveEndpoint method")
-	}
-
-	// Try to resolve with empty model name (should use "default")
-	endpoint, err := resolver.ResolveEndpoint("")
-	if err != nil {
-		// Either error or fallback to default is acceptable
-		// Test just ensures it doesn't panic
-		t.Logf("ResolveEndpoint with empty name returned error: %v", err)
-		return
-	}
-
-	// If it succeeds, it should be the default endpoint
-	if endpoint.Model != "gpt-4" && endpoint.URL != "http://localhost:8080/v1" {
-		t.Logf("Empty model name resolved to: %+v", endpoint)
-	}
-}
-
 // createTestComponent creates a minimal component for testing
 func createTestComponent(t *testing.T) component.Discoverable {
 	config := agenticmodel.DefaultConfig()
-	config.Endpoints = map[string]agenticmodel.Endpoint{
-		"default": {
-			URL:   "http://localhost:8080/v1",
-			Model: "gpt-4",
-		},
-	}
 
 	rawConfig, err := json.Marshal(config)
 	if err != nil {
 		t.Fatalf("Marshal config failed: %v", err)
 	}
 
+	registry := newTestRegistry(map[string]*model.EndpointConfig{
+		"default": {
+			URL:       "http://localhost:8080/v1",
+			Model:     "gpt-4",
+			MaxTokens: 128000,
+		},
+	})
+
 	deps := component.Dependencies{
-		NATSClient: nil,
+		NATSClient:    nil,
+		ModelRegistry: registry,
 	}
 
 	comp, err := agenticmodel.NewComponent(rawConfig, deps)
