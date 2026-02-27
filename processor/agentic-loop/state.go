@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/google/uuid"
 )
@@ -20,6 +21,7 @@ type LoopManager struct {
 	requestToLoop   map[string]string          // requestID -> loopID
 	toolCallToLoop  map[string]string          // callID -> loopID
 	contextConfig   ContextConfig              // shared context config
+	modelRegistry   model.RegistryReader       // model registry for context managers
 	logger          *slog.Logger               // logger for context managers
 	mu              sync.RWMutex
 }
@@ -31,6 +33,13 @@ type LoopManagerOption func(*LoopManager)
 func WithLoopManagerLogger(logger *slog.Logger) LoopManagerOption {
 	return func(lm *LoopManager) {
 		lm.logger = logger
+	}
+}
+
+// WithLoopManagerModelRegistry sets the model registry for context managers
+func WithLoopManagerModelRegistry(reg model.RegistryReader) LoopManagerOption {
+	return func(lm *LoopManager) {
+		lm.modelRegistry = reg
 	}
 }
 
@@ -92,7 +101,11 @@ func (m *LoopManager) CreateLoopWithID(loopID, taskID, role, model string, maxIt
 
 	// Create context manager for this loop if context management is enabled
 	if m.contextConfig.Enabled {
-		m.contextManagers[loopID] = NewContextManager(loopID, model, m.contextConfig, WithLogger(m.logger))
+		opts := []ContextManagerOption{WithLogger(m.logger)}
+		if m.modelRegistry != nil {
+			opts = append(opts, WithModelRegistry(m.modelRegistry))
+		}
+		m.contextManagers[loopID] = NewContextManager(loopID, model, m.contextConfig, opts...)
 	}
 
 	return loopID, nil

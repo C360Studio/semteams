@@ -11,7 +11,6 @@ func TestDefaultConfig(t *testing.T) {
 	config := DefaultConfig()
 
 	assert.Equal(t, "general", config.DefaultRole)
-	assert.Equal(t, "qwen2.5-coder:32b", config.DefaultModel)
 	assert.True(t, config.AutoContinue)
 	assert.Equal(t, "USER", config.StreamName)
 
@@ -41,27 +40,17 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "valid minimal config",
 			config: Config{
-				DefaultRole:  "agent",
-				DefaultModel: "gpt-4",
-				StreamName:   "CUSTOM",
+				DefaultRole: "agent",
+				StreamName:  "CUSTOM",
 			},
 			wantErr: "",
 		},
 		{
 			name: "missing default_role",
 			config: Config{
-				DefaultModel: "gpt-4",
-				StreamName:   "USER",
+				StreamName: "USER",
 			},
 			wantErr: "default_role is required",
-		},
-		{
-			name: "missing default_model",
-			config: Config{
-				DefaultRole: "general",
-				StreamName:  "USER",
-			},
-			wantErr: "default_model is required",
 		},
 	}
 

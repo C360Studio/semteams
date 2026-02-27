@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
 	openai "github.com/sashabaranov/go-openai"
 )
@@ -14,13 +15,16 @@ import (
 // Client wraps OpenAI SDK for agentic model requests
 type Client struct {
 	client   *openai.Client
-	endpoint Endpoint
+	endpoint *model.EndpointConfig
 }
 
-// NewClient creates a new client for the given endpoint
-func NewClient(endpoint Endpoint) (*Client, error) {
-	if err := endpoint.Validate(); err != nil {
-		return nil, errs.WrapInvalid(err, "Client", "NewClient", "validate endpoint")
+// NewClient creates a new client for the given endpoint configuration
+func NewClient(endpoint *model.EndpointConfig) (*Client, error) {
+	if endpoint == nil {
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Client", "NewClient", "endpoint is nil")
+	}
+	if endpoint.Model == "" {
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Client", "NewClient", "check model")
 	}
 
 	// Get API key from environment if specified
@@ -31,7 +35,9 @@ func NewClient(endpoint Endpoint) (*Client, error) {
 
 	// Create OpenAI client config
 	config := openai.DefaultConfig(apiKey)
-	config.BaseURL = endpoint.URL
+	if endpoint.URL != "" {
+		config.BaseURL = endpoint.URL
+	}
 
 	client := openai.NewClientWithConfig(config)
 

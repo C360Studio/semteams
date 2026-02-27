@@ -13,13 +13,15 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/model"
 	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
 )
 
 func TestNewClient_ValidConfig(t *testing.T) {
-	endpoint := agenticmodel.Endpoint{
-		URL:   "http://localhost:8080/v1",
-		Model: "gpt-4",
+	endpoint := &model.EndpointConfig{
+		URL:       "http://localhost:8080/v1",
+		Model:     "gpt-4",
+		MaxTokens: 128000,
 	}
 
 	client, err := agenticmodel.NewClient(endpoint)
@@ -31,23 +33,10 @@ func TestNewClient_ValidConfig(t *testing.T) {
 	}
 }
 
-func TestNewClient_MissingURL(t *testing.T) {
-	endpoint := agenticmodel.Endpoint{
-		Model: "gpt-4",
-	}
-
-	client, err := agenticmodel.NewClient(endpoint)
-	if err == nil {
-		t.Fatal("NewClient() should fail with missing URL")
-	}
-	if client != nil {
-		t.Error("NewClient() should return nil client on error")
-	}
-}
-
 func TestNewClient_MissingModel(t *testing.T) {
-	endpoint := agenticmodel.Endpoint{
-		URL: "http://localhost:8080/v1",
+	endpoint := &model.EndpointConfig{
+		URL:       "http://localhost:8080/v1",
+		MaxTokens: 128000,
 	}
 
 	client, err := agenticmodel.NewClient(endpoint)
@@ -97,9 +86,10 @@ func TestChatCompletion_SimpleSuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	endpoint := agenticmodel.Endpoint{
-		URL:   server.URL,
-		Model: "gpt-4",
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
 	}
 
 	client, err := agenticmodel.NewClient(endpoint)
@@ -176,9 +166,10 @@ func TestChatCompletion_WithToolCalls(t *testing.T) {
 	}))
 	defer server.Close()
 
-	endpoint := agenticmodel.Endpoint{
-		URL:   server.URL,
-		Model: "gpt-4",
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
 	}
 
 	client, err := agenticmodel.NewClient(endpoint)
@@ -236,9 +227,10 @@ func TestChatCompletion_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	endpoint := agenticmodel.Endpoint{
-		URL:   server.URL,
-		Model: "gpt-4",
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
 	}
 
 	client, err := agenticmodel.NewClient(endpoint)
@@ -276,9 +268,10 @@ func TestChatCompletion_Timeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	endpoint := agenticmodel.Endpoint{
-		URL:   server.URL,
-		Model: "gpt-4",
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
 	}
 
 	client, err := agenticmodel.NewClient(endpoint)
@@ -347,9 +340,10 @@ func TestChatCompletion_RetryBehavior(t *testing.T) {
 	}))
 	defer server.Close()
 
-	endpoint := agenticmodel.Endpoint{
-		URL:   server.URL,
-		Model: "gpt-4",
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
 	}
 
 	client, err := agenticmodel.NewClient(endpoint)
@@ -419,9 +413,10 @@ func TestChatCompletion_RequestMapping(t *testing.T) {
 	}))
 	defer server.Close()
 
-	endpoint := agenticmodel.Endpoint{
-		URL:   server.URL,
-		Model: "gpt-4",
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
 	}
 
 	client, err := agenticmodel.NewClient(endpoint)
@@ -557,9 +552,10 @@ func TestChatCompletion_ResponseMapping(t *testing.T) {
 			}))
 			defer server.Close()
 
-			endpoint := agenticmodel.Endpoint{
-				URL:   server.URL,
-				Model: "gpt-4",
+			endpoint := &model.EndpointConfig{
+				URL:       server.URL,
+				Model:     "gpt-4",
+				MaxTokens: 128000,
 			}
 
 			client, err := agenticmodel.NewClient(endpoint)

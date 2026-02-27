@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/model"
 	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
 )
 
@@ -18,18 +19,23 @@ func createTestComponentForLifecycle() component.LifecycleComponent {
 	}
 
 	config := agenticmodel.DefaultConfig()
-	// Add required endpoint configuration
-	config.Endpoints = map[string]agenticmodel.Endpoint{
-		"default": {
-			URL:   "http://localhost:8080/v1",
-			Model: "gpt-4",
-		},
-	}
 	// Use unique consumer suffix and delete on stop for test isolation
 	config.ConsumerNameSuffix = "lifecycle"
 	config.DeleteConsumerOnStop = true
+
+	registry := &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
+			"default": {
+				URL:       "http://localhost:8080/v1",
+				Model:     "gpt-4",
+				MaxTokens: 128000,
+			},
+		},
+	}
+
 	deps := component.Dependencies{
-		NATSClient: sharedNATSClient,
+		NATSClient:    sharedNATSClient,
+		ModelRegistry: registry,
 	}
 
 	rawConfig, err := json.Marshal(config)

@@ -5,72 +5,10 @@
 package agenticmodel_test
 
 import (
-	"encoding/json"
 	"testing"
 
 	agenticmodel "github.com/c360studio/semstreams/processor/agentic-model"
 )
-
-func TestConfig_JSONSerialization(t *testing.T) {
-	tests := []struct {
-		name     string
-		config   agenticmodel.Config
-		wantJSON string
-	}{
-		{
-			name: "minimal config",
-			config: agenticmodel.Config{
-				Endpoints: map[string]agenticmodel.Endpoint{
-					"default": {
-						URL:   "http://localhost:8080/v1",
-						Model: "mistral-7b",
-					},
-				},
-			},
-			wantJSON: `{"endpoints":{"default":{"url":"http://localhost:8080/v1","model":"mistral-7b"}}}`,
-		},
-		{
-			name: "full config with api key env",
-			config: agenticmodel.Config{
-				Endpoints: map[string]agenticmodel.Endpoint{
-					"qwen-32b": {
-						URL:       "http://ollama:11434/v1",
-						Model:     "qwen2.5:32b",
-						APIKeyEnv: "OLLAMA_API_KEY",
-					},
-					"deepseek-16b": {
-						URL:       "http://lmstudio:1234/v1",
-						Model:     "deepseek-coder-16b",
-						APIKeyEnv: "LMSTUDIO_KEY",
-					},
-				},
-				Timeout: "120s",
-			},
-			wantJSON: `{"endpoints":{"deepseek-16b":{"url":"http://lmstudio:1234/v1","model":"deepseek-coder-16b","api_key_env":"LMSTUDIO_KEY"},"qwen-32b":{"url":"http://ollama:11434/v1","model":"qwen2.5:32b","api_key_env":"OLLAMA_API_KEY"}},"timeout":"120s"}`,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Marshal
-			gotJSON, err := json.Marshal(tt.config)
-			if err != nil {
-				t.Fatalf("Marshal() error = %v", err)
-			}
-
-			// Unmarshal back
-			var gotConfig agenticmodel.Config
-			if err := json.Unmarshal(gotJSON, &gotConfig); err != nil {
-				t.Fatalf("Unmarshal() error = %v", err)
-			}
-
-			// Verify round-trip
-			if len(gotConfig.Endpoints) != len(tt.config.Endpoints) {
-				t.Errorf("Endpoints count mismatch: got %d, want %d", len(gotConfig.Endpoints), len(tt.config.Endpoints))
-			}
-		})
-	}
-}
 
 func TestConfig_Validate(t *testing.T) {
 	tests := []struct {
@@ -80,83 +18,13 @@ func TestConfig_Validate(t *testing.T) {
 		errMsg  string
 	}{
 		{
-			name: "valid minimal config",
-			config: agenticmodel.Config{
-				Endpoints: map[string]agenticmodel.Endpoint{
-					"default": {
-						URL:   "http://localhost:8080/v1",
-						Model: "gpt-4",
-					},
-				},
-			},
+			name:    "valid minimal config",
+			config:  agenticmodel.Config{},
 			wantErr: false,
-		},
-		{
-			name: "valid multiple endpoints",
-			config: agenticmodel.Config{
-				Endpoints: map[string]agenticmodel.Endpoint{
-					"qwen-32b": {
-						URL:   "http://ollama:11434/v1",
-						Model: "qwen2.5:32b",
-					},
-					"deepseek-16b": {
-						URL:   "http://lmstudio:1234/v1",
-						Model: "deepseek-coder-16b",
-					},
-				},
-				Timeout: "120s",
-			},
-			wantErr: false,
-		},
-		{
-			name: "empty endpoints map",
-			config: agenticmodel.Config{
-				Endpoints: map[string]agenticmodel.Endpoint{},
-			},
-			wantErr: true,
-			errMsg:  "endpoints",
-		},
-		{
-			name: "nil endpoints",
-			config: agenticmodel.Config{
-				Endpoints: nil,
-			},
-			wantErr: true,
-			errMsg:  "endpoints",
-		},
-		{
-			name: "endpoint missing URL",
-			config: agenticmodel.Config{
-				Endpoints: map[string]agenticmodel.Endpoint{
-					"bad": {
-						Model: "gpt-4",
-					},
-				},
-			},
-			wantErr: true,
-			errMsg:  "url",
-		},
-		{
-			name: "endpoint missing Model",
-			config: agenticmodel.Config{
-				Endpoints: map[string]agenticmodel.Endpoint{
-					"bad": {
-						URL: "http://localhost:8080/v1",
-					},
-				},
-			},
-			wantErr: true,
-			errMsg:  "model",
 		},
 		{
 			name: "invalid timeout format",
 			config: agenticmodel.Config{
-				Endpoints: map[string]agenticmodel.Endpoint{
-					"default": {
-						URL:   "http://localhost:8080/v1",
-						Model: "gpt-4",
-					},
-				},
 				Timeout: "not-a-duration",
 			},
 			wantErr: true,
@@ -165,13 +33,14 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "valid timeout format",
 			config: agenticmodel.Config{
-				Endpoints: map[string]agenticmodel.Endpoint{
-					"default": {
-						URL:   "http://localhost:8080/v1",
-						Model: "gpt-4",
-					},
-				},
 				Timeout: "30s",
+			},
+			wantErr: false,
+		},
+		{
+			name: "valid timeout 120s",
+			config: agenticmodel.Config{
+				Timeout: "120s",
 			},
 			wantErr: false,
 		},
@@ -186,82 +55,6 @@ func TestConfig_Validate(t *testing.T) {
 			}
 			if tt.wantErr && err != nil && tt.errMsg != "" {
 				// Check error message contains expected substring
-				if !containsIgnoreCase(err.Error(), tt.errMsg) {
-					t.Errorf("Validate() error = %v, expected error message to contain %q", err, tt.errMsg)
-				}
-			}
-		})
-	}
-}
-
-func TestEndpoint_Validate(t *testing.T) {
-	tests := []struct {
-		name     string
-		endpoint agenticmodel.Endpoint
-		wantErr  bool
-		errMsg   string
-	}{
-		{
-			name: "valid endpoint",
-			endpoint: agenticmodel.Endpoint{
-				URL:   "http://localhost:8080/v1",
-				Model: "gpt-4",
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid with api key env",
-			endpoint: agenticmodel.Endpoint{
-				URL:       "http://localhost:8080/v1",
-				Model:     "gpt-4",
-				APIKeyEnv: "OPENAI_API_KEY",
-			},
-			wantErr: false,
-		},
-		{
-			name: "missing URL",
-			endpoint: agenticmodel.Endpoint{
-				Model: "gpt-4",
-			},
-			wantErr: true,
-			errMsg:  "url",
-		},
-		{
-			name: "empty URL",
-			endpoint: agenticmodel.Endpoint{
-				URL:   "",
-				Model: "gpt-4",
-			},
-			wantErr: true,
-			errMsg:  "url",
-		},
-		{
-			name: "missing Model",
-			endpoint: agenticmodel.Endpoint{
-				URL: "http://localhost:8080/v1",
-			},
-			wantErr: true,
-			errMsg:  "model",
-		},
-		{
-			name: "empty Model",
-			endpoint: agenticmodel.Endpoint{
-				URL:   "http://localhost:8080/v1",
-				Model: "",
-			},
-			wantErr: true,
-			errMsg:  "model",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.endpoint.Validate()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if tt.wantErr && err != nil && tt.errMsg != "" {
 				if !containsIgnoreCase(err.Error(), tt.errMsg) {
 					t.Errorf("Validate() error = %v, expected error message to contain %q", err, tt.errMsg)
 				}
@@ -379,11 +172,6 @@ func TestDefaultConfig(t *testing.T) {
 		if cfg.Ports.Outputs[0].Subject != "agent.response.*" {
 			t.Errorf("DefaultConfig() output subject = %s, want agent.response.*", cfg.Ports.Outputs[0].Subject)
 		}
-	}
-
-	// Verify endpoints is initialized (empty but not nil)
-	if cfg.Endpoints == nil {
-		t.Error("DefaultConfig() endpoints should not be nil")
 	}
 }
 

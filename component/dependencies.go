@@ -4,6 +4,7 @@ import (
 	"log/slog"
 
 	"github.com/c360studio/semstreams/metric"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/security"
 	"github.com/c360studio/semstreams/types"
@@ -22,6 +23,7 @@ type Dependencies struct {
 	Logger          *slog.Logger            // Structured logger (can be nil, defaults to slog.Default())
 	Platform        PlatformMeta            // Platform identity (organization and platform)
 	Security        security.Config         // Platform-wide security configuration
+	ModelRegistry   model.RegistryReader    // Unified model registry (can be nil)
 }
 
 // GetLogger returns the configured logger or a default logger if none is provided

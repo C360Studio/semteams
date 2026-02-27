@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/model"
 	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
 )
 
@@ -148,9 +149,8 @@ func TestContextManager_ShouldCompact(t *testing.T) {
 			config.CompactThreshold = tt.threshold
 			cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
-			// Fill context to target utilization
-			modelLimit := config.ModelLimits["gpt-4o"]
-			targetTokens := int(float64(modelLimit) * tt.fillToUtilPct)
+			// Fill context to target utilization using DefaultContextLimit as the model limit
+			targetTokens := int(float64(agenticloop.DefaultContextLimit) * tt.fillToUtilPct)
 			fillContextToTokens(t, cm, targetTokens)
 
 			shouldCompact := cm.ShouldCompact()
@@ -345,65 +345,85 @@ func TestContextManager_ModelLimits(t *testing.T) {
 	tests := []struct {
 		name         string
 		model        string
+		registry     *model.Registry
 		wantLimitMin int
 		wantLimitMax int
 	}{
 		{
-			name:         "gpt-4o",
-			model:        "gpt-4o",
+			name:  "gpt-4o via registry",
+			model: "gpt-4o",
+			registry: &model.Registry{
+				Endpoints: map[string]*model.EndpointConfig{
+					"gpt-4o": {Model: "gpt-4o", MaxTokens: 128000},
+				},
+				Defaults: model.DefaultsConfig{Model: "gpt-4o"},
+			},
 			wantLimitMin: 128000,
 			wantLimitMax: 128000,
 		},
 		{
-			name:         "gpt-4o-mini",
-			model:        "gpt-4o-mini",
+			name:  "gpt-4o-mini via registry",
+			model: "gpt-4o-mini",
+			registry: &model.Registry{
+				Endpoints: map[string]*model.EndpointConfig{
+					"gpt-4o-mini": {Model: "gpt-4o-mini", MaxTokens: 128000},
+				},
+				Defaults: model.DefaultsConfig{Model: "gpt-4o-mini"},
+			},
 			wantLimitMin: 128000,
 			wantLimitMax: 128000,
 		},
 		{
-			name:         "claude-sonnet",
-			model:        "claude-sonnet",
+			name:  "claude-sonnet via registry",
+			model: "claude-sonnet",
+			registry: &model.Registry{
+				Endpoints: map[string]*model.EndpointConfig{
+					"claude-sonnet": {Model: "claude-sonnet", MaxTokens: 200000},
+				},
+				Defaults: model.DefaultsConfig{Model: "claude-sonnet"},
+			},
 			wantLimitMin: 200000,
 			wantLimitMax: 200000,
 		},
 		{
-			name:         "claude-opus",
-			model:        "claude-opus",
+			name:  "claude-opus via registry",
+			model: "claude-opus",
+			registry: &model.Registry{
+				Endpoints: map[string]*model.EndpointConfig{
+					"claude-opus": {Model: "claude-opus", MaxTokens: 200000},
+				},
+				Defaults: model.DefaultsConfig{Model: "claude-opus"},
+			},
 			wantLimitMin: 200000,
 			wantLimitMax: 200000,
 		},
 		{
 			name:         "unknown model uses default",
 			model:        "unknown-model",
-			wantLimitMin: 128000,
-			wantLimitMax: 128000,
+			registry:     nil, // No registry — falls back to DefaultContextLimit
+			wantLimitMin: agenticloop.DefaultContextLimit,
+			wantLimitMax: agenticloop.DefaultContextLimit,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := agenticloop.DefaultContextConfig()
-			cm := agenticloop.NewContextManager("loop-1", tt.model, config)
 
-			// Fill context almost to limit
-			modelLimit := config.ModelLimits[tt.model]
-			if modelLimit == 0 {
-				modelLimit = config.ModelLimits["default"]
+			var opts []agenticloop.ContextManagerOption
+			if tt.registry != nil {
+				opts = append(opts, agenticloop.WithModelRegistry(tt.registry))
 			}
+			cm := agenticloop.NewContextManager("loop-1", tt.model, config, opts...)
 
-			// Add messages until near limit
-			targetTokens := int(float64(modelLimit) * 0.95)
+			// Fill context almost to the expected limit
+			targetTokens := int(float64(tt.wantLimitMin) * 0.95)
 			fillContextToTokens(t, cm, targetTokens)
 
 			// Should be near but not over limit
 			utilization := cm.Utilization()
 			if utilization < 0.90 || utilization > 1.0 {
 				t.Errorf("Utilization() = %f, want between 0.90 and 1.0", utilization)
-			}
-
-			// Verify model limit is correct
-			if modelLimit < tt.wantLimitMin || modelLimit > tt.wantLimitMax {
-				t.Errorf("Model limit = %d, want between %d and %d", modelLimit, tt.wantLimitMin, tt.wantLimitMax)
 			}
 		})
 	}

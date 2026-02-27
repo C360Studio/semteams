@@ -6,9 +6,20 @@ import (
 	"testing"
 
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// newTestRegistry returns a minimal model.Registry suitable for unit tests.
+func newTestRegistry() model.RegistryReader {
+	return &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
+			"test-model": {Model: "test-model", MaxTokens: 128000},
+		},
+		Defaults: model.DefaultsConfig{Model: "test-model"},
+	}
+}
 
 // TestComponent_Start_NilContext verifies that Start rejects nil context
 func TestComponent_Start_NilContext(t *testing.T) {
@@ -17,7 +28,8 @@ func TestComponent_Start_NilContext(t *testing.T) {
 	require.NoError(t, err)
 
 	deps := component.Dependencies{
-		NATSClient: nil, // Not needed for this test
+		NATSClient:    nil, // Not needed for this test
+		ModelRegistry: newTestRegistry(),
 	}
 
 	comp, err := NewComponent(rawConfig, deps)
@@ -39,7 +51,8 @@ func TestComponent_Start_CancelledContext(t *testing.T) {
 	require.NoError(t, err)
 
 	deps := component.Dependencies{
-		NATSClient: nil, // Not needed for this test
+		NATSClient:    nil, // Not needed for this test
+		ModelRegistry: newTestRegistry(),
 	}
 
 	comp, err := NewComponent(rawConfig, deps)

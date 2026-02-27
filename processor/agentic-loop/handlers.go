@@ -64,8 +64,8 @@ type MessageHandler struct {
 }
 
 // NewMessageHandler creates a new MessageHandler
-func NewMessageHandler(config Config) *MessageHandler {
-	loopManager := NewLoopManagerWithConfig(config.Context)
+func NewMessageHandler(config Config, loopManagerOpts ...LoopManagerOption) *MessageHandler {
+	loopManager := NewLoopManagerWithConfig(config.Context, loopManagerOpts...)
 	return &MessageHandler{
 		config:            config,
 		loopManager:       loopManager,
