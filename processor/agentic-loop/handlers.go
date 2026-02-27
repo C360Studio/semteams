@@ -756,3 +756,9 @@ func (h *MessageHandler) UpdateLoop(entity agentic.LoopEntity) error {
 func (h *MessageHandler) CancelLoop(loopID, cancelledBy string) (agentic.LoopEntity, error) {
 	return h.loopManager.CancelLoop(loopID, cancelledBy)
 }
+
+// GetContextManager returns the ContextManager for a given loop ID.
+// Used by BoidHandler to apply steering signals to context.
+func (h *MessageHandler) GetContextManager(loopID string) *ContextManager {
+	return h.loopManager.GetContextManager(loopID)
+}

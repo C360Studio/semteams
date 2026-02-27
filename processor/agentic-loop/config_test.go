@@ -254,9 +254,9 @@ func TestDefaultConfig(t *testing.T) {
 		t.Fatal("DefaultConfig() ports should not be nil")
 	}
 
-	// Verify input ports
-	if len(cfg.Ports.Inputs) != 4 {
-		t.Errorf("DefaultConfig() input ports count = %d, want 4", len(cfg.Ports.Inputs))
+	// Verify input ports (includes agent.boid for Boid coordination)
+	if len(cfg.Ports.Inputs) != 5 {
+		t.Errorf("DefaultConfig() input ports count = %d, want 5", len(cfg.Ports.Inputs))
 	}
 
 	// Verify output ports

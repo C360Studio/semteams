@@ -38,8 +38,8 @@ func TestComponent_InputPorts(t *testing.T) {
 
 	ports := comp.InputPorts()
 
-	if len(ports) != 4 {
-		t.Fatalf("InputPorts() count = %d, want 4", len(ports))
+	if len(ports) != 5 {
+		t.Fatalf("InputPorts() count = %d, want 5", len(ports))
 	}
 
 	// Expected input ports with required flag
@@ -52,6 +52,7 @@ func TestComponent_InputPorts(t *testing.T) {
 		"agent.response": {"agent.response.>", true},
 		"tool.result":    {"tool.result.>", true},
 		"agent.signal":   {"agent.signal.*", false}, // Optional - not all deployments need signal handling
+		"agent.boid":     {"agent.boid.>", false},   // Optional - Boid steering signals for coordination
 	}
 
 	for _, port := range ports {

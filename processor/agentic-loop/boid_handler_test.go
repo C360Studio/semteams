@@ -1,7 +1,11 @@
 package agenticloop
 
 import (
+	"context"
 	"testing"
+	"time"
+
+	"github.com/c360studio/semstreams/processor/rule/boid"
 )
 
 func TestBoidHandler_ExtractEntitiesFromToolResult(t *testing.T) {
@@ -245,5 +249,283 @@ func TestMergeEntities(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// --- Signal Store Tests ---
+
+func TestSignalStore_StoreAndGet(t *testing.T) {
+	store := NewSignalStore(5 * time.Second)
+
+	signal := &boid.SteeringSignal{
+		LoopID:        "loop-1",
+		SignalType:    boid.SignalTypeSeparation,
+		AvoidEntities: []string{"entity.a", "entity.b"},
+		Strength:      0.8,
+	}
+
+	store.Store(signal)
+
+	// Get the signal back
+	retrieved := store.Get("loop-1", boid.SignalTypeSeparation)
+	if retrieved == nil {
+		t.Fatal("expected signal, got nil")
+	}
+	if len(retrieved.AvoidEntities) != 2 {
+		t.Errorf("expected 2 avoid entities, got %d", len(retrieved.AvoidEntities))
+	}
+
+	// Different signal type should return nil
+	cohesion := store.Get("loop-1", boid.SignalTypeCohesion)
+	if cohesion != nil {
+		t.Error("expected nil for cohesion signal type")
+	}
+
+	// Different loop ID should return nil
+	other := store.Get("loop-2", boid.SignalTypeSeparation)
+	if other != nil {
+		t.Error("expected nil for different loop ID")
+	}
+}
+
+func TestSignalStore_GetAll(t *testing.T) {
+	store := NewSignalStore(5 * time.Second)
+
+	// Store multiple signal types for same loop
+	store.Store(&boid.SteeringSignal{
+		LoopID:        "loop-1",
+		SignalType:    boid.SignalTypeSeparation,
+		AvoidEntities: []string{"entity.a"},
+	})
+	store.Store(&boid.SteeringSignal{
+		LoopID:         "loop-1",
+		SignalType:     boid.SignalTypeCohesion,
+		SuggestedFocus: []string{"entity.b"},
+	})
+
+	all := store.GetAll("loop-1")
+	if len(all) != 2 {
+		t.Fatalf("expected 2 signals, got %d", len(all))
+	}
+
+	if all[boid.SignalTypeSeparation] == nil {
+		t.Error("expected separation signal")
+	}
+	if all[boid.SignalTypeCohesion] == nil {
+		t.Error("expected cohesion signal")
+	}
+}
+
+func TestSignalStore_Expiration(t *testing.T) {
+	store := NewSignalStore(50 * time.Millisecond) // Short TTL for testing
+
+	store.Store(&boid.SteeringSignal{
+		LoopID:     "loop-1",
+		SignalType: boid.SignalTypeSeparation,
+	})
+
+	// Should exist immediately
+	if store.Get("loop-1", boid.SignalTypeSeparation) == nil {
+		t.Error("signal should exist immediately after storing")
+	}
+
+	// Wait for expiration
+	time.Sleep(60 * time.Millisecond)
+
+	// Should be expired
+	if store.Get("loop-1", boid.SignalTypeSeparation) != nil {
+		t.Error("signal should have expired")
+	}
+}
+
+func TestSignalStore_Remove(t *testing.T) {
+	store := NewSignalStore(5 * time.Second)
+
+	store.Store(&boid.SteeringSignal{
+		LoopID:     "loop-1",
+		SignalType: boid.SignalTypeSeparation,
+	})
+
+	store.Remove("loop-1")
+
+	if store.Get("loop-1", boid.SignalTypeSeparation) != nil {
+		t.Error("signal should be removed")
+	}
+}
+
+func TestSignalStore_Cleanup(t *testing.T) {
+	store := NewSignalStore(50 * time.Millisecond)
+
+	store.Store(&boid.SteeringSignal{
+		LoopID:     "loop-1",
+		SignalType: boid.SignalTypeSeparation,
+	})
+	store.Store(&boid.SteeringSignal{
+		LoopID:     "loop-2",
+		SignalType: boid.SignalTypeCohesion,
+	})
+
+	// Wait for expiration
+	time.Sleep(60 * time.Millisecond)
+
+	removed := store.Cleanup()
+	if removed != 2 {
+		t.Errorf("expected 2 removed, got %d", removed)
+	}
+
+	// Verify cleanup
+	if store.GetAll("loop-1") != nil {
+		t.Error("loop-1 signals should be cleaned up")
+	}
+}
+
+// --- BoidHandler Signal Integration Tests ---
+
+func TestBoidHandler_ProcessSteeringSignal(t *testing.T) {
+	handler := NewBoidHandler(nil, nil)
+
+	signal := &boid.SteeringSignal{
+		LoopID:        "loop-1",
+		SignalType:    boid.SignalTypeSeparation,
+		AvoidEntities: []string{"entity.a", "entity.b"},
+		Strength:      0.8,
+	}
+
+	err := handler.ProcessSteeringSignal(context.Background(), signal, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Signal should be stored
+	retrieved := handler.GetActiveSignal("loop-1", boid.SignalTypeSeparation)
+	if retrieved == nil {
+		t.Fatal("signal should be stored after processing")
+	}
+	if len(retrieved.AvoidEntities) != 2 {
+		t.Errorf("expected 2 avoid entities, got %d", len(retrieved.AvoidEntities))
+	}
+}
+
+func TestBoidHandler_ApplySteeringToEntities(t *testing.T) {
+	handler := NewBoidHandler(nil, nil)
+
+	// Store separation and cohesion signals
+	handler.ProcessSteeringSignal(context.Background(), &boid.SteeringSignal{
+		LoopID:        "loop-1",
+		SignalType:    boid.SignalTypeSeparation,
+		AvoidEntities: []string{"entity.avoid"},
+	}, nil)
+
+	handler.ProcessSteeringSignal(context.Background(), &boid.SteeringSignal{
+		LoopID:         "loop-1",
+		SignalType:     boid.SignalTypeCohesion,
+		SuggestedFocus: []string{"entity.priority"},
+	}, nil)
+
+	prioritize, avoid := handler.ApplySteeringToEntities("loop-1")
+
+	if len(prioritize) != 1 || prioritize[0] != "entity.priority" {
+		t.Errorf("expected prioritize=[entity.priority], got %v", prioritize)
+	}
+	if len(avoid) != 1 || avoid[0] != "entity.avoid" {
+		t.Errorf("expected avoid=[entity.avoid], got %v", avoid)
+	}
+}
+
+func TestBoidHandler_FilterEntitiesBySignals(t *testing.T) {
+	handler := NewBoidHandler(nil, nil)
+
+	// Store signals
+	handler.ProcessSteeringSignal(context.Background(), &boid.SteeringSignal{
+		LoopID:        "loop-1",
+		SignalType:    boid.SignalTypeSeparation,
+		AvoidEntities: []string{"entity.c"},
+	}, nil)
+
+	handler.ProcessSteeringSignal(context.Background(), &boid.SteeringSignal{
+		LoopID:         "loop-1",
+		SignalType:     boid.SignalTypeCohesion,
+		SuggestedFocus: []string{"entity.a"},
+	}, nil)
+
+	// Filter entities
+	entities := []string{"entity.b", "entity.a", "entity.c", "entity.d"}
+	filtered := handler.FilterEntitiesBySignals("loop-1", entities)
+
+	// Expected order: prioritized (a), normal (b, d), avoided (c)
+	expected := []string{"entity.a", "entity.b", "entity.d", "entity.c"}
+	if len(filtered) != len(expected) {
+		t.Fatalf("expected %d entities, got %d", len(expected), len(filtered))
+	}
+	for i, e := range expected {
+		if filtered[i] != e {
+			t.Errorf("position %d: expected %q, got %q", i, e, filtered[i])
+		}
+	}
+}
+
+func TestBoidHandler_FilterEntitiesBySignals_NoSignals(t *testing.T) {
+	handler := NewBoidHandler(nil, nil)
+
+	// No signals stored - should return original order
+	entities := []string{"entity.a", "entity.b", "entity.c"}
+	filtered := handler.FilterEntitiesBySignals("loop-1", entities)
+
+	for i, e := range entities {
+		if filtered[i] != e {
+			t.Errorf("position %d: expected %q, got %q (should preserve original order)", i, e, filtered[i])
+		}
+	}
+}
+
+func TestBoidHandler_GetAlignmentPatterns(t *testing.T) {
+	handler := NewBoidHandler(nil, nil)
+
+	// No signal - should return nil
+	patterns := handler.GetAlignmentPatterns("loop-1")
+	if patterns != nil {
+		t.Errorf("expected nil, got %v", patterns)
+	}
+
+	// Store alignment signal
+	handler.ProcessSteeringSignal(context.Background(), &boid.SteeringSignal{
+		LoopID:     "loop-1",
+		SignalType: boid.SignalTypeAlignment,
+		AlignWith:  []string{"hasComponent", "locatedAt"},
+	}, nil)
+
+	patterns = handler.GetAlignmentPatterns("loop-1")
+	if len(patterns) != 2 {
+		t.Fatalf("expected 2 patterns, got %d", len(patterns))
+	}
+	if patterns[0] != "hasComponent" || patterns[1] != "locatedAt" {
+		t.Errorf("unexpected patterns: %v", patterns)
+	}
+}
+
+func TestBoidHandler_ClearSignals(t *testing.T) {
+	handler := NewBoidHandler(nil, nil)
+
+	// Store signals
+	handler.ProcessSteeringSignal(context.Background(), &boid.SteeringSignal{
+		LoopID:     "loop-1",
+		SignalType: boid.SignalTypeSeparation,
+	}, nil)
+	handler.ProcessSteeringSignal(context.Background(), &boid.SteeringSignal{
+		LoopID:     "loop-1",
+		SignalType: boid.SignalTypeCohesion,
+	}, nil)
+
+	// Verify signals exist
+	if handler.GetActiveSignals("loop-1") == nil {
+		t.Fatal("signals should exist before clear")
+	}
+
+	// Clear signals
+	handler.ClearSignals("loop-1")
+
+	// Verify signals are gone
+	if handler.GetActiveSignals("loop-1") != nil {
+		t.Error("signals should be cleared")
 	}
 }

@@ -30,6 +30,11 @@ type loopMetrics struct {
 	// Tool calls
 	toolCallsDispatched *prometheus.CounterVec
 	toolResultsReceived *prometheus.CounterVec
+
+	// Boid coordination
+	boidSignalsReceived  *prometheus.CounterVec
+	boidPositionUpdates  prometheus.Counter
+	boidEntitiesFiltered prometheus.Counter
 }
 
 // Package-level metrics (registered once to avoid duplicate registration errors)
@@ -120,6 +125,27 @@ func getMetrics(registry *metric.MetricsRegistry) *loopMetrics {
 				Name:      "tool_results_received_total",
 				Help:      "Total tool results received by status",
 			}, []string{"status"}),
+
+			boidSignalsReceived: prometheus.NewCounterVec(prometheus.CounterOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_loop",
+				Name:      "boid_signals_received_total",
+				Help:      "Total Boid steering signals received by type",
+			}, []string{"signal_type"}),
+
+			boidPositionUpdates: prometheus.NewCounter(prometheus.CounterOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_loop",
+				Name:      "boid_position_updates_total",
+				Help:      "Total Boid position updates in KV store",
+			}),
+
+			boidEntitiesFiltered: prometheus.NewCounter(prometheus.CounterOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_loop",
+				Name:      "boid_entities_filtered_total",
+				Help:      "Total times entities were reordered by Boid steering",
+			}),
 		}
 
 		// Register metrics with the metrics registry if available
@@ -135,6 +161,9 @@ func getMetrics(registry *metric.MetricsRegistry) *loopMetrics {
 			_ = registry.RegisterCounterVec("agentic-loop", "trajectory_steps_total", metrics.trajectorySteps)
 			_ = registry.RegisterCounterVec("agentic-loop", "tool_calls_dispatched_total", metrics.toolCallsDispatched)
 			_ = registry.RegisterCounterVec("agentic-loop", "tool_results_received_total", metrics.toolResultsReceived)
+			_ = registry.RegisterCounterVec("agentic-loop", "boid_signals_received_total", metrics.boidSignalsReceived)
+			_ = registry.RegisterCounter("agentic-loop", "boid_position_updates_total", metrics.boidPositionUpdates)
+			_ = registry.RegisterCounter("agentic-loop", "boid_entities_filtered_total", metrics.boidEntitiesFiltered)
 		} else {
 			// Fallback to default prometheus registry for testing
 			_ = prometheus.DefaultRegisterer.Register(metrics.loopsCreated)
@@ -148,6 +177,9 @@ func getMetrics(registry *metric.MetricsRegistry) *loopMetrics {
 			_ = prometheus.DefaultRegisterer.Register(metrics.trajectorySteps)
 			_ = prometheus.DefaultRegisterer.Register(metrics.toolCallsDispatched)
 			_ = prometheus.DefaultRegisterer.Register(metrics.toolResultsReceived)
+			_ = prometheus.DefaultRegisterer.Register(metrics.boidSignalsReceived)
+			_ = prometheus.DefaultRegisterer.Register(metrics.boidPositionUpdates)
+			_ = prometheus.DefaultRegisterer.Register(metrics.boidEntitiesFiltered)
 		}
 	})
 	return metrics
@@ -205,4 +237,19 @@ func (m *loopMetrics) recordToolResultReceived(hasError bool) {
 		status = "error"
 	}
 	m.toolResultsReceived.WithLabelValues(status).Inc()
+}
+
+// recordBoidSignalReceived records a Boid steering signal received.
+func (m *loopMetrics) recordBoidSignalReceived(signalType string) {
+	m.boidSignalsReceived.WithLabelValues(signalType).Inc()
+}
+
+// recordBoidPositionUpdate records a Boid position update.
+func (m *loopMetrics) recordBoidPositionUpdate() {
+	m.boidPositionUpdates.Inc()
+}
+
+// recordBoidEntitiesFiltered records entity filtering by Boid steering.
+func (m *loopMetrics) recordBoidEntitiesFiltered() {
+	m.boidEntitiesFiltered.Inc()
 }

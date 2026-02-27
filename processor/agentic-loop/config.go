@@ -202,6 +202,14 @@ func DefaultConfig() Config {
 					Required:    false,
 					Description: "Control signals for loops (cancel, pause, etc.)",
 				},
+				{
+					Name:        "agent.boid",
+					Type:        "jetstream",
+					Subject:     "agent.boid.>",
+					StreamName:  "AGENT",
+					Required:    false,
+					Description: "Boid steering signals for agent coordination",
+				},
 			},
 			Outputs: []component.PortDefinition{
 				{

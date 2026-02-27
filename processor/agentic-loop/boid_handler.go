@@ -6,12 +6,139 @@ import (
 	"log/slog"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/processor/rule/boid"
 	"github.com/nats-io/nats.go/jetstream"
 )
+
+// Default signal TTL before expiration
+const defaultSignalTTL = 30 * time.Second
+
+// Pre-compiled regex patterns for entity extraction
+var entityContextPattern = regexp.MustCompile(`\[Entity:\s*([^\]]+)\]`)
+
+// activeSignal wraps a steering signal with its expiration time
+type activeSignal struct {
+	Signal    *boid.SteeringSignal
+	ExpiresAt time.Time
+}
+
+// SignalStore maintains active steering signals per loop, organized by signal type.
+// Signals are time-limited and automatically expire after TTL.
+type SignalStore struct {
+	mu      sync.RWMutex
+	signals map[string]map[string]*activeSignal // loopID -> signalType -> signal
+	ttl     time.Duration
+}
+
+// NewSignalStore creates a new signal store with the given TTL.
+func NewSignalStore(ttl time.Duration) *SignalStore {
+	if ttl == 0 {
+		ttl = defaultSignalTTL
+	}
+	return &SignalStore{
+		signals: make(map[string]map[string]*activeSignal),
+		ttl:     ttl,
+	}
+}
+
+// Store adds or updates a steering signal for a loop.
+// Signals are keyed by loop ID and signal type (only most recent per type kept).
+func (s *SignalStore) Store(signal *boid.SteeringSignal) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.signals[signal.LoopID]; !exists {
+		s.signals[signal.LoopID] = make(map[string]*activeSignal)
+	}
+
+	s.signals[signal.LoopID][signal.SignalType] = &activeSignal{
+		Signal:    signal,
+		ExpiresAt: time.Now().Add(s.ttl),
+	}
+}
+
+// Get retrieves an active signal by loop ID and signal type.
+// Returns nil if no signal exists or if it has expired.
+func (s *SignalStore) Get(loopID, signalType string) *boid.SteeringSignal {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	loopSignals, exists := s.signals[loopID]
+	if !exists {
+		return nil
+	}
+
+	active, exists := loopSignals[signalType]
+	if !exists {
+		return nil
+	}
+
+	// Check expiration
+	if time.Now().After(active.ExpiresAt) {
+		return nil
+	}
+
+	return active.Signal
+}
+
+// GetAll retrieves all active signals for a loop.
+// Returns a map of signal type -> signal, excluding expired signals.
+func (s *SignalStore) GetAll(loopID string) map[string]*boid.SteeringSignal {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	loopSignals, exists := s.signals[loopID]
+	if !exists {
+		return nil
+	}
+
+	now := time.Now()
+	result := make(map[string]*boid.SteeringSignal)
+	for signalType, active := range loopSignals {
+		if now.Before(active.ExpiresAt) {
+			result[signalType] = active.Signal
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// Remove removes all signals for a loop (called on loop completion).
+func (s *SignalStore) Remove(loopID string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.signals, loopID)
+}
+
+// Cleanup removes expired signals (can be called periodically).
+func (s *SignalStore) Cleanup() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	now := time.Now()
+	removed := 0
+
+	for loopID, loopSignals := range s.signals {
+		for signalType, active := range loopSignals {
+			if now.After(active.ExpiresAt) {
+				delete(loopSignals, signalType)
+				removed++
+			}
+		}
+		if len(loopSignals) == 0 {
+			delete(s.signals, loopID)
+		}
+	}
+
+	return removed
+}
 
 // BoidHandler manages agent position tracking and steering signal processing
 // for Boids-style local coordination rules.
@@ -21,6 +148,9 @@ type BoidHandler struct {
 
 	// Entity ID extraction patterns
 	entityIDPattern *regexp.Regexp
+
+	// Active steering signals per loop
+	signalStore *SignalStore
 }
 
 // NewBoidHandler creates a new boid handler.
@@ -33,6 +163,7 @@ func NewBoidHandler(positionsBucket jetstream.KeyValue, logger *slog.Logger) *Bo
 		logger:          logger,
 		// Pattern to extract entity IDs from content (6-part federated IDs)
 		entityIDPattern: regexp.MustCompile(`([a-z0-9_-]+\.){5}[a-z0-9_-]+`),
+		signalStore:     NewSignalStore(defaultSignalTTL),
 	}
 }
 
@@ -138,9 +269,8 @@ func (h *BoidHandler) ExtractEntitiesFromContext(content string) []string {
 		return nil
 	}
 
-	// Pattern for "[Entity: {id}]" format
-	pattern := regexp.MustCompile(`\[Entity:\s*([^\]]+)\]`)
-	matches := pattern.FindAllStringSubmatch(content, -1)
+	// Use pre-compiled pattern for "[Entity: {id}]" format
+	matches := entityContextPattern.FindAllStringSubmatch(content, -1)
 
 	if len(matches) == 0 {
 		return nil
@@ -156,56 +286,74 @@ func (h *BoidHandler) ExtractEntitiesFromContext(content string) []string {
 	return result
 }
 
-// ProcessSteeringSignal processes an incoming boid steering signal
-// and applies it to the agent's context.
-func (h *BoidHandler) ProcessSteeringSignal(_ context.Context, signal *boid.SteeringSignal, cm *ContextManager) error {
-	if cm == nil || signal == nil {
+// ProcessSteeringSignal processes an incoming boid steering signal.
+// Stores the signal for use during context building and tool prioritization.
+func (h *BoidHandler) ProcessSteeringSignal(_ context.Context, signal *boid.SteeringSignal, _ *ContextManager) error {
+	if signal == nil {
 		return nil
 	}
 
-	h.logger.Info("Processing steering signal",
+	// Store the signal for later use
+	h.signalStore.Store(signal)
+
+	h.logger.Info("Stored steering signal",
 		"loop_id", signal.LoopID,
 		"signal_type", signal.SignalType,
 		"strength", signal.Strength)
 
 	switch signal.SignalType {
 	case boid.SignalTypeSeparation:
-		// For separation signals, we could deprioritize certain entities
-		// This is handled via context slicing preferences
-		h.logger.Debug("Separation signal received",
-			"avoid_count", len(signal.AvoidEntities))
+		h.logger.Debug("Separation signal stored",
+			"avoid_count", len(signal.AvoidEntities),
+			"avoid_entities", signal.AvoidEntities)
 
 	case boid.SignalTypeCohesion:
-		// For cohesion signals, we could add suggested entities to context
 		if len(signal.SuggestedFocus) > 0 {
-			h.logger.Debug("Cohesion signal received",
-				"suggested_count", len(signal.SuggestedFocus))
+			h.logger.Debug("Cohesion signal stored",
+				"suggested_count", len(signal.SuggestedFocus),
+				"suggested_focus", signal.SuggestedFocus)
 		}
 
 	case boid.SignalTypeAlignment:
-		// For alignment signals, we note the suggested traversal patterns
 		if len(signal.AlignWith) > 0 {
-			h.logger.Debug("Alignment signal received",
-				"align_patterns", len(signal.AlignWith))
+			h.logger.Debug("Alignment signal stored",
+				"align_patterns", len(signal.AlignWith),
+				"align_with", signal.AlignWith)
 		}
 	}
 
 	return nil
 }
 
+// GetActiveSignal retrieves the most recent signal of a specific type for a loop.
+func (h *BoidHandler) GetActiveSignal(loopID, signalType string) *boid.SteeringSignal {
+	return h.signalStore.Get(loopID, signalType)
+}
+
+// GetActiveSignals retrieves all active signals for a loop.
+func (h *BoidHandler) GetActiveSignals(loopID string) map[string]*boid.SteeringSignal {
+	return h.signalStore.GetAll(loopID)
+}
+
+// ClearSignals removes all signals for a loop (called on loop completion).
+func (h *BoidHandler) ClearSignals(loopID string) {
+	h.signalStore.Remove(loopID)
+}
+
 // HandleSteeringSignalMessage handles incoming boid steering signal messages from NATS.
-func (h *BoidHandler) HandleSteeringSignalMessage(data []byte, getContextManager func(loopID string) *ContextManager) {
+// Returns the signal type if successfully processed, empty string otherwise.
+func (h *BoidHandler) HandleSteeringSignalMessage(data []byte, getContextManager func(loopID string) *ContextManager) string {
 	var baseMsg message.BaseMessage
 	if err := json.Unmarshal(data, &baseMsg); err != nil {
 		h.logger.Error("Failed to unmarshal steering signal", "error", err)
-		return
+		return ""
 	}
 
 	signalPtr, ok := baseMsg.Payload().(*boid.SteeringSignal)
 	if !ok {
 		h.logger.Warn("Unexpected payload type for steering signal",
 			"type_got", baseMsg.Type().String())
-		return
+		return ""
 	}
 
 	signal := *signalPtr
@@ -215,10 +363,82 @@ func (h *BoidHandler) HandleSteeringSignalMessage(data []byte, getContextManager
 		h.logger.Error("Failed to process steering signal",
 			"loop_id", signal.LoopID,
 			"error", err)
+		return ""
 	}
+
+	return signal.SignalType
 }
 
 // CalculateVelocity computes velocity based on position changes.
 func (h *BoidHandler) CalculateVelocity(oldFocus, newFocus []string) float64 {
 	return boid.CalculateVelocity(oldFocus, newFocus)
+}
+
+// ApplySteeringToEntities applies active steering signals to prioritize/deprioritize entities.
+// Returns two lists: prioritized entities (from cohesion) and avoided entities (from separation).
+func (h *BoidHandler) ApplySteeringToEntities(loopID string) (prioritize, avoid []string) {
+	signals := h.signalStore.GetAll(loopID)
+	if signals == nil {
+		return nil, nil
+	}
+
+	// Separation signals: entities to avoid
+	if sep, ok := signals[boid.SignalTypeSeparation]; ok && sep != nil {
+		avoid = sep.AvoidEntities
+	}
+
+	// Cohesion signals: entities to prioritize
+	if coh, ok := signals[boid.SignalTypeCohesion]; ok && coh != nil {
+		prioritize = coh.SuggestedFocus
+	}
+
+	return prioritize, avoid
+}
+
+// GetAlignmentPatterns returns the alignment patterns (predicates) to follow.
+func (h *BoidHandler) GetAlignmentPatterns(loopID string) []string {
+	signal := h.signalStore.Get(loopID, boid.SignalTypeAlignment)
+	if signal == nil {
+		return nil
+	}
+	return signal.AlignWith
+}
+
+// FilterEntitiesBySignals filters a list of entities based on active steering signals.
+// Entities in the avoid list are moved to the end, entities in prioritize list go first.
+func (h *BoidHandler) FilterEntitiesBySignals(loopID string, entities []string) []string {
+	prioritize, avoid := h.ApplySteeringToEntities(loopID)
+	if len(prioritize) == 0 && len(avoid) == 0 {
+		return entities
+	}
+
+	// Build lookup sets
+	prioritizeSet := make(map[string]bool)
+	for _, e := range prioritize {
+		prioritizeSet[e] = true
+	}
+	avoidSet := make(map[string]bool)
+	for _, e := range avoid {
+		avoidSet[e] = true
+	}
+
+	// Partition entities: prioritized, normal, avoided
+	var prioritized, normal, avoided []string
+	for _, e := range entities {
+		switch {
+		case prioritizeSet[e]:
+			prioritized = append(prioritized, e)
+		case avoidSet[e]:
+			avoided = append(avoided, e)
+		default:
+			normal = append(normal, e)
+		}
+	}
+
+	// Reassemble: prioritized first, then normal, then avoided
+	result := make([]string, 0, len(entities))
+	result = append(result, prioritized...)
+	result = append(result, normal...)
+	result = append(result, avoided...)
+	return result
 }

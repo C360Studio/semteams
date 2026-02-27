@@ -386,6 +386,12 @@ func (c *Component) setupSubscriptions(ctx context.Context) error {
 			handler = c.handleToolResultMessage
 		case "agent.signal":
 			handler = c.handleSignalMessage
+		case "agent.boid":
+			// Only subscribe to Boid signals if Boid coordination is enabled
+			if !c.config.BoidEnabled {
+				continue
+			}
+			handler = c.handleBoidSignalMessage
 		default:
 			c.logger.Warn("Unknown input port", "port", port.Name)
 			continue
@@ -1094,6 +1100,29 @@ func (c *Component) handleResumeSignal(ctx context.Context, signal agentic.UserS
 		slog.String("resumed_by", signal.UserID))
 }
 
+// handleBoidSignalMessage processes incoming Boid steering signal messages.
+// These signals come from Boid rules (separation, cohesion, alignment) and
+// guide agent behavior for coordination.
+func (c *Component) handleBoidSignalMessage(_ context.Context, data []byte) {
+	if c.boidHandler == nil {
+		return
+	}
+
+	// Delegate to BoidHandler for parsing and processing
+	signalType := c.boidHandler.HandleSteeringSignalMessage(data, c.getContextManagerForLoop)
+
+	// Record metrics if signal was successfully processed
+	if signalType != "" && c.metrics != nil {
+		c.metrics.recordBoidSignalReceived(signalType)
+	}
+}
+
+// getContextManagerForLoop returns the ContextManager for a given loop ID.
+// This is used by BoidHandler to apply steering signals to context.
+func (c *Component) getContextManagerForLoop(loopID string) *ContextManager {
+	return c.handler.GetContextManager(loopID)
+}
+
 // updateBoidPositionFromToolResult updates the agent's position in the Boid coordination system
 // based on entities accessed in tool results.
 func (c *Component) updateBoidPositionFromToolResult(ctx context.Context, loopID string, toolResult agentic.ToolResult) {
@@ -1139,6 +1168,8 @@ func (c *Component) updateBoidPositionFromToolResult(ctx context.Context, loopID
 	if err := c.boidHandler.UpdatePosition(ctx, pos); err != nil {
 		c.logger.Error("Failed to update Boid position",
 			"loop_id", loopID, "error", err)
+	} else if c.metrics != nil {
+		c.metrics.recordBoidPositionUpdate()
 	}
 }
 
@@ -1172,12 +1203,16 @@ func mergeEntities(existing, newEntities []string, maxCount int) []string {
 	return result
 }
 
-// cleanupBoidPosition removes an agent's position when the loop completes.
+// cleanupBoidPosition removes an agent's position and signals when the loop completes.
 func (c *Component) cleanupBoidPosition(ctx context.Context, loopID string) {
 	if c.boidHandler == nil {
 		return
 	}
 
+	// Clear stored steering signals for this loop
+	c.boidHandler.ClearSignals(loopID)
+
+	// Delete position from KV bucket
 	if err := c.boidHandler.DeletePosition(ctx, loopID); err != nil {
 		c.logger.Debug("Failed to cleanup Boid position",
 			"loop_id", loopID, "error", err)
