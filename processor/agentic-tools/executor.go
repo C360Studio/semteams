@@ -82,12 +82,18 @@ func (r *ExecutorRegistry) Execute(ctx context.Context, call agentic.ToolCall) (
 
 	if !exists {
 		result := agentic.ToolResult{
-			CallID: call.ID,
-			Error:  fmt.Sprintf("tool %q not found", call.Name),
+			CallID:  call.ID,
+			Error:   fmt.Sprintf("tool %q not found", call.Name),
+			LoopID:  call.LoopID,
+			TraceID: call.TraceID,
 		}
 		return result, errs.WrapInvalid(fmt.Errorf("tool %q not found", call.Name), "ExecutorRegistry", "Execute", "find tool")
 	}
 
 	// Execute with context (supports timeout/cancellation)
-	return executor.Execute(ctx, call)
+	result, err := executor.Execute(ctx, call)
+	// Propagate trace correlation fields
+	result.LoopID = call.LoopID
+	result.TraceID = call.TraceID
+	return result, err
 }

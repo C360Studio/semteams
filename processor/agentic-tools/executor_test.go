@@ -494,3 +494,59 @@ func TestExecutorRegistry_ConcurrentExecution(t *testing.T) {
 
 	// Race detector will catch any concurrency issues
 }
+
+func TestExecutorRegistry_Execute_PropagatesTraceFields(t *testing.T) {
+	registry := agentictools.NewExecutorRegistry()
+
+	executor := &mockToolExecutor{
+		name:          "graph_query",
+		returnContent: "result",
+	}
+	if err := registry.RegisterTool("graph_query", executor); err != nil {
+		t.Fatalf("RegisterTool() failed: %v", err)
+	}
+
+	ctx := context.Background()
+	call := agentic.ToolCall{
+		ID:      "call-123",
+		Name:    "graph_query",
+		LoopID:  "loop-456",
+		TraceID: "trace-789",
+	}
+
+	result, err := registry.Execute(ctx, call)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	// Verify trace fields are propagated from call to result
+	if result.LoopID != call.LoopID {
+		t.Errorf("Result.LoopID = %q, want %q", result.LoopID, call.LoopID)
+	}
+	if result.TraceID != call.TraceID {
+		t.Errorf("Result.TraceID = %q, want %q", result.TraceID, call.TraceID)
+	}
+}
+
+func TestExecutorRegistry_Execute_PropagatesTraceFieldsOnError(t *testing.T) {
+	registry := agentictools.NewExecutorRegistry()
+
+	// Test with unknown tool (error case)
+	ctx := context.Background()
+	call := agentic.ToolCall{
+		ID:      "call-123",
+		Name:    "unknown_tool",
+		LoopID:  "loop-456",
+		TraceID: "trace-789",
+	}
+
+	result, _ := registry.Execute(ctx, call)
+
+	// Verify trace fields are propagated even on error
+	if result.LoopID != call.LoopID {
+		t.Errorf("Result.LoopID = %q, want %q", result.LoopID, call.LoopID)
+	}
+	if result.TraceID != call.TraceID {
+		t.Errorf("Result.TraceID = %q, want %q", result.TraceID, call.TraceID)
+	}
+}

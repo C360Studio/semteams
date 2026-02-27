@@ -333,8 +333,10 @@ func (c *Component) handleToolCall(ctx context.Context, data []byte) {
 		}
 
 		result := agentic.ToolResult{
-			CallID: call.ID,
-			Error:  fmt.Sprintf("tool %q is not allowed", call.Name),
+			CallID:  call.ID,
+			Error:   fmt.Sprintf("tool %q is not allowed", call.Name),
+			LoopID:  call.LoopID,
+			TraceID: call.TraceID,
 		}
 		c.publishResult(ctx, result)
 		c.incrementErrors()
@@ -380,6 +382,10 @@ func (c *Component) handleToolCall(ctx context.Context, data []byte) {
 			slog.String("tool", call.Name),
 			slog.Float64("duration_seconds", duration))
 	}
+
+	// Propagate trace correlation fields from call to result
+	result.LoopID = call.LoopID
+	result.TraceID = call.TraceID
 
 	// Publish result
 	if err := c.publishResult(ctx, result); err != nil {
@@ -544,14 +550,20 @@ func (c *Component) Execute(ctx context.Context, call agentic.ToolCall) (agentic
 	// Check if tool is allowed
 	if !c.isToolAllowed(call.Name) {
 		result := agentic.ToolResult{
-			CallID: call.ID,
-			Error:  fmt.Sprintf("tool %q is not allowed", call.Name),
+			CallID:  call.ID,
+			Error:   fmt.Sprintf("tool %q is not allowed", call.Name),
+			LoopID:  call.LoopID,
+			TraceID: call.TraceID,
 		}
 		return result, errs.WrapInvalid(fmt.Errorf("tool %q is not allowed", call.Name), "Component", "Execute", "check tool allowed")
 	}
 
 	// Execute with timeout
-	return c.executeWithTimeout(ctx, call)
+	result, err := c.executeWithTimeout(ctx, call)
+	// Propagate trace correlation fields
+	result.LoopID = call.LoopID
+	result.TraceID = call.TraceID
+	return result, err
 }
 
 // handleToolListRequest handles tool.list request/reply for tool discovery
