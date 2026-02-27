@@ -2,6 +2,7 @@ package boid
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -13,6 +14,15 @@ import (
 // mockPositionProvider implements PositionProvider for testing.
 type mockPositionProvider struct {
 	positions []*AgentPosition
+}
+
+func (m *mockPositionProvider) Get(_ context.Context, loopID string) (*AgentPosition, error) {
+	for _, pos := range m.positions {
+		if pos.LoopID == loopID {
+			return pos, nil
+		}
+	}
+	return nil, fmt.Errorf("position not found for %s", loopID)
 }
 
 func (m *mockPositionProvider) ListOthers(_ context.Context, excludeLoopID string) ([]*AgentPosition, error) {
@@ -76,9 +86,6 @@ func TestSeparationRule_EvaluateEntityState_Disabled(t *testing.T) {
 
 	entityState := &gtypes.EntityState{
 		ID: "loop-1",
-		Triples: []message.Triple{
-			{Subject: "loop-1", Predicate: "boid.role", Object: "general"},
-		},
 	}
 
 	result := r.EvaluateEntityState(entityState)
@@ -101,10 +108,6 @@ func TestSeparationRule_EvaluateEntityState_NoProvider(t *testing.T) {
 
 	entityState := &gtypes.EntityState{
 		ID: "loop-1",
-		Triples: []message.Triple{
-			{Subject: "loop-1", Predicate: "boid.role", Object: "general"},
-			{Subject: "loop-1", Predicate: "boid.focus_entities", Object: []any{"entity-1"}},
-		},
 	}
 
 	result := r.EvaluateEntityState(entityState)
@@ -123,14 +126,21 @@ func TestSeparationRule_EvaluateEntityState_NoFocusEntities(t *testing.T) {
 		Enabled: true,
 	}
 	r := NewSeparationRule("test", def, config, 0, nil)
-	r.SetPositionProvider(&mockPositionProvider{})
+
+	// Provider with position that has no focus entities
+	provider := &mockPositionProvider{
+		positions: []*AgentPosition{
+			{
+				LoopID:        "loop-1",
+				Role:          "general",
+				FocusEntities: []string{}, // No focus entities
+			},
+		},
+	}
+	r.SetPositionProvider(provider)
 
 	entityState := &gtypes.EntityState{
-		ID: "loop-1",
-		Triples: []message.Triple{
-			{Subject: "loop-1", Predicate: "boid.role", Object: "general"},
-			// No focus entities
-		},
+		ID: "loop-1", // ID used to lookup position via provider.Get()
 	}
 
 	result := r.EvaluateEntityState(entityState)
@@ -150,14 +160,21 @@ func TestSeparationRule_EvaluateEntityState_RoleFilter(t *testing.T) {
 		Enabled: true,
 	}
 	r := NewSeparationRule("test", def, config, 0, nil)
-	r.SetPositionProvider(&mockPositionProvider{})
+
+	// Provider with position that has role "general" (not architect)
+	provider := &mockPositionProvider{
+		positions: []*AgentPosition{
+			{
+				LoopID:        "loop-1",
+				Role:          "general", // Not architect
+				FocusEntities: []string{"entity-1"},
+			},
+		},
+	}
+	r.SetPositionProvider(provider)
 
 	entityState := &gtypes.EntityState{
 		ID: "loop-1",
-		Triples: []message.Triple{
-			{Subject: "loop-1", Predicate: "boid.role", Object: "general"}, // Not architect
-			{Subject: "loop-1", Predicate: "boid.focus_entities", Object: []any{"entity-1"}},
-		},
 	}
 
 	result := r.EvaluateEntityState(entityState)
@@ -178,9 +195,15 @@ func TestSeparationRule_EvaluateEntityState_NoOverlap(t *testing.T) {
 	}
 	r := NewSeparationRule("test", def, config, 0, nil)
 
-	// Other agent working on different entities
+	// Provider with both agents - loop-1 (self) and loop-2 (other)
+	// They have different focus entities, no overlap
 	provider := &mockPositionProvider{
 		positions: []*AgentPosition{
+			{
+				LoopID:        "loop-1",
+				Role:          "general",
+				FocusEntities: []string{"entity-1", "entity-2"},
+			},
 			{
 				LoopID:        "loop-2",
 				Role:          "general",
@@ -193,10 +216,6 @@ func TestSeparationRule_EvaluateEntityState_NoOverlap(t *testing.T) {
 
 	entityState := &gtypes.EntityState{
 		ID: "loop-1",
-		Triples: []message.Triple{
-			{Subject: "loop-1", Predicate: "boid.role", Object: "general"},
-			{Subject: "loop-1", Predicate: "boid.focus_entities", Object: []any{"entity-1", "entity-2"}},
-		},
 	}
 
 	result := r.EvaluateEntityState(entityState)
@@ -217,9 +236,15 @@ func TestSeparationRule_EvaluateEntityState_WithOverlap(t *testing.T) {
 	}
 	r := NewSeparationRule("test", def, config, 0, nil)
 
-	// Other agent working on same entity
+	// Provider with both agents - loop-1 (self) and loop-2 (other)
+	// They share entity-1, creating overlap
 	provider := &mockPositionProvider{
 		positions: []*AgentPosition{
+			{
+				LoopID:        "loop-1",
+				Role:          "general",
+				FocusEntities: []string{"entity-1", "entity-2"},
+			},
 			{
 				LoopID:        "loop-2",
 				Role:          "general",
@@ -231,10 +256,6 @@ func TestSeparationRule_EvaluateEntityState_WithOverlap(t *testing.T) {
 
 	entityState := &gtypes.EntityState{
 		ID: "loop-1",
-		Triples: []message.Triple{
-			{Subject: "loop-1", Predicate: "boid.role", Object: "general"},
-			{Subject: "loop-1", Predicate: "boid.focus_entities", Object: []any{"entity-1", "entity-2"}},
-		},
 	}
 
 	result := r.EvaluateEntityState(entityState)
@@ -273,19 +294,25 @@ func TestSeparationRule_Cooldown(t *testing.T) {
 	cooldown := 100 * time.Millisecond
 	r := NewSeparationRule("test", def, config, cooldown, nil)
 
+	// Provider with both agents sharing entity-1
 	provider := &mockPositionProvider{
 		positions: []*AgentPosition{
-			{LoopID: "loop-2", FocusEntities: []string{"entity-1"}},
+			{
+				LoopID:        "loop-1",
+				Role:          "general",
+				FocusEntities: []string{"entity-1"},
+			},
+			{
+				LoopID:        "loop-2",
+				Role:          "general",
+				FocusEntities: []string{"entity-1"},
+			},
 		},
 	}
 	r.SetPositionProvider(provider)
 
 	entityState := &gtypes.EntityState{
 		ID: "loop-1",
-		Triples: []message.Triple{
-			{Subject: "loop-1", Predicate: "boid.role", Object: "general"},
-			{Subject: "loop-1", Predicate: "boid.focus_entities", Object: []any{"entity-1"}},
-		},
 	}
 
 	// First evaluation should trigger

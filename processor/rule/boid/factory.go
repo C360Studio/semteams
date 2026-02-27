@@ -1,6 +1,7 @@
 package boid
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"time"
@@ -43,14 +44,45 @@ func (f *RuleFactory) Create(id string, def rule.Definition, deps rule.Dependenc
 		}
 	}
 
+	// Create PositionTracker if NATS available
+	var tracker *PositionTracker
+	if deps.NATSClient != nil {
+		ctx := context.Background()
+		js, jsErr := deps.NATSClient.JetStream()
+		if jsErr == nil {
+			bucket, kvErr := js.KeyValue(ctx, KVBucketAgentPositions)
+			if kvErr == nil {
+				tracker = NewPositionTracker(bucket, deps.Logger)
+			} else {
+				// Bucket doesn't exist yet - that's okay, rule will degrade gracefully
+				if deps.Logger != nil {
+					deps.Logger.Debug("AGENT_POSITIONS bucket not available, boid rules will be limited",
+						"error", kvErr)
+				}
+			}
+		}
+	}
+
 	// Create appropriate rule type based on config
 	switch config.BoidRule {
 	case RuleTypeSeparation:
-		return NewSeparationRule(id, def, config, cooldown, deps.Logger), nil
+		r := NewSeparationRule(id, def, config, cooldown, deps.Logger)
+		if tracker != nil {
+			r.SetPositionProvider(tracker)
+		}
+		return r, nil
 	case RuleTypeCohesion:
-		return NewCohesionRule(id, def, config, cooldown, deps.Logger), nil
+		r := NewCohesionRule(id, def, config, cooldown, deps.Logger)
+		if tracker != nil {
+			r.SetPositionProvider(tracker)
+		}
+		return r, nil
 	case RuleTypeAlignment:
-		return NewAlignmentRule(id, def, config, cooldown, deps.Logger), nil
+		r := NewAlignmentRule(id, def, config, cooldown, deps.Logger)
+		if tracker != nil {
+			r.SetPositionProvider(tracker)
+		}
+		return r, nil
 	default:
 		return nil, fmt.Errorf("unknown boid rule type: %s", config.BoidRule)
 	}

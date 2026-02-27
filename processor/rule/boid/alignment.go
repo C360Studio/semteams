@@ -47,10 +47,17 @@ func (r *AlignmentRule) EvaluateEntityState(entityState *gtypes.EntityState) boo
 		return false
 	}
 
-	// Extract agent position from entity state
-	pos, err := extractAgentPosition(entityState)
-	if err != nil {
-		r.logger.Debug("Failed to extract position", "entity_id", entityState.ID, "error", err)
+	// Check dependencies first
+	if r.positionProvider == nil {
+		r.logger.Debug("No position provider configured", "rule", r.name)
+		return false
+	}
+
+	// Get agent position using provider (reads flat JSON directly from KV)
+	ctx := context.Background()
+	pos, err := r.positionProvider.Get(ctx, entityState.ID)
+	if err != nil || pos == nil {
+		r.logger.Debug("Failed to get position", "entity_id", entityState.ID, "error", err)
 		return false
 	}
 
@@ -59,14 +66,7 @@ func (r *AlignmentRule) EvaluateEntityState(entityState *gtypes.EntityState) boo
 		return false
 	}
 
-	// Check dependencies
-	if r.positionProvider == nil {
-		r.logger.Debug("No position provider configured", "rule", r.name)
-		return false
-	}
-
 	// Get same-role agent positions
-	ctx := context.Background()
 	others, err := r.positionProvider.ListOthers(ctx, pos.LoopID)
 	if err != nil {
 		r.logger.Warn("Failed to list other positions", "error", err)

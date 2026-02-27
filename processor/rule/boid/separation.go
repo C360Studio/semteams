@@ -28,6 +28,7 @@ type SeparationRule struct {
 
 // PositionProvider retrieves agent positions for rule evaluation.
 type PositionProvider interface {
+	Get(ctx context.Context, loopID string) (*AgentPosition, error)
 	ListOthers(ctx context.Context, excludeLoopID string) ([]*AgentPosition, error)
 }
 
@@ -60,10 +61,17 @@ func (r *SeparationRule) EvaluateEntityState(entityState *gtypes.EntityState) bo
 		return false
 	}
 
-	// Extract agent position from entity state
-	pos, err := extractAgentPosition(entityState)
-	if err != nil {
-		r.logger.Debug("Failed to extract position", "entity_id", entityState.ID, "error", err)
+	// Check dependencies first
+	if r.positionProvider == nil {
+		r.logger.Debug("No position provider configured", "rule", r.name)
+		return false
+	}
+
+	// Get agent position using provider (reads flat JSON directly from KV)
+	ctx := context.Background()
+	pos, err := r.positionProvider.Get(ctx, entityState.ID)
+	if err != nil || pos == nil {
+		r.logger.Debug("Failed to get position", "entity_id", entityState.ID, "error", err)
 		return false
 	}
 
@@ -77,14 +85,7 @@ func (r *SeparationRule) EvaluateEntityState(entityState *gtypes.EntityState) bo
 		return false
 	}
 
-	// Check dependencies
-	if r.positionProvider == nil {
-		r.logger.Debug("No position provider configured", "rule", r.name)
-		return false
-	}
-
 	// Get other agent positions
-	ctx := context.Background()
 	others, err := r.positionProvider.ListOthers(ctx, pos.LoopID)
 	if err != nil {
 		r.logger.Warn("Failed to list other positions", "error", err)

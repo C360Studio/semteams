@@ -17,6 +17,9 @@ import (
 type CohesionRule struct {
 	baseBoidRule
 
+	// positionProvider retrieves agent positions
+	positionProvider PositionProvider
+
 	// centralityProvider provides PageRank scores
 	centralityProvider CentralityProvider
 
@@ -41,6 +44,11 @@ func NewCohesionRule(id string, def rule.Definition, config *Config, cooldown ti
 	}
 }
 
+// SetPositionProvider sets the provider for retrieving agent positions.
+func (r *CohesionRule) SetPositionProvider(provider PositionProvider) {
+	r.positionProvider = provider
+}
+
 // SetCentralityProvider sets the provider for centrality scores.
 func (r *CohesionRule) SetCentralityProvider(provider CentralityProvider) {
 	r.centralityProvider = provider
@@ -63,10 +71,17 @@ func (r *CohesionRule) EvaluateEntityState(entityState *gtypes.EntityState) bool
 		return false
 	}
 
-	// Extract agent position from entity state
-	pos, err := extractAgentPosition(entityState)
-	if err != nil {
-		r.logger.Debug("Failed to extract position", "entity_id", entityState.ID, "error", err)
+	// Check dependencies first
+	if r.positionProvider == nil {
+		r.logger.Debug("No position provider configured", "rule", r.name)
+		return false
+	}
+
+	// Get agent position using provider (reads flat JSON directly from KV)
+	ctx := context.Background()
+	pos, err := r.positionProvider.Get(ctx, entityState.ID)
+	if err != nil || pos == nil {
+		r.logger.Debug("Failed to get position", "entity_id", entityState.ID, "error", err)
 		return false
 	}
 
