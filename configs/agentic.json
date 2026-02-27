@@ -12,6 +12,21 @@
   "nats": {
     "urls": ["nats://localhost:4222"]
   },
+  "model_registry": {
+    "endpoints": {
+      "mock": {
+        "provider": "openai",
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 4096,
+        "supports_tools": true,
+        "tool_format": "openai"
+      }
+    },
+    "defaults": {
+      "model": "mock"
+    }
+  },
   "services": {
     "service-manager": {
       "name": "service-manager",
