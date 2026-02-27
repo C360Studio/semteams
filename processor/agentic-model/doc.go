@@ -5,7 +5,8 @@
 // The agentic-model processor routes agent requests to OpenAI-compatible LLM endpoints.
 // It receives AgentRequest messages from the loop orchestrator, calls the appropriate
 // model endpoint, and publishes AgentResponse messages back. The processor supports
-// multiple named endpoints, tool calling, retry with backoff, and token tracking.
+// tool calling, retry with backoff, and token tracking. Model endpoints are
+// resolved from the unified model registry (component.Dependencies.ModelRegistry).
 //
 // This processor acts as the bridge between the agentic orchestration layer and
 // external LLM services (OpenAI, Ollama, LiteLLM, vLLM, or any OpenAI-compatible API).
@@ -24,24 +25,14 @@
 //
 // # Quick Start
 //
-// Configure and start the processor:
+// Configure the model registry in the top-level config and start the processor:
 //
 //	config := agenticmodel.Config{
 //	    StreamName: "AGENT",
-//	    Endpoints: map[string]agenticmodel.Endpoint{
-//	        "gpt-4": {
-//	            URL:       "https://api.openai.com/v1/chat/completions",
-//	            Model:     "gpt-4",
-//	            APIKeyEnv: "OPENAI_API_KEY",
-//	        },
-//	        "ollama": {
-//	            URL:   "http://localhost:11434/v1/chat/completions",
-//	            Model: "llama2",
-//	        },
-//	    },
-//	    Timeout: "120s",
+//	    Timeout:    "120s",
 //	}
 //
+//	// Model endpoints are resolved from deps.ModelRegistry (set in config.model_registry)
 //	rawConfig, _ := json.Marshal(config)
 //	comp, err := agenticmodel.NewComponent(rawConfig, deps)
 //
@@ -49,90 +40,14 @@
 //	lc.Initialize()
 //	lc.Start(ctx)
 //
-// # Endpoint Configuration
-//
-// Endpoints are named configurations for different LLM services:
-//
-//	"endpoints": {
-//	    "gpt-4": {
-//	        "url": "https://api.openai.com/v1/chat/completions",
-//	        "model": "gpt-4",
-//	        "api_key_env": "OPENAI_API_KEY"
-//	    },
-//	    "gpt-3.5": {
-//	        "url": "https://api.openai.com/v1/chat/completions",
-//	        "model": "gpt-3.5-turbo",
-//	        "api_key_env": "OPENAI_API_KEY"
-//	    },
-//	    "local-llama": {
-//	        "url": "http://localhost:11434/v1/chat/completions",
-//	        "model": "llama2"
-//	    }
-//	}
-//
-// Endpoint fields:
-//
-//   - url: Base URL for the OpenAI-compatible API (required)
-//   - model: Model name to use in API requests (required)
-//   - api_key_env: Environment variable name containing the API key (optional)
-//
 // # Endpoint Resolution
 //
-// When processing an AgentRequest, the processor resolves the endpoint by:
+// When processing an AgentRequest, the processor resolves the endpoint from
+// the unified model registry by looking up the request's Model field.
+// Clients are created dynamically and cached for reuse.
 //
-//  1. Looking for an endpoint matching the request's Model field exactly
-//  2. Looking for a model alias matching the Model field, then resolving to target
-//  3. Falling back to a "default" endpoint if configured
-//  4. Returning an error if no matching endpoint is found
-//
-// # Model Aliases
-//
-// Model aliases provide semantic names for endpoints, allowing other components
-// to reference models by purpose rather than specific endpoint name:
-//
-//	config := agenticmodel.Config{
-//	    Endpoints: map[string]agenticmodel.Endpoint{
-//	        "gpt-4": {URL: "...", Model: "gpt-4"},
-//	        "gpt-3.5-turbo": {URL: "...", Model: "gpt-3.5-turbo"},
-//	    },
-//	    ModelAliases: map[string]string{
-//	        "reasoning": "gpt-4",
-//	        "coding":    "gpt-4",
-//	        "fast":      "gpt-3.5-turbo",
-//	    },
-//	}
-//
-// Alias validation rules:
-//
-//   - Target must exist in Endpoints
-//   - No alias chaining (alias cannot point to another alias)
-//   - Empty target is not allowed
-//
-// Usage in requests:
-//
-//	// Using endpoint name directly
-//	request := agentic.AgentRequest{Model: "gpt-4", ...}
-//
-//	// Using alias
-//	request := agentic.AgentRequest{Model: "fast", ...}  // Resolves to gpt-3.5-turbo
-//
-// This allows agentic-loop, agentic-memory, and workflow components to reference
-// models semantically (e.g., "fast" for summarization) without hardcoding
-// specific model names.
-//
-// This allows routing different requests to different models/providers:
-//
-//	// Request using GPT-4
-//	request := agentic.AgentRequest{
-//	    Model: "gpt-4",  // Routes to "gpt-4" endpoint
-//	    // ...
-//	}
-//
-//	// Request using local Ollama
-//	request := agentic.AgentRequest{
-//	    Model: "local-llama",  // Routes to "local-llama" endpoint
-//	    // ...
-//	}
+// If the resolved endpoint has SupportsTools=false, any tools in the request
+// are stripped and a warning is logged.
 //
 // # OpenAI Compatibility
 //
@@ -224,16 +139,9 @@
 //
 // # Configuration Reference
 //
-// Full configuration schema:
+// Full configuration schema (endpoints are in the top-level model_registry):
 //
 //	{
-//	    "endpoints": {
-//	        "<name>": {
-//	            "url": "string (required)",
-//	            "model": "string (required)",
-//	            "api_key_env": "string (optional)"
-//	        }
-//	    },
 //	    "timeout": "string (default: 120s)",
 //	    "stream_name": "string (default: AGENT)",
 //	    "consumer_name_suffix": "string (optional)",
@@ -271,12 +179,12 @@
 //
 // # Client Architecture
 //
-// The processor creates Client instances per endpoint:
+// The processor dynamically creates and caches Client instances per endpoint:
 //
-//	client, err := NewClient(endpoint)
+//	client, err := NewClient(endpointConfig)
 //	response, err := client.ChatCompletion(ctx, request)
-//	client.Close()
 //
+// Clients are cached by URL|Model key with mutex protection for concurrent access.
 // Clients wrap the go-openai SDK and handle:
 //
 //   - API key injection from environment variables
@@ -296,7 +204,7 @@
 //
 // Error categories:
 //
-//   - Endpoint resolution errors: Unknown model name
+//   - Endpoint resolution errors: Model not found in registry
 //   - Request validation errors: Invalid request format
 //   - Network errors: Connection failures (may retry)
 //   - API errors: 4xx/5xx from LLM provider
@@ -328,17 +236,19 @@
 //
 // # Testing
 //
-// For testing, use the ConsumerNameSuffix config option:
+// For testing, use the ConsumerNameSuffix config option and provide a model registry:
 //
 //	config := agenticmodel.Config{
 //	    StreamName:         "AGENT",
 //	    ConsumerNameSuffix: "test-" + t.Name(),
-//	    Endpoints: map[string]agenticmodel.Endpoint{
-//	        "test-model": {
-//	            URL:   mockServer.URL,
-//	            Model: "test-model",
-//	        },
+//	}
+//
+//	// Provide endpoints via model registry in deps.ModelRegistry
+//	deps.ModelRegistry = &model.Registry{
+//	    Endpoints: map[string]*model.EndpointConfig{
+//	        "test-model": {URL: mockServer.URL, Model: "test-model", MaxTokens: 128000},
 //	    },
+//	    Defaults: model.DefaultsConfig{Model: "test-model"},
 //	}
 //
 // Use httptest.Server to mock the LLM endpoint in tests.
@@ -348,7 +258,6 @@
 // Current limitations:
 //
 //   - No streaming support (responses are complete documents)
-//   - No connection pooling per endpoint (new client per request)
 //   - Retry configuration is global, not per-endpoint
 //   - No request queuing or rate limiting
 //

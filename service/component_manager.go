@@ -14,6 +14,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/component/flowgraph"
 	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/retry"
 	"github.com/c360studio/semstreams/pkg/security"
@@ -1279,12 +1280,17 @@ func (cm *ComponentManager) CreateComponentsFromConfig(ctx context.Context, cfg 
 
 // buildComponentDependencies creates Dependencies from ComponentManager's context
 func (cm *ComponentManager) buildComponentDependencies() component.Dependencies {
-	// Get current security configuration
+	// Get current security configuration and model registry
 	var securityCfg security.Config
+	var modelReg model.RegistryReader
 	if cm.configManager != nil {
 		fullConfig := cm.configManager.GetConfig()
 		if fullConfig != nil {
-			securityCfg = fullConfig.Get().Security
+			cfg := fullConfig.Get()
+			securityCfg = cfg.Security
+			if cfg.ModelRegistry != nil {
+				modelReg = cfg.ModelRegistry
+			}
 		}
 	}
 
@@ -1296,7 +1302,8 @@ func (cm *ComponentManager) buildComponentDependencies() component.Dependencies 
 			Org:      cm.platform.Org,
 			Platform: cm.platform.Platform,
 		},
-		Security: securityCfg,
+		Security:      securityCfg,
+		ModelRegistry: modelReg,
 	}
 
 	return deps

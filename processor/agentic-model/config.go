@@ -8,23 +8,15 @@ import (
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
-// Config holds configuration for agentic-model processor component
+// Config holds configuration for agentic-model processor component.
+// Model endpoints are resolved from the unified model registry (component.Dependencies.ModelRegistry).
 type Config struct {
 	Ports                *component.PortConfig `json:"ports"                schema:"type:ports,description:Port configuration,category:basic"`
-	Endpoints            map[string]Endpoint   `json:"endpoints"            schema:"type:object,description:Model endpoints,category:basic"`
-	ModelAliases         map[string]string     `json:"model_aliases,omitempty" schema:"type:object,description:Semantic model aliases mapping to endpoint names,category:basic"`
 	StreamName           string                `json:"stream_name"          schema:"type:string,description:JetStream stream name for agentic messages,category:basic,default:AGENT"`
 	ConsumerNameSuffix   string                `json:"consumer_name_suffix" schema:"type:string,description:Suffix appended to consumer names for uniqueness,category:advanced"`
 	DeleteConsumerOnStop bool                  `json:"delete_consumer_on_stop,omitempty" schema:"type:bool,description:Delete durable consumers on Stop (use for tests only),category:advanced,default:false"`
 	Timeout              string                `json:"timeout"              schema:"type:string,description:Request timeout,category:advanced,default:120s"`
 	Retry                RetryConfig           `json:"retry"                schema:"type:object,description:Retry configuration,category:advanced"`
-}
-
-// Endpoint represents a single model endpoint configuration
-type Endpoint struct {
-	URL       string `json:"url"         schema:"type:string,description:OpenAI-compatible API URL,category:basic"`
-	Model     string `json:"model"       schema:"type:string,description:Model name,category:basic"`
-	APIKeyEnv string `json:"api_key_env" schema:"type:string,description:Environment variable for API key,category:advanced"`
 }
 
 // RetryConfig holds retry configuration
@@ -35,36 +27,6 @@ type RetryConfig struct {
 
 // Validate checks the configuration for errors
 func (c *Config) Validate() error {
-	if c.Endpoints == nil || len(c.Endpoints) == 0 {
-		return errs.WrapInvalid(errs.ErrMissingConfig, "Config", "Validate", "check endpoints")
-	}
-
-	for name, endpoint := range c.Endpoints {
-		if err := endpoint.Validate(); err != nil {
-			return errs.WrapInvalid(err, "Config", "Validate", fmt.Sprintf("validate endpoint %q", name))
-		}
-	}
-
-	// Validate model aliases if present
-	if c.ModelAliases != nil && len(c.ModelAliases) > 0 {
-		for alias, target := range c.ModelAliases {
-			// Empty target is not allowed
-			if target == "" {
-				return errs.WrapInvalid(fmt.Errorf("alias %q has empty target", alias), "Config", "Validate", "check alias target")
-			}
-
-			// Target must exist in Endpoints
-			if _, exists := c.Endpoints[target]; !exists {
-				return errs.WrapInvalid(fmt.Errorf("alias %q points to non-existent endpoint %q", alias, target), "Config", "Validate", "check alias endpoint exists")
-			}
-
-			// No alias chaining: target cannot be another alias
-			if _, isAlias := c.ModelAliases[target]; isAlias {
-				return errs.WrapInvalid(fmt.Errorf("alias %q points to another alias %q, chaining not supported", alias, target), "Config", "Validate", "check alias chaining")
-			}
-		}
-	}
-
 	if c.Timeout != "" {
 		if _, err := time.ParseDuration(c.Timeout); err != nil {
 			return errs.WrapInvalid(err, "Config", "Validate", "parse timeout")
@@ -83,17 +45,6 @@ func (c *Config) Validate() error {
 		return errs.WrapInvalid(err, "Config", "Validate", "validate retry config")
 	}
 
-	return nil
-}
-
-// Validate checks the endpoint configuration for errors
-func (e *Endpoint) Validate() error {
-	if e.URL == "" {
-		return errs.WrapInvalid(errs.ErrMissingConfig, "Endpoint", "Validate", "check url")
-	}
-	if e.Model == "" {
-		return errs.WrapInvalid(errs.ErrMissingConfig, "Endpoint", "Validate", "check model")
-	}
 	return nil
 }
 
@@ -144,7 +95,6 @@ func DefaultConfig() Config {
 			Inputs:  inputDefs,
 			Outputs: outputDefs,
 		},
-		Endpoints:  make(map[string]Endpoint),
 		StreamName: "AGENT",
 		Timeout:    "120s",
 		Retry: RetryConfig{

@@ -26,7 +26,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: false,
 		},
@@ -45,7 +44,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: true,
 			errMsg:  "compact_threshold",
@@ -58,7 +56,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: true,
 			errMsg:  "compact_threshold",
@@ -71,7 +68,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: true,
 			errMsg:  "compact_threshold",
@@ -84,7 +80,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   -1,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: true,
 			errMsg:  "tool_result_max_age",
@@ -97,7 +92,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   0,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: true,
 			errMsg:  "tool_result_max_age",
@@ -110,7 +104,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     -100,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: true,
 			errMsg:  "headroom_tokens",
@@ -123,75 +116,9 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     6400,
 				SummarizationModel: "",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: true,
 			errMsg:  "summarization_model",
-		},
-		{
-			name: "nil model limits",
-			config: agenticloop.ContextConfig{
-				Enabled:            true,
-				CompactThreshold:   0.60,
-				ToolResultMaxAge:   3,
-				HeadroomTokens:     6400,
-				SummarizationModel: "fast",
-				ModelLimits:        nil,
-			},
-			wantErr: true,
-			errMsg:  "model_limits",
-		},
-		{
-			name: "empty model limits",
-			config: agenticloop.ContextConfig{
-				Enabled:            true,
-				CompactThreshold:   0.60,
-				ToolResultMaxAge:   3,
-				HeadroomTokens:     6400,
-				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{},
-			},
-			wantErr: true,
-			errMsg:  "model_limits",
-		},
-		{
-			name: "missing default in model limits",
-			config: agenticloop.ContextConfig{
-				Enabled:            true,
-				CompactThreshold:   0.60,
-				ToolResultMaxAge:   3,
-				HeadroomTokens:     6400,
-				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"gpt-4o": 128000},
-			},
-			wantErr: true,
-			errMsg:  "default",
-		},
-		{
-			name: "negative model limit",
-			config: agenticloop.ContextConfig{
-				Enabled:            true,
-				CompactThreshold:   0.60,
-				ToolResultMaxAge:   3,
-				HeadroomTokens:     6400,
-				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": -100},
-			},
-			wantErr: true,
-			errMsg:  "model_limits",
-		},
-		{
-			name: "zero model limit",
-			config: agenticloop.ContextConfig{
-				Enabled:            true,
-				CompactThreshold:   0.60,
-				ToolResultMaxAge:   3,
-				HeadroomTokens:     6400,
-				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 0},
-			},
-			wantErr: true,
-			errMsg:  "model_limits",
 		},
 		{
 			name: "boundary threshold 0.01",
@@ -201,7 +128,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: false,
 		},
@@ -213,7 +139,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: false,
 		},
@@ -225,7 +150,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   1,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: false,
 		},
@@ -237,7 +161,6 @@ func TestContextConfig_Validate(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     0,
 				SummarizationModel: "fast",
-				ModelLimits:        map[string]int{"default": 128000},
 			},
 			wantErr: false,
 		},
@@ -287,126 +210,9 @@ func TestContextConfig_DefaultValues(t *testing.T) {
 		t.Errorf("DefaultContextConfig() summarization_model = %s, want fast", cfg.SummarizationModel)
 	}
 
-	// Verify model limits exist
-	if cfg.ModelLimits == nil {
-		t.Fatal("DefaultContextConfig() model_limits should not be nil")
-	}
-
-	// Verify default limit
-	if cfg.ModelLimits["default"] != 128000 {
-		t.Errorf("DefaultContextConfig() model_limits[default] = %d, want 128000", cfg.ModelLimits["default"])
-	}
-
-	// Verify gpt-4o limit
-	if cfg.ModelLimits["gpt-4o"] != 128000 {
-		t.Errorf("DefaultContextConfig() model_limits[gpt-4o] = %d, want 128000", cfg.ModelLimits["gpt-4o"])
-	}
-
-	// Verify gpt-4o-mini limit
-	if cfg.ModelLimits["gpt-4o-mini"] != 128000 {
-		t.Errorf("DefaultContextConfig() model_limits[gpt-4o-mini] = %d, want 128000", cfg.ModelLimits["gpt-4o-mini"])
-	}
-
-	// Verify claude-sonnet limit
-	if cfg.ModelLimits["claude-sonnet"] != 200000 {
-		t.Errorf("DefaultContextConfig() model_limits[claude-sonnet] = %d, want 200000", cfg.ModelLimits["claude-sonnet"])
-	}
-
-	// Verify claude-opus limit
-	if cfg.ModelLimits["claude-opus"] != 200000 {
-		t.Errorf("DefaultContextConfig() model_limits[claude-opus] = %d, want 200000", cfg.ModelLimits["claude-opus"])
-	}
-
 	// Verify default config is valid
 	if err := cfg.Validate(); err != nil {
 		t.Errorf("DefaultContextConfig() should be valid, got error: %v", err)
-	}
-}
-
-func TestContextConfig_ModelLimits(t *testing.T) {
-	tests := []struct {
-		name        string
-		modelLimits map[string]int
-		wantValid   bool
-	}{
-		{
-			name: "valid with all models",
-			modelLimits: map[string]int{
-				"gpt-4o":        128000,
-				"gpt-4o-mini":   128000,
-				"claude-sonnet": 200000,
-				"claude-opus":   200000,
-				"default":       128000,
-			},
-			wantValid: true,
-		},
-		{
-			name: "valid with only default",
-			modelLimits: map[string]int{
-				"default": 128000,
-			},
-			wantValid: true,
-		},
-		{
-			name: "valid with custom models",
-			modelLimits: map[string]int{
-				"custom-model": 100000,
-				"default":      128000,
-			},
-			wantValid: true,
-		},
-		{
-			name: "invalid without default",
-			modelLimits: map[string]int{
-				"gpt-4o": 128000,
-			},
-			wantValid: false,
-		},
-		{
-			name:        "invalid nil map",
-			modelLimits: nil,
-			wantValid:   false,
-		},
-		{
-			name:        "invalid empty map",
-			modelLimits: map[string]int{},
-			wantValid:   false,
-		},
-		{
-			name: "invalid negative limit",
-			modelLimits: map[string]int{
-				"default":   128000,
-				"bad-model": -1000,
-			},
-			wantValid: false,
-		},
-		{
-			name: "invalid zero limit",
-			modelLimits: map[string]int{
-				"default": 0,
-			},
-			wantValid: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := agenticloop.ContextConfig{
-				Enabled:            true,
-				CompactThreshold:   0.60,
-				ToolResultMaxAge:   3,
-				HeadroomTokens:     6400,
-				SummarizationModel: "fast",
-				ModelLimits:        tt.modelLimits,
-			}
-
-			err := config.Validate()
-			isValid := err == nil
-
-			if isValid != tt.wantValid {
-				t.Errorf("Validate() valid=%v, want %v (error: %v)", isValid, tt.wantValid, err)
-			}
-		})
 	}
 }
 
@@ -423,10 +229,6 @@ func TestContextConfig_JSONSerialization(t *testing.T) {
 				ToolResultMaxAge:   3,
 				HeadroomTokens:     6400,
 				SummarizationModel: "fast",
-				ModelLimits: map[string]int{
-					"gpt-4o":  128000,
-					"default": 128000,
-				},
 			},
 		},
 		{
@@ -443,9 +245,6 @@ func TestContextConfig_JSONSerialization(t *testing.T) {
 				ToolResultMaxAge:   5,
 				HeadroomTokens:     10000,
 				SummarizationModel: "accurate",
-				ModelLimits: map[string]int{
-					"default": 200000,
-				},
 			},
 		},
 	}

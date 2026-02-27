@@ -102,8 +102,12 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, errs.WrapInvalid(err, "agentic-loop", "NewComponent", "parse timeout format")
 	}
 
-	// Create handler
-	handler := NewMessageHandler(config)
+	// Create handler with model registry if available
+	var loopOpts []LoopManagerOption
+	if deps.ModelRegistry != nil {
+		loopOpts = append(loopOpts, WithLoopManagerModelRegistry(deps.ModelRegistry))
+	}
+	handler := NewMessageHandler(config, loopOpts...)
 
 	comp := &Component{
 		config:         config,

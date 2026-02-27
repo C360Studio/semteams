@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
@@ -46,6 +47,7 @@ type ContextManager struct {
 	model            string
 	modelLimit       int
 	config           ContextConfig
+	modelRegistry    model.RegistryReader
 	regions          map[RegionType][]contextMessage
 	mu               sync.RWMutex
 	currentIteration int
@@ -59,6 +61,13 @@ type ContextManagerOption func(*ContextManager)
 func WithLogger(logger *slog.Logger) ContextManagerOption {
 	return func(cm *ContextManager) {
 		cm.logger = logger
+	}
+}
+
+// WithModelRegistry provides registry-based model limit resolution
+func WithModelRegistry(reg model.RegistryReader) ContextManagerOption {
+	return func(cm *ContextManager) {
+		cm.modelRegistry = reg
 	}
 }
 
@@ -89,20 +98,21 @@ func NewContextManager(loopID, model string, config ContextConfig, opts ...Conte
 	return cm
 }
 
-// resolveModelLimit looks up the model limit with fallback logging
-func (cm *ContextManager) resolveModelLimit(model string) int {
-	if limit, ok := cm.config.ModelLimits[model]; ok {
-		return limit
+// resolveModelLimit looks up the model context window size from the model registry.
+func (cm *ContextManager) resolveModelLimit(modelName string) int {
+	if cm.modelRegistry != nil {
+		if limit := cm.modelRegistry.GetMaxTokens(modelName); limit > 0 {
+			return limit
+		}
 	}
 
-	defaultLimit := cm.config.ModelLimits[DefaultModelKey]
-	cm.logger.Warn("model not in config, using default context limit",
+	cm.logger.Warn("model not in registry, using default context limit",
 		"loop_id", cm.loopID,
-		"model", model,
-		"default_limit", defaultLimit,
-		"hint", "add to model_limits config for explicit limit",
+		"model", modelName,
+		"default_limit", DefaultContextLimit,
+		"hint", "add model to model_registry for explicit limit",
 	)
-	return defaultLimit
+	return DefaultContextLimit
 }
 
 // Utilization returns the current context utilization (0.0 to 1.0)
