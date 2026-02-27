@@ -60,7 +60,12 @@ func CreateRuleProcessor(rawConfig json.RawMessage, deps component.Dependencies)
 		ruleConfig.BufferWindowSize = userConfig.BufferWindowSize
 		ruleConfig.AlertCooldownPeriod = userConfig.AlertCooldownPeriod
 		ruleConfig.EnableGraphIntegration = userConfig.EnableGraphIntegration
-		ruleConfig.EntityWatchPatterns = userConfig.EntityWatchPatterns
+		if len(userConfig.EntityWatchPatterns) > 0 {
+			ruleConfig.EntityWatchPatterns = userConfig.EntityWatchPatterns
+		}
+		if len(userConfig.EntityWatchBuckets) > 0 {
+			ruleConfig.EntityWatchBuckets = userConfig.EntityWatchBuckets
+		}
 		ruleConfig.Consumer = userConfig.Consumer
 
 		// Note: InputSubjects no longer supported - use Ports configuration only
