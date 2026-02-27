@@ -659,17 +659,8 @@ func (c *Component) handleAgentComplete(ctx context.Context, data []byte) {
 		content = fmt.Sprintf("Loop %s: %s", completion.LoopID, completion.Outcome)
 	}
 
-	// Send response to user
-	c.sendResponse(ctx, agentic.UserResponse{
-		ResponseID:  uuid.New().String(),
-		ChannelType: loopInfo.ChannelType,
-		ChannelID:   loopInfo.ChannelID,
-		UserID:      loopInfo.UserID,
-		InReplyTo:   completion.LoopID,
-		Type:        respType,
-		Content:     content,
-		Timestamp:   time.Now(),
-	})
+	// Send response to user (skipped for workflow-initiated loops without user routing)
+	c.sendUserResponseForLoop(ctx, loopInfo, respType, content)
 
 	c.logger.Info("Loop completed",
 		slog.String("loop_id", completion.LoopID),
@@ -754,17 +745,9 @@ func (c *Component) handleAgentFailed(ctx context.Context, data []byte) {
 		return
 	}
 
-	// Send error response to user
-	c.sendResponse(ctx, agentic.UserResponse{
-		ResponseID:  uuid.New().String(),
-		ChannelType: loopInfo.ChannelType,
-		ChannelID:   loopInfo.ChannelID,
-		UserID:      loopInfo.UserID,
-		InReplyTo:   failure.LoopID,
-		Type:        agentic.ResponseTypeError,
-		Content:     fmt.Sprintf("Loop %s failed: %s", failure.LoopID, failure.Error),
-		Timestamp:   time.Now(),
-	})
+	// Send error response to user (skipped for workflow-initiated loops without user routing)
+	errorContent := fmt.Sprintf("Loop %s failed: %s", failure.LoopID, failure.Error)
+	c.sendUserResponseForLoop(ctx, loopInfo, agentic.ResponseTypeError, errorContent)
 
 	c.logger.Info("Loop failed",
 		slog.String("loop_id", failure.LoopID),
@@ -785,6 +768,31 @@ func (c *Component) sendResponse(ctx context.Context, resp agentic.UserResponse)
 	if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
 		c.logger.Error("Failed to publish response", slog.String("error", err.Error()))
 	}
+}
+
+// sendUserResponseForLoop sends a response only if the loop has a user channel.
+// This prevents invalid NATS subjects like "user.response.." for loops without user routing.
+// Workflow-initiated loops that lack user routing are silently skipped.
+func (c *Component) sendUserResponseForLoop(ctx context.Context, loopInfo *LoopInfo, respType, content string) {
+	if loopInfo.ChannelType == "" || loopInfo.ChannelID == "" {
+		c.logger.Debug("Skipping user response for loop without user routing",
+			slog.String("loop_id", loopInfo.LoopID),
+			slog.String("channel_type", loopInfo.ChannelType),
+			slog.String("channel_id", loopInfo.ChannelID),
+			slog.String("workflow_slug", loopInfo.WorkflowSlug))
+		return
+	}
+
+	c.sendResponse(ctx, agentic.UserResponse{
+		ResponseID:  uuid.New().String(),
+		ChannelType: loopInfo.ChannelType,
+		ChannelID:   loopInfo.ChannelID,
+		UserID:      loopInfo.UserID,
+		InReplyTo:   loopInfo.LoopID,
+		Type:        respType,
+		Content:     content,
+		Timestamp:   time.Now(),
+	})
 }
 
 // hasPermission checks if a user has a specific permission
