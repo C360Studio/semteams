@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/workflow"
+	"github.com/c360studio/semstreams/processor/rule/boid"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -41,6 +42,10 @@ type Component struct {
 	// KV buckets
 	loopsBucket        jetstream.KeyValue
 	trajectoriesBucket jetstream.KeyValue
+	positionsBucket    jetstream.KeyValue
+
+	// Boid coordination handler
+	boidHandler *BoidHandler
 
 	// Ports (merged from config)
 	inputPorts  []component.Port
@@ -322,6 +327,30 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 		}
 	}
 	c.trajectoriesBucket = trajectoriesBucket
+
+	// Initialize positions bucket if Boid coordination is enabled
+	if c.config.BoidEnabled {
+		bucketName := c.config.PositionsBucket
+		if bucketName == "" {
+			bucketName = "AGENT_POSITIONS"
+		}
+
+		positionsBucket, err := js.KeyValue(ctx, bucketName)
+		if err != nil {
+			// Bucket doesn't exist, try to create it
+			positionsBucket, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+				Bucket: bucketName,
+			})
+			if err != nil {
+				return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create positions bucket")
+			}
+		}
+		c.positionsBucket = positionsBucket
+
+		// Initialize the Boid handler
+		c.boidHandler = NewBoidHandler(c.positionsBucket, c.logger)
+		c.logger.Info("Boid coordination enabled", "positions_bucket", bucketName)
+	}
 
 	return nil
 }
@@ -648,6 +677,7 @@ func (c *Component) persistHandlerResult(ctx context.Context, result HandlerResu
 	// Finalize terminal states
 	if result.State == agentic.LoopStateComplete || result.State == agentic.LoopStateFailed {
 		c.finalizeTrajectory(ctx, result.LoopID, result.State)
+		c.cleanupBoidPosition(ctx, result.LoopID)
 		if result.CompletionState != nil {
 			c.persistCompletionState(ctx, result.LoopID, result.CompletionState)
 		}
@@ -695,6 +725,9 @@ func (c *Component) handleToolResultMessage(ctx context.Context, data []byte) {
 		c.logger.Error("Failed to handle tool result", "error", err, "loop_id", loopID)
 		return
 	}
+
+	// Update Boid position if enabled
+	c.updateBoidPositionFromToolResult(ctx, loopID, toolResult)
 
 	// Publish output messages
 	c.publishResults(ctx, result)
@@ -971,8 +1004,9 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 		return
 	}
 
-	// Finalize trajectory
+	// Finalize trajectory and cleanup Boid position
 	c.finalizeTrajectory(ctx, loopID, agentic.LoopStateCancelled)
+	c.cleanupBoidPosition(ctx, loopID)
 
 	c.logger.Info("Loop cancelled",
 		slog.String("loop_id", loopID),
@@ -1058,6 +1092,96 @@ func (c *Component) handleResumeSignal(ctx context.Context, signal agentic.UserS
 	c.logger.Info("Loop resumed",
 		slog.String("loop_id", loopID),
 		slog.String("resumed_by", signal.UserID))
+}
+
+// updateBoidPositionFromToolResult updates the agent's position in the Boid coordination system
+// based on entities accessed in tool results.
+func (c *Component) updateBoidPositionFromToolResult(ctx context.Context, loopID string, toolResult agentic.ToolResult) {
+	// Skip if Boid coordination is not enabled
+	if c.boidHandler == nil {
+		return
+	}
+
+	// Extract entities from tool result content
+	entities := c.boidHandler.ExtractEntitiesFromToolResult(toolResult.Content)
+	if len(entities) == 0 {
+		return
+	}
+
+	// Get current position (or create new one)
+	pos, err := c.boidHandler.GetPosition(ctx, loopID)
+	if err != nil {
+		// Position doesn't exist yet, create a new one
+		entity, loopErr := c.handler.GetLoop(loopID)
+		if loopErr != nil {
+			c.logger.Debug("Failed to get loop for position update",
+				"loop_id", loopID, "error", loopErr)
+			return
+		}
+
+		pos = &boid.AgentPosition{
+			LoopID:        loopID,
+			Role:          entity.Role,
+			FocusEntities: entities,
+			Iteration:     entity.Iterations,
+		}
+	} else {
+		// Calculate velocity based on position change
+		oldFocus := pos.FocusEntities
+		pos.Velocity = c.boidHandler.CalculateVelocity(oldFocus, entities)
+
+		// Merge entities (keep recent focus + new entities)
+		pos.FocusEntities = mergeEntities(pos.FocusEntities, entities, 10)
+		pos.Iteration++
+	}
+
+	// Update position in KV
+	if err := c.boidHandler.UpdatePosition(ctx, pos); err != nil {
+		c.logger.Error("Failed to update Boid position",
+			"loop_id", loopID, "error", err)
+	}
+}
+
+// mergeEntities merges two entity lists, keeping the most recent up to maxCount.
+func mergeEntities(existing, newEntities []string, maxCount int) []string {
+	// Use a map to dedupe and preserve insertion order
+	seen := make(map[string]bool)
+	result := make([]string, 0, maxCount)
+
+	// Add new entities first (they're more recent)
+	for _, e := range newEntities {
+		if !seen[e] {
+			seen[e] = true
+			result = append(result, e)
+		}
+	}
+
+	// Add existing entities
+	for _, e := range existing {
+		if !seen[e] {
+			seen[e] = true
+			result = append(result, e)
+		}
+	}
+
+	// Limit to maxCount
+	if len(result) > maxCount {
+		result = result[:maxCount]
+	}
+
+	return result
+}
+
+// cleanupBoidPosition removes an agent's position when the loop completes.
+func (c *Component) cleanupBoidPosition(ctx context.Context, loopID string) {
+	if c.boidHandler == nil {
+		return
+	}
+
+	if err := c.boidHandler.DeletePosition(ctx, loopID); err != nil {
+		c.logger.Debug("Failed to cleanup Boid position",
+			"loop_id", loopID, "error", err)
+	}
 }
 
 // WorkflowParticipant interface implementation.

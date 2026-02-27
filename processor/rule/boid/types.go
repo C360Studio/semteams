@@ -2,6 +2,7 @@ package boid
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/c360studio/semstreams/message"
@@ -145,6 +146,26 @@ func (s *SteeringSignal) Schema() message.Type {
 		Category: CategorySignal,
 		Version:  SchemaVersion,
 	}
+}
+
+// Validate checks that the SteeringSignal has required fields.
+func (s *SteeringSignal) Validate() error {
+	if s.LoopID == "" {
+		return fmt.Errorf("loop_id required")
+	}
+	if s.SignalType == "" {
+		return fmt.Errorf("signal_type required")
+	}
+	if s.SignalType != SignalTypeSeparation &&
+		s.SignalType != SignalTypeCohesion &&
+		s.SignalType != SignalTypeAlignment {
+		return fmt.Errorf("signal_type must be one of: %s, %s, %s",
+			SignalTypeSeparation, SignalTypeCohesion, SignalTypeAlignment)
+	}
+	if s.Strength < 0 || s.Strength > 1 {
+		return fmt.Errorf("strength must be between 0.0 and 1.0")
+	}
+	return nil
 }
 
 // MarshalJSON implements json.Marshaler.

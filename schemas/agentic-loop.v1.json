@@ -5,6 +5,12 @@
   "title": "agentic-loop Configuration",
   "description": "Orchestrates agentic loops with tool calls, state management, and trajectory tracking",
   "properties": {
+    "boid_enabled": {
+      "type": "boolean",
+      "description": "Enable Boid-style agent coordination (position tracking and steering signals)",
+      "default": false,
+      "category": "advanced"
+    },
     "consumer_name_suffix": {
       "type": "string",
       "description": "Suffix for consumer names",
@@ -84,6 +90,12 @@
       "type": "string",
       "description": "Port configuration for inputs and outputs",
       "category": "basic"
+    },
+    "positions_bucket": {
+      "type": "string",
+      "description": "NATS KV bucket name for boid agent positions",
+      "default": "AGENT_POSITIONS",
+      "category": "advanced"
     },
     "stream_name": {
       "type": "string",

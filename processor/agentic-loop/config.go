@@ -30,6 +30,8 @@ type Config struct {
 	DeleteConsumerOnStop bool                  `json:"delete_consumer_on_stop,omitempty" schema:"type:bool,description:Delete durable consumers on Stop (use for tests only),category:advanced,default:false"`
 	LoopsBucket          string                `json:"loops_bucket" schema:"type:string,description:NATS KV bucket name for storing loop state,default:AGENT_LOOPS,category:advanced,required"`
 	TrajectoriesBucket   string                `json:"trajectories_bucket" schema:"type:string,description:NATS KV bucket name for storing trajectories,default:AGENT_TRAJECTORIES,category:advanced,required"`
+	PositionsBucket      string                `json:"positions_bucket,omitempty" schema:"type:string,description:NATS KV bucket name for boid agent positions,default:AGENT_POSITIONS,category:advanced"`
+	BoidEnabled          bool                  `json:"boid_enabled,omitempty" schema:"type:bool,description:Enable Boid-style agent coordination (position tracking and steering signals),default:false,category:advanced"`
 	Context              ContextConfig         `json:"context" schema:"type:object,description:Context window management. model_limits maps model names to context window sizes in tokens,category:advanced"`
 	Ports                *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
 }
@@ -163,6 +165,8 @@ func DefaultConfig() Config {
 		StreamName:         "AGENT",
 		LoopsBucket:        "AGENT_LOOPS",
 		TrajectoriesBucket: "AGENT_TRAJECTORIES",
+		PositionsBucket:    "AGENT_POSITIONS",
+		BoidEnabled:        false,
 		Context:            DefaultContextConfig(),
 		Ports: &component.PortConfig{
 			Inputs: []component.PortDefinition{
