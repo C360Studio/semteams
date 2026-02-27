@@ -29,6 +29,8 @@ const (
 	ActionTypePublishAgent = "publish_agent"
 	// ActionTypeTriggerWorkflow triggers a reactive workflow by publishing to workflow.trigger.<workflow_id>
 	ActionTypeTriggerWorkflow = "trigger_workflow"
+	// ActionTypePublishBoidSignal publishes a Boid steering signal for agent coordination
+	ActionTypePublishBoidSignal = "publish_boid_signal"
 )
 
 // Action represents an action to execute when a rule fires.
@@ -68,6 +70,12 @@ type Action struct {
 
 	// ContextData provides additional context passed to the workflow
 	ContextData map[string]any `json:"context_data,omitempty"`
+
+	// BoidSignalType specifies the type of boid signal: separation, cohesion, or alignment
+	BoidSignalType string `json:"boid_signal_type,omitempty"`
+
+	// BoidStrength specifies the steering strength for boid signals (0.0-1.0)
+	BoidStrength float64 `json:"boid_strength,omitempty"`
 }
 
 // ParseTTL parses the TTL string into a duration.
@@ -171,6 +179,8 @@ func (e *ActionExecutor) Execute(ctx context.Context, action Action, entityID st
 		return e.executePublishAgent(ctx, action, entityID, relatedID)
 	case ActionTypeTriggerWorkflow:
 		return e.executeTriggerWorkflow(ctx, action, entityID, relatedID)
+	case ActionTypePublishBoidSignal:
+		return e.executePublishBoidSignal(ctx, action, entityID, relatedID)
 	default:
 		return fmt.Errorf("unknown action type: %s", action.Type)
 	}
@@ -601,6 +611,103 @@ func (e *ActionExecutor) executeTriggerWorkflow(ctx context.Context, action Acti
 		e.logger.Debug("Workflow trigger not published (no publisher configured)",
 			"workflow_id", action.WorkflowID,
 			"subject", subject,
+			"entity_id", entityID)
+	}
+
+	return nil
+}
+
+// executePublishBoidSignal executes a publish_boid_signal action.
+// It publishes a BoidSteeringSignal to the agent.boid.<loopID> subject
+// for consumption by the agentic-loop for coordination.
+func (e *ActionExecutor) executePublishBoidSignal(ctx context.Context, action Action, entityID, relatedID string) error {
+	if action.Subject == "" {
+		return errors.New("subject is required for publish_boid_signal action")
+	}
+	if action.BoidSignalType == "" {
+		return errors.New("boid_signal_type is required for publish_boid_signal action")
+	}
+
+	// Validate signal type
+	validSignalTypes := map[string]bool{
+		"separation": true,
+		"cohesion":   true,
+		"alignment":  true,
+	}
+	if !validSignalTypes[action.BoidSignalType] {
+		return fmt.Errorf("invalid boid_signal_type %q: must be one of: separation, cohesion, alignment", action.BoidSignalType)
+	}
+
+	// Substitute variables in subject
+	subject := substituteVariables(action.Subject, entityID, relatedID)
+
+	// Build signal payload
+	strength := action.BoidStrength
+	if strength <= 0 || strength > 1 {
+		strength = 0.5 // Default strength
+	}
+
+	signal := map[string]any{
+		"loop_id":     entityID,
+		"signal_type": action.BoidSignalType,
+		"strength":    strength,
+		"source_rule": "rule_engine",
+		"timestamp":   time.Now().Format(time.RFC3339Nano),
+	}
+
+	// Add related entity as context
+	if relatedID != "" {
+		signal["related_id"] = relatedID
+	}
+
+	// Include any custom properties
+	if action.Properties != nil {
+		for k, v := range action.Properties {
+			signal[k] = v
+		}
+	}
+
+	if e.logger != nil {
+		e.logger.Info("Publishing boid signal",
+			"subject", subject,
+			"signal_type", action.BoidSignalType,
+			"entity_id", entityID,
+			"strength", strength)
+	}
+
+	// Publish via NATS if publisher is configured
+	if e.publisher != nil {
+		// Wrap in BaseMessage for proper deserialization
+		msgType := message.Type{
+			Domain:   "boid",
+			Category: "signal",
+			Version:  "v1",
+		}
+
+		// Create a generic payload wrapper
+		payload := &message.GenericJSONPayload{Data: signal}
+		baseMsg := message.NewBaseMessage(msgType, payload, "rule-processor")
+
+		data, err := json.Marshal(baseMsg)
+		if err != nil {
+			return fmt.Errorf("marshal boid signal message: %w", err)
+		}
+
+		if err := e.publisher.Publish(ctx, subject, data); err != nil {
+			return fmt.Errorf("publish boid signal to %s: %w", subject, err)
+		}
+
+		if e.logger != nil {
+			e.logger.Info("Boid signal published",
+				"subject", subject,
+				"signal_type", action.BoidSignalType,
+				"entity_id", entityID,
+				"size", len(data))
+		}
+	} else if e.logger != nil {
+		e.logger.Debug("Boid signal not published (no publisher configured)",
+			"subject", subject,
+			"signal_type", action.BoidSignalType,
 			"entity_id", entityID)
 	}
 

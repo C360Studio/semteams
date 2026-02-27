@@ -124,6 +124,14 @@
             "items": {
               "type": "object",
               "properties": {
+                "boid_signal_type": {
+                  "type": "string",
+                  "description": "boid_signal_type"
+                },
+                "boid_strength": {
+                  "type": "number",
+                  "description": "boid_strength"
+                },
                 "context_data": {
                   "type": "object",
                   "description": "context_data"
@@ -177,6 +185,14 @@
             "items": {
               "type": "object",
               "properties": {
+                "boid_signal_type": {
+                  "type": "string",
+                  "description": "boid_signal_type"
+                },
+                "boid_strength": {
+                  "type": "number",
+                  "description": "boid_strength"
+                },
                 "context_data": {
                   "type": "object",
                   "description": "context_data"
@@ -241,6 +257,14 @@
             "items": {
               "type": "object",
               "properties": {
+                "boid_signal_type": {
+                  "type": "string",
+                  "description": "boid_signal_type"
+                },
+                "boid_strength": {
+                  "type": "number",
+                  "description": "boid_strength"
+                },
                 "context_data": {
                   "type": "object",
                   "description": "context_data"
