@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sort"
+	"sync"
 	"time"
 
 	gtypes "github.com/c360studio/semstreams/graph"
@@ -15,6 +16,9 @@ import (
 // by suggesting common predicate patterns to follow.
 type AlignmentRule struct {
 	baseBoidRule
+
+	// mu protects mutable state
+	mu sync.Mutex
 
 	// positionProvider retrieves other agent positions
 	positionProvider PositionProvider
@@ -32,6 +36,8 @@ func NewAlignmentRule(id string, def rule.Definition, config *Config, cooldown t
 
 // SetPositionProvider sets the provider for retrieving other agent positions.
 func (r *AlignmentRule) SetPositionProvider(provider PositionProvider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.positionProvider = provider
 }
 
@@ -47,15 +53,20 @@ func (r *AlignmentRule) EvaluateEntityState(entityState *gtypes.EntityState) boo
 		return false
 	}
 
+	// Get provider under lock
+	r.mu.Lock()
+	pp := r.positionProvider
+	r.mu.Unlock()
+
 	// Check dependencies first
-	if r.positionProvider == nil {
+	if pp == nil {
 		r.logger.Debug("No position provider configured", "rule", r.name)
 		return false
 	}
 
 	// Get agent position using provider (reads flat JSON directly from KV)
 	ctx := context.Background()
-	pos, err := r.positionProvider.Get(ctx, entityState.ID)
+	pos, err := pp.Get(ctx, entityState.ID)
 	if err != nil || pos == nil {
 		r.logger.Debug("Failed to get position", "entity_id", entityState.ID, "error", err)
 		return false
@@ -67,7 +78,7 @@ func (r *AlignmentRule) EvaluateEntityState(entityState *gtypes.EntityState) boo
 	}
 
 	// Get same-role agent positions
-	others, err := r.positionProvider.ListOthers(ctx, pos.LoopID)
+	others, err := pp.ListOthers(ctx, pos.LoopID)
 	if err != nil {
 		r.logger.Warn("Failed to list other positions", "error", err)
 		return false
@@ -87,7 +98,7 @@ func (r *AlignmentRule) EvaluateEntityState(entityState *gtypes.EntityState) boo
 	}
 
 	// Find common traversal patterns
-	alignWith := r.findCommonTraversalPatterns(pos, sameRole)
+	alignWith := findCommonTraversalPatterns(pos, sameRole, r.config)
 	if len(alignWith) == 0 {
 		return false
 	}
@@ -107,7 +118,11 @@ func (r *AlignmentRule) EvaluateEntityState(entityState *gtypes.EntityState) boo
 		},
 	}
 
+	// Append signal under lock
+	r.mu.Lock()
 	r.pendingSignals = append(r.pendingSignals, signal)
+	r.mu.Unlock()
+
 	r.markTriggered()
 
 	r.logger.Info("Alignment rule triggered",
@@ -120,7 +135,7 @@ func (r *AlignmentRule) EvaluateEntityState(entityState *gtypes.EntityState) boo
 }
 
 // findCommonTraversalPatterns finds predicates commonly used by same-role agents.
-func (r *AlignmentRule) findCommonTraversalPatterns(pos *AgentPosition, sameRole []*AgentPosition) []string {
+func findCommonTraversalPatterns(pos *AgentPosition, sameRole []*AgentPosition, config *Config) []string {
 	// Count predicate occurrences across all same-role agents
 	predicateCounts := make(map[string]int)
 	for _, other := range sameRole {
@@ -149,7 +164,7 @@ func (r *AlignmentRule) findCommonTraversalPatterns(pos *AgentPosition, sameRole
 
 	// Return top predicates up to alignment window
 	result := make([]string, 0)
-	window := r.config.AlignmentWindow
+	window := config.AlignmentWindow
 	if window <= 0 {
 		window = DefaultAlignmentWindow
 	}
@@ -182,6 +197,8 @@ func (r *AlignmentRule) findCommonTraversalPatterns(pos *AgentPosition, sameRole
 
 // GetPendingSignals returns and clears the pending signals.
 func (r *AlignmentRule) GetPendingSignals() []*SteeringSignal {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	signals := r.pendingSignals
 	r.pendingSignals = nil
 	return signals

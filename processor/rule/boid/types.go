@@ -96,6 +96,20 @@ func (p *AgentPosition) Schema() message.Type {
 	}
 }
 
+// Validate checks that the AgentPosition has required fields and valid values.
+func (p *AgentPosition) Validate() error {
+	if p.LoopID == "" {
+		return fmt.Errorf("loop_id required")
+	}
+	if p.Role == "" {
+		return fmt.Errorf("role required")
+	}
+	if p.Velocity < 0 || p.Velocity > 1 {
+		return fmt.Errorf("velocity must be between 0.0 and 1.0")
+	}
+	return nil
+}
+
 // MarshalJSON implements json.Marshaler.
 func (p *AgentPosition) MarshalJSON() ([]byte, error) {
 	type Alias AgentPosition
@@ -243,3 +257,9 @@ func ParseConfig(metadata map[string]any) (*Config, error) {
 
 	return config, nil
 }
+
+// Compile-time interface compliance checks.
+var (
+	_ message.Payload = (*AgentPosition)(nil)
+	_ message.Payload = (*SteeringSignal)(nil)
+)

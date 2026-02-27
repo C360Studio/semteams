@@ -56,6 +56,211 @@ func TestAgentPosition_Schema(t *testing.T) {
 	}
 }
 
+func TestAgentPosition_Validate(t *testing.T) {
+	tests := []struct {
+		name      string
+		pos       *AgentPosition
+		wantError bool
+		errMsg    string
+	}{
+		{
+			name:      "empty position",
+			pos:       &AgentPosition{},
+			wantError: true,
+			errMsg:    "loop_id required",
+		},
+		{
+			name: "missing role",
+			pos: &AgentPosition{
+				LoopID: "loop-1",
+			},
+			wantError: true,
+			errMsg:    "role required",
+		},
+		{
+			name: "invalid velocity - negative",
+			pos: &AgentPosition{
+				LoopID:   "loop-1",
+				Role:     "general",
+				Velocity: -0.5,
+			},
+			wantError: true,
+			errMsg:    "velocity must be between",
+		},
+		{
+			name: "invalid velocity - above 1",
+			pos: &AgentPosition{
+				LoopID:   "loop-1",
+				Role:     "general",
+				Velocity: 1.5,
+			},
+			wantError: true,
+			errMsg:    "velocity must be between",
+		},
+		{
+			name: "valid position - min velocity",
+			pos: &AgentPosition{
+				LoopID:   "loop-1",
+				Role:     "general",
+				Velocity: 0.0,
+			},
+			wantError: false,
+		},
+		{
+			name: "valid position - max velocity",
+			pos: &AgentPosition{
+				LoopID:   "loop-1",
+				Role:     "general",
+				Velocity: 1.0,
+			},
+			wantError: false,
+		},
+		{
+			name: "valid position - with all fields",
+			pos: &AgentPosition{
+				LoopID:          "loop-1",
+				Role:            "architect",
+				FocusEntities:   []string{"entity-1"},
+				TraversalVector: []string{"has_member"},
+				Velocity:        0.5,
+				Iteration:       10,
+			},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.pos.Validate()
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("Validate() expected error containing %q, got nil", tt.errMsg)
+				} else if !contains(err.Error(), tt.errMsg) {
+					t.Errorf("Validate() error = %q, want error containing %q", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Validate() unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestSteeringSignal_Validate(t *testing.T) {
+	tests := []struct {
+		name      string
+		signal    *SteeringSignal
+		wantError bool
+		errMsg    string
+	}{
+		{
+			name:      "empty signal",
+			signal:    &SteeringSignal{},
+			wantError: true,
+			errMsg:    "loop_id required",
+		},
+		{
+			name: "missing signal type",
+			signal: &SteeringSignal{
+				LoopID: "loop-1",
+			},
+			wantError: true,
+			errMsg:    "signal_type required",
+		},
+		{
+			name: "invalid signal type",
+			signal: &SteeringSignal{
+				LoopID:     "loop-1",
+				SignalType: "invalid",
+			},
+			wantError: true,
+			errMsg:    "signal_type must be one of",
+		},
+		{
+			name: "invalid strength - negative",
+			signal: &SteeringSignal{
+				LoopID:     "loop-1",
+				SignalType: SignalTypeSeparation,
+				Strength:   -0.5,
+			},
+			wantError: true,
+			errMsg:    "strength must be between",
+		},
+		{
+			name: "invalid strength - above 1",
+			signal: &SteeringSignal{
+				LoopID:     "loop-1",
+				SignalType: SignalTypeSeparation,
+				Strength:   1.5,
+			},
+			wantError: true,
+			errMsg:    "strength must be between",
+		},
+		{
+			name: "valid separation signal",
+			signal: &SteeringSignal{
+				LoopID:        "loop-1",
+				SignalType:    SignalTypeSeparation,
+				AvoidEntities: []string{"entity-1"},
+				Strength:      0.8,
+			},
+			wantError: false,
+		},
+		{
+			name: "valid cohesion signal",
+			signal: &SteeringSignal{
+				LoopID:         "loop-1",
+				SignalType:     SignalTypeCohesion,
+				SuggestedFocus: []string{"entity-1"},
+				Strength:       0.5,
+			},
+			wantError: false,
+		},
+		{
+			name: "valid alignment signal",
+			signal: &SteeringSignal{
+				LoopID:     "loop-1",
+				SignalType: SignalTypeAlignment,
+				AlignWith:  []string{"has_member"},
+				Strength:   0.7,
+			},
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.signal.Validate()
+			if tt.wantError {
+				if err == nil {
+					t.Errorf("Validate() expected error containing %q, got nil", tt.errMsg)
+				} else if !contains(err.Error(), tt.errMsg) {
+					t.Errorf("Validate() error = %q, want error containing %q", err.Error(), tt.errMsg)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Validate() unexpected error: %v", err)
+				}
+			}
+		})
+	}
+}
+
+// contains checks if s contains substr
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsLoop(s, substr))
+}
+
+func containsLoop(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestSteeringSignal_MarshalUnmarshal(t *testing.T) {
 	signal := &SteeringSignal{
 		LoopID:        "loop-456",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"sort"
+	"sync"
 	"time"
 
 	gtypes "github.com/c360studio/semstreams/graph"
@@ -16,6 +17,9 @@ import (
 // that match their role's objective function.
 type CohesionRule struct {
 	baseBoidRule
+
+	// mu protects mutable state
+	mu sync.Mutex
 
 	// positionProvider retrieves agent positions
 	positionProvider PositionProvider
@@ -46,16 +50,22 @@ func NewCohesionRule(id string, def rule.Definition, config *Config, cooldown ti
 
 // SetPositionProvider sets the provider for retrieving agent positions.
 func (r *CohesionRule) SetPositionProvider(provider PositionProvider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.positionProvider = provider
 }
 
 // SetCentralityProvider sets the provider for centrality scores.
 func (r *CohesionRule) SetCentralityProvider(provider CentralityProvider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.centralityProvider = provider
 }
 
 // SetPivotIndex sets the pivot index for finding reachable candidates.
 func (r *CohesionRule) SetPivotIndex(index *structural.PivotIndex) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.pivotIndex = index
 }
 
@@ -71,15 +81,22 @@ func (r *CohesionRule) EvaluateEntityState(entityState *gtypes.EntityState) bool
 		return false
 	}
 
+	// Get providers under lock
+	r.mu.Lock()
+	pp := r.positionProvider
+	cp := r.centralityProvider
+	pi := r.pivotIndex
+	r.mu.Unlock()
+
 	// Check dependencies first
-	if r.positionProvider == nil {
+	if pp == nil {
 		r.logger.Debug("No position provider configured", "rule", r.name)
 		return false
 	}
 
 	// Get agent position using provider (reads flat JSON directly from KV)
 	ctx := context.Background()
-	pos, err := r.positionProvider.Get(ctx, entityState.ID)
+	pos, err := pp.Get(ctx, entityState.ID)
 	if err != nil || pos == nil {
 		r.logger.Debug("Failed to get position", "entity_id", entityState.ID, "error", err)
 		return false
@@ -95,8 +112,8 @@ func (r *CohesionRule) EvaluateEntityState(entityState *gtypes.EntityState) bool
 		return false
 	}
 
-	// Find high-centrality candidates
-	candidates := r.findHighCentralityCandidates(pos)
+	// Find high-centrality candidates (using local variables for thread safety)
+	candidates := r.findHighCentralityCandidatesWithProviders(pos, pi, cp)
 	if len(candidates) == 0 {
 		return false
 	}
@@ -115,7 +132,11 @@ func (r *CohesionRule) EvaluateEntityState(entityState *gtypes.EntityState) bool
 		},
 	}
 
+	// Append signal under lock
+	r.mu.Lock()
 	r.pendingSignals = append(r.pendingSignals, signal)
+	r.mu.Unlock()
+
 	r.markTriggered()
 
 	r.logger.Info("Cohesion rule triggered",
@@ -126,8 +147,9 @@ func (r *CohesionRule) EvaluateEntityState(entityState *gtypes.EntityState) bool
 	return true
 }
 
-// findHighCentralityCandidates finds entities with high centrality near the agent's focus.
-func (r *CohesionRule) findHighCentralityCandidates(pos *AgentPosition) []string {
+// findHighCentralityCandidatesWithProviders finds entities with high centrality near the agent's focus.
+// Uses the provided providers for thread-safe operation.
+func (r *CohesionRule) findHighCentralityCandidatesWithProviders(pos *AgentPosition, pi *structural.PivotIndex, cp CentralityProvider) []string {
 	ctx := context.Background()
 
 	// Get reachable candidates from each focus entity
@@ -136,8 +158,8 @@ func (r *CohesionRule) findHighCentralityCandidates(pos *AgentPosition) []string
 		// Default search radius: 3 hops
 		searchRadius := 3
 
-		if r.pivotIndex != nil {
-			reachable := r.pivotIndex.GetReachableCandidates(focus, searchRadius)
+		if pi != nil {
+			reachable := pi.GetReachableCandidates(focus, searchRadius)
 			for _, id := range reachable {
 				candidates[id] = true
 			}
@@ -158,7 +180,7 @@ func (r *CohesionRule) findHighCentralityCandidates(pos *AgentPosition) []string
 	}
 
 	// Get centrality scores
-	if r.centralityProvider == nil {
+	if cp == nil {
 		// Without centrality provider, return candidates sorted by ID (deterministic)
 		sort.Strings(candidateList)
 		if len(candidateList) > 5 {
@@ -167,7 +189,7 @@ func (r *CohesionRule) findHighCentralityCandidates(pos *AgentPosition) []string
 		return candidateList
 	}
 
-	scores, err := r.centralityProvider.GetPageRankScores(ctx, candidateList)
+	scores, err := cp.GetPageRankScores(ctx, candidateList)
 	if err != nil {
 		r.logger.Warn("Failed to get centrality scores", "error", err)
 		return nil
@@ -205,6 +227,8 @@ func (r *CohesionRule) findHighCentralityCandidates(pos *AgentPosition) []string
 
 // GetPendingSignals returns and clears the pending signals.
 func (r *CohesionRule) GetPendingSignals() []*SteeringSignal {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	signals := r.pendingSignals
 	r.pendingSignals = nil
 	return signals

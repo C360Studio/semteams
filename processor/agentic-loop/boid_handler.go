@@ -20,6 +20,49 @@ const defaultSignalTTL = 30 * time.Second
 // Pre-compiled regex patterns for entity extraction
 var entityContextPattern = regexp.MustCompile(`\[Entity:\s*([^\]]+)\]`)
 
+// Pre-compiled pattern for predicate-like patterns in tool results
+// Matches snake_case patterns like "has_member", "related_to", "depends_on"
+var predicatePattern = regexp.MustCompile(`[a-z][a-z0-9]*(?:_[a-z][a-z0-9]*)+`)
+
+// Known predicates used in graph traversal
+// This is a curated list - add predicates as they become relevant
+var knownPredicates = map[string]bool{
+	// Common relationship predicates
+	"has_member":      true,
+	"member_of":       true,
+	"related_to":      true,
+	"depends_on":      true,
+	"dependency_of":   true,
+	"part_of":         true,
+	"contains":        true,
+	"owned_by":        true,
+	"created_by":      true,
+	"modified_by":     true,
+	"assigned_to":     true,
+	"belongs_to":      true,
+	"connected_to":    true,
+	"links_to":        true,
+	"references":      true,
+	"referenced_by":   true,
+	"parent_of":       true,
+	"child_of":        true,
+	"sibling_of":      true,
+	"located_at":      true,
+	"located_in":      true,
+	"works_with":      true,
+	"reports_to":      true,
+	"manages":         true,
+	"implements":      true,
+	"extends":         true,
+	"uses":            true,
+	"used_by":         true,
+	"calls":           true,
+	"called_by":       true,
+	"instance_of":     true,
+	"type_of":         true,
+	"associated_with": true,
+}
+
 // activeSignal wraps a steering signal with its expiration time
 type activeSignal struct {
 	Signal    *boid.SteeringSignal
@@ -254,6 +297,32 @@ func (h *BoidHandler) ExtractEntitiesFromToolResult(content string) []string {
 	result := make([]string, 0)
 	for _, m := range matches {
 		if !seen[m] {
+			seen[m] = true
+			result = append(result, m)
+		}
+	}
+
+	return result
+}
+
+// ExtractPredicatesFromToolResult extracts predicate patterns from tool result content.
+// This captures which relationship types an agent is following during graph traversal.
+// Only known predicates are returned to avoid noise from random snake_case strings.
+func (h *BoidHandler) ExtractPredicatesFromToolResult(content string) []string {
+	if content == "" {
+		return nil
+	}
+
+	matches := predicatePattern.FindAllString(content, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	// Deduplicate and filter to known predicates only
+	seen := make(map[string]bool)
+	result := make([]string, 0)
+	for _, m := range matches {
+		if !seen[m] && knownPredicates[m] {
 			seen[m] = true
 			result = append(result, m)
 		}

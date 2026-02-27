@@ -3,6 +3,7 @@ package boid
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	gtypes "github.com/c360studio/semstreams/graph"
@@ -15,6 +16,9 @@ import (
 // by generating avoid signals when agents are within k-hop distance.
 type SeparationRule struct {
 	baseBoidRule
+
+	// mu protects mutable state
+	mu sync.Mutex
 
 	// positionProvider retrieves other agent positions
 	positionProvider PositionProvider
@@ -41,11 +45,15 @@ func NewSeparationRule(id string, def rule.Definition, config *Config, cooldown 
 
 // SetPositionProvider sets the provider for retrieving other agent positions.
 func (r *SeparationRule) SetPositionProvider(provider PositionProvider) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.positionProvider = provider
 }
 
 // SetPivotIndex sets the pivot index for k-hop distance estimation.
 func (r *SeparationRule) SetPivotIndex(index *structural.PivotIndex) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.pivotIndex = index
 }
 
@@ -61,15 +69,21 @@ func (r *SeparationRule) EvaluateEntityState(entityState *gtypes.EntityState) bo
 		return false
 	}
 
+	// Get providers under lock
+	r.mu.Lock()
+	pp := r.positionProvider
+	pi := r.pivotIndex
+	r.mu.Unlock()
+
 	// Check dependencies first
-	if r.positionProvider == nil {
+	if pp == nil {
 		r.logger.Debug("No position provider configured", "rule", r.name)
 		return false
 	}
 
 	// Get agent position using provider (reads flat JSON directly from KV)
 	ctx := context.Background()
-	pos, err := r.positionProvider.Get(ctx, entityState.ID)
+	pos, err := pp.Get(ctx, entityState.ID)
 	if err != nil || pos == nil {
 		r.logger.Debug("Failed to get position", "entity_id", entityState.ID, "error", err)
 		return false
@@ -86,14 +100,14 @@ func (r *SeparationRule) EvaluateEntityState(entityState *gtypes.EntityState) bo
 	}
 
 	// Get other agent positions
-	others, err := r.positionProvider.ListOthers(ctx, pos.LoopID)
+	others, err := pp.ListOthers(ctx, pos.LoopID)
 	if err != nil {
 		r.logger.Warn("Failed to list other positions", "error", err)
 		return false
 	}
 
-	// Find entities to avoid
-	avoidEntities := r.findOverlappingEntities(pos, others)
+	// Find entities to avoid (using local pi variable for thread safety)
+	avoidEntities := findOverlappingEntitiesWithPivotIndex(pos, others, pi, r.config)
 	if len(avoidEntities) == 0 {
 		return false
 	}
@@ -112,7 +126,11 @@ func (r *SeparationRule) EvaluateEntityState(entityState *gtypes.EntityState) bo
 		},
 	}
 
+	// Append signal under lock
+	r.mu.Lock()
 	r.pendingSignals = append(r.pendingSignals, signal)
+	r.mu.Unlock()
+
 	r.markTriggered()
 
 	r.logger.Info("Separation rule triggered",
@@ -124,9 +142,10 @@ func (r *SeparationRule) EvaluateEntityState(entityState *gtypes.EntityState) bo
 	return true
 }
 
-// findOverlappingEntities finds entities that are within k-hop distance of other agents.
-func (r *SeparationRule) findOverlappingEntities(pos *AgentPosition, others []*AgentPosition) []string {
-	threshold := r.config.GetSeparationThreshold(pos.Role)
+// findOverlappingEntitiesWithPivotIndex finds entities that are within k-hop distance of other agents.
+// Uses the provided pivot index for thread-safe operation.
+func findOverlappingEntitiesWithPivotIndex(pos *AgentPosition, others []*AgentPosition, pi *structural.PivotIndex, config *Config) []string {
+	threshold := config.GetSeparationThreshold(pos.Role)
 	overlapping := make(map[string]bool)
 
 	for _, other := range others {
@@ -138,7 +157,7 @@ func (r *SeparationRule) findOverlappingEntities(pos *AgentPosition, others []*A
 		// Check each pair of focus entities for proximity
 		for _, myEntity := range pos.FocusEntities {
 			for _, otherEntity := range other.FocusEntities {
-				if r.areEntitiesWithinRange(myEntity, otherEntity, threshold) {
+				if areEntitiesWithinRange(myEntity, otherEntity, threshold, pi) {
 					// Mark my entity as overlapping - I should avoid it
 					overlapping[myEntity] = true
 				}
@@ -154,23 +173,25 @@ func (r *SeparationRule) findOverlappingEntities(pos *AgentPosition, others []*A
 }
 
 // areEntitiesWithinRange checks if two entities are within k-hop distance.
-func (r *SeparationRule) areEntitiesWithinRange(entityA, entityB string, maxHops int) bool {
+func areEntitiesWithinRange(entityA, entityB string, maxHops int, pi *structural.PivotIndex) bool {
 	if entityA == entityB {
 		return true // Same entity is always within range
 	}
 
-	if r.pivotIndex == nil {
+	if pi == nil {
 		// Without pivot index, fall back to string comparison (same prefix = related)
 		// This is a conservative approximation
 		return false
 	}
 
-	return r.pivotIndex.IsWithinHops(entityA, entityB, maxHops)
+	return pi.IsWithinHops(entityA, entityB, maxHops)
 }
 
 // GetPendingSignals returns and clears the pending signals.
 // This is used by the rule processor to retrieve generated signals.
 func (r *SeparationRule) GetPendingSignals() []*SteeringSignal {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	signals := r.pendingSignals
 	r.pendingSignals = nil
 	return signals

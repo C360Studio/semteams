@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
-	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/graph/structural"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/processor/rule"
 )
@@ -44,12 +45,16 @@ func (f *RuleFactory) Create(id string, def rule.Definition, deps rule.Dependenc
 		}
 	}
 
+	ctx := context.Background()
+
 	// Create PositionTracker if NATS available
 	var tracker *PositionTracker
+	var pivotIndex *structural.PivotIndex
+
 	if deps.NATSClient != nil {
-		ctx := context.Background()
 		js, jsErr := deps.NATSClient.JetStream()
 		if jsErr == nil {
+			// Try to get AGENT_POSITIONS bucket for position tracking
 			bucket, kvErr := js.KeyValue(ctx, KVBucketAgentPositions)
 			if kvErr == nil {
 				tracker = NewPositionTracker(bucket, deps.Logger)
@@ -58,6 +63,18 @@ func (f *RuleFactory) Create(id string, def rule.Definition, deps rule.Dependenc
 				if deps.Logger != nil {
 					deps.Logger.Debug("AGENT_POSITIONS bucket not available, boid rules will be limited",
 						"error", kvErr)
+				}
+			}
+
+			// Try to get STRUCTURAL_INDEX bucket for PivotIndex
+			structuralBucket, structErr := js.KeyValue(ctx, structural.StructuralIndexBucket)
+			if structErr == nil {
+				storage := structural.NewNATSStructuralIndexStorage(structuralBucket)
+				pivotIndex, _ = storage.GetPivotIndex(ctx) // Graceful if missing
+				if pivotIndex != nil && deps.Logger != nil {
+					deps.Logger.Debug("Loaded PivotIndex for boid rules",
+						"entity_count", pivotIndex.EntityCount,
+						"pivot_count", len(pivotIndex.Pivots))
 				}
 			}
 		}
@@ -70,11 +87,17 @@ func (f *RuleFactory) Create(id string, def rule.Definition, deps rule.Dependenc
 		if tracker != nil {
 			r.SetPositionProvider(tracker)
 		}
+		if pivotIndex != nil {
+			r.SetPivotIndex(pivotIndex)
+		}
 		return r, nil
 	case RuleTypeCohesion:
 		r := NewCohesionRule(id, def, config, cooldown, deps.Logger)
 		if tracker != nil {
 			r.SetPositionProvider(tracker)
+		}
+		if pivotIndex != nil {
+			r.SetPivotIndex(pivotIndex)
 		}
 		return r, nil
 	case RuleTypeAlignment:
@@ -174,14 +197,17 @@ func (f *RuleFactory) Schema() rule.Schema {
 
 // baseBoidRule provides common functionality for all boid rules.
 type baseBoidRule struct {
-	id            string
-	name          string
-	description   string
-	enabled       bool
-	config        *Config
-	cooldown      time.Duration
+	id          string
+	name        string
+	description string
+	enabled     bool
+	config      *Config
+	cooldown    time.Duration
+	logger      *slog.Logger
+
+	// mu protects mutable state (lastTriggered)
+	mu            sync.Mutex
 	lastTriggered time.Time
-	logger        *slog.Logger
 }
 
 // newBaseBoidRule creates base rule from definition.
@@ -226,11 +252,15 @@ func (r *baseBoidRule) canTrigger() bool {
 	if r.cooldown == 0 {
 		return true
 	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	return time.Since(r.lastTriggered) >= r.cooldown
 }
 
 // markTriggered updates the last triggered time.
 func (r *baseBoidRule) markTriggered() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.lastTriggered = time.Now()
 }
 
@@ -240,61 +270,6 @@ func (r *baseBoidRule) matchesRoleFilter(role string) bool {
 		return true // No filter, matches all roles
 	}
 	return r.config.RoleFilter == role
-}
-
-// extractAgentPosition extracts AgentPosition from EntityState triples.
-func extractAgentPosition(entityState *gtypes.EntityState) (*AgentPosition, error) {
-	if entityState == nil {
-		return nil, fmt.Errorf("nil entity state")
-	}
-
-	pos := &AgentPosition{
-		LoopID: entityState.ID,
-	}
-
-	for _, triple := range entityState.Triples {
-		switch triple.Predicate {
-		case "boid.role":
-			if s, ok := triple.Object.(string); ok {
-				pos.Role = s
-			}
-		case "boid.focus_entities":
-			if arr, ok := triple.Object.([]any); ok {
-				for _, v := range arr {
-					if s, ok := v.(string); ok {
-						pos.FocusEntities = append(pos.FocusEntities, s)
-					}
-				}
-			}
-		case "boid.traversal_vector":
-			if arr, ok := triple.Object.([]any); ok {
-				for _, v := range arr {
-					if s, ok := v.(string); ok {
-						pos.TraversalVector = append(pos.TraversalVector, s)
-					}
-				}
-			}
-		case "boid.velocity":
-			if f, ok := triple.Object.(float64); ok {
-				pos.Velocity = f
-			}
-		case "boid.iteration":
-			switch v := triple.Object.(type) {
-			case int:
-				pos.Iteration = v
-			case float64:
-				pos.Iteration = int(v)
-			}
-		case "boid.last_update":
-			if s, ok := triple.Object.(string); ok {
-				if t, err := time.Parse(time.RFC3339, s); err == nil {
-					pos.LastUpdate = t
-				}
-			}
-		}
-	}
-
-	return pos, nil
 }
 
 // init registers the boid rule factory.
