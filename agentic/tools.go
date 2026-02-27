@@ -31,6 +31,8 @@ type ToolCall struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments,omitempty"`
+	LoopID    string         `json:"loop_id,omitempty"`
+	TraceID   string         `json:"trace_id,omitempty"`
 }
 
 // Validate checks if the ToolCall is valid
@@ -67,6 +69,8 @@ type ToolResult struct {
 	Content  string         `json:"content,omitempty"`
 	Error    string         `json:"error,omitempty"`
 	Metadata map[string]any `json:"metadata,omitempty"`
+	LoopID   string         `json:"loop_id,omitempty"`
+	TraceID  string         `json:"trace_id,omitempty"`
 }
 
 // Validate checks if the ToolResult is valid

@@ -156,6 +156,7 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		{"capture-baseline", s.captureBaseline},
 		{"inject-task", s.injectTask},
 		{"wait-for-completion", s.waitForCompletion},
+		{"verify-tool-execution", s.verifyToolExecution},
 		{"validate-results", s.validateResults},
 		// AGNTCY integration stages (optional, skip if not configured)
 		{"verify-oasf-generation", s.verifyOASFGeneration},
@@ -309,6 +310,27 @@ func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Resu
 	result.Details["timeout_loops_completed"] = loopsCompleted
 
 	return fmt.Errorf("timeout waiting for agent loop completion after %v (loops_completed=%v)", timeout, loopsCompleted)
+}
+
+// verifyToolExecution verifies that tools were executed during the agent loop
+func (s *Scenario) verifyToolExecution(ctx context.Context, result *scenarios.Result) error {
+	// Check tool execution metrics
+	toolExecutions, err := s.metrics.SumMetricsByName(ctx, "semstreams_agentic_tools_executions_total")
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Could not verify tool executions: %v", err))
+		return nil // Non-fatal - metrics may not be available
+	}
+
+	result.Metrics["tool_executions"] = toolExecutions
+
+	// Verify at least one tool was executed
+	if toolExecutions < 1 {
+		result.Warnings = append(result.Warnings, "No tool executions recorded")
+	} else {
+		result.Details["tool_execution_verified"] = true
+	}
+
+	return nil
 }
 
 // validateResults validates the scenario results

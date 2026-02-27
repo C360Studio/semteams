@@ -436,6 +436,61 @@ func TestToolResult_Validation(t *testing.T) {
 	}
 }
 
+func TestToolCall_TraceFields(t *testing.T) {
+	call := agentic.ToolCall{
+		ID:      "call-123",
+		Name:    "test_tool",
+		LoopID:  "loop-456",
+		TraceID: "trace-789",
+		Arguments: map[string]any{
+			"query": "SELECT *",
+		},
+	}
+
+	data, err := json.Marshal(call)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded agentic.ToolCall
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.LoopID != "loop-456" {
+		t.Errorf("LoopID = %v, want loop-456", decoded.LoopID)
+	}
+	if decoded.TraceID != "trace-789" {
+		t.Errorf("TraceID = %v, want trace-789", decoded.TraceID)
+	}
+}
+
+func TestToolResult_TraceFields(t *testing.T) {
+	result := agentic.ToolResult{
+		CallID:  "call-123",
+		Content: "result content",
+		LoopID:  "loop-456",
+		TraceID: "trace-789",
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded agentic.ToolResult
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.LoopID != "loop-456" {
+		t.Errorf("LoopID = %v, want loop-456", decoded.LoopID)
+	}
+	if decoded.TraceID != "trace-789" {
+		t.Errorf("TraceID = %v, want trace-789", decoded.TraceID)
+	}
+}
+
 func TestValidateToolsAllowed(t *testing.T) {
 	tests := []struct {
 		name        string
