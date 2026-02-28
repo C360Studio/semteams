@@ -312,7 +312,10 @@ func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Resu
 	return fmt.Errorf("timeout waiting for agent loop completion after %v (loops_completed=%v)", timeout, loopsCompleted)
 }
 
-// verifyToolExecution verifies that tools were executed during the agent loop
+// verifyToolExecution verifies that tools were executed during the agent loop.
+// This is a critical verification that tool definitions are being injected into
+// AgentRequest messages. The mock LLM only returns tool calls when it receives
+// tool definitions, so if this fails, it indicates the tool injection path is broken.
 func (s *Scenario) verifyToolExecution(ctx context.Context, result *scenarios.Result) error {
 	// Check tool execution metrics
 	toolExecutions, err := s.metrics.SumMetricsByName(ctx, "semstreams_agentic_tools_executions_total")
@@ -324,12 +327,14 @@ func (s *Scenario) verifyToolExecution(ctx context.Context, result *scenarios.Re
 	result.Metrics["tool_executions"] = toolExecutions
 
 	// Verify at least one tool was executed
+	// This is now a HARD FAILURE because the mock LLM only calls tools when
+	// tool definitions are present in the request. If no tools were executed,
+	// it means AgentRequest.Tools was empty (tool injection failed).
 	if toolExecutions < 1 {
-		result.Warnings = append(result.Warnings, "No tool executions recorded")
-	} else {
-		result.Details["tool_execution_verified"] = true
+		return fmt.Errorf("no tool executions recorded - tool definitions may not be injected into AgentRequest")
 	}
 
+	result.Details["tool_execution_verified"] = true
 	return nil
 }
 
