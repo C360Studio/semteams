@@ -23,6 +23,10 @@ import (
 // schema is the configuration schema for agentic-loop, generated from Config struct tags
 var schema = component.GenerateConfigSchema(reflect.TypeOf(Config{}))
 
+// maxTraversalVectorSize is the maximum number of predicates to track in an agent's traversal vector.
+// This limits memory usage while retaining enough history for alignment rule evaluation.
+const maxTraversalVectorSize = 5
+
 // Component implements the agentic-loop processor
 type Component struct {
 	config     Config
@@ -351,9 +355,17 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 		}
 		c.positionsBucket = positionsBucket
 
-		// Initialize the Boid handler
-		c.boidHandler = NewBoidHandler(c.positionsBucket, c.logger)
-		c.logger.Info("Boid coordination enabled", "positions_bucket", bucketName)
+		// Parse signal TTL (use default if not specified or invalid)
+		signalTTL := defaultSignalTTL
+		if c.config.BoidSignalTTL != "" {
+			if parsed, err := time.ParseDuration(c.config.BoidSignalTTL); err == nil && parsed > 0 {
+				signalTTL = parsed
+			}
+		}
+
+		// Initialize the Boid handler with configured TTL
+		c.boidHandler = NewBoidHandlerWithTTL(c.positionsBucket, c.logger, signalTTL)
+		c.logger.Info("Boid coordination enabled", "positions_bucket", bucketName, "signal_ttl", signalTTL)
 	}
 
 	return nil
@@ -558,6 +570,9 @@ func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
 
 	// Persist trajectory steps
 	c.persistTrajectorySteps(ctx, result.LoopID, result.TrajectorySteps)
+
+	// Write initial Boid position for coordination
+	c.writeInitialBoidPosition(ctx, result.LoopID, task)
 }
 
 // handleResponseMessage processes incoming agent response messages
@@ -728,6 +743,10 @@ func (c *Component) handleToolResultMessage(ctx context.Context, data []byte) {
 		c.metrics.recordToolResultReceived(hasError)
 		c.metrics.recordTrajectoryStep("tool_call")
 	}
+
+	// Apply accumulated Boid steering signals before handler processes result
+	// This ensures steering affects context before the next model call is built
+	c.applyAccumulatedSteering(loopID)
 
 	// Handle the tool result using the message handler
 	result, err := c.handler.HandleToolResult(ctx, loopID, toolResult)
@@ -1107,13 +1126,13 @@ func (c *Component) handleResumeSignal(ctx context.Context, signal agentic.UserS
 // handleBoidSignalMessage processes incoming Boid steering signal messages.
 // These signals come from Boid rules (separation, cohesion, alignment) and
 // guide agent behavior for coordination.
-func (c *Component) handleBoidSignalMessage(_ context.Context, data []byte) {
+func (c *Component) handleBoidSignalMessage(ctx context.Context, data []byte) {
 	if c.boidHandler == nil {
 		return
 	}
 
 	// Delegate to BoidHandler for parsing and processing
-	signalType := c.boidHandler.HandleSteeringSignalMessage(data, c.getContextManagerForLoop)
+	signalType := c.boidHandler.HandleSteeringSignalMessage(ctx, data, c.getContextManagerForLoop)
 
 	// Record metrics if signal was successfully processed
 	if signalType != "" && c.metrics != nil {
@@ -1168,34 +1187,123 @@ func (c *Component) updateBoidPositionFromToolResult(ctx context.Context, loopID
 		pos.Iteration++
 	}
 
+	// Extract predicates for alignment rule data
+	predicates := c.boidHandler.ExtractPredicatesFromToolResult(toolResult.Content)
+	if len(predicates) > 0 {
+		pos.TraversalVector = mergeStrings(predicates, pos.TraversalVector, maxTraversalVectorSize)
+	}
+
 	// Update position in KV
 	if err := c.boidHandler.UpdatePosition(ctx, pos); err != nil {
-		c.logger.Error("Failed to update Boid position",
+		c.logger.Debug("Failed to update Boid position",
 			"loop_id", loopID, "error", err)
 	} else if c.metrics != nil {
 		c.metrics.recordBoidPositionUpdate()
 	}
 }
 
-// mergeEntities merges two entity lists, keeping the most recent up to maxCount.
-func mergeEntities(existing, newEntities []string, maxCount int) []string {
-	// Use a map to dedupe and preserve insertion order
-	seen := make(map[string]bool)
-	result := make([]string, 0, maxCount)
+// writeInitialBoidPosition writes an initial position at task arrival.
+// This enables Boid rules to fire before the first tool result arrives.
+func (c *Component) writeInitialBoidPosition(ctx context.Context, loopID string, task *agentic.TaskMessage) {
+	if c.boidHandler == nil {
+		return
+	}
 
-	// Add new entities first (they're more recent)
-	for _, e := range newEntities {
-		if !seen[e] {
-			seen[e] = true
-			result = append(result, e)
+	// Determine initial focus entities (priority order)
+	var focusEntities []string
+	switch {
+	case task.Context != nil && len(task.Context.Entities) > 0:
+		// 1. Pre-constructed context entities (most reliable)
+		focusEntities = task.Context.Entities
+	default:
+		// 2. Extract from prompt using existing entity pattern
+		focusEntities = c.boidHandler.ExtractEntitiesFromToolResult(task.Prompt)
+	}
+
+	// Ensure non-nil slice for JSON serialization consistency
+	if focusEntities == nil {
+		focusEntities = []string{}
+	}
+
+	pos := &boid.AgentPosition{
+		LoopID:        loopID,
+		Role:          task.Role,
+		FocusEntities: focusEntities,
+		Velocity:      0.0, // Not moving yet
+		Iteration:     0,   // Pre-first-iteration
+		LastUpdate:    time.Now(),
+	}
+
+	if err := c.boidHandler.UpdatePosition(ctx, pos); err != nil {
+		c.logger.Debug("Failed to write initial Boid position",
+			"loop_id", loopID, "error", err)
+		return
+	}
+
+	c.logger.Debug("Wrote initial Boid position",
+		"loop_id", loopID,
+		"role", task.Role,
+		"focus_count", len(focusEntities))
+}
+
+// applyAccumulatedSteering applies all active Boid steering signals to a loop's context.
+// This should be called before building the next model request to ensure steering
+// signals affect entity prioritization in the context.
+//
+// Note: There is a small window between signal retrieval and application where signals
+// could be modified. This is acceptable since signals are advisory steering guidance.
+func (c *Component) applyAccumulatedSteering(loopID string) {
+	if c.boidHandler == nil {
+		return
+	}
+
+	cm := c.handler.GetContextManager(loopID)
+	if cm == nil {
+		c.logger.Debug("No context manager for loop, skipping steering",
+			"loop_id", loopID)
+		return
+	}
+
+	signals := c.boidHandler.GetActiveSignals(loopID)
+	if len(signals) == 0 {
+		return
+	}
+
+	steering := BoidSteeringConfig{}
+	for _, signal := range signals {
+		switch signal.SignalType {
+		case boid.SignalTypeSeparation:
+			steering.AvoidEntities = append(steering.AvoidEntities, signal.AvoidEntities...)
+		case boid.SignalTypeCohesion:
+			steering.PrioritizeEntities = append(steering.PrioritizeEntities, signal.SuggestedFocus...)
+		case boid.SignalTypeAlignment:
+			steering.AlignPatterns = append(steering.AlignPatterns, signal.AlignWith...)
 		}
 	}
 
-	// Add existing entities
-	for _, e := range existing {
-		if !seen[e] {
-			seen[e] = true
-			result = append(result, e)
+	cm.ApplyBoidSteering(steering)
+}
+
+// mergeStringSlices merges two string slices, keeping the most recent up to maxCount.
+// New items are added first, then existing items are added if not already present.
+// This is the shared implementation for merging entities and predicates.
+func mergeStringSlices(newItems, existing []string, maxCount int) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, maxCount)
+
+	// Add new items first (they're more recent)
+	for _, s := range newItems {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+	}
+
+	// Add existing items
+	for _, s := range existing {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
 		}
 	}
 
@@ -1205,6 +1313,16 @@ func mergeEntities(existing, newEntities []string, maxCount int) []string {
 	}
 
 	return result
+}
+
+// mergeEntities merges two entity lists, keeping the most recent up to maxCount.
+func mergeEntities(existing, newEntities []string, maxCount int) []string {
+	return mergeStringSlices(newEntities, existing, maxCount)
+}
+
+// mergeStrings merges two string lists, keeping the most recent up to maxCount.
+func mergeStrings(newItems, existing []string, maxCount int) []string {
+	return mergeStringSlices(newItems, existing, maxCount)
 }
 
 // cleanupBoidPosition removes an agent's position and signals when the loop completes.

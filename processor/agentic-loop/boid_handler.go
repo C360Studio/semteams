@@ -196,17 +196,25 @@ type BoidHandler struct {
 	signalStore *SignalStore
 }
 
-// NewBoidHandler creates a new boid handler.
+// NewBoidHandler creates a new boid handler with the default signal TTL.
 func NewBoidHandler(positionsBucket jetstream.KeyValue, logger *slog.Logger) *BoidHandler {
+	return NewBoidHandlerWithTTL(positionsBucket, logger, defaultSignalTTL)
+}
+
+// NewBoidHandlerWithTTL creates a new boid handler with a custom signal TTL.
+func NewBoidHandlerWithTTL(positionsBucket jetstream.KeyValue, logger *slog.Logger, signalTTL time.Duration) *BoidHandler {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if signalTTL <= 0 {
+		signalTTL = defaultSignalTTL
 	}
 	return &BoidHandler{
 		positionsBucket: positionsBucket,
 		logger:          logger,
 		// Pattern to extract entity IDs from content (6-part federated IDs)
 		entityIDPattern: regexp.MustCompile(`([a-z0-9_-]+\.){5}[a-z0-9_-]+`),
-		signalStore:     NewSignalStore(defaultSignalTTL),
+		signalStore:     NewSignalStore(signalTTL),
 	}
 }
 
@@ -356,8 +364,9 @@ func (h *BoidHandler) ExtractEntitiesFromContext(content string) []string {
 }
 
 // ProcessSteeringSignal processes an incoming boid steering signal.
-// Stores the signal for use during context building and tool prioritization.
-func (h *BoidHandler) ProcessSteeringSignal(_ context.Context, signal *boid.SteeringSignal, _ *ContextManager) error {
+// Stores the signal for use during context building and tool prioritization,
+// and applies steering to the context manager if provided.
+func (h *BoidHandler) ProcessSteeringSignal(_ context.Context, signal *boid.SteeringSignal, cm *ContextManager) error {
 	if signal == nil {
 		return nil
 	}
@@ -391,6 +400,22 @@ func (h *BoidHandler) ProcessSteeringSignal(_ context.Context, signal *boid.Stee
 		}
 	}
 
+	// Apply steering to context manager if provided
+	if cm != nil {
+		steering := BoidSteeringConfig{}
+
+		switch signal.SignalType {
+		case boid.SignalTypeSeparation:
+			steering.AvoidEntities = signal.AvoidEntities
+		case boid.SignalTypeCohesion:
+			steering.PrioritizeEntities = signal.SuggestedFocus
+		case boid.SignalTypeAlignment:
+			steering.AlignPatterns = signal.AlignWith
+		}
+
+		cm.ApplyBoidSteering(steering)
+	}
+
 	return nil
 }
 
@@ -411,7 +436,7 @@ func (h *BoidHandler) ClearSignals(loopID string) {
 
 // HandleSteeringSignalMessage handles incoming boid steering signal messages from NATS.
 // Returns the signal type if successfully processed, empty string otherwise.
-func (h *BoidHandler) HandleSteeringSignalMessage(data []byte, getContextManager func(loopID string) *ContextManager) string {
+func (h *BoidHandler) HandleSteeringSignalMessage(ctx context.Context, data []byte, getContextManager func(loopID string) *ContextManager) string {
 	var baseMsg message.BaseMessage
 	if err := json.Unmarshal(data, &baseMsg); err != nil {
 		h.logger.Error("Failed to unmarshal steering signal", "error", err)
@@ -428,7 +453,7 @@ func (h *BoidHandler) HandleSteeringSignalMessage(data []byte, getContextManager
 	signal := *signalPtr
 	cm := getContextManager(signal.LoopID)
 
-	if err := h.ProcessSteeringSignal(context.Background(), &signal, cm); err != nil {
+	if err := h.ProcessSteeringSignal(ctx, &signal, cm); err != nil {
 		h.logger.Error("Failed to process steering signal",
 			"loop_id", signal.LoopID,
 			"error", err)

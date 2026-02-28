@@ -11,6 +11,12 @@
       "default": false,
       "category": "advanced"
     },
+    "boid_signal_ttl": {
+      "type": "string",
+      "description": "TTL for Boid steering signals before expiration (e.g. 30s or 1m)",
+      "default": "30s",
+      "category": "advanced"
+    },
     "consumer_name_suffix": {
       "type": "string",
       "description": "Suffix for consumer names",

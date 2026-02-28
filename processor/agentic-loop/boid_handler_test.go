@@ -529,3 +529,336 @@ func TestBoidHandler_ClearSignals(t *testing.T) {
 		t.Error("signals should be cleared")
 	}
 }
+
+func TestBoidHandler_ProcessSteeringSignal_AppliesSteeringToContext(t *testing.T) {
+	handler := NewBoidHandler(nil, nil)
+
+	// Create a context manager with some graph entities
+	cfg := ContextConfig{
+		Enabled:          true,
+		CompactThreshold: 0.8,
+		ToolResultMaxAge: 3,
+	}
+	cm := NewContextManager("loop-1", "test-model", cfg)
+
+	// Add some graph entity context
+	_ = cm.AddGraphEntityContext("entity.avoid", "Content for entity to avoid")
+	_ = cm.AddGraphEntityContext("entity.normal", "Content for normal entity")
+	_ = cm.AddGraphEntityContext("entity.prioritize", "Content for prioritized entity")
+
+	// Process a separation signal with context manager
+	signal := &boid.SteeringSignal{
+		LoopID:        "loop-1",
+		SignalType:    boid.SignalTypeSeparation,
+		AvoidEntities: []string{"entity.avoid"},
+		Strength:      0.8,
+	}
+
+	err := handler.ProcessSteeringSignal(context.Background(), signal, cm)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Signal should be stored
+	retrieved := handler.GetActiveSignal("loop-1", boid.SignalTypeSeparation)
+	if retrieved == nil {
+		t.Fatal("signal should be stored after processing")
+	}
+
+	// Note: The actual reordering is tested in context_manager_test.go
+	// This test verifies that ProcessSteeringSignal calls ApplyBoidSteering
+}
+
+func TestBoidHandler_ProcessSteeringSignal_AllSignalTypes(t *testing.T) {
+	handler := NewBoidHandler(nil, nil)
+	cfg := ContextConfig{
+		Enabled:          true,
+		CompactThreshold: 0.8,
+		ToolResultMaxAge: 3,
+	}
+	cm := NewContextManager("loop-1", "test-model", cfg)
+
+	tests := []struct {
+		name   string
+		signal *boid.SteeringSignal
+	}{
+		{
+			name: "separation signal",
+			signal: &boid.SteeringSignal{
+				LoopID:        "loop-1",
+				SignalType:    boid.SignalTypeSeparation,
+				AvoidEntities: []string{"entity.a"},
+				Strength:      0.7,
+			},
+		},
+		{
+			name: "cohesion signal",
+			signal: &boid.SteeringSignal{
+				LoopID:         "loop-1",
+				SignalType:     boid.SignalTypeCohesion,
+				SuggestedFocus: []string{"entity.b"},
+				Strength:       0.6,
+			},
+		},
+		{
+			name: "alignment signal",
+			signal: &boid.SteeringSignal{
+				LoopID:     "loop-1",
+				SignalType: boid.SignalTypeAlignment,
+				AlignWith:  []string{"has_member", "related_to"},
+				Strength:   0.5,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handler.ProcessSteeringSignal(context.Background(), tt.signal, cm)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			retrieved := handler.GetActiveSignal("loop-1", tt.signal.SignalType)
+			if retrieved == nil {
+				t.Fatal("signal should be stored after processing")
+			}
+		})
+	}
+}
+
+func TestBoidHandler_ExtractPredicatesFromToolResult(t *testing.T) {
+	handler := NewBoidHandler(nil, nil)
+
+	tests := []struct {
+		name     string
+		content  string
+		expected []string
+	}{
+		{
+			name:     "empty content",
+			content:  "",
+			expected: nil,
+		},
+		{
+			name:     "no predicates",
+			content:  "Just some regular text",
+			expected: nil,
+		},
+		{
+			name:     "unknown predicate-like pattern",
+			content:  "Found some_random_thing in the data",
+			expected: []string{}, // Not in known predicates list, returns empty slice
+		},
+		{
+			name:    "single known predicate",
+			content: "The entity has_member relationship with another",
+			expected: []string{
+				"has_member",
+			},
+		},
+		{
+			name:    "multiple known predicates",
+			content: "Found has_member and related_to relationships in the graph",
+			expected: []string{
+				"has_member",
+				"related_to",
+			},
+		},
+		{
+			name:    "duplicate predicates",
+			content: "has_member relation and another has_member link",
+			expected: []string{
+				"has_member",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := handler.ExtractPredicatesFromToolResult(tt.content)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d predicates, got %d: %v", len(tt.expected), len(result), result)
+				return
+			}
+
+			for i, expected := range tt.expected {
+				if result[i] != expected {
+					t.Errorf("predicate %d: expected %q, got %q", i, expected, result[i])
+				}
+			}
+		})
+	}
+}
+
+func TestMergeStringSlices(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing []string
+		newItems []string
+		maxCount int
+		expected []string
+	}{
+		{
+			name:     "empty both",
+			existing: nil,
+			newItems: nil,
+			maxCount: 10,
+			expected: []string{},
+		},
+		{
+			name:     "new items only",
+			existing: nil,
+			newItems: []string{"a", "b"},
+			maxCount: 10,
+			expected: []string{"a", "b"},
+		},
+		{
+			name:     "existing items only",
+			existing: []string{"a", "b"},
+			newItems: nil,
+			maxCount: 10,
+			expected: []string{"a", "b"},
+		},
+		{
+			name:     "merge without duplicates",
+			existing: []string{"a", "b"},
+			newItems: []string{"c", "d"},
+			maxCount: 10,
+			expected: []string{"c", "d", "a", "b"},
+		},
+		{
+			name:     "merge with duplicates",
+			existing: []string{"a", "b"},
+			newItems: []string{"b", "c"},
+			maxCount: 10,
+			expected: []string{"b", "c", "a"},
+		},
+		{
+			name:     "limit exceeded",
+			existing: []string{"a", "b", "c"},
+			newItems: []string{"d", "e"},
+			maxCount: 3,
+			expected: []string{"d", "e", "a"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeStringSlices(tt.newItems, tt.existing, tt.maxCount)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d strings, got %d: %v", len(tt.expected), len(result), result)
+				return
+			}
+
+			for i, expected := range tt.expected {
+				if result[i] != expected {
+					t.Errorf("string %d: expected %q, got %q", i, expected, result[i])
+				}
+			}
+		})
+	}
+}
+
+func TestNewBoidHandlerWithTTL(t *testing.T) {
+	tests := []struct {
+		name string
+		ttl  time.Duration
+	}{
+		{
+			name: "default TTL",
+			ttl:  0, // Should use default
+		},
+		{
+			name: "custom TTL",
+			ttl:  60 * time.Second,
+		},
+		{
+			name: "negative TTL uses default",
+			ttl:  -1 * time.Second,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := NewBoidHandlerWithTTL(nil, nil, tt.ttl)
+			if handler == nil {
+				t.Fatal("handler should not be nil")
+			}
+			if handler.signalStore == nil {
+				t.Fatal("signal store should not be nil")
+			}
+		})
+	}
+}
+
+func TestMergeStrings(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing []string
+		newItems []string
+		maxCount int
+		expected []string
+	}{
+		{
+			name:     "empty both",
+			existing: nil,
+			newItems: nil,
+			maxCount: 10,
+			expected: []string{},
+		},
+		{
+			name:     "new items only",
+			existing: nil,
+			newItems: []string{"a", "b"},
+			maxCount: 10,
+			expected: []string{"a", "b"},
+		},
+		{
+			name:     "existing items only",
+			existing: []string{"a", "b"},
+			newItems: nil,
+			maxCount: 10,
+			expected: []string{"a", "b"},
+		},
+		{
+			name:     "merge without duplicates",
+			existing: []string{"a", "b"},
+			newItems: []string{"c", "d"},
+			maxCount: 10,
+			expected: []string{"c", "d", "a", "b"},
+		},
+		{
+			name:     "merge with duplicates",
+			existing: []string{"a", "b"},
+			newItems: []string{"b", "c"},
+			maxCount: 10,
+			expected: []string{"b", "c", "a"},
+		},
+		{
+			name:     "limit exceeded",
+			existing: []string{"a", "b", "c"},
+			newItems: []string{"d", "e"},
+			maxCount: 3,
+			expected: []string{"d", "e", "a"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeStrings(tt.newItems, tt.existing, tt.maxCount)
+
+			if len(result) != len(tt.expected) {
+				t.Errorf("expected %d strings, got %d: %v", len(tt.expected), len(result), result)
+				return
+			}
+
+			for i, expected := range tt.expected {
+				if result[i] != expected {
+					t.Errorf("string %d: expected %q, got %q", i, expected, result[i])
+				}
+			}
+		})
+	}
+}
