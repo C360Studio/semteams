@@ -62,6 +62,10 @@ type LoopCompletedEvent struct {
 	WorkflowSlug string    `json:"workflow_slug,omitempty"`
 	WorkflowStep string    `json:"workflow_step,omitempty"`
 	CompletedAt  time.Time `json:"completed_at"`
+	// User routing info for response delivery
+	ChannelType string `json:"channel_type,omitempty"`
+	ChannelID   string `json:"channel_id,omitempty"`
+	UserID      string `json:"user_id,omitempty"`
 }
 
 // Validate implements message.Payload

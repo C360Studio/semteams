@@ -465,6 +465,10 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 		WorkflowSlug: entity.WorkflowSlug,
 		WorkflowStep: entity.WorkflowStep,
 		CompletedAt:  time.Now(),
+		// User routing info for response delivery
+		ChannelType: entity.ChannelType,
+		ChannelID:   entity.ChannelID,
+		UserID:      entity.UserID,
 	}
 
 	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "agentic-loop")
