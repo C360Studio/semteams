@@ -339,6 +339,35 @@ func (kv *KVStore) Keys(ctx context.Context) ([]string, error) {
 	return keys, nil
 }
 
+// KeysByPrefix returns all keys matching the given prefix.
+// Uses JetStream KV's native key filtering for efficient server-side filtering.
+// The prefix is automatically converted to a NATS wildcard pattern (prefix + ">").
+func (kv *KVStore) KeysByPrefix(ctx context.Context, prefix string) ([]string, error) {
+	ctx, cancel := kv.applyTimeout(ctx)
+	defer cancel()
+
+	// Convert prefix to NATS wildcard pattern
+	// "entity.sensor." becomes "entity.sensor.>" to match all keys with that prefix
+	pattern := prefix + ">"
+
+	lister, err := kv.bucket.ListKeysFiltered(ctx, pattern)
+	if err != nil {
+		// Handle empty bucket case
+		if err == jetstream.ErrNoKeysFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("kv keys by prefix %q: %w", prefix, err)
+	}
+
+	// Collect keys from the channel
+	var keys []string
+	for key := range lister.Keys() {
+		keys = append(keys, key)
+	}
+
+	return keys, nil
+}
+
 // Watch creates a watcher for key changes
 // Note: Watch does not apply timeout as it creates a long-lived watcher
 func (kv *KVStore) Watch(ctx context.Context, pattern string) (jetstream.KeyWatcher, error) {

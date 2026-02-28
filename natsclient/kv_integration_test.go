@@ -420,3 +420,71 @@ func TestKVStore_ErrorHelpers(t *testing.T) {
 		assert.False(t, IsKVConflictError(nil))
 	})
 }
+
+func TestKVStore_KeysByPrefix(t *testing.T) {
+	testClient := NewTestClient(t, WithKV())
+	client := testClient.Client
+	ctx := context.Background()
+
+	bucket, err := client.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket: "test-keys-by-prefix",
+	})
+	require.NoError(t, err)
+
+	kvStore := client.NewKVStore(bucket)
+
+	// Create test keys with different prefixes
+	testKeys := map[string]string{
+		"entity.sensor.temp-001":     "sensor1",
+		"entity.sensor.temp-002":     "sensor2",
+		"entity.sensor.humidity-001": "humidity1",
+		"entity.device.router-001":   "router1",
+		"entity.device.switch-001":   "switch1",
+		"other.key":                  "other",
+	}
+
+	for key, value := range testKeys {
+		_, err := kvStore.Put(ctx, key, []byte(value))
+		require.NoError(t, err)
+	}
+
+	t.Run("filter by entity.sensor. prefix", func(t *testing.T) {
+		keys, err := kvStore.KeysByPrefix(ctx, "entity.sensor.")
+		require.NoError(t, err)
+
+		assert.Len(t, keys, 3)
+		assert.Contains(t, keys, "entity.sensor.temp-001")
+		assert.Contains(t, keys, "entity.sensor.temp-002")
+		assert.Contains(t, keys, "entity.sensor.humidity-001")
+	})
+
+	t.Run("filter by entity.device. prefix", func(t *testing.T) {
+		keys, err := kvStore.KeysByPrefix(ctx, "entity.device.")
+		require.NoError(t, err)
+
+		assert.Len(t, keys, 2)
+		assert.Contains(t, keys, "entity.device.router-001")
+		assert.Contains(t, keys, "entity.device.switch-001")
+	})
+
+	t.Run("filter by entity. prefix returns all entities", func(t *testing.T) {
+		keys, err := kvStore.KeysByPrefix(ctx, "entity.")
+		require.NoError(t, err)
+
+		assert.Len(t, keys, 5)
+	})
+
+	t.Run("filter with no matches returns empty", func(t *testing.T) {
+		keys, err := kvStore.KeysByPrefix(ctx, "nonexistent.")
+		require.NoError(t, err)
+
+		assert.Empty(t, keys)
+	})
+
+	t.Run("empty prefix returns all keys", func(t *testing.T) {
+		keys, err := kvStore.KeysByPrefix(ctx, "")
+		require.NoError(t, err)
+
+		assert.Len(t, keys, 6)
+	})
+}
