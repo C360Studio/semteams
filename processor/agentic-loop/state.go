@@ -16,13 +16,14 @@ import (
 // LoopManager manages loop entity lifecycle and state
 type LoopManager struct {
 	loops           map[string]*agentic.LoopEntity
-	contextManagers map[string]*ContextManager // loopID -> ContextManager
-	pendingTools    map[string]map[string]bool // loopID -> map[callID]bool
-	requestToLoop   map[string]string          // requestID -> loopID
-	toolCallToLoop  map[string]string          // callID -> loopID
-	contextConfig   ContextConfig              // shared context config
-	modelRegistry   model.RegistryReader       // model registry for context managers
-	logger          *slog.Logger               // logger for context managers
+	contextManagers map[string]*ContextManager          // loopID -> ContextManager
+	pendingTools    map[string]map[string]bool          // loopID -> map[callID]bool
+	cachedTools     map[string][]agentic.ToolDefinition // loopID -> tools (runtime cache, not persisted)
+	requestToLoop   map[string]string                   // requestID -> loopID
+	toolCallToLoop  map[string]string                   // callID -> loopID
+	contextConfig   ContextConfig                       // shared context config
+	modelRegistry   model.RegistryReader                // model registry for context managers
+	logger          *slog.Logger                        // logger for context managers
 	mu              sync.RWMutex
 }
 
@@ -49,6 +50,7 @@ func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 		loops:           make(map[string]*agentic.LoopEntity),
 		contextManagers: make(map[string]*ContextManager),
 		pendingTools:    make(map[string]map[string]bool),
+		cachedTools:     make(map[string][]agentic.ToolDefinition),
 		requestToLoop:   make(map[string]string),
 		toolCallToLoop:  make(map[string]string),
 		contextConfig:   DefaultContextConfig(),
@@ -66,6 +68,7 @@ func NewLoopManagerWithConfig(contextConfig ContextConfig, opts ...LoopManagerOp
 		loops:           make(map[string]*agentic.LoopEntity),
 		contextManagers: make(map[string]*ContextManager),
 		pendingTools:    make(map[string]map[string]bool),
+		cachedTools:     make(map[string][]agentic.ToolDefinition),
 		requestToLoop:   make(map[string]string),
 		toolCallToLoop:  make(map[string]string),
 		contextConfig:   contextConfig,
@@ -149,6 +152,7 @@ func (m *LoopManager) DeleteLoop(loopID string) error {
 	delete(m.loops, loopID)
 	delete(m.pendingTools, loopID)
 	delete(m.contextManagers, loopID)
+	delete(m.cachedTools, loopID)
 	return nil
 }
 
@@ -157,6 +161,20 @@ func (m *LoopManager) GetContextManager(loopID string) *ContextManager {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.contextManagers[loopID]
+}
+
+// CacheTools stores tool definitions for a loop (discovered once, reused for all requests)
+func (m *LoopManager) CacheTools(loopID string, tools []agentic.ToolDefinition) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cachedTools[loopID] = tools
+}
+
+// GetCachedTools retrieves the cached tool definitions for a loop
+func (m *LoopManager) GetCachedTools(loopID string) []agentic.ToolDefinition {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cachedTools[loopID]
 }
 
 // GetCurrentIteration returns the current iteration for a loop

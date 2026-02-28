@@ -7,11 +7,45 @@ package agenticloop_test
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic"
 	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
+	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 )
+
+// testToolExecutor is a mock tool executor for testing tool injection
+type testToolExecutor struct {
+	tools []agentic.ToolDefinition
+}
+
+func (e *testToolExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
+	return agentic.ToolResult{CallID: call.ID, Content: "test result"}, nil
+}
+
+func (e *testToolExecutor) ListTools() []agentic.ToolDefinition {
+	return e.tools
+}
+
+// registerTestToolOnce ensures test tools are registered only once across all tests
+var registerTestToolOnce sync.Once
+
+func ensureTestToolRegistered() {
+	registerTestToolOnce.Do(func() {
+		executor := &testToolExecutor{
+			tools: []agentic.ToolDefinition{
+				{
+					Name:        "test_tool",
+					Description: "A test tool for unit tests",
+					Parameters:  map[string]any{"type": "object", "properties": map[string]any{}},
+				},
+			},
+		}
+		// Ignore error if already registered (may happen in parallel test runs)
+		_ = agentictools.RegisterTool("test_tool", executor)
+	})
+}
 
 func TestHandleTask_CreatesLoop(t *testing.T) {
 	handler := agenticloop.NewMessageHandler(createTestConfig())
@@ -769,4 +803,151 @@ type HandlerResult struct {
 	RetryScheduled       bool
 	MaxIterationsReached bool
 	CompletionState      map[string]any
+}
+
+// TestHandleTask_PopulatesToolsInRequest verifies that AgentRequest.Tools
+// is populated with tool definitions from the global registry.
+func TestHandleTask_PopulatesToolsInRequest(t *testing.T) {
+	ensureTestToolRegistered()
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	task := agenticloop.TaskMessage{
+		TaskID: "task-tools",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test with tools",
+	}
+
+	ctx := context.Background()
+	result, err := handler.HandleTask(ctx, task)
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	// Find the agent.request message
+	var foundRequest bool
+	for _, msg := range result.PublishedMessages {
+		if !containsIgnoreCase(msg.Subject, "agent.request") {
+			continue
+		}
+		foundRequest = true
+
+		// Extract request from BaseMessage envelope
+		var envelope map[string]any
+		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+			t.Fatalf("Failed to unmarshal envelope: %v", err)
+		}
+		payload, ok := envelope["payload"].(map[string]any)
+		if !ok {
+			t.Fatalf("Expected payload in BaseMessage envelope")
+		}
+
+		// CRITICAL ASSERTION: Tools field must be populated
+		tools, hasTools := payload["tools"]
+		if !hasTools {
+			t.Error("AgentRequest.Tools should be present in payload")
+			break
+		}
+		toolsSlice, ok := tools.([]any)
+		if !ok {
+			t.Errorf("AgentRequest.Tools should be a slice, got %T", tools)
+			break
+		}
+		if len(toolsSlice) == 0 {
+			t.Error("AgentRequest.Tools should not be empty - tools should be discovered from registry")
+		}
+		break
+	}
+
+	if !foundRequest {
+		t.Error("HandleTask() should publish agent.request message")
+	}
+}
+
+// TestHandleToolResult_NextRequestHasTools verifies that subsequent AgentRequest
+// messages (after tool completion) also include tool definitions.
+func TestHandleToolResult_NextRequestHasTools(t *testing.T) {
+	ensureTestToolRegistered()
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	// Create loop first
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-tools-2",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test with tools",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	loopID := taskResult.LoopID
+
+	// Trigger a tool call
+	toolResponse := agentic.AgentResponse{
+		RequestID: "req-001",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-001", Name: "test_tool"},
+			},
+		},
+	}
+
+	_, err = handler.HandleModelResponse(ctx, loopID, toolResponse)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// Complete the tool
+	toolResult := agentic.ToolResult{
+		CallID:  "call-001",
+		Content: "Tool result",
+	}
+
+	result, err := handler.HandleToolResult(ctx, loopID, toolResult)
+	if err != nil {
+		t.Fatalf("HandleToolResult() error = %v", err)
+	}
+
+	// Find the follow-up agent.request message
+	var foundRequest bool
+	for _, msg := range result.PublishedMessages {
+		if !containsIgnoreCase(msg.Subject, "agent.request") {
+			continue
+		}
+		foundRequest = true
+
+		// Extract request from BaseMessage envelope
+		var envelope map[string]any
+		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+			t.Fatalf("Failed to unmarshal envelope: %v", err)
+		}
+		payload, ok := envelope["payload"].(map[string]any)
+		if !ok {
+			t.Fatalf("Expected payload in BaseMessage envelope")
+		}
+
+		// CRITICAL ASSERTION: Tools field must be populated in subsequent requests too
+		tools, hasTools := payload["tools"]
+		if !hasTools {
+			t.Error("AgentRequest.Tools should be present in subsequent requests")
+			break
+		}
+		toolsSlice, ok := tools.([]any)
+		if !ok {
+			t.Errorf("AgentRequest.Tools should be a slice, got %T", tools)
+			break
+		}
+		if len(toolsSlice) == 0 {
+			t.Error("AgentRequest.Tools should not be empty in subsequent requests")
+		}
+		break
+	}
+
+	if !foundRequest {
+		t.Error("HandleToolResult() should publish next agent.request")
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/errs"
+	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 )
 
 // Subject patterns for NATS publishing (concrete subjects, no wildcards).
@@ -78,6 +79,12 @@ func NewMessageHandler(config Config, loopManagerOpts ...LoopManagerOption) *Mes
 // SetLogger sets the logger for the handler
 func (h *MessageHandler) SetLogger(logger *slog.Logger) {
 	h.logger = logger
+}
+
+// discoverTools retrieves available tool definitions from the global registry.
+// This is called once per loop and cached for subsequent requests.
+func (h *MessageHandler) discoverTools() []agentic.ToolDefinition {
+	return agentictools.ListRegisteredTools()
 }
 
 // configureLoopMetadata sets optional metadata on a newly created loop.
@@ -227,6 +234,10 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	// Build messages for initial request
 	messages := h.buildInitialMessages(task)
 
+	// Discover available tools and cache for this loop
+	tools := h.discoverTools()
+	h.loopManager.CacheTools(loopID, tools)
+
 	// Create initial agent request with structured ID for recovery
 	request := agentic.AgentRequest{
 		RequestID: h.loopManager.GenerateRequestID(loopID),
@@ -234,6 +245,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		Role:      task.Role,
 		Model:     task.Model,
 		Messages:  messages,
+		Tools:     tools,
 	}
 
 	// Track request ID to loop ID mapping (cache for fast lookup)
@@ -639,6 +651,9 @@ func (h *MessageHandler) handleToolsComplete(
 		return *result, err
 	}
 
+	// Get cached tools for this loop (discovered once at loop start)
+	tools := h.loopManager.GetCachedTools(loopID)
+
 	// All tools complete - send next agent request with ALL results
 	request := agentic.AgentRequest{
 		RequestID: h.loopManager.GenerateRequestID(loopID),
@@ -646,6 +661,7 @@ func (h *MessageHandler) handleToolsComplete(
 		Role:      entity.Role,
 		Model:     entity.Model,
 		Messages:  toolMessages,
+		Tools:     tools,
 	}
 
 	// Track request ID to loop ID mapping (cache for fast lookup)
