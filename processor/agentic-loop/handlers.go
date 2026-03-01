@@ -363,6 +363,14 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
+	// Eagerly add step to trajectory manager so token totals are available
+	// when handleCompleteResponse queries the trajectory for cost tracking.
+	if _, addErr := h.trajectoryManager.AddStep(loopID, step); addErr != nil {
+		h.logger.Warn("failed to add trajectory step",
+			slog.String("loop_id", loopID),
+			slog.String("error", addErr.Error()))
+	}
+
 	// Add assistant response to context manager if enabled
 	cm := h.loopManager.GetContextManager(loopID)
 	if cm != nil && response.Message.Content != "" {
@@ -481,6 +489,12 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 		ChannelType: entity.ChannelType,
 		ChannelID:   entity.ChannelID,
 		UserID:      entity.UserID,
+	}
+
+	// Pull token totals from trajectory for cost tracking
+	if traj, trajErr := h.trajectoryManager.GetTrajectory(loopID); trajErr == nil {
+		completion.TokensIn = traj.TotalTokensIn
+		completion.TokensOut = traj.TotalTokensOut
 	}
 
 	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "agentic-loop")
@@ -713,6 +727,12 @@ func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (Pub
 		UserID:      entity.UserID,
 	}
 
+	// Pull token totals from trajectory for cost tracking
+	if traj, trajErr := h.trajectoryManager.GetTrajectory(loopID); trajErr == nil {
+		failure.TokensIn = traj.TotalTokensIn
+		failure.TokensOut = traj.TotalTokensOut
+	}
+
 	failureMsg := message.NewBaseMessage(failure.Schema(), &failure, "agentic-loop")
 	data, err := json.Marshal(failureMsg)
 	if err != nil {
@@ -748,6 +768,12 @@ func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) (
 		ChannelType:  entity.ChannelType,
 		ChannelID:    entity.ChannelID,
 		UserID:       entity.UserID,
+	}
+
+	// Pull token totals from trajectory for cost tracking
+	if traj, trajErr := h.trajectoryManager.GetTrajectory(loopID); trajErr == nil {
+		failure.TokensIn = traj.TotalTokensIn
+		failure.TokensOut = traj.TotalTokensOut
 	}
 
 	failureMsg := message.NewBaseMessage(failure.Schema(), &failure, "agentic-loop")

@@ -81,13 +81,38 @@ go run ./cmd/semstreams -config configs/github-pr-workflow.json
 | `AGENT_TRAJECTORIES` | Agent execution trajectories |
 | `ENTITY_STATES` | Knowledge graph entities |
 
+## Cost Safety Controls
+
+Built-in guardrails prevent runaway token spend:
+
+| Control | Default | What it does |
+|---------|---------|--------------|
+| Token budget per execution | 500k tokens | Caps total tokens (in+out) across all agents in one workflow run. Escalates to human when exceeded. |
+| Issue cooldown | 60s | Minimum time between processing new issues. Prevents burst processing. |
+| Max review cycles | 3 | Caps developer/reviewer back-and-forth. Escalates to human after 3 rejections. |
+| Workflow timeout | 30 min | Hard wall-clock limit per execution. |
+
+When the token budget is exceeded mid-workflow, the execution escalates to a human rather than continuing to burn tokens. The completion payload includes `total_tokens_in` and `total_tokens_out` so you can monitor actual spend.
+
+Constants are in `workflow.go` — adjust `DefaultTokenBudget`, `DefaultIssueCooldown`, etc. to taste.
+
+## Testing with a Toy Repo
+
+To try this safely:
+
+1. Create a throwaway GitHub repo (e.g. `yourname/workflow-test`)
+2. Set `repo_allowlist` in the config to `["yourname/workflow-test"]` to restrict which repos trigger workflows
+3. Configure the webhook on that repo only
+4. Open a simple issue like "Add a hello world endpoint" and watch the agents work
+5. Monitor token usage in the workflow completion events
+
 ## Adversarial Tension
 
 The quality funnel works through opposing pressures:
 
 - **Qualifier vs Issues**: Incentivized to reject. Vague, duplicate, or invalid issues are filtered out.
 - **Reviewer vs Developer**: Incentivized to find problems. Forces the Developer to produce correct, well-tested code.
-- **Escalation**: After 3 review cycles without convergence, the workflow escalates to a human with a full history summary.
+- **Escalation**: After 3 review cycles without convergence, or when the token budget is exceeded, the workflow escalates to a human with a full history summary.
 
 ## Graph Entities
 

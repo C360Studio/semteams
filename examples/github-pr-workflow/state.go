@@ -34,6 +34,10 @@ type IssueToPRState struct {
 	ReviewRejections    int  `json:"review_rejections"`
 	DevelopmentAttempts int  `json:"development_attempts"`
 	EscalatedToHuman    bool `json:"escalated_to_human"`
+
+	// Cost tracking
+	TotalTokensIn  int `json:"total_tokens_in"`
+	TotalTokensOut int `json:"total_tokens_out"`
 }
 
 // GetExecutionState implements reactive.StateAccessor to avoid reflection overhead.

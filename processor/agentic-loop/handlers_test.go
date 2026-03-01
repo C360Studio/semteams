@@ -951,3 +951,55 @@ func TestHandleToolResult_NextRequestHasTools(t *testing.T) {
 		t.Error("HandleToolResult() should publish next agent.request")
 	}
 }
+
+// TestHandleModelResponse_Complete_PopulatesTokenFields verifies that
+// LoopCompletedEvent includes token totals from the trajectory.
+func TestHandleModelResponse_Complete_PopulatesTokenFields(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-tokens",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test token tracking",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	loopID := taskResult.LoopID
+
+	// Model response with token usage
+	response := agentic.AgentResponse{
+		RequestID: "req-tokens",
+		Status:    "complete",
+		Message: agentic.ChatMessage{
+			Role:    "assistant",
+			Content: "Done",
+		},
+		TokenUsage: agentic.TokenUsage{
+			PromptTokens:     1500,
+			CompletionTokens: 750,
+		},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, response)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	if result.CompletionState == nil {
+		t.Fatal("CompletionState should not be nil")
+	}
+
+	// The trajectory should have accumulated tokens from this model call.
+	// The HandleTask creates an initial trajectory step (no tokens),
+	// then HandleModelResponse adds a step with the response tokens.
+	if result.CompletionState.TokensIn != 1500 {
+		t.Errorf("CompletionState.TokensIn = %d, want 1500", result.CompletionState.TokensIn)
+	}
+	if result.CompletionState.TokensOut != 750 {
+		t.Errorf("CompletionState.TokensOut = %d, want 750", result.CompletionState.TokensOut)
+	}
+}

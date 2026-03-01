@@ -26,8 +26,8 @@ func TestNewIssueToPRWorkflow(t *testing.T) {
 	if def.MaxIterations != MaxReviewCycles+3 {
 		t.Errorf("MaxIterations: got %d, want %d", def.MaxIterations, MaxReviewCycles+3)
 	}
-	if len(def.Rules) != 8 {
-		t.Errorf("Rules count: got %d, want 8", len(def.Rules))
+	if len(def.Rules) != 9 {
+		t.Errorf("Rules count: got %d, want 9", len(def.Rules))
 	}
 }
 
@@ -45,6 +45,7 @@ func TestNewIssueToPRWorkflow_RuleIDs(t *testing.T) {
 		"escalate-deadlock",
 		"issue-rejected",
 		"needs-info",
+		"budget-exceeded",
 	}
 
 	for i, want := range wantIDs {
@@ -725,4 +726,294 @@ func findSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// TestBudgetExceeded_EscalatesWorkflow verifies that the budget-exceeded rule
+// fires when total tokens exceed DefaultTokenBudget and escalates the workflow.
+func TestBudgetExceeded_EscalatesWorkflow(t *testing.T) {
+	def := NewIssueToPRWorkflow()
+
+	// Find the budget-exceeded rule
+	var budgetRule *reactive.RuleDef
+	for i := range def.Rules {
+		if def.Rules[i].ID == "budget-exceeded" {
+			budgetRule = &def.Rules[i]
+			break
+		}
+	}
+	if budgetRule == nil {
+		t.Fatal("budget-exceeded rule not found")
+	}
+
+	t.Run("over budget triggers escalation", func(t *testing.T) {
+		state := &IssueToPRState{
+			TotalTokensIn:  300_000,
+			TotalTokensOut: 250_000, // total 550k > 500k budget
+		}
+		state.Phase = PhaseDeveloping
+		state.Status = reactive.StatusRunning
+
+		ctx := &reactive.RuleContext{State: state}
+
+		for _, cond := range budgetRule.Conditions {
+			if !cond.Evaluate(ctx) {
+				t.Errorf("condition %q should be true when over budget", cond.Description)
+			}
+		}
+
+		// Execute the mutation
+		if budgetRule.Action.MutateState != nil {
+			if err := budgetRule.Action.MutateState(ctx, nil); err != nil {
+				t.Fatalf("MutateState() error: %v", err)
+			}
+		}
+
+		if state.Phase != PhaseEscalated {
+			t.Errorf("Phase: got %q, want %q", state.Phase, PhaseEscalated)
+		}
+		if !state.EscalatedToHuman {
+			t.Error("EscalatedToHuman should be true")
+		}
+	})
+
+	t.Run("under budget does not trigger", func(t *testing.T) {
+		state := &IssueToPRState{
+			TotalTokensIn:  100_000,
+			TotalTokensOut: 50_000, // total 150k < 500k budget
+		}
+		state.Phase = PhaseDeveloping
+		state.Status = reactive.StatusRunning
+
+		ctx := &reactive.RuleContext{State: state}
+
+		// First condition (budget exceeded) should be false
+		if budgetRule.Conditions[0].Evaluate(ctx) {
+			t.Error("budget condition should be false when under budget")
+		}
+	})
+
+	t.Run("terminal state does not trigger", func(t *testing.T) {
+		state := &IssueToPRState{
+			TotalTokensIn:  300_000,
+			TotalTokensOut: 250_000,
+		}
+		state.Phase = PhaseEscalated
+		state.Status = reactive.StatusEscalated
+		now := time.Now()
+		state.CompletedAt = &now
+
+		ctx := &reactive.RuleContext{State: state}
+
+		// Second condition (not already terminal) should be false
+		if budgetRule.Conditions[1].Evaluate(ctx) {
+			t.Error("terminal condition should be false for already-terminal state")
+		}
+	})
+}
+
+// TestTokenAccumulation_AcrossAgents verifies that token counts accumulate
+// correctly when processing results from qualifier, developer, and reviewer.
+func TestTokenAccumulation_AcrossAgents(t *testing.T) {
+	state := &IssueToPRState{}
+	state.ID = "exec-tokens"
+
+	// Qualifier completes with some tokens
+	qualifierEvent := &agentic.LoopCompletedEvent{
+		Result:   `{"verdict":"qualified","confidence":0.9,"severity":"high"}`,
+		TokensIn: 1000, TokensOut: 200,
+	}
+	ctx := &reactive.RuleContext{State: state}
+	if err := handleQualifierResult(ctx, qualifierEvent); err != nil {
+		t.Fatalf("handleQualifierResult() error: %v", err)
+	}
+
+	if state.TotalTokensIn != 1000 {
+		t.Errorf("TotalTokensIn after qualifier: got %d, want 1000", state.TotalTokensIn)
+	}
+	if state.TotalTokensOut != 200 {
+		t.Errorf("TotalTokensOut after qualifier: got %d, want 200", state.TotalTokensOut)
+	}
+
+	// Developer completes with more tokens
+	devEvent := &agentic.LoopCompletedEvent{
+		Result:   `{"branch_name":"fix/test","pr_number":1,"pr_url":"http://example.com","files_changed":["a.go"]}`,
+		TokensIn: 5000, TokensOut: 3000,
+	}
+	if err := handleDeveloperResult(ctx, devEvent); err != nil {
+		t.Fatalf("handleDeveloperResult() error: %v", err)
+	}
+
+	if state.TotalTokensIn != 6000 {
+		t.Errorf("TotalTokensIn after developer: got %d, want 6000", state.TotalTokensIn)
+	}
+	if state.TotalTokensOut != 3200 {
+		t.Errorf("TotalTokensOut after developer: got %d, want 3200", state.TotalTokensOut)
+	}
+
+	// Reviewer completes
+	reviewEvent := &agentic.LoopCompletedEvent{
+		Result:   `{"verdict":"approved","feedback":""}`,
+		TokensIn: 2000, TokensOut: 500,
+	}
+	if err := handleReviewerResult(ctx, reviewEvent); err != nil {
+		t.Fatalf("handleReviewerResult() error: %v", err)
+	}
+
+	if state.TotalTokensIn != 8000 {
+		t.Errorf("TotalTokensIn after reviewer: got %d, want 8000", state.TotalTokensIn)
+	}
+	if state.TotalTokensOut != 3700 {
+		t.Errorf("TotalTokensOut after reviewer: got %d, want 3700", state.TotalTokensOut)
+	}
+}
+
+// TestBudgetCondition_BlocksSpawn verifies that spawn-developer and
+// spawn-reviewer rules do not fire when the token budget is exceeded.
+func TestBudgetCondition_BlocksSpawn(t *testing.T) {
+	def := NewIssueToPRWorkflow()
+
+	tests := []struct {
+		ruleID    string
+		ruleIndex int
+		phase     string
+	}{
+		{"spawn-developer", 1, PhaseQualified},
+		{"spawn-reviewer", 2, PhaseDevComplete},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.ruleID+"/under_budget", func(t *testing.T) {
+			rule := def.Rules[tt.ruleIndex]
+			if rule.ID != tt.ruleID {
+				t.Fatalf("expected %q at index %d, got %q", tt.ruleID, tt.ruleIndex, rule.ID)
+			}
+
+			state := &IssueToPRState{
+				TotalTokensIn:  100_000,
+				TotalTokensOut: 50_000,
+			}
+			state.Phase = tt.phase
+
+			ctx := &reactive.RuleContext{State: state}
+
+			allPass := true
+			for _, cond := range rule.Conditions {
+				if !cond.Evaluate(ctx) {
+					allPass = false
+					break
+				}
+			}
+			if !allPass {
+				t.Errorf("all conditions should pass when under budget")
+			}
+		})
+
+		t.Run(tt.ruleID+"/over_budget", func(t *testing.T) {
+			rule := def.Rules[tt.ruleIndex]
+
+			state := &IssueToPRState{
+				TotalTokensIn:  400_000,
+				TotalTokensOut: 200_000, // 600k > 500k budget
+			}
+			state.Phase = tt.phase
+
+			ctx := &reactive.RuleContext{State: state}
+
+			// At least one condition should fail (the budget check)
+			allPass := true
+			for _, cond := range rule.Conditions {
+				if !cond.Evaluate(ctx) {
+					allPass = false
+					break
+				}
+			}
+			if allPass {
+				t.Errorf("conditions should not all pass when over budget")
+			}
+		})
+	}
+}
+
+// TestCompletionPayload_IncludesTokens verifies that the completion payload
+// includes token usage totals.
+func TestCompletionPayload_IncludesTokens(t *testing.T) {
+	state := &IssueToPRState{
+		IssueNumber:    42,
+		RepoOwner:      "acme",
+		RepoName:       "myapp",
+		PRNumber:       99,
+		TotalTokensIn:  10000,
+		TotalTokensOut: 5000,
+	}
+	state.ID = "exec-tokens"
+	state.Phase = PhaseApproved
+
+	ctx := &reactive.RuleContext{State: state}
+
+	payload, err := buildCompletionPayload(ctx)
+	if err != nil {
+		t.Fatalf("buildCompletionPayload() error: %v", err)
+	}
+
+	cp := payload.(*WorkflowCompletionPayload)
+	if cp.TotalTokensIn != 10000 {
+		t.Errorf("TotalTokensIn: got %d, want 10000", cp.TotalTokensIn)
+	}
+	if cp.TotalTokensOut != 5000 {
+		t.Errorf("TotalTokensOut: got %d, want 5000", cp.TotalTokensOut)
+	}
+}
+
+// TestPhaseIsActive verifies the helper distinguishes active from terminal phases.
+func TestPhaseIsActive(t *testing.T) {
+	activePhases := []string{
+		PhaseQualified, PhaseDeveloping, PhaseDevComplete,
+		PhaseChangesRequested, PhaseNeedsInfo, PhaseAwaitingInfo,
+	}
+	for _, p := range activePhases {
+		if !PhaseIsActive(p) {
+			t.Errorf("PhaseIsActive(%q) = false, want true", p)
+		}
+	}
+
+	inactivePhases := []string{
+		PhaseApproved, PhaseEscalated, PhaseRejected,
+		PhaseNotABug, PhaseWontFix, "",
+	}
+	for _, p := range inactivePhases {
+		if PhaseIsActive(p) {
+			t.Errorf("PhaseIsActive(%q) = true, want false", p)
+		}
+	}
+}
+
+// TestDefaultBudgetConstants verifies sane defaults for cost controls.
+func TestDefaultBudgetConstants(t *testing.T) {
+	if DefaultTokenBudget <= 0 {
+		t.Errorf("DefaultTokenBudget: got %d, must be positive", DefaultTokenBudget)
+	}
+	if DefaultMaxConcurrentWorkflows <= 0 {
+		t.Errorf("DefaultMaxConcurrentWorkflows: got %d, must be positive", DefaultMaxConcurrentWorkflows)
+	}
+	if DefaultHourlyTokenCeiling <= DefaultTokenBudget {
+		t.Errorf("DefaultHourlyTokenCeiling (%d) should be larger than DefaultTokenBudget (%d)",
+			DefaultHourlyTokenCeiling, DefaultTokenBudget)
+	}
+	if DefaultIssueCooldown <= 0 {
+		t.Errorf("DefaultIssueCooldown: got %v, must be positive", DefaultIssueCooldown)
+	}
+}
+
+// TestSpawnQualifier_HasCooldown verifies that the spawn-qualifier rule
+// has a cooldown configured.
+func TestSpawnQualifier_HasCooldown(t *testing.T) {
+	def := NewIssueToPRWorkflow()
+	rule := def.Rules[0]
+
+	if rule.ID != "spawn-qualifier" {
+		t.Fatalf("expected spawn-qualifier at index 0, got %q", rule.ID)
+	}
+	if rule.Cooldown != DefaultIssueCooldown {
+		t.Errorf("Cooldown: got %v, want %v", rule.Cooldown, DefaultIssueCooldown)
+	}
 }

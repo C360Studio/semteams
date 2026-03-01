@@ -58,6 +58,8 @@ type LoopCompletedEvent struct {
 	Result       string    `json:"result"`
 	Model        string    `json:"model"`
 	Iterations   int       `json:"iterations"`
+	TokensIn     int       `json:"tokens_in"`
+	TokensOut    int       `json:"tokens_out"`
 	ParentLoopID string    `json:"parent_loop,omitempty"`
 	WorkflowSlug string    `json:"workflow_slug,omitempty"`
 	WorkflowStep string    `json:"workflow_step,omitempty"`
@@ -106,6 +108,8 @@ type LoopFailedEvent struct {
 	Role         string    `json:"role"`
 	Model        string    `json:"model"`
 	Iterations   int       `json:"iterations"`
+	TokensIn     int       `json:"tokens_in"`
+	TokensOut    int       `json:"tokens_out"`
 	WorkflowSlug string    `json:"workflow_slug,omitempty"`
 	WorkflowStep string    `json:"workflow_step,omitempty"`
 	FailedAt     time.Time `json:"failed_at"`

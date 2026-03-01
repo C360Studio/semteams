@@ -49,6 +49,8 @@ type WorkflowCompletionPayload struct {
 	FilesChanged        []string `json:"files_changed"`
 	DevelopmentAttempts int      `json:"development_attempts"`
 	ReviewRejections    int      `json:"review_rejections"`
+	TotalTokensIn       int      `json:"total_tokens_in"`
+	TotalTokensOut      int      `json:"total_tokens_out"`
 }
 
 // Schema implements message.Payload.
@@ -146,6 +148,10 @@ func handleQualifierResult(ctx *reactive.RuleContext, result any) error {
 	s.Severity = verdict.Severity
 	s.Phase = verdict.Verdict // phase mirrors verdict (qualified, rejected, etc.)
 
+	// Accumulate token usage for budget tracking
+	s.TotalTokensIn += event.TokensIn
+	s.TotalTokensOut += event.TokensOut
+
 	return nil
 }
 
@@ -221,6 +227,10 @@ func handleDeveloperResult(ctx *reactive.RuleContext, result any) error {
 	s.FilesChanged = output.FilesChanged
 	s.Phase = PhaseDevComplete
 
+	// Accumulate token usage for budget tracking
+	s.TotalTokensIn += event.TokensIn
+	s.TotalTokensOut += event.TokensOut
+
 	return nil
 }
 
@@ -290,6 +300,10 @@ func handleReviewerResult(ctx *reactive.RuleContext, result any) error {
 	s.ReviewVerdict = review.Verdict
 	s.ReviewFeedback = review.Feedback
 
+	// Accumulate token usage for budget tracking
+	s.TotalTokensIn += event.TokensIn
+	s.TotalTokensOut += event.TokensOut
+
 	switch review.Verdict {
 	case "approved":
 		s.Phase = PhaseApproved
@@ -329,5 +343,7 @@ func buildCompletionPayload(ctx *reactive.RuleContext) (message.Payload, error) 
 		FilesChanged:        s.FilesChanged,
 		DevelopmentAttempts: s.DevelopmentAttempts,
 		ReviewRejections:    s.ReviewRejections,
+		TotalTokensIn:       s.TotalTokensIn,
+		TotalTokensOut:      s.TotalTokensOut,
 	}, nil
 }

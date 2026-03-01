@@ -5,6 +5,7 @@
 package githubprworkflow
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/c360studio/semstreams/processor/reactive"
@@ -21,6 +22,20 @@ const (
 	// WorkflowTimeout is the maximum wall-clock duration for any single
 	// execution before the engine marks it as timed out.
 	WorkflowTimeout = 30 * time.Minute
+
+	// DefaultTokenBudget is the maximum tokens (in+out) per workflow execution.
+	// ~$5 at GPT-4o pricing — enough for qualify + develop + review.
+	DefaultTokenBudget = 500_000
+
+	// DefaultMaxConcurrentWorkflows limits parallel active workflows.
+	DefaultMaxConcurrentWorkflows = 3
+
+	// DefaultHourlyTokenCeiling is the global hourly token limit across all workflows.
+	// ~$20/hour hard ceiling.
+	DefaultHourlyTokenCeiling = 2_000_000
+
+	// DefaultIssueCooldown is the minimum time between processing new issues.
+	DefaultIssueCooldown = 60 * time.Second
 )
 
 // Phase constants represent the distinct states an issue-to-PR execution
@@ -72,6 +87,7 @@ func NewIssueToPRWorkflow() *reactive.Definition {
 					"agentic.loop_completed.v1",
 					handleQualifierResult,
 				).
+				WithCooldown(DefaultIssueCooldown).
 				WithMaxFirings(1),
 		).
 
@@ -83,6 +99,13 @@ func NewIssueToPRWorkflow() *reactive.Definition {
 				WatchKV(StateBucket, "*").
 				When("phase is qualified", func(ctx *reactive.RuleContext) bool {
 					return reactive.GetPhase(ctx.State) == PhaseQualified
+				}).
+				When("token budget not exceeded", func(ctx *reactive.RuleContext) bool {
+					s, ok := ctx.State.(*IssueToPRState)
+					if !ok {
+						return false
+					}
+					return (s.TotalTokensIn + s.TotalTokensOut) < DefaultTokenBudget
 				}).
 				PublishAsync(
 					"agent.task.developer",
@@ -107,6 +130,13 @@ func NewIssueToPRWorkflow() *reactive.Definition {
 						return false
 					}
 					return s.ReviewRejections < MaxReviewCycles
+				}).
+				When("token budget not exceeded", func(ctx *reactive.RuleContext) bool {
+					s, ok := ctx.State.(*IssueToPRState)
+					if !ok {
+						return false
+					}
+					return (s.TotalTokensIn + s.TotalTokensOut) < DefaultTokenBudget
 				}).
 				PublishAsync(
 					"agent.task.reviewer",
@@ -218,5 +248,46 @@ func NewIssueToPRWorkflow() *reactive.Definition {
 					return nil
 				}),
 		).
+
+		// Rule 9: budget-exceeded
+		// When total tokens exceed the per-execution budget, escalate to a
+		// human rather than continuing to burn tokens.
+		AddRuleFromBuilder(
+			reactive.NewRule("budget-exceeded").
+				WatchKV(StateBucket, "*").
+				When("token budget exceeded", func(ctx *reactive.RuleContext) bool {
+					s, ok := ctx.State.(*IssueToPRState)
+					if !ok {
+						return false
+					}
+					return (s.TotalTokensIn + s.TotalTokensOut) >= DefaultTokenBudget
+				}).
+				When("not already terminal", func(ctx *reactive.RuleContext) bool {
+					return !reactive.IsTerminal(ctx.State)
+				}).
+				Mutate(func(ctx *reactive.RuleContext, _ any) error {
+					s, ok := ctx.State.(*IssueToPRState)
+					if !ok {
+						return nil
+					}
+					s.Phase = PhaseEscalated
+					s.EscalatedToHuman = true
+					reactive.SetStatus(ctx.State, reactive.StatusEscalated)
+					reactive.SetError(ctx.State, fmt.Sprintf(
+						"token budget exceeded: %d tokens used (limit: %d)",
+						s.TotalTokensIn+s.TotalTokensOut, DefaultTokenBudget))
+					return nil
+				}),
+		).
 		MustBuild()
+}
+
+// PhaseIsActive returns true if the phase indicates an active workflow.
+func PhaseIsActive(phase string) bool {
+	switch phase {
+	case PhaseQualified, PhaseDeveloping, PhaseDevComplete,
+		PhaseChangesRequested, PhaseNeedsInfo, PhaseAwaitingInfo:
+		return true
+	}
+	return false
 }
