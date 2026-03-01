@@ -144,23 +144,8 @@ func (a *entityManagerAdapter) CreateEntity(ctx context.Context, entity *graph.E
 }
 
 func (a *entityManagerAdapter) ListWithPrefix(ctx context.Context, prefix string) ([]string, error) {
-	// Get all keys from KV bucket
-	keys, err := a.component.entityBucket.Keys(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Filter by prefix (prefix + "." to ensure we match the exact level)
-	var matched []string
-	prefixDot := prefix + "."
-
-	for _, key := range keys {
-		if strings.HasPrefix(key, prefixDot) {
-			matched = append(matched, key)
-		}
-	}
-
-	return matched, nil
+	// Use server-side prefix filtering (prefix + "." to ensure we match the exact level)
+	return a.component.entityBucket.KeysByPrefix(ctx, prefix+".")
 }
 
 // tripleAdderAdapter adapts Component to implement inference.TripleAdder interface

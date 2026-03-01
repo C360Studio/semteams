@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -292,28 +293,15 @@ func (s *NATSStructuralIndexStorage) GetPivotIndex(ctx context.Context) (*PivotI
 		return nil, errs.WrapInvalid(err, "NATSStructuralIndexStorage", "GetPivotIndex", "parse computed_at")
 	}
 
-	// Load distance vectors by scanning keys
+	// Load distance vectors using server-side prefix filtering
 	distanceVectors := make(map[string][]int)
-	keys, err := s.kv.Keys(ctx)
+	const pivotEntityPrefix = "structural.pivot.entity."
+	keys, err := natsclient.FilteredKeys(ctx, s.kv, pivotEntityPrefix+">")
 	if err != nil {
-		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
-			// No keys, return index with just metadata
-			return &PivotIndex{
-				Pivots:          meta.Pivots,
-				DistanceVectors: distanceVectors,
-				ComputedAt:      computedAt,
-				EntityCount:     meta.EntityCount,
-			}, nil
-		}
 		return nil, errs.WrapTransient(err, "NATSStructuralIndexStorage", "GetPivotIndex", "list keys")
 	}
 
-	prefix := "structural.pivot.entity."
 	for _, key := range keys {
-		if !strings.HasPrefix(key, prefix) {
-			continue
-		}
-
 		entry, err := s.kv.Get(ctx, key)
 		if err != nil {
 			continue // Skip errors for individual entries
@@ -324,7 +312,7 @@ func (s *NATSStructuralIndexStorage) GetPivotIndex(ctx context.Context) (*PivotI
 			continue
 		}
 
-		entityID := strings.TrimPrefix(key, prefix)
+		entityID := strings.TrimPrefix(key, pivotEntityPrefix)
 		distanceVectors[entityID] = distances
 	}
 
@@ -349,20 +337,16 @@ func (s *NATSStructuralIndexStorage) Clear(ctx context.Context) error {
 		return nil
 	}
 
-	keys, err := s.kv.Keys(ctx)
+	// Use server-side prefix filtering to find only structural keys
+	keys, err := natsclient.FilteredKeys(ctx, s.kv, "structural.>")
 	if err != nil {
-		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
-			return nil
-		}
 		return errs.WrapTransient(err, "NATSStructuralIndexStorage", "Clear", "list keys")
 	}
 
 	var deleteErrs []error
 	for _, key := range keys {
-		if strings.HasPrefix(key, "structural.") {
-			if err := s.kv.Delete(ctx, key); err != nil {
-				deleteErrs = append(deleteErrs, fmt.Errorf("failed to delete %s: %w", key, err))
-			}
+		if err := s.kv.Delete(ctx, key); err != nil {
+			deleteErrs = append(deleteErrs, fmt.Errorf("failed to delete %s: %w", key, err))
 		}
 	}
 

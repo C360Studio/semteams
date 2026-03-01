@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -311,20 +312,14 @@ func (s *NATSAnomalyStorage) GetByType(ctx context.Context, anomalyType AnomalyT
 
 // getByIndexPrefix retrieves anomalies by scanning an index prefix.
 func (s *NATSAnomalyStorage) getByIndexPrefix(ctx context.Context, prefix string) ([]*StructuralAnomaly, error) {
-	keys, err := s.kv.Keys(ctx)
+	// Use server-side prefix filtering instead of loading all keys
+	keys, err := natsclient.FilteredKeys(ctx, s.kv, prefix+">")
 	if err != nil {
-		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
-			return nil, nil
-		}
 		return nil, errs.WrapTransient(err, "NATSAnomalyStorage", "getByIndexPrefix", "list keys")
 	}
 
 	var result []*StructuralAnomaly
 	for _, key := range keys {
-		if !strings.HasPrefix(key, prefix) {
-			continue
-		}
-
 		// Extract anomaly ID from index key
 		id := extractIDFromIndexKey(key)
 		if id == "" {
@@ -558,15 +553,7 @@ func (s *NATSAnomalyStorage) Count(ctx context.Context) (map[AnomalyStatus]int, 
 		return counts, nil
 	}
 
-	keys, err := s.kv.Keys(ctx)
-	if err != nil {
-		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
-			return counts, nil
-		}
-		return nil, errs.WrapTransient(err, "NATSAnomalyStorage", "Count", "list keys")
-	}
-
-	// Count status index entries
+	// Count status index entries using per-status server-side filtering
 	statuses := []AnomalyStatus{
 		StatusPending, StatusLLMReviewing, StatusLLMApproved, StatusLLMRejected,
 		StatusHumanReview, StatusApproved, StatusRejected, StatusApplied,
@@ -574,11 +561,11 @@ func (s *NATSAnomalyStorage) Count(ctx context.Context) (map[AnomalyStatus]int, 
 
 	for _, status := range statuses {
 		prefix := statusIndexPrefix(status)
-		for _, key := range keys {
-			if strings.HasPrefix(key, prefix) {
-				counts[status]++
-			}
+		keys, err := natsclient.FilteredKeys(ctx, s.kv, prefix+">")
+		if err != nil {
+			return nil, errs.WrapTransient(err, "NATSAnomalyStorage", "Count", "list keys for status "+string(status))
 		}
+		counts[status] = len(keys)
 	}
 
 	return counts, nil

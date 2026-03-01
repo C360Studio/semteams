@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -198,29 +199,16 @@ func (s *NATSCommunityStorage) GetCommunity(ctx context.Context, id string) (*Co
 
 // GetCommunitiesByLevel retrieves all communities at a level
 func (s *NATSCommunityStorage) GetCommunitiesByLevel(ctx context.Context, level int) ([]*Community, error) {
-	prefix := communityPrefix(level)
 	communities := make([]*Community, 0)
 
-	// Use Keys to get all keys with prefix
-	keys, err := s.kv.Keys(ctx)
+	// Use server-side prefix filtering: community keys are "{level}.{id}"
+	pattern := fmt.Sprintf("%d.>", level)
+	keys, err := natsclient.FilteredKeys(ctx, s.kv, pattern)
 	if err != nil {
-		// Empty bucket returns ErrKeyNotFound or "no keys found" error
-		if stderrors.Is(err, jetstream.ErrKeyNotFound) || strings.Contains(err.Error(), "no keys found") {
-			return communities, nil
-		}
 		return nil, errs.WrapTransient(err, "NATSCommunityStorage", "GetCommunitiesByLevel", "list keys")
 	}
 
 	for _, key := range keys {
-		if !strings.HasPrefix(key, prefix) {
-			continue
-		}
-
-		// Skip entity mapping keys (format: entity.{level}.{entityID})
-		if strings.HasPrefix(key, "entity.") {
-			continue
-		}
-
 		entry, err := s.kv.Get(ctx, key)
 		if err != nil {
 			continue // Skip errors for individual entries
@@ -406,10 +394,6 @@ func (s *NATSCommunityStorage) Clear(ctx context.Context) error {
 
 func communityKey(level int, communityID string) string {
 	return fmt.Sprintf("%d.%s", level, communityID)
-}
-
-func communityPrefix(level int) string {
-	return fmt.Sprintf("%d.", level)
 }
 
 func entityCommunityKey(level int, entityID string) string {

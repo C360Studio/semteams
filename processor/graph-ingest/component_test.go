@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -154,7 +155,50 @@ func (m *mockKVBucket) ListKeys(ctx context.Context, opts ...jetstream.WatchOpt)
 }
 
 func (m *mockKVBucket) ListKeysFiltered(ctx context.Context, filters ...string) (jetstream.KeyLister, error) {
-	return nil, errors.New("not implemented")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var matched []string
+	for k := range m.data {
+		if matchesNATSFilters(k, filters) {
+			matched = append(matched, k)
+		}
+	}
+
+	ch := make(chan string, len(matched))
+	for _, k := range matched {
+		ch <- k
+	}
+	close(ch)
+	return &mockKeyLister{ch: ch}, nil
+}
+
+// mockKeyLister implements jetstream.KeyLister for testing.
+type mockKeyLister struct {
+	ch chan string
+}
+
+func (l *mockKeyLister) Keys() <-chan string                    { return l.ch }
+func (l *mockKeyLister) Status() <-chan jetstream.KeyValueEntry { return nil }
+func (l *mockKeyLister) Stop() error                            { return nil }
+
+// matchesNATSFilters checks if a key matches any of the NATS subject filter patterns.
+// Supports ">" wildcard at end of pattern to match one or more remaining tokens.
+func matchesNATSFilters(key string, filters []string) bool {
+	for _, filter := range filters {
+		if filter == ">" {
+			return true // matches everything
+		}
+		if strings.HasSuffix(filter, ".>") {
+			prefix := strings.TrimSuffix(filter, ">")
+			if strings.HasPrefix(key, prefix) {
+				return true
+			}
+		} else if key == filter {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *mockKVBucket) History(ctx context.Context, key string, opts ...jetstream.WatchOpt) ([]jetstream.KeyValueEntry, error) {

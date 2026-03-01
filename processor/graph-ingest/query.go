@@ -141,16 +141,24 @@ func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byt
 		return nil, fmt.Errorf("invalid request: %w", err)
 	}
 
-	// Get all keys from KV bucket
-	keys, err := c.entityBucket.Keys(ctx)
+	// Build prefix for server-side filtering
+	prefixDot := req.Prefix
+	if req.Prefix != "" {
+		prefixDot = req.Prefix + "."
+	}
+
+	// Use server-side prefix filtering instead of loading all keys
+	keys, err := c.entityBucket.KeysByPrefix(ctx, prefixDot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get keys: %w", err)
 	}
 
-	// Filter by prefix
-	prefixDot := req.Prefix
-	if req.Prefix != "" {
-		prefixDot = req.Prefix + "."
+	// Also check exact match for full entity ID queries (6-part IDs
+	// where KeysByPrefix("org.plat.dom.sys.type.inst.") finds nothing)
+	if req.Prefix != "" && len(keys) == 0 {
+		if _, getErr := c.entityBucket.Get(ctx, req.Prefix); getErr == nil {
+			keys = []string{req.Prefix}
+		}
 	}
 
 	limit := req.Limit
@@ -158,16 +166,10 @@ func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byt
 		limit = 1000 // Default limit
 	}
 
-	// Collect matching IDs
-	var matched []string
-	for _, key := range keys {
-		// Match if prefix is empty (all entities) or key starts with prefix.
-		if req.Prefix == "" || strings.HasPrefix(key, prefixDot) || key == req.Prefix {
-			matched = append(matched, key)
-			if len(matched) >= limit {
-				break
-			}
-		}
+	// Apply limit
+	matched := keys
+	if len(matched) > limit {
+		matched = matched[:limit]
 	}
 
 	// Fetch full entities for matched IDs

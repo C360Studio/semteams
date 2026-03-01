@@ -368,6 +368,27 @@ func (kv *KVStore) KeysByPrefix(ctx context.Context, prefix string) ([]string, e
 	return keys, nil
 }
 
+// FilteredKeys returns keys matching a NATS wildcard pattern from a raw jetstream.KeyValue bucket.
+// Use this for components that hold jetstream.KeyValue directly instead of *KVStore.
+// The pattern should be a valid NATS subject filter (e.g., "0.>" for level-0 community keys).
+// Returns nil, nil when no keys match.
+func FilteredKeys(ctx context.Context, kv jetstream.KeyValue, pattern string) ([]string, error) {
+	lister, err := kv.ListKeysFiltered(ctx, pattern)
+	if err != nil {
+		if errors.Is(err, jetstream.ErrNoKeysFound) || errors.Is(err, jetstream.ErrKeyNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("kv filtered keys %q: %w", pattern, err)
+	}
+
+	var keys []string
+	for key := range lister.Keys() {
+		keys = append(keys, key)
+	}
+
+	return keys, nil
+}
+
 // Watch creates a watcher for key changes
 // Note: Watch does not apply timeout as it creates a long-lived watcher
 func (kv *KVStore) Watch(ctx context.Context, pattern string) (jetstream.KeyWatcher, error) {

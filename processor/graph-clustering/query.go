@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/graph/clustering"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -298,8 +299,9 @@ func (c *Component) getCommunitiesByLevel(ctx context.Context, level int) ([]*cl
 		return nil, errs.WrapFatal(errs.ErrInvalidConfig, "Component", "getCommunitiesByLevel", "community bucket not initialized")
 	}
 
-	// List all keys and filter by level
-	keys, err := c.communityBucket.Keys(ctx)
+	// Use server-side prefix filtering: community keys are "{level}.{id}"
+	pattern := fmt.Sprintf("%d.>", level)
+	keys, err := natsclient.FilteredKeys(ctx, c.communityBucket, pattern)
 	if err != nil {
 		return nil, errs.WrapTransient(err, "Component", "getCommunitiesByLevel", "list keys")
 	}
@@ -317,9 +319,7 @@ func (c *Component) getCommunitiesByLevel(ctx context.Context, level int) ([]*cl
 			continue
 		}
 
-		if community.Level == level {
-			communities = append(communities, &community)
-		}
+		communities = append(communities, &community)
 	}
 
 	return communities, nil
