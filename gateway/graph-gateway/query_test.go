@@ -1207,6 +1207,98 @@ func createTestGateway(t *testing.T) *Component {
 }
 
 // createTestGatewayWithMock creates a test gateway with provided mock client
+func TestGateway_TransformPathSearchVars(t *testing.T) {
+	comp := &Component{}
+
+	tests := []struct {
+		name     string
+		vars     map[string]interface{}
+		expected map[string]interface{}
+	}{
+		{
+			name: "direction forwarded and lowercased",
+			vars: map[string]interface{}{
+				"startEntity": "a.b.c.d.e.f",
+				"direction":   "OUTGOING",
+			},
+			expected: map[string]interface{}{
+				"start_entity": "a.b.c.d.e.f",
+				"direction":    "outgoing",
+			},
+		},
+		{
+			name: "predicates array forwarded",
+			vars: map[string]interface{}{
+				"startEntity": "a.b.c.d.e.f",
+				"predicates":  []interface{}{"rel.connects", "rel.depends"},
+			},
+			expected: map[string]interface{}{
+				"start_entity": "a.b.c.d.e.f",
+				"predicates":   []interface{}{"rel.connects", "rel.depends"},
+			},
+		},
+		{
+			name: "timeout string forwarded",
+			vars: map[string]interface{}{
+				"startEntity": "a.b.c.d.e.f",
+				"timeout":     "10s",
+			},
+			expected: map[string]interface{}{
+				"start_entity": "a.b.c.d.e.f",
+				"timeout":      "10s",
+			},
+		},
+		{
+			name: "maxPaths forwarded as max_paths",
+			vars: map[string]interface{}{
+				"startEntity": "a.b.c.d.e.f",
+				"maxPaths":    float64(50),
+			},
+			expected: map[string]interface{}{
+				"start_entity": "a.b.c.d.e.f",
+				"max_paths":    float64(50),
+			},
+		},
+		{
+			name: "omitted params not in payload",
+			vars: map[string]interface{}{
+				"startEntity": "a.b.c.d.e.f",
+			},
+			expected: map[string]interface{}{
+				"start_entity": "a.b.c.d.e.f",
+			},
+		},
+		{
+			name: "all params together",
+			vars: map[string]interface{}{
+				"startEntity": "a.b.c.d.e.f",
+				"maxDepth":    float64(5),
+				"maxNodes":    float64(100),
+				"direction":   "Incoming",
+				"predicates":  []interface{}{"rel.owns"},
+				"timeout":     "30s",
+				"maxPaths":    float64(10),
+			},
+			expected: map[string]interface{}{
+				"start_entity": "a.b.c.d.e.f",
+				"max_depth":    float64(5),
+				"max_nodes":    float64(100),
+				"direction":    "incoming",
+				"predicates":   []interface{}{"rel.owns"},
+				"timeout":      "30s",
+				"max_paths":    float64(10),
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := comp.transformPathSearchVars(tt.vars)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func createTestGatewayWithMock(t *testing.T, mock *mockNATSRequester) *Component {
 	t.Helper()
 

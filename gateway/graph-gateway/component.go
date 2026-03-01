@@ -824,6 +824,28 @@ func (c *Component) transformPathSearchVars(variables map[string]interface{}) ma
 			payload["max_nodes"] = val
 		}
 	}
+	// Handle direction — normalize to lowercase
+	if direction, ok := variables["direction"].(string); ok {
+		payload["direction"] = strings.ToLower(direction)
+	}
+	// Handle predicates — pass through as-is (array via JSON variables)
+	if predicates, ok := variables["predicates"]; ok {
+		payload["predicates"] = predicates
+	}
+	// Handle timeout — accept camelCase and snake_case
+	for _, key := range []string{"timeout", "timeoutDuration"} {
+		if val, ok := variables[key].(string); ok {
+			payload["timeout"] = val
+			break
+		}
+	}
+	// Handle maxPaths — accept camelCase and snake_case
+	for _, key := range []string{"maxPaths", "max_paths"} {
+		if val, ok := variables[key]; ok {
+			payload["max_paths"] = val
+			break
+		}
+	}
 	return payload
 }
 
@@ -1276,7 +1298,9 @@ func buildIntrospectionSchema() map[string]interface{} {
 					fieldDef("entityByAlias", "Entity", argDef("alias", "String!")),
 					fieldDef("relationships", "[Relationship]", argDef("entityId", "String!"), argDef("direction", "String")),
 					fieldDef("entityIdHierarchy", "HierarchyResult", argDef("prefix", "String!"), argDef("limit", "Int")),
-					fieldDef("pathSearch", "PathSearchResult", argDef("startEntity", "String!"), argDef("maxDepth", "Int"), argDef("maxNodes", "Int")),
+					fieldDef("pathSearch", "PathSearchResult", argDef("startEntity", "String!"), argDef("maxDepth", "Int"), argDef("maxNodes", "Int"),
+						argDef("direction", "String"), argDef("predicates", "[String]"),
+						argDef("timeout", "String"), argDef("maxPaths", "Int")),
 					fieldDef("spatialSearch", "[Entity]", argDef("north", "Float!"), argDef("south", "Float!"), argDef("east", "Float!"), argDef("west", "Float!"), argDef("limit", "Int")),
 					fieldDef("temporalSearch", "[Entity]", argDef("startTime", "String!"), argDef("endTime", "String!"), argDef("limit", "Int")),
 					fieldDef("semanticSearch", "[Entity]", argDef("query", "String!"), argDef("limit", "Int")),

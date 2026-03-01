@@ -33,8 +33,8 @@ The Label Propagation Algorithm traverses edges via:
 ### NOT Used in Clustering
 
 5. **ALIAS_INDEX**: ID resolution only
-6. **SPATIAL_INDEX**: Index exists, no provider implementation
-7. **TEMPORAL_INDEX**: Index exists, no provider implementation
+6. **SPATIAL_INDEX**: Fully operational for queries; clustering provider planned
+7. **TEMPORAL_INDEX**: Fully operational for queries; clustering provider planned
 
 ## Edge Weights
 
@@ -179,7 +179,7 @@ query {
 
 **Created by:** Triples with `geo.*` predicates containing lat/lon
 **Used for:** "Find entities within bounding box"
-**Gap:** Not fed to clustering or LLM context
+**Clustering:** Not yet integrated. Spatial queries (bounding box) are fully operational.
 
 ### TEMPORAL_INDEX
 
@@ -188,7 +188,7 @@ query {
 
 **Created by:** Triples with timestamp values
 **Used for:** "Find entities in time range"
-**Gap:** Not fed to clustering or LLM context
+**Clustering:** Not yet integrated. Temporal queries (time range) are fully operational.
 
 ### EMBEDDING_INDEX
 
@@ -198,7 +198,7 @@ query {
 **Created by:** `TextContent()` → embedding service → stored
 **Used for:** Semantic similarity search, virtual edges in Tier 2
 
-## Future: Spatial/Temporal in Clustering
+## Planned: Spatial/Temporal Clustering Providers
 
 The architecture supports spatial/temporal clustering via graph providers. The pattern is proven by `SemanticGraphProvider` — spatial and temporal providers would follow the same approach.
 

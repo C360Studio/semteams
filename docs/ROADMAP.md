@@ -257,6 +257,8 @@ Add `SpatialGraphProvider` and `TemporalGraphProvider` for clustering:
 - Indexes exist and are populated, just need provider implementations
 - Would enable geo-proximity and time-correlated community detection
 
+**Current state:** Spatial and temporal indexes are fully operational — bounding box and time-range queries work via GraphQL and NATS. This enhancement adds clustering integration only.
+
 ---
 
 ## Legend
