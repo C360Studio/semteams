@@ -5,14 +5,22 @@
 Items requiring completion before alpha release.
 
 ### Search Query Classification
-**Status:** Needs Implementation | **ADR:** [ADR-004](architecture/adr-004-search-query-classification.md)
+**Status:** Basic Implementation (Tier 0 Active) | **ADR:** [ADR-004](architecture/adr-004-search-query-classification.md)
 
 Hybrid NL intent extraction with progressive fallback:
-- Tier 1: Keyword heuristics (always available)
-- Tier 2: Embedding similarity to training examples
-- Tier 3: LLM classification for complex queries
+- Tier 0: Keyword heuristics — **active in production** (temporal, spatial, similarity, path, zone intents)
+- Tier 1/2: Embedding similarity to domain examples — **built and tested, not wired up**
+- Tier 3: LLM classification for complex queries — **not started**
 
-Current state: Rule-based strategy inference from structured `SearchOptions`. Works for API clients but doesn't handle natural language inputs.
+Current state: `KeywordClassifier` runs in both `graph-gateway` and `graph-query` with 10+ regex patterns covering temporal ranges, spatial bounds, similarity, and path intent. `EmbeddingClassifier` and `ClassifierChain` are fully implemented with tests, and domain example JSON files exist in `configs/domains/` (logistics, IoT, robotics). However, the embedding tier is never instantiated at runtime — no config surface for domain example paths or thresholds.
+
+**Improvements for roadmap:**
+- Wire `EmbeddingClassifier` activation in gateway/graph-query startup (config fields + domain JSON loading)
+- Expose `UpgradeVectors()` path for hot-swapping BM25 → neural vectors at runtime
+- Add aggregation intent handling (`how many`, `count`, `total`)
+- Add classifier observability metrics (tier hit rate, confidence distribution, fallback frequency)
+- Expose classification to MCP handler (currently only GraphQL `globalSearch` and `semantic`)
+- Align `graph-query` to use `ClassifierChain` instead of bare `KeywordClassifier`
 
 ### Anomaly Approval Workflow
 **Status:** Implemented | **ADR:** [ADR-005](architecture/adr-005-anomaly-approval-workflow.md)
@@ -46,21 +54,26 @@ Transitivity gap detector wired into anomaly detection pipeline:
 Current state: Fully operational. Detects transitivity gaps for configured predicates.
 
 ### Query Pattern Enhancements
-**Status:** Partial Implementation | **ADR:** [ADR-009](architecture/adr-009-pathrag-enhancements.md)
+**Status:** PathRAG Implemented, Gateway Exposure Needed | **ADR:** [ADR-009](architecture/adr-009-pathrag-enhancements.md)
 
-Complete PathRAG and GraphRAG with missing documented features:
+**PathRAG — processor complete:**
+- Direction control (incoming, outgoing, both) — **implemented and tested**
+- Predicate filtering — **implemented and tested**
+- Per-request timeout — **implemented and tested**
+- MaxPaths bound — **implemented and tested**
+- All features accessible via direct NATS `graph.query.pathSearch` subject
 
-**PathRAG:**
-- Direction control (incoming, outgoing, both) - enables "what depends on X" queries
-- Predicate filtering - focus traversal on specific relationship types
-- Timeout and path limits - SLA enforcement and memory protection
+**PathRAG — gateway gap:**
+- GraphQL schema only exposes `startEntity`, `maxDepth`, `maxNodes`
+- `direction`, `predicates`, `timeout`, `maxPaths` not in GraphQL schema or `transformPathSearchVars()`
+- `IncludeSiblings` field declared but not wired in BFS logic
 
-**GraphRAG:**
-- Relationships in response - show connections between returned entities
-- Source attribution - link answers to specific entities/communities for explainability
+**GraphRAG — not yet implemented:**
+- Relationships in response — show connections between returned entities
+- Source attribution — link answers to specific entities/communities for explainability
 - Response control parameters (include_summaries, include_relationships)
 
-Current state: PathRAG only supports outgoing traversal. GraphRAG doesn't include relationships or source attribution.
+Current state: PathRAG BFS engine is feature-complete with direction control, predicate filtering, timeout, and path limits. All features work via NATS but are not exposed through the GraphQL/MCP gateway. GraphRAG doesn't include relationships or source attribution.
 
 ### Rules Processor Completion
 **Status:** Partial Implementation | **ADR:** [ADR-010](architecture/adr-010-rules-processor-completion.md)
@@ -102,6 +115,13 @@ LLM-powered autonomous task execution with six specialized components:
 - agentic-governance: PII filtering, rate limiting, content governance
 
 Current state: Fully operational. Run `task e2e:agentic` for validation.
+
+### UI Flow Builder
+**Status:** WIP | **Repo:** semstreams-ui
+
+Visual flow builder for designing, deploying, and managing flows through a drag-and-drop interface. Backend APIs (Flow CRUD, component lifecycle, live metrics) are implemented in semstreams. The frontend UI is under active development in the `semstreams-ui` repository.
+
+Current state: Backend ready. UI planned for beta release.
 
 ---
 
@@ -182,6 +202,60 @@ Generate embeddings directly from images.
 - **Integration:** Extends `BinaryStorable` pipeline via `ContentRoleMedia`
 - **Pattern:** KV-watching async worker (follows ADR-013)
 - **Tier requirement:** Semantic (multimodal embedding provider)
+
+---
+
+### Query & Classification
+
+#### Embedding Classifier Activation
+**Priority:** High | **Complexity:** Low
+
+Wire the existing `EmbeddingClassifier` and domain example JSON files into runtime startup:
+- Add config fields for domain example paths and embedding threshold
+- Load `configs/domains/*.json` at startup in gateway and graph-query
+- Instantiate `ClassifierChain` with embedding tier instead of `nil`
+- Wire `UpgradeVectors()` for hot-swapping BM25 → neural vectors when embedding service is available
+
+Current state: All code exists and is tested. Needs config surface and startup wiring only.
+
+#### PathRAG Gateway Exposure
+**Priority:** High | **Complexity:** Low
+
+Expose PathRAG ADR-009 features through GraphQL/MCP gateway:
+- Add `direction`, `predicates`, `timeout`, `maxPaths` to GraphQL schema arguments
+- Update `transformPathSearchVars()` to forward these fields
+- Wire `IncludeSiblings` into BFS logic or remove the dead field
+
+Current state: All features work via direct NATS. Gateway just needs schema + transform updates.
+
+#### Classifier Observability
+**Priority:** Medium | **Complexity:** Low
+
+Add Prometheus metrics for classification behavior:
+- Counter per tier (T0/T1/T2) hit rate
+- Histogram for classification confidence
+- Counter for fallback frequency (embedding miss → keyword)
+- Counter for MCP vs GraphQL classification usage
+
+#### Aggregation Intent Support
+**Priority:** Medium | **Complexity:** Medium
+
+Add aggregation query classification and handling:
+- Add aggregation patterns (`how many`, `count`, `total`) to `KeywordClassifier`
+- Add `StrategyAggregation` to search strategies
+- Domain JSON files already include `aggregation` intent examples
+
+---
+
+### Graph Providers
+
+#### Spatial/Temporal Graph Providers
+**Priority:** Low | **Complexity:** Medium
+
+Add `SpatialGraphProvider` and `TemporalGraphProvider` for clustering:
+- Pattern proven by existing `SemanticGraphProvider`
+- Indexes exist and are populated, just need provider implementations
+- Would enable geo-proximity and time-correlated community detection
 
 ---
 

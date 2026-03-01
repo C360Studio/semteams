@@ -105,7 +105,7 @@ LPA operates on a graph with two edge types:
 
 Relationships you define in your domain model become graph edges. When an entity declares triples like "located_in" pointing to a zone or "monitors" pointing to equipment, these create edges stored in OUTGOING_INDEX and INCOMING_INDEX.
 
-See [Knowledge Graphs](02-knowledge-graphs.md) for how to define relationships in your domain model.
+See [Knowledge Graphs](04-knowledge-graphs.md) for how to define relationships in your domain model.
 
 ### Virtual Edges (from embeddings)
 
@@ -277,11 +277,11 @@ Many single-entity communities.
 ## Related
 
 **Concepts**
-- [Knowledge Graphs](02-knowledge-graphs.md) - Defining relationships that create explicit edges
-- [Embeddings](03-embeddings.md) - How virtual edges are computed from content similarity
-- [Anomaly Detection](06-anomaly-detection.md) - K-core decomposition complements community clustering
-- [GraphRAG Pattern](07-graphrag-pattern.md) - How communities enable retrieval-augmented generation
-- [Similarity Metrics](04-similarity-metrics.md) - TF-IDF and threshold tuning
+- [Knowledge Graphs](04-knowledge-graphs.md) - Defining relationships that create explicit edges
+- [Embeddings](05-embeddings.md) - How virtual edges are computed from content similarity
+- [Anomaly Detection](08-anomaly-detection.md) - K-core decomposition complements community clustering
+- [GraphRAG Pattern](09-graphrag-pattern.md) - How communities enable retrieval-augmented generation
+- [Similarity Metrics](06-similarity-metrics.md) - TF-IDF and threshold tuning
 
 **Configuration**
 - [Clustering Configuration](../advanced/01-clustering.md) - Full parameter reference

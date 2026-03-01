@@ -154,7 +154,7 @@ SemStreams uses three orchestration layers. Respecting layer boundaries prevents
 | A → B → A → B... (max N times) | Workflow |
 | Execute LLM call, process tools | Component |
 
-See [Orchestration Layers](docs/concepts/12-orchestration-layers.md) for details.
+See [Orchestration Layers](docs/concepts/14-orchestration-layers.md) for details.
 
 ## Payload Registry Pattern
 
@@ -217,4 +217,4 @@ data, _ := json.Marshal(msg)
 fmt.Println(string(data))  // Should show {"type":{"domain":"..."},"payload":{...}}
 ```
 
-See [Payload Registry Guide](docs/concepts/13-payload-registry.md) for complete documentation.
+See [Payload Registry Guide](docs/concepts/15-payload-registry.md) for complete documentation.

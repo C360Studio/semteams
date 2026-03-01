@@ -50,7 +50,7 @@ The `ContentStorable` interface extends `Graphable` with:
 - **ContentFields**: Maps semantic roles (body, abstract, title) to field names
 - **RawContent**: Provides the actual text to store
 
-See [Implementing ContentStorable](../basics/05-content-storable.md) for implementation details.
+See `ContentStorable` for implementation details.
 
 ## How Text Gets to Embeddings
 
@@ -198,13 +198,13 @@ Entities without embeddings (telemetry, structured data) connect through other m
 
 Relationships defined in your entity's `Triples()` method create graph edges. A sensor with `sensor.location.zone: zone-A` connects to the zone entity. Entities sharing common neighbors cluster together via LPA.
 
-See [Knowledge Graphs](02-knowledge-graphs.md) for triple patterns.
+See [Knowledge Graphs](04-knowledge-graphs.md) for triple patterns.
 
 ### 2. Stateful Rules
 
 The rules engine can add triples dynamically based on conditions. When a sensor exceeds a threshold, a rule can add `alert.related: zone-A`—creating runtime relationships without manual coding.
 
-See [Rules Engine](../basics/07-rules-engine.md) for rule configuration.
+See [Rules Engine](../advanced/06-rules-engine.md) for rule configuration.
 
 ### 3. Structural Indexes
 
@@ -290,12 +290,12 @@ This is expected. Telemetry entities implement only `Graphable`—they have no t
 
 **Concepts (mental models):**
 - [Real-Time Inference](00-real-time-inference.md) - How tiers affect embeddings
-- [Knowledge Graphs](02-knowledge-graphs.md) - Triple patterns for explicit relationships
-- [Similarity Metrics](04-similarity-metrics.md) - Cosine similarity tuning
-- [Community Detection](05-community-detection.md) - How LPA uses virtual edges
-- [GraphRAG Pattern](07-graphrag-pattern.md) - Semantic search over communities
+- [Knowledge Graphs](04-knowledge-graphs.md) - Triple patterns for explicit relationships
+- [Similarity Metrics](06-similarity-metrics.md) - Cosine similarity tuning
+- [Community Detection](07-community-detection.md) - How LPA uses virtual edges
+- [GraphRAG Pattern](09-graphrag-pattern.md) - Semantic search over communities
 
 **Basics (how to implement):**
-- [Implementing ContentStorable](../basics/05-content-storable.md) - Document entity pattern
+- `ContentStorable` - Document entity pattern
 - [Configuration](../basics/06-configuration.md) - Tier and threshold settings
-- [Rules Engine](../basics/07-rules-engine.md) - Dynamic relationship creation
+- [Rules Engine](../advanced/06-rules-engine.md) - Dynamic relationship creation

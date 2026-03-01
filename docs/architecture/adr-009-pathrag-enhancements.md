@@ -179,7 +179,7 @@ type GlobalSearchRequest struct {
 ## References
 
 - [ADR-004: Search Query Classification](./adr-004-search-query-classification.md) - NL query classification (extracts intent before these enhancements execute)
-- [PathRAG Pattern](../concepts/08-pathrag-pattern.md)
-- [GraphRAG Pattern](../concepts/07-graphrag-pattern.md)
+- [PathRAG Pattern](../concepts/10-pathrag-pattern.md)
+- [GraphRAG Pattern](../concepts/09-graphrag-pattern.md)
 - `processor/graph-query/pathrag.go`
 - `processor/graph-query/graphrag.go`

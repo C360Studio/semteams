@@ -148,5 +148,5 @@ NATS KV Buckets:
 
 - **Depends on**: [ADR-010: Rules Processor Completion](./adr-010-rules-processor-completion.md)
 - **Related**: [ADR-018: Agentic Workflow Orchestration](./adr-018-agentic-workflow-orchestration.md)
-- **Concept**: [Orchestration Layers](../concepts/12-orchestration-layers.md)
+- **Concept**: [Orchestration Layers](../concepts/14-orchestration-layers.md)
 - **Full specification**: [Workflow Processor Spec](./specs/workflow-processor-spec.md)

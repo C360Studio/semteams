@@ -135,7 +135,7 @@ The graph builds situational awareness; rules and agents close the loop.
 
 Two core patterns power this:
 - **Graphable** — Your types become graph entities ([docs](docs/basics/03-graphable-interface.md))
-- **Payload Registry** — Messages serialize with type discrimination ([docs](docs/concepts/13-payload-registry.md))
+- **Payload Registry** — Messages serialize with type discrimination ([docs](docs/concepts/15-payload-registry.md))
 
 ## Progressive Capabilities
 

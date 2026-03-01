@@ -350,9 +350,9 @@ New to knowledge graphs or event-driven systems? See [Concepts](../concepts/) fo
 
 - [Real-Time Inference](../concepts/00-real-time-inference.md) - Tier system (Structural → Statistical → Semantic)
 - [Event-Driven Basics](../concepts/01-event-driven-basics.md) - Pub/sub, streams, NATS
-- [Knowledge Graphs](../concepts/02-knowledge-graphs.md) - Triples, SPO model
-- [Community Detection](../concepts/05-community-detection.md) - LPA algorithm details
-- [GraphRAG Pattern](../concepts/07-graphrag-pattern.md) - Community-based RAG
+- [Knowledge Graphs](../concepts/04-knowledge-graphs.md) - Triples, SPO model
+- [Community Detection](../concepts/07-community-detection.md) - LPA algorithm details
+- [GraphRAG Pattern](../concepts/09-graphrag-pattern.md) - Community-based RAG
 
 ## Next Steps
 

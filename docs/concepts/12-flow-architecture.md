@@ -19,6 +19,8 @@ semstreams --config config.json
 
 ### UI Mode (Visual Flow Builder)
 
+> **WIP**: The visual flow builder UI is under active development in the `semstreams-ui` repository, planned for beta release. Backend APIs are available now.
+
 Design and manage flows through a visual interface:
 
 - Drag-and-drop component placement

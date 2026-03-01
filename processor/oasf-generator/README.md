@@ -529,4 +529,4 @@ The component exposes Prometheus metrics through the SemStreams metrics registry
 
 - **Directory Bridge**: Component that registers OASF records with AGNTCY directories
 - **Graph Ingest**: Upstream component that creates entity states
-- **Payload Registry**: [Pattern documentation](/docs/concepts/13-payload-registry.md) for message serialization
+- **Payload Registry**: [Pattern documentation](/docs/concepts/15-payload-registry.md) for message serialization

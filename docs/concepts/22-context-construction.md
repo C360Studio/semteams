@@ -249,7 +249,7 @@ func buildReviewContext(ctx context.Context, client context.GraphClient, fileIDs
 
 ## Related Documentation
 
-- [Agentic Systems](11-agentic-systems.md) - Overview of agentic loop
+- [Agentic Systems](13-agentic-systems.md) - Overview of agentic loop
 - [Parallel Agents](23-parallel-agents.md) - Parallel execution with context
 - [Workflow Configuration](../advanced/09-workflow-configuration.md) - Workflow processor
 - [pkg/context README](../../pkg/context/README.md) - Package documentation

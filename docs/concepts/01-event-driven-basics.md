@@ -162,7 +162,7 @@ Ingest data from external sources:
 
 Transform data into knowledge graph entities. Your domain types implement the `Graphable` interface, defining how raw data becomes entities with triples.
 
-See [Implementing Graphable](../basics/04-implementing-graphable.md) for code examples.
+See [Implementing Graphable](../basics/03-graphable-interface.md) for code examples.
 
 ### State (KV Buckets)
 
@@ -212,7 +212,7 @@ For services that need HTTP access to NATS, SemStreams provides an HTTP Request/
 
 See [Configuration Guide](../basics/06-configuration.md) for HTTP gateway setup.
 
-> **Note**: For knowledge graph queries, use the [GraphQL gateway](09-query-access.md) instead. The HTTP Request/Reply gateway is for generic NATS service integration, not graph queries.
+> **Note**: For knowledge graph queries, use the [GraphQL gateway](11-query-access.md) instead. The HTTP Request/Reply gateway is for generic NATS service integration, not graph queries.
 
 ## Eventual Consistency
 
@@ -318,7 +318,7 @@ See [Configuration](../basics/06-configuration.md) for setup details.
 
 **Basics (how to implement):**
 - [Architecture](../basics/02-architecture.md) - Full system overview
-- [Implementing Graphable](../basics/04-implementing-graphable.md) - Writing domain processors
+- [Implementing Graphable](../basics/03-graphable-interface.md) - Writing domain processors
 - [Configuration](../basics/06-configuration.md) - Component setup
 
 **Reference (API details):**
@@ -326,4 +326,4 @@ See [Configuration](../basics/06-configuration.md) for setup details.
 
 **Concepts (mental models):**
 - [Real-Time Inference](00-real-time-inference.md) - Tiers and inference modes
-- [Knowledge Graphs](02-knowledge-graphs.md) - Entity and triple fundamentals
+- [Knowledge Graphs](04-knowledge-graphs.md) - Entity and triple fundamentals

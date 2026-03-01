@@ -297,6 +297,6 @@ Anomaly detection is unique in analyzing the **shape** of the graph rather than 
 ## Related Concepts
 
 - [Real-Time Inference](00-real-time-inference.md) — Anomaly detection is a Tier 1+ capability
-- [Community Detection](05-community-detection.md) — Inference runs after clustering completes
-- [Knowledge Graphs](02-knowledge-graphs.md) — Approved suggestions become new triples
-- [Similarity Metrics](04-similarity-metrics.md) — Cosine similarity powers semantic gap detection
+- [Community Detection](07-community-detection.md) — Inference runs after clustering completes
+- [Knowledge Graphs](04-knowledge-graphs.md) — Approved suggestions become new triples
+- [Similarity Metrics](06-similarity-metrics.md) — Cosine similarity powers semantic gap detection

@@ -225,4 +225,4 @@ When authoring query examples for a domain:
 ## References
 
 - [ADR-002: Query Capability Discovery](./adr-002-query-capability-discovery.md) - Query routing patterns
-- [Query Access Concepts](../concepts/09-query-access.md) - Current query architecture
+- [Query Access Concepts](../concepts/11-query-access.md) - Current query architecture

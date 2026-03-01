@@ -86,7 +86,7 @@ The `tiered --variant structural` scenario validates rules-only processing with 
 
 The PathRAG pattern is documented as a Tier 0 (structural) feature:
 
-From `docs/concepts/08-pathrag-pattern.md`:
+From `docs/concepts/10-pathrag-pattern.md`:
 > "PathRAG works at Tier 0 (no ML required)"
 > "Given a starting entity, PathRAG answers: 'What's connected to this, and how?'"
 
@@ -101,7 +101,7 @@ From `docs/concepts/08-pathrag-pattern.md`:
 
 | Feature | Documentation Source | Gap |
 |---------|---------------------|-----|
-| **PathRAG queries** | `docs/concepts/08-pathrag-pattern.md` | No test exists |
+| **PathRAG queries** | `docs/concepts/10-pathrag-pattern.md` | No test exists |
 | Rule add_triple effect | Rules can add triples to graph | Not verified in indexes |
 | Rule remove_triple effect | Rules can remove triples | Not verified |
 | Rule publish action | Rules can publish to subjects | Not verified |

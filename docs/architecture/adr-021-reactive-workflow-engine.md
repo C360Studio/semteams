@@ -278,5 +278,5 @@ processor/reactive/
 
 - [ADR-011: Workflow Processor](./adr-011-workflow-processor.md) — Original workflow processor design
 - [ADR-020: Unified Dataflow Patterns](./adr-020-unified-dataflow-patterns.md) — Input/output improvements
-- [Orchestration Layers](../concepts/12-orchestration-layers.md) — Three-layer orchestration model
-- [Payload Registry](../concepts/13-payload-registry.md) — Typed payload deserialization
+- [Orchestration Layers](../concepts/14-orchestration-layers.md) — Three-layer orchestration model
+- [Payload Registry](../concepts/15-payload-registry.md) — Typed payload deserialization

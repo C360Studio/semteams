@@ -15,7 +15,7 @@ mechanics with orchestration logic.
 - **Complex workflows** (loops, timeouts, limits): Requires workflow processor (ADR-011)
 
 This ADR focuses on which orchestration layer handles which agentic patterns. See
-[Orchestration Layers](../concepts/12-orchestration-layers.md) for the complete three-layer model.
+[Orchestration Layers](../concepts/14-orchestration-layers.md) for the complete three-layer model.
 
 ### The Separation Problem
 
@@ -223,7 +223,7 @@ Rules cannot track iteration counts or enforce loop limits. Workflows own this s
 - **Right Tool for Each Pattern**: Simple handoffs use rules; complex workflows use workflow processor
 - **Configurable**: Agent orchestration defined in JSON, not code
 - **Hot-Reloadable**: Both rules and workflows reload without redeployment
-- **Clear Boundaries**: See [Orchestration Layers](../concepts/12-orchestration-layers.md) for separation
+- **Clear Boundaries**: See [Orchestration Layers](../concepts/14-orchestration-layers.md) for separation
 - **Loop Safety**: Workflow processor enforces iteration limits and timeouts
 - **Extensible**: New patterns without code changes
 - **Observable**: Both rules and workflows emit metrics and audit trails
@@ -338,7 +338,7 @@ Delete from `handlers.go`:
 
 ## References
 
-- [Orchestration Layers](../concepts/12-orchestration-layers.md) - Three-layer model (rules, workflows, components)
+- [Orchestration Layers](../concepts/14-orchestration-layers.md) - Three-layer model (rules, workflows, components)
 - [ADR-010: Rules Processor Completion](./adr-010-rules-processor-completion.md) - Rules engine design
 - [ADR-011: Workflow Processor](./adr-011-workflow-processor.md) - Multi-step workflow patterns (minimal implementation)
 - [ADR-016: Agentic Governance Layer](./adr-016-agentic-governance-layer.md) - Related agent infrastructure

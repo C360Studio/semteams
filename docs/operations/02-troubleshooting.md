@@ -512,6 +512,6 @@ curl http://localhost:9090/metrics > metrics.txt
 ## Related Documentation
 
 - [Agentic Components](../advanced/08-agentic-components.md) — Component details
-- [Payload Registry](../concepts/13-payload-registry.md) — Serialization patterns
+- [Payload Registry](../concepts/15-payload-registry.md) — Serialization patterns
 - [E2E Tests](../contributing/02-e2e-tests.md) — Test infrastructure
 - [Local Monitoring](01-local-monitoring.md) — Observability setup

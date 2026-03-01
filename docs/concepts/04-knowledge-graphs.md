@@ -292,7 +292,7 @@ Your domain types implement the `Graphable` interface to become graph entities:
 1. **EntityID()** - Returns the 6-part federated identifier
 2. **Triples()** - Returns properties and relationships as triples
 
-See [Implementing Graphable](../basics/04-implementing-graphable.md) for code examples and patterns.
+See [Implementing Graphable](../basics/03-graphable-interface.md) for code examples and patterns.
 
 ## Querying the Graph
 
@@ -355,13 +355,13 @@ Query with wildcards: `acme.logistics.facility.zone.area.warehouse-7.*`
 ## Related
 
 **Basics (how to implement):**
-- [Implementing Graphable](../basics/04-implementing-graphable.md) - Writing entity types
-- [Vocabulary](../basics/05-vocabulary.md) - Predicate design patterns
+- [Implementing Graphable](../basics/03-graphable-interface.md) - Writing entity types
+- [Vocabulary](../basics/04-vocabulary.md) - Predicate design patterns
 
 **Reference (API details):**
 - [Index and Bucket Reference](../advanced/05-index-reference.md) - Index storage schema
 
 **Concepts (mental models):**
-- [Community Detection](05-community-detection.md) - Clustering from edges
-- [PathRAG Pattern](08-pathrag-pattern.md) - Traversing relationships
+- [Community Detection](07-community-detection.md) - Clustering from edges
+- [PathRAG Pattern](10-pathrag-pattern.md) - Traversing relationships
 - [Real-Time Inference](00-real-time-inference.md) - How triples flow through tiers

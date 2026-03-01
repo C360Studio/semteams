@@ -156,8 +156,8 @@ GraphRAG uses summaries for context
 
 **Concepts**
 - [Real-Time Inference](00-real-time-inference.md) - How metrics fit in the inference pipeline
-- [Embeddings](03-embeddings.md) - Vector generation and ContentStorable interface
-- [Community Detection](05-community-detection.md) - How LPA uses similarity for clustering
+- [Embeddings](05-embeddings.md) - Vector generation and ContentStorable interface
+- [Community Detection](07-community-detection.md) - How LPA uses similarity for clustering
 
 **Configuration**
 - [Clustering Configuration](../advanced/01-clustering.md) - Threshold tuning and parameter reference

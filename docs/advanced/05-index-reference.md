@@ -14,7 +14,7 @@ SemStreams maintains multiple indexes for graph traversal and query. Understandi
 | **SPATIAL_INDEX** | Geographic queries | No* | No* |
 | **TEMPORAL_INDEX** | Time-range queries | No* | No* |
 
-*Future enhancement - architecture supports it, not yet implemented.
+*Indexes exist and are populated. Graph providers for clustering integration are a future enhancement (see [Roadmap](../ROADMAP.md)).
 
 ## Which Indexes Feed Community Detection?
 
@@ -198,16 +198,17 @@ query {
 **Created by:** `TextContent()` → embedding service → stored
 **Used for:** Semantic similarity search, virtual edges in Tier 2
 
-## Gap: Spatial/Temporal in Clustering
+## Future: Spatial/Temporal in Clustering
 
-The architecture supports spatial/temporal clustering - it's just not implemented.
+The architecture supports spatial/temporal clustering via graph providers. The pattern is proven by `SemanticGraphProvider` — spatial and temporal providers would follow the same approach.
 
 **Current state:**
-- Indexes exist and are populated
-- No `SpatialGraphProvider` or `TemporalGraphProvider`
-- LLM summaries don't include geo/time context
+- Spatial and temporal indexes exist and are populated
+- Queries work (bounding box, time range)
+- No `SpatialGraphProvider` or `TemporalGraphProvider` for clustering integration yet
+- LLM summaries don't include geo/time context yet
 
-**Future enhancement pattern** (proven by SemanticGraphProvider):
+**Provider pattern** (proven by SemanticGraphProvider):
 
 ```go
 type SpatialGraphProvider struct {
@@ -446,7 +447,7 @@ Bucket retention is configured per-processor. Default is to keep latest value on
 
 ## Next Steps
 
-- [Community Detection](../concepts/05-community-detection.md) - How indexes enable clustering
+- [Community Detection](../concepts/07-community-detection.md) - How indexes enable clustering
 - [Vocabulary](../basics/04-vocabulary.md) - Predicate naming conventions
 - [Clustering Configuration](01-clustering.md) - LPA and hierarchical detection
 - [Event-Driven Basics](../concepts/01-event-driven-basics.md) - How KV buckets fit into the architecture

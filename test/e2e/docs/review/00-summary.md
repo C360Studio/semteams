@@ -40,7 +40,7 @@ PathRAG is documented as a core Tier 0 feature for structural graph traversal, b
 - Direction control (incoming/outgoing/both) untested
 - Resource bounds (max_depth, max_nodes, max_time) untested
 
-**Documentation**: `docs/concepts/08-pathrag-pattern.md`
+**Documentation**: `docs/concepts/10-pathrag-pattern.md`
 
 ### 2. GraphRAG Not Tested (Tier 1+ Feature)
 
@@ -54,7 +54,7 @@ GraphRAG is the flagship community-based search feature, but **no e2e test exist
 - LLM answer generation (Tier 2) untested
 - Community context assembly untested
 
-**Documentation**: `docs/concepts/07-graphrag-pattern.md`
+**Documentation**: `docs/concepts/09-graphrag-pattern.md`
 
 ### 3. Spatial/Temporal Index Queries Not Tested
 

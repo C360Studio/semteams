@@ -489,7 +489,7 @@ Event Stream → Graphable → Triples → Graph Processor
                                       └─ Semantic reasoning
 ```
 
-See [Agentic Systems](../concepts/11-agentic-systems.md) for integration with the agentic-loop component.
+See [Agentic Systems](../concepts/13-agentic-systems.md) for integration with the agentic-loop component.
 
 ## References
 
@@ -497,5 +497,5 @@ See [Agentic Systems](../concepts/11-agentic-systems.md) for integration with th
 - [S-Agent-Comm Ontology](https://w3id.org/agent-ontology/) - Agent interoperability ontology
 - [PROV-O](https://www.w3.org/TR/prov-o/) - Provenance Ontology
 - [CCO](https://github.com/CommonCoreOntology/CommonCoreOntologies) - Common Core Ontologies
-- [Knowledge Graphs](../concepts/02-knowledge-graphs.md) - Triple model and indexes
-- [Vocabulary Patterns](../basics/05-vocabulary.md) - Predicate design conventions
+- [Knowledge Graphs](../concepts/04-knowledge-graphs.md) - Triple model and indexes
+- [Vocabulary Patterns](../basics/04-vocabulary.md) - Predicate design conventions

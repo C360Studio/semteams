@@ -126,7 +126,7 @@ Statistical summaries are fast and deterministic. LLM summaries add natural lang
 
 ### Enable GraphRAG
 
-GraphRAG requires clustering to be enabled. Configure detection interval and entity change threshold to control how often communities are recomputed. See [Community Detection](05-community-detection.md) for clustering configuration details.
+GraphRAG requires clustering to be enabled. Configure detection interval and entity change threshold to control how often communities are recomputed. See [Community Detection](07-community-detection.md) for clustering configuration details.
 
 ### Search Parameters
 
@@ -229,10 +229,10 @@ The LLM receives organized context—summaries, key entities, relationships—ra
 
 **Concepts**
 - [Real-Time Inference](00-real-time-inference.md) - How GraphRAG fits in the hybrid streaming model
-- [Community Detection](05-community-detection.md) - How communities form via LPA
-- [PathRAG Pattern](08-pathrag-pattern.md) - Structural traversal alternative for impact analysis
-- [Embeddings](03-embeddings.md) - Semantic matching that enables community search
-- [Query Access](09-query-access.md) - Access patterns for GraphQL, MCP, and NATS
+- [Community Detection](07-community-detection.md) - How communities form via LPA
+- [PathRAG Pattern](10-pathrag-pattern.md) - Structural traversal alternative for impact analysis
+- [Embeddings](05-embeddings.md) - Semantic matching that enables community search
+- [Query Access](11-query-access.md) - Access patterns for GraphQL, MCP, and NATS
 
 **Architecture**
 - [ADR-004: Search Query Classification](../architecture/adr-004-search-query-classification.md) - NL query classification design

@@ -438,6 +438,6 @@ func TestTaskMessage_RoundTrip(t *testing.T) {
 ## Related Documentation
 
 - [Agentic Components](../advanced/08-agentic-components.md) — Uses payload registry for all message types
-- [Agentic Systems Concepts](./11-agentic-systems.md) — Foundational concepts
+- [Agentic Systems Concepts](./13-agentic-systems.md) — Foundational concepts
 - [Component Registry](../basics/02-architecture.md) — Similar pattern for components
 - [Contract Testing](../contributing/04-contract-testing.md) — Message contract tests validate all payloads

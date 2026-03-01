@@ -487,4 +487,4 @@ agentLoopsBucket.Put(ctx, "COMPLETE_exec123", completionData)
 - [ADR-018: Agentic Workflow Orchestration](../architecture/adr-018-agentic-workflow-orchestration.md) — Agent-specific orchestration
 - [Advanced Guide: Reactive Workflows](../advanced/10-reactive-workflows.md) — Usage guide and examples
 - [Reactive Workflow Migration](../architecture/specs/reactive-workflow-migration.md) — Migration from JSON to Go workflows
-- [Concept: Agentic Systems](./11-agentic-systems.md) — Agentic loop fundamentals
+- [Concept: Agentic Systems](./13-agentic-systems.md) — Agentic loop fundamentals

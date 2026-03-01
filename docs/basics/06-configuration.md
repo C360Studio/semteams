@@ -31,6 +31,8 @@ Components defined in the config start automatically. Ideal for production and C
 
 ### UI Mode (Visual Flow Builder)
 
+> **WIP**: The visual flow builder UI is under active development in the `semstreams-ui` repository, planned for beta release. Backend APIs (Flow CRUD, component lifecycle, live metrics) are available now.
+
 Design flows visually with drag-and-drop components, real-time validation, and live metrics. The UI
 connects to the same APIs that power headless mode.
 
@@ -46,7 +48,7 @@ This makes your static configuration visible and controllable through the UI:
 This allows you to start in headless mode for deployment, then connect the UI later to monitor
 and adjust the running flow.
 
-See [Flow Architecture](../concepts/10-flow-architecture.md) for details on the dual-bucket design
+See [Flow Architecture](../concepts/12-flow-architecture.md) for details on the dual-bucket design
 and lifecycle operations.
 
 ## Component-Based Deployment
@@ -548,6 +550,6 @@ Need LLM summaries? → LLM
 
 ## Next Steps
 
-- [Rules](../rules/01-overview.md) - Stateful rules engine
-- [Community Detection](../concepts/04-community-detection.md) - How clustering works
+- [Rules](../advanced/06-rules-engine.md) - Stateful rules engine
+- [Community Detection](../concepts/07-community-detection.md) - How clustering works
 - [Advanced: LLM Enhancement](../advanced/02-llm-enhancement.md) - LLM details

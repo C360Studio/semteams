@@ -103,4 +103,4 @@ Configuration is exposed through the anomaly detection config:
 
 - `graph/inference/transitivity.go` - Detector implementation
 - `processor/graph-clustering/anomaly.go:132-135` - Current skip logic
-- [Anomaly Detection Concepts](../concepts/06-anomaly-detection.md) - User-facing documentation
+- [Anomaly Detection Concepts](../concepts/08-anomaly-detection.md) - User-facing documentation

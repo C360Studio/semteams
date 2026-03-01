@@ -94,8 +94,8 @@ But does NOT test:
 
 | Feature | Documentation Source | Gap |
 |---------|---------------------|-----|
-| **GraphRAG local search** | `docs/concepts/07-graphrag-pattern.md` | No test |
-| **GraphRAG global search** | `docs/concepts/07-graphrag-pattern.md` | No test |
+| **GraphRAG local search** | `docs/concepts/09-graphrag-pattern.md` | No test |
+| **GraphRAG global search** | `docs/concepts/09-graphrag-pattern.md` | No test |
 | LLM-generated answers | GraphRAG returns answers | Not tested |
 | LLM summary coherence | Summaries should be readable | Not validated |
 | Neural vs BM25 quality | Semantic should outperform | Not compared |

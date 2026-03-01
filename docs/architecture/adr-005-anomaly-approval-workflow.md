@@ -163,6 +163,6 @@ The graph-gateway component stores the context from `Start()` and uses it when r
 
 ## References
 
-- [Community Detection Concepts](../concepts/05-community-detection.md)
-- [Anomaly Detection Concepts](../concepts/06-anomaly-detection.md)
+- [Community Detection Concepts](../concepts/07-community-detection.md)
+- [Anomaly Detection Concepts](../concepts/08-anomaly-detection.md)
 - [ADR-001: Pragmatic Semantic Web](./adr-001-pragmatic-semantic-web.md)

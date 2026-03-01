@@ -84,7 +84,7 @@ The `tiered --variant statistical` scenario validates BM25 lexical embeddings an
 
 GraphRAG is documented as a Tier 1+ feature:
 
-From `docs/concepts/07-graphrag-pattern.md`:
+From `docs/concepts/09-graphrag-pattern.md`:
 > "Requires: Communities (Tier 1+)"
 > "Global Search: Searches across all communities by topic"
 > "Local Search: Starts from a known entity and explores its community"
@@ -108,8 +108,8 @@ The test verifies community detection *runs* but doesn't verify:
 
 | Feature | Documentation Source | Gap |
 |---------|---------------------|-----|
-| **GraphRAG local search** | `docs/concepts/07-graphrag-pattern.md` | No test exists |
-| **GraphRAG global search** | `docs/concepts/07-graphrag-pattern.md` | No test exists |
+| **GraphRAG local search** | `docs/concepts/09-graphrag-pattern.md` | No test exists |
+| **GraphRAG global search** | `docs/concepts/09-graphrag-pattern.md` | No test exists |
 | Community membership query | Architecture docs | Not tested |
 | Community summary content | Should have TF-IDF keywords | Not validated |
 | PageRank representatives | Community detection identifies hubs | Not validated |

@@ -9,7 +9,7 @@ The core SemStreams system (ingestion, graph, indexing, queries, rules) operates
 agentic components.
 
 For conceptual background on when and why to use agentic systems, see
-[Concepts: Agentic Systems](../concepts/11-agentic-systems.md).
+[Concepts: Agentic Systems](../concepts/13-agentic-systems.md).
 
 ## Overview
 
@@ -1020,7 +1020,7 @@ nats kv get AGENT_TRAJECTORIES <loop_id>
 
 ## Related Documentation
 
-- [Agentic Systems Concepts](../concepts/11-agentic-systems.md) - Foundational concepts
+- [Agentic Systems Concepts](../concepts/13-agentic-systems.md) - Foundational concepts
 - [Graph Components Reference](07-graph-components.md) - Knowledge graph integration
 - [Configuration Guide](../basics/06-configuration.md) - Component configuration
 - [Architecture Overview](../basics/02-architecture.md) - System design

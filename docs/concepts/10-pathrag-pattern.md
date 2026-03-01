@@ -87,8 +87,6 @@ PathRAG guarantees bounded execution:
 
 If any limit is hit, results are marked `truncated: true`.
 
-> **Note**: Additional bounds (`max_time`, `max_paths`) are planned. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
-
 ## Configuration
 
 ### Basic PathRAG Query
@@ -100,25 +98,31 @@ A PathRAG query requires a starting entity and accepts optional bounds. Key para
 | `start_entity` | (required) | Entity ID to start traversal from |
 | `max_depth` | 10 | Maximum hops from start entity |
 | `max_nodes` | 100 | Maximum entities to return |
+| `max_paths` | 0 (unlimited) | Maximum paths to return |
+| `timeout` | (none) | Per-request timeout (e.g., `5s`) |
 | `decay_factor` | 0.8 | Score reduction per hop (see Decay Function) |
 
-### Predicate Filtering (Planned)
+### Predicate Filtering
 
-> **Note**: Predicate filtering is not yet implemented. Currently all relationship types are traversed. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
+Limit traversal to specific relationship types. For example, filtering to only `depends_on` and `uses` predicates will ignore relationships like `located_in` or `owned_by` that aren't relevant to dependency analysis.
 
-When implemented, you'll be able to limit traversal to specific relationship types. For example, filtering to only `depends_on` and `uses` predicates will ignore relationships like `located_in` or `owned_by` that aren't relevant to dependency analysis.
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `predicates` | `[]string` | Only follow edges with these predicate types |
 
-### Direction Control (Planned)
+> **Note**: Available via NATS `graph.query.pathSearch` subject. Not yet exposed in the GraphQL gateway schema — see [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
 
-> **Note**: Direction control is not yet implemented. Currently only outgoing edges are traversed. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
+### Direction Control
 
-When implemented:
+Control which edges are followed during traversal:
 
 | Direction | Follows | Use Case |
 |-----------|---------|----------|
-| `outgoing` | Entity → references | "What does this depend on?" (current behavior) |
+| `outgoing` | Entity → references | "What does this depend on?" (default) |
 | `incoming` | References → entity | "What depends on this?" |
 | `both` | Bidirectional | "What's connected either way?" |
+
+> **Note**: Available via NATS `graph.query.pathSearch` subject. Not yet exposed in the GraphQL gateway schema — see [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
 
 ## API and Response
 
@@ -222,10 +226,10 @@ These indexes maintain entity-to-entity relationships for efficient traversal. T
 
 **Concepts**
 - [Real-Time Inference](00-real-time-inference.md) - PathRAG works at Tier 0 (no ML required)
-- [GraphRAG Pattern](07-graphrag-pattern.md) - Semantic search alternative for topic-based queries
-- [Knowledge Graphs](02-knowledge-graphs.md) - How triples create the relationships PathRAG traverses
-- [Community Detection](05-community-detection.md) - How communities differ from structural paths
-- [Anomaly Detection](06-anomaly-detection.md) - Background topology analysis (Tier 1+ feature)
+- [GraphRAG Pattern](09-graphrag-pattern.md) - Semantic search alternative for topic-based queries
+- [Knowledge Graphs](04-knowledge-graphs.md) - How triples create the relationships PathRAG traverses
+- [Community Detection](07-community-detection.md) - How communities differ from structural paths
+- [Anomaly Detection](08-anomaly-detection.md) - Background topology analysis (Tier 1+ feature)
 
 **Configuration**
 - [Configuration Guide](../basics/06-configuration.md) - Index and traversal settings

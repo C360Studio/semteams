@@ -183,6 +183,6 @@ SemStreams:
 
 ## Related Documentation
 
-- [Agentic Systems](../../docs/concepts/11-agentic-systems.md) - Overview of agentic loop
+- [Agentic Systems](../../docs/concepts/13-agentic-systems.md) - Overview of agentic loop
 - [Workflow Configuration](../../docs/advanced/09-workflow-configuration.md) - Workflow processor
 - [Context Construction](../../docs/concepts/22-context-construction.md) - Concept guide

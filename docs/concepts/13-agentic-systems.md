@@ -617,4 +617,4 @@ For implementation details, configuration options, and production guidance, see 
 [Advanced: Agentic Components](../advanced/08-agentic-components.md) guide.
 
 For orchestration patterns (when to use rules vs. workflows), see
-[Orchestration Layers](./12-orchestration-layers.md).
+[Orchestration Layers](./14-orchestration-layers.md).

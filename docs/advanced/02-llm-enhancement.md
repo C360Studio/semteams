@@ -472,6 +472,6 @@ More workers help when LLM is fast. Too many workers with slow LLM just builds b
 
 For foundational understanding of the RAG patterns and algorithms:
 
-- [GraphRAG Pattern](../concepts/07-graphrag-pattern.md) - Community-based RAG explained
-- [Community Detection](../concepts/05-community-detection.md) - How communities form
-- [Similarity Metrics](../concepts/04-similarity-metrics.md) - TF-IDF keyword extraction
+- [GraphRAG Pattern](../concepts/09-graphrag-pattern.md) - Community-based RAG explained
+- [Community Detection](../concepts/07-community-detection.md) - How communities form
+- [Similarity Metrics](../concepts/06-similarity-metrics.md) - TF-IDF keyword extraction

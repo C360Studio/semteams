@@ -237,9 +237,9 @@ The access pattern affects latency, not consistency guarantees.
 ## Related
 
 **Concepts**
-- [Knowledge Graphs](02-knowledge-graphs.md) - The data model being queried
-- [GraphRAG Pattern](07-graphrag-pattern.md) - Community-based search operations
-- [PathRAG Pattern](08-pathrag-pattern.md) - Graph traversal operations
+- [Knowledge Graphs](04-knowledge-graphs.md) - The data model being queried
+- [GraphRAG Pattern](09-graphrag-pattern.md) - Community-based search operations
+- [PathRAG Pattern](10-pathrag-pattern.md) - Graph traversal operations
 - [Event-Driven Basics](01-event-driven-basics.md) - NATS fundamentals
 
 **Architecture**

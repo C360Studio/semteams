@@ -654,10 +654,10 @@ Mutate(func(ctx *reactive.RuleContext, result any) error {
 
 ## Related Documentation
 
-- [Agentic Systems](11-agentic-systems.md) - Core agentic concepts and loop architecture
-- [Reactive Workflows](../architecture/adr-021-reactive-workflows.md) - Reactive workflow engine design
-- [Orchestration Layers](12-orchestration-layers.md) - When to use rules vs workflows
-- [Payload Registry](13-payload-registry.md) - Message type registration for deserialization
+- [Agentic Systems](13-agentic-systems.md) - Core agentic concepts and loop architecture
+- [Reactive Workflows](../architecture/adr-021-reactive-workflow-engine.md) - Reactive workflow engine design
+- [Orchestration Layers](14-orchestration-layers.md) - When to use rules vs workflows
+- [Payload Registry](15-payload-registry.md) - Message type registration for deserialization
 
 ## Migration from DAG Workflows
 

@@ -754,7 +754,7 @@ NATS query handlers return structured errors:
 ## Related Documentation
 
 - [Architecture Overview](../basics/02-architecture.md) - High-level system design
-- [Query Access Patterns](../concepts/09-query-access.md) - GraphQL and NATS query usage
+- [Query Access Patterns](../concepts/11-query-access.md) - GraphQL and NATS query usage
 - [Configuration Guide](../basics/06-configuration.md) - Component configuration examples
-- [PathRAG Pattern](../concepts/08-pathrag-pattern.md) - Structural traversal details
-- [GraphRAG Pattern](../concepts/07-graphrag-pattern.md) - Community-based search details
+- [PathRAG Pattern](../concepts/10-pathrag-pattern.md) - Structural traversal details
+- [GraphRAG Pattern](../concepts/09-graphrag-pattern.md) - Community-based search details
