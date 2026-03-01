@@ -20,7 +20,8 @@
         "model": "gpt-4o",
         "max_tokens": 8192,
         "supports_tools": true,
-        "tool_format": "openai"
+        "tool_format": "openai",
+        "api_key_env": "OPENAI_API_KEY"
       }
     },
     "defaults": {
