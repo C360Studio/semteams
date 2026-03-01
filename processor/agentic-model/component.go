@@ -188,15 +188,22 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 		FilterSubject:  port.Subject,
 		DeliverPolicy:  consumerCfg.DeliverPolicy,
 		AckPolicy:      consumerCfg.AckPolicy,
-		MaxDeliver:     consumerCfg.MaxDeliver,
+		MaxDeliver:     2,
+		AckWait:        2 * time.Minute,
+		MaxAckPending:  1,
 		AutoCreate:     false,
-		MessageTimeout: c.messageTimeout, // Use configured timeout for LLM calls
+		MessageTimeout: 30 * time.Minute,
 	}
 
+	heartbeatInterval := 90 * time.Second
 	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
-		c.handleRequest(msgCtx, msg.Data())
-		if ackErr := msg.Ack(); ackErr != nil {
-			c.logger.Error("Failed to ack JetStream message", "error", ackErr)
+		if hbErr := natsclient.ConsumeWithHeartbeat(msgCtx, msg, heartbeatInterval,
+			func(workCtx context.Context) error {
+				c.handleRequest(workCtx, msg.Data())
+				return nil
+			},
+		); hbErr != nil {
+			c.logger.Error("Model handler error", "error", hbErr)
 		}
 	})
 	if err != nil {

@@ -188,13 +188,17 @@ func (c *Component) setupConsumer(ctx context.Context, port component.PortDefini
 	consumerCfg := component.GetConsumerConfigFromDefinition(port)
 
 	cfg := natsclient.StreamConsumerConfig{
-		StreamName:    streamName,
-		ConsumerName:  consumerName,
-		FilterSubject: port.Subject,
-		DeliverPolicy: consumerCfg.DeliverPolicy,
-		AckPolicy:     consumerCfg.AckPolicy,
-		MaxDeliver:    consumerCfg.MaxDeliver,
-		AutoCreate:    false,
+		StreamName:     streamName,
+		ConsumerName:   consumerName,
+		FilterSubject:  port.Subject,
+		DeliverPolicy:  consumerCfg.DeliverPolicy,
+		AckPolicy:      consumerCfg.AckPolicy,
+		MaxDeliver:     3,
+		AckWait:        5 * time.Minute,
+		MaxAckPending:  3,
+		BackOff:        []time.Duration{15 * time.Second, 60 * time.Second},
+		AutoCreate:     false,
+		MessageTimeout: 10 * time.Minute,
 	}
 
 	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {

@@ -58,6 +58,7 @@ Build LLM-powered autonomous agents with tool use:
 - [Agentic Systems](concepts/11-agentic-systems.md) - Concepts: loops, state machine, tools, trajectories
 - [Agentic Components](advanced/08-agentic-components.md) - Reference: loop, model, and tools processors
 - [Payload Registry](concepts/13-payload-registry.md) - Polymorphic JSON serialization pattern
+- [JetStream Tuning](advanced/11-jetstream-tuning.md) - AckWait, backpressure, and heartbeats for agentic consumers
 
 ## Workflow Orchestration
 

@@ -315,7 +315,9 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	if err != nil {
 		// Bucket doesn't exist, try to create it
 		loopsBucket, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
-			Bucket: c.config.LoopsBucket,
+			Bucket:  c.config.LoopsBucket,
+			History: 10,
+			TTL:     24 * time.Hour,
 		})
 		if err != nil {
 			return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create loops bucket")
@@ -328,7 +330,9 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	if err != nil {
 		// Bucket doesn't exist, try to create it
 		trajectoriesBucket, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
-			Bucket: c.config.TrajectoriesBucket,
+			Bucket:  c.config.TrajectoriesBucket,
+			History: 10,
+			TTL:     24 * time.Hour,
 		})
 		if err != nil {
 			return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create trajectories bucket")
@@ -450,23 +454,74 @@ func (c *Component) setupConsumer(ctx context.Context, port component.Port, subj
 	// Defaults to "new" - only process new messages, don't replay old ones
 	consumerCfg := component.GetConsumerConfig(port)
 
+	// Differentiate consumer config by latency class:
+	// - Long-running ports (task, response, tool.result) need serial processing,
+	//   heartbeats, and graduated backoff to handle LLM-scale latency.
+	// - Fast ports (signal, boid) keep short timeouts and higher concurrency.
+	var (
+		ackWait           time.Duration
+		maxAckPending     int
+		maxDeliver        int
+		msgTimeout        time.Duration
+		backOff           []time.Duration
+		useHeartbeat      bool
+		heartbeatInterval time.Duration
+	)
+
+	switch port.Name {
+	case "agent.task", "agent.response", "tool.result":
+		ackWait = 90 * time.Second
+		maxAckPending = 1
+		maxDeliver = 2
+		msgTimeout = 30 * time.Minute
+		backOff = []time.Duration{30 * time.Second, 2 * time.Minute}
+		useHeartbeat = true
+		heartbeatInterval = 60 * time.Second
+	default: // agent.signal, agent.boid — fast, advisory
+		ackWait = 30 * time.Second
+		maxAckPending = 10
+		maxDeliver = consumerCfg.MaxDeliver
+		msgTimeout = c.messageTimeout
+		useHeartbeat = false
+	}
+
 	cfg := natsclient.StreamConsumerConfig{
 		StreamName:     streamName,
 		ConsumerName:   consumerName,
 		FilterSubject:  subject,
 		DeliverPolicy:  consumerCfg.DeliverPolicy,
 		AckPolicy:      consumerCfg.AckPolicy,
-		MaxDeliver:     consumerCfg.MaxDeliver,
+		MaxDeliver:     maxDeliver,
+		AckWait:        ackWait,
+		MaxAckPending:  maxAckPending,
+		BackOff:        backOff,
 		AutoCreate:     false,
-		MessageTimeout: c.messageTimeout, // Use configured timeout for LLM calls
+		MessageTimeout: msgTimeout,
 	}
 
-	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
-		handler(msgCtx, msg.Data())
-		if ackErr := msg.Ack(); ackErr != nil {
-			c.logger.Error("Failed to ack JetStream message", "error", ackErr)
+	var handlerFn func(context.Context, jetstream.Msg)
+	if useHeartbeat {
+		hi := heartbeatInterval
+		handlerFn = func(msgCtx context.Context, msg jetstream.Msg) {
+			if err := natsclient.ConsumeWithHeartbeat(msgCtx, msg, hi,
+				func(workCtx context.Context) error {
+					handler(workCtx, msg.Data())
+					return nil
+				},
+			); err != nil {
+				c.logger.Error("Message handler error", "port", port.Name, "error", err)
+			}
 		}
-	})
+	} else {
+		handlerFn = func(msgCtx context.Context, msg jetstream.Msg) {
+			handler(msgCtx, msg.Data())
+			if ackErr := msg.Ack(); ackErr != nil {
+				c.logger.Error("Failed to ack JetStream message", "error", ackErr)
+			}
+		}
+	}
+
+	err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, handlerFn)
 	if err != nil {
 		return errs.Wrap(err, "agentic-loop", "setupConsumer", fmt.Sprintf("setup consumer for stream %s", streamName))
 	}

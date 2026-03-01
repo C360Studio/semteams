@@ -52,6 +52,11 @@ type StreamConsumerConfig struct {
 	// If nil, defaults are used based on FilterSubject.
 	AutoCreateConfig *StreamAutoCreateConfig
 
+	// BackOff overrides AckWait per retry attempt. Index 0 is the first retry
+	// wait, index 1 is the second, and so on. The last value is used for all
+	// subsequent retries. If empty, AckWait applies uniformly.
+	BackOff []time.Duration
+
 	// MessageTimeout is the context timeout for processing each message.
 	// This timeout is passed to the handler and should accommodate the full
 	// processing time including any downstream calls (e.g., LLM requests).
@@ -196,6 +201,11 @@ func (c *Client) ConsumeStreamWithConfig(
 			"failed to create consumer for stream "+cfg.StreamName)
 	}
 
+	// Track consumer for JetStream metrics (Prometheus poller)
+	if c.jsMetrics != nil {
+		c.jsMetrics.trackConsumer(cfg.StreamName, consumerCfg.Durable, consumer)
+	}
+
 	// Determine message timeout (default 30s if not specified)
 	messageTimeout := cfg.MessageTimeout
 	if messageTimeout <= 0 {
@@ -302,6 +312,11 @@ func (c *Client) buildConsumerConfig(cfg StreamConsumerConfig) jetstream.Consume
 	// Set max ack pending for backpressure
 	if cfg.MaxAckPending > 0 {
 		consumerCfg.MaxAckPending = cfg.MaxAckPending
+	}
+
+	// Set graduated backoff for retries
+	if len(cfg.BackOff) > 0 {
+		consumerCfg.BackOff = cfg.BackOff
 	}
 
 	return consumerCfg
