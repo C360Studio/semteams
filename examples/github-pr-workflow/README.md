@@ -56,15 +56,60 @@ issue_received -> qualifying -> qualified -> developing -> dev_complete -> revie
 4. Set environment variables:
 
 ```bash
+# Required
 export GITHUB_TOKEN="ghp_..."
 export GITHUB_WEBHOOK_SECRET="your-webhook-secret"
-export OPENAI_API_KEY="sk-..."  # or configure model_registry in the config
+export OPENAI_API_KEY="sk-..."
+
+# Optional — override LLM provider (defaults to OpenAI/gpt-4o)
+export LLM_PROVIDER="anthropic"                          # openai, anthropic, ollama, openrouter
+export LLM_API_URL="https://api.anthropic.com/v1"        # API endpoint
+export LLM_MODEL="claude-sonnet-4-20250514"                    # model identifier
+export LLM_TOOL_FORMAT="anthropic"                       # anthropic or openai
+export LLM_API_KEY_ENV="ANTHROPIC_API_KEY"               # which env var holds the API key
+export ANTHROPIC_API_KEY="sk-ant-..."                    # the actual key
 ```
+
+All `LLM_*` variables have sensible defaults (OpenAI/gpt-4o), so the minimum setup is just the three required vars.
 
 5. Run with the flow config:
 
 ```bash
 go run ./cmd/semstreams -config configs/github-pr-workflow.json
+```
+
+## LLM Configuration
+
+The config uses `${VAR:-default}` env var expansion so you can swap providers without editing the JSON:
+
+| Env Var | Default | Description |
+|---------|---------|-------------|
+| `LLM_PROVIDER` | `openai` | Provider name: `openai`, `anthropic`, `ollama`, `openrouter` |
+| `LLM_API_URL` | `https://api.openai.com/v1` | API endpoint URL |
+| `LLM_MODEL` | `gpt-4o` | Model identifier |
+| `LLM_TOOL_FORMAT` | `openai` | Tool calling format: `openai` or `anthropic` |
+| `LLM_API_KEY_ENV` | `OPENAI_API_KEY` | Name of the env var that holds the actual API key |
+
+**OpenAI (zero config)**:
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+**Anthropic**:
+```bash
+export LLM_PROVIDER="anthropic"
+export LLM_API_URL="https://api.anthropic.com/v1"
+export LLM_MODEL="claude-sonnet-4-20250514"
+export LLM_TOOL_FORMAT="anthropic"
+export LLM_API_KEY_ENV="ANTHROPIC_API_KEY"
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+**Local Ollama (no API key needed)**:
+```bash
+export LLM_PROVIDER="ollama"
+export LLM_API_URL="http://localhost:11434/v1"
+export LLM_MODEL="qwen2.5:32b"
 ```
 
 ## NATS Topology

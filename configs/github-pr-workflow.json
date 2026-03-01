@@ -15,13 +15,13 @@
   "model_registry": {
     "endpoints": {
       "default": {
-        "provider": "openai",
-        "url": "https://api.openai.com/v1",
-        "model": "gpt-4o",
+        "provider": "${LLM_PROVIDER:-openai}",
+        "url": "${LLM_API_URL:-https://api.openai.com/v1}",
+        "model": "${LLM_MODEL:-gpt-4o}",
         "max_tokens": 8192,
         "supports_tools": true,
-        "tool_format": "openai",
-        "api_key_env": "OPENAI_API_KEY"
+        "tool_format": "${LLM_TOOL_FORMAT:-openai}",
+        "api_key_env": "${LLM_API_KEY_ENV:-OPENAI_API_KEY}"
       }
     },
     "defaults": {
