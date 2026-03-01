@@ -27,8 +27,12 @@ func (r AgentRequest) Validate() error {
 	if len(r.Messages) == 0 {
 		return fmt.Errorf("messages cannot be empty")
 	}
-	if r.Role != RoleArchitect && r.Role != RoleEditor && r.Role != RoleGeneral {
-		return fmt.Errorf("role must be one of: %s, %s, %s", RoleArchitect, RoleEditor, RoleGeneral)
+	validRoles := map[string]bool{
+		RoleArchitect: true, RoleEditor: true, RoleGeneral: true,
+		RoleQualifier: true, RoleDeveloper: true, RoleReviewer: true,
+	}
+	if !validRoles[r.Role] {
+		return fmt.Errorf("invalid role: %s", r.Role)
 	}
 	return nil
 }

@@ -210,7 +210,7 @@ func TestAgentRequest_Validation(t *testing.T) {
 				Model: "gpt-4",
 			},
 			wantErr: true,
-			errMsg:  "role must be one of: architect, editor, general",
+			errMsg:  "invalid role: invalid-role",
 		},
 		{
 			name: "empty role",
@@ -224,7 +224,7 @@ func TestAgentRequest_Validation(t *testing.T) {
 				Model: "gpt-4",
 			},
 			wantErr: true,
-			errMsg:  "role must be one of: architect, editor, general",
+			errMsg:  "invalid role: ",
 		},
 	}
 

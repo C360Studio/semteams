@@ -12,6 +12,7 @@ import (
 	gatewayhttp "github.com/c360studio/semstreams/gateway/http"
 	a2ainput "github.com/c360studio/semstreams/input/a2a"
 	fileinput "github.com/c360studio/semstreams/input/file"
+	githubwebhook "github.com/c360studio/semstreams/input/github-webhook"
 	slimbridgeinput "github.com/c360studio/semstreams/input/slim"
 	trustgraphinput "github.com/c360studio/semstreams/input/trustgraph"
 	"github.com/c360studio/semstreams/input/udp"
@@ -136,6 +137,10 @@ func registerProtocolLayer(registry *component.Registry) error {
 
 	if err := websocketinput.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "WebSocket input component registration")
+	}
+
+	if err := githubwebhook.Register(registry); err != nil {
+		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "GitHub webhook input component registration")
 	}
 
 	if err := fileinput.Register(registry); err != nil {

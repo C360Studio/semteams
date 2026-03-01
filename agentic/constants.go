@@ -50,4 +50,7 @@ const (
 	RoleArchitect = "architect"
 	RoleEditor    = "editor"
 	RoleGeneral   = "general"
+	RoleQualifier = "qualifier"
+	RoleDeveloper = "developer"
+	RoleReviewer  = "reviewer"
 )

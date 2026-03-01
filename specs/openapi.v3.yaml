@@ -806,6 +806,7 @@ components:
                         - $ref: ../schemas/document_processor.v1.json
                         - $ref: ../schemas/file.v1.json
                         - $ref: ../schemas/file_input.v1.json
+                        - $ref: ../schemas/github_webhook.v1.json
                         - $ref: ../schemas/graph-clustering.v1.json
                         - $ref: ../schemas/graph-embedding.v1.json
                         - $ref: ../schemas/graph-gateway.v1.json
