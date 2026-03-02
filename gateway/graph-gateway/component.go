@@ -798,7 +798,7 @@ func (c *Component) transformVariablesToNATSPayload(variables map[string]interfa
 	case "graph.index.query.predicateCompound":
 		return c.transformCompoundPredicateVars(variables)
 	case "agentic.query.trajectory":
-		return extractVars(variables, "loopId")
+		return extractVars(variables, "loopId", "limit")
 	default:
 		return variables
 	}
@@ -1321,7 +1321,7 @@ func buildIntrospectionSchema() map[string]interface{} {
 					fieldDef("globalSearch", "SearchResult", argDef("query", "String!"), argDef("level", "Int"), argDef("maxCommunities", "Int")),
 					fieldDef("capabilities", "Capabilities"),
 					// Agentic queries
-					fieldDef("trajectory", "Trajectory", argDef("loopId", "String!")),
+					fieldDef("trajectory", "Trajectory", argDef("loopId", "String!"), argDef("limit", "Int")),
 					// Predicate queries
 					fieldDef("entitiesByPredicate", "[String]", argDef("predicate", "String!"), argDef("limit", "Int")),
 					fieldDef("predicates", "PredicateListResult"),
@@ -1481,6 +1481,13 @@ func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	subject := c.mapGraphQLQueryToNATSSubject(gqlReq.Query)
+
+	// Reject unrecognized queries immediately instead of dispatching to NATS
+	if subject == "graph.query.unknown" {
+		atomic.AddInt64(&c.errors, 1)
+		c.writeGraphQLError(w, http.StatusBadRequest, "unrecognized query")
+		return
+	}
 
 	// Extract inline arguments from query string and merge with explicit variables
 	inlineArgs := extractInlineArguments(gqlReq.Query)

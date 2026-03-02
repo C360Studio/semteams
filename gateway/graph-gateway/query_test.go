@@ -1327,6 +1327,84 @@ func TestGateway_TransformPathSearchVars(t *testing.T) {
 	}
 }
 
+// ====================================================================================
+// Trajectory Limit Tests
+// ====================================================================================
+
+func TestGateway_TrajectoryQuery_PassesLimit(t *testing.T) {
+	mock := newMockNATSRequester()
+
+	var capturedPayload map[string]interface{}
+	mock.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		_ = json.Unmarshal(data, &capturedPayload)
+		return []byte(`{"loopId":"loop-1","steps":[],"outcome":"complete"}`), nil
+	}
+
+	comp := createTestGatewayWithMock(t, mock)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query": `{ trajectory(loopId: "loop-1", limit: 10) { loopId steps { stepType } outcome } }`,
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "loop-1", capturedPayload["loopId"])
+	assert.Equal(t, float64(10), capturedPayload["limit"])
+}
+
+// ====================================================================================
+// Unknown Query Fast-Fail Tests
+// ====================================================================================
+
+func TestGateway_UnknownQuery_ReturnsBadRequest(t *testing.T) {
+	mock := newMockNATSRequester()
+
+	natsWasCalled := false
+	mock.requestFunc = func(ctx context.Context, subject string, data []byte, timeout time.Duration) ([]byte, error) {
+		natsWasCalled = true
+		return nil, errors.New("no responders available")
+	}
+
+	comp := createTestGatewayWithMock(t, mock)
+	require.NoError(t, comp.Initialize())
+	require.NoError(t, comp.Start(context.Background()))
+	defer comp.Stop(5 * time.Second)
+
+	gqlRequest := map[string]interface{}{
+		"query": `query { unknownOperation { data } }`,
+	}
+	body, err := json.Marshal(gqlRequest)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	comp.handleGraphQL(w, req)
+
+	// Should return 400 immediately, NOT dispatch to NATS
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.False(t, natsWasCalled, "should not dispatch unknown queries to NATS")
+
+	var response map[string]interface{}
+	err = json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	errs, ok := response["errors"]
+	assert.True(t, ok, "response should have 'errors' field")
+	assert.NotNil(t, errs)
+}
+
 func createTestGatewayWithMock(t *testing.T, mock *mockNATSRequester) *Component {
 	t.Helper()
 

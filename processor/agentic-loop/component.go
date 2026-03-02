@@ -1004,6 +1004,7 @@ func (c *Component) finalizeTrajectory(ctx context.Context, loopID string, state
 func (c *Component) handleTrajectoryQuery(ctx context.Context, data []byte) ([]byte, error) {
 	var req struct {
 		LoopID string `json:"loopId"`
+		Limit  int    `json:"limit,omitempty"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil || req.LoopID == "" {
 		return nil, fmt.Errorf("loopId required")
@@ -1016,6 +1017,18 @@ func (c *Component) handleTrajectoryQuery(ctx context.Context, data []byte) ([]b
 	entry, err := c.trajectoriesBucket.Get(ctx, req.LoopID)
 	if err != nil {
 		return nil, fmt.Errorf("trajectory not found: %w", err)
+	}
+
+	// Apply step limit if requested
+	if req.Limit > 0 {
+		var traj agentic.Trajectory
+		if err := json.Unmarshal(entry.Value(), &traj); err != nil {
+			return nil, fmt.Errorf("failed to decode trajectory: %w", err)
+		}
+		if len(traj.Steps) > req.Limit {
+			traj.Steps = traj.Steps[:req.Limit]
+		}
+		return json.Marshal(traj)
 	}
 
 	return entry.Value(), nil
