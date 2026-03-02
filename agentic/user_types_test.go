@@ -522,3 +522,76 @@ func TestTaskMessage_JSONRoundTrip(t *testing.T) {
 	assert.Equal(t, original.Model, decoded.Model)
 	assert.Equal(t, original.Prompt, decoded.Prompt)
 }
+
+func TestTaskMessage_Tools_JSONRoundTrip(t *testing.T) {
+	original := TaskMessage{
+		TaskID: "task-tools",
+		Role:   "general",
+		Model:  "fast",
+		Prompt: "do the thing",
+		Tools: []ToolDefinition{
+			{
+				Name:        "graph_query",
+				Description: "Query the knowledge graph",
+				Parameters:  map[string]any{"type": "object"},
+			},
+			{
+				Name:        "file_read",
+				Description: "Read a file",
+				Parameters:  map[string]any{"type": "object"},
+			},
+		},
+		Metadata: map[string]any{
+			"tenant_id": "acme",
+			"org":       "ops",
+		},
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var decoded TaskMessage
+	err = json.Unmarshal(data, &decoded)
+	require.NoError(t, err)
+
+	assert.Len(t, decoded.Tools, 2)
+	assert.Equal(t, "graph_query", decoded.Tools[0].Name)
+	assert.Equal(t, "file_read", decoded.Tools[1].Name)
+	assert.Equal(t, "acme", decoded.Metadata["tenant_id"])
+	assert.Equal(t, "ops", decoded.Metadata["org"])
+}
+
+func TestTaskMessage_Tools_OmitEmpty(t *testing.T) {
+	original := TaskMessage{
+		TaskID: "task-no-tools",
+		Role:   "general",
+		Model:  "fast",
+		Prompt: "do the thing",
+	}
+
+	data, err := json.Marshal(original)
+	require.NoError(t, err)
+
+	var raw map[string]any
+	err = json.Unmarshal(data, &raw)
+	require.NoError(t, err)
+
+	_, hasTools := raw["tools"]
+	assert.False(t, hasTools, "tools should be omitted when empty")
+
+	_, hasMeta := raw["metadata"]
+	assert.False(t, hasMeta, "metadata should be omitted when empty")
+}
+
+func TestTaskMessage_BackwardCompat_OldJSON(t *testing.T) {
+	// JSON without the new fields — should deserialize cleanly
+	oldJSON := `{"task_id":"t1","role":"general","model":"fast","prompt":"hello"}`
+
+	var decoded TaskMessage
+	err := json.Unmarshal([]byte(oldJSON), &decoded)
+	require.NoError(t, err)
+
+	assert.Equal(t, "t1", decoded.TaskID)
+	assert.Nil(t, decoded.Tools)
+	assert.Nil(t, decoded.Metadata)
+}

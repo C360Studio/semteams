@@ -61,6 +61,7 @@ type MessageHandler struct {
 	loopManager       *LoopManager
 	trajectoryManager *TrajectoryManager
 	compactor         *Compactor
+	toolCallFilter    agentic.ToolCallFilter
 	logger            *slog.Logger
 }
 
@@ -79,6 +80,13 @@ func NewMessageHandler(config Config, loopManagerOpts ...LoopManagerOption) *Mes
 // SetLogger sets the logger for the handler
 func (h *MessageHandler) SetLogger(logger *slog.Logger) {
 	h.logger = logger
+}
+
+// SetToolCallFilter sets a filter that intercepts tool calls before execution.
+// When set, each tool call batch is passed through the filter. Rejected calls
+// receive immediate error results; approved calls proceed to tool.execute.
+func (h *MessageHandler) SetToolCallFilter(filter agentic.ToolCallFilter) {
+	h.toolCallFilter = filter
 }
 
 // discoverTools retrieves available tool definitions from the global registry.
@@ -234,9 +242,19 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	// Build messages for initial request
 	messages := h.buildInitialMessages(task)
 
-	// Discover available tools and cache for this loop
-	tools := h.discoverTools()
+	// Use per-task tools if provided, otherwise discover from global registry
+	var tools []agentic.ToolDefinition
+	if len(task.Tools) > 0 {
+		tools = task.Tools
+	} else {
+		tools = h.discoverTools()
+	}
 	h.loopManager.CacheTools(loopID, tools)
+
+	// Cache domain metadata for propagation to tool calls
+	if len(task.Metadata) > 0 {
+		h.loopManager.CacheMetadata(loopID, task.Metadata)
+	}
 
 	// Create initial agent request with structured ID for recovery
 	request := agentic.AgentRequest{
@@ -408,6 +426,16 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 			return result, err
 		}
 
+		// Edge case: if a filter rejected ALL calls, no tool.execute messages were
+		// published so no tool results will arrive. Trigger tools-complete immediately.
+		if h.toolCallFilter != nil && h.loopManager.AllToolsComplete(loopID) {
+			completionResult, err := h.handleToolsComplete(ctx, loopID, entity, cm, &result)
+			if err != nil {
+				return completionResult, err
+			}
+			return completionResult, nil
+		}
+
 	case "complete":
 		if err := h.handleCompleteResponse(&result, loopID, entity, response.Message.Content); err != nil {
 			return result, err
@@ -435,21 +463,57 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	return result, nil
 }
 
-// handleToolCallResponse processes tool call responses
+// handleToolCallResponse processes tool call responses.
+// When a ToolCallFilter is set, calls are filtered before dispatch.
+// Rejected calls receive immediate error results; approved calls are published.
+// Domain metadata from the task is propagated to each approved tool call.
 func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID string, toolCalls []agentic.ToolCall) error {
-	for _, toolCall := range toolCalls {
-		if err := h.loopManager.AddPendingTool(loopID, toolCall.ID); err != nil {
+	approved := toolCalls
+
+	// Apply filter if configured
+	if h.toolCallFilter != nil {
+		filterResult, err := h.toolCallFilter.FilterToolCalls(loopID, toolCalls)
+		if err != nil {
 			return err
 		}
-		h.loopManager.TrackToolCall(toolCall.ID, loopID)
 
-		toolMsg := message.NewBaseMessage(toolCall.Schema(), &toolCall, "agentic-loop")
+		// Store immediate error results for rejected calls
+		for _, rejection := range filterResult.Rejected {
+			errResult := agentic.ToolResult{
+				CallID: rejection.Call.ID,
+				Error:  fmt.Sprintf("tool call rejected: %s", rejection.Reason),
+				LoopID: loopID,
+			}
+			if err := h.loopManager.StoreToolResult(loopID, errResult); err != nil {
+				return err
+			}
+		}
+
+		approved = filterResult.Approved
+	}
+
+	// Propagate domain metadata to approved tool calls
+	metadata := h.loopManager.GetCachedMetadata(loopID)
+
+	for i := range approved {
+		// Inject metadata if present and call doesn't already have it
+		if len(metadata) > 0 && len(approved[i].Metadata) == 0 {
+			approved[i].Metadata = metadata
+		}
+
+		if err := h.loopManager.AddPendingTool(loopID, approved[i].ID); err != nil {
+			return err
+		}
+		h.loopManager.TrackToolCall(approved[i].ID, loopID)
+
+		tc := approved[i] // local copy for pointer
+		toolMsg := message.NewBaseMessage(tc.Schema(), &tc, "agentic-loop")
 		toolData, err := json.Marshal(toolMsg)
 		if err != nil {
 			return err
 		}
 		result.PublishedMessages = append(result.PublishedMessages, PublishedMessage{
-			Subject: subjectToolExecute + "." + toolCall.Name,
+			Subject: subjectToolExecute + "." + tc.Name,
 			Data:    toolData,
 		})
 	}

@@ -31,6 +31,7 @@ type ToolCall struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"` // Domain context, propagated from task
 	LoopID    string         `json:"loop_id,omitempty"`
 	TraceID   string         `json:"trace_id,omitempty"`
 }

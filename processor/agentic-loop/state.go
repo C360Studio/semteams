@@ -19,6 +19,7 @@ type LoopManager struct {
 	contextManagers map[string]*ContextManager          // loopID -> ContextManager
 	pendingTools    map[string]map[string]bool          // loopID -> map[callID]bool
 	cachedTools     map[string][]agentic.ToolDefinition // loopID -> tools (runtime cache, not persisted)
+	cachedMetadata  map[string]map[string]any           // loopID -> metadata (domain context, not persisted)
 	requestToLoop   map[string]string                   // requestID -> loopID
 	toolCallToLoop  map[string]string                   // callID -> loopID
 	contextConfig   ContextConfig                       // shared context config
@@ -51,6 +52,7 @@ func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 		contextManagers: make(map[string]*ContextManager),
 		pendingTools:    make(map[string]map[string]bool),
 		cachedTools:     make(map[string][]agentic.ToolDefinition),
+		cachedMetadata:  make(map[string]map[string]any),
 		requestToLoop:   make(map[string]string),
 		toolCallToLoop:  make(map[string]string),
 		contextConfig:   DefaultContextConfig(),
@@ -69,6 +71,7 @@ func NewLoopManagerWithConfig(contextConfig ContextConfig, opts ...LoopManagerOp
 		contextManagers: make(map[string]*ContextManager),
 		pendingTools:    make(map[string]map[string]bool),
 		cachedTools:     make(map[string][]agentic.ToolDefinition),
+		cachedMetadata:  make(map[string]map[string]any),
 		requestToLoop:   make(map[string]string),
 		toolCallToLoop:  make(map[string]string),
 		contextConfig:   contextConfig,
@@ -153,6 +156,7 @@ func (m *LoopManager) DeleteLoop(loopID string) error {
 	delete(m.pendingTools, loopID)
 	delete(m.contextManagers, loopID)
 	delete(m.cachedTools, loopID)
+	delete(m.cachedMetadata, loopID)
 	return nil
 }
 
@@ -175,6 +179,20 @@ func (m *LoopManager) GetCachedTools(loopID string) []agentic.ToolDefinition {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.cachedTools[loopID]
+}
+
+// CacheMetadata stores domain context metadata for a loop (set once from task, reused for all tool calls)
+func (m *LoopManager) CacheMetadata(loopID string, metadata map[string]any) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cachedMetadata[loopID] = metadata
+}
+
+// GetCachedMetadata retrieves the cached metadata for a loop
+func (m *LoopManager) GetCachedMetadata(loopID string) map[string]any {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cachedMetadata[loopID]
 }
 
 // GetCurrentIteration returns the current iteration for a loop

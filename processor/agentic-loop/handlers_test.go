@@ -1003,3 +1003,370 @@ func TestHandleModelResponse_Complete_PopulatesTokenFields(t *testing.T) {
 		t.Errorf("CompletionState.TokensOut = %d, want 750", result.CompletionState.TokensOut)
 	}
 }
+
+// --- Per-task tools tests ---
+
+func TestHandleTask_PerTaskTools(t *testing.T) {
+	ensureTestToolRegistered()
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	customTools := []agentic.ToolDefinition{
+		{
+			Name:        "custom_tool_a",
+			Description: "Custom A",
+			Parameters:  map[string]any{"type": "object"},
+		},
+		{
+			Name:        "custom_tool_b",
+			Description: "Custom B",
+			Parameters:  map[string]any{"type": "object"},
+		},
+	}
+
+	task := agenticloop.TaskMessage{
+		TaskID: "task-per-task-tools",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test with per-task tools",
+		Tools:  customTools,
+	}
+
+	ctx := context.Background()
+	result, err := handler.HandleTask(ctx, task)
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	// Find agent.request and verify it contains per-task tools, not global ones
+	for _, msg := range result.PublishedMessages {
+		if !containsIgnoreCase(msg.Subject, "agent.request") {
+			continue
+		}
+		var envelope map[string]any
+		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+			t.Fatalf("Failed to unmarshal envelope: %v", err)
+		}
+		payload, ok := envelope["payload"].(map[string]any)
+		if !ok {
+			t.Fatal("Expected payload in BaseMessage envelope")
+		}
+		tools, ok := payload["tools"].([]any)
+		if !ok {
+			t.Fatal("tools should be a slice")
+		}
+		if len(tools) != 2 {
+			t.Errorf("Expected 2 per-task tools, got %d", len(tools))
+		}
+		// Verify tool names are the custom ones
+		tool0, _ := tools[0].(map[string]any)
+		if tool0["name"] != "custom_tool_a" {
+			t.Errorf("First tool name = %v, want custom_tool_a", tool0["name"])
+		}
+		return
+	}
+	t.Error("HandleTask() should publish agent.request message")
+}
+
+// --- Metadata propagation tests ---
+
+func TestHandleTask_MetadataCachedAndPropagated(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	task := agenticloop.TaskMessage{
+		TaskID: "task-meta",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test with metadata",
+		Metadata: map[string]any{
+			"tenant_id": "acme",
+			"domain":    "robotics",
+		},
+	}
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, task)
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	// Trigger a tool call — metadata should flow to published tool calls
+	toolResponse := agentic.AgentResponse{
+		RequestID: "req-meta",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-meta-001", Name: "graph_query"},
+			},
+		},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, toolResponse)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// Find tool.execute message and check metadata propagation
+	for _, msg := range result.PublishedMessages {
+		if !containsIgnoreCase(msg.Subject, "tool.execute") {
+			continue
+		}
+		var envelope map[string]any
+		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+			t.Fatalf("Failed to unmarshal: %v", err)
+		}
+		payload, ok := envelope["payload"].(map[string]any)
+		if !ok {
+			t.Fatal("Expected payload")
+		}
+		meta, ok := payload["metadata"].(map[string]any)
+		if !ok {
+			t.Fatal("Expected metadata in tool call payload")
+		}
+		if meta["tenant_id"] != "acme" {
+			t.Errorf("metadata.tenant_id = %v, want acme", meta["tenant_id"])
+		}
+		if meta["domain"] != "robotics" {
+			t.Errorf("metadata.domain = %v, want robotics", meta["domain"])
+		}
+		return
+	}
+	t.Error("Should publish tool.execute with metadata")
+}
+
+// --- ToolCallFilter tests ---
+
+// mockFilter implements agentic.ToolCallFilter for testing
+type mockFilter struct {
+	approveAll   bool
+	rejectAll    bool
+	rejectByName map[string]string // name -> reason
+}
+
+func (f *mockFilter) FilterToolCalls(loopID string, calls []agentic.ToolCall) (agentic.ToolCallFilterResult, error) {
+	if f.approveAll {
+		return agentic.ToolCallFilterResult{Approved: calls}, nil
+	}
+
+	var result agentic.ToolCallFilterResult
+	for _, call := range calls {
+		if f.rejectAll {
+			result.Rejected = append(result.Rejected, agentic.ToolCallRejection{
+				Call:   call,
+				Reason: "all calls rejected",
+			})
+			continue
+		}
+		if reason, reject := f.rejectByName[call.Name]; reject {
+			result.Rejected = append(result.Rejected, agentic.ToolCallRejection{
+				Call:   call,
+				Reason: reason,
+			})
+		} else {
+			result.Approved = append(result.Approved, call)
+		}
+	}
+	return result, nil
+}
+
+func TestToolCallFilter_AllApproved(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+	handler.SetToolCallFilter(&mockFilter{approveAll: true})
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-filter-approved",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	response := agentic.AgentResponse{
+		RequestID: "req-filter-ok",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-fa-1", Name: "tool_a"},
+				{ID: "call-fa-2", Name: "tool_b"},
+			},
+		},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, response)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// All calls should be published as tool.execute
+	toolCount := 0
+	for _, msg := range result.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute") {
+			toolCount++
+		}
+	}
+	if toolCount != 2 {
+		t.Errorf("Expected 2 tool.execute messages, got %d", toolCount)
+	}
+	if len(result.PendingTools) != 2 {
+		t.Errorf("Expected 2 pending tools, got %d", len(result.PendingTools))
+	}
+}
+
+func TestToolCallFilter_PartialRejection(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+	handler.SetToolCallFilter(&mockFilter{
+		rejectByName: map[string]string{
+			"dangerous_tool": "not authorized",
+		},
+	})
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-filter-partial",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	response := agentic.AgentResponse{
+		RequestID: "req-filter-partial",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-fp-1", Name: "safe_tool"},
+				{ID: "call-fp-2", Name: "dangerous_tool"},
+			},
+		},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, response)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// Only safe_tool should be published
+	toolCount := 0
+	for _, msg := range result.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute") {
+			toolCount++
+		}
+	}
+	if toolCount != 1 {
+		t.Errorf("Expected 1 tool.execute message, got %d", toolCount)
+	}
+	// Only 1 pending tool (safe_tool)
+	if len(result.PendingTools) != 1 {
+		t.Errorf("Expected 1 pending tool, got %d", len(result.PendingTools))
+	}
+}
+
+func TestToolCallFilter_AllRejected(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+	handler.SetToolCallFilter(&mockFilter{rejectAll: true})
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-filter-all-reject",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	response := agentic.AgentResponse{
+		RequestID: "req-filter-reject",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-fr-1", Name: "tool_x"},
+				{ID: "call-fr-2", Name: "tool_y"},
+			},
+		},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, response)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// No tool.execute messages should be published
+	toolCount := 0
+	for _, msg := range result.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute") {
+			toolCount++
+		}
+	}
+	if toolCount != 0 {
+		t.Errorf("Expected 0 tool.execute messages, got %d", toolCount)
+	}
+
+	// All tools rejected → handleToolsComplete should fire → agent.request published
+	requestCount := 0
+	for _, msg := range result.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "agent.request") {
+			requestCount++
+		}
+	}
+	if requestCount == 0 {
+		t.Error("All-rejected filter should trigger handleToolsComplete and publish agent.request")
+	}
+}
+
+func TestToolCallFilter_Nil_NoFiltering(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+	// No filter set — default behavior
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-no-filter",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	response := agentic.AgentResponse{
+		RequestID: "req-no-filter",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-nf-1", Name: "tool_a"},
+			},
+		},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, response)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// Without filter, all calls proceed normally
+	toolCount := 0
+	for _, msg := range result.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute") {
+			toolCount++
+		}
+	}
+	if toolCount != 1 {
+		t.Errorf("Expected 1 tool.execute message, got %d", toolCount)
+	}
+}

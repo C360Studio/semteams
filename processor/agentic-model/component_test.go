@@ -233,6 +233,136 @@ func TestNewComponent_MissingModelRegistry(t *testing.T) {
 	}
 }
 
+// --- Capability-based model resolution tests ---
+
+// TestGetClientForRequest_CapabilityResolution verifies that when req.Model
+// matches a capability name, the preferred endpoint from the chain is used.
+func TestGetClientForRequest_CapabilityResolution(t *testing.T) {
+	registry := &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
+			"ollama-qwen": {
+				URL:       "http://localhost:11434/v1",
+				Model:     "qwen2.5:32b",
+				MaxTokens: 128000,
+			},
+			"ollama-deepseek": {
+				URL:       "http://localhost:11434/v1",
+				Model:     "deepseek:16b",
+				MaxTokens: 64000,
+			},
+		},
+		Capabilities: map[string]*model.CapabilityConfig{
+			"fast": {
+				Preferred: []string{"ollama-qwen"},
+				Fallback:  []string{"ollama-deepseek"},
+			},
+		},
+		Defaults: model.DefaultsConfig{
+			Model: "ollama-deepseek",
+		},
+	}
+
+	config := agenticmodel.DefaultConfig()
+	rawConfig, err := json.Marshal(config)
+	if err != nil {
+		t.Fatalf("Marshal config: %v", err)
+	}
+
+	deps := component.Dependencies{
+		ModelRegistry: registry,
+	}
+
+	comp, err := agenticmodel.NewComponent(rawConfig, deps)
+	if err != nil {
+		t.Fatalf("NewComponent(): %v", err)
+	}
+
+	// The component is created, registry has capability "fast" → "ollama-qwen".
+	// We can't directly call getClientForRequest, but we can verify the registry
+	// resolves correctly, which the component uses.
+	resolved := registry.Resolve("fast")
+	if resolved != "ollama-qwen" {
+		t.Errorf("Resolve(fast) = %s, want ollama-qwen", resolved)
+	}
+
+	chain := registry.GetFallbackChain("fast")
+	if len(chain) != 2 || chain[0] != "ollama-qwen" || chain[1] != "ollama-deepseek" {
+		t.Errorf("GetFallbackChain(fast) = %v, want [ollama-qwen, ollama-deepseek]", chain)
+	}
+
+	_ = comp // component is valid
+}
+
+// TestGetClientForRequest_DirectEndpointFallback verifies that when req.Model
+// is a direct endpoint name (not a capability), it resolves correctly.
+func TestGetClientForRequest_DirectEndpointFallback(t *testing.T) {
+	registry := &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
+			"ollama-qwen": {
+				URL:       "http://localhost:11434/v1",
+				Model:     "qwen2.5:32b",
+				MaxTokens: 128000,
+			},
+		},
+		Defaults: model.DefaultsConfig{
+			Model: "ollama-qwen",
+		},
+	}
+
+	// GetFallbackChain returns nil for unknown capability
+	chain := registry.GetFallbackChain("ollama-qwen")
+	if chain != nil {
+		t.Errorf("GetFallbackChain for endpoint name should return nil, got %v", chain)
+	}
+
+	// Direct endpoint lookup succeeds
+	ep := registry.GetEndpoint("ollama-qwen")
+	if ep == nil {
+		t.Fatal("GetEndpoint(ollama-qwen) should not be nil")
+	}
+	if ep.Model != "qwen2.5:32b" {
+		t.Errorf("ep.Model = %s, want qwen2.5:32b", ep.Model)
+	}
+}
+
+// TestGetClientForRequest_DefaultFallback verifies that unknown model names
+// fall through to the default endpoint.
+func TestGetClientForRequest_DefaultFallback(t *testing.T) {
+	registry := &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
+			"ollama-qwen": {
+				URL:       "http://localhost:11434/v1",
+				Model:     "qwen2.5:32b",
+				MaxTokens: 128000,
+			},
+		},
+		Defaults: model.DefaultsConfig{
+			Model: "ollama-qwen",
+		},
+	}
+
+	// Unknown name: not a capability, not an endpoint
+	chain := registry.GetFallbackChain("unknown-model")
+	if chain != nil {
+		t.Errorf("GetFallbackChain(unknown) should be nil, got %v", chain)
+	}
+
+	ep := registry.GetEndpoint("unknown-model")
+	if ep != nil {
+		t.Error("GetEndpoint(unknown) should be nil")
+	}
+
+	// Default fallback
+	defaultName := registry.GetDefault()
+	if defaultName != "ollama-qwen" {
+		t.Errorf("GetDefault() = %s, want ollama-qwen", defaultName)
+	}
+	defaultEP := registry.GetEndpoint(defaultName)
+	if defaultEP == nil {
+		t.Fatal("Default endpoint should not be nil")
+	}
+}
+
 // createTestComponent creates a minimal component for testing
 func createTestComponent(t *testing.T) component.Discoverable {
 	config := agenticmodel.DefaultConfig()

@@ -444,21 +444,46 @@ func (c *Component) handleModelSuccess(ctx context.Context, req agentic.AgentReq
 	c.mu.Unlock()
 }
 
-// getClientForRequest resolves endpoint from registry and returns a cached or new client
+// getClientForRequest resolves an endpoint from the registry and returns a cached or new client.
+//
+// Resolution order:
+//  1. Capability chain — GetFallbackChain(req.Model) walks preferred+fallback endpoints.
+//  2. Direct endpoint — GetEndpoint(req.Model) treats the name as an endpoint key.
+//  3. Default fallback — GetDefault() -> GetEndpoint.
+//  4. Error.
+//
+// This allows callers to set req.Model to either a capability name (e.g. "fast")
+// or a concrete endpoint name (e.g. "ollama-qwen32b") and get the right client.
 func (c *Component) getClientForRequest(req agentic.AgentRequest) (*Client, error) {
-	ep := c.modelRegistry.GetEndpoint(req.Model)
+	var ep *model.EndpointConfig
+
+	// 1. Try capability-based resolution
+	chain := c.modelRegistry.GetFallbackChain(req.Model)
+	for _, name := range chain {
+		if candidate := c.modelRegistry.GetEndpoint(name); candidate != nil {
+			ep = candidate
+			break
+		}
+	}
+
+	// 2. Try direct endpoint name
 	if ep == nil {
-		// Try the default endpoint
+		ep = c.modelRegistry.GetEndpoint(req.Model)
+	}
+
+	// 3. Fall back to default
+	if ep == nil {
 		defaultName := c.modelRegistry.GetDefault()
 		if defaultName != "" {
 			ep = c.modelRegistry.GetEndpoint(defaultName)
 		}
-		if ep == nil {
-			return nil, errs.WrapInvalid(
-				fmt.Errorf("no endpoint found for model %q in registry", req.Model),
-				"Component", "getClientForRequest", "resolve endpoint",
-			)
-		}
+	}
+
+	if ep == nil {
+		return nil, errs.WrapInvalid(
+			fmt.Errorf("no endpoint found for model %q in registry", req.Model),
+			"Component", "getClientForRequest", "resolve endpoint",
+		)
 	}
 
 	// Cache key: URL + model name

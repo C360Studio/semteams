@@ -269,6 +269,12 @@ type TaskMessage struct {
 
 	// Context assembly reference (links to assembled context)
 	ContextRequestID string `json:"context_request_id,omitempty"`
+
+	// Per-task tool override (optional, skips global discovery if present)
+	Tools []ToolDefinition `json:"tools,omitempty"`
+
+	// Domain context propagated to all tool calls in this loop
+	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
 // ConstructedContext is an alias for types.ConstructedContext.

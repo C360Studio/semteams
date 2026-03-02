@@ -628,3 +628,58 @@ func TestValidateToolsAllowed(t *testing.T) {
 		})
 	}
 }
+
+func TestToolCall_Metadata_JSONRoundTrip(t *testing.T) {
+	call := agentic.ToolCall{
+		ID:   "call-meta",
+		Name: "graph_query",
+		Arguments: map[string]any{
+			"query": "SELECT *",
+		},
+		Metadata: map[string]any{
+			"tenant_id": "acme",
+			"domain":    "robotics",
+		},
+	}
+
+	data, err := json.Marshal(call)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var decoded agentic.ToolCall
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if decoded.Metadata == nil {
+		t.Fatal("Metadata should not be nil")
+	}
+	if decoded.Metadata["tenant_id"] != "acme" {
+		t.Errorf("Metadata[tenant_id] = %v, want acme", decoded.Metadata["tenant_id"])
+	}
+	if decoded.Metadata["domain"] != "robotics" {
+		t.Errorf("Metadata[domain] = %v, want robotics", decoded.Metadata["domain"])
+	}
+}
+
+func TestToolCall_Metadata_OmitEmpty(t *testing.T) {
+	call := agentic.ToolCall{
+		ID:   "call-no-meta",
+		Name: "graph_query",
+	}
+
+	data, err := json.Marshal(call)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	// Metadata should be omitted from JSON when nil
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("Unmarshal raw failed: %v", err)
+	}
+	if _, exists := raw["metadata"]; exists {
+		t.Error("Metadata should be omitted from JSON when nil")
+	}
+}
