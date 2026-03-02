@@ -23,6 +23,7 @@ type QueryLoadResult struct {
 	ErrorCount      int                       `json:"error_count"`
 	NotFoundCount   int                       `json:"not_found_count"`
 	NotFoundDetails []string                  `json:"not_found_details,omitempty"` // unique not-found messages
+	ErrorDetails    []string                  `json:"error_details,omitempty"`     // unique infra error messages
 	P50LatencyMs    float64                   `json:"p50_latency_ms"`
 	P95LatencyMs    float64                   `json:"p95_latency_ms"`
 	P99LatencyMs    float64                   `json:"p99_latency_ms"`
@@ -200,7 +201,9 @@ func workerLoop(ctx context.Context, rng *rand.Rand, pool []querySpec, httpClien
 		isNotFound := false
 		var errMsg string
 
-		if err == nil {
+		if err != nil {
+			errMsg = err.Error()
+		} else {
 			body, readErr := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			if readErr == nil {
@@ -241,11 +244,16 @@ func aggregateObservations(observations []queryObservation, elapsed time.Duratio
 	}
 
 	notFoundSeen := make(map[string]bool)
+	errorSeen := make(map[string]bool)
 	latencies := make([]float64, 0, len(observations))
 	for _, obs := range observations {
 		result.TotalQueries++
 		if obs.err {
 			result.ErrorCount++
+			if obs.errorMsg != "" && !errorSeen[obs.errorMsg] {
+				errorSeen[obs.errorMsg] = true
+				result.ErrorDetails = append(result.ErrorDetails, obs.errorMsg)
+			}
 		}
 		if obs.notFound {
 			result.NotFoundCount++
@@ -319,6 +327,9 @@ func printQueryLoadSummary(r *QueryLoadResult) {
 		fmt.Printf("  Errors: %d infra, %d not-found (%.1f%% total failure rate)\n",
 			r.ErrorCount, r.NotFoundCount,
 			float64(r.ErrorCount)/float64(r.TotalQueries)*100)
+		for _, detail := range r.ErrorDetails {
+			fmt.Printf("    infra: %s\n", detail)
+		}
 		for _, detail := range r.NotFoundDetails {
 			fmt.Printf("    not-found: %s\n", detail)
 		}

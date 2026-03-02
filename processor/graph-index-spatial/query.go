@@ -6,10 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/c360studio/semstreams/pkg/errs"
 )
+
+// spatialFetchConcurrency is the max parallel KV Gets for spatial cell lookups.
+const spatialFetchConcurrency = 10
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
@@ -74,32 +78,65 @@ func (c *Component) handleQueryBoundsNATS(ctx context.Context, data []byte) ([]b
 	return json.Marshal(results)
 }
 
-// collectSpatialResults fetches spatial cells by key and filters entities within bounds.
+// spatialCellData holds the parsed content of a single spatial KV entry.
+type spatialCellData struct {
+	Entities map[string]struct {
+		Lat float64 `json:"lat"`
+		Lon float64 `json:"lon"`
+		Alt float64 `json:"alt"`
+	} `json:"entities"`
+}
+
+// collectSpatialResults fetches spatial cells concurrently and filters entities within bounds.
 func (c *Component) collectSpatialResults(ctx context.Context, keys []string, req boundsRequest) []SpatialResult {
+	if len(keys) == 0 {
+		return []SpatialResult{}
+	}
+
+	// Phase 1: Fetch all cells concurrently with bounded concurrency.
+	type fetchResult struct {
+		data spatialCellData
+		ok   bool
+	}
+	fetched := make([]fetchResult, len(keys))
+	sem := make(chan struct{}, spatialFetchConcurrency)
+	var wg sync.WaitGroup
+
+	for i, key := range keys {
+		if ctx.Err() != nil {
+			break
+		}
+		wg.Add(1)
+		go func(idx int, k string) {
+			defer wg.Done()
+			select {
+			case <-ctx.Done():
+				return
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			}
+
+			entry, err := c.spatialBucket.Get(ctx, k)
+			if err != nil {
+				return
+			}
+			var data spatialCellData
+			if json.Unmarshal(entry.Value(), &data) == nil {
+				fetched[idx] = fetchResult{data: data, ok: true}
+			}
+		}(i, key)
+	}
+	wg.Wait()
+
+	// Phase 2: Filter entities within bounds (single-threaded, fast).
 	results := make([]SpatialResult, 0)
 	seen := make(map[string]bool)
 
-	for _, key := range keys {
-		if len(results) >= req.Limit {
-			break
-		}
-		entry, err := c.spatialBucket.Get(ctx, key)
-		if err != nil {
+	for _, fr := range fetched {
+		if !fr.ok {
 			continue
 		}
-
-		var spatialData struct {
-			Entities map[string]struct {
-				Lat float64 `json:"lat"`
-				Lon float64 `json:"lon"`
-				Alt float64 `json:"alt"`
-			} `json:"entities"`
-		}
-		if err := json.Unmarshal(entry.Value(), &spatialData); err != nil {
-			continue
-		}
-
-		for entityID, coords := range spatialData.Entities {
+		for entityID, coords := range fr.data.Entities {
 			if seen[entityID] {
 				continue
 			}
@@ -108,7 +145,7 @@ func (c *Component) collectSpatialResults(ctx context.Context, keys []string, re
 				seen[entityID] = true
 				results = append(results, SpatialResult{ID: entityID, Type: "entity"})
 				if len(results) >= req.Limit {
-					break
+					return results
 				}
 			}
 		}
