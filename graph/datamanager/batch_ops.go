@@ -4,6 +4,7 @@ import (
 	"context"
 
 	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
@@ -75,15 +76,23 @@ func (m *Manager) BatchGet(ctx context.Context, ids []string) ([]*gtypes.EntityS
 	return entities, nil
 }
 
-// List returns entity IDs matching a pattern
-func (m *Manager) List(ctx context.Context, _ string) ([]string, error) {
+// List returns entity IDs matching a pattern. When pattern is non-empty it is
+// forwarded to the NATS server as a subject filter (e.g. "foo.>"); an empty
+// pattern returns all keys.
+func (m *Manager) List(ctx context.Context, pattern string) ([]string, error) {
 
-	keys, err := m.kvBucket.Keys(ctx)
-	if err != nil {
-		return nil, errs.Wrap(err, "DataManager", "List", "list keys")
+	if pattern == "" {
+		keys, err := m.kvBucket.Keys(ctx)
+		if err != nil {
+			return nil, errs.Wrap(err, "DataManager", "List", "list keys")
+		}
+		return keys, nil
 	}
 
-	// TODO: Add pattern matching if needed
+	keys, err := natsclient.FilteredKeys(ctx, m.kvBucket, pattern)
+	if err != nil {
+		return nil, errs.Wrap(err, "DataManager", "List", "filtered keys")
+	}
 	return keys, nil
 }
 
@@ -94,28 +103,24 @@ func (m *Manager) List(ctx context.Context, _ string) ([]string, error) {
 // Example: prefix "c360.logistics.environmental.sensor.temperature" returns all
 // temperature sensor entities like "c360.logistics.environmental.sensor.temperature.cold-storage-01"
 func (m *Manager) ListWithPrefix(ctx context.Context, prefix string) ([]string, error) {
-	keys, err := m.kvBucket.Keys(ctx)
-	if err != nil {
-		return nil, errs.Wrap(err, "DataManager", "ListWithPrefix", "list keys")
-	}
 
-	// Empty prefix returns all keys (root-level hierarchy query)
+	// Empty prefix returns all keys (root-level hierarchy query).
+	// NATS does not accept ".>" as a bare wildcard, so fall back to Keys().
 	if prefix == "" {
+		keys, err := m.kvBucket.Keys(ctx)
+		if err != nil {
+			return nil, errs.Wrap(err, "DataManager", "ListWithPrefix", "list keys")
+		}
 		return keys, nil
 	}
 
-	// Filter keys by prefix
-	var matched []string
-	prefixDot := prefix + "."
-	for _, key := range keys {
-		// Match if key starts with prefix followed by a dot (proper hierarchy match)
-		// or if key exactly equals prefix (exact match)
-		if key == prefix || (len(key) > len(prefix) && key[:len(prefixDot)] == prefixDot) {
-			matched = append(matched, key)
-		}
+	// Use server-side prefix filtering: "prefix.>" matches every key that
+	// starts with "prefix." — NATS ">" means one-or-more token segments.
+	keys, err := natsclient.FilteredKeys(ctx, m.kvBucket, prefix+".>")
+	if err != nil {
+		return nil, errs.Wrap(err, "DataManager", "ListWithPrefix", "filtered keys")
 	}
-
-	return matched, nil
+	return keys, nil
 }
 
 // GetCacheStats returns cache statistics

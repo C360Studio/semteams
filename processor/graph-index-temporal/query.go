@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 )
 
@@ -32,12 +34,10 @@ type TemporalResult struct {
 }
 
 // handleQueryRangeNATS handles temporal range queries via NATS request/reply
-func (c *Component) handleQueryRangeNATS(_ context.Context, data []byte) ([]byte, error) {
-	// Create context with timeout for KV operations
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+func (c *Component) handleQueryRangeNATS(ctx context.Context, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	// Parse request
 	var req struct {
 		StartTime string `json:"startTime"`
 		EndTime   string `json:"endTime"`
@@ -47,7 +47,6 @@ func (c *Component) handleQueryRangeNATS(_ context.Context, data []byte) ([]byte
 		return nil, errs.WrapInvalid(err, "Component", "handleQueryRangeNATS", "invalid request JSON")
 	}
 
-	// Parse time strings (RFC3339 format)
 	startTime, err := time.Parse(time.RFC3339, req.StartTime)
 	if err != nil {
 		return nil, errs.WrapInvalid(err, "Component", "handleQueryRangeNATS", "invalid startTime format")
@@ -57,38 +56,42 @@ func (c *Component) handleQueryRangeNATS(_ context.Context, data []byte) ([]byte
 		return nil, errs.WrapInvalid(err, "Component", "handleQueryRangeNATS", "invalid endTime format")
 	}
 
-	// Apply default limit
 	limit := req.Limit
 	if limit <= 0 {
 		limit = 100
 	}
 
-	// Collect matching entities
+	// Use targeted prefix scan instead of full key enumeration.
+	prefixes := generateTemporalPrefixes(startTime, endTime)
+	var keys []string
+	for _, prefix := range prefixes {
+		matched, err := natsclient.FilteredKeys(ctx, c.temporalBucket, prefix)
+		if err != nil {
+			return json.Marshal([]TemporalResult{})
+		}
+		keys = append(keys, matched...)
+	}
+
+	results := c.collectTemporalResults(ctx, keys, startTime, endTime, limit)
+	return json.Marshal(results)
+}
+
+// collectTemporalResults fetches time buckets and filters events within the query range.
+func (c *Component) collectTemporalResults(ctx context.Context, keys []string, startTime, endTime time.Time, limit int) []TemporalResult {
 	results := make([]TemporalResult, 0)
 	seen := make(map[string]bool)
 
-	// Get all keys from temporal bucket
-	keys, err := c.temporalBucket.Keys(ctx)
-	if err != nil {
-		// If bucket is empty or not initialized, return empty results
-		return json.Marshal(results)
-	}
-
-	// Iterate through time buckets
-	// Key format: YYYY.MM.DD.HH
 	for _, key := range keys {
 		if len(results) >= limit {
 			break
 		}
 
-		// Parse the time bucket key
 		bucketTime, err := parseTimeBucketKey(key)
 		if err != nil {
-			continue // Skip malformed keys
+			continue
 		}
 
 		// Skip if bucket is outside the query range
-		// Add 1 hour to bucket time to get the end of that hour
 		bucketEnd := bucketTime.Add(time.Hour)
 		if bucketEnd.Before(startTime) || bucketTime.After(endTime) {
 			continue
@@ -99,7 +102,6 @@ func (c *Component) handleQueryRangeNATS(_ context.Context, data []byte) ([]byte
 			continue
 		}
 
-		// Parse temporal data: {"events": [{"entity": "...", "type": "...", "timestamp": "..."}], "entity_count": N}
 		var temporalData struct {
 			Events []struct {
 				Entity    string `json:"entity"`
@@ -111,36 +113,25 @@ func (c *Component) handleQueryRangeNATS(_ context.Context, data []byte) ([]byte
 			continue
 		}
 
-		// Check each event's timestamp against the query range
 		for _, event := range temporalData.Events {
 			if seen[event.Entity] {
 				continue
 			}
-
-			// Parse event timestamp
 			eventTime, err := time.Parse(time.RFC3339, event.Timestamp)
 			if err != nil {
 				continue
 			}
-
-			// Check if within query range
 			if eventTime.Before(startTime) || eventTime.After(endTime) {
 				continue
 			}
-
 			seen[event.Entity] = true
-			results = append(results, TemporalResult{
-				ID:   event.Entity,
-				Type: "entity",
-			})
-
+			results = append(results, TemporalResult{ID: event.Entity, Type: "entity"})
 			if len(results) >= limit {
 				break
 			}
 		}
 	}
-
-	return json.Marshal(results)
+	return results
 }
 
 // parseTimeBucketKey parses a time bucket key in format "YYYY.MM.DD.HH"
@@ -151,4 +142,47 @@ func parseTimeBucketKey(key string) (time.Time, error) {
 		return time.Time{}, err
 	}
 	return time.Date(year, time.Month(month), day, hour, 0, 0, 0, time.UTC), nil
+}
+
+// generateTemporalPrefixes produces NATS wildcard patterns that cover [startTime, endTime]
+// without scanning every bucket key.
+//
+// Key format is YYYY.MM.DD.HH; dots are NATS subject separators, so the server
+// honours ">" suffix filtering server-side.
+//
+//   - Ranges ≤ 30 days  → one "YYYY.MM.DD.>" pattern per calendar day
+//   - Ranges  > 30 days → one "YYYY.MM.>" pattern per calendar month
+func generateTemporalPrefixes(startTime, endTime time.Time) []string {
+	// Truncate to UTC so boundary arithmetic is clean.
+	start := startTime.UTC()
+	end := endTime.UTC()
+
+	// Number of whole days covered by the range (ceiling so a partial last day
+	// is still included).
+	hours := end.Sub(start).Hours()
+	days := int(math.Ceil(hours / 24))
+
+	if days <= 30 {
+		// Day-level prefixes: one per calendar day in the range.
+		var prefixes []string
+		current := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, time.UTC)
+		endDay := time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
+		for !current.After(endDay) {
+			prefixes = append(prefixes,
+				fmt.Sprintf("%04d.%02d.%02d.>", current.Year(), int(current.Month()), current.Day()))
+			current = current.AddDate(0, 0, 1)
+		}
+		return prefixes
+	}
+
+	// Month-level prefixes: one per calendar month in the range.
+	var prefixes []string
+	current := time.Date(start.Year(), start.Month(), 1, 0, 0, 0, 0, time.UTC)
+	endMonth := time.Date(end.Year(), end.Month(), 1, 0, 0, 0, 0, time.UTC)
+	for !current.After(endMonth) {
+		prefixes = append(prefixes,
+			fmt.Sprintf("%04d.%02d.>", current.Year(), int(current.Month())))
+		current = current.AddDate(0, 1, 0)
+	}
+	return prefixes
 }

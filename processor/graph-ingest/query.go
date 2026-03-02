@@ -6,11 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/natsclient"
 )
+
+// defaultMaxConcurrent is the default bounded concurrency for entity fetches
+const defaultMaxConcurrent = 10
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
 func (c *Component) setupQueryHandlers(ctx context.Context) error {
@@ -49,9 +53,9 @@ func (c *Component) setupQueryHandlers(ctx context.Context) error {
 }
 
 // handleQueryEntityNATS handles single entity query requests via NATS request/reply
-func (c *Component) handleQueryEntityNATS(_ context.Context, data []byte) ([]byte, error) {
+func (c *Component) handleQueryEntityNATS(ctx context.Context, data []byte) ([]byte, error) {
 	// Create context with timeout for KV operation
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	// Parse request
@@ -80,9 +84,9 @@ func (c *Component) handleQueryEntityNATS(_ context.Context, data []byte) ([]byt
 }
 
 // handleQueryBatchNATS handles batch entity query requests via NATS request/reply
-func (c *Component) handleQueryBatchNATS(_ context.Context, data []byte) ([]byte, error) {
+func (c *Component) handleQueryBatchNATS(ctx context.Context, data []byte) ([]byte, error) {
 	// Create context with timeout for KV operations
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	// Parse request
@@ -98,27 +102,8 @@ func (c *Component) handleQueryBatchNATS(_ context.Context, data []byte) ([]byte
 		return []byte(`{"entities":[]}`), nil
 	}
 
-	// Fetch entities
-	entities := make([]graph.EntityState, 0, len(req.IDs))
-	for _, id := range req.IDs {
-		if id == "" {
-			continue // Skip empty IDs
-		}
-
-		entry, err := c.entityBucket.Get(ctx, id)
-		if err != nil {
-			// Skip not found entities (partial success)
-			continue
-		}
-
-		var entity graph.EntityState
-		if err := json.Unmarshal(entry.Value, &entity); err != nil {
-			// Skip entities that fail to unmarshal
-			continue
-		}
-
-		entities = append(entities, entity)
-	}
+	// Fetch entities with bounded concurrency and cache
+	entities := c.fetchEntitiesConcurrent(ctx, req.IDs, defaultMaxConcurrent)
 
 	// Return entities wrapped in a struct for consistency with loadEntities expectations
 	return json.Marshal(map[string]any{
@@ -127,9 +112,9 @@ func (c *Component) handleQueryBatchNATS(_ context.Context, data []byte) ([]byte
 }
 
 // handleQueryPrefixNATS handles prefix-based entity listing for hierarchy queries
-func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byte, error) {
+func (c *Component) handleQueryPrefixNATS(ctx context.Context, data []byte) ([]byte, error) {
 	// Create context with timeout for KV operation
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	// Parse request
@@ -172,32 +157,19 @@ func (c *Component) handleQueryPrefixNATS(_ context.Context, data []byte) ([]byt
 		matched = matched[:limit]
 	}
 
-	// Fetch full entities for matched IDs
-	entities := make([]graph.EntityState, 0, len(matched))
-	for _, id := range matched {
-		entry, err := c.entityBucket.Get(ctx, id)
-		if err != nil {
-			continue // Skip entities that can't be fetched
-		}
-
-		var entity graph.EntityState
-		if err := json.Unmarshal(entry.Value, &entity); err != nil {
-			continue // Skip entities that fail to unmarshal
-		}
-
-		entities = append(entities, entity)
-	}
+	// Fetch full entities with bounded concurrency and cache
+	entities := c.fetchEntitiesConcurrent(ctx, matched, defaultMaxConcurrent)
 
 	// Return entities array directly (matches GraphQL schema [Entity])
 	return json.Marshal(entities)
 }
 
 // handleQuerySuffixNATS handles suffix-based entity ID resolution.
-// Scans entity keys and matches by suffix to resolve partial entity IDs.
+// Uses a three-tier lookup: TTL cache → KV suffix index → fallback full scan.
 // This enables NL queries to use partial entity IDs like "temp-sensor-001" which
 // get resolved to full 6-part IDs like "c360.logistics.environmental.sensor.temperature.temp-sensor-001".
-func (c *Component) handleQuerySuffixNATS(_ context.Context, data []byte) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+func (c *Component) handleQuerySuffixNATS(ctx context.Context, data []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	var req struct {
@@ -214,36 +186,76 @@ func (c *Component) handleQuerySuffixNATS(_ context.Context, data []byte) ([]byt
 		return nil, fmt.Errorf("invalid request: empty suffix")
 	}
 
-	// Get all entity keys and find one matching the suffix
-	// This matches the instance part of a 6-part EntityID: org.platform.domain.system.type.instance
-	keys, err := c.entityBucket.Keys(ctx)
-	if err != nil {
-		c.logger.Error("suffix query keys failed", "error", err)
-		return nil, fmt.Errorf("failed to get keys: %w", err)
-	}
-	// Handle empty bucket
-	if keys == nil {
-		return json.Marshal(map[string]string{"id": ""})
-	}
-
-	c.logger.Debug("suffix query scanning keys", "suffix", req.Suffix, "key_count", len(keys))
-
-	// Match keys ending with ".suffix" (the instance part)
-	suffixWithDot := "." + req.Suffix
-	var matchedID string
-	for _, key := range keys {
-		if strings.HasSuffix(key, suffixWithDot) || key == req.Suffix {
-			matchedID = key
-			c.logger.Debug("suffix query matched", "suffix", req.Suffix, "matched", matchedID)
-			break
+	// Tier 1: Check TTL cache (O(1) memory lookup)
+	if c.suffixCache != nil {
+		if fullID, ok := c.suffixCache.Get(req.Suffix); ok {
+			c.logger.Debug("suffix query cache hit", "suffix", req.Suffix, "matched", fullID)
+			return json.Marshal(map[string]string{"id": fullID})
 		}
 	}
 
-	if matchedID == "" {
-		c.logger.Debug("suffix query no match found", "suffix", req.Suffix)
+	// Tier 2: Check KV suffix index (O(1) KV get)
+	if c.suffixBucket != nil {
+		if matchedID := c.lookupSuffixIndex(ctx, req.Suffix); matchedID != "" {
+			// Populate cache on hit
+			if c.suffixCache != nil {
+				c.suffixCache.Set(req.Suffix, matchedID) //nolint:errcheck
+			}
+			return json.Marshal(map[string]string{"id": matchedID})
+		}
+	}
+
+	// Tier 3: Fallback full scan (migration period — index may be incomplete)
+	matchedID := c.suffixFallbackScan(ctx, req.Suffix)
+
+	// If found via scan, populate index + cache for next time
+	if matchedID != "" {
+		c.updateSuffixIndex(ctx, matchedID)
+		if c.suffixCache != nil {
+			c.suffixCache.Set(req.Suffix, matchedID) //nolint:errcheck
+		}
 	}
 
 	return json.Marshal(map[string]string{"id": matchedID})
+}
+
+// lookupSuffixIndex checks the KV suffix index for a matching entity ID.
+func (c *Component) lookupSuffixIndex(ctx context.Context, suffix string) string {
+	entry, err := c.suffixBucket.Get(ctx, suffix)
+	if err != nil {
+		return ""
+	}
+
+	var indexEntry struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+		return ""
+	}
+
+	c.logger.Debug("suffix query index hit", "suffix", suffix, "matched", indexEntry.ID)
+	return indexEntry.ID
+}
+
+// suffixFallbackScan performs a full key scan for suffix matching.
+// This is the fallback path during migration when the suffix index may be incomplete.
+func (c *Component) suffixFallbackScan(ctx context.Context, suffix string) string {
+	keys, err := c.entityBucket.Keys(ctx)
+	if err != nil || keys == nil {
+		return ""
+	}
+
+	c.logger.Debug("suffix query fallback scan", "suffix", suffix, "key_count", len(keys))
+
+	suffixWithDot := "." + suffix
+	for _, key := range keys {
+		if strings.HasSuffix(key, suffixWithDot) || key == suffix {
+			c.logger.Debug("suffix query matched via scan", "suffix", suffix, "matched", key)
+			return key
+		}
+	}
+
+	return ""
 }
 
 // queryMsg is an interface for query request messages.
@@ -326,30 +338,107 @@ func (c *Component) handleQueryBatch(msg queryMsg) {
 		return
 	}
 
-	// Fetch entities
-	entities := make([]graph.EntityState, 0, len(req.IDs))
-	for _, id := range req.IDs {
-		if id == "" {
-			continue // Skip empty IDs
-		}
-
-		entry, err := c.entityBucket.Get(ctx, id)
-		if err != nil {
-			// Skip not found entities (partial success)
-			continue
-		}
-
-		var entity graph.EntityState
-		if err := json.Unmarshal(entry.Value, &entity); err != nil {
-			// Skip entities that fail to unmarshal
-			continue
-		}
-
-		entities = append(entities, entity)
-	}
+	// Fetch entities with bounded concurrency and cache
+	entities := c.fetchEntitiesConcurrent(ctx, req.IDs, defaultMaxConcurrent)
 
 	// Respond with entities array
 	c.respondJSON(msg, entities)
+}
+
+// fetchEntitiesConcurrent fetches entities by IDs using bounded concurrency with cache.
+// Cache hits skip KV entirely; cache misses are fetched with bounded concurrency.
+// Returns entities in non-deterministic order (callers process as sets).
+func (c *Component) fetchEntitiesConcurrent(ctx context.Context, ids []string, maxConcurrent int) []graph.EntityState {
+	if len(ids) == 0 {
+		return nil
+	}
+	if maxConcurrent <= 0 {
+		maxConcurrent = defaultMaxConcurrent
+	}
+
+	// Phase 1: Check cache for all IDs, collect misses
+	var cached []graph.EntityState
+	var missIDs []string
+	for _, id := range ids {
+		if id == "" {
+			continue
+		}
+		if c.entityCache != nil {
+			if entity, ok := c.entityCache.Get(id); ok {
+				cached = append(cached, entity)
+				continue
+			}
+		}
+		missIDs = append(missIDs, id)
+	}
+
+	// Phase 2: Fetch cache misses with bounded concurrency
+	if len(missIDs) == 0 {
+		return cached
+	}
+
+	type fetchResult struct {
+		entity graph.EntityState
+		ok     bool
+	}
+
+	results := make([]fetchResult, len(missIDs))
+	sem := make(chan struct{}, maxConcurrent)
+	var wg sync.WaitGroup
+
+	for i, id := range missIDs {
+		if err := ctx.Err(); err != nil {
+			break
+		}
+
+		wg.Add(1)
+		go func(idx int, entityID string) {
+			defer wg.Done()
+
+			// Acquire semaphore (with context cancellation)
+			select {
+			case <-ctx.Done():
+				return
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			}
+
+			// Check context after acquiring semaphore
+			if ctx.Err() != nil {
+				return
+			}
+
+			entry, err := c.entityBucket.Get(ctx, entityID)
+			if err != nil {
+				return // Skip not found / errors (partial success)
+			}
+
+			var entity graph.EntityState
+			if err := json.Unmarshal(entry.Value, &entity); err != nil {
+				return // Skip unmarshal errors
+			}
+
+			// Populate cache
+			if c.entityCache != nil {
+				c.entityCache.Set(entityID, entity) //nolint:errcheck
+			}
+
+			results[idx] = fetchResult{entity: entity, ok: true}
+		}(i, id)
+	}
+
+	wg.Wait()
+
+	// Phase 3: Merge cached + fetched results
+	entities := make([]graph.EntityState, 0, len(cached)+len(missIDs))
+	entities = append(entities, cached...)
+	for _, r := range results {
+		if r.ok {
+			entities = append(entities, r.entity)
+		}
+	}
+
+	return entities
 }
 
 // respondError sends an error response

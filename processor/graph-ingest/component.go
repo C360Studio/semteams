@@ -19,6 +19,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/cache"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/prometheus/client_golang/prometheus"
@@ -168,7 +169,10 @@ type Component struct {
 	logger     *slog.Logger
 
 	// Domain resources
-	entityBucket *natsclient.KVStore // KV operations with CAS support
+	entityBucket *natsclient.KVStore            // KV operations with CAS support
+	entityCache  cache.Cache[graph.EntityState] // Read-through cache for query handlers
+	suffixBucket jetstream.KeyValue             // KV suffix index: suffix → fullID
+	suffixCache  cache.Cache[string]            // TTL cache for suffix resolution
 
 	// Inference components
 	hierarchyInference *inference.HierarchyInference
@@ -189,6 +193,7 @@ type Component struct {
 
 	// Prometheus metrics (for e2e test compatibility with datamanager metrics)
 	entitiesUpdated prometheus.Counter
+	metricsRegistry *metric.MetricsRegistry
 
 	// Lifecycle reporting
 	lifecycleReporter component.LifecycleReporter
@@ -235,6 +240,7 @@ func CreateGraphIngest(rawConfig json.RawMessage, deps component.Dependencies) (
 		natsClient:      natsClient,
 		logger:          logger,
 		entitiesUpdated: getEntitiesUpdatedMetric(deps.MetricsRegistry),
+		metricsRegistry: deps.MetricsRegistry,
 	}
 
 	// Initialize last activity
@@ -448,17 +454,11 @@ func (c *Component) Start(ctx context.Context) error {
 		}
 	}
 
-	// Initialize KV bucket (create if not exists) - we are the WRITER
-	bucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      graph.BucketEntityStates,
-		Description: "Entity state storage for graph-ingest",
-	})
-	if err != nil {
+	// Initialize storage buckets and query caches
+	if err := c.initStorage(ctx); err != nil {
 		cancel()
-		return errs.Wrap(err, "Component", "Start", "KV bucket creation")
+		return err
 	}
-	// Wrap in KVStore for all KV operations (includes CAS support via UpdateWithRetry)
-	c.entityBucket = c.natsClient.NewKVStore(bucket)
 
 	// Initialize lifecycle reporter (throttled for high-throughput ingestion)
 	c.initLifecycleReporter(ctx)
@@ -519,6 +519,18 @@ func (c *Component) Stop(timeout time.Duration) error {
 	}
 	c.subscriptions = nil
 
+	// Close caches
+	if c.entityCache != nil {
+		if err := c.entityCache.Close(); err != nil {
+			c.logger.Warn("entity cache close error", slog.Any("error", err))
+		}
+	}
+	if c.suffixCache != nil {
+		if err := c.suffixCache.Close(); err != nil {
+			c.logger.Warn("suffix cache close error", slog.Any("error", err))
+		}
+	}
+
 	// Cancel context
 	if c.cancel != nil {
 		c.cancel()
@@ -542,6 +554,57 @@ func (c *Component) Stop(timeout time.Duration) error {
 		c.logger.Warn("component stop timed out", slog.String("component", "graph-ingest"))
 		return fmt.Errorf("stop timeout after %v", timeout)
 	}
+}
+
+// initStorage initializes KV buckets and query caches.
+func (c *Component) initStorage(ctx context.Context) error {
+	// Entity states KV bucket (create if not exists) - we are the WRITER
+	bucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      graph.BucketEntityStates,
+		Description: "Entity state storage for graph-ingest",
+	})
+	if err != nil {
+		return errs.Wrap(err, "Component", "Start", "KV bucket creation")
+	}
+	c.entityBucket = c.natsClient.NewKVStore(bucket)
+
+	// Entity query cache (HybridCache: LRU capacity + TTL freshness)
+	entityCache, err := cache.NewFromConfig[graph.EntityState](ctx, cache.Config{
+		Enabled:         true,
+		Strategy:        cache.StrategyHybrid,
+		MaxSize:         5000,
+		TTL:             30 * time.Second,
+		CleanupInterval: 10 * time.Second,
+	}, cache.WithMetrics[graph.EntityState](c.metricsRegistry, "entity_query_cache"))
+	if err != nil {
+		return errs.Wrap(err, "Component", "Start", "entity cache creation")
+	}
+	c.entityCache = entityCache
+
+	// Suffix index KV bucket for fast suffix→fullID resolution
+	suffixBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      "ENTITY_SUFFIX_INDEX",
+		Description: "Suffix-to-full-ID reverse index for partial entity ID resolution",
+	})
+	if err != nil {
+		return errs.Wrap(err, "Component", "Start", "suffix index bucket creation")
+	}
+	c.suffixBucket = suffixBucket
+
+	// Suffix resolution cache (stable mappings, long TTL)
+	suffixCacheInst, err := cache.NewFromConfig[string](ctx, cache.Config{
+		Enabled:         true,
+		Strategy:        cache.StrategyTTL,
+		MaxSize:         500,
+		TTL:             5 * time.Minute,
+		CleanupInterval: 1 * time.Minute,
+	}, cache.WithMetrics[string](c.metricsRegistry, "suffix_resolution_cache"))
+	if err != nil {
+		return errs.Wrap(err, "Component", "Start", "suffix cache creation")
+	}
+	c.suffixCache = suffixCacheInst
+
+	return nil
 }
 
 // initLifecycleReporter initializes the lifecycle reporter for component status tracking.
@@ -882,6 +945,14 @@ func (c *Component) CreateEntity(ctx context.Context, entity *graph.EntityState)
 		return errs.Wrap(err, "Component", "CreateEntity", "KV store")
 	}
 
+	// Invalidate cache on write (cache consistency)
+	if c.entityCache != nil {
+		c.entityCache.Delete(entity.ID) //nolint:errcheck
+	}
+
+	// Update suffix index (best-effort, don't fail entity creation)
+	c.updateSuffixIndex(ctx, entity.ID)
+
 	// Update metrics
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	atomic.AddInt64(&c.bytesProcessed, int64(len(data)))
@@ -993,6 +1064,11 @@ func (c *Component) UpdateEntity(ctx context.Context, entity *graph.EntityState)
 		return errs.Wrap(err, "Component", "UpdateEntity", "KV store")
 	}
 
+	// Invalidate cache on write (cache consistency)
+	if c.entityCache != nil {
+		c.entityCache.Delete(entity.ID) //nolint:errcheck
+	}
+
 	// Update metrics
 	atomic.AddInt64(&c.messagesProcessed, 1)
 	atomic.AddInt64(&c.bytesProcessed, int64(len(data)))
@@ -1023,6 +1099,14 @@ func (c *Component) DeleteEntity(ctx context.Context, entityID string) error {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "DeleteEntity", "KV delete")
 	}
+
+	// Invalidate cache on delete (cache consistency)
+	if c.entityCache != nil {
+		c.entityCache.Delete(entityID) //nolint:errcheck
+	}
+
+	// Remove suffix index entries (best-effort)
+	c.removeSuffixIndex(ctx, entityID)
 
 	// Update metrics
 	atomic.AddInt64(&c.messagesProcessed, 1)
@@ -1153,4 +1237,68 @@ func (c *Component) RemoveTriple(ctx context.Context, subject, predicate string)
 	}
 
 	return nil
+}
+
+// ============================================================================
+// Suffix Index Operations
+// ============================================================================
+
+// entitySuffixKeys returns the suffix index keys for a given entity ID.
+// Entity ID format: org.platform.domain.system.type.instance
+// Returns two keys: instance part and type.instance part.
+func entitySuffixKeys(entityID string) (instance, typeInstance string) {
+	parts := strings.Split(entityID, ".")
+	if len(parts) < 2 {
+		return entityID, ""
+	}
+	instance = parts[len(parts)-1]
+	typeInstance = parts[len(parts)-2] + "." + parts[len(parts)-1]
+	return instance, typeInstance
+}
+
+// updateSuffixIndex writes suffix→fullID mappings to the KV suffix index.
+// Best-effort: errors are logged but don't fail the caller.
+func (c *Component) updateSuffixIndex(ctx context.Context, entityID string) {
+	if c.suffixBucket == nil {
+		return
+	}
+
+	instance, typeInstance := entitySuffixKeys(entityID)
+	indexValue := []byte(`{"id":"` + entityID + `"}`)
+
+	if instance != "" {
+		if _, err := c.suffixBucket.Put(ctx, instance, indexValue); err != nil {
+			c.logger.Debug("suffix index write failed",
+				slog.String("key", instance), slog.Any("error", err))
+		}
+	}
+	if typeInstance != "" {
+		if _, err := c.suffixBucket.Put(ctx, typeInstance, indexValue); err != nil {
+			c.logger.Debug("suffix index write failed",
+				slog.String("key", typeInstance), slog.Any("error", err))
+		}
+	}
+}
+
+// removeSuffixIndex removes suffix→fullID mappings from the KV suffix index and cache.
+// Best-effort: errors are logged but don't fail the caller.
+func (c *Component) removeSuffixIndex(ctx context.Context, entityID string) {
+	if c.suffixBucket == nil {
+		return
+	}
+
+	instance, typeInstance := entitySuffixKeys(entityID)
+
+	if instance != "" {
+		_ = c.suffixBucket.Delete(ctx, instance)
+		if c.suffixCache != nil {
+			c.suffixCache.Delete(instance) //nolint:errcheck
+		}
+	}
+	if typeInstance != "" {
+		_ = c.suffixBucket.Delete(ctx, typeInstance)
+		if c.suffixCache != nil {
+			c.suffixCache.Delete(typeInstance) //nolint:errcheck
+		}
+	}
 }

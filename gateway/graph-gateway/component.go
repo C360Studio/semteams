@@ -441,8 +441,11 @@ func (c *Component) Start(ctx context.Context) error {
 
 	// Create HTTP server
 	c.httpServer = &http.Server{
-		Addr:    c.config.BindAddress,
-		Handler: c.httpMux,
+		Addr:         c.config.BindAddress,
+		Handler:      c.httpMux,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	// Start HTTP server in background
