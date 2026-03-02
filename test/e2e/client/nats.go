@@ -11,6 +11,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/graph/clustering"
 	"github.com/c360studio/semstreams/natsclient"
 )
@@ -181,6 +182,26 @@ func (c *NATSValidationClient) GetEntity(ctx context.Context, entityID string) (
 	}
 
 	return &entity, nil
+}
+
+// GetTrajectory retrieves a trajectory from the AGENT_TRAJECTORIES KV bucket.
+func (c *NATSValidationClient) GetTrajectory(ctx context.Context, loopID string) (*agentic.Trajectory, error) {
+	bucket, err := c.client.GetKeyValueBucket(ctx, "AGENT_TRAJECTORIES")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get trajectories bucket: %w", err)
+	}
+
+	entry, err := bucket.Get(ctx, loopID)
+	if err != nil {
+		return nil, fmt.Errorf("trajectory not found for loop %s: %w", loopID, err)
+	}
+
+	var traj agentic.Trajectory
+	if err := json.Unmarshal(entry.Value(), &traj); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal trajectory: %w", err)
+	}
+
+	return &traj, nil
 }
 
 // ValidateIndexPopulated checks if an index bucket has entries

@@ -58,6 +58,9 @@ type Component struct {
 	// Track consumers for cleanup
 	consumerInfos []consumerInfo
 
+	// Query subscription for trajectory requests
+	trajectorySub *natsclient.Subscription
+
 	// Metrics
 	metrics *loopMetrics
 }
@@ -225,6 +228,13 @@ func (c *Component) Start(ctx context.Context) error {
 		if err := c.setupSubscriptions(ctx); err != nil {
 			return errs.Wrap(err, "agentic-loop", "Start", "setup subscriptions")
 		}
+
+		// Set up trajectory query handler
+		sub, err := c.natsClient.SubscribeForRequests(ctx, "agentic.query.trajectory", c.handleTrajectoryQuery)
+		if err != nil {
+			return errs.Wrap(err, "agentic-loop", "Start", "subscribe to trajectory query")
+		}
+		c.trajectorySub = sub
 	}
 
 	c.started = true
@@ -240,6 +250,12 @@ func (c *Component) Stop(timeout time.Duration) error {
 
 	if !c.started {
 		return nil
+	}
+
+	// Unsubscribe from trajectory query handler
+	if c.trajectorySub != nil {
+		_ = c.trajectorySub.Unsubscribe()
+		c.trajectorySub = nil
 	}
 
 	// Stop all JetStream consumers
@@ -980,6 +996,28 @@ func (c *Component) finalizeTrajectory(ctx context.Context, loopID string, state
 	if _, err := c.trajectoriesBucket.Put(ctx, loopID, data); err != nil {
 		c.logger.Error("Failed to persist finalized trajectory", "error", err, "loop_id", loopID)
 	}
+}
+
+// handleTrajectoryQuery handles NATS request/reply for trajectory queries.
+// It reads the trajectory from the KV bucket keyed by loopId.
+func (c *Component) handleTrajectoryQuery(ctx context.Context, data []byte) ([]byte, error) {
+	var req struct {
+		LoopID string `json:"loopId"`
+	}
+	if err := json.Unmarshal(data, &req); err != nil || req.LoopID == "" {
+		return nil, fmt.Errorf("loopId required")
+	}
+
+	if c.trajectoriesBucket == nil {
+		return nil, fmt.Errorf("trajectories bucket not initialized")
+	}
+
+	entry, err := c.trajectoriesBucket.Get(ctx, req.LoopID)
+	if err != nil {
+		return nil, fmt.Errorf("trajectory not found: %w", err)
+	}
+
+	return entry.Value(), nil
 }
 
 // findLoopIDForRequest finds the loop ID associated with a request ID,

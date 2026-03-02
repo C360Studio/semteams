@@ -651,6 +651,11 @@ func (c *Component) mapGraphQLQueryToNATSSubject(query string) string {
 	// IMPORTANT: Check specific patterns BEFORE generic ones
 	// "entityidhierarchy" and "entitybyalias" contain "entity" - must check first
 
+	// Agentic query patterns
+	if strings.Contains(query, "trajectory") {
+		return "agentic.query.trajectory"
+	}
+
 	// Most specific patterns first
 	if strings.Contains(query, "entityidhierarchy") {
 		return "graph.query.hierarchyStats"
@@ -750,6 +755,8 @@ func (c *Component) subjectToGraphQLField(subject string) string {
 		return "predicateStats"
 	case "graph.index.query.predicateCompound":
 		return "compoundPredicateQuery"
+	case "agentic.query.trajectory":
+		return "trajectory"
 	default:
 		return ""
 	}
@@ -790,6 +797,8 @@ func (c *Component) transformVariablesToNATSPayload(variables map[string]interfa
 		return c.transformPredicateStatsVars(variables)
 	case "graph.index.query.predicateCompound":
 		return c.transformCompoundPredicateVars(variables)
+	case "agentic.query.trajectory":
+		return extractVars(variables, "loopId")
 	default:
 		return variables
 	}
@@ -1311,6 +1320,8 @@ func buildIntrospectionSchema() map[string]interface{} {
 					fieldDef("localSearch", "SearchResult", argDef("entityId", "String!"), argDef("query", "String"), argDef("level", "Int")),
 					fieldDef("globalSearch", "SearchResult", argDef("query", "String!"), argDef("level", "Int"), argDef("maxCommunities", "Int")),
 					fieldDef("capabilities", "Capabilities"),
+					// Agentic queries
+					fieldDef("trajectory", "Trajectory", argDef("loopId", "String!")),
 					// Predicate queries
 					fieldDef("entitiesByPredicate", "[String]", argDef("predicate", "String!"), argDef("limit", "Int")),
 					fieldDef("predicates", "PredicateListResult"),
@@ -1330,6 +1341,9 @@ func buildIntrospectionSchema() map[string]interface{} {
 			typeDef("OBJECT", "PredicateListResult", "predicates", "total"),
 			typeDef("OBJECT", "PredicateStatsResult", "predicate", "entityCount", "sampleEntities"),
 			typeDef("OBJECT", "CompoundPredicateResult", "entities", "operator", "matched"),
+			// Agentic types
+			typeDef("OBJECT", "Trajectory", "loopId", "startTime", "endTime", "steps", "outcome", "totalTokensIn", "totalTokensOut", "duration"),
+			typeDef("OBJECT", "TrajectoryStep", "timestamp", "stepType", "requestId", "prompt", "response", "tokensIn", "tokensOut", "toolName", "toolResult", "duration"),
 			typeDef("SCALAR", "String"),
 			typeDef("SCALAR", "Int"),
 			typeDef("SCALAR", "Float"),

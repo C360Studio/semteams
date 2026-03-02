@@ -156,6 +156,7 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		{"capture-baseline", s.captureBaseline},
 		{"inject-task", s.injectTask},
 		{"wait-for-completion", s.waitForCompletion},
+		{"validate-trajectory", s.validateTrajectory},
 		{"verify-tool-execution", s.verifyToolExecution},
 		{"validate-results", s.validateResults},
 		// AGNTCY integration stages (optional, skip if not configured)
@@ -257,6 +258,7 @@ func (s *Scenario) captureBaseline(ctx context.Context, result *scenarios.Result
 func (s *Scenario) injectTask(ctx context.Context, result *scenarios.Result) error {
 	// Inject a direct task to test agentic loop
 	task := agentic.TaskMessage{
+		LoopID: fmt.Sprintf("e2e-loop-%d", time.Now().UnixNano()),
 		TaskID: fmt.Sprintf("e2e-agentic-%d", time.Now().UnixNano()),
 		Role:   "general",
 		Model:  "mock",
@@ -270,6 +272,7 @@ func (s *Scenario) injectTask(ctx context.Context, result *scenarios.Result) err
 	}
 
 	result.Details["task_id"] = task.TaskID
+	result.Details["loop_id"] = task.LoopID
 	result.Details["task_subject"] = "agent.task.e2e"
 
 	if err := s.nats.Publish(ctx, "agent.task.e2e", taskData); err != nil {
@@ -310,6 +313,63 @@ func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Resu
 	result.Details["timeout_loops_completed"] = loopsCompleted
 
 	return fmt.Errorf("timeout waiting for agent loop completion after %v (loops_completed=%v)", timeout, loopsCompleted)
+}
+
+// validateTrajectory retrieves and validates the trajectory from NATS KV.
+func (s *Scenario) validateTrajectory(ctx context.Context, result *scenarios.Result) error {
+	loopID, ok := result.Details["loop_id"].(string)
+	if !ok || loopID == "" {
+		return fmt.Errorf("loop_id not found in result details")
+	}
+
+	traj, err := s.nats.GetTrajectory(ctx, loopID)
+	if err != nil {
+		return fmt.Errorf("failed to get trajectory for loop %s: %w", loopID, err)
+	}
+
+	// Validate minimum steps
+	if len(traj.Steps) < s.config.MinTrajectorySteps {
+		return fmt.Errorf("trajectory has %d steps, expected at least %d", len(traj.Steps), s.config.MinTrajectorySteps)
+	}
+
+	// Validate at least one model_call step exists
+	hasModelCall := false
+	hasToolCall := false
+	for _, step := range traj.Steps {
+		switch step.StepType {
+		case "model_call":
+			hasModelCall = true
+		case "tool_call":
+			hasToolCall = true
+		}
+	}
+
+	if !hasModelCall {
+		return fmt.Errorf("trajectory has no model_call steps")
+	}
+	if !hasToolCall {
+		result.Warnings = append(result.Warnings, "trajectory has no tool_call steps")
+	}
+
+	// Validate completion
+	if traj.Outcome != "complete" {
+		return fmt.Errorf("trajectory outcome is %q, expected \"complete\"", traj.Outcome)
+	}
+	if traj.EndTime == nil {
+		return fmt.Errorf("trajectory end_time is nil")
+	}
+	if traj.Duration <= 0 {
+		return fmt.Errorf("trajectory duration is %d, expected > 0", traj.Duration)
+	}
+
+	// Store metrics
+	result.Metrics["trajectory_steps"] = len(traj.Steps)
+	result.Metrics["trajectory_tokens_in"] = traj.TotalTokensIn
+	result.Metrics["trajectory_tokens_out"] = traj.TotalTokensOut
+	result.Metrics["trajectory_duration_ms"] = traj.Duration
+	result.Details["trajectory_outcome"] = traj.Outcome
+
+	return nil
 }
 
 // verifyToolExecution verifies that tools were executed during the agent loop.

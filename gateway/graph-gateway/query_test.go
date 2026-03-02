@@ -141,6 +141,34 @@ func TestGateway_MapGraphQLToNATSSubject_Relationships(t *testing.T) {
 	}
 }
 
+func TestGateway_MapGraphQLToNATSSubject_Trajectory(t *testing.T) {
+	comp := createTestGateway(t)
+
+	tests := []struct {
+		name            string
+		query           string
+		expectedSubject string
+	}{
+		{
+			name:            "trajectory query",
+			query:           `{ trajectory(loopId: "loop-123") { loopId steps { stepType } outcome } }`,
+			expectedSubject: "agentic.query.trajectory",
+		},
+		{
+			name:            "trajectory query with operation name",
+			query:           `query GetTrajectory($id: String!) { trajectory(loopId: $id) { loopId outcome duration } }`,
+			expectedSubject: "agentic.query.trajectory",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			subject := comp.mapGraphQLQueryToNATSSubject(tt.query)
+			assert.Equal(t, tt.expectedSubject, subject)
+		})
+	}
+}
+
 func TestGateway_MapGraphQLToNATSSubject_Unknown(t *testing.T) {
 	comp := createTestGateway(t)
 
