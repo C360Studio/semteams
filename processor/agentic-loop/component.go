@@ -977,9 +977,10 @@ func (c *Component) finalizeTrajectory(ctx context.Context, loopID string, state
 		return
 	}
 
-	// Set end time and outcome
+	// Set end time, outcome, and total duration
 	now := time.Now()
 	trajectory.EndTime = &now
+	trajectory.Duration = now.Sub(trajectory.StartTime).Milliseconds()
 	if state == agentic.LoopStateComplete {
 		trajectory.Outcome = "complete"
 	} else {

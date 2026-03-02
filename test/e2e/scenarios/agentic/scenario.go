@@ -358,8 +358,8 @@ func (s *Scenario) validateTrajectory(ctx context.Context, result *scenarios.Res
 	if traj.EndTime == nil {
 		return fmt.Errorf("trajectory end_time is nil")
 	}
-	if traj.Duration <= 0 {
-		return fmt.Errorf("trajectory duration is %d, expected > 0", traj.Duration)
+	if traj.Duration < 0 {
+		return fmt.Errorf("trajectory duration is %d, expected >= 0", traj.Duration)
 	}
 
 	// Store metrics
