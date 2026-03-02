@@ -196,11 +196,12 @@ type Component struct {
 	logger     *slog.Logger
 
 	// Domain resources - KV buckets for index storage
-	outgoingBucket  jetstream.KeyValue
-	incomingBucket  jetstream.KeyValue
-	aliasBucket     jetstream.KeyValue
-	predicateBucket jetstream.KeyValue
-	contextBucket   jetstream.KeyValue
+	outgoingBucket     jetstream.KeyValue
+	incomingBucket     jetstream.KeyValue
+	aliasBucket        jetstream.KeyValue
+	predicateBucket    jetstream.KeyValue
+	contextBucket      jetstream.KeyValue
+	entityStatesBucket jetstream.KeyValue
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -509,16 +510,15 @@ func (c *Component) Start(ctx context.Context) error {
 		)
 	}
 
-	// Bucket is available - get it for use
-	entityBucket, err := js.KeyValue(ctx, graph.BucketEntityStates)
-	if err != nil {
+	// Bucket is available - get it for use (also used for value filtering in queries)
+	if c.entityStatesBucket, err = js.KeyValue(ctx, graph.BucketEntityStates); err != nil {
 		cancel()
 		return errs.Wrap(err, "Component", "Start", "get entity bucket after availability check")
 	}
 
 	// Start entity watcher goroutine
 	c.wg.Add(1)
-	go c.watchEntityStates(ctx, entityBucket)
+	go c.watchEntityStates(ctx, c.entityStatesBucket)
 
 	// Set up query handler subscriptions
 	if err := c.setupQueryHandlers(ctx); err != nil {

@@ -58,9 +58,10 @@ type ConditionResult struct {
 
 // EvaluateRule evaluates a rule against a RuleContext and returns whether it should fire.
 // This checks:
-// 1. All conditions (using AND/OR logic based on rule.Logic)
+// 1. Terminal state (completed/failed/escalated/timed_out executions never fire)
 // 2. Cooldown constraints
 // 3. Max firings constraints
+// 4. All conditions (using AND/OR logic based on rule.Logic)
 func (e *Evaluator) EvaluateRule(
 	ctx *RuleContext,
 	rule *RuleDef,
@@ -70,6 +71,19 @@ func (e *Evaluator) EvaluateRule(
 	result := EvaluationResult{
 		RuleID:           rule.ID,
 		ConditionResults: make([]ConditionResult, 0, len(rule.Conditions)),
+	}
+
+	// Check terminal state first (cheapest check, no locks needed).
+	// Safe for nil state (TriggerMessageOnly rules): IsTerminal returns false.
+	if IsTerminal(ctx.State) {
+		result.ShouldFire = false
+		result.Reason = "execution in terminal state"
+		e.logger.Debug("Skipping rule evaluation for terminal state",
+			"workflow", workflowID,
+			"rule", rule.ID,
+			"execution", executionID,
+			"status", string(GetStatus(ctx.State)))
+		return result
 	}
 
 	// Check cooldown first (cheap check)

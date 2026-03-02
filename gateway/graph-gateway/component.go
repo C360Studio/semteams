@@ -790,7 +790,7 @@ func (c *Component) transformVariablesToNATSPayload(variables map[string]interfa
 	case "graph.query.globalSearch":
 		return c.transformGlobalSearchVars(variables)
 	case "graph.index.query.predicate":
-		return extractVars(variables, "predicate", "limit")
+		return extractVars(variables, "predicate", "value", "limit")
 	case "graph.index.query.predicateList":
 		return map[string]interface{}{}
 	case "graph.index.query.predicateStats":
@@ -1323,7 +1323,7 @@ func buildIntrospectionSchema() map[string]interface{} {
 					// Agentic queries
 					fieldDef("trajectory", "Trajectory", argDef("loopId", "String!"), argDef("limit", "Int")),
 					// Predicate queries
-					fieldDef("entitiesByPredicate", "[String]", argDef("predicate", "String!"), argDef("limit", "Int")),
+					fieldDef("entitiesByPredicate", "[String]", argDef("predicate", "String!"), argDef("value", "String"), argDef("limit", "Int")),
 					fieldDef("predicates", "PredicateListResult"),
 					fieldDef("predicateStats", "PredicateStatsResult", argDef("predicate", "String!"), argDef("sampleLimit", "Int")),
 					fieldDef("compoundPredicateQuery", "CompoundPredicateResult", argDef("predicates", "[String!]!"), argDef("operator", "String!"), argDef("limit", "Int")),

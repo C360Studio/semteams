@@ -147,6 +147,125 @@ func TestEvaluator_EvaluateRule_ORLogic_AllFail(t *testing.T) {
 	assert.Equal(t, "no conditions passed (OR logic)", result.Reason)
 }
 
+func TestEvaluator_EvaluateRule_TerminalState(t *testing.T) {
+	terminalStatuses := []struct {
+		name   string
+		status ExecutionStatus
+	}{
+		{"completed", StatusCompleted},
+		{"failed", StatusFailed},
+		{"escalated", StatusEscalated},
+		{"timed_out", StatusTimedOut},
+	}
+
+	for _, tc := range terminalStatuses {
+		t.Run(tc.name, func(t *testing.T) {
+			e := NewEvaluator(slog.Default())
+
+			// Rule has an always-true condition: proves the guard fires BEFORE
+			// condition evaluation when the result has empty ConditionResults.
+			rule := &RuleDef{
+				ID: "test-rule",
+				Conditions: []Condition{
+					{Description: "always true", Evaluate: func(_ *RuleContext) bool { return true }},
+				},
+				Trigger: TriggerSource{
+					WatchBucket:  "TEST",
+					WatchPattern: "*",
+				},
+				Action: Action{
+					Type:        ActionMutate,
+					MutateState: func(_ *RuleContext, _ any) error { return nil },
+				},
+			}
+
+			ctx := &RuleContext{
+				State: &TestState{
+					ExecutionState: ExecutionState{
+						ID:     "exec-1",
+						Status: tc.status,
+					},
+				},
+			}
+
+			result := e.EvaluateRule(ctx, rule, "test-workflow", "exec-1")
+
+			assert.False(t, result.ShouldFire)
+			assert.Equal(t, "execution in terminal state", result.Reason)
+			assert.Empty(t, result.ConditionResults, "conditions must not be evaluated for terminal state")
+		})
+	}
+}
+
+func TestEvaluator_EvaluateRule_NonTerminalState_StillFires(t *testing.T) {
+	nonTerminalStatuses := []struct {
+		name   string
+		status ExecutionStatus
+	}{
+		{"pending", StatusPending},
+		{"running", StatusRunning},
+		{"waiting", StatusWaiting},
+	}
+
+	for _, tc := range nonTerminalStatuses {
+		t.Run(tc.name, func(t *testing.T) {
+			e := NewEvaluator(slog.Default())
+
+			rule := &RuleDef{
+				ID: "test-rule",
+				Conditions: []Condition{
+					{Description: "always true", Evaluate: func(_ *RuleContext) bool { return true }},
+				},
+				Trigger: TriggerSource{
+					WatchBucket:  "TEST",
+					WatchPattern: "*",
+				},
+				Action: Action{
+					Type:        ActionMutate,
+					MutateState: func(_ *RuleContext, _ any) error { return nil },
+				},
+			}
+
+			ctx := &RuleContext{
+				State: &TestState{
+					ExecutionState: ExecutionState{
+						ID:     "exec-1",
+						Status: tc.status,
+					},
+				},
+			}
+
+			result := e.EvaluateRule(ctx, rule, "test-workflow", "exec-1")
+
+			assert.True(t, result.ShouldFire, "non-terminal status %q should not be blocked", tc.status)
+		})
+	}
+}
+
+func TestEvaluator_EvaluateRule_NilState_NotTerminal(t *testing.T) {
+	e := NewEvaluator(slog.Default())
+
+	// No conditions — simulates a TriggerMessageOnly rule with no state.
+	rule := &RuleDef{
+		ID: "test-rule",
+		Trigger: TriggerSource{
+			WatchBucket:  "TEST",
+			WatchPattern: "*",
+		},
+		Action: Action{
+			Type:        ActionMutate,
+			MutateState: func(_ *RuleContext, _ any) error { return nil },
+		},
+	}
+
+	ctx := &RuleContext{State: nil}
+
+	result := e.EvaluateRule(ctx, rule, "test-workflow", "exec-1")
+
+	assert.True(t, result.ShouldFire)
+	assert.Equal(t, "no conditions (always fires)", result.Reason)
+}
+
 func TestEvaluator_EvaluateRule_DefaultsToAND(t *testing.T) {
 	e := NewEvaluator(slog.Default())
 

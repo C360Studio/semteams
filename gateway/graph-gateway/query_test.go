@@ -1405,6 +1405,57 @@ func TestGateway_UnknownQuery_ReturnsBadRequest(t *testing.T) {
 	assert.NotNil(t, errs)
 }
 
+func TestGateway_TransformPredicateVarsWithValue(t *testing.T) {
+	comp := &Component{}
+
+	tests := []struct {
+		name     string
+		vars     map[string]interface{}
+		expected map[string]interface{}
+	}{
+		{
+			name: "predicate with value forwarded",
+			vars: map[string]interface{}{
+				"predicate": "robotics.battery.level",
+				"value":     "15",
+				"limit":     float64(10),
+			},
+			expected: map[string]interface{}{
+				"predicate": "robotics.battery.level",
+				"value":     "15",
+				"limit":     float64(10),
+			},
+		},
+		{
+			name: "predicate without value",
+			vars: map[string]interface{}{
+				"predicate": "robotics.type.drone",
+			},
+			expected: map[string]interface{}{
+				"predicate": "robotics.type.drone",
+			},
+		},
+		{
+			name: "predicate with value and no limit",
+			vars: map[string]interface{}{
+				"predicate": "robotics.battery.level",
+				"value":     "critical",
+			},
+			expected: map[string]interface{}{
+				"predicate": "robotics.battery.level",
+				"value":     "critical",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := comp.transformVariablesToNATSPayload(tt.vars, "graph.index.query.predicate")
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func createTestGatewayWithMock(t *testing.T, mock *mockNATSRequester) *Component {
 	t.Helper()
 

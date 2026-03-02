@@ -4,7 +4,9 @@ package graphindex
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	"github.com/c360studio/semstreams/graph"
@@ -187,7 +189,9 @@ func (c *Component) handleQueryPredicateNATS(ctx context.Context, data []byte) (
 	defer cancel()
 
 	var req struct {
-		Predicate string `json:"predicate"`
+		Predicate string  `json:"predicate"`
+		Value     *string `json:"value,omitempty"`
+		Limit     int     `json:"limit,omitempty"`
 	}
 	if err := json.Unmarshal(data, &req); err != nil {
 		return json.Marshal(graph.NewQueryError[graph.PredicateData]("invalid request"))
@@ -197,23 +201,13 @@ func (c *Component) handleQueryPredicateNATS(ctx context.Context, data []byte) (
 		return json.Marshal(graph.NewQueryError[graph.PredicateData]("invalid request: empty predicate"))
 	}
 
-	entry, err := c.predicateBucket.Get(ctx, req.Predicate)
+	entities, err := c.queryPredicateEntities(ctx, req.Predicate, req.Value, req.Limit)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
-			return json.Marshal(graph.NewQueryResponse(graph.PredicateData{
-				Entities: []string{},
-			}))
-		}
-		return json.Marshal(graph.NewQueryError[graph.PredicateData]("internal error"))
-	}
-
-	var indexEntry graph.PredicateIndexEntry
-	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
 		return json.Marshal(graph.NewQueryError[graph.PredicateData]("internal error"))
 	}
 
 	return json.Marshal(graph.NewQueryResponse(graph.PredicateData{
-		Entities: indexEntry.Entities,
+		Entities: entities,
 	}))
 }
 
@@ -359,7 +353,9 @@ func (c *Component) handleQueryPredicate(msg queryMsg) {
 
 	// Parse request
 	var req struct {
-		Predicate string `json:"predicate"`
+		Predicate string  `json:"predicate"`
+		Value     *string `json:"value,omitempty"`
+		Limit     int     `json:"limit,omitempty"`
 	}
 	if err := json.Unmarshal(msg.Data(), &req); err != nil {
 		c.respondError(msg, "invalid request")
@@ -372,32 +368,110 @@ func (c *Component) handleQueryPredicate(msg queryMsg) {
 		return
 	}
 
-	// Get predicate index entry from KV bucket
-	entry, err := c.predicateBucket.Get(ctx, req.Predicate)
+	entities, err := c.queryPredicateEntities(ctx, req.Predicate, req.Value, req.Limit)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
-			// Return empty entities array for not found
-			c.respondJSON(msg, map[string][]string{
-				"entities": {},
-			})
-			return
-		}
-		c.respondError(msg, "internal error")
-		return
-	}
-
-	// Parse predicate index entry
-	var indexEntry graph.PredicateIndexEntry
-	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
 		c.respondError(msg, "internal error")
 		return
 	}
 
 	// Respond with entities array
-	response := map[string][]string{
-		"entities": indexEntry.Entities,
+	c.respondJSON(msg, map[string][]string{
+		"entities": entities,
+	})
+}
+
+// queryPredicateEntities is the shared helper used by both NATS and msg-based predicate
+// handlers. It looks up the predicate index, optionally filters by value, and applies
+// the limit in a single place so both call sites stay consistent.
+func (c *Component) queryPredicateEntities(ctx context.Context, predicate string, value *string, limit int) ([]string, error) {
+	entry, err := c.predicateBucket.Get(ctx, predicate)
+	if err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return []string{}, nil
+		}
+		return nil, err
 	}
-	c.respondJSON(msg, response)
+
+	var indexEntry graph.PredicateIndexEntry
+	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+		return nil, err
+	}
+
+	entities := indexEntry.Entities
+
+	if value != nil && c.entityStatesBucket != nil {
+		// filterEntitiesByPredicateValue handles limit internally so we avoid
+		// iterating the full list twice.
+		entities = c.filterEntitiesByPredicateValue(ctx, entities, predicate, *value, limit)
+	} else if limit > 0 && len(entities) > limit {
+		entities = entities[:limit]
+	}
+
+	return entities, nil
+}
+
+// filterEntitiesByPredicateValue filters entity IDs by checking if their entity state
+// contains a triple with the given predicate whose Object matches the specified value.
+// limit is applied early — iteration stops once enough matches are collected.
+// ctx cancellation is also checked on each iteration to allow cooperative cancellation.
+func (c *Component) filterEntitiesByPredicateValue(ctx context.Context, entityIDs []string, predicate string, value string, limit int) []string {
+	var matched []string
+
+	for _, entityID := range entityIDs {
+		// Respect context cancellation between iterations.
+		if ctx.Err() != nil {
+			break
+		}
+
+		entry, err := c.entityStatesBucket.Get(ctx, entityID)
+		if err != nil {
+			c.logger.Debug("value filter: skip entity on fetch",
+				slog.String("entity_id", entityID),
+				slog.Any("error", err))
+			continue
+		}
+
+		var state graph.EntityState
+		if err := json.Unmarshal(entry.Value(), &state); err != nil {
+			c.logger.Debug("value filter: skip entity on unmarshal",
+				slog.String("entity_id", entityID),
+				slog.Any("error", err))
+			continue
+		}
+
+		for _, triple := range state.Triples {
+			if triple.Predicate == predicate && normalizeToString(triple.Object) == value {
+				matched = append(matched, entityID)
+				break
+			}
+		}
+
+		// Stop as soon as the caller's limit is satisfied.
+		if limit > 0 && len(matched) >= limit {
+			break
+		}
+	}
+
+	return matched
+}
+
+// normalizeToString converts a triple Object value to a string for comparison.
+// Numeric values stored as float64 (the default JSON number type) are formatted
+// without a trailing decimal point when the value is integral, matching how callers
+// typically express integer quantities (e.g. "85" rather than "85.0").
+func normalizeToString(v any) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case float64:
+		return strconv.FormatFloat(val, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(val)
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", val)
+	}
 }
 
 // respondError sends an error response

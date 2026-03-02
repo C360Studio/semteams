@@ -7,10 +7,12 @@ package graphindex
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
@@ -778,6 +780,247 @@ func TestComponent_QueryHandlers_UseContextWithTimeout(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ====================================================================================
+// Query Handler: handleQueryPredicate Value Filter Tests
+// ====================================================================================
+
+func TestComponent_HandleQueryPredicate_WithValueFilter(t *testing.T) {
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	// Set up entity states bucket
+	entityStatesBucket := newMockKVBucket()
+	comp.entityStatesBucket = entityStatesBucket
+
+	predicate := "robotics.battery.level"
+
+	// Store predicate index entries for 3 entities
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.001", predicate))
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.002", predicate))
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.003", predicate))
+
+	// Store entity states with different battery levels
+	storeEntityState(t, entityStatesBucket, "drone.001", []message.Triple{
+		{Subject: "drone.001", Predicate: predicate, Object: "85"},
+	})
+	storeEntityState(t, entityStatesBucket, "drone.002", []message.Triple{
+		{Subject: "drone.002", Predicate: predicate, Object: "15"},
+	})
+	storeEntityState(t, entityStatesBucket, "drone.003", []message.Triple{
+		{Subject: "drone.003", Predicate: predicate, Object: "15"},
+	})
+
+	// Query with value filter for "15"
+	request := map[string]any{"predicate": predicate, "value": "15"}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	msg := &mockNATSMsg{data: requestJSON}
+	comp.handleQueryPredicate(msg)
+
+	require.NotNil(t, msg.response)
+
+	var response map[string][]string
+	err = json.Unmarshal(msg.response, &response)
+	require.NoError(t, err)
+
+	entities := response["entities"]
+	assert.Len(t, entities, 2, "should return only entities matching value")
+
+	entityMap := make(map[string]bool)
+	for _, id := range entities {
+		entityMap[id] = true
+	}
+	assert.True(t, entityMap["drone.002"])
+	assert.True(t, entityMap["drone.003"])
+	assert.False(t, entityMap["drone.001"])
+}
+
+func TestComponent_HandleQueryPredicate_WithValueFilter_NoMatch(t *testing.T) {
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	entityStatesBucket := newMockKVBucket()
+	comp.entityStatesBucket = entityStatesBucket
+
+	predicate := "robotics.battery.level"
+
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.001", predicate))
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.002", predicate))
+
+	storeEntityState(t, entityStatesBucket, "drone.001", []message.Triple{
+		{Subject: "drone.001", Predicate: predicate, Object: "85"},
+	})
+	storeEntityState(t, entityStatesBucket, "drone.002", []message.Triple{
+		{Subject: "drone.002", Predicate: predicate, Object: "50"},
+	})
+
+	// Query with a value that no entity has
+	request := map[string]any{"predicate": predicate, "value": "99"}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	msg := &mockNATSMsg{data: requestJSON}
+	comp.handleQueryPredicate(msg)
+
+	require.NotNil(t, msg.response)
+
+	var response map[string][]string
+	err = json.Unmarshal(msg.response, &response)
+	require.NoError(t, err)
+
+	assert.Empty(t, response["entities"], "should return empty array when no entities match value")
+}
+
+func TestComponent_HandleQueryPredicate_WithoutValue_BackwardCompat(t *testing.T) {
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	entityStatesBucket := newMockKVBucket()
+	comp.entityStatesBucket = entityStatesBucket
+
+	predicate := "robotics.type.drone"
+
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.001", predicate))
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.002", predicate))
+
+	// Query WITHOUT value — should return all entities (backward compat)
+	request := map[string]string{"predicate": predicate}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	msg := &mockNATSMsg{data: requestJSON}
+	comp.handleQueryPredicate(msg)
+
+	require.NotNil(t, msg.response)
+
+	var response map[string][]string
+	err = json.Unmarshal(msg.response, &response)
+	require.NoError(t, err)
+
+	assert.Len(t, response["entities"], 2, "should return all entities when no value filter")
+}
+
+func TestComponent_HandleQueryPredicate_WithValueFilter_NumericObject(t *testing.T) {
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	entityStatesBucket := newMockKVBucket()
+	comp.entityStatesBucket = entityStatesBucket
+
+	predicate := "robotics.battery.level"
+
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.001", predicate))
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.002", predicate))
+
+	// Store entity states where the Object is a float64 — the JSON-decoded representation
+	// of a numeric literal.  The caller queries with the string "85.5".
+	storeEntityState(t, entityStatesBucket, "drone.001", []message.Triple{
+		{Subject: "drone.001", Predicate: predicate, Object: float64(85.5)},
+	})
+	storeEntityState(t, entityStatesBucket, "drone.002", []message.Triple{
+		{Subject: "drone.002", Predicate: predicate, Object: float64(50.0)},
+	})
+
+	value := "85.5"
+	request := map[string]any{"predicate": predicate, "value": value}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	msg := &mockNATSMsg{data: requestJSON}
+	comp.handleQueryPredicate(msg)
+
+	require.NotNil(t, msg.response)
+
+	var response map[string][]string
+	err = json.Unmarshal(msg.response, &response)
+	require.NoError(t, err)
+
+	entities := response["entities"]
+	assert.Len(t, entities, 1, "should return only the entity whose float64 Object normalizes to \"85.5\"")
+	assert.Equal(t, "drone.001", entities[0])
+}
+
+func TestComponent_HandleQueryPredicate_WithValueFilter_PartialErrors(t *testing.T) {
+	comp := createTestComponentWithMockKV(t)
+	ctx := context.Background()
+
+	entityStatesBucket := newMockKVBucket()
+	comp.entityStatesBucket = entityStatesBucket
+
+	predicate := "robotics.battery.level"
+
+	// Three entities in the predicate index.
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.001", predicate))
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.002", predicate))
+	require.NoError(t, comp.UpdatePredicateIndex(ctx, "drone.003", predicate))
+
+	// Entities 1 and 3 have matching state; entity 2 will return a fetch error.
+	storeEntityState(t, entityStatesBucket, "drone.001", []message.Triple{
+		{Subject: "drone.001", Predicate: predicate, Object: "critical"},
+	})
+	storeEntityState(t, entityStatesBucket, "drone.003", []message.Triple{
+		{Subject: "drone.003", Predicate: predicate, Object: "critical"},
+	})
+
+	// Override Get so that drone.002 returns an error while the others fall through
+	// to the in-memory map.
+	original := entityStatesBucket.getFunc
+	entityStatesBucket.getFunc = func(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
+		if key == "drone.002" {
+			return nil, errors.New("simulated fetch error for drone.002")
+		}
+		if original != nil {
+			return original(ctx, key)
+		}
+		// Default: read from the bucket's data map.
+		entityStatesBucket.mu.Lock()
+		data, exists := entityStatesBucket.data[key]
+		entityStatesBucket.mu.Unlock()
+		if !exists {
+			return nil, jetstream.ErrKeyNotFound
+		}
+		return &mockKVEntry{data: data}, nil
+	}
+
+	request := map[string]any{"predicate": predicate, "value": "critical"}
+	requestJSON, err := json.Marshal(request)
+	require.NoError(t, err)
+
+	msg := &mockNATSMsg{data: requestJSON}
+	comp.handleQueryPredicate(msg)
+
+	require.NotNil(t, msg.response)
+
+	var response map[string][]string
+	err = json.Unmarshal(msg.response, &response)
+	require.NoError(t, err)
+
+	entities := response["entities"]
+	assert.Len(t, entities, 2, "should still return matching entities when one entity fetch fails")
+
+	entityMap := make(map[string]bool)
+	for _, id := range entities {
+		entityMap[id] = true
+	}
+	assert.True(t, entityMap["drone.001"], "drone.001 should be returned")
+	assert.True(t, entityMap["drone.003"], "drone.003 should be returned")
+	assert.False(t, entityMap["drone.002"], "drone.002 should be skipped due to fetch error")
+}
+
+// storeEntityState is a test helper to store an entity state in a mock KV bucket.
+func storeEntityState(t *testing.T, bucket *mockKVBucket, entityID string, triples []message.Triple) {
+	t.Helper()
+	state := graph.EntityState{
+		ID:      entityID,
+		Triples: triples,
+	}
+	data, err := json.Marshal(state)
+	require.NoError(t, err)
+	_, err = bucket.Put(context.Background(), entityID, data)
+	require.NoError(t, err)
 }
 
 // ====================================================================================
