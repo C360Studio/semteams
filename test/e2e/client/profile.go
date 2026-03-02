@@ -142,6 +142,31 @@ func (c *ProfileClient) capture(ctx context.Context, endpoint, filename string) 
 	return absPath, nil
 }
 
+// CaptureBlockAndMutex captures blocking and mutex contention profiles with a common prefix.
+// Useful for profiling lock contention under load.
+func (c *ProfileClient) CaptureBlockAndMutex(ctx context.Context, prefix string) (map[string]string, error) {
+	profiles := make(map[string]string)
+	var lastErr error
+
+	if path, err := c.CaptureBlock(ctx, prefix); err != nil {
+		lastErr = err
+	} else {
+		profiles["block"] = path
+	}
+
+	if path, err := c.CaptureMutex(ctx, prefix); err != nil {
+		lastErr = err
+	} else {
+		profiles["mutex"] = path
+	}
+
+	if len(profiles) == 0 && lastErr != nil {
+		return nil, lastErr
+	}
+
+	return profiles, nil
+}
+
 // CaptureAll captures heap, goroutine, and allocs profiles with a common prefix.
 // Useful for getting a baseline or final snapshot.
 func (c *ProfileClient) CaptureAll(ctx context.Context, prefix string) (map[string]string, error) {

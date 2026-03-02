@@ -107,6 +107,8 @@ type cliFlags struct {
 	wsStatusURL string
 	// Throughput scenario options
 	messageCount int
+	graphqlURL   string
+	profileAll   bool
 }
 
 // parseCommandLineFlags parses and returns command-line flags
@@ -151,6 +153,10 @@ func parseCommandLineFlags() *cliFlags {
 	// Throughput scenario options
 	flag.IntVar(&flags.messageCount, "message-count", 10000,
 		"Number of messages for throughput scenario")
+	flag.StringVar(&flags.graphqlURL, "graphql-url", "http://localhost:38082/graphql",
+		"GraphQL endpoint for throughput query load (empty to skip query phase)")
+	flag.BoolVar(&flags.profileAll, "profile-all", false,
+		"Capture all profile types including block and mutex (throughput scenario)")
 
 	// Support environment variables for Docker Compose
 	if envURL := os.Getenv("SEMSTREAMS_BASE_URL"); envURL != "" {
@@ -360,10 +366,12 @@ func createScenario(
 		cfg.MetricsURL = flags.metricsURL
 		return agentic.NewScenario(edgeClient, cfg)
 
-	// Throughput scenario (high-volume stress test with profiling)
+	// Throughput scenario (high-volume stress test with profiling + query load)
 	case "throughput":
 		cfg := throughput.DefaultConfig()
 		cfg.MessageCount = flags.messageCount
+		cfg.GraphQLURL = flags.graphqlURL
+		cfg.ProfileAll = flags.profileAll
 		if flags.outputDir != "" {
 			cfg.ProfileDir = flags.outputDir + "/profiles"
 		}

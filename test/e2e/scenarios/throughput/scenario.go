@@ -35,6 +35,14 @@ type Config struct {
 	ProfileDuration int    `json:"profile_duration"` // CPU profile seconds (default: 30)
 	ProfileDir      string `json:"profile_dir"`      // Directory for profile output
 
+	// Query load configuration
+	QueryConcurrency int           `json:"query_concurrency"` // Parallel query goroutines (default: 10)
+	QueryDuration    time.Duration `json:"query_duration"`    // Sustain queries for (default: 15s)
+	GraphQLURL       string        `json:"graphql_url"`       // Gateway GraphQL endpoint
+
+	// Extended profiling
+	ProfileAll bool `json:"profile_all"` // Capture block + mutex profiles too
+
 	// Validation
 	ValidationTimeout time.Duration `json:"validation_timeout"`  // Max wait for processing
 	MinProcessedRatio float64       `json:"min_processed_ratio"` // Min ratio of messages processed (default: 0.9)
@@ -48,6 +56,9 @@ func DefaultConfig() *Config {
 		MessageSize:       256,
 		ProfileDuration:   30,
 		ProfileDir:        "test/e2e/results/profiles",
+		QueryConcurrency:  10,
+		QueryDuration:     15 * time.Second,
+		GraphQLURL:        "http://localhost:38082/graphql",
 		ValidationTimeout: 60 * time.Second,
 		MinProcessedRatio: 0.9,
 	}
@@ -152,10 +163,15 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 	}
 	result.Metrics["processing_wait_ms"] = time.Since(processingStart).Milliseconds()
 
+	// Query load phase (only when GraphQL endpoint is configured)
+	if s.config.GraphQLURL != "" {
+		s.runQueryPhase(ctx, profilingEnabled, result)
+	}
+
 	// Capture final metrics delta
 	s.captureMetricsDelta(ctx, baseline, result)
 
-	// Capture final profiles
+	// Capture final profiles (if we didn't already capture during query phase)
 	if profilingEnabled {
 		s.captureFinalProfiles(ctx, result)
 	}
@@ -169,6 +185,84 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 	result.Duration = result.EndTime.Sub(result.StartTime)
 
 	return result, nil
+}
+
+// runQueryPhase executes the query load phase with optional profiling.
+func (s *Scenario) runQueryPhase(ctx context.Context, profilingEnabled bool, result *scenarios.Result) {
+	fmt.Printf("\n[QUERY-LOAD] Starting %d concurrent query workers for %v...\n",
+		s.config.QueryConcurrency, s.config.QueryDuration)
+
+	// Capture pre-query goroutine count
+	var preQueryGoroutines string
+	if profilingEnabled {
+		if path, err := s.profile.CaptureGoroutine(ctx, "throughput-pre-query"); err == nil {
+			preQueryGoroutines = path
+			result.Details["profile_pre_query_goroutine"] = path
+		}
+	}
+
+	// Start CPU profile for query phase (async)
+	var cpuWg sync.WaitGroup
+	if profilingEnabled {
+		cpuWg.Add(1)
+		go func() {
+			defer cpuWg.Done()
+			duration := int(s.config.QueryDuration.Seconds()) + 2 // Slightly longer than query phase
+			if path, err := s.profile.CaptureCPU(ctx, "throughput-query", duration); err == nil {
+				result.Details["profile_query_cpu"] = path
+			}
+		}()
+	}
+
+	// Run query load
+	queryResult, err := runQueryLoad(ctx, s.config)
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Query load failed: %v", err))
+		return
+	}
+
+	// Record query metrics
+	result.Metrics["query_total"] = queryResult.TotalQueries
+	result.Metrics["query_per_sec"] = queryResult.QueriesPerSec
+	result.Metrics["query_errors"] = queryResult.ErrorCount
+	result.Metrics["query_p50_ms"] = queryResult.P50LatencyMs
+	result.Metrics["query_p95_ms"] = queryResult.P95LatencyMs
+	result.Metrics["query_p99_ms"] = queryResult.P99LatencyMs
+	result.Details["query_load"] = queryResult
+
+	printQueryLoadSummary(queryResult)
+
+	// Wait for query CPU profile to finish
+	cpuWg.Wait()
+
+	// Capture post-query profiles
+	if profilingEnabled {
+		if path, err := s.profile.CaptureGoroutine(ctx, "throughput-post-query"); err == nil {
+			result.Details["profile_post_query_goroutine"] = path
+		}
+		if path, err := s.profile.CaptureHeap(ctx, "throughput-post-query"); err == nil {
+			result.Details["profile_post_query_heap"] = path
+		}
+		if path, err := s.profile.CaptureAllocs(ctx, "throughput-post-query"); err == nil {
+			result.Details["profile_post_query_allocs"] = path
+		}
+	}
+
+	// Analyze profiles and print summary
+	if profilingEnabled {
+		analysis, err := analyzeProfiles(s.config.ProfileDir)
+		if err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Profile analysis failed: %v", err))
+		} else {
+			result.Details["profile_analysis"] = analysis
+			printProfileAnalysis(analysis)
+		}
+
+		// Check goroutine delta
+		if preQueryGoroutines != "" {
+			result.Details["goroutine_check"] = "pre and post query goroutine profiles captured for comparison"
+		}
+	}
 }
 
 // startProfiling captures baseline heap and starts CPU profiling.
@@ -231,6 +325,17 @@ func (s *Scenario) captureFinalProfiles(ctx context.Context, result *scenarios.R
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture goroutine profile: %v", err))
 	} else {
 		result.Details["profile_goroutine"] = path
+	}
+
+	// Extended profiling: block + mutex
+	if s.config.ProfileAll {
+		if profiles, err := s.profile.CaptureBlockAndMutex(ctx, "throughput-final"); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture block/mutex profiles: %v", err))
+		} else {
+			for k, v := range profiles {
+				result.Details["profile_final_"+k] = v
+			}
+		}
 	}
 }
 
