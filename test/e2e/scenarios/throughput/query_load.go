@@ -16,15 +16,16 @@ import (
 
 // QueryLoadResult holds aggregate results from the query load phase.
 type QueryLoadResult struct {
-	TotalQueries  int                       `json:"total_queries"`
-	QueriesPerSec float64                   `json:"queries_per_sec"`
-	Duration      time.Duration             `json:"duration"`
-	ByType        map[string]QueryTypeStats `json:"by_type"`
-	ErrorCount    int                       `json:"error_count"`
-	NotFoundCount int                       `json:"not_found_count"`
-	P50LatencyMs  float64                   `json:"p50_latency_ms"`
-	P95LatencyMs  float64                   `json:"p95_latency_ms"`
-	P99LatencyMs  float64                   `json:"p99_latency_ms"`
+	TotalQueries    int                       `json:"total_queries"`
+	QueriesPerSec   float64                   `json:"queries_per_sec"`
+	Duration        time.Duration             `json:"duration"`
+	ByType          map[string]QueryTypeStats `json:"by_type"`
+	ErrorCount      int                       `json:"error_count"`
+	NotFoundCount   int                       `json:"not_found_count"`
+	NotFoundDetails []string                  `json:"not_found_details,omitempty"` // unique not-found messages
+	P50LatencyMs    float64                   `json:"p50_latency_ms"`
+	P95LatencyMs    float64                   `json:"p95_latency_ms"`
+	P99LatencyMs    float64                   `json:"p99_latency_ms"`
 }
 
 // QueryTypeStats holds per-query-type statistics.
@@ -43,6 +44,8 @@ type querySpec struct {
 }
 
 // knownEntityIDs returns entity IDs known to exist in the statistical testdata.
+// Entity IDs are built by iot_sensor as: {org}.{platform}.environmental.sensor.{type}.{device_id}
+// where {type} comes from the "type" field in sensors.jsonl (e.g., "combustible_gas", not "gas").
 func knownEntityIDs() []string {
 	return []string{
 		"c360.logistics.environmental.sensor.temperature.temp-sensor-001",
@@ -52,8 +55,8 @@ func knownEntityIDs() []string {
 		"c360.logistics.environmental.sensor.power.power-sensor-001",
 		"c360.logistics.environmental.sensor.vibration.vibration-sensor-001",
 		"c360.logistics.environmental.sensor.flow.flow-sensor-001",
-		"c360.logistics.environmental.sensor.gas.gas-sensor-001",
-		"c360.logistics.environmental.sensor.light.light-sensor-001",
+		"c360.logistics.environmental.sensor.combustible_gas.gas-sensor-001",
+		"c360.logistics.environmental.sensor.illumination.light-sensor-001",
 		"c360.logistics.environmental.sensor.level.level-sensor-001",
 	}
 }
@@ -139,6 +142,7 @@ type queryObservation struct {
 	latency   time.Duration
 	err       bool
 	notFound  bool
+	errorMsg  string // first error message (for diagnostics)
 }
 
 // runQueryLoad fires concurrent GraphQL queries for the configured duration.
@@ -194,6 +198,7 @@ func workerLoop(ctx context.Context, rng *rand.Rand, pool []querySpec, httpClien
 		latency := time.Since(qStart)
 		isErr := err != nil
 		isNotFound := false
+		var errMsg string
 
 		if err == nil {
 			body, readErr := io.ReadAll(resp.Body)
@@ -205,8 +210,9 @@ func workerLoop(ctx context.Context, rng *rand.Rand, pool []querySpec, httpClien
 					} `json:"errors"`
 				}
 				if jsonErr := json.Unmarshal(body, &gqlResp); jsonErr == nil && len(gqlResp.Errors) > 0 {
+					errMsg = gqlResp.Errors[0].Message
 					// Classify: "not found" is a data-level miss, not an infra error
-					if strings.Contains(gqlResp.Errors[0].Message, "not found") {
+					if strings.Contains(errMsg, "not found") {
 						isNotFound = true
 					} else {
 						isErr = true
@@ -221,6 +227,7 @@ func workerLoop(ctx context.Context, rng *rand.Rand, pool []querySpec, httpClien
 			latency:   latency,
 			err:       isErr,
 			notFound:  isNotFound,
+			errorMsg:  errMsg,
 		})
 		mu.Unlock()
 	}
@@ -233,6 +240,7 @@ func aggregateObservations(observations []queryObservation, elapsed time.Duratio
 		ByType:   make(map[string]QueryTypeStats),
 	}
 
+	notFoundSeen := make(map[string]bool)
 	latencies := make([]float64, 0, len(observations))
 	for _, obs := range observations {
 		result.TotalQueries++
@@ -241,6 +249,10 @@ func aggregateObservations(observations []queryObservation, elapsed time.Duratio
 		}
 		if obs.notFound {
 			result.NotFoundCount++
+			if obs.errorMsg != "" && !notFoundSeen[obs.errorMsg] {
+				notFoundSeen[obs.errorMsg] = true
+				result.NotFoundDetails = append(result.NotFoundDetails, obs.errorMsg)
+			}
 		}
 		latencies = append(latencies, float64(obs.latency.Milliseconds()))
 
@@ -307,5 +319,8 @@ func printQueryLoadSummary(r *QueryLoadResult) {
 		fmt.Printf("  Errors: %d infra, %d not-found (%.1f%% total failure rate)\n",
 			r.ErrorCount, r.NotFoundCount,
 			float64(r.ErrorCount)/float64(r.TotalQueries)*100)
+		for _, detail := range r.NotFoundDetails {
+			fmt.Printf("    not-found: %s\n", detail)
+		}
 	}
 }

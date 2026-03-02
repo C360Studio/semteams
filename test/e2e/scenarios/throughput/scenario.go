@@ -513,12 +513,13 @@ func (s *Scenario) waitForProcessing(ctx context.Context, baseline *client.Metri
 	return fmt.Errorf("timeout waiting for processing (expected %.0f messages)", minExpected)
 }
 
-// waitForEntities polls the GraphQL gateway until at least one known entity
-// is queryable. This ensures file inputs have been ingested before we start
-// the query load phase.
+// waitForEntities polls the GraphQL gateway until ALL known entity IDs are
+// queryable. This ensures file inputs have been fully ingested before we start
+// the query load phase. Previously this only checked for 1 entity via prefix
+// query, which caused "not found" errors when the query load queried entities
+// that hadn't been ingested yet.
 func (s *Scenario) waitForEntities(ctx context.Context) error {
-	probeQuery := `{"query":"{ entitiesByPrefix(prefix: \"c360.logistics\", limit: 1) { id } }"}`
-
+	entities := knownEntityIDs()
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 	deadline := time.Now().Add(s.config.ValidationTimeout)
 
@@ -529,26 +530,45 @@ func (s *Scenario) waitForEntities(ctx context.Context) error {
 		case <-time.After(1 * time.Second):
 		}
 
+		missing := s.probeEntities(ctx, httpClient, entities)
+		if len(missing) == 0 {
+			return nil
+		}
+
+		fmt.Printf(".")
+	}
+
+	// Final check to report which entities are still missing
+	missing := s.probeEntities(ctx, httpClient, entities)
+	return fmt.Errorf("timeout: %d/%d entities not queryable at %s: %v",
+		len(missing), len(entities), s.config.GraphQLURL, missing)
+}
+
+// probeEntities checks which entity IDs are queryable and returns the missing ones.
+func (s *Scenario) probeEntities(ctx context.Context, httpClient *http.Client, entityIDs []string) []string {
+	var missing []string
+	for _, eid := range entityIDs {
+		query := fmt.Sprintf(`{"query":"{ entity(id: \"%s\") { id } }"}`, eid)
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.config.GraphQLURL,
-			bytes.NewReader([]byte(probeQuery)))
+			bytes.NewReader([]byte(query)))
 		if err != nil {
+			missing = append(missing, eid)
 			continue
 		}
 		req.Header.Set("Content-Type", "application/json")
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
+			missing = append(missing, eid)
 			continue
 		}
-
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 
-		// Check that we got at least one entity back
-		if resp.StatusCode == http.StatusOK && strings.Contains(string(body), "c360.logistics") {
-			return nil
+		// Check for successful response with entity data (no errors)
+		if resp.StatusCode != http.StatusOK || strings.Contains(string(body), "not found") || strings.Contains(string(body), "error") {
+			missing = append(missing, eid)
 		}
 	}
-
-	return fmt.Errorf("timeout waiting for entities at %s", s.config.GraphQLURL)
+	return missing
 }
