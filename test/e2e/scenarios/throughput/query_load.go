@@ -197,6 +197,13 @@ func workerLoop(ctx context.Context, rng *rand.Rand, pool []querySpec, httpClien
 
 		resp, err := httpClient.Do(req)
 		latency := time.Since(qStart)
+
+		// If the load-phase context expired, the request was cancelled as part of
+		// normal shutdown — not a real error.  Drop the observation and exit.
+		if err != nil && ctx.Err() != nil {
+			return
+		}
+
 		isErr := err != nil
 		isNotFound := false
 		var errMsg string
