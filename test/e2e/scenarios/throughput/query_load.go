@@ -9,6 +9,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,6 +21,7 @@ type QueryLoadResult struct {
 	Duration      time.Duration             `json:"duration"`
 	ByType        map[string]QueryTypeStats `json:"by_type"`
 	ErrorCount    int                       `json:"error_count"`
+	NotFoundCount int                       `json:"not_found_count"`
 	P50LatencyMs  float64                   `json:"p50_latency_ms"`
 	P95LatencyMs  float64                   `json:"p95_latency_ms"`
 	P99LatencyMs  float64                   `json:"p99_latency_ms"`
@@ -29,6 +31,7 @@ type QueryLoadResult struct {
 type QueryTypeStats struct {
 	Count        int     `json:"count"`
 	Errors       int     `json:"errors"`
+	NotFound     int     `json:"not_found"`
 	AvgLatencyMs float64 `json:"avg_latency_ms"`
 	TotalMs      float64 `json:"-"` // accumulator
 }
@@ -135,6 +138,7 @@ type queryObservation struct {
 	queryType string
 	latency   time.Duration
 	err       bool
+	notFound  bool
 }
 
 // runQueryLoad fires concurrent GraphQL queries for the configured duration.
@@ -189,16 +193,24 @@ func workerLoop(ctx context.Context, rng *rand.Rand, pool []querySpec, httpClien
 		resp, err := httpClient.Do(req)
 		latency := time.Since(qStart)
 		isErr := err != nil
+		isNotFound := false
 
 		if err == nil {
-			var gqlResp struct {
-				Errors []json.RawMessage `json:"errors"`
-			}
 			body, readErr := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			if readErr == nil {
+				var gqlResp struct {
+					Errors []struct {
+						Message string `json:"message"`
+					} `json:"errors"`
+				}
 				if jsonErr := json.Unmarshal(body, &gqlResp); jsonErr == nil && len(gqlResp.Errors) > 0 {
-					isErr = true
+					// Classify: "not found" is a data-level miss, not an infra error
+					if strings.Contains(gqlResp.Errors[0].Message, "not found") {
+						isNotFound = true
+					} else {
+						isErr = true
+					}
 				}
 			}
 		}
@@ -208,6 +220,7 @@ func workerLoop(ctx context.Context, rng *rand.Rand, pool []querySpec, httpClien
 			queryType: spec.Name,
 			latency:   latency,
 			err:       isErr,
+			notFound:  isNotFound,
 		})
 		mu.Unlock()
 	}
@@ -226,12 +239,18 @@ func aggregateObservations(observations []queryObservation, elapsed time.Duratio
 		if obs.err {
 			result.ErrorCount++
 		}
+		if obs.notFound {
+			result.NotFoundCount++
+		}
 		latencies = append(latencies, float64(obs.latency.Milliseconds()))
 
 		stats := result.ByType[obs.queryType]
 		stats.Count++
 		if obs.err {
 			stats.Errors++
+		}
+		if obs.notFound {
+			stats.NotFound++
 		}
 		stats.TotalMs += float64(obs.latency.Milliseconds())
 		result.ByType[obs.queryType] = stats
@@ -275,13 +294,18 @@ func printQueryLoadSummary(r *QueryLoadResult) {
 	fmt.Printf("\n  Query Load: %d queries in %v (%.0f q/sec)\n",
 		r.TotalQueries, r.Duration.Round(time.Millisecond), r.QueriesPerSec)
 	for name, stats := range r.ByType {
-		fmt.Printf("    %-10s %d queries, avg %.0fms, %d errors\n",
-			name+":", stats.Count, stats.AvgLatencyMs, stats.Errors)
+		errInfo := fmt.Sprintf("%d errors", stats.Errors)
+		if stats.NotFound > 0 {
+			errInfo = fmt.Sprintf("%d errors, %d not-found", stats.Errors, stats.NotFound)
+		}
+		fmt.Printf("    %-10s %d queries, avg %.0fms, %s\n",
+			name+":", stats.Count, stats.AvgLatencyMs, errInfo)
 	}
 	fmt.Printf("  P50: %.0fms  P95: %.0fms  P99: %.0fms\n",
 		r.P50LatencyMs, r.P95LatencyMs, r.P99LatencyMs)
-	if r.ErrorCount > 0 {
-		fmt.Printf("  Errors: %d (%.1f%%)\n", r.ErrorCount,
+	if r.ErrorCount > 0 || r.NotFoundCount > 0 {
+		fmt.Printf("  Errors: %d infra, %d not-found (%.1f%% total failure rate)\n",
+			r.ErrorCount, r.NotFoundCount,
 			float64(r.ErrorCount)/float64(r.TotalQueries)*100)
 	}
 }

@@ -222,11 +222,13 @@ func parsePprofTextOutput(output string) []FunctionSample {
 			continue
 		}
 
-		// Skip header and comment lines
+		// Skip header, metadata, and comment lines
 		if strings.HasPrefix(line, "flat") || strings.HasPrefix(line, "Showing") ||
 			strings.HasPrefix(line, "Type:") || strings.HasPrefix(line, "Time:") ||
 			strings.HasPrefix(line, "Duration:") || strings.HasPrefix(line, "Active") ||
-			strings.HasPrefix(line, "Total") || strings.HasPrefix(line, "(pprof)") {
+			strings.HasPrefix(line, "Total") || strings.HasPrefix(line, "(pprof)") ||
+			strings.HasPrefix(line, "Dropped") || strings.HasPrefix(line, "File:") ||
+			strings.HasPrefix(line, "Build") {
 			continue
 		}
 
@@ -244,8 +246,11 @@ func parsePprofTextOutput(output string) []FunctionSample {
 			continue
 		}
 
+		// Function name is field 5+, join in case of generics like foo[go.shape.string]
+		funcName := strings.Join(fields[5:], " ")
+
 		functions = append(functions, FunctionSample{
-			Name:      fields[5],
+			Name:      funcName,
 			FlatPct:   flatPct,
 			CumPct:    cumPct,
 			FlatValue: fields[0],

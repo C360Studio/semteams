@@ -2,10 +2,14 @@
 package throughput
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -189,7 +193,16 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 
 // runQueryPhase executes the query load phase with optional profiling.
 func (s *Scenario) runQueryPhase(ctx context.Context, profilingEnabled bool, result *scenarios.Result) {
-	fmt.Printf("\n[QUERY-LOAD] Starting %d concurrent query workers for %v...\n",
+	// Wait for entities to be queryable before hammering the gateway
+	fmt.Print("\n[QUERY-LOAD] Waiting for entities to be queryable...")
+	if err := s.waitForEntities(ctx); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Entity readiness check failed: %v", err))
+		fmt.Printf(" skipping query load (%v)\n", err)
+		return
+	}
+	fmt.Println(" ready")
+
+	fmt.Printf("[QUERY-LOAD] Starting %d concurrent query workers for %v...\n",
 		s.config.QueryConcurrency, s.config.QueryDuration)
 
 	// Capture pre-query goroutine count
@@ -498,4 +511,44 @@ func (s *Scenario) waitForProcessing(ctx context.Context, baseline *client.Metri
 	}
 
 	return fmt.Errorf("timeout waiting for processing (expected %.0f messages)", minExpected)
+}
+
+// waitForEntities polls the GraphQL gateway until at least one known entity
+// is queryable. This ensures file inputs have been ingested before we start
+// the query load phase.
+func (s *Scenario) waitForEntities(ctx context.Context) error {
+	probeQuery := `{"query":"{ entitiesByPrefix(prefix: \"c360.logistics\", limit: 1) { id } }"}`
+
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	deadline := time.Now().Add(s.config.ValidationTimeout)
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(1 * time.Second):
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.config.GraphQLURL,
+			bytes.NewReader([]byte(probeQuery)))
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			continue
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		// Check that we got at least one entity back
+		if resp.StatusCode == http.StatusOK && strings.Contains(string(body), "c360.logistics") {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("timeout waiting for entities at %s", s.config.GraphQLURL)
 }
