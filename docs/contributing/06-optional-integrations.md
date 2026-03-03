@@ -1,6 +1,6 @@
 # Optional Integration Documentation Pattern
 
-This guide establishes conventions for documenting optional integrations like TrustGraph, AGNTCY, and future external system bridges.
+This guide establishes conventions for documenting optional integrations like AGNTCY and future external system bridges.
 
 ## Package Structure
 
@@ -159,7 +159,7 @@ flowchart LR
 | Complex configuration | Required | Required |
 | User-facing component | Required | Required |
 
-External integrations (TrustGraph, AGNTCY, etc.) should always have both files because:
+External integrations (AGNTCY, etc.) should always have both files because:
 
 - **doc.go**: Developers extending or debugging the component
 - **README.md**: Operators configuring and troubleshooting deployments
@@ -173,8 +173,8 @@ Use relative package paths:
 ```go
 // # See Also
 //
-//   - output/trustgraph: Export entities to TrustGraph
-//   - vocabulary/trustgraph: URI/EntityID translation
+//   - output/example: Export entities to external system
+//   - vocabulary/example: URI/EntityID translation
 ```
 
 ### From README.md
@@ -184,13 +184,13 @@ Use relative file paths:
 ```markdown
 ## See Also
 
-- [TrustGraph Output](../../output/trustgraph/README.md)
-- [Integration Guide](../../docs/integration/trustgraph-integration.md)
+- [Example Output](../../output/example/README.md)
+- [Integration Guide](../../docs/concepts/20-agntcy-integration.md)
 ```
 
 ## Integration-Specific Documentation
 
-For integrations that span multiple components (e.g., TrustGraph with input/output/vocab packages), also create:
+For integrations that span multiple components (e.g., with input/output/vocab packages), also create:
 
 ### Integration Guide
 
@@ -230,6 +230,5 @@ Content:
 
 Reference implementations:
 
-- **TrustGraph**: `input/trustgraph/`, `output/trustgraph/`
 - **Directory Bridge**: `output/directory-bridge/`
 - **WebSocket**: `output/websocket/`, `input/websocket/`

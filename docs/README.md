@@ -52,7 +52,6 @@
 ## Vocabulary & Standards
 
 - [Vocabulary Guide](basics/04-vocabulary.md) - Predicate design, registration, alias resolution
-- [Agentic Vocabulary](vocabulary/agentic.md) - W3C S-Agent-Comm predicates for agent interoperability
 - [RDF Export](../vocabulary/export/doc.go) - Serialize triples to Turtle, N-Triples, JSON-LD
 - [Vocabulary Package](../vocabulary/README.md) - Full API reference, IRI mappings, ontology subpackages
 
@@ -86,6 +85,5 @@ Optional bridges for connecting SemStreams to external systems:
 | Integration | Purpose | Documentation |
 |-------------|---------|---------------|
 | **AGNTCY** | Agent discovery, A2A protocol, OTEL export | [Concepts Guide](concepts/20-agntcy-integration.md) |
-| **TrustGraph** | Document knowledge import/export, GraphRAG queries | [Integration Guide](integration/trustgraph-integration.md) |
 
 These integrations are optional components that can be enabled based on deployment needs. See individual guides for configuration and deployment patterns.
