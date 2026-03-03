@@ -358,9 +358,9 @@ func TestSchemaFromType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := schemaFromType(tt.input)
+			result := service.SchemaFromType(tt.input)
 			if !reflect.DeepEqual(result, tt.expected) {
-				t.Errorf("schemaFromType(%v) = %v, want %v", tt.input, result, tt.expected)
+				t.Errorf("SchemaFromType(%v) = %v, want %v", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -375,7 +375,7 @@ func TestSchemaFromStruct(t *testing.T) {
 		Ignored  string `json:"-"`
 	}
 
-	schema := schemaFromType(reflect.TypeOf(TestStruct{}))
+	schema := service.SchemaFromType(reflect.TypeOf(TestStruct{}))
 
 	// Verify it's an object type
 	if schema["type"] != "object" {
@@ -419,9 +419,9 @@ func TestTypeNameFromReflect(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
-			result := typeNameFromReflect(tt.input)
+			result := service.TypeNameFromReflect(tt.input)
 			if result != tt.expected {
-				t.Errorf("typeNameFromReflect(%v) = %s, want %s", tt.input, result, tt.expected)
+				t.Errorf("TypeNameFromReflect(%v) = %s, want %s", tt.input, result, tt.expected)
 			}
 		})
 	}

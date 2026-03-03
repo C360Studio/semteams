@@ -257,8 +257,8 @@ func addResponseSchemas(schemas map[string]any, serviceSpecs map[string]*service
 			}
 			seen[t] = true
 
-			typeName := typeNameFromReflect(t)
-			schemas[typeName] = schemaFromType(t)
+			typeName := service.TypeNameFromReflect(t)
+			schemas[typeName] = service.SchemaFromType(t)
 		}
 		for _, t := range spec.RequestBodyTypes {
 			if seen[t] {
@@ -266,8 +266,8 @@ func addResponseSchemas(schemas map[string]any, serviceSpecs map[string]*service
 			}
 			seen[t] = true
 
-			typeName := typeNameFromReflect(t)
-			schemas[typeName] = schemaFromType(t)
+			typeName := service.TypeNameFromReflect(t)
+			schemas[typeName] = service.SchemaFromType(t)
 		}
 	}
 }
