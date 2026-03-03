@@ -39,5 +39,6 @@ type PathItem struct {
 	Get    *Operation `yaml:"get,omitempty"`
 	Post   *Operation `yaml:"post,omitempty"`
 	Put    *Operation `yaml:"put,omitempty"`
+	Patch  *Operation `yaml:"patch,omitempty"`
 	Delete *Operation `yaml:"delete,omitempty"`
 }

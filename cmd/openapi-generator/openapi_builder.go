@@ -78,6 +78,9 @@ func convertPathSpec(ps service.PathSpec) PathItem {
 	if ps.PUT != nil {
 		item.Put = convertOperation(ps.PUT)
 	}
+	if ps.PATCH != nil {
+		item.Patch = convertOperation(ps.PATCH)
+	}
 	if ps.DELETE != nil {
 		item.Delete = convertOperation(ps.DELETE)
 	}

@@ -20,6 +20,7 @@ type PathSpec struct {
 	GET    *OperationSpec `json:"get,omitempty"`
 	POST   *OperationSpec `json:"post,omitempty"`
 	PUT    *OperationSpec `json:"put,omitempty"`
+	PATCH  *OperationSpec `json:"patch,omitempty"`
 	DELETE *OperationSpec `json:"delete,omitempty"`
 }
 
