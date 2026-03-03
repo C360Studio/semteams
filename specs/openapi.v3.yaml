@@ -869,8 +869,6 @@ components:
                         - $ref: ../schemas/reactive-workflow.v1.json
                         - $ref: ../schemas/rule-processor.v1.json
                         - $ref: ../schemas/slim-bridge.v1.json
-                        - $ref: ../schemas/trustgraph_input.v1.json
-                        - $ref: ../schemas/trustgraph_output.v1.json
                         - $ref: ../schemas/udp.v1.json
                         - $ref: ../schemas/websocket.v1.json
                         - $ref: ../schemas/websocket_input.v1.json

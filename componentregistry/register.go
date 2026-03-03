@@ -14,14 +14,12 @@ import (
 	fileinput "github.com/c360studio/semstreams/input/file"
 	githubwebhook "github.com/c360studio/semstreams/input/github-webhook"
 	slimbridgeinput "github.com/c360studio/semstreams/input/slim"
-	trustgraphinput "github.com/c360studio/semstreams/input/trustgraph"
 	"github.com/c360studio/semstreams/input/udp"
 	websocketinput "github.com/c360studio/semstreams/input/websocket"
 	directorybridge "github.com/c360studio/semstreams/output/directory-bridge"
 	"github.com/c360studio/semstreams/output/file"
 	"github.com/c360studio/semstreams/output/httppost"
 	otelexporter "github.com/c360studio/semstreams/output/otel"
-	trustgraphoutput "github.com/c360studio/semstreams/output/trustgraph"
 	"github.com/c360studio/semstreams/output/websocket"
 	pkgerrs "github.com/c360studio/semstreams/pkg/errs"
 	agenticdispatch "github.com/c360studio/semstreams/processor/agentic-dispatch"
@@ -91,10 +89,6 @@ import (
 //   - a2a-adapter (receives A2A task requests from external agents)
 //   - otel-exporter (exports agent telemetry to OpenTelemetry collectors)
 //
-// Bridge Layer - External system integration:
-//   - trustgraph-input (imports entities from TrustGraph knowledge graph)
-//   - trustgraph-output (exports entities to TrustGraph knowledge cores)
-//
 // Domain Layer (example processors):
 //   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
 //   - Document processor (document processing)
@@ -118,10 +112,6 @@ func Register(registry *component.Registry) error {
 	}
 
 	if err := registerAgenticLayer(registry); err != nil {
-		return err
-	}
-
-	if err := registerBridgeLayer(registry); err != nil {
 		return err
 	}
 
@@ -277,20 +267,6 @@ func registerAgenticLayer(registry *component.Registry) error {
 
 	if err := otelexporter.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "otel-exporter component registration")
-	}
-
-	return nil
-}
-
-// registerBridgeLayer registers bridge components for external system integration.
-func registerBridgeLayer(registry *component.Registry) error {
-	// TrustGraph bridge components
-	if err := trustgraphinput.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "trustgraph-input component registration")
-	}
-
-	if err := trustgraphoutput.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "trustgraph-output component registration")
 	}
 
 	return nil
