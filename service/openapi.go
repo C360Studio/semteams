@@ -9,11 +9,17 @@ type HTTPHandler interface {
 	OpenAPISpec() *OpenAPISpec // Returns OpenAPI specification for this service
 }
 
+// ComponentsSpec holds reusable OpenAPI component definitions
+type ComponentsSpec struct {
+	Schemas map[string]any `json:"schemas,omitempty"`
+}
+
 // OpenAPIDocument represents the complete OpenAPI 3.0 specification
 type OpenAPIDocument struct {
-	OpenAPI string              `json:"openapi"`
-	Info    InfoSpec            `json:"info"`
-	Servers []ServerSpec        `json:"servers"`
-	Paths   map[string]PathSpec `json:"paths"`
-	Tags    []TagSpec           `json:"tags,omitempty"`
+	OpenAPI    string              `json:"openapi"`
+	Info       InfoSpec            `json:"info"`
+	Servers    []ServerSpec        `json:"servers"`
+	Paths      map[string]PathSpec `json:"paths"`
+	Components *ComponentsSpec     `json:"components,omitempty"`
+	Tags       []TagSpec           `json:"tags,omitempty"`
 }

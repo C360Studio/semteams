@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -1088,9 +1089,17 @@ func (m *Manager) generateOpenAPIDocument() *OpenAPIDocument {
 		Tags:  make([]TagSpec, 0),
 	}
 
+	// Snapshot services under read lock to avoid data race
+	m.mu.RLock()
+	services := make(map[string]Service, len(m.services))
+	for name, svc := range m.services {
+		services[name] = svc
+	}
+	m.mu.RUnlock()
+
 	// Collect specs from all services that implement HTTPHandler
-	for name, service := range m.services {
-		if handler, ok := service.(HTTPHandler); ok {
+	for name, svc := range services {
+		if handler, ok := svc.(HTTPHandler); ok {
 			serviceSpec := handler.OpenAPISpec()
 			if serviceSpec != nil {
 				// Merge paths with service prefix
@@ -1106,6 +1115,29 @@ func (m *Manager) generateOpenAPIDocument() *OpenAPIDocument {
 				}
 			}
 		}
+	}
+
+	// Generate schemas from all registered specs (superset including component specs)
+	schemas := make(map[string]any)
+	seen := make(map[reflect.Type]bool)
+
+	for _, spec := range GetAllOpenAPISpecs() {
+		for _, t := range spec.ResponseTypes {
+			if !seen[t] {
+				seen[t] = true
+				schemas[TypeNameFromReflect(t)] = SchemaFromType(t)
+			}
+		}
+		for _, t := range spec.RequestBodyTypes {
+			if !seen[t] {
+				seen[t] = true
+				schemas[TypeNameFromReflect(t)] = SchemaFromType(t)
+			}
+		}
+	}
+
+	if len(schemas) > 0 {
+		doc.Components = &ComponentsSpec{Schemas: schemas}
 	}
 
 	return doc
