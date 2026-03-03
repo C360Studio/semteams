@@ -2,7 +2,13 @@
 
 ## Status
 
-Accepted
+Accepted (principles current, implementation details partially outdated)
+
+> **Reading guidance**: The layer-separation principles in this ADR remain valid:
+> rules for simple handoffs, workflows for loops with limits, components for execution.
+> However, implementation details reference the old JSON-based rules/workflow processors.
+> For current implementation patterns, see [ADR-021](./adr-021-reactive-workflow-engine.md)
+> and [ADR-022](./adr-022-workflow-engine-simplification.md).
 
 ## Context
 

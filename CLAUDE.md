@@ -119,102 +119,72 @@ go test ./test/contract/...  # Contract tests
 - Race conditions detected in tests
 - Unformatted code (`go fmt` not run)
 
+## Architectural Identity (Not an Event Bus)
+
+SemStreams is NOT a simple event bus or pub/sub framework. It is a knowledge graph engine where the communication model is a consequence of the data model.
+
+### The KV Twofer
+
+Every NATS KV bucket gives you three interfaces from one write:
+
+- **State**: `kv.Get(key)` — current value, right now
+- **Events**: `kv.Watch(pattern)` — fires on every change (fan-out to all watchers)
+- **History**: Replay from any revision — audit trail at no extra cost
+
+**The write IS the event.** No separate event bus. No dual-write problem. Internal processors react to state changes via KV watch, not pub/sub topics. See [KV Twofer](docs/concepts/02-kv-twofer.md).
+
+### Facts vs Requests
+
+| Communication type | Primitive | Restart behavior |
+|---|---|---|
+| Fact about the world (entity state, index, current status) | KV Watch | Re-delivers all current values (correct recovery) |
+| Request to do something (task, LLM call, tool execution) | JetStream Stream | Resumes from last ack (no re-execution) |
+
+Use `/kv-or-stream` for the full 4-test decision heuristic. See [Streams vs KV Watches](docs/concepts/03-streams-vs-kv-watches.md).
+
+### Inference Tiers
+
+| Tier | Method | Requires |
+|------|--------|----------|
+| 0 | Explicit triples + rules only | Nothing extra |
+| 1 | + BM25 statistical embeddings | Text content (pure Go) |
+| 2 | + Neural semantic embeddings | Text + external embedding service |
+
+Tiers only affect entities with text content. Telemetry-only entities cluster via explicit relationships regardless of tier. See [Real-Time Inference](docs/concepts/00-real-time-inference.md).
+
 ## Orchestration Boundaries
 
-SemStreams uses three orchestration layers. Respecting layer boundaries prevents design debt.
-
-### Layer Summary
-
-| Layer | Purpose | Owns |
-|-------|---------|------|
-| **Rules** | React to state, fire single actions | Conditions, triggers |
-| **Workflow** | Multi-step coordination with limits | Step sequence, loop limits, timeouts |
-| **Component** | Execute work | Execution mechanics |
-
-### Rules of Thumb
-
-1. **Rules trigger, they don't orchestrate** — A rule fires one action, not a sequence
-2. **Workflows coordinate, they don't execute** — Workflows spawn components, not inline logic
-3. **Components are workflow-agnostic** — Components don't know their caller
-4. **State ownership is exclusive** — Only one layer owns any state
-5. **If it needs a loop limit, it's a workflow** — Simple handoffs use rules; loops use workflows
-
-### Anti-Patterns to Avoid
-
-- Rule chains that build up state across multiple firings
-- Workflows with inline processing logic (belongs in components)
-- Components checking workflow context to decide behavior
-- Both rules and workflows tracking the same state
-
-### Quick Decision Guide
+Two layers: **Reactive Engine** (conditions + actions + workflows) and **Components** (execute work).
 
 | Pattern | Use |
 |---------|-----|
-| A completes → B starts (no retry) | Rules |
-| A → B → A → B... (max N times) | Workflow |
+| A completes → B starts (no retry) | Reactive rule (single trigger) |
+| A → B → A → B... (max N times) | Reactive workflow (loop limits, timeouts) |
 | Execute LLM call, process tools | Component |
 
-See [Orchestration Layers](docs/concepts/14-orchestration-layers.md) for details.
+**Key rules**: Rules trigger, they don't orchestrate. Workflows coordinate, they don't execute. Components are workflow-agnostic. State ownership is exclusive.
 
-## Payload Registry Pattern
+Use `/orchestration-check` for the full decision framework. See [Orchestration Layers](docs/concepts/14-orchestration-layers.md).
 
-**Critical pattern for polymorphic JSON deserialization.** When adding new message types to the agentic system:
+## Payload Registry
 
-### Registration (in init())
+Polymorphic JSON deserialization via type-discriminated envelopes. Every new message type needs:
 
-Register payload types in an `init()` function within the package's `payload_registry.go`:
+1. `init()` registration in `payload_registry.go` with domain/category/version/factory
+2. `MarshalJSON` method wrapping payload in `BaseMessage` (use type alias to avoid recursion)
+3. Package import (blank import if needed) so `init()` runs
 
-```go
-func init() {
-    err := component.RegisterPayload(&component.PayloadRegistration{
-        Domain:      "agentic",           // Message domain
-        Category:    "task",              // Message category
-        Version:     "v1",                // Schema version
-        Description: "Agent task request",
-        Factory:     func() any { return &TaskMessage{} },
-    })
-    if err != nil {
-        panic("failed to register payload: " + err.Error())
-    }
-}
-```
+Use `/new-payload` for the step-by-step checklist with code templates. See [Payload Registry Guide](docs/concepts/15-payload-registry.md).
 
-### Required MarshalJSON Method
+## ADR Currency Guide
 
-**Every payload type MUST implement MarshalJSON that wraps in BaseMessage:**
+| ADR | Status | Guidance |
+|-----|--------|----------|
+| 021 (Reactive Workflow Engine) | **Current** | Canonical workflow design |
+| 022 (Workflow Simplification) | **Current** | Canonical simplification rationale |
+| 010 (Rules Processor) | Superseded by 021 | **Skip** — old JSON-based rules |
+| 011 (Workflow Processor) | Superseded by 021 | **Skip** — old JSON-based workflows |
+| 018 (Agentic Orchestration) | Partially outdated | Read for principles, skip implementation details |
+| 020 (Unified Dataflow) | Partially outdated | Read for port patterns, skip JSON workflow examples |
 
-```go
-func (t *TaskMessage) MarshalJSON() ([]byte, error) {
-    type Alias TaskMessage
-    return json.Marshal(&message.BaseMessage{
-        Type: message.MessageType{
-            Domain:   agentic.Domain,
-            Category: agentic.CategoryTask,
-            Version:  agentic.SchemaVersion,
-        },
-        Payload: (*Alias)(t),
-    })
-}
-```
-
-### Common Mistakes
-
-1. **Missing MarshalJSON**: Payload serializes without type wrapper, deserialization fails
-2. **Wrong type fields**: Domain/Category/Version don't match registration
-3. **Forgotten import**: Package not imported, `init()` never runs
-
-### Debugging Serialization Issues
-
-```go
-// Check if payload is registered
-payloads := component.GlobalPayloadRegistry().ListPayloads()
-for msgType := range payloads {
-    fmt.Println(msgType)  // e.g., "agentic.task.v1"
-}
-
-// Verify JSON structure
-data, _ := json.Marshal(msg)
-fmt.Println(string(data))  // Should show {"type":{"domain":"..."},"payload":{...}}
-```
-
-See [Payload Registry Guide](docs/concepts/15-payload-registry.md) for complete documentation.
+All other ADRs (001-009, 012-017, 019) remain current and accurate.

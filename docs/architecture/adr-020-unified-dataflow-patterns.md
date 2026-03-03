@@ -2,7 +2,11 @@
 
 ## Status
 
-Accepted
+Accepted (port/subject patterns current, JSON workflow examples outdated)
+
+> **Reading guidance**: The unification of port/subject patterns described here remains valid.
+> JSON workflow step examples are outdated — workflows are now defined in type-safe Go code.
+> See [ADR-021](./adr-021-reactive-workflow-engine.md) for the current workflow approach.
 
 ## Context
 
