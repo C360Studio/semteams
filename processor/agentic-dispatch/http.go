@@ -905,8 +905,13 @@ func agenticDispatchOpenAPISpec() *service.OpenAPISpec {
 			"/message": {
 				POST: &service.OperationSpec{
 					Summary:     "Process a user message",
-					Description: "Processes a user message synchronously. Commands (starting with /) are executed immediately. Regular messages are submitted as tasks. Request body: {content: string (required), user_id?: string, channel_type?: string, channel_id?: string, reply_to?: string}",
+					Description: "Processes a user message synchronously. Commands (starting with /) are executed immediately. Regular messages are submitted as tasks.",
 					Tags:        []string{"AgenticDispatch"},
+					RequestBody: &service.RequestBodySpec{
+						Description: "User message to process",
+						Required:    true,
+						SchemaRef:   "#/components/schemas/HTTPMessageRequest",
+					},
 					Responses: map[string]service.ResponseSpec{
 						"200": {
 							Description: "Message processed successfully",
@@ -986,8 +991,13 @@ func agenticDispatchOpenAPISpec() *service.OpenAPISpec {
 			"/loops/{id}/signal": {
 				POST: &service.OperationSpec{
 					Summary:     "Send control signal to loop",
-					Description: "Sends a control signal (pause, resume, cancel) to an active loop. Request body: {type: 'pause'|'resume'|'cancel', reason?: string}",
+					Description: "Sends a control signal (pause, resume, cancel) to an active loop.",
 					Tags:        []string{"AgenticDispatch"},
+					RequestBody: &service.RequestBodySpec{
+						Description: "Control signal to send",
+						Required:    true,
+						SchemaRef:   "#/components/schemas/SignalRequest",
+					},
 					Parameters: []service.ParameterSpec{
 						{Name: "id", In: "path", Description: "Loop ID", Required: true},
 					},
@@ -1037,6 +1047,10 @@ func agenticDispatchOpenAPISpec() *service.OpenAPISpec {
 			reflect.TypeOf(HTTPMessageResponse{}),
 			reflect.TypeOf(SignalResponse{}),
 			reflect.TypeOf(ActivityEvent{}),
+		},
+		RequestBodyTypes: []reflect.Type{
+			reflect.TypeOf(HTTPMessageRequest{}),
+			reflect.TypeOf(SignalRequest{}),
 		},
 	}
 }

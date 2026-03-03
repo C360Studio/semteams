@@ -7,6 +7,12 @@ import (
 	"github.com/c360studio/semstreams/service"
 )
 
+// GraphQLRequest represents the request body for GraphQL queries.
+type GraphQLRequest struct {
+	Query     string         `json:"query"`
+	Variables map[string]any `json:"variables,omitempty"`
+}
+
 func init() {
 	service.RegisterOpenAPISpec("graph-gateway", graphGatewayOpenAPISpec())
 }
@@ -30,6 +36,11 @@ func graphGatewayOpenAPISpec() *service.OpenAPISpec {
 					Summary:     "Execute GraphQL query",
 					Description: "Execute GraphQL queries against the knowledge graph. The GraphQL schema is available via introspection query.",
 					Tags:        []string{"GraphQL"},
+					RequestBody: &service.RequestBodySpec{
+						Description: "GraphQL query with optional variables",
+						Required:    true,
+						SchemaRef:   "#/components/schemas/GraphQLRequest",
+					},
 					Responses: map[string]service.ResponseSpec{
 						"200": {
 							Description: "GraphQL response with data or errors",
@@ -100,6 +111,11 @@ func graphGatewayOpenAPISpec() *service.OpenAPISpec {
 					Summary:     "Submit review decision",
 					Description: "Submit a human review decision (approve or reject) for a structural anomaly",
 					Tags:        []string{"Inference"},
+					RequestBody: &service.RequestBodySpec{
+						Description: "Review decision with optional notes and overrides",
+						Required:    true,
+						SchemaRef:   "#/components/schemas/ReviewRequest",
+					},
 					Parameters: []service.ParameterSpec{
 						{
 							Name:        "id",
@@ -141,6 +157,10 @@ func graphGatewayOpenAPISpec() *service.OpenAPISpec {
 		ResponseTypes: []reflect.Type{
 			reflect.TypeOf(inference.StructuralAnomaly{}),
 			reflect.TypeOf(inference.StatsResponse{}),
+		},
+		RequestBodyTypes: []reflect.Type{
+			reflect.TypeOf(GraphQLRequest{}),
+			reflect.TypeOf(inference.ReviewRequest{}),
 		},
 	}
 }

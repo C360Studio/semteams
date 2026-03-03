@@ -105,6 +105,21 @@ func convertOperation(op *service.OperationSpec) *Operation {
 		})
 	}
 
+	// Convert request body
+	if op.RequestBody != nil {
+		contentType := op.RequestBody.ContentType
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		operation.RequestBody = &RequestBodyObject{
+			Description: op.RequestBody.Description,
+			Required:    op.RequestBody.Required,
+			Content: map[string]MediaType{
+				contentType: {Schema: SchemaRef{Ref: op.RequestBody.SchemaRef}},
+			},
+		}
+	}
+
 	// Convert responses
 	for code, resp := range op.Responses {
 		response := Response{
@@ -220,7 +235,7 @@ func addComponentSchemas(schemas map[string]any, components []ComponentSchema, s
 	}
 }
 
-// addResponseSchemas generates and adds response type schemas via reflection
+// addResponseSchemas generates and adds response and request body type schemas via reflection
 func addResponseSchemas(schemas map[string]any, serviceSpecs map[string]*service.OpenAPISpec) {
 	seen := make(map[reflect.Type]bool)
 
@@ -234,6 +249,15 @@ func addResponseSchemas(schemas map[string]any, serviceSpecs map[string]*service
 	for _, name := range names {
 		spec := serviceSpecs[name]
 		for _, t := range spec.ResponseTypes {
+			if seen[t] {
+				continue
+			}
+			seen[t] = true
+
+			typeName := typeNameFromReflect(t)
+			schemas[typeName] = schemaFromType(t)
+		}
+		for _, t := range spec.RequestBodyTypes {
 			if seen[t] {
 				continue
 			}

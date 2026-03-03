@@ -8,10 +8,11 @@ import (
 
 // OpenAPISpec represents a service's OpenAPI specification fragment
 type OpenAPISpec struct {
-	Paths         map[string]PathSpec `json:"paths"`
-	Components    map[string]any      `json:"components,omitempty"`
-	Tags          []TagSpec           `json:"tags,omitempty"`
-	ResponseTypes []reflect.Type      `json:"-"` // Types to generate schemas for (not serialized)
+	Paths            map[string]PathSpec `json:"paths"`
+	Components       map[string]any      `json:"components,omitempty"`
+	Tags             []TagSpec           `json:"tags,omitempty"`
+	ResponseTypes    []reflect.Type      `json:"-"` // Response types to generate schemas for (not serialized)
+	RequestBodyTypes []reflect.Type      `json:"-"` // Request body types to generate schemas for (not serialized)
 }
 
 // PathSpec defines HTTP operations for a specific path
@@ -27,6 +28,7 @@ type OperationSpec struct {
 	Summary     string                  `json:"summary"`
 	Description string                  `json:"description,omitempty"`
 	Parameters  []ParameterSpec         `json:"parameters,omitempty"`
+	RequestBody *RequestBodySpec        `json:"request_body,omitempty"`
 	Responses   map[string]ResponseSpec `json:"responses"`
 	Tags        []string                `json:"tags,omitempty"`
 }
@@ -46,6 +48,14 @@ type ResponseSpec struct {
 	ContentType string `json:"content_type,omitempty"`
 	SchemaRef   string `json:"schema_ref,omitempty"` // $ref to schema, e.g., "#/components/schemas/RuntimeHealthResponse"
 	IsArray     bool   `json:"is_array,omitempty"`   // If true, response is an array of SchemaRef items
+}
+
+// RequestBodySpec defines an operation request body
+type RequestBodySpec struct {
+	Description string `json:"description,omitempty"`
+	ContentType string `json:"content_type,omitempty"` // defaults to "application/json"
+	SchemaRef   string `json:"schema_ref,omitempty"`   // e.g. "#/components/schemas/ReviewRequest"
+	Required    bool   `json:"required,omitempty"`
 }
 
 // Schema defines parameter or response schema

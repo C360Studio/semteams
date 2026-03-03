@@ -6,7 +6,15 @@ type Operation struct {
 	Description string              `yaml:"description,omitempty"`
 	Tags        []string            `yaml:"tags,omitempty"`
 	Parameters  []Parameter         `yaml:"parameters,omitempty"`
+	RequestBody *RequestBodyObject  `yaml:"requestBody,omitempty"`
 	Responses   map[string]Response `yaml:"responses"`
+}
+
+// RequestBodyObject describes a request body
+type RequestBodyObject struct {
+	Description string               `yaml:"description,omitempty"`
+	Required    bool                 `yaml:"required,omitempty"`
+	Content     map[string]MediaType `yaml:"content"`
 }
 
 // Parameter describes an operation parameter

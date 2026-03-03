@@ -157,6 +157,13 @@ paths:
             description: Creates a new visual flow
             tags:
                 - Flows
+            requestBody:
+                description: Flow definition to create
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Flow'
             responses:
                 "201":
                     description: Flow created
@@ -193,6 +200,13 @@ paths:
             description: Updates an existing flow
             tags:
                 - Flows
+            requestBody:
+                description: Updated flow definition
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Flow'
             responses:
                 "200":
                     description: Flow updated
@@ -305,6 +319,13 @@ paths:
             description: Execute GraphQL queries against the knowledge graph. The GraphQL schema is available via introspection query.
             tags:
                 - GraphQL
+            requestBody:
+                description: GraphQL query with optional variables
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GraphQLRequest'
             responses:
                 "200":
                     description: GraphQL response with data or errors
@@ -368,6 +389,13 @@ paths:
                   description: Anomaly ID
                   schema:
                     type: string
+            requestBody:
+                description: Review decision with optional notes and overrides
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReviewRequest'
             responses:
                 "200":
                     description: Updated anomaly after review
@@ -533,7 +561,7 @@ paths:
     /loops/{id}/signal:
         post:
             summary: Send control signal to loop
-            description: 'Sends a control signal (pause, resume, cancel) to an active loop. Request body: {type: ''pause''|''resume''|''cancel'', reason?: string}'
+            description: Sends a control signal (pause, resume, cancel) to an active loop.
             tags:
                 - AgenticDispatch
             parameters:
@@ -542,6 +570,13 @@ paths:
                   required: true
                   description: Loop ID
                   schema: {}
+            requestBody:
+                description: Control signal to send
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SignalRequest'
             responses:
                 "200":
                     description: Signal accepted
@@ -569,9 +604,16 @@ paths:
     /message:
         post:
             summary: Process a user message
-            description: 'Processes a user message synchronously. Commands (starting with /) are executed immediately. Regular messages are submitted as tasks. Request body: {content: string (required), user_id?: string, channel_type?: string, channel_id?: string, reply_to?: string}'
+            description: Processes a user message synchronously. Commands (starting with /) are executed immediately. Regular messages are submitted as tasks.
             tags:
                 - AgenticDispatch
+            requestBody:
+                description: User message to process
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/HTTPMessageRequest'
             responses:
                 "200":
                     description: Message processed successfully
@@ -961,6 +1003,35 @@ components:
                 - prev_state
                 - timestamp
             type: object
+        GraphQLRequest:
+            properties:
+                query:
+                    type: string
+                variables:
+                    additionalProperties: {}
+                    type: object
+            required:
+                - query
+            type: object
+        HTTPMessageRequest:
+            properties:
+                channel_id:
+                    type: string
+                channel_type:
+                    type: string
+                content:
+                    type: string
+                metadata:
+                    additionalProperties:
+                        type: string
+                    type: object
+                reply_to:
+                    type: string
+                user_id:
+                    type: string
+            required:
+                - content
+            type: object
         HTTPMessageResponse:
             properties:
                 content:
@@ -1123,6 +1194,21 @@ components:
                 - component
                 - metrics
             type: object
+        ReviewRequest:
+            properties:
+                decision:
+                    type: string
+                notes:
+                    type: string
+                override_predicate:
+                    type: string
+                reviewed_by:
+                    type: string
+                target_entity:
+                    type: string
+            required:
+                - decision
+            type: object
         RuntimeHealthResponse:
             properties:
                 components:
@@ -1282,6 +1368,16 @@ components:
                 - timestamp
                 - prometheus_available
                 - components
+            type: object
+        SignalRequest:
+            properties:
+                reason:
+                    type: string
+                type:
+                    type: string
+            required:
+                - type
+                - reason
             type: object
         SignalResponse:
             properties:

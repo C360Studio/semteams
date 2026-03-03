@@ -304,6 +304,11 @@ func flowServiceOpenAPISpec() *OpenAPISpec {
 					Summary:     "Create a new flow",
 					Description: "Creates a new visual flow",
 					Tags:        []string{"Flows"},
+					RequestBody: &RequestBodySpec{
+						Description: "Flow definition to create",
+						Required:    true,
+						SchemaRef:   "#/components/schemas/Flow",
+					},
 					Responses: map[string]ResponseSpec{
 						"201": {
 							Description: "Flow created",
@@ -343,6 +348,11 @@ func flowServiceOpenAPISpec() *OpenAPISpec {
 					Summary:     "Update flow",
 					Description: "Updates an existing flow",
 					Tags:        []string{"Flows"},
+					RequestBody: &RequestBodySpec{
+						Description: "Updated flow definition",
+						Required:    true,
+						SchemaRef:   "#/components/schemas/Flow",
+					},
 					Responses: map[string]ResponseSpec{
 						"200": {
 							Description: "Flow updated",
