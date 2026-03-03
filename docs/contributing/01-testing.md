@@ -226,7 +226,7 @@ import (
     "testing"
     "time"
 
-    "github.com/c360/semstreams/natsclient"
+    "github.com/c360studio/semstreams/natsclient"
 )
 
 func TestGraphProcessorIntegration(t *testing.T) {
@@ -270,7 +270,7 @@ import (
     "testing"
     "time"
 
-    "github.com/c360/semstreams/natsclient"
+    "github.com/c360studio/semstreams/natsclient"
 )
 
 var (

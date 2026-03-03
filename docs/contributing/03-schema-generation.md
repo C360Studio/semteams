@@ -100,8 +100,8 @@ package mycomponent
 import (
     "context"
 
-    "github.com/c360/semstreams/component"
-    "github.com/c360/semstreams/message"
+    "github.com/c360studio/semstreams/component"
+    "github.com/c360studio/semstreams/message"
 )
 
 // Config defines component configuration
@@ -150,8 +150,8 @@ func (m *MyComponent) Process(ctx context.Context, msg message.Message) error {
 package componentregistry
 
 import (
-    "github.com/c360/semstreams/component"
-    "github.com/c360/semstreams/output/mycomponent"
+    "github.com/c360studio/semstreams/component"
+    "github.com/c360studio/semstreams/output/mycomponent"
 )
 
 func Register(registry *component.Registry) error {

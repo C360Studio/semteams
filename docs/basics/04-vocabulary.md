@@ -73,7 +73,7 @@ const (
 For discoverability and standards compliance, register predicates with metadata:
 
 ```go
-import "github.com/c360/semstreams/vocabulary"
+import "github.com/c360studio/semstreams/vocabulary"
 
 func init() {
     vocabulary.Register(DroneBattery,
@@ -109,7 +109,7 @@ Standard vocabulary predicates should be defined in the `vocabulary/` package so
 **Using Standard Predicates**
 
 ```go
-import "github.com/c360/semstreams/vocabulary"
+import "github.com/c360studio/semstreams/vocabulary"
 
 // Use standard Dublin Core predicates
 func (d *Document) Triples() []message.Triple {

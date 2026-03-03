@@ -141,7 +141,7 @@ package robotics
 import (
     "fmt"
     "time"
-    "github.com/c360/semstreams/message"
+    "github.com/c360studio/semstreams/message"
 )
 
 // DroneTelemetry implements Graphable for drone position data.
