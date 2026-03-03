@@ -110,7 +110,7 @@ Limit traversal to specific relationship types. For example, filtering to only `
 |-----------|------|-------------|
 | `predicates` | `[]string` | Only follow edges with these predicate types |
 
-> **Note**: Available via NATS `graph.query.pathSearch` subject. Not yet exposed in the GraphQL gateway schema — see [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
+> **Note**: Available via NATS `graph.query.pathSearch` subject. Not yet exposed in the GraphQL gateway schema.
 
 ### Direction Control
 
@@ -122,7 +122,7 @@ Control which edges are followed during traversal:
 | `incoming` | References → entity | "What depends on this?" |
 | `both` | Bidirectional | "What's connected either way?" |
 
-> **Note**: Available via NATS `graph.query.pathSearch` subject. Not yet exposed in the GraphQL gateway schema — see [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
+> **Note**: Available via NATS `graph.query.pathSearch` subject. Not yet exposed in the GraphQL gateway schema.
 
 ## API and Response
 

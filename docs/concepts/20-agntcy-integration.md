@@ -219,7 +219,6 @@ Trust is established through:
 
 ## References
 
-- [ADR-019: AGNTCY Integration](../architecture/adr-019-agntcy-integration.md)
 - [OASF Specification](https://docs.agntcy.org/pages/syntaxes/oasf)
 - [A2A Protocol](https://github.com/google/A2A)
 - [W3C DID Specification](https://www.w3.org/TR/did-core/)

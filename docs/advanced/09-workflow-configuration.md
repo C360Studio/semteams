@@ -803,7 +803,5 @@ func ReviewFixCycleWorkflow() *reactive.Definition {
 
 ## Related Documentation
 
-- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md)
-- [ADR-022: Workflow Engine Simplification](../architecture/adr-022-workflow-engine-simplification.md)
 - [Orchestration Layers](../concepts/14-orchestration-layers.md)
 - [Payload Registry Guide](../concepts/15-payload-registry.md)

@@ -2,7 +2,7 @@
 
 > **⚠️ DEPRECATED**
 >
-> The JSON-based rules engine is superseded by the **Reactive Workflow Engine** (ADR-021).
+> The JSON-based rules engine is superseded by the **Reactive Workflow Engine**.
 > The reactive engine provides:
 > - Typed Go conditions (compile-time safety)
 > - Dual reactive primitives (KV watch + NATS subject consumers)
@@ -11,7 +11,6 @@
 >
 > **For new development, use:**
 > - [Reactive Workflows Guide](./10-reactive-workflows.md) - Usage documentation
-> - [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) - Design rationale
 >
 > This documentation is retained for reference during migration.
 

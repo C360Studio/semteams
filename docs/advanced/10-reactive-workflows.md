@@ -343,6 +343,5 @@ These examples show real-world patterns for:
 
 ## Detailed Reference
 
-- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) - Design rationale
 - [processor/reactive/](../../processor/reactive/) - Package source code
 - [cmd/e2e-semstreams/workflows.go](../../cmd/e2e-semstreams/workflows.go) - Working examples

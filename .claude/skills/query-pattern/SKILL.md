@@ -54,7 +54,7 @@ Who is calling?
 
 - All three patterns read from the same underlying knowledge graph
 - Consistency is eventually consistent regardless of access pattern
-- GraphQL and MCP both include natural language query classification (ADR-004)
+- GraphQL and MCP both include natural language query classification
 - MCP wraps GraphQL capabilities with bounded tool definitions and structured audit
 - GraphRAG (community search) and PathRAG (structural traversal) are available through GraphQL and MCP, not NATS Direct currently
 

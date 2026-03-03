@@ -4,7 +4,7 @@ SemStreams uses a two-layer orchestration model that separates concerns between 
 orchestration and component execution. Understanding these layers and their boundaries is
 essential for building maintainable, scalable systems.
 
-> **Note**: As of ADR-021, the **Reactive Workflow Engine** handles both rules-style single
+> **Note**: The **Reactive Workflow Engine** handles both rules-style single
 > triggers AND workflow-style multi-step orchestration using the same unified infrastructure.
 > Both are defined in type-safe Go code with compile-time verification.
 
@@ -480,11 +480,5 @@ agentLoopsBucket.Put(ctx, "COMPLETE_exec123", completionData)
 
 ## References
 
-- [ADR-010: Rules Processor Completion](../architecture/adr-010-rules-processor-completion.md) — Rules engine design
-- [ADR-021: Reactive Workflow Engine](../architecture/adr-021-reactive-workflow-engine.md) — Type-safe Go workflow engine
-- [ADR-022: Workflow Engine Simplification](../architecture/adr-022-workflow-engine-simplification.md) — Simplified reactive workflow state management (current)
-- [ADR-011: Workflow Processor](../architecture/adr-011-workflow-processor.md) — Original JSON-based workflow processor (superseded by ADR-021/022)
-- [ADR-018: Agentic Workflow Orchestration](../architecture/adr-018-agentic-workflow-orchestration.md) — Agent-specific orchestration
 - [Advanced Guide: Reactive Workflows](../advanced/10-reactive-workflows.md) — Usage guide and examples
-- [Reactive Workflow Migration](../architecture/specs/reactive-workflow-migration.md) — Migration from JSON to Go workflows
 - [Concept: Agentic Systems](./13-agentic-systems.md) — Agentic loop fundamentals

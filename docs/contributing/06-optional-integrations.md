@@ -205,8 +205,6 @@ Content:
 
 ### Architecture Spec (for complex integrations)
 
-Location: `/docs/architecture/specs/<integration>-spec.md`
-
 Content:
 - Detailed design decisions
 - API contracts

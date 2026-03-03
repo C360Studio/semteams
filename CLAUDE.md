@@ -176,15 +176,3 @@ Polymorphic JSON deserialization via type-discriminated envelopes. Every new mes
 
 Use `/new-payload` for the step-by-step checklist with code templates. See [Payload Registry Guide](docs/concepts/15-payload-registry.md).
 
-## ADR Currency Guide
-
-| ADR | Status | Guidance |
-|-----|--------|----------|
-| 021 (Reactive Workflow Engine) | **Current** | Canonical workflow design |
-| 022 (Workflow Simplification) | **Current** | Canonical simplification rationale |
-| 010 (Rules Processor) | Superseded by 021 | **Skip** — old JSON-based rules |
-| 011 (Workflow Processor) | Superseded by 021 | **Skip** — old JSON-based workflows |
-| 018 (Agentic Orchestration) | Partially outdated | Read for principles, skip implementation details |
-| 020 (Unified Dataflow) | Partially outdated | Read for port patterns, skip JSON workflow examples |
-
-All other ADRs (001-009, 012-017, 019) remain current and accurate.

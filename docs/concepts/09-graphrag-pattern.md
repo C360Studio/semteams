@@ -34,7 +34,7 @@ User Question (natural language)
       ▼
 ┌─────────────────┐
 │ Query Classifier │◄── extracts temporal/spatial/intent
-│ (ADR-004)        │    from NL query
+│                  │    from NL query
 └────────┬────────┘
          │
          ▼
@@ -135,7 +135,7 @@ GraphRAG requires clustering to be enabled. Configure detection interval and ent
 | `max_communities` | 5 | Maximum communities to return per query |
 | `max_entities_per_community` | 20 | Entity limit per community in results |
 
-> **Note**: Additional parameters (`include_summaries`, `include_relationships`) are planned. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
+> **Note**: Additional parameters (`include_summaries`, `include_relationships`) are planned.
 
 ### LLM Integration (Tier 2)
 
@@ -157,7 +157,7 @@ GraphRAG is accessible via the MCP (Model Context Protocol) gateway using GraphQ
 | `communities` | List of matched communities with summaries |
 | `entities` | Key entities from matched communities |
 
-> **Note**: Additional response fields (`relationships`, `sources` for attribution) are planned. See [ADR-009](../architecture/adr-009-pathrag-enhancements.md).
+> **Note**: Additional response fields (`relationships`, `sources` for attribution) are planned.
 
 ## How Context Flows to the LLM
 
@@ -233,9 +233,6 @@ The LLM receives organized context—summaries, key entities, relationships—ra
 - [PathRAG Pattern](10-pathrag-pattern.md) - Structural traversal alternative for impact analysis
 - [Embeddings](05-embeddings.md) - Semantic matching that enables community search
 - [Query Access](11-query-access.md) - Access patterns for GraphQL, MCP, and NATS
-
-**Architecture**
-- [ADR-004: Search Query Classification](../architecture/adr-004-search-query-classification.md) - NL query classification design
 
 **Configuration**
 - [Clustering Configuration](../advanced/01-clustering.md) - Community detection settings

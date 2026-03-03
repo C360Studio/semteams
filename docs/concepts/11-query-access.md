@@ -69,7 +69,7 @@ GraphQL provides schema-validated queries with field selection.
 - Single HTTP endpoint for all operations
 - Natural language query classification extracts search intents automatically
 
-**Natural language support:** The GraphQL gateway includes a query classifier that extracts temporal, spatial, and intent information from natural language queries. For example, "What sensors were active yesterday?" automatically populates temporal filters and routes to the appropriate search strategy. See [ADR-004](../architecture/adr-004-search-query-classification.md) for details.
+**Natural language support:** The GraphQL gateway includes a query classifier that extracts temporal, spatial, and intent information from natural language queries. For example, "What sensors were active yesterday?" automatically populates temporal filters and routes to the appropriate search strategy.
 
 **Best for:** External applications, web frontends, interactive exploration, natural language queries.
 
@@ -242,5 +242,3 @@ The access pattern affects latency, not consistency guarantees.
 - [PathRAG Pattern](10-pathrag-pattern.md) - Graph traversal operations
 - [Event-Driven Basics](01-event-driven-basics.md) - NATS fundamentals
 
-**Architecture**
-- [ADR-004: Search Query Classification](../architecture/adr-004-search-query-classification.md) - NL query classification design

@@ -95,6 +95,4 @@ reactive.NewWorkflow("review-fix-cycle").
     MustBuild()
 ```
 
-Current canonical ADRs: ADR-021 (Reactive Workflow Engine), ADR-022 (Workflow Simplification).
-Skip ADR-010 and ADR-011 (superseded).
 Read `docs/concepts/14-orchestration-layers.md` for full documentation.

@@ -200,4 +200,3 @@ You can start in headless mode for initial deployment, then connect the UI later
 ## Related Documentation
 
 - [Configuration Guide](../basics/06-configuration.md) - Static config structure
-- [ADR-014: Static Config to Flow Bridge](../architecture/adr-014-static-config-flow-bridge.md) - Architecture decision

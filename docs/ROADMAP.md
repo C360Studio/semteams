@@ -5,7 +5,7 @@
 Items requiring completion before alpha release.
 
 ### Search Query Classification
-**Status:** Basic Implementation (Tier 0 Active) | **ADR:** [ADR-004](architecture/adr-004-search-query-classification.md)
+**Status:** Basic Implementation (Tier 0 Active)
 
 Hybrid NL intent extraction with progressive fallback:
 - Tier 0: Keyword heuristics — **active in production** (temporal, spatial, similarity, path, zone intents)
@@ -23,7 +23,7 @@ Current state: `KeywordClassifier` runs in both `graph-gateway` and `graph-query
 - Align `graph-query` to use `ClassifierChain` instead of bare `KeywordClassifier`
 
 ### Anomaly Approval Workflow
-**Status:** Implemented | **ADR:** [ADR-005](architecture/adr-005-anomaly-approval-workflow.md)
+**Status:** Implemented
 
 ReviewWorker and HTTP handlers wired into runtime:
 - ReviewWorker started in graph-clustering when enabled
@@ -34,7 +34,7 @@ ReviewWorker and HTTP handlers wired into runtime:
 Current state: Fully operational. Human-only mode works without LLM.
 
 ### Mutation E2E Testing
-**Status:** Partial Coverage | **ADR:** [ADR-006](architecture/adr-006-mutation-e2e-testing.md)
+**Status:** Partial Coverage
 
 Add explicit mutation tests beyond rule-driven coverage:
 - Direct API tests for AddTriple/RemoveTriple
@@ -44,7 +44,7 @@ Add explicit mutation tests beyond rule-driven coverage:
 Current state: Mutations only tested indirectly via rules engine.
 
 ### Transitivity Detector Wiring
-**Status:** Implemented | **ADR:** [ADR-008](architecture/adr-008-transitivity-detector.md)
+**Status:** Implemented
 
 Transitivity gap detector wired into anomaly detection pipeline:
 - `kvRelationshipQuerier` implementation preserves predicate information
@@ -54,7 +54,7 @@ Transitivity gap detector wired into anomaly detection pipeline:
 Current state: Fully operational. Detects transitivity gaps for configured predicates.
 
 ### Query Pattern Enhancements
-**Status:** PathRAG Implemented, Gateway Exposure Needed | **ADR:** [ADR-009](architecture/adr-009-pathrag-enhancements.md)
+**Status:** PathRAG Implemented, Gateway Exposure Needed
 
 **PathRAG — processor complete:**
 - Direction control (incoming, outgoing, both) — **implemented and tested**
@@ -76,7 +76,7 @@ Current state: Fully operational. Detects transitivity gaps for configured predi
 Current state: PathRAG BFS engine is feature-complete with direction control, predicate filtering, timeout, and path limits. All features work via NATS but are not exposed through the GraphQL/MCP gateway. GraphRAG doesn't include relationships or source attribution.
 
 ### Rules Processor Completion
-**Status:** Partial Implementation | **ADR:** [ADR-010](architecture/adr-010-rules-processor-completion.md)
+**Status:** Partial Implementation
 
 Complete stubbed action implementations in rules processor:
 - ActionTypePublish: Implemented for agentic workflows
@@ -87,8 +87,7 @@ Complete stubbed action implementations in rules processor:
 Current state: Stateful ECA rules work. Publish actions implemented for agentic system integration. Update triple actions partially implemented.
 
 ### Workflow Processor
-**Status:** Implemented (Reactive Engine) | **ADRs:** [ADR-021](architecture/adr-021-reactive-workflow-engine.md),
-[ADR-022](architecture/adr-022-workflow-engine-simplification.md)
+**Status:** Implemented (Reactive Engine)
 
 Reactive workflow engine for stateless rules and stateful multi-step workflows:
 - KV watch and stream/subject-based triggers
@@ -101,10 +100,10 @@ Current state: The original DAG-based workflow processor (`processor/workflow/`)
 engine (`processor/reactive/`). The new engine aligns with semstreams' reactive philosophy where the message topology
 IS the execution graph. Components that need stateful workflows implement `WorkflowParticipant` and manage state via
 KV buckets as a side effect. This reduced code complexity by 55% (~1550 lines) while maintaining all required
-functionality. See [ADR-022](architecture/adr-022-workflow-engine-simplification.md) for migration details.
+functionality.
 
 ### Agentic Components
-**Status:** Implemented | **ADR:** [ADR-018](architecture/adr-018-agentic-workflow-orchestration.md)
+**Status:** Implemented
 
 LLM-powered autonomous task execution with six specialized components:
 - agentic-loop: State machine, orchestration, trajectory capture
@@ -132,18 +131,18 @@ Items planned but not required for alpha.
 ### Content Processing
 
 #### LLM-Generated Abstracts
-**Priority:** Medium | **Complexity:** Medium | **Pattern:** [ADR-013](architecture/adr-013-content-enrichment-pattern.md)
+**Priority:** Medium | **Complexity:** Medium
 
 Auto-generate abstracts/summaries for content using LLM agents.
 
 - **Use cases:** Documents without descriptions, long-form content needing summaries
 - **Integration:** ContentStorable processing pipeline
 - **Approach:** Send `RawContent()` fields to LLM, store generated abstract in content fields
-- **Pattern:** KV-watching async worker (follows ADR-013)
+- **Pattern:** KV-watching async worker
 - **Tier requirement:** Semantic (LLM required)
 
 #### Content Analysis Processor
-**Priority:** Medium | **Complexity:** High | **ADR:** [ADR-012](architecture/adr-012-content-analysis-processor.md) | **Pattern:** [ADR-013](architecture/adr-013-content-enrichment-pattern.md)
+**Priority:** Medium | **Complexity:** High
 
 LLM-powered analysis of operational documents to suggest rules and workflows:
 - Watch for new documents by configurable type/category patterns
@@ -154,10 +153,10 @@ LLM-powered analysis of operational documents to suggest rules and workflows:
 
 - **Use cases:** Early adopters uploading SOPs before field deployment
 - **Tier requirement:** Semantic (LLM required)
-- **Pattern:** KV-watching async worker (follows ADR-013)
-- **Depends on:** ADR-010 (rules completion), reactive workflow engine (ADR-021/ADR-022)
+- **Pattern:** KV-watching async worker
+- **Depends on:** Rules completion, reactive workflow engine
 
-Current state: ADR and spec complete. Reactive workflow engine is implemented. Content analysis implementation
+Current state: Reactive workflow engine is implemented. Content analysis implementation
 can proceed when prioritized.
 
 ---
@@ -165,7 +164,7 @@ can proceed when prioritized.
 ### Community Detection
 
 #### Content-Aware Keyword Extraction
-**Priority:** Medium | **Complexity:** Medium | **ADR:** [ADR-007](architecture/adr-007-content-aware-keywords.md)
+**Priority:** Medium | **Complexity:** Medium
 
 Enhance keyword extraction to use ContentStorable document content.
 
@@ -179,7 +178,7 @@ Enhance keyword extraction to use ContentStorable document content.
 ### Embeddings & Retrieval
 
 #### Multimodal Video Embeddings
-**Priority:** Low | **Complexity:** High | **Pattern:** [ADR-013](architecture/adr-013-content-enrichment-pattern.md)
+**Priority:** Low | **Complexity:** High
 
 Generate embeddings from video content for semantic search.
 
@@ -188,11 +187,11 @@ Generate embeddings from video content for semantic search.
   2. Extract keyframes, send to vision LLM for descriptions, embed descriptions
   3. Use video-specific embedding models (expensive, specialized)
 - **Integration:** Extends `BinaryStorable` pipeline via `ContentRoleMedia`
-- **Pattern:** KV-watching async worker (follows ADR-013)
+- **Pattern:** KV-watching async worker
 - **Tier requirement:** Semantic (vision LLM or multimodal model)
 
 #### Image Embeddings
-**Priority:** Medium | **Complexity:** Medium | **Pattern:** [ADR-013](architecture/adr-013-content-enrichment-pattern.md)
+**Priority:** Medium | **Complexity:** Medium
 
 Generate embeddings directly from images.
 
@@ -200,7 +199,7 @@ Generate embeddings directly from images.
   1. Vision LLM generates description, embed the text
   2. Direct image-to-vector using multimodal models (CLIP, etc.)
 - **Integration:** Extends `BinaryStorable` pipeline via `ContentRoleMedia`
-- **Pattern:** KV-watching async worker (follows ADR-013)
+- **Pattern:** KV-watching async worker
 - **Tier requirement:** Semantic (multimodal embedding provider)
 
 ---
@@ -221,7 +220,7 @@ Current state: All code exists and is tested. Needs config surface and startup w
 #### PathRAG Gateway Exposure
 **Priority:** High | **Complexity:** Low
 
-Expose PathRAG ADR-009 features through GraphQL/MCP gateway:
+Expose PathRAG features through GraphQL/MCP gateway:
 - Add `direction`, `predicates`, `timeout`, `maxPaths` to GraphQL schema arguments
 - Update `transformPathSearchVars()` to forward these fields
 - Wire `IncludeSiblings` into BFS logic or remove the dead field

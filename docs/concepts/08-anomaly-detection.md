@@ -118,8 +118,6 @@ Alice ──member_of──→ Engineering ──part_of──→ Company
 
 **Interpretation**: Transitive predicates should create implied paths. A gap suggests missing edges.
 
-> **Note**: The transitivity detector code exists but is not yet wired into the runtime. See [ADR-008](../architecture/adr-008-transitivity-detector.md).
-
 ### Step 3: Queue for Review
 
 Detected anomalies are stored in the ANOMALY_INDEX KV bucket with:
