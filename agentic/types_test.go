@@ -6,6 +6,7 @@ package agentic_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/c360studio/semstreams/agentic"
@@ -539,6 +540,86 @@ func TestChatMessage_Validation(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestChatMessage_ReasoningAlias(t *testing.T) {
+	tests := []struct {
+		name          string
+		json          string
+		wantReasoning string
+		wantContent   string
+	}{
+		{
+			name:          "reasoning_content field (canonical)",
+			json:          `{"role":"assistant","content":"answer","reasoning_content":"thinking..."}`,
+			wantReasoning: "thinking...",
+			wantContent:   "answer",
+		},
+		{
+			name:          "reasoning field (Ollama alias)",
+			json:          `{"role":"assistant","content":"answer","reasoning":"thinking via ollama"}`,
+			wantReasoning: "thinking via ollama",
+			wantContent:   "answer",
+		},
+		{
+			name:          "both present - reasoning_content wins",
+			json:          `{"role":"assistant","content":"answer","reasoning_content":"canonical","reasoning":"alias"}`,
+			wantReasoning: "canonical",
+			wantContent:   "answer",
+		},
+		{
+			name:          "neither present",
+			json:          `{"role":"assistant","content":"just content"}`,
+			wantReasoning: "",
+			wantContent:   "just content",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var msg agentic.ChatMessage
+			if err := json.Unmarshal([]byte(tt.json), &msg); err != nil {
+				t.Fatalf("Unmarshal failed: %v", err)
+			}
+			if msg.ReasoningContent != tt.wantReasoning {
+				t.Errorf("ReasoningContent = %q, want %q", msg.ReasoningContent, tt.wantReasoning)
+			}
+			if msg.Content != tt.wantContent {
+				t.Errorf("Content = %q, want %q", msg.Content, tt.wantContent)
+			}
+		})
+	}
+}
+
+func TestChatMessage_ReasoningRoundTrip(t *testing.T) {
+	// Marshal always uses reasoning_content (struct tag), never "reasoning"
+	msg := agentic.ChatMessage{
+		Role:             "assistant",
+		Content:          "answer",
+		ReasoningContent: "thinking...",
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	// Verify canonical field name in JSON
+	jsonStr := string(data)
+	if !strings.Contains(jsonStr, `"reasoning_content"`) {
+		t.Errorf("expected reasoning_content in JSON, got: %s", jsonStr)
+	}
+	if strings.Contains(jsonStr, `"reasoning"`) && !strings.Contains(jsonStr, `"reasoning_content"`) {
+		t.Errorf("expected no bare reasoning field in JSON, got: %s", jsonStr)
+	}
+
+	// Round-trip back
+	var decoded agentic.ChatMessage
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("round-trip Unmarshal failed: %v", err)
+	}
+	if decoded.ReasoningContent != msg.ReasoningContent {
+		t.Errorf("round-trip ReasoningContent = %q, want %q", decoded.ReasoningContent, msg.ReasoningContent)
 	}
 }
 

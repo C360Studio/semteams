@@ -97,6 +97,23 @@ type ChatMessage struct {
 	ToolCallID       string     `json:"tool_call_id,omitempty"` // Required for tool role messages
 }
 
+// UnmarshalJSON accepts both "reasoning" (Ollama) and "reasoning_content" (DeepSeek/canonical).
+// If both are present, reasoning_content wins.
+func (m *ChatMessage) UnmarshalJSON(data []byte) error {
+	type Alias ChatMessage
+	aux := &struct {
+		*Alias
+		Reasoning string `json:"reasoning,omitempty"`
+	}{Alias: (*Alias)(m)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	if m.ReasoningContent == "" && aux.Reasoning != "" {
+		m.ReasoningContent = aux.Reasoning
+	}
+	return nil
+}
+
 // Validate checks if the ChatMessage is valid
 func (m ChatMessage) Validate() error {
 	if m.Role != "system" && m.Role != "user" && m.Role != "assistant" && m.Role != "tool" {
