@@ -155,6 +155,7 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		{"wait-for-completion", s.waitForCompletion},
 		{"validate-trajectory", s.validateTrajectory},
 		{"verify-tool-execution", s.verifyToolExecution},
+		{"verify-streaming-metrics", s.verifyStreamingMetrics},
 		{"validate-results", s.validateResults},
 		// AGNTCY integration stages (optional, skip if not configured)
 		{"verify-oasf-generation", s.verifyOASFGeneration},
@@ -384,6 +385,34 @@ func (s *Scenario) verifyToolExecution(ctx context.Context, result *scenarios.Re
 	}
 
 	result.Details["tool_execution_verified"] = true
+	return nil
+}
+
+// verifyStreamingMetrics checks that the streaming path was exercised.
+// This is non-fatal — the core agentic flow is validated by earlier stages.
+func (s *Scenario) verifyStreamingMetrics(ctx context.Context, result *scenarios.Result) error {
+	// Check streaming chunks counter
+	chunks, err := s.metrics.SumMetricsByName(ctx, "semstreams_agentic_model_stream_chunks_total")
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Could not verify streaming chunks: %v", err))
+		return nil
+	}
+	result.Metrics["stream_chunks_total"] = chunks
+
+	if chunks < 1 {
+		result.Warnings = append(result.Warnings, "No streaming chunks recorded — streaming path may not have been exercised")
+		return nil
+	}
+
+	// Check time-to-first-token histogram
+	ttft, err := s.metrics.SumMetricsByName(ctx, "semstreams_agentic_model_stream_ttft_seconds_count")
+	if err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Could not verify TTFT metric: %v", err))
+	} else {
+		result.Metrics["stream_ttft_count"] = ttft
+	}
+
+	result.Details["streaming_verified"] = true
 	return nil
 }
 

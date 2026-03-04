@@ -3,6 +3,7 @@ package agenticmodel
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"time"
 
@@ -14,8 +15,10 @@ import (
 
 // Client wraps OpenAI SDK for agentic model requests
 type Client struct {
-	client   *openai.Client
-	endpoint *model.EndpointConfig
+	client       *openai.Client
+	endpoint     *model.EndpointConfig
+	chunkHandler ChunkHandler
+	metrics      *modelMetrics
 }
 
 // NewClient creates a new client for the given endpoint configuration
@@ -47,9 +50,18 @@ func NewClient(endpoint *model.EndpointConfig) (*Client, error) {
 	}, nil
 }
 
-// ChatCompletion sends a chat completion request
-func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (agentic.AgentResponse, error) {
-	// Convert AgentRequest to OpenAI format
+// SetChunkHandler sets the callback for receiving streaming deltas.
+func (c *Client) SetChunkHandler(handler ChunkHandler) {
+	c.chunkHandler = handler
+}
+
+// SetMetrics sets the metrics instance for recording streaming metrics.
+func (c *Client) SetMetrics(m *modelMetrics) {
+	c.metrics = m
+}
+
+// buildChatRequest converts an AgentRequest into an OpenAI ChatCompletionRequest.
+func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletionRequest {
 	messages := make([]openai.ChatCompletionMessage, len(req.Messages))
 	for i, msg := range req.Messages {
 		messages[i] = openai.ChatCompletionMessage{
@@ -81,7 +93,6 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 		}
 	}
 
-	// Build request
 	chatReq := openai.ChatCompletionRequest{
 		Model:    c.endpoint.Model,
 		Messages: messages,
@@ -90,13 +101,9 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 	if req.MaxTokens > 0 {
 		chatReq.MaxTokens = req.MaxTokens
 	}
-
 	if req.Temperature > 0 {
 		chatReq.Temperature = float32(req.Temperature)
 	}
-
-	// Forward provider-specific options as chat_template_kwargs
-	// (e.g. enable_thinking, thinking_budget for vLLM/ollama thinking models)
 	if len(c.endpoint.Options) > 0 {
 		chatReq.ChatTemplateKwargs = c.endpoint.Options
 	}
@@ -117,6 +124,13 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 		chatReq.Tools = tools
 	}
 
+	return chatReq
+}
+
+// ChatCompletion sends a chat completion request
+func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (agentic.AgentResponse, error) {
+	chatReq := c.buildChatRequest(req)
+
 	// Make request with retry logic
 	response := agentic.AgentResponse{
 		RequestID: req.RequestID,
@@ -134,6 +148,20 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 				return response, nil
 			case <-time.After(backoffDuration):
 			}
+		}
+
+		if c.endpoint.Stream {
+			resp, err := c.streamChatCompletion(ctx, chatReq, req.RequestID)
+			if err != nil {
+				// Connection errors are retryable
+				if attempt < maxAttempts-1 && isRetryable(err) {
+					continue
+				}
+				response.Status = "error"
+				response.Error = err.Error()
+				return response, nil
+			}
+			return resp, nil
 		}
 
 		resp, err := c.client.CreateChatCompletion(ctx, chatReq)
@@ -157,6 +185,76 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 	response.Status = "error"
 	response.Error = "maximum retry attempts exceeded"
 	return response, nil
+}
+
+// streamChatCompletion handles the streaming path. Connection errors return
+// a Go error (retryable). Mid-stream errors return AgentResponse{Status: "error"}
+// (not retryable — partial state can't be replayed).
+func (c *Client) streamChatCompletion(ctx context.Context, chatReq openai.ChatCompletionRequest, requestID string) (agentic.AgentResponse, error) {
+	chatReq.Stream = true
+	chatReq.StreamOptions = &openai.StreamOptions{IncludeUsage: true}
+
+	stream, err := c.client.CreateChatCompletionStream(ctx, chatReq)
+	if err != nil {
+		return agentic.AgentResponse{}, err // retryable connection error
+	}
+	defer stream.Close()
+
+	acc := &streamAccumulator{}
+	streamStart := time.Now()
+	firstTokenRecorded := false
+
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			// Mid-stream error — not retryable
+			resp := agentic.AgentResponse{
+				RequestID: requestID,
+				Status:    "error",
+				Error:     err.Error(),
+			}
+			return resp, nil
+		}
+
+		// Record usage from the final chunk (has empty choices)
+		if chunk.Usage != nil {
+			acc.setUsage(chunk.Usage)
+		}
+
+		// Process choice deltas
+		for _, choice := range chunk.Choices {
+			acc.processDelta(choice)
+
+			// Build chunk for handler
+			if c.chunkHandler != nil {
+				sc := StreamChunk{
+					RequestID:      requestID,
+					ContentDelta:   choice.Delta.Content,
+					ReasoningDelta: choice.Delta.ReasoningContent,
+				}
+				c.chunkHandler(sc)
+			}
+
+			// Record streaming metrics
+			if c.metrics != nil {
+				c.metrics.recordStreamChunk(chatReq.Model)
+				if !firstTokenRecorded && (choice.Delta.Content != "" || choice.Delta.ReasoningContent != "") {
+					c.metrics.recordStreamTTFT(chatReq.Model, time.Since(streamStart).Seconds())
+					firstTokenRecorded = true
+				}
+			}
+		}
+	}
+
+	// Send done signal to handler
+	if c.chunkHandler != nil {
+		c.chunkHandler(StreamChunk{RequestID: requestID, Done: true})
+	}
+
+	return acc.toAgentResponse(requestID), nil
 }
 
 // convertResponse converts OpenAI response to AgentResponse

@@ -20,7 +20,8 @@
         "model": "mock-model",
         "max_tokens": 4096,
         "supports_tools": true,
-        "tool_format": "openai"
+        "tool_format": "openai",
+        "stream": true
       }
     },
     "defaults": {
@@ -600,6 +601,6 @@
           "outputs": []
         }
       }
-    },
+    }
   }
 }

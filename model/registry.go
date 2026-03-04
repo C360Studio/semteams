@@ -25,12 +25,22 @@ type EndpointConfig struct {
 	// APIKeyEnv is the environment variable containing the API key.
 	// Required for anthropic/openai/openrouter, ignored for ollama.
 	APIKeyEnv string `json:"api_key_env,omitempty"`
-	// Options holds provider-specific template parameters passed to the API.
-	// For vLLM/ollama with thinking models, set "enable_thinking" and
-	// "thinking_budget" here — they are forwarded as chat_template_kwargs.
+	// Options holds provider-specific template parameters passed to the API
+	// as chat_template_kwargs. For vLLM/SGLang with thinking models, set
+	// "enable_thinking" and "thinking_budget" here.
+	//
+	// Note: Ollama's OpenAI-compatible endpoint ignores chat_template_kwargs.
+	// Ollama thinking models (Qwen3, DeepSeek-R1) always return reasoning_content
+	// but the thinking toggle and budget are only controllable via Ollama's
+	// native /api/chat endpoint, not the OpenAI-compatible /v1/ endpoint.
+	//
 	// Do not use for inference parameters (temperature, top_k, etc.) which
 	// have dedicated fields in AgentRequest.
 	Options map[string]any `json:"options,omitempty"`
+	// Stream enables SSE streaming for this endpoint. The client uses
+	// CreateChatCompletionStream internally, reducing time-to-first-token.
+	// The inter-component protocol remains complete AgentResponse messages.
+	Stream bool `json:"stream,omitempty"`
 }
 
 // CapabilityConfig defines model preferences for a capability.

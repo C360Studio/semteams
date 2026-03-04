@@ -501,8 +501,34 @@ func (c *Component) getClientForRequest(req agentic.AgentRequest) (*Client, erro
 		return nil, errs.Wrap(err, "Component", "getClientForRequest", fmt.Sprintf("create client for model %q", req.Model))
 	}
 
+	// Wire streaming chunk handler and metrics
+	if ep.Stream {
+		client.SetChunkHandler(c.makeChunkHandler())
+	}
+	if c.metrics != nil {
+		client.SetMetrics(c.metrics)
+	}
+
 	c.clientCache[cacheKey] = client
 	return client, nil
+}
+
+// makeChunkHandler returns a ChunkHandler that publishes chunks to core NATS.
+// Chunks are fire-and-forget (core NATS Publish, not JetStream) since they are
+// ephemeral — dropped if no subscriber is listening.
+func (c *Component) makeChunkHandler() ChunkHandler {
+	return func(chunk StreamChunk) {
+		data, err := json.Marshal(chunk)
+		if err != nil {
+			c.logger.Warn("Failed to marshal stream chunk", "error", err)
+			return
+		}
+
+		subject := "agent.stream." + chunk.RequestID
+		if err := c.natsClient.Publish(context.Background(), subject, data); err != nil {
+			c.logger.Debug("Failed to publish stream chunk", "subject", subject, "error", err)
+		}
+	}
 }
 
 // executeRequest executes the chat completion with timeout

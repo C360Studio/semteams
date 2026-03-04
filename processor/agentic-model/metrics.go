@@ -23,6 +23,10 @@ type modelMetrics struct {
 
 	// Token usage
 	tokensTotal *prometheus.CounterVec
+
+	// Streaming
+	streamChunksTotal *prometheus.CounterVec
+	streamTTFT        *prometheus.HistogramVec
 }
 
 // Package-level metrics (registered once to avoid duplicate registration errors)
@@ -78,6 +82,21 @@ func getMetrics(registry *metric.MetricsRegistry) *modelMetrics {
 				Name:      "tokens_total",
 				Help:      "Total tokens used by model and type (prompt/completion)",
 			}, []string{"model", "type"}),
+
+			streamChunksTotal: prometheus.NewCounterVec(prometheus.CounterOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_model",
+				Name:      "stream_chunks_total",
+				Help:      "Total streaming chunks received by model",
+			}, []string{"model"}),
+
+			streamTTFT: prometheus.NewHistogramVec(prometheus.HistogramOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_model",
+				Name:      "stream_ttft_seconds",
+				Help:      "Time-to-first-token for streaming requests",
+				Buckets:   prometheus.ExponentialBuckets(0.01, 2, 12), // 10ms to ~40s
+			}, []string{"model"}),
 		}
 
 		// Register metrics with the metrics registry if available
@@ -88,6 +107,8 @@ func getMetrics(registry *metric.MetricsRegistry) *modelMetrics {
 			_ = registry.RegisterCounterVec("agentic-model", "errors_total", metrics.errorsTotal)
 			_ = registry.RegisterHistogramVec("agentic-model", "tool_calls_returned", metrics.toolCallsReturned)
 			_ = registry.RegisterCounterVec("agentic-model", "tokens_total", metrics.tokensTotal)
+			_ = registry.RegisterCounterVec("agentic-model", "stream_chunks_total", metrics.streamChunksTotal)
+			_ = registry.RegisterHistogramVec("agentic-model", "stream_ttft_seconds", metrics.streamTTFT)
 		} else {
 			// Fallback to default prometheus registry for testing
 			_ = prometheus.DefaultRegisterer.Register(metrics.requestsTotal)
@@ -96,6 +117,8 @@ func getMetrics(registry *metric.MetricsRegistry) *modelMetrics {
 			_ = prometheus.DefaultRegisterer.Register(metrics.errorsTotal)
 			_ = prometheus.DefaultRegisterer.Register(metrics.toolCallsReturned)
 			_ = prometheus.DefaultRegisterer.Register(metrics.tokensTotal)
+			_ = prometheus.DefaultRegisterer.Register(metrics.streamChunksTotal)
+			_ = prometheus.DefaultRegisterer.Register(metrics.streamTTFT)
 		}
 	})
 	return metrics
@@ -130,4 +153,14 @@ func (m *modelMetrics) recordTokenUsage(model string, promptTokens, completionTo
 	if completionTokens > 0 {
 		m.tokensTotal.WithLabelValues(model, "completion").Add(float64(completionTokens))
 	}
+}
+
+// recordStreamChunk increments the streaming chunk counter.
+func (m *modelMetrics) recordStreamChunk(model string) {
+	m.streamChunksTotal.WithLabelValues(model).Inc()
+}
+
+// recordStreamTTFT records time-to-first-token for a streaming request.
+func (m *modelMetrics) recordStreamTTFT(model string, seconds float64) {
+	m.streamTTFT.WithLabelValues(model).Observe(seconds)
 }

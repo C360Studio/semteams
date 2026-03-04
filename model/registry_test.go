@@ -420,6 +420,63 @@ func TestEndpointOptions(t *testing.T) {
 	}
 }
 
+func TestStreamFieldRoundTrip(t *testing.T) {
+	r := &Registry{
+		Endpoints: map[string]*EndpointConfig{
+			"streaming": {
+				Provider:  "ollama",
+				URL:       "http://localhost:11434/v1",
+				Model:     "qwen3:32b",
+				MaxTokens: 131072,
+				Stream:    true,
+			},
+			"non-streaming": {
+				Provider:  "ollama",
+				URL:       "http://localhost:11434/v1",
+				Model:     "qwen3:1.7b",
+				MaxTokens: 32768,
+			},
+		},
+		Defaults: DefaultsConfig{Model: "streaming"},
+	}
+
+	if err := r.Validate(); err != nil {
+		t.Fatalf("registry with stream should be valid: %v", err)
+	}
+
+	// Verify direct access
+	if !r.GetEndpoint("streaming").Stream {
+		t.Error("streaming endpoint: Stream = false, want true")
+	}
+	if r.GetEndpoint("non-streaming").Stream {
+		t.Error("non-streaming endpoint: Stream = true, want false")
+	}
+
+	// JSON round-trip
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got Registry
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !got.GetEndpoint("streaming").Stream {
+		t.Error("round-trip: streaming endpoint Stream = false, want true")
+	}
+	if got.GetEndpoint("non-streaming").Stream {
+		t.Error("round-trip: non-streaming endpoint Stream = true, want false")
+	}
+
+	// Verify omitempty: Stream=false should not appear in JSON
+	if contains(string(data), `"stream":false`) {
+		t.Error("Stream=false should be omitted from JSON")
+	}
+	if !contains(string(data), `"stream":true`) {
+		t.Error("Stream=true should be present in JSON")
+	}
+}
+
 func TestMinimalRegistry(t *testing.T) {
 	r := &Registry{
 		Endpoints: map[string]*EndpointConfig{

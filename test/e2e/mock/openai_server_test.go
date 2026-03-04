@@ -1,9 +1,11 @@
 package mock
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 )
@@ -301,6 +303,204 @@ func TestOpenAIServer_UsageStats(t *testing.T) {
 	if resp.Usage.TotalTokens != resp.Usage.PromptTokens+resp.Usage.CompletionTokens {
 		t.Error("total tokens should equal prompt + completion")
 	}
+}
+
+func TestOpenAIServer_StreamingCompletion(t *testing.T) {
+	server := NewOpenAIServer().
+		WithCompletionContent("Hello streaming world!")
+
+	if err := server.Start(":0"); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer server.Stop()
+
+	req := ChatCompletionRequest{
+		Model: "test-model",
+		Messages: []ChatMessage{
+			{Role: "user", Content: "Hello"},
+		},
+		Stream: true,
+	}
+
+	chunks := makeStreamingRequest(t, server.URL()+"/v1/chat/completions", req)
+
+	// Should have content chunks + usage chunk (at least 3)
+	if len(chunks) < 3 {
+		t.Fatalf("expected at least 3 chunks, got %d", len(chunks))
+	}
+
+	// Concatenate content from all chunks
+	var content string
+	var gotRole bool
+	var gotFinishReason bool
+	var gotUsage bool
+
+	for _, chunk := range chunks {
+		if chunk.Usage != nil {
+			gotUsage = true
+			if chunk.Usage.PromptTokens <= 0 {
+				t.Error("expected positive prompt tokens in usage chunk")
+			}
+		}
+		for _, choice := range chunk.Choices {
+			if choice.Delta.Role == "assistant" {
+				gotRole = true
+			}
+			content += choice.Delta.Content
+			if choice.FinishReason != nil {
+				gotFinishReason = true
+			}
+		}
+	}
+
+	if content != "Hello streaming world!" {
+		t.Errorf("concatenated content = %q, want %q", content, "Hello streaming world!")
+	}
+	if !gotRole {
+		t.Error("expected at least one chunk with role=assistant")
+	}
+	if !gotFinishReason {
+		t.Error("expected at least one chunk with finish_reason")
+	}
+	if !gotUsage {
+		t.Error("expected a usage chunk")
+	}
+}
+
+func TestOpenAIServer_StreamingToolCall(t *testing.T) {
+	server := NewOpenAIServer().
+		WithToolArgs("query_entity", `{"entity_id": "test-001"}`)
+
+	if err := server.Start(":0"); err != nil {
+		t.Fatalf("failed to start server: %v", err)
+	}
+	defer server.Stop()
+
+	req := ChatCompletionRequest{
+		Model: "test-model",
+		Messages: []ChatMessage{
+			{Role: "user", Content: "Analyze entity"},
+		},
+		Tools: []Tool{{
+			Type: "function",
+			Function: FunctionDef{
+				Name:        "query_entity",
+				Description: "Query an entity",
+				Parameters:  map[string]any{"type": "object"},
+			},
+		}},
+		Stream: true,
+	}
+
+	chunks := makeStreamingRequest(t, server.URL()+"/v1/chat/completions", req)
+
+	// Should have tool call delta chunks + finish reason + usage (at least 4)
+	if len(chunks) < 4 {
+		t.Fatalf("expected at least 4 chunks, got %d", len(chunks))
+	}
+
+	// Reconstruct tool call from deltas
+	var toolName, toolArgs, toolID string
+	var gotFinishReason bool
+
+	for _, chunk := range chunks {
+		for _, choice := range chunk.Choices {
+			for _, tc := range choice.Delta.ToolCalls {
+				if tc.ID != "" {
+					toolID = tc.ID
+				}
+				toolName += tc.Function.Name
+				toolArgs += tc.Function.Arguments
+			}
+			if choice.FinishReason != nil && *choice.FinishReason == "tool_calls" {
+				gotFinishReason = true
+			}
+		}
+	}
+
+	if toolName != "query_entity" {
+		t.Errorf("tool name = %q, want query_entity", toolName)
+	}
+	if toolArgs != `{"entity_id": "test-001"}` {
+		t.Errorf("tool args = %q, want %q", toolArgs, `{"entity_id": "test-001"}`)
+	}
+	if toolID == "" {
+		t.Error("expected non-empty tool call ID")
+	}
+	if !gotFinishReason {
+		t.Error("expected finish_reason=tool_calls")
+	}
+}
+
+// streamChunkForTest is used to unmarshal SSE chunks in tests.
+type streamChunkForTest struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+	Model   string `json:"model"`
+	Choices []struct {
+		Index int `json:"index"`
+		Delta struct {
+			Role      string `json:"role,omitempty"`
+			Content   string `json:"content,omitempty"`
+			ToolCalls []struct {
+				Index    int    `json:"index"`
+				ID       string `json:"id,omitempty"`
+				Type     string `json:"type,omitempty"`
+				Function struct {
+					Name      string `json:"name,omitempty"`
+					Arguments string `json:"arguments,omitempty"`
+				} `json:"function"`
+			} `json:"tool_calls,omitempty"`
+		} `json:"delta"`
+		FinishReason *string `json:"finish_reason"`
+	} `json:"choices"`
+	Usage *Usage `json:"usage,omitempty"`
+}
+
+func makeStreamingRequest(t *testing.T, url string, req ChatCompletionRequest) []streamChunkForTest {
+	t.Helper()
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("failed to marshal request: %v", err)
+	}
+
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "text/event-stream" {
+		t.Fatalf("expected Content-Type text/event-stream, got %s", contentType)
+	}
+
+	var chunks []streamChunkForTest
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			break
+		}
+
+		var chunk streamChunkForTest
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			t.Fatalf("failed to unmarshal chunk: %v\ndata: %s", err, data)
+		}
+		chunks = append(chunks, chunk)
+	}
+
+	return chunks
 }
 
 func makeRequest(t *testing.T, url string, req ChatCompletionRequest) ChatCompletionResponse {

@@ -20,6 +20,7 @@ type ChatCompletionRequest struct {
 	Tools       []Tool        `json:"tools,omitempty"`
 	MaxTokens   int           `json:"max_tokens,omitempty"`
 	Temperature float32       `json:"temperature,omitempty"`
+	Stream      bool          `json:"stream,omitempty"`
 }
 
 // ChatMessage matches OpenAI API message format.
@@ -78,6 +79,38 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
+}
+
+// streamChunkResponse matches OpenAI streaming chunk format.
+type streamChunkResponse struct {
+	ID      string              `json:"id"`
+	Object  string              `json:"object"`
+	Created int64               `json:"created"`
+	Model   string              `json:"model"`
+	Choices []streamChunkChoice `json:"choices"`
+	Usage   *Usage              `json:"usage,omitempty"`
+}
+
+// streamChunkChoice matches OpenAI streaming choice format.
+type streamChunkChoice struct {
+	Index        int              `json:"index"`
+	Delta        streamChunkDelta `json:"delta"`
+	FinishReason *string          `json:"finish_reason"`
+}
+
+// streamChunkDelta matches OpenAI streaming delta format.
+type streamChunkDelta struct {
+	Role      string           `json:"role,omitempty"`
+	Content   string           `json:"content,omitempty"`
+	ToolCalls []streamToolCall `json:"tool_calls,omitempty"`
+}
+
+// streamToolCall matches OpenAI streaming tool call delta format.
+type streamToolCall struct {
+	Index    int          `json:"index"`
+	ID       string       `json:"id,omitempty"`
+	Type     string       `json:"type,omitempty"`
+	Function FunctionCall `json:"function"`
 }
 
 // OpenAIServer is a mock OpenAI-compatible server for testing.
@@ -262,18 +295,148 @@ func (s *OpenAIServer) handleChatCompletion(w http.ResponseWriter, r *http.Reque
 	var resp ChatCompletionResponse
 
 	if s.hasToolResults(req.Messages) {
-		// After tool results: return completion
 		resp = s.buildCompletionResponse(req.Model)
 	} else if len(req.Tools) > 0 {
-		// First turn with tools: call the first tool
 		resp = s.buildToolCallResponse(req.Tools[0], req.Model)
 	} else {
-		// No tools: simple completion
 		resp = s.buildCompletionResponse(req.Model)
+	}
+
+	if req.Stream {
+		s.writeStreamingResponse(w, resp)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+// writeStreamingResponse converts a ChatCompletionResponse into SSE chunks.
+func (s *OpenAIServer) writeStreamingResponse(w http.ResponseWriter, resp ChatCompletionResponse) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	id := resp.ID
+	created := resp.Created
+	model := resp.Model
+
+	if len(resp.Choices) == 0 {
+		return
+	}
+
+	choice := resp.Choices[0]
+
+	if len(choice.Message.ToolCalls) > 0 {
+		s.writeStreamingToolCalls(w, flusher, id, created, model, choice)
+	} else {
+		s.writeStreamingContent(w, flusher, id, created, model, choice)
+	}
+
+	// Final chunk: usage with empty choices
+	usageChunk := streamChunkResponse{
+		ID:      id,
+		Object:  "chat.completion.chunk",
+		Created: created,
+		Model:   model,
+		Choices: []streamChunkChoice{},
+		Usage:   &resp.Usage,
+	}
+	s.writeSSEChunk(w, flusher, usageChunk)
+
+	// Done sentinel
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
+}
+
+// writeStreamingContent splits text content into two chunks.
+func (s *OpenAIServer) writeStreamingContent(w http.ResponseWriter, flusher http.Flusher, id string, created int64, model string, choice Choice) {
+	content := choice.Message.Content
+	mid := len(content) / 2
+
+	finishReason := choice.FinishReason
+
+	// Chunk 1: role + first half of content
+	s.writeSSEChunk(w, flusher, streamChunkResponse{
+		ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+		Choices: []streamChunkChoice{{
+			Index: 0,
+			Delta: streamChunkDelta{Role: "assistant", Content: content[:mid]},
+		}},
+	})
+
+	// Chunk 2: second half + finish_reason
+	s.writeSSEChunk(w, flusher, streamChunkResponse{
+		ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+		Choices: []streamChunkChoice{{
+			Index:        0,
+			Delta:        streamChunkDelta{Content: content[mid:]},
+			FinishReason: &finishReason,
+		}},
+	})
+}
+
+// writeStreamingToolCalls splits tool calls into delta chunks.
+func (s *OpenAIServer) writeStreamingToolCalls(w http.ResponseWriter, flusher http.Flusher, id string, created int64, model string, choice Choice) {
+	finishReason := choice.FinishReason
+
+	for i, tc := range choice.Message.ToolCalls {
+		args := tc.Function.Arguments
+		argMid := len(args) / 2
+
+		// Chunk: tool call start (id, name, first half of args)
+		s.writeSSEChunk(w, flusher, streamChunkResponse{
+			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+			Choices: []streamChunkChoice{{
+				Index: 0,
+				Delta: streamChunkDelta{
+					Role: "assistant",
+					ToolCalls: []streamToolCall{{
+						Index:    i,
+						ID:       tc.ID,
+						Type:     "function",
+						Function: FunctionCall{Name: tc.Function.Name, Arguments: args[:argMid]},
+					}},
+				},
+			}},
+		})
+
+		// Chunk: remaining args
+		s.writeSSEChunk(w, flusher, streamChunkResponse{
+			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+			Choices: []streamChunkChoice{{
+				Index: 0,
+				Delta: streamChunkDelta{
+					ToolCalls: []streamToolCall{{
+						Index:    i,
+						Function: FunctionCall{Arguments: args[argMid:]},
+					}},
+				},
+			}},
+		})
+	}
+
+	// Finish reason chunk
+	s.writeSSEChunk(w, flusher, streamChunkResponse{
+		ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+		Choices: []streamChunkChoice{{
+			Index:        0,
+			Delta:        streamChunkDelta{},
+			FinishReason: &finishReason,
+		}},
+	})
+}
+
+func (s *OpenAIServer) writeSSEChunk(w http.ResponseWriter, flusher http.Flusher, chunk streamChunkResponse) {
+	data, _ := json.Marshal(chunk)
+	fmt.Fprintf(w, "data: %s\n\n", data)
+	flusher.Flush()
 }
 
 func (s *OpenAIServer) hasToolResults(messages []ChatMessage) bool {
