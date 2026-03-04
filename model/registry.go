@@ -25,6 +25,12 @@ type EndpointConfig struct {
 	// APIKeyEnv is the environment variable containing the API key.
 	// Required for anthropic/openai/openrouter, ignored for ollama.
 	APIKeyEnv string `json:"api_key_env,omitempty"`
+	// Options holds provider-specific template parameters passed to the API.
+	// For vLLM/ollama with thinking models, set "enable_thinking" and
+	// "thinking_budget" here — they are forwarded as chat_template_kwargs.
+	// Do not use for inference parameters (temperature, top_k, etc.) which
+	// have dedicated fields in AgentRequest.
+	Options map[string]any `json:"options,omitempty"`
 }
 
 // CapabilityConfig defines model preferences for a capability.

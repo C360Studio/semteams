@@ -299,6 +299,22 @@ func TestAgentResponse_JSONRoundTrip(t *testing.T) {
 				Error:     "Model timeout",
 			},
 		},
+		{
+			name: "response with reasoning content",
+			response: agentic.AgentResponse{
+				RequestID: "req-reasoning",
+				Status:    "complete",
+				Message: agentic.ChatMessage{
+					Role:             "assistant",
+					Content:          "The answer is 42.",
+					ReasoningContent: "Let me think step by step...",
+				},
+				TokenUsage: agentic.TokenUsage{
+					PromptTokens:     50,
+					CompletionTokens: 100,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -321,6 +337,9 @@ func TestAgentResponse_JSONRoundTrip(t *testing.T) {
 			}
 			if decoded.Error != tt.response.Error {
 				t.Errorf("Error = %v, want %v", decoded.Error, tt.response.Error)
+			}
+			if decoded.Message.ReasoningContent != tt.response.Message.ReasoningContent {
+				t.Errorf("ReasoningContent = %v, want %v", decoded.Message.ReasoningContent, tt.response.Message.ReasoningContent)
 			}
 		})
 	}
@@ -481,7 +500,7 @@ func TestChatMessage_Validation(t *testing.T) {
 				Role: "user",
 			},
 			wantErr: true,
-			errMsg:  "either content or tool_calls must be present",
+			errMsg:  "either content, reasoning_content, or tool_calls must be present",
 		},
 		{
 			name: "empty content and empty tool calls",
@@ -491,7 +510,15 @@ func TestChatMessage_Validation(t *testing.T) {
 				ToolCalls: []agentic.ToolCall{},
 			},
 			wantErr: true,
-			errMsg:  "either content or tool_calls must be present",
+			errMsg:  "either content, reasoning_content, or tool_calls must be present",
+		},
+		{
+			name: "valid assistant message with reasoning only",
+			message: agentic.ChatMessage{
+				Role:             "assistant",
+				ReasoningContent: "Let me think about this step by step...",
+			},
+			wantErr: false,
 		},
 	}
 

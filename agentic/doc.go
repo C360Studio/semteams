@@ -249,7 +249,7 @@
 //
 //   - AgentRequest: requires request_id, at least one message, valid role
 //   - AgentResponse: requires valid status (complete, tool_call, error)
-//   - ChatMessage: requires valid role, either content or tool_calls
+//   - ChatMessage: requires valid role, either content, reasoning_content, or tool_calls
 //   - ToolDefinition: requires name and parameters
 //   - ToolCall: requires id and name
 //   - ToolResult: requires call_id

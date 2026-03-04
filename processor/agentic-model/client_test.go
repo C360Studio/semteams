@@ -583,3 +583,119 @@ func TestChatCompletion_ResponseMapping(t *testing.T) {
 		})
 	}
 }
+
+func TestChatCompletion_ChatTemplateKwargs(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+
+		response := map[string]any{
+			"id": "chatcmpl-kwargs", "object": "chat.completion",
+			"created": 1677652288, "model": "qwen3",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "OK"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "qwen3",
+		MaxTokens: 32768,
+		Options: map[string]any{
+			"enable_thinking": true,
+			"thinking_budget": 4096,
+		},
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	req := agentic.AgentRequest{
+		RequestID: "req-kwargs",
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Think about this"}},
+		Model:     "qwen3",
+	}
+
+	ctx := context.Background()
+	_, err = client.ChatCompletion(ctx, req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	// Verify chat_template_kwargs was forwarded
+	kwargs, ok := capturedRequest["chat_template_kwargs"].(map[string]any)
+	if !ok {
+		t.Fatal("chat_template_kwargs not found in request")
+	}
+	if kwargs["enable_thinking"] != true {
+		t.Errorf("enable_thinking = %v, want true", kwargs["enable_thinking"])
+	}
+	if kwargs["thinking_budget"] != float64(4096) {
+		t.Errorf("thinking_budget = %v, want 4096", kwargs["thinking_budget"])
+	}
+}
+
+func TestChatCompletion_ReasoningContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]any{
+			"id": "chatcmpl-reasoning", "object": "chat.completion",
+			"created": 1677652288, "model": "qwen3",
+			"choices": []map[string]any{{
+				"index": 0,
+				"message": map[string]any{
+					"role":              "assistant",
+					"content":           "The answer is 42.",
+					"reasoning_content": "Let me think step by step about this problem...",
+				},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 30, "total_tokens": 40},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "qwen3",
+		MaxTokens: 32768,
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	req := agentic.AgentRequest{
+		RequestID: "req-reasoning",
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "What is the meaning of life?"}},
+		Model:     "qwen3",
+	}
+
+	ctx := context.Background()
+	resp, err := client.ChatCompletion(ctx, req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	if resp.Status != "complete" {
+		t.Errorf("Status = %s, want complete", resp.Status)
+	}
+	if resp.Message.Content != "The answer is 42." {
+		t.Errorf("Content = %q, want %q", resp.Message.Content, "The answer is 42.")
+	}
+	if resp.Message.ReasoningContent != "Let me think step by step about this problem..." {
+		t.Errorf("ReasoningContent = %q, want %q", resp.Message.ReasoningContent, "Let me think step by step about this problem...")
+	}
+}

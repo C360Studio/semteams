@@ -170,7 +170,7 @@ func (cm *ContextManager) AddMessage(region RegionType, msg agentic.ChatMessage)
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	tokens := estimateTokens(msg.Content)
+	tokens := estimateTokens(msg.Content) + estimateTokens(msg.ReasoningContent)
 	cm.regions[region] = append(cm.regions[region], contextMessage{
 		Message:   msg,
 		Tokens:    tokens,

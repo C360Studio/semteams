@@ -53,8 +53,9 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 	messages := make([]openai.ChatCompletionMessage, len(req.Messages))
 	for i, msg := range req.Messages {
 		messages[i] = openai.ChatCompletionMessage{
-			Role:    msg.Role,
-			Content: msg.Content,
+			Role:             msg.Role,
+			Content:          msg.Content,
+			ReasoningContent: msg.ReasoningContent,
 		}
 
 		// Handle tool results - include tool_call_id (required by OpenAI API)
@@ -92,6 +93,12 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 
 	if req.Temperature > 0 {
 		chatReq.Temperature = float32(req.Temperature)
+	}
+
+	// Forward provider-specific options as chat_template_kwargs
+	// (e.g. enable_thinking, thinking_budget for vLLM/ollama thinking models)
+	if len(c.endpoint.Options) > 0 {
+		chatReq.ChatTemplateKwargs = c.endpoint.Options
 	}
 
 	// Convert tools if present
@@ -178,8 +185,9 @@ func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID s
 
 	// Convert message
 	response.Message = agentic.ChatMessage{
-		Role:    choice.Message.Role,
-		Content: choice.Message.Content,
+		Role:             choice.Message.Role,
+		Content:          choice.Message.Content,
+		ReasoningContent: choice.Message.ReasoningContent,
 	}
 
 	// Convert tool calls if present

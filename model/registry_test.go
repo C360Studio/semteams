@@ -367,6 +367,59 @@ func TestJSONRoundTrip(t *testing.T) {
 	}
 }
 
+func TestEndpointOptions(t *testing.T) {
+	r := &Registry{
+		Endpoints: map[string]*EndpointConfig{
+			"thinking": {
+				Provider:  "ollama",
+				URL:       "http://localhost:11434/v1",
+				Model:     "qwen3:32b",
+				MaxTokens: 131072,
+				Options: map[string]any{
+					"enable_thinking": true,
+					"thinking_budget": 4096,
+				},
+			},
+		},
+		Defaults: DefaultsConfig{Model: "thinking"},
+	}
+
+	if err := r.Validate(); err != nil {
+		t.Fatalf("registry with options should be valid: %v", err)
+	}
+
+	ep := r.GetEndpoint("thinking")
+	if ep.Options == nil {
+		t.Fatal("Options should not be nil")
+	}
+	if ep.Options["enable_thinking"] != true {
+		t.Errorf("enable_thinking = %v, want true", ep.Options["enable_thinking"])
+	}
+	if ep.Options["thinking_budget"] != 4096 {
+		t.Errorf("thinking_budget = %v, want 4096", ep.Options["thinking_budget"])
+	}
+
+	// JSON round-trip preserves options
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got Registry
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	gotEP := got.GetEndpoint("thinking")
+	if gotEP.Options == nil {
+		t.Fatal("Options lost after round-trip")
+	}
+	if gotEP.Options["enable_thinking"] != true {
+		t.Errorf("round-trip enable_thinking = %v, want true", gotEP.Options["enable_thinking"])
+	}
+	if gotEP.Options["thinking_budget"] != float64(4096) {
+		t.Errorf("round-trip thinking_budget = %v, want 4096", gotEP.Options["thinking_budget"])
+	}
+}
+
 func TestMinimalRegistry(t *testing.T) {
 	r := &Registry{
 		Endpoints: map[string]*EndpointConfig{

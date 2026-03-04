@@ -391,11 +391,8 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 
 	// Add assistant response to context manager if enabled
 	cm := h.loopManager.GetContextManager(loopID)
-	if cm != nil && response.Message.Content != "" {
-		_ = cm.AddMessage(RegionRecentHistory, agentic.ChatMessage{
-			Role:    "assistant",
-			Content: response.Message.Content,
-		})
+	if cm != nil && (response.Message.Content != "" || response.Message.ReasoningContent != "") {
+		_ = cm.AddMessage(RegionRecentHistory, response.Message)
 
 		// Check if compaction is needed
 		if h.compactor.ShouldCompact(cm) {

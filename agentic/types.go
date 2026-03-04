@@ -90,10 +90,11 @@ func (r *AgentResponse) UnmarshalJSON(data []byte) error {
 
 // ChatMessage represents a message in a conversation
 type ChatMessage struct {
-	Role       string     `json:"role"`
-	Content    string     `json:"content,omitempty"`
-	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
-	ToolCallID string     `json:"tool_call_id,omitempty"` // Required for tool role messages
+	Role             string     `json:"role"`
+	Content          string     `json:"content,omitempty"`
+	ReasoningContent string     `json:"reasoning_content,omitempty"` // Thinking model chain-of-thought
+	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID       string     `json:"tool_call_id,omitempty"` // Required for tool role messages
 }
 
 // Validate checks if the ChatMessage is valid
@@ -101,8 +102,8 @@ func (m ChatMessage) Validate() error {
 	if m.Role != "system" && m.Role != "user" && m.Role != "assistant" && m.Role != "tool" {
 		return fmt.Errorf("role must be one of: system, user, assistant, tool")
 	}
-	if m.Content == "" && len(m.ToolCalls) == 0 {
-		return fmt.Errorf("either content or tool_calls must be present")
+	if m.Content == "" && m.ReasoningContent == "" && len(m.ToolCalls) == 0 {
+		return fmt.Errorf("either content, reasoning_content, or tool_calls must be present")
 	}
 	return nil
 }
