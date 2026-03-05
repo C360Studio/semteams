@@ -593,6 +593,110 @@ func TestMinimalRegistry(t *testing.T) {
 	}
 }
 
+func TestPricingFieldsRoundTrip(t *testing.T) {
+	r := &Registry{
+		Endpoints: map[string]*EndpointConfig{
+			"priced": {
+				Provider:               "openai",
+				Model:                  "gpt-4o",
+				MaxTokens:              128000,
+				APIKeyEnv:              "OPENAI_API_KEY",
+				InputPricePer1MTokens:  2.50,
+				OutputPricePer1MTokens: 10.00,
+			},
+			"free": {
+				Provider:  "ollama",
+				URL:       "http://localhost:11434/v1",
+				Model:     "qwen3:1.7b",
+				MaxTokens: 32768,
+			},
+		},
+		Defaults: DefaultsConfig{Model: "priced"},
+	}
+
+	if err := r.Validate(); err != nil {
+		t.Fatalf("registry with pricing should be valid: %v", err)
+	}
+
+	// Verify direct access
+	if r.GetEndpoint("priced").InputPricePer1MTokens != 2.50 {
+		t.Errorf("InputPricePer1MTokens = %v, want 2.50", r.GetEndpoint("priced").InputPricePer1MTokens)
+	}
+	if r.GetEndpoint("priced").OutputPricePer1MTokens != 10.00 {
+		t.Errorf("OutputPricePer1MTokens = %v, want 10.00", r.GetEndpoint("priced").OutputPricePer1MTokens)
+	}
+	if r.GetEndpoint("free").InputPricePer1MTokens != 0 {
+		t.Error("free endpoint: InputPricePer1MTokens should be zero")
+	}
+
+	// JSON round-trip
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got Registry
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.GetEndpoint("priced").InputPricePer1MTokens != 2.50 {
+		t.Error("round-trip: input price lost")
+	}
+	if got.GetEndpoint("priced").OutputPricePer1MTokens != 10.00 {
+		t.Error("round-trip: output price lost")
+	}
+
+	// Verify omitempty: zero prices should not appear in JSON
+	if contains(string(data), `"input_price_per_1m_tokens":0`) {
+		t.Error("zero input price should be omitted from JSON")
+	}
+	if !contains(string(data), `"input_price_per_1m_tokens":2.5`) {
+		t.Error("input_price_per_1m_tokens:2.5 should be present in JSON")
+	}
+}
+
+func TestPricingFieldsValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   float64
+		output  float64
+		wantErr string
+	}{
+		{"zero prices valid", 0, 0, ""},
+		{"positive prices valid", 3.00, 15.00, ""},
+		{"negative input price", -1.0, 10.0, "input_price_per_1m_tokens must not be negative"},
+		{"negative output price", 3.0, -5.0, "output_price_per_1m_tokens must not be negative"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &Registry{
+				Endpoints: map[string]*EndpointConfig{
+					"test": {
+						Model:                  "test-model",
+						MaxTokens:              100000,
+						InputPricePer1MTokens:  tt.input,
+						OutputPricePer1MTokens: tt.output,
+					},
+				},
+				Defaults: DefaultsConfig{Model: "test"},
+			}
+			err := r.Validate()
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected error, got nil")
+			}
+			if !contains(err.Error(), tt.wantErr) {
+				t.Fatalf("error %q does not contain %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
 // helpers
 
 func contains(s, substr string) bool {

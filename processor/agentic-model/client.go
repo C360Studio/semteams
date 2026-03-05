@@ -213,12 +213,11 @@ func (c *Client) streamChatCompletion(ctx context.Context, chatReq openai.ChatCo
 			break
 		}
 		if err != nil {
-			// Mid-stream error — not retryable
-			resp := agentic.AgentResponse{
-				RequestID: requestID,
-				Status:    "error",
-				Error:     err.Error(),
-			}
+			// Mid-stream error — not retryable. Preserve any partial tokens
+			// the accumulator received before the connection died.
+			resp := acc.toAgentResponse(requestID)
+			resp.Status = "error"
+			resp.Error = err.Error()
 			return resp, nil
 		}
 

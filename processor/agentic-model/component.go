@@ -358,7 +358,7 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 	duration := time.Since(startTime).Seconds()
 
 	if err != nil || resp.Status == "error" {
-		c.handleModelError(ctx, req, err, resp.Error, duration)
+		c.handleModelError(ctx, req, resp, err, duration)
 		return
 	}
 
@@ -380,9 +380,10 @@ func (c *Component) parseAgentRequest(data []byte) (agentic.AgentRequest, error)
 	return *reqPtr, nil
 }
 
-// handleModelError processes and publishes error responses with metrics
-func (c *Component) handleModelError(ctx context.Context, req agentic.AgentRequest, err error, respError string, duration float64) {
-	errorMsg := respError
+// handleModelError processes and publishes error responses with metrics.
+// It preserves any partial token usage from the response for cost tracking.
+func (c *Component) handleModelError(ctx context.Context, req agentic.AgentRequest, resp agentic.AgentResponse, err error, duration float64) {
+	errorMsg := resp.Error
 	if err != nil {
 		errorMsg = err.Error()
 	}
@@ -392,11 +393,15 @@ func (c *Component) handleModelError(ctx context.Context, req agentic.AgentReque
 	errorType := classifyError(ctx, errorMsg)
 	if c.metrics != nil {
 		c.metrics.recordRequestError(req.Model, errorType, duration)
+		// Record partial token usage even on errors
+		if resp.TokenUsage.PromptTokens > 0 || resp.TokenUsage.CompletionTokens > 0 {
+			c.metrics.recordTokenUsage(req.Model, resp.TokenUsage.PromptTokens, resp.TokenUsage.CompletionTokens)
+		}
 	}
 
 	errorCtx, cancel := natsclient.DetachContextWithTrace(ctx, 5*time.Second)
 	defer cancel()
-	c.publishErrorResponse(errorCtx, req.RequestID, errorMsg)
+	c.publishErrorResponseWithTokens(errorCtx, req.RequestID, errorMsg, resp.TokenUsage)
 	c.incrementErrors()
 }
 
@@ -582,12 +587,19 @@ func (c *Component) publishResponse(ctx context.Context, resp agentic.AgentRespo
 	return nil
 }
 
-// publishErrorResponse publishes an error response
+// publishErrorResponse publishes an error response with zero token usage.
+// Used for errors where no model call occurred (e.g., endpoint not found).
 func (c *Component) publishErrorResponse(ctx context.Context, requestID string, errMsg string) {
+	c.publishErrorResponseWithTokens(ctx, requestID, errMsg, agentic.TokenUsage{})
+}
+
+// publishErrorResponseWithTokens publishes an error response preserving partial token usage.
+func (c *Component) publishErrorResponseWithTokens(ctx context.Context, requestID string, errMsg string, tokens agentic.TokenUsage) {
 	resp := agentic.AgentResponse{
-		RequestID: requestID,
-		Status:    "error",
-		Error:     errMsg,
+		RequestID:  requestID,
+		Status:     "error",
+		Error:      errMsg,
+		TokenUsage: tokens,
 	}
 
 	if err := c.publishResponse(ctx, resp); err != nil {

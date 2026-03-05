@@ -46,6 +46,12 @@ type EndpointConfig struct {
 	// Empty means the provider default is used. Forwarded as reasoning_effort
 	// on the OpenAI-compatible chat completions request.
 	ReasoningEffort string `json:"reasoning_effort,omitempty"`
+	// InputPricePer1MTokens is the cost per 1M input tokens in USD.
+	// Consumers join this with token usage data to calculate costs.
+	InputPricePer1MTokens float64 `json:"input_price_per_1m_tokens,omitempty"`
+	// OutputPricePer1MTokens is the cost per 1M output tokens in USD.
+	// Consumers join this with token usage data to calculate costs.
+	OutputPricePer1MTokens float64 `json:"output_price_per_1m_tokens,omitempty"`
 }
 
 // CapabilityConfig defines model preferences for a capability.
@@ -168,6 +174,13 @@ func validateEndpoint(name string, ep *EndpointConfig) error {
 		if !validEfforts[ep.ReasoningEffort] {
 			return fmt.Errorf("endpoint %q: reasoning_effort must be one of: none, low, medium, high", name)
 		}
+	}
+
+	if ep.InputPricePer1MTokens < 0 {
+		return fmt.Errorf("endpoint %q: input_price_per_1m_tokens must not be negative", name)
+	}
+	if ep.OutputPricePer1MTokens < 0 {
+		return fmt.Errorf("endpoint %q: output_price_per_1m_tokens must not be negative", name)
 	}
 
 	return nil

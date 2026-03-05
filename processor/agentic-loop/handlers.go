@@ -556,6 +556,10 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 	if traj, trajErr := h.trajectoryManager.GetTrajectory(loopID); trajErr == nil {
 		completion.TokensIn = traj.TotalTokensIn
 		completion.TokensOut = traj.TotalTokensOut
+	} else {
+		h.logger.Warn("trajectory unavailable for cost tracking",
+			slog.String("loop_id", loopID),
+			slog.String("error", trajErr.Error()))
 	}
 
 	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "agentic-loop")
@@ -792,6 +796,10 @@ func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (Pub
 	if traj, trajErr := h.trajectoryManager.GetTrajectory(loopID); trajErr == nil {
 		failure.TokensIn = traj.TotalTokensIn
 		failure.TokensOut = traj.TotalTokensOut
+	} else {
+		h.logger.Warn("trajectory unavailable for cost tracking",
+			slog.String("loop_id", loopID),
+			slog.String("error", trajErr.Error()))
 	}
 
 	failureMsg := message.NewBaseMessage(failure.Schema(), &failure, "agentic-loop")
@@ -835,6 +843,10 @@ func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) (
 	if traj, trajErr := h.trajectoryManager.GetTrajectory(loopID); trajErr == nil {
 		failure.TokensIn = traj.TotalTokensIn
 		failure.TokensOut = traj.TotalTokensOut
+	} else {
+		h.logger.Warn("trajectory unavailable for cost tracking",
+			slog.String("loop_id", loopID),
+			slog.String("error", trajErr.Error()))
 	}
 
 	failureMsg := message.NewBaseMessage(failure.Schema(), &failure, "agentic-loop")

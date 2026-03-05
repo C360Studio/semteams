@@ -263,6 +263,48 @@ func TestStreamChatCompletion_MidStreamError(t *testing.T) {
 	}
 }
 
+func TestStreamChatCompletion_MidStreamError_PreservesPartialTokens(t *testing.T) {
+	// Server sends a usage chunk before killing the connection
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+
+		// Send a content chunk
+		fmt.Fprintf(w, "data: %s\n\n", `{"id":"pt1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","content":"partial"}}]}`)
+		flusher.Flush()
+
+		// Send a usage chunk (some providers send usage incrementally)
+		fmt.Fprintf(w, "data: %s\n\n", `{"id":"pt1","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":42,"completion_tokens":7,"total_tokens":49}}`)
+		flusher.Flush()
+
+		// Kill the connection mid-stream
+		hijacker, ok := w.(http.Hijacker)
+		if !ok {
+			t.Fatal("ResponseWriter does not implement http.Hijacker")
+		}
+		conn, _, _ := hijacker.Hijack()
+		conn.Close()
+	}))
+	defer server.Close()
+
+	client := newStreamingClient(t, server.URL)
+
+	resp, err := client.ChatCompletion(context.Background(), simpleRequest("req-partial-tokens"))
+	if err != nil {
+		t.Fatalf("ChatCompletion() returned Go error: %v", err)
+	}
+	if resp.Status != "error" {
+		t.Errorf("Status = %q, want error", resp.Status)
+	}
+	// Partial tokens from the usage chunk should be preserved
+	if resp.TokenUsage.PromptTokens != 42 {
+		t.Errorf("PromptTokens = %d, want 42", resp.TokenUsage.PromptTokens)
+	}
+	if resp.TokenUsage.CompletionTokens != 7 {
+		t.Errorf("CompletionTokens = %d, want 7", resp.TokenUsage.CompletionTokens)
+	}
+}
+
 func TestStreamChatCompletion_ConnectionError(t *testing.T) {
 	// Server that is immediately closed
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
