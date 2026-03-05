@@ -105,6 +105,15 @@ func TestValidate(t *testing.T) {
 			wantErr: "endpoint \"bad\": tool_format must be",
 		},
 		{
+			name: "endpoint invalid reasoning_effort",
+			modify: func(r *Registry) {
+				r.Endpoints["bad"] = &EndpointConfig{
+					Model: "test", MaxTokens: 1000, ReasoningEffort: "extreme",
+				}
+			},
+			wantErr: "endpoint \"bad\": reasoning_effort must be",
+		},
+		{
 			name: "nil endpoint",
 			modify: func(r *Registry) {
 				r.Endpoints["bad"] = nil
@@ -474,6 +483,82 @@ func TestStreamFieldRoundTrip(t *testing.T) {
 	}
 	if !contains(string(data), `"stream":true`) {
 		t.Error("Stream=true should be present in JSON")
+	}
+}
+
+func TestReasoningEffortFieldRoundTrip(t *testing.T) {
+	r := &Registry{
+		Endpoints: map[string]*EndpointConfig{
+			"reasoning": {
+				Provider:        "openai",
+				Model:           "o3-mini",
+				MaxTokens:       100000,
+				APIKeyEnv:       "OPENAI_API_KEY",
+				ReasoningEffort: "high",
+			},
+			"no-reasoning": {
+				Provider:  "ollama",
+				URL:       "http://localhost:11434/v1",
+				Model:     "qwen3:1.7b",
+				MaxTokens: 32768,
+			},
+		},
+		Defaults: DefaultsConfig{Model: "reasoning"},
+	}
+
+	if err := r.Validate(); err != nil {
+		t.Fatalf("registry with reasoning_effort should be valid: %v", err)
+	}
+
+	// Verify direct access
+	if r.GetEndpoint("reasoning").ReasoningEffort != "high" {
+		t.Errorf("reasoning endpoint: ReasoningEffort = %q, want %q",
+			r.GetEndpoint("reasoning").ReasoningEffort, "high")
+	}
+	if r.GetEndpoint("no-reasoning").ReasoningEffort != "" {
+		t.Error("no-reasoning endpoint: ReasoningEffort should be empty")
+	}
+
+	// JSON round-trip
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got Registry
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.GetEndpoint("reasoning").ReasoningEffort != "high" {
+		t.Error("round-trip: reasoning_effort lost")
+	}
+	if got.GetEndpoint("no-reasoning").ReasoningEffort != "" {
+		t.Error("round-trip: no-reasoning should have empty reasoning_effort")
+	}
+
+	// Verify omitempty: empty reasoning_effort should not appear in JSON
+	if contains(string(data), `"reasoning_effort":""`) {
+		t.Error("empty reasoning_effort should be omitted from JSON")
+	}
+	if !contains(string(data), `"reasoning_effort":"high"`) {
+		t.Error("reasoning_effort:high should be present in JSON")
+	}
+}
+
+func TestReasoningEffortValidValues(t *testing.T) {
+	for _, effort := range []string{"", "none", "low", "medium", "high"} {
+		t.Run("effort="+effort, func(t *testing.T) {
+			r := &Registry{
+				Endpoints: map[string]*EndpointConfig{
+					"test": {
+						Model: "o3", MaxTokens: 100000, ReasoningEffort: effort,
+					},
+				},
+				Defaults: DefaultsConfig{Model: "test"},
+			}
+			if err := r.Validate(); err != nil {
+				t.Fatalf("reasoning_effort=%q should be valid: %v", effort, err)
+			}
+		})
 	}
 }
 

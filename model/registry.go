@@ -41,6 +41,11 @@ type EndpointConfig struct {
 	// CreateChatCompletionStream internally, reducing time-to-first-token.
 	// The inter-component protocol remains complete AgentResponse messages.
 	Stream bool `json:"stream,omitempty"`
+	// ReasoningEffort controls how much effort reasoning models spend thinking.
+	// Accepted values: "none" (Gemini only), "low", "medium", "high".
+	// Empty means the provider default is used. Forwarded as reasoning_effort
+	// on the OpenAI-compatible chat completions request.
+	ReasoningEffort string `json:"reasoning_effort,omitempty"`
 }
 
 // CapabilityConfig defines model preferences for a capability.
@@ -154,6 +159,15 @@ func validateEndpoint(name string, ep *EndpointConfig) error {
 
 	if ep.ToolFormat != "" && ep.ToolFormat != "anthropic" && ep.ToolFormat != "openai" {
 		return fmt.Errorf("endpoint %q: tool_format must be \"anthropic\" or \"openai\"", name)
+	}
+
+	if ep.ReasoningEffort != "" {
+		validEfforts := map[string]bool{
+			"none": true, "low": true, "medium": true, "high": true,
+		}
+		if !validEfforts[ep.ReasoningEffort] {
+			return fmt.Errorf("endpoint %q: reasoning_effort must be one of: none, low, medium, high", name)
+		}
 	}
 
 	return nil

@@ -645,6 +645,109 @@ func TestChatCompletion_ChatTemplateKwargs(t *testing.T) {
 	}
 }
 
+func TestChatCompletion_ReasoningEffort(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+
+		response := map[string]any{
+			"id": "chatcmpl-effort", "object": "chat.completion",
+			"created": 1677652288, "model": "o3-mini",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "OK"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:             server.URL,
+		Model:           "o3-mini",
+		MaxTokens:       100000,
+		ReasoningEffort: "high",
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	req := agentic.AgentRequest{
+		RequestID: "req-effort",
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Think hard"}},
+		Model:     "o3-mini",
+	}
+
+	ctx := context.Background()
+	_, err = client.ChatCompletion(ctx, req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	// Verify reasoning_effort was forwarded
+	effort, ok := capturedRequest["reasoning_effort"].(string)
+	if !ok || effort != "high" {
+		t.Errorf("reasoning_effort = %v, want %q", capturedRequest["reasoning_effort"], "high")
+	}
+}
+
+func TestChatCompletion_ReasoningEffortOmitted(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+
+		response := map[string]any{
+			"id": "chatcmpl-noeffort", "object": "chat.completion",
+			"created": 1677652288, "model": "gpt-4",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "OK"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	req := agentic.AgentRequest{
+		RequestID: "req-noeffort",
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Hello"}},
+		Model:     "gpt-4",
+	}
+
+	ctx := context.Background()
+	_, err = client.ChatCompletion(ctx, req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	// Verify reasoning_effort was NOT included in request
+	if _, exists := capturedRequest["reasoning_effort"]; exists {
+		t.Errorf("reasoning_effort should not be present when not configured, got %v",
+			capturedRequest["reasoning_effort"])
+	}
+}
+
 func TestChatCompletion_ReasoningContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		response := map[string]any{

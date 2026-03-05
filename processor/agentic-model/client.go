@@ -107,6 +107,9 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 	if len(c.endpoint.Options) > 0 {
 		chatReq.ChatTemplateKwargs = c.endpoint.Options
 	}
+	if c.endpoint.ReasoningEffort != "" {
+		chatReq.ReasoningEffort = c.endpoint.ReasoningEffort
+	}
 
 	// Convert tools if present
 	if len(req.Tools) > 0 {
