@@ -1370,3 +1370,116 @@ func TestToolCallFilter_Nil_NoFiltering(t *testing.T) {
 		t.Errorf("Expected 1 tool.execute message, got %d", toolCount)
 	}
 }
+
+// --- Conversation context regression tests ---
+
+// TestHandleToolsComplete_FullConversationHistory verifies that the next
+// agent.request after tool completion includes the full conversation history
+// (user prompt, assistant tool_call message, and tool results) — not just
+// tool results. Regression test for Gemini INVALID_ARGUMENT 400 errors.
+func TestHandleToolsComplete_FullConversationHistory(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-full-ctx",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Analyze the system",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	// Model response with tool calls (empty content — typical for tool_call responses)
+	toolResponse := agentic.AgentResponse{
+		RequestID: "req-ctx-001",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role:    "assistant",
+			Content: "", // Empty content — this is the common case
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-ctx-1", Name: "get_weather"},
+			},
+		},
+	}
+
+	_, err = handler.HandleModelResponse(ctx, loopID, toolResponse)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// Tool result
+	result, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
+		CallID:  "call-ctx-1",
+		Content: `{"temp": 20}`,
+	})
+	if err != nil {
+		t.Fatalf("HandleToolResult() error = %v", err)
+	}
+
+	// Find the follow-up agent.request and validate conversation structure
+	for _, msg := range result.PublishedMessages {
+		if !containsIgnoreCase(msg.Subject, "agent.request") {
+			continue
+		}
+
+		var envelope map[string]any
+		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+			t.Fatalf("Failed to unmarshal envelope: %v", err)
+		}
+		payload, ok := envelope["payload"].(map[string]any)
+		if !ok {
+			t.Fatal("Expected payload in BaseMessage envelope")
+		}
+		messages, ok := payload["messages"].([]any)
+		if !ok {
+			t.Fatal("Expected messages array")
+		}
+
+		// Must have at least: user message + assistant tool_call + tool result
+		if len(messages) < 3 {
+			t.Errorf("Expected at least 3 messages (user + assistant + tool), got %d", len(messages))
+			for i, m := range messages {
+				msg, _ := m.(map[string]any)
+				t.Logf("  message[%d]: role=%v", i, msg["role"])
+			}
+			return
+		}
+
+		// Verify conversation structure: find user, assistant, and tool messages
+		var hasUser, hasAssistant, hasTool bool
+		for _, m := range messages {
+			msg, _ := m.(map[string]any)
+			role, _ := msg["role"].(string)
+			switch role {
+			case "user":
+				hasUser = true
+			case "assistant":
+				hasAssistant = true
+				// The assistant message should have tool_calls
+				if tc, ok := msg["tool_calls"]; ok {
+					tcs, _ := tc.([]any)
+					if len(tcs) == 0 {
+						t.Error("Assistant message should have tool_calls")
+					}
+				}
+			case "tool":
+				hasTool = true
+			}
+		}
+
+		if !hasUser {
+			t.Error("Conversation must include user message")
+		}
+		if !hasAssistant {
+			t.Error("Conversation must include assistant tool_call message")
+		}
+		if !hasTool {
+			t.Error("Conversation must include tool result message")
+		}
+		return
+	}
+	t.Error("Should publish agent.request after tool completion")
+}

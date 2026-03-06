@@ -389,9 +389,12 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 			slog.String("error", addErr.Error()))
 	}
 
-	// Add assistant response to context manager if enabled
+	// Add assistant response to context manager if enabled.
+	// Must store tool_call messages even when content is empty — they are
+	// required in the conversation history for the next model request.
 	cm := h.loopManager.GetContextManager(loopID)
-	if cm != nil && (response.Message.Content != "" || response.Message.ReasoningContent != "") {
+	hasContent := response.Message.Content != "" || response.Message.ReasoningContent != "" || len(response.Message.ToolCalls) > 0
+	if cm != nil && hasContent {
 		_ = cm.AddMessage(RegionRecentHistory, response.Message)
 
 		// Check if compaction is needed
@@ -641,16 +644,9 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
-	// Add tool result to context manager if enabled
+	// Context manager reference for handleToolsComplete (tool results are added
+	// there in batch, not individually, to avoid double-adds with filter rejections).
 	cm := h.loopManager.GetContextManager(loopID)
-	if cm != nil {
-		_ = cm.AddMessage(RegionToolResults, agentic.ChatMessage{
-			Role:       "tool",
-			ToolCallID: toolResult.CallID,
-			Name:       h.loopManager.GetToolName(toolResult.CallID),
-			Content:    toolResult.Content,
-		})
-	}
 
 	// Check if all tools are complete
 	if h.loopManager.AllToolsComplete(loopID) {
@@ -717,7 +713,7 @@ func (h *MessageHandler) handleToolsComplete(
 	// Get ALL accumulated tool results
 	allResults := h.loopManager.GetAndClearToolResults(loopID)
 
-	// Build messages with ALL tool results, each with its tool_call_id and name
+	// Build tool result messages with tool_call_id and name
 	toolMessages := make([]agentic.ChatMessage, len(allResults))
 	for i, r := range allResults {
 		toolMessages[i] = agentic.ChatMessage{
@@ -728,6 +724,20 @@ func (h *MessageHandler) handleToolsComplete(
 		}
 	}
 
+	// Build full conversation for the next model request.
+	// When context management is enabled, add tool results and use the full
+	// conversation history (system + user + assistant + tool results).
+	// Without context management, fall back to tool-results-only (legacy behavior).
+	var messages []agentic.ChatMessage
+	if cm != nil {
+		for _, tm := range toolMessages {
+			_ = cm.AddMessage(RegionToolResults, tm)
+		}
+		messages = cm.GetContext()
+	} else {
+		messages = toolMessages
+	}
+
 	// Check for cancellation before building request
 	if err := ctx.Err(); err != nil {
 		return *result, err
@@ -736,13 +746,13 @@ func (h *MessageHandler) handleToolsComplete(
 	// Get cached tools for this loop (discovered once at loop start)
 	tools := h.loopManager.GetCachedTools(loopID)
 
-	// All tools complete - send next agent request with ALL results
+	// All tools complete - send next agent request with full conversation
 	request := agentic.AgentRequest{
 		RequestID: h.loopManager.GenerateRequestID(loopID),
 		LoopID:    loopID,
 		Role:      entity.Role,
 		Model:     entity.Model,
-		Messages:  toolMessages,
+		Messages:  messages,
 		Tools:     tools,
 	}
 
