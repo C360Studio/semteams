@@ -22,13 +22,6 @@ const (
 	subjectAgentComplete = "agent.complete"
 )
 
-// Default durations for trajectory step timing (milliseconds).
-// These are placeholder values until actual timing is measured.
-const (
-	defaultModelCallDurationMs = 100
-	defaultToolCallDurationMs  = 50
-)
-
 // TaskMessage is an alias for agentic.TaskMessage for backward compatibility.
 // This allows existing code to use agenticloop.TaskMessage without modification.
 type TaskMessage = agentic.TaskMessage
@@ -145,6 +138,58 @@ func (h *MessageHandler) configureLoopMetadata(loopID string, task TaskMessage) 
 			}
 		}
 	}
+}
+
+// computeRequestDuration returns the elapsed milliseconds since TrackRequestStart was called.
+func (h *MessageHandler) computeRequestDuration(requestID string) int64 {
+	if start := h.loopManager.GetRequestStart(requestID); !start.IsZero() {
+		return time.Since(start).Milliseconds()
+	}
+	h.logger.Warn("missing request start time for duration computation",
+		slog.String("request_id", requestID))
+	return 0
+}
+
+// computeToolDuration returns the elapsed milliseconds since TrackToolStart was called.
+func (h *MessageHandler) computeToolDuration(callID string) int64 {
+	if start := h.loopManager.GetToolStart(callID); !start.IsZero() {
+		return time.Since(start).Milliseconds()
+	}
+	h.logger.Warn("missing tool start time for duration computation",
+		slog.String("call_id", callID))
+	return 0
+}
+
+// buildTaskTrajectoryStep creates the trajectory step for a HandleTask invocation.
+func (h *MessageHandler) buildTaskTrajectoryStep(requestID string, task TaskMessage, messages []agentic.ChatMessage) agentic.TrajectoryStep {
+	step := agentic.TrajectoryStep{
+		Timestamp: time.Now(),
+		StepType:  "model_call",
+		RequestID: requestID,
+		Prompt:    task.Prompt,
+	}
+	if h.config.TrajectoryDetail == "full" {
+		step.Messages = messages
+		step.Model = task.Model
+	}
+	return step
+}
+
+// buildLoopCreatedData marshals a LoopCreatedEvent for publishing.
+func (h *MessageHandler) buildLoopCreatedData(loopID string, task TaskMessage, entity agentic.LoopEntity) ([]byte, error) {
+	created := agentic.LoopCreatedEvent{
+		LoopID:           loopID,
+		TaskID:           task.TaskID,
+		Role:             task.Role,
+		Model:            task.Model,
+		WorkflowSlug:     task.WorkflowSlug,
+		WorkflowStep:     task.WorkflowStep,
+		ContextRequestID: task.ContextRequestID,
+		MaxIterations:    entity.MaxIterations,
+		CreatedAt:        time.Now(),
+	}
+	createdMsg := message.NewBaseMessage(created.Schema(), &created, "agentic-loop")
+	return json.Marshal(createdMsg)
 }
 
 // buildInitialMessages constructs the initial message list for an agent request.
@@ -268,6 +313,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 
 	// Track request ID to loop ID mapping (cache for fast lookup)
 	h.loopManager.TrackRequest(request.RequestID, loopID)
+	h.loopManager.TrackRequestStart(request.RequestID)
 
 	requestMsg := message.NewBaseMessage(request.Schema(), &request, "agentic-loop")
 	requestData, err := json.Marshal(requestMsg)
@@ -276,27 +322,10 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	}
 
 	// Record trajectory step (duration will be updated when response arrives)
-	step := agentic.TrajectoryStep{
-		Timestamp: time.Now(),
-		StepType:  "model_call",
-		RequestID: request.RequestID,
-		Prompt:    task.Prompt,
-	}
+	step := h.buildTaskTrajectoryStep(request.RequestID, task, messages)
 
-	// Build loop created event for dispatch sync
-	created := agentic.LoopCreatedEvent{
-		LoopID:           loopID,
-		TaskID:           task.TaskID,
-		Role:             task.Role,
-		Model:            task.Model,
-		WorkflowSlug:     task.WorkflowSlug,
-		WorkflowStep:     task.WorkflowStep,
-		ContextRequestID: task.ContextRequestID,
-		MaxIterations:    entity.MaxIterations,
-		CreatedAt:        time.Now(),
-	}
-	createdMsg := message.NewBaseMessage(created.Schema(), &created, "agentic-loop")
-	createdData, err := json.Marshal(createdMsg)
+	// Build loop created event
+	createdData, err := h.buildLoopCreatedData(loopID, task, entity)
 	if err != nil {
 		return HandlerResult{}, err
 	}
@@ -377,7 +406,11 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 		Response:  response.Message.Content,
 		TokensIn:  response.TokenUsage.PromptTokens,
 		TokensOut: response.TokenUsage.CompletionTokens,
-		Duration:  defaultModelCallDurationMs,
+		Duration:  h.computeRequestDuration(response.RequestID),
+	}
+	if h.config.TrajectoryDetail == "full" {
+		step.ToolCalls = response.Message.ToolCalls
+		step.Model = entity.Model
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
@@ -506,6 +539,8 @@ func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID st
 		}
 		h.loopManager.TrackToolCall(approved[i].ID, loopID)
 		h.loopManager.TrackToolName(approved[i].ID, approved[i].Name)
+		h.loopManager.TrackToolArguments(approved[i].ID, approved[i].Arguments)
+		h.loopManager.TrackToolStart(approved[i].ID)
 
 		tc := approved[i] // local copy for pointer
 		toolMsg := message.NewBaseMessage(tc.Schema(), &tc, "agentic-loop")
@@ -637,10 +672,12 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 
 	// Record trajectory step
 	step := agentic.TrajectoryStep{
-		Timestamp:  time.Now(),
-		StepType:   "tool_call",
-		ToolResult: toolResult.Content,
-		Duration:   defaultToolCallDurationMs,
+		Timestamp:     time.Now(),
+		StepType:      "tool_call",
+		ToolName:      h.loopManager.GetToolName(toolResult.CallID),
+		ToolArguments: h.loopManager.GetToolArguments(toolResult.CallID),
+		ToolResult:    toolResult.Content,
+		Duration:      h.computeToolDuration(toolResult.CallID),
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
@@ -758,6 +795,7 @@ func (h *MessageHandler) handleToolsComplete(
 
 	// Track request ID to loop ID mapping (cache for fast lookup)
 	h.loopManager.TrackRequest(request.RequestID, loopID)
+	h.loopManager.TrackRequestStart(request.RequestID)
 
 	requestMsg := message.NewBaseMessage(request.Schema(), &request, "agentic-loop")
 	requestData, err := json.Marshal(requestMsg)

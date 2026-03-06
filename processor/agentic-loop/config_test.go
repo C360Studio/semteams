@@ -420,6 +420,69 @@ func TestConfig_BucketNames(t *testing.T) {
 	}
 }
 
+func TestConfig_TrajectoryTTL(t *testing.T) {
+	tests := []struct {
+		name      string
+		ttl       string
+		wantValid bool
+	}{
+		{"valid 24h", "24h", true},
+		{"valid 1h", "1h", true},
+		{"valid 7 days", "168h", true},
+		{"empty (uses default)", "", true},
+		{"invalid format", "not-a-duration", false},
+		{"negative", "-1h", false},
+		{"zero", "0s", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := agenticloop.Config{
+				MaxIterations:      20,
+				Timeout:            "120s",
+				LoopsBucket:        "AGENT_LOOPS",
+				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+				TrajectoryTTL:      tt.ttl,
+			}
+			err := config.Validate()
+			isValid := err == nil
+			if isValid != tt.wantValid {
+				t.Errorf("Validate() with trajectory_ttl=%q: valid=%v, want %v (err: %v)", tt.ttl, isValid, tt.wantValid, err)
+			}
+		})
+	}
+}
+
+func TestConfig_TrajectoryDetail(t *testing.T) {
+	tests := []struct {
+		name      string
+		detail    string
+		wantValid bool
+	}{
+		{"summary", "summary", true},
+		{"full", "full", true},
+		{"empty (uses default)", "", true},
+		{"invalid", "verbose", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := agenticloop.Config{
+				MaxIterations:      20,
+				Timeout:            "120s",
+				LoopsBucket:        "AGENT_LOOPS",
+				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+				TrajectoryDetail:   tt.detail,
+			}
+			err := config.Validate()
+			isValid := err == nil
+			if isValid != tt.wantValid {
+				t.Errorf("Validate() with trajectory_detail=%q: valid=%v, want %v (err: %v)", tt.detail, isValid, tt.wantValid, err)
+			}
+		})
+	}
+}
+
 // Helper functions
 
 func containsIgnoreCase(s, substr string) bool {

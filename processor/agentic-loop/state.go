@@ -3,6 +3,7 @@ package agenticloop
 import (
 	"fmt"
 	"log/slog"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -15,18 +16,21 @@ import (
 
 // LoopManager manages loop entity lifecycle and state
 type LoopManager struct {
-	loops           map[string]*agentic.LoopEntity
-	contextManagers map[string]*ContextManager          // loopID -> ContextManager
-	pendingTools    map[string]map[string]bool          // loopID -> map[callID]bool
-	cachedTools     map[string][]agentic.ToolDefinition // loopID -> tools (runtime cache, not persisted)
-	cachedMetadata  map[string]map[string]any           // loopID -> metadata (domain context, not persisted)
-	requestToLoop   map[string]string                   // requestID -> loopID
-	toolCallToLoop  map[string]string                   // callID -> loopID
-	callIDToName    map[string]string                   // callID -> function name (for Gemini tool result name field)
-	contextConfig   ContextConfig                       // shared context config
-	modelRegistry   model.RegistryReader                // model registry for context managers
-	logger          *slog.Logger                        // logger for context managers
-	mu              sync.RWMutex
+	loops             map[string]*agentic.LoopEntity
+	contextManagers   map[string]*ContextManager          // loopID -> ContextManager
+	pendingTools      map[string]map[string]bool          // loopID -> map[callID]bool
+	cachedTools       map[string][]agentic.ToolDefinition // loopID -> tools (runtime cache, not persisted)
+	cachedMetadata    map[string]map[string]any           // loopID -> metadata (domain context, not persisted)
+	requestToLoop     map[string]string                   // requestID -> loopID
+	toolCallToLoop    map[string]string                   // callID -> loopID
+	callIDToName      map[string]string                   // callID -> function name (for Gemini tool result name field)
+	callIDToArguments map[string]map[string]any           // callID -> tool arguments (for trajectory audit)
+	requestStartTimes map[string]time.Time                // requestID -> start time (for duration measurement)
+	toolStartTimes    map[string]time.Time                // callID -> start time (for duration measurement)
+	contextConfig     ContextConfig                       // shared context config
+	modelRegistry     model.RegistryReader                // model registry for context managers
+	logger            *slog.Logger                        // logger for context managers
+	mu                sync.RWMutex
 }
 
 // LoopManagerOption is a functional option for configuring LoopManager
@@ -49,16 +53,19 @@ func WithLoopManagerModelRegistry(reg model.RegistryReader) LoopManagerOption {
 // NewLoopManager creates a new LoopManager
 func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 	lm := &LoopManager{
-		loops:           make(map[string]*agentic.LoopEntity),
-		contextManagers: make(map[string]*ContextManager),
-		pendingTools:    make(map[string]map[string]bool),
-		cachedTools:     make(map[string][]agentic.ToolDefinition),
-		cachedMetadata:  make(map[string]map[string]any),
-		requestToLoop:   make(map[string]string),
-		toolCallToLoop:  make(map[string]string),
-		callIDToName:    make(map[string]string),
-		contextConfig:   DefaultContextConfig(),
-		logger:          slog.Default(),
+		loops:             make(map[string]*agentic.LoopEntity),
+		contextManagers:   make(map[string]*ContextManager),
+		pendingTools:      make(map[string]map[string]bool),
+		cachedTools:       make(map[string][]agentic.ToolDefinition),
+		cachedMetadata:    make(map[string]map[string]any),
+		requestToLoop:     make(map[string]string),
+		toolCallToLoop:    make(map[string]string),
+		callIDToName:      make(map[string]string),
+		callIDToArguments: make(map[string]map[string]any),
+		requestStartTimes: make(map[string]time.Time),
+		toolStartTimes:    make(map[string]time.Time),
+		contextConfig:     DefaultContextConfig(),
+		logger:            slog.Default(),
 	}
 	for _, opt := range opts {
 		opt(lm)
@@ -69,16 +76,19 @@ func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 // NewLoopManagerWithConfig creates a new LoopManager with custom context config
 func NewLoopManagerWithConfig(contextConfig ContextConfig, opts ...LoopManagerOption) *LoopManager {
 	lm := &LoopManager{
-		loops:           make(map[string]*agentic.LoopEntity),
-		contextManagers: make(map[string]*ContextManager),
-		pendingTools:    make(map[string]map[string]bool),
-		cachedTools:     make(map[string][]agentic.ToolDefinition),
-		cachedMetadata:  make(map[string]map[string]any),
-		requestToLoop:   make(map[string]string),
-		toolCallToLoop:  make(map[string]string),
-		callIDToName:    make(map[string]string),
-		contextConfig:   contextConfig,
-		logger:          slog.Default(),
+		loops:             make(map[string]*agentic.LoopEntity),
+		contextManagers:   make(map[string]*ContextManager),
+		pendingTools:      make(map[string]map[string]bool),
+		cachedTools:       make(map[string][]agentic.ToolDefinition),
+		cachedMetadata:    make(map[string]map[string]any),
+		requestToLoop:     make(map[string]string),
+		toolCallToLoop:    make(map[string]string),
+		callIDToName:      make(map[string]string),
+		callIDToArguments: make(map[string]map[string]any),
+		requestStartTimes: make(map[string]time.Time),
+		toolStartTimes:    make(map[string]time.Time),
+		contextConfig:     contextConfig,
+		logger:            slog.Default(),
 	}
 	for _, opt := range opts {
 		opt(lm)
@@ -150,7 +160,7 @@ func (m *LoopManager) UpdateLoop(entity agentic.LoopEntity) error {
 	return nil
 }
 
-// DeleteLoop deletes a loop entity
+// DeleteLoop deletes a loop entity and all associated tracking data.
 func (m *LoopManager) DeleteLoop(loopID string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -160,6 +170,24 @@ func (m *LoopManager) DeleteLoop(loopID string) error {
 	delete(m.contextManagers, loopID)
 	delete(m.cachedTools, loopID)
 	delete(m.cachedMetadata, loopID)
+
+	// Clean up maps keyed by requestID/callID that embed the loopID prefix.
+	// Structured IDs use format: {loopID}:req:{short} or {loopID}:tool:{short}.
+	prefix := loopID + ":"
+	for k := range m.requestToLoop {
+		if strings.HasPrefix(k, prefix) {
+			delete(m.requestToLoop, k)
+			delete(m.requestStartTimes, k)
+		}
+	}
+	for k := range m.toolCallToLoop {
+		if strings.HasPrefix(k, prefix) {
+			delete(m.toolCallToLoop, k)
+			delete(m.callIDToName, k)
+			delete(m.callIDToArguments, k)
+			delete(m.toolStartTimes, k)
+		}
+	}
 	return nil
 }
 
@@ -327,6 +355,55 @@ func (m *LoopManager) GetToolName(callID string) string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.callIDToName[callID]
+}
+
+// TrackToolArguments associates a tool call ID with its arguments.
+// This is used to populate the ToolArguments field on trajectory steps for audit.
+func (m *LoopManager) TrackToolArguments(callID string, args map[string]any) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callIDToArguments[callID] = args
+}
+
+// GetToolArguments retrieves a shallow copy of the arguments for a tool call ID.
+func (m *LoopManager) GetToolArguments(callID string) map[string]any {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	orig := m.callIDToArguments[callID]
+	if orig == nil {
+		return nil
+	}
+	cp := make(map[string]any, len(orig))
+	maps.Copy(cp, orig)
+	return cp
+}
+
+// TrackRequestStart records when a model request was sent.
+func (m *LoopManager) TrackRequestStart(requestID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.requestStartTimes[requestID] = time.Now()
+}
+
+// GetRequestStart retrieves the start time for a model request.
+func (m *LoopManager) GetRequestStart(requestID string) time.Time {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.requestStartTimes[requestID]
+}
+
+// TrackToolStart records when a tool call was dispatched for execution.
+func (m *LoopManager) TrackToolStart(callID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.toolStartTimes[callID] = time.Now()
+}
+
+// GetToolStart retrieves the start time for a tool call.
+func (m *LoopManager) GetToolStart(callID string) time.Time {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.toolStartTimes[callID]
 }
 
 // GetLoopForToolCall retrieves the loop ID for a tool call ID

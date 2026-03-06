@@ -814,3 +814,85 @@ func TestLoopManager_TrackToolName(t *testing.T) {
 		t.Errorf("GetToolName(call_abc) = %q, want %q", got, "get_weather")
 	}
 }
+
+func TestLoopManager_TrackToolArguments(t *testing.T) {
+	manager := agenticloop.NewLoopManager()
+
+	// Track arguments for a tool call
+	args := map[string]any{"query": "SELECT *", "limit": float64(10)}
+	manager.TrackToolArguments("call_abc", args)
+
+	// Retrieve them
+	got := manager.GetToolArguments("call_abc")
+	if got == nil {
+		t.Fatal("GetToolArguments() returned nil, expected arguments")
+	}
+	if got["query"] != "SELECT *" {
+		t.Errorf("GetToolArguments()[query] = %v, want %q", got["query"], "SELECT *")
+	}
+	if got["limit"] != float64(10) {
+		t.Errorf("GetToolArguments()[limit] = %v, want %v", got["limit"], float64(10))
+	}
+
+	// Nil args can be tracked without panic
+	manager.TrackToolArguments("call_nil", nil)
+	nilGot := manager.GetToolArguments("call_nil")
+	if nilGot != nil {
+		t.Errorf("GetToolArguments(nil args) = %v, want nil", nilGot)
+	}
+
+	// Non-existent call ID returns nil
+	missing := manager.GetToolArguments("call_unknown")
+	if missing != nil {
+		t.Errorf("GetToolArguments(unknown) = %v, want nil", missing)
+	}
+
+	// Multiple arguments can be tracked independently
+	args2 := map[string]any{"path": "/tmp/test"}
+	manager.TrackToolArguments("call_def", args2)
+	if got2 := manager.GetToolArguments("call_def"); got2["path"] != "/tmp/test" {
+		t.Errorf("GetToolArguments(call_def)[path] = %v, want %q", got2["path"], "/tmp/test")
+	}
+	// Original still accessible
+	if orig := manager.GetToolArguments("call_abc"); orig["query"] != "SELECT *" {
+		t.Errorf("GetToolArguments(call_abc) overwritten unexpectedly")
+	}
+}
+
+func TestLoopManager_TrackRequestStart(t *testing.T) {
+	manager := agenticloop.NewLoopManager()
+
+	// Track request start
+	manager.TrackRequestStart("req-001")
+
+	// Retrieve it — should be non-zero
+	start := manager.GetRequestStart("req-001")
+	if start.IsZero() {
+		t.Error("GetRequestStart() returned zero time, expected non-zero")
+	}
+
+	// Unknown request returns zero time
+	unknown := manager.GetRequestStart("req-unknown")
+	if !unknown.IsZero() {
+		t.Errorf("GetRequestStart(unknown) = %v, want zero time", unknown)
+	}
+}
+
+func TestLoopManager_TrackToolStart(t *testing.T) {
+	manager := agenticloop.NewLoopManager()
+
+	// Track tool start
+	manager.TrackToolStart("call-001")
+
+	// Retrieve it — should be non-zero
+	start := manager.GetToolStart("call-001")
+	if start.IsZero() {
+		t.Error("GetToolStart() returned zero time, expected non-zero")
+	}
+
+	// Unknown call returns zero time
+	unknown := manager.GetToolStart("call-unknown")
+	if !unknown.IsZero() {
+		t.Errorf("GetToolStart(unknown) = %v, want zero time", unknown)
+	}
+}

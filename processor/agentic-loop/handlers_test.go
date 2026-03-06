@@ -1490,3 +1490,185 @@ func TestHandleToolsComplete_FullConversationHistory(t *testing.T) {
 	}
 	t.Error("Should publish agent.request after tool completion")
 }
+
+// TestHandleToolResult_PopulatesToolNameAndArguments verifies that trajectory
+// steps from HandleToolResult include ToolName and ToolArguments.
+func TestHandleToolResult_PopulatesToolNameAndArguments(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-tool-args",
+		Role:   "general",
+		Model:  "qwen-32b",
+		Prompt: "Test tool args",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	// Model response with a tool call that has arguments
+	toolResponse := agentic.AgentResponse{
+		RequestID: "req-args-001",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{
+					ID:        "call-args-001",
+					Name:      "graph_query",
+					Arguments: map[string]any{"query": "SELECT *", "limit": float64(10)},
+				},
+			},
+		},
+	}
+
+	_, err = handler.HandleModelResponse(ctx, loopID, toolResponse)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// Tool result
+	result, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
+		CallID:  "call-args-001",
+		Content: "42 results",
+	})
+	if err != nil {
+		t.Fatalf("HandleToolResult() error = %v", err)
+	}
+
+	// Verify trajectory step has ToolName and ToolArguments populated
+	if len(result.TrajectorySteps) == 0 {
+		t.Fatal("Expected trajectory steps")
+	}
+	step := result.TrajectorySteps[0]
+	if step.ToolName != "graph_query" {
+		t.Errorf("TrajectoryStep.ToolName = %q, want %q", step.ToolName, "graph_query")
+	}
+	if step.ToolArguments == nil {
+		t.Fatal("TrajectoryStep.ToolArguments should not be nil")
+	}
+	if step.ToolArguments["query"] != "SELECT *" {
+		t.Errorf("TrajectoryStep.ToolArguments[query] = %v, want %q", step.ToolArguments["query"], "SELECT *")
+	}
+}
+
+// TestHandleTask_TrajectoryDetail_Full verifies that when TrajectoryDetail is "full",
+// the trajectory step from HandleTask includes Messages and Model.
+func TestHandleTask_TrajectoryDetail_Full(t *testing.T) {
+	config := createTestConfig()
+	config.TrajectoryDetail = "full"
+	handler := agenticloop.NewMessageHandler(config)
+
+	ctx := context.Background()
+	result, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-detail",
+		Role:   "general",
+		Model:  "qwen-32b",
+		Prompt: "Full detail test",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	if len(result.TrajectorySteps) == 0 {
+		t.Fatal("Expected trajectory steps")
+	}
+	step := result.TrajectorySteps[0]
+
+	// Messages should be populated
+	if len(step.Messages) == 0 {
+		t.Error("TrajectoryStep.Messages should be populated in full detail mode")
+	}
+	// Model should be populated
+	if step.Model != "qwen-32b" {
+		t.Errorf("TrajectoryStep.Model = %q, want %q", step.Model, "qwen-32b")
+	}
+}
+
+// TestHandleTask_TrajectoryDetail_Default verifies that with default config,
+// Messages and Model are NOT populated on trajectory steps.
+func TestHandleTask_TrajectoryDetail_Default(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	ctx := context.Background()
+	result, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-summary",
+		Role:   "general",
+		Model:  "qwen-32b",
+		Prompt: "Summary mode test",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	if len(result.TrajectorySteps) == 0 {
+		t.Fatal("Expected trajectory steps")
+	}
+	step := result.TrajectorySteps[0]
+
+	// Messages should NOT be populated in summary mode
+	if len(step.Messages) != 0 {
+		t.Errorf("TrajectoryStep.Messages should be nil/empty in summary mode, got %d", len(step.Messages))
+	}
+	// Model should NOT be populated in summary mode
+	if step.Model != "" {
+		t.Errorf("TrajectoryStep.Model should be empty in summary mode, got %q", step.Model)
+	}
+}
+
+// TestHandleModelResponse_TrajectoryDetail_Full verifies that when TrajectoryDetail
+// is "full", the trajectory step from HandleModelResponse includes ToolCalls and Model.
+func TestHandleModelResponse_TrajectoryDetail_Full(t *testing.T) {
+	config := createTestConfig()
+	config.TrajectoryDetail = "full"
+	handler := agenticloop.NewMessageHandler(config)
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-detail-resp",
+		Role:   "general",
+		Model:  "qwen-32b",
+		Prompt: "Detail response test",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	// Model response with tool calls
+	response := agentic.AgentResponse{
+		RequestID: "req-detail-001",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-detail-1", Name: "test_tool"},
+			},
+		},
+		TokenUsage: agentic.TokenUsage{PromptTokens: 100, CompletionTokens: 50},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, response)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	if len(result.TrajectorySteps) == 0 {
+		t.Fatal("Expected trajectory steps")
+	}
+	step := result.TrajectorySteps[0]
+
+	// ToolCalls should be populated in full mode
+	if len(step.ToolCalls) == 0 {
+		t.Error("TrajectoryStep.ToolCalls should be populated in full detail mode")
+	}
+	if step.ToolCalls[0].Name != "test_tool" {
+		t.Errorf("TrajectoryStep.ToolCalls[0].Name = %q, want %q", step.ToolCalls[0].Name, "test_tool")
+	}
+	// Model should be populated
+	if step.Model != "qwen-32b" {
+		t.Errorf("TrajectoryStep.Model = %q, want %q", step.Model, "qwen-32b")
+	}
+}

@@ -529,6 +529,113 @@ func TestNewTrajectory(t *testing.T) {
 	}
 }
 
+func TestTrajectoryStep_JSONRoundTrip_AuditFields(t *testing.T) {
+	tests := []struct {
+		name string
+		step agentic.TrajectoryStep
+	}{
+		{
+			name: "model call with messages and model (detail=full)",
+			step: agentic.TrajectoryStep{
+				Timestamp: time.Now().UTC(),
+				StepType:  "model_call",
+				RequestID: "req-audit-1",
+				Prompt:    "Analyze this",
+				Model:     "qwen-32b",
+				Messages: []agentic.ChatMessage{
+					{Role: "system", Content: "You are helpful"},
+					{Role: "user", Content: "Analyze this"},
+				},
+				Duration: 1500,
+			},
+		},
+		{
+			name: "model call with tool calls (detail=full)",
+			step: agentic.TrajectoryStep{
+				Timestamp: time.Now().UTC(),
+				StepType:  "model_call",
+				RequestID: "req-audit-2",
+				Response:  "Calling tool...",
+				Model:     "deepseek-16b",
+				ToolCalls: []agentic.ToolCall{
+					{ID: "call-1", Name: "graph_query", Arguments: map[string]any{"q": "test"}},
+				},
+				TokensIn:  100,
+				TokensOut: 50,
+				Duration:  800,
+			},
+		},
+		{
+			name: "step without audit fields (summary mode, omitempty)",
+			step: agentic.TrajectoryStep{
+				Timestamp: time.Now().UTC(),
+				StepType:  "model_call",
+				RequestID: "req-summary",
+				Prompt:    "Simple query",
+				Duration:  200,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(tt.step)
+			if err != nil {
+				t.Fatalf("Marshal failed: %v", err)
+			}
+
+			var decoded agentic.TrajectoryStep
+			if err := json.Unmarshal(data, &decoded); err != nil {
+				t.Fatalf("Unmarshal failed: %v", err)
+			}
+
+			// Verify new audit fields
+			if decoded.Model != tt.step.Model {
+				t.Errorf("Model = %v, want %v", decoded.Model, tt.step.Model)
+			}
+			if len(decoded.Messages) != len(tt.step.Messages) {
+				t.Errorf("Messages length = %d, want %d", len(decoded.Messages), len(tt.step.Messages))
+			}
+			if len(decoded.ToolCalls) != len(tt.step.ToolCalls) {
+				t.Errorf("ToolCalls length = %d, want %d", len(decoded.ToolCalls), len(tt.step.ToolCalls))
+			}
+
+			// Verify omitempty: nil fields should not appear in JSON
+			if tt.step.Messages == nil {
+				dataStr := string(data)
+				if containsStr(dataStr, `"messages"`) {
+					t.Error("nil Messages should be omitted from JSON")
+				}
+			}
+			if tt.step.ToolCalls == nil {
+				dataStr := string(data)
+				if containsStr(dataStr, `"tool_calls"`) {
+					t.Error("nil ToolCalls should be omitted from JSON")
+				}
+			}
+			if tt.step.Model == "" {
+				dataStr := string(data)
+				if containsStr(dataStr, `"model"`) {
+					t.Error("empty Model should be omitted from JSON")
+				}
+			}
+		})
+	}
+}
+
+func containsStr(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && len(substr) > 0 && searchStr(s, substr))
+}
+
+func searchStr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 // Helper function to create time pointer
 func ptrTime(t time.Time) *time.Time {
 	return &t

@@ -116,6 +116,26 @@
       "description": "NATS KV bucket name for storing trajectories",
       "default": "AGENT_TRAJECTORIES",
       "category": "advanced"
+    },
+    "trajectory_detail": {
+      "type": "string",
+      "description": "Trajectory detail level: summary (default) or full",
+      "default": "summary",
+      "category": "advanced"
+    },
+    "trajectory_history": {
+      "type": "number",
+      "description": "History revisions for trajectory KV",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 100,
+      "category": "advanced"
+    },
+    "trajectory_ttl": {
+      "type": "string",
+      "description": "TTL for trajectory KV entries",
+      "default": "24h",
+      "category": "advanced"
     }
   },
   "required": [

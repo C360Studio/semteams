@@ -341,14 +341,26 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	}
 	c.loopsBucket = loopsBucket
 
+	// Parse trajectory TTL from config (defaults to 24h)
+	trajectoryTTL := 24 * time.Hour
+	if c.config.TrajectoryTTL != "" {
+		if parsed, parseErr := time.ParseDuration(c.config.TrajectoryTTL); parseErr == nil {
+			trajectoryTTL = parsed
+		}
+	}
+	trajectoryHistory := 10
+	if c.config.TrajectoryHistory > 0 {
+		trajectoryHistory = c.config.TrajectoryHistory
+	}
+
 	// Initialize trajectories bucket
 	trajectoriesBucket, err := js.KeyValue(ctx, c.config.TrajectoriesBucket)
 	if err != nil {
 		// Bucket doesn't exist, try to create it
 		trajectoriesBucket, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
 			Bucket:  c.config.TrajectoriesBucket,
-			History: 10,
-			TTL:     24 * time.Hour,
+			History: uint8(trajectoryHistory),
+			TTL:     trajectoryTTL,
 		})
 		if err != nil {
 			return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create trajectories bucket")
@@ -943,8 +955,19 @@ func (c *Component) persistTrajectorySteps(ctx context.Context, loopID string, s
 		}
 	}
 
-	// Append new steps
-	trajectory.Steps = append(trajectory.Steps, steps...)
+	// Recalculate totals from existing steps (fixes stale values from old code)
+	trajectory.TotalTokensIn = 0
+	trajectory.TotalTokensOut = 0
+	trajectory.Duration = 0
+	for _, s := range trajectory.Steps {
+		trajectory.TotalTokensIn += s.TokensIn
+		trajectory.TotalTokensOut += s.TokensOut
+		trajectory.Duration += s.Duration
+	}
+	// Append new steps using AddStep (updates totals correctly)
+	for _, step := range steps {
+		trajectory.AddStep(step)
+	}
 
 	// Persist updated trajectory
 	data, err := json.Marshal(trajectory)

@@ -17,7 +17,10 @@ type TrajectoryStep struct {
 	ToolName      string         `json:"tool_name,omitempty"`
 	ToolArguments map[string]any `json:"tool_arguments,omitempty"`
 	ToolResult    string         `json:"tool_result,omitempty"`
-	Duration      int64          `json:"duration"` // milliseconds
+	Duration      int64          `json:"duration"`             // milliseconds
+	Messages      []ChatMessage  `json:"messages,omitempty"`   // Full request messages (detail=full)
+	ToolCalls     []ToolCall     `json:"tool_calls,omitempty"` // Assistant tool calls (detail=full)
+	Model         string         `json:"model,omitempty"`      // Model used
 }
 
 // Validate checks if the TrajectoryStep is valid

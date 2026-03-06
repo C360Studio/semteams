@@ -24,6 +24,9 @@ type Config struct {
 	PositionsBucket      string                `json:"positions_bucket,omitempty" schema:"type:string,description:NATS KV bucket name for boid agent positions,default:AGENT_POSITIONS,category:advanced"`
 	BoidEnabled          bool                  `json:"boid_enabled,omitempty" schema:"type:bool,description:Enable Boid-style agent coordination (position tracking and steering signals),default:false,category:advanced"`
 	BoidSignalTTL        string                `json:"boid_signal_ttl,omitempty" schema:"type:string,description:TTL for Boid steering signals before expiration (e.g. 30s or 1m),default:30s,category:advanced"`
+	TrajectoryDetail     string                `json:"trajectory_detail,omitempty" schema:"type:string,description:Trajectory detail level: summary (default) or full,default:summary,category:advanced"`
+	TrajectoryTTL        string                `json:"trajectory_ttl,omitempty" schema:"type:string,description:TTL for trajectory KV entries,default:24h,category:advanced"`
+	TrajectoryHistory    int                   `json:"trajectory_history,omitempty" schema:"type:int,description:History revisions for trajectory KV,default:10,min:1,max:100,category:advanced"`
 	Context              ContextConfig         `json:"context" schema:"type:object,description:Context window management. Model limits are resolved from the model registry,category:advanced"`
 	Ports                *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
 }
@@ -75,6 +78,27 @@ func (c Config) Validate() error {
 	// Validate trajectories_bucket
 	if strings.TrimSpace(c.TrajectoriesBucket) == "" {
 		return errs.WrapInvalid(fmt.Errorf("trajectories_bucket is required"), "Config", "Validate", "check trajectories_bucket")
+	}
+
+	// Validate trajectory_ttl if set
+	if c.TrajectoryTTL != "" {
+		ttl, ttlErr := time.ParseDuration(c.TrajectoryTTL)
+		if ttlErr != nil {
+			return errs.WrapInvalid(ttlErr, "Config", "Validate", "parse trajectory_ttl format")
+		}
+		if ttl <= 0 {
+			return errs.WrapInvalid(fmt.Errorf("trajectory_ttl must be positive"), "Config", "Validate", "check trajectory_ttl value")
+		}
+	}
+
+	// Validate trajectory_history if set (uint8 max is 255)
+	if c.TrajectoryHistory < 0 || c.TrajectoryHistory > 255 {
+		return errs.WrapInvalid(fmt.Errorf("trajectory_history must be between 0 and 255"), "Config", "Validate", "check trajectory_history")
+	}
+
+	// Validate trajectory_detail if set
+	if c.TrajectoryDetail != "" && c.TrajectoryDetail != "summary" && c.TrajectoryDetail != "full" {
+		return errs.WrapInvalid(fmt.Errorf("trajectory_detail must be 'summary' or 'full'"), "Config", "Validate", "check trajectory_detail")
 	}
 
 	// Validate context config
@@ -132,6 +156,9 @@ func DefaultConfig() Config {
 		PositionsBucket:    "AGENT_POSITIONS",
 		BoidEnabled:        false,
 		BoidSignalTTL:      "30s",
+		TrajectoryDetail:   "summary",
+		TrajectoryTTL:      "24h",
+		TrajectoryHistory:  10,
 		Context:            DefaultContextConfig(),
 		Ports: &component.PortConfig{
 			Inputs: []component.PortDefinition{
