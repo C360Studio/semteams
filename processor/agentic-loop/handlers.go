@@ -750,14 +750,20 @@ func (h *MessageHandler) handleToolsComplete(
 	// Get ALL accumulated tool results
 	allResults := h.loopManager.GetAndClearToolResults(loopID)
 
-	// Build tool result messages with tool_call_id and name
+	// Build tool result messages with tool_call_id and name.
+	// Fall back to Error when Content is empty — Gemini rejects tool result
+	// messages with no content (400 INVALID_ARGUMENT).
 	toolMessages := make([]agentic.ChatMessage, len(allResults))
 	for i, r := range allResults {
+		content := r.Content
+		if content == "" && r.Error != "" {
+			content = fmt.Sprintf("Tool error: %s", r.Error)
+		}
 		toolMessages[i] = agentic.ChatMessage{
 			Role:       "tool",
 			ToolCallID: r.CallID,
 			Name:       h.loopManager.GetToolName(r.CallID),
-			Content:    r.Content,
+			Content:    content,
 		}
 	}
 
