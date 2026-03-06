@@ -92,6 +92,7 @@ func (r *AgentResponse) UnmarshalJSON(data []byte) error {
 type ChatMessage struct {
 	Role             string     `json:"role"`
 	Content          string     `json:"content,omitempty"`
+	Name             string     `json:"name,omitempty"`              // Function name for tool role messages (required by Gemini)
 	ReasoningContent string     `json:"reasoning_content,omitempty"` // Thinking model chain-of-thought
 	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string     `json:"tool_call_id,omitempty"` // Required for tool role messages

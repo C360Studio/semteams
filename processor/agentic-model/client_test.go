@@ -802,3 +802,143 @@ func TestChatCompletion_ReasoningContent(t *testing.T) {
 		t.Errorf("ReasoningContent = %q, want %q", resp.Message.ReasoningContent, "Let me think step by step about this problem...")
 	}
 }
+
+func TestBuildChatRequest_ToolCallEmptyContentPreserved(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+
+		response := map[string]any{
+			"id": "chatcmpl-content", "object": "chat.completion",
+			"created": 1677652288, "model": "gpt-4",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "OK"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	// Request with an assistant message that has tool_calls but empty content
+	req := agentic.AgentRequest{
+		RequestID: "req-content",
+		Messages: []agentic.ChatMessage{
+			{Role: "user", Content: "What's the weather?"},
+			{
+				Role:    "assistant",
+				Content: "", // Empty content with tool calls
+				ToolCalls: []agentic.ToolCall{
+					{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"location": "London"}},
+				},
+			},
+			{Role: "tool", ToolCallID: "call_1", Content: `{"temp": 20}`},
+		},
+		Model: "gpt-4",
+	}
+
+	ctx := context.Background()
+	_, err = client.ChatCompletion(ctx, req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	// Verify the assistant message with tool_calls has content set to " "
+	messages, ok := capturedRequest["messages"].([]any)
+	if !ok {
+		t.Fatal("messages not found in request")
+	}
+
+	assistantMsg := messages[1].(map[string]any)
+	content, ok := assistantMsg["content"].(string)
+	if !ok {
+		t.Fatal("content field missing on assistant message with tool_calls")
+	}
+	if content != " " {
+		t.Errorf("content = %q, want %q (single space for Gemini compatibility)", content, " ")
+	}
+}
+
+func TestBuildChatRequest_ToolResultNameField(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+
+		response := map[string]any{
+			"id": "chatcmpl-name", "object": "chat.completion",
+			"created": 1677652288, "model": "gpt-4",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "OK"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	req := agentic.AgentRequest{
+		RequestID: "req-name",
+		Messages: []agentic.ChatMessage{
+			{Role: "user", Content: "What's the weather?"},
+			{
+				Role: "assistant",
+				ToolCalls: []agentic.ToolCall{
+					{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"location": "London"}},
+				},
+			},
+			{Role: "tool", ToolCallID: "call_1", Name: "get_weather", Content: `{"temp": 20}`},
+		},
+		Model: "gpt-4",
+	}
+
+	ctx := context.Background()
+	_, err = client.ChatCompletion(ctx, req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	// Verify the tool result message has name field set
+	messages, ok := capturedRequest["messages"].([]any)
+	if !ok {
+		t.Fatal("messages not found in request")
+	}
+
+	toolMsg := messages[2].(map[string]any)
+	name, ok := toolMsg["name"].(string)
+	if !ok {
+		t.Fatal("name field missing on tool result message")
+	}
+	if name != "get_weather" {
+		t.Errorf("name = %q, want %q", name, "get_weather")
+	}
+}

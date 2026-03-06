@@ -396,6 +396,54 @@ func TestStreamChatCompletion_ChunkHandler(t *testing.T) {
 	}
 }
 
+func TestStreamChatCompletion_GeminiMissingIndex(t *testing.T) {
+	// Gemini omits the index field on streaming tool call deltas.
+	// Two tool calls without index fields should be preserved as separate calls.
+	chunks := []string{
+		// First tool call: ID present, no index
+		`{"id":"g1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"id":"call_aaa","type":"function","function":{"name":"get_weather","arguments":""}}]}}]}`,
+		// First tool call arguments continuation: no ID, no index
+		`{"id":"g1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"function":{"arguments":"{\"location\":\"London\"}"}}]}}]}`,
+		// Second tool call: new ID, no index
+		`{"id":"g1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_bbb","type":"function","function":{"name":"get_time","arguments":"{\"tz\":\"UTC\"}"}}]}}]}`,
+		// Finish
+		`{"id":"g1","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+		`{"id":"g1","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":15,"total_tokens":25}}`,
+	}
+
+	server := sseServer(t, chunks)
+	defer server.Close()
+
+	client := newStreamingClient(t, server.URL)
+
+	resp, err := client.ChatCompletion(context.Background(), simpleRequest("req-gemini-idx"))
+	if err != nil {
+		t.Fatalf("ChatCompletion() error: %v", err)
+	}
+
+	if resp.Status != "tool_call" {
+		t.Errorf("Status = %q, want tool_call", resp.Status)
+	}
+
+	if len(resp.Message.ToolCalls) != 2 {
+		t.Fatalf("ToolCalls count = %d, want 2 (Gemini missing index collapsed parallel calls)", len(resp.Message.ToolCalls))
+	}
+
+	tc0 := resp.Message.ToolCalls[0]
+	if tc0.ID != "call_aaa" || tc0.Name != "get_weather" {
+		t.Errorf("ToolCall[0] = {ID:%q, Name:%q}, want {ID:call_aaa, Name:get_weather}", tc0.ID, tc0.Name)
+	}
+	loc, ok := tc0.Arguments["location"]
+	if !ok || loc != "London" {
+		t.Errorf("ToolCall[0].Arguments[location] = %v, want London", loc)
+	}
+
+	tc1 := resp.Message.ToolCalls[1]
+	if tc1.ID != "call_bbb" || tc1.Name != "get_time" {
+		t.Errorf("ToolCall[1] = {ID:%q, Name:%q}, want {ID:call_bbb, Name:get_time}", tc1.ID, tc1.Name)
+	}
+}
+
 func TestStreamChatCompletion_NonStreamEndpoint(t *testing.T) {
 	// Non-streaming endpoint should use the regular path
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

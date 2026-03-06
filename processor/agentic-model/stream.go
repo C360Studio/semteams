@@ -31,6 +31,7 @@ type streamAccumulator struct {
 	toolCalls        map[int]*openai.ToolCall
 	promptTokens     int
 	completionTokens int
+	lastToolIndex    int // tracks last assigned index for Gemini missing-index inference
 }
 
 // processDelta incorporates a single streaming choice delta.
@@ -55,10 +56,7 @@ func (a *streamAccumulator) processDelta(choice openai.ChatCompletionStreamChoic
 
 	// Aggregate tool call deltas by index
 	for _, tc := range delta.ToolCalls {
-		idx := 0
-		if tc.Index != nil {
-			idx = *tc.Index
-		}
+		idx := a.inferToolIndex(tc)
 
 		if a.toolCalls == nil {
 			a.toolCalls = make(map[int]*openai.ToolCall)
@@ -81,7 +79,38 @@ func (a *streamAccumulator) processDelta(choice openai.ChatCompletionStreamChoic
 		if tc.Function.Arguments != "" {
 			existing.Function.Arguments += tc.Function.Arguments
 		}
+
+		a.lastToolIndex = idx
 	}
+}
+
+// inferToolIndex determines the correct index for a tool call delta.
+// When the provider includes an explicit index, use it. When omitted (Gemini),
+// infer: a non-empty ID signals a new tool call (assign next index),
+// an empty ID is an argument continuation (reuse lastToolIndex).
+func (a *streamAccumulator) inferToolIndex(tc openai.ToolCall) int {
+	if tc.Index != nil {
+		return *tc.Index
+	}
+	// Gemini omits index — infer from ID presence
+	if tc.ID != "" {
+		return a.nextToolIndex()
+	}
+	return a.lastToolIndex
+}
+
+// nextToolIndex returns the next available tool call index.
+func (a *streamAccumulator) nextToolIndex() int {
+	if len(a.toolCalls) == 0 {
+		return 0
+	}
+	max := -1
+	for idx := range a.toolCalls {
+		if idx > max {
+			max = idx
+		}
+	}
+	return max + 1
 }
 
 // setUsage records token counts from the final stream chunk.

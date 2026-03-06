@@ -22,6 +22,7 @@ type LoopManager struct {
 	cachedMetadata  map[string]map[string]any           // loopID -> metadata (domain context, not persisted)
 	requestToLoop   map[string]string                   // requestID -> loopID
 	toolCallToLoop  map[string]string                   // callID -> loopID
+	callIDToName    map[string]string                   // callID -> function name (for Gemini tool result name field)
 	contextConfig   ContextConfig                       // shared context config
 	modelRegistry   model.RegistryReader                // model registry for context managers
 	logger          *slog.Logger                        // logger for context managers
@@ -55,6 +56,7 @@ func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 		cachedMetadata:  make(map[string]map[string]any),
 		requestToLoop:   make(map[string]string),
 		toolCallToLoop:  make(map[string]string),
+		callIDToName:    make(map[string]string),
 		contextConfig:   DefaultContextConfig(),
 		logger:          slog.Default(),
 	}
@@ -74,6 +76,7 @@ func NewLoopManagerWithConfig(contextConfig ContextConfig, opts ...LoopManagerOp
 		cachedMetadata:  make(map[string]map[string]any),
 		requestToLoop:   make(map[string]string),
 		toolCallToLoop:  make(map[string]string),
+		callIDToName:    make(map[string]string),
 		contextConfig:   contextConfig,
 		logger:          slog.Default(),
 	}
@@ -309,6 +312,21 @@ func (m *LoopManager) TrackToolCall(callID, loopID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.toolCallToLoop[callID] = loopID
+}
+
+// TrackToolName associates a tool call ID with its function name.
+// This is used to populate the name field on tool result messages (required by Gemini).
+func (m *LoopManager) TrackToolName(callID, name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callIDToName[callID] = name
+}
+
+// GetToolName retrieves the function name for a tool call ID.
+func (m *LoopManager) GetToolName(callID string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.callIDToName[callID]
 }
 
 // GetLoopForToolCall retrieves the loop ID for a tool call ID

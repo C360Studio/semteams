@@ -502,6 +502,7 @@ func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID st
 			return err
 		}
 		h.loopManager.TrackToolCall(approved[i].ID, loopID)
+		h.loopManager.TrackToolName(approved[i].ID, approved[i].Name)
 
 		tc := approved[i] // local copy for pointer
 		toolMsg := message.NewBaseMessage(tc.Schema(), &tc, "agentic-loop")
@@ -646,6 +647,7 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		_ = cm.AddMessage(RegionToolResults, agentic.ChatMessage{
 			Role:       "tool",
 			ToolCallID: toolResult.CallID,
+			Name:       h.loopManager.GetToolName(toolResult.CallID),
 			Content:    toolResult.Content,
 		})
 	}
@@ -715,12 +717,13 @@ func (h *MessageHandler) handleToolsComplete(
 	// Get ALL accumulated tool results
 	allResults := h.loopManager.GetAndClearToolResults(loopID)
 
-	// Build messages with ALL tool results, each with its tool_call_id
+	// Build messages with ALL tool results, each with its tool_call_id and name
 	toolMessages := make([]agentic.ChatMessage, len(allResults))
 	for i, r := range allResults {
 		toolMessages[i] = agentic.ChatMessage{
 			Role:       "tool",
 			ToolCallID: r.CallID,
+			Name:       h.loopManager.GetToolName(r.CallID),
 			Content:    r.Content,
 		}
 	}

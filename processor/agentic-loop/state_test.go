@@ -785,3 +785,32 @@ func TestLoopManager_CancelLoop_NotFound(t *testing.T) {
 		t.Errorf("CancelLoop() error = %v, want substring 'not found'", err)
 	}
 }
+
+func TestLoopManager_TrackToolName(t *testing.T) {
+	manager := agenticloop.NewLoopManager()
+
+	// Track a tool name
+	manager.TrackToolName("call_abc", "get_weather")
+
+	// Retrieve it
+	name := manager.GetToolName("call_abc")
+	if name != "get_weather" {
+		t.Errorf("GetToolName() = %q, want %q", name, "get_weather")
+	}
+
+	// Non-existent call ID returns empty string
+	name = manager.GetToolName("call_unknown")
+	if name != "" {
+		t.Errorf("GetToolName(unknown) = %q, want empty string", name)
+	}
+
+	// Multiple tool names can be tracked
+	manager.TrackToolName("call_def", "get_time")
+	if got := manager.GetToolName("call_def"); got != "get_time" {
+		t.Errorf("GetToolName(call_def) = %q, want %q", got, "get_time")
+	}
+	// Original still accessible
+	if got := manager.GetToolName("call_abc"); got != "get_weather" {
+		t.Errorf("GetToolName(call_abc) = %q, want %q", got, "get_weather")
+	}
+}

@@ -75,6 +75,11 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 			messages[i].ToolCallID = msg.ToolCallID
 		}
 
+		// Handle tool result name field (required by Gemini)
+		if msg.Role == "tool" && msg.Name != "" {
+			messages[i].Name = msg.Name
+		}
+
 		// Convert tool calls if present
 		if len(msg.ToolCalls) > 0 {
 			toolCalls := make([]openai.ToolCall, len(msg.ToolCalls))
@@ -90,6 +95,12 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 				}
 			}
 			messages[i].ToolCalls = toolCalls
+
+			// Gemini rejects absent content on assistant tool_call messages.
+			// Set to single space (standard adapter convention from LiteLLM, etc.).
+			if messages[i].Content == "" {
+				messages[i].Content = " "
+			}
 		}
 	}
 
