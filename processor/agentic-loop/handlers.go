@@ -731,7 +731,7 @@ func (h *MessageHandler) handleToolsComplete(
 	var messages []agentic.ChatMessage
 	if cm != nil {
 		for _, tm := range toolMessages {
-			_ = cm.AddMessage(RegionToolResults, tm)
+			_ = cm.AddMessage(RegionRecentHistory, tm)
 		}
 		messages = cm.GetContext()
 	} else {

@@ -200,29 +200,33 @@ func (cm *ContextManager) GetRegionTokens(region RegionType) int {
 	return total
 }
 
-// GCToolResults garbage collects old tool results based on age
+// GCToolResults garbage collects old tool results based on age.
+// Tool results live in RegionRecentHistory (for chronological ordering with
+// assistant messages), so this scans that region for role="tool" messages.
 func (cm *ContextManager) GCToolResults(currentIteration int) int {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	toolResults := cm.regions[RegionToolResults]
-	if len(toolResults) == 0 {
+	recent := cm.regions[RegionRecentHistory]
+	if len(recent) == 0 {
 		return 0
 	}
 
 	evicted := 0
-	remaining := []contextMessage{}
+	remaining := make([]contextMessage, 0, len(recent))
 
-	for _, m := range toolResults {
-		age := currentIteration - m.Iteration
-		if age <= cm.config.ToolResultMaxAge {
-			remaining = append(remaining, m)
-		} else {
-			evicted++
+	for _, m := range recent {
+		if m.Message.Role == "tool" {
+			age := currentIteration - m.Iteration
+			if age > cm.config.ToolResultMaxAge {
+				evicted++
+				continue
+			}
 		}
+		remaining = append(remaining, m)
 	}
 
-	cm.regions[RegionToolResults] = remaining
+	cm.regions[RegionRecentHistory] = remaining
 
 	// Update current iteration for future AddMessage calls
 	cm.currentIteration = currentIteration

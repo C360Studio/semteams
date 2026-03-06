@@ -1448,9 +1448,10 @@ func TestHandleToolsComplete_FullConversationHistory(t *testing.T) {
 			return
 		}
 
-		// Verify conversation structure: find user, assistant, and tool messages
+		// Verify conversation structure and chronological ordering
 		var hasUser, hasAssistant, hasTool bool
-		for _, m := range messages {
+		var assistantIdx, toolIdx int
+		for i, m := range messages {
 			msg, _ := m.(map[string]any)
 			role, _ := msg["role"].(string)
 			switch role {
@@ -1458,6 +1459,7 @@ func TestHandleToolsComplete_FullConversationHistory(t *testing.T) {
 				hasUser = true
 			case "assistant":
 				hasAssistant = true
+				assistantIdx = i
 				// The assistant message should have tool_calls
 				if tc, ok := msg["tool_calls"]; ok {
 					tcs, _ := tc.([]any)
@@ -1467,6 +1469,7 @@ func TestHandleToolsComplete_FullConversationHistory(t *testing.T) {
 				}
 			case "tool":
 				hasTool = true
+				toolIdx = i
 			}
 		}
 
@@ -1478,6 +1481,10 @@ func TestHandleToolsComplete_FullConversationHistory(t *testing.T) {
 		}
 		if !hasTool {
 			t.Error("Conversation must include tool result message")
+		}
+		// Tool results must follow their assistant tool_call message (chronological)
+		if hasTool && hasAssistant && toolIdx <= assistantIdx {
+			t.Errorf("Tool result (index %d) must come after assistant tool_call (index %d)", toolIdx, assistantIdx)
 		}
 		return
 	}
