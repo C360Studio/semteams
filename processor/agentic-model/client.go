@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"os"
 	"time"
 
@@ -19,6 +20,7 @@ type Client struct {
 	endpoint     *model.EndpointConfig
 	chunkHandler ChunkHandler
 	metrics      *modelMetrics
+	logger       *slog.Logger
 }
 
 // NewClient creates a new client for the given endpoint configuration
@@ -58,6 +60,11 @@ func (c *Client) SetChunkHandler(handler ChunkHandler) {
 // SetMetrics sets the metrics instance for recording streaming metrics.
 func (c *Client) SetMetrics(m *modelMetrics) {
 	c.metrics = m
+}
+
+// SetLogger sets the logger for debug-level request/response logging.
+func (c *Client) SetLogger(l *slog.Logger) {
+	c.logger = l
 }
 
 // buildChatRequest converts an AgentRequest into an OpenAI ChatCompletionRequest.
@@ -145,6 +152,17 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (agentic.AgentResponse, error) {
 	chatReq := c.buildChatRequest(req)
 
+	// Log full request payload at debug level for wire-level diagnostics
+	if c.logger != nil && c.logger.Enabled(context.Background(), slog.LevelDebug) {
+		if payload, err := json.Marshal(chatReq); err == nil {
+			c.logger.Debug("OpenAI API request payload",
+				slog.String("request_id", req.RequestID),
+				slog.String("model", chatReq.Model),
+				slog.Int("message_count", len(chatReq.Messages)),
+				slog.String("payload", string(payload)))
+		}
+	}
+
 	// Make request with retry logic
 	response := agentic.AgentResponse{
 		RequestID: req.RequestID,
@@ -180,6 +198,13 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 
 		resp, err := c.client.CreateChatCompletion(ctx, chatReq)
 		if err != nil {
+			if c.logger != nil {
+				c.logger.Debug("OpenAI API request failed",
+					slog.String("request_id", req.RequestID),
+					slog.String("model", chatReq.Model),
+					slog.Int("attempt", attempt+1),
+					slog.String("error", err.Error()))
+			}
 			// Check if this is a retryable error
 			if attempt < maxAttempts-1 && isRetryable(err) {
 				continue

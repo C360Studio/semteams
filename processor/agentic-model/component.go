@@ -506,7 +506,8 @@ func (c *Component) getClientForRequest(req agentic.AgentRequest) (*Client, erro
 		return nil, errs.Wrap(err, "Component", "getClientForRequest", fmt.Sprintf("create client for model %q", req.Model))
 	}
 
-	// Wire streaming chunk handler and metrics
+	// Wire logger, streaming chunk handler, and metrics
+	client.SetLogger(c.logger)
 	if ep.Stream {
 		client.SetChunkHandler(c.makeChunkHandler())
 	}
