@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import type { ConfigSchema } from '$lib/types/schema';
+	import type { ConfigValue } from '$lib/types/config';
 	import { validateField } from '$lib/validation/schema-validator';
 	import SchemaField from './SchemaField.svelte';
 
@@ -12,13 +13,13 @@
 		/** ConfigSchema definition */
 		schema: ConfigSchema;
 		/** Current configuration values (bindable for two-way sync) */
-		config?: Record<string, any>;
+		config?: Record<string, ConfigValue>;
 		/** External validation errors from backend (T097) */
 		externalErrors?: Record<string, string>;
 		/** Saving state for UI feedback (T098) */
 		saving?: boolean;
 		/** Callback when form is saved */
-		onSave?: (config: Record<string, any>) => void;
+		onSave?: (config: Record<string, ConfigValue>) => void;
 		/** Callback when form is cancelled */
 		onCancel?: () => void;
 	}
@@ -48,7 +49,7 @@
 		for (const [fieldName, propSchema] of Object.entries(properties)) {
 			const currentValue = untrack(() => config[fieldName]);
 			if (currentValue === undefined && propSchema.default !== undefined) {
-				config[fieldName] = propSchema.default;
+				config[fieldName] = propSchema.default as ConfigValue;
 			}
 		}
 	});
@@ -69,7 +70,7 @@
 	);
 
 	// T089: Debounced real-time validation (300ms)
-	function handleFieldChange(fieldName: string, value: any) {
+	function handleFieldChange(fieldName: string, value: ConfigValue) {
 		config[fieldName] = value;
 
 		// Clear existing timer

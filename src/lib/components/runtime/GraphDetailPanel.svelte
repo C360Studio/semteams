@@ -115,7 +115,7 @@
 			<section class="section">
 				<h4 class="section-title">Properties ({entity.properties.length})</h4>
 				<div class="properties-list">
-					{#each entity.properties as prop}
+					{#each entity.properties as prop, idx (prop.predicate + idx)}
 						<div class="property-row">
 							<span class="property-predicate" style="color: {getPredicateColor(prop.predicate)}">
 								{shortPredicate(prop.predicate)}
@@ -139,7 +139,7 @@
 			<section class="section">
 				<h4 class="section-title">Outgoing ({entity.outgoing.length})</h4>
 				<div class="relationships-list">
-					{#each entity.outgoing as rel}
+					{#each entity.outgoing as rel (rel.id)}
 						<button
 							class="relationship-row"
 							onclick={() => handleEntityClick(rel.targetId)}
@@ -167,7 +167,7 @@
 			<section class="section">
 				<h4 class="section-title">Incoming ({entity.incoming.length})</h4>
 				<div class="relationships-list">
-					{#each entity.incoming as rel}
+					{#each entity.incoming as rel (rel.id)}
 						<button
 							class="relationship-row"
 							onclick={() => handleEntityClick(rel.sourceId)}

@@ -1,7 +1,7 @@
 // Runtime data store for WebSocket-driven updates
 // Centralizes all runtime panel data: logs, metrics, health, flow status
 
-import * as store from "svelte/store";
+import { SvelteMap } from "svelte/reactivity";
 
 // ============================================================================
 // Types
@@ -58,7 +58,7 @@ export interface MetricValue {
 }
 
 // ============================================================================
-// Store State
+// Store State (kept for backward compatibility with test mocks)
 // ============================================================================
 
 export interface RuntimeStoreState {
@@ -87,48 +87,77 @@ const MAX_LOGS = 1000;
 const _METRICS_INTERVAL_MS = 5000; // Expected interval for rate calculation (documentation)
 
 // ============================================================================
-// Store Implementation
+// Store Implementation using Svelte 5 runes
 // ============================================================================
 
 function createRuntimeStore() {
-  const initialState: RuntimeStoreState = {
-    connected: false,
-    error: null,
-    flowId: null,
-    flowStatus: null,
-    healthOverall: null,
-    healthComponents: [],
-    logs: [],
-    metricsRaw: new Map(),
-    metricsRates: new Map(),
-    lastMetricsTimestamp: null,
-  };
-
-  const { subscribe, update, set } =
-    store.writable<RuntimeStoreState>(initialState);
+  // Reactive state using $state rune
+  let connected = $state(false);
+  let error = $state<string | null>(null);
+  let flowId = $state<string | null>(null);
+  let flowStatus = $state<FlowStatus | null>(null);
+  let healthOverall = $state<HealthOverall | null>(null);
+  let healthComponents = $state<ComponentHealth[]>([]);
+  let logs = $state<LogEntry[]>([]);
+  let metricsRaw = new SvelteMap<string, MetricValue>();
+  let metricsRates = new SvelteMap<string, number>();
+  let lastMetricsTimestamp = $state<number | null>(null);
 
   return {
-    subscribe,
+    // ========================================================================
+    // Reactive getters — consumers read these directly (no subscribe needed)
+    // ========================================================================
+
+    get connected() {
+      return connected;
+    },
+    get error() {
+      return error;
+    },
+    get flowId() {
+      return flowId;
+    },
+    get flowStatus() {
+      return flowStatus;
+    },
+    get healthOverall() {
+      return healthOverall;
+    },
+    get healthComponents() {
+      return healthComponents;
+    },
+    get logs() {
+      return logs;
+    },
+    get metricsRaw() {
+      return metricsRaw;
+    },
+    get metricsRates() {
+      return metricsRates;
+    },
+    get lastMetricsTimestamp() {
+      return lastMetricsTimestamp;
+    },
 
     // ========================================================================
     // Connection State
     // ========================================================================
 
-    setConnected(connected: boolean, flowId?: string) {
-      update((state) => ({
-        ...state,
-        connected,
-        flowId: flowId ?? state.flowId,
-        error: connected ? null : state.error,
-      }));
+    setConnected(isConnected: boolean, newFlowId?: string) {
+      connected = isConnected;
+      if (newFlowId !== undefined) {
+        flowId = newFlowId;
+      }
+      if (isConnected) {
+        error = null;
+      }
     },
 
-    setError(error: string | null) {
-      update((state) => ({
-        ...state,
-        error,
-        connected: error ? false : state.connected,
-      }));
+    setError(newError: string | null) {
+      error = newError;
+      if (newError) {
+        connected = false;
+      }
     },
 
     // ========================================================================
@@ -141,15 +170,12 @@ function createRuntimeStore() {
       timestamp?: number;
       error?: string;
     }) {
-      update((state) => ({
-        ...state,
-        flowStatus: {
-          state: payload.state,
-          prevState: payload.prev_state ?? null,
-          timestamp: payload.timestamp ?? null,
-          error: payload.error ?? null,
-        },
-      }));
+      flowStatus = {
+        state: payload.state,
+        prevState: payload.prev_state ?? null,
+        timestamp: payload.timestamp ?? null,
+        error: payload.error ?? null,
+      };
     },
 
     // ========================================================================
@@ -170,11 +196,8 @@ function createRuntimeStore() {
         message: string | null;
       }>;
     }) {
-      update((state) => ({
-        ...state,
-        healthOverall: payload.overall,
-        healthComponents: payload.components,
-      }));
+      healthOverall = payload.overall;
+      healthComponents = payload.components;
     },
 
     /**
@@ -185,60 +208,51 @@ function createRuntimeStore() {
       status: ComponentStatus;
       message: string | null;
     }) {
-      update((state) => {
-        // Find existing component or create new entry
-        const existingIndex = state.healthComponents.findIndex(
-          (c) => c.name === payload.name,
-        );
-        let newComponents: ComponentHealth[];
+      const existingIndex = healthComponents.findIndex(
+        (c) => c.name === payload.name,
+      );
 
-        if (existingIndex >= 0) {
-          // Update existing
-          newComponents = [...state.healthComponents];
-          newComponents[existingIndex] = {
-            ...newComponents[existingIndex],
+      if (existingIndex >= 0) {
+        // Update existing — replace array to trigger reactivity
+        const updated = [...healthComponents];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          status: payload.status,
+          healthy: payload.status === "healthy",
+          message: payload.message,
+        };
+        healthComponents = updated;
+      } else {
+        // Add new component
+        healthComponents = [
+          ...healthComponents,
+          {
+            name: payload.name,
+            component: payload.name, // Use name as component ID
+            type: "unknown",
             status: payload.status,
             healthy: payload.status === "healthy",
             message: payload.message,
-          };
-        } else {
-          // Add new component
-          newComponents = [
-            ...state.healthComponents,
-            {
-              name: payload.name,
-              component: payload.name, // Use name as component ID
-              type: "unknown",
-              status: payload.status,
-              healthy: payload.status === "healthy",
-              message: payload.message,
-            },
-          ];
-        }
-
-        // Recalculate overall health
-        const counts = {
-          healthy: newComponents.filter((c) => c.status === "healthy").length,
-          degraded: newComponents.filter((c) => c.status === "degraded").length,
-          error: newComponents.filter((c) => c.status === "error").length,
-        };
-
-        const overallStatus: ComponentStatus =
-          counts.error > 0
-            ? "error"
-            : counts.degraded > 0
-              ? "degraded"
-              : "healthy";
-
-        return {
-          ...state,
-          healthComponents: newComponents,
-          healthOverall: {
-            status: overallStatus,
-            counts,
           },
-        };
-      });
+        ];
+      }
+
+      // Recalculate overall health
+      const counts = {
+        healthy: healthComponents.filter((c) => c.status === "healthy").length,
+        degraded: healthComponents.filter((c) => c.status === "degraded")
+          .length,
+        error: healthComponents.filter((c) => c.status === "error").length,
+      };
+
+      const overallStatus: ComponentStatus =
+        counts.error > 0
+          ? "error"
+          : counts.degraded > 0
+            ? "degraded"
+            : "healthy";
+
+      healthOverall = { status: overallStatus, counts };
     },
 
     // ========================================================================
@@ -255,25 +269,21 @@ function createRuntimeStore() {
       id: string,
       timestamp: number,
     ) {
-      update((state) => {
-        const newLog: LogEntry = {
-          id,
-          timestamp,
-          level: payload.level,
-          source: payload.source,
-          message: payload.message,
-          fields: payload.fields,
-        };
+      const newLog: LogEntry = {
+        id,
+        timestamp,
+        level: payload.level,
+        source: payload.source,
+        message: payload.message,
+        fields: payload.fields,
+      };
 
-        // Circular buffer: keep last MAX_LOGS
-        const logs = [...state.logs, newLog].slice(-MAX_LOGS);
-
-        return { ...state, logs };
-      });
+      // Circular buffer: keep last MAX_LOGS
+      logs = [...logs, newLog].slice(-MAX_LOGS);
     },
 
     clearLogs() {
-      update((state) => ({ ...state, logs: [] }));
+      logs = [];
     },
 
     // ========================================================================
@@ -290,42 +300,31 @@ function createRuntimeStore() {
       },
       timestamp: number,
     ) {
-      update((state) => {
-        const key = `${payload.component}:${payload.name}`;
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity
-        const newMetricsRaw = new Map(state.metricsRaw);
-        // eslint-disable-next-line svelte/prefer-svelte-reactivity
-        const newMetricsRates = new Map(state.metricsRates);
+      const key = `${payload.component}:${payload.name}`;
 
-        // Get previous value for rate calculation
-        const prevMetric = state.metricsRaw.get(key);
-        const prevTimestamp = state.lastMetricsTimestamp;
+      // Get previous value for rate calculation
+      const prevMetric = metricsRaw.get(key);
+      const prevTimestamp = lastMetricsTimestamp;
 
-        // Store new raw value
-        newMetricsRaw.set(key, {
-          name: payload.name,
-          type: payload.type,
-          value: payload.value,
-          labels: payload.labels,
-        });
-
-        // Calculate rate if we have previous data
-        if (prevMetric && prevTimestamp && payload.type === "counter") {
-          const timeDeltaSec = (timestamp - prevTimestamp) / 1000;
-          if (timeDeltaSec > 0) {
-            const valueDelta = payload.value - prevMetric.value;
-            const rate = valueDelta / timeDeltaSec;
-            newMetricsRates.set(key, Math.max(0, rate)); // Clamp to non-negative
-          }
-        }
-
-        return {
-          ...state,
-          metricsRaw: newMetricsRaw,
-          metricsRates: newMetricsRates,
-          lastMetricsTimestamp: timestamp,
-        };
+      // Store new raw value
+      metricsRaw.set(key, {
+        name: payload.name,
+        type: payload.type,
+        value: payload.value,
+        labels: payload.labels,
       });
+
+      // Calculate rate if we have previous data
+      if (prevMetric && prevTimestamp && payload.type === "counter") {
+        const timeDeltaSec = (timestamp - prevTimestamp) / 1000;
+        if (timeDeltaSec > 0) {
+          const valueDelta = payload.value - prevMetric.value;
+          const rate = valueDelta / timeDeltaSec;
+          metricsRates.set(key, Math.max(0, rate)); // Clamp to non-negative
+        }
+      }
+
+      lastMetricsTimestamp = timestamp;
     },
 
     // ========================================================================
@@ -335,10 +334,10 @@ function createRuntimeStore() {
     /**
      * Get logs filtered by level and/or source
      */
-    getFilteredLogs(
-      state: RuntimeStoreState,
-      options: { minLevel?: LogLevel; sources?: string[] },
-    ): LogEntry[] {
+    getFilteredLogs(options: {
+      minLevel?: LogLevel;
+      sources?: string[];
+    }): LogEntry[] {
       const levelOrder: Record<LogLevel, number> = {
         DEBUG: 0,
         INFO: 1,
@@ -346,7 +345,7 @@ function createRuntimeStore() {
         ERROR: 3,
       };
 
-      return state.logs.filter((log) => {
+      return logs.filter((log) => {
         // Filter by level
         if (
           options.minLevel &&
@@ -369,20 +368,16 @@ function createRuntimeStore() {
     /**
      * Get metrics rate for a specific component and metric name
      */
-    getMetricRate(
-      state: RuntimeStoreState,
-      component: string,
-      metricName: string,
-    ): number | null {
+    getMetricRate(component: string, metricName: string): number | null {
       const key = `${component}:${metricName}`;
-      return state.metricsRates.get(key) ?? null;
+      return metricsRates.get(key) ?? null;
     },
 
     /**
      * Get all metrics as an array for display
      * Shows metrics immediately, rate is null until second data point
      */
-    getMetricsArray(state: RuntimeStoreState): Array<{
+    getMetricsArray(): Array<{
       component: string;
       metricName: string;
       rate: number | null;
@@ -396,12 +391,12 @@ function createRuntimeStore() {
       }> = [];
 
       // Iterate over raw metrics so they show immediately
-      for (const [key, raw] of state.metricsRaw) {
+      for (const [key, raw] of metricsRaw) {
         const [component, metricName] = key.split(":");
         result.push({
           component,
           metricName,
-          rate: state.metricsRates.get(key) ?? null,
+          rate: metricsRates.get(key) ?? null,
           raw,
         });
       }
@@ -414,7 +409,16 @@ function createRuntimeStore() {
     // ========================================================================
 
     reset() {
-      set(initialState);
+      connected = false;
+      error = null;
+      flowId = null;
+      flowStatus = null;
+      healthOverall = null;
+      healthComponents = [];
+      logs = [];
+      metricsRaw.clear();
+      metricsRates.clear();
+      lastMetricsTimestamp = null;
     },
   };
 }

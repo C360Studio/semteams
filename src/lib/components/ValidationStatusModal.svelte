@@ -100,14 +100,11 @@
 		}
 	}
 
-	// Set up keyboard listener and focus management when modal is open
+	// Manage focus when modal opens/closes
 	$effect(() => {
 		if (isOpen) {
 			// Save currently focused element
 			previouslyFocusedElement = document.activeElement as HTMLElement;
-
-			// Set up keyboard listener
-			document.addEventListener('keydown', handleKeyDown);
 
 			// Focus the dialog element after a short delay to allow DOM update
 			setTimeout(() => {
@@ -122,8 +119,6 @@
 			}, 10);
 
 			return () => {
-				document.removeEventListener('keydown', handleKeyDown);
-
 				// Return focus to previously focused element
 				if (previouslyFocusedElement) {
 					previouslyFocusedElement.focus();
@@ -132,6 +127,8 @@
 		}
 	});
 </script>
+
+<svelte:window onkeydown={handleKeyDown} />
 
 {#if isOpen && validationResult}
 	<div

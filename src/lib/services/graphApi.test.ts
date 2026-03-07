@@ -212,7 +212,9 @@ describe("graphApi", () => {
         json: async () => mockResponse,
       });
 
-      const result = await graphApi.getEntity("c360.ops.robotics.gcs.drone.001");
+      const result = await graphApi.getEntity(
+        "c360.ops.robotics.gcs.drone.001",
+      );
 
       expect(mockFetch).toHaveBeenCalledWith("/graphql", {
         method: "POST",

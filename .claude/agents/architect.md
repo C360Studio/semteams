@@ -26,6 +26,7 @@ You design before code gets written. You're invoked when a problem needs thinkin
 ### 1. Clarify Requirements
 
 Before designing, state:
+
 - What problem are we solving?
 - What are the constraints?
 - What are the inputs and outputs?
@@ -33,6 +34,7 @@ Before designing, state:
 ### 2. Evaluate Options
 
 For each viable approach:
+
 - How it works
 - Tradeoffs (complexity, performance, maintainability)
 - How it fits existing patterns in this codebase
@@ -46,12 +48,14 @@ Pick one. Justify it. Be specific about implementation.
 ### Component Architecture
 
 This codebase has 51 Svelte components. Key patterns:
+
 - Props via `$props()` with TypeScript interfaces
 - Stores via factory functions with runes
 - Runtime tabs (Health, Logs, Metrics, Messages) share a panel layout
 - Flow builder uses a graph visualization with nodes and edges
 
 When splitting components, consider:
+
 - Does this component have a single responsibility?
 - Would a new store help or add unnecessary indirection?
 - Does this need to be reactive, or can it be derived?
@@ -59,12 +63,14 @@ When splitting components, consider:
 ### Backend Integration
 
 The UI talks to semstreams via Caddy proxy at `localhost:3001`:
+
 - `/components/types` — component type registry (schema-driven)
 - `/flowbuilder/flows` — CRUD for flow definitions
 - `/health` — system health
 - SSR fetch transforms in `src/hooks.server.ts`
 
 When designing new integrations:
+
 - Does the data need to be reactive (WebSocket/polling) or static (fetch once)?
 - Where does the data live — store, page load, or component-local?
 - How does SSR affect this? (check `$app/environment` browser guard)
@@ -72,6 +78,7 @@ When designing new integrations:
 ### State Management
 
 Decision framework:
+
 - **Component-local `$state`**: UI state that belongs to one component (open/closed, selected tab)
 - **`$derived`**: Anything computed from other state (filtered lists, formatted values)
 - **Store (factory + runes)**: Shared state across components (selected flow, graph data, runtime status)
@@ -81,6 +88,7 @@ Decision framework:
 ### Svelte 5 Runes
 
 Key decisions:
+
 - `$state` vs `$state.raw` — use `.raw` for large objects you replace wholesale, never mutate
 - `$derived` vs `$derived.by` — use `.by` when computation needs a block, not an expression
 - `$effect` — last resort for side effects. Prefer event handlers. Never use to sync derived state.
@@ -92,20 +100,25 @@ Key decisions:
 ## Design: [Problem]
 
 ### Requirements
+
 [What we need]
 
 ### Options Considered
 
 #### Option A: [Name]
+
 [How it works, tradeoffs]
 
 #### Option B: [Name]
+
 [How it works, tradeoffs]
 
 ### Recommendation: Option [X]
+
 [Why, and specific implementation guidance]
 
 ### Implementation Notes
+
 - [Component structure]
 - [Props/types needed]
 - [Store changes if any]

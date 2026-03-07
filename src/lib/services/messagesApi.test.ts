@@ -377,11 +377,7 @@ describe("messagesApi", () => {
 
   describe("MessagesApiError", () => {
     it("creates error with message, flowId, and status code", () => {
-      const error = new MessagesApiError(
-        "Fetch failed",
-        "flow-123",
-        500,
-      );
+      const error = new MessagesApiError("Fetch failed", "flow-123", 500);
 
       expect(error.message).toBe("Fetch failed");
       expect(error.flowId).toBe("flow-123");

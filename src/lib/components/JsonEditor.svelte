@@ -3,9 +3,11 @@
 	 * JsonEditor - Fallback component for raw JSON editing.
 	 * T094: Used when schema is missing or for complex types (object/array).
 	 */
+	import type { ConfigValue } from '$lib/types/config';
+
 	interface JsonEditorProps {
 		/** Current configuration object */
-		config?: Record<string, any>;
+		config?: Record<string, ConfigValue>;
 		/** Warning message to display */
 		warning?: string;
 		/** Parse error (bindable) - exposed to parent */
@@ -14,26 +16,31 @@
 
 	let { config = $bindable({}), warning, parseError = $bindable(null) }: JsonEditorProps = $props();
 
-	// Convert config object to formatted JSON string
-	let jsonString = $state(JSON.stringify(config, null, 2));
+	// User-edited text (undefined means "use derived from config")
+	let userText = $state<string | undefined>(undefined);
 
-	// Update JSON string when config changes externally
-	$effect(() => {
+	// Derive the JSON string from config when not being user-edited
+	const derivedJsonString = $derived.by(() => {
 		try {
-			jsonString = JSON.stringify(config, null, 2);
+			return JSON.stringify(config, null, 2);
 		} catch {
-			// Keep existing jsonString if config is invalid
+			return '{}';
 		}
 	});
+
+	// The actual textarea value: user edits take precedence, otherwise follow config
+	const jsonString = $derived(userText !== undefined ? userText : derivedJsonString);
 
 	// Handle JSON text changes
 	function handleInput(event: Event) {
 		const target = event.target as HTMLTextAreaElement;
-		jsonString = target.value;
+		userText = target.value;
 
 		try {
-			const parsed = JSON.parse(jsonString);
+			const parsed = JSON.parse(userText) as Record<string, ConfigValue>;
 			config = parsed;
+			// Reset userText so textarea follows config again
+			userText = undefined;
 			parseError = null;
 		} catch (e) {
 			parseError = e instanceof Error ? e.message : 'Invalid JSON';

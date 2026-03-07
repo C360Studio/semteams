@@ -14,8 +14,7 @@
 
 	import {
 		runtimeStore,
-		type ComponentHealth,
-		type RuntimeStoreState
+		type ComponentHealth
 	} from '$lib/stores/runtimeStore.svelte';
 
 	interface HealthTabProps {
@@ -29,34 +28,15 @@
 	// Local UI state
 	let expandedComponents = new SvelteSet<string>();
 
-	// Subscribe to store - get initial state synchronously
-	let storeState = $state<RuntimeStoreState>({
-		connected: false,
-		error: null,
-		flowId: null,
-		flowStatus: null,
-		healthOverall: null,
-		healthComponents: [],
-		logs: [],
-		metricsRaw: new Map(),
-		metricsRates: new Map(),
-		lastMetricsTimestamp: null
-	});
-
-	$effect(() => {
-		const unsubscribe = runtimeStore.subscribe((s) => {
-			storeState = s;
-		});
-		return unsubscribe;
-	});
-
 	// Sorted components (alphabetically by name)
 	const sortedComponents = $derived(
-		storeState.healthComponents.slice().sort((a, b) => a.name.localeCompare(b.name))
+		runtimeStore.healthComponents.slice().sort((a, b) => a.name.localeCompare(b.name))
 	);
 
 	// Check if component is expanded
-	const isExpanded = $derived((name: string) => expandedComponents.has(name));
+	function isExpanded(name: string): boolean {
+		return expandedComponents.has(name);
+	}
 
 	/**
 	 * Get status color from design system
@@ -132,12 +112,12 @@
 
 <div class="health-tab" data-testid="health-tab">
 	<!-- Connection Status -->
-	{#if storeState.error}
+	{#if runtimeStore.error}
 		<div class="error-message" role="alert" data-testid="health-error">
 			<span class="error-icon">⚠</span>
-			<span>{storeState.error}</span>
+			<span>{runtimeStore.error}</span>
 		</div>
-	{:else if !storeState.connected}
+	{:else if !runtimeStore.connected}
 		<div class="connecting-message">
 			<span class="connecting-icon">⋯</span>
 			<span>Connecting to runtime stream...</span>
@@ -145,19 +125,19 @@
 	{/if}
 
 	<!-- Health Summary -->
-	{#if storeState.healthOverall}
+	{#if runtimeStore.healthOverall}
 		<div class="health-summary" data-testid="health-summary">
 			<span
 				class="overall-status"
-				style="color: {getOverallStatusColor(storeState.healthOverall.status)}"
-				aria-label="Overall system health: {storeState.healthOverall.status}"
+				style="color: {getOverallStatusColor(runtimeStore.healthOverall.status)}"
+				aria-label="Overall system health: {runtimeStore.healthOverall.status}"
 			>
-				<span class="status-icon">{getOverallStatusIcon(storeState.healthOverall.status)}</span>
+				<span class="status-icon">{getOverallStatusIcon(runtimeStore.healthOverall.status)}</span>
 				<span class="status-text">System Health:</span>
 				<span class="health-count">
-					{storeState.healthOverall.counts.healthy}/{storeState.healthOverall.counts.healthy +
-						storeState.healthOverall.counts.degraded +
-						storeState.healthOverall.counts.error} components healthy
+					{runtimeStore.healthOverall.counts.healthy}/{runtimeStore.healthOverall.counts.healthy +
+						runtimeStore.healthOverall.counts.degraded +
+						runtimeStore.healthOverall.counts.error} components healthy
 				</span>
 			</span>
 		</div>
@@ -165,7 +145,7 @@
 
 	<!-- Health Table -->
 	<div class="table-container">
-		{#if sortedComponents.length === 0 && !storeState.error}
+		{#if sortedComponents.length === 0 && !runtimeStore.error}
 			<div class="empty-state">
 				<p>No health data available</p>
 			</div>

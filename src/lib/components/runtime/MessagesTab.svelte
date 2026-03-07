@@ -17,8 +17,7 @@
 
 	import {
 		runtimeStore,
-		type LogEntry,
-		type RuntimeStoreState
+		type LogEntry
 	} from '$lib/stores/runtimeStore.svelte';
 	import {
 		messagesApi,
@@ -49,36 +48,15 @@
 	// Refs for DOM elements
 	let messagesContainerRef: HTMLDivElement | null = null;
 
-	// Subscribe to store - get initial state synchronously
-	let storeState = $state<RuntimeStoreState>({
-		connected: false,
-		error: null,
-		flowId: null,
-		flowStatus: null,
-		healthOverall: null,
-		healthComponents: [],
-		logs: [],
-		metricsRaw: new Map(),
-		metricsRates: new Map(),
-		lastMetricsTimestamp: null
-	});
-
-	$effect(() => {
-		const unsubscribe = runtimeStore.subscribe((s) => {
-			storeState = s;
-		});
-		return unsubscribe;
-	});
-
 	// Check if message-logger service is available in health components
 	// Service name is just 'message-logger' (not 'message-logger-service')
 	const messageLoggerAvailable = $derived(
-		storeState.healthComponents.some((c) => c.name === 'message-logger')
+		runtimeStore.healthComponents.some((c) => c.name === 'message-logger')
 	);
 
 	// Filter logs to only message-logger entries
 	const messageLoggerLogs = $derived(
-		storeState.logs.filter((log) => log.source === 'message-logger')
+		runtimeStore.logs.filter((log) => log.source === 'message-logger')
 	);
 
 	// Convert RuntimeMessage to MessageInfo
@@ -101,7 +79,7 @@
 	}
 
 	// Merge historical and live messages, deduplicate cross-source only
-	const allMessages = $derived(() => {
+	const allMessages = $derived.by(() => {
 		const liveMessages: MessageInfo[] = [];
 		for (const log of messageLoggerLogs) {
 			const info = extractMessageInfo(log);
@@ -169,9 +147,9 @@
 	}
 
 	// Convert logs to messages and apply filters
-	const filteredMessages = $derived(() => {
+	const filteredMessages = $derived.by(() => {
 		const messages: MessageInfo[] = [];
-		for (const msg of allMessages()) {
+		for (const msg of allMessages) {
 			// Apply direction filter
 			if (directionFilter !== 'all' && msg.direction !== directionFilter) {
 				continue;
@@ -323,7 +301,7 @@
 
 	// Effect: Auto-scroll when filtered messages change
 	$effect(() => {
-		const messages = filteredMessages();
+		const messages = filteredMessages;
 
 		if (autoScroll && messagesContainerRef && messages.length > 0) {
 			requestAnimationFrame(() => {
@@ -388,7 +366,7 @@
 				Clear
 			</button>
 
-			{#if storeState.connected && messageLoggerAvailable}
+			{#if runtimeStore.connected && messageLoggerAvailable}
 				<button
 					class="load-history-button"
 					onclick={loadHistory}
@@ -414,12 +392,12 @@
 	</div>
 
 	<!-- Connection Status -->
-	{#if storeState.error}
+	{#if runtimeStore.error}
 		<div class="error-message" role="alert">
 			<span class="error-icon">⚠</span>
-			<span>{storeState.error}</span>
+			<span>{runtimeStore.error}</span>
 		</div>
-	{:else if !storeState.connected}
+	{:else if !runtimeStore.connected}
 		<div class="connecting-message">
 			<span class="connecting-icon">⋯</span>
 			<span>Connecting to runtime stream...</span>
@@ -451,9 +429,9 @@
 					Enable the message-logger service in your backend configuration to capture NATS messages.
 				</p>
 			</div>
-		{:else if filteredMessages().length === 0}
+		{:else if filteredMessages.length === 0}
 			<div class="empty-state">
-				{#if allMessages().length === 0}
+				{#if allMessages.length === 0}
 					<p>No messages yet. Waiting for NATS traffic...</p>
 				{:else}
 					<p>No messages match current filters.</p>
@@ -461,7 +439,7 @@
 			</div>
 		{:else}
 			<div class="message-entries" role="log" aria-live="polite" aria-atomic="false">
-				{#each filteredMessages() as message (message.id)}
+				{#each filteredMessages as message (message.id)}
 					<div class="message-entry" data-testid="message-entry">
 						<span class="timestamp">{formatTime(message.timestamp)}</span>
 						<span

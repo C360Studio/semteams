@@ -83,20 +83,30 @@ function createMyStore() {
   let selectedId = $state<string | null>(null);
   let itemMap = new SvelteMap<string, Item>();
 
-  let selected = $derived(items.find(i => i.id === selectedId) ?? null);
+  let selected = $derived(items.find((i) => i.id === selectedId) ?? null);
 
   return {
-    get items() { return items; },
-    get selected() { return selected; },
-    get itemMap() { return itemMap; },
+    get items() {
+      return items;
+    },
+    get selected() {
+      return selected;
+    },
+    get itemMap() {
+      return itemMap;
+    },
 
-    setItems(newItems: Item[]) { items = newItems; },
-    select(id: string) { selectedId = id; },
+    setItems(newItems: Item[]) {
+      items = newItems;
+    },
+    select(id: string) {
+      selectedId = id;
+    },
 
     addItem(item: Item) {
       items = [...items, item];
       itemMap.set(item.id, item);
-    }
+    },
   };
 }
 
@@ -104,6 +114,7 @@ export const myStore = createMyStore();
 ```
 
 **Key rules:**
+
 - File must be `.svelte.ts` (runes require this)
 - Use `SvelteMap`/`SvelteSet` from `svelte/reactivity` for reactive collections
 - Expose state via getters (read-only from outside)
@@ -115,10 +126,10 @@ export const myStore = createMyStore();
 
 ```typescript
 // src/routes/flows/+page.ts
-import type { PageLoad } from './$types';
+import type { PageLoad } from "./$types";
 
 export const load: PageLoad = async ({ fetch }) => {
-  const response = await fetch('/flowbuilder/flows');
+  const response = await fetch("/flowbuilder/flows");
   const flows = await response.json();
   return { flows };
 };
@@ -133,6 +144,7 @@ export const load: PageLoad = async ({ fetch }) => {
 ```
 
 **Key rules:**
+
 - Use `fetch` from the load function (not global `fetch`) — SvelteKit handles SSR transforms
 - For server-only data, use `+page.server.ts`
 - `src/hooks.server.ts` transforms fetch URLs for SSR
@@ -158,25 +170,25 @@ export const load: PageLoad = async ({ fetch }) => {
 
 ## Common Combinations
 
-| Scenario | Pattern |
-|----------|---------|
-| Flow builder graph state | Store (shared across panel, canvas, toolbar) |
-| Modal open/closed | Component-local `$state` |
-| Filtered list in a component | `$derived` from store + local search query |
-| Component types from backend | SvelteKit load → store on first use |
-| Active flow tab | URL state (survives refresh) |
-| Runtime health data | Store with periodic fetch via `$effect` |
-| Computed node positions | `$derived.by` from graph store data |
+| Scenario                     | Pattern                                      |
+| ---------------------------- | -------------------------------------------- |
+| Flow builder graph state     | Store (shared across panel, canvas, toolbar) |
+| Modal open/closed            | Component-local `$state`                     |
+| Filtered list in a component | `$derived` from store + local search query   |
+| Component types from backend | SvelteKit load → store on first use          |
+| Active flow tab              | URL state (survives refresh)                 |
+| Runtime health data          | Store with periodic fetch via `$effect`      |
+| Computed node positions      | `$derived.by` from graph store data          |
 
 ## Migration from Svelte 4
 
-| Svelte 4 | Svelte 5 |
-|----------|----------|
-| `writable(value)` | `$state(value)` in factory function |
-| `derived(store, fn)` | `$derived(fn)` or `$derived.by(() => {...})` |
-| `$store` auto-subscription | Use getter: `store.value` |
-| `store.subscribe(fn)` | `$effect(() => { /* read store.value */ })` |
-| `store.set(value)` | `store.setValue(value)` method |
+| Svelte 4                   | Svelte 5                                     |
+| -------------------------- | -------------------------------------------- |
+| `writable(value)`          | `$state(value)` in factory function          |
+| `derived(store, fn)`       | `$derived(fn)` or `$derived.by(() => {...})` |
+| `$store` auto-subscription | Use getter: `store.value`                    |
+| `store.subscribe(fn)`      | `$effect(() => { /* read store.value */ })`  |
+| `store.set(value)`         | `store.setValue(value)` method               |
 
 ## Decision Checklist
 

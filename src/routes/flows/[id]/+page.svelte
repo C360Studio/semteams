@@ -119,7 +119,7 @@
 
 	// Reset to flow view when flow stops running
 	$effect(() => {
-		if (!isFlowRunning && $panelLayout.viewMode === 'data') {
+		if (!isFlowRunning && panelLayout.state.viewMode === 'data') {
 			panelLayout.setViewMode('flow');
 		}
 	});
@@ -136,10 +136,6 @@
 	type PortsMap = Record<string, { input_ports: ValidatedPort[]; output_ports: ValidatedPort[] }>;
 	let portsMap = $state<PortsMap>({});
 
-	// Track dirty state when nodes/connections change
-	let initialNodeCount = flowNodes.length;
-	let initialConnectionCount = flowConnections.length;
-	let initialLoadComplete = false;
 
 	// Fetch component types and set up viewport handling on mount
 	onMount(async () => {
@@ -195,7 +191,7 @@
 		if (isMod && event.shiftKey && event.key === 'E') {
 			event.preventDefault();
 			explorerTab = 'components';
-			if (!$panelLayout.leftPanelOpen) {
+			if (!panelLayout.state.leftPanelOpen) {
 				panelLayout.toggleLeft();
 			}
 			return;
@@ -205,7 +201,7 @@
 		if (isMod && event.shiftKey && event.key === 'P') {
 			event.preventDefault();
 			explorerTab = 'palette';
-			if (!$panelLayout.leftPanelOpen) {
+			if (!panelLayout.state.leftPanelOpen) {
 				panelLayout.toggleLeft();
 			}
 			return;
@@ -226,36 +222,9 @@
 		}
 	}
 
-	$effect(() => {
-		// Watch for changes to flowNodes or flowConnections
-		const nodeCount = flowNodes.length;
-		const connectionCount = flowConnections.length;
-
-		// Skip initial load
-		if (nodeCount === initialNodeCount && connectionCount === initialConnectionCount) {
-			return;
-		}
-
-		// Skip marking dirty until initial load completes and first validation runs
-		if (!initialLoadComplete) {
-			initialNodeCount = nodeCount;
-			initialConnectionCount = connectionCount;
-			initialLoadComplete = true;
-			return;
-		}
-
-		// Mark dirty when nodes or connections change
-		dirty = true;
-		saveState = { ...saveState, status: 'dirty' };
-
-		// Update baseline
-		initialNodeCount = nodeCount;
-		initialConnectionCount = connectionCount;
-	});
-
 	// Debounced validation on canvas changes (500ms delay)
 	let validationTimer: ReturnType<typeof setTimeout> | null = null;
-	let lastValidatedSignature = '';
+	let lastValidatedSignature = $state('');
 
 	$effect(() => {
 		// Create signature from things that represent USER changes only
@@ -647,7 +616,7 @@
 	}
 
 	// Track if operations are in progress to prevent concurrent mutations
-	let saveInProgress = false;
+	let saveInProgress = $state(false);
 
 	// Save handler using fetch API
 	async function handleSave() {
@@ -859,14 +828,14 @@
 	function handleCloseRuntimePanel() {
 		showRuntimePanel = false;
 		// Also exit monitor mode when closing
-		if ($panelLayout.monitorMode) {
+		if (panelLayout.state.monitorMode) {
 			panelLayout.setMonitorMode(false);
 		}
 	}
 
 	function handleToggleMonitorMode() {
 		// Check current state BEFORE toggling
-		const enteringMonitorMode = !$panelLayout.monitorMode;
+		const enteringMonitorMode = !panelLayout.state.monitorMode;
 		panelLayout.toggleMonitorMode();
 		// Ensure runtime panel is open when entering monitor mode
 		if (enteringMonitorMode && !showRuntimePanel) {
@@ -955,7 +924,7 @@
 			</div>
 			{#if isFlowRunning}
 				<ViewSwitcher
-					currentView={$panelLayout.viewMode}
+					currentView={panelLayout.state.viewMode}
 					onViewChange={handleViewModeChange}
 				/>
 			{/if}
@@ -970,16 +939,16 @@
 
 	<!-- View Content: Flow Editor or Data Visualization -->
 	<div class="panel-area">
-		{#if $panelLayout.viewMode === 'data' && isFlowRunning}
+		{#if panelLayout.state.viewMode === 'data' && isFlowRunning}
 			<!-- Data View: Knowledge Graph Visualization -->
 			<DataView flowId={backendFlow.id} />
 		{:else}
 			<!-- Flow View: Three-Panel Editor Layout -->
 			<ThreePanelLayout
-				leftPanelOpen={$panelLayout.monitorMode ? false : $panelLayout.leftPanelOpen}
-				rightPanelOpen={$panelLayout.monitorMode ? false : $panelLayout.rightPanelOpen}
-				leftPanelWidth={$panelLayout.leftPanelWidth}
-				rightPanelWidth={$panelLayout.rightPanelWidth}
+				leftPanelOpen={panelLayout.state.monitorMode ? false : panelLayout.state.leftPanelOpen}
+				rightPanelOpen={panelLayout.state.monitorMode ? false : panelLayout.state.rightPanelOpen}
+				leftPanelWidth={panelLayout.state.leftPanelWidth}
+				rightPanelWidth={panelLayout.state.rightPanelWidth}
 				onLeftWidthChange={handleLeftWidthChange}
 				onRightWidthChange={handleRightWidthChange}
 				onToggleLeft={handleToggleLeftPanel}
@@ -1009,8 +978,8 @@
 				{/snippet}
 
 				{#snippet centerPanel()}
-					<div class="center-content" class:monitor-mode={$panelLayout.monitorMode}>
-						{#if !$panelLayout.monitorMode}
+					<div class="center-content" class:monitor-mode={panelLayout.state.monitorMode}>
+						{#if !panelLayout.state.monitorMode}
 							<div class="canvas-container" style="height: {canvasHeight};">
 								<FlowCanvas
 									nodes={flowNodes}
@@ -1033,11 +1002,11 @@
 						{/if}
 
 						<RuntimePanel
-							isOpen={showRuntimePanel || $panelLayout.monitorMode}
+							isOpen={showRuntimePanel || panelLayout.state.monitorMode}
 							height={runtimePanelHeight}
 							flowId={backendFlow.id}
 							onClose={handleCloseRuntimePanel}
-							isMonitorMode={$panelLayout.monitorMode}
+							isMonitorMode={panelLayout.state.monitorMode}
 							onToggleMonitorMode={handleToggleMonitorMode}
 						/>
 					</div>

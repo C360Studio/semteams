@@ -46,7 +46,7 @@
 	const midY = $derived((sourceY + targetY) / 2);
 
 	// Calculate path with curve
-	const path = $derived(() => {
+	const path = $derived.by(() => {
 		const dx = targetX - sourceX;
 
 		// Horizontal offset from source (right edge) to start bezier
@@ -75,7 +75,7 @@
 	const opacity = $derived(edge.opacity * (selected || highlighted ? 1 : 0.7));
 
 	// Extract short predicate label (last part of dotted notation)
-	const shortPredicate = $derived(() => {
+	const shortPredicate = $derived.by(() => {
 		const parts = edge.relationship.predicate.split('.');
 		return parts[parts.length - 1] || edge.relationship.predicate;
 	});
@@ -89,12 +89,12 @@
 	data-predicate={edge.relationship.predicate}
 >
 	<!-- Invisible wider path for easier selection -->
-	<path class="edge-hitbox" d={path()} stroke="transparent" stroke-width="15" fill="none" />
+	<path class="edge-hitbox" d={path} stroke="transparent" stroke-width="15" fill="none" />
 
 	<!-- Visible edge path -->
 	<path
 		class="edge-path"
-		d={path()}
+		d={path}
 		stroke={predicateColor}
 		stroke-width={strokeWidth}
 		stroke-opacity={opacity}
@@ -116,7 +116,7 @@
 				fill-opacity="0.9"
 			/>
 			<text class="edge-label" text-anchor="middle" dominant-baseline="middle" fill={predicateColor}>
-				{shortPredicate()}
+				{shortPredicate}
 			</text>
 		</g>
 	{/if}

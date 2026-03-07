@@ -14,8 +14,7 @@
 
 	import {
 		runtimeStore,
-		type LogLevel,
-		type RuntimeStoreState
+		type LogLevel
 	} from '$lib/stores/runtimeStore.svelte';
 
 	interface LogsTabProps {
@@ -34,30 +33,9 @@
 	// Refs for DOM elements
 	let logContainerRef: HTMLDivElement | null = null;
 
-	// Subscribe to store - get initial state synchronously
-	let storeState = $state<RuntimeStoreState>({
-		connected: false,
-		error: null,
-		flowId: null,
-		flowStatus: null,
-		healthOverall: null,
-		healthComponents: [],
-		logs: [],
-		metricsRaw: new Map(),
-		metricsRates: new Map(),
-		lastMetricsTimestamp: null
-	});
-
-	$effect(() => {
-		const unsubscribe = runtimeStore.subscribe((s) => {
-			storeState = s;
-		});
-		return unsubscribe;
-	});
-
 	// Filter out message-logger entries (those are shown in MessagesTab)
 	const logsExcludingMessages = $derived(
-		storeState.logs.filter((log) => log.source !== 'message-logger')
+		runtimeStore.logs.filter((log) => log.source !== 'message-logger')
 	);
 
 	// Extract unique sources from logs (excluding message-logger)
@@ -66,7 +44,7 @@
 	);
 
 	// Filter logs based on selected level and component
-	const filteredLogs = $derived(() => {
+	const filteredLogs = $derived.by(() => {
 		const levelOrder: Record<LogLevel, number> = {
 			DEBUG: 0,
 			INFO: 1,
@@ -128,7 +106,7 @@
 	// Effect: Scroll to bottom when filtered logs change (if auto-scroll enabled)
 	$effect(() => {
 		// Access filteredLogs to subscribe to changes
-		const logs = filteredLogs();
+		const logs = filteredLogs;
 
 		if (autoScroll && logContainerRef && logs.length > 0) {
 			requestAnimationFrame(() => {
@@ -189,12 +167,12 @@
 	</div>
 
 	<!-- Connection Status -->
-	{#if storeState.error}
+	{#if runtimeStore.error}
 		<div class="connection-status error" data-testid="connection-error">
 			<span class="status-icon">⚠</span>
-			<span>{storeState.error}</span>
+			<span>{runtimeStore.error}</span>
 		</div>
-	{:else if !storeState.connected}
+	{:else if !runtimeStore.connected}
 		<div class="connection-status connecting" data-testid="connection-connecting">
 			<span class="status-icon">⋯</span>
 			<span>Connecting to runtime stream...</span>
@@ -203,7 +181,7 @@
 
 	<!-- Log Display -->
 	<div class="log-container" bind:this={logContainerRef} data-testid="log-container">
-		{#if filteredLogs().length === 0}
+		{#if filteredLogs.length === 0}
 			<div class="empty-state">
 				{#if logsExcludingMessages.length === 0}
 					<p>No logs yet. Waiting for runtime events...</p>
@@ -213,7 +191,7 @@
 			</div>
 		{:else}
 			<div class="log-entries" role="log" aria-live="polite" aria-atomic="false">
-				{#each filteredLogs() as log (log.id)}
+				{#each filteredLogs as log (log.id)}
 					<div class="log-entry" data-level={log.level} data-testid="log-entry">
 						<span class="log-timestamp">{formatTimestamp(log.timestamp)}</span>
 						<span class="log-level" style="color: {getLevelColor(log.level)}">{log.level}</span>

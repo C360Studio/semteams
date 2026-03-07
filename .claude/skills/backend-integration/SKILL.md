@@ -21,18 +21,19 @@ Browser --> localhost:3001 (Caddy) --> backend:8080 (Docker)
 
 ### Caddy Routes (from `Caddyfile.dev`)
 
-| Route | Destination | Purpose |
-|-------|------------|---------|
-| `/components/*` | backend:8080 | Component type registry |
-| `/flowbuilder/*` | backend:8080 | Flow CRUD operations |
-| `/health` | backend:8080 | System health |
-| `/*` | Vite dev server | UI assets and pages |
+| Route            | Destination     | Purpose                 |
+| ---------------- | --------------- | ----------------------- |
+| `/components/*`  | backend:8080    | Component type registry |
+| `/flowbuilder/*` | backend:8080    | Flow CRUD operations    |
+| `/health`        | backend:8080    | System health           |
+| `/*`             | Vite dev server | UI assets and pages     |
 
 ### SSR Fetch Transform
 
 `src/hooks.server.ts` transforms fetch URLs during SSR so that server-side rendering can reach the backend via Docker networking (not `localhost`).
 
 When adding new backend routes:
+
 1. Add the route to `Caddyfile.dev`
 2. Update `src/hooks.server.ts` if SSR needs to fetch from this route
 
@@ -45,6 +46,7 @@ curl -s http://localhost:3001/components/types | jq
 ```
 
 Returns array of:
+
 ```json
 {
   "id": "udp-input",
@@ -53,7 +55,7 @@ Returns array of:
   "protocol": "udp",
   "category": "input",
   "description": "Receives UDP packets",
-  "schema": { }
+  "schema": {}
 }
 ```
 
@@ -84,12 +86,12 @@ curl http://localhost:3001/health
 
 ```typescript
 // src/routes/my-page/+page.ts
-import type { PageLoad } from './$types';
+import type { PageLoad } from "./$types";
 
 export const load: PageLoad = async ({ fetch }) => {
-  const response = await fetch('/components/types');
+  const response = await fetch("/components/types");
   if (!response.ok) {
-    throw error(response.status, 'Failed to load component types');
+    throw error(response.status, "Failed to load component types");
   }
   const types = await response.json();
   return { types };
@@ -159,6 +161,7 @@ Use the `fetch` provided by SvelteKit — it handles SSR URL transforms via `hoo
 ### Checklist
 
 1. **Verify the endpoint exists**
+
    ```bash
    curl -v http://localhost:3001/your/endpoint
    ```
@@ -178,6 +181,7 @@ Use the `fetch` provided by SvelteKit — it handles SSR URL transforms via `hoo
    - User-triggered → event handler with async fetch
 
 5. **Type the response**
+
    ```typescript
    interface MyApiResponse {
      items: Item[];
@@ -210,6 +214,7 @@ grep -n "handle" src/hooks.server.ts
 ```
 
 Common issues:
+
 - **404**: Route not in `Caddyfile.dev`
 - **CORS error**: Hitting backend directly (use `:3001` not backend port)
 - **Empty response in SSR**: `hooks.server.ts` not transforming the URL

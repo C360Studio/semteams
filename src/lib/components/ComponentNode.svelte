@@ -3,15 +3,15 @@
 
 	interface ComponentNodeProps {
 		component: ComponentInstance;
-		onClick?: (_componentId: string) => void;
+		onclick?: (_componentId: string) => void;
 		compact?: boolean;
 		selected?: boolean;
 	}
 
-	let { component, onClick, compact = false, selected = false }: ComponentNodeProps = $props();
+	let { component, onclick, compact = false, selected = false }: ComponentNodeProps = $props();
 
 	function handleClick() {
-		onClick?.(component.id);
+		onclick?.(component.id);
 	}
 
 	function handleKeyDown(event: KeyboardEvent) {

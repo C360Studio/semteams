@@ -21,20 +21,21 @@ Assume Builder took shortcuts. Prove it — or verify the code is solid.
 
 ### Component Review
 
-| Area | Check For |
-|------|-----------|
-| Props | TypeScript interface, defaults, validation |
-| Reactivity | Proper $state, $derived, $effect usage |
-| Effects | Cleanup functions, no infinite loops, no derived-in-effect |
-| Events | `onclick` not `on:click`, proper handlers |
-| TypeScript | No `any`, proper null handling, exported interfaces |
-| Accessibility | ARIA labels, keyboard nav, focus management |
-| Error handling | Loading, error, and empty states |
-| Security | No `{@html}` with user input, XSS prevention |
+| Area           | Check For                                                  |
+| -------------- | ---------------------------------------------------------- |
+| Props          | TypeScript interface, defaults, validation                 |
+| Reactivity     | Proper $state, $derived, $effect usage                     |
+| Effects        | Cleanup functions, no infinite loops, no derived-in-effect |
+| Events         | `onclick` not `on:click`, proper handlers                  |
+| TypeScript     | No `any`, proper null handling, exported interfaces        |
+| Accessibility  | ARIA labels, keyboard nav, focus management                |
+| Error handling | Loading, error, and empty states                           |
+| Security       | No `{@html}` with user input, XSS prevention               |
 
 ### Test Change Review
 
 If Builder modified existing tests:
+
 - Is the change justified? (removed feature, wrong assumption, spec change)
 - Is the justification documented in a comment?
 - Did the change weaken coverage or just adapt to new behavior?
@@ -64,15 +65,15 @@ Write tests that try to break the code. Place in `ComponentName.attack.test.ts`:
 
 ### Attack Vectors
 
-| Vector | What To Test |
-|--------|-------------|
-| Undefined/null | Missing props, null values, undefined data |
-| Empty data | Empty arrays, empty strings, empty objects |
-| Large data | 10K+ items, very long strings |
-| Rapid interactions | Multiple rapid clicks, fast typing |
-| Effect cleanup | Memory leaks, dangling subscriptions |
-| Async race conditions | Concurrent fetches, stale closures |
-| Accessibility | Keyboard-only navigation, screen reader compat |
+| Vector                | What To Test                                   |
+| --------------------- | ---------------------------------------------- |
+| Undefined/null        | Missing props, null values, undefined data     |
+| Empty data            | Empty arrays, empty strings, empty objects     |
+| Large data            | 10K+ items, very long strings                  |
+| Rapid interactions    | Multiple rapid clicks, fast typing             |
+| Effect cleanup        | Memory leaks, dangling subscriptions           |
+| Async race conditions | Concurrent fetches, stale closures             |
+| Accessibility         | Keyboard-only navigation, screen reader compat |
 
 ### Run Attacks
 
@@ -90,19 +91,24 @@ npm run test -- --run
 ### Final Verdict: APPROVED
 
 ### Phase 1: Review
+
 #### Verdict: PASS
+
 [Summary of what looked good]
 
 ### Phase 2: Attack
+
 #### Verdict: PASS
-| Attack | Result |
-|--------|--------|
-| Undefined props | PASS |
-| Empty data | PASS |
-| Rapid clicks | PASS |
-| Effect cleanup | PASS |
+
+| Attack          | Result |
+| --------------- | ------ |
+| Undefined props | PASS   |
+| Empty data      | PASS   |
+| Rapid clicks    | PASS   |
+| Effect cleanup  | PASS   |
 
 ### Files Created
+
 - `src/lib/components/MyComponent.attack.test.ts`
 ```
 
@@ -114,9 +120,11 @@ npm run test -- --run
 ### Final Verdict: REJECTED
 
 ### Phase 1: Review
+
 [Specific concerns with code locations]
 
 ### Phase 2: Attack
+
 [Which tests failed, actual output, required fixes]
 
 Builder must fix these issues. Attack test files should not be modified
@@ -128,6 +136,7 @@ without Reviewer discussion.
 **APPROVED**: Both phases pass. No unjustified test changes detected.
 
 **REJECTED**: Any phase fails, or test changes are unjustified. Provide:
+
 1. What failed
 2. Location in code
 3. Failure output

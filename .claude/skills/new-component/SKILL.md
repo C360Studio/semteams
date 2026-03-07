@@ -26,6 +26,7 @@ $ARGUMENTS
 ```
 
 Key rules:
+
 - Use `interface Props` (not `type`)
 - Default values for optional props
 - Event handlers as callback props (`onAction`, not `createEventDispatcher`)
@@ -50,6 +51,7 @@ Key rules:
 ```
 
 Decision guide:
+
 - `$state` — mutable local UI state (open/closed, selected, input value)
 - `$derived` — anything computed from props or other state
 - `$effect` — side effects only (DOM manipulation, fetch, logging). Last resort.
@@ -78,6 +80,7 @@ Decision guide:
 ```
 
 Key rules:
+
 - Always use `(item.id)` key in `{#each}` blocks
 - Use `onclick` not `on:click` (Svelte 5)
 - Semantic HTML elements over generic `<div>`
@@ -101,7 +104,9 @@ describe("ComponentName", () => {
   test("handles user interaction", async () => {
     const user = userEvent.setup();
     const handler = vi.fn();
-    render(ComponentName, { props: { requiredProp: "test", onAction: handler } });
+    render(ComponentName, {
+      props: { requiredProp: "test", onAction: handler },
+    });
 
     await user.click(screen.getByRole("button"));
     expect(handler).toHaveBeenCalledOnce();
@@ -155,8 +160,8 @@ Add component-specific styles only when pico doesn't cover it:
 
 ## File Naming
 
-| Type | Pattern | Example |
-|------|---------|---------|
-| Component | `PascalCase.svelte` | `FlowNode.svelte` |
-| Test | `PascalCase.test.ts` | `FlowNode.test.ts` |
+| Type        | Pattern                     | Example                   |
+| ----------- | --------------------------- | ------------------------- |
+| Component   | `PascalCase.svelte`         | `FlowNode.svelte`         |
+| Test        | `PascalCase.test.ts`        | `FlowNode.test.ts`        |
 | Attack test | `PascalCase.attack.test.ts` | `FlowNode.attack.test.ts` |

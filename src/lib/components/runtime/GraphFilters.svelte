@@ -110,7 +110,7 @@
 		<div class="filter-section">
 			<span class="filter-label">Types</span>
 			<div class="filter-chips">
-				{#each availableTypes as type}
+				{#each availableTypes as type (type)}
 					<button
 						class="filter-chip"
 						class:active={filters.types.includes(type)}
@@ -129,7 +129,7 @@
 		<div class="filter-section">
 			<span class="filter-label">Domains</span>
 			<div class="filter-chips">
-				{#each availableDomains as domain}
+				{#each availableDomains as domain (domain)}
 					<button
 						class="filter-chip"
 						class:active={filters.domains.includes(domain)}

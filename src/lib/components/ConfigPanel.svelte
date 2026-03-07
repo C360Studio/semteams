@@ -1,15 +1,15 @@
 <script lang="ts">
 	import type { ComponentInstance } from '$lib/types/flow';
 	import type { SchemaResponse } from '$lib/types/schema';
+	import type { ConfigValue } from '$lib/types/config';
 	import SchemaForm from './SchemaForm.svelte';
 	import JsonEditor from './JsonEditor.svelte';
 
 	interface ConfigPanelProps {
 		component: ComponentInstance | null;
-		onSave?: (_nodeId: string, _config: any) => void;
+		onSave?: (_nodeId: string, _config: Record<string, ConfigValue>) => void;
 		onClose?: () => void;
 	}
-
 
 	let { component, onSave, onClose }: ConfigPanelProps = $props();
 
@@ -24,10 +24,10 @@
 	let schemaError = $state<string | null>(null);
 
 	// T095: Dirty state preservation (per component ID)
-	let dirtyConfigs = $state<Map<string, Record<string, any>>>(new Map());
+	let dirtyConfigs = $state<Map<string, Record<string, ConfigValue>>>(new Map());
 
 	// Current config being edited
-	let editingConfig = $state<Record<string, any>>({});
+	let editingConfig = $state<Record<string, ConfigValue>>({});
 
 	let error = $state<string | null>(null);
 
@@ -37,45 +37,39 @@
 	// T097: Backend validation errors (reserved for future deployed component config)
 	let backendValidationErrors = $state<Record<string, string>>({});
 
-	// Track current component ID to detect changes
+	// P2-013: Track current component ID to detect switches
 	let currentComponentId = $state<string | null>(null);
-	let previousComponentId = $state<string | null>(null);
 
-	// T092: Load schema when component changes
+	// P2-013: Load schema and reset session state when component changes.
+	// Uses currentComponentId to detect switches without manual prev-ID bookkeeping.
 	$effect(() => {
 		if (component && component.id !== currentComponentId) {
-			// Save previous component's dirty state BEFORE switching
-			if (previousComponentId && previousComponentId !== currentComponentId) {
-				dirtyConfigs.set(previousComponentId, editingConfig);
-			}
-
 			currentComponentId = component.id;
-			previousComponentId = currentComponentId;
 			loadSchemaForComponent(component.component);
 
-			// T095: Restore dirty state if exists
+			// T095: Restore dirty state if exists, otherwise use component config
 			if (dirtyConfigs.has(component.id)) {
 				editingConfig = { ...dirtyConfigs.get(component.id)! };
 			} else {
-				editingConfig = { ...component.config };
+				editingConfig = { ...(component.config as Record<string, ConfigValue>) };
 			}
 
+			// Isolate error state per component session
 			error = null;
 			schemaError = null;
 			jsonParseError = null;
 		} else if (!component) {
 			currentComponentId = null;
-			previousComponentId = null;
 			componentSchema = null;
 			editingConfig = {};
 			jsonParseError = null;
 		}
 	});
 
-	// T095: Track dirty state reactively (side effect of config changes)
+	// T095: Mirror editingConfig into dirtyConfigs whenever it changes.
+	// This runs synchronously after each binding update from JsonEditor/SchemaForm.
 	$effect(() => {
 		if (component && currentComponentId && editingConfig) {
-			// Update dirty cache whenever editingConfig changes via binding
 			dirtyConfigs.set(currentComponentId, editingConfig);
 		}
 	});
@@ -99,7 +93,7 @@
 			if (response.status === 404) {
 				// Component has no schema - use JSON editor fallback
 				componentSchema = null;
-				schemaCache.set(componentType, null as any); // Cache the miss
+				schemaCache.set(componentType, null as unknown as SchemaResponse); // Cache the miss
 				return;
 			}
 
@@ -121,7 +115,7 @@
 	// T097: Handle schema form save
 	// NOTE: For draft flows, we just update the flow model locally.
 	// Backend API calls are only for deployed/running components (future feature).
-	function handleSchemaFormSave(config: Record<string, any>) {
+	function handleSchemaFormSave(config: Record<string, ConfigValue>) {
 		if (!component) return;
 
 		// Clear previous errors
@@ -160,7 +154,7 @@
 		// Clear dirty state and reset to original config
 		if (component) {
 			dirtyConfigs.delete(component.id);
-			editingConfig = { ...component.config };
+			editingConfig = { ...(component.config as Record<string, ConfigValue>) };
 			error = null;
 			jsonParseError = null;
 		}
@@ -208,11 +202,7 @@
 					<p>Failed to load schema: {schemaError}</p>
 					<p>Falling back to JSON editor.</p>
 				</div>
-				<JsonEditor
-					bind:config={editingConfig}
-					bind:parseError={jsonParseError}
-					warning="Schema unavailable - using JSON editor"
-				/>
+				<JsonEditor bind:config={editingConfig} bind:parseError={jsonParseError} />
 				<footer>
 					<button onclick={handleCancel} class="cancel-button">Cancel</button>
 					<button onclick={handleJsonSave} class="save-button">Apply</button>
@@ -234,11 +224,8 @@
 				/>
 			{:else}
 				<!-- T094, T041: Fallback to JSON editor when schema missing -->
-				<JsonEditor
-					bind:config={editingConfig}
-					bind:parseError={jsonParseError}
-					warning="Schema not available for this component type"
-				/>
+				<p class="schema-info">Schema not available for this component type</p>
+				<JsonEditor bind:config={editingConfig} bind:parseError={jsonParseError} />
 				<footer>
 					<button onclick={handleCancel} class="cancel-button">Cancel</button>
 					<button onclick={handleJsonSave} class="save-button">Apply</button>
@@ -414,5 +401,11 @@
 
 	.save-button:hover {
 		background: var(--ui-interactive-primary-hover);
+	}
+
+	.schema-info {
+		font-size: 0.875rem;
+		color: var(--ui-text-secondary);
+		margin: 0 0 0.75rem;
 	}
 </style>

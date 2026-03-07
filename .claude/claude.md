@@ -23,15 +23,15 @@ The UI is a flow builder for semstreams pipelines. Users create flows by adding 
 
 ## Key Directories
 
-| Path | Purpose |
-|------|---------|
-| `src/lib/components/` | 51 Svelte components |
-| `src/lib/components/runtime/` | Runtime monitoring tabs (Health, Logs, Metrics, Messages) |
-| `src/lib/stores/*.svelte.ts` | Runes-based stores (factory function pattern) |
-| `src/routes/` | SvelteKit pages |
-| `src/hooks.server.ts` | SSR fetch transformations |
-| `e2e/` | Playwright E2E tests |
-| `docs/agents/svelte-patterns.md` | Test patterns, code standards, review checklists |
+| Path                             | Purpose                                                   |
+| -------------------------------- | --------------------------------------------------------- |
+| `src/lib/components/`            | 51 Svelte components                                      |
+| `src/lib/components/runtime/`    | Runtime monitoring tabs (Health, Logs, Metrics, Messages) |
+| `src/lib/stores/*.svelte.ts`     | Runes-based stores (factory function pattern)             |
+| `src/routes/`                    | SvelteKit pages                                           |
+| `src/hooks.server.ts`            | SSR fetch transformations                                 |
+| `e2e/`                           | Playwright E2E tests                                      |
+| `docs/agents/svelte-patterns.md` | Test patterns, code standards, review checklists          |
 
 ## Commands
 
@@ -73,8 +73,12 @@ Stores use the runes-based factory function pattern:
 function createMyStore() {
   let value = $state<Type>(initial);
   return {
-    get value() { return value; },
-    setValue(v: Type) { value = v; }
+    get value() {
+      return value;
+    },
+    setValue(v: Type) {
+      value = v;
+    },
   };
 }
 export const myStore = createMyStore();
@@ -125,15 +129,19 @@ Reviewer rejects -> Builder fixes -> You verify -> Reviewer re-reviews. Max 3 cy
 ## Agents
 
 ### Builder (`.claude/agents/builder.md`)
+
 TDD implementation. Writes tests + code + E2E in a single context. Core workflow agent.
 
 ### Reviewer (`.claude/agents/reviewer.md`)
+
 Code review + attack tests. The quality gate. Evaluates whether any test changes were justified.
 
 ### Architect (`.claude/agents/architect.md`)
+
 On-demand. Design decisions, API contracts, component structure planning. Invoke before Builder when the problem needs design thinking.
 
 ### Debugger (`.claude/agents/debugger.md`)
+
 On-demand. Deep knowledge of Svelte 5 pitfalls, SvelteKit SSR, semstreams backend integration, and this codebase's specific failure modes.
 
 ## Skills
@@ -145,6 +153,7 @@ On-demand. Deep knowledge of Svelte 5 pitfalls, SvelteKit SSR, semstreams backen
 ## Detecting Gaming
 
 Watch for:
+
 - "All tests pass" without showing output
 - Tests that assert almost nothing
 - E2E tests that don't interact with the UI

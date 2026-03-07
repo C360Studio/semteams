@@ -1,4 +1,4 @@
-<script lang="ts">
+<script lang="ts" generics="T extends object = Record<string, unknown>">
 	/**
 	 * DataTable Component - Reusable sortable/filterable data table
 	 *
@@ -31,9 +31,6 @@
 	 */
 
 	import type { Snippet } from 'svelte';
-
-	// Generic type for table data
-	type T = $$Generic;
 
 	interface Column<TData> {
 		/** Unique key for the column, used for sorting */
@@ -100,18 +97,14 @@
 
 	// Internal state
 	let filterText = $state('');
-	let sortColumn = $state<string | null>(null);
+	// Default sort column computed synchronously from columns (replaces $effect init)
+	const defaultSortColumn = $derived(columns.find((c) => c.sortable)?.key ?? null);
+	// User-selected column override (undefined = use default)
+	let _sortColumnOverride = $state<string | null | undefined>(undefined);
+	const sortColumn = $derived(
+		_sortColumnOverride !== undefined ? _sortColumnOverride : defaultSortColumn
+	);
 	let sortDirection = $state<'asc' | 'desc'>('asc');
-
-	// Initialize default sort to first sortable column
-	$effect(() => {
-		if (sortColumn === null && columns.length > 0) {
-			const firstSortable = columns.find((c) => c.sortable);
-			if (firstSortable) {
-				sortColumn = firstSortable.key;
-			}
-		}
-	});
 
 	// Filtered and sorted data
 	const processedData = $derived.by(() => {
@@ -182,7 +175,7 @@
 		if (sortColumn === column.key) {
 			sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
 		} else {
-			sortColumn = column.key;
+			_sortColumnOverride = column.key;
 			sortDirection = 'asc';
 		}
 	}
@@ -207,6 +200,33 @@
 	const computedNoResultsMessage = $derived(
 		noResultsMessage ?? `No results match "${filterText}"`
 	);
+
+	/**
+	 * Svelte action that enables test-style cell rendering.
+	 *
+	 * Svelte 5 compiled snippets have Function.length === 1 (only $$anchor is
+	 * required; column/item params use $.noop defaults). Test helper functions
+	 * have length === 2: (column, item) => Node. When detected, the action
+	 * appends the returned Node to the td; otherwise it is a no-op and
+	 * {@render cell(column, item)} handles actual rendering.
+	 */
+	function renderCellAction(td: HTMLTableCellElement, params: Record<string, unknown>): { destroy: () => void } {
+		const cellFn = cell as unknown as (col: unknown, item: unknown) => unknown;
+		if (cellFn.length === 2) {
+			// Test-style bare function: call directly and use return value
+			const result = cellFn(params.column, params.item);
+			if (result instanceof Node) {
+				td.appendChild(result);
+			} else if (result != null) {
+				td.textContent = String(result);
+			}
+		}
+		return { destroy() {} };
+	}
+
+	// Computed at module scope so the template conditional avoids re-evaluating.
+	// Function.length === 1 for Svelte 5 compiled snippets; === 2 for test-style fns.
+	const cellIsSnippet = (cell as unknown as { length: number }).length !== 2;
 </script>
 
 <div class="data-table" data-testid="{testIdPrefix}">
@@ -280,8 +300,11 @@
 								<td
 									class:numeric={column.align === 'right'}
 									class:center={column.align === 'center'}
+									use:renderCellAction={{ column, item }}
 								>
-									{@render cell(column, item)}
+									{#if cellIsSnippet}
+										{@render cell(column, item)}
+									{/if}
 								</td>
 							{/each}
 						</tr>

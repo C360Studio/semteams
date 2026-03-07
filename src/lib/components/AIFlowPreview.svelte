@@ -6,9 +6,8 @@
 	 * Shows nodes, connections, and validation results with apply/reject actions.
 	 */
 
-	import type { Flow } from '$lib/types/flow';
+	import type { Flow, FlowConnection } from '$lib/types/flow';
 	import type { ValidationResult } from '$lib/types/validation';
-	import { onMount } from 'svelte';
 
 	interface Props {
 		isOpen: boolean;
@@ -104,7 +103,7 @@
 	/**
 	 * Get connection display text
 	 */
-	function getConnectionText(connection: any): string {
+	function getConnectionText(connection: FlowConnection): string {
 		const sourceName =
 			flow?.nodes?.find((n) => n.id === connection.source_node_id)?.name || 'Unknown';
 		const targetName =
@@ -112,21 +111,10 @@
 		return `${sourceName} (${connection.source_port}) → ${targetName} (${connection.target_port})`;
 	}
 
-	// Register keyboard listener
-	onMount(() => {
-		const handleKeyDownWrapper = (event: KeyboardEvent) => {
-			if (isOpen) {
-				handleKeyDown(event);
-			}
-		};
-
-		document.addEventListener('keydown', handleKeyDownWrapper);
-
-		return () => {
-			document.removeEventListener('keydown', handleKeyDownWrapper);
-		};
-	});
+	// Keyboard listener is registered via <svelte:window onkeydown> below
 </script>
+
+<svelte:window onkeydown={(e) => { if (isOpen) handleKeyDown(e); }} />
 
 {#if isOpen}
 	<div class="modal-backdrop backdrop" onclick={handleBackdropClick} role="presentation">

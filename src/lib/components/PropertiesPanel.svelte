@@ -12,6 +12,7 @@
 	import type { ComponentType } from '$lib/types/component';
 	import type { PropertySchema } from '$lib/types/schema';
 	import type { PropertiesPanelMode } from '$lib/types/ui-state';
+	import type { ConfigValue } from '$lib/types/config';
 	import { getTypeColor } from '$lib/utils/category-colors';
 	import { humanizeFieldName } from '$lib/utils/humanize';
 	import SchemaField from './SchemaField.svelte';
@@ -26,7 +27,7 @@
 		/** Component type definition for the node (for schema) */
 		nodeComponentType?: ComponentType | null;
 		/** Callback when config is saved */
-		onSave?: (nodeId: string, name: string, config: Record<string, unknown>) => void;
+		onSave?: (nodeId: string, name: string, config: Record<string, ConfigValue>) => void;
 		/** Callback when node is deleted */
 		onDelete?: (nodeId: string) => void;
 	}
@@ -42,7 +43,7 @@
 
 	// Edit form state
 	let editedName = $state('');
-	let editedConfig = $state<Record<string, unknown>>({});
+	let editedConfig = $state<Record<string, ConfigValue>>({});
 	let showDeleteConfirm = $state(false);
 	let searchQuery = $state('');
 
@@ -50,7 +51,7 @@
 	$effect(() => {
 		if (node) {
 			editedName = node.name;
-			editedConfig = { ...node.config };
+			editedConfig = { ...(node.config as Record<string, ConfigValue>) };
 		} else {
 			editedName = '';
 			editedConfig = {};
@@ -177,7 +178,7 @@
 	function handleReset() {
 		if (node) {
 			editedName = node.name;
-			editedConfig = { ...node.config };
+			editedConfig = { ...(node.config as Record<string, ConfigValue>) };
 		}
 	}
 
@@ -192,7 +193,7 @@
 		searchQuery = '';
 	}
 
-	function handleFieldChange(fieldName: string, value: unknown) {
+	function handleFieldChange(fieldName: string, value: ConfigValue) {
 		editedConfig[fieldName] = value;
 		handleBlur();
 	}

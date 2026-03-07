@@ -4,23 +4,20 @@
  * Manages state for the graph visualization tab.
  * Handles entities, relationships, communities, selection, and filters.
  *
- * Note: This store uses the traditional svelte/store pattern with writable(),
- * which manages reactivity through subscribe/update. Native Map/Set/Date are
- * intentionally used here as the store's update() function triggers reactivity.
+ * Uses Svelte 5 runes ($state) with SvelteMap/SvelteSet for deep reactivity.
+ * Consumers read state directly via getters — no .subscribe() needed.
  */
-/* eslint-disable svelte/prefer-svelte-reactivity */
 
-import * as store from "svelte/store";
+import { SvelteMap, SvelteSet } from "svelte/reactivity";
 import {
   type GraphEntity,
   type GraphRelationship,
   type GraphCommunity,
   type GraphFilters,
-  type GraphStoreState,
-  type TripleProperty,
   DEFAULT_GRAPH_FILTERS,
   parseEntityId,
   createRelationshipId,
+  type TripleProperty,
 } from "$lib/types/graph";
 
 // =============================================================================
@@ -28,50 +25,78 @@ import {
 // =============================================================================
 
 function createGraphStore() {
-  const initialState: GraphStoreState = {
-    entities: new Map(),
-    relationships: new Map(),
-    communities: new Map(),
-    selectedEntityId: null,
-    hoveredEntityId: null,
-    expandedEntityIds: new Set(),
-    filters: { ...DEFAULT_GRAPH_FILTERS },
-    loading: false,
-    error: null,
-    connected: false,
-  };
-
-  const { subscribe, update, set } =
-    store.writable<GraphStoreState>(initialState);
+  // ---------------------------------------------------------------------------
+  // Reactive state — use SvelteMap/SvelteSet for deep reactivity on
+  // collection mutations without needing to replace the entire reference.
+  // ---------------------------------------------------------------------------
+  let entities = $state(new SvelteMap<string, GraphEntity>());
+  let relationships = $state(new SvelteMap<string, GraphRelationship>());
+  let communities = $state(new SvelteMap<string, GraphCommunity>());
+  let selectedEntityId = $state<string | null>(null);
+  let hoveredEntityId = $state<string | null>(null);
+  let expandedEntityIds = $state(new SvelteSet<string>());
+  let filters = $state<GraphFilters>({ ...DEFAULT_GRAPH_FILTERS });
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+  let connected = $state(false);
 
   return {
-    subscribe,
+    // -------------------------------------------------------------------------
+    // State getters — consumers read these directly, no .subscribe() needed
+    // -------------------------------------------------------------------------
+
+    get entities() {
+      return entities;
+    },
+    get relationships() {
+      return relationships;
+    },
+    get communities() {
+      return communities;
+    },
+    get selectedEntityId() {
+      return selectedEntityId;
+    },
+    get hoveredEntityId() {
+      return hoveredEntityId;
+    },
+    get expandedEntityIds() {
+      return expandedEntityIds;
+    },
+    get filters() {
+      return filters;
+    },
+    get loading() {
+      return loading;
+    },
+    get error() {
+      return error;
+    },
+    get connected() {
+      return connected;
+    },
 
     // ========================================================================
     // Connection State
     // ========================================================================
 
-    setConnected(connected: boolean) {
-      update((state) => ({
-        ...state,
-        connected,
-        error: connected ? null : state.error,
-      }));
+    setConnected(value: boolean) {
+      connected = value;
+      if (value) error = null;
     },
 
-    setLoading(loading: boolean) {
-      update((state) => ({
-        ...state,
-        loading,
-      }));
+    setLoading(value: boolean) {
+      loading = value;
     },
 
-    setError(error: string | null) {
-      update((state) => ({
-        ...state,
-        error,
-        loading: false,
-      }));
+    setError(value: string | null) {
+      error = value;
+      // Clearing the error (null) at the start of a fetch should not affect
+      // loading state — callers manage that separately. Only a real error
+      // implies loading has ended.
+      if (value !== null) {
+        loading = false;
+      }
     },
 
     // ========================================================================
@@ -82,95 +107,58 @@ function createGraphStore() {
      * Add or update a single entity.
      */
     upsertEntity(entity: GraphEntity) {
-      update((state) => {
-        const newEntities = new Map(state.entities);
-        newEntities.set(entity.id, entity);
+      entities.set(entity.id, entity);
 
-        // Also add any relationships
-        const newRelationships = new Map(state.relationships);
-        for (const rel of entity.outgoing) {
-          newRelationships.set(rel.id, rel);
-        }
-        for (const rel of entity.incoming) {
-          newRelationships.set(rel.id, rel);
-        }
-
-        return {
-          ...state,
-          entities: newEntities,
-          relationships: newRelationships,
-        };
-      });
+      for (const rel of entity.outgoing) {
+        relationships.set(rel.id, rel);
+      }
+      for (const rel of entity.incoming) {
+        relationships.set(rel.id, rel);
+      }
     },
 
     /**
      * Add or update multiple entities at once.
      */
-    upsertEntities(entities: GraphEntity[]) {
-      update((state) => {
-        const newEntities = new Map(state.entities);
-        const newRelationships = new Map(state.relationships);
+    upsertEntities(newEntities: GraphEntity[]) {
+      for (const entity of newEntities) {
+        entities.set(entity.id, entity);
 
-        for (const entity of entities) {
-          newEntities.set(entity.id, entity);
-
-          for (const rel of entity.outgoing) {
-            newRelationships.set(rel.id, rel);
-          }
-          for (const rel of entity.incoming) {
-            newRelationships.set(rel.id, rel);
-          }
+        for (const rel of entity.outgoing) {
+          relationships.set(rel.id, rel);
         }
-
-        return {
-          ...state,
-          entities: newEntities,
-          relationships: newRelationships,
-        };
-      });
+        for (const rel of entity.incoming) {
+          relationships.set(rel.id, rel);
+        }
+      }
     },
 
     /**
      * Remove an entity and its relationships.
      */
     removeEntity(entityId: string) {
-      update((state) => {
-        const newEntities = new Map(state.entities);
-        newEntities.delete(entityId);
+      entities.delete(entityId);
 
-        // Remove relationships involving this entity
-        const newRelationships = new Map(state.relationships);
-        for (const [relId, rel] of newRelationships) {
-          if (rel.sourceId === entityId || rel.targetId === entityId) {
-            newRelationships.delete(relId);
-          }
+      for (const [relId, rel] of relationships) {
+        if (rel.sourceId === entityId || rel.targetId === entityId) {
+          relationships.delete(relId);
         }
+      }
 
-        // Clear selection if this entity was selected
-        const selectedEntityId =
-          state.selectedEntityId === entityId ? null : state.selectedEntityId;
-
-        return {
-          ...state,
-          entities: newEntities,
-          relationships: newRelationships,
-          selectedEntityId,
-        };
-      });
+      if (selectedEntityId === entityId) {
+        selectedEntityId = null;
+      }
     },
 
     /**
      * Clear all entities and relationships.
      */
     clearEntities() {
-      update((state) => ({
-        ...state,
-        entities: new Map(),
-        relationships: new Map(),
-        selectedEntityId: null,
-        hoveredEntityId: null,
-        expandedEntityIds: new Set(),
-      }));
+      entities.clear();
+      relationships.clear();
+      selectedEntityId = null;
+      hoveredEntityId = null;
+      expandedEntityIds.clear();
     },
 
     // ========================================================================
@@ -180,17 +168,11 @@ function createGraphStore() {
     /**
      * Update communities data.
      */
-    updateCommunities(communities: GraphCommunity[]) {
-      update((state) => {
-        const newCommunities = new Map<string, GraphCommunity>();
-        for (const community of communities) {
-          newCommunities.set(community.id, community);
-        }
-        return {
-          ...state,
-          communities: newCommunities,
-        };
-      });
+    updateCommunities(newCommunities: GraphCommunity[]) {
+      communities.clear();
+      for (const community of newCommunities) {
+        communities.set(community.id, community);
+      }
     },
 
     // ========================================================================
@@ -201,41 +183,28 @@ function createGraphStore() {
      * Select an entity.
      */
     selectEntity(entityId: string | null) {
-      update((state) => ({
-        ...state,
-        selectedEntityId: entityId,
-      }));
+      selectedEntityId = entityId;
     },
 
     /**
      * Set hovered entity (for highlighting).
      */
     setHoveredEntity(entityId: string | null) {
-      update((state) => ({
-        ...state,
-        hoveredEntityId: entityId,
-      }));
+      hoveredEntityId = entityId;
     },
 
     /**
      * Mark an entity as expanded (neighbors loaded).
      */
     markExpanded(entityId: string) {
-      update((state) => {
-        const newExpandedIds = new Set(state.expandedEntityIds);
-        newExpandedIds.add(entityId);
-        return {
-          ...state,
-          expandedEntityIds: newExpandedIds,
-        };
-      });
+      expandedEntityIds.add(entityId);
     },
 
     /**
      * Check if an entity has been expanded.
      */
-    isExpanded(state: GraphStoreState, entityId: string): boolean {
-      return state.expandedEntityIds.has(entityId);
+    isExpanded(entityId: string): boolean {
+      return expandedEntityIds.has(entityId);
     },
 
     // ========================================================================
@@ -243,26 +212,17 @@ function createGraphStore() {
     // ========================================================================
 
     /**
-     * Update filters.
+     * Update filters (merges partial update into existing filters).
      */
-    setFilters(filters: Partial<GraphFilters>) {
-      update((state) => ({
-        ...state,
-        filters: {
-          ...state.filters,
-          ...filters,
-        },
-      }));
+    setFilters(newFilters: Partial<GraphFilters>) {
+      filters = { ...filters, ...newFilters };
     },
 
     /**
      * Reset filters to defaults.
      */
     resetFilters() {
-      update((state) => ({
-        ...state,
-        filters: { ...DEFAULT_GRAPH_FILTERS },
-      }));
+      filters = { ...DEFAULT_GRAPH_FILTERS };
     },
 
     // ========================================================================
@@ -272,8 +232,7 @@ function createGraphStore() {
     /**
      * Get filtered entities based on current filters.
      */
-    getFilteredEntities(state: GraphStoreState): GraphEntity[] {
-      const { filters, entities } = state;
+    getFilteredEntities(): GraphEntity[] {
       let result = Array.from(entities.values());
 
       // Search filter
@@ -303,7 +262,6 @@ function createGraphStore() {
       if (filters.timeRange) {
         const [start, end] = filters.timeRange;
         result = result.filter((e) => {
-          // Check if any property falls within time range
           return e.properties.some(
             (p) => p.timestamp >= start && p.timestamp <= end,
           );
@@ -316,16 +274,12 @@ function createGraphStore() {
     /**
      * Get filtered relationships based on current filters.
      */
-    getFilteredRelationships(state: GraphStoreState): GraphRelationship[] {
-      const { filters, relationships } = state;
+    getFilteredRelationships(): GraphRelationship[] {
       const visibleEntityIds = new Set(
-        this.getFilteredEntities(state).map((e) => e.id),
+        this.getFilteredEntities().map((e) => e.id),
       );
 
-      let result = Array.from(relationships.values());
-
-      // Only show relationships between visible entities
-      result = result.filter(
+      let result = Array.from(relationships.values()).filter(
         (r) =>
           visibleEntityIds.has(r.sourceId) && visibleEntityIds.has(r.targetId),
       );
@@ -349,9 +303,9 @@ function createGraphStore() {
     /**
      * Get unique entity types from current data.
      */
-    getEntityTypes(state: GraphStoreState): string[] {
+    getEntityTypes(): string[] {
       const types = new Set<string>();
-      for (const entity of state.entities.values()) {
+      for (const entity of entities.values()) {
         types.add(entity.idParts.type);
       }
       return Array.from(types).sort();
@@ -360,9 +314,9 @@ function createGraphStore() {
     /**
      * Get unique domains from current data.
      */
-    getDomains(state: GraphStoreState): string[] {
+    getDomains(): string[] {
       const domains = new Set<string>();
-      for (const entity of state.entities.values()) {
+      for (const entity of entities.values()) {
         domains.add(entity.idParts.domain);
       }
       return Array.from(domains).sort();
@@ -376,18 +330,16 @@ function createGraphStore() {
      * Reset store to initial state.
      */
     reset() {
-      set({
-        entities: new Map(),
-        relationships: new Map(),
-        communities: new Map(),
-        selectedEntityId: null,
-        hoveredEntityId: null,
-        expandedEntityIds: new Set(),
-        filters: { ...DEFAULT_GRAPH_FILTERS },
-        loading: false,
-        error: null,
-        connected: false,
-      });
+      entities = new SvelteMap();
+      relationships = new SvelteMap();
+      communities = new SvelteMap();
+      selectedEntityId = null;
+      hoveredEntityId = null;
+      expandedEntityIds = new SvelteSet();
+      filters = { ...DEFAULT_GRAPH_FILTERS };
+      loading = false;
+      error = null;
+      connected = false;
     },
   };
 }

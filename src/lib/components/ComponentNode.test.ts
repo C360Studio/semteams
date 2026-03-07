@@ -72,18 +72,18 @@ describe("ComponentNode", () => {
     });
   });
 
-  it("should call onClick when component is clicked", async () => {
+  it("should call onclick when component is clicked", async () => {
     const component = createMockComponent();
-    const onClick = vi.fn();
+    const onclick = vi.fn();
 
-    render(ComponentNode, { props: { component, onClick } });
+    render(ComponentNode, { props: { component, onclick } });
 
     const node = screen.getByText("udp-input").closest(".component-node");
     expect(node).toBeInTheDocument();
 
     if (node) {
       await fireEvent.click(node);
-      expect(onClick).toHaveBeenCalledWith("comp-1");
+      expect(onclick).toHaveBeenCalledWith("comp-1");
     }
   });
 

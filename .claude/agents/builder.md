@@ -127,8 +127,12 @@ Factory function pattern with runes:
 function createMyStore() {
   let value = $state<Type>(initial);
   return {
-    get value() { return value; },
-    update(v: Type) { value = v; }
+    get value() {
+      return value;
+    },
+    update(v: Type) {
+      value = v;
+    },
   };
 }
 ```

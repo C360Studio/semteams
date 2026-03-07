@@ -113,7 +113,7 @@
 		direction: 'input' | 'output',
 		index: number,
 		fieldPath: string,
-		newValue: any
+		newValue: string
 	) {
 		const ports = direction === 'input' ? [...portConfig.inputs] : [...portConfig.outputs];
 		const port = { ...ports[index] };
@@ -129,7 +129,7 @@
 					nats: {
 						...port.config.nats,
 						[configField]: newValue
-					} as any
+					}
 				};
 			} else if (
 				pathParts.length === 3 &&
@@ -143,12 +143,12 @@
 					jetstream: {
 						...port.config.jetstream,
 						[configField]: newValue
-					} as any
+					}
 				};
 			}
 		} else {
 			// Top-level field (e.g., "name", "description")
-			(port as any)[fieldPath] = newValue;
+			(port as Record<string, unknown>)[fieldPath] = newValue;
 		}
 
 		ports[index] = port;

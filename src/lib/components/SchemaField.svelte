@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { PropertySchema } from '$lib/types/schema';
+	import type { ConfigValue } from '$lib/types/config';
 	import StringField from './StringField.svelte';
 	import NumberField from './NumberField.svelte';
 	import BooleanField from './BooleanField.svelte';
@@ -18,28 +19,54 @@
 		/** PropertySchema definition */
 		schema: PropertySchema;
 		/** Current value (type varies by field type) */
-		value?: any;
+		value?: ConfigValue;
 		/** Validation error message */
 		error?: string;
 		/** Whether field is required */
 		isRequired?: boolean;
 		/** Callback when value changes */
-		onChange?: (value: any) => void;
+		onChange?: (value: ConfigValue) => void;
 	}
 
+	import type { PortDefinition } from '$lib/types/component';
+
 	let { name, label, schema, value = $bindable(undefined), error, isRequired = false, onChange }: SchemaFieldProps = $props();
+
+	// Typed intermediaries — SchemaField narrows by schema.type in the template,
+	// but Svelte can't propagate that narrowing into bind: expressions.
+	// These getters/setters cast ConfigValue to the specific sub-field type.
+	let stringValue = {
+		get value(): string | undefined { return value as string | undefined; },
+		set value(v: string | undefined) { value = v; }
+	};
+	let numberValue = {
+		get value(): number | undefined { return value as number | undefined; },
+		set value(v: number | undefined) { value = v; }
+	};
+	let boolValue = {
+		get value(): boolean | undefined { return value as boolean | undefined; },
+		set value(v: boolean | undefined) { value = v; }
+	};
+	let portValue = {
+		get value(): { inputs?: PortDefinition[]; outputs?: PortDefinition[] } | undefined {
+			return value as { inputs?: PortDefinition[]; outputs?: PortDefinition[] } | undefined;
+		},
+		set value(v: { inputs?: PortDefinition[]; outputs?: PortDefinition[] } | undefined) {
+			value = v as ConfigValue;
+		}
+	};
 </script>
 
 {#if schema.type === 'string'}
-	<StringField {name} {label} {schema} bind:value {error} {isRequired} {onChange} />
+	<StringField {name} {label} {schema} bind:value={stringValue.value} {error} {isRequired} onChange={(v) => onChange?.(v)} />
 {:else if schema.type === 'int' || schema.type === 'float'}
-	<NumberField {name} {label} {schema} bind:value {error} {isRequired} {onChange} />
+	<NumberField {name} {label} {schema} bind:value={numberValue.value} {error} {isRequired} onChange={(v) => onChange?.(v as ConfigValue)} />
 {:else if schema.type === 'bool'}
-	<BooleanField {name} {label} {schema} bind:value {error} {isRequired} {onChange} />
+	<BooleanField {name} {label} {schema} bind:value={boolValue.value} {error} {isRequired} onChange={(v) => onChange?.(v)} />
 {:else if schema.type === 'enum'}
-	<EnumField {name} {label} {schema} bind:value {error} {isRequired} {onChange} />
+	<EnumField {name} {label} {schema} bind:value={stringValue.value} {error} {isRequired} onChange={(v) => onChange?.(v)} />
 {:else if schema.type === 'ports'}
-	<PortConfigEditor {name} {schema} bind:value {error} {isRequired} {onChange} />
+	<PortConfigEditor {name} {schema} bind:value={portValue.value} {error} {isRequired} onChange={(v) => onChange?.(v as ConfigValue)} />
 {:else if schema.type === 'object' || schema.type === 'array'}
 	<div class="field complex-field-fallback">
 		<label for={name}>

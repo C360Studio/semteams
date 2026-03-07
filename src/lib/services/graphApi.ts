@@ -75,11 +75,9 @@ async function executeQuery<T>(
   }
 
   if (data.errors && data.errors.length > 0) {
-    throw new GraphApiError(
-      data.errors[0].message,
-      200,
-      { errors: data.errors },
-    );
+    throw new GraphApiError(data.errors[0].message, 200, {
+      errors: data.errors,
+    });
   }
 
   if (!data.data) {

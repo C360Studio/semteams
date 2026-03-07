@@ -11,7 +11,7 @@
 	 * - Data persists across tab switches (no polling needed)
 	 */
 
-	import { runtimeStore, type RuntimeStoreState } from '$lib/stores/runtimeStore.svelte';
+	import { runtimeStore } from '$lib/stores/runtimeStore.svelte';
 	import DataTable from '$lib/components/DataTable.svelte';
 
 	interface MetricsTabProps {
@@ -34,33 +34,12 @@
 	// Props passed from parent - may be used for future tab-specific logic
 	let { flowId: _flowId, isActive: _isActive }: MetricsTabProps = $props();
 
-	// Subscribe to store - get initial state synchronously
-	let storeState = $state<RuntimeStoreState>({
-		connected: false,
-		error: null,
-		flowId: null,
-		flowStatus: null,
-		healthOverall: null,
-		healthComponents: [],
-		logs: [],
-		metricsRaw: new Map(),
-		metricsRates: new Map(),
-		lastMetricsTimestamp: null
-	});
-
-	$effect(() => {
-		const unsubscribe = runtimeStore.subscribe((s) => {
-			storeState = s;
-		});
-		return unsubscribe;
-	});
-
 	// Get metrics array from store helper - shows all metrics
-	const metricsArray = $derived(runtimeStore.getMetricsArray(storeState));
+	const metricsArray = $derived(runtimeStore.getMetricsArray());
 
 	// Last updated timestamp
 	const lastUpdated = $derived(
-		storeState.lastMetricsTimestamp ? new Date(storeState.lastMetricsTimestamp) : null
+		runtimeStore.lastMetricsTimestamp ? new Date(runtimeStore.lastMetricsTimestamp) : null
 	);
 
 	// Column definitions for the metrics table
@@ -129,12 +108,12 @@
 
 <div class="metrics-tab" data-testid="metrics-tab">
 	<!-- Connection Status -->
-	{#if storeState.error}
+	{#if runtimeStore.error}
 		<div class="error-message" role="alert">
 			<span class="error-icon">⚠</span>
-			<span>{storeState.error}</span>
+			<span>{runtimeStore.error}</span>
 		</div>
-	{:else if !storeState.connected}
+	{:else if !runtimeStore.connected}
 		<div class="connecting-message">
 			<span class="connecting-icon">⋯</span>
 			<span>Connecting to runtime stream...</span>
