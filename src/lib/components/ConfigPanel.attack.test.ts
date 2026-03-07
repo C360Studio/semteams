@@ -19,10 +19,11 @@ function makeComponent(id: string, componentType = "udp-input"): ComponentInstan
   return {
     id,
     component: componentType,
+    type: "input",
     name: `${componentType}-${id}`,
     config: { host: "localhost", port: 1234 },
     position: { x: 0, y: 0 },
-    health: undefined,
+    health: { status: "not_running" as const, lastUpdated: "" },
   };
 }
 

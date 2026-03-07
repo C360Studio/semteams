@@ -214,7 +214,7 @@ describe("graphStore — expanded entity tracking", () => {
 
 describe("graphStore — setFilters / resetFilters", () => {
   it("setFilters merges partial update", () => {
-    const original = graphStore.filters.minConfidence;
+    const _original = graphStore.filters.minConfidence;
     graphStore.setFilters({ minConfidence: 0.9 });
     expect(graphStore.filters.minConfidence).toBe(0.9);
     // Other fields preserved
