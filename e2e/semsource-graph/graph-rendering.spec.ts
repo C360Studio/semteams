@@ -1,19 +1,21 @@
 /**
  * Graph Rendering - SemSource Integration E2E Tests
  *
- * Validates that semsource entities appear in the DataView after ingestion
- * through the full pipeline:
+ * Validates that semsource entities appear in the DataView after ingestion.
+ * Semsource IS a semstreams app — it runs the full graph pipeline internally:
  *
- *   semsource → WebSocket → semstreams backend → ENTITY_STATES KV → GraphQL → UI
+ *   semsource sources → NATS (graph.ingest.entity)
+ *     → graph-ingest → ENTITY_STATES KV → graph-index → graph-query
+ *     → graph-gateway (:8080/graphql) → UI
  *
  * Prerequisites:
  *   - Docker Compose profile "semsource" must be active
- *   - Backend must be configured with e2e-with-semsource.json
+ *   - GRAPHQL_HOST=semsource:8080 must be set (Caddy routes /graphql to semsource)
  *   - Run via: task test:e2e:semsource-graph
- *     (or: COMPOSE_PROFILES=semsource npx playwright test e2e/semsource-graph/)
+ *     (or: COMPOSE_PROFILES=semsource GRAPHQL_HOST=semsource:8080 npx playwright test e2e/semsource-graph/)
  *
  * All tests use polling/waiting. Never assume entities exist immediately after
- * the backend starts — semsource ingestion is asynchronous.
+ * startup — semsource ingestion is asynchronous.
  */
 
 import { test, expect } from "@playwright/test";

@@ -3,10 +3,11 @@
  *
  * Validates GraphFilters panel interactions against real semsource entities.
  * Tests cover type chips, domain chips, search, and reset behaviour.
+ * Semsource serves its own graph-gateway — no separate backend needed for graph data.
  *
  * Prerequisites:
  *   - Docker Compose profile "semsource" must be active
- *   - Backend must be configured with e2e-with-semsource.json
+ *   - GRAPHQL_HOST=semsource:8080 must be set
  *   - Run via: task test:e2e:semsource-graph
  *
  * Filter chips appear only when the corresponding type/domain is present in

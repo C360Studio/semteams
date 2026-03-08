@@ -2,11 +2,12 @@
  * Graph Interaction - SemSource Integration E2E Tests
  *
  * Validates selection, hover, and expansion interactions against real
- * semsource entities rendered in SigmaCanvas.
+ * semsource entities rendered in SigmaCanvas. Semsource serves its own
+ * graph-gateway at :8080/graphql — no separate backend needed for graph data.
  *
  * Prerequisites:
  *   - Docker Compose profile "semsource" must be active
- *   - Backend must be configured with e2e-with-semsource.json
+ *   - GRAPHQL_HOST=semsource:8080 must be set
  *   - Run via: task test:e2e:semsource-graph
  *
  * Note on Sigma.js canvas interactions:
