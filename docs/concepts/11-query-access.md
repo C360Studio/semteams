@@ -69,7 +69,11 @@ GraphQL provides schema-validated queries with field selection.
 - Single HTTP endpoint for all operations
 - Natural language query classification extracts search intents automatically
 
-**Natural language support:** The GraphQL gateway includes a query classifier that extracts temporal, spatial, and intent information from natural language queries. For example, "What sensors were active yesterday?" automatically populates temporal filters and routes to the appropriate search strategy.
+**Natural language support:** The GraphQL gateway includes a 3-tier classifier chain (keyword patterns → embedding
+similarity → LLM fallback) that extracts temporal, spatial, aggregation, ranking, and intent information from natural
+language queries. For example, "What sensors were active yesterday?" is caught by T0 keyword patterns and automatically
+populates temporal filters, while more ambiguous queries fall through to embedding similarity (T1/T2) or LLM
+classification (T3).
 
 **Best for:** External applications, web frontends, interactive exploration, natural language queries.
 
@@ -100,7 +104,9 @@ Model Context Protocol wraps GraphQL for AI assistants.
 
 MCP trades flexibility for safety—appropriate for production AI deployments.
 
-**Natural language handling:** AI agents typically issue natural language queries. The underlying GraphQL gateway's query classifier automatically extracts temporal, spatial, and intent information, routing queries to appropriate search strategies without requiring agents to construct structured parameters.
+**Natural language handling:** AI agents typically issue natural language queries. The underlying GraphQL gateway's
+3-tier classifier chain automatically extracts temporal, spatial, aggregation, ranking, and intent information, routing
+queries to the appropriate search strategy without requiring agents to construct structured parameters.
 
 **Best for:** Claude, LLM agents, automated reasoning systems, conversational interfaces.
 

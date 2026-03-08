@@ -58,7 +58,10 @@ User Question (natural language)
 └─────────────────┘
 ```
 
-The query classifier automatically extracts structured search parameters from natural language. For example, "What sensors were active yesterday?" extracts a temporal filter (last 24 hours) and routes to the temporal GraphRAG strategy.
+The query classifier uses a 3-tier chain: keyword patterns (T0), embedding similarity to domain examples (T1/T2), and
+LLM classification (T3). Each tier progressively handles more ambiguous queries. For example, "What sensors were active
+yesterday?" is caught at T0 by temporal keyword patterns, while "What's the operational health of the fleet?" falls
+through to T3 for LLM-based classification.
 
 ### Local Search
 

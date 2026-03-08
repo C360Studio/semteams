@@ -5,19 +5,24 @@
 Items requiring completion before alpha release.
 
 ### Search Query Classification
-**Status:** Basic Implementation (Tier 0 Active)
+**Status:** Implemented (All Three Tiers Active)
 
 Hybrid NL intent extraction with progressive fallback:
-- Tier 0: Keyword heuristics — **active in production** (temporal, spatial, similarity, path, zone intents)
-- Tier 1/2: Embedding similarity to domain examples — **built and tested, not wired up**
-- Tier 3: LLM classification for complex queries — **not started**
+- Tier 0: Keyword heuristics — **active** (temporal, spatial, similarity, path, zone, aggregation, ranking intents)
+- Tier 1/2: Embedding similarity to domain examples — **active** (wired via `enable_embedding_classifier` +
+  `domain_examples_path` config fields)
+- Tier 3: LLM classification for complex queries — **active** (via `LLMClientAdapter`, integration tested with
+  Ollama qwen3:14b)
 
-Current state: `KeywordClassifier` runs in both `graph-gateway` and `graph-query` with 10+ regex patterns covering temporal ranges, spatial bounds, similarity, and path intent. `EmbeddingClassifier` and `ClassifierChain` are fully implemented with tests, and domain example JSON files exist in `configs/domains/` (logistics, IoT, robotics). However, the embedding tier is never instantiated at runtime — no config surface for domain example paths or thresholds.
+Current state: `ClassifierChain` runs all three tiers in sequence. T0 `KeywordClassifier` covers 10+ regex patterns
+including aggregation (`how many`, `count`, `average`, `sum`, `total`, `min`, `max`) and ranking (`top N`, `bottom N`,
+`most`, `least`). T1/T2 `EmbeddingClassifier` is instantiated at startup when `enable_embedding_classifier` is true and
+loads domain JSON from `domain_examples_path`. T3 `LLMClassifier` uses `LLMClientAdapter` to bridge
+`graph/llm.Client` → `query.LLMClient`, handles reasoning model quirks (qwen3 `<think>` tags, markdown fences). New
+`SearchOptions` fields: `AggregationType`, `AggregationField`, `RankingIntent`, `Strategy: "aggregation"`.
 
-**Improvements for roadmap:**
-- Wire `EmbeddingClassifier` activation in gateway/graph-query startup (config fields + domain JSON loading)
+**Remaining roadmap items:**
 - Expose `UpgradeVectors()` path for hot-swapping BM25 → neural vectors at runtime
-- Add aggregation intent handling (`how many`, `count`, `total`)
 - Add classifier observability metrics (tier hit rate, confidence distribution, fallback frequency)
 - Expose classification to MCP handler (currently only GraphQL `globalSearch` and `semantic`)
 - Align `graph-query` to use `ClassifierChain` instead of bare `KeywordClassifier`
@@ -206,17 +211,6 @@ Generate embeddings directly from images.
 
 ### Query & Classification
 
-#### Embedding Classifier Activation
-**Priority:** High | **Complexity:** Low
-
-Wire the existing `EmbeddingClassifier` and domain example JSON files into runtime startup:
-- Add config fields for domain example paths and embedding threshold
-- Load `configs/domains/*.json` at startup in gateway and graph-query
-- Instantiate `ClassifierChain` with embedding tier instead of `nil`
-- Wire `UpgradeVectors()` for hot-swapping BM25 → neural vectors when embedding service is available
-
-Current state: All code exists and is tested. Needs config surface and startup wiring only.
-
 #### PathRAG Gateway Exposure
 **Priority:** High | **Complexity:** Low
 
@@ -235,14 +229,6 @@ Add Prometheus metrics for classification behavior:
 - Histogram for classification confidence
 - Counter for fallback frequency (embedding miss → keyword)
 - Counter for MCP vs GraphQL classification usage
-
-#### Aggregation Intent Support
-**Priority:** Medium | **Complexity:** Medium
-
-Add aggregation query classification and handling:
-- Add aggregation patterns (`how many`, `count`, `total`) to `KeywordClassifier`
-- Add `StrategyAggregation` to search strategies
-- Domain JSON files already include `aggregation` intent examples
 
 ---
 
