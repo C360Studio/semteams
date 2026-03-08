@@ -1011,6 +1011,15 @@ func (c *Component) transformGlobalSearchVars(variables map[string]interface{}) 
 	if maxCommunities, ok := variables["maxCommunities"]; ok {
 		payload["max_communities"] = maxCommunities
 	}
+	if includeSummaries, ok := variables["includeSummaries"]; ok {
+		payload["include_summaries"] = includeSummaries
+	}
+	if includeRelationships, ok := variables["includeRelationships"]; ok {
+		payload["include_relationships"] = includeRelationships
+	}
+	if includeSources, ok := variables["includeSources"]; ok {
+		payload["include_sources"] = includeSources
+	}
 	return payload
 }
 
@@ -1082,6 +1091,13 @@ func (c *Component) writeGraphQLError(w http.ResponseWriter, statusCode int, mes
 
 // writeGraphQLSuccess writes a successful GraphQL response wrapping data with the field name.
 func (c *Component) writeGraphQLSuccess(w http.ResponseWriter, subject string, resp []byte) {
+	c.writeGraphQLSuccessWithExtensions(w, subject, resp, nil)
+}
+
+// writeGraphQLSuccessWithExtensions writes a successful GraphQL response with an optional
+// extensions map. When extensions is nil or empty the field is omitted, preserving full
+// backward compatibility with callers that use writeGraphQLSuccess.
+func (c *Component) writeGraphQLSuccessWithExtensions(w http.ResponseWriter, subject string, resp []byte, extensions map[string]interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
@@ -1094,6 +1110,9 @@ func (c *Component) writeGraphQLSuccess(w http.ResponseWriter, subject string, r
 	}
 
 	response := map[string]interface{}{"data": dataPayload}
+	if len(extensions) > 0 {
+		response["extensions"] = extensions
+	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		atomic.AddInt64(&c.errors, 1)
 		c.logger.Error("failed to encode response", slog.Any("error", err))
@@ -1412,8 +1431,8 @@ func buildIntrospectionSchema() map[string]interface{} {
 					fieldDef("temporalSearch", "[Entity]", argDef("startTime", "String!"), argDef("endTime", "String!"), argDef("limit", "Int")),
 					fieldDef("semanticSearch", "[Entity]", argDef("query", "String!"), argDef("limit", "Int")),
 					fieldDef("findSimilar", "[Entity]", argDef("entityId", "String!"), argDef("limit", "Int")),
-					fieldDef("localSearch", "SearchResult", argDef("entityId", "String!"), argDef("query", "String"), argDef("level", "Int")),
-					fieldDef("globalSearch", "SearchResult", argDef("query", "String!"), argDef("level", "Int"), argDef("maxCommunities", "Int")),
+					fieldDef("localSearch", "LocalSearchResult", argDef("entityId", "String!"), argDef("query", "String"), argDef("level", "Int")),
+					fieldDef("globalSearch", "GlobalSearchResult", argDef("query", "String!"), argDef("level", "Int"), argDef("maxCommunities", "Int"), argDef("includeSummaries", "Boolean"), argDef("includeRelationships", "Boolean"), argDef("includeSources", "Boolean")),
 					fieldDef("capabilities", "Capabilities"),
 					// Agentic queries
 					fieldDef("trajectory", "Trajectory", argDef("loopId", "String!"), argDef("limit", "Int")),
@@ -1429,7 +1448,11 @@ func buildIntrospectionSchema() map[string]interface{} {
 			typeDef("OBJECT", "Relationship", "from", "to", "predicate"),
 			typeDef("OBJECT", "HierarchyResult", "prefix", "children", "count"),
 			typeDef("OBJECT", "PathSearchResult", "entities", "edges", "paths"),
-			typeDef("OBJECT", "SearchResult", "results", "score"),
+			typeDef("OBJECT", "GlobalSearchResult", "entities", "community_summaries", "relationships", "sources", "count", "duration_ms", "answer", "answer_model"),
+			typeDef("OBJECT", "LocalSearchResult", "entities", "communityId", "count", "durationMs"),
+			typeDef("OBJECT", "CommunitySummary", "community_id", "summary", "keywords", "level", "relevance"),
+			typeDef("OBJECT", "SearchRelationship", "from_entity_id", "to_entity_id", "predicate"),
+			typeDef("OBJECT", "SearchSource", "entity_id", "community_id", "relevance"),
 			typeDef("OBJECT", "Capabilities", "queries", "mutations"),
 			// Predicate types
 			typeDef("OBJECT", "PredicateSummary", "predicate", "entityCount"),
@@ -1489,6 +1512,13 @@ func typeDef(kind, name string, fieldNames ...string) map[string]interface{} {
 
 // handleNATSResponse processes the NATS response and writes appropriate GraphQL response.
 func (c *Component) handleNATSResponse(w http.ResponseWriter, subject string, resp []byte) {
+	c.handleNATSResponseWithExtensions(w, subject, resp, nil)
+}
+
+// handleNATSResponseWithExtensions processes the NATS response and writes a GraphQL response
+// that optionally includes an extensions map (e.g. classification metadata). When extensions
+// is nil, behaviour is identical to handleNATSResponse.
+func (c *Component) handleNATSResponseWithExtensions(w http.ResponseWriter, subject string, resp []byte, extensions map[string]interface{}) {
 	// Check if response is a plain-text error from NATS handler (format: "error: <message>")
 	respStr := string(resp)
 	if strings.HasPrefix(respStr, "error:") {
@@ -1536,7 +1566,7 @@ func (c *Component) handleNATSResponse(w http.ResponseWriter, subject string, re
 		}
 	}
 
-	c.writeGraphQLSuccess(w, subject, resp)
+	c.writeGraphQLSuccessWithExtensions(w, subject, resp, extensions)
 }
 
 // handleGraphQL handles GraphQL requests
@@ -1590,13 +1620,22 @@ func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 
 	payload := c.transformVariablesToNATSPayload(mergedVars, subject)
 
-	// For search queries, classify the query text and merge extracted options
+	// For search queries, classify the query text and merge extracted options.
+	// When classification succeeds, capture the result for inclusion in the GraphQL
+	// extensions field so clients can observe which tier and intent was resolved.
+	var extensions map[string]interface{}
 	if c.classifier != nil && (subject == "graph.query.globalSearch" || subject == "graph.query.semantic") {
 		if queryText, ok := payload["query"].(string); ok && queryText != "" {
 			result := c.classifier.ClassifyQuery(ctx, queryText)
 			if result != nil {
-				// Merge classification options into payload
 				c.mergeClassificationOptions(payload, result)
+				extensions = map[string]interface{}{
+					"classification": map[string]interface{}{
+						"tier":       result.Tier,
+						"confidence": result.Confidence,
+						"intent":     result.Intent,
+					},
+				}
 			}
 		}
 	}
@@ -1614,7 +1653,7 @@ func (c *Component) handleGraphQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c.handleNATSResponse(w, subject, resp)
+	c.handleNATSResponseWithExtensions(w, subject, resp, extensions)
 }
 
 // handleMCP handles MCP requests

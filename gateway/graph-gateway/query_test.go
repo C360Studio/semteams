@@ -1456,6 +1456,103 @@ func TestGateway_TransformPredicateVarsWithValue(t *testing.T) {
 	}
 }
 
+// ====================================================================================
+// writeGraphQLSuccessWithExtensions tests
+// ====================================================================================
+
+func TestWriteGraphQLSuccessWithExtensions_IncludesExtensions(t *testing.T) {
+	comp := createTestGateway(t)
+
+	w := httptest.NewRecorder()
+	extensions := map[string]interface{}{
+		"classification": map[string]interface{}{
+			"tier":       1,
+			"confidence": 0.92,
+			"intent":     "entity_lookup",
+		},
+	}
+
+	comp.writeGraphQLSuccessWithExtensions(w, "graph.query.globalSearch", []byte(`{"results":[]}`), extensions)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+
+	// extensions field must be present
+	ext, ok := body["extensions"]
+	require.True(t, ok, "response must contain 'extensions' field")
+	require.NotNil(t, ext)
+
+	extMap, ok := ext.(map[string]interface{})
+	require.True(t, ok, "'extensions' must be an object")
+
+	classification, ok := extMap["classification"]
+	require.True(t, ok, "'extensions.classification' must be present")
+
+	classMap, ok := classification.(map[string]interface{})
+	require.True(t, ok, "'extensions.classification' must be an object")
+
+	assert.Equal(t, float64(1), classMap["tier"])
+	assert.InDelta(t, 0.92, classMap["confidence"], 0.001)
+	assert.Equal(t, "entity_lookup", classMap["intent"])
+
+	// data field must also be present
+	_, ok = body["data"]
+	assert.True(t, ok, "response must contain 'data' field")
+}
+
+func TestWriteGraphQLSuccessWithExtensions_OmitsWhenNil(t *testing.T) {
+	comp := createTestGateway(t)
+
+	w := httptest.NewRecorder()
+	comp.writeGraphQLSuccessWithExtensions(w, "graph.query.globalSearch", []byte(`{"results":[]}`), nil)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+
+	_, hasExtensions := body["extensions"]
+	assert.False(t, hasExtensions, "nil extensions must not produce an 'extensions' field")
+}
+
+func TestWriteGraphQLSuccessWithExtensions_OmitsWhenEmpty(t *testing.T) {
+	comp := createTestGateway(t)
+
+	w := httptest.NewRecorder()
+	comp.writeGraphQLSuccessWithExtensions(w, "graph.query.globalSearch", []byte(`{"results":[]}`), map[string]interface{}{})
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var body map[string]interface{}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+
+	_, hasExtensions := body["extensions"]
+	assert.False(t, hasExtensions, "empty extensions map must not produce an 'extensions' field")
+}
+
+func TestWriteGraphQLSuccess_DelegatesToWithExtensions(t *testing.T) {
+	comp := createTestGateway(t)
+
+	// Call the original helper (no extensions).
+	wOld := httptest.NewRecorder()
+	comp.writeGraphQLSuccess(wOld, "graph.query.entity", []byte(`{"id":"x"}`))
+
+	// Call the new helper with nil extensions — must produce identical output.
+	wNew := httptest.NewRecorder()
+	comp.writeGraphQLSuccessWithExtensions(wNew, "graph.query.entity", []byte(`{"id":"x"}`), nil)
+
+	assert.Equal(t, wOld.Code, wNew.Code, "status codes must match")
+	assert.Equal(t, wOld.Header().Get("Content-Type"), wNew.Header().Get("Content-Type"), "content-type must match")
+
+	var oldBody, newBody map[string]interface{}
+	require.NoError(t, json.Unmarshal(wOld.Body.Bytes(), &oldBody))
+	require.NoError(t, json.Unmarshal(wNew.Body.Bytes(), &newBody))
+	assert.Equal(t, oldBody, newBody, "response bodies must be identical for nil extensions")
+}
+
 func createTestGatewayWithMock(t *testing.T, mock *mockNATSRequester) *Component {
 	t.Helper()
 
@@ -1479,4 +1576,199 @@ func createTestGatewayWithMock(t *testing.T, mock *mockNATSRequester) *Component
 // createTestLogger creates a logger for testing
 func createTestLogger() *slog.Logger {
 	return slog.Default()
+}
+
+// ====================================================================================
+// GlobalSearch Schema Enrichment Tests
+// ====================================================================================
+
+// TestTransformGlobalSearchVars_IncludeFlags verifies that the three new boolean
+// flags are forwarded to the backend payload under snake_case keys.
+func TestTransformGlobalSearchVars_IncludeFlags(t *testing.T) {
+	comp := &Component{}
+
+	tests := []struct {
+		name     string
+		vars     map[string]interface{}
+		expected map[string]interface{}
+	}{
+		{
+			name: "includeSummaries maps to include_summaries",
+			vars: map[string]interface{}{
+				"query":            "find drones near Houston",
+				"includeSummaries": true,
+			},
+			expected: map[string]interface{}{
+				"query":             "find drones near Houston",
+				"include_summaries": true,
+			},
+		},
+		{
+			name: "includeRelationships maps to include_relationships",
+			vars: map[string]interface{}{
+				"query":                "network topology",
+				"includeRelationships": false,
+			},
+			expected: map[string]interface{}{
+				"query":                 "network topology",
+				"include_relationships": false,
+			},
+		},
+		{
+			name: "includeSources maps to include_sources",
+			vars: map[string]interface{}{
+				"query":          "supply chain risk",
+				"includeSources": true,
+			},
+			expected: map[string]interface{}{
+				"query":           "supply chain risk",
+				"include_sources": true,
+			},
+		},
+		{
+			name: "all three flags together with existing args",
+			vars: map[string]interface{}{
+				"query":                "multi-hop community search",
+				"level":                float64(2),
+				"maxCommunities":       float64(10),
+				"includeSummaries":     true,
+				"includeRelationships": true,
+				"includeSources":       false,
+			},
+			expected: map[string]interface{}{
+				"query":                 "multi-hop community search",
+				"level":                 float64(2),
+				"max_communities":       float64(10),
+				"include_summaries":     true,
+				"include_relationships": true,
+				"include_sources":       false,
+			},
+		},
+		{
+			name: "omitted flags not present in payload",
+			vars: map[string]interface{}{
+				"query": "minimal global search",
+			},
+			expected: map[string]interface{}{
+				"query": "minimal global search",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := comp.transformGlobalSearchVars(tt.vars)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestBuildIntrospectionSchema_GlobalSearchResult verifies that GlobalSearchResult
+// is present in the schema with all expected fields.
+func TestBuildIntrospectionSchema_GlobalSearchResult(t *testing.T) {
+	schema := buildIntrospectionSchema()
+
+	types, ok := schema["types"].([]map[string]interface{})
+	require.True(t, ok, "schema must have a types slice")
+
+	var globalSearchResult map[string]interface{}
+	for _, td := range types {
+		if td["name"] == "GlobalSearchResult" {
+			globalSearchResult = td
+			break
+		}
+	}
+	require.NotNil(t, globalSearchResult, "GlobalSearchResult type must exist in schema")
+	assert.Equal(t, "OBJECT", globalSearchResult["kind"])
+
+	fields, ok := globalSearchResult["fields"].([]map[string]interface{})
+	require.True(t, ok, "GlobalSearchResult must have a fields slice")
+
+	fieldNames := make([]string, 0, len(fields))
+	for _, f := range fields {
+		fieldNames = append(fieldNames, f["name"].(string))
+	}
+
+	expectedFields := []string{"entities", "community_summaries", "relationships", "sources", "count", "duration_ms", "answer", "answer_model"}
+	for _, expected := range expectedFields {
+		assert.Contains(t, fieldNames, expected, "GlobalSearchResult should contain field %q", expected)
+	}
+}
+
+// TestBuildIntrospectionSchema_LocalSearchResult verifies that LocalSearchResult
+// is present in the schema with all expected fields.
+func TestBuildIntrospectionSchema_LocalSearchResult(t *testing.T) {
+	schema := buildIntrospectionSchema()
+
+	types, ok := schema["types"].([]map[string]interface{})
+	require.True(t, ok, "schema must have a types slice")
+
+	var localSearchResult map[string]interface{}
+	for _, td := range types {
+		if td["name"] == "LocalSearchResult" {
+			localSearchResult = td
+			break
+		}
+	}
+	require.NotNil(t, localSearchResult, "LocalSearchResult type must exist in schema")
+	assert.Equal(t, "OBJECT", localSearchResult["kind"])
+
+	fields, ok := localSearchResult["fields"].([]map[string]interface{})
+	require.True(t, ok, "LocalSearchResult must have a fields slice")
+
+	fieldNames := make([]string, 0, len(fields))
+	for _, f := range fields {
+		fieldNames = append(fieldNames, f["name"].(string))
+	}
+
+	expectedFields := []string{"entities", "communityId", "count", "durationMs"}
+	for _, expected := range expectedFields {
+		assert.Contains(t, fieldNames, expected, "LocalSearchResult should contain field %q", expected)
+	}
+}
+
+// TestBuildIntrospectionSchema_GlobalSearchArgs verifies that the globalSearch
+// query field exposes all 6 expected arguments in the schema.
+func TestBuildIntrospectionSchema_GlobalSearchArgs(t *testing.T) {
+	schema := buildIntrospectionSchema()
+
+	types, ok := schema["types"].([]map[string]interface{})
+	require.True(t, ok, "schema must have a types slice")
+
+	// Find the Query type.
+	var queryType map[string]interface{}
+	for _, td := range types {
+		if td["name"] == "Query" {
+			queryType = td
+			break
+		}
+	}
+	require.NotNil(t, queryType, "Query type must exist in schema")
+
+	fields, ok := queryType["fields"].([]map[string]interface{})
+	require.True(t, ok, "Query type must have a fields slice")
+
+	// Find the globalSearch field.
+	var globalSearchField map[string]interface{}
+	for _, f := range fields {
+		if f["name"] == "globalSearch" {
+			globalSearchField = f
+			break
+		}
+	}
+	require.NotNil(t, globalSearchField, "globalSearch field must exist on Query type")
+
+	args, ok := globalSearchField["args"].([]map[string]interface{})
+	require.True(t, ok, "globalSearch must have args slice")
+
+	argNames := make([]string, 0, len(args))
+	for _, a := range args {
+		argNames = append(argNames, a["name"].(string))
+	}
+
+	expectedArgs := []string{"query", "level", "maxCommunities", "includeSummaries", "includeRelationships", "includeSources"}
+	assert.Len(t, argNames, len(expectedArgs), "globalSearch should have exactly %d args", len(expectedArgs))
+	for _, expected := range expectedArgs {
+		assert.Contains(t, argNames, expected, "globalSearch should have arg %q", expected)
+	}
 }
