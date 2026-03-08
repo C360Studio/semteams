@@ -72,6 +72,7 @@ type ToolResult struct {
 	Metadata map[string]any `json:"metadata,omitempty"`
 	LoopID   string         `json:"loop_id,omitempty"`
 	TraceID  string         `json:"trace_id,omitempty"`
+	StopLoop bool           `json:"stop_loop,omitempty"` // Signal loop termination; Content becomes the completion result
 }
 
 // Validate checks if the ToolResult is valid

@@ -681,6 +681,16 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
+	// Tool-initiated loop termination: the tool signals that no further iterations
+	// are needed (e.g., a terminal action like decompose, submit, approve).
+	// Content becomes the LoopCompletedEvent.Result.
+	if toolResult.StopLoop {
+		if err := h.handleCompleteResponse(&result, loopID, entity, toolResult.Content); err != nil {
+			return result, err
+		}
+		return result, nil
+	}
+
 	// Context manager reference for handleToolsComplete (tool results are added
 	// there in batch, not individually, to avoid double-adds with filter rejections).
 	cm := h.loopManager.GetContextManager(loopID)

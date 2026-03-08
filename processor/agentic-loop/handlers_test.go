@@ -681,6 +681,93 @@ func TestHandleToolResult_WithError(t *testing.T) {
 	}
 }
 
+func TestHandleToolResult_StopLoop(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-001",
+		Role:   "general",
+		Model:  "qwen-32b",
+		Prompt: "Test",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	loopID := taskResult.LoopID
+
+	// Trigger tool call
+	toolResponse := agentic.AgentResponse{
+		RequestID: "req-001",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-001", Name: "decompose_quest"},
+			},
+		},
+	}
+
+	_, err = handler.HandleModelResponse(ctx, loopID, toolResponse)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// Tool result with StopLoop
+	toolResult := agentic.ToolResult{
+		CallID:   "call-001",
+		Content:  `{"dag": "quest-decomposition-result"}`,
+		StopLoop: true,
+	}
+
+	result, err := handler.HandleToolResult(ctx, loopID, toolResult)
+	if err != nil {
+		t.Fatalf("HandleToolResult() error = %v", err)
+	}
+
+	// Should be in complete state
+	if result.State != agentic.LoopStateComplete {
+		t.Errorf("State = %q, want %q", result.State, agentic.LoopStateComplete)
+	}
+
+	// Should publish agent.complete (not agent.request)
+	foundComplete := false
+	foundRequest := false
+	for _, msg := range result.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "agent.complete") {
+			foundComplete = true
+
+			// Verify the completion result contains the tool's content
+			var envelope map[string]any
+			if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+				t.Fatalf("Failed to parse envelope: %v", err)
+			}
+			payload, ok := envelope["payload"].(map[string]any)
+			if !ok {
+				t.Fatalf("Expected payload in BaseMessage envelope")
+			}
+			if got, ok := payload["result"].(string); !ok || got != toolResult.Content {
+				t.Errorf("Completion result = %q, want %q", got, toolResult.Content)
+			}
+		}
+		if containsIgnoreCase(msg.Subject, "agent.request") {
+			foundRequest = true
+		}
+	}
+	if !foundComplete {
+		t.Error("Should publish agent.complete when StopLoop is set")
+	}
+	if foundRequest {
+		t.Error("Should NOT publish agent.request when StopLoop is set")
+	}
+
+	// Should have completion state set
+	if result.CompletionState == nil {
+		t.Error("CompletionState should be set for StopLoop")
+	}
+}
+
 func TestHandleToolResult_NonExistentLoop(t *testing.T) {
 	handler := agenticloop.NewMessageHandler(createTestConfig())
 
