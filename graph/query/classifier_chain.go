@@ -23,16 +23,21 @@ type ClassificationResult struct {
 type ClassifierChain struct {
 	keyword   *KeywordClassifier   // T0 - always available (pattern matching)
 	embedding *EmbeddingClassifier // T1/T2 - statistical or neural (optional)
-	// llm       *LLMClassifier    // T3 - future
+	llm       *LLMClassifier       // T3 - LLM-based classification (optional)
 }
 
-// NewClassifierChain creates a classifier chain with keyword and optional embedding classifiers.
+// NewClassifierChain creates a classifier chain with keyword and optional embedding/LLM classifiers.
 //
-// Both parameters may be nil. Chain will route queries through available tiers.
-func NewClassifierChain(keyword *KeywordClassifier, embedding *EmbeddingClassifier) *ClassifierChain {
+// All parameters may be nil. Chain will route queries through available tiers.
+func NewClassifierChain(keyword *KeywordClassifier, embedding *EmbeddingClassifier, llmClassifiers ...*LLMClassifier) *ClassifierChain {
+	var llm *LLMClassifier
+	if len(llmClassifiers) > 0 {
+		llm = llmClassifiers[0]
+	}
 	return &ClassifierChain{
 		keyword:   keyword,
 		embedding: embedding,
+		llm:       llm,
 	}
 }
 
@@ -84,6 +89,15 @@ func (c *ClassifierChain) ClassifyQuery(ctx context.Context, query string) *Clas
 				Confidence: score,
 			}
 		}
+	}
+
+	// T3: Try LLM classifier if available and no keyword/embedding match
+	if c.llm != nil {
+		result, err := c.llm.ClassifyQuery(ctx, query)
+		if err == nil && result != nil {
+			return result
+		}
+		// LLM failure is non-fatal — fall through to default
 	}
 
 	// Default: Return T0 result with no filters
