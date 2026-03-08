@@ -12,7 +12,7 @@
 	 */
 
 	import { graphStore } from '$lib/stores/graphStore.svelte';
-	import type { GraphEntity, GraphRelationship, GraphFilters as GraphFiltersType, CommunitySummary, ClassificationMeta } from '$lib/types/graph';
+	import type { GraphEntity, GraphRelationship, GraphFilters as GraphFiltersType, CommunitySummary, ClassificationMeta, SearchMode } from '$lib/types/graph';
 	import { graphApi, GraphApiError } from '$lib/services/graphApi';
 	import { transformPathSearchResult, transformGlobalSearchResult } from '$lib/services/graphTransform';
 
@@ -55,6 +55,7 @@
 	let nlqInSearchMode = $state(false);
 	let nlqSummaries = $state<CommunitySummary[]>([]);
 	let nlqClassification = $state<ClassificationMeta | null>(null);
+	let searchMode = $state<SearchMode>('replace');
 
 	// Kick off the initial data load after mount
 	$effect(() => {
@@ -112,7 +113,9 @@
 		try {
 			const result = await graphApi.globalSearch(query, 2, 10);
 			const entities = transformGlobalSearchResult(result);
-			graphStore.clearEntities();
+			if (searchMode === 'replace') {
+				graphStore.clearEntities();
+			}
 			graphStore.upsertEntities(entities);
 			nlqSummaries = result.communitySummaries ?? [];
 			nlqClassification = result.classification ?? null;
@@ -135,9 +138,14 @@
 		nlqInSearchMode = false;
 		nlqSummaries = [];
 		nlqClassification = null;
+		searchMode = 'replace';
 		graphStore.clearEntities();
 		graphStore.setLoading(true);
 		await loadGraphData();
+	}
+
+	function handleSearchModeChange(mode: SearchMode) {
+		searchMode = mode;
 	}
 
 	// Event handlers
@@ -267,6 +275,8 @@
 			loading={nlqLoading}
 			inSearchMode={nlqInSearchMode}
 			error={nlqError}
+			{searchMode}
+			onSearchModeChange={handleSearchModeChange}
 		/>
 		{#if nlqSummaries.length > 0}
 			<CommunitySummaryPanel summaries={nlqSummaries} />

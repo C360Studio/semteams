@@ -6,12 +6,16 @@
    * with loading, error, and search-mode states.
    */
 
+  import type { SearchMode } from "$lib/types/graph";
+
   interface Props {
     onSearch: (query: string) => void;
     onClear: () => void;
     loading?: boolean;
     inSearchMode?: boolean;
     error?: string | null;
+    searchMode?: SearchMode;
+    onSearchModeChange?: (mode: SearchMode) => void;
   }
 
   let {
@@ -20,6 +24,8 @@
     loading = false,
     inSearchMode = false,
     error = null,
+    searchMode = undefined,
+    onSearchModeChange = undefined,
   }: Props = $props();
 
   // Local state: the current input value and a local error flag that clears on typing
@@ -61,6 +67,12 @@
       localErrorDismissed = false;
     }
   });
+
+  function handleToggleMode() {
+    if (!onSearchModeChange || !searchMode) return;
+    const nextMode: SearchMode = searchMode === "replace" ? "merge" : "replace";
+    onSearchModeChange(nextMode);
+  }
 </script>
 
 <div class="nlq-search-bar">
@@ -94,6 +106,18 @@
         aria-label="Back to browse"
       >
         Back to browse
+      </button>
+    {/if}
+    {#if searchMode !== undefined}
+      <button
+        type="button"
+        class="nlq-mode-toggle"
+        data-testid="search-mode-toggle"
+        onclick={handleToggleMode}
+        disabled={loading}
+        aria-label="Toggle mode: {searchMode}"
+      >
+        {searchMode === "replace" ? "Replace" : "Merge"}
       </button>
     {/if}
   </div>
@@ -170,6 +194,22 @@
   .nlq-clear-button {
     background: transparent;
     color: var(--ui-text-secondary, #888);
+  }
+
+  .nlq-mode-toggle {
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--ui-border-subtle, #ccc);
+    cursor: pointer;
+    font-size: 13px;
+    white-space: nowrap;
+    background: var(--ui-surface-secondary, #f5f5f5);
+    color: var(--ui-text-primary, #222);
+  }
+
+  .nlq-mode-toggle:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   .nlq-loading {
