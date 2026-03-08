@@ -106,6 +106,25 @@ services:
       timeout: 3s
       retries: 10
 
+  # SemSource (optional, for graph integration E2E tests)
+  # Activated via: COMPOSE_PROFILES=semsource
+  semsource:
+    profiles: ["semsource"]
+    build:
+      context: ${SEMSOURCE_CONTEXT:-../semsource}
+      dockerfile: ${SEMSOURCE_DOCKERFILE:-Dockerfile}
+    container_name: semstreams-ui-e2e-semsource
+    volumes:
+      - ./e2e/fixtures/semsource:/data/fixture:ro
+      - ./e2e/fixtures/semsource/semsource-e2e.json:/etc/semsource/config.json:ro
+    networks:
+      - e2e-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7890/health"]
+      interval: 3s
+      timeout: 2s
+      retries: 15
+
 networks:
   e2e-net:
     driver: bridge

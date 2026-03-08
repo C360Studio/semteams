@@ -161,6 +161,16 @@ tasks:
     cmds:
       - npm run test:e2e
 
+  test:e2e:semsource-graph:
+    desc: Run E2E tests with semsource graph integration
+    env:
+      BACKEND_CONTEXT: ../semstreams
+      BACKEND_CONFIG: e2e-with-semsource.json
+      SEMSOURCE_CONTEXT: ../semsource
+      COMPOSE_PROFILES: semsource
+    cmds:
+      - npx playwright test e2e/semsource-graph/
+
   test:e2e:semmem:
     desc: Run E2E tests against semmem backend
     env:
