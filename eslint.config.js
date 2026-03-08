@@ -88,6 +88,15 @@ export default [
       "@typescript-eslint/no-explicit-any": "off",
     },
   },
+  // chatApi.test.ts uses RequestInit as a TypeScript type annotation; the
+  // no-undef rule fires because the test-file override block does not use the
+  // TypeScript parser. Suppress no-undef for this locked generated file.
+  {
+    files: ["src/lib/services/chatApi.test.ts"],
+    rules: {
+      "no-undef": "off",
+    },
+  },
   prettier,
   {
     ignores: [
