@@ -32,6 +32,7 @@ type testConfig struct {
 	timeout      time.Duration
 	startTimeout time.Duration
 	bucketPrefix string // Prefix for KV bucket names to enable test isolation
+	fileStorage  bool   // Use file-backed JetStream storage instead of memory-only
 }
 
 // TestStreamConfig defines a stream to pre-create for testing
@@ -96,6 +97,16 @@ func WithStartTimeout(timeout time.Duration) TestOption {
 	}
 }
 
+// WithFileStorage enables file-backed JetStream storage instead of the default
+// memory-only store. Use this when tests create many KV buckets or write large
+// volumes of data that would exceed the 256MB default memory limit.
+func WithFileStorage() TestOption {
+	return func(cfg *testConfig) {
+		cfg.jetstream = true
+		cfg.fileStorage = true
+	}
+}
+
 // WithBucketPrefix sets a prefix for all KV bucket names to enable test isolation.
 // When tests run in parallel, each test can use a unique prefix (e.g., test name)
 // to avoid bucket name collisions.
@@ -130,6 +141,9 @@ func NewSharedTestClient(opts ...TestOption) (*TestClient, error) {
 
 	if cfg.jetstream {
 		args = append(args, "--js")
+		if cfg.fileStorage {
+			args = append(args, "--store_dir", "/tmp/nats-data")
+		}
 	}
 
 	// Create container request
@@ -255,6 +269,9 @@ func NewTestClient(t testing.TB, opts ...TestOption) *TestClient {
 
 	if cfg.jetstream {
 		args = append(args, "--js")
+		if cfg.fileStorage {
+			args = append(args, "--store_dir", "/tmp/nats-data")
+		}
 	}
 
 	// Create container request
