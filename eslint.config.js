@@ -81,6 +81,7 @@ export default [
       "src/lib/components/DataTable.test.ts",
       "src/lib/components/JsonEditor.test.ts",
       "src/lib/components/PropertiesPanel.attack.test.ts",
+      "src/lib/components/runtime/NlqDebugBadge.test.ts",
     ],
     rules: {
       "@typescript-eslint/no-unused-vars": "off",

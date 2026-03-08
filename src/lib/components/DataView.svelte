@@ -12,7 +12,7 @@
 	 */
 
 	import { graphStore } from '$lib/stores/graphStore.svelte';
-	import type { GraphEntity, GraphRelationship, GraphFilters as GraphFiltersType } from '$lib/types/graph';
+	import type { GraphEntity, GraphRelationship, GraphFilters as GraphFiltersType, CommunitySummary, ClassificationMeta } from '$lib/types/graph';
 	import { graphApi, GraphApiError } from '$lib/services/graphApi';
 	import { transformPathSearchResult, transformGlobalSearchResult } from '$lib/services/graphTransform';
 
@@ -20,6 +20,8 @@
 	import SigmaCanvas from './runtime/SigmaCanvas.svelte';
 	import GraphDetailPanel from './runtime/GraphDetailPanel.svelte';
 	import NlqSearchBar from './runtime/NlqSearchBar.svelte';
+	import CommunitySummaryPanel from './runtime/CommunitySummaryPanel.svelte';
+	import NlqDebugBadge from './runtime/NlqDebugBadge.svelte';
 
 	interface DataViewProps {
 		flowId: string;
@@ -51,6 +53,8 @@
 	let nlqLoading = $state(false);
 	let nlqError = $state<string | null>(null);
 	let nlqInSearchMode = $state(false);
+	let nlqSummaries = $state<CommunitySummary[]>([]);
+	let nlqClassification = $state<ClassificationMeta | null>(null);
 
 	// Kick off the initial data load after mount
 	$effect(() => {
@@ -110,6 +114,8 @@
 			const entities = transformGlobalSearchResult(result);
 			graphStore.clearEntities();
 			graphStore.upsertEntities(entities);
+			nlqSummaries = result.communitySummaries ?? [];
+			nlqClassification = result.classification ?? null;
 			nlqInSearchMode = true;
 		} catch (error) {
 			let errorMessage = 'Search failed';
@@ -127,6 +133,8 @@
 	async function handleClearSearch() {
 		nlqError = null;
 		nlqInSearchMode = false;
+		nlqSummaries = [];
+		nlqClassification = null;
 		graphStore.clearEntities();
 		graphStore.setLoading(true);
 		await loadGraphData();
@@ -260,6 +268,12 @@
 			inSearchMode={nlqInSearchMode}
 			error={nlqError}
 		/>
+		{#if nlqSummaries.length > 0}
+			<CommunitySummaryPanel summaries={nlqSummaries} />
+		{/if}
+		{#if nlqClassification}
+			<NlqDebugBadge classification={nlqClassification} />
+		{/if}
 		<SigmaCanvas
 			{entities}
 			{relationships}
