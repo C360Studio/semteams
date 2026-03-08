@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -47,16 +48,17 @@ type Config struct {
 
 // ConstructorConfig holds all configuration needed to construct an Output instance
 type ConstructorConfig struct {
-	Name            string                  // Component name (empty = auto-generate)
-	Port            int                     // WebSocket server port
-	Path            string                  // WebSocket endpoint path
-	Subjects        []string                // NATS subjects to subscribe to
-	NATSClient      *natsclient.Client      // NATS client for messaging
-	MetricsRegistry *metric.MetricsRegistry // Optional Prometheus metrics registry
-	Logger          *slog.Logger            // Optional logger (nil = use default)
-	Security        security.Config         // Security configuration
-	DeliveryMode    DeliveryMode            // Reliability semantics
-	AckTimeout      time.Duration           // Acknowledgment timeout for at-least-once
+	Name            string                     // Component name (empty = auto-generate)
+	Port            int                        // WebSocket server port
+	Path            string                     // WebSocket endpoint path
+	Subjects        []string                   // NATS subjects to subscribe to
+	InputPorts      []component.PortDefinition // Full port definitions (type, stream, consumer config)
+	NATSClient      *natsclient.Client         // NATS client for messaging
+	MetricsRegistry *metric.MetricsRegistry    // Optional Prometheus metrics registry
+	Logger          *slog.Logger               // Optional logger (nil = use default)
+	Security        security.Config            // Security configuration
+	DeliveryMode    DeliveryMode               // Reliability semantics
+	AckTimeout      time.Duration              // Acknowledgment timeout for at-least-once
 }
 
 // DefaultConstructorConfig returns sensible defaults for Output construction
@@ -118,6 +120,7 @@ type Output struct {
 	port         int
 	path         string
 	subjects     []string
+	inputPorts   []component.PortDefinition // Full port definitions for type-aware subscriptions
 	natsClient   *natsclient.Client
 	security     security.Config
 	deliveryMode DeliveryMode
@@ -352,6 +355,7 @@ func NewOutputFromConfig(cfg ConstructorConfig) *Output {
 		port:         cfg.Port,
 		path:         cfg.Path,
 		subjects:     cfg.Subjects,
+		inputPorts:   cfg.InputPorts,
 		natsClient:   cfg.NATSClient,
 		security:     cfg.Security,
 		deliveryMode: cfg.DeliveryMode,
@@ -547,7 +551,7 @@ func (w *Output) Start(ctx context.Context) error {
 	}
 
 	// Subscribe to NATS subjects for graph updates
-	if err := w.subscribeToNATS(ctx); err != nil {
+	if err := w.setupSubscriptions(ctx); err != nil {
 		cleanupErr = err
 		return errs.Wrap(err, "Output", "Start", fmt.Sprintf("subscribe to NATS subjects %v", w.subjects))
 	}
@@ -806,25 +810,150 @@ func (w *Output) Stop(timeout time.Duration) error {
 	return nil
 }
 
-// subscribeToNATS subscribes to the configured NATS subjects
-func (w *Output) subscribeToNATS(ctx context.Context) error {
-	// Skip NATS subscription if client is nil (for testing)
+// setupSubscriptions creates subscriptions for all input ports, dispatching on port type.
+// When inputPorts is populated it uses the full port definition (enabling JetStream consumers).
+// When only subjects is available (legacy construction via NewOutput), it synthesises core-NATS
+// port definitions for backward compatibility.
+func (w *Output) setupSubscriptions(ctx context.Context) error {
 	if w.natsClient == nil {
 		return nil
 	}
 
-	// Subscribe to each subject using natsclient wrapper
-	for _, subject := range w.subjects {
-		sub, err := w.natsClient.Subscribe(ctx, subject, func(msgCtx context.Context, msg *natspkg.Msg) {
-			w.handleNATSMessageData(msgCtx, msg.Data, msg.Subject)
-		})
-		if err != nil {
-			return errs.Wrap(err, "Output", "subscribeToNATS", fmt.Sprintf("subscribe to NATS subject %s", subject))
+	// Build the effective port list: prefer explicit port definitions, fall back to subjects.
+	ports := w.inputPorts
+	if len(ports) == 0 && len(w.subjects) > 0 {
+		ports = make([]component.PortDefinition, len(w.subjects))
+		for i, subj := range w.subjects {
+			ports[i] = component.PortDefinition{
+				Name:    fmt.Sprintf("nats_input_%d", i),
+				Type:    "nats",
+				Subject: subj,
+			}
 		}
-		w.subscriptions = append(w.subscriptions, sub)
+	}
+
+	for _, port := range ports {
+		if port.Subject == "" {
+			continue
+		}
+
+		switch port.Type {
+		case "jetstream":
+			if err := w.setupJetStreamConsumer(ctx, port); err != nil {
+				return errs.WrapTransient(err, "Output", "setupSubscriptions",
+					fmt.Sprintf("JetStream consumer for %s", port.Subject))
+			}
+
+		default: // "nats" or empty — backward compatible core NATS subscribe
+			sub, err := w.natsClient.Subscribe(ctx, port.Subject, func(msgCtx context.Context, msg *natspkg.Msg) {
+				w.handleNATSMessageData(msgCtx, msg.Data, msg.Subject)
+			})
+			if err != nil {
+				return errs.Wrap(err, "Output", "setupSubscriptions",
+					fmt.Sprintf("subscribe to NATS subject %s", port.Subject))
+			}
+			w.subscriptions = append(w.subscriptions, sub)
+		}
 	}
 
 	return nil
+}
+
+// setupJetStreamConsumer creates a durable JetStream consumer for an input port.
+// The consumer provides replay-on-reconnect and proper ack-based backpressure.
+func (w *Output) setupJetStreamConsumer(ctx context.Context, port component.PortDefinition) error {
+	streamName := port.StreamName
+	if streamName == "" {
+		streamName = w.deriveStreamName(port.Subject)
+	}
+	if streamName == "" {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Output", "setupJetStreamConsumer",
+			fmt.Sprintf("derive stream name for subject %s", port.Subject))
+	}
+
+	if err := w.waitForStream(ctx, streamName); err != nil {
+		return errs.WrapTransient(err, "Output", "setupJetStreamConsumer",
+			fmt.Sprintf("wait for stream %s", streamName))
+	}
+
+	sanitizedSubject := strings.ReplaceAll(port.Subject, ".", "-")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, "*", "all")
+	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
+	consumerName := fmt.Sprintf("ws-output-%s", sanitizedSubject)
+
+	w.logger.Info("Setting up JetStream consumer",
+		"stream", streamName,
+		"consumer", consumerName,
+		"filter_subject", port.Subject)
+
+	consumerCfg := component.GetConsumerConfigFromDefinition(port)
+
+	cfg := natsclient.StreamConsumerConfig{
+		StreamName:    streamName,
+		ConsumerName:  consumerName,
+		FilterSubject: port.Subject,
+		DeliverPolicy: consumerCfg.DeliverPolicy,
+		AckPolicy:     consumerCfg.AckPolicy,
+		MaxDeliver:    consumerCfg.MaxDeliver,
+		AutoCreate:    false,
+	}
+
+	err := w.natsClient.ConsumeStreamWithConfig(ctx, cfg, func(msgCtx context.Context, msg jetstream.Msg) {
+		w.handleNATSMessageData(msgCtx, msg.Data(), msg.Subject())
+		if ackErr := msg.Ack(); ackErr != nil {
+			w.logger.Error("Failed to ack JetStream message", "error", ackErr)
+		}
+	})
+	if err != nil {
+		return errs.WrapTransient(err, "Output", "setupJetStreamConsumer",
+			fmt.Sprintf("setup consumer for stream %s", streamName))
+	}
+
+	w.logger.Info("WebSocket output subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
+	return nil
+}
+
+// waitForStream polls until the named JetStream stream is available or the context is cancelled.
+func (w *Output) waitForStream(ctx context.Context, streamName string) error {
+	js, err := w.natsClient.JetStream()
+	if err != nil {
+		return errs.WrapTransient(err, "WebSocketOutput", "waitForStream", "get JetStream context")
+	}
+
+	maxRetries := 30
+	retryInterval := 100 * time.Millisecond
+	maxInterval := 2 * time.Second
+
+	for i := 0; i < maxRetries; i++ {
+		_, err := js.Stream(ctx, streamName)
+		if err == nil {
+			return nil
+		}
+		if i < maxRetries-1 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(retryInterval):
+				retryInterval = min(retryInterval*2, maxInterval)
+			}
+		}
+	}
+	return errs.WrapTransient(errs.ErrStorageUnavailable, "WebSocketOutput", "waitForStream",
+		fmt.Sprintf("stream %s not available after %d retries", streamName, maxRetries))
+}
+
+// deriveStreamName extracts a stream name from the subject by taking the first dot-delimited
+// segment and uppercasing it (e.g. "events.>" → "EVENTS").
+func (w *Output) deriveStreamName(subject string) string {
+	subject = strings.TrimPrefix(subject, "*.")
+	subject = strings.TrimSuffix(subject, ".>")
+	subject = strings.TrimSuffix(subject, ".*")
+
+	parts := strings.Split(subject, ".")
+	if len(parts) == 0 || parts[0] == "" || parts[0] == "*" || parts[0] == ">" {
+		return ""
+	}
+	return strings.ToUpper(parts[0])
 }
 
 // unsubscribeFromNATS unsubscribes from all NATS subjects
@@ -1577,12 +1706,19 @@ func CreateOutput(rawConfig json.RawMessage, deps component.Dependencies) (compo
 			"websocket-output-factory", "create", "NATS client is required")
 	}
 
+	// Collect full input port definitions for type-aware subscription dispatch
+	var inputPorts []component.PortDefinition
+	if cfg.Ports != nil {
+		inputPorts = cfg.Ports.Inputs
+	}
+
 	// Create constructor config
 	ctorCfg := ConstructorConfig{
 		Name:            "websocket-output",
 		Port:            port,
 		Path:            path,
 		Subjects:        subjects,
+		InputPorts:      inputPorts,
 		NATSClient:      deps.NATSClient,
 		MetricsRegistry: deps.MetricsRegistry,
 		Security:        deps.Security,

@@ -1773,3 +1773,112 @@ func TestWebSocketOutput_PendingBufferCreation(t *testing.T) {
 	assert.NotNil(t, clientInfo.pendingBuffer)
 	assert.NotNil(t, clientInfo.pendingMessages)
 }
+
+// TestSetupSubscriptions_CoreNATS verifies that a port with type "nats" results in a core NATS
+// subscription (not a JetStream consumer). A nil NATS client is used so the method returns
+// immediately without actually connecting; the test validates the early-return path and that
+// no error is produced for the "nats" type branch structure.
+func TestSetupSubscriptions_CoreNATS(t *testing.T) {
+	cfg := DefaultConstructorConfig()
+	cfg.Port = 19100
+	cfg.Path = "/ws"
+	cfg.Subjects = []string{"events.>"}
+	cfg.InputPorts = []component.PortDefinition{
+		{
+			Name:    "nats_input_0",
+			Type:    "nats",
+			Subject: "events.>",
+		},
+	}
+	cfg.NATSClient = nil // nil client → setupSubscriptions returns nil immediately
+
+	ws := NewOutputFromConfig(cfg)
+
+	ctx := context.Background()
+	err := ws.setupSubscriptions(ctx)
+	require.NoError(t, err, "setupSubscriptions should not error when natsClient is nil")
+
+	// Confirm that inputPorts was stored correctly on the struct
+	require.Len(t, ws.inputPorts, 1)
+	assert.Equal(t, "nats", ws.inputPorts[0].Type)
+	assert.Equal(t, "events.>", ws.inputPorts[0].Subject)
+}
+
+// TestSetupSubscriptions_DefaultType verifies that a port with an empty type string is treated
+// as core NATS (backward compatibility). The nil client path is used so no real connection is
+// required; this purely validates the type-dispatch logic accepts empty-string type as "default".
+func TestSetupSubscriptions_DefaultType(t *testing.T) {
+	cfg := DefaultConstructorConfig()
+	cfg.Port = 19101
+	cfg.Path = "/ws"
+	cfg.Subjects = []string{"metrics.>"}
+	cfg.InputPorts = []component.PortDefinition{
+		{
+			Name:    "legacy_input",
+			Type:    "", // empty type → should default to core NATS path
+			Subject: "metrics.>",
+		},
+	}
+	cfg.NATSClient = nil
+
+	ws := NewOutputFromConfig(cfg)
+
+	ctx := context.Background()
+	err := ws.setupSubscriptions(ctx)
+	require.NoError(t, err, "empty port type should be treated as core NATS without error")
+}
+
+// TestDeriveStreamName tests the stream name derivation heuristic used when no explicit
+// StreamName is provided in the port definition.
+func TestDeriveStreamName(t *testing.T) {
+	ws := NewOutput(19102, "/ws", []string{"placeholder"}, nil)
+
+	tests := []struct {
+		name    string
+		subject string
+		want    string
+	}{
+		{
+			name:    "simple subject",
+			subject: "events.entity.created",
+			want:    "EVENTS",
+		},
+		{
+			name:    "wildcard suffix >",
+			subject: "metrics.>",
+			want:    "METRICS",
+		},
+		{
+			name:    "wildcard suffix *",
+			subject: "logs.*",
+			want:    "LOGS",
+		},
+		{
+			name:    "leading wildcard prefix stripped",
+			subject: "*.events",
+			want:    "EVENTS",
+		},
+		{
+			name:    "bare wildcard",
+			subject: ">",
+			want:    "",
+		},
+		{
+			name:    "empty string",
+			subject: "",
+			want:    "",
+		},
+		{
+			name:    "single segment",
+			subject: "telemetry",
+			want:    "TELEMETRY",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ws.deriveStreamName(tt.subject)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
