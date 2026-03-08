@@ -24,33 +24,22 @@ func TestEvent_Validate(t *testing.T) {
 				SourceID:  "test-source",
 				Namespace: "acme",
 				Timestamp: now,
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "test-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
+				Entity: federation.Entity{
+					ID: "acme.platform.git.my-repo.commit.a1b2c3",
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name: "valid DELTA event with entities",
+			name: "valid DELTA event with entity",
 			event: federation.Event{
 				Type:      federation.EventTypeDELTA,
 				SourceID:  "test-source",
 				Namespace: "acme",
 				Timestamp: now,
-				Entities: []federation.Entity{
-					{
-						ID:      "acme.platform.git.my-repo.commit.a1b2c3",
-						Triples: []message.Triple{{Subject: "acme.platform.git.my-repo.commit.a1b2c3", Predicate: "git.commit.sha", Object: "a1b2c3"}},
-					},
-				},
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "test-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
+				Entity: federation.Entity{
+					ID:      "acme.platform.git.my-repo.commit.a1b2c3",
+					Triples: []message.Triple{{Subject: "acme.platform.git.my-repo.commit.a1b2c3", Predicate: "git.commit.sha", Object: "a1b2c3"}},
 				},
 			},
 			wantErr: false,
@@ -63,12 +52,6 @@ func TestEvent_Validate(t *testing.T) {
 				Namespace:   "acme",
 				Timestamp:   now,
 				Retractions: []string{"acme.platform.git.my-repo.commit.a1b2c3"},
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "test-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
-				},
 			},
 			wantErr: false,
 		},
@@ -79,12 +62,6 @@ func TestEvent_Validate(t *testing.T) {
 				SourceID:  "test-source",
 				Namespace: "acme",
 				Timestamp: now,
-				Provenance: federation.Provenance{
-					SourceType: "internal",
-					SourceID:   "test-source",
-					Timestamp:  now,
-					Handler:    "Engine",
-				},
 			},
 			wantErr: false,
 		},
@@ -94,12 +71,6 @@ func TestEvent_Validate(t *testing.T) {
 				SourceID:  "test-source",
 				Namespace: "acme",
 				Timestamp: now,
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "test-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
-				},
 			},
 			wantErr: true,
 		},
@@ -109,28 +80,15 @@ func TestEvent_Validate(t *testing.T) {
 				Type:      federation.EventTypeSEED,
 				Namespace: "acme",
 				Timestamp: now,
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "test-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
-				},
 			},
 			wantErr: true,
 		},
 		{
 			name: "missing namespace",
 			event: federation.Event{
-				Type:     federation.EventTypeSEED,
-				SourceID: "test-source",
-
+				Type:      federation.EventTypeSEED,
+				SourceID:  "test-source",
 				Timestamp: now,
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "test-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
-				},
 			},
 			wantErr: true,
 		},
@@ -150,12 +108,6 @@ func TestEvent_Validate(t *testing.T) {
 				Type:      federation.EventTypeSEED,
 				SourceID:  "test-source",
 				Namespace: "acme",
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "test-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
-				},
 			},
 			wantErr: true,
 		},
@@ -180,38 +132,22 @@ func TestEventPayload_JSONRoundTrip(t *testing.T) {
 			SourceID:  "my-source",
 			Namespace: "acme",
 			Timestamp: now,
-			Entities: []federation.Entity{
-				{
-					ID: "acme.platform.git.my-repo.commit.a1b2c3",
-					Triples: []message.Triple{
-						{
-							Subject:   "acme.platform.git.my-repo.commit.a1b2c3",
-							Predicate: "git.commit.sha",
-							Object:    "a1b2c3",
-							Timestamp: now,
-						},
-					},
-					Edges: []federation.Edge{
-						{
-							FromID:   "acme.platform.git.my-repo.commit.a1b2c3",
-							ToID:     "acme.platform.git.my-repo.author.alice",
-							EdgeType: "authored_by",
-							Weight:   1.0,
-						},
-					},
-					Provenance: federation.Provenance{
-						SourceType: "git",
-						SourceID:   "my-source",
-						Timestamp:  now,
-						Handler:    "GitHandler",
+			Entity: federation.Entity{
+				ID: "acme.platform.git.my-repo.commit.a1b2c3",
+				Triples: []message.Triple{
+					{
+						Subject:   "acme.platform.git.my-repo.commit.a1b2c3",
+						Predicate: "git.commit.sha",
+						Object:    "a1b2c3",
+						Timestamp: now,
 					},
 				},
-			},
-			Provenance: federation.Provenance{
-				SourceType: "git",
-				SourceID:   "my-source",
-				Timestamp:  now,
-				Handler:    "GitHandler",
+				Provenance: federation.Provenance{
+					SourceType: "git",
+					SourceID:   "my-source",
+					Timestamp:  now,
+					Handler:    "GitHandler",
+				},
 			},
 		},
 	}
@@ -235,11 +171,8 @@ func TestEventPayload_JSONRoundTrip(t *testing.T) {
 	if restored.Event.Namespace != original.Event.Namespace {
 		t.Errorf("Namespace mismatch: got %v, want %v", restored.Event.Namespace, original.Event.Namespace)
 	}
-	if len(restored.Event.Entities) != len(original.Event.Entities) {
-		t.Fatalf("Entities count mismatch: got %d, want %d", len(restored.Event.Entities), len(original.Event.Entities))
-	}
-	if restored.Event.Entities[0].ID != original.Event.Entities[0].ID {
-		t.Errorf("Entity ID mismatch: got %v, want %v", restored.Event.Entities[0].ID, original.Event.Entities[0].ID)
+	if restored.Event.Entity.ID != original.Event.Entity.ID {
+		t.Errorf("Entity ID mismatch: got %v, want %v", restored.Event.Entity.ID, original.Event.Entity.ID)
 	}
 }
 
@@ -268,11 +201,8 @@ func TestEventPayload_Validate(t *testing.T) {
 				SourceID:  "my-source",
 				Namespace: "acme",
 				Timestamp: now,
-				Provenance: federation.Provenance{
-					SourceType: "git",
-					SourceID:   "my-source",
-					Timestamp:  now,
-					Handler:    "GitHandler",
+				Entity: federation.Entity{
+					ID: "acme.platform.git.my-repo.commit.a1b2c3",
 				},
 			},
 		}
@@ -289,6 +219,52 @@ func TestEventPayload_Validate(t *testing.T) {
 			t.Error("Validate() expected error for empty event")
 		}
 	})
+
+	t.Run("DELTA without entity ID", func(t *testing.T) {
+		p := &federation.EventPayload{
+			Event: federation.Event{
+				Type:      federation.EventTypeDELTA,
+				SourceID:  "my-source",
+				Namespace: "acme",
+				Timestamp: now,
+			},
+		}
+		if err := p.Validate(); err == nil {
+			t.Error("Validate() expected error for DELTA without entity ID")
+		}
+	})
+}
+
+func TestEventPayload_Graphable(t *testing.T) {
+	now := time.Now()
+
+	p := &federation.EventPayload{
+		Event: federation.Event{
+			Type:      federation.EventTypeDELTA,
+			SourceID:  "my-source",
+			Namespace: "acme",
+			Timestamp: now,
+			Entity: federation.Entity{
+				ID: "acme.platform.git.my-repo.commit.a1b2c3",
+				Triples: []message.Triple{
+					{Subject: "acme.platform.git.my-repo.commit.a1b2c3", Predicate: "git.commit.sha", Object: "a1b2c3"},
+					{Subject: "acme.platform.git.my-repo.commit.a1b2c3", Predicate: "calls", Object: "acme.platform.git.my-repo.function.helper"},
+				},
+			},
+		},
+	}
+
+	if got := p.EntityID(); got != "acme.platform.git.my-repo.commit.a1b2c3" {
+		t.Errorf("EntityID() = %q, want %q", got, "acme.platform.git.my-repo.commit.a1b2c3")
+	}
+
+	triples := p.Triples()
+	if len(triples) != 2 {
+		t.Fatalf("Triples() len = %d, want 2", len(triples))
+	}
+	if triples[1].Predicate != "calls" {
+		t.Errorf("Triples()[1].Predicate = %q, want %q", triples[1].Predicate, "calls")
+	}
 }
 
 func TestEventPayload_PayloadRegistration(t *testing.T) {
@@ -300,12 +276,6 @@ func TestEventPayload_PayloadRegistration(t *testing.T) {
 		SourceID:  "heartbeat-source",
 		Namespace: "acme",
 		Timestamp: time.Now(),
-		Provenance: federation.Provenance{
-			SourceType: "internal",
-			SourceID:   "heartbeat-source",
-			Timestamp:  time.Now(),
-			Handler:    "Engine",
-		},
 	}
 
 	payload := &federation.EventPayload{Event: event}

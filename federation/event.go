@@ -23,8 +23,8 @@ const (
 	EventTypeHEARTBEAT EventType = "HEARTBEAT"
 )
 
-// Event represents a single graph mutation event.
-// Events flow between services through NATS JetStream for federation merge operations.
+// Event represents a single graph mutation event carrying one entity.
+// Events flow between services over WebSocket for graph-ingest processing.
 type Event struct {
 	// Type is the event type enum.
 	Type EventType `json:"type"`
@@ -38,14 +38,11 @@ type Event struct {
 	// Timestamp is when the event was generated.
 	Timestamp time.Time `json:"timestamp"`
 
-	// Entities contains graph entities for SEED and DELTA events.
-	Entities []Entity `json:"entities,omitempty"`
+	// Entity is the graph entity for SEED and DELTA events.
+	Entity Entity `json:"entity"`
 
 	// Retractions contains entity IDs to remove for RETRACT events.
 	Retractions []string `json:"retractions,omitempty"`
-
-	// Provenance records the event origin.
-	Provenance Provenance `json:"provenance"`
 }
 
 // ValidEventTypes is the set of known event types for validation.

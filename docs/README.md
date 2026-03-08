@@ -78,6 +78,12 @@ Multi-step processes with loops, timeouts, and retries:
 - [Local Monitoring](operations/01-local-monitoring.md) - Prometheus + Grafana setup
 - [Troubleshooting](operations/02-troubleshooting.md) - Common issues and solutions
 
+## Federation
+
+Ingesting graph entities from external sources (semsource, other sem* services):
+
+- [Federation](concepts/16-federation.md) - Ingestion patterns, entity namespacing, flow configuration
+
 ## External Integrations
 
 Optional bridges for connecting SemStreams to external systems:

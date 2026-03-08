@@ -2,13 +2,16 @@ package federation
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 )
 
-// EventPayload implements message.Payload for federation graph events.
-// It wraps Event for transport through the semstreams message bus.
+// EventPayload implements message.Payload and graph.Graphable for federation graph events.
+// It wraps Event for transport through the semstreams message bus. Because it implements
+// Graphable, graph-ingest processes federation entities natively — no separate federation
+// processor is needed.
 type EventPayload struct {
 	Event Event `json:"event"`
 }
@@ -22,7 +25,20 @@ func (p *EventPayload) Schema() message.Type {
 
 // Validate validates the payload for the Payload interface.
 func (p *EventPayload) Validate() error {
+	if p.Event.Entity.ID == "" && p.Event.Type != EventTypeHEARTBEAT && p.Event.Type != EventTypeRETRACT {
+		return fmt.Errorf("entity ID is required for %s events", p.Event.Type)
+	}
 	return p.Event.Validate()
+}
+
+// EntityID implements graph.Graphable. Returns the 6-part entity identifier.
+func (p *EventPayload) EntityID() string {
+	return p.Event.Entity.ID
+}
+
+// Triples implements graph.Graphable. Returns the entity's triples.
+func (p *EventPayload) Triples() []message.Triple {
+	return p.Event.Entity.Triples
 }
 
 // MarshalJSON implements json.Marshaler.
