@@ -102,7 +102,8 @@ func (c *ClassifierChain) ClassifyQuery(ctx context.Context, query string) *Clas
 //   - GeoBounds (spatial filter)
 //   - UseEmbeddings (similarity intent)
 //   - PathIntent (path/zone intent)
-//   - AggregationType (aggregation/ranking intent)
+//   - AggregationType (aggregation intent)
+//   - RankingIntent (ranking intent)
 func hasExplicitIntent(opts *SearchOptions) bool {
 	if opts == nil {
 		return false
@@ -112,7 +113,8 @@ func hasExplicitIntent(opts *SearchOptions) bool {
 		opts.GeoBounds != nil ||
 		opts.UseEmbeddings ||
 		opts.PathIntent ||
-		opts.AggregationType != ""
+		opts.AggregationType != "" ||
+		opts.RankingIntent
 }
 
 // searchOptionsToMap converts SearchOptions to map[string]any for ClassificationResult.

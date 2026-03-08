@@ -237,7 +237,8 @@ func isValidStrategy(s SearchStrategy) bool {
 		StrategyHybridGraphRAG,
 		StrategyPathRAG,
 		StrategySemantic,
-		StrategyExact:
+		StrategyExact,
+		StrategyAggregation:
 		return true
 	}
 	return false
