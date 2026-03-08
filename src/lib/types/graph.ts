@@ -223,6 +223,51 @@ export interface PathSearchResult {
 }
 
 /**
+ * Community summary returned by a global (NLQ) search.
+ */
+export interface CommunitySummary {
+  communityId: string;
+  text: string;
+  keywords: string[];
+}
+
+/**
+ * Explicit relationship returned by a global (NLQ) search.
+ */
+export interface SearchRelationship {
+  from: string;
+  to: string;
+  predicate: string;
+}
+
+/**
+ * Parsed result from the globalSearch GraphQL operation.
+ */
+export interface GlobalSearchResult {
+  entities: BackendEntity[];
+  communitySummaries: CommunitySummary[];
+  relationships: SearchRelationship[];
+  count: number;
+  durationMs: number;
+  classification?: ClassificationMeta;
+}
+
+/**
+ * Whether search results replace or merge with existing graph data.
+ */
+export type SearchMode = "replace" | "merge";
+
+/**
+ * NLQ classification metadata returned via GraphQL extensions.
+ * Available in semstreams alpha.17+.
+ */
+export interface ClassificationMeta {
+  tier: number;
+  confidence: number;
+  intent: string;
+}
+
+/**
  * GraphQL response for entity query.
  */
 export interface EntityQueryResponse {

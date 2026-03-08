@@ -1,7 +1,12 @@
 // GraphQL API client
 // Handles GraphQL queries for knowledge graph operations
 
-import type { BackendEntity, PathSearchResult } from "$lib/types/graph";
+import type {
+  BackendEntity,
+  ClassificationMeta,
+  GlobalSearchResult,
+  PathSearchResult,
+} from "$lib/types/graph";
 
 const GRAPHQL_ENDPOINT = "/graphql";
 
@@ -27,6 +32,7 @@ interface GraphQLResponse<T> {
     message: string;
     path?: string[];
   }>;
+  extensions?: Record<string, unknown>;
 }
 
 async function executeQuery<T>(
@@ -85,6 +91,69 @@ async function executeQuery<T>(
   }
 
   return data.data;
+}
+
+interface QueryResultWithExtensions<T> {
+  data: T;
+  extensions?: Record<string, unknown>;
+}
+
+async function executeQueryWithExtensions<T>(
+  query: string,
+  variables: Record<string, unknown>,
+  operationName: string,
+): Promise<QueryResultWithExtensions<T>> {
+  const request: GraphQLRequest = {
+    query,
+    variables,
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(GRAPHQL_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+    });
+  } catch (error) {
+    throw new GraphApiError(
+      `Network error during ${operationName}: ${error instanceof Error ? error.message : "Unknown error"}`,
+      0,
+      { originalError: error },
+    );
+  }
+
+  if (!response.ok) {
+    throw new GraphApiError(
+      `${operationName} failed: ${response.statusText}`,
+      response.status,
+    );
+  }
+
+  let parsed: GraphQLResponse<T>;
+  try {
+    parsed = await response.json();
+  } catch (error) {
+    throw new GraphApiError(
+      `Invalid JSON response from ${operationName}`,
+      500,
+      { originalError: error },
+    );
+  }
+
+  if (parsed.errors && parsed.errors.length > 0) {
+    throw new GraphApiError(parsed.errors[0].message, 200, {
+      errors: parsed.errors,
+    });
+  }
+
+  if (!parsed.data) {
+    throw new GraphApiError(`No data in ${operationName} response`, 500);
+  }
+
+  return { data: parsed.data, extensions: parsed.extensions };
 }
 
 export const graphApi = {
@@ -192,5 +261,97 @@ export const graphApi = {
     );
 
     return data.entitiesByPrefix;
+  },
+
+  /**
+   * Execute globalSearch NLQ query.
+   * Uses alpha.17+ schema with properly typed fields and classification extensions.
+   */
+  async globalSearch(
+    query: string,
+    level?: number,
+    maxCommunities?: number,
+  ): Promise<GlobalSearchResult> {
+    const gqlQuery = `
+      query GlobalSearch($query: String!, $level: Int, $maxCommunities: Int) {
+        globalSearch(query: $query, level: $level, maxCommunities: $maxCommunities) {
+          entities {
+            id
+            triples {
+              subject
+              predicate
+              object
+            }
+          }
+          community_summaries {
+            communityId
+            text
+            keywords
+          }
+          relationships {
+            from
+            to
+            predicate
+          }
+          count
+          duration_ms
+        }
+      }
+    `;
+
+    const variables: Record<string, unknown> = { query };
+    if (level !== undefined) {
+      variables.level = level;
+    }
+    if (maxCommunities !== undefined) {
+      variables.maxCommunities = maxCommunities;
+    }
+
+    interface GlobalSearchGqlResponse {
+      globalSearch: {
+        entities: BackendEntity[];
+        community_summaries: Array<{
+          communityId: string;
+          text: string;
+          keywords: string[];
+        }>;
+        relationships: Array<{
+          from: string;
+          to: string;
+          predicate: string;
+        }>;
+        count: number;
+        duration_ms: number;
+      };
+    }
+
+    const { data, extensions } =
+      await executeQueryWithExtensions<GlobalSearchGqlResponse>(
+        gqlQuery,
+        variables,
+        "globalSearch",
+      );
+
+    const gs = data.globalSearch;
+
+    // Extract classification metadata from GraphQL extensions (alpha.17+)
+    let classification: ClassificationMeta | undefined;
+    if (extensions?.classification) {
+      const c = extensions.classification as Record<string, unknown>;
+      classification = {
+        tier: (c.tier as number) ?? 0,
+        confidence: (c.confidence as number) ?? 0,
+        intent: (c.intent as string) ?? "",
+      };
+    }
+
+    return {
+      entities: gs.entities ?? [],
+      communitySummaries: gs.community_summaries ?? [],
+      relationships: gs.relationships ?? [],
+      count: gs.count ?? 0,
+      durationMs: gs.duration_ms ?? 0,
+      classification,
+    };
   },
 };

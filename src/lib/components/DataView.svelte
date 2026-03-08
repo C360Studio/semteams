@@ -14,11 +14,12 @@
 	import { graphStore } from '$lib/stores/graphStore.svelte';
 	import type { GraphEntity, GraphRelationship, GraphFilters as GraphFiltersType } from '$lib/types/graph';
 	import { graphApi, GraphApiError } from '$lib/services/graphApi';
-	import { transformPathSearchResult } from '$lib/services/graphTransform';
+	import { transformPathSearchResult, transformGlobalSearchResult } from '$lib/services/graphTransform';
 
 	import GraphFiltersPanel from './runtime/GraphFilters.svelte';
 	import SigmaCanvas from './runtime/SigmaCanvas.svelte';
 	import GraphDetailPanel from './runtime/GraphDetailPanel.svelte';
+	import NlqSearchBar from './runtime/NlqSearchBar.svelte';
 
 	interface DataViewProps {
 		flowId: string;
@@ -45,6 +46,11 @@
 	const availableTypes = $derived<string[]>(graphStore.getEntityTypes());
 	const availableDomains = $derived<string[]>(graphStore.getDomains());
 	const filters = $derived<GraphFiltersType>(graphStore.filters);
+
+	// NLQ search state
+	let nlqLoading = $state(false);
+	let nlqError = $state<string | null>(null);
+	let nlqInSearchMode = $state(false);
 
 	// Kick off the initial data load after mount
 	$effect(() => {
@@ -94,6 +100,37 @@
 		}
 	}
 
+
+	// NLQ search handlers
+	async function handleSearch(query: string) {
+		nlqError = null;
+		nlqLoading = true;
+		try {
+			const result = await graphApi.globalSearch(query, 2, 10);
+			const entities = transformGlobalSearchResult(result);
+			graphStore.clearEntities();
+			graphStore.upsertEntities(entities);
+			nlqInSearchMode = true;
+		} catch (error) {
+			let errorMessage = 'Search failed';
+			if (error instanceof GraphApiError) {
+				errorMessage = error.message;
+			} else if (error instanceof Error) {
+				errorMessage = error.message;
+			}
+			nlqError = errorMessage;
+		} finally {
+			nlqLoading = false;
+		}
+	}
+
+	async function handleClearSearch() {
+		nlqError = null;
+		nlqInSearchMode = false;
+		graphStore.clearEntities();
+		graphStore.setLoading(true);
+		await loadGraphData();
+	}
 
 	// Event handlers
 	function handleEntitySelect(entityId: string | null) {
@@ -216,6 +253,13 @@
 
 	<!-- Center Panel: Canvas -->
 	<main class="data-view-center">
+		<NlqSearchBar
+			onSearch={handleSearch}
+			onClear={handleClearSearch}
+			loading={nlqLoading}
+			inSearchMode={nlqInSearchMode}
+			error={nlqError}
+		/>
 		<SigmaCanvas
 			{entities}
 			{relationships}

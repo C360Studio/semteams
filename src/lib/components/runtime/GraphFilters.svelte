@@ -77,7 +77,7 @@
 	<div class="filter-section">
 		<label for="entity-search" class="filter-label">Search</label>
 		<input
-			type="text"
+			type="search"
 			id="entity-search"
 			class="filter-input"
 			placeholder="Entity ID or name..."
