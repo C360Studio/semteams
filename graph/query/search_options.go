@@ -14,6 +14,16 @@ const (
 	StrategyPathRAG          SearchStrategy = "pathrag"
 	StrategySemantic         SearchStrategy = "semantic"
 	StrategyExact            SearchStrategy = "exact"
+	StrategyAggregation      SearchStrategy = "aggregation"
+)
+
+// Aggregation type constants for aggregation queries.
+const (
+	AggregationCount = "count"
+	AggregationAvg   = "avg"
+	AggregationSum   = "sum"
+	AggregationMin   = "min"
+	AggregationMax   = "max"
 )
 
 // DefaultMaxCommunities is the default number of communities to search.
@@ -35,6 +45,14 @@ type SearchOptions struct {
 	PathIntent        bool           `json:"path_intent,omitempty"`
 	PathStartNode     string         `json:"path_start_node,omitempty"`
 	PathPredicates    []string       `json:"path_predicates,omitempty"`
+	// AggregationType specifies the type of aggregation (count, avg, sum, min, max).
+	// Use the AggregationCount / AggregationAvg / … constants.
+	AggregationType string `json:"aggregation_type,omitempty"`
+	// AggregationField is the property or attribute to aggregate on (e.g. "temperature").
+	// Empty means aggregate over entity count.
+	AggregationField string `json:"aggregation_field,omitempty"`
+	// RankingIntent is true when the query requests a ranked/top-N result set.
+	RankingIntent bool `json:"ranking_intent,omitempty"`
 }
 
 // TimeRange represents temporal query bounds.
@@ -64,6 +82,13 @@ func (o *SearchOptions) InferStrategy() SearchStrategy {
 	hasText := o.Query != ""
 	hasPath := o.PathIntent && o.PathStartNode != ""
 	hasAnyFilter := hasGeo || hasTemporal || hasPredicates || hasTypes
+
+	// Aggregation intent always routes to the dedicated aggregation strategy.
+	// Combined filters (e.g. temporal + count) still route here so the
+	// aggregation executor can apply them.
+	if o.AggregationType != "" {
+		return StrategyAggregation
+	}
 
 	// Path intent with extractable entity routes to PathRAG
 	if hasPath {
@@ -122,7 +147,8 @@ func (o *SearchOptions) HasIndexFilters() bool {
 	return o.GeoBounds != nil ||
 		o.TimeRange != nil ||
 		len(o.Predicates) > 0 ||
-		len(o.Types) > 0
+		len(o.Types) > 0 ||
+		o.AggregationType != ""
 }
 
 // SetDefaults applies default values for unset options.

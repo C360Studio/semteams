@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -40,13 +42,15 @@ var (
 
 // Config holds configuration for graph-gateway component
 type Config struct {
-	Ports              *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
-	GraphQLPath        string                `json:"graphql_path" schema:"type:string,description:GraphQL endpoint path,category:basic"`
-	MCPPath            string                `json:"mcp_path" schema:"type:string,description:MCP endpoint path,category:basic"`
-	BindAddress        string                `json:"bind_address" schema:"type:string,description:HTTP server bind address,category:basic"`
-	EnablePlayground   bool                  `json:"enable_playground" schema:"type:bool,description:Enable GraphQL playground,category:basic"`
-	EnableInferenceAPI bool                  `json:"enable_inference_api" schema:"type:bool,description:Enable inference API for anomaly review,category:basic"`
-	QueryTimeout       time.Duration         `json:"query_timeout" schema:"type:duration,description:Query timeout duration,category:basic"`
+	Ports                     *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
+	GraphQLPath               string                `json:"graphql_path" schema:"type:string,description:GraphQL endpoint path,category:basic"`
+	MCPPath                   string                `json:"mcp_path" schema:"type:string,description:MCP endpoint path,category:basic"`
+	BindAddress               string                `json:"bind_address" schema:"type:string,description:HTTP server bind address,category:basic"`
+	EnablePlayground          bool                  `json:"enable_playground" schema:"type:bool,description:Enable GraphQL playground,category:basic"`
+	EnableInferenceAPI        bool                  `json:"enable_inference_api" schema:"type:bool,description:Enable inference API for anomaly review,category:basic"`
+	QueryTimeout              time.Duration         `json:"query_timeout" schema:"type:duration,description:Query timeout duration,category:basic"`
+	DomainExamplesPath        string                `json:"domain_examples_path" schema:"type:string,description:Path to domain examples JSON directory or file,category:classifier"`
+	EnableEmbeddingClassifier bool                  `json:"enable_embedding_classifier" schema:"type:bool,description:Enable T1/T2 embedding classifier using domain examples,category:classifier"`
 }
 
 // Validate implements component.Validatable interface
@@ -211,10 +215,11 @@ func CreateGraphGateway(rawConfig json.RawMessage, deps component.Dependencies) 
 	// Create logger with component context
 	logger := deps.GetLoggerWithComponent("graph-gateway")
 
-	// Create query classifier chain (T0: keywords only for now)
-	// T1/T2 embedding classifier can be added later when domain examples are loaded
+	// Build classifier chain. T0 (keyword) is always present.
+	// T1/T2 (embedding) is added when both the flag is set and domain examples load successfully.
 	keywordClassifier := query.NewKeywordClassifier()
-	classifier := query.NewClassifierChain(keywordClassifier, nil)
+	embeddingClassifier := loadEmbeddingClassifier(config, logger)
+	classifier := query.NewClassifierChain(keywordClassifier, embeddingClassifier)
 
 	// Create component
 	comp := &Component{
@@ -244,6 +249,96 @@ func Register(registry *component.Registry) error {
 		Schema:      schema,
 		Factory:     CreateGraphGateway,
 	})
+}
+
+// loadEmbeddingClassifier constructs a T1/T2 EmbeddingClassifier from the config.
+//
+// Returns nil (with a log message) in any of these cases:
+//   - EnableEmbeddingClassifier is false
+//   - DomainExamplesPath is empty
+//   - The path does not exist or cannot be read
+//   - No valid domain examples were found
+//
+// When the path is a directory, every *.json file inside is loaded.
+// When the path is a file, that single file is loaded.
+// Individual file errors are logged and skipped so a single bad file
+// does not block the rest.
+func loadEmbeddingClassifier(cfg Config, logger *slog.Logger) *query.EmbeddingClassifier {
+	if !cfg.EnableEmbeddingClassifier {
+		return nil
+	}
+
+	if cfg.DomainExamplesPath == "" {
+		logger.Warn("enable_embedding_classifier is true but domain_examples_path is empty; falling back to T0-only")
+		return nil
+	}
+
+	// Resolve the set of JSON files to load.
+	var filePaths []string
+
+	info, err := os.Stat(cfg.DomainExamplesPath)
+	if err != nil {
+		logger.Warn("domain_examples_path not accessible; falling back to T0-only",
+			slog.String("path", cfg.DomainExamplesPath),
+			slog.String("error", err.Error()))
+		return nil
+	}
+
+	if info.IsDir() {
+		entries, err := filepath.Glob(filepath.Join(cfg.DomainExamplesPath, "*.json"))
+		if err != nil {
+			logger.Warn("failed to list domain example files; falling back to T0-only",
+				slog.String("path", cfg.DomainExamplesPath),
+				slog.String("error", err.Error()))
+			return nil
+		}
+		filePaths = entries
+	} else {
+		filePaths = []string{cfg.DomainExamplesPath}
+	}
+
+	if len(filePaths) == 0 {
+		logger.Warn("no domain example JSON files found; falling back to T0-only",
+			slog.String("path", cfg.DomainExamplesPath))
+		return nil
+	}
+
+	// Load each file, skipping files that fail.
+	var domains []*query.DomainExamples
+	for _, fp := range filePaths {
+		domain, err := query.LoadDomainExamples(fp)
+		if err != nil {
+			logger.Warn("failed to load domain examples file; skipping",
+				slog.String("file", fp),
+				slog.String("error", err.Error()))
+			continue
+		}
+		domains = append(domains, domain)
+	}
+
+	if len(domains) == 0 {
+		logger.Warn("all domain example files failed to load; falling back to T0-only",
+			slog.String("path", cfg.DomainExamplesPath))
+		return nil
+	}
+
+	// Default similarity threshold: 0.7 gives a reasonable precision/recall balance.
+	const defaultThreshold = 0.7
+
+	classifier := query.NewEmbeddingClassifier(domains, defaultThreshold)
+
+	// Count total examples for the log message.
+	totalExamples := 0
+	for _, d := range domains {
+		totalExamples += len(d.Examples)
+	}
+
+	logger.Info("embedding classifier initialised (T1/T2)",
+		slog.Int("domains", len(domains)),
+		slog.Int("examples", totalExamples),
+		slog.String("path", cfg.DomainExamplesPath))
+
+	return classifier
 }
 
 // ============================================================================

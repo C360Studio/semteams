@@ -51,6 +51,32 @@ var (
 	pathPattern       = regexp.MustCompile(`(?i)\b(connect|relat|path|link|between)\w*`)
 )
 
+// Aggregation patterns — ordered from most-specific to least-specific so that
+// "total number of" and "how many" are matched before the bare "total" check.
+var (
+	// count: "how many", "count", "total number of"
+	countPattern = regexp.MustCompile(`(?i)\b(how\s+many|total\s+number\s+of|count)\b`)
+	// average
+	avgPattern = regexp.MustCompile(`(?i)\b(average|avg|mean)\b`)
+	// sum: "sum" alone, or "total" when NOT followed by "number" (handled by order of checks)
+	sumPattern = regexp.MustCompile(`(?i)\b(sum|total)\b`)
+	// min / max
+	minPattern = regexp.MustCompile(`(?i)\b(minimum|min)\b`)
+	maxPattern = regexp.MustCompile(`(?i)\b(maximum|max)\b`)
+)
+
+// Ranking patterns — "top N", "bottom N", "most", "least".
+var (
+	topNPattern    = regexp.MustCompile(`(?i)\btop\s+(\d+)\b`)
+	bottomNPattern = regexp.MustCompile(`(?i)\bbottom\s+(\d+)\b`)
+	mostPattern    = regexp.MustCompile(`(?i)\bmost\b`)
+	leastPattern   = regexp.MustCompile(`(?i)\bleast\b`)
+)
+
+// aggregationFieldPattern captures a noun following "of" in aggregation queries,
+// e.g. "average temperature of sensors" → "temperature".
+var aggregationFieldPattern = regexp.MustCompile(`(?i)\b(?:average|avg|mean|sum|total|min|max|minimum|maximum)\s+(\w+)\b`)
+
 // Entity extraction pattern - matches patterns like "sensor-001", "pump-42", "device-abc"
 var entityPattern = regexp.MustCompile(`\b([a-zA-Z]+[-][a-zA-Z0-9-]+)\b`)
 
@@ -110,6 +136,25 @@ func (k *KeywordClassifier) ClassifyQuery(_ context.Context, query string) *Sear
 	// Detect true spatial intent - "within Xkm of lat,lon"
 	if bounds := k.extractSpatialBounds(query); bounds != nil {
 		opts.GeoBounds = bounds
+	}
+
+	// Detect aggregation intent — count, avg, sum, min, max.
+	// Must be checked before ranking because "most" / "least" are also aggregation-adjacent.
+	if aggType, aggField := k.extractAggregation(query); aggType != "" {
+		opts.AggregationType = aggType
+		opts.AggregationField = aggField
+	}
+
+	// Detect ranking intent — "top N", "bottom N", "most", "least".
+	// Only set ranking when there is no aggregation type already assigned (ranking
+	// queries are a separate intent from numeric aggregations).
+	if opts.AggregationType == "" {
+		if rankingIntent, limit := k.extractRanking(query); rankingIntent {
+			opts.RankingIntent = true
+			if limit > 0 {
+				opts.Limit = limit
+			}
+		}
 	}
 
 	return opts
@@ -319,6 +364,72 @@ func (k *KeywordClassifier) extractSpatialBounds(query string) *SpatialBounds {
 		East:  lon + lonDelta,
 		West:  lon - lonDelta,
 	}
+}
+
+// extractAggregation detects aggregation intent and returns (aggregationType, aggregationField).
+// Patterns are checked in specificity order: count > avg > sum > min > max.
+// "total number of" binds to count before "total" alone can bind to sum.
+// aggregationField is extracted from adjacent noun context when available.
+func (k *KeywordClassifier) extractAggregation(query string) (string, string) {
+	// count — "how many", "total number of", "count"
+	if countPattern.MatchString(query) {
+		return AggregationCount, ""
+	}
+
+	// average / mean
+	if avgPattern.MatchString(query) {
+		return AggregationAvg, k.extractAggregationField(query)
+	}
+
+	// min / max (check before sum so "minimum" / "maximum" are not partially matched)
+	if minPattern.MatchString(query) {
+		return AggregationMin, k.extractAggregationField(query)
+	}
+	if maxPattern.MatchString(query) {
+		return AggregationMax, k.extractAggregationField(query)
+	}
+
+	// sum / total (bare "total" without "number of")
+	if sumPattern.MatchString(query) {
+		return AggregationSum, k.extractAggregationField(query)
+	}
+
+	return "", ""
+}
+
+// extractAggregationField attempts to extract the field/attribute being aggregated.
+// Looks for a noun following the aggregation verb, e.g. "average temperature" → "temperature".
+func (k *KeywordClassifier) extractAggregationField(query string) string {
+	matches := aggregationFieldPattern.FindStringSubmatch(query)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
+}
+
+// extractRanking detects ranking intent ("top N", "bottom N", "most", "least") and
+// returns (rankingIntent, limit). limit is 0 when no explicit N is present.
+func (k *KeywordClassifier) extractRanking(query string) (bool, int) {
+	// "top N" — explicit limit
+	if matches := topNPattern.FindStringSubmatch(query); matches != nil {
+		if n, err := strconv.Atoi(matches[1]); err == nil {
+			return true, n
+		}
+	}
+
+	// "bottom N" — explicit limit
+	if matches := bottomNPattern.FindStringSubmatch(query); matches != nil {
+		if n, err := strconv.Atoi(matches[1]); err == nil {
+			return true, n
+		}
+	}
+
+	// "most" / "least" — no explicit limit
+	if mostPattern.MatchString(query) || leastPattern.MatchString(query) {
+		return true, 0
+	}
+
+	return false, 0
 }
 
 // cosDegrees calculates cosine of angle in degrees.
