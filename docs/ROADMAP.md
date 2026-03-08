@@ -221,13 +221,36 @@ Expose PathRAG features through GraphQL/MCP gateway:
 
 Current state: All features work via direct NATS. Gateway just needs schema + transform updates.
 
+#### Classification Metadata in GraphQL Response
+**Priority:** High | **Complexity:** Low
+
+Expose classification metadata as GraphQL response extensions for debug/power-user UI:
+- `classification_tier` (0-3), `classification_intent`, `classification_confidence`
+- Already computed and injected into NATS payload (`mergeClassificationOptions` in `component.go:1050`)
+- Needs: echo metadata back in `GlobalSearchResponse` or as GraphQL `extensions` field
+- **Requested by:** semstreams-ui team (Phase 2)
+
+Current state: Classification metadata flows gateway → graph-query but is not returned to the client.
+
+#### GlobalSearch GraphQL Schema Enrichment
+**Priority:** High | **Complexity:** Low
+
+Expose `GlobalSearchResponse` fields individually in GraphQL `SearchResult` type:
+- Current `SearchResult` only declares `results` and `score`
+- Actual NATS response includes `entities`, `community_summaries`, `relationships`, `count`, `durationMs`
+- Add `include_relationships` and `include_sources` as GraphQL args (already supported on NATS side)
+- Update `buildIntrospectionSchema()` in `component.go:1393`
+- **Requested by:** semstreams-ui team (Phase 1)
+
+Current state: Raw NATS JSON passes through so fields are accessible in practice, but not declared in the GraphQL schema.
+
 #### Classifier Observability
 **Priority:** Medium | **Complexity:** Low
 
 Add Prometheus metrics for classification behavior:
-- Counter per tier (T0/T1/T2) hit rate
+- Counter per tier (T0/T1/T2/T3) hit rate
 - Histogram for classification confidence
-- Counter for fallback frequency (embedding miss → keyword)
+- Counter for fallback frequency (embedding miss → keyword → LLM)
 - Counter for MCP vs GraphQL classification usage
 
 ---
