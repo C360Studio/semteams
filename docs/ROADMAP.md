@@ -222,27 +222,14 @@ Expose PathRAG features through GraphQL/MCP gateway:
 Current state: All features work via direct NATS. Gateway just needs schema + transform updates.
 
 #### Classification Metadata in GraphQL Response
-**Priority:** High | **Complexity:** Low
+**Status:** Implemented
 
-Expose classification metadata as GraphQL response extensions for debug/power-user UI:
-- `classification_tier` (0-3), `classification_intent`, `classification_confidence`
-- Already computed and injected into NATS payload (`mergeClassificationOptions` in `component.go:1050`)
-- Needs: echo metadata back in `GlobalSearchResponse` or as GraphQL `extensions` field
-- **Requested by:** semstreams-ui team (Phase 2)
-
-Current state: Classification metadata flows gateway → graph-query but is not returned to the client.
+Classification metadata (tier, confidence, intent) returned in standard GraphQL `extensions` field for `globalSearch` and `semanticSearch` queries. Non-search queries omit extensions. Implemented via `writeGraphQLSuccessWithExtensions` delegation pattern.
 
 #### GlobalSearch GraphQL Schema Enrichment
-**Priority:** High | **Complexity:** Low
+**Status:** Implemented
 
-Expose `GlobalSearchResponse` fields individually in GraphQL `SearchResult` type:
-- Current `SearchResult` only declares `results` and `score`
-- Actual NATS response includes `entities`, `community_summaries`, `relationships`, `count`, `durationMs`
-- Add `include_relationships` and `include_sources` as GraphQL args (already supported on NATS side)
-- Update `buildIntrospectionSchema()` in `component.go:1393`
-- **Requested by:** semstreams-ui team (Phase 1)
-
-Current state: Raw NATS JSON passes through so fields are accessible in practice, but not declared in the GraphQL schema.
+`SearchResult` split into `GlobalSearchResult` (entities, community_summaries, relationships, sources, count, duration_ms, answer, answer_model) and `LocalSearchResult` (entities, communityId, count, durationMs). Added `includeSummaries`, `includeRelationships`, `includeSources` boolean args to `globalSearch` query, mapped to backend `GlobalSearchRequest` fields.
 
 #### Classifier Observability
 **Priority:** Medium | **Complexity:** Low
