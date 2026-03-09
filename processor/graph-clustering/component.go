@@ -320,10 +320,6 @@ type Component struct {
 	errors            int64
 	lastActivity      atomic.Value // stores time.Time
 
-	// Port definitions
-	inputPorts  []component.Port
-	outputPorts []component.Port
-
 	// Query subscriptions (for cleanup)
 	querySubscriptions []*natsclient.Subscription
 }
@@ -401,14 +397,30 @@ func (c *Component) Meta() component.Metadata {
 func (c *Component) InputPorts() []component.Port {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.inputPorts
+
+	if c.config.Ports == nil {
+		return []component.Port{}
+	}
+	ports := make([]component.Port, 0, len(c.config.Ports.Inputs))
+	for _, portDef := range c.config.Ports.Inputs {
+		ports = append(ports, component.BuildPortFromDefinition(portDef, component.DirectionInput))
+	}
+	return ports
 }
 
 // OutputPorts returns output port definitions
 func (c *Component) OutputPorts() []component.Port {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.outputPorts
+
+	if c.config.Ports == nil {
+		return []component.Port{}
+	}
+	ports := make([]component.Port, 0, len(c.config.Ports.Outputs))
+	for _, portDef := range c.config.Ports.Outputs {
+		ports = append(ports, component.BuildPortFromDefinition(portDef, component.DirectionOutput))
+	}
+	return ports
 }
 
 // ConfigSchema returns the configuration schema
@@ -502,18 +514,6 @@ func (c *Component) Initialize() error {
 	// Validate configuration
 	if err := c.config.Validate(); err != nil {
 		return errs.Wrap(err, "Component", "Initialize", "config validation")
-	}
-
-	// Build input ports from config
-	c.inputPorts = make([]component.Port, len(c.config.Ports.Inputs))
-	for i, portDef := range c.config.Ports.Inputs {
-		c.inputPorts[i] = component.BuildPortFromDefinition(portDef, component.DirectionInput)
-	}
-
-	// Build output ports from config
-	c.outputPorts = make([]component.Port, len(c.config.Ports.Outputs))
-	for i, portDef := range c.config.Ports.Outputs {
-		c.outputPorts[i] = component.BuildPortFromDefinition(portDef, component.DirectionOutput)
 	}
 
 	c.initialized = true
