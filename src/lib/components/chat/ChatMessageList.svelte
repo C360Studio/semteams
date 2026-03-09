@@ -21,7 +21,7 @@
 
 <div data-testid="chat-message-list">
   {#if messages.length === 0 && !showStreaming}
-    <div data-testid="chat-empty-state">Describe the flow you want to build and I will help you create it.</div>
+    <div data-testid="chat-empty-state">Ask a question, explore the graph, or type / for commands.</div>
   {:else}
     {#each messages as message (message.id)}
       <ChatMessageComponent {message} {onApplyFlow} />

@@ -79,6 +79,7 @@ export default [
   {
     files: [
       "src/lib/components/DataTable.test.ts",
+      "src/lib/components/DataView.test.ts",
       "src/lib/components/JsonEditor.test.ts",
       "src/lib/components/PropertiesPanel.attack.test.ts",
       "src/lib/components/runtime/NlqDebugBadge.test.ts",

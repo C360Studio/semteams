@@ -50,7 +50,11 @@ describe("graphStore — upsertEntity", () => {
   });
 
   it("upsertEntities adds multiple entities", () => {
-    graphStore.upsertEntities([makeEntity("a"), makeEntity("b"), makeEntity("c")]);
+    graphStore.upsertEntities([
+      makeEntity("a"),
+      makeEntity("b"),
+      makeEntity("c"),
+    ]);
     expect(graphStore.entities.size).toBe(3);
   });
 
@@ -72,9 +76,7 @@ describe("graphStore — relationship extraction from entities", () => {
     const entity = buildGraphEntity({
       id: sourceId,
       properties: [],
-      outgoing: [
-        { predicate: "knows", targetId, confidence: 0.9 },
-      ],
+      outgoing: [{ predicate: "knows", targetId, confidence: 0.9 }],
       incoming: [],
     });
 
@@ -89,7 +91,11 @@ describe("graphStore — relationship extraction from entities", () => {
       properties: [],
       outgoing: [],
       incoming: [
-        { predicate: "knows", sourceId: "org.platform.default.system.thing.other", confidence: 0.8 },
+        {
+          predicate: "knows",
+          sourceId: "org.platform.default.system.thing.other",
+          confidence: 0.8,
+        },
       ],
     });
 
@@ -296,16 +302,19 @@ describe("graphStore — reset", () => {
 
 describe("buildGraphEntity — edge inputs", () => {
   it("handles missing properties/outgoing/incoming arrays", () => {
-    expect(() =>
-      buildGraphEntity({ id: "default:thing:bare" }),
-    ).not.toThrow();
+    expect(() => buildGraphEntity({ id: "default:thing:bare" })).not.toThrow();
   });
 
   it("handles numeric timestamps without converting via SvelteDate", () => {
     const entity = buildGraphEntity({
       id: "default:thing:ts",
       properties: [
-        { predicate: "age", object: 42, confidence: 1, timestamp: 1700000000000 },
+        {
+          predicate: "age",
+          object: 42,
+          confidence: 1,
+          timestamp: 1700000000000,
+        },
       ],
     });
     expect(entity.properties[0].timestamp).toBe(1700000000000);

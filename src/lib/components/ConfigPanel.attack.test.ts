@@ -15,7 +15,10 @@ import type { ComponentInstance } from "$lib/types/flow";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeComponent(id: string, componentType = "udp-input"): ComponentInstance {
+function makeComponent(
+  id: string,
+  componentType = "udp-input",
+): ComponentInstance {
   return {
     id,
     component: componentType,
@@ -80,15 +83,11 @@ describe("ConfigPanel — schema loading", () => {
     render(ConfigPanel, { props: { component: makeComponent("c1") } });
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/Schema not available/i),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/Schema not available/i)).toBeInTheDocument();
     });
 
     // JSON editor should be present
-    expect(
-      document.querySelector("textarea#json-config"),
-    ).toBeInTheDocument();
+    expect(document.querySelector("textarea#json-config")).toBeInTheDocument();
 
     vi.unstubAllGlobals();
   });
@@ -96,7 +95,12 @@ describe("ConfigPanel — schema loading", () => {
   it("shows error message and JSON fallback when schema fetch fails", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(new Response("Server Error", { status: 500, statusText: "Internal Server Error" })),
+      vi.fn().mockResolvedValue(
+        new Response("Server Error", {
+          status: 500,
+          statusText: "Internal Server Error",
+        }),
+      ),
     );
 
     render(ConfigPanel, { props: { component: makeComponent("c1") } });
@@ -106,9 +110,7 @@ describe("ConfigPanel — schema loading", () => {
     });
 
     // JSON editor fallback should be rendered
-    expect(
-      document.querySelector("textarea#json-config"),
-    ).toBeInTheDocument();
+    expect(document.querySelector("textarea#json-config")).toBeInTheDocument();
 
     vi.unstubAllGlobals();
   });
@@ -133,11 +135,15 @@ describe("ConfigPanel — error state isolation", () => {
 
     // Wait for JSON editor to appear
     await waitFor(() => {
-      expect(document.querySelector("textarea#json-config")).toBeInTheDocument();
+      expect(
+        document.querySelector("textarea#json-config"),
+      ).toBeInTheDocument();
     });
 
     // Fire an input event with invalid JSON directly (avoids user-event brace escaping)
-    const textarea = document.querySelector("textarea#json-config") as HTMLTextAreaElement;
+    const textarea = document.querySelector(
+      "textarea#json-config",
+    ) as HTMLTextAreaElement;
     fireEvent.input(textarea, { target: { value: "{ invalid json" } });
 
     // Parse error should appear
@@ -176,7 +182,9 @@ describe("ConfigPanel — onSave callback", () => {
     });
 
     await waitFor(() => {
-      expect(document.querySelector("textarea#json-config")).toBeInTheDocument();
+      expect(
+        document.querySelector("textarea#json-config"),
+      ).toBeInTheDocument();
     });
 
     // Click Apply
@@ -206,10 +214,14 @@ describe("ConfigPanel — onSave callback", () => {
     });
 
     await waitFor(() => {
-      expect(document.querySelector("textarea#json-config")).toBeInTheDocument();
+      expect(
+        document.querySelector("textarea#json-config"),
+      ).toBeInTheDocument();
     });
 
-    const textarea = document.querySelector("textarea#json-config") as HTMLTextAreaElement;
+    const textarea = document.querySelector(
+      "textarea#json-config",
+    ) as HTMLTextAreaElement;
     fireEvent.input(textarea, { target: { value: "not valid json" } });
 
     const applyButton = screen.getByText("Apply");
@@ -240,7 +252,9 @@ describe("ConfigPanel — cancel resets config", () => {
     });
 
     await waitFor(() => {
-      expect(document.querySelector("textarea#json-config")).toBeInTheDocument();
+      expect(
+        document.querySelector("textarea#json-config"),
+      ).toBeInTheDocument();
     });
 
     await userEvent.click(screen.getByText("Cancel"));

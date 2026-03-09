@@ -191,9 +191,7 @@ describe("NlqSearchBar", () => {
         },
       });
 
-      expect(
-        screen.getByTestId("nlq-loading-indicator"),
-      ).toBeInTheDocument();
+      expect(screen.getByTestId("nlq-loading-indicator")).toBeInTheDocument();
     });
 
     it("should disable the text input while loading", () => {
@@ -446,12 +444,7 @@ describe("NlqSearchBar", () => {
 
     it.each(propCases)(
       "$description",
-      ({
-        props,
-        expectLoadingIndicator,
-        expectAlert,
-        expectClearButton,
-      }) => {
+      ({ props, expectLoadingIndicator, expectAlert, expectClearButton }) => {
         render(NlqSearchBar, {
           props: {
             onSearch: vi.fn(),

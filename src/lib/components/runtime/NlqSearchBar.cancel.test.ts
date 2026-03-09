@@ -22,9 +22,7 @@ describe("NlqSearchBar — Cancel button", () => {
         },
       });
 
-      expect(
-        screen.queryByTestId("nlq-cancel-button"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("nlq-cancel-button")).not.toBeInTheDocument();
     });
 
     it("should show cancel button with data-testid='nlq-cancel-button' when loading is true", () => {
@@ -155,7 +153,9 @@ describe("NlqSearchBar — Cancel button", () => {
         },
       });
 
-      expect(screen.getByRole("button", { name: /cancel/i })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: /cancel/i }),
+      ).toBeInTheDocument();
     });
   });
 
@@ -211,9 +211,7 @@ describe("NlqSearchBar — Elapsed time counter", () => {
         },
       });
 
-      expect(
-        screen.queryByTestId("nlq-elapsed-time"),
-      ).not.toBeInTheDocument();
+      expect(screen.queryByTestId("nlq-elapsed-time")).not.toBeInTheDocument();
     });
 
     it("should show elapsed time with data-testid='nlq-elapsed-time' when loading is true", () => {
@@ -453,7 +451,9 @@ describe("NlqSearchBar — Elapsed time counter", () => {
           await Promise.resolve();
         }
 
-        expect(screen.getByTestId("nlq-elapsed-time")).toHaveTextContent(expected);
+        expect(screen.getByTestId("nlq-elapsed-time")).toHaveTextContent(
+          expected,
+        );
       },
     );
   });

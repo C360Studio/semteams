@@ -10,6 +10,7 @@
 	 */
 
 	import type { GraphEntity } from '$lib/types/graph';
+	import type { ContextChip } from '$lib/types/chat';
 	import { getEntityLabel, getEntityTypeLabel, parseEntityId } from '$lib/types/graph';
 	import { getEntityColor, getPredicateColor, getConfidenceOpacity } from '$lib/utils/entity-colors';
 
@@ -17,9 +18,22 @@
 		entity: GraphEntity | null;
 		onClose?: () => void;
 		onEntityClick?: (entityId: string) => void;
+		onAddChip?: (chip: ContextChip) => void;
 	}
 
-	let { entity, onClose, onEntityClick }: GraphDetailPanelProps = $props();
+	let { entity, onClose, onEntityClick, onAddChip }: GraphDetailPanelProps = $props();
+
+	function handleAddChip() {
+		if (!entity || !onAddChip) return;
+		const instanceLabel = entity.idParts?.instance || entity.id;
+		const chip: ContextChip = {
+			id: crypto.randomUUID(),
+			kind: 'entity',
+			label: instanceLabel,
+			value: entity.id,
+		};
+		onAddChip(chip);
+	}
 
 	// Derived values
 	const label = $derived(entity ? getEntityLabel(entity) : '');
@@ -60,6 +74,13 @@
 				<h3 class="entity-label">{label}</h3>
 				<span class="entity-type">{typeLabel}</span>
 			</div>
+			{#if onAddChip}
+				<button
+					class="add-chip-button"
+					onclick={handleAddChip}
+					aria-label="+Chat: add {entity.idParts?.instance || entity.id} to chat context"
+				>+Chat</button>
+			{/if}
 			{#if onClose}
 				<button class="close-button" onclick={onClose} aria-label="Close panel">×</button>
 			{/if}
@@ -272,6 +293,24 @@
 		color: var(--ui-text-secondary);
 		text-transform: uppercase;
 		letter-spacing: 0.5px;
+	}
+
+	.add-chip-button {
+		padding: 4px 8px;
+		border: 1px solid var(--ui-interactive-primary, #4a9eff);
+		border-radius: 4px;
+		background: transparent;
+		color: var(--ui-interactive-primary, #4a9eff);
+		font-size: 11px;
+		font-weight: 500;
+		cursor: pointer;
+		flex-shrink: 0;
+		transition: all 0.2s;
+	}
+
+	.add-chip-button:hover {
+		background: var(--ui-interactive-primary, #4a9eff);
+		color: white;
 	}
 
 	.close-button {

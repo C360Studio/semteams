@@ -585,10 +585,7 @@ test.describe("DataView — entity selection via test seam", () => {
   test("selecting an entity via __e2eSelectEntity shows the detail panel", async ({
     page,
   }) => {
-    await page.evaluate(
-      (id) => window.__e2eSelectEntity?.(id),
-      ENTITY_DRONE,
-    );
+    await page.evaluate((id) => window.__e2eSelectEntity?.(id), ENTITY_DRONE);
 
     const detailPanel = page.locator('[data-testid="graph-detail-panel"]');
     await expect(detailPanel).toBeVisible({ timeout: 3000 });
@@ -601,10 +598,7 @@ test.describe("DataView — entity selection via test seam", () => {
   test("detail panel displays the selected entity's 6-part ID breakdown", async ({
     page,
   }) => {
-    await page.evaluate(
-      (id) => window.__e2eSelectEntity?.(id),
-      ENTITY_DRONE,
-    );
+    await page.evaluate((id) => window.__e2eSelectEntity?.(id), ENTITY_DRONE);
 
     const detailPanel = page.locator('[data-testid="graph-detail-panel"]');
     await expect(detailPanel).toBeVisible({ timeout: 3000 });
@@ -638,10 +632,7 @@ test.describe("DataView — entity selection via test seam", () => {
   test("detail panel shows properties ingested from entity triples", async ({
     page,
   }) => {
-    await page.evaluate(
-      (id) => window.__e2eSelectEntity?.(id),
-      ENTITY_DRONE,
-    );
+    await page.evaluate((id) => window.__e2eSelectEntity?.(id), ENTITY_DRONE);
 
     const detailPanel = page.locator('[data-testid="graph-detail-panel"]');
     await expect(detailPanel).toBeVisible({ timeout: 3000 });
@@ -662,10 +653,7 @@ test.describe("DataView — entity selection via test seam", () => {
     page,
   }) => {
     // Select the drone first
-    await page.evaluate(
-      (id) => window.__e2eSelectEntity?.(id),
-      ENTITY_DRONE,
-    );
+    await page.evaluate((id) => window.__e2eSelectEntity?.(id), ENTITY_DRONE);
 
     const detailPanel = page.locator('[data-testid="graph-detail-panel"]');
     await expect(detailPanel).toBeVisible({ timeout: 3000 });
@@ -673,10 +661,7 @@ test.describe("DataView — entity selection via test seam", () => {
     await expect(detailPanel.locator(".id-breakdown")).toContainText("drone");
 
     // Switch to the fleet entity
-    await page.evaluate(
-      (id) => window.__e2eSelectEntity?.(id),
-      ENTITY_FLEET,
-    );
+    await page.evaluate((id) => window.__e2eSelectEntity?.(id), ENTITY_FLEET);
 
     // Panel should now reflect the fleet entity: type=fleet, instance=west
     await expect(detailPanel.locator(".id-breakdown")).toContainText("fleet");

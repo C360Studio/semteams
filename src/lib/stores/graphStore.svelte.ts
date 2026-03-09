@@ -207,6 +207,14 @@ function createGraphStore() {
       return expandedEntityIds.has(entityId);
     },
 
+    /**
+     * Clear only the expanded entity tracking set.
+     * Used on DataView mount to reset expansion state without clearing entities.
+     */
+    clearExpanded() {
+      expandedEntityIds.clear();
+    },
+
     // ========================================================================
     // Filters
     // ========================================================================

@@ -17,11 +17,7 @@ function addLog(
   msg: string,
   id: string,
 ) {
-  runtimeStore.addLog(
-    { level, source: "test", message: msg },
-    id,
-    Date.now(),
-  );
+  runtimeStore.addLog({ level, source: "test", message: msg }, id, Date.now());
 }
 
 // ---------------------------------------------------------------------------
@@ -83,15 +79,19 @@ describe("runtimeStore — circular log buffer", () => {
     expect(runtimeStore.logs.length).toBe(1000);
   });
 
-  it("retains the most recent entries after overflow", { timeout: 15000 }, () => {
-    for (let i = 0; i < 1100; i++) {
-      addLog("INFO", `msg-${i}`, `id-${i}`);
-    }
-    // Oldest surviving log should be msg-100 (entries 0–99 were evicted)
-    expect(runtimeStore.logs[0].message).toBe("msg-100");
-    // Newest log should be msg-1099
-    expect(runtimeStore.logs[999].message).toBe("msg-1099");
-  });
+  it(
+    "retains the most recent entries after overflow",
+    { timeout: 15000 },
+    () => {
+      for (let i = 0; i < 1100; i++) {
+        addLog("INFO", `msg-${i}`, `id-${i}`);
+      }
+      // Oldest surviving log should be msg-100 (entries 0–99 were evicted)
+      expect(runtimeStore.logs[0].message).toBe("msg-100");
+      // Newest log should be msg-1099
+      expect(runtimeStore.logs[999].message).toBe("msg-1099");
+    },
+  );
 
   it("clearLogs empties the buffer", () => {
     addLog("ERROR", "boom", "err-1");
@@ -200,7 +200,13 @@ describe("runtimeStore — updateComponentHealth", () => {
 describe("runtimeStore — metrics rate calculation", () => {
   it("rate is null before second data point", () => {
     runtimeStore.updateMetrics(
-      { component: "parser", name: "bytes_in", type: "counter", value: 100, labels: {} },
+      {
+        component: "parser",
+        name: "bytes_in",
+        type: "counter",
+        value: 100,
+        labels: {},
+      },
       1000,
     );
     expect(runtimeStore.getMetricRate("parser", "bytes_in")).toBeNull();
@@ -210,11 +216,23 @@ describe("runtimeStore — metrics rate calculation", () => {
     // NOTE: prevTimestamp=0 is falsy so the rate guard `if (prevMetric && prevTimestamp ...)`
     // rejects it. Use timestamps > 0 to exercise the rate path.
     runtimeStore.updateMetrics(
-      { component: "parser", name: "bytes_in", type: "counter", value: 0, labels: {} },
+      {
+        component: "parser",
+        name: "bytes_in",
+        type: "counter",
+        value: 0,
+        labels: {},
+      },
       1000, // t=1s (non-zero so it passes the truthiness check on second call)
     );
     runtimeStore.updateMetrics(
-      { component: "parser", name: "bytes_in", type: "counter", value: 1000, labels: {} },
+      {
+        component: "parser",
+        name: "bytes_in",
+        type: "counter",
+        value: 1000,
+        labels: {},
+      },
       2000, // t=2s, delta = 1s
     );
     // 1000 bytes / 1 second = 1000 bytes/sec
@@ -223,11 +241,23 @@ describe("runtimeStore — metrics rate calculation", () => {
 
   it("clamps rate to zero when counter decreases (reset)", () => {
     runtimeStore.updateMetrics(
-      { component: "parser", name: "bytes_in", type: "counter", value: 500, labels: {} },
+      {
+        component: "parser",
+        name: "bytes_in",
+        type: "counter",
+        value: 500,
+        labels: {},
+      },
       1000,
     );
     runtimeStore.updateMetrics(
-      { component: "parser", name: "bytes_in", type: "counter", value: 0, labels: {} },
+      {
+        component: "parser",
+        name: "bytes_in",
+        type: "counter",
+        value: 0,
+        labels: {},
+      },
       2000,
     );
     expect(runtimeStore.getMetricRate("parser", "bytes_in")).toBe(0);
@@ -256,10 +286,26 @@ describe("runtimeStore — metrics rate calculation", () => {
 
 describe("runtimeStore — getFilteredLogs", () => {
   beforeEach(() => {
-    runtimeStore.addLog({ level: "DEBUG", source: "svc-a", message: "debug msg" }, "1", 1000);
-    runtimeStore.addLog({ level: "INFO", source: "svc-a", message: "info msg" }, "2", 2000);
-    runtimeStore.addLog({ level: "WARN", source: "svc-b", message: "warn msg" }, "3", 3000);
-    runtimeStore.addLog({ level: "ERROR", source: "svc-b", message: "error msg" }, "4", 4000);
+    runtimeStore.addLog(
+      { level: "DEBUG", source: "svc-a", message: "debug msg" },
+      "1",
+      1000,
+    );
+    runtimeStore.addLog(
+      { level: "INFO", source: "svc-a", message: "info msg" },
+      "2",
+      2000,
+    );
+    runtimeStore.addLog(
+      { level: "WARN", source: "svc-b", message: "warn msg" },
+      "3",
+      3000,
+    );
+    runtimeStore.addLog(
+      { level: "ERROR", source: "svc-b", message: "error msg" },
+      "4",
+      4000,
+    );
   });
 
   it("returns all logs when no filter options given", () => {
@@ -279,7 +325,10 @@ describe("runtimeStore — getFilteredLogs", () => {
   });
 
   it("combines level and source filters", () => {
-    const result = runtimeStore.getFilteredLogs({ minLevel: "INFO", sources: ["svc-a"] });
+    const result = runtimeStore.getFilteredLogs({
+      minLevel: "INFO",
+      sources: ["svc-a"],
+    });
     expect(result).toHaveLength(1);
     expect(result[0].level).toBe("INFO");
   });
@@ -300,8 +349,20 @@ describe("runtimeStore — reset", () => {
     runtimeStore.setError("some error");
     addLog("ERROR", "bad", "err-1");
     runtimeStore.updateHealth({
-      overall: { status: "error", counts: { healthy: 0, degraded: 0, error: 1 } },
-      components: [{ name: "x", component: "x", type: "t", status: "error", healthy: false, message: "x" }],
+      overall: {
+        status: "error",
+        counts: { healthy: 0, degraded: 0, error: 1 },
+      },
+      components: [
+        {
+          name: "x",
+          component: "x",
+          type: "t",
+          status: "error",
+          healthy: false,
+          message: "x",
+        },
+      ],
     });
     runtimeStore.updateMetrics(
       { component: "c", name: "m", type: "counter", value: 1, labels: {} },

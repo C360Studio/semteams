@@ -58,7 +58,7 @@ describe("NlqSearchBar Attack Tests", () => {
 
   describe("XSS in error prop", () => {
     test("renders script-tag payload in error as text, not executable HTML", () => {
-      const xssPayload = '<script>window.__xss = true;</script>';
+      const xssPayload = "<script>window.__xss = true;</script>";
       render(NlqSearchBar, {
         props: {
           onSearch: vi.fn(),
@@ -71,7 +71,9 @@ describe("NlqSearchBar Attack Tests", () => {
       // Text content must contain the literal string, not execute it
       expect(alert.textContent).toContain("<script>");
       // The XSS must not have executed
-      expect((window as unknown as Record<string, unknown>).__xss).toBeUndefined();
+      expect(
+        (window as unknown as Record<string, unknown>).__xss,
+      ).toBeUndefined();
     });
 
     test("renders img-onerror payload in error as text, not executable HTML", () => {
@@ -86,7 +88,9 @@ describe("NlqSearchBar Attack Tests", () => {
 
       const alert = screen.getByRole("alert");
       expect(alert.textContent).toContain("<img");
-      expect((window as unknown as Record<string, unknown>).__xss2).toBeUndefined();
+      expect(
+        (window as unknown as Record<string, unknown>).__xss2,
+      ).toBeUndefined();
     });
 
     test("renders HTML entity characters in error without injection", () => {
@@ -121,11 +125,13 @@ describe("NlqSearchBar Attack Tests", () => {
 
       const input = screen.getByRole("textbox");
       // Type a payload that would be dangerous if eval'd or injected as HTML
-      await user.type(input, '<script>alert(1)</script>{Enter}');
+      await user.type(input, "<script>alert(1)</script>{Enter}");
 
-      expect(onSearch).toHaveBeenCalledWith('<script>alert(1)</script>');
+      expect(onSearch).toHaveBeenCalledWith("<script>alert(1)</script>");
       // The DOM must not have executed the injected script
-      expect((window as unknown as Record<string, unknown>).__xss3).toBeUndefined();
+      expect(
+        (window as unknown as Record<string, unknown>).__xss3,
+      ).toBeUndefined();
     });
   });
 

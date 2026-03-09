@@ -17,7 +17,7 @@ const DEFAULT_SETTINGS = {
   adjustSizes: true,
 };
 
-const AUTO_STOP_MS = 10_000;
+const AUTO_STOP_MS = 3_000;
 
 export class LayoutController {
   private layout: FA2Layout | null = null;

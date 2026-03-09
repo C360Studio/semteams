@@ -150,13 +150,14 @@ These components are clean Svelte 5:
 
 All CI blockers fixed. Current status: **0 errors across all checks.**
 
-| Check | Result |
-| ----- | ------ |
-| `npm run test` | 1432 passed, 12 skipped, **0 errors** |
-| `npm run check` | **0 errors**, 15 warnings (a11y/CSS — non-blocking) |
-| `npm run lint` | **0 errors**, 3 warnings (`any` in aiApi.ts — non-blocking) |
+| Check           | Result                                                      |
+| --------------- | ----------------------------------------------------------- |
+| `npm run test`  | 1432 passed, 12 skipped, **0 errors**                       |
+| `npm run check` | **0 errors**, 15 warnings (a11y/CSS — non-blocking)         |
+| `npm run lint`  | **0 errors**, 3 warnings (`any` in aiApi.ts — non-blocking) |
 
 Fixes applied:
+
 - ESLint config: added Svelte 5 rune globals for `.svelte.ts` files
 - graphStore: removed `$state()` wrapping of SvelteMap/SvelteSet, used SvelteDate
 - DataView.test.ts: removed stale `@ts-expect-error` directives

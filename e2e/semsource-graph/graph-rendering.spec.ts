@@ -205,7 +205,7 @@ test.describe("Graph Rendering - SemSource Entities", () => {
     const paths: Array<{ from: string; predicate: string; to: string }[]> =
       body?.data?.pathSearch?.paths ?? [];
 
-    const semsourceEntities = entities.filter((e) =>
+    const _semsourceEntities = entities.filter((e) =>
       e.id.startsWith(SEMSOURCE_ENTITY_PREFIX),
     );
 

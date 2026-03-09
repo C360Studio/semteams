@@ -55,7 +55,9 @@ describe("FlowDiffSummary — empty diff", () => {
 describe("FlowDiffSummary — added nodes", () => {
   it("should show added node names", () => {
     render(FlowDiffSummary, {
-      props: { diff: makeDiff({ nodesAdded: ["WebhookInput", "JsonProcessor"] }) },
+      props: {
+        diff: makeDiff({ nodesAdded: ["WebhookInput", "JsonProcessor"] }),
+      },
     });
 
     const summary = screen.getByTestId("flow-diff-summary");
@@ -91,7 +93,9 @@ describe("FlowDiffSummary — added nodes", () => {
 describe("FlowDiffSummary — removed nodes", () => {
   it("should show removed node names", () => {
     render(FlowDiffSummary, {
-      props: { diff: makeDiff({ nodesRemoved: ["OldOutput", "LegacyFilter"] }) },
+      props: {
+        diff: makeDiff({ nodesRemoved: ["OldOutput", "LegacyFilter"] }),
+      },
     });
 
     const summary = screen.getByTestId("flow-diff-summary");
@@ -107,7 +111,9 @@ describe("FlowDiffSummary — removed nodes", () => {
     expect(screen.getByTestId("flow-diff-summary")).not.toHaveTextContent(
       /no changes/i,
     );
-    expect(screen.getByTestId("flow-diff-summary")).toHaveTextContent("DeadNode");
+    expect(screen.getByTestId("flow-diff-summary")).toHaveTextContent(
+      "DeadNode",
+    );
   });
 });
 
@@ -211,22 +217,19 @@ describe("FlowDiffSummary — table-driven partial diffs", () => {
     },
   ];
 
-  it.each(cases)(
-    "$description",
-    ({ diff, expectNoChanges, expectTexts }) => {
-      render(FlowDiffSummary, { props: { diff } });
+  it.each(cases)("$description", ({ diff, expectNoChanges, expectTexts }) => {
+    render(FlowDiffSummary, { props: { diff } });
 
-      const summary = screen.getByTestId("flow-diff-summary");
+    const summary = screen.getByTestId("flow-diff-summary");
 
-      if (expectNoChanges) {
-        expect(summary).toHaveTextContent(/no changes/i);
-      } else {
-        expect(summary).not.toHaveTextContent(/no changes/i);
-      }
+    if (expectNoChanges) {
+      expect(summary).toHaveTextContent(/no changes/i);
+    } else {
+      expect(summary).not.toHaveTextContent(/no changes/i);
+    }
 
-      for (const text of expectTexts) {
-        expect(summary).toHaveTextContent(text);
-      }
-    },
-  );
+    for (const text of expectTexts) {
+      expect(summary).toHaveTextContent(text);
+    }
+  });
 });

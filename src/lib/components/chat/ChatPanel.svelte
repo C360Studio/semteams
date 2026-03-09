@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { ChatMessage } from "$lib/types/chat";
+  import type { ChatMessage, ContextChip } from "$lib/types/chat";
+  import type { SlashCommand } from "$lib/types/slashCommand";
   import ChatToolbar from "./ChatToolbar.svelte";
   import ChatMessageList from "./ChatMessageList.svelte";
   import ChatInput from "./ChatInput.svelte";
@@ -15,6 +16,11 @@
     onLoadJson: (data: unknown) => void;
     onExportJson: () => void;
     onNewChat: () => void;
+    chips?: ContextChip[];
+    onRemoveChip?: (chipId: string) => void;
+    onClearChips?: () => void;
+    commands?: SlashCommand[];
+    onCommandSelect?: (command: SlashCommand) => void;
   }
 
   let {
@@ -28,6 +34,11 @@
     onLoadJson,
     onExportJson,
     onNewChat,
+    chips,
+    onRemoveChip,
+    onClearChips,
+    commands,
+    onCommandSelect,
   }: Props = $props();
 
   let errorDismissed = $state(false);
@@ -55,5 +66,14 @@
     </div>
   {/if}
   <ChatMessageList {messages} {isStreaming} {streamingContent} {onApplyFlow} />
-  <ChatInput {onSubmit} {onCancel} {isStreaming} />
+  <ChatInput
+    {onSubmit}
+    {onCancel}
+    {isStreaming}
+    {chips}
+    {onRemoveChip}
+    {onClearChips}
+    {commands}
+    {onCommandSelect}
+  />
 </div>

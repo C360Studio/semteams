@@ -316,9 +316,9 @@ describe("graphApi.globalSearch", () => {
     it("should throw GraphApiError on network error (fetch throws)", async () => {
       mockFetch.mockRejectedValueOnce(new Error("Network unavailable"));
 
-      await expect(
-        graphApi.globalSearch("find drones"),
-      ).rejects.toThrow(GraphApiError);
+      await expect(graphApi.globalSearch("find drones")).rejects.toThrow(
+        GraphApiError,
+      );
     });
 
     it("should throw GraphApiError with statusCode 0 on network error", async () => {
@@ -383,9 +383,9 @@ describe("graphApi.globalSearch", () => {
         },
       });
 
-      await expect(
-        graphApi.globalSearch("find drones"),
-      ).rejects.toThrow(GraphApiError);
+      await expect(graphApi.globalSearch("find drones")).rejects.toThrow(
+        GraphApiError,
+      );
     });
 
     it("should throw GraphApiError when response has no data field", async () => {
@@ -394,9 +394,9 @@ describe("graphApi.globalSearch", () => {
         json: async () => ({ errors: [] }),
       });
 
-      await expect(
-        graphApi.globalSearch("find drones"),
-      ).rejects.toThrow(GraphApiError);
+      await expect(graphApi.globalSearch("find drones")).rejects.toThrow(
+        GraphApiError,
+      );
     });
   });
 });

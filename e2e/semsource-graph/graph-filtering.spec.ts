@@ -133,7 +133,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.function.main",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -145,7 +146,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.interface.Handler",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.interface.Handler",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.interface.Handler",
                       predicate: "has.name",
                       object: "Handler",
                       confidence: 1.0,
@@ -197,7 +199,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.function.main",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -209,7 +212,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.interface.Handler",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.interface.Handler",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.interface.Handler",
                       predicate: "has.name",
                       object: "Handler",
                       confidence: 1.0,
@@ -333,7 +337,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.function.main",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -393,7 +398,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.function.main",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -417,7 +423,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.config.data-fixture.gomod.fixture-project",
                   triples: [
                     {
-                      subject: "e2e.semsource.config.data-fixture.gomod.fixture-project",
+                      subject:
+                        "e2e.semsource.config.data-fixture.gomod.fixture-project",
                       predicate: "has.name",
                       object: "fixture-project",
                       confidence: 1.0,
@@ -491,7 +498,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.function.main",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -578,7 +586,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.function.main",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -632,7 +641,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.function.main",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -644,7 +654,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.interface.Handler",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.interface.Handler",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.interface.Handler",
                       predicate: "has.name",
                       object: "Handler",
                       confidence: 1.0,
@@ -704,7 +715,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.golang.data-fixture.function.main",
+                      subject:
+                        "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,

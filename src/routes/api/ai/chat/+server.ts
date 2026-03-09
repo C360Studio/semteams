@@ -58,7 +58,9 @@ function getClientId(request: Request): string {
 /**
  * Validate the chat request body.
  */
-function validateChatRequest(body: unknown): { valid: true; data: ChatRequest } | { valid: false; error: string } {
+function validateChatRequest(
+  body: unknown,
+): { valid: true; data: ChatRequest } | { valid: false; error: string } {
   if (!body || typeof body !== "object") {
     return { valid: false, error: "Request body must be a JSON object" };
   }
@@ -90,15 +92,21 @@ function validateChatRequest(body: unknown): { valid: true; data: ChatRequest } 
  * Build the system prompt with component catalog and current flow context.
  */
 function buildSystemPrompt(
-  catalog: Array<{ id: string; name: string; category?: string; description?: string; ports?: Array<{ direction: string }> }>,
+  catalog: Array<{
+    id: string;
+    name: string;
+    category?: string;
+    description?: string;
+    ports?: Array<{ direction: string }>;
+  }>,
   currentFlow: unknown,
 ): string {
   const catalogDescription = catalog
     .map((comp) => {
       const inputPorts =
-        (comp.ports?.filter((p) => p.direction === "input").length) ?? 0;
+        comp.ports?.filter((p) => p.direction === "input").length ?? 0;
       const outputPorts =
-        (comp.ports?.filter((p) => p.direction === "output").length) ?? 0;
+        comp.ports?.filter((p) => p.direction === "output").length ?? 0;
       return `- ${comp.id} (${comp.category ?? "unknown"}): ${comp.description ?? ""}\n  Ports: ${inputPorts} inputs, ${outputPorts} outputs`;
     })
     .join("\n");
@@ -181,7 +189,10 @@ export const POST: RequestHandler = async ({ request }) => {
     body = await request.json();
   } catch {
     return new Response(
-      JSON.stringify({ error: "Invalid JSON in request body", code: "INVALID_JSON" }),
+      JSON.stringify({
+        error: "Invalid JSON in request body",
+        code: "INVALID_JSON",
+      }),
       { status: 400, headers: { "Content-Type": "application/json" } },
     );
   }
@@ -203,14 +214,22 @@ export const POST: RequestHandler = async ({ request }) => {
   });
 
   // Step 5: Fetch component catalog via MCP
-  let componentCatalog: Array<{ id: string; name: string; category?: string; description?: string; ports?: Array<{ direction: string }> }>;
+  let componentCatalog: Array<{
+    id: string;
+    name: string;
+    category?: string;
+    description?: string;
+    ports?: Array<{ direction: string }>;
+  }>;
   try {
-    componentCatalog = (await mcpServer.getComponentCatalog()) as typeof componentCatalog;
+    componentCatalog =
+      (await mcpServer.getComponentCatalog()) as typeof componentCatalog;
   } catch (err) {
     console.error("Failed to fetch component catalog:", err);
     return new Response(
       JSON.stringify({
-        error: "Unable to fetch available components. Please check if the backend is running and try again.",
+        error:
+          "Unable to fetch available components. Please check if the backend is running and try again.",
         code: "COMPONENT_CATALOG_FAILED",
         details: err instanceof Error ? err.message : undefined,
       }),
@@ -325,7 +344,9 @@ export const POST: RequestHandler = async ({ request }) => {
             tempId,
             generatedFlow,
           );
-          chunks.push(buildEvent("done", { flow: generatedFlow, validationResult }));
+          chunks.push(
+            buildEvent("done", { flow: generatedFlow, validationResult }),
+          );
         } else {
           chunks.push(buildEvent("done", {}));
         }

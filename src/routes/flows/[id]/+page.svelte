@@ -438,17 +438,22 @@
 				messages: chatStore.messages
 					.filter((m) => m.role !== 'system')
 					.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-				currentFlow: {
+				// Updated to use new context shape instead of currentFlow
+				context: {
+					page: 'flow-builder',
+					flowId: backendFlow.id,
+					flowName: backendFlow.name,
 					nodes: flowNodes,
 					connections: flowConnections
-				}
+				},
+				chips: chatStore.chips
 			},
 			{
 				onText: (chunk: string) => {
 					chatStore.appendStreamContent(chunk);
 				},
-				onDone: ({ flow }: { flow?: Partial<Flow>; validationResult?: unknown }) => {
-					chatStore.finalizeStream(chatStore.streamingContent, flow);
+				onDone: ({ attachments }) => {
+					chatStore.finalizeStream(chatStore.streamingContent, attachments);
 					chatAbortController = null;
 				},
 				onError: (errorMsg: string) => {
@@ -469,7 +474,11 @@
 
 	function handleApplyFlow(messageId: string) {
 		const message = chatStore.messages.find((m) => m.id === messageId);
-		if (!message?.flow) return;
+		// Find the flow attachment in the new attachment-based API
+		const flowAttachment = message?.attachments?.find(
+			(a): a is import('$lib/types/chat').FlowAttachment => a.kind === 'flow'
+		);
+		if (!flowAttachment) return;
 
 		// Save current state to history for undo
 		flowHistory.push({
@@ -479,17 +488,17 @@
 		});
 
 		// Apply flow to canvas
-		if (message.flow.nodes) {
-			flowNodes = [...message.flow.nodes];
+		if (flowAttachment.flow.nodes) {
+			flowNodes = [...flowAttachment.flow.nodes];
 		}
-		if (message.flow.connections) {
-			flowConnections = [...message.flow.connections];
+		if (flowAttachment.flow.connections) {
+			flowConnections = [...flowAttachment.flow.connections];
 		}
 
 		// Mark as dirty and applied
 		dirty = true;
 		saveState = { ...saveState, status: 'dirty' };
-		chatStore.markFlowApplied(messageId);
+		chatStore.updateAttachment(messageId, 'flow', { applied: true });
 	}
 
 	function handleLoadJson(data: unknown) {

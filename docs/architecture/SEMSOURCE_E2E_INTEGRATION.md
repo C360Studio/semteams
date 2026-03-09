@@ -47,12 +47,14 @@ Semsource is a semstreams application. It runs the full graph pipeline internall
 ```
 
 Semsource port map:
+
 - `:8080` — service manager (component catalog, health, flow-builder API)
 - `:8082` — graph-gateway (GraphQL `/graphql`, playground)
 - `:7890` — websocket output (entity stream for SemSpec/SemDragon)
 - `:9091` — metrics (Prometheus `/metrics`)
 
 Caddy routing:
+
 - `/graphql` → backend:8082 (graph-gateway)
 - `/flowbuilder/*`, `/components/*`, `/health` → backend:8080 (service manager)
 - `/*` → ui:5173 (Vite dev server)
@@ -89,6 +91,7 @@ e2e/fixtures/semsource/
 ```
 
 Produces known entities:
+
 - **AST**: `e2e.semsource.golang.data-fixture.function.src-main-go-main`, `e2e.semsource.golang.data-fixture.interface.src-handler-go-Handler`, etc.
 - **Docs**: `e2e.semsource.web.data-fixture.doc.87457b`
 - **Config**: `e2e.semsource.config.data-fixture.gomod.fixture-project`, `e2e.semsource.config.data-fixture.image.golang-1-22-alpine`
@@ -96,6 +99,7 @@ Produces known entities:
 Total: ~16-27 entities (including duplicates from relationship triples). Fast ingestion (<2s).
 
 Key config decisions:
+
 - `watch: false` — ingest once, emit SEED events, no file watching (deterministic)
 - `namespace: "e2e"` — distinct from production
 - No `git`, `url`, or media sources — avoids network access during tests

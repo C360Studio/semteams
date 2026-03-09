@@ -102,9 +102,7 @@ describe("AI Flow Generation API Route", () => {
     // Setup mock factories
     const { createMCPServer } = await import("$lib/server/mcp/server");
     const { createClaudeClient } = await import("$lib/server/mcp/claude");
-    const { checkRateLimit } = await import(
-      "$lib/server/middleware/rateLimit"
-    );
+    const { checkRateLimit } = await import("$lib/server/middleware/rateLimit");
 
     vi.mocked(createMCPServer).mockReturnValue(
       mockMCPServer as unknown as MCPServer,

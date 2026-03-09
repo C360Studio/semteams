@@ -187,50 +187,46 @@ describe("graphApi.globalSearch — AbortController support", () => {
       expect(caughtError).not.toBeInstanceOf(GraphApiError);
     });
 
-    it(
-      "should propagate AbortError thrown mid-flight (signal aborted after fetch starts)",
-      async () => {
-        const controller = new AbortController();
+    it("should propagate AbortError thrown mid-flight (signal aborted after fetch starts)", async () => {
+      const controller = new AbortController();
 
-        // fetch rejects with AbortError unconditionally after one microtask,
-        // simulating a browser aborting a request. When the production code
-        // forwards the AbortSignal, the rejection happens via the signal
-        // listener; the unconditional fallback ensures the promise always
-        // settles so the test does not hang during Phase 4 development.
-        let settled = false;
-        globalThis.fetch = vi.fn((_url: string, init?: FetchInit) => {
-          return new Promise<Response>((_resolve, reject) => {
-            const doReject = () => {
-              if (!settled) {
-                settled = true;
-                reject(makeAbortError());
-              }
-            };
-            if (init?.signal?.aborted) {
-              doReject();
-              return;
+      // fetch rejects with AbortError unconditionally after one microtask,
+      // simulating a browser aborting a request. When the production code
+      // forwards the AbortSignal, the rejection happens via the signal
+      // listener; the unconditional fallback ensures the promise always
+      // settles so the test does not hang during Phase 4 development.
+      let settled = false;
+      globalThis.fetch = vi.fn((_url: string, init?: FetchInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          const doReject = () => {
+            if (!settled) {
+              settled = true;
+              reject(makeAbortError());
             }
-            init?.signal?.addEventListener("abort", doReject);
-            // Unconditional fallback so the test never hangs
-            Promise.resolve().then(doReject);
-          });
-        }) as typeof globalThis.fetch;
+          };
+          if (init?.signal?.aborted) {
+            doReject();
+            return;
+          }
+          init?.signal?.addEventListener("abort", doReject);
+          // Unconditional fallback so the test never hangs
+          Promise.resolve().then(doReject);
+        });
+      }) as typeof globalThis.fetch;
 
-        const { graphApi } = await import("./graphApi");
+      const { graphApi } = await import("./graphApi");
 
-        controller.abort();
+      controller.abort();
 
-        const searchPromise = graphApi.globalSearch(
-          "mid-flight abort",
-          2,
-          10,
-          controller.signal,
-        );
+      const searchPromise = graphApi.globalSearch(
+        "mid-flight abort",
+        2,
+        10,
+        controller.signal,
+      );
 
-        await expect(searchPromise).rejects.toMatchObject({ name: "AbortError" });
-      },
-      10000,
-    );
+      await expect(searchPromise).rejects.toMatchObject({ name: "AbortError" });
+    }, 10000);
 
     it("should still wrap non-AbortError fetch exceptions in GraphApiError", async () => {
       globalThis.fetch = vi

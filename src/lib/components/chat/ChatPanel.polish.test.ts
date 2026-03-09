@@ -68,10 +68,11 @@ describe("ChatMessageList — empty state UX", () => {
     const text = emptyState.textContent?.toLowerCase() ?? "";
 
     // At least one of these guidance words must be present
+    // Phase 3 migration: updated from flow-specific to general-purpose assistant text
     const hasGuidance =
-      text.includes("describe") ||
-      text.includes("flow") ||
-      text.includes("build");
+      text.includes("question") ||
+      text.includes("graph") ||
+      text.includes("command");
 
     expect(hasGuidance).toBe(true);
   });
@@ -206,9 +207,9 @@ describe("ChatMessage — accessibility", () => {
     // Any of: rendered text containing time, title attribute, or a <time> element with datetime
     const hasTimeElement = container.querySelector("time") !== null;
     const hasTimestampText = container.textContent?.includes("12:00") ?? false;
-    const hasTitleAttr = Array.from(
-      container.querySelectorAll("[title]"),
-    ).some((el) => el.getAttribute("title")?.includes("2026"));
+    const hasTitleAttr = Array.from(container.querySelectorAll("[title]")).some(
+      (el) => el.getAttribute("title")?.includes("2026"),
+    );
 
     expect(hasTimeElement || hasTimestampText || hasTitleAttr).toBe(true);
   });

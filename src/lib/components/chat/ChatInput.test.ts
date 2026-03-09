@@ -19,7 +19,7 @@ describe("ChatInput — initial render", () => {
     expect(textarea).toBeInTheDocument();
     expect(textarea).toHaveAttribute(
       "placeholder",
-      "Describe the flow you want to build...",
+      "Ask a question or type / for commands...",
     );
   });
 

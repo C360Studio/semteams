@@ -21,6 +21,8 @@
     onEntitySelect?: (entityId: string | null) => void;
     onEntityExpand?: (entityId: string) => void;
     onEntityHover?: (entityId: string | null) => void;
+    onRefresh?: () => void;
+    loading?: boolean;
   }
 
   let {
@@ -31,6 +33,8 @@
     onEntitySelect,
     onEntityExpand,
     onEntityHover,
+    onRefresh,
+    loading = false,
   }: SigmaCanvasProps = $props();
 
   let containerElement: HTMLDivElement;
@@ -167,7 +171,7 @@
 </script>
 
 <div class="sigma-canvas-container" data-testid="sigma-canvas">
-  <!-- Zoom Controls -->
+  <!-- Controls -->
   <div class="zoom-controls">
     <button onclick={handleZoomIn} aria-label="Zoom in" title="Zoom in"
       >+</button
@@ -182,6 +186,17 @@
     >
       <span class="fit-icon">&#x2A01;</span>
     </button>
+    {#if onRefresh}
+      <button
+        onclick={onRefresh}
+        aria-label="Refresh data"
+        title="Refresh data"
+        disabled={loading}
+        class:refreshing={loading}
+      >
+        <span class="refresh-icon">&#x21bb;</span>
+      </button>
+    {/if}
   </div>
 
   <!-- Sigma container -->
@@ -246,6 +261,25 @@
 
   .fit-icon {
     font-size: 14px;
+  }
+
+  .refresh-icon {
+    font-size: 16px;
+  }
+
+  .zoom-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .zoom-controls button.refreshing .refresh-icon {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   /* Stats overlay */

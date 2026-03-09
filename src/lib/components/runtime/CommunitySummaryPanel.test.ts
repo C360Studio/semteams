@@ -12,7 +12,9 @@ import type { CommunitySummary } from "$lib/types/graph";
 // Fixtures
 // ---------------------------------------------------------------------------
 
-function makeSummary(overrides: Partial<CommunitySummary> = {}): CommunitySummary {
+function makeSummary(
+  overrides: Partial<CommunitySummary> = {},
+): CommunitySummary {
   return {
     communityId: "community-1",
     text: "Drone cluster in the west-coast region.",
@@ -57,9 +59,7 @@ describe("CommunitySummaryPanel — panel presence", () => {
       props: { summaries: [makeSummary()] },
     });
 
-    expect(
-      screen.getByTestId("community-summary-panel"),
-    ).toBeInTheDocument();
+    expect(screen.getByTestId("community-summary-panel")).toBeInTheDocument();
   });
 
   it("should render one card per summary", () => {
@@ -94,8 +94,14 @@ describe("CommunitySummaryPanel — summary text", () => {
     render(CommunitySummaryPanel, {
       props: {
         summaries: [
-          makeSummary({ communityId: "c-1", text: "Fleet cluster in the north." }),
-          makeSummary({ communityId: "c-2", text: "Drone sensor mesh network." }),
+          makeSummary({
+            communityId: "c-1",
+            text: "Fleet cluster in the north.",
+          }),
+          makeSummary({
+            communityId: "c-2",
+            text: "Drone sensor mesh network.",
+          }),
         ],
       },
     });
@@ -140,9 +146,7 @@ describe("CommunitySummaryPanel — keywords", () => {
   it("should render each keyword as a chip with data-testid='community-keyword'", () => {
     render(CommunitySummaryPanel, {
       props: {
-        summaries: [
-          makeSummary({ keywords: ["alpha", "beta", "gamma"] }),
-        ],
+        summaries: [makeSummary({ keywords: ["alpha", "beta", "gamma"] })],
       },
     });
 
@@ -153,9 +157,7 @@ describe("CommunitySummaryPanel — keywords", () => {
   it("should display the keyword text inside each chip", () => {
     render(CommunitySummaryPanel, {
       props: {
-        summaries: [
-          makeSummary({ keywords: ["drone", "west-coast"] }),
-        ],
+        summaries: [makeSummary({ keywords: ["drone", "west-coast"] })],
       },
     });
 
@@ -181,9 +183,7 @@ describe("CommunitySummaryPanel — keywords", () => {
   it("should handle summaries with an empty keywords array", () => {
     render(CommunitySummaryPanel, {
       props: {
-        summaries: [
-          makeSummary({ keywords: [] }),
-        ],
+        summaries: [makeSummary({ keywords: [] })],
       },
     });
 
@@ -203,8 +203,12 @@ describe("CommunitySummaryPanel — keywords", () => {
     });
 
     const cards = screen.getAllByTestId("community-card");
-    expect(within(cards[0]).getAllByTestId("community-keyword")).toHaveLength(1);
-    expect(within(cards[1]).getAllByTestId("community-keyword")).toHaveLength(2);
+    expect(within(cards[0]).getAllByTestId("community-keyword")).toHaveLength(
+      1,
+    );
+    expect(within(cards[1]).getAllByTestId("community-keyword")).toHaveLength(
+      2,
+    );
   });
 });
 
@@ -332,8 +336,7 @@ describe("CommunitySummaryPanel — accessibility", () => {
     // understand what it represents.
     const hasHeading = panel.querySelector("h1,h2,h3,h4,h5,h6") !== null;
     const hasLabel =
-      panel.hasAttribute("aria-label") ||
-      panel.hasAttribute("aria-labelledby");
+      panel.hasAttribute("aria-label") || panel.hasAttribute("aria-labelledby");
 
     expect(hasHeading || hasLabel).toBe(true);
   });

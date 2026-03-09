@@ -259,7 +259,10 @@ describe("graphology-adapter attack tests", () => {
     const graph = new Graph();
     const entity = makeEntity("c360.ops.robotics.gcs.drone.001");
     syncStoreToGraph(graph, [entity], []);
-    const size = graph.getNodeAttribute("c360.ops.robotics.gcs.drone.001", "size");
+    const size = graph.getNodeAttribute(
+      "c360.ops.robotics.gcs.drone.001",
+      "size",
+    );
     expect(size).toBeGreaterThanOrEqual(5);
   });
 

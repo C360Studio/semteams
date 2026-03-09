@@ -70,17 +70,17 @@ async function readSSE(response: Response): Promise<string> {
 /**
  * Parse SSE text into an array of { event, data } objects.
  */
-function parseSSEEvents(
-  raw: string,
-): Array<{ event: string; data: unknown }> {
+function parseSSEEvents(raw: string): Array<{ event: string; data: unknown }> {
   const events: Array<{ event: string; data: unknown }> = [];
   const blocks = raw.split("\n\n").filter((b) => b.trim());
   for (const block of blocks) {
     let eventName = "";
     let dataLine = "";
     for (const line of block.split("\n")) {
-      if (line.startsWith("event: ")) eventName = line.slice("event: ".length).trim();
-      if (line.startsWith("data: ")) dataLine = line.slice("data: ".length).trim();
+      if (line.startsWith("event: "))
+        eventName = line.slice("event: ".length).trim();
+      if (line.startsWith("data: "))
+        dataLine = line.slice("data: ".length).trim();
     }
     if (eventName && dataLine) {
       try {
@@ -136,9 +136,11 @@ describe("Chat Streaming API Route", () => {
     };
 
     mockProvider = {
-      streamChat: vi.fn().mockReturnValue(
-        makeStream([{ type: "text", content: "Hello" }, { type: "done" }]),
-      ),
+      streamChat: vi
+        .fn()
+        .mockReturnValue(
+          makeStream([{ type: "text", content: "Hello" }, { type: "done" }]),
+        ),
     };
 
     const { createMCPServer } = await import("$lib/server/mcp/server");
@@ -164,7 +166,9 @@ describe("Chat Streaming API Route", () => {
 
   describe("Rate limiting", () => {
     it("returns 429 when rate limited", async () => {
-      const { checkRateLimit } = await import("$lib/server/middleware/rateLimit");
+      const { checkRateLimit } = await import(
+        "$lib/server/middleware/rateLimit"
+      );
       vi.mocked(checkRateLimit).mockReturnValueOnce({
         allowed: false,
         remaining: 0,
@@ -180,7 +184,9 @@ describe("Chat Streaming API Route", () => {
     });
 
     it("includes Retry-After header when rate limited", async () => {
-      const { checkRateLimit } = await import("$lib/server/middleware/rateLimit");
+      const { checkRateLimit } = await import(
+        "$lib/server/middleware/rateLimit"
+      );
       vi.mocked(checkRateLimit).mockReturnValueOnce({
         allowed: false,
         remaining: 0,
@@ -310,10 +316,14 @@ describe("Chat Streaming API Route", () => {
       const textEvents = events.filter((e) => e.event === "text");
       expect(textEvents.length).toBeGreaterThanOrEqual(2);
       expect(
-        textEvents.some((e) => (e.data as { content: string }).content === "Hello "),
+        textEvents.some(
+          (e) => (e.data as { content: string }).content === "Hello ",
+        ),
       ).toBe(true);
       expect(
-        textEvents.some((e) => (e.data as { content: string }).content === "world"),
+        textEvents.some(
+          (e) => (e.data as { content: string }).content === "world",
+        ),
       ).toBe(true);
     });
   });

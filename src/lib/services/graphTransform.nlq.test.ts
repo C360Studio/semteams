@@ -394,7 +394,11 @@ describe("transformGlobalSearchResult", () => {
     const entityTripleCases = [
       {
         description: "numeric object (integer) is a property",
-        triple: { subject: DRONE_001, predicate: "telemetry.speed", object: 42 },
+        triple: {
+          subject: DRONE_001,
+          predicate: "telemetry.speed",
+          object: 42,
+        },
         expectProperty: true,
       },
       {

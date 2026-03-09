@@ -67,9 +67,7 @@ describe("NlqDebugBadge — badge presence", () => {
       props: { classification: makeClassification() },
     });
 
-    expect(
-      screen.queryByTestId("nlq-debug-expanded"),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nlq-debug-expanded")).not.toBeInTheDocument();
   });
 });
 

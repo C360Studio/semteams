@@ -10,7 +10,11 @@ import type { FlowNode, FlowConnection } from "$lib/types/flow";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeNode(id: string, name: string, config: Record<string, unknown> = {}): FlowNode {
+function makeNode(
+  id: string,
+  name: string,
+  config: Record<string, unknown> = {},
+): FlowNode {
   return {
     id,
     component: "test-component",
@@ -21,7 +25,11 @@ function makeNode(id: string, name: string, config: Record<string, unknown> = {}
   };
 }
 
-function makeConnection(id: string, sourceId = "n1", targetId = "n2"): FlowConnection {
+function makeConnection(
+  id: string,
+  sourceId = "n1",
+  targetId = "n2",
+): FlowConnection {
   return {
     id,
     source_node_id: sourceId,
@@ -59,14 +67,23 @@ describe("computeFlowDiff — nodes added", () => {
   });
 
   it("uses node name (not id) in nodesAdded", () => {
-    const diff = computeFlowDiff([], [], [makeNode("abc-123", "My Processor")], []);
+    const diff = computeFlowDiff(
+      [],
+      [],
+      [makeNode("abc-123", "My Processor")],
+      [],
+    );
     expect(diff.nodesAdded).toContain("My Processor");
     expect(diff.nodesAdded).not.toContain("abc-123");
   });
 
   it("detects multiple nodes added", () => {
     const oldNodes = [makeNode("n1", "Source")];
-    const newNodes = [makeNode("n1", "Source"), makeNode("n2", "Transform"), makeNode("n3", "Sink")];
+    const newNodes = [
+      makeNode("n1", "Source"),
+      makeNode("n2", "Transform"),
+      makeNode("n3", "Sink"),
+    ];
     const diff = computeFlowDiff(oldNodes, [], newNodes, []);
     expect(diff.nodesAdded).toHaveLength(2);
     expect(diff.nodesAdded).toContain("Transform");
@@ -95,7 +112,12 @@ describe("computeFlowDiff — nodes removed", () => {
   });
 
   it("uses node name (not id) in nodesRemoved", () => {
-    const diff = computeFlowDiff([makeNode("abc-123", "My Source")], [], [], []);
+    const diff = computeFlowDiff(
+      [makeNode("abc-123", "My Source")],
+      [],
+      [],
+      [],
+    );
     expect(diff.nodesRemoved).toContain("My Source");
     expect(diff.nodesRemoved).not.toContain("abc-123");
   });
@@ -128,8 +150,22 @@ describe("computeFlowDiff — nodes modified", () => {
   });
 
   it("does NOT mark node as modified when only position changes", () => {
-    const oldNode: FlowNode = { id: "n1", component: "c", type: "processor", name: "Parser", position: { x: 0, y: 0 }, config: {} };
-    const newNode: FlowNode = { id: "n1", component: "c", type: "processor", name: "Parser", position: { x: 999, y: 999 }, config: {} };
+    const oldNode: FlowNode = {
+      id: "n1",
+      component: "c",
+      type: "processor",
+      name: "Parser",
+      position: { x: 0, y: 0 },
+      config: {},
+    };
+    const newNode: FlowNode = {
+      id: "n1",
+      component: "c",
+      type: "processor",
+      name: "Parser",
+      position: { x: 999, y: 999 },
+      config: {},
+    };
     const diff = computeFlowDiff([oldNode], [], [newNode], []);
     expect(diff.nodesModified).toHaveLength(0);
   });
@@ -150,9 +186,9 @@ describe("computeFlowDiff — nodes modified", () => {
       makeNode("n3", "C", {}),
     ];
     const newNodes = [
-      makeNode("n1", "A", { x: 99 }),  // config changed
-      makeNode("n2", "B-renamed", { y: 2 }),  // name changed
-      makeNode("n3", "C", {}),  // unchanged
+      makeNode("n1", "A", { x: 99 }), // config changed
+      makeNode("n2", "B-renamed", { y: 2 }), // name changed
+      makeNode("n3", "C", {}), // unchanged
     ];
     const diff = computeFlowDiff(oldNodes, [], newNodes, []);
     expect(diff.nodesModified).toHaveLength(2);
@@ -181,7 +217,11 @@ describe("computeFlowDiff — connections", () => {
   });
 
   it("counts removed connections", () => {
-    const oldConns = [makeConnection("c1"), makeConnection("c2"), makeConnection("c3")];
+    const oldConns = [
+      makeConnection("c1"),
+      makeConnection("c2"),
+      makeConnection("c3"),
+    ];
     const newConns = [makeConnection("c1")];
     const diff = computeFlowDiff([], oldConns, [], newConns);
     expect(diff.connectionsRemoved).toBe(2);
@@ -195,7 +235,11 @@ describe("computeFlowDiff — connections", () => {
   });
 
   it("handles all connections added (empty old)", () => {
-    const newConns = [makeConnection("c1"), makeConnection("c2"), makeConnection("c3")];
+    const newConns = [
+      makeConnection("c1"),
+      makeConnection("c2"),
+      makeConnection("c3"),
+    ];
     const diff = computeFlowDiff([], [], [], newConns);
     expect(diff.connectionsAdded).toBe(3);
     expect(diff.connectionsRemoved).toBe(0);
@@ -309,9 +353,16 @@ describe("computeFlowDiff — edge cases", () => {
 
     for (const tc of cases) {
       const diff = computeFlowDiff(tc.oldNodes, [], tc.newNodes, []);
-      expect(diff.nodesAdded, `${tc.label}: nodesAdded`).toEqual(tc.expectedAdded);
-      expect(diff.nodesRemoved, `${tc.label}: nodesRemoved`).toEqual(tc.expectedRemoved);
-      expect(diff.nodesModified, `${tc.label}: nodesModified count`).toHaveLength(tc.expectedModified);
+      expect(diff.nodesAdded, `${tc.label}: nodesAdded`).toEqual(
+        tc.expectedAdded,
+      );
+      expect(diff.nodesRemoved, `${tc.label}: nodesRemoved`).toEqual(
+        tc.expectedRemoved,
+      );
+      expect(
+        diff.nodesModified,
+        `${tc.label}: nodesModified count`,
+      ).toHaveLength(tc.expectedModified);
     }
   });
 });

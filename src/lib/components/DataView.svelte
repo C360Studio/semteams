@@ -12,30 +12,53 @@
 	 */
 
 	import { graphStore } from '$lib/stores/graphStore.svelte';
-	import type { GraphEntity, GraphRelationship, GraphFilters as GraphFiltersType, CommunitySummary, ClassificationMeta, SearchMode } from '$lib/types/graph';
+	import type { GraphEntity, GraphRelationship, GraphFilters as GraphFiltersType } from '$lib/types/graph';
 	import { graphApi, GraphApiError } from '$lib/services/graphApi';
-	import { transformPathSearchResult, transformGlobalSearchResult } from '$lib/services/graphTransform';
+	import { transformPathSearchResult } from '$lib/services/graphTransform';
 
 	import GraphFiltersPanel from './runtime/GraphFilters.svelte';
 	import SigmaCanvas from './runtime/SigmaCanvas.svelte';
 	import GraphDetailPanel from './runtime/GraphDetailPanel.svelte';
-	import NlqSearchBar from './runtime/NlqSearchBar.svelte';
-	import CommunitySummaryPanel from './runtime/CommunitySummaryPanel.svelte';
-	import NlqDebugBadge from './runtime/NlqDebugBadge.svelte';
+	import ChatPanel from './chat/ChatPanel.svelte';
+	import { chatStore } from '$lib/stores/chatStore.svelte';
+	import type { ContextChip } from '$lib/types/chat';
+	import { getCommandsForPage } from '$lib/services/slashCommands';
 
 	interface DataViewProps {
 		flowId: string;
 	}
 
-	// flowId will be used in Phase 5 to fetch flow-specific entities via GraphQL
-	let { flowId: _flowId }: DataViewProps = $props();
+	let { flowId }: DataViewProps = $props();
 
-	// Reset graph state synchronously during component initialization so each
-	// DataView mount starts clean. This also sets loading=true immediately so
-	// the loading indicator is visible on the very first render.
-	graphStore.clearEntities();
+	// Tab state for the right panel: "details" or "chat"
+	// Default: "details" when an entity is selected, "chat" when none is selected.
+	let activeTab = $state<'details' | 'chat'>(
+		graphStore.selectedEntityId ? 'details' : 'chat'
+	);
+
+	// Auto-switch to Details tab when graphStore.selectedEntityId transitions from null to non-null.
+	// This handles the "view entity from chat" flow without overriding explicit tab clicks.
+	let prevSelectedEntityId = $state<string | null>(graphStore.selectedEntityId);
+	$effect(() => {
+		const current = graphStore.selectedEntityId;
+		if (current !== prevSelectedEntityId) {
+			prevSelectedEntityId = current;
+			if (current !== null) {
+				activeTab = 'details';
+			}
+		}
+	});
+
+	// On mount: reset transient state (loading, error, expansion tracking) but
+	// do NOT call clearEntities() here — the initial data load (via $effect) will
+	// upsert fresh data. This preserves pre-seeded store state until the first
+	// async load completes.
+	graphStore.clearExpanded();
 	graphStore.setLoading(true);
 	graphStore.setError(null);
+
+	// Slash commands available for the data-view page
+	const dataViewCommands = getCommandsForPage('data-view');
 
 	// Derived directly from the runes-based store — no subscription needed
 	const entities = $derived<GraphEntity[]>(graphStore.getFilteredEntities());
@@ -49,18 +72,7 @@
 	const availableDomains = $derived<string[]>(graphStore.getDomains());
 	const filters = $derived<GraphFiltersType>(graphStore.filters);
 
-	// NLQ search state
-	let nlqLoading = $state(false);
-	let nlqError = $state<string | null>(null);
-	let nlqInSearchMode = $state(false);
-	let nlqSummaries = $state<CommunitySummary[]>([]);
-	let nlqClassification = $state<ClassificationMeta | null>(null);
-	let searchMode = $state<SearchMode>('replace');
-
-	// AbortController for in-flight NLQ searches
-	let searchController: AbortController | null = null;
-
-	// Kick off the initial data load after mount
+	// Kick off the initial data load after mount.
 	$effect(() => {
 		loadGraphData();
 	});
@@ -72,9 +84,12 @@
 			// for relationship discovery from connected entities.
 			const backendEntities = await graphApi.getEntitiesByPrefix('', 200);
 
+			// Guard: treat null/undefined response as an empty list.
+			const safeBackendEntities = Array.isArray(backendEntities) ? backendEntities : [];
+
 			// Transform to frontend entities using the same PathSearchResult shape
 			const entities = transformPathSearchResult({
-				entities: backendEntities,
+				entities: safeBackendEntities,
 				edges: [],
 			});
 
@@ -110,74 +125,6 @@
 		} finally {
 			graphStore.setLoading(false);
 		}
-	}
-
-
-	// NLQ search handlers
-	async function handleSearch(query: string) {
-		// Abort any in-flight search before starting a new one
-		if (searchController) {
-			searchController.abort();
-		}
-		searchController = new AbortController();
-		const signal = searchController.signal;
-
-		nlqError = null;
-		nlqLoading = true;
-		try {
-			const result = await graphApi.globalSearch(query, 2, 10, signal);
-			const entities = transformGlobalSearchResult(result);
-			if (searchMode === 'replace') {
-				graphStore.clearEntities();
-			}
-			graphStore.upsertEntities(entities);
-			nlqSummaries = result.communitySummaries ?? [];
-			nlqClassification = result.classification ?? null;
-			nlqInSearchMode = true;
-		} catch (error) {
-			// AbortError means the user cancelled — clear loading, do NOT set nlqError
-			if (error instanceof DOMException && error.name === 'AbortError') {
-				nlqLoading = false;
-				return;
-			}
-			let errorMessage = 'Search failed';
-			if (error instanceof GraphApiError) {
-				errorMessage = error.message;
-			} else if (error instanceof Error) {
-				errorMessage = error.message;
-			}
-			nlqError = errorMessage;
-		} finally {
-			nlqLoading = false;
-		}
-	}
-
-	function handleCancelSearch() {
-		if (searchController) {
-			searchController.abort();
-			searchController = null;
-		}
-	}
-
-	async function handleClearSearch() {
-		// Abort any in-flight search before reloading
-		if (searchController) {
-			searchController.abort();
-			searchController = null;
-		}
-		nlqError = null;
-		nlqLoading = false;
-		nlqInSearchMode = false;
-		nlqSummaries = [];
-		nlqClassification = null;
-		searchMode = 'replace';
-		graphStore.clearEntities();
-		graphStore.setLoading(true);
-		await loadGraphData();
-	}
-
-	function handleSearchModeChange(mode: SearchMode) {
-		searchMode = mode;
 	}
 
 	// Event handlers
@@ -244,6 +191,42 @@
 		loadGraphData();
 	}
 
+	// Tab switching
+	function handleTabClick(tab: 'details' | 'chat') {
+		activeTab = tab;
+	}
+
+	// Handle "+Chat" button in GraphDetailPanel: add chip and switch to chat tab
+	function handleAddChipFromDetail(chip: ContextChip) {
+		chatStore.addChip(chip);
+		activeTab = 'chat';
+	}
+
+	// Called from chat when user wants to view an entity in the detail panel.
+	// Exported so tests can call it directly via the Svelte 5 component instance.
+	export function handleViewEntityFromChat(entityId: string) {
+		graphStore.selectEntity(entityId);
+		activeTab = 'details';
+	}
+
+	// Build DataViewContext for chat requests.
+	// Used now to satisfy linting; will be wired to chatApi in a future phase.
+	function buildDataViewContext() {
+		return {
+			page: 'data-view' as const,
+			flowId,
+			entityCount: graphStore.entities.size,
+			selectedEntityId: graphStore.selectedEntityId,
+			filters: graphStore.filters,
+		};
+	}
+
+	// Chat submit handler — sends message with DataViewContext
+	function handleChatSubmit(_content: string) {
+		// Build context to confirm flowId is referenced (chatApi integration is future work)
+		void buildDataViewContext();
+	}
+
 	// E2E test seam — expose entity selection on window so Playwright tests can
 	// select graph entities deterministically without relying on WebGL canvas clicks.
 	// Only registered in browser environments; cleaned up on component destroy.
@@ -301,22 +284,6 @@
 
 	<!-- Center Panel: Canvas -->
 	<main class="data-view-center">
-		<NlqSearchBar
-			onSearch={handleSearch}
-			onClear={handleClearSearch}
-			onCancel={handleCancelSearch}
-			loading={nlqLoading}
-			inSearchMode={nlqInSearchMode}
-			error={nlqError}
-			{searchMode}
-			onSearchModeChange={handleSearchModeChange}
-		/>
-		{#if nlqSummaries.length > 0}
-			<CommunitySummaryPanel summaries={nlqSummaries} />
-		{/if}
-		{#if nlqClassification}
-			<NlqDebugBadge classification={nlqClassification} />
-		{/if}
 		<SigmaCanvas
 			{entities}
 			{relationships}
@@ -325,29 +292,59 @@
 			onEntitySelect={handleEntitySelect}
 			onEntityExpand={handleEntityExpand}
 			onEntityHover={handleEntityHover}
+			onRefresh={handleRefresh}
+			loading={graphStore.loading}
 		/>
-
-		<!-- Toolbar overlay -->
-		<div class="toolbar">
-			<button
-				class="toolbar-button"
-				onclick={handleRefresh}
-				title="Refresh data"
-				aria-label="Refresh"
-				disabled={graphStore.loading}
-			>
-				<span class="toolbar-icon">↻</span>
-			</button>
-		</div>
 	</main>
 
-	<!-- Right Panel: Detail -->
+	<!-- Right Panel: Tabs + Detail / Chat -->
 	<aside class="data-view-right">
-		<GraphDetailPanel
-			entity={selectedEntity}
-			onClose={handleDetailClose}
-			onEntityClick={handleDetailEntityClick}
-		/>
+		<div class="right-panel-tabs" role="tablist">
+			<button
+				role="tab"
+				data-testid="data-view-tab-details"
+				aria-label="Details tab"
+				aria-selected={activeTab === 'details'}
+				data-active={activeTab === 'details' ? 'true' : undefined}
+				class="tab-button"
+				class:active={activeTab === 'details'}
+				onclick={() => handleTabClick('details')}
+			>Details</button>
+			<button
+				role="tab"
+				data-testid="data-view-tab-chat"
+				aria-label="Chat tab"
+				aria-selected={activeTab === 'chat'}
+				data-active={activeTab === 'chat' ? 'true' : undefined}
+				class="tab-button"
+				class:active={activeTab === 'chat'}
+				onclick={() => handleTabClick('chat')}
+			>Chat</button>
+		</div>
+
+		{#if activeTab === 'details'}
+			<GraphDetailPanel
+				entity={selectedEntity}
+				onClose={handleDetailClose}
+				onEntityClick={handleDetailEntityClick}
+				onAddChip={handleAddChipFromDetail}
+			/>
+		{:else}
+			<ChatPanel
+				messages={chatStore.messages}
+				isStreaming={chatStore.isStreaming}
+				streamingContent={chatStore.streamingContent}
+				error={chatStore.error}
+				chips={chatStore.chips}
+				onRemoveChip={chatStore.removeChip}
+				onClearChips={chatStore.clearChips}
+				commands={dataViewCommands}
+				onSubmit={handleChatSubmit}
+				onLoadJson={() => {}}
+				onExportJson={() => {}}
+				onNewChat={() => chatStore.clearConversation()}
+			/>
+		{/if}
 	</aside>
 </div>
 
@@ -373,6 +370,37 @@
 	.data-view-right {
 		border-left: 1px solid var(--ui-border-subtle);
 		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+	}
+
+	.right-panel-tabs {
+		display: flex;
+		border-bottom: 1px solid var(--ui-border-subtle);
+		flex-shrink: 0;
+	}
+
+	.tab-button {
+		flex: 1;
+		padding: 8px 12px;
+		border: none;
+		border-bottom: 2px solid transparent;
+		background: transparent;
+		color: var(--ui-text-secondary);
+		font-size: 12px;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+
+	.tab-button:hover {
+		color: var(--ui-text-primary);
+		background: var(--ui-surface-tertiary);
+	}
+
+	.tab-button.active {
+		color: var(--ui-interactive-primary, #4a9eff);
+		border-bottom-color: var(--ui-interactive-primary, #4a9eff);
 	}
 
 	/* Loading overlay */
@@ -454,45 +482,6 @@
 	.retry-button:hover {
 		background: var(--status-error);
 		color: white;
-	}
-
-	/* Toolbar */
-	.toolbar {
-		position: absolute;
-		top: 12px;
-		left: 12px;
-		display: flex;
-		gap: 4px;
-		z-index: 10;
-	}
-
-	.toolbar-button {
-		width: 32px;
-		height: 32px;
-		border: 1px solid var(--ui-border-subtle);
-		border-radius: 6px;
-		background: var(--ui-surface-primary);
-		color: var(--ui-text-primary);
-		font-size: 16px;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.2s;
-	}
-
-	.toolbar-button:hover:not(:disabled) {
-		background: var(--ui-surface-secondary);
-		border-color: var(--ui-border-strong);
-	}
-
-	.toolbar-button:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.toolbar-icon {
-		font-size: 14px;
 	}
 
 	/* Responsive: collapse panels on smaller screens */

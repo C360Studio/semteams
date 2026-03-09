@@ -1,9 +1,8 @@
-import type { ChatRequest } from "$lib/types/chat";
-import type { Flow } from "$lib/types/flow";
+import type { ChatRequest, MessageAttachment } from "$lib/types/chat";
 
 export interface ChatStreamCallbacks {
   onText: (content: string) => void;
-  onDone: (data: { flow?: Partial<Flow>; validationResult?: unknown }) => void;
+  onDone: (data: { attachments: MessageAttachment[] }) => void;
   onError: (error: string) => void;
 }
 
@@ -43,6 +42,7 @@ export async function streamChat(
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  const accumulatedAttachments: MessageAttachment[] = [];
 
   while (true) {
     const { done, value } = await reader.read();
@@ -80,8 +80,11 @@ export async function streamChat(
 
       if (eventName === "text") {
         callbacks.onText(parsed["content"] as string);
+      } else if (eventName === "attachment") {
+        // Accumulate attachment events during streaming
+        accumulatedAttachments.push(parsed as unknown as MessageAttachment);
       } else if (eventName === "done") {
-        callbacks.onDone(parsed as { flow?: Partial<Flow>; validationResult?: unknown });
+        callbacks.onDone({ attachments: accumulatedAttachments });
       } else if (eventName === "error") {
         callbacks.onError(parsed["message"] as string);
       }

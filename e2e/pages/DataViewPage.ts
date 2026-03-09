@@ -169,10 +169,7 @@ export class DataViewPage {
    * exposed by SigmaCanvas. This bypasses WebGL canvas click coordinates.
    */
   async selectEntity(entityId: string): Promise<void> {
-    await this.page.evaluate(
-      (id) => window.__e2eSelectEntity?.(id),
-      entityId,
-    );
+    await this.page.evaluate((id) => window.__e2eSelectEntity?.(id), entityId);
   }
 
   // ---------------------------------------------------------------------------

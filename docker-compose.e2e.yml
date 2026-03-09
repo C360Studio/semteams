@@ -74,7 +74,14 @@ services:
       context: ${SEMSOURCE_CONTEXT:-../semsource}
       dockerfile: ${SEMSOURCE_DOCKERFILE:-Dockerfile}
     container_name: semstreams-ui-e2e-semsource
-    command: ["run", "--config", "/etc/semsource/semsource.json", "--nats-url", "nats://nats:4222"]
+    command:
+      [
+        "run",
+        "--config",
+        "/etc/semsource/semsource.json",
+        "--nats-url",
+        "nats://nats:4222",
+      ]
     depends_on:
       nats:
         condition: service_healthy

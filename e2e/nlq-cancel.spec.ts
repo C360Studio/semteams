@@ -169,9 +169,9 @@ test.describe("NLQ Cancellation UX", () => {
     ).toBeVisible({ timeout: 3000 });
 
     // Cancel button should appear alongside loading indicator
-    await expect(
-      page.locator('[data-testid="nlq-cancel-button"]'),
-    ).toBeVisible({ timeout: 1000 });
+    await expect(page.locator('[data-testid="nlq-cancel-button"]')).toBeVisible(
+      { timeout: 1000 },
+    );
 
     // Release the held response
     resolveSearch?.();
@@ -228,9 +228,9 @@ test.describe("NLQ Cancellation UX", () => {
     await searchInput.press("Enter");
 
     // Wait for cancel button
-    await expect(
-      page.locator('[data-testid="nlq-cancel-button"]'),
-    ).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('[data-testid="nlq-cancel-button"]')).toBeVisible(
+      { timeout: 3000 },
+    );
 
     // Click cancel — this aborts the in-flight request
     await page.locator('[data-testid="nlq-cancel-button"]').click();
@@ -294,9 +294,9 @@ test.describe("NLQ Cancellation UX", () => {
     await searchInput.press("Enter");
 
     // Elapsed timer element should appear
-    await expect(
-      page.locator('[data-testid="nlq-elapsed-time"]'),
-    ).toBeVisible({ timeout: 3000 });
+    await expect(page.locator('[data-testid="nlq-elapsed-time"]')).toBeVisible({
+      timeout: 3000,
+    });
 
     // Initial value should be "0s"
     await expect(page.locator('[data-testid="nlq-elapsed-time"]')).toHaveText(
