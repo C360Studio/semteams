@@ -203,6 +203,7 @@ func (cm *ContextManager) GetRegionTokens(region RegionType) int {
 // GCToolResults garbage collects old tool results based on age.
 // Tool results live in RegionRecentHistory (for chronological ordering with
 // assistant messages), so this scans that region for role="tool" messages.
+// After eviction, repairs tool pairs to ensure no orphaned assistant/tool messages.
 func (cm *ContextManager) GCToolResults(currentIteration int) int {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -228,10 +229,96 @@ func (cm *ContextManager) GCToolResults(currentIteration int) int {
 
 	cm.regions[RegionRecentHistory] = remaining
 
+	// Repair orphaned tool pairs created by the eviction above
+	evicted += cm.repairToolPairsLocked()
+
 	// Update current iteration for future AddMessage calls
 	cm.currentIteration = currentIteration
 
 	return evicted
+}
+
+// repairToolPairsLocked removes orphaned tool pair messages from RegionRecentHistory.
+// An assistant message with ToolCalls is orphaned if any of its tool results are missing.
+// A tool result message is orphaned if its corresponding assistant message is missing.
+// When an orphan is found, the entire group (assistant + all its tool results) is removed.
+// Caller must hold cm.mu.
+func (cm *ContextManager) repairToolPairsLocked() int {
+	recent := cm.regions[RegionRecentHistory]
+	if len(recent) == 0 {
+		return 0
+	}
+
+	// Collect all tool call IDs offered by present assistant messages
+	assistantCallIDs := make(map[string]bool)
+	for _, m := range recent {
+		for _, tc := range m.Message.ToolCalls {
+			assistantCallIDs[tc.ID] = true
+		}
+	}
+
+	// Collect all tool result IDs present
+	resultIDs := make(map[string]bool)
+	for _, m := range recent {
+		if m.Message.Role == "tool" && m.Message.ToolCallID != "" {
+			resultIDs[m.Message.ToolCallID] = true
+		}
+	}
+
+	// Find assistant messages with incomplete tool results and mark their IDs as broken
+	brokenCallIDs := make(map[string]bool)
+	for _, m := range recent {
+		if len(m.Message.ToolCalls) == 0 {
+			continue
+		}
+		for _, tc := range m.Message.ToolCalls {
+			if !resultIDs[tc.ID] {
+				// Missing a result — mark entire group as broken
+				for _, sibling := range m.Message.ToolCalls {
+					brokenCallIDs[sibling.ID] = true
+				}
+				break
+			}
+		}
+	}
+
+	// Filter out orphaned and broken messages
+	removed := 0
+	remaining := make([]contextMessage, 0, len(recent))
+	for _, m := range recent {
+		drop := false
+
+		// Drop tool results whose assistant is gone or whose group is broken
+		if m.Message.Role == "tool" && m.Message.ToolCallID != "" {
+			if !assistantCallIDs[m.Message.ToolCallID] || brokenCallIDs[m.Message.ToolCallID] {
+				drop = true
+			}
+		}
+
+		// Drop assistant messages with broken tool pairs
+		if len(m.Message.ToolCalls) > 0 {
+			for _, tc := range m.Message.ToolCalls {
+				if brokenCallIDs[tc.ID] {
+					drop = true
+					break
+				}
+			}
+		}
+
+		if drop {
+			removed++
+		} else {
+			remaining = append(remaining, m)
+		}
+	}
+
+	if removed > 0 {
+		cm.regions[RegionRecentHistory] = remaining
+		cm.logger.Debug("Repaired orphaned tool pairs",
+			"loop_id", cm.loopID,
+			"removed", removed)
+	}
+	return removed
 }
 
 // estimateTokens estimates the token count for a string
@@ -371,10 +458,14 @@ func (cm *ContextManager) SliceForBudget(budget int, slice ContextSlice) error {
 		cm.regions[region] = newMessages
 	}
 
+	// Repair orphaned tool pairs created by the eviction above
+	repaired := cm.repairToolPairsLocked()
+
 	cm.logger.Info("Context sliced for budget",
 		"loop_id", cm.loopID,
 		"budget", budget,
 		"evicted_tokens", evicted,
+		"repaired_orphans", repaired,
 		"new_total", cm.getTotalTokensLocked())
 
 	return nil

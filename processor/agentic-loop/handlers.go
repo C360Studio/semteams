@@ -745,18 +745,6 @@ func (h *MessageHandler) handleToolsComplete(
 	// Get the new iteration count for GC
 	newIteration := h.loopManager.GetCurrentIteration(loopID)
 
-	// Run GC on tool results if context management is enabled
-	if cm != nil {
-		evicted := cm.GCToolResults(newIteration)
-		if evicted > 0 {
-			result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
-				Type:      "gc_complete",
-				LoopID:    loopID,
-				Iteration: newIteration,
-			})
-		}
-	}
-
 	// Get ALL accumulated tool results
 	allResults := h.loopManager.GetAndClearToolResults(loopID)
 
@@ -778,14 +766,26 @@ func (h *MessageHandler) handleToolsComplete(
 	}
 
 	// Build full conversation for the next model request.
-	// When context management is enabled, add tool results and use the full
-	// conversation history (system + user + assistant + tool results).
+	// When context management is enabled, add tool results first, then run GC.
+	// GC must run AFTER tool results are in context so the repair pass can see
+	// complete tool pairs (assistant + tool results) and avoid orphaning them.
 	// Without context management, fall back to tool-results-only (legacy behavior).
 	var messages []agentic.ChatMessage
 	if cm != nil {
 		for _, tm := range toolMessages {
 			_ = cm.AddMessage(RegionRecentHistory, tm)
 		}
+
+		// Run GC on old tool results now that current results are in context
+		evicted := cm.GCToolResults(newIteration)
+		if evicted > 0 {
+			result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
+				Type:      "gc_complete",
+				LoopID:    loopID,
+				Iteration: newIteration,
+			})
+		}
+
 		messages = cm.GetContext()
 	} else {
 		messages = toolMessages

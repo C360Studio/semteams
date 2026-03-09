@@ -7,76 +7,83 @@ import (
 	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
 )
 
+// toolPair adds an assistant message with tool calls and matching tool result messages.
+func toolPair(t *testing.T, cm *agenticloop.ContextManager, callIDs ...string) {
+	t.Helper()
+	calls := make([]agentic.ToolCall, len(callIDs))
+	for i, id := range callIDs {
+		calls[i] = agentic.ToolCall{ID: id, Name: "test_tool"}
+	}
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role:      "assistant",
+		Content:   "Calling tools",
+		ToolCalls: calls,
+	})
+	for _, id := range callIDs {
+		_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+			Role:       "tool",
+			Content:    "Result for " + id,
+			ToolCallID: id,
+		})
+	}
+}
+
 func TestContextManager_GCToolResults_AgeBasedEviction(t *testing.T) {
 	config := agenticloop.DefaultContextConfig()
 	config.ToolResultMaxAge = 3
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
-	// Iteration 1: Add tool result
-	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-		Role: "tool", Content: "Result from iteration 1", ToolCallID: "call-1",
-	})
+	// Iteration 1: Add tool pair
+	toolPair(t, cm, "call-1")
 	cm.AdvanceIteration() // Move to iteration 2
 
-	// Iteration 2: Add tool result
-	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-		Role: "tool", Content: "Result from iteration 2", ToolCallID: "call-2",
-	})
+	// Iteration 2: Add tool pair
+	toolPair(t, cm, "call-2")
 	cm.AdvanceIteration() // Move to iteration 3
 
-	// Iteration 3: Add tool result
-	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-		Role: "tool", Content: "Result from iteration 3", ToolCallID: "call-3",
-	})
+	// Iteration 3: Add tool pair
+	toolPair(t, cm, "call-3")
 	cm.AdvanceIteration() // Move to iteration 4
 
-	// Iteration 4: Add tool result
-	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-		Role: "tool", Content: "Result from iteration 4", ToolCallID: "call-4",
-	})
+	// Iteration 4: Add tool pair
+	toolPair(t, cm, "call-4")
 
-	// Verify all 4 results exist
+	// Verify messages exist
 	if cm.GetRegionTokens(agenticloop.RegionRecentHistory) == 0 {
 		t.Fatal("Recent history region should have tokens before GC")
 	}
 
 	// Run GC at iteration 5 (age 4 iterations)
+	// Should evict iteration 1 tool result (age 4 > maxAge 3)
+	// AND its assistant message (repair pass)
 	evicted := cm.GCToolResults(5)
-
-	// Should evict iteration 1 result (age 4 > maxAge 3)
-	if evicted != 1 {
-		t.Errorf("GCToolResults(5) evicted %d results, want 1", evicted)
+	if evicted != 2 { // 1 tool result + 1 assistant
+		t.Errorf("GCToolResults(5) evicted %d messages, want 2", evicted)
 	}
 
-	// Run GC at iteration 6 (age 5 iterations)
+	// Run GC at iteration 6
 	evicted = cm.GCToolResults(6)
-
-	// Should evict iteration 2 result (age 4 > maxAge 3)
-	if evicted != 1 {
-		t.Errorf("GCToolResults(6) evicted %d results, want 1", evicted)
+	if evicted != 2 {
+		t.Errorf("GCToolResults(6) evicted %d messages, want 2", evicted)
 	}
 
 	// Run GC at iteration 7
 	evicted = cm.GCToolResults(7)
-
-	// Should evict iteration 3 result
-	if evicted != 1 {
-		t.Errorf("GCToolResults(7) evicted %d results, want 1", evicted)
+	if evicted != 2 {
+		t.Errorf("GCToolResults(7) evicted %d messages, want 2", evicted)
 	}
 
 	// Run GC at iteration 8
 	evicted = cm.GCToolResults(8)
-
-	// Should evict iteration 4 result
-	if evicted != 1 {
-		t.Errorf("GCToolResults(8) evicted %d results, want 1", evicted)
+	if evicted != 2 {
+		t.Errorf("GCToolResults(8) evicted %d messages, want 2", evicted)
 	}
 
-	// All tool results should be evicted — only check via GetContext
+	// All messages should be evicted
 	messages := cm.GetContext()
 	for _, msg := range messages {
-		if msg.Role == "tool" {
-			t.Error("All tool results should be evicted after full GC")
+		if msg.Role == "tool" || (msg.Role == "assistant" && len(msg.ToolCalls) > 0) {
+			t.Errorf("Unexpected %s message remaining after full GC", msg.Role)
 		}
 	}
 }
@@ -86,39 +93,17 @@ func TestContextManager_GCToolResults_NoEviction(t *testing.T) {
 	config.ToolResultMaxAge = 3
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
-	// Iteration 1: Add tool results
-	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-		Role: "tool", Content: "Result A", ToolCallID: "call-1",
-	})
+	// Iteration 1: Add tool pair
+	toolPair(t, cm, "call-1")
 
 	initialTokens := cm.GetRegionTokens(agenticloop.RegionRecentHistory)
 
-	// Run GC at iteration 1 (age 0)
-	evicted := cm.GCToolResults(1)
-
-	if evicted != 0 {
-		t.Errorf("GCToolResults(1) evicted %d results, want 0 (age 0)", evicted)
-	}
-
-	// Run GC at iteration 2 (age 1)
-	evicted = cm.GCToolResults(2)
-
-	if evicted != 0 {
-		t.Errorf("GCToolResults(2) evicted %d results, want 0 (age 1)", evicted)
-	}
-
-	// Run GC at iteration 3 (age 2)
-	evicted = cm.GCToolResults(3)
-
-	if evicted != 0 {
-		t.Errorf("GCToolResults(3) evicted %d results, want 0 (age 2)", evicted)
-	}
-
-	// Run GC at iteration 4 (age 3, at max age)
-	evicted = cm.GCToolResults(4)
-
-	if evicted != 0 {
-		t.Errorf("GCToolResults(4) evicted %d results, want 0 (age 3, at max)", evicted)
+	// GC at iterations 1-4 (ages 0-3, all within maxAge)
+	for i := 1; i <= 4; i++ {
+		evicted := cm.GCToolResults(i)
+		if evicted != 0 {
+			t.Errorf("GCToolResults(%d) evicted %d results, want 0", i, evicted)
+		}
 	}
 
 	// Tokens should be unchanged
@@ -133,35 +118,26 @@ func TestContextManager_GCToolResults_MultipleIterations(t *testing.T) {
 	config.ToolResultMaxAge = 2
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
-	// Add tool results across iterations
+	// Add tool pairs across iterations
 	for i := 1; i <= 10; i++ {
-		// Add result for this iteration
-		_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-			Role:       "tool",
-			Content:    "Result from iteration " + string(rune('0'+i)),
-			ToolCallID: "call-" + string(rune('0'+i)),
-		})
+		callID := "call-" + string(rune('0'+i))
+		toolPair(t, cm, callID)
 
 		// Run GC (also advances iteration for next loop)
 		evicted := cm.GCToolResults(i)
 
 		// For iterations 1-3, no eviction expected
-		if i <= 3 {
-			if evicted != 0 {
-				t.Errorf("Iteration %d: GCToolResults() evicted %d, want 0", i, evicted)
-			}
+		if i <= 3 && evicted != 0 {
+			t.Errorf("Iteration %d: GCToolResults() evicted %d, want 0", i, evicted)
 		}
 
-		// For iteration 4+, should evict old results
-		if i > 3 {
-			if evicted == 0 {
-				t.Errorf("Iteration %d: GCToolResults() evicted 0, want > 0", i)
-			}
+		// For iteration 4+, should evict old pairs
+		if i > 3 && evicted == 0 {
+			t.Errorf("Iteration %d: GCToolResults() evicted 0, want > 0", i)
 		}
 	}
 
-	// After iteration 10, only iterations 8, 9, 10 should remain (maxAge = 2)
-	// Should have at most 3 results
+	// After iteration 10, only recent iterations should remain
 	messages := cm.GetContext()
 	toolResultCount := 0
 	for _, msg := range messages {
@@ -180,11 +156,7 @@ func TestContextManager_GCToolResults_EmptyRegion(t *testing.T) {
 	config.ToolResultMaxAge = 3
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
-	// Don't add any tool results
-
-	// Run GC should not error
 	evicted := cm.GCToolResults(5)
-
 	if evicted != 0 {
 		t.Errorf("GCToolResults() on empty region evicted %d, want 0", evicted)
 	}
@@ -195,10 +167,8 @@ func TestContextManager_GCToolResults_MaxAgeOne(t *testing.T) {
 	config.ToolResultMaxAge = 1
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
-	// Add result at iteration 1
-	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-		Role: "tool", Content: "Result 1", ToolCallID: "call-1",
-	})
+	// Add tool pair at iteration 1
+	toolPair(t, cm, "call-1")
 
 	// GC at iteration 1 (age 0)
 	evicted := cm.GCToolResults(1)
@@ -206,7 +176,7 @@ func TestContextManager_GCToolResults_MaxAgeOne(t *testing.T) {
 		t.Errorf("GCToolResults(1) evicted %d, want 0", evicted)
 	}
 
-	// GC at iteration 2 (age 1)
+	// GC at iteration 2 (age 1, equals maxAge)
 	evicted = cm.GCToolResults(2)
 	if evicted != 0 {
 		t.Errorf("GCToolResults(2) evicted %d, want 0 (age equals maxAge)", evicted)
@@ -214,8 +184,8 @@ func TestContextManager_GCToolResults_MaxAgeOne(t *testing.T) {
 
 	// GC at iteration 3 (age 2 > maxAge 1)
 	evicted = cm.GCToolResults(3)
-	if evicted != 1 {
-		t.Errorf("GCToolResults(3) evicted %d, want 1", evicted)
+	if evicted != 2 { // 1 tool result + 1 assistant
+		t.Errorf("GCToolResults(3) evicted %d, want 2", evicted)
 	}
 }
 
@@ -239,16 +209,14 @@ func TestContextManager_GCToolResults_PreservesNonToolMessages(t *testing.T) {
 
 	systemTokensBefore := cm.GetRegionTokens(agenticloop.RegionSystemPrompt)
 
-	// Add old tool results interleaved
-	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-		Role: "tool", Content: "Old result", ToolCallID: "call-1",
-	})
+	// Add old tool pair interleaved
+	toolPair(t, cm, "call-1")
 
-	// Run GC at iteration 10 (should evict tool result but keep user/assistant)
+	// Run GC at iteration 10 (should evict tool pair but keep user/assistant)
 	evicted := cm.GCToolResults(10)
 
-	if evicted != 1 {
-		t.Errorf("GCToolResults(10) evicted %d, want 1", evicted)
+	if evicted != 2 { // 1 tool result + 1 assistant with tool calls
+		t.Errorf("GCToolResults(10) evicted %d, want 2", evicted)
 	}
 
 	// System prompt should be unchanged
@@ -264,7 +232,7 @@ func TestContextManager_GCToolResults_PreservesNonToolMessages(t *testing.T) {
 		if msg.Role == "user" && msg.Content == "User message" {
 			hasUser = true
 		}
-		if msg.Role == "assistant" && msg.Content == "Assistant response" {
+		if msg.Role == "assistant" && msg.Content == "Assistant response" && len(msg.ToolCalls) == 0 {
 			hasAssistant = true
 		}
 		if msg.Role == "tool" {
@@ -275,7 +243,7 @@ func TestContextManager_GCToolResults_PreservesNonToolMessages(t *testing.T) {
 		t.Error("User message should survive GC")
 	}
 	if !hasAssistant {
-		t.Error("Assistant message should survive GC")
+		t.Error("Assistant message (without tool calls) should survive GC")
 	}
 }
 
@@ -284,27 +252,26 @@ func TestContextManager_GCToolResults_BatchEviction(t *testing.T) {
 	config.ToolResultMaxAge = 3
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
-	// Add 10 tool results at iteration 1 (batch - all same iteration)
+	// Add assistant with 10 tool calls (one group)
+	callIDs := make([]string, 10)
 	for i := range 10 {
-		_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-			Role:       "tool",
-			Content:    "Result " + string(rune('0'+i)),
-			ToolCallID: "call-" + string(rune('0'+i)),
-		})
+		callIDs[i] = "call-" + string(rune('0'+i))
 	}
+	toolPair(t, cm, callIDs...)
 
 	// Run GC at iteration 10 (all results are age 9, should evict all)
 	evicted := cm.GCToolResults(10)
 
-	if evicted != 10 {
-		t.Errorf("GCToolResults(10) evicted %d, want 10", evicted)
+	// 10 tool results + 1 assistant = 11
+	if evicted != 11 {
+		t.Errorf("GCToolResults(10) evicted %d, want 11", evicted)
 	}
 
-	// No tool results should remain
+	// No messages should remain
 	messages := cm.GetContext()
 	for _, msg := range messages {
-		if msg.Role == "tool" {
-			t.Error("All tool results should be evicted after batch eviction")
+		if msg.Role == "tool" || (msg.Role == "assistant" && len(msg.ToolCalls) > 0) {
+			t.Error("All tool pair messages should be evicted after batch eviction")
 		}
 	}
 }
@@ -314,14 +281,9 @@ func TestContextManager_GCToolResults_ZeroIteration(t *testing.T) {
 	config.ToolResultMaxAge = 3
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
-	// Add tool result
-	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-		Role: "tool", Content: "Result", ToolCallID: "call-1",
-	})
+	toolPair(t, cm, "call-1")
 
-	// GC at iteration 0 (should not evict)
 	evicted := cm.GCToolResults(0)
-
 	if evicted != 0 {
 		t.Errorf("GCToolResults(0) evicted %d, want 0", evicted)
 	}
@@ -332,43 +294,180 @@ func TestContextManager_GCToolResults_ReturnValue(t *testing.T) {
 	config.ToolResultMaxAge = 3
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
-	// Add 3 results at iteration 1
-	for i := range 3 {
-		_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-			Role:       "tool",
-			Content:    "Result " + string(rune('0'+i)),
-			ToolCallID: "call-" + string(rune('0'+i)),
-		})
-	}
+	// Add 3 tool pairs at iteration 1
+	toolPair(t, cm, "call-1a", "call-1b", "call-1c")
 
 	// Advance to iteration 2
 	cm.AdvanceIteration()
 
-	// Add 2 results at iteration 2
-	for i := range 2 {
-		_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
-			Role:       "tool",
-			Content:    "Result new " + string(rune('0'+i)),
-			ToolCallID: "call-new-" + string(rune('0'+i)),
-		})
-	}
+	// Add 2 tool pairs at iteration 2
+	toolPair(t, cm, "call-2a", "call-2b")
 
 	// GC at iteration 5:
 	// - iteration 1 results: age = 5-1 = 4 > maxAge 3, evict
 	// - iteration 2 results: age = 5-2 = 3 <= maxAge 3, keep
 	evicted := cm.GCToolResults(5)
 
-	// Should evict exactly 3 results from iteration 1
-	if evicted != 3 {
-		t.Errorf("GCToolResults(5) evicted %d, want 3", evicted)
+	// Should evict 3 tool results + 1 assistant = 4
+	if evicted != 4 {
+		t.Errorf("GCToolResults(5) evicted %d, want 4", evicted)
 	}
 
 	// GC at iteration 6:
 	// - iteration 2 results: age = 6-2 = 4 > maxAge 3, evict
 	evicted = cm.GCToolResults(6)
 
-	// Should evict exactly 2 results from iteration 2
-	if evicted != 2 {
-		t.Errorf("GCToolResults(6) evicted %d, want 2", evicted)
+	// Should evict 2 tool results + 1 assistant = 3
+	if evicted != 3 {
+		t.Errorf("GCToolResults(6) evicted %d, want 3", evicted)
+	}
+}
+
+// --- Tool pair integrity tests ---
+
+func TestContextManager_GCToolResults_EvictsEntireGroup(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	config.ToolResultMaxAge = 2
+	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
+
+	// Add assistant with 3 tool calls at iteration 1
+	toolPair(t, cm, "call-a", "call-b", "call-c")
+
+	// GC at iteration 4 (age 3 > maxAge 2 for all results)
+	evicted := cm.GCToolResults(4)
+
+	// All 4 messages (1 assistant + 3 tool results) should be evicted
+	if evicted != 4 {
+		t.Errorf("GCToolResults(4) evicted %d, want 4 (entire group)", evicted)
+	}
+
+	messages := cm.GetContext()
+	for _, msg := range messages {
+		if msg.Role == "tool" || (msg.Role == "assistant" && len(msg.ToolCalls) > 0) {
+			t.Errorf("Expected entire tool group to be evicted, found %s message", msg.Role)
+		}
+	}
+}
+
+func TestContextManager_GCToolResults_PreservesCompleteGroups(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	config.ToolResultMaxAge = 5
+	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
+
+	// Add tool pair at iteration 1
+	toolPair(t, cm, "call-x", "call-y")
+
+	// GC at iteration 3 (age 2, within maxAge 5)
+	evicted := cm.GCToolResults(3)
+	if evicted != 0 {
+		t.Errorf("GCToolResults(3) evicted %d, want 0 (group still young)", evicted)
+	}
+
+	// Verify complete group is intact
+	messages := cm.GetContext()
+	var assistantCount, toolCount int
+	for _, msg := range messages {
+		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
+			assistantCount++
+		}
+		if msg.Role == "tool" {
+			toolCount++
+		}
+	}
+	if assistantCount != 1 {
+		t.Errorf("Expected 1 assistant message, got %d", assistantCount)
+	}
+	if toolCount != 2 {
+		t.Errorf("Expected 2 tool results, got %d", toolCount)
+	}
+}
+
+func TestContextManager_GCToolResults_MixedAgeGroups(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	config.ToolResultMaxAge = 2
+	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
+
+	// Old group at iteration 1
+	toolPair(t, cm, "old-a", "old-b")
+	cm.AdvanceIteration() // iteration 2
+
+	// Young group at iteration 2
+	toolPair(t, cm, "new-a")
+
+	// GC at iteration 4: old group age=3 > maxAge=2, new group age=2 <= maxAge=2
+	evicted := cm.GCToolResults(4)
+
+	// Old group: 1 assistant + 2 tool results = 3
+	if evicted != 3 {
+		t.Errorf("GCToolResults(4) evicted %d, want 3 (old group only)", evicted)
+	}
+
+	// New group should be intact
+	messages := cm.GetContext()
+	var foundAssistant, foundTool bool
+	for _, msg := range messages {
+		if msg.Role == "assistant" && len(msg.ToolCalls) > 0 {
+			foundAssistant = true
+		}
+		if msg.Role == "tool" && msg.ToolCallID == "new-a" {
+			foundTool = true
+		}
+		if msg.Role == "tool" && (msg.ToolCallID == "old-a" || msg.ToolCallID == "old-b") {
+			t.Error("Old tool result should have been evicted")
+		}
+	}
+	if !foundAssistant {
+		t.Error("New assistant message should survive")
+	}
+	if !foundTool {
+		t.Error("New tool result should survive")
+	}
+}
+
+func TestContextManager_SliceForBudget_PreservesToolPairs(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
+
+	// Add a tool pair to recent history
+	toolPair(t, cm, "budget-call-1")
+
+	// Add a large filler message to push over budget
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role:    "user",
+		Content: string(make([]byte, 1000)),
+	})
+
+	// Slice to a small budget that forces eviction
+	err := cm.SliceForBudget(100, agenticloop.ContextSlice{})
+	if err != nil {
+		t.Fatalf("SliceForBudget failed: %v", err)
+	}
+
+	// After slicing, verify no orphaned tool messages remain
+	messages := cm.GetContext()
+	assistantCallIDs := make(map[string]bool)
+	toolResultIDs := make(map[string]bool)
+
+	for _, msg := range messages {
+		for _, tc := range msg.ToolCalls {
+			assistantCallIDs[tc.ID] = true
+		}
+		if msg.Role == "tool" && msg.ToolCallID != "" {
+			toolResultIDs[msg.ToolCallID] = true
+		}
+	}
+
+	// Every tool result must have a matching assistant
+	for id := range toolResultIDs {
+		if !assistantCallIDs[id] {
+			t.Errorf("Orphaned tool result %s: no matching assistant message", id)
+		}
+	}
+
+	// Every assistant tool call must have a matching result
+	for id := range assistantCallIDs {
+		if !toolResultIDs[id] {
+			t.Errorf("Orphaned assistant tool call %s: no matching tool result", id)
+		}
 	}
 }
