@@ -134,6 +134,13 @@ func BuildPortFromDefinition(def PortDefinition, direction Direction) Port {
 			Bucket:    bucket,
 			Interface: iface,
 		}
+	case "http", "grpc", "websocket-server":
+		// HTTP/gRPC/WebSocket server ports are network boundary ports
+		port.Config = NetworkPort{
+			Protocol: def.Type,
+			Host:     "0.0.0.0",
+			Port:     parsePortFromSubject(def.Subject),
+		}
 	default: // Default to NATS pub/sub
 		var iface *InterfaceContract
 		if def.Interface != "" {
@@ -149,4 +156,27 @@ func BuildPortFromDefinition(def PortDefinition, direction Direction) Port {
 	}
 
 	return port
+}
+
+// parsePortFromSubject extracts a port number from a subject string like ":8084" or "localhost:8084".
+func parsePortFromSubject(subject string) int {
+	// Handle ":8084" or "localhost:8084" formats
+	if idx := len(subject) - 1; idx >= 0 {
+		// Find the last colon
+		for i := len(subject) - 1; i >= 0; i-- {
+			if subject[i] == ':' {
+				portStr := subject[i+1:]
+				port := 0
+				for _, c := range portStr {
+					if c >= '0' && c <= '9' {
+						port = port*10 + int(c-'0')
+					} else {
+						return 0
+					}
+				}
+				return port
+			}
+		}
+	}
+	return 0
 }
