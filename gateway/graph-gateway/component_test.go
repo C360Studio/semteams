@@ -284,19 +284,19 @@ func TestComponent_OutputPorts_ReturnsNATSRequestPort(t *testing.T) {
 
 	require.NotEmpty(t, ports, "should have at least one output port")
 
-	// Verify NATS request port exists
-	hasNATSRequest := false
+	// Verify NATS request ports exist for both queries and mutations
+	subjects := make(map[string]bool)
 	for _, port := range ports {
 		assert.NotEmpty(t, port.Name)
 		assert.Equal(t, component.DirectionOutput, port.Direction)
 
 		if natsPort, ok := port.Config.(component.NATSRequestPort); ok {
-			hasNATSRequest = true
-			assert.Contains(t, natsPort.Subject, "graph.mutation", "should handle graph mutation subjects")
+			subjects[natsPort.Subject] = true
 		}
 	}
 
-	assert.True(t, hasNATSRequest, "should have NATS request output port")
+	assert.True(t, subjects["graph.query.*"], "should have graph.query.* output port")
+	assert.True(t, subjects["graph.mutation.*"], "should have graph.mutation.* output port")
 }
 
 func TestComponent_ConfigSchema_ReturnsValidSchema(t *testing.T) {

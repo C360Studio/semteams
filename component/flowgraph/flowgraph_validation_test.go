@@ -485,3 +485,302 @@ func TestFlowGraphInterfaceAlternatives(t *testing.T) {
 		}
 	})
 }
+
+// TestJetStreamSubjectMatching tests that a NATSPort subscriber can match a
+// JetStream publisher when the JetStream port has a StreamName but its Subjects
+// list overlaps with the NATSPort subject.
+func TestJetStreamSubjectMatching(t *testing.T) {
+	t.Run("NATSPort subscriber matches JetStream publisher via subjects list", func(t *testing.T) {
+		graph := NewFlowGraph()
+
+		// JetStream publisher: StreamName="GRAPH", Subjects=["graph.ingest.entity"]
+		// extractConnectionID will return "GRAPH" (StreamName), but the extra subject
+		// entry added by buildPublisherMap allows pattern matching on the subject.
+		jsPublisher := createMockComponentWithPorts("graph-ingestor", "processor",
+			nil,
+			[]component.Port{
+				{
+					Name:      "entity_out",
+					Direction: component.DirectionOutput,
+					Config: component.JetStreamPort{
+						StreamName: "GRAPH",
+						Subjects:   []string{"graph.ingest.entity"},
+					},
+				},
+			},
+		)
+
+		// NATSPort subscriber listening to the same concrete subject
+		natsSubscriber := createMockComponentWithPorts("graph-processor", "processor",
+			[]component.Port{
+				{
+					Name:      "entity_in",
+					Direction: component.DirectionInput,
+					Config:    component.NATSPort{Subject: "graph.ingest.entity"},
+				},
+			},
+			nil,
+		)
+
+		require.NoError(t, graph.AddComponentNode("graph-ingestor", jsPublisher))
+		require.NoError(t, graph.AddComponentNode("graph-processor", natsSubscriber))
+
+		err := graph.ConnectComponentsByPatterns()
+		require.NoError(t, err)
+
+		edges := graph.GetEdges()
+		require.Len(t, edges, 1, "JetStream publisher and NATSPort subscriber on same subject should be connected")
+
+		edge := edges[0]
+		assert.Equal(t, PatternStream, edge.Pattern)
+		assert.Equal(t, "graph-ingestor", edge.From.ComponentName)
+		assert.Equal(t, "entity_out", edge.From.PortName)
+		assert.Equal(t, "graph-processor", edge.To.ComponentName)
+		assert.Equal(t, "entity_in", edge.To.PortName)
+	})
+
+	t.Run("NATSPort wildcard subscriber matches JetStream publisher via subjects list", func(t *testing.T) {
+		graph := NewFlowGraph()
+
+		// JetStream publisher with wildcard subject
+		jsPublisher := createMockComponentWithPorts("event-source", "processor",
+			nil,
+			[]component.Port{
+				{
+					Name:      "events_out",
+					Direction: component.DirectionOutput,
+					Config: component.JetStreamPort{
+						StreamName: "EVENTS",
+						Subjects:   []string{"events.graph.entity.>"},
+					},
+				},
+			},
+		)
+
+		// NATSPort subscriber with concrete subject that falls under the wildcard
+		natsSubscriber := createMockComponentWithPorts("entity-handler", "processor",
+			[]component.Port{
+				{
+					Name:      "events_in",
+					Direction: component.DirectionInput,
+					Config:    component.NATSPort{Subject: "events.graph.entity.created"},
+				},
+			},
+			nil,
+		)
+
+		require.NoError(t, graph.AddComponentNode("event-source", jsPublisher))
+		require.NoError(t, graph.AddComponentNode("entity-handler", natsSubscriber))
+
+		err := graph.ConnectComponentsByPatterns()
+		require.NoError(t, err)
+
+		edges := graph.GetEdges()
+		require.Len(t, edges, 1, "JetStream wildcard subject should match NATSPort concrete subject")
+
+		edge := edges[0]
+		assert.Equal(t, PatternStream, edge.Pattern)
+		assert.Equal(t, "event-source", edge.From.ComponentName)
+		assert.Equal(t, "entity-handler", edge.To.ComponentName)
+	})
+
+	t.Run("no duplicate edges when JetStream port indexed under StreamName and subjects", func(t *testing.T) {
+		graph := NewFlowGraph()
+
+		// Publisher indexed under both "GRAPH" and "graph.mutation.write"
+		jsPublisher := createMockComponentWithPorts("writer", "processor",
+			nil,
+			[]component.Port{
+				{
+					Name:      "out",
+					Direction: component.DirectionOutput,
+					Config: component.JetStreamPort{
+						StreamName: "GRAPH",
+						Subjects:   []string{"graph.mutation.write"},
+					},
+				},
+			},
+		)
+
+		natsSubscriber := createMockComponentWithPorts("reader", "processor",
+			[]component.Port{
+				{
+					Name:      "in",
+					Direction: component.DirectionInput,
+					Config:    component.NATSPort{Subject: "graph.mutation.write"},
+				},
+			},
+			nil,
+		)
+
+		require.NoError(t, graph.AddComponentNode("writer", jsPublisher))
+		require.NoError(t, graph.AddComponentNode("reader", natsSubscriber))
+
+		err := graph.ConnectComponentsByPatterns()
+		require.NoError(t, err)
+
+		edges := graph.GetEdges()
+		assert.Len(t, edges, 1, "should have exactly one edge, no duplicates")
+	})
+}
+
+// TestRequestPortWildcardMatching tests that request ports with wildcard subjects
+// are connected when one side uses a concrete subject and the other uses a
+// wildcard pattern (e.g. graph.query.search vs graph.query.*).
+func TestRequestPortWildcardMatching(t *testing.T) {
+	t.Run("concrete request port connects to wildcard request port", func(t *testing.T) {
+		graph := NewFlowGraph()
+
+		// Client publishes a request to a concrete subject
+		clientComponent := createMockComponentWithPorts("query-client", "processor",
+			nil,
+			[]component.Port{
+				{
+					Name:      "query_out",
+					Direction: component.DirectionOutput,
+					Config:    component.NATSRequestPort{Subject: "graph.query.search"},
+				},
+			},
+		)
+
+		// Server handles requests on a wildcard subject
+		serverComponent := createMockComponentWithPorts("query-server", "processor",
+			[]component.Port{
+				{
+					Name:      "query_in",
+					Direction: component.DirectionInput,
+					Config:    component.NATSRequestPort{Subject: "graph.query.*"},
+				},
+			},
+			nil,
+		)
+
+		require.NoError(t, graph.AddComponentNode("query-client", clientComponent))
+		require.NoError(t, graph.AddComponentNode("query-server", serverComponent))
+
+		err := graph.ConnectComponentsByPatterns()
+		require.NoError(t, err)
+
+		edges := graph.GetEdges()
+		require.Len(t, edges, 1, "wildcard request port should match concrete request subject")
+
+		edge := edges[0]
+		assert.Equal(t, PatternRequest, edge.Pattern)
+		// Connection ID should be the concrete (non-wildcard) subject
+		assert.Equal(t, "graph.query.search", edge.ConnectionID)
+		// The edge must connect the two components (either direction is valid)
+		assert.True(t,
+			(edge.From.ComponentName == "query-client" && edge.To.ComponentName == "query-server") ||
+				(edge.From.ComponentName == "query-server" && edge.To.ComponentName == "query-client"),
+			"edge should connect query-client and query-server",
+		)
+	})
+
+	t.Run("gt-wildcard request port connects to concrete request subject", func(t *testing.T) {
+		graph := NewFlowGraph()
+
+		clientComponent := createMockComponentWithPorts("mutation-client", "processor",
+			nil,
+			[]component.Port{
+				{
+					Name:      "mutation_out",
+					Direction: component.DirectionOutput,
+					Config:    component.NATSRequestPort{Subject: "graph.mutation.upsert"},
+				},
+			},
+		)
+
+		serverComponent := createMockComponentWithPorts("mutation-server", "processor",
+			[]component.Port{
+				{
+					Name:      "mutation_in",
+					Direction: component.DirectionInput,
+					Config:    component.NATSRequestPort{Subject: "graph.mutation.>"},
+				},
+			},
+			nil,
+		)
+
+		require.NoError(t, graph.AddComponentNode("mutation-client", clientComponent))
+		require.NoError(t, graph.AddComponentNode("mutation-server", serverComponent))
+
+		err := graph.ConnectComponentsByPatterns()
+		require.NoError(t, err)
+
+		edges := graph.GetEdges()
+		require.Len(t, edges, 1, "gt-wildcard request port should match concrete request subject")
+
+		edge := edges[0]
+		assert.Equal(t, PatternRequest, edge.Pattern)
+		assert.Equal(t, "graph.mutation.upsert", edge.ConnectionID)
+	})
+
+	t.Run("no self-connection when single component has both request port sides", func(t *testing.T) {
+		graph := NewFlowGraph()
+
+		// A component with both an outgoing and incoming request port on matching subjects
+		selfComponent := createMockComponentWithPorts("self-component", "processor",
+			[]component.Port{
+				{
+					Name:      "handle",
+					Direction: component.DirectionInput,
+					Config:    component.NATSRequestPort{Subject: "self.api.*"},
+				},
+			},
+			[]component.Port{
+				{
+					Name:      "call",
+					Direction: component.DirectionOutput,
+					Config:    component.NATSRequestPort{Subject: "self.api.method"},
+				},
+			},
+		)
+
+		require.NoError(t, graph.AddComponentNode("self-component", selfComponent))
+
+		err := graph.ConnectComponentsByPatterns()
+		require.NoError(t, err)
+
+		for _, edge := range graph.GetEdges() {
+			assert.NotEqual(t, edge.From.ComponentName, edge.To.ComponentName,
+				"self-connections should never be created")
+		}
+	})
+
+	t.Run("exact match request ports still work after wildcard fix", func(t *testing.T) {
+		graph := NewFlowGraph()
+
+		// Both ports on the same exact subject (regression test)
+		clientComponent := createMockComponentWithPorts("exact-client", "processor",
+			nil,
+			[]component.Port{
+				{
+					Name:      "req",
+					Direction: component.DirectionOutput,
+					Config:    component.NATSRequestPort{Subject: "storage.api"},
+				},
+			},
+		)
+
+		serverComponent := createMockComponentWithPorts("exact-server", "processor",
+			[]component.Port{
+				{
+					Name:      "handler",
+					Direction: component.DirectionInput,
+					Config:    component.NATSRequestPort{Subject: "storage.api"},
+				},
+			},
+			nil,
+		)
+
+		require.NoError(t, graph.AddComponentNode("exact-client", clientComponent))
+		require.NoError(t, graph.AddComponentNode("exact-server", serverComponent))
+
+		err := graph.ConnectComponentsByPatterns()
+		require.NoError(t, err)
+
+		edges := graph.GetEdges()
+		assert.Len(t, edges, 1, "exact-match request ports should still produce one edge")
+		assert.Equal(t, "storage.api", edges[0].ConnectionID)
+	})
+}

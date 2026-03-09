@@ -108,6 +108,11 @@ func (c *Config) ApplyDefaults() {
 		if len(c.Ports.Outputs) == 0 {
 			c.Ports.Outputs = []component.PortDefinition{
 				{
+					Name:    "queries",
+					Type:    "nats-request",
+					Subject: "graph.query.*",
+				},
+				{
 					Name:    "mutations",
 					Type:    "nats-request",
 					Subject: "graph.mutation.*",
@@ -129,6 +134,11 @@ func DefaultConfig() Config {
 				},
 			},
 			Outputs: []component.PortDefinition{
+				{
+					Name:    "queries",
+					Type:    "nats-request",
+					Subject: "graph.query.*",
+				},
 				{
 					Name:    "mutations",
 					Type:    "nats-request",
