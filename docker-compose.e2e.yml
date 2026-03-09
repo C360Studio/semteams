@@ -1,20 +1,15 @@
 # E2E Test Environment for SemStreams UI
 #
-# This compose file starts a complete test environment:
-#   - NATS server (message broker)
-#   - SemStreams backend (or semmem, configurable)
-#   - SemStreams UI
-#   - Caddy (reverse proxy)
+# Two modes:
 #
-# The Playwright tests run from the host and connect to http://localhost:3000
+#   1. Generic backend (default):
+#      BACKEND_CONTEXT=../semstreams docker compose -f docker-compose.e2e.yml up
 #
-# Usage (via Playwright - automatic):
-#   npm run test:e2e
+#   2. SemSource as backend (graph integration tests):
+#      COMPOSE_PROFILES=semsource docker compose -f docker-compose.e2e.yml up
+#      No BACKEND_CONTEXT needed — semsource IS the backend.
 #
-# Manual usage (debugging):
-#   docker compose -f docker-compose.e2e.yml up
-#   # Services available at http://localhost:3000
-#   docker compose -f docker-compose.e2e.yml down
+# Playwright tests run from the host and connect to http://localhost:3000
 
 services:
   # NATS Server with JetStream
@@ -40,12 +35,13 @@ services:
       timeout: 3s
       retries: 10
 
-  # Backend (configurable via BACKEND_CONTEXT environment variable)
-  # REQUIRED: Set BACKEND_CONTEXT to your backend's directory
-  # Example: BACKEND_CONTEXT=/path/to/your-backend task test:e2e
+  # Generic backend (configurable via BACKEND_CONTEXT)
+  # Excluded when COMPOSE_PROFILES=semsource — semsource replaces it.
+  # Defaults to ../semstreams (standard sibling directory).
   backend:
+    profiles: ["generic"]
     build:
-      context: ${BACKEND_CONTEXT:?BACKEND_CONTEXT must be set - path to your SemStreams-based backend}
+      context: ${BACKEND_CONTEXT:-../semstreams}
       dockerfile: ${BACKEND_DOCKERFILE:-Dockerfile}
       target: production
     container_name: semstreams-ui-e2e-backend
@@ -60,6 +56,37 @@ services:
       - ${BACKEND_CONTEXT}/testdata:/data/testdata:ro
     networks:
       - e2e-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # SemSource as backend (graph integration E2E tests)
+  # Activated via: COMPOSE_PROFILES=semsource
+  #
+  # Semsource IS a full semstreams app — runs graph pipeline, flow-builder
+  # service, component catalog, and health endpoint. No separate backend needed.
+  # Uses network alias "backend" so UI and Caddy config work unchanged.
+  semsource:
+    profiles: ["semsource"]
+    build:
+      context: ${SEMSOURCE_CONTEXT:-../semsource}
+      dockerfile: ${SEMSOURCE_DOCKERFILE:-Dockerfile}
+    container_name: semstreams-ui-e2e-semsource
+    command: ["run", "--config", "/etc/semsource/semsource.json", "--nats-url", "nats://nats:4222"]
+    depends_on:
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./e2e/fixtures/semsource:/data/fixture:ro
+      - ./e2e/fixtures/semsource/semsource-e2e.json:/etc/semsource/semsource.json:ro
+    environment:
+      - NATS_URL=nats://nats:4222
+    networks:
+      e2e-net:
+        aliases:
+          - backend
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
       interval: 5s
@@ -81,62 +108,27 @@ services:
       - ui-e2e-node-modules:/app/node_modules
     networks:
       - e2e-net
-    depends_on:
-      backend:
-        condition: service_healthy
 
   # Caddy Reverse Proxy
   caddy:
     image: caddy:2-alpine
     container_name: semstreams-ui-e2e-caddy
     depends_on:
-      - backend
       - ui
     volumes:
       - ./Caddyfile.e2e:/etc/caddy/Caddyfile:ro
     environment:
       - BACKEND_HOST=backend:8080
-      # Override to semsource:8080 when running with COMPOSE_PROFILES=semsource
-      - GRAPHQL_HOST=${GRAPHQL_HOST:-backend:8082}
+      - GRAPHQL_HOST=backend:8082
     ports:
       - "${E2E_UI_PORT:-3000}:3000"
     networks:
       - e2e-net
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
       interval: 5s
       timeout: 3s
       retries: 10
-
-  # SemSource (optional, for graph integration E2E tests)
-  # Activated via: COMPOSE_PROFILES=semsource
-  #
-  # Semsource IS a semstreams app — it runs the full graph pipeline internally:
-  #   sources → graph-ingest → graph-index → graph-query → graph-gateway (:8080/graphql)
-  # The UI queries semsource's graph-gateway directly for graph data.
-  # The separate backend service is still needed for flow CRUD (/flowbuilder/*).
-  semsource:
-    profiles: ["semsource"]
-    build:
-      context: ${SEMSOURCE_CONTEXT:-../semsource}
-      dockerfile: ${SEMSOURCE_DOCKERFILE:-Dockerfile}
-    container_name: semstreams-ui-e2e-semsource
-    command: ["run-v2", "--config", "/etc/semsource/semsource.json", "--nats-url", "nats://nats:4222"]
-    depends_on:
-      nats:
-        condition: service_healthy
-    volumes:
-      - ./e2e/fixtures/semsource:/data/fixture:ro
-      - ./e2e/fixtures/semsource/semsource-e2e.json:/etc/semsource/semsource.json:ro
-    environment:
-      - NATS_URL=nats://nats:4222
-    networks:
-      - e2e-net
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/graphql"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
 
 networks:
   e2e-net:

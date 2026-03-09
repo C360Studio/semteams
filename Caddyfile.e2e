@@ -21,10 +21,9 @@
 		reverse_proxy backend:8080
 	}
 
-	# GraphQL gateway — routed to GRAPHQL_HOST (defaults to backend:8082,
-	# overridden to semsource:8080 when COMPOSE_PROFILES=semsource)
+	# GraphQL gateway (graph-gateway on port 8082)
 	handle /graphql {
-		reverse_proxy {$GRAPHQL_HOST:backend:8082}
+		reverse_proxy backend:8082
 	}
 
 	# Vite dev server handles everything else (UI, HMR, /api/ai/*)

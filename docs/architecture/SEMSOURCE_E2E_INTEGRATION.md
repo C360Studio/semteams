@@ -46,10 +46,18 @@ Semsource is a semstreams application. It runs the full graph pipeline internall
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
+Semsource port map:
+- `:8080` — service manager (component catalog, health, flow-builder API)
+- `:8082` — graph-gateway (GraphQL `/graphql`, playground)
+- `:7890` — websocket output (entity stream for SemSpec/SemDragon)
+- `:9091` — metrics (Prometheus `/metrics`)
+
 Caddy routing:
-- `/graphql` → semsource:8080 (graph-gateway)
-- `/flowbuilder/*`, `/components/*`, `/health` → backend:8080 (flow CRUD)
+- `/graphql` → backend:8082 (graph-gateway)
+- `/flowbuilder/*`, `/components/*`, `/health` → backend:8080 (service manager)
 - `/*` → ui:5173 (Vite dev server)
+
+(`backend` is a network alias for the semsource container.)
 
 ## Why Semsource IS the Backend (for graph data)
 
@@ -81,11 +89,11 @@ e2e/fixtures/semsource/
 ```
 
 Produces known entities:
-- **AST**: `e2e.semsource.code.go.function.main`, `e2e.semsource.code.go.type.Handler`, etc.
-- **Docs**: `e2e.semsource.docs.markdown.document.README`
-- **Config**: `e2e.semsource.config.go.module.fixture-project`
+- **AST**: `e2e.semsource.golang.data-fixture.function.src-main-go-main`, `e2e.semsource.golang.data-fixture.interface.src-handler-go-Handler`, etc.
+- **Docs**: `e2e.semsource.web.data-fixture.doc.87457b`
+- **Config**: `e2e.semsource.config.data-fixture.gomod.fixture-project`, `e2e.semsource.config.data-fixture.image.golang-1-22-alpine`
 
-Total: ~8-15 entities, 10-20 relationship triples. Fast ingestion (<2s).
+Total: ~16-27 entities (including duplicates from relationship triples). Fast ingestion (<2s).
 
 Key config decisions:
 - `watch: false` — ingest once, emit SEED events, no file watching (deterministic)

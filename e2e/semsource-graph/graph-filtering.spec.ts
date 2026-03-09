@@ -7,8 +7,7 @@
  *
  * Prerequisites:
  *   - Docker Compose profile "semsource" must be active
- *   - GRAPHQL_HOST=semsource:8080 must be set
- *   - Run via: task test:e2e:semsource-graph
+ *   - Run via: COMPOSE_PROFILES=semsource npx playwright test e2e/semsource-graph/
  *
  * Filter chips appear only when the corresponding type/domain is present in
  * the loaded entity set. All tests wait for semsource entities to load before
@@ -131,10 +130,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
             pathSearch: {
               entities: [
                 {
-                  id: "e2e.semsource.code.go.function.main",
+                  id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.function.main",
+                      subject: "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -143,10 +142,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   ],
                 },
                 {
-                  id: "e2e.semsource.code.go.type.Handler",
+                  id: "e2e.semsource.golang.data-fixture.interface.Handler",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.type.Handler",
+                      subject: "e2e.semsource.golang.data-fixture.interface.Handler",
                       predicate: "has.name",
                       object: "Handler",
                       confidence: 1.0,
@@ -195,10 +194,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
             pathSearch: {
               entities: [
                 {
-                  id: "e2e.semsource.code.go.function.main",
+                  id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.function.main",
+                      subject: "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -207,10 +206,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   ],
                 },
                 {
-                  id: "e2e.semsource.code.go.type.Handler",
+                  id: "e2e.semsource.golang.data-fixture.interface.Handler",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.type.Handler",
+                      subject: "e2e.semsource.golang.data-fixture.interface.Handler",
                       predicate: "has.name",
                       object: "Handler",
                       confidence: 1.0,
@@ -271,7 +270,7 @@ test.describe("Graph Filtering - SemSource Entities", () => {
   // Domain filter chips
   // ---------------------------------------------------------------------------
 
-  test("domain filter chips contain code, docs, and config domains", async ({
+  test("domain filter chips contain golang, web, and config domains", async ({
     page,
   }) => {
     const ts = Date.now();
@@ -331,10 +330,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
             pathSearch: {
               entities: [
                 {
-                  id: "e2e.semsource.code.go.function.main",
+                  id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.function.main",
+                      subject: "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -343,10 +342,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   ],
                 },
                 {
-                  id: "e2e.semsource.docs.markdown.document.README",
+                  id: "e2e.semsource.web.data-fixture.doc.README",
                   triples: [
                     {
-                      subject: "e2e.semsource.docs.markdown.document.README",
+                      subject: "e2e.semsource.web.data-fixture.doc.README",
                       predicate: "has.name",
                       object: "README",
                       confidence: 1.0,
@@ -369,7 +368,7 @@ test.describe("Graph Filtering - SemSource Entities", () => {
       .waitFor({ state: "hidden", timeout: 10000 });
     await page.waitForTimeout(500);
 
-    const codeChip = page.locator('[data-testid="domain-filter-code"]');
+    const codeChip = page.locator('[data-testid="domain-filter-golang"]');
     await expect(codeChip).toBeVisible({ timeout: 3000 });
     await expect(codeChip).not.toHaveClass(/active/);
 
@@ -377,7 +376,7 @@ test.describe("Graph Filtering - SemSource Entities", () => {
     await expect(codeChip).toHaveClass(/active/);
   });
 
-  test("filtering by domain code reduces visible entity count", async ({
+  test("filtering by domain golang reduces visible entity count", async ({
     page,
   }) => {
     const ts = Date.now();
@@ -391,10 +390,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
             pathSearch: {
               entities: [
                 {
-                  id: "e2e.semsource.code.go.function.main",
+                  id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.function.main",
+                      subject: "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -403,10 +402,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   ],
                 },
                 {
-                  id: "e2e.semsource.docs.markdown.document.README",
+                  id: "e2e.semsource.web.data-fixture.doc.README",
                   triples: [
                     {
-                      subject: "e2e.semsource.docs.markdown.document.README",
+                      subject: "e2e.semsource.web.data-fixture.doc.README",
                       predicate: "has.name",
                       object: "README",
                       confidence: 1.0,
@@ -415,10 +414,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   ],
                 },
                 {
-                  id: "e2e.semsource.config.go.module.fixture-project",
+                  id: "e2e.semsource.config.data-fixture.gomod.fixture-project",
                   triples: [
                     {
-                      subject: "e2e.semsource.config.go.module.fixture-project",
+                      subject: "e2e.semsource.config.data-fixture.gomod.fixture-project",
                       predicate: "has.name",
                       object: "fixture-project",
                       confidence: 1.0,
@@ -453,8 +452,8 @@ test.describe("Graph Filtering - SemSource Entities", () => {
       10,
     );
 
-    // Filter by "code" domain — should hide docs and config entities
-    const codeChip = page.locator('[data-testid="domain-filter-code"]');
+    // Filter by "golang" domain — should hide web and config entities
+    const codeChip = page.locator('[data-testid="domain-filter-golang"]');
     await expect(codeChip).toBeVisible({ timeout: 3000 });
     await codeChip.click();
     await page.waitForTimeout(600);
@@ -489,10 +488,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
             pathSearch: {
               entities: [
                 {
-                  id: "e2e.semsource.code.go.function.main",
+                  id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.function.main",
+                      subject: "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -501,10 +500,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   ],
                 },
                 {
-                  id: "e2e.semsource.docs.markdown.document.README",
+                  id: "e2e.semsource.web.data-fixture.doc.README",
                   triples: [
                     {
-                      subject: "e2e.semsource.docs.markdown.document.README",
+                      subject: "e2e.semsource.web.data-fixture.doc.README",
                       predicate: "has.name",
                       object: "README",
                       confidence: 1.0,
@@ -576,10 +575,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
             pathSearch: {
               entities: [
                 {
-                  id: "e2e.semsource.code.go.function.main",
+                  id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.function.main",
+                      subject: "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -630,10 +629,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
             pathSearch: {
               entities: [
                 {
-                  id: "e2e.semsource.code.go.function.main",
+                  id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.function.main",
+                      subject: "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -642,10 +641,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   ],
                 },
                 {
-                  id: "e2e.semsource.code.go.type.Handler",
+                  id: "e2e.semsource.golang.data-fixture.interface.Handler",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.type.Handler",
+                      subject: "e2e.semsource.golang.data-fixture.interface.Handler",
                       predicate: "has.name",
                       object: "Handler",
                       confidence: 1.0,
@@ -702,10 +701,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
             pathSearch: {
               entities: [
                 {
-                  id: "e2e.semsource.code.go.function.main",
+                  id: "e2e.semsource.golang.data-fixture.function.main",
                   triples: [
                     {
-                      subject: "e2e.semsource.code.go.function.main",
+                      subject: "e2e.semsource.golang.data-fixture.function.main",
                       predicate: "has.name",
                       object: "main",
                       confidence: 1.0,
@@ -714,10 +713,10 @@ test.describe("Graph Filtering - SemSource Entities", () => {
                   ],
                 },
                 {
-                  id: "e2e.semsource.docs.markdown.document.README",
+                  id: "e2e.semsource.web.data-fixture.doc.README",
                   triples: [
                     {
-                      subject: "e2e.semsource.docs.markdown.document.README",
+                      subject: "e2e.semsource.web.data-fixture.doc.README",
                       predicate: "has.name",
                       object: "README",
                       confidence: 1.0,

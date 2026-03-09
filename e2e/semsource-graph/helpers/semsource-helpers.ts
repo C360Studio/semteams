@@ -14,10 +14,12 @@ import {
  * See: e2e/fixtures/semsource/
  */
 export const KNOWN_ENTITIES = {
-  mainFunc: "e2e.semsource.code.go.function.main",
-  handlerType: "e2e.semsource.code.go.type.Handler",
-  readme: "e2e.semsource.docs.markdown.document.README",
-  goMod: "e2e.semsource.config.go.module.fixture-project",
+  mainFunc: "e2e.semsource.golang.data-fixture.function.src-main-go-main",
+  handlerType:
+    "e2e.semsource.golang.data-fixture.interface.src-handler-go-Handler",
+  readme: "e2e.semsource.web.data-fixture.doc.87457b",
+  goMod: "e2e.semsource.config.data-fixture.gomod.fixture-project",
+  mainFile: "e2e.semsource.golang.data-fixture.file.src-main-go",
 } as const;
 
 export type KnownEntityKey = keyof typeof KNOWN_ENTITIES;
@@ -33,15 +35,15 @@ export const SEMSOURCE_ENTITY_PREFIX = "e2e.semsource.";
  */
 export const SEMSOURCE_ENTITY_TYPES = [
   "function",
-  "type",
-  "document",
-  "module",
+  "interface",
+  "file",
+  "doc",
 ] as const;
 
 /**
  * Expected domain values produced by the semsource fixture.
  */
-export const SEMSOURCE_DOMAINS = ["code", "docs", "config"] as const;
+export const SEMSOURCE_DOMAINS = ["golang", "web", "config"] as const;
 
 /**
  * Wait for semsource entities to appear in the GraphQL backend.
@@ -63,12 +65,15 @@ export async function waitForSemsourceEntities(
   timeout: number = 30000,
 ): Promise<void> {
   const startTime = Date.now();
+  // Use a known file entity as the canary — pathSearch with "*" only returns
+  // the wildcard itself, so we probe a known entity and check for connections.
+  const canaryEntity = KNOWN_ENTITIES.mainFile;
 
   while (Date.now() - startTime < timeout) {
     try {
       const response = await page.request.post("/graphql", {
         data: {
-          query: `query { pathSearch(startEntity: "*", maxDepth: 2, maxNodes: 50) { entities { id } } }`,
+          query: `query { pathSearch(startEntity: "${canaryEntity}", maxDepth: 3, maxNodes: 50) { entities { id } } }`,
           variables: {},
         },
       });

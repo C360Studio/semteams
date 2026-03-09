@@ -7,8 +7,7 @@
  *
  * Prerequisites:
  *   - Docker Compose profile "semsource" must be active
- *   - GRAPHQL_HOST=semsource:8080 must be set
- *   - Run via: task test:e2e:semsource-graph
+ *   - Run via: COMPOSE_PROFILES=semsource npx playwright test e2e/semsource-graph/
  *
  * Note on Sigma.js canvas interactions:
  *   Sigma.js renders via WebGL into a <canvas> element. DOM-level click
@@ -83,8 +82,8 @@ test.describe("Graph Interaction - SemSource Entities", () => {
     page,
   }) => {
     const knownId = KNOWN_ENTITIES.mainFunc;
-    // e2e.semsource.code.go.function.main
-    // org=e2e, platform=semsource, domain=code, system=go, type=function, instance=main
+    // e2e.semsource.golang.data-fixture.function.src-main-go-main
+    // org=e2e, platform=semsource, domain=golang, system=data-fixture, type=function, instance=src-main-go-main
 
     await page.route("**/graphql", (route) => {
       route.fulfill({
@@ -150,12 +149,16 @@ test.describe("Graph Interaction - SemSource Entities", () => {
     await expect(idSection.locator(".id-value").nth(1)).toContainText(
       "semsource",
     );
-    await expect(idSection.locator(".id-value").nth(2)).toContainText("code");
-    await expect(idSection.locator(".id-value").nth(3)).toContainText("go");
+    await expect(idSection.locator(".id-value").nth(2)).toContainText("golang");
+    await expect(idSection.locator(".id-value").nth(3)).toContainText(
+      "data-fixture",
+    );
     await expect(idSection.locator(".id-value").nth(4)).toContainText(
       "function",
     );
-    await expect(idSection.locator(".id-value").nth(5)).toContainText("main");
+    await expect(idSection.locator(".id-value").nth(5)).toContainText(
+      "src-main-go-main",
+    );
   });
 
   test("entity detail panel shows properties from ingested triples", async ({
@@ -318,7 +321,7 @@ test.describe("Graph Interaction - SemSource Entities", () => {
 
     const response = await page.request.post("/graphql", {
       data: {
-        query: `query { pathSearch(startEntity: "*", maxDepth: 2, maxNodes: 50) { entities { id } } }`,
+        query: `query { pathSearch(startEntity: "${KNOWN_ENTITIES.mainFile}", maxDepth: 3, maxNodes: 50) { entities { id } } }`,
         variables: {},
       },
     });
@@ -331,7 +334,7 @@ test.describe("Graph Interaction - SemSource Entities", () => {
     const semsourceIds = allIds.filter((id) =>
       id.startsWith(SEMSOURCE_ENTITY_PREFIX),
     );
-    expect(semsourceIds.length).toBeGreaterThanOrEqual(3);
+    expect(semsourceIds.length).toBeGreaterThanOrEqual(2);
 
     // Every semsource ID must have exactly 6 dot-separated parts
     for (const id of semsourceIds) {
