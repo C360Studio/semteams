@@ -25,7 +25,7 @@
 	import { getCommandsForPage } from '$lib/services/slashCommands';
 
 	interface DataViewProps {
-		flowId: string;
+		flowId?: string;
 	}
 
 	let { flowId }: DataViewProps = $props();
@@ -214,7 +214,7 @@
 	function buildDataViewContext() {
 		return {
 			page: 'data-view' as const,
-			flowId,
+			flowId: flowId ?? '',
 			entityCount: graphStore.entities.size,
 			selectedEntityId: graphStore.selectedEntityId,
 			filters: graphStore.filters,

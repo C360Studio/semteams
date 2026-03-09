@@ -68,11 +68,66 @@ tasks:
   # === Development ===
 
   dev:
-    desc: Start development server (expects backend at localhost:8080)
+    desc: Start Vite dev server only (no proxy — use dev:connect or dev:full instead)
     cmds:
       - echo "Starting UI dev server..."
       - echo "Expecting backend at {{.BACKEND_URL}}"
       - npm run dev
+
+  dev:connect:
+    desc: Connect to any running SemStreams app (no Docker backend needed)
+    summary: |
+      Starts Caddy + Vite dev server, proxying API requests to a running
+      SemStreams backend. No NATS, no Docker build — just point and go.
+
+      Examples:
+        task dev:connect                                  # localhost:8080
+        BACKEND_HOST=myapp.local:8080 task dev:connect    # remote host
+        BACKEND_HOST=10.0.1.5:8080 GRAPHQL_HOST=10.0.1.5:8082 task dev:connect
+    vars:
+      BACKEND_HOST: '{{.BACKEND_HOST | default "localhost:8080"}}'
+      GRAPHQL_HOST: '{{.GRAPHQL_HOST | default .BACKEND_HOST | default "localhost:8080"}}'
+    env:
+      BACKEND_HOST: "{{.BACKEND_HOST}}"
+      GRAPHQL_HOST: "{{.GRAPHQL_HOST}}"
+      UI_HOST: "localhost:{{.DEV_VITE_PORT}}"
+      LISTEN_PORT: "{{.DEV_UI_PORT}}"
+    deps:
+      - task: dev:connect:check
+        vars:
+          BACKEND_HOST: "{{.BACKEND_HOST}}"
+    cmds:
+      - defer: { task: dev:connect:stop }
+      - |
+        echo "Connecting to SemStreams backend at {{.BACKEND_HOST}}"
+        echo "GraphQL gateway at {{.GRAPHQL_HOST}}"
+        echo ""
+        echo "UI will be at http://localhost:{{.DEV_UI_PORT}}"
+        echo ""
+      - caddy start --config Caddyfile.dev
+      - npm run dev -- --port {{.DEV_VITE_PORT}} --host
+    preconditions:
+      - sh: command -v caddy
+        msg: "Caddy not found. Install with: brew install caddy"
+
+  dev:connect:check:
+    desc: Check if the backend is reachable
+    internal: true
+    vars:
+      BACKEND_HOST: '{{.BACKEND_HOST | default "localhost:8080"}}'
+    cmds:
+      - |
+        if curl -sf "http://{{.BACKEND_HOST}}/health" > /dev/null 2>&1; then
+          echo "✅ Backend reachable at {{.BACKEND_HOST}}"
+        else
+          echo "⚠️  Backend at {{.BACKEND_HOST}} not responding — Caddy will retry"
+        fi
+
+  dev:connect:stop:
+    desc: Stop the Caddy dev proxy
+    internal: true
+    cmds:
+      - caddy stop 2>/dev/null || true
 
   # === Full Stack Development ===
 

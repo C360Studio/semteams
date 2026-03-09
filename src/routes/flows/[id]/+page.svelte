@@ -834,7 +834,7 @@
 	<header class="editor-header">
 		<div class="header-content">
 			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-			<a href="/" data-sveltekit-reload class="back-button" aria-label="Back to flows">← Flows</a>
+			<a href="/flows" class="back-button" aria-label="Back to flows">← Flows</a>
 			<div class="header-text">
 				<h1>{backendFlow?.name || 'Loading...'}</h1>
 				{#if backendFlow?.description}

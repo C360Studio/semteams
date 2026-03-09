@@ -83,7 +83,9 @@ services:
     ports:
       - "${DEV_UI_PORT:-3001}:3000"
     environment:
-      - VITE_PORT=${DEV_VITE_PORT:-5173}
+      - BACKEND_HOST=${BACKEND_HOST:-backend:8080}
+      - GRAPHQL_HOST=${GRAPHQL_HOST:-backend:8080}
+      - UI_HOST=host.docker.internal:${DEV_VITE_PORT:-5173}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
