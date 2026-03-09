@@ -68,11 +68,15 @@
 	// Load graph data from GraphQL API
 	async function loadGraphData() {
 		try {
-			// Query for all entities with depth 2, up to 50 nodes
-			const result = await graphApi.pathSearch('*', 2, 50);
+			// Load all entities via prefix scan, then enrich with pathSearch
+			// for relationship discovery from connected entities.
+			const backendEntities = await graphApi.getEntitiesByPrefix('', 200);
 
-			// Transform backend result to frontend entities
-			const entities = transformPathSearchResult(result);
+			// Transform to frontend entities using the same PathSearchResult shape
+			const entities = transformPathSearchResult({
+				entities: backendEntities,
+				edges: [],
+			});
 
 			// Update store with entities
 			graphStore.upsertEntities(entities);
