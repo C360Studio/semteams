@@ -95,14 +95,12 @@ describe("getToolsForContext — all intent values return arrays", () => {
   }
 
   it("unknown/future intent string returns an array without throwing", () => {
-    // @ts-expect-error - intentional attack: unknown intent
     expect(() =>
-      getToolsForContext(config, "unknown-future-intent", flowBuilderContext),
+      getToolsForContext(config, "unknown-future-intent" as never, flowBuilderContext),
     ).not.toThrow();
-    // @ts-expect-error - intentional attack: unknown intent
     const result = getToolsForContext(
       config,
-      "unknown-future-intent",
+      "unknown-future-intent" as never,
       flowBuilderContext,
     );
     expect(Array.isArray(result)).toBe(true);

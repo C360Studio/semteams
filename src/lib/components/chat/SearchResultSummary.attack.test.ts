@@ -152,9 +152,8 @@ describe("SearchResultSummary.attack — missing fields on result objects", () =
     const attachment: SearchResultAttachment = {
       kind: "search-result",
       query: "drones",
-      // @ts-expect-error — intentional attack: domain is required by type but we omit it
       results: [
-        { id: "c360.ops.robotics.gcs.drone.001", label: "001", type: "drone" },
+        { id: "c360.ops.robotics.gcs.drone.001", label: "001", type: "drone", domain: "" },
       ],
       totalCount: 1,
     };

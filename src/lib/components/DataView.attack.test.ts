@@ -453,7 +453,6 @@ describe("GraphDetailPanel attack — null and undefined prop hardening", () => 
       incoming: [],
     };
 
-    // @ts-expect-error — intentional attack: empty-string idParts
     expect(() =>
       render(GraphDetailPanel, {
         props: { entity: weirdEntity, onAddChip: vi.fn() },

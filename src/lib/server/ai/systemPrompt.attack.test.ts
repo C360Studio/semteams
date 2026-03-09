@@ -119,11 +119,10 @@ describe("buildSystemPrompt — adversarial chip label/value injection", () => {
   it("handles adversarial chip kind values without throwing", () => {
     const weirdKindChip = {
       id: "chip-weird",
-      // @ts-expect-error - intentional attack: unknown kind
       kind: "'; DROP TABLE--",
       label: "weird",
       value: "v",
-    } as ContextChip;
+    } as unknown as ContextChip;
     expect(() =>
       buildSystemPrompt("general", flowBuilderContext, [weirdKindChip]),
     ).not.toThrow();
@@ -308,9 +307,8 @@ describe("buildSystemPrompt — all intent × context combinations never throw",
   }
 
   it("unknown future intent does not throw", () => {
-    // @ts-expect-error - intentional attack: unknown intent
     expect(() =>
-      buildSystemPrompt("unknown-intent", flowBuilderContext, []),
+      buildSystemPrompt("unknown-intent" as never, flowBuilderContext, []),
     ).not.toThrow();
   });
 });

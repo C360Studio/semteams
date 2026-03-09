@@ -279,15 +279,10 @@ describe("createGraphQLClient — query throws on network failure", () => {
 describe("createGraphQLClient — query respects timeout", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it("throws when request exceeds timeout", async () => {
-    // Never resolves — simulates a hung server
+    // Use a real (short) timeout — avoids jsdom AbortController quirks with fake timers
     mockFetch.mockImplementationOnce(
       (_url: string, init: RequestInit) =>
         new Promise<Response>((_resolve, reject) => {
@@ -303,18 +298,14 @@ describe("createGraphQLClient — query respects timeout", () => {
 
     const client = createGraphQLClient({
       baseUrl: "http://backend:8082",
-      timeout: 1000,
+      timeout: 10, // 10ms — short enough for test, long enough to be real
     });
 
-    const queryPromise = client.query("query { ok }");
-    // Advance time past the timeout
-    await vi.advanceTimersByTimeAsync(1100);
-
-    await expect(queryPromise).rejects.toThrow();
+    await expect(client.query("query { ok }")).rejects.toThrow();
   });
 
   it("does not throw before timeout elapses", async () => {
-    // Resolves just before timeout
+    // Resolves immediately — well before any timeout
     mockFetch.mockImplementationOnce(async () =>
       makeGraphQLResponse({ ok: true }),
     );

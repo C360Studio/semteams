@@ -321,9 +321,8 @@ describe("executeEntityLookup.attack — adversarial triple values", () => {
   });
 
   it("always returns ToolResult — never throws even on unexpected input", async () => {
-    // @ts-expect-error — intentional attack
     const ctx = makeContext(async () => ({
-      entity: { id: entityId, triples: "not-an-array" },
+      entity: { id: entityId, triples: "not-an-array" as unknown as [] },
     }));
     await expect(executeEntityLookup({ entityId }, ctx)).resolves.toBeDefined();
   });
