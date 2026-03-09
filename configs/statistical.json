@@ -697,6 +697,11 @@
           ],
           "outputs": [
             {
+              "name": "queries",
+              "subject": "graph.query.*",
+              "type": "nats-request"
+            },
+            {
               "name": "mutations",
               "subject": "graph.mutation.*",
               "type": "nats-request",

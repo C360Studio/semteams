@@ -118,6 +118,26 @@ func (c *Config) ApplyDefaults() {
 					Subject: "graph.mutation.*",
 				},
 			}
+		} else {
+			// Ensure the queries port is always present — graph-gateway
+			// always makes NATS requests to graph.query.* subjects regardless
+			// of what the user configures for mutations/other outputs.
+			hasQueries := false
+			for _, p := range c.Ports.Outputs {
+				if p.Name == "queries" {
+					hasQueries = true
+					break
+				}
+			}
+			if !hasQueries {
+				c.Ports.Outputs = append([]component.PortDefinition{
+					{
+						Name:    "queries",
+						Type:    "nats-request",
+						Subject: "graph.query.*",
+					},
+				}, c.Ports.Outputs...)
+			}
 		}
 	}
 }

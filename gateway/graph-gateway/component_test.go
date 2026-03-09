@@ -716,6 +716,14 @@ func TestCreateGraphGateway_PartialConfig(t *testing.T) {
 	assert.Equal(t, "/custom-graphql", component.config.GraphQLPath, "should use provided GraphQL path")
 	assert.Equal(t, "/mcp", component.config.MCPPath, "should apply default MCP path")
 	assert.Equal(t, "localhost:8080", component.config.BindAddress, "should apply default bind address")
+
+	// Verify queries port was injected even though outputs already had mutations
+	outputNames := make(map[string]bool)
+	for _, p := range component.config.Ports.Outputs {
+		outputNames[p.Name] = true
+	}
+	assert.True(t, outputNames["queries"], "ensureDefaults should inject queries port when missing")
+	assert.True(t, outputNames["mutations"], "ensureDefaults should preserve existing mutations port")
 }
 
 func TestRegister_AddsToRegistry(t *testing.T) {

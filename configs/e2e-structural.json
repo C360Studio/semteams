@@ -323,7 +323,7 @@
       "config": {
         "ports": {
           "inputs": [{"name": "http", "subject": ":8082", "type": "http"}],
-          "outputs": [{"name": "mutations", "subject": "graph.mutation.*", "type": "nats-request"}]
+          "outputs": [{"name": "queries", "subject": "graph.query.*", "type": "nats-request"}, {"name": "mutations", "subject": "graph.mutation.*", "type": "nats-request"}]
         },
         "graphql_path": "/graphql",
         "mcp_path": "/mcp",
