@@ -23,7 +23,9 @@ The `agentic-model` component routes agent requests to OpenAI-compatible LLM end
 - **Multiple Endpoints**: Configure different models/providers by name
 - **OpenAI Compatible**: Works with OpenAI, Ollama, LiteLLM, vLLM, etc.
 - **Tool Support**: Full tool calling (function calling) support
-- **Retry Logic**: Configurable retry with exponential backoff
+- **Retry Logic**: Exponential backoff with jitter via `pkg/retry`
+- **Rate Limiting**: Per-endpoint token bucket rate limiting and concurrency control
+- **Endpoint Throttling**: Semaphore-based concurrency cap shared across all agents
 - **Token Tracking**: Tracks prompt and completion tokens
 
 ## Configuration
@@ -36,20 +38,11 @@ The `agentic-model` component routes agent requests to OpenAI-compatible LLM end
   "config": {
     "stream_name": "AGENT",
     "timeout": "120s",
-    "endpoints": {
-      "gpt-4": {
-        "url": "https://api.openai.com/v1/chat/completions",
-        "model": "gpt-4",
-        "api_key_env": "OPENAI_API_KEY"
-      },
-      "ollama": {
-        "url": "http://localhost:11434/v1/chat/completions",
-        "model": "llama2"
-      }
-    },
     "retry": {
       "max_attempts": 3,
-      "backoff": "exponential"
+      "initial_delay": "1s",
+      "max_delay": "60s",
+      "rate_limit_delay": "5s"
     },
     "ports": {
       "inputs": [
@@ -63,25 +56,35 @@ The `agentic-model` component routes agent requests to OpenAI-compatible LLM end
 }
 ```
 
+Endpoint configurations including rate limits are defined in the top-level `model_registry` config block,
+not inline in this component. See the [Model Registry](../../docs/advanced/08-agentic-components.md) section
+for endpoint configuration.
+
 ### Configuration Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `endpoints` | object | required | Named endpoint configurations |
 | `timeout` | string | "120s" | Request timeout |
 | `stream_name` | string | "AGENT" | JetStream stream name |
 | `consumer_name_suffix` | string | "" | Suffix for consumer names (for testing) |
 | `retry.max_attempts` | int | 3 | Maximum retry attempts |
-| `retry.backoff` | string | "exponential" | Backoff strategy |
+| `retry.initial_delay` | string | "1s" | Initial delay before first retry |
+| `retry.max_delay` | string | "60s" | Maximum delay between retries |
+| `retry.rate_limit_delay` | string | "5s" | Extra wait added before backoff on HTTP 429 |
 | `ports` | object | (defaults) | Port configuration |
 
 ### Endpoint Configuration
+
+Endpoints are configured in the top-level `model_registry` block. In addition to the base fields, each
+endpoint now supports rate limiting controls:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `url` | string | yes | Base URL for OpenAI-compatible API |
 | `model` | string | yes | Model name for API requests |
 | `api_key_env` | string | no | Environment variable for API key |
+| `requests_per_minute` | int | no | Token bucket rate limit (0 = unlimited) |
+| `max_concurrent` | int | no | Maximum simultaneous in-flight requests (0 = unlimited) |
 
 ### Model Aliases
 
@@ -176,10 +179,77 @@ Reference in config:
 
 ## Retry Behavior
 
-- **Max Attempts**: Default 3, configurable
-- **Backoff**: Exponential (100ms, 200ms, 400ms)
-- **Retryable**: Network errors, 5xx responses
-- **Non-retryable**: Context cancellation, 4xx responses
+Retries are implemented using `pkg/retry` with exponential backoff and jitter.
+
+- **Max Attempts**: Default 3, configurable via `retry.max_attempts`
+- **Initial Delay**: Default 1s (`retry.initial_delay`); tests use 100ms for speed
+- **Max Delay**: Default 60s (`retry.max_delay`); each interval doubles with jitter
+- **HTTP 429 Handling**: Detected via SDK error types (`openai.APIError.HTTPStatusCode`,
+  `openai.RequestError.HTTPStatusCode`). An extra `rate_limit_delay` (default 5s) is added before
+  the normal backoff begins, giving the provider time to recover
+- **Retryable**: HTTP 429, 500, 502, 503, 504, and network errors
+- **Non-retryable**: HTTP 400, 401, 403, 404, and context cancellation
+
+## Rate Limiting
+
+When running agent teams or quests, multiple agents concurrently target the same endpoint. Without
+coordination, they can saturate the provider's rate limit within seconds, causing cascading 429 errors
+that waste time in retry loops. Per-endpoint throttling solves this by enforcing limits before requests
+leave the process.
+
+Each endpoint in the model registry can be configured with two complementary controls:
+
+- **`requests_per_minute`**: A token bucket that caps the request rate. Agents block until a token is
+  available rather than racing to the endpoint.
+- **`max_concurrent`**: A semaphore that caps simultaneous in-flight requests. Useful for providers that
+  enforce concurrency limits independently of rate limits.
+
+Both controls are shared across all agents targeting the same endpoint — the throttle is instantiated
+once per cached client, not per agent.
+
+### Configuration Example
+
+```json
+{
+  "model_registry": {
+    "endpoints": {
+      "gpt-4": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "model": "gpt-4-turbo-preview",
+        "api_key_env": "OPENAI_API_KEY",
+        "requests_per_minute": 60,
+        "max_concurrent": 5
+      },
+      "ollama": {
+        "url": "http://localhost:11434/v1/chat/completions",
+        "model": "qwen2.5-coder:14b"
+      }
+    }
+  }
+}
+```
+
+The `ollama` endpoint has no limits configured — local models typically do not need them.
+
+### When to Use
+
+| Scenario | Recommended Setting |
+|----------|---------------------|
+| Single agent, low traffic | No limits needed |
+| Agent team (quest), shared OpenAI key | `requests_per_minute` matching your tier |
+| Shared API key across multiple services | Both `requests_per_minute` and `max_concurrent` |
+| Local model (Ollama, vLLM) | No limits needed |
+
+### Observability
+
+Rate limit events are tracked via:
+
+```
+semstreams_agentic_model_rate_limit_hits_total{model="gpt-4"}
+```
+
+This counter increments each time a request encounters an HTTP 429. A sustained high rate suggests
+the configured `requests_per_minute` is too close to the actual provider limit and should be reduced.
 
 ## Troubleshooting
 

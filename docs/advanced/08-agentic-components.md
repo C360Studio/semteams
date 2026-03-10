@@ -188,24 +188,12 @@ implements retry logic with configurable backoff.
 
 ```json
 {
-  "endpoints": {
-    "default": {
-      "url": "http://localhost:11434/v1/chat/completions",
-      "model": "qwen2.5-coder:14b",
-      "api_key_env": ""
-    },
-    "gpt-4": {
-      "url": "https://api.openai.com/v1/chat/completions",
-      "model": "gpt-4-turbo-preview",
-      "api_key_env": "OPENAI_API_KEY"
-    }
-  },
   "timeout": "120s",
   "retry": {
     "max_attempts": 3,
     "initial_delay": "1s",
-    "max_delay": "30s",
-    "backoff_type": "exponential"
+    "max_delay": "60s",
+    "rate_limit_delay": "5s"
   },
   "stream_name": "AGENT",
   "consumer_name_suffix": "",
@@ -220,26 +208,30 @@ implements retry logic with configurable backoff.
 }
 ```
 
+Endpoints (including rate limits) are configured in the top-level `model_registry` block, not inline
+in the component config.
+
 **Configuration Options**:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `endpoints` | map[string]Endpoint | required | Named endpoint configurations |
 | `timeout` | string | 120s | Request timeout |
 | `retry.max_attempts` | int | 3 | Maximum retry attempts |
-| `retry.initial_delay` | string | 1s | Initial retry delay |
-| `retry.max_delay` | string | 30s | Maximum retry delay |
-| `retry.backoff_type` | string | exponential | Backoff strategy (exponential, linear) |
+| `retry.initial_delay` | string | 1s | Initial delay before first retry |
+| `retry.max_delay` | string | 60s | Maximum delay between retries |
+| `retry.rate_limit_delay` | string | 5s | Extra wait added before backoff on HTTP 429 |
 | `stream_name` | string | AGENT | JetStream stream name |
 | `consumer_name_suffix` | string | "" | Suffix for unique consumer names |
 
-**Endpoint Configuration**:
+**Endpoint Configuration** (in `model_registry`):
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `url` | string | yes | Full URL to chat completions endpoint |
 | `model` | string | yes | Model identifier for the API |
 | `api_key_env` | string | no | Environment variable containing API key |
+| `requests_per_minute` | int | no | Token bucket rate limit (0 = unlimited) |
+| `max_concurrent` | int | no | Maximum simultaneous in-flight requests (0 = unlimited) |
 
 **Endpoint Resolution**:
 
@@ -574,6 +566,7 @@ Each component exposes Prometheus metrics:
 | `agentic_model_tokens_out_total` | counter | endpoint | Output tokens |
 | `agentic_model_latency_seconds` | histogram | endpoint | Request latency |
 | `agentic_model_retries_total` | counter | endpoint | Retry attempts |
+| `semstreams_agentic_model_rate_limit_hits_total` | counter | model | HTTP 429 responses received |
 
 **agentic-tools**:
 
@@ -880,8 +873,31 @@ Protect against runaway loops and costs:
 
 1. **Iteration limits**: Always set `max_iterations`
 2. **Timeout guards**: Always set `timeout` at loop and tool levels
-3. **External rate limits**: Configure at the LLM provider level
+3. **Endpoint throttling**: Configure `requests_per_minute` and `max_concurrent` on each endpoint in
+   the model registry. The throttle is shared across all agents targeting that endpoint, preventing
+   agent teams from collectively saturating a provider's rate limit.
 4. **Budget alerts**: Monitor token usage metrics
+
+Configure endpoint throttling in the model registry:
+
+```json
+{
+  "model_registry": {
+    "endpoints": {
+      "gpt-4": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "model": "gpt-4-turbo-preview",
+        "api_key_env": "OPENAI_API_KEY",
+        "requests_per_minute": 60,
+        "max_concurrent": 5
+      }
+    }
+  }
+}
+```
+
+The `semstreams_agentic_model_rate_limit_hits_total` metric tracks HTTP 429 responses per model. A
+rising count indicates the configured limit is too high for the provider tier and should be reduced.
 
 ### Input Validation
 

@@ -21,8 +21,11 @@ type Config struct {
 
 // RetryConfig holds retry configuration
 type RetryConfig struct {
-	MaxAttempts int    `json:"max_attempts" schema:"type:int,description:Maximum retry attempts,category:advanced,default:3"`
-	Backoff     string `json:"backoff"      schema:"type:enum,description:Backoff strategy,category:advanced,enum:exponential|linear,default:exponential"`
+	MaxAttempts    int    `json:"max_attempts"     schema:"type:int,description:Maximum retry attempts,category:advanced,default:3"`
+	Backoff        string `json:"backoff"          schema:"type:enum,description:Backoff strategy,category:advanced,enum:exponential|linear,default:exponential"`
+	InitialDelay   string `json:"initial_delay"    schema:"type:string,description:Initial retry delay,category:advanced,default:1s"`
+	MaxDelay       string `json:"max_delay"        schema:"type:string,description:Maximum retry delay,category:advanced,default:60s"`
+	RateLimitDelay string `json:"rate_limit_delay" schema:"type:string,description:Initial delay when rate limited (429),category:advanced,default:5s"`
 }
 
 // Validate checks the configuration for errors
@@ -55,15 +58,57 @@ func (r *RetryConfig) Validate() error {
 	}
 
 	// Empty backoff defaults to exponential
-	if r.Backoff == "" {
-		return nil
-	}
-
-	if r.Backoff != "exponential" && r.Backoff != "linear" {
+	if r.Backoff != "" && r.Backoff != "exponential" && r.Backoff != "linear" {
 		return errs.WrapInvalid(fmt.Errorf("backoff must be 'exponential' or 'linear'"), "RetryConfig", "Validate", "check backoff type")
 	}
 
+	if r.InitialDelay != "" {
+		if _, err := time.ParseDuration(r.InitialDelay); err != nil {
+			return errs.WrapInvalid(err, "RetryConfig", "Validate", "parse initial_delay")
+		}
+	}
+	if r.MaxDelay != "" {
+		if _, err := time.ParseDuration(r.MaxDelay); err != nil {
+			return errs.WrapInvalid(err, "RetryConfig", "Validate", "parse max_delay")
+		}
+	}
+	if r.RateLimitDelay != "" {
+		if _, err := time.ParseDuration(r.RateLimitDelay); err != nil {
+			return errs.WrapInvalid(err, "RetryConfig", "Validate", "parse rate_limit_delay")
+		}
+	}
+
 	return nil
+}
+
+// initialDelayDuration returns the parsed InitialDelay, falling back to the given default.
+func (r *RetryConfig) initialDelayDuration(defaultDelay time.Duration) time.Duration {
+	if r.InitialDelay != "" {
+		if d, err := time.ParseDuration(r.InitialDelay); err == nil {
+			return d
+		}
+	}
+	return defaultDelay
+}
+
+// maxDelayDuration returns the parsed MaxDelay, falling back to the given default.
+func (r *RetryConfig) maxDelayDuration(defaultDelay time.Duration) time.Duration {
+	if r.MaxDelay != "" {
+		if d, err := time.ParseDuration(r.MaxDelay); err == nil {
+			return d
+		}
+	}
+	return defaultDelay
+}
+
+// rateLimitDelayDuration returns the parsed RateLimitDelay, falling back to the given default.
+func (r *RetryConfig) rateLimitDelayDuration(defaultDelay time.Duration) time.Duration {
+	if r.RateLimitDelay != "" {
+		if d, err := time.ParseDuration(r.RateLimitDelay); err == nil {
+			return d
+		}
+	}
+	return defaultDelay
 }
 
 // DefaultConfig returns default configuration for agentic-model processor

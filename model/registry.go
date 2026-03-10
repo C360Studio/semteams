@@ -52,6 +52,12 @@ type EndpointConfig struct {
 	// OutputPricePer1MTokens is the cost per 1M output tokens in USD.
 	// Consumers join this with token usage data to calculate costs.
 	OutputPricePer1MTokens float64 `json:"output_price_per_1m_tokens,omitempty"`
+	// RequestsPerMinute limits the rate of requests to this endpoint.
+	// 0 means no rate limiting. Applied per-endpoint across all consumers.
+	RequestsPerMinute int `json:"requests_per_minute,omitempty"`
+	// MaxConcurrent limits concurrent in-flight requests to this endpoint.
+	// 0 means no concurrency limit.
+	MaxConcurrent int `json:"max_concurrent,omitempty"`
 }
 
 // CapabilityConfig defines model preferences for a capability.

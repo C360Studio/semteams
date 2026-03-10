@@ -7,8 +7,10 @@ package agenticmodel_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -871,6 +873,452 @@ func TestBuildChatRequest_ToolCallEmptyContentPreserved(t *testing.T) {
 	}
 	if content != " " {
 		t.Errorf("content = %q, want %q (single space for Gemini compatibility)", content, " ")
+	}
+}
+
+// fastRetryConfig returns a RetryConfig tuned for fast unit tests.
+// MaxAttempts controls how many total tries are made; delays are ms-scale so
+// the retry backoff does not dominate test runtime.
+func fastRetryConfig(maxAttempts int) agenticmodel.RetryConfig {
+	return agenticmodel.RetryConfig{
+		MaxAttempts:    maxAttempts,
+		Backoff:        "exponential",
+		InitialDelay:   "1ms",
+		MaxDelay:       "5ms",
+		RateLimitDelay: "1ms",
+	}
+}
+
+// successResponse returns a minimal OpenAI-compatible JSON response body.
+func successResponse() map[string]any {
+	return map[string]any{
+		"id":      "chatcmpl-ok",
+		"object":  "chat.completion",
+		"created": 1677652288,
+		"model":   "gpt-4",
+		"choices": []map[string]any{
+			{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "OK"},
+				"finish_reason": "stop",
+			},
+		},
+		"usage": map[string]any{
+			"prompt_tokens":     1,
+			"completion_tokens": 1,
+			"total_tokens":      2,
+		},
+	}
+}
+
+// apiErrorResponse returns an OpenAI-compatible JSON error body for the given
+// HTTP status code and message. The server handler must call WriteHeader with
+// the matching status before writing this body.
+func apiErrorResponse(msg, errType, code string) map[string]any {
+	return map[string]any{
+		"error": map[string]any{
+			"message": msg,
+			"type":    errType,
+			"code":    code,
+		},
+	}
+}
+
+// simpleAgentRequest returns a minimal AgentRequest for use in table-driven tests.
+func simpleAgentRequest(id string) agentic.AgentRequest {
+	return agentic.AgentRequest{
+		RequestID: id,
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Hello"}},
+		Model:     "gpt-4",
+	}
+}
+
+// newTestClient creates a Client pointed at serverURL with the given RetryConfig.
+func newTestClient(t *testing.T, serverURL string, cfg agenticmodel.RetryConfig) *agenticmodel.Client {
+	t.Helper()
+	endpoint := &model.EndpointConfig{
+		URL:       serverURL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
+	}
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+	client.SetRetryConfig(cfg)
+	return client
+}
+
+// TestChatCompletion_RateLimitRetry verifies that a 429 on the first request
+// is retried and the second (200) attempt is returned as a successful response.
+func TestChatCompletion_RateLimitRetry(t *testing.T) {
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&requestCount, 1)
+		if n == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(apiErrorResponse("Rate limit exceeded", "tokens", "rate_limit_exceeded"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(successResponse())
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, fastRetryConfig(3))
+	ctx := context.Background()
+	resp, err := client.ChatCompletion(ctx, simpleAgentRequest("req-rl-retry"))
+	if err != nil {
+		t.Fatalf("ChatCompletion() returned unexpected Go error: %v", err)
+	}
+	if resp.Status != "complete" {
+		t.Errorf("Status = %q, want %q; Error = %q", resp.Status, "complete", resp.Error)
+	}
+	if got := atomic.LoadInt32(&requestCount); got != 2 {
+		t.Errorf("server received %d requests, want 2", got)
+	}
+}
+
+// TestChatCompletion_RateLimitExhaustsRetries verifies that when every attempt
+// returns 429, the response status is "error" and all max_attempts were used.
+func TestChatCompletion_RateLimitExhaustsRetries(t *testing.T) {
+	const maxAttempts = 3
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		json.NewEncoder(w).Encode(apiErrorResponse("Rate limit exceeded", "tokens", "rate_limit_exceeded"))
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, fastRetryConfig(maxAttempts))
+	ctx := context.Background()
+	resp, err := client.ChatCompletion(ctx, simpleAgentRequest("req-rl-exhaust"))
+	if err != nil {
+		t.Fatalf("ChatCompletion() returned unexpected Go error: %v", err)
+	}
+	if resp.Status != "error" {
+		t.Errorf("Status = %q, want %q", resp.Status, "error")
+	}
+	if resp.Error == "" {
+		t.Error("Error field should not be empty after exhausted retries")
+	}
+	if got := atomic.LoadInt32(&requestCount); got != maxAttempts {
+		t.Errorf("server received %d requests, want %d", got, maxAttempts)
+	}
+}
+
+// TestChatCompletion_NonRetryable401 verifies that a 401 Unauthorized response
+// is not retried — the server must receive exactly one request.
+func TestChatCompletion_NonRetryable401(t *testing.T) {
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(apiErrorResponse("Invalid API key", "invalid_request_error", "invalid_api_key"))
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, fastRetryConfig(3))
+	ctx := context.Background()
+	resp, err := client.ChatCompletion(ctx, simpleAgentRequest("req-401"))
+	if err != nil {
+		t.Fatalf("ChatCompletion() returned unexpected Go error: %v", err)
+	}
+	if resp.Status != "error" {
+		t.Errorf("Status = %q, want %q", resp.Status, "error")
+	}
+	if got := atomic.LoadInt32(&requestCount); got != 1 {
+		t.Errorf("server received %d requests, want 1 (no retry for 401)", got)
+	}
+}
+
+// TestChatCompletion_NonRetryable400 verifies that a 400 Bad Request response
+// is not retried — the server must receive exactly one request.
+func TestChatCompletion_NonRetryable400(t *testing.T) {
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requestCount, 1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(apiErrorResponse("Bad request", "invalid_request_error", "bad_request"))
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, fastRetryConfig(3))
+	ctx := context.Background()
+	resp, err := client.ChatCompletion(ctx, simpleAgentRequest("req-400"))
+	if err != nil {
+		t.Fatalf("ChatCompletion() returned unexpected Go error: %v", err)
+	}
+	if resp.Status != "error" {
+		t.Errorf("Status = %q, want %q", resp.Status, "error")
+	}
+	if got := atomic.LoadInt32(&requestCount); got != 1 {
+		t.Errorf("server received %d requests, want 1 (no retry for 400)", got)
+	}
+}
+
+// TestChatCompletion_ServerError503Retries verifies that 503 Service Unavailable
+// is retried, succeeding on the third attempt out of three allowed.
+func TestChatCompletion_ServerError503Retries(t *testing.T) {
+	const maxAttempts = 3
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&requestCount, 1)
+		if n < maxAttempts {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(apiErrorResponse("Service temporarily unavailable", "server_error", "service_unavailable"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(successResponse())
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, fastRetryConfig(maxAttempts))
+	ctx := context.Background()
+	resp, err := client.ChatCompletion(ctx, simpleAgentRequest("req-503"))
+	if err != nil {
+		t.Fatalf("ChatCompletion() returned unexpected Go error: %v", err)
+	}
+	if resp.Status != "complete" {
+		t.Errorf("Status = %q, want %q; Error = %q", resp.Status, "complete", resp.Error)
+	}
+	if got := atomic.LoadInt32(&requestCount); got != maxAttempts {
+		t.Errorf("server received %d requests, want %d", got, maxAttempts)
+	}
+}
+
+// TestChatCompletion_WithThrottle verifies that two concurrent ChatCompletion
+// calls through a max_concurrent=1 throttle both complete without deadlock or panic.
+func TestChatCompletion_WithThrottle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Small sleep to ensure both goroutines are alive at the same time,
+		// exercising the throttle serialisation path.
+		time.Sleep(10 * time.Millisecond)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(successResponse())
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
+	}
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+	client.SetRetryConfig(fastRetryConfig(1))
+
+	throttle := agenticmodel.NewEndpointThrottle(0, 1) // 0 rps limit, 1 concurrent
+	client.SetThrottle(throttle)
+
+	ctx := context.Background()
+	errs := make(chan error, 2)
+	statuses := make(chan string, 2)
+
+	for i := range 2 {
+		go func(id int) {
+			resp, goErr := client.ChatCompletion(ctx, simpleAgentRequest(fmt.Sprintf("req-throttle-%d", id)))
+			errs <- goErr
+			statuses <- resp.Status
+		}(i)
+	}
+
+	for range 2 {
+		if goErr := <-errs; goErr != nil {
+			t.Errorf("ChatCompletion() returned unexpected Go error: %v", goErr)
+		}
+		if status := <-statuses; status != "complete" {
+			t.Errorf("Status = %q, want %q", status, "complete")
+		}
+	}
+}
+
+// TestChatCompletion_ThrottleContextCancellation verifies that when the
+// throttle concurrency slot is held and the context deadline expires,
+// ChatCompletion returns an error response (not a Go error, per client contract).
+func TestChatCompletion_ThrottleContextCancellation(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(successResponse())
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
+	}
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+	client.SetRetryConfig(fastRetryConfig(1))
+
+	// Create a throttle with max_concurrent=1 and drain its sole slot manually
+	// so that the next Acquire call must block.
+	throttle := agenticmodel.NewEndpointThrottle(0, 1)
+	held := context.Background()
+	if acquireErr := throttle.Acquire(held); acquireErr != nil {
+		t.Fatalf("Acquire() failed unexpectedly: %v", acquireErr)
+	}
+	// Do NOT Release — slot stays drained for the duration of this test.
+	defer throttle.Release()
+
+	client.SetThrottle(throttle)
+
+	// Short deadline — the blocked Acquire inside ChatCompletion will timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	resp, goErr := client.ChatCompletion(ctx, simpleAgentRequest("req-throttle-cancel"))
+	if goErr != nil {
+		t.Fatalf("ChatCompletion() returned unexpected Go error: %v", goErr)
+	}
+	if resp.Status != "error" {
+		t.Errorf("Status = %q, want %q", resp.Status, "error")
+	}
+	if resp.Error == "" {
+		t.Error("Error field should not be empty after context cancellation in throttle")
+	}
+}
+
+// TestChatCompletion_RateLimitDelay verifies that the rate_limit_delay
+// configuration is applied as an extra wait before the retry after a 429.
+func TestChatCompletion_RateLimitDelay(t *testing.T) {
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&requestCount, 1)
+		if n == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(apiErrorResponse("Rate limit exceeded", "tokens", "rate_limit_exceeded"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(successResponse())
+	}))
+	defer server.Close()
+
+	const rateLimitDelay = 200 * time.Millisecond
+	cfg := agenticmodel.RetryConfig{
+		MaxAttempts:    3,
+		Backoff:        "exponential",
+		InitialDelay:   "1ms",
+		MaxDelay:       "5ms",
+		RateLimitDelay: rateLimitDelay.String(), // "200ms"
+	}
+
+	client := newTestClient(t, server.URL, cfg)
+	ctx := context.Background()
+
+	start := time.Now()
+	resp, err := client.ChatCompletion(ctx, simpleAgentRequest("req-rl-delay"))
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("ChatCompletion() returned unexpected Go error: %v", err)
+	}
+	if resp.Status != "complete" {
+		t.Errorf("Status = %q, want %q", resp.Status, "complete")
+	}
+	// The rate-limit delay alone should account for at least rateLimitDelay.
+	// Allow a generous lower bound to avoid flakiness on slow CI machines.
+	if elapsed < rateLimitDelay {
+		t.Errorf("elapsed %v < rate_limit_delay %v; delay was not applied", elapsed, rateLimitDelay)
+	}
+}
+
+// TestChatCompletion_SetRetryConfig verifies that SetRetryConfig is respected:
+// with MaxAttempts=5 the client succeeds after 4 failures followed by a success.
+func TestChatCompletion_SetRetryConfig(t *testing.T) {
+	const failCount = 4
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&requestCount, 1)
+		if n <= failCount {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(apiErrorResponse("Unavailable", "server_error", "service_unavailable"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(successResponse())
+	}))
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, agenticmodel.RetryConfig{
+		MaxAttempts:    5,
+		Backoff:        "exponential",
+		InitialDelay:   "1ms",
+		MaxDelay:       "5ms",
+		RateLimitDelay: "1ms",
+	})
+
+	ctx := context.Background()
+	resp, err := client.ChatCompletion(ctx, simpleAgentRequest("req-set-retry"))
+	if err != nil {
+		t.Fatalf("ChatCompletion() returned unexpected Go error: %v", err)
+	}
+	if resp.Status != "complete" {
+		t.Errorf("Status = %q, want %q; Error = %q", resp.Status, "complete", resp.Error)
+	}
+	if got := atomic.LoadInt32(&requestCount); got != failCount+1 {
+		t.Errorf("server received %d requests, want %d", got, failCount+1)
+	}
+}
+
+// TestRateLimitDelayDuration verifies the rate_limit_delay config value is
+// used as the actual wait duration between a 429 and the subsequent retry.
+// This is a higher-level alias of TestChatCompletion_RateLimitDelay using a
+// longer delay to ensure measurement noise cannot produce a false pass.
+func TestRateLimitDelayDuration(t *testing.T) {
+	var requestCount int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&requestCount, 1)
+		if n == 1 {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(apiErrorResponse("Rate limit exceeded", "tokens", "rate_limit_exceeded"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(successResponse())
+	}))
+	defer server.Close()
+
+	const configuredDelay = 500 * time.Millisecond
+	cfg := agenticmodel.RetryConfig{
+		MaxAttempts:    3,
+		Backoff:        "exponential",
+		InitialDelay:   "1ms",
+		MaxDelay:       "5ms",
+		RateLimitDelay: configuredDelay.String(), // "500ms"
+	}
+
+	client := newTestClient(t, server.URL, cfg)
+	ctx := context.Background()
+
+	start := time.Now()
+	resp, err := client.ChatCompletion(ctx, simpleAgentRequest("req-rl-dur"))
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("ChatCompletion() returned unexpected Go error: %v", err)
+	}
+	if resp.Status != "complete" {
+		t.Errorf("Status = %q, want %q", resp.Status, "complete")
+	}
+	if elapsed < configuredDelay {
+		t.Errorf("elapsed %v < configured rate_limit_delay %v; delay was not honoured", elapsed, configuredDelay)
 	}
 }
 

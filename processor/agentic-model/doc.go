@@ -113,18 +113,22 @@
 //
 // # Retry Logic
 //
-// The processor implements retry with exponential backoff:
+// The processor implements retry using pkg/retry with exponential backoff and jitter.
 //
-//   - Default: 3 attempts
-//   - Backoff: 100ms, 200ms, 400ms (exponential)
-//   - Retryable: Network errors, 5xx responses
-//   - Non-retryable: Context cancellation, 4xx responses
+//   - Default: 3 attempts, 1s initial delay, 60s max delay
+//   - Tests use 100ms initial delay for fast feedback
+//   - HTTP 429: Detected via openai.APIError.HTTPStatusCode and openai.RequestError.HTTPStatusCode.
+//     An extra rate_limit_delay (default 5s) is prepended before normal backoff begins.
+//   - Retryable: 429, 500, 502, 503, 504, and network errors
+//   - Non-retryable: 400, 401, 403, 404, context cancellation
 //
 // Configuration:
 //
 //	"retry": {
 //	    "max_attempts": 3,
-//	    "backoff": "exponential"
+//	    "initial_delay": "1s",
+//	    "max_delay": "60s",
+//	    "rate_limit_delay": "5s"
 //	}
 //
 // # Token Tracking
@@ -147,12 +151,24 @@
 //	    "consumer_name_suffix": "string (optional)",
 //	    "retry": {
 //	        "max_attempts": "int (default: 3)",
-//	        "backoff": "string (default: exponential)"
+//	        "initial_delay": "string (default: 1s)",
+//	        "max_delay": "string (default: 60s)",
+//	        "rate_limit_delay": "string (default: 5s)"
 //	    },
 //	    "ports": {
 //	        "inputs": [...],
 //	        "outputs": [...]
 //	    }
+//	}
+//
+// Endpoint-level fields in model_registry:
+//
+//	{
+//	    "url": "string",
+//	    "model": "string",
+//	    "api_key_env": "string (optional)",
+//	    "requests_per_minute": "int (0 = unlimited)",
+//	    "max_concurrent": "int (0 = unlimited)"
 //	}
 //
 // # Ports
@@ -171,11 +187,13 @@
 //
 //  1. Receive AgentRequest from agent.request.>
 //  2. Resolve endpoint by model name
-//  3. Convert AgentRequest to OpenAI format
-//  4. Call LLM endpoint with retry logic
-//  5. Convert OpenAI response to AgentResponse
-//  6. Publish to agent.response.{request_id}
-//  7. Acknowledge JetStream message
+//  3. Acquire throttle slot (rate limiter token + concurrency semaphore)
+//  4. Convert AgentRequest to OpenAI format
+//  5. Call LLM endpoint with retry logic
+//  6. Release throttle slot
+//  7. Convert OpenAI response to AgentResponse
+//  8. Publish to agent.response.{request_id}
+//  9. Acknowledge JetStream message
 //
 // # Client Architecture
 //
@@ -257,9 +275,8 @@
 //
 // Current limitations:
 //
-//   - No streaming support (responses are complete documents)
-//   - Retry configuration is global, not per-endpoint
-//   - No request queuing or rate limiting
+//   - Responses are complete documents; streaming is not supported
+//   - Retry configuration (max_attempts, delays) is global, not per-endpoint
 //
 // # See Also
 //

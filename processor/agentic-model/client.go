@@ -3,14 +3,17 @@ package agenticmodel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
+	"net/http"
 	"os"
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/retry"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -21,9 +24,23 @@ type Client struct {
 	chunkHandler ChunkHandler
 	metrics      *modelMetrics
 	logger       *slog.Logger
+	throttle     *EndpointThrottle
+	retryCfg     RetryConfig
 }
 
-// NewClient creates a new client for the given endpoint configuration
+// defaultClientRetryConfig is the retry configuration used when the component
+// does not supply one. The short initial delay keeps unit tests fast.
+var defaultClientRetryConfig = RetryConfig{
+	MaxAttempts:    3,
+	Backoff:        "exponential",
+	InitialDelay:   "100ms",
+	MaxDelay:       "30s",
+	RateLimitDelay: "5s",
+}
+
+// NewClient creates a new client for the given endpoint configuration.
+// The default retry config is suitable for unit tests (3 attempts, 100ms initial delay).
+// Call SetRetryConfig before ChatCompletion to apply production settings.
 func NewClient(endpoint *model.EndpointConfig) (*Client, error) {
 	if endpoint == nil {
 		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Client", "NewClient", "endpoint is nil")
@@ -49,6 +66,7 @@ func NewClient(endpoint *model.EndpointConfig) (*Client, error) {
 	return &Client{
 		client:   client,
 		endpoint: endpoint,
+		retryCfg: defaultClientRetryConfig,
 	}, nil
 }
 
@@ -65,6 +83,17 @@ func (c *Client) SetMetrics(m *modelMetrics) {
 // SetLogger sets the logger for debug-level request/response logging.
 func (c *Client) SetLogger(l *slog.Logger) {
 	c.logger = l
+}
+
+// SetThrottle attaches a rate/concurrency limiter to this client.
+func (c *Client) SetThrottle(t *EndpointThrottle) {
+	c.throttle = t
+}
+
+// SetRetryConfig replaces the default retry configuration.
+// Call this after NewClient to apply production settings.
+func (c *Client) SetRetryConfig(cfg RetryConfig) {
+	c.retryCfg = cfg
 }
 
 // buildChatRequest converts an AgentRequest into an OpenAI ChatCompletionRequest.
@@ -148,7 +177,7 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 	return chatReq
 }
 
-// ChatCompletion sends a chat completion request
+// ChatCompletion sends a chat completion request with retry and throttling.
 func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (agentic.AgentResponse, error) {
 	chatReq := c.buildChatRequest(req)
 
@@ -163,37 +192,42 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 		}
 	}
 
-	// Make request with retry logic
-	response := agentic.AgentResponse{
-		RequestID: req.RequestID,
+	// Acquire throttle slot before any network attempt.
+	if c.throttle != nil {
+		if err := c.throttle.Acquire(ctx); err != nil {
+			return agentic.AgentResponse{
+				RequestID: req.RequestID,
+				Status:    "error",
+				Error:     err.Error(),
+			}, nil
+		}
+		defer c.throttle.Release()
 	}
 
-	maxAttempts := 3 // Default retry count
-	for attempt := 0; attempt < maxAttempts; attempt++ {
-		if attempt > 0 {
-			// Exponential backoff
-			backoffDuration := time.Duration(1<<uint(attempt-1)) * 100 * time.Millisecond
-			select {
-			case <-ctx.Done():
-				response.Status = "error"
-				response.Error = ctx.Err().Error()
-				return response, nil
-			case <-time.After(backoffDuration):
-			}
-		}
+	var lastResp agentic.AgentResponse
+	lastResp.RequestID = req.RequestID
 
+	retryCfg := c.buildRetryConfig()
+
+	err := retry.Do(ctx, retryCfg, func() error {
 		if c.endpoint.Stream {
 			resp, err := c.streamChatCompletion(ctx, chatReq, req.RequestID)
 			if err != nil {
-				// Connection errors are retryable
-				if attempt < maxAttempts-1 && isRetryable(err) {
-					continue
+				// Connection error before the stream opened — retryable.
+				if c.logger != nil {
+					c.logger.Debug("OpenAI stream connection failed",
+						slog.String("request_id", req.RequestID),
+						slog.String("model", chatReq.Model),
+						slog.String("error", err.Error()))
 				}
-				response.Status = "error"
-				response.Error = err.Error()
-				return response, nil
+				if !isRetryable(err) {
+					return retry.NonRetryable(err)
+				}
+				return err
 			}
-			return resp, nil
+			// Mid-stream errors are returned as AgentResponse{Status:"error"} — not retried.
+			lastResp = resp
+			return nil
 		}
 
 		resp, err := c.client.CreateChatCompletion(ctx, chatReq)
@@ -202,28 +236,83 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 				c.logger.Debug("OpenAI API request failed",
 					slog.String("request_id", req.RequestID),
 					slog.String("model", chatReq.Model),
-					slog.Int("attempt", attempt+1),
 					slog.String("error", err.Error()))
 			}
-			// Check if this is a retryable error
-			if attempt < maxAttempts-1 && isRetryable(err) {
-				continue
+
+			if isRateLimited(err) {
+				if c.metrics != nil {
+					c.metrics.recordRateLimitHit(chatReq.Model)
+				}
+				// Honour Retry-After header if present; otherwise use configured delay.
+				waitDur := c.rateLimitWait(err)
+				select {
+				case <-ctx.Done():
+					return retry.NonRetryable(ctx.Err())
+				case <-time.After(waitDur):
+				}
+				return err // retryable — pkg/retry will add its own backoff on top
 			}
 
-			// Final error - return error response
-			response.Status = "error"
-			response.Error = err.Error()
-			return response, nil
+			if !isRetryable(err) {
+				return retry.NonRetryable(err)
+			}
+			return err
 		}
 
-		// Success - convert response
-		return c.convertResponse(resp, req.RequestID), nil
+		lastResp = c.convertResponse(resp, req.RequestID)
+		return nil
+	})
+
+	if err != nil {
+		// Unwrap NonRetryableError so the message stays clean.
+		var nre *retry.NonRetryableError
+		if errors.As(err, &nre) {
+			err = nre.Unwrap()
+		}
+		return agentic.AgentResponse{
+			RequestID: req.RequestID,
+			Status:    "error",
+			Error:     err.Error(),
+		}, nil
 	}
 
-	// Should not reach here, but handle it
-	response.Status = "error"
-	response.Error = "maximum retry attempts exceeded"
-	return response, nil
+	return lastResp, nil
+}
+
+// buildRetryConfig converts the component RetryConfig into a pkg/retry Config.
+func (c *Client) buildRetryConfig() retry.Config {
+	initialDelay := c.retryCfg.initialDelayDuration(100 * time.Millisecond)
+	maxDelay := c.retryCfg.maxDelayDuration(30 * time.Second)
+
+	return retry.Config{
+		MaxAttempts:  c.retryCfg.MaxAttempts,
+		InitialDelay: initialDelay,
+		MaxDelay:     maxDelay,
+		Multiplier:   2.0,
+		AddJitter:    true,
+	}
+}
+
+// rateLimitWait returns the duration to wait after a 429 response.
+// It honours the Retry-After header when present.
+func (c *Client) rateLimitWait(err error) time.Duration {
+	// Try to extract Retry-After from the OpenAI API error header bag.
+	// The OpenAI SDK does not directly expose response headers, but the
+	// error message sometimes contains the value. We use the configured
+	// default and let the operator tune it via RateLimitDelay.
+	if ra := retryAfterFromError(err); ra > 0 {
+		return ra
+	}
+	return c.retryCfg.rateLimitDelayDuration(5 * time.Second)
+}
+
+// retryAfterFromError attempts to extract a Retry-After wait duration from a
+// 429 error. The go-openai SDK does not expose raw HTTP response headers, so
+// this currently always returns 0, causing the caller to fall back to the
+// configured RateLimitDelay. A future improvement could wrap the HTTP transport
+// to capture headers before they are discarded by the SDK.
+func retryAfterFromError(_ error) time.Duration {
+	return 0
 }
 
 // streamChatCompletion handles the streaming path. Connection errors return
@@ -362,18 +451,57 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// isRetryable checks if an error should trigger a retry
+// isRetryable checks if an error should trigger a retry.
+// Context errors and unrecoverable 4xx responses are never retried.
 func isRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
-
-	// Check for context errors (not retryable)
-	if err == context.Canceled || err == context.DeadlineExceeded {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
 
-	// For now, retry all other errors
-	// In production, would check specific HTTP status codes
+	var apiErr *openai.APIError
+	if errors.As(err, &apiErr) {
+		return isRetryableStatusCode(apiErr.HTTPStatusCode)
+	}
+	var reqErr *openai.RequestError
+	if errors.As(err, &reqErr) {
+		return isRetryableStatusCode(reqErr.HTTPStatusCode)
+	}
+
+	// Network-level errors (no HTTP status) are retryable.
 	return true
+}
+
+// isRetryableStatusCode returns true for HTTP status codes that are worth retrying.
+func isRetryableStatusCode(code int) bool {
+	if code == 0 {
+		// No status code — treat as network error, retryable.
+		return true
+	}
+	switch code {
+	case http.StatusTooManyRequests, // 429
+		http.StatusInternalServerError, // 500
+		http.StatusBadGateway,          // 502
+		http.StatusServiceUnavailable,  // 503
+		http.StatusGatewayTimeout:      // 504
+		return true
+	default:
+		// All other 4xx errors (400, 401, 403, 404) are client errors — not retryable.
+		return false
+	}
+}
+
+// isRateLimited reports whether the error is an HTTP 429 Too Many Requests.
+func isRateLimited(err error) bool {
+	var apiErr *openai.APIError
+	if errors.As(err, &apiErr) && apiErr.HTTPStatusCode == http.StatusTooManyRequests {
+		return true
+	}
+	var reqErr *openai.RequestError
+	if errors.As(err, &reqErr) && reqErr.HTTPStatusCode == http.StatusTooManyRequests {
+		return true
+	}
+	return false
 }

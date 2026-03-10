@@ -234,7 +234,7 @@ func (c *Component) waitForStream(ctx context.Context, streamName string) error 
 	retryInterval := 100 * time.Millisecond
 	maxInterval := 2 * time.Second
 
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		_, err := js.Stream(ctx, streamName)
 		if err == nil {
 			return nil
@@ -513,6 +513,14 @@ func (c *Component) getClientForRequest(req agentic.AgentRequest) (*Client, erro
 	}
 	if c.metrics != nil {
 		client.SetMetrics(c.metrics)
+	}
+
+	// Apply production retry settings from component config.
+	client.SetRetryConfig(c.config.Retry)
+
+	// Attach rate/concurrency throttle when the endpoint declares limits.
+	if ep.RequestsPerMinute > 0 || ep.MaxConcurrent > 0 {
+		client.SetThrottle(NewEndpointThrottle(ep.RequestsPerMinute, ep.MaxConcurrent))
 	}
 
 	c.clientCache[cacheKey] = client
