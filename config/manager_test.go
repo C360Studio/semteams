@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/types"
 	"github.com/stretchr/testify/assert"
@@ -225,6 +226,26 @@ func TestConfigManager_PushToKV(t *testing.T) {
 				Config:  json.RawMessage(`{"port": 8080}`),
 			},
 		},
+		ModelRegistry: &model.Registry{
+			Endpoints: map[string]*model.EndpointConfig{
+				"ollama-coder": {
+					Provider:  "ollama",
+					Model:     "qwen2.5-coder:7b",
+					URL:       "http://localhost:11434/v1",
+					MaxTokens: 32768,
+				},
+			},
+			Capabilities: map[string]*model.CapabilityConfig{
+				"agent-work": {
+					Preferred:     []string{"ollama-coder"},
+					RequiresTools: false,
+				},
+			},
+			Defaults: model.DefaultsConfig{
+				Model:      "ollama-coder",
+				Capability: "agent-work",
+			},
+		},
 	}
 
 	// Create test NATS client with JetStream enabled
@@ -284,6 +305,119 @@ func TestConfigManager_PushToKV(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "test-org", platformConfig.Org)
 	assert.Equal(t, "test-id", platformConfig.ID)
+
+	// Verify model registry was pushed
+	entry, err = cm.kv.Get(ctx, "model_registry")
+	require.NoError(t, err)
+
+	var registry model.Registry
+	err = json.Unmarshal(entry.Value(), &registry)
+	require.NoError(t, err)
+	assert.Contains(t, registry.Endpoints, "ollama-coder")
+	assert.Equal(t, "ollama", registry.Endpoints["ollama-coder"].Provider)
+	assert.Equal(t, 32768, registry.Endpoints["ollama-coder"].MaxTokens)
+	assert.Contains(t, registry.Capabilities, "agent-work")
+	assert.Equal(t, "ollama-coder", registry.Defaults.Model)
+}
+
+func TestConfigManager_ModelRegistryKVUpdate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	cfg := &Config{
+		Version: "1.0.0",
+		Platform: PlatformConfig{
+			Org:  "c360",
+			ID:   "test-platform",
+			Type: "test",
+		},
+		Services:   make(types.ServiceConfigs),
+		Components: make(ComponentConfigs),
+		ModelRegistry: &model.Registry{
+			Endpoints: map[string]*model.EndpointConfig{
+				"ollama-coder": {
+					Provider:  "ollama",
+					Model:     "qwen2.5-coder:7b",
+					URL:       "http://localhost:11434/v1",
+					MaxTokens: 32768,
+				},
+			},
+			Capabilities: map[string]*model.CapabilityConfig{
+				"agent-work": {
+					Preferred:     []string{"ollama-coder"},
+					RequiresTools: false,
+				},
+			},
+			Defaults: model.DefaultsConfig{
+				Model:      "ollama-coder",
+				Capability: "agent-work",
+			},
+		},
+	}
+
+	client := natsclient.NewTestClient(t, natsclient.WithJetStream())
+
+	cm, err := NewConfigManager(cfg, client.Client, nil)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err = cm.PushToKV(ctx)
+	require.NoError(t, err)
+
+	err = cm.Start(ctx)
+	require.NoError(t, err)
+	defer cm.Stop(5 * time.Second)
+
+	// Subscribe to model_registry updates
+	updates := cm.OnChange("model_registry")
+
+	// Drain initial config from OnChange
+	select {
+	case <-updates:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timeout waiting for initial config from OnChange")
+	}
+
+	// Update model registry via KV (simulating external mutation)
+	updatedRegistry := &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
+			"claude-4": {
+				Provider:  "anthropic",
+				Model:     "claude-sonnet-4-20250514",
+				MaxTokens: 200000,
+			},
+		},
+		Capabilities: map[string]*model.CapabilityConfig{
+			"agent-work": {
+				Preferred:     []string{"claude-4"},
+				RequiresTools: false,
+			},
+		},
+		Defaults: model.DefaultsConfig{
+			Model:      "claude-4",
+			Capability: "agent-work",
+		},
+	}
+	data, err := json.Marshal(updatedRegistry)
+	require.NoError(t, err)
+	_, err = cm.kv.Put(ctx, "model_registry", data)
+	require.NoError(t, err)
+
+	// Should receive update via watcher
+	select {
+	case update := <-updates:
+		assert.Equal(t, "model_registry", update.Path)
+		currentCfg := update.Config.Get()
+		require.NotNil(t, currentCfg.ModelRegistry)
+		assert.Contains(t, currentCfg.ModelRegistry.Endpoints, "claude-4")
+		assert.Equal(t, "anthropic", currentCfg.ModelRegistry.Endpoints["claude-4"].Provider)
+		assert.Equal(t, "claude-4", currentCfg.ModelRegistry.Defaults.Model)
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for model_registry update")
+	}
 }
 
 func TestConfigManager_MultipleSubscribers(t *testing.T) {

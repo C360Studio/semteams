@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/types"
 	"github.com/nats-io/nats.go/jetstream"
@@ -177,10 +178,11 @@ func (cm *Manager) Start(ctx context.Context) error {
 	// Watch specific patterns (2-part keys only)
 	// Use * for single-level wildcard to exclude property-level keys
 	patterns := []string{
-		"services.*",   // Matches services.metrics but NOT services.metrics.enabled
-		"components.*", // Matches components.udp but NOT components.udp.port
-		"platform",     // Single key
-		"nats",         // Single key
+		"services.*",     // Matches services.metrics but NOT services.metrics.enabled
+		"components.*",   // Matches components.udp but NOT components.udp.port
+		"platform",       // Single key
+		"nats",           // Single key
+		"model_registry", // Single key
 	}
 
 	// Create watchers with cleanup on error
@@ -446,6 +448,17 @@ func (cm *Manager) updateConfig(key string, value []byte) error {
 			return fmt.Errorf("parse NATS config: %w", err)
 		}
 
+	case "model_registry":
+		if len(value) == 0 {
+			currentConfig.ModelRegistry = nil
+		} else {
+			var registry model.Registry
+			if err := json.Unmarshal(value, &registry); err != nil {
+				return fmt.Errorf("parse model_registry config: %w", err)
+			}
+			currentConfig.ModelRegistry = &registry
+		}
+
 	// Graph and ObjectStore config moved to components
 
 	default:
@@ -556,7 +569,14 @@ func (cm *Manager) PushToKV(ctx context.Context) error {
 		}
 	}
 
-	// Graph and ObjectStore config moved to components
+	// Model Registry
+	if cfg.ModelRegistry != nil {
+		if data, err := json.Marshal(cfg.ModelRegistry); err == nil && len(data) > 2 {
+			if _, err := cm.kvStore.Put(ctx, "model_registry", data); err != nil {
+				return fmt.Errorf("push model_registry: %w", err)
+			}
+		}
+	}
 
 	return nil
 }
