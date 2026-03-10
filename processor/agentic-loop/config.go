@@ -34,12 +34,10 @@ type Config struct {
 // ContextConfig represents configuration for context memory management.
 // Model context limits are resolved from the unified model registry (component.Dependencies.ModelRegistry).
 type ContextConfig struct {
-	Enabled            bool    `json:"enabled" description:"Enable context memory management"`
-	CompactThreshold   float64 `json:"compact_threshold" description:"Utilization threshold (0.01-1.0) that triggers context compaction"`
-	ToolResultMaxAge   int     `json:"tool_result_max_age" description:"Maximum age in iterations before tool results are garbage collected"`
-	HeadroomTokens     int     `json:"headroom_tokens" description:"Token headroom to reserve for model responses"`
-	SummarizationModel string  `json:"summarization_model" description:"Model alias to use for context summarization"`
-
+	Enabled          bool    `json:"enabled" description:"Enable context memory management"`
+	CompactThreshold float64 `json:"compact_threshold" description:"Utilization threshold (0.01-1.0) that triggers context compaction"`
+	ToolResultMaxAge int     `json:"tool_result_max_age" description:"Maximum age in iterations before tool results are garbage collected"`
+	HeadroomTokens   int     `json:"headroom_tokens" description:"Token headroom to reserve for model responses"`
 	// Multi-agent context budget fields
 	MaxBudgetTokens  int      `json:"max_budget_tokens,omitempty" description:"Hard token limit for context budget (overrides model limits when set)"`
 	SliceOnBudget    bool     `json:"slice_on_budget,omitempty" description:"Enable context slicing when budget is exceeded"`
@@ -126,22 +124,16 @@ func (c ContextConfig) Validate() error {
 		return errs.WrapInvalid(fmt.Errorf("headroom_tokens must be non-negative"), "ContextConfig", "Validate", "check headroom_tokens")
 	}
 
-	// Validate SummarizationModel: must not be empty
-	if c.SummarizationModel == "" {
-		return errs.WrapInvalid(fmt.Errorf("summarization_model is required when context management is enabled"), "ContextConfig", "Validate", "check summarization_model")
-	}
-
 	return nil
 }
 
 // DefaultContextConfig returns the default context configuration
 func DefaultContextConfig() ContextConfig {
 	return ContextConfig{
-		Enabled:            true,
-		CompactThreshold:   0.60,
-		ToolResultMaxAge:   3,
-		HeadroomTokens:     6400,
-		SummarizationModel: "fast",
+		Enabled:          true,
+		CompactThreshold: 0.60,
+		ToolResultMaxAge: 3,
+		HeadroomTokens:   6400,
 	}
 }
 

@@ -116,6 +116,13 @@ type RegistryReader interface {
 
 	// ListEndpoints returns all configured endpoint names sorted alphabetically.
 	ListEndpoints() []string
+
+	// ResolveSummarization returns the endpoint name to use for context summarization.
+	// Resolution order:
+	//  1. Explicit "summarization" capability if configured
+	//  2. Endpoint with the largest MaxTokens (best suited for long context summarization)
+	//  3. The default endpoint as final fallback
+	ResolveSummarization() string
 }
 
 // Validate checks the registry configuration for consistency.
@@ -294,6 +301,40 @@ func (r *Registry) ListEndpoints() []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// ResolveSummarization returns the endpoint name best suited for summarization.
+func (r *Registry) ResolveSummarization() string {
+	// 1. Explicit "summarization" capability takes priority.
+	if _, ok := r.Capabilities["summarization"]; ok {
+		if name := r.Resolve("summarization"); name != "" {
+			return name
+		}
+	}
+
+	// 2. Find the endpoint with the largest MaxTokens. Sort endpoint names
+	// alphabetically before iterating so ties are broken deterministically.
+	names := make([]string, 0, len(r.Endpoints))
+	for name := range r.Endpoints {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var bestName string
+	var bestTokens int
+	for _, name := range names {
+		ep := r.Endpoints[name]
+		if ep.MaxTokens > bestTokens {
+			bestTokens = ep.MaxTokens
+			bestName = name
+		}
+	}
+	if bestName != "" {
+		return bestName
+	}
+
+	// 3. Fall back to the configured default.
+	return r.Defaults.Model
 }
 
 // buildChain constructs the full endpoint chain for a capability,

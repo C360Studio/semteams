@@ -697,6 +697,104 @@ func TestPricingFieldsValidation(t *testing.T) {
 	}
 }
 
+func TestResolveSummarization(t *testing.T) {
+	tests := []struct {
+		name     string
+		registry *Registry
+		want     string
+	}{
+		{
+			name: "explicit summarization capability returns preferred endpoint",
+			registry: &Registry{
+				Capabilities: map[string]*CapabilityConfig{
+					"summarization": {
+						Description: "Long context summarization",
+						Preferred:   []string{"claude-sonnet"},
+					},
+				},
+				Endpoints: map[string]*EndpointConfig{
+					"claude-sonnet": {
+						Provider: "anthropic", Model: "claude-sonnet-4-20250514", MaxTokens: 200000,
+					},
+					"qwen-fast": {
+						Provider: "ollama", URL: "http://localhost:11434/v1", Model: "qwen3:1.7b", MaxTokens: 32768,
+					},
+				},
+				Defaults: DefaultsConfig{Model: "qwen-fast"},
+			},
+			want: "claude-sonnet",
+		},
+		{
+			name: "no capability, multiple endpoints returns largest MaxTokens",
+			registry: &Registry{
+				Endpoints: map[string]*EndpointConfig{
+					"large": {
+						Provider: "anthropic", Model: "claude-sonnet-4-20250514", MaxTokens: 200000,
+					},
+					"medium": {
+						Provider: "ollama", URL: "http://localhost:11434/v1", Model: "qwen3:30b", MaxTokens: 131072,
+					},
+					"small": {
+						Provider: "ollama", URL: "http://localhost:11434/v1", Model: "qwen3:1.7b", MaxTokens: 32768,
+					},
+				},
+				Defaults: DefaultsConfig{Model: "small"},
+			},
+			want: "large",
+		},
+		{
+			name: "no capability, tie in MaxTokens resolves alphabetically",
+			registry: &Registry{
+				Endpoints: map[string]*EndpointConfig{
+					"alpha": {
+						Provider: "ollama", URL: "http://localhost:11434/v1", Model: "model-a", MaxTokens: 128000,
+					},
+					"beta": {
+						Provider: "ollama", URL: "http://localhost:11434/v1", Model: "model-b", MaxTokens: 128000,
+					},
+					"gamma": {
+						Provider: "ollama", URL: "http://localhost:11434/v1", Model: "model-c", MaxTokens: 128000,
+					},
+				},
+				Defaults: DefaultsConfig{Model: "gamma"},
+			},
+			// All tied at 128000; alphabetically first is "alpha".
+			want: "alpha",
+		},
+		{
+			name: "single endpoint returns that endpoint",
+			registry: &Registry{
+				Endpoints: map[string]*EndpointConfig{
+					"only": {
+						Provider: "ollama", URL: "http://localhost:11434/v1", Model: "llama3.2", MaxTokens: 128000,
+					},
+				},
+				Defaults: DefaultsConfig{Model: "only"},
+			},
+			want: "only",
+		},
+		{
+			name: "no endpoints falls back to default model",
+			registry: &Registry{
+				// Bypass Validate() to test the defensive fallback path directly.
+				// Endpoints is intentionally empty here.
+				Endpoints: map[string]*EndpointConfig{},
+				Defaults:  DefaultsConfig{Model: "fallback-default"},
+			},
+			want: "fallback-default",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.registry.ResolveSummarization()
+			if got != tt.want {
+				t.Fatalf("ResolveSummarization() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 // helpers
 
 func contains(s, substr string) bool {

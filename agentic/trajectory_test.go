@@ -124,13 +124,24 @@ func TestTrajectoryStep_Validation(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "valid context_compaction step",
+			step: agentic.TrajectoryStep{
+				Timestamp: time.Now(),
+				StepType:  "context_compaction",
+				Response:  "Summary of conversation so far",
+				TokensIn:  5000,
+				TokensOut: 800,
+			},
+			wantErr: false,
+		},
+		{
 			name: "invalid step type",
 			step: agentic.TrajectoryStep{
 				Timestamp: time.Now(),
 				StepType:  "invalid",
 			},
 			wantErr: true,
-			errMsg:  "step_type must be one of: model_call, tool_call",
+			errMsg:  "step_type must be one of: model_call, tool_call, context_compaction",
 		},
 		{
 			name: "empty step type",
@@ -139,7 +150,7 @@ func TestTrajectoryStep_Validation(t *testing.T) {
 				StepType:  "",
 			},
 			wantErr: true,
-			errMsg:  "step_type must be one of: model_call, tool_call",
+			errMsg:  "step_type must be one of: model_call, tool_call, context_compaction",
 		},
 		{
 			name: "zero timestamp",

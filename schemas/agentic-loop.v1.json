@@ -58,10 +58,6 @@
           "type": "boolean",
           "description": "Enable context slicing when budget is exceeded"
         },
-        "summarization_model": {
-          "type": "string",
-          "description": "Model alias to use for context summarization"
-        },
         "tool_result_max_age": {
           "type": "number",
           "description": "Maximum age in iterations before tool results are garbage collected"

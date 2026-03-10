@@ -10,8 +10,11 @@ import (
 	"sync"
 	"time"
 
+	"os"
+
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	"github.com/c360studio/semstreams/graph/llm"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
@@ -121,6 +124,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 	handler := NewMessageHandler(config, loopOpts...)
 
+	// Wire LLM-backed summarizer for context compaction if model registry is available
+	if deps.ModelRegistry != nil && config.Context.Enabled {
+		if summarizer, modelName := createSummarizer(deps, deps.GetLogger()); summarizer != nil {
+			handler.SetSummarizer(summarizer, modelName)
+		}
+	}
+
 	comp := &Component{
 		config:         config,
 		handler:        handler,
@@ -134,6 +144,42 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	return comp, nil
+}
+
+// createSummarizer resolves the summarization endpoint from the model registry
+// and returns an LLM-backed Summarizer plus the resolved endpoint name.
+// Returns (nil, "") if the endpoint cannot be resolved.
+func createSummarizer(deps component.Dependencies, logger *slog.Logger) (Summarizer, string) {
+	endpointName := deps.ModelRegistry.ResolveSummarization()
+	if endpointName == "" {
+		logger.Debug("no summarization endpoint available, using stub compactor")
+		return nil, ""
+	}
+
+	ep := deps.ModelRegistry.GetEndpoint(endpointName)
+	if ep == nil {
+		logger.Warn("summarization endpoint not found in registry", "endpoint", endpointName)
+		return nil, ""
+	}
+
+	apiKey := ""
+	if ep.APIKeyEnv != "" {
+		apiKey = os.Getenv(ep.APIKeyEnv)
+	}
+
+	client, err := llm.NewOpenAIClient(llm.OpenAIConfig{
+		BaseURL: ep.URL,
+		Model:   ep.Model,
+		APIKey:  apiKey,
+		Logger:  logger,
+	})
+	if err != nil {
+		logger.Warn("failed to create summarization LLM client", "error", err, "endpoint", endpointName)
+		return nil, ""
+	}
+
+	logger.Info("context compaction using LLM summarizer", "endpoint", endpointName, "model", ep.Model)
+	return NewLLMSummarizer(client, logger), endpointName
 }
 
 // Meta returns component metadata

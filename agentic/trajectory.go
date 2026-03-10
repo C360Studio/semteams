@@ -25,8 +25,8 @@ type TrajectoryStep struct {
 
 // Validate checks if the TrajectoryStep is valid
 func (s TrajectoryStep) Validate() error {
-	if s.StepType != "model_call" && s.StepType != "tool_call" {
-		return fmt.Errorf("step_type must be one of: model_call, tool_call")
+	if s.StepType != "model_call" && s.StepType != "tool_call" && s.StepType != "context_compaction" {
+		return fmt.Errorf("step_type must be one of: model_call, tool_call, context_compaction")
 	}
 	if s.Timestamp.IsZero() {
 		return fmt.Errorf("timestamp required")

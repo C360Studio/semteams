@@ -70,6 +70,58 @@ func NewMessageHandler(config Config, loopManagerOpts ...LoopManagerOption) *Mes
 	}
 }
 
+// SetSummarizer injects an LLM-backed summarizer into the compactor.
+// When set, context compaction generates real summaries instead of stubs.
+// modelName is the resolved endpoint name reported in CompactionResult.
+func (h *MessageHandler) SetSummarizer(s Summarizer, modelName string) {
+	h.compactor = NewCompactor(h.config.Context, WithSummarizer(s), WithModelName(modelName), WithCompactorLogger(h.logger))
+}
+
+// maybeCompact checks if context compaction is needed and performs it,
+// recording both a context event and a trajectory step.
+func (h *MessageHandler) maybeCompact(ctx context.Context, cm *ContextManager, loopID string, iteration int, result *HandlerResult) {
+	if !h.compactor.ShouldCompact(cm) {
+		return
+	}
+
+	result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
+		Type:        "compaction_starting",
+		LoopID:      loopID,
+		Iteration:   iteration,
+		Utilization: cm.Utilization(),
+	})
+
+	compactResult, compactErr := h.compactor.Compact(ctx, cm)
+	if compactErr != nil {
+		return
+	}
+
+	tokensSaved := compactResult.EvictedTokens - compactResult.NewTokens
+	result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
+		Type:        "compaction_complete",
+		LoopID:      loopID,
+		Iteration:   iteration,
+		TokensSaved: tokensSaved,
+		Summary:     compactResult.Summary,
+	})
+
+	// Record compaction in trajectory for debugging
+	compactionStep := agentic.TrajectoryStep{
+		Timestamp: time.Now(),
+		StepType:  "context_compaction",
+		Response:  compactResult.Summary,
+		TokensIn:  compactResult.EvictedTokens,
+		TokensOut: compactResult.NewTokens,
+		Model:     compactResult.Model,
+	}
+	result.TrajectorySteps = append(result.TrajectorySteps, compactionStep)
+	if _, addErr := h.trajectoryManager.AddStep(loopID, compactionStep); addErr != nil {
+		h.logger.Warn("failed to add compaction trajectory step",
+			slog.String("loop_id", loopID),
+			slog.String("error", addErr.Error()))
+	}
+}
+
 // SetLogger sets the logger for the handler
 func (h *MessageHandler) SetLogger(logger *slog.Logger) {
 	h.logger = logger
@@ -430,27 +482,7 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	if cm != nil && hasContent {
 		_ = cm.AddMessage(RegionRecentHistory, response.Message)
 
-		// Check if compaction is needed
-		if h.compactor.ShouldCompact(cm) {
-			result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
-				Type:        "compaction_starting",
-				LoopID:      loopID,
-				Iteration:   entity.Iterations,
-				Utilization: cm.Utilization(),
-			})
-
-			// Perform compaction
-			compactResult, compactErr := h.compactor.Compact(ctx, cm)
-			if compactErr == nil {
-				result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
-					Type:        "compaction_complete",
-					LoopID:      loopID,
-					Iteration:   entity.Iterations,
-					TokensSaved: compactResult.EvictedTokens - compactResult.NewTokens,
-					Summary:     compactResult.Summary,
-				})
-			}
-		}
+		h.maybeCompact(ctx, cm, loopID, entity.Iterations, &result)
 	}
 
 	switch response.Status {

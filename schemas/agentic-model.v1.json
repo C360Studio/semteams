@@ -36,10 +36,28 @@
           ],
           "category": "advanced"
         },
+        "initial_delay": {
+          "type": "string",
+          "description": "Initial retry delay",
+          "default": "1s",
+          "category": "advanced"
+        },
         "max_attempts": {
           "type": "number",
           "description": "Maximum retry attempts",
           "default": 3,
+          "category": "advanced"
+        },
+        "max_delay": {
+          "type": "string",
+          "description": "Maximum retry delay",
+          "default": "60s",
+          "category": "advanced"
+        },
+        "rate_limit_delay": {
+          "type": "string",
+          "description": "Initial delay when rate limited (429)",
+          "default": "5s",
           "category": "advanced"
         }
       }
