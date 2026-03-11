@@ -789,6 +789,9 @@ func (h *MessageHandler) handleToolsComplete(
 		if content == "" && r.Error != "" {
 			content = fmt.Sprintf("Tool error: %s", r.Error)
 		}
+		if content == "" {
+			content = "(empty result)"
+		}
 		toolMessages[i] = agentic.ChatMessage{
 			Role:       "tool",
 			ToolCallID: r.CallID,

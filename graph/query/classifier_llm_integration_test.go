@@ -4,6 +4,7 @@ package query
 
 import (
 	"context"
+	"net"
 	"testing"
 	"time"
 
@@ -17,8 +18,18 @@ import (
 //
 // Run with: go test -tags integration -run TestLLMClassifier_Integration ./graph/query/...
 
+func requireOllama(t *testing.T) {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", "localhost:11434", 2*time.Second)
+	if err != nil {
+		t.Skip("Ollama not available at localhost:11434, skipping")
+	}
+	conn.Close()
+}
+
 func newOllamaClient(t *testing.T) llm.Client {
 	t.Helper()
+	requireOllama(t)
 	client, err := llm.NewOpenAIClient(llm.OpenAIConfig{
 		BaseURL:    "http://localhost:11434/v1",
 		Model:      "qwen3:14b",
