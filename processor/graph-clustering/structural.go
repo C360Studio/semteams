@@ -46,7 +46,7 @@ func (c *Component) runStructuralComputation(ctx context.Context) (*structural.K
 		return nil, nil, nil // Not initialized
 	}
 
-	c.logger.Info("running structural computation")
+	c.logger.Debug("running structural computation")
 	start := time.Now()
 
 	// Compute k-core index
@@ -81,7 +81,7 @@ func (c *Component) runStructuralComputation(ctx context.Context) (*structural.K
 		slog.Int("entity_count", pivotIndex.EntityCount),
 		slog.Int("pivot_count", len(pivotIndex.Pivots)))
 
-	c.logger.Info("structural computation complete",
+	c.logger.Debug("structural computation complete",
 		slog.Duration("duration", time.Since(start)),
 		slog.Int("entities", kcoreIndex.EntityCount),
 		slog.Int("max_core", kcoreIndex.MaxCore),

@@ -881,7 +881,7 @@ func (w *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
 	consumerName := fmt.Sprintf("ws-output-%s", sanitizedSubject)
 
-	w.logger.Info("Setting up JetStream consumer",
+	w.logger.Debug("Setting up JetStream consumer",
 		"stream", streamName,
 		"consumer", consumerName,
 		"filter_subject", port.Subject)
@@ -909,7 +909,7 @@ func (w *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 			fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
-	w.logger.Info("WebSocket output subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
+	w.logger.Debug("WebSocket output subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
 	return nil
 }
 

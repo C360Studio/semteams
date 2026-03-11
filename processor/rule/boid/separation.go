@@ -133,7 +133,7 @@ func (r *SeparationRule) EvaluateEntityState(entityState *gtypes.EntityState) bo
 
 	r.markTriggered()
 
-	r.logger.Info("Separation rule triggered",
+	r.logger.Debug("Separation rule triggered",
 		"loop_id", pos.LoopID,
 		"role", pos.Role,
 		"avoid_count", len(avoidEntities),

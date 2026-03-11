@@ -461,7 +461,7 @@ func (cm *ContextManager) SliceForBudget(budget int, slice ContextSlice) error {
 	// Repair orphaned tool pairs created by the eviction above
 	repaired := cm.repairToolPairsLocked()
 
-	cm.logger.Info("Context sliced for budget",
+	cm.logger.Debug("Context sliced for budget",
 		"loop_id", cm.loopID,
 		"budget", budget,
 		"evicted_tokens", evicted,

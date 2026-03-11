@@ -242,7 +242,7 @@ func (c *Component) runAnomalyDetection(ctx context.Context, kcoreIndex *structu
 		return nil // Not initialized
 	}
 
-	c.logger.Info("running anomaly detection")
+	c.logger.Debug("running anomaly detection")
 	start := time.Now()
 
 	// Build structural indices bundle
@@ -291,7 +291,7 @@ func (c *Component) runAnomalyDetection(ctx context.Context, kcoreIndex *structu
 		anomalyCount = len(result.Anomalies)
 	}
 
-	c.logger.Info("anomaly detection complete",
+	c.logger.Debug("anomaly detection complete",
 		slog.Duration("duration", time.Since(start)),
 		slog.Int("anomalies_found", anomalyCount))
 

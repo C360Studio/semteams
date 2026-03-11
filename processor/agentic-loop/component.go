@@ -670,7 +670,7 @@ func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
 		return
 	}
 
-	c.logger.Info("Processing task message",
+	c.logger.Debug("Processing task message",
 		slog.String("task_id", task.TaskID),
 		slog.String("role", task.Role),
 		slog.String("model", task.Model))
@@ -1138,7 +1138,7 @@ func (c *Component) handleSignalMessage(ctx context.Context, data []byte) {
 	}
 	signal := *signalPtr
 
-	c.logger.Info("Processing signal message",
+	c.logger.Debug("Processing signal message",
 		slog.String("signal_id", signal.SignalID),
 		slog.String("type", signal.Type),
 		slog.String("loop_id", signal.LoopID),

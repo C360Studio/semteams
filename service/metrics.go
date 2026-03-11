@@ -260,7 +260,7 @@ func (m *Metrics) ApplyConfigUpdate(changes map[string]any) error {
 	if enabled, ok := changes["enabled"].(bool); ok {
 		// The enabled state is managed by Manager
 		// This is just for tracking
-		m.logger.Info("Metrics enabled state changed", "enabled", enabled)
+		m.logger.Debug("Metrics enabled state changed", "enabled", enabled)
 	}
 
 	return nil

@@ -267,7 +267,7 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
 	consumerName := fmt.Sprintf("json-generic-%s", sanitizedSubject)
 
-	p.logger.Info("Setting up JetStream consumer",
+	p.logger.Debug("Setting up JetStream consumer",
 		"stream", streamName,
 		"consumer", consumerName,
 		"filter_subject", port.Subject)
@@ -296,7 +296,7 @@ func (p *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 			fmt.Sprintf("consumer setup for stream %s", streamName))
 	}
 
-	p.logger.Info("JSON generic subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
+	p.logger.Debug("JSON generic subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
 	return nil
 }
 

@@ -357,7 +357,7 @@ func (h *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
 	consumerName := fmt.Sprintf("httppost-output-%s", sanitizedSubject)
 
-	h.logger.Info("Setting up JetStream consumer",
+	h.logger.Debug("Setting up JetStream consumer",
 		"stream", streamName,
 		"consumer", consumerName,
 		"filter_subject", port.Subject)
@@ -386,7 +386,7 @@ func (h *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 			fmt.Sprintf("consumer setup for stream %s", streamName))
 	}
 
-	h.logger.Info("HTTP POST output subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
+	h.logger.Debug("HTTP POST output subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
 	return nil
 }
 

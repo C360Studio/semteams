@@ -74,7 +74,7 @@ func (c *Component) handleCompactionEvent(ctx context.Context, data []byte) {
 
 // handleCompactionComplete processes compaction completion events
 func (c *Component) handleCompactionComplete(ctx context.Context, event ContextEvent) {
-	c.logger.Info("Compaction complete",
+	c.logger.Debug("Compaction complete",
 		"loop_id", event.LoopID,
 		"iteration", event.Iteration,
 		"tokens_saved", event.TokensSaved,
@@ -112,7 +112,7 @@ func (c *Component) handleCompactionComplete(ctx context.Context, event ContextE
 
 // handleCompactionStarting processes compaction start events
 func (c *Component) handleCompactionStarting(ctx context.Context, event ContextEvent) {
-	c.logger.Info("Compaction starting",
+	c.logger.Debug("Compaction starting",
 		"loop_id", event.LoopID,
 		"iteration", event.Iteration,
 		"utilization", event.Utilization)
@@ -160,7 +160,7 @@ func (c *Component) handleCompactionStarting(ctx context.Context, event ContextE
 
 // handleGCComplete processes garbage collection completion events
 func (c *Component) handleGCComplete(_ context.Context, event ContextEvent) {
-	c.logger.Info("Garbage collection complete",
+	c.logger.Debug("Garbage collection complete",
 		"loop_id", event.LoopID,
 		"iteration", event.Iteration)
 

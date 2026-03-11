@@ -82,7 +82,7 @@ func (c *PivotComputer) Compute(ctx context.Context) (*PivotIndex, error) {
 	}
 
 	elapsed := time.Since(startTime)
-	c.logger.Info("pivot index computation complete",
+	c.logger.Debug("pivot index computation complete",
 		slog.Int("entity_count", len(entityIDs)),
 		slog.Int("pivot_count", len(pivots)),
 		slog.Duration("elapsed", elapsed))

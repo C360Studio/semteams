@@ -330,7 +330,7 @@ func (w *Worker) saveAndNotify(entityID string, vector []float32) {
 		return
 	}
 
-	w.logger.Info("Embedding generated successfully", "entity_id", entityID, "dimensions", dimensions)
+	w.logger.Debug("Embedding generated successfully", "entity_id", entityID, "dimensions", dimensions)
 
 	if w.onGenerated != nil {
 		w.onGenerated(entityID, vector)

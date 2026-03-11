@@ -184,7 +184,7 @@ func (g *Generator) GenerateForEntity(ctx context.Context, entityID string) erro
 		return errs.Wrap(err, "Generator", "GenerateForEntity", "store and publish")
 	}
 
-	g.logger.Info("Generated OASF record",
+	g.logger.Debug("Generated OASF record",
 		slog.String("entity_id", entityID),
 		slog.String("agent_name", record.Name),
 		slog.Int("skill_count", len(record.Skills)))

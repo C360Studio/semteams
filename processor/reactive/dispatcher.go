@@ -205,7 +205,7 @@ func (d *Dispatcher) dispatchPublishAsync(
 		}
 	}
 
-	d.logger.Info("Published async action",
+	d.logger.Debug("Published async action",
 		"subject", action.PublishSubject,
 		"task_id", taskID,
 		"execution_id", execID)

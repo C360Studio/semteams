@@ -229,7 +229,7 @@ func (cm *ComponentManager) Initialize() error {
 				continue
 			}
 
-			cm.logger.Info("Component created from config",
+			cm.logger.Debug("Component created from config",
 				"instance", instanceName,
 				"factory", componentConfig.Name,
 				"type", componentConfig.Type)
@@ -348,7 +348,7 @@ func (cm *ComponentManager) startAllComponents(ctx context.Context) {
 func (cm *ComponentManager) startComponentAsync(name string, mc *component.ManagedComponent, lc component.LifecycleComponent) {
 	defer cm.wg.Done()
 
-	cm.logger.Info("Starting component", "name", name, "type", mc.Component.Meta().Type)
+	cm.logger.Debug("Starting component", "name", name, "type", mc.Component.Meta().Type)
 
 	if err := lc.Start(mc.Context); err != nil {
 		cm.updateComponentState(name, component.StateFailed, err)
@@ -361,7 +361,7 @@ func (cm *ComponentManager) startComponentAsync(name string, mc *component.Manag
 	}
 
 	cm.updateComponentState(name, component.StateStarted, nil)
-	cm.logger.Info("Component started successfully", "name", name, "type", mc.Component.Meta().Type)
+	cm.logger.Debug("Component started successfully", "name", name, "type", mc.Component.Meta().Type)
 	if cm.onComponentStart != nil {
 		cm.onComponentStart(mc.Context, name, mc.Component)
 	}
@@ -936,13 +936,13 @@ func (cm *ComponentManager) watchConfigUpdates(ctx context.Context) {
 				// Get the new config for this component
 				fullConfig := update.Config.Get()
 				if compConfig, exists := fullConfig.Components[componentName]; exists {
-					cm.logger.Info("Processing component config update",
+					cm.logger.Debug("Processing component config update",
 						"component", componentName,
 						"enabled", compConfig.Enabled)
 					cm.handleComponentConfigUpdate(ctx, componentName, compConfig)
 				} else {
 					// Component was removed
-					cm.logger.Info("Component removed from config", "component", componentName)
+					cm.logger.Debug("Component removed from config", "component", componentName)
 					cm.handleComponentRemoval(ctx, componentName)
 				}
 			}
@@ -963,7 +963,7 @@ func (cm *ComponentManager) handleComponentConfigUpdate(ctx context.Context, nam
 	if cfg.Enabled {
 		if exists {
 			// Component exists - attempt graceful restart with new config
-			cm.logger.Info("Component config update detected",
+			cm.logger.Debug("Component config update detected",
 				"component", name,
 				"action", "restart")
 
@@ -978,7 +978,7 @@ func (cm *ComponentManager) handleComponentConfigUpdate(ctx context.Context, nam
 			}
 		} else {
 			// New component to create
-			cm.logger.Info("New component configuration detected",
+			cm.logger.Debug("New component configuration detected",
 				"component", name,
 				"action", "create")
 
@@ -994,7 +994,7 @@ func (cm *ComponentManager) handleComponentConfigUpdate(ctx context.Context, nam
 		}
 	} else if exists {
 		// Component should be disabled - graceful shutdown
-		cm.logger.Info("Component disabled via config",
+		cm.logger.Debug("Component disabled via config",
 			"component", name,
 			"action", "disable")
 
@@ -1016,7 +1016,7 @@ func (cm *ComponentManager) handleComponentRemoval(ctx context.Context, name str
 	cm.mu.Unlock()
 
 	if exists {
-		cm.logger.Info("Component removed from configuration",
+		cm.logger.Debug("Component removed from configuration",
 			"component", name,
 			"action", "remove")
 
@@ -1077,7 +1077,7 @@ func (cm *ComponentManager) restartComponentWithNewConfig(
 	// Step 6: Invalidate FlowGraph cache (always safe to do)
 	cm.invalidateFlowGraph()
 
-	cm.logger.Info("Component successfully restarted with new config",
+	cm.logger.Debug("Component successfully restarted with new config",
 		"component", name)
 	return nil
 }
@@ -1108,7 +1108,7 @@ func (cm *ComponentManager) createAndStartComponent(ctx context.Context, name st
 	// Step 3: Invalidate FlowGraph cache
 	cm.invalidateFlowGraph()
 
-	cm.logger.Info("Component successfully created and started",
+	cm.logger.Debug("Component successfully created and started",
 		"component", name)
 	return nil
 }
@@ -1156,7 +1156,7 @@ func (cm *ComponentManager) stopAndRemoveComponent(
 	// Step 4: Invalidate FlowGraph cache
 	cm.invalidateFlowGraph()
 
-	cm.logger.Info("Component successfully stopped and removed",
+	cm.logger.Debug("Component successfully stopped and removed",
 		"component", name)
 	return nil
 }
@@ -1231,7 +1231,7 @@ func (cm *ComponentManager) startSingleComponent(ctx context.Context, name strin
 			cm.onComponentStart(mc.Context, name, mc.Component)
 		}
 
-		cm.logger.Info("Component started successfully",
+		cm.logger.Debug("Component started successfully",
 			"component", name)
 	}()
 
@@ -1269,7 +1269,7 @@ func (cm *ComponentManager) CreateComponentsFromConfig(ctx context.Context, cfg 
 			continue
 		}
 
-		slog.Info("Component created from config",
+		slog.Debug("Component created from config",
 			"instance", instanceName,
 			"factory", componentConfig.Name,
 			"type", componentConfig.Type)

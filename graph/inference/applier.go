@@ -99,7 +99,7 @@ func (a *NATSRelationshipApplier) ApplyRelationship(
 				suggestion.FromEntity, suggestion.Predicate, suggestion.ToEntity))
 	}
 
-	a.logger.Info("Applied inferred relationship",
+	a.logger.Debug("Applied inferred relationship",
 		"from", suggestion.FromEntity,
 		"predicate", suggestion.Predicate,
 		"to", suggestion.ToEntity,
@@ -196,7 +196,7 @@ func (a *DirectRelationshipApplier) ApplyRelationship(
 				suggestion.FromEntity, suggestion.Predicate, suggestion.ToEntity))
 	}
 
-	a.logger.Info("Applied inferred relationship",
+	a.logger.Debug("Applied inferred relationship",
 		"from", suggestion.FromEntity,
 		"predicate", suggestion.Predicate,
 		"to", suggestion.ToEntity,
@@ -280,7 +280,7 @@ func (a *MutationRelationshipApplier) ApplyRelationship(
 		return errors.New(result.Error)
 	}
 
-	a.logger.Info("Applied inferred relationship via mutation API",
+	a.logger.Debug("Applied inferred relationship via mutation API",
 		"from", suggestion.FromEntity,
 		"predicate", suggestion.Predicate,
 		"to", suggestion.ToEntity,

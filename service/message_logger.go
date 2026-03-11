@@ -373,7 +373,7 @@ func (ml *MessageLogger) Start(ctx context.Context) error {
 		}
 		ml.subscriptions[subject] = true
 		ml.natsSubsRefs = append(ml.natsSubsRefs, sub)
-		ml.logger.Info("Subscribed to subject", "subject", subject)
+		ml.logger.Debug("Subscribed to subject", "subject", subject)
 	}
 
 	ml.logger.Info("MessageLogger started",
@@ -502,7 +502,7 @@ func (ml *MessageLogger) handleMessage(ctx context.Context, subject string, data
 		}
 	}
 
-	ml.logger.Info("Message sample", logArgs...)
+	ml.logger.Debug("Message sample", logArgs...)
 
 	// Output to stdout if configured
 	if ml.config.OutputToStdout {
@@ -902,10 +902,10 @@ func (ml *MessageLogger) startRuntime() error {
 		}
 		ml.subscriptions[subject] = true
 		ml.natsSubsRefs = append(ml.natsSubsRefs, sub)
-		ml.logger.Info("Subscribed to subject", "subject", subject)
+		ml.logger.Debug("Subscribed to subject", "subject", subject)
 	}
 
-	ml.logger.Info("MessageLogger runtime started",
+	ml.logger.Debug("MessageLogger runtime started",
 		"monitored_subjects", len(ml.subscriptions),
 		"max_entries", ml.config.MaxEntries,
 		"output_to_stdout", ml.config.OutputToStdout)
@@ -924,6 +924,6 @@ func (ml *MessageLogger) stopRuntime() error {
 	ml.subscriptions = make(map[string]bool)
 	ml.natsSubsRefs = nil
 
-	ml.logger.Info("MessageLogger runtime stopped")
+	ml.logger.Debug("MessageLogger runtime stopped")
 	return nil
 }

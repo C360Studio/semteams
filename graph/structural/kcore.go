@@ -139,7 +139,7 @@ func (c *KCoreComputer) Compute(ctx context.Context) (*KCoreIndex, error) {
 	}
 
 	elapsed := time.Since(startTime)
-	c.logger.Info("k-core decomposition complete",
+	c.logger.Debug("k-core decomposition complete",
 		slog.Int("entity_count", len(entityIDs)),
 		slog.Int("max_core", maxCore),
 		slog.Int("bucket_count", len(coreBuckets)),

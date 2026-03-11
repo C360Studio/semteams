@@ -336,7 +336,7 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 		}
 	}
 
-	c.logger.Info("Processing agent request",
+	c.logger.Debug("Processing agent request",
 		slog.String("request_id", req.RequestID),
 		slog.String("model", req.Model),
 		slog.String("role", req.Role))

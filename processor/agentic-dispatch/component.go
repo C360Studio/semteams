@@ -493,7 +493,7 @@ func (c *Component) handleCommand(ctx context.Context, msg agentic.UserMessage) 
 	// Record command executed
 	c.metrics.recordCommandExecuted(name)
 
-	c.logger.Info("Command executed",
+	c.logger.Debug("Command executed",
 		slog.String("command", name),
 		slog.String("user_id", msg.UserID))
 }
@@ -598,7 +598,7 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 		Timestamp:   time.Now(),
 	})
 
-	c.logger.Info("Task submitted",
+	c.logger.Debug("Task submitted",
 		slog.String("loop_id", loopID),
 		slog.String("task_id", taskID),
 		slog.String("user_id", msg.UserID))

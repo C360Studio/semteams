@@ -93,7 +93,7 @@ func (d *CoreAnomalyDetector) Detect(ctx context.Context) ([]*StructuralAnomaly,
 		}
 	}
 
-	d.logger.Info("core anomaly detection complete", "anomalies", len(anomalies))
+	d.logger.Debug("core anomaly detection complete", "anomalies", len(anomalies))
 	return anomalies, nil
 }
 

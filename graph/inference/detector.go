@@ -286,7 +286,7 @@ func (o *Orchestrator) collectResults(
 			continue
 		}
 
-		o.logger.Info("detector completed", "name", res.name, "anomalies", len(res.anomalies))
+		o.logger.Debug("detector completed", "name", res.name, "anomalies", len(res.anomalies))
 		totalAnomalies, result.Truncated = o.persistAnomalies(ctx, config, result, res.anomalies, totalAnomalies)
 
 		if result.Truncated {
@@ -459,7 +459,7 @@ func (o *Orchestrator) applyVirtualEdges(ctx context.Context, config Config, res
 	}
 
 	// Always log summary for visibility - including diagnostic info
-	o.logger.Info("virtual edge processing complete",
+	o.logger.Debug("virtual edge processing complete",
 		"semantic_gaps_evaluated", evaluated,
 		"auto_applied", applied,
 		"queued_for_review", queued,

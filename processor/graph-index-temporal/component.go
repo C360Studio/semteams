@@ -601,7 +601,7 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Info("entity watcher stopping", slog.String("reason", "context cancelled"))
+			c.logger.Debug("entity watcher stopping", slog.String("reason", "context cancelled"))
 			watcher.Stop()
 			return
 		case entry, ok := <-watcher.Updates():

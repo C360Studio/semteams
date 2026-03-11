@@ -350,7 +350,7 @@ func (w *EnhancementWorker) handleKVEntry(entry jetstream.KeyValueEntry, workerI
 	latency := time.Since(startTime).Seconds()
 	w.metrics.RecordEnhancementSuccess(latency)
 
-	w.logger.Info("Community enhanced with LLM summary",
+	w.logger.Debug("Community enhanced with LLM summary",
 		"community_id", communityID,
 		"statistical_len", len(community.StatisticalSummary),
 		"llm_len", len(community.LLMSummary),

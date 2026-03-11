@@ -215,7 +215,7 @@ func (hb *HeartbeatService) emitHeartbeat() {
 	}
 
 	// Log heartbeat with structured fields
-	hb.logger.Info("System heartbeat",
+	hb.logger.Debug("System heartbeat",
 		"uptime", uptime.String(),
 		"goroutines", goroutines,
 		"components_healthy", healthyCount,

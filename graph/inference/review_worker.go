@@ -586,7 +586,7 @@ func (w *ReviewWorker) markForHumanReviewWithRevision(anomaly *StructuralAnomaly
 			fmt.Sprintf("failed to save human_review status for %s", anomaly.ID))
 	}
 
-	w.logger.Info("Anomaly queued for human review",
+	w.logger.Debug("Anomaly queued for human review",
 		"anomaly_id", anomaly.ID,
 		"type", anomaly.Type,
 		"reason", reason)

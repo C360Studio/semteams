@@ -501,7 +501,7 @@ func (rp *Processor) setupSubscriptions(ctx context.Context) error {
 
 		// Skip entity.events subjects since we use KV watch for entity states
 		if strings.HasPrefix(port.Subject, "events.graph.entity") {
-			rp.logger.Info("Skipping subscription - using KV watch for entity states", "subject", port.Subject)
+			rp.logger.Debug("Skipping subscription - using KV watch for entity states", "subject", port.Subject)
 			continue
 		}
 
@@ -692,7 +692,7 @@ func (rp *Processor) Stop(_ time.Duration) error {
 
 	// Legacy JetStream consumer cleanup (if still exists)
 	if rp.entityConsumer != nil {
-		rp.logger.Info("Legacy JetStream consumer stopped")
+		rp.logger.Debug("Legacy JetStream consumer stopped")
 	}
 
 	// Note: NATS client handles unsubscription during context cancellation

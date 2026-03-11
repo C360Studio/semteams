@@ -666,7 +666,7 @@ func (c *Component) setupJetStreamConsumer(ctx context.Context, portName, subjec
 	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
 	consumerName := fmt.Sprintf("objectstore-%s-%s", c.instanceName, sanitizedSubject)
 
-	c.logger.Info("Setting up JetStream consumer",
+	c.logger.Debug("Setting up JetStream consumer",
 		"stream", streamName,
 		"consumer", consumerName,
 		"filter_subject", subject)

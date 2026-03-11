@@ -837,13 +837,13 @@ func (c *Component) runDetectionLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Info("detection loop stopping")
+			c.logger.Debug("detection loop stopping")
 			return
 		case <-ticker.C:
 			// Double-check context before starting new detection
 			// This prevents starting a new cycle if shutdown just began
 			if ctx.Err() != nil {
-				c.logger.Info("detection loop stopping - context cancelled")
+				c.logger.Debug("detection loop stopping - context cancelled")
 				return
 			}
 			c.runCommunityDetection(ctx)
@@ -854,7 +854,7 @@ func (c *Component) runDetectionLoop(ctx context.Context) {
 // handleDetectionError handles errors during detection, returning true if the error was handled as shutdown.
 func (c *Component) handleDetectionError(ctx context.Context, err error, operation string) bool {
 	if errors.Is(err, context.Canceled) {
-		c.logger.Info(operation + " interrupted by shutdown")
+		c.logger.Debug(operation + " interrupted by shutdown")
 		return true
 	}
 	c.logger.Error(operation+" failed", slog.Any("error", err))
@@ -911,7 +911,7 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 		}
 	}
 
-	c.logger.Info("running community detection")
+	c.logger.Debug("running community detection")
 	start := time.Now()
 	c.reportStage(ctx, "community_detection")
 
@@ -929,7 +929,7 @@ func (c *Component) runCommunityDetection(ctx context.Context) {
 	atomic.AddInt64(&c.messagesProcessed, int64(totalCommunities))
 	c.lastActivity.Store(time.Now())
 
-	c.logger.Info("community detection complete",
+	c.logger.Debug("community detection complete",
 		slog.Int("communities_found", totalCommunities),
 		slog.Int("levels", len(communities)),
 		slog.Duration("duration", time.Since(start)))

@@ -81,7 +81,7 @@ func (d *SemanticGapDetector) Detect(ctx context.Context) ([]*StructuralAnomaly,
 		return nil, nil
 	}
 
-	d.logger.Info("starting semantic gap detection", "entities", len(entities))
+	d.logger.Debug("starting semantic gap detection", "entities", len(entities))
 
 	anomalies := make([]*StructuralAnomaly, 0)
 	seen := make(map[string]bool) // Track seen pairs to avoid duplicates
@@ -98,7 +98,7 @@ func (d *SemanticGapDetector) Detect(ctx context.Context) ([]*StructuralAnomaly,
 		anomalies = append(anomalies, entityAnomalies...)
 	}
 
-	d.logger.Info("semantic gap detection complete", "anomalies", len(anomalies))
+	d.logger.Debug("semantic gap detection complete", "anomalies", len(anomalies))
 	return anomalies, nil
 }
 

@@ -297,7 +297,7 @@ func (f *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 	sanitizedSubject := sanitizeSubject(port.Subject)
 	consumerName := fmt.Sprintf("json-filter-%s", sanitizedSubject)
 
-	f.logger.Info("Setting up JetStream consumer",
+	f.logger.Debug("Setting up JetStream consumer",
 		"stream", streamName,
 		"consumer", consumerName,
 		"filter_subject", port.Subject)
@@ -326,7 +326,7 @@ func (f *Processor) setupJetStreamConsumer(ctx context.Context, port component.P
 			fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
-	f.logger.Info("JSON filter subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
+	f.logger.Debug("JSON filter subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
 	return nil
 }
 

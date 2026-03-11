@@ -166,7 +166,7 @@ func (cm *Manager) Start(ctx context.Context) error {
 				}
 			} else {
 				// Versions equal: sync from KV (UI may have made changes)
-				cm.logger.Info("File and KV versions match, syncing from KV",
+				cm.logger.Debug("File and KV versions match, syncing from KV",
 					"version", fileVersion)
 				if err := cm.syncFromKV(ctx); err != nil {
 					cm.logger.Warn("Failed to sync from KV on startup", "error", err)
@@ -521,7 +521,7 @@ func (cm *Manager) PushToKV(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("marshal version: %w", err)
 		}
-		cm.logger.Info("Pushing version to KV", "version", cfg.Version)
+		cm.logger.Debug("Pushing version to KV", "version", cfg.Version)
 		if _, err := cm.kvStore.Put(ctx, "version", data); err != nil {
 			return fmt.Errorf("push version: %w", err)
 		}

@@ -197,7 +197,7 @@ func (f *Output) Start(ctx context.Context) error {
 		return errs.WrapInvalid(err, "Output", "Start", "context already cancelled")
 	}
 
-	f.logger.Info("Output.Start called",
+	f.logger.Debug("Output.Start called",
 		"component", f.name,
 		"subjects_count", len(f.subjects),
 		"directory", f.directory,
@@ -344,7 +344,7 @@ func (f *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 	sanitizedSubject = strings.ReplaceAll(sanitizedSubject, ">", "wildcard")
 	consumerName := fmt.Sprintf("file-output-%s", sanitizedSubject)
 
-	f.logger.Info("Setting up JetStream consumer",
+	f.logger.Debug("Setting up JetStream consumer",
 		"stream", streamName,
 		"consumer", consumerName,
 		"filter_subject", port.Subject)
@@ -373,7 +373,7 @@ func (f *Output) setupJetStreamConsumer(ctx context.Context, port component.Port
 			fmt.Sprintf("setup consumer for stream %s", streamName))
 	}
 
-	f.logger.Info("File output subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
+	f.logger.Debug("File output subscribed (JetStream)", "subject", port.Subject, "stream", streamName)
 	return nil
 }
 

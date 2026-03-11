@@ -252,7 +252,7 @@ func (c *Component) processCommandSync(ctx context.Context, msg agentic.UserMess
 	// Record command executed
 	c.metrics.recordCommandExecuted(name)
 
-	c.logger.Info("HTTP command executed",
+	c.logger.Debug("HTTP command executed",
 		slog.String("command", name),
 		slog.String("user_id", msg.UserID))
 
@@ -352,7 +352,7 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg agentic.U
 	// Record task submitted
 	c.metrics.recordTaskSubmitted()
 
-	c.logger.Info("HTTP task submitted",
+	c.logger.Debug("HTTP task submitted",
 		slog.String("loop_id", loopID),
 		slog.String("task_id", taskID),
 		slog.String("user_id", msg.UserID))
@@ -590,7 +590,7 @@ func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c.logger.InfoContext(ctx, "sending signal to loop",
+	c.logger.DebugContext(ctx, "sending signal to loop",
 		slog.String("request_id", requestID),
 		slog.String("loop_id", loopID),
 		slog.String("signal", req.Type),
@@ -614,7 +614,7 @@ func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
 	c.metrics.recordHTTPDuration("/loops/{id}/signal", "POST", time.Since(startTime).Seconds())
 	c.metrics.recordLoopSignal(req.Type, true)
 
-	c.logger.InfoContext(ctx, "signal sent to loop",
+	c.logger.DebugContext(ctx, "signal sent to loop",
 		slog.String("request_id", requestID),
 		slog.String("loop_id", loopID),
 		slog.String("signal", req.Type))

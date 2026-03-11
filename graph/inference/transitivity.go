@@ -97,7 +97,7 @@ func (d *TransitivityDetector) Detect(ctx context.Context) ([]*StructuralAnomaly
 		anomalies = append(anomalies, predicateAnomalies...)
 	}
 
-	d.logger.Info("transitivity detection complete", "anomalies", len(anomalies))
+	d.logger.Debug("transitivity detection complete", "anomalies", len(anomalies))
 	return anomalies, nil
 }
 

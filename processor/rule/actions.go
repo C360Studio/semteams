@@ -518,7 +518,7 @@ func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action,
 	}
 
 	if e.logger != nil {
-		e.logger.Info("Triggering agent task",
+		e.logger.Debug("Triggering agent task",
 			"subject", subject,
 			"task_id", taskID,
 			"role", action.Role,
@@ -540,7 +540,7 @@ func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action,
 		}
 
 		if e.logger != nil {
-			e.logger.Info("Agent task published",
+			e.logger.Debug("Agent task published",
 				"subject", subject,
 				"task_id", taskID,
 				"size", len(data))
@@ -574,7 +574,7 @@ func (e *ActionExecutor) executeTriggerWorkflow(ctx context.Context, action Acti
 	subject := fmt.Sprintf("workflow.trigger.%s", action.WorkflowID)
 
 	if e.logger != nil {
-		e.logger.Info("Triggering workflow",
+		e.logger.Debug("Triggering workflow",
 			"workflow_id", action.WorkflowID,
 			"subject", subject,
 			"entity_id", entityID)
@@ -601,7 +601,7 @@ func (e *ActionExecutor) executeTriggerWorkflow(ctx context.Context, action Acti
 		}
 
 		if e.logger != nil {
-			e.logger.Info("Workflow trigger published",
+			e.logger.Debug("Workflow trigger published",
 				"workflow_id", action.WorkflowID,
 				"subject", subject,
 				"entity_id", entityID,
@@ -668,7 +668,7 @@ func (e *ActionExecutor) executePublishBoidSignal(ctx context.Context, action Ac
 	}
 
 	if e.logger != nil {
-		e.logger.Info("Publishing boid signal",
+		e.logger.Debug("Publishing boid signal",
 			"subject", subject,
 			"signal_type", action.BoidSignalType,
 			"entity_id", entityID,
@@ -698,7 +698,7 @@ func (e *ActionExecutor) executePublishBoidSignal(ctx context.Context, action Ac
 		}
 
 		if e.logger != nil {
-			e.logger.Info("Boid signal published",
+			e.logger.Debug("Boid signal published",
 				"subject", subject,
 				"signal_type", action.BoidSignalType,
 				"entity_id", entityID,

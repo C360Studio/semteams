@@ -657,7 +657,7 @@ func (e *Engine) evaluateAndFire(ctx context.Context, ruleCtx *RuleContext, rule
 		e.metrics.RecordActionDispatch(def.ID, rule.ID, rule.Action.Type.String())
 	}
 
-	e.logger.Info("Rule fired",
+	e.logger.Debug("Rule fired",
 		"workflow", def.ID,
 		"rule", rule.ID,
 		"action", rule.Action.Type,

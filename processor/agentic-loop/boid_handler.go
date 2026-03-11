@@ -374,7 +374,7 @@ func (h *BoidHandler) ProcessSteeringSignal(_ context.Context, signal *boid.Stee
 	// Store the signal for later use
 	h.signalStore.Store(signal)
 
-	h.logger.Info("Stored steering signal",
+	h.logger.Debug("Stored steering signal",
 		"loop_id", signal.LoopID,
 		"signal_type", signal.SignalType,
 		"strength", signal.Strength)

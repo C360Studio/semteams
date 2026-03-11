@@ -718,7 +718,7 @@ func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 		}
 	}
 
-	c.logger.Info("HTTP handlers registered",
+	c.logger.Debug("HTTP handlers registered",
 		slog.String("graphql_path", graphqlPath),
 		slog.String("mcp_path", mcpPath),
 		slog.Bool("playground_enabled", c.config.EnablePlayground),
@@ -764,7 +764,7 @@ func (c *Component) registerInferenceHandlers(prefix string, mux *http.ServeMux)
 	}
 	handler.RegisterHTTPHandlers(inferencePath, mux)
 
-	c.logger.Info("inference API handlers registered",
+	c.logger.Debug("inference API handlers registered",
 		slog.String("inference_path", inferencePath))
 
 	return nil

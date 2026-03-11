@@ -110,7 +110,7 @@ func (rp *Processor) evaluateRulesForMessage(ctx context.Context, subject string
 			if err != nil {
 				rp.logger.Warn("Stateful evaluation failed", "rule_name", ruleName, "error", err)
 			} else if transition != TransitionNone {
-				rp.logger.Info("Rule state transition",
+				rp.logger.Debug("Rule state transition",
 					"rule_name", ruleName,
 					"transition", transition,
 					"entity_id", entityID)
@@ -123,7 +123,7 @@ func (rp *Processor) evaluateRulesForMessage(ctx context.Context, subject string
 		}
 
 		if triggered {
-			rp.logger.Info("Rule triggered", "rule_name", ruleName)
+			rp.logger.Debug("Rule triggered", "rule_name", ruleName)
 
 			// Execute rule events
 			events, err := ruleInstance.ExecuteEvents(messages)
@@ -209,7 +209,7 @@ func (rp *Processor) evaluateRulesForEntityState(ctx context.Context, entityKey,
 			if err != nil {
 				rp.logger.Warn("Stateful evaluation failed", "rule_name", ruleName, "error", err)
 			} else if transition != TransitionNone {
-				rp.logger.Info("Rule state transition",
+				rp.logger.Debug("Rule state transition",
 					"rule_name", ruleName,
 					"transition", transition,
 					"entity_id", entityID)
@@ -222,7 +222,7 @@ func (rp *Processor) evaluateRulesForEntityState(ctx context.Context, entityKey,
 		}
 
 		if triggered {
-			rp.logger.Info("Rule triggered from EntityState",
+			rp.logger.Debug("Rule triggered from EntityState",
 				"rule_name", ruleName,
 				"entity_id", entityState.ID)
 

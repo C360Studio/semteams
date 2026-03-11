@@ -138,7 +138,7 @@ func (t *LoopTracker) UpdateState(loopID, state string) {
 		info.State = state
 
 		if t.logger != nil {
-			t.logger.Info("loop state changed",
+			t.logger.Debug("loop state changed",
 				slog.String("loop_id", loopID),
 				slog.String("user_id", info.UserID),
 				slog.String("old_state", oldState),
@@ -192,7 +192,7 @@ func (t *LoopTracker) UpdateCompletion(loopID, outcome, result, errMsg string) e
 	info.State = outcomeToState(outcome)
 
 	if t.logger != nil {
-		t.logger.Info("loop completion updated",
+		t.logger.Debug("loop completion updated",
 			slog.String("loop_id", loopID),
 			slog.String("outcome", outcome),
 			slog.String("state", info.State),
@@ -306,7 +306,7 @@ func (t *LoopTracker) Remove(loopID string) {
 	delete(t.loops, loopID)
 
 	if t.logger != nil {
-		t.logger.Info("loop removed",
+		t.logger.Debug("loop removed",
 			slog.String("loop_id", loopID),
 			slog.String("user_id", info.UserID),
 			slog.String("final_state", info.State),

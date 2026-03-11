@@ -226,7 +226,7 @@ func (rm *RegistrationManager) UpdateRegistration(ctx context.Context, entityID 
 	existing.ExpiresAt = resp.ExpiresAt
 	rm.mu.Unlock()
 
-	rm.logger.Info("Updated agent registration",
+	rm.logger.Debug("Updated agent registration",
 		slog.String("entity_id", entityID),
 		slog.String("registration_id", resp.RegistrationID))
 

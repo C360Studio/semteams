@@ -239,11 +239,11 @@ func (fs *FlowService) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 		prefix = prefix + "/"
 	}
 
-	fs.logger.Info("Flow service HTTP handlers registered", "prefix", prefix)
+	fs.logger.Debug("Flow service HTTP handlers registered", "prefix", prefix)
 
 	// Flow CRUD endpoints
 	// Note: Go 1.22+ ServeMux supports method and path patterns
-	fs.logger.Info(
+	fs.logger.Debug(
 		"Registering flow routes",
 		"list_pattern",
 		"GET "+prefix+"flows",

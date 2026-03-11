@@ -125,7 +125,7 @@ func (r *AlignmentRule) EvaluateEntityState(entityState *gtypes.EntityState) boo
 
 	r.markTriggered()
 
-	r.logger.Info("Alignment rule triggered",
+	r.logger.Debug("Alignment rule triggered",
 		"loop_id", pos.LoopID,
 		"role", pos.Role,
 		"same_role_count", len(sameRole),

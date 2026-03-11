@@ -642,7 +642,7 @@ func (m *Manager) processServiceConfigChanges(oldConfigs, newConfigs types.Servi
 
 		if !existed {
 			// New service added
-			slog.Info("New service configuration detected",
+			slog.Debug("New service configuration detected",
 				"service", serviceName)
 			// Start the new service if it's enabled
 			if newConfig.Enabled {
@@ -667,7 +667,7 @@ func (m *Manager) processServiceConfigChanges(oldConfigs, newConfigs types.Servi
 			// Handle enable/disable
 			if oldConfig.Enabled != newConfig.Enabled {
 				if newConfig.Enabled {
-					slog.Info("Service enabled in config", "service", serviceName)
+					slog.Debug("Service enabled in config", "service", serviceName)
 					// Start service if not running
 					// Use stored dependencies if available
 					deps := m.dependencies
@@ -682,7 +682,7 @@ func (m *Manager) processServiceConfigChanges(oldConfigs, newConfigs types.Servi
 						slog.Error("Failed to start service", "service", serviceName, "error", err)
 					}
 				} else {
-					slog.Info("Service disabled in config", "service", serviceName)
+					slog.Debug("Service disabled in config", "service", serviceName)
 					// Stop service if running
 					if err := m.StopService(serviceName, 5*time.Second); err != nil {
 						slog.Error("Failed to stop service", "service", serviceName, "error", err)
@@ -699,7 +699,7 @@ func (m *Manager) processServiceConfigChanges(oldConfigs, newConfigs types.Servi
 	// Check for removed services
 	for serviceName := range oldConfigs {
 		if _, exists := newConfigs[serviceName]; !exists {
-			slog.Info("Service configuration removed",
+			slog.Debug("Service configuration removed",
 				"service", serviceName)
 			// Stop the service if it's running
 			if err := m.StopService(serviceName, 5*time.Second); err != nil {
@@ -722,7 +722,7 @@ func (m *Manager) applyServiceConfigChange(serviceName string, newConfig json.Ra
 	// Check if service supports runtime configuration
 	runtimeConfigurable, ok := service.(RuntimeConfigurable)
 	if !ok {
-		slog.Info("Service does not support runtime configuration, restart required",
+		slog.Debug("Service does not support runtime configuration, restart required",
 			"service", serviceName)
 		return
 	}
@@ -752,7 +752,7 @@ func (m *Manager) applyServiceConfigChange(serviceName string, newConfig json.Ra
 		return
 	}
 
-	slog.Info("Successfully applied service configuration update",
+	slog.Debug("Successfully applied service configuration update",
 		"service", serviceName)
 }
 
@@ -1016,7 +1016,7 @@ func (m *Manager) registerComponentHandlers() error {
 			// Use component instance name as URL prefix
 			prefix := "/" + name
 			gateway.RegisterHTTPHandlers(prefix, m.httpMux)
-			m.logger.Info("Registered gateway component HTTP handlers",
+			m.logger.Debug("Registered gateway component HTTP handlers",
 				"component", name,
 				"prefix", prefix)
 		}

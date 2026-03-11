@@ -278,7 +278,7 @@ func (rp *Processor) updateWatchBucketsLocked(newBuckets map[string][]string) er
 					break
 				}
 			}
-			rp.logger.Info("Stopped KV watcher", "key", key)
+			rp.logger.Debug("Stopped KV watcher", "key", key)
 		}
 	}
 

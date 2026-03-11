@@ -205,13 +205,13 @@ func (c *Component) tryPathIntentSearch(ctx context.Context, query string, start
 		return nil, false
 	}
 
-	c.logger.Info("path intent detected in NL query",
+	c.logger.Debug("path intent detected in NL query",
 		"query", query,
 		"start_node", opts.PathStartNode)
 
 	// Resolve partial entity ID to full ID
 	fullID, err := c.resolvePartialEntityID(ctx, opts.PathStartNode)
-	c.logger.Info("entity ID resolution result",
+	c.logger.Debug("entity ID resolution result",
 		"partial", opts.PathStartNode,
 		"full", fullID,
 		"error", err)
@@ -223,7 +223,7 @@ func (c *Component) tryPathIntentSearch(ctx context.Context, query string, start
 		if pathResult != nil {
 			entityCount = len(pathResult.Entities)
 		}
-		c.logger.Info("PathRAG search result",
+		c.logger.Debug("PathRAG search result",
 			"start", fullID,
 			"entities", entityCount,
 			"error", pathErr)
@@ -238,14 +238,14 @@ func (c *Component) tryPathIntentSearch(ctx context.Context, query string, start
 			result, _ := json.Marshal(response)
 			return result, true
 		}
-		c.logger.Info("PathRAG returned no results, falling through to other tiers",
+		c.logger.Debug("PathRAG returned no results, falling through to other tiers",
 			"error", pathErr)
 		return nil, false
 	}
 
 	// At structural tier without entity resolution, return empty result
 	if c.communityCache == nil {
-		c.logger.Info("structural tier: cannot resolve entity ID, returning empty result",
+		c.logger.Debug("structural tier: cannot resolve entity ID, returning empty result",
 			"partial", opts.PathStartNode)
 		response := GlobalSearchResponse{
 			Entities:   []*gtypes.EntityState{},

@@ -505,7 +505,7 @@ func (f *Input) readLoop(ctx context.Context) {
 
 		// Check if we should loop
 		if !f.loop {
-			f.logger.Info("File processing complete", "files", len(matches))
+			f.logger.Debug("File processing complete", "files", len(matches))
 			return
 		}
 

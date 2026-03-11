@@ -139,7 +139,7 @@ func (r *CohesionRule) EvaluateEntityState(entityState *gtypes.EntityState) bool
 
 	r.markTriggered()
 
-	r.logger.Info("Cohesion rule triggered",
+	r.logger.Debug("Cohesion rule triggered",
 		"loop_id", pos.LoopID,
 		"role", pos.Role,
 		"candidates", len(candidates))

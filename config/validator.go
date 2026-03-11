@@ -134,7 +134,7 @@ func (cm *Manager) ValidateAndPersistComponentConfig(
 			"Manager", "ValidateAndPersistComponentConfig", "persist to KV")
 	}
 
-	cm.logger.Info("Component configuration validated and persisted",
+	cm.logger.Debug("Component configuration validated and persisted",
 		"component_name", componentName,
 		"component_type", componentType)
 
