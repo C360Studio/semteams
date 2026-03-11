@@ -805,6 +805,70 @@ func TestChatCompletion_ReasoningContent(t *testing.T) {
 	}
 }
 
+func TestBuildChatRequest_ReasoningContentStripped(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+
+		response := map[string]any{
+			"id": "chatcmpl-strip", "object": "chat.completion",
+			"created": 1677652288, "model": "gemini-2.5-flash",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "Done."},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gemini-2.5-flash",
+		MaxTokens: 128000,
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	// Simulate turn 2: history includes an assistant message with reasoning from turn 1
+	req := agentic.AgentRequest{
+		RequestID: "req-strip",
+		Messages: []agentic.ChatMessage{
+			{Role: "user", Content: "Explain quantum tunneling."},
+			{Role: "assistant", Content: "Quantum tunneling is...", ReasoningContent: "Let me think about this carefully..."},
+			{Role: "user", Content: "Can you elaborate?"},
+		},
+		Model: "gemini-2.5-flash",
+	}
+
+	ctx := context.Background()
+	_, err = client.ChatCompletion(ctx, req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	// Verify reasoning_content is NOT in the outgoing request
+	messages, ok := capturedRequest["messages"].([]any)
+	if !ok {
+		t.Fatal("messages not found in request")
+	}
+
+	assistantMsg := messages[1].(map[string]any)
+	if _, hasReasoning := assistantMsg["reasoning_content"]; hasReasoning {
+		t.Error("reasoning_content should be stripped from outgoing request messages")
+	}
+	if content, _ := assistantMsg["content"].(string); content != "Quantum tunneling is..." {
+		t.Errorf("content = %q, want %q", content, "Quantum tunneling is...")
+	}
+}
+
 func TestBuildChatRequest_ToolCallEmptyContentPreserved(t *testing.T) {
 	var capturedRequest map[string]any
 

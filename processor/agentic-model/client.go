@@ -101,9 +101,11 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 	messages := make([]openai.ChatCompletionMessage, len(req.Messages))
 	for i, msg := range req.Messages {
 		messages[i] = openai.ChatCompletionMessage{
-			Role:             msg.Role,
-			Content:          msg.Content,
-			ReasoningContent: msg.ReasoningContent,
+			Role:    msg.Role,
+			Content: msg.Content,
+			// ReasoningContent is intentionally omitted from outgoing requests.
+			// Providers return it in responses but reject it in request messages
+			// (e.g., Gemini returns 400 INVALID_ARGUMENT).
 		}
 
 		// Handle tool results - include tool_call_id (required by OpenAI API)
