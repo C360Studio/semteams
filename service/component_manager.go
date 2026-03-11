@@ -1302,8 +1302,9 @@ func (cm *ComponentManager) buildComponentDependencies() component.Dependencies 
 			Org:      cm.platform.Org,
 			Platform: cm.platform.Platform,
 		},
-		Security:      securityCfg,
-		ModelRegistry: modelReg,
+		Security:          securityCfg,
+		ModelRegistry:     modelReg,
+		ComponentRegistry: cm.registry,
 	}
 
 	return deps
