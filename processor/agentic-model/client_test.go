@@ -1454,3 +1454,67 @@ func TestBuildChatRequest_ToolResultNameField(t *testing.T) {
 		t.Errorf("name = %q, want %q", name, "get_weather")
 	}
 }
+
+// TestBuildChatRequest_ToolResultEmptyNameFallback verifies that tool result messages
+// with empty names get "unknown_tool" as a fallback. Gemini rejects missing name fields
+// on tool result messages — the omitempty tag on go-openai's Name field would omit ""
+// from the JSON, causing a 400 error.
+func TestBuildChatRequest_ToolResultEmptyNameFallback(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+
+		response := successResponse()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	req := agentic.AgentRequest{
+		RequestID: "req-empty-name",
+		Messages: []agentic.ChatMessage{
+			{Role: "user", Content: "What's the weather?"},
+			{
+				Role: "assistant",
+				ToolCalls: []agentic.ToolCall{
+					{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"location": "London"}},
+				},
+			},
+			// Simulate a tool result with empty name (e.g., from a rejected call with lost name)
+			{Role: "tool", ToolCallID: "call_1", Name: "", Content: `tool call rejected: not allowed`},
+		},
+		Model: "gpt-4",
+	}
+
+	ctx := context.Background()
+	_, err = client.ChatCompletion(ctx, req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	messages, ok := capturedRequest["messages"].([]any)
+	if !ok {
+		t.Fatal("messages not found in request")
+	}
+
+	toolMsg := messages[2].(map[string]any)
+	name, ok := toolMsg["name"].(string)
+	if !ok {
+		t.Fatal("name field missing on tool result message — Gemini would reject this")
+	}
+	if name != "unknown_tool" {
+		t.Errorf("name = %q, want %q", name, "unknown_tool")
+	}
+}

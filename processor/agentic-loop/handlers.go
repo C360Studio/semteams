@@ -544,8 +544,10 @@ func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID st
 
 		// Store immediate error results for rejected calls
 		for _, rejection := range filterResult.Rejected {
+			h.loopManager.TrackToolName(rejection.Call.ID, rejection.Call.Name)
 			errResult := agentic.ToolResult{
 				CallID: rejection.Call.ID,
+				Name:   rejection.Call.Name,
 				Error:  fmt.Sprintf("tool call rejected: %s", rejection.Reason),
 				LoopID: loopID,
 			}
@@ -792,10 +794,14 @@ func (h *MessageHandler) handleToolsComplete(
 		if content == "" {
 			content = "(empty result)"
 		}
+		name := r.Name
+		if name == "" {
+			name = h.loopManager.GetToolName(r.CallID)
+		}
 		toolMessages[i] = agentic.ChatMessage{
 			Role:       "tool",
 			ToolCallID: r.CallID,
-			Name:       h.loopManager.GetToolName(r.CallID),
+			Name:       name,
 			Content:    content,
 		}
 	}

@@ -67,6 +67,7 @@ func (t *ToolCall) UnmarshalJSON(data []byte) error {
 // ToolResult represents the result of a tool call
 type ToolResult struct {
 	CallID   string         `json:"call_id"`
+	Name     string         `json:"name,omitempty"` // Tool function name (required by Gemini on tool result messages)
 	Content  string         `json:"content,omitempty"`
 	Error    string         `json:"error,omitempty"`
 	Metadata map[string]any `json:"metadata,omitempty"`

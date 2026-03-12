@@ -113,9 +113,14 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 			messages[i].ToolCallID = msg.ToolCallID
 		}
 
-		// Handle tool result name field (required by Gemini)
-		if msg.Role == "tool" && msg.Name != "" {
-			messages[i].Name = msg.Name
+		// Tool result name field — Gemini requires this on all tool result messages.
+		// OpenAI accepts it optionally. Always include for cross-provider compat.
+		if msg.Role == "tool" {
+			name := msg.Name
+			if name == "" {
+				name = "unknown_tool"
+			}
+			messages[i].Name = name
 		}
 
 		// Convert tool calls if present

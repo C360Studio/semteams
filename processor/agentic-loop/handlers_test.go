@@ -1454,6 +1454,81 @@ func TestToolCallFilter_Nil_NoFiltering(t *testing.T) {
 	}
 }
 
+// TestToolCallFilter_RejectedCallsPreserveToolName verifies that rejected tool calls
+// track their name so tool result messages include it. Without this, Gemini rejects
+// the request with "function_response.name: Name cannot be empty".
+func TestToolCallFilter_RejectedCallsPreserveToolName(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+	handler.SetToolCallFilter(&mockFilter{rejectAll: true})
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-reject-name",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test rejected names",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	response := agentic.AgentResponse{
+		RequestID: "req-reject-name",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-rn-1", Name: "forbidden_tool"},
+				{ID: "call-rn-2", Name: "blocked_tool"},
+			},
+		},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, response)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// All rejected → handleToolsComplete fires → agent.request published.
+	// Parse the request to verify tool result messages have names.
+	for _, msg := range result.PublishedMessages {
+		if !containsIgnoreCase(msg.Subject, "agent.request") {
+			continue
+		}
+
+		var envelope map[string]any
+		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+			t.Fatalf("Failed to parse envelope: %v", err)
+		}
+		payload, ok := envelope["payload"].(map[string]any)
+		if !ok {
+			t.Fatal("Expected payload in BaseMessage envelope")
+		}
+		messages, ok := payload["messages"].([]any)
+		if !ok {
+			t.Fatal("Expected messages array in payload")
+		}
+
+		// Find tool result messages and verify they have names
+		for _, m := range messages {
+			msgMap, ok := m.(map[string]any)
+			if !ok {
+				continue
+			}
+			if msgMap["role"] != "tool" {
+				continue
+			}
+			name, _ := msgMap["name"].(string)
+			if name == "" {
+				t.Errorf("Tool result message for call %v has empty name — Gemini would reject this", msgMap["tool_call_id"])
+			}
+		}
+		return
+	}
+	t.Error("No agent.request published after all-rejected filter")
+}
+
 // --- Conversation context regression tests ---
 
 // TestHandleToolsComplete_FullConversationHistory verifies that the next
