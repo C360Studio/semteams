@@ -4,6 +4,12 @@
 // These entities model GitHub artifacts (issues, pull requests, reviews) as
 // first-class graph nodes, enabling the knowledge graph to reason about
 // repository activity and code change history.
+//
+// Note: GitHubIssueEntity, GitHubPREntity, and GitHubReviewEntity are
+// published by the github-webhook input component when it ingests events from
+// GitHub. The pr-workflow-spawner component in this package does not
+// instantiate these entities directly — it writes workflow-phase triples via
+// the graph mutation API instead.
 package githubprworkflow
 
 import (

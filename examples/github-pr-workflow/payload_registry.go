@@ -2,7 +2,7 @@ package githubprworkflow
 
 import "github.com/c360studio/semstreams/component"
 
-// init registers all GitHub entity payload types with the global PayloadRegistry.
+// init registers all GitHub payload types with the global PayloadRegistry.
 // This enables BaseMessage.UnmarshalJSON to recreate typed payloads from JSON
 // when the message type matches one of the github entity types.
 func init() {
@@ -27,6 +27,13 @@ func init() {
 			Version:     schemaVersion,
 			Description: "GitHub code review graph entity",
 			Factory:     func() any { return &GitHubReviewEntity{} },
+		},
+		{
+			Domain:      domainGitHub,
+			Category:    "workflow_complete",
+			Version:     schemaVersion,
+			Description: "GitHub issue-to-PR workflow completion summary",
+			Factory:     func() any { return &WorkflowCompletionPayload{} },
 		},
 	}
 

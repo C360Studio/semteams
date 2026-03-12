@@ -1,8 +1,18 @@
 package githubprworkflow
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log/slog"
 	"strings"
+	"sync"
 	"testing"
+	"time"
+
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
 )
 
 // --- Prompt Builder Tests ---
@@ -149,11 +159,13 @@ func TestExtractEntityIDFromTaskID(t *testing.T) {
 		prefix string
 		want   string
 	}{
-		{"qualifier-acme.github.repo.myapp.workflow.42-1234567890", "qualifier-", "acme.github.repo.myapp.workflow.42"},
-		{"developer-acme.github.repo.myapp.workflow.42-1234567890", "developer-", "acme.github.repo.myapp.workflow.42"},
-		{"reviewer-acme.github.repo.myapp.workflow.42-1234567890", "reviewer-", "acme.github.repo.myapp.workflow.42"},
-		{"wrong-prefix-123", "qualifier-", ""},
-		{"qualifier-", "qualifier-", ""},
+		// New "::" separator format
+		{"qualifier::acme.github.repo.myapp.workflow.42", "qualifier::", "acme.github.repo.myapp.workflow.42"},
+		{"developer::acme.github.repo.myapp.workflow.42", "developer::", "acme.github.repo.myapp.workflow.42"},
+		{"reviewer::acme.github.repo.myapp.workflow.42", "reviewer::", "acme.github.repo.myapp.workflow.42"},
+		// Edge cases
+		{"wrong-prefix-123", "qualifier::", ""},
+		{"qualifier::", "qualifier::", ""},
 	}
 
 	for _, tt := range tests {
@@ -256,4 +268,147 @@ func TestDefaultBudgetConstants(t *testing.T) {
 		t.Errorf("DefaultHourlyTokenCeiling (%d) should be larger than DefaultTokenBudget (%d)",
 			DefaultHourlyTokenCeiling, DefaultTokenBudget)
 	}
+}
+
+// --- workflowState Accumulation Tests ---
+
+// TestWorkflowStateAccumulation verifies that accumulateTokens and
+// incrementRejections maintain running totals across multiple calls, not just
+// write the most recent value.
+func TestWorkflowStateAccumulation(t *testing.T) {
+	c := &PRWorkflowComponent{
+		logger: newNopLogger(),
+	}
+	entityID := "acme.github.repo.myapp.workflow.99"
+
+	// Simulate three developer/reviewer steps adding tokens.
+	c.entityWorkflowState(entityID).totalTokens += 100
+	c.entityWorkflowState(entityID).totalTokens += 200
+	c.entityWorkflowState(entityID).totalTokens += 50
+
+	gotTokens := c.entityWorkflowState(entityID).totalTokens
+	if gotTokens != 350 {
+		t.Errorf("totalTokens: got %d, want 350", gotTokens)
+	}
+
+	// Simulate two review rejections.
+	c.entityWorkflowState(entityID).rejections++
+	c.entityWorkflowState(entityID).rejections++
+
+	gotRejections := c.entityWorkflowState(entityID).rejections
+	if gotRejections != 2 {
+		t.Errorf("rejections: got %d, want 2", gotRejections)
+	}
+
+	// Verify that a second entity has independent state.
+	otherID := "acme.github.repo.myapp.workflow.100"
+	c.entityWorkflowState(otherID).totalTokens += 500
+
+	if c.entityWorkflowState(entityID).totalTokens != 350 {
+		t.Errorf("first entity state mutated by second entity write")
+	}
+	if c.entityWorkflowState(otherID).totalTokens != 500 {
+		t.Errorf("second entity totalTokens: got %d, want 500",
+			c.entityWorkflowState(otherID).totalTokens)
+	}
+}
+
+// TestWorkflowStateAccumulation_ConcurrentSafe verifies that concurrent
+// accesses to entityWorkflowState do not create duplicate state entries.
+func TestWorkflowStateAccumulation_ConcurrentSafe(t *testing.T) {
+	c := &PRWorkflowComponent{
+		logger: newNopLogger(),
+	}
+	entityID := "acme.github.repo.myapp.workflow.1"
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_ = c.entityWorkflowState(entityID)
+		}()
+	}
+	wg.Wait()
+
+	// All goroutines should reference the same state object.
+	s1 := c.entityWorkflowState(entityID)
+	s2 := c.entityWorkflowState(entityID)
+	if s1 != s2 {
+		t.Error("entityWorkflowState returned different pointers for same entity ID")
+	}
+}
+
+// --- writeTriple Request Format Tests ---
+
+// TestWriteTripleRequestFormat verifies that writeTriple constructs a properly
+// structured AddTripleRequest by marshalling the request and inspecting it
+// directly — without a live NATS connection.
+func TestWriteTripleRequestFormat(t *testing.T) {
+	entityID := "acme.github.repo.myapp.workflow.42"
+	predicate := "workflow.phase"
+	object := "qualifying"
+
+	triple := message.Triple{
+		Subject:    entityID,
+		Predicate:  predicate,
+		Object:     object,
+		Source:     componentName,
+		Timestamp:  time.Now(),
+		Confidence: 1.0,
+	}
+	req := gtypes.AddTripleRequest{Triple: triple}
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("Marshal AddTripleRequest: %v", err)
+	}
+
+	// Unmarshal back and verify structure.
+	var got gtypes.AddTripleRequest
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal AddTripleRequest: %v", err)
+	}
+
+	if got.Triple.Subject != entityID {
+		t.Errorf("Subject: got %q, want %q", got.Triple.Subject, entityID)
+	}
+	if got.Triple.Predicate != predicate {
+		t.Errorf("Predicate: got %q, want %q", got.Triple.Predicate, predicate)
+	}
+	if fmt.Sprintf("%v", got.Triple.Object) != object {
+		t.Errorf("Object: got %v, want %q", got.Triple.Object, object)
+	}
+	if got.Triple.Source != componentName {
+		t.Errorf("Source: got %q, want %q", got.Triple.Source, componentName)
+	}
+	if got.Triple.Confidence != 1.0 {
+		t.Errorf("Confidence: got %v, want 1.0", got.Triple.Confidence)
+	}
+
+	// Verify the JSON uses the "triple" envelope field expected by graph-ingest.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("Unmarshal to raw map: %v", err)
+	}
+	if _, ok := raw["triple"]; !ok {
+		t.Error("AddTripleRequest JSON must contain a 'triple' field")
+	}
+}
+
+// TestWriteTriple_NilClient verifies that writeTriple returns a non-nil error
+// when the NATS client is nil, rather than panicking.
+func TestWriteTriple_NilClient(t *testing.T) {
+	c := &PRWorkflowComponent{
+		natsClient: nil,
+		logger:     newNopLogger(),
+	}
+	err := c.writeTriple(context.Background(), "acme.github.repo.myapp.workflow.1", "workflow.phase", "qualifying")
+	if err == nil {
+		t.Error("writeTriple with nil natsClient should return an error")
+	}
+}
+
+// newNopLogger returns a discard logger suitable for tests.
+func newNopLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError}))
 }

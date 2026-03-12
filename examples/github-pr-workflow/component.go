@@ -12,6 +12,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
+	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go"
@@ -24,6 +25,14 @@ const (
 	componentName    = "pr-workflow-spawner"
 	componentVersion = "0.1.0"
 )
+
+// workflowState tracks per-entity accumulated counters that this component
+// exclusively owns. Using a local sync.Map avoids a read-modify-write race
+// against the graph KV and keeps the component self-contained.
+type workflowState struct {
+	totalTokens int
+	rejections  int
+}
 
 // PRWorkflowComponent spawns agent tasks for the GitHub issue-to-PR pipeline.
 // It handles the Go-intensive parts of the workflow: prompt building, result parsing,
@@ -45,8 +54,13 @@ type PRWorkflowComponent struct {
 	lifecycleMu   sync.Mutex
 	subscriptions []*natsclient.Subscription
 
+	// entityState tracks per-entity accumulated counters (tokens, rejections).
+	// This component exclusively owns these predicates, so local tracking is correct.
+	entityState sync.Map // map[string]*workflowState
+
 	messagesProcessed atomic.Int64
 	errors            atomic.Int64
+	lastActivity      atomic.Value // stores time.Time
 }
 
 // NewComponent creates a new PRWorkflowComponent from config.
@@ -106,6 +120,12 @@ func (c *PRWorkflowComponent) Start(ctx context.Context) error {
 	}
 	c.mu.RUnlock()
 
+	// Re-create channels to support restart after Stop.
+	c.mu.Lock()
+	c.shutdown = make(chan struct{})
+	c.done = make(chan struct{})
+	c.mu.Unlock()
+
 	c.logger.Info("Starting PR workflow spawner")
 
 	for _, port := range c.inputPorts {
@@ -154,6 +174,11 @@ func (c *PRWorkflowComponent) Stop(_ time.Duration) error {
 
 	c.logger.Info("Stopping PR workflow spawner")
 
+	// Signal shutdown before unsubscribing so in-flight handlers can detect it.
+	c.mu.Lock()
+	close(c.shutdown)
+	c.mu.Unlock()
+
 	for _, sub := range c.subscriptions {
 		if err := sub.Unsubscribe(); err != nil {
 			c.logger.Debug("Unsubscribe error", "error", err)
@@ -163,6 +188,7 @@ func (c *PRWorkflowComponent) Stop(_ time.Duration) error {
 
 	c.mu.Lock()
 	c.running = false
+	close(c.done)
 	c.mu.Unlock()
 
 	return nil
@@ -181,22 +207,29 @@ func (c *PRWorkflowComponent) handleIssueEvent(ctx context.Context, msg *nats.Ms
 		return
 	}
 
-	c.messagesProcessed.Add(1)
-
 	// Build workflow entity ID
 	entityID := WorkflowEntityID(event.Repo.Owner.Login, event.Repo.Name, event.Issue.Number)
 
-	// Write initial entity triples
-	c.writeTriple(ctx, entityID, "workflow.phase", "qualifying")
-	c.writeTriple(ctx, entityID, "workflow.status", "active")
-	c.writeTriple(ctx, entityID, "github.issue.number", fmt.Sprintf("%d", event.Issue.Number))
-	c.writeTriple(ctx, entityID, "github.issue.title", event.Issue.Title)
-	c.writeTriple(ctx, entityID, "workflow.tokens.total", "0")
-	c.writeTriple(ctx, entityID, "workflow.review.rejections", "0")
+	// Write initial entity triples. Errors are best-effort: the triples that
+	// succeed are still useful and the graph is eventually consistent.
+	for pred, obj := range map[string]any{
+		"workflow.phase":             "qualifying",
+		"workflow.status":            "active",
+		"github.issue.number":        fmt.Sprintf("%d", event.Issue.Number),
+		"github.issue.title":         event.Issue.Title,
+		"workflow.tokens.total":      "0",
+		"workflow.review.rejections": "0",
+	} {
+		if err := c.writeTriple(ctx, entityID, pred, obj); err != nil {
+			c.errors.Add(1)
+			c.logger.Warn("Failed to write triple", "predicate", pred, "error", err)
+		}
+	}
 
-	// Spawn qualifier agent
+	// Spawn qualifier agent. Encode the entity ID in the task ID using "::" as a
+	// separator (entity IDs use dots, so "::" is unambiguous).
 	prompt := BuildQualifierPrompt(event.Repo.Owner.Login, event.Repo.Name, event.Issue.Number, event.Issue.Title, event.Issue.Body)
-	taskID := fmt.Sprintf("qualifier-%s-%d", entityID, time.Now().UnixNano())
+	taskID := fmt.Sprintf("qualifier::%s", entityID)
 
 	task := &agentic.TaskMessage{
 		TaskID:       taskID,
@@ -205,9 +238,12 @@ func (c *PRWorkflowComponent) handleIssueEvent(ctx context.Context, msg *nats.Ms
 		Prompt:       prompt,
 		WorkflowSlug: WorkflowSlug,
 		WorkflowStep: "qualify",
+		Metadata:     map[string]any{"entity_id": entityID},
 	}
 
 	c.publishTask(ctx, "agent.task.qualifier", task)
+	c.messagesProcessed.Add(1)
+	c.lastActivity.Store(time.Now())
 }
 
 // handleLoopCompleted processes an agentic loop completion event.
@@ -230,8 +266,6 @@ func (c *PRWorkflowComponent) handleLoopCompleted(ctx context.Context, msg *nats
 		return
 	}
 
-	c.messagesProcessed.Add(1)
-
 	switch event.WorkflowStep {
 	case "qualify":
 		c.handleQualifierComplete(ctx, event)
@@ -241,68 +275,107 @@ func (c *PRWorkflowComponent) handleLoopCompleted(ctx context.Context, msg *nats
 		c.handleReviewerComplete(ctx, event)
 	default:
 		c.logger.Debug("Unknown workflow step", "step", event.WorkflowStep)
+		return
 	}
+
+	c.messagesProcessed.Add(1)
+	c.lastActivity.Store(time.Now())
 }
 
 // handleQualifierComplete processes the qualifier agent's result.
 func (c *PRWorkflowComponent) handleQualifierComplete(ctx context.Context, event *agentic.LoopCompletedEvent) {
 	verdict := ParseQualifierResult(event.Result)
 
-	entityID := extractEntityIDFromTaskID(event.TaskID, "qualifier-")
+	entityID := extractEntityIDFromTaskID(event.TaskID, "qualifier::")
 	if entityID == "" {
 		c.logger.Debug("Cannot extract entity ID from qualifier task", "task_id", event.TaskID)
 		return
 	}
 
-	c.writeTriple(ctx, entityID, "workflow.qualifier.verdict", verdict.Verdict)
-	c.writeTriple(ctx, entityID, "workflow.tokens.total", fmt.Sprintf("%d", event.TokensIn+event.TokensOut))
-	c.writeTriple(ctx, entityID, "workflow.phase", verdict.Verdict) // phase mirrors verdict
+	for pred, obj := range map[string]string{
+		"workflow.qualifier.verdict": verdict.Verdict,
+		"workflow.phase":             verdict.Verdict, // phase mirrors verdict
+	} {
+		if err := c.writeTriple(ctx, entityID, pred, obj); err != nil {
+			c.errors.Add(1)
+			c.logger.Warn("Failed to write triple", "predicate", pred, "error", err)
+		}
+	}
+	if err := c.accumulateTokens(ctx, entityID, event.TokensIn+event.TokensOut); err != nil {
+		c.errors.Add(1)
+		c.logger.Warn("Failed to accumulate tokens", "entity_id", entityID, "error", err)
+	}
 }
 
 // handleDeveloperComplete processes the developer agent's result.
 func (c *PRWorkflowComponent) handleDeveloperComplete(ctx context.Context, event *agentic.LoopCompletedEvent) {
 	output := ParseDeveloperResult(event.Result)
 
-	entityID := extractEntityIDFromTaskID(event.TaskID, "developer-")
+	entityID := extractEntityIDFromTaskID(event.TaskID, "developer::")
 	if entityID == "" {
 		c.logger.Debug("Cannot extract entity ID from developer task", "task_id", event.TaskID)
 		return
 	}
 
 	if output.PRNumber > 0 {
-		c.writeTriple(ctx, entityID, "workflow.pr.number", fmt.Sprintf("%d", output.PRNumber))
+		if err := c.writeTriple(ctx, entityID, "workflow.pr.number", fmt.Sprintf("%d", output.PRNumber)); err != nil {
+			c.errors.Add(1)
+			c.logger.Warn("Failed to write triple", "predicate", "workflow.pr.number", "error", err)
+		}
 	}
-	c.accumulateTokens(ctx, entityID, event.TokensIn+event.TokensOut)
-	c.writeTriple(ctx, entityID, "workflow.phase", PhaseDevComplete)
+	if err := c.accumulateTokens(ctx, entityID, event.TokensIn+event.TokensOut); err != nil {
+		c.errors.Add(1)
+		c.logger.Warn("Failed to accumulate tokens", "entity_id", entityID, "error", err)
+	}
+	if err := c.writeTriple(ctx, entityID, "workflow.phase", PhaseDevComplete); err != nil {
+		c.errors.Add(1)
+		c.logger.Warn("Failed to write triple", "predicate", "workflow.phase", "error", err)
+	}
 }
 
 // handleReviewerComplete processes the reviewer agent's result.
 func (c *PRWorkflowComponent) handleReviewerComplete(ctx context.Context, event *agentic.LoopCompletedEvent) {
 	review := ParseReviewerResult(event.Result)
 
-	entityID := extractEntityIDFromTaskID(event.TaskID, "reviewer-")
+	entityID := extractEntityIDFromTaskID(event.TaskID, "reviewer::")
 	if entityID == "" {
 		c.logger.Debug("Cannot extract entity ID from reviewer task", "task_id", event.TaskID)
 		return
 	}
 
-	c.writeTriple(ctx, entityID, "workflow.review.feedback", review.Feedback)
-	c.accumulateTokens(ctx, entityID, event.TokensIn+event.TokensOut)
+	if err := c.writeTriple(ctx, entityID, "workflow.review.feedback", review.Feedback); err != nil {
+		c.errors.Add(1)
+		c.logger.Warn("Failed to write triple", "predicate", "workflow.review.feedback", "error", err)
+	}
+	if err := c.accumulateTokens(ctx, entityID, event.TokensIn+event.TokensOut); err != nil {
+		c.errors.Add(1)
+		c.logger.Warn("Failed to accumulate tokens", "entity_id", entityID, "error", err)
+	}
 
+	var phase string
 	switch review.Verdict {
 	case "approved":
-		c.writeTriple(ctx, entityID, "workflow.phase", PhaseApproved)
-	case "request_changes", "reject":
-		c.writeTriple(ctx, entityID, "workflow.phase", PhaseChangesRequested)
-		c.incrementRejections(ctx, entityID)
+		phase = PhaseApproved
 	default:
-		c.writeTriple(ctx, entityID, "workflow.phase", PhaseChangesRequested)
-		c.incrementRejections(ctx, entityID)
+		phase = PhaseChangesRequested
+		if err := c.incrementRejections(ctx, entityID); err != nil {
+			c.errors.Add(1)
+			c.logger.Warn("Failed to increment rejections", "entity_id", entityID, "error", err)
+		}
+	}
+	if err := c.writeTriple(ctx, entityID, "workflow.phase", phase); err != nil {
+		c.errors.Add(1)
+		c.logger.Warn("Failed to write triple", "predicate", "workflow.phase", "error", err)
 	}
 }
 
-// writeTriple publishes an add_triple mutation to graph-ingest.
-func (c *PRWorkflowComponent) writeTriple(ctx context.Context, entityID, predicate string, object any) {
+// writeTriple sends an AddTripleRequest to graph-ingest via NATS request/reply
+// and confirms success. It returns an error if the mutation fails.
+func (c *PRWorkflowComponent) writeTriple(ctx context.Context, entityID, predicate string, object any) error {
+	if c.natsClient == nil {
+		return fmt.Errorf("NATS client not available")
+	}
+
 	triple := message.Triple{
 		Subject:    entityID,
 		Predicate:  predicate,
@@ -312,17 +385,26 @@ func (c *PRWorkflowComponent) writeTriple(ctx context.Context, entityID, predica
 		Confidence: 1.0,
 	}
 
-	data, err := json.Marshal(triple)
+	req := gtypes.AddTripleRequest{Triple: triple}
+	reqData, err := json.Marshal(req)
 	if err != nil {
-		c.logger.Debug("Failed to marshal triple", "error", err)
-		return
+		return fmt.Errorf("marshal AddTripleRequest: %w", err)
 	}
 
-	if c.natsClient != nil {
-		if err := c.natsClient.Publish(ctx, "graph.mutation.triple.add", data); err != nil {
-			c.logger.Debug("Failed to publish triple", "predicate", predicate, "error", err)
-		}
+	respData, err := c.natsClient.Request(ctx, "graph.mutation.triple.add", reqData, 5*time.Second)
+	if err != nil {
+		return fmt.Errorf("NATS request failed: %w", err)
 	}
+
+	var resp gtypes.AddTripleResponse
+	if err := json.Unmarshal(respData, &resp); err != nil {
+		return fmt.Errorf("unmarshal AddTripleResponse: %w", err)
+	}
+	if !resp.Success {
+		return fmt.Errorf("graph mutation failed: %s", resp.Error)
+	}
+
+	return nil
 }
 
 // publishTask publishes a TaskMessage to a NATS subject.
@@ -343,14 +425,26 @@ func (c *PRWorkflowComponent) publishTask(ctx context.Context, subject string, t
 	}
 }
 
-// accumulateTokens writes the token count. In production this would do read-modify-write.
-func (c *PRWorkflowComponent) accumulateTokens(ctx context.Context, entityID string, tokens int) {
-	c.writeTriple(ctx, entityID, "workflow.tokens.total", fmt.Sprintf("%d", tokens))
+// entityWorkflowState returns (or creates) the mutable state for an entity.
+func (c *PRWorkflowComponent) entityWorkflowState(entityID string) *workflowState {
+	v, _ := c.entityState.LoadOrStore(entityID, &workflowState{})
+	return v.(*workflowState)
 }
 
-// incrementRejections writes a rejection count. In production this would increment.
-func (c *PRWorkflowComponent) incrementRejections(ctx context.Context, entityID string) {
-	c.writeTriple(ctx, entityID, "workflow.review.rejections", "1")
+// accumulateTokens adds the step's token count to the running total for the
+// entity and persists the new total as a triple.
+func (c *PRWorkflowComponent) accumulateTokens(ctx context.Context, entityID string, tokens int) error {
+	state := c.entityWorkflowState(entityID)
+	state.totalTokens += tokens
+	return c.writeTriple(ctx, entityID, "workflow.tokens.total", fmt.Sprintf("%d", state.totalTokens))
+}
+
+// incrementRejections increments the rejection counter for the entity and
+// persists the new count as a triple.
+func (c *PRWorkflowComponent) incrementRejections(ctx context.Context, entityID string) error {
+	state := c.entityWorkflowState(entityID)
+	state.rejections++
+	return c.writeTriple(ctx, entityID, "workflow.review.rejections", fmt.Sprintf("%d", state.rejections))
 }
 
 // WorkflowEntityID builds the 6-part entity ID for a workflow execution.
@@ -358,19 +452,18 @@ func WorkflowEntityID(org, repo string, issueNumber int) string {
 	return fmt.Sprintf("%s.github.repo.%s.workflow.%d", org, repo, issueNumber)
 }
 
-// extractEntityIDFromTaskID extracts the entity ID embedded in a task ID.
-// Task IDs are formatted as "<prefix><entityID>-<timestamp>".
+// extractEntityIDFromTaskID extracts the entity ID from a task ID.
+// Task IDs are formatted as "<prefix>::<entityID>" where "::" is the separator
+// (entity IDs use dots, so "::" is unambiguous).
 func extractEntityIDFromTaskID(taskID, prefix string) string {
 	if !strings.HasPrefix(taskID, prefix) {
 		return ""
 	}
 	rest := taskID[len(prefix):]
-	// Find the last "-" which separates the entity ID from the timestamp
-	lastDash := strings.LastIndex(rest, "-")
-	if lastDash <= 0 {
+	if rest == "" {
 		return ""
 	}
-	return rest[:lastDash]
+	return rest
 }
 
 // --- Prompt Builders (exported for testing) ---
@@ -509,23 +602,9 @@ func (c *PRWorkflowComponent) OutputPorts() []component.Port {
 }
 
 // ConfigSchema returns the JSON schema for this component's configuration.
+// The canonical schema definition lives in register.go as prWorkflowSchema.
 func (c *PRWorkflowComponent) ConfigSchema() component.ConfigSchema {
-	return component.ConfigSchema{
-		Properties: map[string]component.PropertySchema{
-			"model": {
-				Type:        "string",
-				Description: "Model endpoint name for agent tasks",
-			},
-			"token_budget": {
-				Type:        "integer",
-				Description: "Maximum tokens per workflow execution",
-			},
-			"max_review_cycles": {
-				Type:        "integer",
-				Description: "Maximum review rejection/retry loops",
-			},
-		},
-	}
+	return prWorkflowSchema
 }
 
 // Health returns the current health status of the component.
@@ -540,7 +619,15 @@ func (c *PRWorkflowComponent) Health() component.HealthStatus {
 
 // DataFlow returns current flow metrics for the component.
 func (c *PRWorkflowComponent) DataFlow() component.FlowMetrics {
-	return component.FlowMetrics{}
+	var last time.Time
+	if v := c.lastActivity.Load(); v != nil {
+		last = v.(time.Time)
+	}
+	return component.FlowMetrics{
+		MessagesPerSecond: float64(c.messagesProcessed.Load()),
+		ErrorRate:         float64(c.errors.Load()),
+		LastActivity:      last,
+	}
 }
 
 // portSubject extracts the subject string from a port's config.
