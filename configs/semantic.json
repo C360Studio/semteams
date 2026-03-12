@@ -11,6 +11,29 @@
   "nats": {
     "urls": ["nats://localhost:4222"]
   },
+  "model_registry": {
+    "endpoints": {
+      "seminstruct": {
+        "provider": "openai",
+        "url": "http://seminstruct:8083/v1",
+        "model": "qwen2.5-0.5b-instruct-q4-k-m",
+        "max_tokens": 4096
+      },
+      "semembed": {
+        "provider": "openai",
+        "url": "http://semembed:8081/v1",
+        "model": "all-MiniLM-L6-v2",
+        "max_tokens": 0
+      }
+    },
+    "capabilities": {
+      "community_summary": { "preferred": ["seminstruct"] },
+      "embedding": { "preferred": ["semembed"] }
+    },
+    "defaults": {
+      "model": "seminstruct"
+    }
+  },
   "services": {
     "service-manager": {
       "name": "service-manager",
@@ -422,20 +445,6 @@
         ]
       }
     },
-    "reactive-workflow": {
-      "type": "processor",
-      "name": "reactive-workflow",
-      "enabled": true,
-      "config": {
-        "enable_metrics": true,
-        "state_bucket": "REACTIVE_WORKFLOW_STATE",
-        "callback_stream_name": "WORKFLOW_CALLBACKS",
-        "event_stream_name": "WORKFLOW_EVENTS",
-        "default_timeout": "10m",
-        "default_max_iterations": 10,
-        "consumer_name_prefix": "semantic-"
-      }
-    },
     "graph-ingest": {
       "type": "processor",
       "name": "graph-ingest",
@@ -539,7 +548,6 @@
           ]
         },
         "embedder_type": "http",
-        "embedder_url": "http://semembed:8081/v1",
         "batch_size": 50,
         "cache_ttl": "1h"
       }
@@ -570,8 +578,6 @@
         "detection_interval": "30s",
         "batch_size": 100,
         "enable_llm": true,
-        "llm_endpoint": "http://seminstruct:8083/v1",
-        "llm_model": "qwen2.5-0.5b-instruct-q4-k-m",
         "min_community_size": 2,
         "max_iterations": 100,
         "enable_structural": true,
