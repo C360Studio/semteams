@@ -31,7 +31,8 @@ type streamAccumulator struct {
 	toolCalls        map[int]*openai.ToolCall
 	promptTokens     int
 	completionTokens int
-	lastToolIndex    int // tracks last assigned index for Gemini missing-index inference
+	lastToolIndex    int             // tracks last assigned index for provider missing-index inference
+	adapter          ProviderAdapter // normalizes stream deltas for the active provider
 }
 
 // processDelta incorporates a single streaming choice delta.
@@ -85,18 +86,22 @@ func (a *streamAccumulator) processDelta(choice openai.ChatCompletionStreamChoic
 }
 
 // inferToolIndex determines the correct index for a tool call delta.
-// When the provider includes an explicit index, use it. When omitted (Gemini),
-// infer: a non-empty ID signals a new tool call (assign next index),
-// an empty ID is an argument continuation (reuse lastToolIndex).
+// Delegates to the provider adapter for quirk-specific index inference.
+// A return value of -1 from the adapter is a sentinel meaning "allocate
+// the next available index", which is resolved here via nextToolIndex.
 func (a *streamAccumulator) inferToolIndex(tc openai.ToolCall) int {
-	if tc.Index != nil {
-		return *tc.Index
+	var adapter ProviderAdapter
+	if a.adapter != nil {
+		adapter = a.adapter
+	} else {
+		adapter = defaultAdapter
 	}
-	// Gemini omits index — infer from ID presence
-	if tc.ID != "" {
+
+	idx := adapter.NormalizeStreamDelta(tc, a.lastToolIndex)
+	if idx == -1 {
 		return a.nextToolIndex()
 	}
-	return a.lastToolIndex
+	return idx
 }
 
 // nextToolIndex returns the next available tool call index.

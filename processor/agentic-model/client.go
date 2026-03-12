@@ -26,6 +26,7 @@ type Client struct {
 	logger       *slog.Logger
 	throttle     *EndpointThrottle
 	retryCfg     RetryConfig
+	adapter      ProviderAdapter
 }
 
 // defaultClientRetryConfig is the retry configuration used when the component
@@ -96,6 +97,21 @@ func (c *Client) SetRetryConfig(cfg RetryConfig) {
 	c.retryCfg = cfg
 }
 
+// SetAdapter sets the provider-specific adapter for normalizing requests and responses.
+// When not set, buildChatRequest falls back to GenericAdapter.
+func (c *Client) SetAdapter(a ProviderAdapter) {
+	c.adapter = a
+}
+
+// getAdapter returns the configured adapter, defaulting to the package-level
+// GenericAdapter singleton to avoid repeated allocation of stateless structs.
+func (c *Client) getAdapter() ProviderAdapter {
+	if c.adapter != nil {
+		return c.adapter
+	}
+	return defaultAdapter
+}
+
 // buildChatRequest converts an AgentRequest into an OpenAI ChatCompletionRequest.
 func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletionRequest {
 	if len(req.Messages) == 0 {
@@ -124,14 +140,10 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 			messages[i].ToolCallID = msg.ToolCallID
 		}
 
-		// Tool result name field — Gemini requires this on all tool result messages.
-		// OpenAI accepts it optionally. Always include for cross-provider compat.
+		// Copy tool result name; provider-specific normalization (e.g., empty name
+		// fallback for Gemini) is applied below by the adapter.
 		if msg.Role == "tool" {
-			name := msg.Name
-			if name == "" {
-				name = "unknown_tool"
-			}
-			messages[i].Name = name
+			messages[i].Name = msg.Name
 		}
 
 		// Convert tool calls if present
@@ -149,14 +161,13 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 				}
 			}
 			messages[i].ToolCalls = toolCalls
-
-			// Gemini rejects absent content on assistant tool_call messages.
-			// Set to single space (standard adapter convention from LiteLLM, etc.).
-			if messages[i].Content == "" {
-				messages[i].Content = " "
-			}
 		}
 	}
+
+	// Apply provider-specific message normalization (e.g., Gemini requires a
+	// non-empty name on tool results and non-empty content on assistant tool_call messages).
+	adapter := c.getAdapter()
+	messages = adapter.NormalizeMessages(messages)
 
 	chatReq := openai.ChatCompletionRequest{
 		Model:    c.endpoint.Model,
@@ -175,6 +186,9 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 	if c.endpoint.ReasoningEffort != "" {
 		chatReq.ReasoningEffort = c.endpoint.ReasoningEffort
 	}
+
+	// Apply provider-specific request normalization.
+	adapter.NormalizeRequest(&chatReq)
 
 	// Convert tools if present
 	if len(req.Tools) > 0 {
@@ -346,7 +360,7 @@ func (c *Client) streamChatCompletion(ctx context.Context, chatReq openai.ChatCo
 	}
 	defer stream.Close()
 
-	acc := &streamAccumulator{}
+	acc := &streamAccumulator{adapter: c.getAdapter()}
 	streamStart := time.Now()
 	firstTokenRecorded := false
 
@@ -402,8 +416,12 @@ func (c *Client) streamChatCompletion(ctx context.Context, chatReq openai.ChatCo
 	return acc.toAgentResponse(requestID), nil
 }
 
-// convertResponse converts OpenAI response to AgentResponse
+// convertResponse converts OpenAI response to AgentResponse.
+// NormalizeResponse is called before conversion so provider adapters can
+// adjust the raw response (e.g., strip provider-specific fields).
 func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID string) agentic.AgentResponse {
+	c.getAdapter().NormalizeResponse(&resp)
+
 	response := agentic.AgentResponse{
 		RequestID: requestID,
 	}

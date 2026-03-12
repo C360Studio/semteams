@@ -506,6 +506,9 @@ func (c *Component) getClientForRequest(req agentic.AgentRequest) (*Client, erro
 		return nil, errs.Wrap(err, "Component", "getClientForRequest", fmt.Sprintf("create client for model %q", req.Model))
 	}
 
+	// Wire provider adapter for request/response normalization.
+	client.SetAdapter(AdapterFor(ep.Provider))
+
 	// Wire logger, streaming chunk handler, and metrics
 	client.SetLogger(c.logger)
 	if ep.Stream {
