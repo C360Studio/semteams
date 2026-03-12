@@ -848,11 +848,9 @@ func (h *MessageHandler) handleToolsComplete(
 
 	messages := cm.GetContext()
 
-	// Recovery: GC + repair may have removed all conversation content (e.g.,
-	// orphaned tool pairs were the only messages in RecentHistory). Sending an
-	// empty messages array to Gemini triggers "contents is not specified" (400).
-	// Re-inject the original task prompt so the agent can continue.
-	if len(messages) == 0 {
+	// Recovery: if GC/repair left only system messages (no user or assistant),
+	// Gemini rejects the request. Re-inject the task prompt as a user message.
+	if !hasUserOrAssistantMessage(messages) {
 		messages = h.recoverEmptyContext(loopID, cm, newIteration, evicted)
 	}
 
@@ -890,6 +888,18 @@ func (h *MessageHandler) handleToolsComplete(
 	})
 
 	return *result, nil
+}
+
+// hasUserOrAssistantMessage returns true if the messages contain at least one
+// user or assistant message. System-only messages are insufficient for Gemini
+// which requires conversation content in the contents array.
+func hasUserOrAssistantMessage(messages []agentic.ChatMessage) bool {
+	for _, m := range messages {
+		if m.Role == "user" || m.Role == "assistant" {
+			return true
+		}
+	}
+	return false
 }
 
 // recoverEmptyContext handles the case where GC/repair has removed all conversation

@@ -1,7 +1,6 @@
 package agenticloop
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -314,14 +313,26 @@ func (cm *ContextManager) repairToolPairsLocked() int {
 	}
 
 	if removed > 0 {
-		cm.regions[RegionRecentHistory] = remaining
-		// Warn (not Debug) when repair leaves context nearly empty — this can
-		// cause Gemini to reject the next request with "contents is not specified".
-		level := slog.LevelDebug
-		if len(remaining) <= 1 {
-			level = slog.LevelWarn
+		// Safety: if repair would leave no conversation content (no user or plain
+		// assistant messages), abort the repair. Orphaned tool pairs are less
+		// harmful than empty context — Gemini rejects empty contents with 400.
+		hasConversation := false
+		for _, m := range remaining {
+			if m.Message.Role == "user" || (m.Message.Role == "assistant" && len(m.Message.ToolCalls) == 0) {
+				hasConversation = true
+				break
+			}
 		}
-		cm.logger.Log(context.Background(), level, "Repaired orphaned tool pairs",
+		if !hasConversation {
+			cm.logger.Warn("Skipping tool pair repair — would leave no conversation content",
+				"loop_id", cm.loopID,
+				"would_remove", removed,
+				"remaining_messages", len(recent))
+			return 0
+		}
+
+		cm.regions[RegionRecentHistory] = remaining
+		cm.logger.Debug("Repaired orphaned tool pairs",
 			"loop_id", cm.loopID,
 			"removed", removed,
 			"remaining", len(remaining))

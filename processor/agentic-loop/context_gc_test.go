@@ -33,6 +33,11 @@ func TestContextManager_GCToolResults_AgeBasedEviction(t *testing.T) {
 	config.ToolResultMaxAge = 3
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
+	// User message ensures repair safety check finds conversation content
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "user", Content: "test prompt",
+	})
+
 	// Iteration 1: Add tool pair
 	toolPair(t, cm, "call-1")
 	cm.AdvanceIteration() // Move to iteration 2
@@ -118,6 +123,11 @@ func TestContextManager_GCToolResults_MultipleIterations(t *testing.T) {
 	config.ToolResultMaxAge = 2
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
+	// User message ensures repair safety check finds conversation content
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "user", Content: "test prompt",
+	})
+
 	// Add tool pairs across iterations
 	for i := 1; i <= 10; i++ {
 		callID := "call-" + string(rune('0'+i))
@@ -166,6 +176,11 @@ func TestContextManager_GCToolResults_MaxAgeOne(t *testing.T) {
 	config := agenticloop.DefaultContextConfig()
 	config.ToolResultMaxAge = 1
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
+
+	// User message ensures repair safety check finds conversation content
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "user", Content: "test prompt",
+	})
 
 	// Add tool pair at iteration 1
 	toolPair(t, cm, "call-1")
@@ -252,6 +267,11 @@ func TestContextManager_GCToolResults_BatchEviction(t *testing.T) {
 	config.ToolResultMaxAge = 3
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
+	// User message ensures repair safety check finds conversation content
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "user", Content: "test prompt",
+	})
+
 	// Add assistant with 10 tool calls (one group)
 	callIDs := make([]string, 10)
 	for i := range 10 {
@@ -294,6 +314,11 @@ func TestContextManager_GCToolResults_ReturnValue(t *testing.T) {
 	config.ToolResultMaxAge = 3
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
 
+	// User message ensures repair safety check finds conversation content
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "user", Content: "test prompt",
+	})
+
 	// Add 3 tool pairs at iteration 1
 	toolPair(t, cm, "call-1a", "call-1b", "call-1c")
 
@@ -329,6 +354,11 @@ func TestContextManager_GCToolResults_EvictsEntireGroup(t *testing.T) {
 	config := agenticloop.DefaultContextConfig()
 	config.ToolResultMaxAge = 2
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
+
+	// User message ensures repair safety check finds conversation content
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "user", Content: "test prompt",
+	})
 
 	// Add assistant with 3 tool calls at iteration 1
 	toolPair(t, cm, "call-a", "call-b", "call-c")
@@ -386,6 +416,11 @@ func TestContextManager_GCToolResults_MixedAgeGroups(t *testing.T) {
 	config := agenticloop.DefaultContextConfig()
 	config.ToolResultMaxAge = 2
 	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
+
+	// User message ensures repair safety check finds conversation content
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "user", Content: "test prompt",
+	})
 
 	// Old group at iteration 1
 	toolPair(t, cm, "old-a", "old-b")
