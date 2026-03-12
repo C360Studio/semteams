@@ -14,15 +14,13 @@ import (
 // Type alias to avoid import cycles while maintaining compatibility.
 type PlatformMeta = types.PlatformMeta
 
-// ComponentLookup provides read-only access to sibling components at call time.
+// Lookup provides read-only access to sibling components at call time.
 // Lazy lookup avoids stale pointers when ComponentManager restarts components.
-type ComponentLookup interface {
+type Lookup interface {
 	Component(name string) Discoverable
 }
 
 // Dependencies provides all external dependencies needed by components.
-// This structure follows the same pattern as Dependencies, enabling
-// components to receive properly structured dependencies rather than individual fields.
 type Dependencies struct {
 	NATSClient        *natsclient.Client      // NATS client for messaging
 	MetricsRegistry   *metric.MetricsRegistry // Metrics registry for Prometheus (can be nil)
@@ -30,7 +28,7 @@ type Dependencies struct {
 	Platform          PlatformMeta            // Platform identity (organization and platform)
 	Security          security.Config         // Platform-wide security configuration
 	ModelRegistry     model.RegistryReader    // Unified model registry (can be nil)
-	ComponentRegistry ComponentLookup         // Sibling component lookup (can be nil)
+	ComponentRegistry Lookup                  // Sibling component lookup (can be nil)
 }
 
 // GetLogger returns the configured logger or a default logger if none is provided

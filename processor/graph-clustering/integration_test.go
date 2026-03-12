@@ -5,14 +5,13 @@ package graphclustering
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
@@ -680,15 +679,6 @@ func TestIntegration_ClusteringMetrics(t *testing.T) {
 // the enhancement worker is initialized and ready to process communities.
 // This test caught a missing wiring bug during the monolith refactor.
 func TestIntegration_LLMEnhancementWorkerStarts(t *testing.T) {
-	// Create mock LLM server
-	mockLLM := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Return a minimal OpenAI-compatible response
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"choices":[{"message":{"content":"Test summary"}}]}`))
-	}))
-	defer mockLLM.Close()
-
 	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
 	nc := testClient.Client
 
@@ -704,16 +694,36 @@ func TestIntegration_LLMEnhancementWorkerStarts(t *testing.T) {
 		DetectionIntervalStr: "1s",
 		MinCommunitySize:     2,
 		MaxIterations:        10,
-		EnableLLM:            true,                // Enable LLM enhancement
-		LLMEndpoint:          mockLLM.URL + "/v1", // Point to mock server
+		EnableLLM:            true, // Enable LLM enhancement; endpoint resolved via model registry at runtime
 	}
 
 	config.ApplyDefaults()
 	configJSON, err := json.Marshal(config)
 	require.NoError(t, err)
 
+	// Provide a model registry with community_summary capability pointing to a
+	// dummy endpoint. The test only verifies the worker initializes — no actual
+	// LLM calls are made.
+	reg := &model.Registry{
+		Endpoints: map[string]*model.EndpointConfig{
+			"test-llm": {
+				Provider:  "openai",
+				URL:       "http://localhost:19999/v1",
+				Model:     "test-model",
+				MaxTokens: 4096,
+			},
+		},
+		Capabilities: map[string]*model.CapabilityConfig{
+			model.CapabilityCommunitySummary: {
+				Preferred: []string{"test-llm"},
+			},
+		},
+		Defaults: model.DefaultsConfig{Model: "test-llm"},
+	}
+
 	deps := component.Dependencies{
-		NATSClient: nc,
+		NATSClient:    nc,
+		ModelRegistry: reg,
 	}
 
 	comp, err := CreateGraphClustering(configJSON, deps)

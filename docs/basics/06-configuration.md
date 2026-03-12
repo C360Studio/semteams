@@ -358,7 +358,6 @@ Everything in Native, plus:
   "type": "graph-embedding",
   "config": {
     "embedder_type": "http",
-    "embedder_url": "http://semembed:8081/v1",
     "batch_size": 50,
     "cache_ttl": "15m",
     "ports": {
@@ -385,7 +384,6 @@ Everything in Native, plus:
     "min_community_size": 3,
     "max_iterations": 100,
     "enable_llm": true,
-    "llm_endpoint": "http://seminstruct:8083/v1",
     "enable_structural": true,
     "pivot_count": 16,
     "max_hop_distance": 10,

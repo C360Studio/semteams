@@ -16,6 +16,7 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/graph/embedding"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/resource"
@@ -31,8 +32,7 @@ var (
 // Config holds configuration for graph-embedding component
 type Config struct {
 	Ports        *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
-	EmbedderType string                `json:"embedder_type" schema:"type:string,description:Embedder type (bm25 or http),category:basic"`
-	EmbedderURL  string                `json:"embedder_url" schema:"type:string,description:URL for HTTP embedder (required if embedder_type is http),category:basic"`
+	EmbedderType string                `json:"embedder_type" schema:"type:string,description:Embedder type (bm25 or http). HTTP requires model registry with embedding capability,category:basic"`
 	BatchSize    int                   `json:"batch_size" schema:"type:int,description:Batch size for embedding generation,category:advanced"`
 	CacheTTLStr  string                `json:"cache_ttl" schema:"type:string,description:Cache TTL for embeddings (e.g. 15m or 1h),category:advanced"`
 
@@ -74,11 +74,6 @@ func (c *Config) Validate() error {
 	}
 	if c.EmbedderType != "bm25" && c.EmbedderType != "http" {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "embedder_type must be 'bm25' or 'http'")
-	}
-
-	// If HTTP embedder, URL is required
-	if c.EmbedderType == "http" && c.EmbedderURL == "" {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "embedder_url required for http embedder_type")
 	}
 
 	// Validate batch size
@@ -186,8 +181,9 @@ type Component struct {
 	config Config
 
 	// Dependencies
-	natsClient *natsclient.Client
-	logger     *slog.Logger
+	natsClient    *natsclient.Client
+	logger        *slog.Logger
+	modelRegistry model.RegistryReader
 
 	// Domain resources
 	embedder        embedding.Embedder
@@ -248,11 +244,12 @@ func CreateGraphEmbedding(rawConfig json.RawMessage, deps component.Dependencies
 
 	// Create component
 	comp := &Component{
-		name:       "graph-embedding",
-		config:     config,
-		natsClient: natsClient,
-		logger:     logger,
-		metrics:    getMetrics(deps.MetricsRegistry),
+		name:          "graph-embedding",
+		config:        config,
+		natsClient:    natsClient,
+		logger:        logger,
+		modelRegistry: deps.ModelRegistry,
+		metrics:       getMetrics(deps.MetricsRegistry),
 	}
 
 	// Initialize last activity
@@ -586,9 +583,14 @@ func (c *Component) createEmbedder() error {
 		c.logger.Info("using BM25 embedder", slog.Int("dimensions", 384))
 
 	case "http":
+		resolved, err := model.ResolveEndpoint(c.modelRegistry, model.CapabilityEmbedding)
+		if err != nil {
+			return errs.Wrap(err, "Component", "createEmbedder", "resolve embedding endpoint")
+		}
 		httpEmbedder, err := embedding.NewHTTPEmbedder(embedding.HTTPConfig{
-			BaseURL: c.config.EmbedderURL,
-			Model:   "all-MiniLM-L6-v2",
+			BaseURL: resolved.URL,
+			Model:   resolved.Model,
+			APIKey:  resolved.APIKey,
 			Timeout: 30 * time.Second,
 			Logger:  c.logger,
 		})
@@ -596,7 +598,7 @@ func (c *Component) createEmbedder() error {
 			return errs.Wrap(err, "Component", "createEmbedder", "HTTP embedder creation")
 		}
 		c.embedder = httpEmbedder
-		c.logger.Info("using HTTP embedder", slog.String("url", c.config.EmbedderURL))
+		c.logger.Info("using HTTP embedder", slog.String("url", resolved.URL), slog.String("model", resolved.Model))
 
 	default:
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Component", "createEmbedder",

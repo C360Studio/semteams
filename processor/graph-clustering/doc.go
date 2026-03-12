@@ -57,7 +57,6 @@
 //	  "detection_interval": "30s",
 //	  "batch_size": 100,
 //	  "enable_llm": true,
-//	  "llm_endpoint": "http://seminstruct:8083/v1",
 //	  "min_community_size": 2,
 //	  "max_iterations": 100,
 //	  "enable_structural": true,

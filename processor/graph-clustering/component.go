@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semstreams/graph/inference"
 	"github.com/c360studio/semstreams/graph/llm"
 	"github.com/c360studio/semstreams/graph/structural"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/resource"
@@ -35,9 +36,7 @@ type Config struct {
 	Ports                *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
 	DetectionIntervalStr string                `json:"detection_interval" schema:"type:string,description:Interval between community detection runs (e.g. 30s or 5m),category:basic"`
 	BatchSize            int                   `json:"batch_size" schema:"type:int,description:Event count threshold for triggering detection,category:basic"`
-	EnableLLM            bool                  `json:"enable_llm" schema:"type:bool,description:Enable LLM-based community summarization,category:advanced"`
-	LLMEndpoint          string                `json:"llm_endpoint" schema:"type:string,description:URL for LLM endpoint (required if enable_llm is true),category:advanced"`
-	LLMModel             string                `json:"llm_model" schema:"type:string,description:Model name for LLM service (e.g. mistral-7b-instruct),category:advanced"`
+	EnableLLM            bool                  `json:"enable_llm" schema:"type:bool,description:Enable LLM-based community summarization (requires model registry with community_summary capability),category:advanced"`
 	EnhancementWorkers   int                   `json:"enhancement_workers" schema:"type:int,description:Number of parallel workers for LLM enhancement (default 5),category:advanced"`
 	MinCommunitySize     int                   `json:"min_community_size" schema:"type:int,description:Minimum number of entities to form a community,category:advanced"`
 	MaxIterations        int                   `json:"max_iterations" schema:"type:int,description:Maximum iterations for LPA algorithm,category:advanced"`
@@ -86,11 +85,6 @@ func (c *Config) Validate() error {
 	// Validate detection interval (parsed duration must be positive)
 	if c.detectionInterval <= 0 {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "detection_interval must be greater than 0")
-	}
-
-	// If LLM is enabled, endpoint is required (model defaults to service default)
-	if c.EnableLLM && c.LLMEndpoint == "" {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "llm_endpoint required when enable_llm is true")
 	}
 
 	// Validate min community size
@@ -273,8 +267,9 @@ type Component struct {
 	config Config
 
 	// Dependencies
-	natsClient *natsclient.Client
-	logger     *slog.Logger
+	natsClient    *natsclient.Client
+	logger        *slog.Logger
+	modelRegistry model.RegistryReader
 
 	// Domain resources
 	communityBucket jetstream.KeyValue
@@ -353,10 +348,11 @@ func CreateGraphClustering(rawConfig json.RawMessage, deps component.Dependencie
 
 	// Create component
 	comp := &Component{
-		name:       "graph-clustering",
-		config:     config,
-		natsClient: natsClient,
-		logger:     logger,
+		name:          "graph-clustering",
+		config:        config,
+		natsClient:    natsClient,
+		logger:        logger,
+		modelRegistry: deps.ModelRegistry,
 	}
 
 	// Initialize last activity
@@ -1070,16 +1066,17 @@ func (p *kvProvider) GetEdgeWeight(_ context.Context, _, _ string) (float64, err
 
 // startEnhancementWorker initializes and starts the LLM enhancement worker
 func (c *Component) startEnhancementWorker(ctx context.Context, provider clustering.Provider) error {
-	// Use default model if not specified (LLM service provides its own default)
-	model := c.config.LLMModel
-	if model == "" {
-		model = "default" // LLM service will use its configured default
+	// Resolve endpoint from model registry
+	resolved, err := model.ResolveEndpoint(c.modelRegistry, model.CapabilityCommunitySummary)
+	if err != nil {
+		return errs.Wrap(err, "Component", "startEnhancementWorker", "resolve community_summary endpoint")
 	}
 
 	// Create LLM client
 	llmClient, err := llm.NewOpenAIClient(llm.OpenAIConfig{
-		BaseURL: c.config.LLMEndpoint,
-		Model:   model,
+		BaseURL: resolved.URL,
+		Model:   resolved.Model,
+		APIKey:  resolved.APIKey,
 		Logger:  c.logger,
 	})
 	if err != nil {
@@ -1125,8 +1122,8 @@ func (c *Component) startEnhancementWorker(ctx context.Context, provider cluster
 
 	c.enhancementWorker = worker
 	c.logger.Info("LLM enhancement worker started",
-		slog.String("endpoint", c.config.LLMEndpoint),
-		slog.String("model", c.config.LLMModel),
+		slog.String("endpoint", resolved.URL),
+		slog.String("model", resolved.Model),
 		slog.Int("workers", c.config.EnhancementWorkers))
 
 	return nil

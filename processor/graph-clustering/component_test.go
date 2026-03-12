@@ -221,7 +221,6 @@ func TestConfig_Validate_ValidConfig(t *testing.T) {
 				},
 				DetectionIntervalStr: "60s",
 				EnableLLM:            true,
-				LLMEndpoint:          "http://localhost:8080/llm",
 				MinCommunitySize:     5,
 				MaxIterations:        200,
 			},
@@ -367,68 +366,6 @@ func TestConfig_Validate_InvalidInterval(t *testing.T) {
 				config.ApplyDefaults()
 			}
 
-			err := config.Validate()
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestConfig_Validate_LLMRequiresEndpoint(t *testing.T) {
-	tests := []struct {
-		name        string
-		enableLLM   bool
-		llmEndpoint string
-		wantErr     bool
-	}{
-		{
-			name:        "LLM enabled with endpoint",
-			enableLLM:   true,
-			llmEndpoint: "http://localhost:8080/llm",
-			wantErr:     false,
-		},
-		{
-			name:        "LLM enabled without endpoint",
-			enableLLM:   true,
-			llmEndpoint: "",
-			wantErr:     true,
-		},
-		{
-			name:        "LLM disabled without endpoint",
-			enableLLM:   false,
-			llmEndpoint: "",
-			wantErr:     false,
-		},
-		{
-			name:        "LLM disabled with endpoint",
-			enableLLM:   false,
-			llmEndpoint: "http://localhost:8080/llm",
-			wantErr:     false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := Config{
-				Ports: &component.PortConfig{
-					Inputs: []component.PortDefinition{
-						{Name: "entity_watch", Type: "kv-watch", Subject: "ENTITY_STATES"},
-					},
-					Outputs: []component.PortDefinition{
-						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
-					},
-				},
-				DetectionIntervalStr: "30s",
-				EnableLLM:            tt.enableLLM,
-				LLMEndpoint:          tt.llmEndpoint,
-				MinCommunitySize:     3,
-				MaxIterations:        100,
-			}
-
-			config.ApplyDefaults()
 			err := config.Validate()
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -695,9 +632,6 @@ func TestComponent_ConfigSchema_ReturnsValidSchema(t *testing.T) {
 	_, hasEnableLLMProperty := schema.Properties["enable_llm"]
 	assert.True(t, hasEnableLLMProperty, "schema should have 'enable_llm' property")
 
-	_, hasLLMEndpointProperty := schema.Properties["llm_endpoint"]
-	assert.True(t, hasLLMEndpointProperty, "schema should have 'llm_endpoint' property")
-
 	_, hasMinCommunitySizeProperty := schema.Properties["min_community_size"]
 	assert.True(t, hasMinCommunitySizeProperty, "schema should have 'min_community_size' property")
 
@@ -952,7 +886,6 @@ func TestCreateGraphClustering_LLMConfig(t *testing.T) {
 		},
 		DetectionIntervalStr: "60s",
 		EnableLLM:            true,
-		LLMEndpoint:          "http://localhost:8080/llm",
 		MinCommunitySize:     5,
 		MaxIterations:        200,
 	}
@@ -975,7 +908,6 @@ func TestCreateGraphClustering_LLMConfig(t *testing.T) {
 	// Verify LLM configuration
 	component := comp.(*Component)
 	assert.Equal(t, true, component.config.EnableLLM)
-	assert.Equal(t, "http://localhost:8080/llm", component.config.LLMEndpoint)
 	assert.Equal(t, 60*time.Second, component.config.DetectionInterval())
 	assert.Equal(t, 5, component.config.MinCommunitySize)
 	assert.Equal(t, 200, component.config.MaxIterations)
@@ -1147,29 +1079,10 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 				},
 				DetectionIntervalStr: "30s",
 				EnableLLM:            true,
-				LLMEndpoint:          "http://localhost:8080",
 				MinCommunitySize:     3,
 				MaxIterations:        100,
 			},
 			shouldErr: false,
-		},
-		{
-			name: "invalid - LLM without endpoint",
-			config: Config{
-				Ports: &component.PortConfig{
-					Inputs: []component.PortDefinition{
-						{Name: "entity_watch", Type: "kv-watch", Subject: "ENTITY_STATES"},
-					},
-					Outputs: []component.PortDefinition{
-						{Name: "communities", Type: "kv-write", Subject: "COMMUNITY_INDEX"},
-					},
-				},
-				DetectionIntervalStr: "30s",
-				EnableLLM:            true,
-				MinCommunitySize:     3,
-				MaxIterations:        100,
-			},
-			shouldErr: true,
 		},
 		{
 			name: "invalid - zero interval",

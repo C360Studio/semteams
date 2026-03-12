@@ -17,12 +17,7 @@
     },
     "embedder_type": {
       "type": "string",
-      "description": "Embedder type (bm25 or http)",
-      "category": "basic"
-    },
-    "embedder_url": {
-      "type": "string",
-      "description": "URL for HTTP embedder (required if embedder_type is http)",
+      "description": "Embedder type (bm25 or http). HTTP requires model registry with embedding capability",
       "category": "basic"
     },
     "ports": {

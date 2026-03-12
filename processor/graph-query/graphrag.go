@@ -200,25 +200,35 @@ func (c *Component) tryPathIntentSearch(ctx context.Context, query string, start
 		return nil, false
 	}
 
-	opts := c.classifier.ClassifyQuery(ctx, query)
-	if !opts.PathIntent || opts.PathStartNode == "" {
+	result := c.classifier.ClassifyQuery(ctx, query)
+	if result == nil {
 		return nil, false
+	}
+	pathIntent, _ := result.Options["path_intent"].(bool)
+	pathStartNode, _ := result.Options["path_start_node"].(string)
+	if !pathIntent || pathStartNode == "" {
+		return nil, false
+	}
+
+	var pathPredicates []string
+	if pp, ok := result.Options["path_predicates"].([]string); ok {
+		pathPredicates = pp
 	}
 
 	c.logger.Debug("path intent detected in NL query",
 		"query", query,
-		"start_node", opts.PathStartNode)
+		"start_node", pathStartNode)
 
 	// Resolve partial entity ID to full ID
-	fullID, err := c.resolvePartialEntityID(ctx, opts.PathStartNode)
+	fullID, err := c.resolvePartialEntityID(ctx, pathStartNode)
 	c.logger.Debug("entity ID resolution result",
-		"partial", opts.PathStartNode,
+		"partial", pathStartNode,
 		"full", fullID,
 		"error", err)
 
 	if err == nil && fullID != "" {
 		// Execute PathRAG search
-		pathResult, pathErr := c.executePathSearchForGlobal(ctx, fullID, opts.PathPredicates)
+		pathResult, pathErr := c.executePathSearchForGlobal(ctx, fullID, pathPredicates)
 		entityCount := 0
 		if pathResult != nil {
 			entityCount = len(pathResult.Entities)
@@ -235,8 +245,8 @@ func (c *Component) tryPathIntentSearch(ctx context.Context, query string, start
 				DurationMs: time.Since(startTime).Milliseconds(),
 			}
 			c.recordSuccess(requestSize, 0)
-			result, _ := json.Marshal(response)
-			return result, true
+			marshaledResult, _ := json.Marshal(response)
+			return marshaledResult, true
 		}
 		c.logger.Debug("PathRAG returned no results, falling through to other tiers",
 			"error", pathErr)
@@ -246,14 +256,14 @@ func (c *Component) tryPathIntentSearch(ctx context.Context, query string, start
 	// At structural tier without entity resolution, return empty result
 	if c.communityCache == nil {
 		c.logger.Debug("structural tier: cannot resolve entity ID, returning empty result",
-			"partial", opts.PathStartNode)
+			"partial", pathStartNode)
 		response := GlobalSearchResponse{
 			Entities:   []*gtypes.EntityState{},
 			Count:      0,
 			DurationMs: time.Since(startTime).Milliseconds(),
 		}
-		result, _ := json.Marshal(response)
-		return result, true
+		marshaledResult, _ := json.Marshal(response)
+		return marshaledResult, true
 	}
 
 	return nil, false

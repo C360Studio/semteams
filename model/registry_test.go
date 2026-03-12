@@ -80,11 +80,11 @@ func TestValidate(t *testing.T) {
 			wantErr: "endpoint \"bad\": model is required",
 		},
 		{
-			name: "endpoint zero max_tokens",
+			name: "endpoint negative max_tokens",
 			modify: func(r *Registry) {
-				r.Endpoints["bad"] = &EndpointConfig{Model: "test", MaxTokens: 0}
+				r.Endpoints["bad"] = &EndpointConfig{Model: "test", MaxTokens: -1}
 			},
-			wantErr: "endpoint \"bad\": max_tokens must be positive",
+			wantErr: "endpoint \"bad\": max_tokens must not be negative",
 		},
 		{
 			name: "endpoint unknown provider",
@@ -793,6 +793,97 @@ func TestResolveSummarization(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidate_ZeroMaxTokens(t *testing.T) {
+	r := &Registry{
+		Endpoints: map[string]*EndpointConfig{
+			"embedder": {
+				Provider:  "openai",
+				URL:       "http://localhost:8081/v1",
+				Model:     "all-MiniLM-L6-v2",
+				MaxTokens: 0, // valid: 0 = not applicable (e.g. embedding endpoints)
+			},
+		},
+		Defaults: DefaultsConfig{Model: "embedder"},
+	}
+	if err := r.Validate(); err != nil {
+		t.Fatalf("MaxTokens=0 should be valid: %v", err)
+	}
+}
+
+func TestResolveEndpoint(t *testing.T) {
+	reg := &Registry{
+		Capabilities: map[string]*CapabilityConfig{
+			"embedding": {
+				Preferred: []string{"embedder"},
+			},
+		},
+		Endpoints: map[string]*EndpointConfig{
+			"embedder": {
+				Provider:  "openai",
+				URL:       "http://localhost:8081/v1",
+				Model:     "all-MiniLM-L6-v2",
+				MaxTokens: 0,
+				APIKeyEnv: "TEST_NONEXISTENT_KEY_12345",
+			},
+		},
+		Defaults: DefaultsConfig{Model: "embedder"},
+	}
+
+	t.Run("nil registry returns error", func(t *testing.T) {
+		_, err := ResolveEndpoint(nil, "embedding")
+		if err == nil {
+			t.Fatal("expected error for nil registry")
+		}
+		if !contains(err.Error(), "model registry required") {
+			t.Fatalf("error %q should mention model registry required", err.Error())
+		}
+	})
+
+	t.Run("missing capability falls back to default, resolves endpoint", func(t *testing.T) {
+		resolved, err := ResolveEndpoint(reg, "nonexistent_capability")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if resolved.URL != "http://localhost:8081/v1" {
+			t.Fatalf("URL = %q, want http://localhost:8081/v1", resolved.URL)
+		}
+		if resolved.Model != "all-MiniLM-L6-v2" {
+			t.Fatalf("Model = %q, want all-MiniLM-L6-v2", resolved.Model)
+		}
+	})
+
+	t.Run("successful resolve", func(t *testing.T) {
+		resolved, err := ResolveEndpoint(reg, "embedding")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if resolved.URL != "http://localhost:8081/v1" {
+			t.Fatalf("URL = %q, want http://localhost:8081/v1", resolved.URL)
+		}
+		if resolved.Model != "all-MiniLM-L6-v2" {
+			t.Fatalf("Model = %q, want all-MiniLM-L6-v2", resolved.Model)
+		}
+		// APIKey should be empty since env var doesn't exist
+		if resolved.APIKey != "" {
+			t.Fatalf("APIKey = %q, want empty (env var not set)", resolved.APIKey)
+		}
+	})
+
+	t.Run("no endpoint configured returns error", func(t *testing.T) {
+		emptyReg := &Registry{
+			Endpoints: map[string]*EndpointConfig{},
+			Defaults:  DefaultsConfig{Model: "nonexistent"},
+		}
+		_, err := ResolveEndpoint(emptyReg, "embedding")
+		if err == nil {
+			t.Fatal("expected error for missing endpoint")
+		}
+		if !contains(err.Error(), "no endpoint for capability") {
+			t.Fatalf("error %q should mention no endpoint", err.Error())
+		}
+	})
 }
 
 // helpers

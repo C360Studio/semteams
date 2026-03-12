@@ -54,7 +54,6 @@ ENTITY_STATES ─────►│                  │
       ]
     },
     "embedder_type": "http",
-    "embedder_url": "http://semembed:8081/v1",
     "batch_size": 50,
     "cache_ttl": "1h"
   }
@@ -66,8 +65,7 @@ ENTITY_STATES ─────►│                  │
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `ports` | object | required | Port configuration for inputs and outputs |
-| `embedder_type` | string | "bm25" | Embedder type: "http" or "bm25" |
-| `embedder_url` | string | "" | URL for HTTP embedder (required if type is "http") |
+| `embedder_type` | string | "bm25" | Embedder type: "http" or "bm25". HTTP requires model registry with `embedding` capability |
 | `batch_size` | int | 50 | Batch size for embedding requests |
 | `cache_ttl` | duration | "1h" | Cache TTL for embeddings |
 
@@ -93,10 +91,11 @@ Uses an OpenAI-compatible embedding API:
 
 ```json
 {
-  "embedder_type": "http",
-  "embedder_url": "http://semembed:8081/v1"
+  "embedder_type": "http"
 }
 ```
+
+The HTTP embedder URL, model, and API key are resolved from the model registry's `embedding` capability.
 
 Compatible with:
 - OpenAI Embeddings API

@@ -50,7 +50,6 @@
 //	    ]
 //	  },
 //	  "embedder_type": "http",
-//	  "embedder_url": "http://semembed:8081/v1",
 //	  "batch_size": 50,
 //	  "cache_ttl": "1h"
 //	}

@@ -14,7 +14,9 @@ import (
 
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/graph/llm"
 	"github.com/c360studio/semstreams/graph/query"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/resource"
@@ -94,12 +96,14 @@ func DefaultConfig() Config {
 
 // Component implements the graph query coordinator
 type Component struct {
-	config       Config
-	natsClient   natsRequester
-	pathSearcher *PathSearcher
-	router       *StaticRouter
-	logger       *slog.Logger
-	classifier   query.Classifier
+	config        Config
+	natsClient    natsRequester
+	pathSearcher  *PathSearcher
+	router        *StaticRouter
+	logger        *slog.Logger
+	modelRegistry model.RegistryReader
+	llmClient     llm.Client
+	classifier    *query.ClassifierChain
 
 	// Community cache for GraphRAG (consumer-owned, KV watch based)
 	communityCache   *CommunityCache
@@ -164,13 +168,14 @@ func CreateGraphQuery(rawConfig json.RawMessage, deps component.Dependencies) (c
 
 	logger := deps.GetLoggerWithComponent("graph-query")
 
-	// Create component
+	// Create component with keyword-only classifier; LLM classifier wired in Start()
 	comp := &Component{
 		config:           config,
 		natsClient:       deps.NATSClient, // Assign to interface field
 		pathSearcher:     NewPathSearcher(deps.NATSClient, config.QueryTimeout, config.MaxDepth, logger),
 		logger:           logger,
-		classifier:       query.NewKeywordClassifier(),
+		modelRegistry:    deps.ModelRegistry,
+		classifier:       query.NewClassifierChain(query.NewKeywordClassifier(), nil, nil),
 		lastMetricsReset: time.Now(),
 		promMetrics:      getMetrics(deps.MetricsRegistry),
 	}
@@ -332,6 +337,37 @@ func (c *Component) initLifecycleReporter(ctx context.Context) {
 	})
 }
 
+// initLLMClassifier wires the LLM query classifier if the model registry
+// has a query_classification capability configured. Gracefully degrades to
+// keyword-only classification on any error.
+func (c *Component) initLLMClassifier() {
+	if c.modelRegistry == nil {
+		return
+	}
+	resolved, err := model.ResolveEndpoint(c.modelRegistry, model.CapabilityQueryClassification)
+	if err != nil {
+		// No query_classification capability configured — keyword-only is fine
+		return
+	}
+	client, err := llm.NewOpenAIClient(llm.OpenAIConfig{
+		BaseURL: resolved.URL,
+		Model:   resolved.Model,
+		APIKey:  resolved.APIKey,
+		Logger:  c.logger,
+	})
+	if err != nil {
+		c.logger.Warn("failed to create LLM query classifier, using keyword-only",
+			slog.Any("error", err))
+		return
+	}
+	c.llmClient = client
+	adapter := query.NewLLMClientAdapter(client)
+	llmClassifier := query.NewLLMClassifier(adapter, nil)
+	c.classifier = query.NewClassifierChain(query.NewKeywordClassifier(), nil, llmClassifier)
+	c.logger.Info("LLM query classifier enabled",
+		slog.String("model", resolved.Model))
+}
+
 // Start starts the component
 func (c *Component) Start(ctx context.Context) error {
 	// Validate context
@@ -361,6 +397,9 @@ func (c *Component) Start(ctx context.Context) error {
 	if err := c.natsClient.WaitForConnection(componentCtx); err != nil {
 		return fmt.Errorf("wait for NATS connection: %w", err)
 	}
+
+	// Wire LLM classifier if model registry has query_classification capability
+	c.initLLMClassifier()
 
 	// Initialize lifecycle reporter (throttled for high-throughput queries)
 	c.initLifecycleReporter(componentCtx)
@@ -456,6 +495,13 @@ func (c *Component) Stop(timeout time.Duration) error {
 		}
 	}
 	c.querySubscriptions = nil
+
+	// Close LLM client if present
+	if c.llmClient != nil {
+		if err := c.llmClient.Close(); err != nil {
+			c.logger.Warn("LLM client close error", slog.Any("error", err))
+		}
+	}
 
 	if c.cancel != nil {
 		c.cancel()

@@ -162,7 +162,7 @@ Generates vector embeddings for entities.
 }
 ```
 
-For Semantic tier, use `"embedder_type": "http"` with `"embedder_url": "http://semembed:8081/v1"`.
+For Semantic tier, use `"embedder_type": "http"` with a model registry `embedding` capability configured.
 
 ### graph-clustering
 
@@ -210,8 +210,7 @@ Performs community detection with optional structural analysis, anomaly detectio
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `enable_llm` | bool | `false` | Enable LLM-based community summarization |
-| `llm_endpoint` | string | - | LLM service endpoint (required if enable_llm=true) |
+| `enable_llm` | bool | `false` | Enable LLM-based community summarization (requires model registry `community_summary` capability) |
 | `enable_structural` | bool | `false` | Enable k-core and pivot distance computation |
 | `pivot_count` | int | `16` | Number of pivot nodes for distance indexing |
 | `max_hop_distance` | int | `10` | Maximum BFS traversal depth |
@@ -223,7 +222,6 @@ For Semantic tier, enable LLM and semantic gap detection:
 ```json
 {
   "enable_llm": true,
-  "llm_endpoint": "http://seminstruct:8083/v1",
   "anomaly_config": {
     "semantic_gap": {
       "enabled": true,

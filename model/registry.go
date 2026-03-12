@@ -4,8 +4,49 @@ package model
 
 import (
 	"fmt"
+	"os"
 	"sort"
 )
+
+// Capability name constants for registry-based endpoint resolution.
+// Custom capabilities beyond these can be used with Resolve() directly.
+const (
+	// CapabilitySummarization is used by the agentic loop for context compaction.
+	CapabilitySummarization = "summarization"
+	// CapabilityCommunitySummary is used by graph-clustering for LLM community summaries.
+	CapabilityCommunitySummary = "community_summary"
+	// CapabilityEmbedding is used by graph-embedding for HTTP embedding services.
+	CapabilityEmbedding = "embedding"
+	// CapabilityQueryClassification is used by graph-query for LLM-based query classification.
+	CapabilityQueryClassification = "query_classification"
+)
+
+// ResolvedEndpoint holds the resolved connection details for a capability endpoint.
+type ResolvedEndpoint struct {
+	URL    string
+	Model  string
+	APIKey string
+}
+
+// ResolveEndpoint resolves a capability to its endpoint connection details.
+// Returns an error if the registry is nil, or if no endpoint is configured
+// for the capability. The API key is read from the environment variable
+// specified by EndpointConfig.APIKeyEnv (empty if unset or not configured).
+func ResolveEndpoint(reg RegistryReader, capability string) (*ResolvedEndpoint, error) {
+	if reg == nil {
+		return nil, fmt.Errorf("model registry required for %s", capability)
+	}
+	name := reg.Resolve(capability)
+	ep := reg.GetEndpoint(name)
+	if ep == nil {
+		return nil, fmt.Errorf("no endpoint for capability %q", capability)
+	}
+	apiKey := ""
+	if ep.APIKeyEnv != "" {
+		apiKey = os.Getenv(ep.APIKeyEnv)
+	}
+	return &ResolvedEndpoint{URL: ep.URL, Model: ep.Model, APIKey: apiKey}, nil
+}
 
 // EndpointConfig defines an available model endpoint.
 type EndpointConfig struct {
@@ -165,8 +206,8 @@ func validateEndpoint(name string, ep *EndpointConfig) error {
 	if ep.Model == "" {
 		return fmt.Errorf("endpoint %q: model is required", name)
 	}
-	if ep.MaxTokens < 1 {
-		return fmt.Errorf("endpoint %q: max_tokens must be positive", name)
+	if ep.MaxTokens < 0 {
+		return fmt.Errorf("endpoint %q: max_tokens must not be negative", name)
 	}
 
 	validProviders := map[string]bool{
@@ -306,8 +347,8 @@ func (r *Registry) ListEndpoints() []string {
 // ResolveSummarization returns the endpoint name best suited for summarization.
 func (r *Registry) ResolveSummarization() string {
 	// 1. Explicit "summarization" capability takes priority.
-	if _, ok := r.Capabilities["summarization"]; ok {
-		if name := r.Resolve("summarization"); name != "" {
+	if _, ok := r.Capabilities[CapabilitySummarization]; ok {
+		if name := r.Resolve(CapabilitySummarization); name != "" {
 			return name
 		}
 	}

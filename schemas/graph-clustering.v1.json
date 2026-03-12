@@ -258,7 +258,7 @@
     },
     "enable_llm": {
       "type": "boolean",
-      "description": "Enable LLM-based community summarization",
+      "description": "Enable LLM-based community summarization (requires model registry with community_summary capability)",
       "category": "advanced"
     },
     "enable_structural": {
@@ -269,16 +269,6 @@
     "enhancement_workers": {
       "type": "number",
       "description": "Number of parallel workers for LLM enhancement (default 5)",
-      "category": "advanced"
-    },
-    "llm_endpoint": {
-      "type": "string",
-      "description": "URL for LLM endpoint (required if enable_llm is true)",
-      "category": "advanced"
-    },
-    "llm_model": {
-      "type": "string",
-      "description": "Model name for LLM service (e.g. mistral-7b-instruct)",
       "category": "advanced"
     },
     "max_hop_distance": {

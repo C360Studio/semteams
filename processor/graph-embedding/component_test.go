@@ -187,7 +187,6 @@ func TestConfig_Validate_ValidConfig(t *testing.T) {
 					},
 				},
 				EmbedderType: "http",
-				EmbedderURL:  "http://localhost:8080/embeddings",
 				BatchSize:    100,
 				CacheTTLStr:  "30m",
 			},
@@ -305,22 +304,6 @@ func TestConfig_Validate_InvalidEmbedderType(t *testing.T) {
 					},
 				},
 				EmbedderType: "openai",
-			},
-			wantErr: true,
-		},
-		{
-			name: "http embedder without URL",
-			config: Config{
-				Ports: &component.PortConfig{
-					Inputs: []component.PortDefinition{
-						{Name: "entity_watch", Type: "kv-watch", Subject: "ENTITY_STATES"},
-					},
-					Outputs: []component.PortDefinition{
-						{Name: "embeddings", Type: "kv-write", Subject: "EMBEDDINGS_CACHE"},
-					},
-				},
-				EmbedderType: "http",
-				EmbedderURL:  "",
 			},
 			wantErr: true,
 		},
@@ -515,9 +498,6 @@ func TestComponent_ConfigSchema_ReturnsValidSchema(t *testing.T) {
 
 	_, hasEmbedderTypeProperty := schema.Properties["embedder_type"]
 	assert.True(t, hasEmbedderTypeProperty, "schema should have 'embedder_type' property")
-
-	_, hasEmbedderURLProperty := schema.Properties["embedder_url"]
-	assert.True(t, hasEmbedderURLProperty, "schema should have 'embedder_url' property")
 
 	_, hasBatchSizeProperty := schema.Properties["batch_size"]
 	assert.True(t, hasBatchSizeProperty, "schema should have 'batch_size' property")
@@ -772,7 +752,6 @@ func TestCreateGraphEmbedding_HTTPEmbedderConfig(t *testing.T) {
 			},
 		},
 		EmbedderType: "http",
-		EmbedderURL:  "http://localhost:8080/embeddings",
 		BatchSize:    100,
 		CacheTTLStr:  "30m",
 	}
@@ -795,7 +774,6 @@ func TestCreateGraphEmbedding_HTTPEmbedderConfig(t *testing.T) {
 	// Verify HTTP embedder configuration
 	component := comp.(*Component)
 	assert.Equal(t, "http", component.config.EmbedderType)
-	assert.Equal(t, "http://localhost:8080/embeddings", component.config.EmbedderURL)
 	assert.Equal(t, 100, component.config.BatchSize)
 	assert.Equal(t, 30*time.Minute, component.config.CacheTTL())
 }
@@ -952,7 +930,7 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 			shouldErr: false,
 		},
 		{
-			name: "valid http with URL",
+			name: "valid http embedder",
 			config: Config{
 				Ports: &component.PortConfig{
 					Inputs: []component.PortDefinition{
@@ -963,24 +941,8 @@ func TestComponent_MultipleConfigValidations(t *testing.T) {
 					},
 				},
 				EmbedderType: "http",
-				EmbedderURL:  "http://localhost:8080",
 			},
 			shouldErr: false,
-		},
-		{
-			name: "invalid - http without URL",
-			config: Config{
-				Ports: &component.PortConfig{
-					Inputs: []component.PortDefinition{
-						{Name: "entity_watch", Type: "kv-watch", Subject: "ENTITY_STATES"},
-					},
-					Outputs: []component.PortDefinition{
-						{Name: "embeddings", Type: "kv-write", Subject: "EMBEDDINGS_CACHE"},
-					},
-				},
-				EmbedderType: "http",
-			},
-			shouldErr: true,
 		},
 		{
 			name: "invalid - unknown embedder type",

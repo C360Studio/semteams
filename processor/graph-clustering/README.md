@@ -62,7 +62,6 @@ When triggered, the component runs through these phases:
     "min_community_size": 2,
     "max_iterations": 100,
     "enable_llm": false,
-    "llm_endpoint": "http://seminstruct:8083/v1",
     "enable_structural": true,
     "pivot_count": 16,
     "max_hop_distance": 10,
@@ -104,8 +103,7 @@ When triggered, the component runs through these phases:
 | `batch_size` | int | 100 | Entity change count to trigger detection |
 | `min_community_size` | int | 2 | Minimum entities to form community |
 | `max_iterations` | int | 100 | Max LPA iterations |
-| `enable_llm` | bool | false | Enable LLM community summarization |
-| `llm_endpoint` | string | "" | LLM API endpoint (required if enable_llm) |
+| `enable_llm` | bool | false | Enable LLM community summarization (requires model registry with `community_summary` capability) |
 | `enable_structural` | bool | false | Enable k-core and pivot computation |
 | `pivot_count` | int | 16 | Number of pivot nodes for distance indexing |
 | `max_hop_distance` | int | 10 | Maximum BFS traversal depth |
