@@ -33,7 +33,7 @@
         },
         "enabled": {
           "type": "boolean",
-          "description": "Enable context memory management"
+          "description": "Deprecated: context management is always enabled (required for Gemini compatibility)"
         },
         "entity_priority": {
           "type": "number",

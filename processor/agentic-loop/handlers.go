@@ -313,23 +313,19 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		return HandlerResult{}, err
 	}
 
-	// Add user prompt to context manager if enabled
+	// Add user prompt to context manager
 	cm := h.loopManager.GetContextManager(loopID)
-	if cm != nil {
-		_ = cm.AddMessage(RegionRecentHistory, agentic.ChatMessage{
-			Role:    "user",
-			Content: task.Prompt,
-		})
-	}
+	_ = cm.AddMessage(RegionRecentHistory, agentic.ChatMessage{
+		Role:    "user",
+		Content: task.Prompt,
+	})
 
 	// If embedded context is present, add it directly (skips hydration)
 	if task.Context != nil && task.Context.Content != "" {
-		if cm != nil {
-			_ = cm.AddMessage(RegionGraphEntities, agentic.ChatMessage{
-				Role:    "system",
-				Content: task.Context.Content,
-			})
-		}
+		_ = cm.AddMessage(RegionGraphEntities, agentic.ChatMessage{
+			Role:    "system",
+			Content: task.Context.Content,
+		})
 		h.logger.Debug("Using embedded context",
 			slog.String("loop_id", loopID),
 			slog.Int("token_count", task.Context.TokenCount),
@@ -479,9 +475,8 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 	// required in the conversation history for the next model request.
 	cm := h.loopManager.GetContextManager(loopID)
 	hasContent := response.Message.Content != "" || response.Message.ReasoningContent != "" || len(response.Message.ToolCalls) > 0
-	if cm != nil && hasContent {
+	if hasContent {
 		_ = cm.AddMessage(RegionRecentHistory, response.Message)
-
 		h.maybeCompact(ctx, cm, loopID, entity.Iterations, &result)
 	}
 
@@ -832,30 +827,24 @@ func (h *MessageHandler) handleToolsComplete(
 	}
 
 	// Build full conversation for the next model request.
-	// When context management is enabled, add tool results first, then run GC.
-	// GC must run AFTER tool results are in context so the repair pass can see
-	// complete tool pairs (assistant + tool results) and avoid orphaning them.
-	// Without context management, fall back to tool-results-only (legacy behavior).
-	var messages []agentic.ChatMessage
-	if cm != nil {
-		for _, tm := range toolMessages {
-			_ = cm.AddMessage(RegionRecentHistory, tm)
-		}
-
-		// Run GC on old tool results now that current results are in context
-		evicted := cm.GCToolResults(newIteration)
-		if evicted > 0 {
-			result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
-				Type:      "gc_complete",
-				LoopID:    loopID,
-				Iteration: newIteration,
-			})
-		}
-
-		messages = cm.GetContext()
-	} else {
-		messages = toolMessages
+	// Add tool results first, then run GC. GC must run AFTER tool results are
+	// in context so the repair pass can see complete tool pairs (assistant +
+	// tool results) and avoid orphaning them.
+	for _, tm := range toolMessages {
+		_ = cm.AddMessage(RegionRecentHistory, tm)
 	}
+
+	// Run GC on old tool results now that current results are in context
+	evicted := cm.GCToolResults(newIteration)
+	if evicted > 0 {
+		result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
+			Type:      "gc_complete",
+			LoopID:    loopID,
+			Iteration: newIteration,
+		})
+	}
+
+	messages := cm.GetContext()
 
 	// Check for cancellation before building request
 	if err := ctx.Err(); err != nil {

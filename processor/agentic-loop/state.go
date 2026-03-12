@@ -118,14 +118,14 @@ func (m *LoopManager) CreateLoopWithID(loopID, taskID, role, model string, maxIt
 	m.loops[loopID] = &entity
 	m.pendingTools[loopID] = make(map[string]bool)
 
-	// Create context manager for this loop if context management is enabled
-	if m.contextConfig.Enabled {
-		opts := []ContextManagerOption{WithLogger(m.logger)}
-		if m.modelRegistry != nil {
-			opts = append(opts, WithModelRegistry(m.modelRegistry))
-		}
-		m.contextManagers[loopID] = NewContextManager(loopID, model, m.contextConfig, opts...)
+	// Always create context manager — full conversation history is required
+	// for providers like Gemini that need the assistant tool_call message
+	// paired with every tool result.
+	opts := []ContextManagerOption{WithLogger(m.logger)}
+	if m.modelRegistry != nil {
+		opts = append(opts, WithModelRegistry(m.modelRegistry))
 	}
+	m.contextManagers[loopID] = NewContextManager(loopID, model, m.contextConfig, opts...)
 
 	return loopID, nil
 }

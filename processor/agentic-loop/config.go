@@ -34,7 +34,7 @@ type Config struct {
 // ContextConfig represents configuration for context memory management.
 // Model context limits are resolved from the unified model registry (component.Dependencies.ModelRegistry).
 type ContextConfig struct {
-	Enabled          bool    `json:"enabled" description:"Enable context memory management"`
+	Enabled          bool    `json:"enabled" description:"Deprecated: context management is always enabled (required for Gemini compatibility)"`
 	CompactThreshold float64 `json:"compact_threshold" description:"Utilization threshold (0.01-1.0) that triggers context compaction"`
 	ToolResultMaxAge int     `json:"tool_result_max_age" description:"Maximum age in iterations before tool results are garbage collected"`
 	HeadroomTokens   int     `json:"headroom_tokens" description:"Token headroom to reserve for model responses"`
