@@ -64,7 +64,7 @@ func (v *ComponentVerifier) getRequiredComponents() []string {
 		// Domain processors
 		"document_processor", "iot_sensor",
 		// Semantic components
-		"reactive-workflow", "graph-ingest",
+		"graph-ingest",
 		// Output/storage
 		"file", "objectstore",
 	}

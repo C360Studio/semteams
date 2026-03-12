@@ -39,7 +39,7 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 		// Domain processors (document_processor, iot_sensor handle domain-specific data)
 		domainProcessors := []string{"document_processor", "iot_sensor"}
 		// Graph components (modular: ingest, index, gateway + optional embedding/clustering)
-		graphComponents := []string{"reactive-workflow", "graph-ingest", "graph-index", "graph-gateway"}
+		graphComponents := []string{"graph-ingest", "graph-index", "graph-gateway"}
 		// Output/storage components
 		outputComponents := []string{"file", "objectstore"}
 
