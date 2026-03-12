@@ -21,6 +21,7 @@ type LoopManager struct {
 	pendingTools      map[string]map[string]bool          // loopID -> map[callID]bool
 	cachedTools       map[string][]agentic.ToolDefinition // loopID -> tools (runtime cache, not persisted)
 	cachedMetadata    map[string]map[string]any           // loopID -> metadata (domain context, not persisted)
+	taskPrompts       map[string]string                   // loopID -> original task prompt (for context recovery)
 	requestToLoop     map[string]string                   // requestID -> loopID
 	toolCallToLoop    map[string]string                   // callID -> loopID
 	callIDToName      map[string]string                   // callID -> function name (for Gemini tool result name field)
@@ -58,6 +59,7 @@ func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 		pendingTools:      make(map[string]map[string]bool),
 		cachedTools:       make(map[string][]agentic.ToolDefinition),
 		cachedMetadata:    make(map[string]map[string]any),
+		taskPrompts:       make(map[string]string),
 		requestToLoop:     make(map[string]string),
 		toolCallToLoop:    make(map[string]string),
 		callIDToName:      make(map[string]string),
@@ -81,6 +83,7 @@ func NewLoopManagerWithConfig(contextConfig ContextConfig, opts ...LoopManagerOp
 		pendingTools:      make(map[string]map[string]bool),
 		cachedTools:       make(map[string][]agentic.ToolDefinition),
 		cachedMetadata:    make(map[string]map[string]any),
+		taskPrompts:       make(map[string]string),
 		requestToLoop:     make(map[string]string),
 		toolCallToLoop:    make(map[string]string),
 		callIDToName:      make(map[string]string),
@@ -224,6 +227,22 @@ func (m *LoopManager) GetCachedMetadata(loopID string) map[string]any {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.cachedMetadata[loopID]
+}
+
+// CacheTaskPrompt stores the original task prompt for context recovery.
+// If GC/repair leaves the context empty, this prompt is re-injected as a
+// synthetic user message so the model always has contents to work with.
+func (m *LoopManager) CacheTaskPrompt(loopID, prompt string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.taskPrompts[loopID] = prompt
+}
+
+// GetTaskPrompt retrieves the cached task prompt for a loop
+func (m *LoopManager) GetTaskPrompt(loopID string) string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.taskPrompts[loopID]
 }
 
 // GetCurrentIteration returns the current iteration for a loop

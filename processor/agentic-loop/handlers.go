@@ -313,12 +313,14 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		return HandlerResult{}, err
 	}
 
-	// Add user prompt to context manager
+	// Add user prompt to context manager and cache for recovery.
+	// If GC/repair later empties the context, we re-inject this prompt.
 	cm := h.loopManager.GetContextManager(loopID)
 	_ = cm.AddMessage(RegionRecentHistory, agentic.ChatMessage{
 		Role:    "user",
 		Content: task.Prompt,
 	})
+	h.loopManager.CacheTaskPrompt(loopID, task.Prompt)
 
 	// If embedded context is present, add it directly (skips hydration)
 	if task.Context != nil && task.Context.Content != "" {
@@ -846,11 +848,12 @@ func (h *MessageHandler) handleToolsComplete(
 
 	messages := cm.GetContext()
 
-	// Guard: GC + repair may have removed all conversation content (e.g., orphaned
-	// tool pairs were the only messages). Sending an empty messages array to Gemini
-	// triggers "contents is not specified" (400). Fail the loop gracefully.
+	// Recovery: GC + repair may have removed all conversation content (e.g.,
+	// orphaned tool pairs were the only messages in RecentHistory). Sending an
+	// empty messages array to Gemini triggers "contents is not specified" (400).
+	// Re-inject the original task prompt so the agent can continue.
 	if len(messages) == 0 {
-		return h.failLoopEmptyContext(loopID, newIteration, evicted, result)
+		messages = h.recoverEmptyContext(loopID, cm, newIteration, evicted)
 	}
 
 	// Check for cancellation before building request
@@ -889,26 +892,26 @@ func (h *MessageHandler) handleToolsComplete(
 	return *result, nil
 }
 
-// failLoopEmptyContext handles the case where GC/repair has removed all conversation
-// content, leaving an empty messages array that would cause Gemini to reject the
-// request with "contents is not specified" (400).
-func (h *MessageHandler) failLoopEmptyContext(loopID string, iteration, evicted int, result *HandlerResult) (HandlerResult, error) {
-	h.logger.Warn("context empty after GC/repair — failing loop",
+// recoverEmptyContext handles the case where GC/repair has removed all conversation
+// content. Instead of failing the loop, it re-injects the original task prompt as a
+// synthetic user message so the agent can continue. Returns the recovered messages.
+func (h *MessageHandler) recoverEmptyContext(loopID string, cm *ContextManager, iteration, evicted int) []agentic.ChatMessage {
+	prompt := h.loopManager.GetTaskPrompt(loopID)
+	if prompt == "" {
+		prompt = "Continue with the task."
+	}
+
+	h.logger.Warn("context empty after GC/repair — recovering with task prompt",
 		slog.String("loop_id", loopID),
 		slog.Int("iteration", iteration),
 		slog.Int("evicted", evicted))
-	_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
-	errorMsg := "context empty after tool pair repair — no messages to send to model"
-	if updateErr := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", errorMsg); updateErr != nil {
-		h.logger.Warn("failed to update completion for empty context",
-			slog.String("loop_id", loopID),
-			slog.String("error", updateErr.Error()))
+
+	synthetic := agentic.ChatMessage{
+		Role:    "user",
+		Content: fmt.Sprintf("[Context recovered after tool pair cleanup]\n\nOriginal task: %s\n\nPrevious tool calls encountered errors. Please continue or try a different approach.", prompt),
 	}
-	result.State = agentic.LoopStateFailed
-	if failMsgs, fErr := h.BuildFailureMessages(loopID, "empty_context", errorMsg); fErr == nil {
-		result.PublishedMessages = failMsgs
-	}
-	return *result, nil
+	_ = cm.AddMessage(RegionRecentHistory, synthetic)
+	return cm.GetContext()
 }
 
 // BuildFailureEvent creates a failure event for publishing (public wrapper).
