@@ -846,6 +846,13 @@ func (h *MessageHandler) handleToolsComplete(
 
 	messages := cm.GetContext()
 
+	// Guard: GC + repair may have removed all conversation content (e.g., orphaned
+	// tool pairs were the only messages). Sending an empty messages array to Gemini
+	// triggers "contents is not specified" (400). Fail the loop gracefully.
+	if len(messages) == 0 {
+		return h.failLoopEmptyContext(loopID, newIteration, evicted, result)
+	}
+
 	// Check for cancellation before building request
 	if err := ctx.Err(); err != nil {
 		return *result, err
@@ -879,6 +886,28 @@ func (h *MessageHandler) handleToolsComplete(
 		Data:    requestData,
 	})
 
+	return *result, nil
+}
+
+// failLoopEmptyContext handles the case where GC/repair has removed all conversation
+// content, leaving an empty messages array that would cause Gemini to reject the
+// request with "contents is not specified" (400).
+func (h *MessageHandler) failLoopEmptyContext(loopID string, iteration, evicted int, result *HandlerResult) (HandlerResult, error) {
+	h.logger.Warn("context empty after GC/repair — failing loop",
+		slog.String("loop_id", loopID),
+		slog.Int("iteration", iteration),
+		slog.Int("evicted", evicted))
+	_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
+	errorMsg := "context empty after tool pair repair — no messages to send to model"
+	if updateErr := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", errorMsg); updateErr != nil {
+		h.logger.Warn("failed to update completion for empty context",
+			slog.String("loop_id", loopID),
+			slog.String("error", updateErr.Error()))
+	}
+	result.State = agentic.LoopStateFailed
+	if failMsgs, fErr := h.BuildFailureMessages(loopID, "empty_context", errorMsg); fErr == nil {
+		result.PublishedMessages = failMsgs
+	}
 	return *result, nil
 }
 

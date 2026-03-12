@@ -98,6 +98,17 @@ func (c *Client) SetRetryConfig(cfg RetryConfig) {
 
 // buildChatRequest converts an AgentRequest into an OpenAI ChatCompletionRequest.
 func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletionRequest {
+	if len(req.Messages) == 0 {
+		// Return a minimal request — ChatCompletion will get an API error rather
+		// than a panic or cryptic "contents is not specified" from Gemini.
+		if c.logger != nil {
+			c.logger.Warn("buildChatRequest called with empty messages",
+				slog.String("request_id", req.RequestID),
+				slog.String("loop_id", req.LoopID))
+		}
+		return openai.ChatCompletionRequest{Model: c.endpoint.Model}
+	}
+
 	messages := make([]openai.ChatCompletionMessage, len(req.Messages))
 	for i, msg := range req.Messages {
 		messages[i] = openai.ChatCompletionMessage{

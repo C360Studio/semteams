@@ -471,3 +471,54 @@ func TestContextManager_SliceForBudget_PreservesToolPairs(t *testing.T) {
 		}
 	}
 }
+
+// TestContextManager_RepairPreservesUserMessage verifies that repairToolPairsLocked
+// never removes non-tool, non-assistant messages (e.g., the user prompt). Even if
+// all tool pairs are orphaned and removed, the user message must survive so the
+// next model request has non-empty contents.
+func TestContextManager_RepairPreservesUserMessage(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	config.ToolResultMaxAge = 1 // Aggressive: evict after 1 iteration
+	cm := agenticloop.NewContextManager("loop-repair-user", "gpt-4o", config)
+
+	// Add user message (this must survive all GC/repair)
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role:    "user",
+		Content: "Fix the bug",
+	})
+
+	// Iteration 1: Add a tool pair
+	toolPair(t, cm, "call-orphan-1")
+	cm.AdvanceIteration() // → iteration 2
+
+	// Iteration 2: Add another tool pair
+	toolPair(t, cm, "call-orphan-2")
+	cm.AdvanceIteration() // → iteration 3
+
+	// Iteration 3: no new tool pairs, just advance
+	cm.AdvanceIteration() // → iteration 4
+
+	// GC at iteration 4: tool results from iteration 1 have age=3, maxAge=1 → evicted.
+	// Repair removes their orphaned assistant messages.
+	evicted := cm.GCToolResults(4)
+	if evicted == 0 {
+		t.Fatal("Expected at least some messages to be evicted by GC/repair")
+	}
+
+	// The user message MUST survive
+	messages := cm.GetContext()
+	if len(messages) == 0 {
+		t.Fatal("GetContext() returned empty — user message was lost during GC/repair")
+	}
+
+	foundUser := false
+	for _, m := range messages {
+		if m.Role == "user" && m.Content == "Fix the bug" {
+			foundUser = true
+			break
+		}
+	}
+	if !foundUser {
+		t.Errorf("User message not found in context after GC/repair. Messages: %d", len(messages))
+	}
+}
