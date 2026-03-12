@@ -491,9 +491,10 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 			return result, err
 		}
 
-		// Edge case: if a filter rejected ALL calls, no tool.execute messages were
-		// published so no tool results will arrive. Trigger tools-complete immediately.
-		if h.toolCallFilter != nil && h.loopManager.AllToolsComplete(loopID) {
+		// Edge case: if filtering (empty-name rejection or ToolCallFilter) removed ALL
+		// calls, no tool.execute messages were published so no tool results will arrive.
+		// Trigger tools-complete immediately.
+		if h.loopManager.AllToolsComplete(loopID) {
 			completionResult, err := h.handleToolsComplete(ctx, loopID, entity, cm, &result)
 			if err != nil {
 				return completionResult, err
@@ -533,6 +534,30 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 // Rejected calls receive immediate error results; approved calls are published.
 // Domain metadata from the task is propagated to each approved tool call.
 func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID string, toolCalls []agentic.ToolCall) error {
+	// Reject tool calls with empty names — Gemini sometimes emits these as
+	// acknowledgment non-responses. Store error results so the model gets a
+	// nudge to call a real tool or respond with text.
+	var valid []agentic.ToolCall
+	for _, tc := range toolCalls {
+		if tc.Name == "" {
+			h.logger.Warn("dropping tool call with empty name",
+				slog.String("loop_id", loopID),
+				slog.String("call_id", tc.ID))
+			errResult := agentic.ToolResult{
+				CallID: tc.ID,
+				Name:   "invalid_tool_call",
+				Error:  "tool call had empty function name — call a specific tool by name or respond with text",
+				LoopID: loopID,
+			}
+			if err := h.loopManager.StoreToolResult(loopID, errResult); err != nil {
+				return err
+			}
+			continue
+		}
+		valid = append(valid, tc)
+	}
+	toolCalls = valid
+
 	approved := toolCalls
 
 	// Apply filter if configured

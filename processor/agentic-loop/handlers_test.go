@@ -1454,6 +1454,118 @@ func TestToolCallFilter_Nil_NoFiltering(t *testing.T) {
 	}
 }
 
+// TestEmptyNameToolCalls_Rejected verifies that tool calls with empty names are
+// dropped before dispatch. Gemini sometimes emits these as acknowledgment non-responses.
+// The loop should store error results with a nudge and trigger tools-complete.
+func TestEmptyNameToolCalls_Rejected(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+	// No filter — empty-name rejection is unconditional
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-empty-name",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test empty names",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	// Model response with one valid and one empty-name tool call
+	response := agentic.AgentResponse{
+		RequestID: "req-empty-name",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-en-1", Name: "real_tool"},
+				{ID: "call-en-2", Name: ""},
+			},
+		},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, response)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// Only real_tool should be dispatched
+	toolCount := 0
+	for _, msg := range result.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute") {
+			toolCount++
+		}
+	}
+	if toolCount != 1 {
+		t.Errorf("Expected 1 tool.execute message, got %d", toolCount)
+	}
+
+	// Pending should only contain the valid tool
+	if len(result.PendingTools) != 1 {
+		t.Errorf("Expected 1 pending tool, got %d", len(result.PendingTools))
+	}
+}
+
+// TestEmptyNameToolCalls_AllEmpty verifies that when ALL tool calls have empty names,
+// the loop triggers tools-complete immediately with nudge error results, causing a
+// retry with the model.
+func TestEmptyNameToolCalls_AllEmpty(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-all-empty",
+		Role:   "general",
+		Model:  "test-model",
+		Prompt: "Test all empty names",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+	loopID := taskResult.LoopID
+
+	response := agentic.AgentResponse{
+		RequestID: "req-all-empty",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-ae-1", Name: ""},
+				{ID: "call-ae-2", Name: ""},
+			},
+		},
+	}
+
+	result, err := handler.HandleModelResponse(ctx, loopID, response)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// No tool.execute messages should be published
+	toolCount := 0
+	for _, msg := range result.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute") {
+			toolCount++
+		}
+	}
+	if toolCount != 0 {
+		t.Errorf("Expected 0 tool.execute messages, got %d", toolCount)
+	}
+
+	// All empty → handleToolsComplete should fire → agent.request published
+	requestCount := 0
+	for _, msg := range result.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "agent.request") {
+			requestCount++
+		}
+	}
+	if requestCount == 0 {
+		t.Error("All-empty-name tool calls should trigger handleToolsComplete and publish agent.request")
+	}
+}
+
 // TestToolCallFilter_RejectedCallsPreserveToolName verifies that rejected tool calls
 // track their name so tool result messages include it. Without this, Gemini rejects
 // the request with "function_response.name: Name cannot be empty".
