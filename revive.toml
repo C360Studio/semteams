@@ -42,5 +42,5 @@ warningCode = 0
 [rule.max-public-structs]
   arguments = [10]
   # E2E test infrastructure has many DTOs for structured results
-  # Workflow, reactive, and agentic packages have multiple coordinating types by design
-  exclude = ["**/test/e2e/**", "**/processor/workflow/**", "**/processor/reactive/**", "**/agentic/**"]
+  # Agentic packages have multiple coordinating types by design
+  exclude = ["**/test/e2e/**", "**/agentic/**"]

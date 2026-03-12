@@ -664,6 +664,280 @@ func TestDistance(t *testing.T) {
 	}
 }
 
+func TestExpressionEvaluator_InOperator(t *testing.T) {
+	evaluator := NewExpressionEvaluator()
+
+	tests := []struct {
+		name      string
+		entity    *gtypes.EntityState
+		expr      LogicalExpression
+		expected  bool
+		shouldErr bool
+	}{
+		{
+			name: "string in array - match",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.phase", Object: "rejected", Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.phase", Operator: OpIn, Value: []interface{}{"rejected", "not_a_bug", "wont_fix"}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: true,
+		},
+		{
+			name: "string in array - no match",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.phase", Object: "developing", Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.phase", Operator: OpIn, Value: []interface{}{"rejected", "not_a_bug", "wont_fix"}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: false,
+		},
+		{
+			name: "numeric in array - match",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "error.code", Object: float64(404), Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "error.code", Operator: OpIn, Value: []interface{}{float64(400), float64(404), float64(500)}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: true,
+		},
+		{
+			name: "in with non-array value - error",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.phase", Object: "rejected", Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.phase", Operator: OpIn, Value: "not_an_array", Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected:  false,
+			shouldErr: true,
+		},
+		{
+			name: "in with empty array",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.phase", Object: "rejected", Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.phase", Operator: OpIn, Value: []interface{}{}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := evaluator.Evaluate(tt.entity, tt.expr)
+			if tt.shouldErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExpressionEvaluator_NotInOperator(t *testing.T) {
+	evaluator := NewExpressionEvaluator()
+
+	tests := []struct {
+		name      string
+		entity    *gtypes.EntityState
+		expr      LogicalExpression
+		expected  bool
+		shouldErr bool
+	}{
+		{
+			name: "string not in array - true (not found)",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.phase", Object: "developing", Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.phase", Operator: OpNotIn, Value: []interface{}{"rejected", "not_a_bug", "wont_fix"}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: true,
+		},
+		{
+			name: "string not in array - false (found)",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.phase", Object: "rejected", Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.phase", Operator: OpNotIn, Value: []interface{}{"rejected", "not_a_bug", "wont_fix"}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: false,
+		},
+		{
+			name: "not_in with non-array value - error",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.phase", Object: "developing", Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.phase", Operator: OpNotIn, Value: "not_an_array", Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected:  false,
+			shouldErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := evaluator.Evaluate(tt.entity, tt.expr)
+			if tt.shouldErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExpressionEvaluator_BetweenOperator(t *testing.T) {
+	evaluator := NewExpressionEvaluator()
+
+	tests := []struct {
+		name      string
+		entity    *gtypes.EntityState
+		expr      LogicalExpression
+		expected  bool
+		shouldErr bool
+	}{
+		{
+			name: "value within range",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.tokens.total", Object: float64(250000), Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.tokens.total", Operator: OpBetween, Value: []interface{}{float64(100000), float64(500000)}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: true,
+		},
+		{
+			name: "value at lower bound (inclusive)",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.tokens.total", Object: float64(100000), Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.tokens.total", Operator: OpBetween, Value: []interface{}{float64(100000), float64(500000)}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: true,
+		},
+		{
+			name: "value at upper bound (inclusive)",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.tokens.total", Object: float64(500000), Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.tokens.total", Operator: OpBetween, Value: []interface{}{float64(100000), float64(500000)}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: true,
+		},
+		{
+			name: "value below range",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.tokens.total", Object: float64(50000), Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.tokens.total", Operator: OpBetween, Value: []interface{}{float64(100000), float64(500000)}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: false,
+		},
+		{
+			name: "value above range",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.tokens.total", Object: float64(600000), Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.tokens.total", Operator: OpBetween, Value: []interface{}{float64(100000), float64(500000)}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected: false,
+		},
+		{
+			name: "between with non-array value - error",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.tokens.total", Object: float64(250000), Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.tokens.total", Operator: OpBetween, Value: float64(100000), Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected:  false,
+			shouldErr: true,
+		},
+		{
+			name: "between with wrong array length - error",
+			entity: createTestEntity("wf.001", []message.Triple{
+				{Subject: "wf.001", Predicate: "workflow.tokens.total", Object: float64(250000), Source: "test", Timestamp: time.Now()},
+			}),
+			expr: LogicalExpression{
+				Conditions: []ConditionExpression{
+					{Field: "workflow.tokens.total", Operator: OpBetween, Value: []interface{}{float64(100000)}, Required: true},
+				},
+				Logic: LogicAnd,
+			},
+			expected:  false,
+			shouldErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := evaluator.Evaluate(tt.entity, tt.expr)
+			if tt.shouldErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // Helper function to create test entity states
 func createTestEntity(entityID string, triples []message.Triple) *gtypes.EntityState {
 	return &gtypes.EntityState{

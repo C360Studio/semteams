@@ -26,12 +26,12 @@ func (s *TieredScenario) executeVerifyComponents(ctx context.Context, result *Re
 
 	var allRequired []string
 
-	// Structural tier uses e2e-structural.json config with reactive-workflow and rule processor
+	// Structural tier uses e2e-structural.json config with rule processor
 	if s.config.Variant == "structural" {
-		// Components for structural testing with reactive workflow engine and rule processor
+		// Components for structural testing with rule processor
 		// Graph components are now modular: graph-ingest, graph-index, graph-gateway
 		// Note: "rule" is the instance name (config key), "rule-processor" is the factory name
-		allRequired = []string{"udp", "iot_sensor", "rule", "reactive-workflow", "graph-ingest", "graph-index", "graph-gateway", "file"}
+		allRequired = []string{"udp", "iot_sensor", "rule", "graph-ingest", "graph-index", "graph-gateway", "file"}
 	} else {
 		// Full components for statistical/semantic tiers
 		// Input components
@@ -549,14 +549,13 @@ func (s *TieredScenario) executeValidateRules(ctx context.Context, result *Resul
 	return nil
 }
 
-// checkReactiveMetricsPresence checks for reactive workflow metrics and returns presence map and count.
+// checkReactiveMetricsPresence checks for rule engine metrics and returns presence map and count.
 func (s *TieredScenario) checkReactiveMetricsPresence(ctx context.Context) (map[string]bool, int) {
 	metricsRaw, err := s.metrics.FetchRaw(ctx)
 	metricNames := []string{
-		"semstreams_reactive_workflow_rule_evaluations_total",
-		"semstreams_reactive_workflow_rule_firings_total",
-		"semstreams_reactive_workflow_actions_dispatched_total",
-		"semstreams_reactive_workflow_executions_created_total",
+		"semstreams_rule_evaluations_total",
+		"semstreams_rule_firings_total",
+		"semstreams_rule_actions_dispatched_total",
 	}
 
 	presence := make(map[string]bool, len(metricNames))
@@ -610,7 +609,7 @@ func (s *TieredScenario) waitForRuleEvaluations(ctx context.Context, baseline *c
 		Comparator:   ">=",
 	}
 	expected := baseline.Evaluations + float64(sentCount)
-	if err := s.metrics.WaitForMetric(ctx, "semstreams_reactive_workflow_rule_evaluations_total", expected, waitOpts); err != nil {
+	if err := s.metrics.WaitForMetric(ctx, "semstreams_rule_evaluations_total", expected, waitOpts); err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Rule evaluation wait: %v", err))
 	}
 }
@@ -655,7 +654,7 @@ func (s *TieredScenario) recordRuleValidationResults(result *Result, baseline, f
 		"executions_completed": int(final.ExecutionsCompleted),
 		"test_messages_sent":   sentCount,
 		"validation_passed":    validationPassed,
-		"message": fmt.Sprintf("Reactive workflow: %d firings, %d evaluations (delta: +%d firings, +%d evaluations), %d actions dispatched",
+		"message": fmt.Sprintf("Rule engine: %d firings, %d evaluations (delta: +%d firings, +%d evaluations), %d actions dispatched",
 			int(final.Firings), int(final.Evaluations), firingsDelta, evaluatedDelta, int(final.ActionsDispatched)),
 	}
 }

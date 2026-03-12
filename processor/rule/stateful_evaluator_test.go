@@ -6,6 +6,10 @@ import (
 	"log/slog"
 	"testing"
 	"time"
+
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/processor/rule/expression"
 )
 
 // TestStatefulEvaluator_EvaluateWithState tests state-based action firing
@@ -51,25 +55,12 @@ func TestStatefulEvaluator_EvaluateWithState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-
-			// Setup mock KV bucket
 			bucket := newMockKVBucket()
 			logger := slog.Default()
-
-			// Create StateTracker
 			stateTracker := NewStateTracker(bucket, logger)
-
-			// Create mock action executor to count action executions
-			actionExecutor := &mockActionExecutor{
-				onEnterCalls:   0,
-				onExitCalls:    0,
-				whileTrueCalls: 0,
-			}
-
-			// Create StatefulEvaluator
+			actionExecutor := &mockActionExecutor{}
 			evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
 
-			// Create rule definition with different action sets
 			ruleDef := Definition{
 				ID:   "test-rule",
 				Type: "expression",
@@ -88,7 +79,6 @@ func TestStatefulEvaluator_EvaluateWithState(t *testing.T) {
 			entityID := "entity-123"
 			entityKey := entityID
 
-			// Set up previous state if needed
 			if tt.previousMatching {
 				prevState := MatchState{
 					RuleID:         ruleDef.ID,
@@ -98,54 +88,38 @@ func TestStatefulEvaluator_EvaluateWithState(t *testing.T) {
 					TransitionAt:   time.Now().Add(-1 * time.Minute),
 					LastChecked:    time.Now(),
 				}
-				err := stateTracker.Set(ctx, prevState)
-				if err != nil {
+				if err := stateTracker.Set(ctx, prevState); err != nil {
 					t.Fatalf("Failed to set previous state: %v", err)
 				}
 			}
 
-			// Execute evaluation
 			transition, err := evaluator.EvaluateWithState(
-				ctx,
-				ruleDef,
-				entityID,
-				"", // No related entity for single-entity rule
-				tt.currentlyMatching,
+				ctx, ruleDef, entityID, "", tt.currentlyMatching, nil, nil,
 			)
 
-			// Verify no error
 			if err != nil {
 				t.Errorf("EvaluateWithState() error = %v, want nil", err)
 			}
-
-			// Verify transition type
 			if transition != tt.wantTransition {
 				t.Errorf("EvaluateWithState() transition = %v, want %v", transition, tt.wantTransition)
 			}
-
-			// Verify action execution counts
 			if actionExecutor.onEnterCalls != tt.wantOnEnterCalls {
 				t.Errorf("OnEnter actions called %d times, want %d", actionExecutor.onEnterCalls, tt.wantOnEnterCalls)
 			}
-
 			if actionExecutor.onExitCalls != tt.wantOnExitCalls {
 				t.Errorf("OnExit actions called %d times, want %d", actionExecutor.onExitCalls, tt.wantOnExitCalls)
 			}
-
 			if actionExecutor.whileTrueCalls != tt.wantWhileTrueCalls {
 				t.Errorf("WhileTrue actions called %d times, want %d", actionExecutor.whileTrueCalls, tt.wantWhileTrueCalls)
 			}
 
-			// Verify state was persisted correctly
 			newState, err := stateTracker.Get(ctx, ruleDef.ID, entityKey)
 			if err != nil {
 				t.Errorf("Failed to get new state: %v", err)
 			}
-
 			if newState.IsMatching != tt.currentlyMatching {
 				t.Errorf("Persisted state IsMatching = %v, want %v", newState.IsMatching, tt.currentlyMatching)
 			}
-
 			if newState.LastTransition != string(transition) {
 				t.Errorf("Persisted state LastTransition = %v, want %v", newState.LastTransition, string(transition))
 			}
@@ -153,15 +127,13 @@ func TestStatefulEvaluator_EvaluateWithState(t *testing.T) {
 	}
 }
 
-// TestStatefulEvaluator_EvaluateWithState_NoInitialState tests handling when no previous state exists
-func TestStatefulEvaluator_EvaluateWithState_NoInitialState(t *testing.T) {
+// TestStatefulEvaluator_NoInitialState tests handling when no previous state exists
+func TestStatefulEvaluator_NoInitialState(t *testing.T) {
 	ctx := context.Background()
 	bucket := newMockKVBucket()
 	logger := slog.Default()
-
 	stateTracker := NewStateTracker(bucket, logger)
 	actionExecutor := &mockActionExecutor{}
-
 	evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
 
 	ruleDef := Definition{
@@ -173,34 +145,25 @@ func TestStatefulEvaluator_EvaluateWithState_NoInitialState(t *testing.T) {
 		},
 	}
 
-	entityID := "entity-new"
-
-	// Evaluate with currentlyMatching=true and no previous state
-	// Should treat as false→true transition
-	transition, err := evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", true)
-
+	transition, err := evaluator.EvaluateWithState(ctx, ruleDef, "entity-new", "", true, nil, nil)
 	if err != nil {
 		t.Fatalf("EvaluateWithState() error = %v", err)
 	}
-
 	if transition != TransitionEntered {
 		t.Errorf("Expected TransitionEntered, got %v", transition)
 	}
-
 	if actionExecutor.onEnterCalls != 1 {
 		t.Errorf("Expected OnEnter to be called once, got %d calls", actionExecutor.onEnterCalls)
 	}
 }
 
-// TestStatefulEvaluator_EvaluateWithState_PairRule tests pair rules with two entity IDs
-func TestStatefulEvaluator_EvaluateWithState_PairRule(t *testing.T) {
+// TestStatefulEvaluator_PairRule tests pair rules with two entity IDs
+func TestStatefulEvaluator_PairRule(t *testing.T) {
 	ctx := context.Background()
 	bucket := newMockKVBucket()
 	logger := slog.Default()
-
 	stateTracker := NewStateTracker(bucket, logger)
 	actionExecutor := &mockActionExecutor{}
-
 	evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
 
 	ruleDef := Definition{
@@ -215,44 +178,36 @@ func TestStatefulEvaluator_EvaluateWithState_PairRule(t *testing.T) {
 	entity1 := "entity-a"
 	entity2 := "entity-b"
 
-	// First evaluation: false→true
-	transition1, err := evaluator.EvaluateWithState(ctx, ruleDef, entity1, entity2, true)
+	transition1, err := evaluator.EvaluateWithState(ctx, ruleDef, entity1, entity2, true, nil, nil)
 	if err != nil {
 		t.Fatalf("First evaluation error: %v", err)
 	}
-
 	if transition1 != TransitionEntered {
 		t.Errorf("First transition = %v, want TransitionEntered", transition1)
 	}
-
 	if actionExecutor.onEnterCalls != 1 {
 		t.Errorf("OnEnter calls = %d, want 1", actionExecutor.onEnterCalls)
 	}
 
-	// Verify state key is canonical (sorted)
 	expectedKey := buildPairKey(entity1, entity2)
 	state, err := stateTracker.Get(ctx, ruleDef.ID, expectedKey)
 	if err != nil {
 		t.Fatalf("Failed to get state: %v", err)
 	}
-
 	if state.EntityKey != expectedKey {
 		t.Errorf("State EntityKey = %v, want %v", state.EntityKey, expectedKey)
 	}
 }
 
-// TestStatefulEvaluator_EvaluateWithState_MultipleActions tests executing multiple actions
-func TestStatefulEvaluator_EvaluateWithState_MultipleActions(t *testing.T) {
+// TestStatefulEvaluator_MultipleActions tests executing multiple actions
+func TestStatefulEvaluator_MultipleActions(t *testing.T) {
 	ctx := context.Background()
 	bucket := newMockKVBucket()
 	logger := slog.Default()
-
 	stateTracker := NewStateTracker(bucket, logger)
 	actionExecutor := &mockActionExecutor{}
-
 	evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
 
-	// Rule with multiple OnEnter actions
 	ruleDef := Definition{
 		ID:   "multi-action-rule",
 		Type: "expression",
@@ -264,20 +219,244 @@ func TestStatefulEvaluator_EvaluateWithState_MultipleActions(t *testing.T) {
 		},
 	}
 
-	entityID := "entity-multi"
+	transition, err := evaluator.EvaluateWithState(ctx, ruleDef, "entity-multi", "", true, nil, nil)
+	if err != nil {
+		t.Fatalf("EvaluateWithState() error = %v", err)
+	}
+	if transition != TransitionEntered {
+		t.Errorf("Expected TransitionEntered, got %v", transition)
+	}
+	if actionExecutor.executeCallCount != 3 {
+		t.Errorf("Expected 3 action executions, got %d", actionExecutor.executeCallCount)
+	}
+}
 
-	transition, err := evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", true)
+// TestStatefulEvaluator_Iteration tests iteration tracking across transitions
+func TestStatefulEvaluator_Iteration(t *testing.T) {
+	ctx := context.Background()
+	bucket := newMockKVBucket()
+	logger := slog.Default()
+	stateTracker := NewStateTracker(bucket, logger)
+	actionExecutor := &mockActionExecutor{}
+	evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
+
+	ruleDef := Definition{
+		ID:            "iter-rule",
+		Type:          "expression",
+		Name:          "Iteration Rule",
+		MaxIterations: 3,
+		OnEnter: []Action{
+			{Type: ActionTypePublish, Subject: "test.entered"},
+		},
+	}
+
+	entityID := "entity-iter"
+
+	// First entry: iteration should be 1
+	_, err := evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", true, nil, nil)
+	if err != nil {
+		t.Fatalf("First entry error: %v", err)
+	}
+	state, _ := stateTracker.Get(ctx, ruleDef.ID, entityID)
+	if state.Iteration != 1 {
+		t.Errorf("After first entry: iteration = %d, want 1", state.Iteration)
+	}
+	if state.MaxIterations != 3 {
+		t.Errorf("MaxIterations = %d, want 3", state.MaxIterations)
+	}
+
+	// Exit: iteration preserved
+	_, err = evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", false, nil, nil)
+	if err != nil {
+		t.Fatalf("Exit error: %v", err)
+	}
+	state, _ = stateTracker.Get(ctx, ruleDef.ID, entityID)
+	if state.Iteration != 1 {
+		t.Errorf("After exit: iteration = %d, want 1 (preserved)", state.Iteration)
+	}
+
+	// Second entry: iteration should be 2
+	_, err = evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", true, nil, nil)
+	if err != nil {
+		t.Fatalf("Second entry error: %v", err)
+	}
+	state, _ = stateTracker.Get(ctx, ruleDef.ID, entityID)
+	if state.Iteration != 2 {
+		t.Errorf("After second entry: iteration = %d, want 2", state.Iteration)
+	}
+
+	// Third entry: iteration should be 3
+	_, _ = evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", false, nil, nil)
+	_, err = evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", true, nil, nil)
+	if err != nil {
+		t.Fatalf("Third entry error: %v", err)
+	}
+	state, _ = stateTracker.Get(ctx, ruleDef.ID, entityID)
+	if state.Iteration != 3 {
+		t.Errorf("After third entry: iteration = %d, want 3", state.Iteration)
+	}
+}
+
+// TestStatefulEvaluator_WhenClause tests conditional action execution
+func TestStatefulEvaluator_WhenClause(t *testing.T) {
+	ctx := context.Background()
+	bucket := newMockKVBucket()
+	logger := slog.Default()
+	stateTracker := NewStateTracker(bucket, logger)
+	actionExecutor := &mockActionExecutor{}
+	evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
+
+	entity := &gtypes.EntityState{
+		ID: "entity-when",
+		Triples: []message.Triple{
+			{Subject: "entity-when", Predicate: "review.verdict", Object: "approved"},
+			{Subject: "entity-when", Predicate: "status", Object: "complete"},
+		},
+	}
+
+	ruleDef := Definition{
+		ID:   "when-rule",
+		Type: "expression",
+		Name: "When Rule",
+		OnEnter: []Action{
+			{
+				Type:    ActionTypePublish,
+				Subject: "test.approved",
+				When: []expression.ConditionExpression{
+					{Field: "review.verdict", Operator: "eq", Value: "approved"},
+				},
+			},
+			{
+				Type:    ActionTypePublish,
+				Subject: "test.rejected",
+				When: []expression.ConditionExpression{
+					{Field: "review.verdict", Operator: "eq", Value: "rejected"},
+				},
+			},
+			{
+				Type:    ActionTypePublish,
+				Subject: "test.always",
+				// No When clause — always executes
+			},
+		},
+	}
+
+	_, err := evaluator.EvaluateWithState(ctx, ruleDef, entity.ID, "", true, entity, nil)
 	if err != nil {
 		t.Fatalf("EvaluateWithState() error = %v", err)
 	}
 
-	if transition != TransitionEntered {
-		t.Errorf("Expected TransitionEntered, got %v", transition)
+	// Should execute: test.approved (matches) and test.always (no When)
+	// Should skip: test.rejected (doesn't match)
+	if actionExecutor.executeCallCount != 2 {
+		t.Errorf("Expected 2 actions executed, got %d", actionExecutor.executeCallCount)
+	}
+}
+
+// TestStatefulEvaluator_WhenWithStateFields tests $state.* fields in When clauses
+func TestStatefulEvaluator_WhenWithStateFields(t *testing.T) {
+	ctx := context.Background()
+	bucket := newMockKVBucket()
+	logger := slog.Default()
+	stateTracker := NewStateTracker(bucket, logger)
+	actionExecutor := &mockActionExecutor{}
+	evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
+
+	ruleDef := Definition{
+		ID:            "budget-rule",
+		Type:          "expression",
+		Name:          "Budget Rule",
+		MaxIterations: 3,
+		OnEnter: []Action{
+			{
+				Type:    ActionTypePublish,
+				Subject: "test.retry",
+				When: []expression.ConditionExpression{
+					{Field: "$state.iteration", Operator: "lte", Value: float64(3)},
+				},
+			},
+			{
+				Type:    ActionTypePublish,
+				Subject: "test.escalate",
+				When: []expression.ConditionExpression{
+					{Field: "$state.iteration", Operator: "gt", Value: float64(3)},
+				},
+			},
+		},
 	}
 
-	// Should execute all 3 OnEnter actions
-	if actionExecutor.executeCallCount != 3 {
-		t.Errorf("Expected 3 action executions, got %d", actionExecutor.executeCallCount)
+	entityID := "entity-budget"
+
+	// First 3 entries: retry action fires, escalate doesn't
+	for i := range 3 {
+		actionExecutor.executeCallCount = 0
+		// Exit then enter to trigger TransitionEntered each time
+		if i > 0 {
+			_, _ = evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", false, nil, nil)
+		}
+		_, err := evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", true, nil, nil)
+		if err != nil {
+			t.Fatalf("Entry %d error: %v", i+1, err)
+		}
+		if actionExecutor.executeCallCount != 1 {
+			t.Errorf("Entry %d: expected 1 action (retry), got %d", i+1, actionExecutor.executeCallCount)
+		}
+	}
+
+	// Fourth entry: escalate action fires, retry doesn't
+	_, _ = evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", false, nil, nil)
+	actionExecutor.executeCallCount = 0
+	_, err := evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", true, nil, nil)
+	if err != nil {
+		t.Fatalf("Fourth entry error: %v", err)
+	}
+	if actionExecutor.executeCallCount != 1 {
+		t.Errorf("Fourth entry: expected 1 action (escalate), got %d", actionExecutor.executeCallCount)
+	}
+}
+
+// TestStatefulEvaluator_WhenNilEntity tests When clause behavior with nil entity
+func TestStatefulEvaluator_WhenNilEntity(t *testing.T) {
+	ctx := context.Background()
+	bucket := newMockKVBucket()
+	logger := slog.Default()
+	stateTracker := NewStateTracker(bucket, logger)
+	actionExecutor := &mockActionExecutor{}
+	evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
+
+	ruleDef := Definition{
+		ID:   "nil-entity-rule",
+		Type: "expression",
+		Name: "Nil Entity Rule",
+		OnEnter: []Action{
+			{
+				Type:    ActionTypePublish,
+				Subject: "test.guarded",
+				When: []expression.ConditionExpression{
+					// This references a triple field but entity is nil
+					{Field: "some.field", Operator: "eq", Value: "x"},
+				},
+			},
+			{
+				Type:    ActionTypePublish,
+				Subject: "test.state-guarded",
+				When: []expression.ConditionExpression{
+					// $state.* fields work even without entity
+					{Field: "$state.iteration", Operator: "eq", Value: float64(1)},
+				},
+			},
+		},
+	}
+
+	_, err := evaluator.EvaluateWithState(ctx, ruleDef, "entity-nil", "", true, nil, nil)
+	if err != nil {
+		t.Fatalf("EvaluateWithState() error = %v", err)
+	}
+
+	// guarded: entity is nil, triple field eval fails → skipped
+	// state-guarded: $state.iteration == 1 → executes
+	if actionExecutor.executeCallCount != 1 {
+		t.Errorf("Expected 1 action executed (state-guarded only), got %d", actionExecutor.executeCallCount)
 	}
 }
 
@@ -289,20 +468,17 @@ type mockActionExecutor struct {
 	executeCallCount int
 }
 
-func (m *mockActionExecutor) Execute(_ context.Context, action Action, _ string, _ string) error {
+func (m *mockActionExecutor) Execute(_ context.Context, action Action, _ *ExecutionContext) error {
 	m.executeCallCount++
 
-	// Track which action set was executed based on subject patterns
-	if action.Subject == "test.entered" {
+	switch action.Subject {
+	case "test.entered":
 		m.onEnterCalls++
-	} else if action.Subject == "test.exited" {
+	case "test.exited":
 		m.onExitCalls++
-	} else if action.Subject == "test.while-true" {
+	case "test.while-true":
 		m.whileTrueCalls++
-	}
-
-	// Handle multi-action test
-	if action.Subject == "test.action1" || action.Subject == "test.action2" {
+	case "test.action1", "test.action2":
 		m.onEnterCalls++
 	}
 

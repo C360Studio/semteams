@@ -20,6 +20,8 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/examples/processors/document"
+	iotsensor "github.com/c360studio/semstreams/examples/processors/iot_sensor"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/service"
@@ -260,6 +262,12 @@ func setupRegistriesAndManager(cfg *config.Config) (*component.Registry, *servic
 		return nil, nil, fmt.Errorf("register components: %w", err)
 	}
 
+	// Register bundled example/domain components (not in core registry to avoid
+	// pulling example deps into downstream consumers like semdragons/semspec)
+	if err := registerExampleComponents(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register example components: %w", err)
+	}
+
 	factories := componentRegistry.ListFactories()
 	slog.Info("Core component factories registered", "count", len(factories), "factories", factories)
 
@@ -432,6 +440,19 @@ func loadConfig(path string) (*config.Config, error) {
 		return nil, fmt.Errorf("failed to load config: %w", err)
 	}
 	return cfg, nil
+}
+
+// registerExampleComponents registers bundled example/domain processors.
+// These are kept out of componentregistry.Register() so that downstream
+// consumers (semdragons, semspec) don't inherit example dependencies.
+func registerExampleComponents(registry *component.Registry) error {
+	if err := iotsensor.Register(registry); err != nil {
+		return fmt.Errorf("register iot_sensor: %w", err)
+	}
+	if err := document.Register(registry); err != nil {
+		return fmt.Errorf("register document: %w", err)
+	}
+	return nil
 }
 
 // startPProfServer starts the pprof HTTP server for profiling.

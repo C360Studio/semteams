@@ -25,6 +25,11 @@ func NewExpressionEvaluator() *Evaluator {
 	evaluator.operators[OpGreaterThan] = operatorGreaterThan
 	evaluator.operators[OpGreaterThanEqual] = operatorGreaterThanEqual
 
+	// Register array/range operators
+	evaluator.operators[OpIn] = operatorIn
+	evaluator.operators[OpNotIn] = operatorNotIn
+	evaluator.operators[OpBetween] = operatorBetween
+
 	// Register string operators
 	evaluator.operators[OpContains] = operatorContains
 	evaluator.operators[OpStartsWith] = operatorStartsWith
@@ -36,6 +41,14 @@ func NewExpressionEvaluator() *Evaluator {
 
 // Evaluate evaluates a logical expression against an entity state
 func (e *Evaluator) Evaluate(entityState *gtypes.EntityState, expr LogicalExpression) (bool, error) {
+	return e.EvaluateWithStateFields(entityState, nil, expr)
+}
+
+// EvaluateWithStateFields evaluates a logical expression against entity state and optional
+// match state fields. The stateFields parameter provides $state.* pseudo-field values
+// (e.g., "$state.iteration", "$state.max_iterations") for conditions that reference
+// rule execution state rather than entity triples.
+func (e *Evaluator) EvaluateWithStateFields(entityState *gtypes.EntityState, stateFields StateFields, expr LogicalExpression) (bool, error) {
 	if len(expr.Conditions) == 0 {
 		return true, nil // Empty condition list passes
 	}
@@ -44,7 +57,7 @@ func (e *Evaluator) Evaluate(entityState *gtypes.EntityState, expr LogicalExpres
 
 	// Evaluate each condition
 	for i, condition := range expr.Conditions {
-		result, err := e.evaluateCondition(entityState, condition)
+		result, err := e.evaluateConditionWithState(entityState, stateFields, condition)
 		if err != nil {
 			return false, err
 		}
@@ -74,6 +87,58 @@ func (e *Evaluator) Evaluate(entityState *gtypes.EntityState, expr LogicalExpres
 			Message: fmt.Sprintf("unsupported logic operator: %s", expr.Logic),
 		}
 	}
+}
+
+// evaluateConditionWithState evaluates a single condition, resolving $state.* fields
+// from stateFields before falling through to entity triple evaluation.
+func (e *Evaluator) evaluateConditionWithState(entityState *gtypes.EntityState, stateFields StateFields, condition ConditionExpression) (bool, error) {
+	// Check for $state.* pseudo-fields first
+	if strings.HasPrefix(condition.Field, "$state.") {
+		fieldValue, exists := stateFields[condition.Field]
+		if !exists {
+			if condition.Required {
+				return false, &EvaluationError{
+					Field:   condition.Field,
+					Message: "required state field not found",
+				}
+			}
+			return false, nil
+		}
+
+		// Get operator function
+		opFunc, opExists := e.operators[condition.Operator]
+		if !opExists {
+			return false, &EvaluationError{
+				Field:    condition.Field,
+				Operator: condition.Operator,
+				Message:  "unsupported operator",
+			}
+		}
+
+		result, err := opFunc(fieldValue, condition.Value)
+		if err != nil {
+			return false, &EvaluationError{
+				Field:    condition.Field,
+				Operator: condition.Operator,
+				Message:  "operator execution failed",
+				Err:      err,
+			}
+		}
+		return result, nil
+	}
+
+	// If entityState is nil (message-path rules), non-$state fields are treated as missing
+	if entityState == nil {
+		if condition.Required {
+			return false, &EvaluationError{
+				Field:   condition.Field,
+				Message: "entity state is nil, field not available",
+			}
+		}
+		return false, nil
+	}
+
+	return e.evaluateCondition(entityState, condition)
 }
 
 // evaluateCondition evaluates a single condition against entity state
@@ -238,6 +303,42 @@ func operatorEndsWith(fieldValue, compareValue interface{}) (bool, error) {
 	}
 
 	return strings.HasSuffix(fieldStr, compareStr), nil
+}
+
+func operatorIn(fieldValue, compareValue interface{}) (bool, error) {
+	arr, ok := compareValue.([]interface{})
+	if !ok {
+		return false, fmt.Errorf("in operator requires array value, got %T", compareValue)
+	}
+	for _, item := range arr {
+		if compareValues(fieldValue, item) == 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func operatorNotIn(fieldValue, compareValue interface{}) (bool, error) {
+	result, err := operatorIn(fieldValue, compareValue)
+	if err != nil {
+		return false, err
+	}
+	return !result, nil
+}
+
+func operatorBetween(fieldValue, compareValue interface{}) (bool, error) {
+	arr, ok := compareValue.([]interface{})
+	if !ok || len(arr) != 2 {
+		return false, fmt.Errorf("between operator requires array of [min, max], got %T", compareValue)
+	}
+	gteResult, err := operatorGreaterThanEqual(fieldValue, arr[0])
+	if err != nil {
+		return false, err
+	}
+	if !gteResult {
+		return false, nil
+	}
+	return operatorLessThanEqual(fieldValue, arr[1])
 }
 
 func operatorRegex(fieldValue, compareValue interface{}) (bool, error) {

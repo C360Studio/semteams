@@ -35,6 +35,14 @@ type MatchState struct {
 	TransitionAt   time.Time `json:"transition_at,omitempty"`
 	SourceRevision uint64    `json:"source_revision"`
 	LastChecked    time.Time `json:"last_checked"`
+
+	// Iteration tracks how many times this rule has entered the matching state
+	// for this entity. Incremented on each TransitionEntered, preserved through exits.
+	Iteration int `json:"iteration"`
+
+	// MaxIterations is the configured limit from the rule Definition.
+	// 0 means no limit. Used with $state.iteration in When clauses for retry budgets.
+	MaxIterations int `json:"max_iterations,omitempty"`
 }
 
 // StateTracker manages rule match state persistence in NATS KV.

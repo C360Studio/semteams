@@ -197,20 +197,6 @@
         "data_cache": {"enabled": true, "strategy": "hybrid", "max_size": 5000, "ttl": "1h", "cleanup_interval": "5m"}
       }
     },
-    "reactive-workflow": {
-      "type": "processor",
-      "name": "reactive-workflow",
-      "enabled": true,
-      "config": {
-        "enable_metrics": true,
-        "state_bucket": "REACTIVE_WORKFLOW_STATE",
-        "callback_stream_name": "WORKFLOW_CALLBACKS",
-        "event_stream_name": "WORKFLOW_EVENTS",
-        "default_timeout": "10m",
-        "default_max_iterations": 10,
-        "consumer_name_prefix": "e2e-"
-      }
-    },
     "rule": {
       "type": "processor",
       "name": "rule-processor",

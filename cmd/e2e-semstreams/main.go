@@ -1,6 +1,6 @@
 // Package main provides the E2E test application for SemStreams.
-// This application imports semstreams as a library and registers test workflows,
-// simulating how customers would build applications using the reactive workflow engine.
+// This application imports semstreams as a library, registering core and
+// example components for tiered E2E testing.
 package main
 
 import (
@@ -20,9 +20,10 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/config"
+	"github.com/c360studio/semstreams/examples/processors/document"
+	iotsensor "github.com/c360studio/semstreams/examples/processors/iot_sensor"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semstreams/processor/reactive"
 	"github.com/c360studio/semstreams/service"
 	"github.com/c360studio/semstreams/types"
 )
@@ -101,13 +102,6 @@ func run() error {
 	}
 	defer configManager.Stop(5 * time.Second)
 
-	// Create reactive workflow engine directly (app owns the engine)
-	// Config comes from the config file, but app manages the lifecycle
-	engine, err := createWorkflowEngine(ctx, cfg, natsClient, metricsRegistry, logger)
-	if err != nil {
-		return fmt.Errorf("create workflow engine: %w", err)
-	}
-
 	componentRegistry, manager, err := setupRegistriesAndManager(cfg)
 	if err != nil {
 		return err
@@ -119,98 +113,7 @@ func run() error {
 		return err
 	}
 
-	return runWithSignalHandling(ctx, manager, engine, cliCfg.ShutdownTimeout)
-}
-
-// createWorkflowEngine creates and starts the reactive workflow engine directly.
-// The app owns the engine lifecycle. Config is read from the app's config file.
-func createWorkflowEngine(ctx context.Context, cfg *config.Config, natsClient *natsclient.Client, metricsRegistry *metric.MetricsRegistry, logger *slog.Logger) (*reactive.Engine, error) {
-	// Extract reactive-workflow config from the app config
-	engineConfig, err := extractWorkflowConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("extract workflow config: %w", err)
-	}
-
-	// Get metrics
-	metrics := reactive.GetMetrics(metricsRegistry)
-
-	// Create engine with metrics
-	engine := reactive.NewEngine(
-		engineConfig,
-		natsClient,
-		reactive.WithEngineLogger(logger),
-		reactive.WithEngineMetrics(metrics),
-	)
-
-	// Register all e2e workflows BEFORE initializing
-	if err := registerE2EWorkflows(engine); err != nil {
-		return nil, fmt.Errorf("register workflows: %w", err)
-	}
-	logger.Info("E2E workflows registered", "count", 4)
-
-	// Initialize the engine (creates KV buckets, etc.)
-	if err := engine.Initialize(ctx); err != nil {
-		return nil, fmt.Errorf("initialize engine: %w", err)
-	}
-
-	// Start the engine (begins watching triggers)
-	if err := engine.Start(ctx); err != nil {
-		return nil, fmt.Errorf("start engine: %w", err)
-	}
-
-	logger.Info("Reactive workflow engine started")
-	return engine, nil
-}
-
-// extractWorkflowConfig extracts the reactive-workflow config from the app config.
-func extractWorkflowConfig(cfg *config.Config) (reactive.Config, error) {
-	// Look for reactive-workflow in components
-	compCfg, ok := cfg.Components["reactive-workflow"]
-	if !ok {
-		// Return sensible defaults if not configured
-		return reactive.Config{
-			StateBucket:          "REACTIVE_WORKFLOW_STATE",
-			CallbackStreamName:   "WORKFLOW_CALLBACKS",
-			EventStreamName:      "WORKFLOW_EVENTS",
-			DefaultTimeout:       "10m",
-			DefaultMaxIterations: 10,
-			CleanupRetention:     "24h",
-			CleanupInterval:      "1h",
-			ConsumerNamePrefix:   "e2e-",
-			EnableMetrics:        true,
-		}, nil
-	}
-
-	// Parse the config section
-	var engineConfig reactive.Config
-	if err := json.Unmarshal(compCfg.Config, &engineConfig); err != nil {
-		return reactive.Config{}, fmt.Errorf("parse reactive-workflow config: %w", err)
-	}
-
-	// Apply defaults for any missing fields
-	if engineConfig.StateBucket == "" {
-		engineConfig.StateBucket = "REACTIVE_WORKFLOW_STATE"
-	}
-	if engineConfig.CallbackStreamName == "" {
-		engineConfig.CallbackStreamName = "WORKFLOW_CALLBACKS"
-	}
-	if engineConfig.EventStreamName == "" {
-		engineConfig.EventStreamName = "WORKFLOW_EVENTS"
-	}
-	if engineConfig.DefaultTimeout == "" {
-		engineConfig.DefaultTimeout = "10m"
-	}
-	if engineConfig.DefaultMaxIterations == 0 {
-		engineConfig.DefaultMaxIterations = 10
-	}
-	if engineConfig.CleanupRetention == "" {
-		engineConfig.CleanupRetention = "24h"
-	}
-	if engineConfig.CleanupInterval == "" {
-		engineConfig.CleanupInterval = "1h"
-	}
-
-	return engineConfig, nil
+	return runWithSignalHandling(ctx, manager, cliCfg.ShutdownTimeout)
 }
 
 // --- CLI and Config Functions (copied from semstreams main.go) ---
@@ -441,6 +344,11 @@ func setupRegistriesAndManager(cfg *config.Config) (*component.Registry, *servic
 		return nil, nil, fmt.Errorf("register components: %w", err)
 	}
 
+	// Register bundled example/domain components used by e2e configs
+	if err := registerExampleComponents(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register example components: %w", err)
+	}
+
 	factories := componentRegistry.ListFactories()
 	slog.Info("Core component factories registered", "count", len(factories))
 
@@ -466,7 +374,7 @@ func ensureServiceManagerConfig(cfg *config.Config) {
 			"swagger_ui": true,
 			"server_info": map[string]string{
 				"title":       "SemStreams E2E API",
-				"description": "E2E test application with reactive workflows",
+				"description": "E2E test application",
 				"version":     Version,
 			},
 		}
@@ -544,7 +452,7 @@ func createServiceIfEnabled(
 	return nil
 }
 
-func runWithSignalHandling(ctx context.Context, manager *service.Manager, engine *reactive.Engine, shutdownTimeout time.Duration) error {
+func runWithSignalHandling(ctx context.Context, manager *service.Manager, shutdownTimeout time.Duration) error {
 	signalCtx, signalCancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
 	defer signalCancel()
 
@@ -559,12 +467,6 @@ func runWithSignalHandling(ctx context.Context, manager *service.Manager, engine
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
-
-	// Stop the workflow engine first
-	if engine != nil {
-		engine.Stop()
-		slog.Info("Reactive workflow engine stopped")
-	}
 
 	if err := shutdown(shutdownCtx, manager, shutdownTimeout); err != nil {
 		return fmt.Errorf("graceful shutdown failed: %w", err)
@@ -587,6 +489,19 @@ func shutdown(ctx context.Context, manager *service.Manager, timeout time.Durati
 		return err
 	}
 
+	return nil
+}
+
+// registerExampleComponents registers bundled example/domain processors.
+// These are kept out of componentregistry.Register() so that downstream
+// consumers (semdragons, semspec) don't inherit example dependencies.
+func registerExampleComponents(registry *component.Registry) error {
+	if err := iotsensor.Register(registry); err != nil {
+		return fmt.Errorf("register iot_sensor: %w", err)
+	}
+	if err := document.Register(registry); err != nil {
+		return fmt.Errorf("register document: %w", err)
+	}
 	return nil
 }
 

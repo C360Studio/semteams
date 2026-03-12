@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"log/slog"
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/processor/rule/expression"
 )
 
 // Action type constants define the supported action types for rule execution.
@@ -76,6 +76,17 @@ type Action struct {
 
 	// BoidStrength specifies the steering strength for boid signals (0.0-1.0)
 	BoidStrength float64 `json:"boid_strength,omitempty"`
+
+	// WorkflowSlug identifies the workflow for publish_agent actions (e.g., "github-issue-to-pr")
+	WorkflowSlug string `json:"workflow_slug,omitempty"`
+
+	// WorkflowStep identifies the step within the workflow (e.g., "qualify", "develop", "review")
+	WorkflowStep string `json:"workflow_step,omitempty"`
+
+	// When is an optional guard clause for conditional action execution.
+	// If present, all conditions must match (AND logic) against the entity's current
+	// state and $state.* fields for the action to execute. Actions without When always execute.
+	When []expression.ConditionExpression `json:"when,omitempty"`
 }
 
 // ParseTTL parses the TTL string into a duration.
@@ -161,26 +172,26 @@ func NewActionExecutorFull(logger *slog.Logger, mutator TripleMutator, publisher
 	}
 }
 
-// Execute runs the given action in the context of an entity.
-// The entityID is the subject entity, and relatedID is an optional related entity
-// (used for pair rules and relationship triples).
-func (e *ActionExecutor) Execute(ctx context.Context, action Action, entityID string, relatedID string) error {
+// Execute runs the given action using the execution context.
+// The ExecutionContext provides the entity ID, related entity ID, full entity state,
+// and match state for rich action execution.
+func (e *ActionExecutor) Execute(ctx context.Context, action Action, ec *ExecutionContext) error {
 	switch action.Type {
 	case ActionTypeAddTriple:
-		_, err := e.ExecuteAddTriple(ctx, action, entityID, relatedID)
+		_, err := e.ExecuteAddTriple(ctx, action, ec)
 		return err
 	case ActionTypeRemoveTriple:
-		return e.ExecuteRemoveTriple(ctx, action, entityID, relatedID)
+		return e.ExecuteRemoveTriple(ctx, action, ec)
 	case ActionTypePublish:
-		return e.executePublish(ctx, action, entityID, relatedID)
+		return e.executePublish(ctx, action, ec)
 	case ActionTypeUpdateTriple:
-		return e.executeUpdateTriple(ctx, action, entityID, relatedID)
+		return e.executeUpdateTriple(ctx, action, ec)
 	case ActionTypePublishAgent:
-		return e.executePublishAgent(ctx, action, entityID, relatedID)
+		return e.executePublishAgent(ctx, action, ec)
 	case ActionTypeTriggerWorkflow:
-		return e.executeTriggerWorkflow(ctx, action, entityID, relatedID)
+		return e.executeTriggerWorkflow(ctx, action, ec)
 	case ActionTypePublishBoidSignal:
-		return e.executePublishBoidSignal(ctx, action, entityID, relatedID)
+		return e.executePublishBoidSignal(ctx, action, ec)
 	default:
 		return fmt.Errorf("unknown action type: %s", action.Type)
 	}
@@ -189,15 +200,17 @@ func (e *ActionExecutor) Execute(ctx context.Context, action Action, entityID st
 // ExecuteAddTriple executes an add_triple action, creating a new semantic triple.
 // Returns the created triple and any error that occurred.
 // If a TripleMutator is configured, the triple is persisted via NATS request/response.
-func (e *ActionExecutor) ExecuteAddTriple(ctx context.Context, action Action, entityID, relatedID string) (message.Triple, error) {
+func (e *ActionExecutor) ExecuteAddTriple(ctx context.Context, action Action, ec *ExecutionContext) (message.Triple, error) {
+	entityID := ec.EntityID
+
 	// Validate predicate is present
 	if action.Predicate == "" {
 		return message.Triple{}, errors.New("predicate is required for add_triple action")
 	}
 
 	// Substitute variables in predicate and object
-	predicate := substituteVariables(action.Predicate, entityID, relatedID)
-	object := substituteVariables(action.Object, entityID, relatedID)
+	predicate := ec.SubstituteVariables(action.Predicate)
+	object := ec.SubstituteVariables(action.Object)
 
 	// Parse TTL
 	ttl, err := action.ParseTTL()
@@ -255,14 +268,16 @@ func (e *ActionExecutor) ExecuteAddTriple(ctx context.Context, action Action, en
 
 // ExecuteRemoveTriple executes a remove_triple action, removing a semantic triple.
 // If a TripleMutator is configured, the triple is removed via NATS request/response.
-func (e *ActionExecutor) ExecuteRemoveTriple(ctx context.Context, action Action, entityID, relatedID string) error {
+func (e *ActionExecutor) ExecuteRemoveTriple(ctx context.Context, action Action, ec *ExecutionContext) error {
+	entityID := ec.EntityID
+
 	// Validate predicate is present
 	if action.Predicate == "" {
 		return errors.New("predicate is required for remove_triple action")
 	}
 
-	predicate := substituteVariables(action.Predicate, entityID, relatedID)
-	object := substituteVariables(action.Object, entityID, relatedID)
+	predicate := ec.SubstituteVariables(action.Predicate)
+	object := ec.SubstituteVariables(action.Object)
 
 	if e.logger != nil {
 		e.logger.Debug("Removing triple",
@@ -293,13 +308,15 @@ func (e *ActionExecutor) ExecuteRemoveTriple(ctx context.Context, action Action,
 }
 
 // executePublish executes a publish action, sending a message to a NATS subject.
-func (e *ActionExecutor) executePublish(ctx context.Context, action Action, entityID, relatedID string) error {
+func (e *ActionExecutor) executePublish(ctx context.Context, action Action, ec *ExecutionContext) error {
+	entityID := ec.EntityID
+
 	// Validate subject is present
 	if action.Subject == "" {
 		return errors.New("subject is required for publish action")
 	}
 
-	subject := substituteVariables(action.Subject, entityID, relatedID)
+	subject := ec.SubstituteVariables(action.Subject)
 
 	// Build the message payload
 	payload := map[string]any{
@@ -309,15 +326,15 @@ func (e *ActionExecutor) executePublish(ctx context.Context, action Action, enti
 		"source":     "rule_engine",
 		"properties": action.Properties,
 	}
-	if relatedID != "" {
-		payload["related_id"] = relatedID
+	if ec.RelatedID != "" {
+		payload["related_id"] = ec.RelatedID
 	}
 
 	if e.logger != nil {
 		e.logger.Debug("Publishing message",
 			"subject", subject,
 			"entity_id", entityID,
-			"related_id", relatedID,
+			"related_id", ec.RelatedID,
 			"properties", action.Properties)
 	}
 
@@ -351,14 +368,16 @@ func (e *ActionExecutor) executePublish(ctx context.Context, action Action, enti
 // and adding a new one with the updated values. This is the only way to "update" a triple
 // since triples are identified by (subject, predicate, object) - changing any of those
 // creates a different triple.
-func (e *ActionExecutor) executeUpdateTriple(ctx context.Context, action Action, entityID, relatedID string) error {
+func (e *ActionExecutor) executeUpdateTriple(ctx context.Context, action Action, ec *ExecutionContext) error {
+	entityID := ec.EntityID
+
 	// Validate predicate is present
 	if action.Predicate == "" {
 		return errors.New("predicate is required for update_triple action")
 	}
 
-	predicate := substituteVariables(action.Predicate, entityID, relatedID)
-	object := substituteVariables(action.Object, entityID, relatedID)
+	predicate := ec.SubstituteVariables(action.Predicate)
+	object := ec.SubstituteVariables(action.Object)
 
 	if e.logger != nil {
 		e.logger.Debug("Updating triple (remove + add)",
@@ -426,56 +445,10 @@ func (e *ActionExecutor) executeUpdateTriple(ctx context.Context, action Action,
 	return nil
 }
 
-// substituteVariables replaces template variables with actual entity IDs.
-// Supported variables:
-//   - $entity.id: The primary entity ID
-//   - $related.id: The related entity ID (for pair rules)
-func substituteVariables(template, entityID, relatedID string) string {
-	result := template
-	result = strings.ReplaceAll(result, "$entity.id", entityID)
-	result = strings.ReplaceAll(result, "$related.id", relatedID)
-	return result
-}
-
-// EntityContext provides entity data for variable substitution in rules.
-// This is used for rules-based workflow orchestration where completion
-// state from agentic loops is used to trigger follow-up actions.
-type EntityContext struct {
-	ID         string // The entity/loop ID
-	Role       string // Agent role (architect, editor, general, etc.)
-	Result     string // The result/output content
-	Model      string // Model used for the agent
-	TaskID     string // Task identifier
-	ParentLoop string // Parent loop ID (for chained workflows)
-	Iterations int    // Number of iterations completed
-}
-
-// substituteVariablesWithContext replaces template variables with entity context values.
-// Supports all basic variables plus extended context fields:
-//   - $entity.id: The entity ID
-//   - $related.id: The related entity ID (for pair rules)
-//   - $entity.role: The agent role
-//   - $entity.result: The agent output/result
-//   - $entity.model: The model used
-//   - $entity.task_id: The task identifier
-//   - $entity.parent_loop: The parent loop ID
-//   - $entity.iterations: The iteration count
-func substituteVariablesWithContext(template string, entity EntityContext, relatedID string) string {
-	result := template
-	result = strings.ReplaceAll(result, "$entity.id", entity.ID)
-	result = strings.ReplaceAll(result, "$related.id", relatedID)
-	result = strings.ReplaceAll(result, "$entity.role", entity.Role)
-	result = strings.ReplaceAll(result, "$entity.result", entity.Result)
-	result = strings.ReplaceAll(result, "$entity.model", entity.Model)
-	result = strings.ReplaceAll(result, "$entity.task_id", entity.TaskID)
-	result = strings.ReplaceAll(result, "$entity.parent_loop", entity.ParentLoop)
-	result = strings.ReplaceAll(result, "$entity.iterations", fmt.Sprintf("%d", entity.Iterations))
-	return result
-}
-
 // executePublishAgent executes a publish_agent action, triggering an agentic loop.
 // It publishes a TaskMessage to the specified NATS subject.
-func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action, entityID, relatedID string) error {
+func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action, ec *ExecutionContext) error {
+	entityID := ec.EntityID
 	// Validate required fields
 	if action.Subject == "" {
 		return errors.New("subject is required for publish_agent action")
@@ -497,24 +470,28 @@ func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action,
 		"editor":    true,
 		"reviewer":  true,
 		"fixer":     true,
+		"qualifier": true,
+		"developer": true,
 	}
 	if !validRoles[action.Role] {
-		return fmt.Errorf("invalid role %q: must be one of: general, architect, editor, reviewer, fixer", action.Role)
+		return fmt.Errorf("invalid role %q: must be one of: general, architect, editor, reviewer, fixer, qualifier, developer", action.Role)
 	}
 
 	// Substitute variables in subject and prompt
-	subject := substituteVariables(action.Subject, entityID, relatedID)
-	prompt := substituteVariables(action.Prompt, entityID, relatedID)
+	subject := ec.SubstituteVariables(action.Subject)
+	prompt := ec.SubstituteVariables(action.Prompt)
 
 	// Generate a unique task ID
 	taskID := fmt.Sprintf("rule-%s-%d", entityID, time.Now().UnixNano())
 
 	// Build the TaskMessage
 	task := agentic.TaskMessage{
-		TaskID: taskID,
-		Role:   action.Role,
-		Model:  action.Model,
-		Prompt: prompt,
+		TaskID:       taskID,
+		Role:         action.Role,
+		Model:        action.Model,
+		Prompt:       prompt,
+		WorkflowSlug: ec.SubstituteVariables(action.WorkflowSlug),
+		WorkflowStep: ec.SubstituteVariables(action.WorkflowStep),
 	}
 
 	if e.logger != nil {
@@ -557,7 +534,8 @@ func (e *ActionExecutor) executePublishAgent(ctx context.Context, action Action,
 // executeTriggerWorkflow triggers a reactive workflow by publishing to workflow.trigger.<workflow_id>.
 // This enables rules to initiate complex orchestration workflows while keeping rules simple.
 // The payload is wrapped in a BaseMessage for proper deserialization by the reactive workflow engine.
-func (e *ActionExecutor) executeTriggerWorkflow(ctx context.Context, action Action, entityID, relatedID string) error {
+func (e *ActionExecutor) executeTriggerWorkflow(ctx context.Context, action Action, ec *ExecutionContext) error {
+	entityID := ec.EntityID
 	if action.WorkflowID == "" {
 		return errors.New("workflow_id is required for trigger_workflow action")
 	}
@@ -567,7 +545,7 @@ func (e *ActionExecutor) executeTriggerWorkflow(ctx context.Context, action Acti
 		WorkflowID:  action.WorkflowID,
 		EntityID:    entityID,
 		TriggeredAt: time.Now().UTC(),
-		RelatedID:   relatedID,
+		RelatedID:   ec.RelatedID,
 		Context:     action.ContextData,
 	}
 
@@ -620,7 +598,8 @@ func (e *ActionExecutor) executeTriggerWorkflow(ctx context.Context, action Acti
 // executePublishBoidSignal executes a publish_boid_signal action.
 // It publishes a BoidSteeringSignal to the agent.boid.<loopID> subject
 // for consumption by the agentic-loop for coordination.
-func (e *ActionExecutor) executePublishBoidSignal(ctx context.Context, action Action, entityID, relatedID string) error {
+func (e *ActionExecutor) executePublishBoidSignal(ctx context.Context, action Action, ec *ExecutionContext) error {
+	entityID := ec.EntityID
 	if action.Subject == "" {
 		return errors.New("subject is required for publish_boid_signal action")
 	}
@@ -639,7 +618,7 @@ func (e *ActionExecutor) executePublishBoidSignal(ctx context.Context, action Ac
 	}
 
 	// Substitute variables in subject
-	subject := substituteVariables(action.Subject, entityID, relatedID)
+	subject := ec.SubstituteVariables(action.Subject)
 
 	// Build signal payload
 	strength := action.BoidStrength
@@ -656,8 +635,8 @@ func (e *ActionExecutor) executePublishBoidSignal(ctx context.Context, action Ac
 	}
 
 	// Add related entity as context
-	if relatedID != "" {
-		signal["related_id"] = relatedID
+	if ec.RelatedID != "" {
+		signal["related_id"] = ec.RelatedID
 	}
 
 	// Include any custom properties

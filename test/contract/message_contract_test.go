@@ -11,7 +11,6 @@ import (
 	// Import packages to trigger their init() payload registrations
 	_ "github.com/c360studio/semstreams/agentic"
 	_ "github.com/c360studio/semstreams/processor/agentic-dispatch"
-	_ "github.com/c360studio/semstreams/processor/reactive"
 )
 
 // schemaProvider matches message.Payload's Schema() method

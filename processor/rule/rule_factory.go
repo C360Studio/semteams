@@ -27,6 +27,11 @@ type Definition struct {
 	OnExit          []Action                         `json:"on_exit,omitempty"`          // Fires on true→false transition
 	WhileTrue       []Action                         `json:"while_true,omitempty"`       // Fires on every update while true
 	RelatedPatterns []string                         `json:"related_patterns,omitempty"` // For pair rules
+
+	// MaxIterations limits how many times a rule can enter the matching state for an entity.
+	// 0 means no limit. Use $state.iteration and $state.max_iterations in When clauses
+	// for retry budgets (e.g., retry up to 3 times then escalate).
+	MaxIterations int `json:"max_iterations,omitempty"`
 }
 
 // EntityConfig defines entity-specific configuration
@@ -212,6 +217,7 @@ func isValidOperator(op string) bool {
 	validOps := []string{
 		"eq", "ne", "lt", "lte", "gt", "gte",
 		"contains", "starts_with", "ends_with", "regex",
+		"in", "not_in", "between",
 	}
 	for _, valid := range validOps {
 		if op == valid {

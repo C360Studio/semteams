@@ -121,3 +121,8 @@ const (
 	LogicAnd = "and"
 	LogicOr  = "or"
 )
+
+// StateFields provides rule match state values for $state.* pseudo-field resolution
+// in condition expressions. Keys are the full field names (e.g., "$state.iteration").
+// This avoids circular dependencies between the expression and rule packages.
+type StateFields map[string]interface{}

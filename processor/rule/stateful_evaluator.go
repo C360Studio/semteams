@@ -6,6 +6,9 @@ import (
 	"errors"
 	"log/slog"
 	"time"
+
+	gtypes "github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/processor/rule/expression"
 )
 
 // Compile-time interface check
@@ -17,13 +20,15 @@ var _ ActionExecutorInterface = (*ActionExecutor)(nil)
 type StatefulEvaluator struct {
 	stateTracker   *StateTracker
 	actionExecutor ActionExecutorInterface
+	exprEvaluator  *expression.Evaluator
 	logger         *slog.Logger
 }
 
 // ActionExecutorInterface defines the interface for action execution.
-// This allows for easy mocking in tests.
+// Actions receive an ExecutionContext with the full entity state and match state,
+// replacing the previous (entityID, relatedID string) signature.
 type ActionExecutorInterface interface {
-	Execute(ctx context.Context, action Action, entityID string, relatedID string) error
+	Execute(ctx context.Context, action Action, ec *ExecutionContext) error
 }
 
 // NewStatefulEvaluator creates a new stateful evaluator with the given dependencies.
@@ -35,6 +40,7 @@ func NewStatefulEvaluator(stateTracker *StateTracker, actionExecutor ActionExecu
 	return &StatefulEvaluator{
 		stateTracker:   stateTracker,
 		actionExecutor: actionExecutor,
+		exprEvaluator:  expression.NewExpressionEvaluator(),
 		logger:         logger,
 	}
 }
@@ -44,10 +50,14 @@ func NewStatefulEvaluator(stateTracker *StateTracker, actionExecutor ActionExecu
 //  1. Retrieves previous state from StateTracker (treats missing state as false)
 //  2. Detects transition (entered/exited/none) by comparing previous and current match state
 //  3. Fires appropriate actions based on transition:
-//     - TransitionEntered: Execute all OnEnter actions
-//     - TransitionExited: Execute all OnExit actions
+//     - TransitionEntered: Execute all OnEnter actions (increments iteration)
+//     - TransitionExited: Execute all OnExit actions (preserves iteration)
 //     - TransitionNone + currentlyMatching: Execute all WhileTrue actions
-//  4. Persists new state to StateTracker
+//  4. Evaluates When clauses on each action before execution
+//  5. Persists new state to StateTracker
+//
+// The entity and related parameters provide typed entity state for When clause evaluation
+// and are passed through to actions via ExecutionContext. Pass nil for message-path rules.
 //
 // Returns the transition that occurred and any error encountered.
 func (e *StatefulEvaluator) EvaluateWithState(
@@ -56,14 +66,14 @@ func (e *StatefulEvaluator) EvaluateWithState(
 	entityID string,
 	relatedID string, // empty for single-entity rules
 	currentlyMatching bool,
+	entity *gtypes.EntityState, // nil for message-path rules
+	related *gtypes.EntityState, // nil for single-entity or message-path rules
 ) (Transition, error) {
 	// Build entity key (single entity or canonical pair)
 	var entityKey string
 	if relatedID == "" {
-		// Single entity rule
 		entityKey = entityID
 	} else {
-		// Pair rule - use canonical sorted key
 		entityKey = buildPairKey(entityID, relatedID)
 	}
 
@@ -73,10 +83,8 @@ func (e *StatefulEvaluator) EvaluateWithState(
 
 	if err != nil {
 		if errors.Is(err, ErrStateNotFound) {
-			// No previous state - treat as wasMatching = false
 			wasMatching = false
 		} else {
-			// Real error - return it
 			return TransitionNone, err
 		}
 	} else {
@@ -85,6 +93,40 @@ func (e *StatefulEvaluator) EvaluateWithState(
 
 	// Detect transition
 	transition := DetectTransition(wasMatching, currentlyMatching)
+
+	// Build iteration count for new state
+	iteration := prevState.Iteration
+	if transition == TransitionEntered {
+		iteration++
+	}
+
+	// Build match state for ExecutionContext (before persisting so actions see current state)
+	matchState := &MatchState{
+		RuleID:         ruleDef.ID,
+		EntityKey:      entityKey,
+		IsMatching:     currentlyMatching,
+		LastTransition: string(transition),
+		TransitionAt:   time.Now(),
+		LastChecked:    time.Now(),
+		Iteration:      iteration,
+		MaxIterations:  ruleDef.MaxIterations,
+	}
+
+	// Build execution context for actions
+	ec := &ExecutionContext{
+		EntityID:  entityID,
+		RelatedID: relatedID,
+		Entity:    entity,
+		Related:   related,
+		State:     matchState,
+	}
+
+	// Build state fields for $state.* pseudo-field evaluation in When clauses
+	stateFields := expression.StateFields{
+		"$state.iteration":       iteration,
+		"$state.max_iterations":  ruleDef.MaxIterations,
+		"$state.last_transition": string(transition),
+	}
 
 	// Execute actions based on transition
 	var actionsToExecute []Action
@@ -96,6 +138,7 @@ func (e *StatefulEvaluator) EvaluateWithState(
 			"rule_id", ruleDef.ID,
 			"entity_id", entityID,
 			"related_id", relatedID,
+			"iteration", iteration,
 			"action_count", len(actionsToExecute))
 
 	case TransitionExited:
@@ -107,7 +150,6 @@ func (e *StatefulEvaluator) EvaluateWithState(
 			"action_count", len(actionsToExecute))
 
 	case TransitionNone:
-		// No transition - check if we should fire WhileTrue actions
 		if currentlyMatching {
 			actionsToExecute = ruleDef.WhileTrue
 			e.logger.Debug("Rule while true",
@@ -118,9 +160,29 @@ func (e *StatefulEvaluator) EvaluateWithState(
 		}
 	}
 
-	// Execute all actions for this transition
+	// Execute all actions for this transition, evaluating When clauses
 	for _, action := range actionsToExecute {
-		if err := e.actionExecutor.Execute(ctx, action, entityID, relatedID); err != nil {
+		// Evaluate When clause if present
+		if len(action.When) > 0 {
+			match, whenErr := e.evaluateWhen(action.When, entity, stateFields)
+			if whenErr != nil {
+				e.logger.Warn("When clause evaluation failed, skipping action",
+					"rule_id", ruleDef.ID,
+					"entity_id", entityID,
+					"action_type", action.Type,
+					"error", whenErr)
+				continue
+			}
+			if !match {
+				e.logger.Debug("Action skipped by When clause",
+					"rule_id", ruleDef.ID,
+					"entity_id", entityID,
+					"action_type", action.Type)
+				continue
+			}
+		}
+
+		if err := e.actionExecutor.Execute(ctx, action, ec); err != nil {
 			e.logger.Error("Failed to execute action",
 				"rule_id", ruleDef.ID,
 				"entity_id", entityID,
@@ -131,17 +193,8 @@ func (e *StatefulEvaluator) EvaluateWithState(
 		}
 	}
 
-	// Build and persist new state
-	newState := MatchState{
-		RuleID:         ruleDef.ID,
-		EntityKey:      entityKey,
-		IsMatching:     currentlyMatching,
-		LastTransition: string(transition),
-		TransitionAt:   time.Now(),
-		LastChecked:    time.Now(),
-	}
-
-	if err := e.stateTracker.Set(ctx, newState); err != nil {
+	// Persist new state
+	if err := e.stateTracker.Set(ctx, *matchState); err != nil {
 		e.logger.Warn("Failed to persist rule state",
 			"rule_id", ruleDef.ID,
 			"entity_key", entityKey,
@@ -150,4 +203,21 @@ func (e *StatefulEvaluator) EvaluateWithState(
 	}
 
 	return transition, nil
+}
+
+// evaluateWhen evaluates a When clause (action-level guard conditions).
+// When clauses use AND logic by default — all conditions must match for the action to execute.
+// If entity is nil (message-path rules), the When clause is skipped and returns true.
+func (e *StatefulEvaluator) evaluateWhen(
+	conditions []expression.ConditionExpression,
+	entity *gtypes.EntityState,
+	stateFields expression.StateFields,
+) (bool, error) {
+	// For message-path rules without entity state, skip When evaluation
+	// unless all conditions reference $state.* fields
+	expr := expression.LogicalExpression{
+		Conditions: conditions,
+		Logic:      expression.LogicAnd,
+	}
+	return e.exprEvaluator.EvaluateWithStateFields(entity, stateFields, expr)
 }

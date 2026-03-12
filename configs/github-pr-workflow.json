@@ -126,19 +126,60 @@
         }
       }
     },
-    "reactive-workflow": {
+    "pr-workflow-spawner": {
       "type": "processor",
-      "name": "reactive-workflow",
+      "name": "pr-workflow-spawner",
       "enabled": true,
       "config": {
+        "model": "default",
+        "token_budget": 500000,
+        "max_review_cycles": 3,
         "ports": {
           "inputs": [
-            {"name": "github_events", "subject": "github.event.>", "type": "jetstream", "stream": "GITHUB"},
-            {"name": "agent_completions", "subject": "agent.complete.>", "type": "jetstream", "stream": "AGENT"}
+            {"name": "github_events", "subject": "github.event.issue", "type": "jetstream", "stream": "GITHUB"},
+            {"name": "agent_completions", "subject": "agentic.loop_completed.v1", "type": "jetstream", "stream": "AGENT"}
           ],
           "outputs": [
             {"name": "agent_tasks", "subject": "agent.task", "type": "nats"},
+            {"name": "triple_mutations", "subject": "graph.mutation.triple.add", "type": "nats"}
+          ]
+        }
+      }
+    },
+    "rule-processor": {
+      "type": "processor",
+      "name": "rule-processor",
+      "enabled": true,
+      "config": {
+        "rules_dir": "configs/rules/github-pr-workflow",
+        "entity": {
+          "pattern": "*.github.repo.*.workflow.*",
+          "watch_buckets": ["ENTITY_STATES"]
+        },
+        "ports": {
+          "inputs": [
+            {"name": "entity_states", "subject": "ENTITY_STATES.>", "type": "kv-watch", "bucket": "ENTITY_STATES"}
+          ],
+          "outputs": [
+            {"name": "triple_mutations", "subject": "graph.mutation.triple", "type": "nats"},
             {"name": "workflow_events", "subject": "github.workflow", "type": "nats"}
+          ]
+        }
+      }
+    },
+    "graph-ingest": {
+      "type": "processor",
+      "name": "graph-ingest",
+      "enabled": true,
+      "config": {
+        "entity_bucket": "ENTITY_STATES",
+        "ports": {
+          "inputs": [
+            {"name": "triple_add", "subject": "graph.mutation.triple.add", "type": "nats"},
+            {"name": "triple_remove", "subject": "graph.mutation.triple.remove", "type": "nats"}
+          ],
+          "outputs": [
+            {"name": "entity_events", "subject": "events.graph.entity", "type": "nats"}
           ]
         }
       }

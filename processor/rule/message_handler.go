@@ -106,7 +106,7 @@ func (rp *Processor) evaluateRulesForMessage(ctx context.Context, subject string
 			entityID := extractEntityID(msg)
 
 			// Perform stateful evaluation
-			transition, err := rp.statefulEvaluator.EvaluateWithState(ctx, ruleDef, entityID, "", triggered)
+			transition, err := rp.statefulEvaluator.EvaluateWithState(ctx, ruleDef, entityID, "", triggered, nil, nil)
 			if err != nil {
 				rp.logger.Warn("Stateful evaluation failed", "rule_name", ruleName, "error", err)
 			} else if transition != TransitionNone {
@@ -204,8 +204,8 @@ func (rp *Processor) evaluateRulesForEntityState(ctx context.Context, entityKey,
 			// Use EntityState ID directly for state tracking
 			entityID := entityState.ID
 
-			// Perform stateful evaluation
-			transition, err := rp.statefulEvaluator.EvaluateWithState(ctx, ruleDef, entityID, "", triggered)
+			// Perform stateful evaluation — pass entityState for When clause evaluation
+			transition, err := rp.statefulEvaluator.EvaluateWithState(ctx, ruleDef, entityID, "", triggered, entityState, nil)
 			if err != nil {
 				rp.logger.Warn("Stateful evaluation failed", "rule_name", ruleName, "error", err)
 			} else if transition != TransitionNone {

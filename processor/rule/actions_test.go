@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/agentic"
+	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -77,7 +78,7 @@ func TestAction_AddTriple(t *testing.T) {
 			executor := &ActionExecutor{}
 
 			// Execute action
-			triple, err := executor.ExecuteAddTriple(ctx, tt.action, tt.entityID, tt.relatedID)
+			triple, err := executor.ExecuteAddTriple(ctx, tt.action, &ExecutionContext{EntityID: tt.entityID, RelatedID: tt.relatedID})
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -146,7 +147,7 @@ func TestAction_RemoveTriple(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			executor := &ActionExecutor{}
 
-			err := executor.ExecuteRemoveTriple(ctx, tt.action, tt.entityID, tt.relatedID)
+			err := executor.ExecuteRemoveTriple(ctx, tt.action, &ExecutionContext{EntityID: tt.entityID, RelatedID: tt.relatedID})
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -342,8 +343,8 @@ func TestAction_VariableSubstitution(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Function doesn't exist yet
-			result := substituteVariables(tt.template, tt.entityID, tt.relatedID)
+			ec := &ExecutionContext{EntityID: tt.entityID, RelatedID: tt.relatedID}
+			result := ec.SubstituteVariables(tt.template)
 			assert.Equal(t, tt.want, result)
 		})
 	}
@@ -461,7 +462,7 @@ func TestAction_Publish(t *testing.T) {
 			mock := &mockPublisher{}
 			executor := NewActionExecutorFull(nil, nil, mock)
 
-			err := executor.Execute(ctx, tt.action, tt.entityID, tt.relatedID)
+			err := executor.Execute(ctx, tt.action, &ExecutionContext{EntityID: tt.entityID, RelatedID: tt.relatedID})
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -494,7 +495,7 @@ func TestAction_Publish_PayloadFormat(t *testing.T) {
 		},
 	}
 
-	err := executor.Execute(ctx, action, "entity.001", "related.002")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001", RelatedID: "related.002"})
 	require.NoError(t, err)
 	require.Len(t, mock.published, 1)
 
@@ -530,7 +531,7 @@ func TestAction_Publish_NoPublisher(t *testing.T) {
 	}
 
 	// Should not error, just log and return
-	err := executor.Execute(ctx, action, "entity.001", "")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 	require.NoError(t, err)
 }
 
@@ -548,7 +549,7 @@ func TestAction_Publish_ErrorHandling(t *testing.T) {
 		Subject: "test.subject",
 	}
 
-	err := executor.Execute(ctx, action, "entity.001", "")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "publish to test.subject")
 }
@@ -654,7 +655,7 @@ func TestAction_UpdateTriple(t *testing.T) {
 			mock := &mockTripleMutator{}
 			executor := NewActionExecutorWithMutator(nil, mock)
 
-			err := executor.Execute(ctx, tt.action, tt.entityID, tt.relatedID)
+			err := executor.Execute(ctx, tt.action, &ExecutionContext{EntityID: tt.entityID, RelatedID: tt.relatedID})
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -698,7 +699,7 @@ func TestAction_UpdateTriple_NoMutator(t *testing.T) {
 	}
 
 	// Should not error, just log and return
-	err := executor.Execute(ctx, action, "entity.001", "")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 	require.NoError(t, err)
 }
 
@@ -719,7 +720,7 @@ func TestAction_UpdateTriple_RemoveFailsContinues(t *testing.T) {
 	}
 
 	// Should still succeed - add should still be called
-	err := executor.Execute(ctx, action, "entity.001", "")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 	require.NoError(t, err)
 
 	// Add should still have been called
@@ -742,7 +743,7 @@ func TestAction_UpdateTriple_AddFails(t *testing.T) {
 		Object:    "test.value",
 	}
 
-	err := executor.Execute(ctx, action, "entity.001", "")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "add updated triple")
 }
@@ -869,7 +870,7 @@ func TestAction_PublishAgent(t *testing.T) {
 			mock := &mockPublisher{}
 			executor := NewActionExecutorFull(nil, nil, mock)
 
-			err := executor.Execute(ctx, tt.action, tt.entityID, tt.relatedID)
+			err := executor.Execute(ctx, tt.action, &ExecutionContext{EntityID: tt.entityID, RelatedID: tt.relatedID})
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -901,7 +902,7 @@ func TestAction_PublishAgent_PayloadFormat(t *testing.T) {
 		Prompt:  "Analyze entity $entity.id in location $related.id",
 	}
 
-	err := executor.Execute(ctx, action, "sensor.temp.001", "warehouse.zone.A")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "sensor.temp.001", RelatedID: "warehouse.zone.A"})
 	require.NoError(t, err)
 	require.Len(t, mock.published, 1)
 
@@ -936,7 +937,7 @@ func TestAction_PublishAgent_NoPublisher(t *testing.T) {
 	}
 
 	// Should not error, just log and return
-	err := executor.Execute(ctx, action, "entity.001", "")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 	require.NoError(t, err)
 }
 
@@ -957,7 +958,7 @@ func TestAction_PublishAgent_ErrorHandling(t *testing.T) {
 		Prompt:  "Test prompt",
 	}
 
-	err := executor.Execute(ctx, action, "entity.001", "")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "publish agent task to agent.task.test")
 }
@@ -966,6 +967,130 @@ func TestAction_PublishAgent_ErrorHandling(t *testing.T) {
 func TestActionConstant_PublishAgent(t *testing.T) {
 	t.Parallel()
 	assert.Equal(t, "publish_agent", ActionTypePublishAgent)
+}
+
+// Test PublishAgent with WorkflowSlug and WorkflowStep fields
+func TestAction_PublishAgent_WorkflowFields(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mock := &mockPublisher{}
+	executor := NewActionExecutorFull(nil, nil, mock)
+
+	action := Action{
+		Type:         ActionTypePublishAgent,
+		Subject:      "agent.task.qualifier",
+		Role:         "qualifier",
+		Model:        "mock-model",
+		Prompt:       "Qualify issue for $entity.id",
+		WorkflowSlug: "github-issue-to-pr",
+		WorkflowStep: "qualify",
+	}
+
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "c360.github.repo.myrepo.workflow.42"})
+	require.NoError(t, err)
+	require.Len(t, mock.published, 1)
+
+	// Parse the published TaskMessage
+	var baseMsg message.BaseMessage
+	err = json.Unmarshal(mock.published[0].data, &baseMsg)
+	require.NoError(t, err)
+
+	task, ok := baseMsg.Payload().(*agentic.TaskMessage)
+	require.True(t, ok, "expected *agentic.TaskMessage, got %T", baseMsg.Payload())
+
+	assert.Equal(t, "github-issue-to-pr", task.WorkflowSlug)
+	assert.Equal(t, "qualify", task.WorkflowStep)
+	assert.Equal(t, "qualifier", task.Role)
+	assert.Equal(t, "Qualify issue for c360.github.repo.myrepo.workflow.42", task.Prompt)
+}
+
+// Test PublishAgent WorkflowSlug/WorkflowStep with variable substitution
+func TestAction_PublishAgent_WorkflowFieldsVariableSubstitution(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mock := &mockPublisher{}
+	executor := NewActionExecutorFull(nil, nil, mock)
+
+	action := Action{
+		Type:         ActionTypePublishAgent,
+		Subject:      "agent.task.develop",
+		Role:         "developer",
+		Model:        "mock-model",
+		Prompt:       "Develop fix",
+		WorkflowSlug: "github-issue-to-pr",
+		WorkflowStep: "develop",
+	}
+
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
+	require.NoError(t, err)
+	require.Len(t, mock.published, 1)
+
+	var baseMsg message.BaseMessage
+	err = json.Unmarshal(mock.published[0].data, &baseMsg)
+	require.NoError(t, err)
+
+	task, ok := baseMsg.Payload().(*agentic.TaskMessage)
+	require.True(t, ok)
+	assert.Equal(t, "github-issue-to-pr", task.WorkflowSlug)
+	assert.Equal(t, "develop", task.WorkflowStep)
+}
+
+// Test PublishAgent without WorkflowSlug/WorkflowStep (backwards compatible)
+func TestAction_PublishAgent_NoWorkflowFields(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	mock := &mockPublisher{}
+	executor := NewActionExecutorFull(nil, nil, mock)
+
+	action := Action{
+		Type:    ActionTypePublishAgent,
+		Subject: "agent.task.general",
+		Role:    "general",
+		Model:   "mock-model",
+		Prompt:  "General task",
+	}
+
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
+	require.NoError(t, err)
+	require.Len(t, mock.published, 1)
+
+	var baseMsg message.BaseMessage
+	err = json.Unmarshal(mock.published[0].data, &baseMsg)
+	require.NoError(t, err)
+
+	task, ok := baseMsg.Payload().(*agentic.TaskMessage)
+	require.True(t, ok)
+	assert.Empty(t, task.WorkflowSlug)
+	assert.Empty(t, task.WorkflowStep)
+}
+
+// Test qualifier and developer roles are valid (added for github-pr-workflow)
+func TestAction_PublishAgent_QualifierDeveloperRoles(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+
+	for _, role := range []string{"qualifier", "developer"} {
+		t.Run(role, func(t *testing.T) {
+			mock := &mockPublisher{}
+			executor := NewActionExecutorFull(nil, nil, mock)
+
+			action := Action{
+				Type:    ActionTypePublishAgent,
+				Subject: "agent.task.test",
+				Role:    role,
+				Model:   "mock-model",
+				Prompt:  "Test prompt",
+			}
+
+			err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
+			require.NoError(t, err, "role %q should be valid", role)
+			require.Len(t, mock.published, 1)
+		})
+	}
 }
 
 // T054: Test extended role validation (ADR-018)
@@ -1000,7 +1125,7 @@ func TestAction_PublishAgent_ExtendedRoles(t *testing.T) {
 				Prompt:  "Test prompt",
 			}
 
-			err := executor.Execute(ctx, action, "entity.001", "")
+			err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -1012,105 +1137,78 @@ func TestAction_PublishAgent_ExtendedRoles(t *testing.T) {
 	}
 }
 
-// T055: Test EntityContext type and substituteVariablesWithContext (ADR-018)
-func TestSubstituteVariablesWithContext(t *testing.T) {
+// T055: Test ExecutionContext.SubstituteVariables covers entity IDs, state fields, and entity triples
+func TestExecutionContext_SubstituteVariables(t *testing.T) {
 	t.Parallel()
-
-	entity := EntityContext{
-		ID:         "loop-123",
-		Role:       "architect",
-		Result:     "Design complete: use microservices",
-		Model:      "gpt-4",
-		TaskID:     "task-456",
-		ParentLoop: "parent-789",
-		Iterations: 3,
-	}
 
 	tests := []struct {
 		name     string
+		ec       *ExecutionContext
 		template string
-		related  string
 		want     string
 	}{
 		{
 			name:     "substitute entity.id",
-			template: "Loop: $entity.id",
-			want:     "Loop: loop-123",
-		},
-		{
-			name:     "substitute entity.role",
-			template: "Role: $entity.role",
-			want:     "Role: architect",
-		},
-		{
-			name:     "substitute entity.result",
-			template: "Result: $entity.result",
-			want:     "Result: Design complete: use microservices",
-		},
-		{
-			name:     "substitute entity.model",
-			template: "Model: $entity.model",
-			want:     "Model: gpt-4",
-		},
-		{
-			name:     "substitute entity.task_id",
-			template: "Task: $entity.task_id",
-			want:     "Task: task-456",
-		},
-		{
-			name:     "substitute entity.parent_loop",
-			template: "Parent: $entity.parent_loop",
-			want:     "Parent: parent-789",
-		},
-		{
-			name:     "substitute entity.iterations",
-			template: "Iterations: $entity.iterations",
-			want:     "Iterations: 3",
+			ec:       &ExecutionContext{EntityID: "c360.platform.sensor.temp.001"},
+			template: "Entity: $entity.id",
+			want:     "Entity: c360.platform.sensor.temp.001",
 		},
 		{
 			name:     "substitute related.id",
+			ec:       &ExecutionContext{EntityID: "drone.001", RelatedID: "zone.A"},
 			template: "Related: $related.id",
-			related:  "related-abc",
-			want:     "Related: related-abc",
+			want:     "Related: zone.A",
 		},
 		{
-			name:     "multiple substitutions",
-			template: "Implement $entity.result for task $entity.task_id using $entity.model",
-			want:     "Implement Design complete: use microservices for task task-456 using gpt-4",
+			name: "substitute state.iteration",
+			ec: &ExecutionContext{
+				EntityID: "entity.001",
+				State:    &MatchState{Iteration: 3, MaxIterations: 10},
+			},
+			template: "Iter: $state.iteration of $state.max_iterations",
+			want:     "Iter: 3 of 10",
+		},
+		{
+			name: "substitute entity triple predicate",
+			ec: &ExecutionContext{
+				EntityID: "entity.001",
+				Entity: &gtypes.EntityState{
+					ID: "entity.001",
+					Triples: []message.Triple{
+						{Subject: "entity.001", Predicate: "agent.role", Object: "architect"},
+						{Subject: "entity.001", Predicate: "status.battery", Object: "low"},
+					},
+				},
+			},
+			template: "Role: $entity.triple.agent.role, Battery: $entity.triple.status.battery",
+			want:     "Role: architect, Battery: low",
 		},
 		{
 			name:     "no substitution needed",
-			template: "Static content",
-			want:     "Static content",
+			ec:       &ExecutionContext{EntityID: "entity.001"},
+			template: "static.content",
+			want:     "static.content",
+		},
+		{
+			name:     "empty related.id substitutes empty string",
+			ec:       &ExecutionContext{EntityID: "entity.001", RelatedID: ""},
+			template: "Related: $related.id",
+			want:     "Related: ",
+		},
+		{
+			name:     "nil state skips state substitutions",
+			ec:       &ExecutionContext{EntityID: "entity.001"},
+			template: "Iter: $state.iteration",
+			want:     "Iter: $state.iteration",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := substituteVariablesWithContext(tt.template, entity, tt.related)
+			result := tt.ec.SubstituteVariables(tt.template)
 			assert.Equal(t, tt.want, result)
 		})
 	}
-}
-
-// T056: Test EntityContext with empty fields
-func TestSubstituteVariablesWithContext_EmptyFields(t *testing.T) {
-	t.Parallel()
-
-	entity := EntityContext{
-		ID:   "loop-123",
-		Role: "general",
-		// Other fields empty
-	}
-
-	result := substituteVariablesWithContext(
-		"ID: $entity.id, Parent: $entity.parent_loop, Iterations: $entity.iterations",
-		entity,
-		"",
-	)
-
-	// Empty strings and zero values should substitute correctly
-	assert.Equal(t, "ID: loop-123, Parent: , Iterations: 0", result)
 }
 
 // T057: Test ActionTypeTriggerWorkflow constant
@@ -1175,7 +1273,7 @@ func TestAction_TriggerWorkflow(t *testing.T) {
 			mock := &mockPublisher{}
 			executor := NewActionExecutorFull(nil, nil, mock)
 
-			err := executor.Execute(ctx, tt.action, tt.entityID, tt.relatedID)
+			err := executor.Execute(ctx, tt.action, &ExecutionContext{EntityID: tt.entityID, RelatedID: tt.relatedID})
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -1207,7 +1305,7 @@ func TestAction_TriggerWorkflow_PayloadFormat(t *testing.T) {
 		},
 	}
 
-	err := executor.Execute(ctx, action, "sensor.temp.001", "zone.cold-storage")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "sensor.temp.001", RelatedID: "zone.cold-storage"})
 	require.NoError(t, err)
 	require.Len(t, mock.published, 1)
 
@@ -1252,7 +1350,7 @@ func TestAction_TriggerWorkflow_NoPublisher(t *testing.T) {
 	}
 
 	// Should not error, just log and return
-	err := executor.Execute(ctx, action, "entity.001", "")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 	require.NoError(t, err)
 }
 
@@ -1270,7 +1368,7 @@ func TestAction_TriggerWorkflow_ErrorHandling(t *testing.T) {
 		WorkflowID: "notify-technician",
 	}
 
-	err := executor.Execute(ctx, action, "entity.001", "")
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "entity.001"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "publish workflow trigger to workflow.trigger.notify-technician")
 }

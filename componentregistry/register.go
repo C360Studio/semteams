@@ -6,8 +6,6 @@ import (
 	"errors"
 
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/examples/processors/document"
-	iotsensor "github.com/c360studio/semstreams/examples/processors/iot_sensor"
 	graphgateway "github.com/c360studio/semstreams/gateway/graph-gateway"
 	gatewayhttp "github.com/c360studio/semstreams/gateway/http"
 	a2ainput "github.com/c360studio/semstreams/input/a2a"
@@ -38,13 +36,12 @@ import (
 	jsongeneric "github.com/c360studio/semstreams/processor/json_generic"
 	jsonmap "github.com/c360studio/semstreams/processor/json_map"
 	oasfgenerator "github.com/c360studio/semstreams/processor/oasf-generator"
-	reactive "github.com/c360studio/semstreams/processor/reactive"
 	"github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/storage/objectstore"
 )
 
 // Register registers all SemStreams framework components with the provided registry.
-// This includes protocol-layer, semantic-layer, and example domain components:
+// This includes protocol-layer, semantic-layer, and agentic-layer components:
 //
 // Protocol Layer (network/data agnostic):
 //   - UDP input (network protocol)
@@ -80,7 +77,6 @@ import (
 //   - agentic-model (OpenAI-compatible LLM endpoint caller)
 //   - agentic-tools (tool execution dispatcher)
 //   - agentic-loop (state machine orchestrator with trajectory capture)
-//   - reactive-workflow (reactive rules engine for KV watch and subject-triggered workflows)
 //
 // AGNTCY Integration Layer - Internet of Agents interoperability:
 //   - oasf-generator (generates OASF records from agent capabilities)
@@ -89,12 +85,9 @@ import (
 //   - a2a-adapter (receives A2A task requests from external agents)
 //   - otel-exporter (exports agent telemetry to OpenTelemetry collectors)
 //
-// Domain Layer (example processors):
-//   - IoT sensor processor (JSON sensor data → Graphable SensorReading)
-//   - Document processor (document processing)
-//
-// Note: Domain-specific components (MAVLink, robotics, etc.) are registered
-// in separate modules like streamkit-robotics.
+// Note: Domain-specific and example components (IoT sensor, document, MAVLink,
+// robotics, etc.) are registered by their respective binaries under cmd/examples/
+// or in separate modules like streamkit-robotics, not in this core registry.
 func Register(registry *component.Registry) error {
 	// CRITICAL: Nil registry is a programming error (fatal), not invalid input
 	if registry == nil {
@@ -244,10 +237,6 @@ func registerAgenticLayer(registry *component.Registry) error {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "agentic-loop component registration")
 	}
 
-	if err := reactive.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "reactive-workflow component registration")
-	}
-
 	// AGNTCY integration components
 	if err := oasfgenerator.Register(registry); err != nil {
 		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "oasf-generator component registration")
@@ -272,15 +261,9 @@ func registerAgenticLayer(registry *component.Registry) error {
 	return nil
 }
 
-// registerDomainLayer registers domain-layer example processors.
-func registerDomainLayer(registry *component.Registry) error {
-	if err := iotsensor.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "IoT sensor processor component registration")
-	}
-
-	if err := document.Register(registry); err != nil {
-		return pkgerrs.WrapInvalid(err, "ComponentRegistry", "Register", "Document processor component registration")
-	}
-
+// registerDomainLayer is a no-op placeholder. Domain/example components are
+// registered by their respective binaries (see cmd/examples/) to avoid
+// pulling example dependencies into downstream consumers like semdragons/semspec.
+func registerDomainLayer(_ *component.Registry) error {
 	return nil
 }

@@ -110,6 +110,10 @@
             "type": "string",
             "description": "logic"
           },
+          "max_iterations": {
+            "type": "number",
+            "description": "max_iterations"
+          },
           "metadata": {
             "type": "object",
             "description": "metadata"
@@ -172,9 +176,42 @@
                   "type": "string",
                   "description": "type"
                 },
+                "when": {
+                  "type": "array",
+                  "description": "when",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "description": "field"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "description": "operator"
+                      },
+                      "required": {
+                        "type": "boolean",
+                        "description": "required"
+                      },
+                      "value": {
+                        "type": "string",
+                        "description": "value"
+                      }
+                    }
+                  }
+                },
                 "workflow_id": {
                   "type": "string",
                   "description": "workflow_id"
+                },
+                "workflow_slug": {
+                  "type": "string",
+                  "description": "workflow_slug"
+                },
+                "workflow_step": {
+                  "type": "string",
+                  "description": "workflow_step"
                 }
               }
             }
@@ -233,9 +270,42 @@
                   "type": "string",
                   "description": "type"
                 },
+                "when": {
+                  "type": "array",
+                  "description": "when",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "description": "field"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "description": "operator"
+                      },
+                      "required": {
+                        "type": "boolean",
+                        "description": "required"
+                      },
+                      "value": {
+                        "type": "string",
+                        "description": "value"
+                      }
+                    }
+                  }
+                },
                 "workflow_id": {
                   "type": "string",
                   "description": "workflow_id"
+                },
+                "workflow_slug": {
+                  "type": "string",
+                  "description": "workflow_slug"
+                },
+                "workflow_step": {
+                  "type": "string",
+                  "description": "workflow_step"
                 }
               }
             }
@@ -305,9 +375,42 @@
                   "type": "string",
                   "description": "type"
                 },
+                "when": {
+                  "type": "array",
+                  "description": "when",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "field": {
+                        "type": "string",
+                        "description": "field"
+                      },
+                      "operator": {
+                        "type": "string",
+                        "description": "operator"
+                      },
+                      "required": {
+                        "type": "boolean",
+                        "description": "required"
+                      },
+                      "value": {
+                        "type": "string",
+                        "description": "value"
+                      }
+                    }
+                  }
+                },
                 "workflow_id": {
                   "type": "string",
                   "description": "workflow_id"
+                },
+                "workflow_slug": {
+                  "type": "string",
+                  "description": "workflow_slug"
+                },
+                "workflow_step": {
+                  "type": "string",
+                  "description": "workflow_step"
                 }
               }
             }

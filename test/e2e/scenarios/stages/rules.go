@@ -49,13 +49,12 @@ func (v *RulesValidator) ValidateRules(ctx context.Context) (*RulesValidationRes
 		baselineMetrics = &client.RuleMetrics{}
 	}
 
-	// Check for reactive workflow metrics presence
+	// Check for rule engine metrics presence
 	metricsRaw, err := v.Metrics.FetchRaw(ctx)
 	ruleMetricNames := []string{
-		"semstreams_reactive_workflow_rule_evaluations_total",
-		"semstreams_reactive_workflow_rule_firings_total",
-		"semstreams_reactive_workflow_actions_dispatched_total",
-		"semstreams_reactive_workflow_executions_created_total",
+		"semstreams_rule_evaluations_total",
+		"semstreams_rule_triggers_total",
+		"semstreams_rule_events_published_total",
 	}
 
 	for _, name := range ruleMetricNames {
