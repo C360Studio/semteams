@@ -20,6 +20,7 @@ type LoopManager struct {
 	contextManagers   map[string]*ContextManager          // loopID -> ContextManager
 	pendingTools      map[string]map[string]bool          // loopID -> map[callID]bool
 	cachedTools       map[string][]agentic.ToolDefinition // loopID -> tools (runtime cache, not persisted)
+	cachedToolChoice  map[string]*agentic.ToolChoice      // loopID -> tool choice (runtime cache, not persisted)
 	cachedMetadata    map[string]map[string]any           // loopID -> metadata (domain context, not persisted)
 	taskPrompts       map[string]string                   // loopID -> original task prompt (for context recovery)
 	requestToLoop     map[string]string                   // requestID -> loopID
@@ -58,6 +59,7 @@ func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 		contextManagers:   make(map[string]*ContextManager),
 		pendingTools:      make(map[string]map[string]bool),
 		cachedTools:       make(map[string][]agentic.ToolDefinition),
+		cachedToolChoice:  make(map[string]*agentic.ToolChoice),
 		cachedMetadata:    make(map[string]map[string]any),
 		taskPrompts:       make(map[string]string),
 		requestToLoop:     make(map[string]string),
@@ -82,6 +84,7 @@ func NewLoopManagerWithConfig(contextConfig ContextConfig, opts ...LoopManagerOp
 		contextManagers:   make(map[string]*ContextManager),
 		pendingTools:      make(map[string]map[string]bool),
 		cachedTools:       make(map[string][]agentic.ToolDefinition),
+		cachedToolChoice:  make(map[string]*agentic.ToolChoice),
 		cachedMetadata:    make(map[string]map[string]any),
 		taskPrompts:       make(map[string]string),
 		requestToLoop:     make(map[string]string),
@@ -172,7 +175,9 @@ func (m *LoopManager) DeleteLoop(loopID string) error {
 	delete(m.pendingTools, loopID)
 	delete(m.contextManagers, loopID)
 	delete(m.cachedTools, loopID)
+	delete(m.cachedToolChoice, loopID)
 	delete(m.cachedMetadata, loopID)
+	delete(m.taskPrompts, loopID)
 
 	// Clean up maps keyed by requestID/callID that embed the loopID prefix.
 	// Structured IDs use format: {loopID}:req:{short} or {loopID}:tool:{short}.
@@ -213,6 +218,20 @@ func (m *LoopManager) GetCachedTools(loopID string) []agentic.ToolDefinition {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.cachedTools[loopID]
+}
+
+// CacheToolChoice stores the tool choice strategy for a loop (set once from task, reused for all requests)
+func (m *LoopManager) CacheToolChoice(loopID string, tc *agentic.ToolChoice) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cachedToolChoice[loopID] = tc
+}
+
+// GetCachedToolChoice retrieves the cached tool choice for a loop
+func (m *LoopManager) GetCachedToolChoice(loopID string) *agentic.ToolChoice {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cachedToolChoice[loopID]
 }
 
 // CacheMetadata stores domain context metadata for a loop (set once from task, reused for all tool calls)

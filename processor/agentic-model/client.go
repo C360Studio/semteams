@@ -206,6 +206,19 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 		chatReq.Tools = tools
 	}
 
+	// Convert tool choice if present
+	if req.ToolChoice != nil {
+		switch req.ToolChoice.Mode {
+		case "auto", "required", "none":
+			chatReq.ToolChoice = req.ToolChoice.Mode
+		case "function":
+			chatReq.ToolChoice = openai.ToolChoice{
+				Type:     openai.ToolTypeFunction,
+				Function: openai.ToolFunction{Name: req.ToolChoice.FunctionName},
+			}
+		}
+	}
+
 	return chatReq
 }
 

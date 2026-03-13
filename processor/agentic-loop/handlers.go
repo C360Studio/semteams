@@ -346,6 +346,11 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	}
 	h.loopManager.CacheTools(loopID, tools)
 
+	// Cache tool choice strategy for all iterations in this loop
+	if task.ToolChoice != nil {
+		h.loopManager.CacheToolChoice(loopID, task.ToolChoice)
+	}
+
 	// Cache domain metadata for propagation to tool calls
 	if len(task.Metadata) > 0 {
 		h.loopManager.CacheMetadata(loopID, task.Metadata)
@@ -353,12 +358,13 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 
 	// Create initial agent request with structured ID for recovery
 	request := agentic.AgentRequest{
-		RequestID: h.loopManager.GenerateRequestID(loopID),
-		LoopID:    loopID,
-		Role:      task.Role,
-		Model:     task.Model,
-		Messages:  messages,
-		Tools:     tools,
+		RequestID:  h.loopManager.GenerateRequestID(loopID),
+		LoopID:     loopID,
+		Role:       task.Role,
+		Model:      task.Model,
+		Messages:   messages,
+		Tools:      tools,
+		ToolChoice: task.ToolChoice,
 	}
 
 	// Track request ID to loop ID mapping (cache for fast lookup)
@@ -859,17 +865,19 @@ func (h *MessageHandler) handleToolsComplete(
 		return *result, err
 	}
 
-	// Get cached tools for this loop (discovered once at loop start)
+	// Get cached tools and tool choice for this loop (set once at loop start)
 	tools := h.loopManager.GetCachedTools(loopID)
+	toolChoice := h.loopManager.GetCachedToolChoice(loopID)
 
 	// All tools complete - send next agent request with full conversation
 	request := agentic.AgentRequest{
-		RequestID: h.loopManager.GenerateRequestID(loopID),
-		LoopID:    loopID,
-		Role:      entity.Role,
-		Model:     entity.Model,
-		Messages:  messages,
-		Tools:     tools,
+		RequestID:  h.loopManager.GenerateRequestID(loopID),
+		LoopID:     loopID,
+		Role:       entity.Role,
+		Model:      entity.Model,
+		Messages:   messages,
+		Tools:      tools,
+		ToolChoice: toolChoice,
 	}
 
 	// Track request ID to loop ID mapping (cache for fast lookup)

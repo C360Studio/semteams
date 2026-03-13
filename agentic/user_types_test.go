@@ -486,6 +486,50 @@ func TestTaskMessage_Validate(t *testing.T) {
 			},
 			wantErr: "prompt required",
 		},
+		{
+			name: "valid with tool_choice auto",
+			task: TaskMessage{
+				TaskID:     "task-123",
+				Role:       "general",
+				Model:      "gpt-4",
+				Prompt:     "test",
+				ToolChoice: &ToolChoice{Mode: "auto"},
+			},
+			wantErr: "",
+		},
+		{
+			name: "valid with tool_choice function",
+			task: TaskMessage{
+				TaskID:     "task-123",
+				Role:       "general",
+				Model:      "gpt-4",
+				Prompt:     "test",
+				ToolChoice: &ToolChoice{Mode: "function", FunctionName: "read_file"},
+			},
+			wantErr: "",
+		},
+		{
+			name: "invalid tool_choice mode",
+			task: TaskMessage{
+				TaskID:     "task-123",
+				Role:       "general",
+				Model:      "gpt-4",
+				Prompt:     "test",
+				ToolChoice: &ToolChoice{Mode: "always"},
+			},
+			wantErr: `invalid tool_choice mode: "always" (must be auto, required, none, or function)`,
+		},
+		{
+			name: "function mode without name",
+			task: TaskMessage{
+				TaskID:     "task-123",
+				Role:       "general",
+				Model:      "gpt-4",
+				Prompt:     "test",
+				ToolChoice: &ToolChoice{Mode: "function"},
+			},
+			wantErr: `function_name required when tool_choice mode is "function"`,
+		},
 	}
 
 	for _, tt := range tests {

@@ -7,6 +7,29 @@ import (
 	"github.com/c360studio/semstreams/message"
 )
 
+// ToolChoice controls how the model selects tools.
+// Mode is one of: "auto" (default), "required", "none", or "function".
+// When Mode is "function", FunctionName specifies which function to call.
+type ToolChoice struct {
+	Mode         string `json:"mode"`                    // "auto", "required", "none", "function"
+	FunctionName string `json:"function_name,omitempty"` // required when Mode is "function"
+}
+
+// Validate checks if the ToolChoice has a valid mode and required fields.
+func (tc ToolChoice) Validate() error {
+	switch tc.Mode {
+	case "auto", "required", "none":
+		return nil
+	case "function":
+		if tc.FunctionName == "" {
+			return fmt.Errorf("function_name required when tool_choice mode is \"function\"")
+		}
+		return nil
+	default:
+		return fmt.Errorf("invalid tool_choice mode: %q (must be auto, required, none, or function)", tc.Mode)
+	}
+}
+
 // AgentRequest represents a request to an agentic service
 type AgentRequest struct {
 	RequestID   string           `json:"request_id"`
@@ -17,6 +40,7 @@ type AgentRequest struct {
 	MaxTokens   int              `json:"max_tokens,omitempty"`
 	Temperature float64          `json:"temperature,omitempty"`
 	Tools       []ToolDefinition `json:"tools,omitempty"`
+	ToolChoice  *ToolChoice      `json:"tool_choice,omitempty"`
 }
 
 // Validate checks if the AgentRequest is valid
@@ -33,6 +57,11 @@ func (r AgentRequest) Validate() error {
 	}
 	if !validRoles[r.Role] {
 		return fmt.Errorf("invalid role: %s", r.Role)
+	}
+	if r.ToolChoice != nil {
+		if err := r.ToolChoice.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

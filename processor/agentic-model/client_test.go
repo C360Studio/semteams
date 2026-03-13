@@ -1518,3 +1518,115 @@ func TestBuildChatRequest_ToolResultEmptyNameFallback(t *testing.T) {
 		t.Errorf("name = %q, want %q", name, "unknown_tool")
 	}
 }
+
+func TestBuildChatRequest_ToolChoiceNil(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"id": "tc-nil", "object": "chat.completion",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "ok"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 5, "completion_tokens": 1},
+		})
+	}))
+	defer server.Close()
+
+	client, _ := agenticmodel.NewClient(&model.EndpointConfig{URL: server.URL, Model: "test"})
+	_, _ = client.ChatCompletion(context.Background(), agentic.AgentRequest{
+		RequestID: "req-tc-nil",
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "hi"}},
+		Model:     "test",
+		// ToolChoice deliberately nil
+	})
+
+	if _, exists := capturedRequest["tool_choice"]; exists {
+		t.Error("tool_choice should not be present in request when nil")
+	}
+}
+
+func TestBuildChatRequest_ToolChoiceRequired(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"id": "tc-req", "object": "chat.completion",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "ok"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 5, "completion_tokens": 1},
+		})
+	}))
+	defer server.Close()
+
+	client, _ := agenticmodel.NewClient(&model.EndpointConfig{URL: server.URL, Model: "test"})
+	_, _ = client.ChatCompletion(context.Background(), agentic.AgentRequest{
+		RequestID:  "req-tc-required",
+		Messages:   []agentic.ChatMessage{{Role: "user", Content: "hi"}},
+		Model:      "test",
+		ToolChoice: &agentic.ToolChoice{Mode: "required"},
+	})
+
+	tc, ok := capturedRequest["tool_choice"]
+	if !ok {
+		t.Fatal("tool_choice missing from request")
+	}
+	if tc != "required" {
+		t.Errorf("tool_choice = %v, want \"required\"", tc)
+	}
+}
+
+func TestBuildChatRequest_ToolChoiceFunction(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"id": "tc-func", "object": "chat.completion",
+			"choices": []map[string]any{{
+				"index":         0,
+				"message":       map[string]any{"role": "assistant", "content": "ok"},
+				"finish_reason": "stop",
+			}},
+			"usage": map[string]any{"prompt_tokens": 5, "completion_tokens": 1},
+		})
+	}))
+	defer server.Close()
+
+	client, _ := agenticmodel.NewClient(&model.EndpointConfig{URL: server.URL, Model: "test"})
+	_, _ = client.ChatCompletion(context.Background(), agentic.AgentRequest{
+		RequestID:  "req-tc-func",
+		Messages:   []agentic.ChatMessage{{Role: "user", Content: "hi"}},
+		Model:      "test",
+		ToolChoice: &agentic.ToolChoice{Mode: "function", FunctionName: "read_file"},
+	})
+
+	tc, ok := capturedRequest["tool_choice"]
+	if !ok {
+		t.Fatal("tool_choice missing from request")
+	}
+	tcMap, ok := tc.(map[string]any)
+	if !ok {
+		t.Fatalf("tool_choice should be object for function mode, got %T", tc)
+	}
+	if tcMap["type"] != "function" {
+		t.Errorf("tool_choice.type = %v, want function", tcMap["type"])
+	}
+	fn, ok := tcMap["function"].(map[string]any)
+	if !ok {
+		t.Fatal("tool_choice.function missing")
+	}
+	if fn["name"] != "read_file" {
+		t.Errorf("tool_choice.function.name = %v, want read_file", fn["name"])
+	}
+}

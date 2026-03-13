@@ -273,6 +273,10 @@ type TaskMessage struct {
 	// Per-task tool override (optional, skips global discovery if present)
 	Tools []ToolDefinition `json:"tools,omitempty"`
 
+	// ToolChoice controls how the model selects tools for this task.
+	// Nil means "auto" (model decides). Cached for all iterations in the loop.
+	ToolChoice *ToolChoice `json:"tool_choice,omitempty"`
+
 	// Domain context propagated to all tool calls in this loop
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
@@ -302,6 +306,11 @@ func (t TaskMessage) Validate() error {
 	}
 	if t.Prompt == "" {
 		return fmt.Errorf("prompt required")
+	}
+	if t.ToolChoice != nil {
+		if err := t.ToolChoice.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
