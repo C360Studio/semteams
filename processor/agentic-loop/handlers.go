@@ -46,6 +46,9 @@ type HandlerResult struct {
 	// This is populated when a loop completes and is used by component.go
 	// to write to the loops bucket with key pattern COMPLETE_{loopID}.
 	CompletionState *agentic.LoopCompletedEvent
+	// FailureState contains enriched failure data for graph emission.
+	// Populated when a loop fails, mirrors CompletionState for the failure path.
+	FailureState *agentic.LoopFailedEvent
 }
 
 // MessageHandler handles incoming messages and coordinates loop execution
@@ -425,8 +428,9 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 			State:  agentic.LoopStateFailed,
 		}
 		// Publish failure events for reactive workflows to observe
-		if failMsgs, err := h.BuildFailureMessages(loopID, "timeout", "loop timeout exceeded"); err == nil {
+		if failure, failMsgs, fErr := h.BuildFailureMessages(loopID, "timeout", "loop timeout exceeded"); fErr == nil {
 			result.PublishedMessages = failMsgs
+			result.FailureState = failure
 		}
 		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "agentic-loop", "HandleModelResponse", "check timeout")
 	}
@@ -524,8 +528,9 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 		}
 
 		// Publish failure events for reactive workflows to observe
-		if failMsgs, err := h.BuildFailureMessages(loopID, "model_error", response.Error); err == nil {
+		if failure, failMsgs, fErr := h.BuildFailureMessages(loopID, "model_error", response.Error); fErr == nil {
 			result.PublishedMessages = failMsgs
+			result.FailureState = failure
 		}
 	}
 
@@ -700,8 +705,9 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 			State:  agentic.LoopStateFailed,
 		}
 		// Publish failure events for reactive workflows to observe
-		if failMsgs, err := h.BuildFailureMessages(loopID, "timeout", "loop timeout exceeded"); err == nil {
+		if failure, failMsgs, fErr := h.BuildFailureMessages(loopID, "timeout", "loop timeout exceeded"); fErr == nil {
 			result.PublishedMessages = failMsgs
+			result.FailureState = failure
 		}
 		return result, errs.WrapFatal(fmt.Errorf("loop timeout exceeded"), "agentic-loop", "HandleToolResult", "check timeout")
 	}
@@ -797,8 +803,9 @@ func (h *MessageHandler) handleToolsComplete(
 		}
 
 		// Publish failure events for reactive workflows to observe
-		if failMsgs, fErr := h.BuildFailureMessages(loopID, "max_iterations", errorMsg); fErr == nil {
+		if failure, failMsgs, fErr := h.BuildFailureMessages(loopID, "max_iterations", errorMsg); fErr == nil {
 			result.PublishedMessages = failMsgs
+			result.FailureState = failure
 		}
 
 		return *result, nil
@@ -932,69 +939,16 @@ func (h *MessageHandler) recoverEmptyContext(loopID string, cm *ContextManager, 
 	return cm.GetContext()
 }
 
-// BuildFailureEvent creates a failure event for publishing (public wrapper).
-// Used by the component to publish failure events when handler returns errors.
-func (h *MessageHandler) BuildFailureEvent(loopID, reason, errorMsg string) (PublishedMessage, error) {
-	return h.buildFailureEvent(loopID, reason, errorMsg)
-}
-
-// buildFailureEvent creates a failure event for publishing.
-// Returns a single failure event for reactive workflows to observe.
-func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (PublishedMessage, error) {
-	entity, err := h.loopManager.GetLoop(loopID)
-	if err != nil {
-		return PublishedMessage{}, err
-	}
-
-	failure := agentic.LoopFailedEvent{
-		LoopID:       loopID,
-		TaskID:       entity.TaskID,
-		Outcome:      agentic.OutcomeFailed,
-		Reason:       reason,
-		Error:        errorMsg,
-		Role:         entity.Role,
-		Model:        entity.Model,
-		Iterations:   entity.Iterations,
-		WorkflowSlug: entity.WorkflowSlug,
-		WorkflowStep: entity.WorkflowStep,
-		FailedAt:     time.Now(),
-		// User routing info for error notifications
-		ChannelType: entity.ChannelType,
-		ChannelID:   entity.ChannelID,
-		UserID:      entity.UserID,
-	}
-
-	// Pull token totals from trajectory for cost tracking
-	if traj, trajErr := h.trajectoryManager.GetTrajectory(loopID); trajErr == nil {
-		failure.TokensIn = traj.TotalTokensIn
-		failure.TokensOut = traj.TotalTokensOut
-	} else {
-		h.logger.Warn("trajectory unavailable for cost tracking",
-			slog.String("loop_id", loopID),
-			slog.String("error", trajErr.Error()))
-	}
-
-	failureMsg := message.NewBaseMessage(failure.Schema(), &failure, "agentic-loop")
-	data, err := json.Marshal(failureMsg)
-	if err != nil {
-		return PublishedMessage{}, err
-	}
-
-	return PublishedMessage{
-		Subject: subjectAgentFailed + "." + loopID,
-		Data:    data,
-	}, nil
-}
-
-// BuildFailureMessages creates failure events for publishing.
-// Returns the standard failure event for reactive workflows to observe via KV watch or subject subscription.
-func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) ([]PublishedMessage, error) {
+// buildFailureEvent constructs an enriched LoopFailedEvent with token counts from trajectory.
+// This is the single source of truth for failure event construction — all failure paths
+// (publishing, graph emission) derive from this.
+func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (*agentic.LoopFailedEvent, error) {
 	entity, err := h.loopManager.GetLoop(loopID)
 	if err != nil {
 		return nil, err
 	}
 
-	failure := agentic.LoopFailedEvent{
+	failure := &agentic.LoopFailedEvent{
 		LoopID:       loopID,
 		TaskID:       entity.TaskID,
 		Outcome:      agentic.OutcomeFailed,
@@ -1021,13 +975,29 @@ func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) (
 			slog.String("error", trajErr.Error()))
 	}
 
-	failureMsg := message.NewBaseMessage(failure.Schema(), &failure, "agentic-loop")
-	data, err := json.Marshal(failureMsg)
+	return failure, nil
+}
+
+// BuildFailureEvent creates a failure event (public wrapper for component.go).
+func (h *MessageHandler) BuildFailureEvent(loopID, reason, errorMsg string) (*agentic.LoopFailedEvent, error) {
+	return h.buildFailureEvent(loopID, reason, errorMsg)
+}
+
+// BuildFailureMessages creates a failure event and serializes it for NATS publishing.
+// Returns the event (for graph emission) and published messages (for reactive workflows).
+func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) (*agentic.LoopFailedEvent, []PublishedMessage, error) {
+	failure, err := h.buildFailureEvent(loopID, reason, errorMsg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return []PublishedMessage{{
+	failureMsg := message.NewBaseMessage(failure.Schema(), failure, "agentic-loop")
+	data, err := json.Marshal(failureMsg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return failure, []PublishedMessage{{
 		Subject: subjectAgentFailed + "." + loopID,
 		Data:    data,
 	}}, nil

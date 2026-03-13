@@ -12,6 +12,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/test/e2e/client"
 	"github.com/c360studio/semstreams/test/e2e/scenarios"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
 
 // Scenario validates the agentic components (loop, model, tools) work together.
@@ -154,6 +155,7 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		{"inject-task", s.injectTask},
 		{"wait-for-completion", s.waitForCompletion},
 		{"validate-trajectory", s.validateTrajectory},
+		{"verify-graph-triples", s.verifyGraphTriples},
 		{"verify-tool-execution", s.verifyToolExecution},
 		{"verify-streaming-metrics", s.verifyStreamingMetrics},
 		{"validate-results", s.validateResults},
@@ -358,6 +360,117 @@ func (s *Scenario) validateTrajectory(ctx context.Context, result *scenarios.Res
 	result.Metrics["trajectory_tokens_out"] = traj.TotalTokensOut
 	result.Metrics["trajectory_duration_ms"] = traj.Duration
 	result.Details["trajectory_outcome"] = traj.Outcome
+
+	return nil
+}
+
+// verifyGraphTriples verifies that the graph writer emitted triples for the loop
+// execution and model endpoint entities. This validates the full path:
+// agentic-loop → graph.mutation.triple.add → graph-ingest → ENTITY_STATES KV.
+func (s *Scenario) verifyGraphTriples(ctx context.Context, result *scenarios.Result) error {
+	loopID, ok := result.Details["loop_id"].(string)
+	if !ok || loopID == "" {
+		return fmt.Errorf("loop_id not found in result details")
+	}
+
+	// The agentic config uses platform.org="c360", platform.instance_id="agentic-001".
+	// instance_id takes precedence over id in extractPlatformMeta.
+	const org = "c360"
+	const platform = "agentic-001"
+
+	// --- Verify loop execution entity ---
+	// Graph writes happen after the completion metric is incremented, so the entity
+	// may not be in ENTITY_STATES yet. Poll briefly to allow graph-ingest to process.
+	loopEntityID := agentic.LoopExecutionEntityID(org, platform, loopID)
+
+	var loopEntity *client.EntityState
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		var err error
+		loopEntity, err = s.nats.GetEntity(ctx, loopEntityID)
+		if err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	if loopEntity == nil {
+		return fmt.Errorf("loop entity %s not found in graph after 10s", loopEntityID)
+	}
+
+	// Build predicate set from triples.
+	loopPreds := make(map[string]bool, len(loopEntity.Triples))
+	for _, t := range loopEntity.Triples {
+		loopPreds[t.Predicate] = true
+	}
+
+	requiredLoopPreds := []string{
+		agvocab.LoopOutcome,
+		agvocab.LoopRole,
+		agvocab.LoopIterations,
+		agvocab.LoopTokensIn,
+		agvocab.LoopTokensOut,
+		agvocab.LoopTask,
+		agvocab.LoopEndedAt,
+	}
+
+	missing := []string{}
+	for _, pred := range requiredLoopPreds {
+		if !loopPreds[pred] {
+			missing = append(missing, pred)
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("loop entity %s missing predicates: %v", loopEntityID, missing)
+	}
+
+	result.Metrics["graph_loop_triples"] = len(loopEntity.Triples)
+	result.Details["graph_loop_entity_id"] = loopEntityID
+
+	// --- Verify model endpoint entity ---
+	// The injected task uses model "mock", which is configured in the agentic config.
+	modelEntityID := agentic.ModelEndpointEntityID(org, platform, "mock")
+	modelEntity, err := s.nats.GetEntity(ctx, modelEntityID)
+	if err != nil {
+		// Model endpoint triples are written at startup; if graph-ingest wasn't ready
+		// yet they may be missing. Warn rather than fail.
+		result.Warnings = append(result.Warnings,
+			fmt.Sprintf("model endpoint entity %s not found: %v", modelEntityID, err))
+	} else {
+		modelPreds := make(map[string]bool, len(modelEntity.Triples))
+		for _, t := range modelEntity.Triples {
+			modelPreds[t.Predicate] = true
+		}
+
+		requiredModelPreds := []string{
+			agvocab.ModelProvider,
+			agvocab.ModelName,
+			agvocab.ModelSupportsTools,
+		}
+		modelMissing := []string{}
+		for _, pred := range requiredModelPreds {
+			if !modelPreds[pred] {
+				modelMissing = append(modelMissing, pred)
+			}
+		}
+		if len(modelMissing) > 0 {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("model entity %s missing predicates: %v", modelEntityID, modelMissing))
+		}
+
+		result.Metrics["graph_model_triples"] = len(modelEntity.Triples)
+		result.Details["graph_model_entity_id"] = modelEntityID
+	}
+
+	// --- Verify loop→model relationship ---
+	if loopPreds[agvocab.LoopModelUsed] {
+		result.Details["graph_loop_model_linked"] = true
+	} else {
+		result.Warnings = append(result.Warnings, "loop entity missing LoopModelUsed relationship triple")
+	}
 
 	return nil
 }

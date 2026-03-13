@@ -60,6 +60,29 @@ func TestPredicateFormat(t *testing.T) {
 		agentic.TaskSubtask,
 		agentic.TaskDependency,
 		agentic.TaskStatus,
+		// Model
+		agentic.ModelProvider,
+		agentic.ModelName,
+		agentic.ModelMaxTokens,
+		agentic.ModelSupportsTools,
+		agentic.ModelInputPrice,
+		agentic.ModelOutputPrice,
+		agentic.ModelEndpointURL,
+		agentic.ModelRateLimit,
+		// Loop
+		agentic.LoopOutcome,
+		agentic.LoopRole,
+		agentic.LoopModelUsed,
+		agentic.LoopIterations,
+		agentic.LoopTokensIn,
+		agentic.LoopTokensOut,
+		agentic.LoopCostUSD,
+		agentic.LoopTask,
+		agentic.LoopParent,
+		agentic.LoopWorkflow,
+		agentic.LoopWorkflowStep,
+		agentic.LoopEndedAt,
+		agentic.LoopUser,
 	}
 
 	for _, p := range predicates {
@@ -230,9 +253,81 @@ func TestPredicateCount(t *testing.T) {
 
 	// Expected predicates by category:
 	// Intent: 5, Capability: 7, Delegation: 7, Accountability: 6, Execution: 7, Action: 5, Task: 5
-	// Total: 42 predicates
-	expectedMin := 42
+	// Model: 8, Loop: 13
+	// Total: 63 predicates
+	expectedMin := 63
 	if len(predicates) < expectedMin {
 		t.Errorf("expected at least %d predicates, got %d", expectedMin, len(predicates))
+	}
+}
+
+func TestModelPredicatesRegistered(t *testing.T) {
+	vocabulary.ClearRegistry()
+	defer vocabulary.ClearRegistry()
+
+	agentic.Register()
+
+	modelPredicates := []struct {
+		name      string
+		predicate string
+		dataType  string
+	}{
+		{"ModelProvider", agentic.ModelProvider, "string"},
+		{"ModelName", agentic.ModelName, "string"},
+		{"ModelMaxTokens", agentic.ModelMaxTokens, "int"},
+		{"ModelSupportsTools", agentic.ModelSupportsTools, "bool"},
+		{"ModelInputPrice", agentic.ModelInputPrice, "float64"},
+		{"ModelOutputPrice", agentic.ModelOutputPrice, "float64"},
+		{"ModelEndpointURL", agentic.ModelEndpointURL, "string"},
+		{"ModelRateLimit", agentic.ModelRateLimit, "int"},
+	}
+
+	for _, tt := range modelPredicates {
+		meta := vocabulary.GetPredicateMetadata(tt.predicate)
+		if meta == nil {
+			t.Errorf("%s (%q): not registered", tt.name, tt.predicate)
+			continue
+		}
+		if meta.DataType != tt.dataType {
+			t.Errorf("%s: DataType = %q, want %q", tt.name, meta.DataType, tt.dataType)
+		}
+	}
+}
+
+func TestLoopPredicatesRegistered(t *testing.T) {
+	vocabulary.ClearRegistry()
+	defer vocabulary.ClearRegistry()
+
+	agentic.Register()
+
+	loopPredicates := []struct {
+		name      string
+		predicate string
+		dataType  string
+	}{
+		{"LoopOutcome", agentic.LoopOutcome, "string"},
+		{"LoopRole", agentic.LoopRole, "string"},
+		{"LoopModelUsed", agentic.LoopModelUsed, "string"},
+		{"LoopIterations", agentic.LoopIterations, "int"},
+		{"LoopTokensIn", agentic.LoopTokensIn, "int"},
+		{"LoopTokensOut", agentic.LoopTokensOut, "int"},
+		{"LoopCostUSD", agentic.LoopCostUSD, "float64"},
+		{"LoopTask", agentic.LoopTask, "string"},
+		{"LoopParent", agentic.LoopParent, "string"},
+		{"LoopWorkflow", agentic.LoopWorkflow, "string"},
+		{"LoopWorkflowStep", agentic.LoopWorkflowStep, "string"},
+		{"LoopEndedAt", agentic.LoopEndedAt, "time.Time"},
+		{"LoopUser", agentic.LoopUser, "string"},
+	}
+
+	for _, tt := range loopPredicates {
+		meta := vocabulary.GetPredicateMetadata(tt.predicate)
+		if meta == nil {
+			t.Errorf("%s (%q): not registered", tt.name, tt.predicate)
+			continue
+		}
+		if meta.DataType != tt.dataType {
+			t.Errorf("%s: DataType = %q, want %q", tt.name, meta.DataType, tt.dataType)
+		}
 	}
 }

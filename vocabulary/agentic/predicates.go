@@ -340,3 +340,120 @@ const (
 	// DataType: string
 	IdentityRole = "agent.identity.role"
 )
+
+// Model Predicates
+//
+// Express properties of LLM model endpoints registered in the model registry,
+// enabling graph queries about which models are available and their capabilities.
+const (
+	// ModelProvider is the API provider type for the model endpoint.
+	// Example: "anthropic", "ollama", "openai", "openrouter"
+	// DataType: string
+	ModelProvider = "agent.model.provider"
+
+	// ModelName is the model identifier sent to the provider.
+	// Example: "claude-opus-4-5", "llama3.2", "gpt-4o"
+	// DataType: string
+	ModelName = "agent.model.name"
+
+	// ModelMaxTokens is the context window size in tokens.
+	// Example: 200000
+	// DataType: int
+	ModelMaxTokens = "agent.model.max_tokens"
+
+	// ModelSupportsTools indicates whether the endpoint supports tool calling.
+	// Example: true
+	// DataType: bool
+	ModelSupportsTools = "agent.model.supports_tools"
+
+	// ModelInputPrice is the cost per 1M input tokens in USD.
+	// Example: 3.00
+	// DataType: float64
+	ModelInputPrice = "agent.model.input_price"
+
+	// ModelOutputPrice is the cost per 1M output tokens in USD.
+	// Example: 15.00
+	// DataType: float64
+	ModelOutputPrice = "agent.model.output_price"
+
+	// ModelEndpointURL is the API endpoint URL for the model.
+	// Example: "https://api.anthropic.com/v1"
+	// DataType: string
+	ModelEndpointURL = "agent.model.endpoint_url"
+
+	// ModelRateLimit is the requests per minute limit for the endpoint.
+	// Example: 60
+	// DataType: int
+	ModelRateLimit = "agent.model.rate_limit"
+)
+
+// Loop Predicates
+//
+// Express facts about agentic loop executions, including outcome, resource
+// usage, cost, and relationships to model endpoints and parent loops.
+const (
+	// LoopOutcome is the terminal outcome of the loop execution.
+	// Example: "success", "failed", "cancelled"
+	// DataType: string
+	LoopOutcome = "agent.loop.outcome"
+
+	// LoopRole is the role used during this loop execution.
+	// Example: "architect", "editor", "reviewer"
+	// DataType: string
+	LoopRole = "agent.loop.role"
+
+	// LoopModelUsed is an entity reference to the model endpoint entity used.
+	// Example: entity ID of the model endpoint
+	// DataType: string (entity ID)
+	LoopModelUsed = "agent.loop.model_used"
+
+	// LoopIterations is the number of LLM iterations executed in this loop.
+	// Example: 12
+	// DataType: int
+	LoopIterations = "agent.loop.iterations"
+
+	// LoopTokensIn is the total input tokens consumed across all iterations.
+	// Example: 48320
+	// DataType: int
+	LoopTokensIn = "agent.loop.tokens_in"
+
+	// LoopTokensOut is the total output tokens consumed across all iterations.
+	// Example: 8192
+	// DataType: int
+	LoopTokensOut = "agent.loop.tokens_out"
+
+	// LoopCostUSD is the computed cost in USD for this loop execution.
+	// Example: 0.2754
+	// DataType: float64
+	LoopCostUSD = "agent.loop.cost_usd"
+
+	// LoopTask is the task ID this loop execution served.
+	// Example: "task-abc123"
+	// DataType: string
+	LoopTask = "agent.loop.task"
+
+	// LoopParent is an entity reference to the parent loop entity.
+	// Example: entity ID of the parent loop
+	// DataType: string (entity ID)
+	LoopParent = "agent.loop.parent"
+
+	// LoopWorkflow is the workflow slug this loop belongs to.
+	// Example: "code-review", "feature-implementation"
+	// DataType: string
+	LoopWorkflow = "agent.loop.workflow"
+
+	// LoopWorkflowStep is the step within the workflow for this loop.
+	// Example: "draft", "review", "revise"
+	// DataType: string
+	LoopWorkflowStep = "agent.loop.workflow_step"
+
+	// LoopEndedAt is the terminal timestamp for this loop (completion, failure, or cancellation).
+	// Example: "2026-03-13T14:22:00Z"
+	// DataType: time.Time
+	LoopEndedAt = "agent.loop.ended_at"
+
+	// LoopUser is the user ID who initiated this loop.
+	// Example: "user-xyz789"
+	// DataType: string
+	LoopUser = "agent.loop.user"
+)

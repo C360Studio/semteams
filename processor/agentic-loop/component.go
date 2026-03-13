@@ -66,6 +66,9 @@ type Component struct {
 
 	// Metrics
 	metrics *loopMetrics
+
+	// Graph writer for model endpoint and loop execution entities
+	graphWriter *graphWriter
 }
 
 // consumerInfo tracks JetStream consumer details for cleanup
@@ -141,6 +144,12 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		inputPorts:     inputPorts,
 		outputPorts:    outputPorts,
 		metrics:        getMetrics(deps.MetricsRegistry),
+		graphWriter: &graphWriter{
+			natsClient:    deps.NATSClient,
+			modelRegistry: deps.ModelRegistry,
+			platform:      deps.Platform,
+			logger:        deps.GetLogger(),
+		},
 	}
 
 	return comp, nil
@@ -285,6 +294,11 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.started = true
 	c.startTime = time.Now()
+
+	// Emit model endpoint entities to graph (non-fatal)
+	if c.graphWriter != nil {
+		c.graphWriter.WriteModelEndpoints(ctx)
+	}
 
 	return nil
 }
@@ -769,10 +783,15 @@ func (c *Component) publishFailureEvents(ctx context.Context, loopID, reason, er
 	errorCtx, cancel := natsclient.DetachContextWithTrace(ctx, 5*time.Second)
 	defer cancel()
 
-	failMsgs, err := c.handler.BuildFailureMessages(loopID, reason, errorMsg)
+	failure, failMsgs, err := c.handler.BuildFailureMessages(loopID, reason, errorMsg)
 	if err != nil {
 		c.logger.Warn("Failed to build failure event", "error", err, "loop_id", loopID)
 		return
+	}
+
+	// Emit failure entity to graph (non-fatal)
+	if c.graphWriter != nil && failure != nil {
+		c.graphWriter.WriteLoopFailure(errorCtx, failure)
 	}
 
 	for _, msg := range failMsgs {
@@ -834,6 +853,12 @@ func (c *Component) persistHandlerResult(ctx context.Context, result HandlerResu
 		c.cleanupBoidPosition(ctx, result.LoopID)
 		if result.CompletionState != nil {
 			c.persistCompletionState(ctx, result.LoopID, result.CompletionState)
+			// Emit loop execution entity to graph (non-fatal)
+			if c.graphWriter != nil {
+				c.graphWriter.WriteLoopCompletion(ctx, result.CompletionState)
+			}
+		} else if result.FailureState != nil && c.graphWriter != nil {
+			c.graphWriter.WriteLoopFailure(ctx, result.FailureState)
 		}
 	}
 }
@@ -1207,6 +1232,11 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 			slog.String("error", err.Error()),
 			slog.String("loop_id", loopID))
 		return
+	}
+
+	// Emit cancellation entity to graph (non-fatal)
+	if c.graphWriter != nil {
+		c.graphWriter.WriteLoopCancellation(ctx, &completion)
 	}
 
 	// Finalize trajectory and cleanup Boid position

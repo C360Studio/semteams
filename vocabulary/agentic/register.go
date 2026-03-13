@@ -25,6 +25,8 @@ func Register() {
 	registerExecutionPredicates()
 	registerActionPredicates()
 	registerTaskPredicates()
+	registerModelPredicates()
+	registerLoopPredicates()
 }
 
 // registerIntentPredicates registers predicates for agent intentions and goals.
@@ -245,5 +247,95 @@ func registerTaskPredicates() {
 
 	vocabulary.Register(TaskStatus,
 		vocabulary.WithDescription("Current status of the task"),
+		vocabulary.WithDataType("string"))
+}
+
+// registerModelPredicates registers predicates for LLM model endpoint entities.
+func registerModelPredicates() {
+	vocabulary.Register(ModelProvider,
+		vocabulary.WithDescription("API provider type (anthropic, ollama, openai, openrouter)"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(ModelName,
+		vocabulary.WithDescription("Model identifier sent to the provider"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(ModelMaxTokens,
+		vocabulary.WithDescription("Context window size in tokens"),
+		vocabulary.WithDataType("int"))
+
+	vocabulary.Register(ModelSupportsTools,
+		vocabulary.WithDescription("Whether the endpoint supports tool calling"),
+		vocabulary.WithDataType("bool"))
+
+	vocabulary.Register(ModelInputPrice,
+		vocabulary.WithDescription("Cost per 1M input tokens in USD"),
+		vocabulary.WithDataType("float64"))
+
+	vocabulary.Register(ModelOutputPrice,
+		vocabulary.WithDescription("Cost per 1M output tokens in USD"),
+		vocabulary.WithDataType("float64"))
+
+	vocabulary.Register(ModelEndpointURL,
+		vocabulary.WithDescription("API endpoint URL for the model"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(ModelRateLimit,
+		vocabulary.WithDescription("Requests per minute limit for the endpoint"),
+		vocabulary.WithDataType("int"))
+}
+
+// registerLoopPredicates registers predicates for agentic loop execution entities.
+func registerLoopPredicates() {
+	vocabulary.Register(LoopOutcome,
+		vocabulary.WithDescription("Terminal outcome of the loop execution (success, failed, cancelled)"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(LoopRole,
+		vocabulary.WithDescription("Role used during this loop execution"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(LoopModelUsed,
+		vocabulary.WithDescription("Entity reference to the model endpoint used"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(LoopIterations,
+		vocabulary.WithDescription("Number of LLM iterations executed in this loop"),
+		vocabulary.WithDataType("int"))
+
+	vocabulary.Register(LoopTokensIn,
+		vocabulary.WithDescription("Total input tokens consumed across all iterations"),
+		vocabulary.WithDataType("int"))
+
+	vocabulary.Register(LoopTokensOut,
+		vocabulary.WithDescription("Total output tokens consumed across all iterations"),
+		vocabulary.WithDataType("int"))
+
+	vocabulary.Register(LoopCostUSD,
+		vocabulary.WithDescription("Computed cost in USD for this loop execution"),
+		vocabulary.WithDataType("float64"))
+
+	vocabulary.Register(LoopTask,
+		vocabulary.WithDescription("Task ID this loop execution served"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(LoopParent,
+		vocabulary.WithDescription("Entity reference to the parent loop entity"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(LoopWorkflow,
+		vocabulary.WithDescription("Workflow slug this loop belongs to"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(LoopWorkflowStep,
+		vocabulary.WithDescription("Step within the workflow for this loop"),
+		vocabulary.WithDataType("string"))
+
+	vocabulary.Register(LoopEndedAt,
+		vocabulary.WithDescription("Terminal timestamp for this loop (completion, failure, or cancellation)"),
+		vocabulary.WithDataType("time.Time"))
+
+	vocabulary.Register(LoopUser,
+		vocabulary.WithDescription("User ID who initiated this loop"),
 		vocabulary.WithDataType("string"))
 }
