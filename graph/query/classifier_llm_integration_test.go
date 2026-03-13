@@ -5,6 +5,7 @@ package query
 import (
 	"context"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -13,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// These integration tests require a running Ollama instance at localhost:11434
-// with the qwen3:14b model pulled.
+// These integration tests require a running Ollama instance at localhost:11434.
+// The model defaults to qwen3:1.7b but can be overridden with OLLAMA_TEST_MODEL.
 //
 // Run with: go test -tags integration -run TestLLMClassifier_Integration ./graph/query/...
 
@@ -27,16 +28,25 @@ func requireOllama(t *testing.T) {
 	conn.Close()
 }
 
+func ollamaTestModel() string {
+	if m := os.Getenv("OLLAMA_TEST_MODEL"); m != "" {
+		return m
+	}
+	return "qwen3:1.7b"
+}
+
 func newOllamaClient(t *testing.T) llm.Client {
 	t.Helper()
 	requireOllama(t)
+	model := ollamaTestModel()
 	client, err := llm.NewOpenAIClient(llm.OpenAIConfig{
 		BaseURL:    "http://localhost:11434/v1",
-		Model:      "qwen3:14b",
+		Model:      model,
 		Timeout:    120 * time.Second, // Local inference can be slow
 		MaxRetries: 1,
 	})
 	require.NoError(t, err)
+	t.Logf("Using Ollama model: %s", model)
 	return client
 }
 

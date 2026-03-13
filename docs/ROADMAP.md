@@ -12,7 +12,7 @@ Hybrid NL intent extraction with progressive fallback:
 - Tier 1/2: Embedding similarity to domain examples — **active** (wired via `enable_embedding_classifier` +
   `domain_examples_path` config fields)
 - Tier 3: LLM classification for complex queries — **active** (via `LLMClientAdapter`, integration tested with
-  Ollama qwen3:14b)
+  Ollama, defaults to qwen3:1.7b, configurable via OLLAMA_TEST_MODEL)
 
 Current state: `ClassifierChain` runs all three tiers in sequence. T0 `KeywordClassifier` covers 10+ regex patterns
 including aggregation (`how many`, `count`, `average`, `sum`, `total`, `min`, `max`) and ranking (`top N`, `bottom N`,
