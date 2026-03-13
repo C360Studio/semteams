@@ -745,7 +745,7 @@ func (cm *ComponentManager) checkPortConflicts(comp component.Discoverable) erro
 	allPorts := append(comp.InputPorts(), comp.OutputPorts()...)
 
 	for _, port := range allPorts {
-		if port.Config.IsExclusive() {
+		if port.Config != nil && port.Config.IsExclusive() {
 			resourceID := port.Config.ResourceID()
 			if owners, exists := cm.resources[resourceID]; exists && len(owners) > 0 {
 				return fmt.Errorf("exclusive resource %s already used by %v",
@@ -761,6 +761,9 @@ func (cm *ComponentManager) registerPorts(name string, comp component.Discoverab
 	allPorts := append(comp.InputPorts(), comp.OutputPorts()...)
 
 	for _, port := range allPorts {
+		if port.Config == nil {
+			continue
+		}
 		resourceID := port.Config.ResourceID()
 		cm.resources[resourceID] = append(cm.resources[resourceID], name)
 	}
@@ -776,6 +779,9 @@ func (cm *ComponentManager) unregisterPorts(name string) {
 
 	allPorts := append(comp.InputPorts(), comp.OutputPorts()...)
 	for _, port := range allPorts {
+		if port.Config == nil {
+			continue
+		}
 		resourceID := port.Config.ResourceID()
 		cm.removeFromSlice(resourceID, name)
 	}
