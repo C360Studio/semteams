@@ -1,4 +1,21 @@
 // Package graphgateway provides the graph-gateway component for exposing graph operations via HTTP.
+//
+// # HTTP Server Modes
+//
+// This component supports two mutually exclusive HTTP serving modes:
+//
+// Standalone mode (tests/development): Set StandaloneServer=true in config.
+// Start() creates and manages its own http.Server on BindAddress. Integration
+// tests use this mode to exercise the component without ServiceManager.
+//
+// Service Manager mode (production, default): StandaloneServer=false (or omitted).
+// ServiceManager calls RegisterHTTPHandlers() to register this component's routes
+// on its central HTTP mux. No standalone server is created — ServiceManager owns
+// the single HTTP server.
+//
+// The RegisterHTTPHandlers method is the shared entry point — Start() calls it
+// internally for standalone mode, and ServiceManager calls it externally for
+// production mode.
 package graphgateway
 
 import (
@@ -45,7 +62,8 @@ type Config struct {
 	Ports                     *component.PortConfig `json:"ports" schema:"type:ports,description:Port configuration,category:basic"`
 	GraphQLPath               string                `json:"graphql_path" schema:"type:string,description:GraphQL endpoint path,category:basic"`
 	MCPPath                   string                `json:"mcp_path" schema:"type:string,description:MCP endpoint path,category:basic"`
-	BindAddress               string                `json:"bind_address" schema:"type:string,description:HTTP server bind address,category:basic"`
+	BindAddress               string                `json:"bind_address" schema:"type:string,description:HTTP server bind address (only used when standalone_server is true),category:basic"`
+	StandaloneServer          bool                  `json:"standalone_server" schema:"type:bool,description:Create a standalone HTTP server (for tests/development). When false ServiceManager provides HTTP serving,category:basic"`
 	EnablePlayground          bool                  `json:"enable_playground" schema:"type:bool,description:Enable GraphQL playground,category:basic"`
 	EnableInferenceAPI        bool                  `json:"enable_inference_api" schema:"type:bool,description:Enable inference API for anomaly review,category:basic"`
 	QueryTimeout              time.Duration         `json:"query_timeout" schema:"type:duration,description:Query timeout duration,category:basic"`
@@ -70,8 +88,8 @@ func (c *Config) Validate() error {
 	if c.MCPPath == "" {
 		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "mcp_path cannot be empty")
 	}
-	if c.BindAddress == "" {
-		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "bind_address cannot be empty")
+	if c.StandaloneServer && c.BindAddress == "" {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "Config", "Validate", "bind_address required when standalone_server is true")
 	}
 	return nil
 }
@@ -515,7 +533,11 @@ func (c *Component) Initialize() error {
 	return nil
 }
 
-// Start begins processing (must be initialized first)
+// Start begins processing (must be initialized first).
+//
+// When StandaloneServer is true, creates an HTTP server on BindAddress for
+// tests and development. When false (production default), no server is created —
+// ServiceManager calls RegisterHTTPHandlers() on its shared mux instead.
 func (c *Component) Start(ctx context.Context) error {
 	// Validate context
 	if ctx == nil {
@@ -565,31 +587,33 @@ func (c *Component) Start(ctx context.Context) error {
 		}
 	}
 
-	// Create HTTP server mux and register handlers
-	c.httpMux = http.NewServeMux()
-	c.RegisterHTTPHandlers("", c.httpMux)
+	// Standalone mode: create our own HTTP server for tests/development.
+	// In production (StandaloneServer=false), ServiceManager calls
+	// RegisterHTTPHandlers() on its shared mux — no server needed here.
+	if c.config.StandaloneServer {
+		c.httpMux = http.NewServeMux()
+		c.RegisterHTTPHandlers("", c.httpMux)
 
-	// Create HTTP server
-	c.httpServer = &http.Server{
-		Addr:         c.config.BindAddress,
-		Handler:      c.httpMux,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 60 * time.Second,
-		IdleTimeout:  120 * time.Second,
-	}
-
-	// Start HTTP server in background
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-		c.logger.Info("starting HTTP server",
-			slog.String("bind_address", c.config.BindAddress))
-
-		if err := c.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			c.logger.Error("HTTP server error",
-				slog.Any("error", err))
+		c.httpServer = &http.Server{
+			Addr:         c.config.BindAddress,
+			Handler:      c.httpMux,
+			ReadTimeout:  30 * time.Second,
+			WriteTimeout: 60 * time.Second,
+			IdleTimeout:  120 * time.Second,
 		}
-	}()
+
+		c.wg.Add(1)
+		go func() {
+			defer c.wg.Done()
+			c.logger.Info("starting standalone HTTP server",
+				slog.String("bind_address", c.config.BindAddress))
+
+			if err := c.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				c.logger.Error("HTTP server error",
+					slog.Any("error", err))
+			}
+		}()
+	}
 
 	// Mark as running
 	c.running = true
@@ -597,6 +621,7 @@ func (c *Component) Start(ctx context.Context) error {
 
 	c.logger.Info("component started",
 		slog.String("component", "graph-gateway"),
+		slog.Bool("standalone_server", c.config.StandaloneServer),
 		slog.String("bind_address", c.config.BindAddress),
 		slog.Time("start_time", c.startTime))
 
@@ -659,7 +684,14 @@ func (c *Component) Stop(timeout time.Duration) error {
 // Gateway Interface (1 method)
 // ============================================================================
 
-// RegisterHTTPHandlers registers HTTP handlers with the provided mux
+// RegisterHTTPHandlers registers HTTP handlers with the provided mux.
+//
+// This is called twice in production: once by Start() for the standalone mux,
+// and once by ServiceManager for the shared production mux. Both registrations
+// use the same handler methods — the mux determines which server serves them.
+//
+// In standalone/test mode, only the Start() call happens (prefix="", own mux).
+// In ServiceManager mode, the prefix is typically "/graph-gateway/".
 func (c *Component) RegisterHTTPHandlers(prefix string, mux *http.ServeMux) {
 	// Ensure prefix ends with slash for proper path joining
 	if prefix != "" && prefix[len(prefix)-1] != '/' {

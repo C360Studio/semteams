@@ -7,7 +7,7 @@
   "properties": {
     "bind_address": {
       "type": "string",
-      "description": "HTTP server bind address",
+      "description": "HTTP server bind address (only used when standalone_server is true)",
       "category": "basic"
     },
     "enable_inference_api": {
@@ -33,6 +33,11 @@
     "ports": {
       "type": "string",
       "description": "Port configuration",
+      "category": "basic"
+    },
+    "standalone_server": {
+      "type": "boolean",
+      "description": "Create a standalone HTTP server (for tests/development). When false ServiceManager provides HTTP serving",
       "category": "basic"
     }
   },

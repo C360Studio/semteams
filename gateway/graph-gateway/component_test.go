@@ -171,7 +171,25 @@ func TestConfig_Validate_InvalidPaths(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "empty bind address",
+			name: "empty bind address with standalone server",
+			config: Config{
+				Ports: &component.PortConfig{
+					Inputs: []component.PortDefinition{
+						{Name: "http", Type: "http", Subject: "/graphql"},
+					},
+					Outputs: []component.PortDefinition{
+						{Name: "mutations", Type: "nats-request", Subject: "graph.mutation.*"},
+					},
+				},
+				GraphQLPath:      "/graphql",
+				MCPPath:          "/mcp",
+				StandaloneServer: true,
+				BindAddress:      "", // Empty - invalid when standalone
+			},
+			wantErr: true,
+		},
+		{
+			name: "empty bind address without standalone server",
 			config: Config{
 				Ports: &component.PortConfig{
 					Inputs: []component.PortDefinition{
@@ -183,9 +201,9 @@ func TestConfig_Validate_InvalidPaths(t *testing.T) {
 				},
 				GraphQLPath: "/graphql",
 				MCPPath:     "/mcp",
-				BindAddress: "", // Empty - invalid
+				BindAddress: "", // OK when not standalone
 			},
-			wantErr: true,
+			wantErr: false,
 		},
 	}
 

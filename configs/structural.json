@@ -640,7 +640,6 @@
         },
         "graphql_path": "/graphql",
         "mcp_path": "/mcp",
-        "bind_address": ":8082",
         "enable_playground": true
       }
     },
