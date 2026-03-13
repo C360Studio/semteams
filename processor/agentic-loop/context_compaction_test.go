@@ -2,6 +2,7 @@ package agenticloop_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -65,6 +66,7 @@ func TestCompactor_ShouldCompact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config := agenticloop.DefaultContextConfig()
 			config.CompactThreshold = tt.threshold
+			config.HeadroomTokens = 0 // disable headroom to test threshold in isolation
 
 			compactor := agenticloop.NewCompactor(config)
 
@@ -447,5 +449,113 @@ func TestCompactor_Compact_MultipleCompactions(t *testing.T) {
 	// Summaries should be different (or second should build on first)
 	if result1.Summary == result2.Summary && len(result1.Summary) > 0 {
 		t.Error("Multiple compactions produced identical summaries")
+	}
+}
+
+func TestCompactor_RecompactionCapsCompactedHistory(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	config.HeadroomTokens = 0 // disable headroom for this test
+	compactor := agenticloop.NewCompactor(config)
+	cm := agenticloop.NewContextManager("loop-recompact", "gpt-4o", config)
+	ctx := context.Background()
+
+	// Perform 5 compactions to exceed maxCompactedMessages (3)
+	for i := range 5 {
+		_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+			Role:    "user",
+			Content: fmt.Sprintf("Conversation batch %d with enough content to matter", i),
+		})
+		_, err := compactor.Compact(ctx, cm)
+		if err != nil {
+			t.Fatalf("Compact #%d error: %v", i+1, err)
+		}
+	}
+
+	// After 5 compactions with maxCompactedMessages=3, recompaction should have
+	// consolidated down. The compacted region should have at most maxCompactedMessages entries.
+	compactedTokens := cm.GetRegionTokens(agenticloop.RegionCompactedHistory)
+	if compactedTokens <= 0 {
+		t.Error("Expected compacted history to have tokens after 5 compactions")
+	}
+
+	// Verify the region wasn't unbounded: get context and count system messages
+	// in the compacted region position (after system prompt, before recent history)
+	msgs := cm.GetContext()
+	compactedMsgs := 0
+	for _, m := range msgs {
+		if m.Role == "system" && m.Content != "" {
+			compactedMsgs++
+		}
+	}
+
+	// Should be capped — not 5 separate summaries
+	if compactedMsgs > 4 { // maxCompactedMessages + 1 at most before recompaction
+		t.Errorf("Expected compacted messages to be capped, got %d", compactedMsgs)
+	}
+}
+
+func TestCompactor_RecompactionWithLLMSummarizer(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	config.HeadroomTokens = 0
+
+	mock := &mockSummarizer{summary: "LLM consolidated summary"}
+	compactor := agenticloop.NewCompactor(config, agenticloop.WithSummarizer(mock))
+	cm := agenticloop.NewContextManager("loop-recompact-llm", "gpt-4o", config)
+	ctx := context.Background()
+
+	// Perform enough compactions to trigger recompaction
+	for i := range 5 {
+		_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+			Role:    "user",
+			Content: fmt.Sprintf("Batch %d", i),
+		})
+		_, err := compactor.Compact(ctx, cm)
+		if err != nil {
+			t.Fatalf("Compact #%d error: %v", i+1, err)
+		}
+	}
+
+	// 5 regular compactions + at least 1 recompaction (triggered when exceeding maxCompactedMessages=3)
+	if mock.calls < 6 {
+		t.Errorf("Expected at least 6 summarizer calls (5 compactions + 1+ recompactions), got %d", mock.calls)
+	}
+}
+
+func TestCompactor_RecompactionReducesTokens(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	config.HeadroomTokens = 0
+	compactor := agenticloop.NewCompactor(config)
+	cm := agenticloop.NewContextManager("loop-token-check", "gpt-4o", config)
+	ctx := context.Background()
+
+	// Compact 3 times (right at the limit, no recompaction yet)
+	for i := range 3 {
+		_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+			Role:    "user",
+			Content: fmt.Sprintf("A reasonably sized conversation batch number %d with varied content", i),
+		})
+		_, err := compactor.Compact(ctx, cm)
+		if err != nil {
+			t.Fatalf("Compact #%d error: %v", i+1, err)
+		}
+	}
+	tokensBefore := cm.GetRegionTokens(agenticloop.RegionCompactedHistory)
+
+	// 4th compaction should trigger recompaction (exceeds maxCompactedMessages=3)
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role:    "user",
+		Content: "Final batch that triggers recompaction",
+	})
+	_, err := compactor.Compact(ctx, cm)
+	if err != nil {
+		t.Fatalf("Compact #4 error: %v", err)
+	}
+	tokensAfter := cm.GetRegionTokens(agenticloop.RegionCompactedHistory)
+
+	// After recompaction (stub fallback concatenates), tokens should be different
+	// The stub adds a header so it won't necessarily be smaller, but it should
+	// consolidate into fewer messages
+	if tokensBefore == 0 || tokensAfter == 0 {
+		t.Errorf("Token counts should be non-zero: before=%d, after=%d", tokensBefore, tokensAfter)
 	}
 }

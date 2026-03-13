@@ -87,12 +87,20 @@ func (h *MessageHandler) maybeCompact(ctx context.Context, cm *ContextManager, l
 		return
 	}
 
+	utilization := cm.Utilization()
 	result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
 		Type:        "compaction_starting",
 		LoopID:      loopID,
 		Iteration:   iteration,
-		Utilization: cm.Utilization(),
+		Utilization: utilization,
 	})
+
+	h.logger.Info("context compaction triggered",
+		slog.String("loop_id", loopID),
+		slog.Float64("utilization", utilization),
+		slog.Int("total_tokens", cm.TotalTokens()),
+		slog.Int("model_limit", cm.ModelLimit()),
+		slog.Int("headroom", cm.config.HeadroomTokens))
 
 	compactResult, compactErr := h.compactor.Compact(ctx, cm)
 	if compactErr != nil {
@@ -853,10 +861,16 @@ func (h *MessageHandler) handleToolsComplete(
 	evicted := cm.GCToolResults(newIteration)
 	if evicted > 0 {
 		result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
-			Type:      "gc_complete",
-			LoopID:    loopID,
-			Iteration: newIteration,
+			Type:        "gc_complete",
+			LoopID:      loopID,
+			Iteration:   newIteration,
+			TokensSaved: evicted, // repurposed: count of messages evicted
 		})
+
+		h.logger.Debug("context GC complete",
+			slog.String("loop_id", loopID),
+			slog.Int("evicted", evicted),
+			slog.Float64("utilization_after", cm.Utilization()))
 	}
 
 	messages := cm.GetContext()

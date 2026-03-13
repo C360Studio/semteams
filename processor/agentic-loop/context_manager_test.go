@@ -483,6 +483,95 @@ func TestContextManager_MultipleMessagesPerRegion(t *testing.T) {
 	}
 }
 
+func TestContextManager_HeadroomReducesEffectiveCapacity(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+
+	// Create two context managers: one with headroom, one without
+	configNoHeadroom := config
+	configNoHeadroom.HeadroomTokens = 0
+
+	cmWithHeadroom := agenticloop.NewContextManager("loop-h", "gpt-4o", config)
+	cmNoHeadroom := agenticloop.NewContextManager("loop-nh", "gpt-4o", configNoHeadroom)
+
+	// Fill both to the same number of tokens
+	targetTokens := int(float64(agenticloop.DefaultContextLimit) * 0.55)
+	fillContextToTokens(t, cmWithHeadroom, targetTokens)
+	fillContextToTokens(t, cmNoHeadroom, targetTokens)
+
+	// Headroom context should report higher utilization (smaller effective limit)
+	utilH := cmWithHeadroom.Utilization()
+	utilN := cmNoHeadroom.Utilization()
+
+	if utilH <= utilN {
+		t.Errorf("Headroom utilization (%f) should be > no-headroom utilization (%f)", utilH, utilN)
+	}
+}
+
+func TestContextManager_HeadroomTriggersCompactionEarlier(t *testing.T) {
+	// With default headroom (6400), compaction at 60% threshold should trigger
+	// earlier than without headroom
+	config := agenticloop.DefaultContextConfig()
+	config.CompactThreshold = 0.60
+
+	configNoHeadroom := config
+	configNoHeadroom.HeadroomTokens = 0
+
+	// Fill to 58% of raw model limit — below threshold without headroom,
+	// but above threshold with headroom (58% of 128000 / (128000-6400) ≈ 61%)
+	fillPct := 0.58
+	targetTokens := int(float64(agenticloop.DefaultContextLimit) * fillPct)
+
+	cmWithHeadroom := agenticloop.NewContextManager("loop-h", "gpt-4o", config)
+	fillContextToTokens(t, cmWithHeadroom, targetTokens)
+
+	cmNoHeadroom := agenticloop.NewContextManager("loop-nh", "gpt-4o", configNoHeadroom)
+	fillContextToTokens(t, cmNoHeadroom, targetTokens)
+
+	if !cmWithHeadroom.ShouldCompact() {
+		t.Error("Expected ShouldCompact()=true with headroom at 58% fill")
+	}
+	if cmNoHeadroom.ShouldCompact() {
+		t.Error("Expected ShouldCompact()=false without headroom at 58% fill")
+	}
+}
+
+func TestContextManager_HeadroomExceedsModelLimit(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	config.HeadroomTokens = agenticloop.DefaultContextLimit + 1000 // headroom > model limit
+
+	cm := agenticloop.NewContextManager("loop-edge", "gpt-4o", config)
+
+	// Should not panic — falls back to raw model limit
+	_ = cm.Utilization()
+	_ = cm.ShouldCompact()
+}
+
+func TestContextManager_TotalTokens(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
+
+	if cm.TotalTokens() != 0 {
+		t.Errorf("TotalTokens() = %d for empty context, want 0", cm.TotalTokens())
+	}
+
+	_ = cm.AddMessage(agenticloop.RegionSystemPrompt, agentic.ChatMessage{
+		Role: "system", Content: "Hello world",
+	})
+
+	if cm.TotalTokens() <= 0 {
+		t.Error("TotalTokens() should be > 0 after adding a message")
+	}
+}
+
+func TestContextManager_ModelLimit(t *testing.T) {
+	config := agenticloop.DefaultContextConfig()
+	cm := agenticloop.NewContextManager("loop-1", "gpt-4o", config)
+
+	if cm.ModelLimit() != agenticloop.DefaultContextLimit {
+		t.Errorf("ModelLimit() = %d, want %d", cm.ModelLimit(), agenticloop.DefaultContextLimit)
+	}
+}
+
 // Helper function to fill context to approximately target token count
 func fillContextToTokens(t *testing.T, cm *agenticloop.ContextManager, targetTokens int) {
 	t.Helper()

@@ -31,6 +31,13 @@ type loopMetrics struct {
 	toolCallsDispatched *prometheus.CounterVec
 	toolResultsReceived *prometheus.CounterVec
 
+	// Context management
+	contextUtilization           prometheus.Gauge
+	contextCompactionsTotal      prometheus.Counter
+	contextCompactionTokensSaved prometheus.Histogram
+	contextGCEvictionsTotal      prometheus.Counter
+	contextCompactedRegionTokens prometheus.Gauge
+
 	// Boid coordination
 	boidSignalsReceived  *prometheus.CounterVec
 	boidPositionUpdates  prometheus.Counter
@@ -140,6 +147,42 @@ func getMetrics(registry *metric.MetricsRegistry) *loopMetrics {
 				Help:      "Total Boid position updates in KV store",
 			}),
 
+			contextUtilization: prometheus.NewGauge(prometheus.GaugeOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_loop",
+				Name:      "context_utilization",
+				Help:      "Current context window utilization (0.0-1.0)",
+			}),
+
+			contextCompactionsTotal: prometheus.NewCounter(prometheus.CounterOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_loop",
+				Name:      "context_compactions_total",
+				Help:      "Total number of context compactions performed",
+			}),
+
+			contextCompactionTokensSaved: prometheus.NewHistogram(prometheus.HistogramOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_loop",
+				Name:      "context_compaction_tokens_saved",
+				Help:      "Tokens saved per compaction (evicted minus summary)",
+				Buckets:   prometheus.ExponentialBuckets(100, 2, 10), // 100 to ~100k
+			}),
+
+			contextGCEvictionsTotal: prometheus.NewCounter(prometheus.CounterOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_loop",
+				Name:      "context_gc_evictions_total",
+				Help:      "Total messages evicted by tool result GC",
+			}),
+
+			contextCompactedRegionTokens: prometheus.NewGauge(prometheus.GaugeOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_loop",
+				Name:      "context_compacted_region_tokens",
+				Help:      "Current tokens in compacted history region",
+			}),
+
 			boidEntitiesFiltered: prometheus.NewCounter(prometheus.CounterOpts{
 				Namespace: "semstreams",
 				Subsystem: "agentic_loop",
@@ -164,6 +207,11 @@ func getMetrics(registry *metric.MetricsRegistry) *loopMetrics {
 			_ = registry.RegisterCounterVec("agentic-loop", "boid_signals_received_total", metrics.boidSignalsReceived)
 			_ = registry.RegisterCounter("agentic-loop", "boid_position_updates_total", metrics.boidPositionUpdates)
 			_ = registry.RegisterCounter("agentic-loop", "boid_entities_filtered_total", metrics.boidEntitiesFiltered)
+			_ = registry.RegisterGauge("agentic-loop", "context_utilization", metrics.contextUtilization)
+			_ = registry.RegisterCounter("agentic-loop", "context_compactions_total", metrics.contextCompactionsTotal)
+			_ = registry.RegisterHistogram("agentic-loop", "context_compaction_tokens_saved", metrics.contextCompactionTokensSaved)
+			_ = registry.RegisterCounter("agentic-loop", "context_gc_evictions_total", metrics.contextGCEvictionsTotal)
+			_ = registry.RegisterGauge("agentic-loop", "context_compacted_region_tokens", metrics.contextCompactedRegionTokens)
 		} else {
 			// Fallback to default prometheus registry for testing
 			_ = prometheus.DefaultRegisterer.Register(metrics.loopsCreated)
@@ -180,6 +228,11 @@ func getMetrics(registry *metric.MetricsRegistry) *loopMetrics {
 			_ = prometheus.DefaultRegisterer.Register(metrics.boidSignalsReceived)
 			_ = prometheus.DefaultRegisterer.Register(metrics.boidPositionUpdates)
 			_ = prometheus.DefaultRegisterer.Register(metrics.boidEntitiesFiltered)
+			_ = prometheus.DefaultRegisterer.Register(metrics.contextUtilization)
+			_ = prometheus.DefaultRegisterer.Register(metrics.contextCompactionsTotal)
+			_ = prometheus.DefaultRegisterer.Register(metrics.contextCompactionTokensSaved)
+			_ = prometheus.DefaultRegisterer.Register(metrics.contextGCEvictionsTotal)
+			_ = prometheus.DefaultRegisterer.Register(metrics.contextCompactedRegionTokens)
 		}
 	})
 	return metrics
@@ -252,4 +305,25 @@ func (m *loopMetrics) recordBoidPositionUpdate() {
 // recordBoidEntitiesFiltered records entity filtering by Boid steering.
 func (m *loopMetrics) recordBoidEntitiesFiltered() {
 	m.boidEntitiesFiltered.Inc()
+}
+
+// recordContextUtilization updates the current context utilization gauge.
+func (m *loopMetrics) recordContextUtilization(utilization float64) {
+	m.contextUtilization.Set(utilization)
+}
+
+// recordContextCompaction records a compaction event and tokens saved.
+func (m *loopMetrics) recordContextCompaction(tokensSaved int) {
+	m.contextCompactionsTotal.Inc()
+	m.contextCompactionTokensSaved.Observe(float64(tokensSaved))
+}
+
+// recordContextGCEvictions adds to the total GC evictions counter.
+func (m *loopMetrics) recordContextGCEvictions(count int) {
+	m.contextGCEvictionsTotal.Add(float64(count))
+}
+
+// recordCompactedRegionTokens updates the compacted region tokens gauge.
+func (m *loopMetrics) recordCompactedRegionTokens(tokens int) {
+	m.contextCompactedRegionTokens.Set(float64(tokens))
 }

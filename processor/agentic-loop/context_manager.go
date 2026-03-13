@@ -115,7 +115,9 @@ func (cm *ContextManager) resolveModelLimit(modelName string) int {
 	return DefaultContextLimit
 }
 
-// Utilization returns the current context utilization (0.0 to 1.0)
+// Utilization returns the current context utilization (0.0 to 1.0).
+// Accounts for HeadroomTokens so compaction triggers before the model limit,
+// leaving room for the response.
 func (cm *ContextManager) Utilization() float64 {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -127,7 +129,28 @@ func (cm *ContextManager) Utilization() float64 {
 		}
 	}
 
-	return float64(total) / float64(cm.modelLimit)
+	effectiveLimit := cm.modelLimit - cm.config.HeadroomTokens
+	if effectiveLimit <= 0 {
+		cm.logger.Warn("headroom_tokens >= model_limit, ignoring headroom",
+			"loop_id", cm.loopID,
+			"headroom", cm.config.HeadroomTokens,
+			"model_limit", cm.modelLimit)
+		effectiveLimit = cm.modelLimit
+	}
+
+	return float64(total) / float64(effectiveLimit)
+}
+
+// TotalTokens returns the sum of all region tokens.
+func (cm *ContextManager) TotalTokens() int {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+	return cm.getTotalTokensLocked()
+}
+
+// ModelLimit returns the resolved model context limit.
+func (cm *ContextManager) ModelLimit() int {
+	return cm.modelLimit
 }
 
 // ShouldCompact returns true if compaction should be triggered
@@ -153,8 +176,8 @@ func (cm *ContextManager) GetContext() []agentic.ChatMessage {
 	}
 
 	for _, rt := range order {
-		for _, cm := range cm.regions[rt] {
-			messages = append(messages, cm.Message)
+		for _, entry := range cm.regions[rt] {
+			messages = append(messages, entry.Message)
 		}
 	}
 

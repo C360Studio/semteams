@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/c360studio/semstreams/agentic"
 )
@@ -129,12 +130,100 @@ func (c *Compactor) Compact(ctx context.Context, cm *ContextManager) (Compaction
 	})
 	cm.regions[RegionRecentHistory] = []contextMessage{}
 
+	// Cap compacted history to prevent unbounded growth
+	if len(cm.regions[RegionCompactedHistory]) > maxCompactedMessages {
+		c.recompact(ctx, cm)
+		// Recalculate newTokens to reflect recompacted region
+		newTokens = 0
+		for _, m := range cm.regions[RegionCompactedHistory] {
+			newTokens += m.Tokens
+		}
+	}
+
 	return CompactionResult{
 		Summary:       summary,
 		EvictedTokens: evictedTokens,
 		NewTokens:     newTokens,
 		Model:         modelUsed,
 	}, nil
+}
+
+// maxCompactedMessages is the maximum number of summary messages allowed in
+// RegionCompactedHistory. When exceeded, all summaries are re-summarized into one.
+const maxCompactedMessages = 3
+
+// recompact consolidates all compacted history summaries into a single meta-summary.
+// Caller must hold cm.mu.
+func (c *Compactor) recompact(ctx context.Context, cm *ContextManager) {
+	select {
+	case <-ctx.Done():
+		c.logger.Warn("skipping recompaction due to context cancellation")
+		return
+	default:
+	}
+
+	compacted := cm.regions[RegionCompactedHistory]
+	if len(compacted) <= 1 {
+		return
+	}
+
+	// Calculate tokens before recompaction
+	tokensBefore := 0
+	for _, m := range compacted {
+		tokensBefore += m.Tokens
+	}
+
+	// Extract messages for summarization
+	chatMessages := make([]agentic.ChatMessage, len(compacted))
+	for i, m := range compacted {
+		chatMessages[i] = m.Message
+	}
+
+	// Budget: clamp(tokensBefore/4, 256, 2048)
+	budget := min(max(tokensBefore/4, 256), 2048)
+
+	var summary string
+	if c.summarizer != nil {
+		var err error
+		summary, err = c.summarizer.Summarize(ctx, chatMessages, budget)
+		if err != nil {
+			c.logger.Warn("recompaction summarizer failed, using concatenation fallback",
+				"error", err,
+				"summaries", len(compacted))
+			summary = stubRecompaction(compacted)
+		}
+	} else {
+		summary = stubRecompaction(compacted)
+	}
+
+	tokensAfter := estimateTokens(summary)
+
+	cm.regions[RegionCompactedHistory] = []contextMessage{{
+		Message: agentic.ChatMessage{
+			Role:    "system",
+			Content: summary,
+		},
+		Tokens:    tokensAfter,
+		Iteration: cm.currentIteration,
+	}}
+
+	c.logger.Info("recompacted history summaries",
+		"loop_id", cm.loopID,
+		"summaries_before", len(compacted),
+		"tokens_before", tokensBefore,
+		"tokens_after", tokensAfter)
+}
+
+// stubRecompaction concatenates existing summaries as a fallback when no summarizer is available.
+func stubRecompaction(compacted []contextMessage) string {
+	var b strings.Builder
+	for i, m := range compacted {
+		if i > 0 {
+			b.WriteString("\n---\n")
+		}
+		b.WriteString(m.Message.Content)
+	}
+	return fmt.Sprintf("[Consolidated summary of %d compactions]\n%s", len(compacted), b.String())
 }
 
 // stubSummary generates a placeholder summary string when no LLM summarizer is available.

@@ -935,6 +935,9 @@ func (c *Component) publishResults(ctx context.Context, result HandlerResult) {
 	for _, event := range result.ContextEvents {
 		c.publishContextEvent(ctx, event)
 	}
+
+	// Emit context management metrics from events
+	c.emitContextMetrics(result)
 }
 
 // publishContextEvent publishes a context management event
@@ -949,6 +952,29 @@ func (c *Component) publishContextEvent(ctx context.Context, event agentic.Conte
 	subject := fmt.Sprintf("agent.context.compaction.%s", event.LoopID)
 	if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
 		c.logger.Error("Failed to publish context event", "error", err, "subject", subject)
+	}
+}
+
+// emitContextMetrics emits Prometheus metrics from context management events.
+func (c *Component) emitContextMetrics(result HandlerResult) {
+	if c.metrics == nil {
+		return
+	}
+
+	for _, event := range result.ContextEvents {
+		switch event.Type {
+		case "compaction_complete":
+			c.metrics.recordContextCompaction(event.TokensSaved)
+		case "gc_complete":
+			c.metrics.recordContextGCEvictions(event.TokensSaved)
+		}
+	}
+
+	// Update utilization and compacted region tokens from the live context manager
+	cm := c.handler.GetContextManager(result.LoopID)
+	if cm != nil {
+		c.metrics.recordContextUtilization(cm.Utilization())
+		c.metrics.recordCompactedRegionTokens(cm.GetRegionTokens(RegionCompactedHistory))
 	}
 }
 
