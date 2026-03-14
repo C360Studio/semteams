@@ -444,6 +444,40 @@ func TestStreamChatCompletion_GeminiMissingIndex(t *testing.T) {
 	}
 }
 
+func TestStreamChatCompletion_GeminiSameNameParallelTools(t *testing.T) {
+	// Regression: Gemini parallel tool calls with the same function name
+	// had names concatenated ("run_commandrun_commandrun_command") because
+	// processDelta used += instead of = for Function.Name.
+	chunks := []string{
+		`{"id":"g2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"role":"assistant","tool_calls":[{"id":"call_111","type":"function","function":{"name":"run_command","arguments":""}}]}}]}`,
+		`{"id":"g2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"function":{"arguments":"{\"cmd\":\"ls\"}"}}]}}]}`,
+		`{"id":"g2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_222","type":"function","function":{"name":"run_command","arguments":"{\"cmd\":\"pwd\"}"}}]}}]}`,
+		`{"id":"g2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_333","type":"function","function":{"name":"run_command","arguments":"{\"cmd\":\"date\"}"}}]}}]}`,
+		`{"id":"g2","object":"chat.completion.chunk","choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}]}`,
+		`{"id":"g2","object":"chat.completion.chunk","choices":[],"usage":{"prompt_tokens":10,"completion_tokens":15,"total_tokens":25}}`,
+	}
+
+	server := sseServer(t, chunks)
+	defer server.Close()
+
+	client := newStreamingClient(t, server.URL)
+
+	resp, err := client.ChatCompletion(context.Background(), simpleRequest("req-gemini-same"))
+	if err != nil {
+		t.Fatalf("ChatCompletion() error: %v", err)
+	}
+
+	if len(resp.Message.ToolCalls) != 3 {
+		t.Fatalf("ToolCalls count = %d, want 3", len(resp.Message.ToolCalls))
+	}
+
+	for i, tc := range resp.Message.ToolCalls {
+		if tc.Name != "run_command" {
+			t.Errorf("ToolCall[%d].Name = %q, want %q (name was concatenated)", i, tc.Name, "run_command")
+		}
+	}
+}
+
 func TestStreamChatCompletion_NonStreamEndpoint(t *testing.T) {
 	// Non-streaming endpoint should use the regular path
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

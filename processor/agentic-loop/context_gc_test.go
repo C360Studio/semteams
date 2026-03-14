@@ -557,3 +557,55 @@ func TestContextManager_RepairPreservesUserMessage(t *testing.T) {
 		t.Errorf("User message not found in context after GC/repair. Messages: %d", len(messages))
 	}
 }
+
+func TestGCToolResults_PreservesErrorResults(t *testing.T) {
+	// Regression: error tool results must survive age-based GC so the LLM
+	// learns that a tool failed and stops retrying it.
+	cm := agenticloop.NewContextManager("test-loop", "test-model", agenticloop.ContextConfig{
+		ToolResultMaxAge: 2,
+	})
+
+	// Iteration 1: assistant calls two tools, one succeeds, one errors
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "assistant",
+		ToolCalls: []agentic.ToolCall{
+			{ID: "ok-1", Name: "read_file"},
+			{ID: "err-1", Name: "graph_search"},
+		},
+	})
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role:       "tool",
+		ToolCallID: "ok-1",
+		Content:    "file contents here",
+	})
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role:       "tool",
+		ToolCallID: "err-1",
+		Content:    "Tool error: invalid request",
+		IsError:    true,
+	})
+
+	// Advance well past ToolResultMaxAge
+	evicted := cm.GCToolResults(10)
+
+	// The success result should be evicted (age 9 > max 2)
+	// but the error result must survive
+	messages := cm.GetContext()
+
+	var foundError, foundSuccess bool
+	for _, m := range messages {
+		if m.ToolCallID == "err-1" {
+			foundError = true
+		}
+		if m.ToolCallID == "ok-1" {
+			foundSuccess = true
+		}
+	}
+
+	if !foundError {
+		t.Errorf("Error tool result was evicted — LLM will never learn the tool failed (evicted=%d)", evicted)
+	}
+	if foundSuccess {
+		t.Error("Success tool result should have been evicted by age")
+	}
+}

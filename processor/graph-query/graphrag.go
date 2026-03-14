@@ -299,12 +299,8 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 		return result, nil
 	}
 
-	// Check if community cache is available for Tier 1/2
-	if c.communityCache == nil {
-		return nil, errs.WrapTransient(errors.New("community cache not available"), "GraphQuery", "handleGlobalSearch", "check cache")
-	}
-
-	// Tier 1: Try semantic search first (via graph-embedding)
+	// Tier 1: Try semantic search first (via graph-embedding).
+	// Semantic search works independently of the community cache.
 	semanticHits, err := c.searchEntitiesSemantic(ctx, req.Query, 100)
 	if err == nil && len(semanticHits) > 0 {
 		c.logger.Debug("using semantic search results",
@@ -317,7 +313,7 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 			entityIDs[i] = hit.EntityID
 		}
 
-		// Find communities containing these entities
+		// Find communities containing these entities (may be empty without cache)
 		communityMatches := c.findCommunitiesForEntities(entityIDs)
 
 		// Limit to requested number of communities
@@ -362,7 +358,24 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 			"error", err)
 	}
 
-	// Tier 2: Fall back to text-based community scoring (existing behavior)
+	// Tier 2: Fall back to text-based community scoring.
+	// Return an empty result instead of an error when the community cache
+	// is unavailable — callers should not receive a hard error just because
+	// clustering hasn't run yet.
+	if c.communityCache == nil {
+		c.logger.Debug("community cache not available, returning empty result",
+			"query", req.Query)
+		response := GlobalSearchResponse{
+			Entities:   []*gtypes.EntityState{},
+			Count:      0,
+			DurationMs: time.Since(startTime).Milliseconds(),
+		}
+		if req.shouldIncludeSummaries() {
+			response.CommunitySummaries = []CommunitySummary{}
+		}
+		return json.Marshal(response)
+	}
+
 	return c.globalSearchTextBased(ctx, req, startTime, len(data))
 }
 

@@ -75,7 +75,7 @@ func (a *streamAccumulator) processDelta(choice openai.ChatCompletionStreamChoic
 			existing.ID = tc.ID
 		}
 		if tc.Function.Name != "" {
-			existing.Function.Name += tc.Function.Name
+			existing.Function.Name = tc.Function.Name
 		}
 		if tc.Function.Arguments != "" {
 			existing.Function.Arguments += tc.Function.Arguments

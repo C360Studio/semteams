@@ -242,7 +242,7 @@ func (cm *ContextManager) GCToolResults(currentIteration int) int {
 	for _, m := range recent {
 		if m.Message.Role == "tool" {
 			age := currentIteration - m.Iteration
-			if age > cm.config.ToolResultMaxAge {
+			if age > cm.config.ToolResultMaxAge && !m.Message.IsError {
 				evicted++
 				continue
 			}
@@ -280,20 +280,39 @@ func (cm *ContextManager) repairToolPairsLocked() int {
 		}
 	}
 
-	// Collect all tool result IDs present
+	// Collect all tool result IDs present, and track which have errors
 	resultIDs := make(map[string]bool)
+	errorIDs := make(map[string]bool)
 	for _, m := range recent {
 		if m.Message.Role == "tool" && m.Message.ToolCallID != "" {
 			resultIDs[m.Message.ToolCallID] = true
+			if m.Message.IsError {
+				errorIDs[m.Message.ToolCallID] = true
+			}
 		}
 	}
 
-	// Find assistant messages with incomplete tool results and mark their IDs as broken
+	// Find assistant messages with incomplete tool results and mark their IDs as broken.
+	// Exception: if any surviving result in the group is an error, keep the group alive
+	// so the LLM can learn from the failure.
 	brokenCallIDs := make(map[string]bool)
 	for _, m := range recent {
 		if len(m.Message.ToolCalls) == 0 {
 			continue
 		}
+
+		// Check if any surviving result in this group is an error
+		hasError := false
+		for _, tc := range m.Message.ToolCalls {
+			if errorIDs[tc.ID] {
+				hasError = true
+				break
+			}
+		}
+		if hasError {
+			continue // Preserve entire group — error feedback is valuable
+		}
+
 		for _, tc := range m.Message.ToolCalls {
 			if !resultIDs[tc.ID] {
 				// Missing a result — mark entire group as broken

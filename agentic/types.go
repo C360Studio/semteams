@@ -125,6 +125,7 @@ type ChatMessage struct {
 	ReasoningContent string     `json:"reasoning_content,omitempty"` // Thinking model chain-of-thought
 	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID       string     `json:"tool_call_id,omitempty"` // Required for tool role messages
+	IsError          bool       `json:"is_error,omitempty"`     // Tool result contains an error — preserved during context GC
 }
 
 // UnmarshalJSON accepts both "reasoning" (Ollama) and "reasoning_content" (DeepSeek/canonical).

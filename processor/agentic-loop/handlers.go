@@ -825,29 +825,7 @@ func (h *MessageHandler) handleToolsComplete(
 	// Get ALL accumulated tool results
 	allResults := h.loopManager.GetAndClearToolResults(loopID)
 
-	// Build tool result messages with tool_call_id and name.
-	// Fall back to Error when Content is empty — Gemini rejects tool result
-	// messages with no content (400 INVALID_ARGUMENT).
-	toolMessages := make([]agentic.ChatMessage, len(allResults))
-	for i, r := range allResults {
-		content := r.Content
-		if content == "" && r.Error != "" {
-			content = fmt.Sprintf("Tool error: %s", r.Error)
-		}
-		if content == "" {
-			content = "(empty result)"
-		}
-		name := r.Name
-		if name == "" {
-			name = h.loopManager.GetToolName(r.CallID)
-		}
-		toolMessages[i] = agentic.ChatMessage{
-			Role:       "tool",
-			ToolCallID: r.CallID,
-			Name:       name,
-			Content:    content,
-		}
-	}
+	toolMessages := h.buildToolMessages(allResults)
 
 	// Build full conversation for the next model request.
 	// Add tool results first, then run GC. GC must run AFTER tool results are
@@ -929,6 +907,35 @@ func hasUserOrAssistantMessage(messages []agentic.ChatMessage) bool {
 		}
 	}
 	return false
+}
+
+// buildToolMessages converts tool results into ChatMessages for the conversation context.
+// Falls back to Error when Content is empty — Gemini rejects tool result messages
+// with no content (400 INVALID_ARGUMENT).
+func (h *MessageHandler) buildToolMessages(results []agentic.ToolResult) []agentic.ChatMessage {
+	messages := make([]agentic.ChatMessage, len(results))
+	for i, r := range results {
+		content := r.Content
+		isError := r.Error != ""
+		if content == "" && isError {
+			content = fmt.Sprintf("Tool error: %s", r.Error)
+		}
+		if content == "" {
+			content = "(empty result)"
+		}
+		name := r.Name
+		if name == "" {
+			name = h.loopManager.GetToolName(r.CallID)
+		}
+		messages[i] = agentic.ChatMessage{
+			Role:       "tool",
+			ToolCallID: r.CallID,
+			Name:       name,
+			Content:    content,
+			IsError:    isError,
+		}
+	}
+	return messages
 }
 
 // recoverEmptyContext handles the case where GC/repair has removed all conversation
