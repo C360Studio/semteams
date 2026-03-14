@@ -100,7 +100,7 @@ func (h *MessageHandler) maybeCompact(ctx context.Context, cm *ContextManager, l
 		slog.Float64("utilization", utilization),
 		slog.Int("total_tokens", cm.TotalTokens()),
 		slog.Int("model_limit", cm.ModelLimit()),
-		slog.Int("headroom", cm.config.HeadroomTokens))
+		slog.Int("headroom", cm.resolveHeadroom()))
 
 	compactResult, compactErr := h.compactor.Compact(ctx, cm)
 	if compactErr != nil {

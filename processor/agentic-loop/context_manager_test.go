@@ -488,6 +488,7 @@ func TestContextManager_HeadroomReducesEffectiveCapacity(t *testing.T) {
 
 	// Create two context managers: one with headroom, one without
 	configNoHeadroom := config
+	configNoHeadroom.HeadroomRatio = 0
 	configNoHeadroom.HeadroomTokens = 0
 
 	cmWithHeadroom := agenticloop.NewContextManager("loop-h", "gpt-4o", config)
@@ -508,12 +509,13 @@ func TestContextManager_HeadroomReducesEffectiveCapacity(t *testing.T) {
 }
 
 func TestContextManager_HeadroomTriggersCompactionEarlier(t *testing.T) {
-	// With default headroom (6400), compaction at 60% threshold should trigger
-	// earlier than without headroom
+	// With default headroom (5% ratio = 6400 on 128K), compaction at 60% threshold
+	// should trigger earlier than without headroom
 	config := agenticloop.DefaultContextConfig()
 	config.CompactThreshold = 0.60
 
 	configNoHeadroom := config
+	configNoHeadroom.HeadroomRatio = 0
 	configNoHeadroom.HeadroomTokens = 0
 
 	// Fill to 58% of raw model limit — below threshold without headroom,
@@ -537,7 +539,8 @@ func TestContextManager_HeadroomTriggersCompactionEarlier(t *testing.T) {
 
 func TestContextManager_HeadroomExceedsModelLimit(t *testing.T) {
 	config := agenticloop.DefaultContextConfig()
-	config.HeadroomTokens = agenticloop.DefaultContextLimit + 1000 // headroom > model limit
+	config.HeadroomRatio = 0
+	config.HeadroomTokens = agenticloop.DefaultContextLimit + 1000 // floor > model limit
 
 	cm := agenticloop.NewContextManager("loop-edge", "gpt-4o", config)
 

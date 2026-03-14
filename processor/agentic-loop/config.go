@@ -37,7 +37,8 @@ type ContextConfig struct {
 	Enabled          bool    `json:"enabled" description:"Deprecated: context management is always enabled (required for Gemini compatibility)"`
 	CompactThreshold float64 `json:"compact_threshold" description:"Utilization threshold (0.01-1.0) that triggers context compaction"`
 	ToolResultMaxAge int     `json:"tool_result_max_age" description:"Maximum age in iterations before tool results are garbage collected"`
-	HeadroomTokens   int     `json:"headroom_tokens" description:"Token headroom to reserve for model responses"`
+	HeadroomRatio    float64 `json:"headroom_ratio" description:"Fraction of model context to reserve for responses (0.0-0.5). Takes precedence over headroom_tokens when the computed value is larger"`
+	HeadroomTokens   int     `json:"headroom_tokens" description:"Minimum token headroom floor — ratio-based headroom never goes below this value"`
 	// Multi-agent context budget fields
 	MaxBudgetTokens  int      `json:"max_budget_tokens,omitempty" description:"Hard token limit for context budget (overrides model limits when set)"`
 	SliceOnBudget    bool     `json:"slice_on_budget,omitempty" description:"Enable context slicing when budget is exceeded"`
@@ -103,12 +104,9 @@ func (c Config) Validate() error {
 	return c.Context.Validate()
 }
 
-// Validate validates the context configuration
+// Validate validates the context configuration.
+// Context management is always enabled; the Enabled field is deprecated.
 func (c ContextConfig) Validate() error {
-	if !c.Enabled {
-		return nil // Disabled config doesn't need validation
-	}
-
 	// Validate threshold: must be 0.01-1.0
 	if c.CompactThreshold < 0.01 || c.CompactThreshold > 1.0 {
 		return errs.WrapInvalid(fmt.Errorf("compact_threshold must be between 0.01 and 1.0"), "ContextConfig", "Validate", "check compact_threshold")
@@ -119,7 +117,12 @@ func (c ContextConfig) Validate() error {
 		return errs.WrapInvalid(fmt.Errorf("tool_result_max_age must be greater than 0"), "ContextConfig", "Validate", "check tool_result_max_age")
 	}
 
-	// Validate HeadroomTokens: must be >= 0
+	// Validate HeadroomRatio: must be 0.0-0.5 (reserving >50% defeats the purpose)
+	if c.HeadroomRatio < 0 || c.HeadroomRatio > 0.5 {
+		return errs.WrapInvalid(fmt.Errorf("headroom_ratio must be between 0.0 and 0.5"), "ContextConfig", "Validate", "check headroom_ratio")
+	}
+
+	// Validate HeadroomTokens (floor): must be >= 0
 	if c.HeadroomTokens < 0 {
 		return errs.WrapInvalid(fmt.Errorf("headroom_tokens must be non-negative"), "ContextConfig", "Validate", "check headroom_tokens")
 	}
@@ -133,7 +136,8 @@ func DefaultContextConfig() ContextConfig {
 		Enabled:          true,
 		CompactThreshold: 0.60,
 		ToolResultMaxAge: 3,
-		HeadroomTokens:   6400,
+		HeadroomRatio:    0.05,
+		HeadroomTokens:   4000,
 	}
 }
 

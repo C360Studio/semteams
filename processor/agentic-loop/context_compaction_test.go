@@ -66,7 +66,8 @@ func TestCompactor_ShouldCompact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			config := agenticloop.DefaultContextConfig()
 			config.CompactThreshold = tt.threshold
-			config.HeadroomTokens = 0 // disable headroom to test threshold in isolation
+			config.HeadroomRatio = 0 // disable headroom to test threshold in isolation
+			config.HeadroomTokens = 0
 
 			compactor := agenticloop.NewCompactor(config)
 
@@ -454,7 +455,8 @@ func TestCompactor_Compact_MultipleCompactions(t *testing.T) {
 
 func TestCompactor_RecompactionCapsCompactedHistory(t *testing.T) {
 	config := agenticloop.DefaultContextConfig()
-	config.HeadroomTokens = 0 // disable headroom for this test
+	config.HeadroomRatio = 0 // disable headroom for this test
+	config.HeadroomTokens = 0
 	compactor := agenticloop.NewCompactor(config)
 	cm := agenticloop.NewContextManager("loop-recompact", "gpt-4o", config)
 	ctx := context.Background()
@@ -496,6 +498,7 @@ func TestCompactor_RecompactionCapsCompactedHistory(t *testing.T) {
 
 func TestCompactor_RecompactionWithLLMSummarizer(t *testing.T) {
 	config := agenticloop.DefaultContextConfig()
+	config.HeadroomRatio = 0
 	config.HeadroomTokens = 0
 
 	mock := &mockSummarizer{summary: "LLM consolidated summary"}
@@ -523,6 +526,7 @@ func TestCompactor_RecompactionWithLLMSummarizer(t *testing.T) {
 
 func TestCompactor_RecompactionReducesTokens(t *testing.T) {
 	config := agenticloop.DefaultContextConfig()
+	config.HeadroomRatio = 0
 	config.HeadroomTokens = 0
 	compactor := agenticloop.NewCompactor(config)
 	cm := agenticloop.NewContextManager("loop-token-check", "gpt-4o", config)

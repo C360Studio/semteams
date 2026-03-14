@@ -79,8 +79,11 @@ type consumerInfo struct {
 
 // NewComponent creates a new agentic-loop component
 func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (component.Discoverable, error) {
-	// Parse configuration
-	var config Config
+	// Parse configuration — start from defaults so JSON only overrides
+	// explicitly provided fields. Without this, zero-valued fields like
+	// compact_threshold (0.0) and headroom_tokens (0) cause compaction
+	// to trigger on every iteration regardless of context utilization.
+	config := DefaultConfig()
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
 		return nil, errs.WrapInvalid(err, "agentic-loop", "NewComponent", "parse config")
 	}

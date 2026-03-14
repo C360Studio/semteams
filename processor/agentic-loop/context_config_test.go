@@ -20,16 +20,16 @@ func TestContextConfig_Validate(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 0.60,
 				ToolResultMaxAge: 3,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 			wantErr: false,
 		},
 		{
-			name: "valid disabled config",
-			config: agenticloop.ContextConfig{
-				Enabled: false,
-			},
-			wantErr: false,
+			name:    "zero-value config fails validation",
+			config:  agenticloop.ContextConfig{},
+			wantErr: true,
+			errMsg:  "compact_threshold",
 		},
 		{
 			name: "threshold too low",
@@ -37,7 +37,8 @@ func TestContextConfig_Validate(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: -0.1,
 				ToolResultMaxAge: 3,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 			wantErr: true,
 			errMsg:  "compact_threshold",
@@ -48,7 +49,8 @@ func TestContextConfig_Validate(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 1.5,
 				ToolResultMaxAge: 3,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 			wantErr: true,
 			errMsg:  "compact_threshold",
@@ -59,7 +61,8 @@ func TestContextConfig_Validate(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 0,
 				ToolResultMaxAge: 3,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 			wantErr: true,
 			errMsg:  "compact_threshold",
@@ -70,7 +73,8 @@ func TestContextConfig_Validate(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 0.60,
 				ToolResultMaxAge: -1,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 			wantErr: true,
 			errMsg:  "tool_result_max_age",
@@ -81,7 +85,8 @@ func TestContextConfig_Validate(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 0.60,
 				ToolResultMaxAge: 0,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 			wantErr: true,
 			errMsg:  "tool_result_max_age",
@@ -103,7 +108,8 @@ func TestContextConfig_Validate(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 0.01,
 				ToolResultMaxAge: 3,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 			wantErr: false,
 		},
@@ -113,7 +119,8 @@ func TestContextConfig_Validate(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 1.0,
 				ToolResultMaxAge: 3,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 			wantErr: false,
 		},
@@ -123,7 +130,8 @@ func TestContextConfig_Validate(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 0.60,
 				ToolResultMaxAge: 1,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 			wantErr: false,
 		},
@@ -173,9 +181,14 @@ func TestContextConfig_DefaultValues(t *testing.T) {
 		t.Errorf("DefaultContextConfig() tool_result_max_age = %d, want 3", cfg.ToolResultMaxAge)
 	}
 
-	// Verify headroom tokens
-	if cfg.HeadroomTokens != 6400 {
-		t.Errorf("DefaultContextConfig() headroom_tokens = %d, want 6400", cfg.HeadroomTokens)
+	// Verify headroom ratio
+	if cfg.HeadroomRatio != 0.05 {
+		t.Errorf("DefaultContextConfig() headroom_ratio = %f, want 0.05", cfg.HeadroomRatio)
+	}
+
+	// Verify headroom tokens (floor)
+	if cfg.HeadroomTokens != 4000 {
+		t.Errorf("DefaultContextConfig() headroom_tokens = %d, want 4000", cfg.HeadroomTokens)
 	}
 
 	// Verify default config is valid
@@ -195,14 +208,13 @@ func TestContextConfig_JSONSerialization(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 0.60,
 				ToolResultMaxAge: 3,
-				HeadroomTokens:   6400,
+				HeadroomRatio:    0.05,
+				HeadroomTokens:   4000,
 			},
 		},
 		{
-			name: "disabled config",
-			config: agenticloop.ContextConfig{
-				Enabled: false,
-			},
+			name:   "minimal valid config",
+			config: agenticloop.DefaultContextConfig(),
 		},
 		{
 			name: "custom thresholds",
@@ -210,6 +222,7 @@ func TestContextConfig_JSONSerialization(t *testing.T) {
 				Enabled:          true,
 				CompactThreshold: 0.75,
 				ToolResultMaxAge: 5,
+				HeadroomRatio:    0.10,
 				HeadroomTokens:   10000,
 			},
 		},

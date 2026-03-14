@@ -10,39 +10,42 @@ import (
 func TestConfig_JSONSerialization(t *testing.T) {
 	tests := []struct {
 		name   string
-		config agenticloop.Config
+		modify func(*agenticloop.Config)
 	}{
 		{
 			name: "minimal config",
-			config: agenticloop.Config{
-				MaxIterations: 20,
-				Timeout:       "120s",
+			modify: func(c *agenticloop.Config) {
+				c.LoopsBucket = ""
+				c.TrajectoriesBucket = ""
 			},
 		},
 		{
 			name: "full config with buckets",
-			config: agenticloop.Config{
-				MaxIterations:      25,
-				Timeout:            "180s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.MaxIterations = 25
+				c.Timeout = "180s"
 			},
 		},
 		{
 			name: "custom max iterations",
-			config: agenticloop.Config{
-				MaxIterations:      50,
-				Timeout:            "300s",
-				LoopsBucket:        "CUSTOM_LOOPS",
-				TrajectoriesBucket: "CUSTOM_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.MaxIterations = 50
+				c.Timeout = "300s"
+				c.LoopsBucket = "CUSTOM_LOOPS"
+				c.TrajectoriesBucket = "CUSTOM_TRAJECTORIES"
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			config := validBaseConfig()
+			if tt.modify != nil {
+				tt.modify(&config)
+			}
+
 			// Marshal
-			data, err := json.Marshal(tt.config)
+			data, err := json.Marshal(config)
 			if err != nil {
 				t.Fatalf("Marshal() error = %v", err)
 			}
@@ -54,17 +57,17 @@ func TestConfig_JSONSerialization(t *testing.T) {
 			}
 
 			// Verify round-trip
-			if decoded.MaxIterations != tt.config.MaxIterations {
-				t.Errorf("MaxIterations = %v, want %v", decoded.MaxIterations, tt.config.MaxIterations)
+			if decoded.MaxIterations != config.MaxIterations {
+				t.Errorf("MaxIterations = %v, want %v", decoded.MaxIterations, config.MaxIterations)
 			}
-			if decoded.Timeout != tt.config.Timeout {
-				t.Errorf("Timeout = %v, want %v", decoded.Timeout, tt.config.Timeout)
+			if decoded.Timeout != config.Timeout {
+				t.Errorf("Timeout = %v, want %v", decoded.Timeout, config.Timeout)
 			}
-			if decoded.LoopsBucket != tt.config.LoopsBucket {
-				t.Errorf("LoopsBucket = %v, want %v", decoded.LoopsBucket, tt.config.LoopsBucket)
+			if decoded.LoopsBucket != config.LoopsBucket {
+				t.Errorf("LoopsBucket = %v, want %v", decoded.LoopsBucket, config.LoopsBucket)
 			}
-			if decoded.TrajectoriesBucket != tt.config.TrajectoriesBucket {
-				t.Errorf("TrajectoriesBucket = %v, want %v", decoded.TrajectoriesBucket, tt.config.TrajectoriesBucket)
+			if decoded.TrajectoriesBucket != config.TrajectoriesBucket {
+				t.Errorf("TrajectoriesBucket = %v, want %v", decoded.TrajectoriesBucket, config.TrajectoriesBucket)
 			}
 		})
 	}
@@ -73,134 +76,96 @@ func TestConfig_JSONSerialization(t *testing.T) {
 func TestConfig_Validate(t *testing.T) {
 	tests := []struct {
 		name    string
-		config  agenticloop.Config
+		modify  func(*agenticloop.Config)
 		wantErr bool
 		errMsg  string
 	}{
 		{
-			name: "valid minimal config",
-			config: agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "120s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
-			},
+			name:    "valid minimal config",
 			wantErr: false,
 		},
 		{
 			name: "valid with higher max iterations",
-			config: agenticloop.Config{
-				MaxIterations:      50,
-				Timeout:            "180s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.MaxIterations = 50
+				c.Timeout = "180s"
 			},
 			wantErr: false,
 		},
 		{
 			name: "zero max iterations",
-			config: agenticloop.Config{
-				MaxIterations:      0,
-				Timeout:            "120s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.MaxIterations = 0
 			},
 			wantErr: true,
 			errMsg:  "max_iterations",
 		},
 		{
 			name: "negative max iterations",
-			config: agenticloop.Config{
-				MaxIterations:      -1,
-				Timeout:            "120s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.MaxIterations = -1
 			},
 			wantErr: true,
 			errMsg:  "max_iterations",
 		},
 		{
 			name: "empty timeout",
-			config: agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.Timeout = ""
 			},
 			wantErr: true,
 			errMsg:  "timeout",
 		},
 		{
 			name: "invalid timeout format",
-			config: agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "not-a-duration",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.Timeout = "not-a-duration"
 			},
 			wantErr: true,
 			errMsg:  "timeout",
 		},
 		{
 			name: "negative timeout",
-			config: agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "-5s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.Timeout = "-5s"
 			},
 			wantErr: true,
 			errMsg:  "timeout",
 		},
 		{
 			name: "empty loops bucket",
-			config: agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "120s",
-				LoopsBucket:        "",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.LoopsBucket = ""
 			},
 			wantErr: true,
 			errMsg:  "loops_bucket",
 		},
 		{
 			name: "empty trajectories bucket",
-			config: agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "120s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "",
+			modify: func(c *agenticloop.Config) {
+				c.TrajectoriesBucket = ""
 			},
 			wantErr: true,
 			errMsg:  "trajectories_bucket",
 		},
 		{
 			name: "valid edge case max iterations (1)",
-			config: agenticloop.Config{
-				MaxIterations:      1,
-				Timeout:            "120s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.MaxIterations = 1
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid short timeout",
-			config: agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "1s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.Timeout = "1s"
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid long timeout",
-			config: agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "10m",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
+			modify: func(c *agenticloop.Config) {
+				c.Timeout = "10m"
 			},
 			wantErr: false,
 		},
@@ -208,7 +173,11 @@ func TestConfig_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.config.Validate()
+			config := validBaseConfig()
+			if tt.modify != nil {
+				tt.modify(&config)
+			}
+			err := config.Validate()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -329,12 +298,8 @@ func TestConfig_TimeoutParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            tt.timeout,
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
-			}
+			config := validBaseConfig()
+			config.Timeout = tt.timeout
 
 			err := config.Validate()
 			isValid := err == nil
@@ -363,12 +328,8 @@ func TestConfig_MaxIterationsBoundaries(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := agenticloop.Config{
-				MaxIterations:      tt.maxIterations,
-				Timeout:            "120s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
-			}
+			config := validBaseConfig()
+			config.MaxIterations = tt.maxIterations
 
 			err := config.Validate()
 			isValid := err == nil
@@ -399,12 +360,9 @@ func TestConfig_BucketNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "120s",
-				LoopsBucket:        tt.loopsBucket,
-				TrajectoriesBucket: tt.trajectoriesBucket,
-			}
+			config := validBaseConfig()
+			config.LoopsBucket = tt.loopsBucket
+			config.TrajectoriesBucket = tt.trajectoriesBucket
 
 			err := config.Validate()
 			isValid := err == nil
@@ -433,13 +391,9 @@ func TestConfig_TrajectoryTTL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "120s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
-				TrajectoryTTL:      tt.ttl,
-			}
+			config := validBaseConfig()
+			config.TrajectoryTTL = tt.ttl
+
 			err := config.Validate()
 			isValid := err == nil
 			if isValid != tt.wantValid {
@@ -463,19 +417,27 @@ func TestConfig_TrajectoryDetail(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := agenticloop.Config{
-				MaxIterations:      20,
-				Timeout:            "120s",
-				LoopsBucket:        "AGENT_LOOPS",
-				TrajectoriesBucket: "AGENT_TRAJECTORIES",
-				TrajectoryDetail:   tt.detail,
-			}
+			config := validBaseConfig()
+			config.TrajectoryDetail = tt.detail
+
 			err := config.Validate()
 			isValid := err == nil
 			if isValid != tt.wantValid {
 				t.Errorf("Validate() with trajectory_detail=%q: valid=%v, want %v (err: %v)", tt.detail, isValid, tt.wantValid, err)
 			}
 		})
+	}
+}
+
+// validBaseConfig returns a Config with valid defaults for all fields.
+// Tests override specific fields to test validation of those fields.
+func validBaseConfig() agenticloop.Config {
+	return agenticloop.Config{
+		MaxIterations:      20,
+		Timeout:            "120s",
+		LoopsBucket:        "AGENT_LOOPS",
+		TrajectoriesBucket: "AGENT_TRAJECTORIES",
+		Context:            agenticloop.DefaultContextConfig(),
 	}
 }
 

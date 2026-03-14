@@ -39,9 +39,13 @@
           "type": "number",
           "description": "Priority for entity context vs conversation (1-10, higher = more entity context)"
         },
+        "headroom_ratio": {
+          "type": "number",
+          "description": "Fraction of model context to reserve for responses (0.0-0.5). Takes precedence over headroom_tokens when the computed value is larger"
+        },
         "headroom_tokens": {
           "type": "number",
-          "description": "Token headroom to reserve for model responses"
+          "description": "Minimum token headroom floor — ratio-based headroom never goes below this value"
         },
         "max_budget_tokens": {
           "type": "number",

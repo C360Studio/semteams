@@ -116,8 +116,9 @@ func (cm *ContextManager) resolveModelLimit(modelName string) int {
 }
 
 // Utilization returns the current context utilization (0.0 to 1.0).
-// Accounts for HeadroomTokens so compaction triggers before the model limit,
-// leaving room for the response.
+// Reserves headroom so compaction triggers before the model limit,
+// leaving room for the response. Headroom is resolved as the greater
+// of (HeadroomRatio * modelLimit) and HeadroomTokens (floor).
 func (cm *ContextManager) Utilization() float64 {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
@@ -129,16 +130,28 @@ func (cm *ContextManager) Utilization() float64 {
 		}
 	}
 
-	effectiveLimit := cm.modelLimit - cm.config.HeadroomTokens
+	headroom := cm.resolveHeadroom()
+	effectiveLimit := cm.modelLimit - headroom
 	if effectiveLimit <= 0 {
-		cm.logger.Warn("headroom_tokens >= model_limit, ignoring headroom",
+		cm.logger.Warn("headroom >= model_limit, ignoring headroom",
 			"loop_id", cm.loopID,
-			"headroom", cm.config.HeadroomTokens,
+			"headroom", headroom,
 			"model_limit", cm.modelLimit)
 		effectiveLimit = cm.modelLimit
 	}
 
 	return float64(total) / float64(effectiveLimit)
+}
+
+// resolveHeadroom returns the effective headroom in tokens.
+// Uses max(ratio * modelLimit, floor) so headroom scales with the model
+// but never drops below the configured floor.
+func (cm *ContextManager) resolveHeadroom() int {
+	ratioHeadroom := int(cm.config.HeadroomRatio * float64(cm.modelLimit))
+	if ratioHeadroom > cm.config.HeadroomTokens {
+		return ratioHeadroom
+	}
+	return cm.config.HeadroomTokens
 }
 
 // TotalTokens returns the sum of all region tokens.
