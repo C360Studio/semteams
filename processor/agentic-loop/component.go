@@ -87,6 +87,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	if err := json.Unmarshal(rawConfig, &config); err != nil {
 		return nil, errs.WrapInvalid(err, "agentic-loop", "NewComponent", "parse config")
 	}
+	config.Context.EnsureDefaults()
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {

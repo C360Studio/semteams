@@ -76,10 +76,23 @@ func (c *Compactor) Compact(ctx context.Context, cm *ContextManager) (Compaction
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// Get recent history to compact
+	// Get recent history to compact.
+	// If the last message is an assistant message with pending tool_calls
+	// (results haven't arrived yet), exclude it — compacting it would orphan
+	// the incoming tool results and cause a 400 from the provider API.
 	recentHistory := cm.regions[RegionRecentHistory]
 	if len(recentHistory) == 0 {
 		return CompactionResult{}, nil
+	}
+
+	var retained []contextMessage
+	last := recentHistory[len(recentHistory)-1]
+	if last.Message.Role == "assistant" && len(last.Message.ToolCalls) > 0 {
+		retained = []contextMessage{last}
+		recentHistory = recentHistory[:len(recentHistory)-1]
+		if len(recentHistory) == 0 {
+			return CompactionResult{}, nil // Only the pending tool_call — nothing to compact
+		}
 	}
 
 	// Calculate evicted tokens
@@ -128,7 +141,7 @@ func (c *Compactor) Compact(ctx context.Context, cm *ContextManager) (Compaction
 		Tokens:    newTokens,
 		Iteration: cm.currentIteration,
 	})
-	cm.regions[RegionRecentHistory] = []contextMessage{}
+	cm.regions[RegionRecentHistory] = retained // nil if nothing retained, which is a valid empty slice
 
 	// Cap compacted history to prevent unbounded growth
 	if len(cm.regions[RegionCompactedHistory]) > maxCompactedMessages {

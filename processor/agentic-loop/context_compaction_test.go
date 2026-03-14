@@ -563,3 +563,94 @@ func TestCompactor_RecompactionReducesTokens(t *testing.T) {
 		t.Errorf("Token counts should be non-zero: before=%d, after=%d", tokensBefore, tokensAfter)
 	}
 }
+
+func TestCompactor_RetainsPendingToolCalls(t *testing.T) {
+	// Regression: compaction must not evict an assistant message with pending
+	// tool_calls (results haven't arrived yet). Evicting it orphans the
+	// incoming tool results, causing a 400 from the provider API.
+	config := agenticloop.DefaultContextConfig()
+	config.HeadroomRatio = 0
+	config.HeadroomTokens = 0
+	compactor := agenticloop.NewCompactor(config)
+	cm := agenticloop.NewContextManager("loop-retain", "gpt-4o", config)
+	ctx := context.Background()
+
+	// Build a conversation: completed tool pair, then a pending tool_call
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "user", Content: "Search the graph for drones",
+	})
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "assistant",
+		ToolCalls: []agentic.ToolCall{
+			{ID: "done-1", Name: "graph_search"},
+		},
+	})
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "tool", ToolCallID: "done-1", Content: "found 3 entities",
+	})
+	// This assistant message has pending tool_calls — results not yet in context
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "assistant",
+		ToolCalls: []agentic.ToolCall{
+			{ID: "pending-1", Name: "read_file"},
+			{ID: "pending-2", Name: "run_command"},
+		},
+	})
+
+	result, err := compactor.Compact(ctx, cm)
+	if err != nil {
+		t.Fatalf("Compact() error: %v", err)
+	}
+
+	// Earlier messages should have been compacted
+	if result.EvictedTokens == 0 {
+		t.Error("Expected some tokens to be evicted from earlier messages")
+	}
+
+	// The pending assistant message must survive in RecentHistory
+	messages := cm.GetContext()
+	var foundPending bool
+	for _, m := range messages {
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			for _, tc := range m.ToolCalls {
+				if tc.ID == "pending-1" || tc.ID == "pending-2" {
+					foundPending = true
+					break
+				}
+			}
+		}
+	}
+	if !foundPending {
+		t.Error("Pending assistant tool_call message was evicted by compaction — will orphan incoming tool results")
+	}
+}
+
+func TestCompactor_CompactsCompletedToolCalls(t *testing.T) {
+	// When the last message is NOT a pending tool_call, everything should compact normally.
+	config := agenticloop.DefaultContextConfig()
+	config.HeadroomRatio = 0
+	config.HeadroomTokens = 0
+	compactor := agenticloop.NewCompactor(config)
+	cm := agenticloop.NewContextManager("loop-full", "gpt-4o", config)
+	ctx := context.Background()
+
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "user", Content: "Hello",
+	})
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "assistant", Content: "I'll help you with that.",
+	})
+
+	_, err := compactor.Compact(ctx, cm)
+	if err != nil {
+		t.Fatalf("Compact() error: %v", err)
+	}
+
+	// RecentHistory should be empty — no pending tool_calls to retain
+	messages := cm.GetContext()
+	for _, m := range messages {
+		if m.Role == "assistant" && m.Content == "I'll help you with that." {
+			t.Error("Non-tool assistant message should have been compacted")
+		}
+	}
+}

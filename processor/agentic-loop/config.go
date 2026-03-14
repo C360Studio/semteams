@@ -130,6 +130,23 @@ func (c ContextConfig) Validate() error {
 	return nil
 }
 
+// EnsureDefaults fills zero-valued fields with defaults.
+// This is needed because json.Unmarshal overwrites nested structs even when
+// the JSON contains zero values (e.g., "compact_threshold": 0).
+func (c *ContextConfig) EnsureDefaults() {
+	defaults := DefaultContextConfig()
+	if c.CompactThreshold == 0 {
+		c.CompactThreshold = defaults.CompactThreshold
+	}
+	if c.ToolResultMaxAge == 0 {
+		c.ToolResultMaxAge = defaults.ToolResultMaxAge
+	}
+	if c.HeadroomRatio == 0 && c.HeadroomTokens == 0 {
+		c.HeadroomRatio = defaults.HeadroomRatio
+		c.HeadroomTokens = defaults.HeadroomTokens
+	}
+}
+
 // DefaultContextConfig returns the default context configuration
 func DefaultContextConfig() ContextConfig {
 	return ContextConfig{
