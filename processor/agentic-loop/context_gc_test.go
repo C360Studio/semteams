@@ -558,9 +558,16 @@ func TestContextManager_RepairPreservesUserMessage(t *testing.T) {
 	}
 }
 
-func TestGCToolResults_PreservesErrorResults(t *testing.T) {
-	// Regression: error tool results must survive age-based GC so the LLM
-	// learns that a tool failed and stops retrying it.
+func TestGCToolResults_EvictsMixedErrorGroup(t *testing.T) {
+	// Regression test for the tool pair orphaning bug:
+	// When GC evicts non-error results but preserves error results from the
+	// same group, the group becomes incomplete — the assistant message has
+	// tool_call IDs without matching tool results. This causes 400 errors
+	// from provider APIs (OpenAI, Anthropic, Gemini) that require every
+	// tool_call to have a corresponding tool result.
+	//
+	// Fix: repairToolPairsLocked evicts the ENTIRE group when any result
+	// is missing, regardless of error status.
 	cm := agenticloop.NewContextManager("test-loop", "test-model", agenticloop.ContextConfig{
 		ToolResultMaxAge: 2,
 	})
@@ -588,24 +595,80 @@ func TestGCToolResults_PreservesErrorResults(t *testing.T) {
 	// Advance well past ToolResultMaxAge
 	evicted := cm.GCToolResults(10)
 
-	// The success result should be evicted (age 9 > max 2)
-	// but the error result must survive
+	// GC evicts ok-1 (non-error, age 9 > max 2), keeps err-1 (error exempt).
+	// Repair sees the group is incomplete (ok-1 missing) and evicts the
+	// entire group: assistant + err-1. This prevents orphaned tool_call IDs.
 	messages := cm.GetContext()
 
-	var foundError, foundSuccess bool
 	for _, m := range messages {
 		if m.ToolCallID == "err-1" {
-			foundError = true
+			t.Error("Error tool result should be evicted as part of incomplete group")
 		}
 		if m.ToolCallID == "ok-1" {
-			foundSuccess = true
+			t.Error("Success tool result should have been evicted by age")
+		}
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			t.Error("Assistant with tool_calls should be evicted as part of incomplete group")
 		}
 	}
 
-	if !foundError {
-		t.Errorf("Error tool result was evicted — LLM will never learn the tool failed (evicted=%d)", evicted)
+	if evicted == 0 {
+		t.Error("Expected messages to be evicted")
 	}
-	if foundSuccess {
-		t.Error("Success tool result should have been evicted by age")
+}
+
+func TestGCToolResults_PreservesCompleteErrorGroup(t *testing.T) {
+	// When ALL results in a group are errors, none are evicted by GC
+	// (IsError exempt from age-based eviction), so the group stays complete.
+	// Repair sees all results present and does not touch the group.
+	cm := agenticloop.NewContextManager("test-loop", "test-model", agenticloop.ContextConfig{
+		ToolResultMaxAge: 2,
+	})
+
+	// Assistant calls two tools, both error
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role: "assistant",
+		ToolCalls: []agentic.ToolCall{
+			{ID: "err-a", Name: "read_file"},
+			{ID: "err-b", Name: "graph_search"},
+		},
+	})
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role:       "tool",
+		ToolCallID: "err-a",
+		Content:    "Tool error: not found",
+		IsError:    true,
+	})
+	_ = cm.AddMessage(agenticloop.RegionRecentHistory, agentic.ChatMessage{
+		Role:       "tool",
+		ToolCallID: "err-b",
+		Content:    "Tool error: timeout",
+		IsError:    true,
+	})
+
+	// Advance well past ToolResultMaxAge
+	evicted := cm.GCToolResults(10)
+
+	// Both error results survive GC → group stays complete → repair leaves it alone
+	if evicted != 0 {
+		t.Errorf("Complete error group should not be evicted, got evicted=%d", evicted)
+	}
+
+	messages := cm.GetContext()
+	var foundErrA, foundErrB, foundAssistant bool
+	for _, m := range messages {
+		if m.ToolCallID == "err-a" {
+			foundErrA = true
+		}
+		if m.ToolCallID == "err-b" {
+			foundErrB = true
+		}
+		if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+			foundAssistant = true
+		}
+	}
+
+	if !foundErrA || !foundErrB || !foundAssistant {
+		t.Error("Complete error group should be preserved intact")
 	}
 }
