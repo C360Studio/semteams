@@ -578,7 +578,47 @@ func (cm *Manager) PushToKV(ctx context.Context) error {
 		}
 	}
 
+	// After bulk push, notify subscribers to reconcile.
+	// Individual KV watcher notifications may be dropped when the subscriber
+	// channel (buffer=1) is full during rapid successive puts.
+	cm.notifySubscribers("components.*")
+
 	return nil
+}
+
+// notifySubscribers sends a synthetic update to all subscribers matching the
+// given path. This is used after bulk operations (like PushToKV) to trigger
+// reconciliation, since individual per-key notifications may have been dropped.
+func (cm *Manager) notifySubscribers(path string) {
+	if cm.stopped.Load() {
+		return
+	}
+
+	update := Update{
+		Path:   path,
+		Config: cm.config,
+	}
+
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	for pattern, channels := range cm.subscribers {
+		// Check both directions: the synthetic path may be a wildcard that matches
+		// specific subscriber patterns, or subscriber patterns may be wildcards
+		// that match the synthetic path.
+		if cm.matchesPattern(path, pattern) || cm.matchesPattern(pattern, path) {
+			for _, ch := range channels {
+				if cm.stopped.Load() {
+					return
+				}
+				select {
+				case ch <- update:
+				default:
+					// Channel full — subscriber will reconcile on next receive
+				}
+			}
+		}
+	}
 }
 
 // hasKVConfig checks if the KV bucket has any configuration

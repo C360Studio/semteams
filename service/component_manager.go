@@ -933,9 +933,13 @@ func (cm *ComponentManager) watchConfigUpdates(ctx context.Context) {
 			if len(parts) == 2 && parts[0] == "components" {
 				componentName := parts[1]
 
-				// Skip wildcard paths like "components.*"
+				// Wildcard path "components.*" signals a bulk update (e.g., PushToKV).
+				// Reconcile all components against the full config to catch any
+				// individual notifications that were dropped.
 				if componentName == "*" {
-					cm.logger.Debug("Skipping wildcard path", "path", update.Path)
+					cm.logger.Debug("Bulk update detected, reconciling components",
+						"path", update.Path)
+					cm.reconcileComponents(ctx, update.Config)
 					continue
 				}
 
@@ -1037,6 +1041,94 @@ func (cm *ComponentManager) handleComponentRemoval(ctx context.Context, name str
 	}
 }
 
+// reconcileComponents compares running components against the desired state in
+// SafeConfig and corrects any drift. This handles cases where individual KV
+// watcher notifications were dropped during bulk updates (e.g., PushToKV writing
+// 20+ component configs in rapid succession overflows the buffer-1 subscriber channel).
+//
+// Reconciliation is conservative: it creates missing enabled components and stops
+// running disabled/removed ones, but does NOT restart already-running components
+// (individual notifications handle config-change restarts).
+//
+// IMPORTANT: Must only be called from watchConfigUpdates (single-goroutine consumer).
+// The snapshot-then-operate pattern is safe because no concurrent individual
+// notifications can interleave within the same consumer goroutine.
+func (cm *ComponentManager) reconcileComponents(ctx context.Context, safeConfig *config.SafeConfig) {
+	if safeConfig == nil {
+		return
+	}
+
+	desiredComponents := safeConfig.Get().Components
+
+	// Snapshot current running components under lock
+	cm.mu.RLock()
+	running := make(map[string]bool, len(cm.components))
+	for name := range cm.components {
+		running[name] = true
+	}
+	cm.mu.RUnlock()
+
+	var created, stopped int
+
+	// Phase 1: Create missing enabled components
+	for name, cfg := range desiredComponents {
+		if !cfg.Enabled {
+			continue
+		}
+		if running[name] {
+			continue // Already running — don't restart
+		}
+
+		cm.logger.Debug("Reconcile: creating missing component",
+			"component", name)
+
+		if err := cm.createAndStartComponent(ctx, name, cfg); err != nil {
+			cm.logger.Error("Reconcile: failed to create component",
+				"component", name,
+				"error", err)
+			continue
+		}
+		created++
+	}
+
+	// Phase 2: Stop components that are disabled or removed from config
+	for name := range running {
+		cfg, inConfig := desiredComponents[name]
+		if inConfig && cfg.Enabled {
+			continue // Should be running
+		}
+
+		cm.mu.RLock()
+		existingComp := cm.components[name]
+		cm.mu.RUnlock()
+
+		if existingComp == nil {
+			continue // Already removed by another goroutine
+		}
+
+		if !inConfig {
+			cm.logger.Debug("Reconcile: removing orphaned component",
+				"component", name)
+		} else {
+			cm.logger.Debug("Reconcile: stopping disabled component",
+				"component", name)
+		}
+
+		if err := cm.stopAndRemoveComponent(ctx, name, existingComp); err != nil {
+			cm.logger.Error("Reconcile: failed to stop component",
+				"component", name,
+				"error", err)
+		}
+		stopped++
+	}
+
+	if created > 0 || stopped > 0 {
+		cm.logger.Info("Reconciliation complete",
+			"created", created,
+			"stopped", stopped)
+	}
+}
+
 // restartComponentWithNewConfig gracefully restarts a component with new configuration
 func (cm *ComponentManager) restartComponentWithNewConfig(
 	ctx context.Context, name string, cfg types.ComponentConfig, existingComp *component.ManagedComponent,
@@ -1100,6 +1192,7 @@ func (cm *ComponentManager) createAndStartComponent(ctx context.Context, name st
 	if cm.started.Load() {
 		if err := cm.startSingleComponent(ctx, name); err != nil {
 			// If start fails, remove the component to keep state clean
+			cm.mu.Lock()
 			if mc, exists := cm.components[name]; exists {
 				delete(cm.components, name)
 				cm.removeFromStartOrder(name)
@@ -1107,6 +1200,7 @@ func (cm *ComponentManager) createAndStartComponent(ctx context.Context, name st
 					mc.Cancel()
 				}
 			}
+			cm.mu.Unlock()
 			return fmt.Errorf("failed to start new component: %w", err)
 		}
 	}

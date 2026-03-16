@@ -537,3 +537,123 @@ func TestComponentManagerConfigResilience(t *testing.T) {
 		assert.Contains(t, components, "fail-component", "Component should be created after retry")
 	})
 }
+
+// TestComponentManagerReconcileOnBulkPush tests that PushToKV triggers reconciliation
+// so all components are created even when individual KV watcher notifications are dropped.
+func TestComponentManagerReconcileOnBulkPush(t *testing.T) {
+	ctx := context.Background()
+
+	testClient := natsclient.NewTestClient(t, natsclient.WithKV())
+	defer testClient.Terminate()
+
+	// Register test factory
+	testFactory := func(cfg json.RawMessage, _ component.Dependencies) (component.Discoverable, error) {
+		return &TestMockComponent{
+			id:     "test-bulk",
+			config: cfg,
+		}, nil
+	}
+
+	registry := component.NewRegistry()
+	err := registry.RegisterFactory("test-bulk", &component.Registration{
+		Name:        "test-bulk",
+		Type:        string(types.ComponentTypeProcessor),
+		Protocol:    "test",
+		Description: "Test bulk component",
+		Version:     "1.0.0",
+		Factory:     testFactory,
+	})
+	require.NoError(t, err)
+
+	// Build a config with 20 enabled components — enough to overflow buffer=1
+	components := make(config.ComponentConfigs, 20)
+	for i := range 20 {
+		components[fmt.Sprintf("bulk-comp-%02d", i)] = types.ComponentConfig{
+			Type:    types.ComponentTypeProcessor,
+			Name:    "test-bulk",
+			Enabled: true,
+			Config:  json.RawMessage(fmt.Sprintf(`{"id":%d}`, i)),
+		}
+	}
+	// Add 2 disabled components to verify they're NOT created
+	components["bulk-disabled-1"] = types.ComponentConfig{
+		Type:    types.ComponentTypeProcessor,
+		Name:    "test-bulk",
+		Enabled: false,
+		Config:  json.RawMessage(`{"id":"disabled-1"}`),
+	}
+	components["bulk-disabled-2"] = types.ComponentConfig{
+		Type:    types.ComponentTypeProcessor,
+		Name:    "test-bulk",
+		Enabled: false,
+		Config:  json.RawMessage(`{"id":"disabled-2"}`),
+	}
+
+	initialConfig := &config.Config{
+		Version: "1.0.0",
+		Platform: config.PlatformConfig{
+			Org:         "test",
+			ID:          "test-platform",
+			InstanceID:  "test-001",
+			Environment: "test",
+		},
+		// Start empty — components will arrive via PushToKV
+		Components: config.ComponentConfigs{},
+	}
+
+	// Create and start config Manager
+	configManager, err := config.NewConfigManager(initialConfig, testClient.Client, slog.Default())
+	require.NoError(t, err)
+
+	// Push empty config first so watchers can be created
+	require.NoError(t, configManager.PushToKV(ctx))
+	require.NoError(t, configManager.Start(ctx))
+	defer configManager.Stop(5 * time.Second)
+
+	// Create ComponentManager with config watching enabled
+	deps := &service.Dependencies{
+		NATSClient:        testClient.Client,
+		Manager:           configManager,
+		Logger:            slog.Default(),
+		ComponentRegistry: registry,
+	}
+
+	cmService, err := service.NewComponentManager(json.RawMessage(`{"watch_config": true}`), deps)
+	require.NoError(t, err)
+
+	cm := cmService.(*service.ComponentManager)
+	require.NoError(t, cm.Initialize())
+	require.NoError(t, cm.Start(ctx))
+	defer cm.Stop(5 * time.Second)
+
+	// Give watcher goroutine time to start
+	time.Sleep(200 * time.Millisecond)
+
+	// Now update the SafeConfig with all 22 components and bulk-push to KV.
+	// This is the codepath that was dropping notifications.
+	fullConfig := configManager.GetConfig()
+	cfg := fullConfig.Get()
+	cfg.Components = components
+	require.NoError(t, fullConfig.Update(cfg))
+	require.NoError(t, configManager.PushToKV(ctx))
+
+	// All 20 enabled components should eventually be created via reconciliation
+	require.Eventually(t, func() bool {
+		comps := cm.ListComponents()
+		return len(comps) >= 20
+	}, 10*time.Second, 200*time.Millisecond,
+		"All 20 enabled components should be created via reconciliation")
+
+	// Verify disabled components were NOT created
+	comps := cm.ListComponents()
+	assert.NotContains(t, comps, "bulk-disabled-1", "Disabled component 1 should not be created")
+	assert.NotContains(t, comps, "bulk-disabled-2", "Disabled component 2 should not be created")
+
+	// Verify all 20 enabled components exist
+	for i := range 20 {
+		name := fmt.Sprintf("bulk-comp-%02d", i)
+		assert.Contains(t, comps, name, "Component %s should exist", name)
+	}
+
+	t.Logf("Reconciliation created %d components from bulk push of 22 configs (20 enabled, 2 disabled)", len(comps))
+}
