@@ -150,7 +150,11 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 		if len(msg.ToolCalls) > 0 {
 			toolCalls := make([]openai.ToolCall, len(msg.ToolCalls))
 			for j, tc := range msg.ToolCalls {
-				argsJSON, _ := json.Marshal(tc.Arguments)
+				args := tc.Arguments
+				if args == nil {
+					args = make(map[string]any)
+				}
+				argsJSON, _ := json.Marshal(args)
 				toolCalls[j] = openai.ToolCall{
 					ID:   tc.ID,
 					Type: openai.ToolTypeFunction,
@@ -469,10 +473,18 @@ func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID s
 		response.Status = "tool_call"
 		toolCalls := make([]agentic.ToolCall, len(choice.Message.ToolCalls))
 		for i, tc := range choice.Message.ToolCalls {
-			// Parse arguments JSON
-			var args map[string]any
+			// Parse arguments JSON — must never be nil or the replay
+			// path will marshal it as "null" (a string), which the
+			// Anthropic API rejects ("Input should be a valid dictionary").
+			args := make(map[string]any)
 			if tc.Function.Arguments != "" {
-				json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+					if c.logger != nil {
+						c.logger.Warn("malformed tool_call arguments, using empty object",
+							"tool", tc.Function.Name, "error", err)
+					}
+					args = make(map[string]any)
+				}
 			}
 
 			toolCalls[i] = agentic.ToolCall{

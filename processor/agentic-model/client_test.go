@@ -940,6 +940,130 @@ func TestBuildChatRequest_ToolCallEmptyContentPreserved(t *testing.T) {
 	}
 }
 
+func TestBuildChatRequest_NilToolCallArguments(t *testing.T) {
+	var capturedRequest map[string]any
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewDecoder(r.Body).Decode(&capturedRequest)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(successResponse())
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	// Simulate a replayed conversation where tool_call Arguments are nil
+	// (e.g. due to a prior malformed JSON parse). Without the fix the
+	// marshal produces "null" which Anthropic rejects as not-a-dictionary.
+	req := agentic.AgentRequest{
+		RequestID: "req-nil-args",
+		Messages: []agentic.ChatMessage{
+			{Role: "user", Content: "Hello"},
+			{
+				Role:    "assistant",
+				Content: " ",
+				ToolCalls: []agentic.ToolCall{
+					{ID: "call_1", Name: "some_tool", Arguments: nil},
+				},
+			},
+			{Role: "tool", ToolCallID: "call_1", Content: `result`},
+		},
+		Model: "gpt-4",
+	}
+
+	ctx := context.Background()
+	_, err = client.ChatCompletion(ctx, req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	messages := capturedRequest["messages"].([]any)
+	assistantMsg := messages[1].(map[string]any)
+	toolCalls := assistantMsg["tool_calls"].([]any)
+	tc := toolCalls[0].(map[string]any)
+	fn := tc["function"].(map[string]any)
+	args := fn["arguments"].(string)
+
+	if args != "{}" {
+		t.Errorf("arguments = %q, want \"{}\" (empty object, not \"null\")", args)
+	}
+}
+
+func TestConvertResponse_MalformedToolCallArguments(t *testing.T) {
+	// When the model returns malformed tool_call arguments JSON, the
+	// response should contain an empty map (not nil) so that replaying
+	// the conversation doesn't produce "null" for the input field.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]any{
+			"id": "chatcmpl-bad", "object": "chat.completion",
+			"created": 1677652288, "model": "gpt-4",
+			"choices": []map[string]any{{
+				"index": 0,
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "",
+					"tool_calls": []map[string]any{{
+						"id":   "call_bad",
+						"type": "function",
+						"function": map[string]any{
+							"name":      "broken_tool",
+							"arguments": "this is not json",
+						},
+					}},
+				},
+				"finish_reason": "tool_calls",
+			}},
+			"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	}))
+	defer server.Close()
+
+	endpoint := &model.EndpointConfig{
+		URL:       server.URL,
+		Model:     "gpt-4",
+		MaxTokens: 128000,
+	}
+
+	client, err := agenticmodel.NewClient(endpoint)
+	if err != nil {
+		t.Fatalf("NewClient() failed: %v", err)
+	}
+
+	req := agentic.AgentRequest{
+		RequestID: "req-malformed",
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Hello"}},
+		Model:     "gpt-4",
+	}
+
+	resp, err := client.ChatCompletion(context.Background(), req)
+	if err != nil {
+		t.Fatalf("ChatCompletion() failed: %v", err)
+	}
+
+	if len(resp.Message.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(resp.Message.ToolCalls))
+	}
+
+	args := resp.Message.ToolCalls[0].Arguments
+	if args == nil {
+		t.Fatal("Arguments should be empty map, not nil")
+	}
+	if len(args) != 0 {
+		t.Errorf("Arguments should be empty, got %v", args)
+	}
+}
+
 // fastRetryConfig returns a RetryConfig tuned for fast unit tests.
 // MaxAttempts controls how many total tries are made; delays are ms-scale so
 // the retry backoff does not dominate test runtime.

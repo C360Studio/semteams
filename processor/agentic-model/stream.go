@@ -163,9 +163,13 @@ func (a *streamAccumulator) toAgentResponse(requestID string) agentic.AgentRespo
 		toolCalls := make([]agentic.ToolCall, 0, len(indices))
 		for _, idx := range indices {
 			tc := a.toolCalls[idx]
-			var args map[string]any
+			args := make(map[string]any)
 			if tc.Function.Arguments != "" {
-				json.Unmarshal([]byte(tc.Function.Arguments), &args)
+				if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+					// Malformed arguments — fall back to empty object so the
+					// replay path never serializes "null" for tool_use input.
+					args = make(map[string]any)
+				}
 			}
 			toolCalls = append(toolCalls, agentic.ToolCall{
 				ID:        tc.ID,
