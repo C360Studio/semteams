@@ -36,6 +36,11 @@ type Config struct {
 	BatchSize    int                   `json:"batch_size" schema:"type:int,description:Batch size for embedding generation,category:advanced"`
 	CacheTTLStr  string                `json:"cache_ttl" schema:"type:string,description:Cache TTL for embeddings (e.g. 15m or 1h),category:advanced"`
 
+	// TextSuffixes controls which triple predicates are extracted for embedding.
+	// Predicates ending with any of these suffixes will have their text values embedded.
+	// When empty, defaults to: .title, .content, .description, .summary, .text, .name, .body, .abstract, .subject
+	TextSuffixes []string `json:"text_suffixes,omitempty" schema:"type:array,description:Predicate suffixes to extract for embedding (e.g. .source_code .signature). Defaults to common text predicates,category:advanced"`
+
 	// Dependency startup configuration
 	StartupAttempts int `json:"startup_attempts,omitempty" schema:"type:int,description:Max attempts to wait for dependencies at startup,category:advanced"`
 	StartupInterval int `json:"startup_interval_ms,omitempty" schema:"type:int,description:Interval between startup attempts in milliseconds,category:advanced"`
@@ -840,12 +845,17 @@ func (c *Component) queueEmbeddingWithStorageRef(ctx context.Context, entityID s
 		slog.String("storage_key", state.StorageRef.Key))
 }
 
+// defaultTextSuffixes is the fallback list when Config.TextSuffixes is empty.
+var defaultTextSuffixes = []string{".title", ".content", ".description", ".summary", ".text", ".name", ".body", ".abstract", ".subject"}
+
 // extractTextForEmbedding extracts text from entity state for embedding generation
 func (c *Component) extractTextForEmbedding(state *graph.EntityState) string {
 	var parts []string
 
-	// Suffixes to look for in predicates (e.g., dc.terms.title matches ".title")
-	textSuffixes := []string{".title", ".content", ".description", ".summary", ".text", ".name", ".body", ".abstract", ".subject"}
+	textSuffixes := c.config.TextSuffixes
+	if len(textSuffixes) == 0 {
+		textSuffixes = defaultTextSuffixes
+	}
 
 	// Look through all triples for text-like predicates
 	for _, triple := range state.Triples {

@@ -34,6 +34,14 @@
       "type": "number",
       "description": "Interval between startup attempts in milliseconds",
       "category": "advanced"
+    },
+    "text_suffixes": {
+      "type": "array",
+      "description": "Predicate suffixes to extract for embedding (e.g. .source_code .signature). Defaults to common text predicates",
+      "items": {
+        "type": "string"
+      },
+      "category": "advanced"
     }
   },
   "required": [],
