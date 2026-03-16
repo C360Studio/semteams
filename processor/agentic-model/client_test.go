@@ -1069,11 +1069,12 @@ func TestConvertResponse_MalformedToolCallArguments(t *testing.T) {
 // the retry backoff does not dominate test runtime.
 func fastRetryConfig(maxAttempts int) agenticmodel.RetryConfig {
 	return agenticmodel.RetryConfig{
-		MaxAttempts:    maxAttempts,
-		Backoff:        "exponential",
-		InitialDelay:   "1ms",
-		MaxDelay:       "5ms",
-		RateLimitDelay: "1ms",
+		MaxAttempts:         maxAttempts,
+		MaxRateLimitRetries: maxAttempts,
+		Backoff:             "exponential",
+		InitialDelay:        "1ms",
+		MaxDelay:            "5ms",
+		RateLimitDelay:      "1ms",
 	}
 }
 

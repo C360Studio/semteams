@@ -21,11 +21,12 @@ type Config struct {
 
 // RetryConfig holds retry configuration
 type RetryConfig struct {
-	MaxAttempts    int    `json:"max_attempts"     schema:"type:int,description:Maximum retry attempts,category:advanced,default:3"`
-	Backoff        string `json:"backoff"          schema:"type:enum,description:Backoff strategy,category:advanced,enum:exponential|linear,default:exponential"`
-	InitialDelay   string `json:"initial_delay"    schema:"type:string,description:Initial retry delay,category:advanced,default:1s"`
-	MaxDelay       string `json:"max_delay"        schema:"type:string,description:Maximum retry delay,category:advanced,default:60s"`
-	RateLimitDelay string `json:"rate_limit_delay" schema:"type:string,description:Initial delay when rate limited (429),category:advanced,default:5s"`
+	MaxAttempts         int    `json:"max_attempts"           schema:"type:int,description:Maximum retry attempts for transient errors (5xx/network),category:advanced,default:3"`
+	MaxRateLimitRetries int    `json:"max_rate_limit_retries" schema:"type:int,description:Maximum retry attempts for 429 rate-limit responses (separate from generic retries),category:advanced,default:5"`
+	Backoff             string `json:"backoff"                schema:"type:enum,description:Backoff strategy,category:advanced,enum:exponential|linear,default:exponential"`
+	InitialDelay        string `json:"initial_delay"          schema:"type:string,description:Initial retry delay for transient errors,category:advanced,default:1s"`
+	MaxDelay            string `json:"max_delay"              schema:"type:string,description:Maximum retry delay (caps both generic and rate-limit backoff),category:advanced,default:60s"`
+	RateLimitDelay      string `json:"rate_limit_delay"       schema:"type:string,description:Initial delay when rate limited (429) — doubles each attempt,category:advanced,default:15s"`
 }
 
 // Validate checks the configuration for errors
@@ -39,6 +40,9 @@ func (c *Config) Validate() error {
 	// Apply defaults before validation if Retry is zero value
 	if c.Retry.MaxAttempts == 0 {
 		c.Retry.MaxAttempts = 3
+	}
+	if c.Retry.MaxRateLimitRetries == 0 {
+		c.Retry.MaxRateLimitRetries = 5
 	}
 	if c.Retry.Backoff == "" {
 		c.Retry.Backoff = "exponential"
@@ -101,6 +105,14 @@ func (r *RetryConfig) maxDelayDuration(defaultDelay time.Duration) time.Duration
 	return defaultDelay
 }
 
+// maxRateLimitRetriesOrDefault returns MaxRateLimitRetries, falling back to the given default.
+func (r *RetryConfig) maxRateLimitRetriesOrDefault(defaultVal int) int {
+	if r.MaxRateLimitRetries > 0 {
+		return r.MaxRateLimitRetries
+	}
+	return defaultVal
+}
+
 // rateLimitDelayDuration returns the parsed RateLimitDelay, falling back to the given default.
 func (r *RetryConfig) rateLimitDelayDuration(defaultDelay time.Duration) time.Duration {
 	if r.RateLimitDelay != "" {
@@ -143,8 +155,11 @@ func DefaultConfig() Config {
 		StreamName: "AGENT",
 		Timeout:    "120s",
 		Retry: RetryConfig{
-			MaxAttempts: 3,
-			Backoff:     "exponential",
+			MaxAttempts:         3,
+			MaxRateLimitRetries: 5,
+			Backoff:             "exponential",
+			RateLimitDelay:      "15s",
+			MaxDelay:            "60s",
 		},
 	}
 }

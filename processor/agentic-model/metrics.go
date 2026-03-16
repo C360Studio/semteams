@@ -29,7 +29,8 @@ type modelMetrics struct {
 	streamTTFT        *prometheus.HistogramVec
 
 	// Rate limiting
-	rateLimitHits *prometheus.CounterVec
+	rateLimitHits    *prometheus.CounterVec
+	rateLimitRetries *prometheus.CounterVec
 }
 
 // Package-level metrics (registered once to avoid duplicate registration errors)
@@ -107,6 +108,13 @@ func getMetrics(registry *metric.MetricsRegistry) *modelMetrics {
 				Name:      "rate_limit_hits_total",
 				Help:      "Total HTTP 429 rate-limit responses received by model",
 			}, []string{"model"}),
+
+			rateLimitRetries: prometheus.NewCounterVec(prometheus.CounterOpts{
+				Namespace: "semstreams",
+				Subsystem: "agentic_model",
+				Name:      "rate_limit_retries_total",
+				Help:      "Total retry attempts after 429 rate-limit responses by model",
+			}, []string{"model"}),
 		}
 
 		// Register metrics with the metrics registry if available
@@ -120,6 +128,7 @@ func getMetrics(registry *metric.MetricsRegistry) *modelMetrics {
 			_ = registry.RegisterCounterVec("agentic-model", "stream_chunks_total", metrics.streamChunksTotal)
 			_ = registry.RegisterHistogramVec("agentic-model", "stream_ttft_seconds", metrics.streamTTFT)
 			_ = registry.RegisterCounterVec("agentic-model", "rate_limit_hits_total", metrics.rateLimitHits)
+			_ = registry.RegisterCounterVec("agentic-model", "rate_limit_retries_total", metrics.rateLimitRetries)
 		} else {
 			// Fallback to default prometheus registry for testing
 			_ = prometheus.DefaultRegisterer.Register(metrics.requestsTotal)
@@ -131,6 +140,7 @@ func getMetrics(registry *metric.MetricsRegistry) *modelMetrics {
 			_ = prometheus.DefaultRegisterer.Register(metrics.streamChunksTotal)
 			_ = prometheus.DefaultRegisterer.Register(metrics.streamTTFT)
 			_ = prometheus.DefaultRegisterer.Register(metrics.rateLimitHits)
+			_ = prometheus.DefaultRegisterer.Register(metrics.rateLimitRetries)
 		}
 	})
 	return metrics
@@ -180,4 +190,9 @@ func (m *modelMetrics) recordStreamTTFT(model string, seconds float64) {
 // recordRateLimitHit increments the rate-limit hit counter for the given model.
 func (m *modelMetrics) recordRateLimitHit(model string) {
 	m.rateLimitHits.WithLabelValues(model).Inc()
+}
+
+// recordRateLimitRetry increments the rate-limit retry counter for the given model.
+func (m *modelMetrics) recordRateLimitRetry(model string) {
+	m.rateLimitRetries.WithLabelValues(model).Inc()
 }

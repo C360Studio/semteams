@@ -38,26 +38,32 @@
         },
         "initial_delay": {
           "type": "string",
-          "description": "Initial retry delay",
+          "description": "Initial retry delay for transient errors",
           "default": "1s",
           "category": "advanced"
         },
         "max_attempts": {
           "type": "number",
-          "description": "Maximum retry attempts",
+          "description": "Maximum retry attempts for transient errors (5xx/network)",
           "default": 3,
           "category": "advanced"
         },
         "max_delay": {
           "type": "string",
-          "description": "Maximum retry delay",
+          "description": "Maximum retry delay (caps both generic and rate-limit backoff)",
           "default": "60s",
+          "category": "advanced"
+        },
+        "max_rate_limit_retries": {
+          "type": "number",
+          "description": "Maximum retry attempts for 429 rate-limit responses (separate from generic retries)",
+          "default": 5,
           "category": "advanced"
         },
         "rate_limit_delay": {
           "type": "string",
-          "description": "Initial delay when rate limited (429)",
-          "default": "5s",
+          "description": "Initial delay when rate limited (429) — doubles each attempt",
+          "default": "15s",
           "category": "advanced"
         }
       }

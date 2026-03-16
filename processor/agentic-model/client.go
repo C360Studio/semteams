@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semstreams/pkg/retry"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -32,11 +32,12 @@ type Client struct {
 // defaultClientRetryConfig is the retry configuration used when the component
 // does not supply one. The short initial delay keeps unit tests fast.
 var defaultClientRetryConfig = RetryConfig{
-	MaxAttempts:    3,
-	Backoff:        "exponential",
-	InitialDelay:   "100ms",
-	MaxDelay:       "30s",
-	RateLimitDelay: "5s",
+	MaxAttempts:         3,
+	MaxRateLimitRetries: 5,
+	Backoff:             "exponential",
+	InitialDelay:        "100ms",
+	MaxDelay:            "60s",
+	RateLimitDelay:      "15s",
 }
 
 // NewClient creates a new client for the given endpoint configuration.
@@ -227,6 +228,12 @@ func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletio
 }
 
 // ChatCompletion sends a chat completion request with retry and throttling.
+//
+// Retry strategy uses two independent backoff curves:
+//   - Transient errors (5xx, network): exponential from InitialDelay, up to MaxAttempts
+//   - Rate limits (429): exponential from RateLimitDelay, up to MaxRateLimitRetries
+//
+// Both curves cap at MaxDelay and respect ctx cancellation at every wait point.
 func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (agentic.AgentResponse, error) {
 	chatReq := c.buildChatRequest(req)
 
@@ -244,124 +251,165 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 	// Acquire throttle slot before any network attempt.
 	if c.throttle != nil {
 		if err := c.throttle.Acquire(ctx); err != nil {
-			return agentic.AgentResponse{
-				RequestID: req.RequestID,
-				Status:    "error",
-				Error:     err.Error(),
-			}, nil
+			return errorResponse(req.RequestID, err.Error()), nil
 		}
 		defer c.throttle.Release()
 	}
 
-	var lastResp agentic.AgentResponse
-	lastResp.RequestID = req.RequestID
+	// Resolve retry parameters
+	maxAttempts := c.retryCfg.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 3
+	}
+	maxRLRetries := c.retryCfg.maxRateLimitRetriesOrDefault(5)
+	genericDelay := c.retryCfg.initialDelayDuration(100 * time.Millisecond)
+	rlDelay := c.retryCfg.rateLimitDelayDuration(15 * time.Second)
+	maxDelay := c.retryCfg.maxDelayDuration(60 * time.Second)
 
-	retryCfg := c.buildRetryConfig()
+	genericAttempt := 0
+	rlAttempt := 0
 
-	err := retry.Do(ctx, retryCfg, func() error {
-		if c.endpoint.Stream {
-			resp, err := c.streamChatCompletion(ctx, chatReq, req.RequestID)
-			if err != nil {
-				// Connection error before the stream opened — retryable.
-				if c.logger != nil {
-					c.logger.Debug("OpenAI stream connection failed",
-						slog.String("request_id", req.RequestID),
-						slog.String("model", chatReq.Model),
-						slog.String("error", err.Error()))
-				}
-				if !isRetryable(err) {
-					return retry.NonRetryable(err)
-				}
-				return err
-			}
-			// Mid-stream errors are returned as AgentResponse{Status:"error"} — not retried.
-			lastResp = resp
-			return nil
+	for {
+		// Check context before each attempt
+		if ctx.Err() != nil {
+			return errorResponse(req.RequestID, ctx.Err().Error()), nil
 		}
 
-		resp, err := c.client.CreateChatCompletion(ctx, chatReq)
+		resp, err := c.doSingleAttempt(ctx, chatReq, req.RequestID)
+		if err == nil {
+			return resp, nil
+		}
+
+		// Rate-limited (429) — separate backoff curve
+		if isRateLimited(err) {
+			rlAttempt++
+			if c.metrics != nil {
+				c.metrics.recordRateLimitHit(chatReq.Model)
+			}
+			if rlAttempt >= maxRLRetries {
+				c.logWarn("rate limit retries exhausted", req.RequestID, chatReq.Model,
+					slog.Int("attempts", rlAttempt), slog.Int("max_attempts", maxRLRetries))
+				return errorResponse(req.RequestID, err.Error()), nil
+			}
+
+			wait := addJitter(rlDelay)
+			c.logWarn("rate limited by provider, backing off", req.RequestID, chatReq.Model,
+				slog.Int("attempt", rlAttempt), slog.Int("max_attempts", maxRLRetries),
+				slog.Duration("wait", wait))
+			if c.metrics != nil {
+				c.metrics.recordRateLimitRetry(chatReq.Model)
+			}
+			if !sleepWithContext(ctx, wait) {
+				return errorResponse(req.RequestID, ctx.Err().Error()), nil
+			}
+			rlDelay = min(time.Duration(float64(rlDelay)*2), maxDelay)
+			continue
+		}
+
+		// Non-retryable error — fail immediately
+		if !isRetryable(err) {
+			return errorResponse(req.RequestID, err.Error()), nil
+		}
+
+		// Transient error (5xx, network) — generic backoff curve
+		genericAttempt++
+		if genericAttempt >= maxAttempts {
+			c.logWarn("transient error retries exhausted", req.RequestID, chatReq.Model,
+				slog.Int("attempts", genericAttempt), slog.Int("max_attempts", maxAttempts),
+				slog.String("last_error", err.Error()))
+			return errorResponse(req.RequestID, err.Error()), nil
+		}
+
+		wait := addJitter(genericDelay)
+		if c.logger != nil {
+			c.logger.Debug("transient error, retrying",
+				slog.String("request_id", req.RequestID), slog.String("model", chatReq.Model),
+				slog.Int("attempt", genericAttempt), slog.Int("max_attempts", maxAttempts),
+				slog.Duration("wait", wait), slog.String("error", err.Error()))
+		}
+		if !sleepWithContext(ctx, wait) {
+			return errorResponse(req.RequestID, ctx.Err().Error()), nil
+		}
+		genericDelay = min(time.Duration(float64(genericDelay)*2), maxDelay)
+	}
+}
+
+// logWarn logs a warning if a logger is set. Reduces boilerplate in ChatCompletion.
+func (c *Client) logWarn(msg, requestID, model string, attrs ...slog.Attr) {
+	if c.logger != nil {
+		allAttrs := append([]slog.Attr{
+			slog.String("request_id", requestID),
+			slog.String("model", model),
+		}, attrs...)
+		args := make([]any, len(allAttrs))
+		for i, a := range allAttrs {
+			args[i] = a
+		}
+		c.logger.Warn(msg, args...)
+	}
+}
+
+// errorResponse builds an AgentResponse with status "error".
+func errorResponse(requestID, errMsg string) agentic.AgentResponse {
+	return agentic.AgentResponse{
+		RequestID: requestID,
+		Status:    "error",
+		Error:     errMsg,
+	}
+}
+
+// doSingleAttempt executes one request attempt (streaming or non-streaming).
+// Returns (response, nil) on success, or (zero, error) on failure.
+func (c *Client) doSingleAttempt(ctx context.Context, chatReq openai.ChatCompletionRequest, requestID string) (agentic.AgentResponse, error) {
+	if c.endpoint.Stream {
+		resp, err := c.streamChatCompletion(ctx, chatReq, requestID)
 		if err != nil {
 			if c.logger != nil {
-				c.logger.Debug("OpenAI API request failed",
-					slog.String("request_id", req.RequestID),
+				c.logger.Debug("stream connection failed",
+					slog.String("request_id", requestID),
 					slog.String("model", chatReq.Model),
 					slog.String("error", err.Error()))
 			}
-
-			if isRateLimited(err) {
-				if c.metrics != nil {
-					c.metrics.recordRateLimitHit(chatReq.Model)
-				}
-				// Honour Retry-After header if present; otherwise use configured delay.
-				waitDur := c.rateLimitWait(err)
-				select {
-				case <-ctx.Done():
-					return retry.NonRetryable(ctx.Err())
-				case <-time.After(waitDur):
-				}
-				return err // retryable — pkg/retry will add its own backoff on top
-			}
-
-			if !isRetryable(err) {
-				return retry.NonRetryable(err)
-			}
-			return err
+			return agentic.AgentResponse{}, err
 		}
+		// Mid-stream errors are returned as AgentResponse{Status:"error"} — not retried.
+		return resp, nil
+	}
 
-		lastResp = c.convertResponse(resp, req.RequestID)
-		return nil
-	})
-
+	resp, err := c.client.CreateChatCompletion(ctx, chatReq)
 	if err != nil {
-		// Unwrap NonRetryableError so the message stays clean.
-		var nre *retry.NonRetryableError
-		if errors.As(err, &nre) {
-			err = nre.Unwrap()
+		if c.logger != nil {
+			c.logger.Debug("API request failed",
+				slog.String("request_id", requestID),
+				slog.String("model", chatReq.Model),
+				slog.String("error", err.Error()))
 		}
-		return agentic.AgentResponse{
-			RequestID: req.RequestID,
-			Status:    "error",
-			Error:     err.Error(),
-		}, nil
+		return agentic.AgentResponse{}, err
 	}
 
-	return lastResp, nil
+	return c.convertResponse(resp, requestID), nil
 }
 
-// buildRetryConfig converts the component RetryConfig into a pkg/retry Config.
-func (c *Client) buildRetryConfig() retry.Config {
-	initialDelay := c.retryCfg.initialDelayDuration(100 * time.Millisecond)
-	maxDelay := c.retryCfg.maxDelayDuration(30 * time.Second)
-
-	return retry.Config{
-		MaxAttempts:  c.retryCfg.MaxAttempts,
-		InitialDelay: initialDelay,
-		MaxDelay:     maxDelay,
-		Multiplier:   2.0,
-		AddJitter:    true,
+// sleepWithContext waits for the given duration or until ctx is cancelled.
+// Returns true if the sleep completed, false if ctx was cancelled.
+func sleepWithContext(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
-// rateLimitWait returns the duration to wait after a 429 response.
-// It honours the Retry-After header when present.
-func (c *Client) rateLimitWait(err error) time.Duration {
-	// Try to extract Retry-After from the OpenAI API error header bag.
-	// The OpenAI SDK does not directly expose response headers, but the
-	// error message sometimes contains the value. We use the configured
-	// default and let the operator tune it via RateLimitDelay.
-	if ra := retryAfterFromError(err); ra > 0 {
-		return ra
+// addJitter adds up to 25% jitter to a duration to prevent thundering herd.
+func addJitter(d time.Duration) time.Duration {
+	if d <= 0 {
+		return d
 	}
-	return c.retryCfg.rateLimitDelayDuration(5 * time.Second)
-}
-
-// retryAfterFromError attempts to extract a Retry-After wait duration from a
-// 429 error. The go-openai SDK does not expose raw HTTP response headers, so
-// this currently always returns 0, causing the caller to fall back to the
-// configured RateLimitDelay. A future improvement could wrap the HTTP transport
-// to capture headers before they are discarded by the SDK.
-func retryAfterFromError(_ error) time.Duration {
-	return 0
+	jitter := time.Duration(rand.Int63n(int64(d / 4)))
+	return d + jitter
 }
 
 // streamChatCompletion handles the streaming path. Connection errors return

@@ -611,11 +611,14 @@ func (cm *Manager) notifySubscribers(path string) {
 				if cm.stopped.Load() {
 					return
 				}
+				// Drain any stale notification so the reconciliation signal is
+				// guaranteed to be delivered. This is critical after bulk PushToKV
+				// where individual per-key notifications may have filled the buffer.
 				select {
-				case ch <- update:
+				case <-ch:
 				default:
-					// Channel full — subscriber will reconcile on next receive
 				}
+				ch <- update
 			}
 		}
 	}
