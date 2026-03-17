@@ -552,6 +552,205 @@ func TestBuildLoopCancellationTriples_OptionalWorkflowFields(t *testing.T) {
 	}
 }
 
+// --- buildTrajectoryStepTriples ---
+
+func TestBuildTrajectoryStepTriples_NilTrajectory(t *testing.T) {
+	triples := buildTrajectoryStepTriples("acme.ops.agent.agentic-loop.execution.loop1", "acme", "ops", "loop1", nil)
+	if len(triples) != 0 {
+		t.Errorf("expected no triples for nil trajectory, got %d", len(triples))
+	}
+}
+
+func TestBuildTrajectoryStepTriples_EmptySteps(t *testing.T) {
+	traj := &agentic.Trajectory{LoopID: "loop1", Steps: []agentic.TrajectoryStep{}}
+	triples := buildTrajectoryStepTriples("acme.ops.agent.agentic-loop.execution.loop1", "acme", "ops", "loop1", traj)
+	if len(triples) != 0 {
+		t.Errorf("expected no triples for empty steps, got %d", len(triples))
+	}
+}
+
+func TestBuildTrajectoryStepTriples_SkipsContextCompaction(t *testing.T) {
+	traj := &agentic.Trajectory{
+		LoopID: "loop1",
+		Steps: []agentic.TrajectoryStep{
+			{Timestamp: time.Now(), StepType: "context_compaction", Duration: 100},
+		},
+	}
+	triples := buildTrajectoryStepTriples("acme.ops.agent.agentic-loop.execution.loop1", "acme", "ops", "loop1", traj)
+	if len(triples) != 0 {
+		t.Errorf("expected context_compaction to be skipped, got %d triples", len(triples))
+	}
+}
+
+func TestBuildTrajectoryStepTriples_ToolCallStep(t *testing.T) {
+	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop1"
+	traj := &agentic.Trajectory{
+		LoopID: "loop1",
+		Steps: []agentic.TrajectoryStep{
+			{
+				Timestamp:     time.Date(2026, 3, 17, 14, 0, 0, 0, time.UTC),
+				StepType:      "tool_call",
+				ToolName:      "web_search",
+				ToolArguments: map[string]any{"query": "test"},
+				ToolResult:    "some results",
+				Duration:      1500,
+			},
+		},
+	}
+
+	triples := buildTrajectoryStepTriples(loopEntityID, "acme", "ops", "loop1", traj)
+
+	// Should have step triples + 1 LoopHasStep triple
+	stepEntityID := "acme.ops.agent.agentic-loop.step.loop1-0"
+
+	// Find step triples (Subject == stepEntityID)
+	var stepTriples []message.Triple
+	var loopTriples []message.Triple
+	for _, tr := range triples {
+		if tr.Subject == stepEntityID {
+			stepTriples = append(stepTriples, tr)
+		}
+		if tr.Subject == loopEntityID {
+			loopTriples = append(loopTriples, tr)
+		}
+	}
+
+	// Verify step metadata triples
+	preds := predicateSet(stepTriples)
+	required := []string{
+		agvocab.StepType, agvocab.StepIndex, agvocab.StepLoop,
+		agvocab.StepTimestamp, agvocab.StepDuration, agvocab.StepToolName,
+	}
+	for _, pred := range required {
+		if !preds[pred] {
+			t.Errorf("missing step predicate: %s", pred)
+		}
+	}
+
+	if got := objectFor(stepTriples, agvocab.StepType); got != "tool_call" {
+		t.Errorf("StepType: got %v, want tool_call", got)
+	}
+	if got := objectFor(stepTriples, agvocab.StepToolName); got != "web_search" {
+		t.Errorf("StepToolName: got %v, want web_search", got)
+	}
+	if got := objectFor(stepTriples, agvocab.StepIndex); got != 0 {
+		t.Errorf("StepIndex: got %v, want 0", got)
+	}
+	if got := objectFor(stepTriples, agvocab.StepLoop); got != loopEntityID {
+		t.Errorf("StepLoop: got %v, want %s", got, loopEntityID)
+	}
+
+	// Verify LoopHasStep triple
+	if len(loopTriples) != 1 {
+		t.Fatalf("expected 1 LoopHasStep triple, got %d", len(loopTriples))
+	}
+	if loopTriples[0].Predicate != agvocab.LoopHasStep {
+		t.Errorf("expected LoopHasStep predicate, got %s", loopTriples[0].Predicate)
+	}
+	if loopTriples[0].Object != stepEntityID {
+		t.Errorf("LoopHasStep object: got %v, want %s", loopTriples[0].Object, stepEntityID)
+	}
+}
+
+func TestBuildTrajectoryStepTriples_ModelCallStep(t *testing.T) {
+	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop2"
+	traj := &agentic.Trajectory{
+		LoopID: "loop2",
+		Steps: []agentic.TrajectoryStep{
+			{
+				Timestamp: time.Date(2026, 3, 17, 14, 0, 0, 0, time.UTC),
+				StepType:  "model_call",
+				Model:     "claude-sonnet",
+				TokensIn:  4832,
+				TokensOut: 819,
+				Duration:  3200,
+			},
+		},
+	}
+
+	triples := buildTrajectoryStepTriples(loopEntityID, "acme", "ops", "loop2", traj)
+
+	stepEntityID := "acme.ops.agent.agentic-loop.step.loop2-0"
+	var stepTriples []message.Triple
+	for _, tr := range triples {
+		if tr.Subject == stepEntityID {
+			stepTriples = append(stepTriples, tr)
+		}
+	}
+
+	preds := predicateSet(stepTriples)
+	required := []string{
+		agvocab.StepType, agvocab.StepIndex, agvocab.StepLoop,
+		agvocab.StepTimestamp, agvocab.StepDuration,
+		agvocab.StepModel, agvocab.StepTokensIn, agvocab.StepTokensOut,
+	}
+	for _, pred := range required {
+		if !preds[pred] {
+			t.Errorf("missing step predicate: %s", pred)
+		}
+	}
+
+	// Tool-specific predicates should NOT be present
+	if preds[agvocab.StepToolName] {
+		t.Error("StepToolName should not be present for model_call")
+	}
+
+	if got := objectFor(stepTriples, agvocab.StepModel); got != "claude-sonnet" {
+		t.Errorf("StepModel: got %v, want claude-sonnet", got)
+	}
+	if got := objectFor(stepTriples, agvocab.StepTokensIn); got != 4832 {
+		t.Errorf("StepTokensIn: got %v, want 4832", got)
+	}
+	if got := objectFor(stepTriples, agvocab.StepTokensOut); got != 819 {
+		t.Errorf("StepTokensOut: got %v, want 819", got)
+	}
+}
+
+func TestBuildTrajectoryStepTriples_MixedSteps(t *testing.T) {
+	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop3"
+	traj := &agentic.Trajectory{
+		LoopID: "loop3",
+		Steps: []agentic.TrajectoryStep{
+			{Timestamp: time.Now(), StepType: "model_call", Model: "claude", TokensIn: 100, TokensOut: 50, Duration: 1000},
+			{Timestamp: time.Now(), StepType: "tool_call", ToolName: "graph_query", ToolResult: "data", Duration: 200},
+			{Timestamp: time.Now(), StepType: "context_compaction", Duration: 50},
+			{Timestamp: time.Now(), StepType: "model_call", Model: "claude", TokensIn: 200, TokensOut: 100, Duration: 1500},
+		},
+	}
+
+	triples := buildTrajectoryStepTriples(loopEntityID, "acme", "ops", "loop3", traj)
+
+	// Count LoopHasStep triples — should be 3 (compaction skipped)
+	var loopHasStepCount int
+	for _, tr := range triples {
+		if tr.Subject == loopEntityID && tr.Predicate == agvocab.LoopHasStep {
+			loopHasStepCount++
+		}
+	}
+	if loopHasStepCount != 3 {
+		t.Errorf("expected 3 LoopHasStep triples, got %d", loopHasStepCount)
+	}
+
+	// Step indices should be 0, 1, 3 (index 2 is compaction, skipped but index preserved)
+	expectedStepIDs := []string{
+		"acme.ops.agent.agentic-loop.step.loop3-0",
+		"acme.ops.agent.agentic-loop.step.loop3-1",
+		"acme.ops.agent.agentic-loop.step.loop3-3",
+	}
+	for _, expectedID := range expectedStepIDs {
+		found := false
+		for _, tr := range triples {
+			if tr.Subject == loopEntityID && tr.Object == expectedID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing LoopHasStep for %s", expectedID)
+		}
+	}
+}
+
 // --- computeCost ---
 
 func TestComputeCost(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/types"
 )
 
@@ -29,6 +30,11 @@ func NewGraphWriterForTest(client *natsclient.Client, reg model.RegistryReader, 
 	}
 }
 
+// SetContentStore sets the ObjectStore for content storage in integration tests.
+func (g *GraphWriterForTest) SetContentStore(store *objectstore.Store) {
+	g.w.contentStore = store
+}
+
 func (g *GraphWriterForTest) WriteModelEndpoints(ctx context.Context) { g.w.WriteModelEndpoints(ctx) }
 func (g *GraphWriterForTest) WriteLoopCompletion(ctx context.Context, e *agentic.LoopCompletedEvent) {
 	g.w.WriteLoopCompletion(ctx, e)
@@ -38,4 +44,7 @@ func (g *GraphWriterForTest) WriteLoopFailure(ctx context.Context, e *agentic.Lo
 }
 func (g *GraphWriterForTest) WriteLoopCancellation(ctx context.Context, e *agentic.LoopCancelledEvent) {
 	g.w.WriteLoopCancellation(ctx, e)
+}
+func (g *GraphWriterForTest) WriteTrajectorySteps(ctx context.Context, loopID string, trajectory *agentic.Trajectory) {
+	g.w.WriteTrajectorySteps(ctx, loopID, trajectory)
 }

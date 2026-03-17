@@ -20,6 +20,7 @@ import (
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/workflow"
 	"github.com/c360studio/semstreams/processor/rule/boid"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -431,6 +432,21 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 		}
 	}
 	c.trajectoriesBucket = trajectoriesBucket
+
+	// Initialize content store for trajectory step content (tool results, model responses)
+	contentBucket := c.config.ContentBucket
+	if contentBucket == "" {
+		contentBucket = "AGENT_CONTENT"
+	}
+	contentStore, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
+		BucketName: contentBucket,
+	})
+	if err != nil {
+		c.logger.Warn("Failed to create content store for trajectory steps, content storage disabled",
+			"bucket", contentBucket, "error", err)
+	} else if c.graphWriter != nil {
+		c.graphWriter.contentStore = contentStore
+	}
 
 	// Initialize positions bucket if Boid coordination is enabled
 	if c.config.BoidEnabled {
@@ -864,6 +880,7 @@ func (c *Component) persistHandlerResult(ctx context.Context, result HandlerResu
 		} else if result.FailureState != nil && c.graphWriter != nil {
 			c.graphWriter.WriteLoopFailure(ctx, result.FailureState)
 		}
+		c.writeTrajectoryToGraph(ctx, result.LoopID)
 	}
 }
 
@@ -1082,6 +1099,31 @@ func (c *Component) persistTrajectorySteps(ctx context.Context, loopID string, s
 	}
 }
 
+// writeTrajectoryToGraph reads the finalized trajectory from KV, stores step
+// content in ObjectStore, and emits graph triples for each step.
+// Must be called after finalizeTrajectory.
+func (c *Component) writeTrajectoryToGraph(ctx context.Context, loopID string) {
+	if c.graphWriter == nil || c.trajectoriesBucket == nil {
+		return
+	}
+
+	entry, err := c.trajectoriesBucket.Get(ctx, loopID)
+	if err != nil {
+		c.logger.Debug("graph_writer: trajectory not found for graph emission",
+			"loop_id", loopID, "error", err)
+		return
+	}
+
+	var trajectory agentic.Trajectory
+	if err := json.Unmarshal(entry.Value(), &trajectory); err != nil {
+		c.logger.Warn("graph_writer: failed to unmarshal trajectory for graph emission",
+			"loop_id", loopID, "error", err)
+		return
+	}
+
+	c.graphWriter.WriteTrajectorySteps(ctx, loopID, &trajectory)
+}
+
 // finalizeTrajectory marks a trajectory as complete
 func (c *Component) finalizeTrajectory(ctx context.Context, loopID string, state agentic.LoopState) {
 	if c.trajectoriesBucket == nil {
@@ -1271,6 +1313,7 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 
 	// Finalize trajectory and cleanup Boid position
 	c.finalizeTrajectory(ctx, loopID, agentic.LoopStateCancelled)
+	c.writeTrajectoryToGraph(ctx, loopID)
 	c.cleanupBoidPosition(ctx, loopID)
 
 	c.logger.Info("Loop cancelled",

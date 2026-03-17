@@ -27,6 +27,7 @@ type Config struct {
 	TrajectoryDetail     string                `json:"trajectory_detail,omitempty" schema:"type:string,description:Trajectory detail level: summary (default) or full,default:summary,category:advanced"`
 	TrajectoryTTL        string                `json:"trajectory_ttl,omitempty" schema:"type:string,description:TTL for trajectory KV entries,default:24h,category:advanced"`
 	TrajectoryHistory    int                   `json:"trajectory_history,omitempty" schema:"type:int,description:History revisions for trajectory KV,default:10,min:1,max:100,category:advanced"`
+	ContentBucket        string                `json:"content_bucket,omitempty" schema:"type:string,description:NATS ObjectStore bucket for trajectory step content (tool results and model responses),default:AGENT_CONTENT,category:advanced"`
 	Context              ContextConfig         `json:"context" schema:"type:object,description:Context window management. Model limits are resolved from the model registry,category:advanced"`
 	Ports                *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
 }
@@ -169,6 +170,7 @@ func DefaultConfig() Config {
 		PositionsBucket:    "AGENT_POSITIONS",
 		BoidEnabled:        false,
 		BoidSignalTTL:      "30s",
+		ContentBucket:      "AGENT_CONTENT",
 		TrajectoryDetail:   "summary",
 		TrajectoryTTL:      "24h",
 		TrajectoryHistory:  10,

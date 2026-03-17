@@ -22,6 +22,12 @@
       "description": "Suffix for consumer names",
       "category": "advanced"
     },
+    "content_bucket": {
+      "type": "string",
+      "description": "NATS ObjectStore bucket for trajectory step content (tool results and model responses)",
+      "default": "AGENT_CONTENT",
+      "category": "advanced"
+    },
     "context": {
       "type": "object",
       "description": "Context window management. Model limits are resolved from the model registry",

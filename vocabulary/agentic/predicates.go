@@ -456,4 +456,63 @@ const (
 	// Example: "user-xyz789"
 	// DataType: string
 	LoopUser = "agent.loop.user"
+
+	// LoopHasStep is an entity reference to a trajectory step within this loop.
+	// Multi-valued: one triple per step.
+	// Example: entity ID of a trajectory step
+	// DataType: string (entity ID)
+	LoopHasStep = "agent.loop.has_step"
+)
+
+// Step Predicates
+//
+// Express facts about individual trajectory steps within a loop execution,
+// including step type, ordering, timing, and type-specific metadata.
+// Large content (tool arguments, tool results, model responses) is stored
+// in ObjectStore via the ContentStorable pattern, not in triples.
+const (
+	// StepType is the category of the trajectory step.
+	// Example: "tool_call", "model_call"
+	// DataType: string
+	StepType = "agent.step.type"
+
+	// StepIndex is the zero-based position of this step in the trajectory.
+	// Example: 0, 1, 2
+	// DataType: int
+	StepIndex = "agent.step.index"
+
+	// StepLoop is an entity reference to the parent loop execution.
+	// Example: entity ID of the loop execution
+	// DataType: string (entity ID)
+	StepLoop = "agent.step.loop"
+
+	// StepTimestamp is when this step occurred.
+	// Example: "2026-03-17T14:22:00Z"
+	// DataType: time.Time
+	StepTimestamp = "agent.step.timestamp"
+
+	// StepDuration is the execution time of this step in milliseconds.
+	// Example: 1234
+	// DataType: int64
+	StepDuration = "agent.step.duration_ms"
+
+	// StepToolName is the tool function name for tool_call steps.
+	// Example: "web_search", "graph_query", "http_request"
+	// DataType: string
+	StepToolName = "agent.step.tool_name"
+
+	// StepModel is the model name for model_call steps.
+	// Example: "claude-sonnet", "gpt-4o"
+	// DataType: string
+	StepModel = "agent.step.model"
+
+	// StepTokensIn is the input tokens consumed by a model_call step.
+	// Example: 4832
+	// DataType: int
+	StepTokensIn = "agent.step.tokens_in"
+
+	// StepTokensOut is the output tokens produced by a model_call step.
+	// Example: 819
+	// DataType: int
+	StepTokensOut = "agent.step.tokens_out"
 )

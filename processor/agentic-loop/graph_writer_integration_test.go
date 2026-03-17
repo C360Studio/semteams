@@ -15,6 +15,7 @@ import (
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/types"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
@@ -266,6 +267,184 @@ func TestWriteLoopCancellation_Integration(t *testing.T) {
 	preds := collector.predicateSet()
 	if !preds[agvocab.LoopOutcome] {
 		t.Error("expected agent.loop.outcome triple")
+	}
+}
+
+func TestWriteTrajectorySteps_Integration(t *testing.T) {
+	tc := natsclient.NewTestClient(t, natsclient.WithFastStartup(), natsclient.WithJetStream())
+	ctx := context.Background()
+
+	// Set up triple collector as responder.
+	collector := &tripleCollector{}
+	_, err := tc.Client.SubscribeForRequests(ctx, "graph.mutation.triple.add", collector.handler)
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	// Create ObjectStore for content storage.
+	store, err := objectstore.NewStoreWithConfig(ctx, tc.Client, objectstore.Config{
+		BucketName: "TEST_AGENT_CONTENT",
+	})
+	if err != nil {
+		t.Fatalf("create content store: %v", err)
+	}
+	defer store.Close()
+
+	w := agenticloop.NewGraphWriterForTest(tc.Client, nil, types.PlatformMeta{Org: "acme", Platform: "ops"})
+	w.SetContentStore(store)
+
+	trajectory := &agentic.Trajectory{
+		LoopID:    "loop-traj",
+		StartTime: time.Now().Add(-10 * time.Second),
+		Steps: []agentic.TrajectoryStep{
+			{
+				Timestamp: time.Now().Add(-8 * time.Second),
+				StepType:  "model_call",
+				Model:     "claude-sonnet",
+				Response:  "I'll search for deployment errors.",
+				TokensIn:  4832,
+				TokensOut: 128,
+				Duration:  2000,
+			},
+			{
+				Timestamp:     time.Now().Add(-6 * time.Second),
+				StepType:      "tool_call",
+				ToolName:      "web_search",
+				ToolArguments: map[string]any{"query": "deployment errors k8s"},
+				ToolResult:    "Found 3 results about Kubernetes deployment errors...",
+				Duration:      1500,
+			},
+			{
+				Timestamp: time.Now().Add(-4 * time.Second),
+				StepType:  "context_compaction",
+				Duration:  100,
+			},
+			{
+				Timestamp: time.Now().Add(-2 * time.Second),
+				StepType:  "model_call",
+				Model:     "claude-sonnet",
+				Response:  "Based on the search results, here are the common deployment errors.",
+				TokensIn:  6000,
+				TokensOut: 500,
+				Duration:  3000,
+			},
+		},
+	}
+
+	w.WriteTrajectorySteps(ctx, "loop-traj", trajectory)
+
+	triples := collector.getTriples()
+
+	// Count step entity triples vs LoopHasStep triples.
+	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop-traj"
+	var loopHasStepCount int
+	stepEntityIDs := make(map[string]bool)
+	for _, tr := range triples {
+		if tr.Subject == loopEntityID && tr.Predicate == agvocab.LoopHasStep {
+			loopHasStepCount++
+		}
+		if tr.Predicate == agvocab.StepType {
+			stepEntityIDs[tr.Subject] = true
+		}
+	}
+
+	// 3 non-compaction steps → 3 LoopHasStep triples.
+	if loopHasStepCount != 3 {
+		t.Errorf("expected 3 LoopHasStep triples, got %d", loopHasStepCount)
+	}
+
+	// 3 step entities created.
+	if len(stepEntityIDs) != 3 {
+		t.Errorf("expected 3 step entities, got %d", len(stepEntityIDs))
+	}
+
+	// Verify all step entity IDs are valid.
+	for id := range stepEntityIDs {
+		if !message.IsValidEntityID(id) {
+			t.Errorf("invalid step entity ID: %q", id)
+		}
+	}
+
+	// Verify tool_call step has StepToolName predicate.
+	preds := collector.predicateSet()
+	if !preds[agvocab.StepToolName] {
+		t.Error("expected agent.step.tool_name triple for tool_call step")
+	}
+
+	// Verify model_call steps have token predicates.
+	if !preds[agvocab.StepTokensIn] {
+		t.Error("expected agent.step.tokens_in triple for model_call step")
+	}
+
+	// Verify content was stored in ObjectStore.
+	// The tool_call step (index 1) should have its content stored.
+	toolStepEntity := &agentic.TrajectoryStepEntity{
+		Step:      trajectory.Steps[1],
+		Org:       "acme",
+		Platform:  "ops",
+		LoopID:    "loop-traj",
+		StepIndex: 1,
+	}
+	// Store a second copy to get a ref we can fetch with.
+	ref, err := store.StoreContent(ctx, toolStepEntity)
+	if err != nil {
+		t.Fatalf("store content for verification: %v", err)
+	}
+	storedContent, err := store.FetchContent(ctx, ref)
+	if err != nil {
+		t.Fatalf("fetch content: %v", err)
+	}
+
+	if storedContent.Fields["tool_name"] != "web_search" {
+		t.Errorf("stored tool_name: got %q, want web_search", storedContent.Fields["tool_name"])
+	}
+	if storedContent.Fields["tool_result"] != "Found 3 results about Kubernetes deployment errors..." {
+		t.Errorf("stored tool_result mismatch")
+	}
+	if storedContent.ContentFields["body"] != "tool_result" {
+		t.Errorf("content field mapping: body should map to tool_result, got %q", storedContent.ContentFields["body"])
+	}
+}
+
+func TestWriteTrajectorySteps_NoContentStore_StillWritesTriples(t *testing.T) {
+	tc := natsclient.NewTestClient(t, natsclient.WithFastStartup())
+	ctx := context.Background()
+
+	collector := &tripleCollector{}
+	_, err := tc.Client.SubscribeForRequests(ctx, "graph.mutation.triple.add", collector.handler)
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+
+	// No content store set — triples should still be written.
+	w := agenticloop.NewGraphWriterForTest(tc.Client, nil, types.PlatformMeta{Org: "acme", Platform: "ops"})
+
+	trajectory := &agentic.Trajectory{
+		LoopID: "loop-no-store",
+		Steps: []agentic.TrajectoryStep{
+			{
+				Timestamp:  time.Now(),
+				StepType:   "tool_call",
+				ToolName:   "graph_query",
+				ToolResult: "query results",
+				Duration:   200,
+			},
+		},
+	}
+
+	w.WriteTrajectorySteps(ctx, "loop-no-store", trajectory)
+
+	triples := collector.getTriples()
+	if len(triples) == 0 {
+		t.Error("expected triples even without content store")
+	}
+
+	preds := collector.predicateSet()
+	if !preds[agvocab.StepToolName] {
+		t.Error("expected agent.step.tool_name triple")
+	}
+	if !preds[agvocab.LoopHasStep] {
+		t.Error("expected agent.loop.has_step triple")
 	}
 }
 

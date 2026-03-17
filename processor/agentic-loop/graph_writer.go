@@ -12,6 +12,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/types"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
@@ -29,6 +30,7 @@ type graphWriter struct {
 	modelRegistry model.RegistryReader
 	platform      types.PlatformMeta
 	logger        *slog.Logger
+	contentStore  *objectstore.Store
 }
 
 // writeTriple marshals and sends a single triple via NATS request/response.
@@ -141,6 +143,52 @@ func (w *graphWriter) WriteLoopFailure(ctx context.Context, event *agentic.LoopF
 		if err := w.writeTriple(ctx, t); err != nil {
 			w.logger.Warn("graph_writer: failed to write loop failure triple",
 				"loop_id", event.LoopID, "predicate", t.Predicate, "error", err)
+		}
+	}
+}
+
+// WriteTrajectorySteps stores step content in ObjectStore and emits graph triples
+// for each non-compaction trajectory step, linking them to the parent loop entity
+// via LoopHasStep relationships.
+func (w *graphWriter) WriteTrajectorySteps(ctx context.Context, loopID string, trajectory *agentic.Trajectory) {
+	if w.natsClient == nil {
+		return
+	}
+	if w.platform.Org == "" || w.platform.Platform == "" {
+		w.logger.Warn("graph_writer: cannot write trajectory steps, platform identity missing",
+			"loop_id", loopID, "org", w.platform.Org, "platform", w.platform.Platform)
+		return
+	}
+
+	// Store content in ObjectStore for each non-compaction step.
+	if w.contentStore != nil && trajectory != nil {
+		for i, step := range trajectory.Steps {
+			if step.StepType == "context_compaction" {
+				continue
+			}
+			entity := &agentic.TrajectoryStepEntity{
+				Step:      step,
+				Org:       w.platform.Org,
+				Platform:  w.platform.Platform,
+				LoopID:    loopID,
+				StepIndex: i,
+			}
+			ref, err := w.contentStore.StoreContent(ctx, entity)
+			if err != nil {
+				w.logger.Warn("graph_writer: failed to store trajectory step content",
+					"loop_id", loopID, "step_index", i, "step_type", step.StepType, "error", err)
+				continue
+			}
+			entity.SetStorageRef(ref)
+		}
+	}
+
+	loopEntityID := agentic.LoopExecutionEntityID(w.platform.Org, w.platform.Platform, loopID)
+	triples := buildTrajectoryStepTriples(loopEntityID, w.platform.Org, w.platform.Platform, loopID, trajectory)
+	for _, t := range triples {
+		if err := w.writeTriple(ctx, t); err != nil {
+			w.logger.Warn("graph_writer: failed to write trajectory step triple",
+				"loop_id", loopID, "predicate", t.Predicate, "error", err)
 		}
 	}
 }
@@ -341,6 +389,49 @@ func buildLoopCancellationTriples(loopEntityID string, event *agentic.LoopCancel
 	}
 
 	return triples
+}
+
+// buildTrajectoryStepTriples constructs triples for all non-compaction trajectory steps.
+// Returns triples for both the step entities and LoopHasStep relationship triples
+// on the loop entity. This is a pure function with no side effects.
+func buildTrajectoryStepTriples(
+	loopEntityID, org, platform, loopID string,
+	trajectory *agentic.Trajectory,
+) []message.Triple {
+	if trajectory == nil || len(trajectory.Steps) == 0 {
+		return nil
+	}
+
+	var allTriples []message.Triple
+
+	for i, step := range trajectory.Steps {
+		if step.StepType == "context_compaction" {
+			continue
+		}
+
+		entity := &agentic.TrajectoryStepEntity{
+			Step:      step,
+			Org:       org,
+			Platform:  platform,
+			LoopID:    loopID,
+			StepIndex: i,
+		}
+
+		// Add the step's metadata triples.
+		allTriples = append(allTriples, entity.Triples()...)
+
+		// Add LoopHasStep relationship triple on the loop entity.
+		allTriples = append(allTriples, message.Triple{
+			Subject:    loopEntityID,
+			Predicate:  agvocab.LoopHasStep,
+			Object:     entity.EntityID(),
+			Source:     graphWriterSource,
+			Timestamp:  step.Timestamp,
+			Confidence: 1.0,
+		})
+	}
+
+	return allTriples
 }
 
 // computeCost calculates loop cost from token counts and endpoint pricing.
