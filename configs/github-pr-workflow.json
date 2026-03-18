@@ -84,7 +84,6 @@
         "max_iterations": 25,
         "timeout": "300s",
         "loops_bucket": "AGENT_LOOPS",
-        "trajectories_bucket": "AGENT_TRAJECTORIES",
         "ports": {
           "inputs": [
             {"name": "task_input", "subject": "agent.task.>", "type": "jetstream", "stream": "AGENT"}

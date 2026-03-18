@@ -184,20 +184,21 @@ func (c *NATSValidationClient) GetEntity(ctx context.Context, entityID string) (
 	return &entity, nil
 }
 
-// GetTrajectory retrieves a trajectory from the AGENT_TRAJECTORIES KV bucket.
+// GetTrajectory retrieves a trajectory via the agentic.query.trajectory NATS request/reply handler.
+// The trajectory is served from the agentic-loop's in-memory cache.
 func (c *NATSValidationClient) GetTrajectory(ctx context.Context, loopID string) (*agentic.Trajectory, error) {
-	bucket, err := c.client.GetKeyValueBucket(ctx, "AGENT_TRAJECTORIES")
+	req, err := json.Marshal(map[string]string{"loopId": loopID})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get trajectories bucket: %w", err)
+		return nil, fmt.Errorf("failed to marshal trajectory request: %w", err)
 	}
 
-	entry, err := bucket.Get(ctx, loopID)
+	resp, err := c.client.Request(ctx, "agentic.query.trajectory", req, 5*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("trajectory not found for loop %s: %w", loopID, err)
+		return nil, fmt.Errorf("trajectory query failed for loop %s: %w", loopID, err)
 	}
 
 	var traj agentic.Trajectory
-	if err := json.Unmarshal(entry.Value(), &traj); err != nil {
+	if err := json.Unmarshal(resp, &traj); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal trajectory: %w", err)
 	}
 

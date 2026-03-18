@@ -133,7 +133,6 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 		StreamName:         "AGENT",
 		ConsumerNameSuffix: "fullcycle-test",
 		LoopsBucket:        "AGENT_LOOPS",
-		TrajectoriesBucket: "AGENT_TRAJECTORIES",
 	}
 
 	rawConfig, err := json.Marshal(config)
@@ -292,7 +291,6 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 		StreamName:         "AGENT",
 		ConsumerNameSuffix: "toolcalls-test",
 		LoopsBucket:        "AGENT_LOOPS",
-		TrajectoriesBucket: "AGENT_TRAJECTORIES",
 	}
 
 	rawConfig, err := json.Marshal(config)
@@ -462,7 +460,6 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 		StreamName:         "AGENT",
 		ConsumerNameSuffix: "maxiter-test",
 		LoopsBucket:        "AGENT_LOOPS",
-		TrajectoriesBucket: "AGENT_TRAJECTORIES",
 	}
 
 	rawConfig, err := json.Marshal(config)
@@ -609,7 +606,6 @@ func TestIntegration_LoopStatePersistence(t *testing.T) {
 		StreamName:         "AGENT",
 		ConsumerNameSuffix: "persist-test",
 		LoopsBucket:        "AGENT_LOOPS",
-		TrajectoriesBucket: "AGENT_TRAJECTORIES",
 	}
 
 	rawConfig, err := json.Marshal(config)
@@ -711,7 +707,6 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 		StreamName:         "AGENT",
 		ConsumerNameSuffix: "trajectory-test",
 		LoopsBucket:        "AGENT_LOOPS",
-		TrajectoriesBucket: "AGENT_TRAJECTORIES",
 	}
 
 	rawConfig, err := json.Marshal(config)

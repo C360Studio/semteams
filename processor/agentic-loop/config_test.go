@@ -16,7 +16,6 @@ func TestConfig_JSONSerialization(t *testing.T) {
 			name: "minimal config",
 			modify: func(c *agenticloop.Config) {
 				c.LoopsBucket = ""
-				c.TrajectoriesBucket = ""
 			},
 		},
 		{
@@ -32,7 +31,6 @@ func TestConfig_JSONSerialization(t *testing.T) {
 				c.MaxIterations = 50
 				c.Timeout = "300s"
 				c.LoopsBucket = "CUSTOM_LOOPS"
-				c.TrajectoriesBucket = "CUSTOM_TRAJECTORIES"
 			},
 		},
 	}
@@ -65,9 +63,6 @@ func TestConfig_JSONSerialization(t *testing.T) {
 			}
 			if decoded.LoopsBucket != config.LoopsBucket {
 				t.Errorf("LoopsBucket = %v, want %v", decoded.LoopsBucket, config.LoopsBucket)
-			}
-			if decoded.TrajectoriesBucket != config.TrajectoriesBucket {
-				t.Errorf("TrajectoriesBucket = %v, want %v", decoded.TrajectoriesBucket, config.TrajectoriesBucket)
 			}
 		})
 	}
@@ -141,14 +136,6 @@ func TestConfig_Validate(t *testing.T) {
 			errMsg:  "loops_bucket",
 		},
 		{
-			name: "empty trajectories bucket",
-			modify: func(c *agenticloop.Config) {
-				c.TrajectoriesBucket = ""
-			},
-			wantErr: true,
-			errMsg:  "trajectories_bucket",
-		},
-		{
 			name: "valid edge case max iterations (1)",
 			modify: func(c *agenticloop.Config) {
 				c.MaxIterations = 1
@@ -209,11 +196,6 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("DefaultConfig() loops_bucket = %s, want AGENT_LOOPS", cfg.LoopsBucket)
 	}
 
-	// Verify default trajectories bucket
-	if cfg.TrajectoriesBucket != "AGENT_TRAJECTORIES" {
-		t.Errorf("DefaultConfig() trajectories_bucket = %s, want AGENT_TRAJECTORIES", cfg.TrajectoriesBucket)
-	}
-
 	// Verify ports are configured
 	if cfg.Ports == nil {
 		t.Fatal("DefaultConfig() ports should not be nil")
@@ -230,8 +212,8 @@ func TestDefaultConfig(t *testing.T) {
 	}
 
 	// Verify KV ports
-	if len(cfg.Ports.KVWrite) != 2 {
-		t.Errorf("DefaultConfig() KV write ports count = %d, want 2", len(cfg.Ports.KVWrite))
+	if len(cfg.Ports.KVWrite) != 1 {
+		t.Errorf("DefaultConfig() KV write ports count = %d, want 1", len(cfg.Ports.KVWrite))
 	}
 
 	// Verify specific input subjects
@@ -343,61 +325,26 @@ func TestConfig_MaxIterationsBoundaries(t *testing.T) {
 
 func TestConfig_BucketNames(t *testing.T) {
 	tests := []struct {
-		name               string
-		loopsBucket        string
-		trajectoriesBucket string
-		wantValid          bool
+		name        string
+		loopsBucket string
+		wantValid   bool
 	}{
-		{"default names", "AGENT_LOOPS", "AGENT_TRAJECTORIES", true},
-		{"custom names", "MY_LOOPS", "MY_TRAJECTORIES", true},
-		{"same name both", "SAME_BUCKET", "SAME_BUCKET", true}, // Allowed but not recommended
-		{"empty loops bucket", "", "AGENT_TRAJECTORIES", false},
-		{"empty trajectories bucket", "AGENT_LOOPS", "", false},
-		{"both empty", "", "", false},
-		{"whitespace loops", "  ", "AGENT_TRAJECTORIES", false},
-		{"whitespace trajectories", "AGENT_LOOPS", "  ", false},
+		{"default name", "AGENT_LOOPS", true},
+		{"custom name", "MY_LOOPS", true},
+		{"empty loops bucket", "", false},
+		{"whitespace loops", "  ", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			config := validBaseConfig()
 			config.LoopsBucket = tt.loopsBucket
-			config.TrajectoriesBucket = tt.trajectoriesBucket
 
 			err := config.Validate()
 			isValid := err == nil
 
 			if isValid != tt.wantValid {
 				t.Errorf("Validate() valid=%v, want %v (error: %v)", isValid, tt.wantValid, err)
-			}
-		})
-	}
-}
-
-func TestConfig_TrajectoryTTL(t *testing.T) {
-	tests := []struct {
-		name      string
-		ttl       string
-		wantValid bool
-	}{
-		{"valid 24h", "24h", true},
-		{"valid 1h", "1h", true},
-		{"valid 7 days", "168h", true},
-		{"empty (uses default)", "", true},
-		{"invalid format", "not-a-duration", false},
-		{"negative", "-1h", false},
-		{"zero", "0s", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			config := validBaseConfig()
-			config.TrajectoryTTL = tt.ttl
-
-			err := config.Validate()
-			isValid := err == nil
-			if isValid != tt.wantValid {
-				t.Errorf("Validate() with trajectory_ttl=%q: valid=%v, want %v (err: %v)", tt.ttl, isValid, tt.wantValid, err)
 			}
 		})
 	}
@@ -433,11 +380,10 @@ func TestConfig_TrajectoryDetail(t *testing.T) {
 // Tests override specific fields to test validation of those fields.
 func validBaseConfig() agenticloop.Config {
 	return agenticloop.Config{
-		MaxIterations:      20,
-		Timeout:            "120s",
-		LoopsBucket:        "AGENT_LOOPS",
-		TrajectoriesBucket: "AGENT_TRAJECTORIES",
-		Context:            agenticloop.DefaultContextConfig(),
+		MaxIterations: 20,
+		Timeout:       "120s",
+		LoopsBucket:   "AGENT_LOOPS",
+		Context:       agenticloop.DefaultContextConfig(),
 	}
 }
 

@@ -131,12 +131,12 @@ func TestComponent_KVPorts(t *testing.T) {
 	// This may be implementation-specific, but we can verify via config
 	config := agenticloop.DefaultConfig()
 
-	if len(config.Ports.KVWrite) != 2 {
-		t.Errorf("Config should have 2 KV write ports, got %d", len(config.Ports.KVWrite))
+	if len(config.Ports.KVWrite) != 1 {
+		t.Errorf("Config should have 1 KV write port, got %d", len(config.Ports.KVWrite))
 	}
 
 	// Verify KV bucket names
-	expectedBuckets := []string{"AGENT_LOOPS", "AGENT_TRAJECTORIES"}
+	expectedBuckets := []string{"AGENT_LOOPS"}
 	foundBuckets := make(map[string]bool)
 	for _, kvPort := range config.Ports.KVWrite {
 		foundBuckets[kvPort.Bucket] = true
@@ -162,7 +162,7 @@ func TestComponent_ConfigSchema(t *testing.T) {
 	}
 
 	// Verify expected properties exist
-	expectedProps := []string{"max_iterations", "timeout", "loops_bucket", "trajectories_bucket", "ports"}
+	expectedProps := []string{"max_iterations", "timeout", "loops_bucket", "ports"}
 	for _, propName := range expectedProps {
 		if _, ok := schema.Properties[propName]; !ok {
 			t.Errorf("ConfigSchema() should have %q property", propName)
@@ -196,14 +196,6 @@ func TestComponent_ConfigSchema(t *testing.T) {
 		t.Errorf("loops_bucket type = %s, want string", loopsBucketProp.Type)
 	}
 
-	// Verify trajectories_bucket property
-	trajBucketProp, ok := schema.Properties["trajectories_bucket"]
-	if !ok {
-		t.Fatal("ConfigSchema() should have 'trajectories_bucket' property")
-	}
-	if trajBucketProp.Type != "string" {
-		t.Errorf("trajectories_bucket type = %s, want string", trajBucketProp.Type)
-	}
 }
 
 func TestComponent_Health_NotStarted(t *testing.T) {
@@ -411,7 +403,6 @@ func TestNewComponent_CustomMaxIterations(t *testing.T) {
 func TestNewComponent_CustomBucketNames(t *testing.T) {
 	config := agenticloop.DefaultConfig()
 	config.LoopsBucket = "CUSTOM_LOOPS"
-	config.TrajectoriesBucket = "CUSTOM_TRAJECTORIES"
 
 	rawConfig, err := json.Marshal(config)
 	if err != nil {

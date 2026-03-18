@@ -317,7 +317,6 @@
         "timeout": "30s",
         "stream_name": "AGENT",
         "loops_bucket": "AGENT_LOOPS",
-        "trajectories_bucket": "AGENT_TRAJECTORIES",
         "ports": {
           "inputs": [
             {

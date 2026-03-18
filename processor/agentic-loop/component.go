@@ -17,6 +17,7 @@ import (
 	"github.com/c360studio/semstreams/graph/llm"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/cache"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/workflow"
 	"github.com/c360studio/semstreams/processor/rule/boid"
@@ -48,9 +49,11 @@ type Component struct {
 	startTime time.Time
 
 	// KV buckets
-	loopsBucket        jetstream.KeyValue
-	trajectoriesBucket jetstream.KeyValue
-	positionsBucket    jetstream.KeyValue
+	loopsBucket     jetstream.KeyValue
+	positionsBucket jetstream.KeyValue
+
+	// Trajectory cache (replaces KV bucket — durable content in ObjectStore + graph)
+	trajectoryCache cache.Cache[*agentic.Trajectory]
 
 	// Boid coordination handler
 	boidHandler *BoidHandler
@@ -406,32 +409,13 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	}
 	c.loopsBucket = loopsBucket
 
-	// Parse trajectory TTL from config (defaults to 24h)
-	trajectoryTTL := 24 * time.Hour
-	if c.config.TrajectoryTTL != "" {
-		if parsed, parseErr := time.ParseDuration(c.config.TrajectoryTTL); parseErr == nil {
-			trajectoryTTL = parsed
-		}
-	}
-	trajectoryHistory := 10
-	if c.config.TrajectoryHistory > 0 {
-		trajectoryHistory = c.config.TrajectoryHistory
-	}
-
-	// Initialize trajectories bucket
-	trajectoriesBucket, err := js.KeyValue(ctx, c.config.TrajectoriesBucket)
+	// Initialize trajectory cache (15m TTL, cleanup every 5m).
+	// Durable trajectory content is stored in ObjectStore + graph entities.
+	trajectoryCache, err := cache.NewTTL[*agentic.Trajectory](ctx, 15*time.Minute, 5*time.Minute)
 	if err != nil {
-		// Bucket doesn't exist, try to create it
-		trajectoriesBucket, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
-			Bucket:  c.config.TrajectoriesBucket,
-			History: uint8(trajectoryHistory),
-			TTL:     trajectoryTTL,
-		})
-		if err != nil {
-			return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create trajectories bucket")
-		}
+		return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create trajectory cache")
 	}
-	c.trajectoriesBucket = trajectoriesBucket
+	c.trajectoryCache = trajectoryCache
 
 	// Initialize content store for trajectory step content (tool results, model responses)
 	contentBucket := c.config.ContentBucket
@@ -731,9 +715,6 @@ func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
 	// Persist loop state to KV
 	c.persistLoopState(ctx, result.LoopID)
 
-	// Persist trajectory steps
-	c.persistTrajectorySteps(ctx, result.LoopID, result.TrajectorySteps)
-
 	// Write initial Boid position for coordination
 	c.writeInitialBoidPosition(ctx, result.LoopID, task)
 }
@@ -865,7 +846,6 @@ func (c *Component) recordResponseMetrics(response *agentic.AgentResponse, resul
 func (c *Component) persistHandlerResult(ctx context.Context, result HandlerResult) {
 	c.publishResults(ctx, result)
 	c.persistLoopState(ctx, result.LoopID)
-	c.persistTrajectorySteps(ctx, result.LoopID, result.TrajectorySteps)
 
 	// Finalize terminal states
 	if result.State == agentic.LoopStateComplete || result.State == agentic.LoopStateFailed {
@@ -939,8 +919,6 @@ func (c *Component) handleToolResultMessage(ctx context.Context, data []byte) {
 	// Persist loop state to KV
 	c.persistLoopState(ctx, result.LoopID)
 
-	// Persist trajectory steps
-	c.persistTrajectorySteps(ctx, result.LoopID, result.TrajectorySteps)
 }
 
 // publishResults publishes all output messages from a handler result using JetStream
@@ -1049,125 +1027,45 @@ func (c *Component) persistLoopState(ctx context.Context, loopID string) {
 	}
 }
 
-// persistTrajectorySteps persists trajectory steps to KV
-func (c *Component) persistTrajectorySteps(ctx context.Context, loopID string, steps []agentic.TrajectoryStep) {
-	if c.trajectoriesBucket == nil || len(steps) == 0 {
-		return
-	}
-
-	// Get or create trajectory
-	var trajectory agentic.Trajectory
-	entry, err := c.trajectoriesBucket.Get(ctx, loopID)
-	if err == nil {
-		// Trajectory exists, unmarshal it
-		if err := json.Unmarshal(entry.Value(), &trajectory); err != nil {
-			c.logger.Error("Failed to unmarshal existing trajectory", "error", err, "loop_id", loopID)
-			return
-		}
-	} else {
-		// Create new trajectory
-		trajectory = agentic.Trajectory{
-			LoopID:    loopID,
-			StartTime: time.Now(),
-			Steps:     []agentic.TrajectoryStep{},
-		}
-	}
-
-	// Recalculate totals from existing steps (fixes stale values from old code)
-	trajectory.TotalTokensIn = 0
-	trajectory.TotalTokensOut = 0
-	trajectory.Duration = 0
-	for _, s := range trajectory.Steps {
-		trajectory.TotalTokensIn += s.TokensIn
-		trajectory.TotalTokensOut += s.TokensOut
-		trajectory.Duration += s.Duration
-	}
-	// Append new steps using AddStep (updates totals correctly)
-	for _, step := range steps {
-		trajectory.AddStep(step)
-	}
-
-	// Persist updated trajectory
-	data, err := json.Marshal(trajectory)
-	if err != nil {
-		c.logger.Error("Failed to marshal trajectory", "error", err, "loop_id", loopID)
-		return
-	}
-
-	if _, err := c.trajectoriesBucket.Put(ctx, loopID, data); err != nil {
-		c.logger.Error("Failed to persist trajectory", "error", err, "loop_id", loopID)
-	}
-}
-
-// writeTrajectoryToGraph reads the finalized trajectory from KV, stores step
-// content in ObjectStore, and emits graph triples for each step.
-// Must be called after finalizeTrajectory.
+// writeTrajectoryToGraph reads the trajectory from the in-memory TrajectoryManager,
+// stores step content in ObjectStore, and emits graph triples for each step.
 func (c *Component) writeTrajectoryToGraph(ctx context.Context, loopID string) {
-	if c.graphWriter == nil || c.trajectoriesBucket == nil {
+	if c.graphWriter == nil {
 		return
 	}
-
-	entry, err := c.trajectoriesBucket.Get(ctx, loopID)
+	traj, err := c.handler.trajectoryManager.GetTrajectory(loopID)
 	if err != nil {
 		c.logger.Debug("graph_writer: trajectory not found for graph emission",
 			"loop_id", loopID, "error", err)
 		return
 	}
-
-	var trajectory agentic.Trajectory
-	if err := json.Unmarshal(entry.Value(), &trajectory); err != nil {
-		c.logger.Warn("graph_writer: failed to unmarshal trajectory for graph emission",
-			"loop_id", loopID, "error", err)
-		return
-	}
-
-	c.graphWriter.WriteTrajectorySteps(ctx, loopID, &trajectory)
+	c.graphWriter.WriteTrajectorySteps(ctx, loopID, &traj)
 }
 
-// finalizeTrajectory marks a trajectory as complete
-func (c *Component) finalizeTrajectory(ctx context.Context, loopID string, state agentic.LoopState) {
-	if c.trajectoriesBucket == nil {
-		return
-	}
-
-	// Get trajectory
-	entry, err := c.trajectoriesBucket.Get(ctx, loopID)
+// finalizeTrajectory reads the trajectory from the in-memory TrajectoryManager,
+// marks it complete, and caches it for post-completion queries.
+func (c *Component) finalizeTrajectory(_ context.Context, loopID string, state agentic.LoopState) {
+	traj, err := c.handler.trajectoryManager.GetTrajectory(loopID)
 	if err != nil {
-		c.logger.Error("Failed to get trajectory for finalization", "error", err, "loop_id", loopID)
+		c.logger.Debug("finalizeTrajectory: trajectory not found", "loop_id", loopID)
 		return
 	}
-
-	var trajectory agentic.Trajectory
-	if err := json.Unmarshal(entry.Value(), &trajectory); err != nil {
-		c.logger.Error("Failed to unmarshal trajectory", "error", err, "loop_id", loopID)
-		return
-	}
-
-	// Set end time, outcome, and total duration
-	now := time.Now()
-	trajectory.EndTime = &now
-	trajectory.Duration = now.Sub(trajectory.StartTime).Milliseconds()
 	if state == agentic.LoopStateComplete {
-		trajectory.Outcome = "complete"
+		traj.Complete("complete")
 	} else {
-		trajectory.Outcome = "failed"
+		traj.Complete("failed")
 	}
-
-	// Persist finalized trajectory
-	data, err := json.Marshal(trajectory)
-	if err != nil {
-		c.logger.Error("Failed to marshal finalized trajectory", "error", err, "loop_id", loopID)
-		return
-	}
-
-	if _, err := c.trajectoriesBucket.Put(ctx, loopID, data); err != nil {
-		c.logger.Error("Failed to persist finalized trajectory", "error", err, "loop_id", loopID)
+	if c.trajectoryCache != nil {
+		if _, setErr := c.trajectoryCache.Set(loopID, &traj); setErr != nil {
+			c.logger.Warn("Failed to cache finalized trajectory", "loop_id", loopID, "error", setErr)
+		}
 	}
 }
 
 // handleTrajectoryQuery handles NATS request/reply for trajectory queries.
-// It reads the trajectory from the KV bucket keyed by loopId.
-func (c *Component) handleTrajectoryQuery(ctx context.Context, data []byte) ([]byte, error) {
+// Serves from TTL cache for recently completed loops, or from the in-memory
+// TrajectoryManager for active loops.
+func (c *Component) handleTrajectoryQuery(_ context.Context, data []byte) ([]byte, error) {
 	var req struct {
 		LoopID string `json:"loopId"`
 		Limit  int    `json:"limit,omitempty"`
@@ -1176,28 +1074,27 @@ func (c *Component) handleTrajectoryQuery(ctx context.Context, data []byte) ([]b
 		return nil, fmt.Errorf("loopId required")
 	}
 
-	if c.trajectoriesBucket == nil {
-		return nil, fmt.Errorf("trajectories bucket not initialized")
+	// Try cache first (finalized trajectories).
+	var traj *agentic.Trajectory
+	if c.trajectoryCache != nil {
+		traj, _ = c.trajectoryCache.Get(req.LoopID)
 	}
 
-	entry, err := c.trajectoriesBucket.Get(ctx, req.LoopID)
-	if err != nil {
-		return nil, fmt.Errorf("trajectory not found: %w", err)
-	}
-
-	// Apply step limit if requested
-	if req.Limit > 0 {
-		var traj agentic.Trajectory
-		if err := json.Unmarshal(entry.Value(), &traj); err != nil {
-			return nil, fmt.Errorf("failed to decode trajectory: %w", err)
+	// Fall back to in-memory TrajectoryManager (active loops).
+	if traj == nil {
+		t, err := c.handler.trajectoryManager.GetTrajectory(req.LoopID)
+		if err != nil {
+			return nil, fmt.Errorf("trajectory not found: %w", err)
 		}
-		if len(traj.Steps) > req.Limit {
-			traj.Steps = traj.Steps[:req.Limit]
-		}
-		return json.Marshal(traj)
+		traj = &t
 	}
 
-	return entry.Value(), nil
+	if req.Limit > 0 && len(traj.Steps) > req.Limit {
+		limited := *traj
+		limited.Steps = limited.Steps[:req.Limit]
+		return json.Marshal(&limited)
+	}
+	return json.Marshal(traj)
 }
 
 // findLoopIDForRequest finds the loop ID associated with a request ID,

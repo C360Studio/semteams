@@ -99,7 +99,7 @@ func TestRegister_ConfigSchema(t *testing.T) {
 	}
 
 	// Verify expected properties exist
-	expectedProps := []string{"max_iterations", "timeout", "loops_bucket", "trajectories_bucket", "ports"}
+	expectedProps := []string{"max_iterations", "timeout", "loops_bucket", "ports"}
 	for _, propName := range expectedProps {
 		if _, ok := schema.Properties[propName]; !ok {
 			t.Errorf("Schema.Properties should have %q property", propName)
@@ -137,15 +137,6 @@ func TestRegister_ConfigSchema(t *testing.T) {
 	}
 	if loopsBucketProp.Type != "string" {
 		t.Errorf("loops_bucket.Type = %s, want string", loopsBucketProp.Type)
-	}
-
-	// Verify trajectories_bucket property
-	trajBucketProp, ok := schema.Properties["trajectories_bucket"]
-	if !ok {
-		t.Fatal("Schema should have 'trajectories_bucket' property")
-	}
-	if trajBucketProp.Type != "string" {
-		t.Errorf("trajectories_bucket.Type = %s, want string", trajBucketProp.Type)
 	}
 
 	// Verify ports property
@@ -246,11 +237,6 @@ func TestRegister_SchemaValidation(t *testing.T) {
 	loopsBucketProp := schema.Properties["loops_bucket"]
 	if loopsBucketProp.Type != "string" {
 		t.Errorf("loops_bucket type should be string, got %s", loopsBucketProp.Type)
-	}
-
-	trajBucketProp := schema.Properties["trajectories_bucket"]
-	if trajBucketProp.Type != "string" {
-		t.Errorf("trajectories_bucket type should be string, got %s", trajBucketProp.Type)
 	}
 
 	// Verify schema can be used for validation

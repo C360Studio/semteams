@@ -332,9 +332,8 @@
 //	    MaxIterations:      20,
 //	    Timeout:            "120s",
 //	    StreamName:         "AGENT",
-//	    LoopsBucket:        "AGENT_LOOPS",
-//	    TrajectoriesBucket: "AGENT_TRAJECTORIES",
-//	    Context:            agenticloop.DefaultContextConfig(),
+//	    LoopsBucket: "AGENT_LOOPS",
+//	    Context:    agenticloop.DefaultContextConfig(),
 //	}
 //
 //	rawConfig, _ := json.Marshal(config)
