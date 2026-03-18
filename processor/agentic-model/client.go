@@ -277,7 +277,7 @@ func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (
 
 		resp, err := c.doSingleAttempt(ctx, chatReq, req.RequestID)
 		if err == nil {
-			return resp, nil
+			return c.withRetryCount(resp, genericAttempt+rlAttempt), nil
 		}
 
 		// Rate-limited (429) — separate backoff curve
@@ -347,6 +347,12 @@ func (c *Client) logWarn(msg, requestID, model string, attrs ...slog.Attr) {
 		}
 		c.logger.Warn(msg, args...)
 	}
+}
+
+// withRetryCount sets the retry count on a response if retries occurred.
+func (c *Client) withRetryCount(resp agentic.AgentResponse, count int) agentic.AgentResponse {
+	resp.RetryCount = count
+	return resp
 }
 
 // errorResponse builds an AgentResponse with status "error".

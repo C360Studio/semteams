@@ -90,6 +90,7 @@ type AgentResponse struct {
 	Message    ChatMessage `json:"message,omitempty"`
 	Error      string      `json:"error,omitempty"`
 	TokenUsage TokenUsage  `json:"token_usage,omitempty"`
+	RetryCount int         `json:"retry_count,omitempty"`
 }
 
 // Validate checks if the AgentResponse is valid

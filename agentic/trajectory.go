@@ -17,10 +17,13 @@ type TrajectoryStep struct {
 	ToolName      string         `json:"tool_name,omitempty"`
 	ToolArguments map[string]any `json:"tool_arguments,omitempty"`
 	ToolResult    string         `json:"tool_result,omitempty"`
-	Duration      int64          `json:"duration"`             // milliseconds
-	Messages      []ChatMessage  `json:"messages,omitempty"`   // Full request messages (detail=full)
-	ToolCalls     []ToolCall     `json:"tool_calls,omitempty"` // Assistant tool calls (detail=full)
-	Model         string         `json:"model,omitempty"`      // Model used
+	Duration      int64          `json:"duration"`              // milliseconds
+	Messages      []ChatMessage  `json:"messages,omitempty"`    // Full request messages (detail=full)
+	ToolCalls     []ToolCall     `json:"tool_calls,omitempty"`  // Assistant tool calls (detail=full)
+	Model         string         `json:"model,omitempty"`       // Model used
+	Provider      string         `json:"provider,omitempty"`    // LLM provider (anthropic, openai, etc.)
+	Capability    string         `json:"capability,omitempty"`  // Role/purpose (coding, planning, reviewing, etc.)
+	RetryCount    int            `json:"retry_count,omitempty"` // Number of retries before success
 }
 
 // Validate checks if the TrajectoryStep is valid

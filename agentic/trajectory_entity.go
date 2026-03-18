@@ -71,6 +71,17 @@ func (e *TrajectoryStepEntity) Triples() []message.Triple {
 		}
 	}
 
+	// Common optional predicates (apply to both step types)
+	if e.Step.Capability != "" {
+		triples = append(triples, triple(agvocab.StepCapability, e.Step.Capability))
+	}
+	if e.Step.Provider != "" {
+		triples = append(triples, triple(agvocab.StepProvider, e.Step.Provider))
+	}
+	if e.Step.RetryCount > 0 {
+		triples = append(triples, triple(agvocab.StepRetries, e.Step.RetryCount))
+	}
+
 	return triples
 }
 

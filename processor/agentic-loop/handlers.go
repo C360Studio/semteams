@@ -9,6 +9,7 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
 	agentictools "github.com/c360studio/semstreams/processor/agentic-tools"
 )
@@ -58,6 +59,7 @@ type MessageHandler struct {
 	trajectoryManager *TrajectoryManager
 	compactor         *Compactor
 	toolCallFilter    agentic.ToolCallFilter
+	modelRegistry     model.RegistryReader
 	logger            *slog.Logger
 }
 
@@ -71,6 +73,18 @@ func NewMessageHandler(config Config, loopManagerOpts ...LoopManagerOption) *Mes
 		compactor:         NewCompactor(config.Context),
 		logger:            slog.Default(),
 	}
+}
+
+// resolveProvider looks up the LLM provider for a model endpoint name.
+func (h *MessageHandler) resolveProvider(endpointName string) string {
+	if h.modelRegistry == nil || endpointName == "" {
+		return ""
+	}
+	ep := h.modelRegistry.GetEndpoint(endpointName)
+	if ep == nil {
+		return ""
+	}
+	return ep.Provider
 }
 
 // SetSummarizer injects an LLM-backed summarizer into the compactor.
@@ -468,17 +482,20 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 
 	// Record trajectory step
 	step := agentic.TrajectoryStep{
-		Timestamp: time.Now(),
-		StepType:  "model_call",
-		RequestID: response.RequestID,
-		Response:  response.Message.Content,
-		TokensIn:  response.TokenUsage.PromptTokens,
-		TokensOut: response.TokenUsage.CompletionTokens,
-		Duration:  h.computeRequestDuration(response.RequestID),
+		Timestamp:  time.Now(),
+		StepType:   "model_call",
+		RequestID:  response.RequestID,
+		Response:   response.Message.Content,
+		TokensIn:   response.TokenUsage.PromptTokens,
+		TokensOut:  response.TokenUsage.CompletionTokens,
+		Duration:   h.computeRequestDuration(response.RequestID),
+		Model:      entity.Model,
+		Provider:   h.resolveProvider(entity.Model),
+		Capability: entity.Role,
+		RetryCount: response.RetryCount,
 	}
 	if h.config.TrajectoryDetail == "full" {
 		step.ToolCalls = response.Message.ToolCalls
-		step.Model = entity.Model
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
@@ -754,6 +771,8 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		ToolArguments: h.loopManager.GetToolArguments(toolResult.CallID),
 		ToolResult:    toolResult.Content,
 		Duration:      h.computeToolDuration(toolResult.CallID),
+		Provider:      h.resolveProvider(entity.Model),
+		Capability:    entity.Role,
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 

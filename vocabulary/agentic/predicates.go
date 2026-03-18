@@ -515,4 +515,20 @@ const (
 	// Example: 819
 	// DataType: int
 	StepTokensOut = "agent.step.tokens_out"
+
+	// StepCapability is the role or purpose of this step.
+	// For model_call steps: the task role (e.g., "coding", "planning", "reviewing", "reasoning").
+	// Example: "coding"
+	// DataType: string
+	StepCapability = "agent.step.capability"
+
+	// StepProvider is the LLM provider for this step's model endpoint.
+	// Example: "anthropic", "openai", "ollama"
+	// DataType: string
+	StepProvider = "agent.step.provider"
+
+	// StepRetries is the number of retries before this step succeeded.
+	// Example: 2
+	// DataType: int
+	StepRetries = "agent.step.retries"
 )

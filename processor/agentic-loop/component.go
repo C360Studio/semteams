@@ -134,6 +134,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		loopOpts = append(loopOpts, WithLoopManagerModelRegistry(deps.ModelRegistry))
 	}
 	handler := NewMessageHandler(config, loopOpts...)
+	handler.modelRegistry = deps.ModelRegistry
 
 	// Wire LLM-backed summarizer for context compaction if model registry is available
 	if deps.ModelRegistry != nil && config.Context.Enabled {
