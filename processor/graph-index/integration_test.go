@@ -110,7 +110,7 @@ func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
 	assert.NotNil(t, outgoingEntry)
 
 	var outgoingData []map[string]interface{}
-	err = json.Unmarshal(outgoingEntry.Value(), &outgoingData)
+	err = json.Unmarshal(outgoingEntry.Value, &outgoingData)
 	require.NoError(t, err)
 	require.Len(t, outgoingData, 1, "should have one relationship")
 
@@ -123,7 +123,7 @@ func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
 	assert.NotNil(t, incomingEntry)
 
 	var incomingData []map[string]interface{}
-	err = json.Unmarshal(incomingEntry.Value(), &incomingData)
+	err = json.Unmarshal(incomingEntry.Value, &incomingData)
 	require.NoError(t, err)
 	require.Len(t, incomingData, 1, "should have one incoming relationship")
 
@@ -134,7 +134,7 @@ func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
 	aliasEntry, err := graphIndex.aliasBucket.Get(ctx, alias)
 	require.NoError(t, err)
 	assert.NotNil(t, aliasEntry)
-	assert.Equal(t, entityID, string(aliasEntry.Value()))
+	assert.Equal(t, entityID, string(aliasEntry.Value))
 
 	// Verify predicate indexes were created (format: {entities: [...], predicate, entity_id})
 	predicates := []string{"robotics.assigned.mission", "robotics.status.armed", "core.identity.alias"}
@@ -143,7 +143,7 @@ func TestIntegration_KVWatchToIndexFlow(t *testing.T) {
 		require.NoError(t, err, "predicate index should exist for %s", predicate)
 
 		var predicateData map[string]interface{}
-		err = json.Unmarshal(predicateEntry.Value(), &predicateData)
+		err = json.Unmarshal(predicateEntry.Value, &predicateData)
 		require.NoError(t, err)
 
 		// Check entities array contains our entity
@@ -238,10 +238,10 @@ func TestIntegration_EntityDeletion(t *testing.T) {
 
 	// Verify indexes were removed
 	_, err = graphIndex.outgoingBucket.Get(ctx, entityID)
-	assert.ErrorIs(t, err, jetstream.ErrKeyNotFound, "outgoing index should be deleted")
+	assert.True(t, natsclient.IsKVNotFoundError(err), "outgoing index should be deleted, got: %v", err)
 
 	_, err = graphIndex.incomingBucket.Get(ctx, entityID)
-	assert.ErrorIs(t, err, jetstream.ErrKeyNotFound, "incoming index should be deleted")
+	assert.True(t, natsclient.IsKVNotFoundError(err), "incoming index should be deleted, got: %v", err)
 }
 
 // TestIntegration_MultipleRelationships tests indexing entities with multiple relationships
@@ -336,7 +336,7 @@ func TestIntegration_MultipleRelationships(t *testing.T) {
 	require.NoError(t, err)
 
 	var outgoingData []map[string]interface{}
-	err = json.Unmarshal(outgoingEntry.Value(), &outgoingData)
+	err = json.Unmarshal(outgoingEntry.Value, &outgoingData)
 	require.NoError(t, err)
 	require.Len(t, outgoingData, 3, "should have three relationships")
 
@@ -356,7 +356,7 @@ func TestIntegration_MultipleRelationships(t *testing.T) {
 		require.NoError(t, err, "incoming index should exist for %s", targetID)
 
 		var incomingData []map[string]interface{}
-		err = json.Unmarshal(incomingEntry.Value(), &incomingData)
+		err = json.Unmarshal(incomingEntry.Value, &incomingData)
 		require.NoError(t, err)
 		require.NotEmpty(t, incomingData, "should have at least one incoming relationship")
 
@@ -580,7 +580,7 @@ func TestIntegration_HierarchyEdgeIndexing(t *testing.T) {
 	assert.NotNil(t, outgoingEntry)
 
 	var outgoingData []map[string]interface{}
-	err = json.Unmarshal(outgoingEntry.Value(), &outgoingData)
+	err = json.Unmarshal(outgoingEntry.Value, &outgoingData)
 	require.NoError(t, err)
 
 	// Should have exactly 3 hierarchy relationships
@@ -606,7 +606,7 @@ func TestIntegration_HierarchyEdgeIndexing(t *testing.T) {
 		require.NoError(t, err, "incoming index should exist for container %s", containerID)
 
 		var incomingData []map[string]interface{}
-		err = json.Unmarshal(incomingEntry.Value(), &incomingData)
+		err = json.Unmarshal(incomingEntry.Value, &incomingData)
 		require.NoError(t, err)
 		require.NotEmpty(t, incomingData, "container %s should have incoming edges", containerID)
 
@@ -627,7 +627,7 @@ func TestIntegration_HierarchyEdgeIndexing(t *testing.T) {
 
 	// Context index stores []ContextEntry (entity_id, predicate pairs)
 	var contextData []map[string]interface{}
-	err = json.Unmarshal(contextEntry.Value(), &contextData)
+	err = json.Unmarshal(contextEntry.Value, &contextData)
 	require.NoError(t, err)
 
 	// Verify entity is in context index

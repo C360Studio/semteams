@@ -171,7 +171,7 @@ type Component struct {
 	// Domain resources
 	entityBucket *natsclient.KVStore            // KV operations with CAS support
 	entityCache  cache.Cache[graph.EntityState] // Read-through cache for query handlers
-	suffixBucket jetstream.KeyValue             // KV suffix index: suffix → fullID
+	suffixBucket *natsclient.KVStore            // KV suffix index: suffix → fullID
 	suffixCache  cache.Cache[string]            // TTL cache for suffix resolution
 
 	// Inference components
@@ -593,7 +593,7 @@ func (c *Component) initStorage(ctx context.Context) error {
 	if err != nil {
 		return errs.Wrap(err, "Component", "Start", "suffix index bucket creation")
 	}
-	c.suffixBucket = suffixBucket
+	c.suffixBucket = c.natsClient.NewKVStore(suffixBucket)
 
 	// Suffix resolution cache (stable mappings, long TTL)
 	suffixCacheInst, err := cache.NewFromConfig[string](ctx, cache.Config{
@@ -970,20 +970,53 @@ func (c *Component) CreateEntity(ctx context.Context, entity *graph.EntityState)
 	// Ensure referenced entities exist (fallback for referential integrity)
 	// This creates stub entities for any entity IDs referenced in relationship triples
 	// that don't already exist, guaranteeing graph consistency.
+	// Deduplicate target IDs — multiple triples may reference the same entity.
+	uniqueTargets := make(map[string]struct{})
 	for _, triple := range entity.Triples {
 		if triple.IsRelationship() {
 			targetID, ok := triple.Object.(string)
 			if ok && targetID != "" && targetID != entity.ID {
-				if err := c.ensureReferencedEntityExists(ctx, targetID, entity.ID); err != nil {
-					c.logger.Debug("failed to ensure referenced entity exists",
-						slog.String("target", targetID),
-						slog.String("referenced_by", entity.ID),
-						slog.Any("error", err))
-					// Don't fail entity creation - this is a best-effort fallback
-				}
+				uniqueTargets[targetID] = struct{}{}
 			}
 		}
 	}
+
+	// Check referential integrity for all unique targets in parallel, bounded to 5
+	// concurrent KV operations. Errors are best-effort — they don't fail entity creation.
+	sem := make(chan struct{}, 5)
+	var wg sync.WaitGroup
+
+	for targetID := range uniqueTargets {
+		if ctx.Err() != nil {
+			break
+		}
+
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+
+			// Acquire semaphore with context cancellation support.
+			select {
+			case <-ctx.Done():
+				return
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			}
+
+			if ctx.Err() != nil {
+				return
+			}
+
+			if err := c.ensureReferencedEntityExists(ctx, id, entity.ID); err != nil {
+				c.logger.Debug("failed to ensure referenced entity exists",
+					slog.String("target", id),
+					slog.String("referenced_by", entity.ID),
+					slog.Any("error", err))
+			}
+		}(targetID)
+	}
+
+	wg.Wait()
 
 	return nil
 }

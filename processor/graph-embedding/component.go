@@ -663,6 +663,14 @@ func (c *Component) initLifecycleReporter(ctx context.Context) {
 func (c *Component) initStorageAndWorker(ctx context.Context, indexBucket, dedupBucket jetstream.KeyValue) error {
 	c.storage = embedding.NewStorage(indexBucket, dedupBucket)
 
+	// Start the in-memory vector cache before the worker so it is warm as
+	// quickly as possible. Errors here are non-fatal: similarity queries
+	// fall back to the KV scan path until the watcher is ready.
+	if err := c.storage.StartVectorCache(ctx); err != nil {
+		c.logger.Warn("vector cache watcher failed to start, similarity queries will use KV scan",
+			slog.Any("error", err))
+	}
+
 	c.worker = embedding.NewWorker(c.storage, c.embedder, indexBucket, c.logger).
 		WithWorkers(c.config.BatchSize / 10).
 		WithMetrics(newWorkerMetricsAdapter(c.metrics)).

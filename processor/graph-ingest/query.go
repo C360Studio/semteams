@@ -229,7 +229,7 @@ func (c *Component) lookupSuffixIndex(ctx context.Context, suffix string) string
 	var indexEntry struct {
 		ID string `json:"id"`
 	}
-	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+	if err := json.Unmarshal(entry.Value, &indexEntry); err != nil {
 		return ""
 	}
 

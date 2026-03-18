@@ -3,6 +3,9 @@ package embedding
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -63,10 +66,27 @@ type DedupRecord struct {
 	FirstGenerated time.Time `json:"first_generated"`
 }
 
-// Storage handles persistence of embeddings to NATS KV buckets
+// ScoredEntity pairs an entity ID with its cosine similarity score.
+// Returned by FindSimilarFromCache for zero-KV similarity queries.
+type ScoredEntity struct {
+	EntityID   string
+	Similarity float64
+}
+
+// Storage handles persistence of embeddings to NATS KV buckets.
+// It also maintains an in-memory vector cache, kept current via a
+// KV watcher on the index bucket, to serve similarity queries without
+// any network round-trips.
 type Storage struct {
 	indexBucket jetstream.KeyValue // EMBEDDING_INDEX
 	dedupBucket jetstream.KeyValue // EMBEDDING_DEDUP
+
+	// vectorCache is populated and maintained by StartVectorCache.
+	// Only StatusGenerated entries with non-empty vectors are stored.
+	vectorCache   map[string][]float32
+	vectorCacheMu sync.RWMutex
+	cacheReady    chan struct{} // closed once initial watcher sync completes
+	cacheStarted  bool
 }
 
 // NewStorage creates a new embedding storage instance
@@ -74,6 +94,8 @@ func NewStorage(indexBucket, dedupBucket jetstream.KeyValue) *Storage {
 	return &Storage{
 		indexBucket: indexBucket,
 		dedupBucket: dedupBucket,
+		vectorCache: make(map[string][]float32),
+		cacheReady:  make(chan struct{}),
 	}
 }
 
@@ -311,4 +333,122 @@ func (s *Storage) ListGeneratedEntityIDs(ctx context.Context) ([]string, error) 
 	}
 
 	return entityIDs, nil
+}
+
+// StartVectorCache launches a goroutine that keeps the in-memory vector cache
+// synchronised with the EMBEDDING_INDEX KV bucket via WatchAll.
+//
+// The goroutine runs until ctx is cancelled. It is safe to call only once; a
+// second call is a no-op. cacheReady is closed after the initial snapshot has
+// been applied (nil delimiter received), so FindSimilarFromCache will not
+// return results until the cache is warm.
+func (s *Storage) StartVectorCache(ctx context.Context) error {
+	s.vectorCacheMu.Lock()
+	if s.cacheStarted {
+		s.vectorCacheMu.Unlock()
+		return nil
+	}
+	s.cacheStarted = true
+	s.vectorCacheMu.Unlock()
+
+	watcher, err := s.indexBucket.WatchAll(ctx)
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil
+		}
+		return errs.WrapTransient(err, "Storage", "StartVectorCache", "watch index bucket")
+	}
+
+	go func() {
+		// NOTE: explicit watcher.Stop() before each return avoids the nats.go
+		// race between Stop() and the internal message-handler goroutine.
+		initialSyncDone := false
+
+		for {
+			select {
+			case <-ctx.Done():
+				watcher.Stop()
+				return
+			case entry, ok := <-watcher.Updates():
+				if !ok {
+					watcher.Stop()
+					return
+				}
+
+				// nil entry is the initial-sync delimiter.
+				if entry == nil {
+					if !initialSyncDone {
+						initialSyncDone = true
+						close(s.cacheReady)
+					}
+					continue
+				}
+
+				entityID := entry.Key()
+
+				if entry.Operation() == jetstream.KeyValueDelete ||
+					entry.Operation() == jetstream.KeyValuePurge {
+					s.vectorCacheMu.Lock()
+					delete(s.vectorCache, entityID)
+					s.vectorCacheMu.Unlock()
+					continue
+				}
+
+				var record Record
+				if err := json.Unmarshal(entry.Value(), &record); err != nil {
+					continue
+				}
+
+				if record.Status == StatusGenerated && len(record.Vector) > 0 {
+					s.vectorCacheMu.Lock()
+					s.vectorCache[entityID] = record.Vector
+					s.vectorCacheMu.Unlock()
+				} else {
+					// Record exists but is pending or failed — remove stale vector.
+					s.vectorCacheMu.Lock()
+					delete(s.vectorCache, entityID)
+					s.vectorCacheMu.Unlock()
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
+// FindSimilarFromCache scans the in-memory vector cache for entities whose
+// cosine similarity to queryVector is highest, excluding the entity identified
+// by excludeID (pass "" to skip exclusion).
+//
+// The second return value reports whether the cache was ready (warm) at the
+// time of the call. Callers must fall back to KV when it is false.
+func (s *Storage) FindSimilarFromCache(excludeID string, queryVector []float32, limit int) ([]ScoredEntity, bool) {
+	// Non-blocking check: is the initial sync complete?
+	select {
+	case <-s.cacheReady:
+	default:
+		return nil, false
+	}
+
+	s.vectorCacheMu.RLock()
+	defer s.vectorCacheMu.RUnlock()
+
+	results := make([]ScoredEntity, 0, len(s.vectorCache))
+	for entityID, vector := range s.vectorCache {
+		if entityID == excludeID {
+			continue
+		}
+		sim := CosineSimilarity(queryVector, vector)
+		results = append(results, ScoredEntity{EntityID: entityID, Similarity: sim})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Similarity > results[j].Similarity
+	})
+
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
+	return results, true
 }

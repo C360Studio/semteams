@@ -32,7 +32,7 @@ func TestUpdateOutgoingIndex_SerializationFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify data was written
-	bucket := comp.outgoingBucket.(*mockKVBucket)
+	bucket := outgoingMock(comp)
 	bucket.mu.Lock()
 	data, exists := bucket.data[entityID]
 	bucket.mu.Unlock()
@@ -62,7 +62,7 @@ func TestUpdateIncomingIndex_SerializationFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify data was written
-	bucket := comp.incomingBucket.(*mockKVBucket)
+	bucket := incomingMock(comp)
 	bucket.mu.Lock()
 	data, exists := bucket.data[targetID]
 	bucket.mu.Unlock()
@@ -91,7 +91,7 @@ func TestUpdateAliasIndex_StoresPlainString(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify data was written (alias index stores plain strings)
-	bucket := comp.aliasBucket.(*mockKVBucket)
+	bucket := aliasMock(comp)
 	bucket.mu.Lock()
 	data, exists := bucket.data[alias]
 	bucket.mu.Unlock()
@@ -111,7 +111,7 @@ func TestUpdatePredicateIndex_SerializationFormat(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify data was written
-	bucket := comp.predicateBucket.(*mockKVBucket)
+	bucket := predicateMock(comp)
 	bucket.mu.Lock()
 	data, exists := bucket.data[predicate]
 	bucket.mu.Unlock()
@@ -394,7 +394,7 @@ func TestProcessEntityUpdate_TripleIndexing(t *testing.T) {
 			comp.processEntityUpdate(context.Background(), entry)
 
 			// Verify outgoing index
-			outgoing := comp.outgoingBucket.(*mockKVBucket)
+			outgoing := outgoingMock(comp)
 			outgoing.mu.Lock()
 			_, hasOutgoing := outgoing.data[entityID]
 			outgoing.mu.Unlock()
@@ -402,7 +402,7 @@ func TestProcessEntityUpdate_TripleIndexing(t *testing.T) {
 
 			// Verify incoming index
 			if tt.wantIncoming {
-				incoming := comp.incomingBucket.(*mockKVBucket)
+				incoming := incomingMock(comp)
 				incoming.mu.Lock()
 				hasIncoming := len(incoming.data) > 0
 				incoming.mu.Unlock()
@@ -411,7 +411,7 @@ func TestProcessEntityUpdate_TripleIndexing(t *testing.T) {
 
 			// Verify alias index
 			if tt.wantAlias {
-				alias := comp.aliasBucket.(*mockKVBucket)
+				alias := aliasMock(comp)
 				alias.mu.Lock()
 				hasAlias := len(alias.data) > 0
 				alias.mu.Unlock()
@@ -419,7 +419,7 @@ func TestProcessEntityUpdate_TripleIndexing(t *testing.T) {
 			}
 
 			// Verify predicate index
-			predicate := comp.predicateBucket.(*mockKVBucket)
+			predicate := predicateMock(comp)
 			predicate.mu.Lock()
 			predicateCount := len(predicate.data)
 			predicate.mu.Unlock()
@@ -489,7 +489,7 @@ func TestProcessEntityUpdate_RelationshipDetection(t *testing.T) {
 			comp.processEntityUpdate(context.Background(), entry)
 
 			// Check if outgoing/incoming indexes were populated
-			outgoing := comp.outgoingBucket.(*mockKVBucket)
+			outgoing := outgoingMock(comp)
 			outgoing.mu.Lock()
 			_, hasOutgoing := outgoing.data[entityID]
 			outgoing.mu.Unlock()
@@ -515,7 +515,7 @@ func TestHandleEntityDelete_RemovesFromIndexes(t *testing.T) {
 	require.NoError(t, comp.UpdateIncomingIndex(ctx, entityID, "source", "predicate"))
 
 	// Verify entries exist
-	outgoing := comp.outgoingBucket.(*mockKVBucket)
+	outgoing := outgoingMock(comp)
 	outgoing.mu.Lock()
 	_, hasOutgoing := outgoing.data[entityID]
 	outgoing.mu.Unlock()
@@ -530,7 +530,7 @@ func TestHandleEntityDelete_RemovesFromIndexes(t *testing.T) {
 	outgoing.mu.Unlock()
 	assert.False(t, stillHasOutgoing, "should remove outgoing entry after delete")
 
-	incoming := comp.incomingBucket.(*mockKVBucket)
+	incoming := incomingMock(comp)
 	incoming.mu.Lock()
 	_, stillHasIncoming := incoming.data[entityID]
 	incoming.mu.Unlock()

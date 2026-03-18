@@ -116,7 +116,7 @@ func DefaultTieredConfig() *TieredConfig {
 		MetricsURL:           config.DefaultEndpoints.Metrics,
 		ServiceManagerURL:    config.DefaultEndpoints.HTTP,
 		GatewayURL:           config.DefaultEndpoints.HTTP + "/api-gateway",
-		GraphQLURL:           "http://localhost:38082/graphql", // Default for statistical profile
+		GraphQLURL:           config.DefaultEndpoints.HTTP + "/graph-gateway/graphql", // Via ServiceManager shared mux
 		OutputDir:            "test/e2e/results",
 		MaxRegressionPercent: 20.0, // 20% regression threshold
 		// Structural tier defaults (rules-only, no ML)
@@ -146,9 +146,9 @@ func NewTieredScenario(
 	}
 
 	// Set GraphQL URL if not explicitly configured
-	// Docker compose maps statistical/structural to 38082, semantic to 38182
+	// Goes through ServiceManager shared mux on the default HTTP port
 	if cfg.GraphQLURL == "" {
-		cfg.GraphQLURL = "http://localhost:38082/graphql"
+		cfg.GraphQLURL = config.DefaultEndpoints.HTTP + "/graph-gateway/graphql"
 	}
 
 	return &TieredScenario{

@@ -15,9 +15,11 @@ import (
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
+	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/resource"
+	"github.com/c360studio/semstreams/pkg/worker"
 	"github.com/c360studio/semstreams/vocabulary"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -192,16 +194,17 @@ type Component struct {
 	config Config
 
 	// Dependencies
-	natsClient *natsclient.Client
-	logger     *slog.Logger
+	natsClient      *natsclient.Client
+	logger          *slog.Logger
+	metricsRegistry *metric.MetricsRegistry
 
-	// Domain resources - KV buckets for index storage
-	outgoingBucket     jetstream.KeyValue
-	incomingBucket     jetstream.KeyValue
-	aliasBucket        jetstream.KeyValue
-	predicateBucket    jetstream.KeyValue
-	contextBucket      jetstream.KeyValue
-	entityStatesBucket jetstream.KeyValue
+	// Domain resources - KV buckets for index storage (wrapped for CAS + retry)
+	outgoingBucket     *natsclient.KVStore
+	incomingBucket     *natsclient.KVStore
+	aliasBucket        *natsclient.KVStore
+	predicateBucket    *natsclient.KVStore
+	contextBucket      *natsclient.KVStore
+	entityStatesBucket jetstream.KeyValue // raw: read-only watcher, no CAS needed
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -210,6 +213,7 @@ type Component struct {
 	startTime   time.Time
 	wg          sync.WaitGroup
 	cancel      context.CancelFunc
+	indexPool   *worker.Pool[jetstream.KeyValueEntry]
 
 	// Metrics (atomic)
 	messagesProcessed int64
@@ -259,11 +263,12 @@ func CreateGraphIndex(rawConfig json.RawMessage, deps component.Dependencies) (c
 
 	// Create component
 	comp := &Component{
-		name:       "graph-index",
-		config:     config,
-		natsClient: natsClient,
-		logger:     logger,
-		metrics:    getMetrics(deps.MetricsRegistry),
+		name:            "graph-index",
+		config:          config,
+		natsClient:      natsClient,
+		logger:          logger,
+		metrics:         getMetrics(deps.MetricsRegistry),
+		metricsRegistry: deps.MetricsRegistry,
 	}
 
 	// Initialize last activity
@@ -476,6 +481,12 @@ func (c *Component) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Create and start the entity index worker pool
+	if err := c.startIndexPool(ctx); err != nil {
+		cancel()
+		return err
+	}
+
 	// Initialize lifecycle reporter (throttled for high-throughput indexing)
 	c.initLifecycleReporter(ctx)
 
@@ -486,43 +497,11 @@ func (c *Component) Start(ctx context.Context) error {
 		return errs.Wrap(err, "Component", "Start", "JetStream connection")
 	}
 
-	// Report waiting stage for visibility
-	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketEntityStates); err != nil {
-		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketEntityStates), slog.Any("error", err))
-	}
-
-	// Use resource.Watcher for bounded startup with clear timeout behavior
-	watcherCfg := resource.DefaultConfig()
-	watcherCfg.StartupAttempts = c.config.StartupAttempts
-	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
-	watcherCfg.Logger = c.logger
-
-	entityWatcher := resource.NewWatcher(
-		graph.BucketEntityStates,
-		func(checkCtx context.Context) error {
-			_, err := js.KeyValue(checkCtx, graph.BucketEntityStates)
-			return err
-		},
-		watcherCfg,
-	)
-
-	if !entityWatcher.WaitForStartup(ctx) {
+	// Wait for ENTITY_STATES bucket and start the watcher goroutine
+	if err := c.waitAndWatchEntityStates(ctx, js); err != nil {
 		cancel()
-		return errs.WrapTransient(
-			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
-			"Component", "Start", "dependency not available",
-		)
+		return err
 	}
-
-	// Bucket is available - get it for use (also used for value filtering in queries)
-	if c.entityStatesBucket, err = js.KeyValue(ctx, graph.BucketEntityStates); err != nil {
-		cancel()
-		return errs.Wrap(err, "Component", "Start", "get entity bucket after availability check")
-	}
-
-	// Start entity watcher goroutine
-	c.wg.Add(1)
-	go c.watchEntityStates(ctx, c.entityStatesBucket)
 
 	// Set up query handler subscriptions
 	if err := c.setupQueryHandlers(ctx); err != nil {
@@ -564,6 +543,13 @@ func (c *Component) Stop(timeout time.Duration) error {
 		}
 	}
 	c.querySubscriptions = nil
+
+	// Stop the index worker pool before cancelling the context so it can drain
+	if c.indexPool != nil {
+		if err := c.indexPool.Stop(5 * time.Second); err != nil {
+			c.logger.Warn("index pool stop error", slog.Any("error", err))
+		}
+	}
 
 	// Cancel context
 	if c.cancel != nil {
@@ -614,21 +600,23 @@ func (c *Component) createOutputBuckets(ctx context.Context) error {
 	if err != nil {
 		return errs.Wrap(err, "Component", "createOutputBuckets", fmt.Sprintf("KV bucket: %s", graph.BucketContextIndex))
 	}
-	c.contextBucket = contextBucket
+	c.contextBucket = c.natsClient.NewKVStore(contextBucket)
 	return nil
 }
 
-// assignBucket assigns a bucket to the appropriate field based on subject.
+// assignBucket wraps a raw jetstream.KeyValue bucket with natsclient.KVStore
+// for CAS support, retry, and consistent error handling, then assigns it.
 func (c *Component) assignBucket(subject string, bucket jetstream.KeyValue) {
+	kvStore := c.natsClient.NewKVStore(bucket)
 	switch subject {
 	case graph.BucketOutgoingIndex:
-		c.outgoingBucket = bucket
+		c.outgoingBucket = kvStore
 	case graph.BucketIncomingIndex:
-		c.incomingBucket = bucket
+		c.incomingBucket = kvStore
 	case graph.BucketAliasIndex:
-		c.aliasBucket = bucket
+		c.aliasBucket = kvStore
 	case graph.BucketPredicateIndex:
-		c.predicateBucket = bucket
+		c.predicateBucket = kvStore
 	}
 }
 
@@ -702,9 +690,79 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 				continue
 			}
 
-			c.processEntityUpdate(ctx, entry)
+			if c.indexPool != nil {
+				if err := c.indexPool.SubmitBlocking(ctx, entry); err != nil {
+					c.logger.Warn("failed to submit entity for indexing",
+						slog.String("entity", entry.Key()),
+						slog.Any("error", err))
+				}
+			} else {
+				c.processEntityUpdate(ctx, entry)
+			}
 		}
 	}
+}
+
+// waitAndWatchEntityStates waits for the ENTITY_STATES bucket with bounded retries,
+// then starts the watcher goroutine that feeds entity updates to the worker pool.
+func (c *Component) waitAndWatchEntityStates(ctx context.Context, js jetstream.JetStream) error {
+	if err := c.lifecycleReporter.ReportStage(ctx, "waiting_for_"+graph.BucketEntityStates); err != nil {
+		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "waiting_for_"+graph.BucketEntityStates), slog.Any("error", err))
+	}
+
+	watcherCfg := resource.DefaultConfig()
+	watcherCfg.StartupAttempts = c.config.StartupAttempts
+	watcherCfg.StartupInterval = time.Duration(c.config.StartupInterval) * time.Millisecond
+	watcherCfg.Logger = c.logger
+
+	entityWatcher := resource.NewWatcher(
+		graph.BucketEntityStates,
+		func(checkCtx context.Context) error {
+			_, err := js.KeyValue(checkCtx, graph.BucketEntityStates)
+			return err
+		},
+		watcherCfg,
+	)
+
+	if !entityWatcher.WaitForStartup(ctx) {
+		return errs.WrapTransient(
+			fmt.Errorf("bucket %s not available after %d attempts", graph.BucketEntityStates, c.config.StartupAttempts),
+			"Component", "Start", "dependency not available",
+		)
+	}
+
+	var err error
+	if c.entityStatesBucket, err = js.KeyValue(ctx, graph.BucketEntityStates); err != nil {
+		return errs.Wrap(err, "Component", "Start", "get entity bucket after availability check")
+	}
+
+	c.wg.Add(1)
+	go c.watchEntityStates(ctx, c.entityStatesBucket)
+	return nil
+}
+
+// startIndexPool creates and starts the entity index worker pool.
+func (c *Component) startIndexPool(ctx context.Context) error {
+	poolOpts := []worker.Option[jetstream.KeyValueEntry]{}
+	if c.metricsRegistry != nil {
+		poolOpts = append(poolOpts, worker.WithMetricsRegistry[jetstream.KeyValueEntry](c.metricsRegistry, "graph_index"))
+	}
+	c.indexPool = worker.NewPool[jetstream.KeyValueEntry](
+		c.config.Workers,
+		1000,
+		c.processEntityUpdateWorker,
+		poolOpts...,
+	)
+	if err := c.indexPool.Start(ctx); err != nil {
+		return errs.Wrap(err, "Component", "Start", "start index worker pool")
+	}
+	return nil
+}
+
+// processEntityUpdateWorker is the worker pool adapter for processEntityUpdate.
+func (c *Component) processEntityUpdateWorker(ctx context.Context, entry jetstream.KeyValueEntry) error {
+	c.processEntityUpdate(ctx, entry)
+	return nil
 }
 
 // processEntityUpdate indexes an entity's relationships from its triples
@@ -747,6 +805,9 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 	// Track indexed relationships for this entity
 	var indexed int
 
+	// Collect incoming entries grouped by target ID to batch CAS cycles
+	incomingByTarget := make(map[string][]graph.IncomingEntry)
+
 	// Index each triple
 	for _, triple := range state.Triples {
 		// Track predicate usage
@@ -762,13 +823,11 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 				"predicate": triple.Predicate,
 			})
 
-			// Index incoming relationship: targetID <- entityID
-			if err := c.UpdateIncomingIndex(ctx, targetID, entityID, triple.Predicate); err != nil {
-				c.logger.Debug("failed to update incoming index",
-					slog.String("target", targetID),
-					slog.String("source", entityID),
-					slog.Any("error", err))
-			}
+			// Collect incoming entry; will be written in batch after the loop
+			incomingByTarget[targetID] = append(incomingByTarget[targetID], graph.IncomingEntry{
+				FromEntityID: entityID,
+				Predicate:    triple.Predicate,
+			})
 
 			indexed++
 		}
@@ -787,6 +846,16 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 						slog.Any("error", err))
 				}
 			}
+		}
+	}
+
+	// Write incoming index in batches — one CAS cycle per distinct target ID
+	for targetID, entries := range incomingByTarget {
+		if err := c.updateIncomingIndexBatch(ctx, targetID, entries); err != nil {
+			c.logger.Debug("failed to update incoming index",
+				slog.String("target", targetID),
+				slog.String("source", entityID),
+				slog.Any("error", err))
 		}
 	}
 
@@ -926,14 +995,14 @@ func (c *Component) UpdateOutgoingIndex(ctx context.Context, entityID, targetID,
 	// Read existing entries (raw array format matching graph/indexmanager)
 	var entries []graph.OutgoingEntry
 	existingEntry, err := c.outgoingBucket.Get(ctx, entityID)
-	if err != nil && err != jetstream.ErrKeyNotFound {
+	if err != nil && !natsclient.IsKVNotFoundError(err) {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "UpdateOutgoingIndex", "KV get")
 	}
 
 	if err == nil {
 		// Parse existing array
-		if unmarshalErr := json.Unmarshal(existingEntry.Value(), &entries); unmarshalErr != nil {
+		if unmarshalErr := json.Unmarshal(existingEntry.Value, &entries); unmarshalErr != nil {
 			// If unmarshal fails, start fresh (backward compatibility with old format)
 			entries = []graph.OutgoingEntry{}
 		}
@@ -982,7 +1051,9 @@ func (c *Component) UpdateOutgoingIndex(ctx context.Context, entityID, targetID,
 	return nil
 }
 
-// UpdateIncomingIndex updates the incoming index for a relationship
+// UpdateIncomingIndex updates the incoming index for a single relationship.
+// It delegates to updateIncomingIndexBatch so that tests and ad-hoc callers
+// share the same merge logic as the batched path in processEntityUpdate.
 func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID, predicate string) error {
 	if targetID == "" {
 		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "UpdateIncomingIndex", "target ID cannot be empty")
@@ -1002,55 +1073,65 @@ func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID,
 		return errs.Wrap(err, "Component", "UpdateIncomingIndex", "context cancelled")
 	}
 
-	// Read existing entries (raw array format matching graph/indexmanager)
-	var entries []graph.IncomingEntry
-	existingEntry, err := c.incomingBucket.Get(ctx, targetID)
-	if err != nil && err != jetstream.ErrKeyNotFound {
-		atomic.AddInt64(&c.errors, 1)
-		return errs.Wrap(err, "Component", "UpdateIncomingIndex", "KV get")
+	return c.updateIncomingIndexBatch(ctx, targetID, []graph.IncomingEntry{
+		{FromEntityID: sourceID, Predicate: predicate},
+	})
+}
+
+// updateIncomingIndexBatch merges newEntries into the incoming index for targetID
+// in a single CAS cycle. Duplicate (FromEntityID, Predicate) pairs are skipped.
+func (c *Component) updateIncomingIndexBatch(ctx context.Context, targetID string, newEntries []graph.IncomingEntry) error {
+	if targetID == "" {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "updateIncomingIndexBatch", "target ID cannot be empty")
+	}
+	if len(newEntries) == 0 {
+		return nil
 	}
 
-	if err == nil {
-		// Parse existing array
-		if unmarshalErr := json.Unmarshal(existingEntry.Value(), &entries); unmarshalErr != nil {
-			// If unmarshal fails, start fresh (backward compatibility with old format)
-			entries = []graph.IncomingEntry{}
+	// Check context - nil check first to prevent panic
+	if ctx == nil {
+		return errs.WrapInvalid(errs.ErrInvalidData, "Component", "updateIncomingIndexBatch", "context cannot be nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return errs.Wrap(err, "Component", "updateIncomingIndexBatch", "context cancelled")
+	}
+
+	// CAS update: read-modify-write with automatic retry on conflict.
+	// One cycle handles all newEntries regardless of how many triples point at this target.
+	err := c.incomingBucket.UpdateWithRetry(ctx, targetID, func(current []byte) ([]byte, error) {
+		var entries []graph.IncomingEntry
+		if len(current) > 0 {
+			if unmarshalErr := json.Unmarshal(current, &entries); unmarshalErr != nil {
+				// Start fresh on corrupt data (backward compatibility)
+				entries = []graph.IncomingEntry{}
+			}
 		}
-	}
 
-	// Check if this source already exists (avoid duplicates)
-	sourceExists := false
-	for _, entry := range entries {
-		if entry.FromEntityID == sourceID && entry.Predicate == predicate {
-			sourceExists = true
-			break
+		// Build a lookup set of already-stored (FromEntityID, Predicate) pairs
+		type entryKey struct{ from, predicate string }
+		existing := make(map[entryKey]bool, len(entries))
+		for _, e := range entries {
+			existing[entryKey{e.FromEntityID, e.Predicate}] = true
 		}
-	}
 
-	// Append new source if it doesn't exist
-	if !sourceExists {
-		entries = append(entries, graph.IncomingEntry{
-			FromEntityID: sourceID,
-			Predicate:    predicate,
-		})
-	}
+		// Append only entries that are not already present
+		for _, ne := range newEntries {
+			k := entryKey{ne.FromEntityID, ne.Predicate}
+			if !existing[k] {
+				entries = append(entries, ne)
+				existing[k] = true // guard against duplicates within newEntries itself
+			}
+		}
 
-	// Serialize array (matching graph/indexmanager expected format)
-	data, err := json.Marshal(entries)
+		return json.Marshal(entries)
+	})
 	if err != nil {
 		atomic.AddInt64(&c.errors, 1)
-		return errs.Wrap(err, "Component", "UpdateIncomingIndex", "entry serialization")
-	}
-
-	// Store in KV bucket using target ID as key
-	if _, err := c.incomingBucket.Put(ctx, targetID, data); err != nil {
-		atomic.AddInt64(&c.errors, 1)
-		return errs.Wrap(err, "Component", "UpdateIncomingIndex", "KV store")
+		return errs.Wrap(err, "Component", "updateIncomingIndexBatch", "CAS update")
 	}
 
 	// Update metrics
 	atomic.AddInt64(&c.messagesProcessed, 1)
-	atomic.AddInt64(&c.bytesProcessed, int64(len(data)))
 	c.lastActivity.Store(time.Now())
 
 	// Record Prometheus metrics
@@ -1059,10 +1140,9 @@ func (c *Component) UpdateIncomingIndex(ctx context.Context, targetID, sourceID,
 		c.metrics.recordKVOperation("put", "incoming")
 	}
 
-	c.logger.Debug("incoming index updated",
+	c.logger.Debug("incoming index batch updated",
 		slog.String("target_id", targetID),
-		slog.String("source_id", sourceID),
-		slog.String("predicate", predicate))
+		slog.Int("new_entries", len(newEntries)))
 
 	return nil
 }
@@ -1085,7 +1165,7 @@ func (c *Component) UpdateAliasIndex(ctx context.Context, alias, entityID string
 	}
 
 	// Store alias mapping (value is just the entity ID as string)
-	if _, err := c.aliasBucket.PutString(ctx, alias, entityID); err != nil {
+	if _, err := c.aliasBucket.Put(ctx, alias, []byte(entityID)); err != nil {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "UpdateAliasIndex", "KV store")
 	}
@@ -1125,62 +1205,47 @@ func (c *Component) UpdatePredicateIndex(ctx context.Context, entityID, predicat
 		return errs.Wrap(err, "Component", "UpdatePredicateIndex", "context cancelled")
 	}
 
-	// Read existing entry (if any)
-	var entry graph.PredicateIndexEntry
-	existingEntry, err := c.predicateBucket.Get(ctx, predicate)
-	if err != nil && err != jetstream.ErrKeyNotFound {
-		atomic.AddInt64(&c.errors, 1)
-		return errs.Wrap(err, "Component", "UpdatePredicateIndex", "KV get")
-	}
-
-	if err == nil {
-		// Parse existing entry
-		if unmarshalErr := json.Unmarshal(existingEntry.Value(), &entry); unmarshalErr != nil {
-			// If unmarshal fails, start fresh (backward compatibility with old format)
+	// CAS update: read-modify-write with automatic retry on conflict
+	err := c.predicateBucket.UpdateWithRetry(ctx, predicate, func(current []byte) ([]byte, error) {
+		var entry graph.PredicateIndexEntry
+		if len(current) > 0 {
+			if unmarshalErr := json.Unmarshal(current, &entry); unmarshalErr != nil {
+				// If unmarshal fails, start fresh (backward compatibility with old format)
+				entry.Entities = []string{}
+				entry.Predicate = predicate
+			}
+		} else {
+			// New entry
 			entry.Entities = []string{}
 			entry.Predicate = predicate
 		}
-	} else {
-		// New entry
-		entry.Entities = []string{}
-		entry.Predicate = predicate
-	}
 
-	// Check if this entity already exists (avoid duplicates)
-	entityExists := false
-	for _, e := range entry.Entities {
-		if e == entityID {
-			entityExists = true
-			break
+		// Check if this entity already exists (avoid duplicates)
+		for _, e := range entry.Entities {
+			if e == entityID {
+				// Already exists, return unchanged
+				if len(entry.Entities) > 0 {
+					entry.EntityID = entry.Entities[len(entry.Entities)-1]
+				}
+				return json.Marshal(entry)
+			}
 		}
-	}
 
-	// Append new entity if it doesn't exist
-	if !entityExists {
+		// Append new entity
 		entry.Entities = append(entry.Entities, entityID)
-	}
 
-	// Set backward compatibility field (last entity)
-	if len(entry.Entities) > 0 {
+		// Set backward compatibility field (last entity)
 		entry.EntityID = entry.Entities[len(entry.Entities)-1]
-	}
 
-	// Serialize updated entry
-	data, err := json.Marshal(entry)
+		return json.Marshal(entry)
+	})
 	if err != nil {
 		atomic.AddInt64(&c.errors, 1)
-		return errs.Wrap(err, "Component", "UpdatePredicateIndex", "entry serialization")
-	}
-
-	// Store in KV bucket using predicate as key
-	if _, err := c.predicateBucket.Put(ctx, predicate, data); err != nil {
-		atomic.AddInt64(&c.errors, 1)
-		return errs.Wrap(err, "Component", "UpdatePredicateIndex", "KV store")
+		return errs.Wrap(err, "Component", "UpdatePredicateIndex", "CAS update")
 	}
 
 	// Update metrics
 	atomic.AddInt64(&c.messagesProcessed, 1)
-	atomic.AddInt64(&c.bytesProcessed, int64(len(data)))
 	c.lastActivity.Store(time.Now())
 
 	// Record Prometheus metrics
@@ -1215,13 +1280,13 @@ func (c *Component) DeleteFromIndexes(ctx context.Context, entityID string) erro
 	}
 
 	// Delete from outgoing index
-	if err := c.outgoingBucket.Delete(ctx, entityID); err != nil && err != jetstream.ErrKeyNotFound {
+	if err := c.outgoingBucket.Delete(ctx, entityID); err != nil && !natsclient.IsKVNotFoundError(err) {
 		atomic.AddInt64(&c.errors, 1)
 		c.logger.Warn("failed to delete from outgoing index", slog.String("entity_id", entityID), slog.Any("error", err))
 	}
 
 	// Delete from incoming index
-	if err := c.incomingBucket.Delete(ctx, entityID); err != nil && err != jetstream.ErrKeyNotFound {
+	if err := c.incomingBucket.Delete(ctx, entityID); err != nil && !natsclient.IsKVNotFoundError(err) {
 		atomic.AddInt64(&c.errors, 1)
 		c.logger.Warn("failed to delete from incoming index", slog.String("entity_id", entityID), slog.Any("error", err))
 	}
@@ -1253,7 +1318,7 @@ func (c *Component) DeleteFromPredicateIndex(ctx context.Context, entityID, pred
 	}
 
 	// Delete from predicate index
-	if err := c.predicateBucket.Delete(ctx, predicate); err != nil && err != jetstream.ErrKeyNotFound {
+	if err := c.predicateBucket.Delete(ctx, predicate); err != nil && !natsclient.IsKVNotFoundError(err) {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "DeleteFromPredicateIndex", "KV delete")
 	}
@@ -1284,7 +1349,7 @@ func (c *Component) DeleteFromAliasIndex(ctx context.Context, alias string) erro
 	}
 
 	// Delete from alias index
-	if err := c.aliasBucket.Delete(ctx, alias); err != nil && err != jetstream.ErrKeyNotFound {
+	if err := c.aliasBucket.Delete(ctx, alias); err != nil && !natsclient.IsKVNotFoundError(err) {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "DeleteFromAliasIndex", "KV delete")
 	}
@@ -1316,7 +1381,7 @@ func (c *Component) DeleteFromIncomingIndex(ctx context.Context, targetID, sourc
 	}
 
 	// For simplicity, delete the entire target entry (in real implementation, would remove specific source)
-	if err := c.incomingBucket.Delete(ctx, targetID); err != nil && err != jetstream.ErrKeyNotFound {
+	if err := c.incomingBucket.Delete(ctx, targetID); err != nil && !natsclient.IsKVNotFoundError(err) {
 		atomic.AddInt64(&c.errors, 1)
 		return errs.Wrap(err, "Component", "DeleteFromIncomingIndex", "KV delete")
 	}
@@ -1395,11 +1460,11 @@ func (c *Component) mergeContextEntries(ctx context.Context, contextValue, entit
 	// Get existing entries
 	var existing []ContextEntry
 	entry, err := c.contextBucket.Get(ctx, key)
-	if err != nil && err != jetstream.ErrKeyNotFound {
+	if err != nil && !natsclient.IsKVNotFoundError(err) {
 		return errs.WrapTransient(err, "Component", "mergeContextEntries", "get existing entries")
 	}
 	if err == nil {
-		if err := json.Unmarshal(entry.Value(), &existing); err != nil {
+		if err := json.Unmarshal(entry.Value, &existing); err != nil {
 			return errs.WrapInvalid(err, "Component", "mergeContextEntries", "unmarshal existing entries")
 		}
 	}

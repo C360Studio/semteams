@@ -202,8 +202,8 @@ func TestComponent_HandleQueryOutgoing_RespectsContext(t *testing.T) {
 	require.NoError(t, comp.UpdateOutgoingIndex(ctx, entityID, "target", "predicate"))
 
 	// Mock KV bucket with context verification
-	mockBucket := comp.outgoingBucket.(*mockKVBucket)
-	mockBucket.getFunc = func(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
+	mb := outgoingMock(comp)
+	mb.getFunc = func(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
 		// Verify context is passed to KV Get operation
 		assert.NotNil(t, ctx, "context should be passed to KV Get operation")
 
@@ -214,9 +214,9 @@ func TestComponent_HandleQueryOutgoing_RespectsContext(t *testing.T) {
 		}
 
 		// Return stored data
-		mockBucket.mu.Lock()
-		data := mockBucket.data[key]
-		mockBucket.mu.Unlock()
+		mb.mu.Lock()
+		data := mb.data[key]
+		mb.mu.Unlock()
 		return &mockKVEntry{data: data}, nil
 	}
 
@@ -742,7 +742,8 @@ func TestComponent_QueryHandlers_UseContextWithTimeout(t *testing.T) {
 
 			// Mock bucket to verify context usage
 			contextUsed := false
-			comp.outgoingBucket.(*mockKVBucket).getFunc = func(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
+			omock := outgoingMock(comp)
+			sharedGetFunc := func(ctx context.Context, key string) (jetstream.KeyValueEntry, error) {
 				contextUsed = true
 				assert.NotNil(t, ctx, "context should be passed to KV operations")
 
@@ -753,15 +754,15 @@ func TestComponent_QueryHandlers_UseContextWithTimeout(t *testing.T) {
 				}
 
 				// Return data
-				comp.outgoingBucket.(*mockKVBucket).mu.Lock()
-				data := comp.outgoingBucket.(*mockKVBucket).data[key]
-				comp.outgoingBucket.(*mockKVBucket).mu.Unlock()
+				omock.mu.Lock()
+				data := omock.data[key]
+				omock.mu.Unlock()
 				return &mockKVEntry{data: data}, nil
 			}
-
-			comp.incomingBucket.(*mockKVBucket).getFunc = comp.outgoingBucket.(*mockKVBucket).getFunc
-			comp.aliasBucket.(*mockKVBucket).getFunc = comp.outgoingBucket.(*mockKVBucket).getFunc
-			comp.predicateBucket.(*mockKVBucket).getFunc = comp.outgoingBucket.(*mockKVBucket).getFunc
+			omock.getFunc = sharedGetFunc
+			incomingMock(comp).getFunc = sharedGetFunc
+			aliasMock(comp).getFunc = sharedGetFunc
+			predicateMock(comp).getFunc = sharedGetFunc
 
 			// Create request
 			request := map[string]string{"entity_id": "entity", "alias": "alias", "predicate": "predicate"}

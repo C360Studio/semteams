@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/graph"
+	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/nats-io/nats.go/jetstream"
 )
 
 // setupQueryHandlers sets up NATS request/reply subscriptions for query handlers
@@ -97,7 +97,7 @@ func (c *Component) handleQueryOutgoingNATS(ctx context.Context, data []byte) ([
 
 	entry, err := c.outgoingBucket.Get(ctx, req.EntityID)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			return json.Marshal(graph.NewQueryResponse(graph.OutgoingRelationshipsData{
 				Relationships: []graph.OutgoingEntry{},
 			}))
@@ -106,7 +106,7 @@ func (c *Component) handleQueryOutgoingNATS(ctx context.Context, data []byte) ([
 	}
 
 	var entries []graph.OutgoingEntry
-	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+	if err := json.Unmarshal(entry.Value, &entries); err != nil {
 		return json.Marshal(graph.NewQueryError[graph.OutgoingRelationshipsData]("internal error"))
 	}
 
@@ -133,7 +133,7 @@ func (c *Component) handleQueryIncomingNATS(ctx context.Context, data []byte) ([
 
 	entry, err := c.incomingBucket.Get(ctx, req.EntityID)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			return json.Marshal(graph.NewQueryResponse(graph.IncomingRelationshipsData{
 				Relationships: []graph.IncomingEntry{},
 			}))
@@ -142,7 +142,7 @@ func (c *Component) handleQueryIncomingNATS(ctx context.Context, data []byte) ([
 	}
 
 	var entries []graph.IncomingEntry
-	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+	if err := json.Unmarshal(entry.Value, &entries); err != nil {
 		return json.Marshal(graph.NewQueryError[graph.IncomingRelationshipsData]("internal error"))
 	}
 
@@ -169,7 +169,7 @@ func (c *Component) handleQueryAliasNATS(ctx context.Context, data []byte) ([]by
 
 	entry, err := c.aliasBucket.Get(ctx, req.Alias)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			return json.Marshal(graph.NewQueryResponse(graph.AliasData{
 				CanonicalID: nil,
 			}))
@@ -177,7 +177,7 @@ func (c *Component) handleQueryAliasNATS(ctx context.Context, data []byte) ([]by
 		return json.Marshal(graph.NewQueryError[graph.AliasData]("internal error"))
 	}
 
-	canonicalID := string(entry.Value())
+	canonicalID := string(entry.Value)
 	return json.Marshal(graph.NewQueryResponse(graph.AliasData{
 		CanonicalID: &canonicalID,
 	}))
@@ -242,7 +242,7 @@ func (c *Component) handleQueryOutgoing(msg queryMsg) {
 	// Get outgoing relationships from KV bucket
 	entry, err := c.outgoingBucket.Get(ctx, req.EntityID)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			// Return empty array for not found
 			c.respondJSON(msg, []graph.OutgoingEntry{})
 			return
@@ -253,7 +253,7 @@ func (c *Component) handleQueryOutgoing(msg queryMsg) {
 
 	// Parse outgoing entries
 	var entries []graph.OutgoingEntry
-	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+	if err := json.Unmarshal(entry.Value, &entries); err != nil {
 		c.respondError(msg, "internal error")
 		return
 	}
@@ -286,7 +286,7 @@ func (c *Component) handleQueryIncoming(msg queryMsg) {
 	// Get incoming relationships from KV bucket
 	entry, err := c.incomingBucket.Get(ctx, req.EntityID)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			// Return empty array for not found
 			c.respondJSON(msg, []graph.IncomingEntry{})
 			return
@@ -297,7 +297,7 @@ func (c *Component) handleQueryIncoming(msg queryMsg) {
 
 	// Parse incoming entries
 	var entries []graph.IncomingEntry
-	if err := json.Unmarshal(entry.Value(), &entries); err != nil {
+	if err := json.Unmarshal(entry.Value, &entries); err != nil {
 		c.respondError(msg, "internal error")
 		return
 	}
@@ -330,7 +330,7 @@ func (c *Component) handleQueryAlias(msg queryMsg) {
 	// Get canonical entity ID from KV bucket
 	entry, err := c.aliasBucket.Get(ctx, req.Alias)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			c.respondError(msg, "not found")
 			return
 		}
@@ -340,7 +340,7 @@ func (c *Component) handleQueryAlias(msg queryMsg) {
 
 	// Respond with canonical ID
 	response := map[string]string{
-		"canonical_id": string(entry.Value()),
+		"canonical_id": string(entry.Value),
 	}
 	c.respondJSON(msg, response)
 }
@@ -386,14 +386,14 @@ func (c *Component) handleQueryPredicate(msg queryMsg) {
 func (c *Component) queryPredicateEntities(ctx context.Context, predicate string, value *string, limit int) ([]string, error) {
 	entry, err := c.predicateBucket.Get(ctx, predicate)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			return []string{}, nil
 		}
 		return nil, err
 	}
 
 	var indexEntry graph.PredicateIndexEntry
-	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+	if err := json.Unmarshal(entry.Value, &indexEntry); err != nil {
 		return nil, err
 	}
 
@@ -504,13 +504,13 @@ func (c *Component) handleQueryPredicateListNATS(ctx context.Context, _ []byte) 
 	// Get all predicate keys from the bucket
 	keys, err := c.predicateBucket.Keys(ctx)
 	if err != nil {
-		if err == jetstream.ErrNoKeysFound {
-			return json.Marshal(graph.NewQueryResponse(graph.PredicateListData{
-				Predicates: []graph.PredicateSummary{},
-				Total:      0,
-			}))
-		}
 		return json.Marshal(graph.NewQueryError[graph.PredicateListData]("internal error"))
+	}
+	if len(keys) == 0 {
+		return json.Marshal(graph.NewQueryResponse(graph.PredicateListData{
+			Predicates: []graph.PredicateSummary{},
+			Total:      0,
+		}))
 	}
 
 	predicates := make([]graph.PredicateSummary, 0, len(keys))
@@ -521,7 +521,7 @@ func (c *Component) handleQueryPredicateListNATS(ctx context.Context, _ []byte) 
 		}
 
 		var indexEntry graph.PredicateIndexEntry
-		if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+		if err := json.Unmarshal(entry.Value, &indexEntry); err != nil {
 			continue // Skip malformed entries
 		}
 
@@ -562,7 +562,7 @@ func (c *Component) handleQueryPredicateStatsNATS(ctx context.Context, data []by
 
 	entry, err := c.predicateBucket.Get(ctx, req.Predicate)
 	if err != nil {
-		if err == jetstream.ErrKeyNotFound {
+		if natsclient.IsKVNotFoundError(err) {
 			return json.Marshal(graph.NewQueryResponse(graph.PredicateStatsData{
 				Predicate:      req.Predicate,
 				EntityCount:    0,
@@ -573,7 +573,7 @@ func (c *Component) handleQueryPredicateStatsNATS(ctx context.Context, data []by
 	}
 
 	var indexEntry graph.PredicateIndexEntry
-	if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+	if err := json.Unmarshal(entry.Value, &indexEntry); err != nil {
 		return json.Marshal(graph.NewQueryError[graph.PredicateStatsData]("internal error"))
 	}
 
@@ -615,7 +615,7 @@ func (c *Component) handleQueryPredicateCompoundNATS(ctx context.Context, data [
 	for _, predicate := range req.Predicates {
 		entry, err := c.predicateBucket.Get(ctx, predicate)
 		if err != nil {
-			if err == jetstream.ErrKeyNotFound {
+			if natsclient.IsKVNotFoundError(err) {
 				// Predicate not found - empty set
 				entitySets = append(entitySets, make(map[string]struct{}))
 				continue
@@ -624,7 +624,7 @@ func (c *Component) handleQueryPredicateCompoundNATS(ctx context.Context, data [
 		}
 
 		var indexEntry graph.PredicateIndexEntry
-		if err := json.Unmarshal(entry.Value(), &indexEntry); err != nil {
+		if err := json.Unmarshal(entry.Value, &indexEntry); err != nil {
 			return json.Marshal(graph.NewQueryError[graph.CompoundPredicateData]("internal error"))
 		}
 

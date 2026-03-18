@@ -445,7 +445,7 @@ func TestAttack_MultipleEntitiesSamePredicate(t *testing.T) {
 	require.NoError(t, err, "predicate index should exist")
 
 	var predicateData map[string]interface{}
-	err = json.Unmarshal(predicateEntry.Value(), &predicateData)
+	err = json.Unmarshal(predicateEntry.Value, &predicateData)
 	require.NoError(t, err)
 
 	// ATTACK TEST: This demonstrates the bug
@@ -533,7 +533,7 @@ func TestAttack_MultipleSourcesSameTarget(t *testing.T) {
 
 	// Now uses array format matching graph/indexmanager for PathRAG compatibility
 	var incomingData []map[string]interface{}
-	err = json.Unmarshal(incomingEntry.Value(), &incomingData)
+	err = json.Unmarshal(incomingEntry.Value, &incomingData)
 	require.NoError(t, err)
 
 	// With array format, we can now verify all sources are captured

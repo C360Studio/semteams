@@ -62,7 +62,7 @@ func DefaultConfig() *Config {
 		ProfileDir:        "test/e2e/results/profiles",
 		QueryConcurrency:  10,
 		QueryDuration:     15 * time.Second,
-		GraphQLURL:        "http://localhost:38082/graphql",
+		GraphQLURL:        config.DefaultEndpoints.HTTP + "/graph-gateway/graphql",
 		ValidationTimeout: 60 * time.Second,
 		MinProcessedRatio: 0.9,
 	}

@@ -202,13 +202,26 @@ func (c *Component) handleQuerySearchNATS(_ context.Context, data []byte) ([]byt
 	return json.Marshal(response)
 }
 
-// findSimilarEntities finds entities similar to the given vector
+// findSimilarEntities finds entities similar to the given vector.
+//
+// It first attempts to serve the query from the in-memory vector cache
+// (zero KV round-trips). If the cache is not yet warm it falls back to
+// the original O(n) KV scan path so queries are never blocked during startup.
 func (c *Component) findSimilarEntities(ctx context.Context, excludeID string, queryVector []float32, limit int) ([]SimilarEntity, error) {
 	if c.storage == nil {
 		return nil, errs.WrapFatal(errs.ErrInvalidConfig, "findSimilarEntities", "helper", "storage not initialized")
 	}
 
-	// List all entity IDs with embeddings
+	// Try in-memory cache first (zero KV I/O).
+	if scored, ok := c.storage.FindSimilarFromCache(excludeID, queryVector, limit); ok {
+		results := make([]SimilarEntity, len(scored))
+		for i, s := range scored {
+			results[i] = SimilarEntity{EntityID: s.EntityID, Similarity: s.Similarity}
+		}
+		return results, nil
+	}
+
+	// Cache not ready yet — fall back to KV scan.
 	entityIDs, err := c.storage.ListGeneratedEntityIDs(ctx)
 	if err != nil {
 		return nil, errs.Wrap(err, "findSimilarEntities", "helper", "list entity IDs")

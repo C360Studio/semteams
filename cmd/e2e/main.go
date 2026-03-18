@@ -153,7 +153,7 @@ func parseCommandLineFlags() *cliFlags {
 	// Throughput scenario options
 	flag.IntVar(&flags.messageCount, "message-count", 10000,
 		"Number of messages for throughput scenario")
-	flag.StringVar(&flags.graphqlURL, "graphql-url", "http://localhost:38082/graphql",
+	flag.StringVar(&flags.graphqlURL, "graphql-url", "http://localhost:38080/graph-gateway/graphql",
 		"GraphQL endpoint for throughput query load (empty to skip query phase)")
 	flag.BoolVar(&flags.profileAll, "profile-all", false,
 		"Capture all profile types including block and mutex (throughput scenario)")
@@ -350,13 +350,12 @@ func createScenario(
 				cfg.Variant = flags.scenarioName
 			}
 		}
-		// Set GraphQL URL based on variant
-		// Statistical/structural use port 38082, semantic uses port 38182
+		// Set GraphQL URL based on variant — via ServiceManager shared mux
 		if cfg.Variant == "semantic" {
-			cfg.GraphQLURL = "http://localhost:38182/graphql"
+			cfg.GraphQLURL = "http://localhost:38180/graph-gateway/graphql"
 			cfg.ValidationTimeout = 60 * time.Second // Neural embeddings need more time
 		} else {
-			cfg.GraphQLURL = "http://localhost:38082/graphql"
+			cfg.GraphQLURL = "http://localhost:38080/graph-gateway/graphql"
 		}
 		return scenarios.NewTieredScenario(edgeClient, flags.udpEndpoint, cfg)
 

@@ -1004,7 +1004,7 @@ func TestComponent_KVError_IncreasesErrorCount(t *testing.T) {
 	ctx := context.Background()
 
 	// Configure mock to return error
-	comp.outgoingBucket.(*mockKVBucket).putFunc = func(ctx context.Context, key string, value []byte) (uint64, error) {
+	outgoingMock(comp).putFunc = func(ctx context.Context, key string, value []byte) (uint64, error) {
 		return 0, errors.New("mock KV error")
 	}
 
@@ -1021,7 +1021,7 @@ func TestComponent_MultipleErrors_AccumulateCount(t *testing.T) {
 	ctx := context.Background()
 
 	// Configure mock to return error
-	comp.outgoingBucket.(*mockKVBucket).putFunc = func(ctx context.Context, key string, value []byte) (uint64, error) {
+	outgoingMock(comp).putFunc = func(ctx context.Context, key string, value []byte) (uint64, error) {
 		return 0, errors.New("mock KV error")
 	}
 
@@ -1086,17 +1086,19 @@ func createTestComponent(t *testing.T) *Component {
 	return comp.(*Component)
 }
 
-// createTestComponentWithMockKV creates a test component with mock KV buckets
+// createTestComponentWithMockKV creates a test component with mock KV buckets.
+// The underlying *mockKVBucket instances are accessible via outgoingMock, incomingMock,
+// aliasMock, and predicateMock helper functions.
 func createTestComponentWithMockKV(t *testing.T) *Component {
 	t.Helper()
 
 	// Create unconnected NATS client
-	natsClient, err := natsclient.NewClient("nats://localhost:4222")
+	nc, err := natsclient.NewClient("nats://localhost:4222")
 	require.NoError(t, err)
 
 	config := DefaultConfig()
 	deps := component.Dependencies{
-		NATSClient: natsClient,
+		NATSClient: nc,
 	}
 
 	configJSON, err := json.Marshal(config)
@@ -1105,14 +1107,24 @@ func createTestComponentWithMockKV(t *testing.T) *Component {
 	comp, err := CreateGraphIndex(configJSON, deps)
 	require.NoError(t, err)
 
-	// Initialize with mock buckets (bypass actual NATS connection)
+	// Create mock buckets and wrap them in KVStore so the component field types match.
+	mocks := &mockRefs{
+		outgoing:  newMockKVBucket(),
+		incoming:  newMockKVBucket(),
+		alias:     newMockKVBucket(),
+		predicate: newMockKVBucket(),
+	}
+
 	graphIndexComp := comp.(*Component)
-	graphIndexComp.outgoingBucket = newMockKVBucket()
-	graphIndexComp.incomingBucket = newMockKVBucket()
-	graphIndexComp.aliasBucket = newMockKVBucket()
-	graphIndexComp.predicateBucket = newMockKVBucket()
+	graphIndexComp.outgoingBucket = nc.NewKVStore(mocks.outgoing)
+	graphIndexComp.incomingBucket = nc.NewKVStore(mocks.incoming)
+	graphIndexComp.aliasBucket = nc.NewKVStore(mocks.alias)
+	graphIndexComp.predicateBucket = nc.NewKVStore(mocks.predicate)
 	// Initialize lifecycle reporter (normally done in Start())
 	graphIndexComp.lifecycleReporter = component.NewNoOpLifecycleReporter()
+
+	// Register mock refs for later retrieval by helper functions.
+	registerMocks(graphIndexComp, mocks)
 
 	return graphIndexComp
 }
