@@ -776,6 +776,14 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, step)
 
+	// Eagerly add step to trajectory manager so the tool_call is available
+	// when finalizeTrajectory snapshots the trajectory for the TTL cache.
+	if _, addErr := h.trajectoryManager.AddStep(loopID, step); addErr != nil {
+		h.logger.Warn("failed to add tool_call trajectory step",
+			slog.String("loop_id", loopID),
+			slog.String("error", addErr.Error()))
+	}
+
 	// Tool-initiated loop termination: the tool signals that no further iterations
 	// are needed (e.g., a terminal action like decompose, submit, approve).
 	// Content becomes the LoopCompletedEvent.Result.
@@ -1056,6 +1064,11 @@ func (h *MessageHandler) UpdateLoop(entity agentic.LoopEntity) error {
 // CancelLoop atomically cancels a loop and populates completion data.
 func (h *MessageHandler) CancelLoop(loopID, cancelledBy string) (agentic.LoopEntity, error) {
 	return h.loopManager.CancelLoop(loopID, cancelledBy)
+}
+
+// GetTrajectory retrieves a trajectory snapshot for a given loop ID.
+func (h *MessageHandler) GetTrajectory(loopID string) (agentic.Trajectory, error) {
+	return h.trajectoryManager.GetTrajectory(loopID)
 }
 
 // GetContextManager returns the ContextManager for a given loop ID.

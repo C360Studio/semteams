@@ -914,11 +914,11 @@ func (c *Component) handleToolResultMessage(ctx context.Context, data []byte) {
 	// Update Boid position if enabled
 	c.updateBoidPositionFromToolResult(ctx, loopID, toolResult)
 
-	// Publish output messages
-	c.publishResults(ctx, result)
-
-	// Persist loop state to KV
-	c.persistLoopState(ctx, result.LoopID)
+	// Publish results, persist state, and handle terminal states (StopLoop).
+	// persistHandlerResult covers publishResults + persistLoopState for all states,
+	// plus finalizeTrajectory, persistCompletionState, and writeTrajectoryToGraph
+	// when the loop reaches a terminal state.
+	c.persistHandlerResult(ctx, result)
 
 }
 

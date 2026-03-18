@@ -511,6 +511,22 @@ func TestHandleToolResult_SingleTool(t *testing.T) {
 	if len(result.TrajectorySteps) == 0 {
 		t.Error("Should record trajectory step for tool result")
 	}
+
+	// Verify tool_call step was persisted in trajectory manager
+	traj, trajErr := handler.GetTrajectory(loopID)
+	if trajErr != nil {
+		t.Fatalf("GetTrajectory() error = %v", trajErr)
+	}
+	foundToolCall := false
+	for _, s := range traj.Steps {
+		if s.StepType == "tool_call" {
+			foundToolCall = true
+			break
+		}
+	}
+	if !foundToolCall {
+		t.Error("Trajectory manager should contain a tool_call step")
+	}
 }
 
 func TestHandleToolResult_MultipleTool_Partial(t *testing.T) {
@@ -761,6 +777,27 @@ func TestHandleToolResult_StopLoop(t *testing.T) {
 	// Should have completion state set
 	if result.CompletionState == nil {
 		t.Error("CompletionState should be set for StopLoop")
+	}
+
+	// Verify tool_call step was persisted in trajectory manager (regression test:
+	// prior to fix, tool_call steps were only on result.TrajectorySteps but never
+	// added to the trajectory manager, so they were missing from query responses).
+	traj, trajErr := handler.GetTrajectory(loopID)
+	if trajErr != nil {
+		t.Fatalf("GetTrajectory() error = %v", trajErr)
+	}
+	foundToolCall := false
+	for _, s := range traj.Steps {
+		if s.StepType == "tool_call" {
+			foundToolCall = true
+			if s.ToolName != "decompose_quest" {
+				t.Errorf("tool_call step ToolName = %q, want %q", s.ToolName, "decompose_quest")
+			}
+			break
+		}
+	}
+	if !foundToolCall {
+		t.Error("Trajectory manager should contain a tool_call step after HandleToolResult")
 	}
 }
 
