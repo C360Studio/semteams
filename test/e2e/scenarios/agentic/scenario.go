@@ -307,7 +307,7 @@ func (s *Scenario) waitForCompletion(ctx context.Context, result *scenarios.Resu
 	return fmt.Errorf("timeout waiting for agent loop completion after %v (loops_completed=%v)", timeout, loopsCompleted)
 }
 
-// validateTrajectory retrieves and validates the trajectory from NATS KV.
+// validateTrajectory retrieves and validates the trajectory via NATS query handler.
 func (s *Scenario) validateTrajectory(ctx context.Context, result *scenarios.Result) error {
 	loopID, ok := result.Details["loop_id"].(string)
 	if !ok || loopID == "" {
