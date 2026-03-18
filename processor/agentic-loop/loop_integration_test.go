@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 	testClient, err := natsclient.NewSharedTestClient(
 		natsclient.WithJetStream(),
 		natsclient.WithKV(),
-		natsclient.WithKVBuckets("AGENT_LOOPS", "AGENT_TRAJECTORIES"),
+		natsclient.WithKVBuckets("AGENT_LOOPS"),
 		natsclient.WithStreams(streams...),
 		natsclient.WithTestTimeout(5*time.Second),
 		natsclient.WithStartTimeout(30*time.Second),
@@ -666,9 +666,13 @@ func TestIntegration_LoopStatePersistence(t *testing.T) {
 	assert.Equal(t, "test-model", entity.Model)
 }
 
-// TestIntegration_LoopTrajectoryCapture tests that trajectory is saved on completion
+// TestIntegration_LoopTrajectoryCapture tests that trajectory is saved on completion.
+// Uses its own NATS client to avoid query handler conflicts with other test components.
 func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
-	natsClient := getSharedNATSClient(t)
+	tc := natsclient.NewTestClient(t, natsclient.WithFastStartup(), natsclient.WithJetStream(),
+		natsclient.WithStreams(natsclient.TestStreamConfig{Name: "AGENT", Subjects: []string{"agent.>", "tool.>"}}),
+		natsclient.WithKV(), natsclient.WithKVBuckets("AGENT_LOOPS"))
+	natsClient := tc.Client
 
 	config := agenticloop.Config{
 		Ports: &component.PortConfig{
@@ -787,18 +791,15 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	// Verify trajectory exists in KV
-	js, err := natsClient.JetStream()
+	// Verify trajectory via NATS query handler (served from TTLCache)
+	trajReq, err := json.Marshal(map[string]string{"loopId": loopID})
 	require.NoError(t, err)
 
-	kv, err := js.KeyValue(ctx, "AGENT_TRAJECTORIES")
-	require.NoError(t, err)
-
-	entry, err := kv.Get(ctx, loopID)
-	require.NoError(t, err, "Trajectory should be persisted in KV")
+	trajResp, err := natsClient.Request(ctx, "agentic.query.trajectory", trajReq, 5*time.Second)
+	require.NoError(t, err, "Trajectory should be available via query handler")
 
 	var trajectory agentic.Trajectory
-	err = json.Unmarshal(entry.Value(), &trajectory)
+	err = json.Unmarshal(trajResp, &trajectory)
 	require.NoError(t, err)
 
 	assert.Equal(t, loopID, trajectory.LoopID)
