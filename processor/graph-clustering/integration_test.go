@@ -5,6 +5,8 @@ package graphclustering
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -701,14 +703,18 @@ func TestIntegration_LLMEnhancementWorkerStarts(t *testing.T) {
 	configJSON, err := json.Marshal(config)
 	require.NoError(t, err)
 
-	// Provide a model registry with community_summary capability pointing to a
-	// dummy endpoint. The test only verifies the worker initializes — no actual
-	// LLM calls are made.
+	// Start a minimal HTTP server to satisfy the LLM health probe.
+	// The test only verifies the worker initializes — no actual LLM calls are made.
+	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer llmServer.Close()
+
 	reg := &model.Registry{
 		Endpoints: map[string]*model.EndpointConfig{
 			"test-llm": {
 				Provider:  "openai",
-				URL:       "http://localhost:19999/v1",
+				URL:       llmServer.URL + "/v1",
 				Model:     "test-model",
 				MaxTokens: 4096,
 			},
