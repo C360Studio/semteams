@@ -915,6 +915,8 @@ func (cm *ComponentManager) RegisterHealthChangeHook(
 func (cm *ComponentManager) watchConfigUpdates(ctx context.Context) {
 	for {
 		select {
+		case <-cm.shutdown:
+			return
 		case update, ok := <-cm.configUpdates:
 			if !ok {
 				// Channel closed
