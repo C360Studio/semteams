@@ -24,6 +24,11 @@ const (
 	// across all communities in GlobalSearch to prevent unbounded memory usage
 	MaxTotalEntitiesInSearch = 10000
 
+	// DefaultSummarizeThreshold auto-summarizes globalSearch results when entity
+	// count exceeds this value. Returns community summaries + entity IDs instead
+	// of full entity triples. Set to 0 to disable and always return full entities.
+	DefaultSummarizeThreshold = 50
+
 	// ScoreWeightSummary is the weight for summary text matches in community scoring
 	ScoreWeightSummary = 2.0
 
@@ -51,9 +56,19 @@ type GlobalSearchRequest struct {
 	Query                string `json:"query"`
 	Level                int    `json:"level"`
 	MaxCommunities       int    `json:"max_communities"`
+	SummarizeThreshold   *int   `json:"summarize_threshold,omitempty"`   // Auto-summarize when results exceed this (default: 50, -1=disabled)
 	IncludeSummaries     *bool  `json:"include_summaries,omitempty"`     // Include community summaries (default: true)
 	IncludeRelationships bool   `json:"include_relationships,omitempty"` // Include relationships between entities (default: false)
 	IncludeSources       bool   `json:"include_sources,omitempty"`       // Include source attribution (default: false)
+}
+
+// getSummarizeThreshold returns the summarize threshold. Defaults to DefaultSummarizeThreshold.
+// A negative value disables auto-summarization.
+func (r *GlobalSearchRequest) getSummarizeThreshold() int {
+	if r.SummarizeThreshold == nil {
+		return DefaultSummarizeThreshold
+	}
+	return *r.SummarizeThreshold
 }
 
 // shouldIncludeSummaries returns whether summaries should be included in the response.
@@ -68,6 +83,8 @@ func (r *GlobalSearchRequest) shouldIncludeSummaries() bool {
 // GlobalSearchResponse is the response format for global search
 type GlobalSearchResponse struct {
 	Entities           []*gtypes.EntityState `json:"entities"`
+	EntityIDs          []string              `json:"entity_ids,omitempty"` // IDs only (when summarized)
+	Summarized         bool                  `json:"summarized,omitempty"` // true when auto-summarized
 	CommunitySummaries []CommunitySummary    `json:"community_summaries,omitempty"`
 	Relationships      []Relationship        `json:"relationships,omitempty"`
 	Sources            []Source              `json:"sources,omitempty"`
@@ -319,6 +336,27 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 		// Limit to requested number of communities
 		if len(communityMatches) > req.MaxCommunities {
 			communityMatches = communityMatches[:req.MaxCommunities]
+		}
+
+		// Auto-summarize: when results exceed threshold, return summaries + IDs
+		// instead of loading full entity triples (which can be 100MB+ for broad queries).
+		threshold := req.getSummarizeThreshold()
+		if threshold > 0 && len(entityIDs) > threshold {
+			c.logger.Debug("auto-summarizing broad search results",
+				"query", req.Query,
+				"hits", len(entityIDs),
+				"threshold", threshold)
+
+			response := GlobalSearchResponse{
+				Summarized:         true,
+				EntityIDs:          entityIDs,
+				Count:              len(entityIDs),
+				CommunitySummaries: communityMatches,
+				DurationMs:         time.Since(startTime).Milliseconds(),
+			}
+
+			c.recordSuccess(len(data), 0)
+			return json.Marshal(response)
 		}
 
 		// Load full entity data for the semantic hits

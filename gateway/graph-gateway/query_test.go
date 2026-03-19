@@ -1766,7 +1766,7 @@ func TestBuildIntrospectionSchema_GlobalSearchArgs(t *testing.T) {
 		argNames = append(argNames, a["name"].(string))
 	}
 
-	expectedArgs := []string{"query", "level", "maxCommunities", "includeSummaries", "includeRelationships", "includeSources"}
+	expectedArgs := []string{"query", "level", "maxCommunities", "summarizeThreshold", "includeSummaries", "includeRelationships", "includeSources"}
 	assert.Len(t, argNames, len(expectedArgs), "globalSearch should have exactly %d args", len(expectedArgs))
 	for _, expected := range expectedArgs {
 		assert.Contains(t, argNames, expected, "globalSearch should have arg %q", expected)

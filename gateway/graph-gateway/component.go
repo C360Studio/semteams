@@ -1499,7 +1499,7 @@ func buildIntrospectionSchema() map[string]interface{} {
 					fieldDef("semanticSearch", "[Entity]", argDef("query", "String!"), argDef("limit", "Int")),
 					fieldDef("findSimilar", "[Entity]", argDef("entityId", "String!"), argDef("limit", "Int")),
 					fieldDef("localSearch", "LocalSearchResult", argDef("entityId", "String!"), argDef("query", "String"), argDef("level", "Int")),
-					fieldDef("globalSearch", "GlobalSearchResult", argDef("query", "String!"), argDef("level", "Int"), argDef("maxCommunities", "Int"), argDef("includeSummaries", "Boolean"), argDef("includeRelationships", "Boolean"), argDef("includeSources", "Boolean")),
+					fieldDef("globalSearch", "GlobalSearchResult", argDef("query", "String!"), argDef("level", "Int"), argDef("maxCommunities", "Int"), argDef("summarizeThreshold", "Int"), argDef("includeSummaries", "Boolean"), argDef("includeRelationships", "Boolean"), argDef("includeSources", "Boolean")),
 					fieldDef("capabilities", "Capabilities"),
 					// Agentic queries
 					fieldDef("trajectory", "Trajectory", argDef("loopId", "String!"), argDef("limit", "Int")),
