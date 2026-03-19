@@ -62,7 +62,8 @@ type EnhancementWorker struct {
 	resumeCh chan struct{} // Closed when resume requested
 
 	// Configuration
-	workers int // Number of concurrent workers
+	workers    int           // Number of concurrent workers
+	llmTimeout time.Duration // Per-request LLM timeout (default 30s)
 
 	// Metrics
 	metrics *EnhancementMetrics
@@ -122,7 +123,8 @@ func NewEnhancementWorker(config *EnhancementWorkerConfig) (*EnhancementWorker, 
 		provider:        config.Provider,
 		querier:         config.Querier,
 		communityBucket: config.CommunityBucket,
-		workers:         3, // Default concurrent workers
+		workers:         3,                // Default concurrent workers
+		llmTimeout:      30 * time.Second, // Default per-request LLM timeout
 		metrics:         metrics,
 		logger:          logger,
 	}, nil
@@ -322,7 +324,7 @@ func (w *EnhancementWorker) handleKVEntry(entry jetstream.KeyValueEntry, workerI
 	}
 
 	// Generate LLM summary with per-request timeout (content fetching happens internally via ContentFetcher)
-	llmCtx, llmCancel := context.WithTimeout(w.ctx, 60*time.Second)
+	llmCtx, llmCancel := context.WithTimeout(w.ctx, w.llmTimeout)
 	enhanced, err := w.llm.SummarizeCommunity(llmCtx, &community, entities)
 	llmCancel()
 	if err != nil {

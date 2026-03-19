@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1072,7 +1074,18 @@ func (c *Component) startEnhancementWorker(ctx context.Context, provider cluster
 		return errs.Wrap(err, "Component", "startEnhancementWorker", "resolve community_summary endpoint")
 	}
 
-	// Create LLM client
+	// Probe LLM endpoint before committing workers — a fast health check
+	// prevents 60s blocking per community when the endpoint is unreachable
+	// (e.g., shimmy unhealthy, LLM disabled in deployment).
+	probeCtx, probeCancel := context.WithTimeout(ctx, 5*time.Second)
+	if err := probeLLMEndpoint(probeCtx, resolved.URL); err != nil {
+		probeCancel()
+		return errs.WrapTransient(err, "Component", "startEnhancementWorker",
+			fmt.Sprintf("LLM endpoint unreachable at %s", resolved.URL))
+	}
+	probeCancel()
+
+	// Create LLM client — uses the resolved endpoint for inference
 	llmClient, err := llm.NewOpenAIClient(llm.OpenAIConfig{
 		BaseURL: resolved.URL,
 		Model:   resolved.Model,
@@ -1126,7 +1139,62 @@ func (c *Component) startEnhancementWorker(ctx context.Context, provider cluster
 		slog.String("model", resolved.Model),
 		slog.Int("workers", c.config.EnhancementWorkers))
 
+	// Start background health monitor that pauses/resumes the worker based
+	// on LLM endpoint availability. Checks every 30s so recovery is automatic
+	// when the endpoint comes back.
+	c.wg.Add(1)
+	go c.monitorLLMHealth(ctx, resolved.URL, worker)
+
 	return nil
+}
+
+// probeLLMEndpoint performs a fast connectivity check against the LLM service.
+// Returns nil if the endpoint responds (any status), error if unreachable.
+func probeLLMEndpoint(ctx context.Context, baseURL string) error {
+	probeURL := strings.TrimSuffix(baseURL, "/v1") + "/health"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, probeURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	resp.Body.Close()
+	return nil
+}
+
+// monitorLLMHealth periodically probes the LLM endpoint and pauses/resumes
+// the enhancement worker based on availability. This prevents workers from
+// blocking on 30s timeouts when the endpoint goes down mid-operation, and
+// automatically resumes when it recovers.
+func (c *Component) monitorLLMHealth(ctx context.Context, endpointURL string, worker *clustering.EnhancementWorker) {
+	defer c.wg.Done()
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			err := probeLLMEndpoint(probeCtx, endpointURL)
+			cancel()
+
+			if err != nil && !worker.IsPaused() {
+				c.logger.Warn("LLM endpoint unreachable, pausing enhancement worker",
+					slog.String("endpoint", endpointURL),
+					slog.Any("error", err))
+				worker.Pause()
+			} else if err == nil && worker.IsPaused() {
+				c.logger.Info("LLM endpoint recovered, resuming enhancement worker",
+					slog.String("endpoint", endpointURL))
+				worker.Resume()
+			}
+		}
+	}
 }
 
 // startReviewWorker initializes and starts the anomaly review worker.
