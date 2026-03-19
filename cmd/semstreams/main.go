@@ -278,6 +278,7 @@ func setupRegistriesAndManager(cfg *config.Config) (*component.Registry, *servic
 
 	manager := service.NewServiceManager(serviceRegistry)
 	ensureServiceManagerConfig(cfg)
+	ensureMetricsConfig(cfg)
 
 	return componentRegistry, manager, nil
 }
@@ -308,6 +309,26 @@ func ensureServiceManagerConfig(cfg *config.Config) {
 		slog.Debug("Service-manager config added", "enabled", true)
 	} else {
 		slog.Debug("Service-manager config already exists", "enabled", cfg.Services["service-manager"].Enabled)
+	}
+}
+
+// ensureMetricsConfig ensures metrics service is always present with defaults.
+// Observability should not be opt-in — metrics are critical for tuning and SLA validation.
+func ensureMetricsConfig(cfg *config.Config) {
+	if _, exists := cfg.Services["metrics"]; !exists {
+		slog.Debug("Adding default metrics config")
+		defaultConfig := map[string]any{
+			"port":               9090,
+			"path":               "/metrics",
+			"include_go_metrics": true,
+		}
+		defaultConfigJSON, _ := json.Marshal(defaultConfig)
+		cfg.Services["metrics"] = types.ServiceConfig{
+			Name:    "metrics",
+			Enabled: true,
+			Config:  defaultConfigJSON,
+		}
+		slog.Debug("Metrics config added", "port", 9090)
 	}
 }
 
