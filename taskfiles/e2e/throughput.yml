@@ -68,6 +68,28 @@ tasks:
       - 'echo "Profiles saved to test/e2e/results/profiles/"'
       - 'echo "Includes: CPU, heap, goroutine, allocs, block, mutex profiles"'
 
+  sla:
+    desc: "SLA validation: 14K entities + concurrent queries (P99 < 2s, errors < 5%)"
+    silent: false
+    deps: [":e2e:clean", ":e2e:check-ports", ":build:e2e"]
+    env:
+      SEMSTREAMS_DEBUG: "true"
+    cmds:
+      - 'echo "[THROUGHPUT-SLA] 14K synthetic entities + concurrent query load with SLA assertions..."'
+      - docker compose -f docker/compose/tiered.yml --profile statistical up -d --wait --build
+      - 'echo "[OK] Services ready"'
+      - cmd: >
+          cd cmd/e2e && ./e2e --scenario throughput
+          --unique-entities 14000
+          --query-during-ingestion
+          --max-query-p99-ms 2000
+          --max-query-error-rate 0.05
+          --output-dir ./test/e2e/results
+        ignore_error: true
+      - docker compose -f docker/compose/tiered.yml --profile statistical down -v --timeout 15
+      - 'echo ""'
+      - 'echo "Results saved to test/e2e/results/"'
+
   debug:
     desc: "Start services for manual throughput testing"
     silent: false

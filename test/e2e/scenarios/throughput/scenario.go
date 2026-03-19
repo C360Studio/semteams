@@ -50,6 +50,16 @@ type Config struct {
 	// Validation
 	ValidationTimeout time.Duration `json:"validation_timeout"`  // Max wait for processing
 	MinProcessedRatio float64       `json:"min_processed_ratio"` // Min ratio of messages processed (default: 0.9)
+
+	// Synthetic entity generation (0 = use testdata cycling)
+	UniqueEntities int `json:"unique_entities"`
+
+	// Concurrent query-during-ingestion mode
+	QueryDuringIngestion bool `json:"query_during_ingestion"`
+
+	// Query SLA thresholds (0 = disabled, no assertion)
+	MaxQueryP99Ms     float64 `json:"max_query_p99_ms"`
+	MaxQueryErrorRate float64 `json:"max_query_error_rate"`
 }
 
 // DefaultConfig returns sensible defaults for throughput testing.
@@ -143,33 +153,16 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Failed to capture metrics baseline: %v", err))
 	}
 
-	// Send messages
 	sendStart := time.Now()
-	sendResult, err := s.sendMessages(ctx, result)
+	var queryResult *QueryLoadResult
+
+	if s.config.QueryDuringIngestion && s.config.GraphQLURL != "" {
+		queryResult, err = s.executeConcurrent(ctx, profilingEnabled, baseline, result)
+	} else {
+		queryResult, err = s.executeSequential(ctx, profilingEnabled, baseline, result)
+	}
 	if err != nil {
-		result.Error = fmt.Sprintf("send failed: %v", err)
-		result.EndTime = time.Now()
-		result.Duration = result.EndTime.Sub(result.StartTime)
-		return result, nil
-	}
-
-	result.Metrics["messages_sent"] = sendResult.MessagesSent
-	result.Metrics["send_duration_ms"] = sendResult.Duration.Milliseconds()
-	result.Metrics["send_rate_msg_sec"] = sendResult.Rate
-	result.Details["send_summary"] = fmt.Sprintf(
-		"Sent %d messages in %v (%.0f msg/sec)",
-		sendResult.MessagesSent, sendResult.Duration, sendResult.Rate)
-
-	// Wait for processing with timeout
-	processingStart := time.Now()
-	if err := s.waitForProcessing(ctx, baseline, sendResult.MessagesSent); err != nil {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("Processing validation: %v", err))
-	}
-	result.Metrics["processing_wait_ms"] = time.Since(processingStart).Milliseconds()
-
-	// Query load phase (only when GraphQL endpoint is configured)
-	if s.config.GraphQLURL != "" {
-		s.runQueryPhase(ctx, profilingEnabled, result)
+		return result, nil // error already recorded in result
 	}
 
 	// Capture final metrics delta
@@ -182,7 +175,35 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 
 	// Calculate end-to-end throughput
 	totalDuration := time.Since(sendStart)
-	result.Metrics["total_throughput_msg_sec"] = float64(sendResult.MessagesSent) / totalDuration.Seconds()
+	if sent, ok := result.Metrics["messages_sent"].(int); ok && totalDuration.Seconds() > 0 {
+		result.Metrics["total_throughput_msg_sec"] = float64(sent) / totalDuration.Seconds()
+	}
+
+	// Query SLA validation
+	if queryResult != nil {
+		if s.config.MaxQueryP99Ms > 0 && queryResult.P99LatencyMs > s.config.MaxQueryP99Ms {
+			result.Success = false
+			result.Errors = append(result.Errors, fmt.Sprintf(
+				"query P99 latency %.0fms exceeds SLA threshold %.0fms",
+				queryResult.P99LatencyMs, s.config.MaxQueryP99Ms))
+		}
+		if s.config.MaxQueryErrorRate > 0 && queryResult.TotalQueries > 0 {
+			errorRate := float64(queryResult.ErrorCount) / float64(queryResult.TotalQueries)
+			if errorRate > s.config.MaxQueryErrorRate {
+				result.Success = false
+				result.Errors = append(result.Errors, fmt.Sprintf(
+					"query error rate %.1f%% exceeds SLA threshold %.1f%%",
+					errorRate*100, s.config.MaxQueryErrorRate*100))
+			}
+		}
+	}
+
+	// Only mark success if SLA checks didn't already flag a failure
+	if !result.Success && len(result.Errors) > 0 {
+		result.EndTime = time.Now()
+		result.Duration = result.EndTime.Sub(result.StartTime)
+		return result, nil
+	}
 
 	result.Success = true
 	result.EndTime = time.Now()
@@ -191,14 +212,84 @@ func (s *Scenario) Execute(ctx context.Context) (*scenarios.Result, error) {
 	return result, nil
 }
 
+// executeConcurrent runs message ingestion and queries in parallel.
+func (s *Scenario) executeConcurrent(ctx context.Context, profilingEnabled bool, _ *client.MetricsBaseline, result *scenarios.Result) (*QueryLoadResult, error) {
+	var sendResult *SendResult
+	var sendErr error
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		sendResult, sendErr = s.sendMessages(ctx, result)
+	}()
+
+	// Brief warmup before starting queries
+	time.Sleep(2 * time.Second)
+
+	queryResult := s.runQueryPhase(ctx, profilingEnabled, result)
+
+	wg.Wait()
+
+	if sendErr != nil {
+		result.Error = fmt.Sprintf("send failed: %v", sendErr)
+		result.EndTime = time.Now()
+		result.Duration = result.EndTime.Sub(result.StartTime)
+		return queryResult, sendErr
+	}
+
+	result.Metrics["messages_sent"] = sendResult.MessagesSent
+	result.Metrics["send_duration_ms"] = sendResult.Duration.Milliseconds()
+	result.Metrics["send_rate_msg_sec"] = sendResult.Rate
+	result.Details["send_summary"] = fmt.Sprintf(
+		"Sent %d messages in %v (%.0f msg/sec)",
+		sendResult.MessagesSent, sendResult.Duration, sendResult.Rate)
+	result.Details["mode"] = "concurrent"
+
+	return queryResult, nil
+}
+
+// executeSequential runs the original send → wait → query flow.
+func (s *Scenario) executeSequential(ctx context.Context, profilingEnabled bool, baseline *client.MetricsBaseline, result *scenarios.Result) (*QueryLoadResult, error) {
+	sendResult, err := s.sendMessages(ctx, result)
+	if err != nil {
+		result.Error = fmt.Sprintf("send failed: %v", err)
+		result.EndTime = time.Now()
+		result.Duration = result.EndTime.Sub(result.StartTime)
+		return nil, err
+	}
+
+	result.Metrics["messages_sent"] = sendResult.MessagesSent
+	result.Metrics["send_duration_ms"] = sendResult.Duration.Milliseconds()
+	result.Metrics["send_rate_msg_sec"] = sendResult.Rate
+	result.Details["send_summary"] = fmt.Sprintf(
+		"Sent %d messages in %v (%.0f msg/sec)",
+		sendResult.MessagesSent, sendResult.Duration, sendResult.Rate)
+	result.Details["mode"] = "sequential"
+
+	processingStart := time.Now()
+	if err := s.waitForProcessing(ctx, baseline, sendResult.MessagesSent); err != nil {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("Processing validation: %v", err))
+	}
+	result.Metrics["processing_wait_ms"] = time.Since(processingStart).Milliseconds()
+
+	var queryResult *QueryLoadResult
+	if s.config.GraphQLURL != "" {
+		queryResult = s.runQueryPhase(ctx, profilingEnabled, result)
+	}
+
+	return queryResult, nil
+}
+
 // runQueryPhase executes the query load phase with optional profiling.
-func (s *Scenario) runQueryPhase(ctx context.Context, profilingEnabled bool, result *scenarios.Result) {
+// Returns nil when the phase is skipped or fails before collecting results.
+func (s *Scenario) runQueryPhase(ctx context.Context, profilingEnabled bool, result *scenarios.Result) *QueryLoadResult {
 	// Wait for entities to be queryable before hammering the gateway
 	fmt.Print("\n[QUERY-LOAD] Waiting for entities to be queryable...")
 	if err := s.waitForEntities(ctx); err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Entity readiness check failed: %v", err))
 		fmt.Printf(" skipping query load (%v)\n", err)
-		return
+		return nil
 	}
 	fmt.Println(" ready")
 
@@ -231,7 +322,7 @@ func (s *Scenario) runQueryPhase(ctx context.Context, profilingEnabled bool, res
 	queryResult, err := runQueryLoad(ctx, s.config)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("Query load failed: %v", err))
-		return
+		return nil
 	}
 
 	// Record query metrics
@@ -276,6 +367,8 @@ func (s *Scenario) runQueryPhase(ctx context.Context, profilingEnabled bool, res
 			result.Details["goroutine_check"] = "pre and post query goroutine profiles captured for comparison"
 		}
 	}
+
+	return queryResult
 }
 
 // startProfiling captures baseline heap and starts CPU profiling.
@@ -372,8 +465,14 @@ func (s *Scenario) sendMessages(ctx context.Context, result *scenarios.Result) (
 	}
 	defer conn.Close()
 
-	// Pre-generate messages to avoid allocation during send loop
-	messages := s.generateMessages(s.config.MessageCount, s.config.MessageSize)
+	// Pre-generate messages
+	var messages [][]byte
+	if s.config.UniqueEntities > 0 {
+		messages = GenerateSyntheticMessages(s.config.UniqueEntities)
+		result.Details["synthetic_entities"] = s.config.UniqueEntities
+	} else {
+		messages = s.generateMessages(s.config.MessageCount, s.config.MessageSize)
+	}
 	result.Details["messages_pregenerated"] = len(messages)
 
 	// Rate limiting setup
@@ -520,6 +619,11 @@ func (s *Scenario) waitForProcessing(ctx context.Context, baseline *client.Metri
 // that hadn't been ingested yet.
 func (s *Scenario) waitForEntities(ctx context.Context) error {
 	entities := knownEntityIDs()
+	if s.config.UniqueEntities > 0 {
+		// Synthetic entities have platform-dependent IDs, so probe via
+		// prefix query instead of exact entity lookups.
+		return s.waitForSyntheticEntities(ctx)
+	}
 	httpClient := &http.Client{Timeout: 5 * time.Second}
 	deadline := time.Now().Add(s.config.ValidationTimeout)
 
@@ -542,6 +646,51 @@ func (s *Scenario) waitForEntities(ctx context.Context) error {
 	missing := s.probeEntities(ctx, httpClient, entities)
 	return fmt.Errorf("timeout: %d/%d entities not queryable at %s: %v",
 		len(missing), len(entities), s.config.GraphQLURL, missing)
+}
+
+// waitForSyntheticEntities waits until synthetic entities are queryable via predicate search.
+// Uses entitiesByPredicate instead of exact entity ID lookups since synthetic entity IDs
+// contain the platform name which varies across configs (statistical vs semantic).
+func (s *Scenario) waitForSyntheticEntities(ctx context.Context) error {
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+	deadline := time.Now().Add(s.config.ValidationTimeout)
+
+	query := `{"query":"{ entitiesByPredicate(predicate: \"sensor.classification.type\", limit: 1) }"}`
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(1 * time.Second):
+		}
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.config.GraphQLURL,
+			bytes.NewReader([]byte(query)))
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := httpClient.Do(req)
+		if err != nil {
+			fmt.Print(".")
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		// Check if we got at least one entity back
+		if resp.StatusCode == http.StatusOK && !bytes.Contains(body, []byte(`"errors"`)) &&
+			bytes.Contains(body, []byte(`"entitiesByPredicate"`)) {
+			// Verify the result array is non-empty
+			if !bytes.Contains(body, []byte(`[]`)) {
+				return nil
+			}
+		}
+		fmt.Print(".")
+	}
+
+	return fmt.Errorf("timeout: synthetic entities not queryable at %s via predicate search", s.config.GraphQLURL)
 }
 
 // probeEntities checks which entity IDs are queryable and returns the missing ones.

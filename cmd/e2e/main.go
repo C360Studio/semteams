@@ -109,6 +109,11 @@ type cliFlags struct {
 	messageCount int
 	graphqlURL   string
 	profileAll   bool
+	// Throughput SLA and advanced options
+	uniqueEntities       int
+	queryDuringIngestion bool
+	maxQueryP99Ms        float64
+	maxQueryErrorRate    float64
 }
 
 // parseCommandLineFlags parses and returns command-line flags
@@ -157,6 +162,14 @@ func parseCommandLineFlags() *cliFlags {
 		"GraphQL endpoint for throughput query load (empty to skip query phase)")
 	flag.BoolVar(&flags.profileAll, "profile-all", false,
 		"Capture all profile types including block and mutex (throughput scenario)")
+	flag.IntVar(&flags.uniqueEntities, "unique-entities", 0,
+		"Generate N unique synthetic entities (0 = cycle testdata)")
+	flag.BoolVar(&flags.queryDuringIngestion, "query-during-ingestion", false,
+		"Run queries concurrently with message ingestion")
+	flag.Float64Var(&flags.maxQueryP99Ms, "max-query-p99-ms", 0,
+		"Fail if query P99 latency exceeds this threshold in ms (0 = disabled)")
+	flag.Float64Var(&flags.maxQueryErrorRate, "max-query-error-rate", 0,
+		"Fail if query error rate exceeds this ratio (0 = disabled, 0.05 = 5%)")
 
 	// Support environment variables for Docker Compose
 	if envURL := os.Getenv("SEMSTREAMS_BASE_URL"); envURL != "" {
@@ -371,6 +384,10 @@ func createScenario(
 		cfg.MessageCount = flags.messageCount
 		cfg.GraphQLURL = flags.graphqlURL
 		cfg.ProfileAll = flags.profileAll
+		cfg.UniqueEntities = flags.uniqueEntities
+		cfg.QueryDuringIngestion = flags.queryDuringIngestion
+		cfg.MaxQueryP99Ms = flags.maxQueryP99Ms
+		cfg.MaxQueryErrorRate = flags.maxQueryErrorRate
 		if flags.outputDir != "" {
 			cfg.ProfileDir = flags.outputDir + "/profiles"
 		}

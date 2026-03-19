@@ -63,7 +63,7 @@ func knownEntityIDs() []string {
 }
 
 // buildQueryPool returns a weighted list of query specs to randomly sample from.
-// Weights: entity 30%, prefix 25%, spatial 25%, temporal 20%.
+// Weights: entity 30%, prefix 20%, spatial 20%, predicate 20%, temporal 10%.
 func buildQueryPool() []querySpec {
 	pool := make([]querySpec, 0, 100)
 
@@ -80,7 +80,7 @@ func buildQueryPool() []querySpec {
 		})
 	}
 
-	// Prefix queries (25 entries = 25%)
+	// Prefix queries (20 entries = 20%)
 	prefixes := []string{
 		"c360.logistics",
 		"c360.logistics.environmental",
@@ -88,7 +88,7 @@ func buildQueryPool() []querySpec {
 		"c360.logistics.environmental.sensor.temperature",
 		"c360.logistics.warehouse",
 	}
-	for i := range 25 {
+	for i := range 20 {
 		pfx := prefixes[i%len(prefixes)]
 		pool = append(pool, querySpec{
 			Name: "prefix",
@@ -98,7 +98,7 @@ func buildQueryPool() []querySpec {
 		})
 	}
 
-	// Spatial queries (25 entries = 25%) — bounding boxes around San Francisco testdata
+	// Spatial queries (20 entries = 20%) — bounding boxes around San Francisco testdata
 	type bbox struct{ north, south, east, west float64 }
 	boxes := []bbox{
 		{37.78, 37.77, -122.41, -122.43},
@@ -107,7 +107,7 @@ func buildQueryPool() []querySpec {
 		{37.80, 37.75, -122.39, -122.45},
 		{37.7755, 37.7745, -122.4190, -122.4200},
 	}
-	for i := range 25 {
+	for i := range 20 {
 		b := boxes[i%len(boxes)]
 		pool = append(pool, querySpec{
 			Name: "spatial",
@@ -117,14 +117,33 @@ func buildQueryPool() []querySpec {
 		})
 	}
 
-	// Temporal queries (20 entries = 20%)
+	// Predicate filter queries (20 entries = 20%) — simulates semdragon's
+	// game board entity filtering: find entities by predicate prefix, limit 100.
+	predicates := []string{
+		"sensor.measurement",
+		"sensor.classification",
+		"geo.location",
+		"iot.sensor",
+		"time.observation",
+	}
+	for i := range 20 {
+		pred := predicates[i%len(predicates)]
+		pool = append(pool, querySpec{
+			Name: "predicate",
+			Query: fmt.Sprintf(
+				`{"query":"{ entitiesByPredicate(predicate: \"%s\", limit: 100) }"}`,
+				pred),
+		})
+	}
+
+	// Temporal queries (10 entries = 10%)
 	windows := []struct{ start, end string }{
 		{"2024-11-15T00:00:00Z", "2024-11-15T23:59:59Z"},
 		{"2024-11-15T06:00:00Z", "2024-11-15T12:00:00Z"},
 		{"2024-11-15T08:00:00Z", "2024-11-15T10:00:00Z"},
 		{"2024-11-14T00:00:00Z", "2024-11-16T00:00:00Z"},
 	}
-	for i := range 20 {
+	for i := range 10 {
 		w := windows[i%len(windows)]
 		pool = append(pool, querySpec{
 			Name: "temporal",
