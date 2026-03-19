@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/cache"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -22,15 +22,12 @@ type Generator struct {
 	config     Config
 	logger     *slog.Logger
 
-	// Debouncing state
-	pendingEntities map[string]time.Time // entityID -> lastChangeTime
-	pendingMu       sync.Mutex
-	debounceTimer   *time.Timer
+	// Coalescing: deduplicates rapid entity updates within a fixed time window
+	coalescer *cache.CoalescingSet
 
 	// Lifecycle
-	ctx     context.Context
-	cancel  context.CancelFunc
-	stopped bool
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	// KV stores
 	entityKV *natsclient.KVStore
@@ -40,15 +37,14 @@ type Generator struct {
 // NewGenerator creates a new OASF generator.
 func NewGenerator(mapper *Mapper, natsClient *natsclient.Client, config Config, logger *slog.Logger) *Generator {
 	return &Generator{
-		mapper:          mapper,
-		natsClient:      natsClient,
-		config:          config,
-		logger:          logger,
-		pendingEntities: make(map[string]time.Time),
+		mapper:     mapper,
+		natsClient: natsClient,
+		config:     config,
+		logger:     logger,
 	}
 }
 
-// Initialize sets up KV stores for the generator.
+// Initialize sets up KV stores and coalescer for the generator.
 func (g *Generator) Initialize(ctx context.Context) error {
 	// Store parent context for background operations
 	g.ctx, g.cancel = context.WithCancel(ctx)
@@ -66,6 +62,11 @@ func (g *Generator) Initialize(ctx context.Context) error {
 		return errs.Wrap(err, "Generator", "Initialize", "get OASF KV bucket")
 	}
 	g.oasfKV = g.natsClient.NewKVStore(oasfBucket)
+
+	// Create coalescer for batching rapid entity updates
+	g.coalescer = cache.NewCoalescingSet(ctx, g.config.GetGenerationDebounce(), func(entityIDs []string) {
+		g.processEntityBatch(entityIDs)
+	})
 
 	return nil
 }
@@ -90,52 +91,25 @@ func (g *Generator) getOrCreateKVBucket(ctx context.Context, bucketName string) 
 }
 
 // QueueGeneration queues an entity for OASF generation.
-// The actual generation happens after the debounce period.
+// The actual generation happens after the coalescing window expires.
 func (g *Generator) QueueGeneration(entityID string) {
-	g.pendingMu.Lock()
-	defer g.pendingMu.Unlock()
-
-	if g.stopped {
-		return
+	if g.coalescer != nil {
+		g.coalescer.Add(entityID)
 	}
-
-	g.pendingEntities[entityID] = time.Now()
-
-	// Start or reset debounce timer
-	debounce := g.config.GetGenerationDebounce()
-	if g.debounceTimer != nil {
-		g.debounceTimer.Stop()
-	}
-	g.debounceTimer = time.AfterFunc(debounce, func() {
-		g.processPendingEntities()
-	})
 }
 
-// processPendingEntities processes all queued entities.
-func (g *Generator) processPendingEntities() {
-	g.pendingMu.Lock()
-	if g.stopped {
-		g.pendingMu.Unlock()
-		return
-	}
-	entities := make([]string, 0, len(g.pendingEntities))
-	for entityID := range g.pendingEntities {
-		entities = append(entities, entityID)
-	}
-	g.pendingEntities = make(map[string]time.Time)
+// processEntityBatch generates OASF records for a batch of coalesced entities.
+// Called by CoalescingSet callback after the debounce window expires.
+func (g *Generator) processEntityBatch(entityIDs []string) {
 	ctx := g.ctx
-	g.pendingMu.Unlock()
-
-	// Check if context is cancelled
 	if ctx == nil || ctx.Err() != nil {
 		return
 	}
 
-	for _, entityID := range entities {
-		// Check context before each entity
+	for _, entityID := range entityIDs {
 		if ctx.Err() != nil {
 			g.logger.Debug("Generation cancelled",
-				slog.Int("remaining_entities", len(entities)))
+				slog.Int("remaining_entities", len(entityIDs)))
 			return
 		}
 
@@ -301,18 +275,11 @@ func sanitizeSubject(entityID string) string {
 
 // Stop cleans up the generator resources.
 func (g *Generator) Stop() {
-	g.pendingMu.Lock()
-	defer g.pendingMu.Unlock()
-
-	g.stopped = true
+	if g.coalescer != nil {
+		_ = g.coalescer.Close()
+	}
 
 	if g.cancel != nil {
 		g.cancel()
 	}
-
-	if g.debounceTimer != nil {
-		g.debounceTimer.Stop()
-		g.debounceTimer = nil
-	}
-	g.pendingEntities = make(map[string]time.Time)
 }

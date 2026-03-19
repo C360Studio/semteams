@@ -18,6 +18,7 @@ import (
 	"github.com/c360studio/semstreams/graph/embedding"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/cache"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/resource"
 	"github.com/nats-io/nats.go/jetstream"
@@ -44,6 +45,7 @@ type Config struct {
 	// Dependency startup configuration
 	StartupAttempts int `json:"startup_attempts,omitempty" schema:"type:int,description:Max attempts to wait for dependencies at startup,category:advanced"`
 	StartupInterval int `json:"startup_interval_ms,omitempty" schema:"type:int,description:Interval between startup attempts in milliseconds,category:advanced"`
+	CoalesceMs      int `json:"coalesce_ms,omitempty" schema:"type:int,description:Debounce window for entity updates in ms. 0=immediate processing,category:advanced"`
 
 	// Parsed duration (set by ApplyDefaults)
 	cacheTTL time.Duration
@@ -191,10 +193,12 @@ type Component struct {
 	modelRegistry model.RegistryReader
 
 	// Domain resources
-	embedder        embedding.Embedder
-	storage         *embedding.Storage
-	worker          *embedding.Worker
-	embeddingBucket jetstream.KeyValue
+	embedder           embedding.Embedder
+	storage            *embedding.Storage
+	worker             *embedding.Worker
+	embeddingBucket    jetstream.KeyValue
+	entityCoalescer    *cache.CoalescingSet
+	entityStatesBucket jetstream.KeyValue
 
 	// Lifecycle state
 	mu          sync.RWMutex
@@ -495,6 +499,13 @@ func (c *Component) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Optionally wrap entity updates with coalescing to avoid redundant re-embedding
+	if c.config.CoalesceMs > 0 {
+		c.entityCoalescer = cache.NewCoalescingSet(ctx, time.Duration(c.config.CoalesceMs)*time.Millisecond, func(entityIDs []string) {
+			c.processEntityBatch(ctx, entityIDs)
+		})
+	}
+
 	// Set up query handlers
 	if err := c.setupQueryHandlers(ctx); err != nil {
 		cancel()
@@ -525,6 +536,11 @@ func (c *Component) Stop(timeout time.Duration) error {
 	if !c.running {
 		c.mu.Unlock()
 		return nil // Already stopped
+	}
+
+	// Stop coalescer so no new batch callbacks fire during teardown
+	if c.entityCoalescer != nil {
+		_ = c.entityCoalescer.Close()
 	}
 
 	// Unsubscribe from query handlers
@@ -723,6 +739,7 @@ func (c *Component) waitForDependenciesAndStartWatcher(ctx context.Context) erro
 	if err != nil {
 		return errs.Wrap(err, "Component", "waitForDependenciesAndStartWatcher", "get entity bucket")
 	}
+	c.entityStatesBucket = entityBucket
 
 	c.wg.Add(1)
 	go c.watchEntityStates(ctx, entityBucket)
@@ -775,12 +792,40 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 			}
 
 			if entry.Operation() == jetstream.KeyValueDelete {
-				// Skip deleted entities
+				if c.entityCoalescer != nil {
+					c.entityCoalescer.Remove(entry.Key())
+				}
 				continue
 			}
 
-			c.queueEntityForEmbedding(ctx, entry.Key(), entry.Value())
+			if c.entityCoalescer != nil {
+				c.entityCoalescer.Add(entry.Key())
+			} else {
+				c.queueEntityForEmbedding(ctx, entry.Key(), entry.Value())
+			}
 		}
+	}
+}
+
+// processEntityBatch re-fetches each entity from KV and queues it for embedding.
+// It is invoked by the CoalescingSet after the debounce window elapses.
+func (c *Component) processEntityBatch(ctx context.Context, entityIDs []string) {
+	c.logger.Debug("processing coalesced entity batch", slog.Int("count", len(entityIDs)))
+
+	for _, entityID := range entityIDs {
+		if ctx.Err() != nil {
+			return
+		}
+
+		entry, err := c.entityStatesBucket.Get(ctx, entityID)
+		if err != nil {
+			c.logger.Debug("entity not found during batch processing",
+				slog.String("entity", entityID),
+				slog.Any("error", err))
+			continue
+		}
+
+		c.queueEntityForEmbedding(ctx, entry.Key(), entry.Value())
 	}
 }
 

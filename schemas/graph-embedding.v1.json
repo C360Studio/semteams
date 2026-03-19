@@ -15,6 +15,11 @@
       "description": "Cache TTL for embeddings (e.g. 15m or 1h)",
       "category": "advanced"
     },
+    "coalesce_ms": {
+      "type": "number",
+      "description": "Debounce window for entity updates in ms. 0=immediate processing",
+      "category": "advanced"
+    },
     "embedder_type": {
       "type": "string",
       "description": "Embedder type (bm25 or http). HTTP requires model registry with embedding capability",

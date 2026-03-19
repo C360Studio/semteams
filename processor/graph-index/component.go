@@ -17,6 +17,7 @@ import (
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/cache"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/resource"
 	"github.com/c360studio/semstreams/pkg/worker"
@@ -39,6 +40,7 @@ type Config struct {
 	// Dependency startup configuration
 	StartupAttempts int `json:"startup_attempts,omitempty" schema:"type:int,description:Max attempts to wait for dependencies at startup,category:advanced"`
 	StartupInterval int `json:"startup_interval_ms,omitempty" schema:"type:int,description:Interval between startup attempts in milliseconds,category:advanced"`
+	CoalesceMs      int `json:"coalesce_ms,omitempty" schema:"type:int,description:Debounce window for entity updates in ms. 0=immediate processing,category:advanced"`
 }
 
 // Validate implements component.Validatable interface
@@ -207,13 +209,14 @@ type Component struct {
 	entityStatesBucket jetstream.KeyValue // raw: read-only watcher, no CAS needed
 
 	// Lifecycle state
-	mu          sync.RWMutex
-	running     bool
-	initialized bool
-	startTime   time.Time
-	wg          sync.WaitGroup
-	cancel      context.CancelFunc
-	indexPool   *worker.Pool[jetstream.KeyValueEntry]
+	mu              sync.RWMutex
+	running         bool
+	initialized     bool
+	startTime       time.Time
+	wg              sync.WaitGroup
+	cancel          context.CancelFunc
+	indexPool       *worker.Pool[jetstream.KeyValueEntry]
+	entityCoalescer *cache.CoalescingSet
 
 	// Metrics (atomic)
 	messagesProcessed int64
@@ -503,6 +506,13 @@ func (c *Component) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Optionally coalesce rapid entity updates to reduce KV write amplification
+	if c.config.CoalesceMs > 0 {
+		c.entityCoalescer = cache.NewCoalescingSet(ctx, time.Duration(c.config.CoalesceMs)*time.Millisecond, func(entityIDs []string) {
+			c.processEntityBatch(ctx, entityIDs)
+		})
+	}
+
 	// Set up query handler subscriptions
 	if err := c.setupQueryHandlers(ctx); err != nil {
 		cancel()
@@ -543,6 +553,11 @@ func (c *Component) Stop(timeout time.Duration) error {
 		}
 	}
 	c.querySubscriptions = nil
+
+	// Stop the entity coalescer before the worker pool so any pending keys are flushed
+	if c.entityCoalescer != nil {
+		_ = c.entityCoalescer.Close()
+	}
 
 	// Stop the index worker pool before cancelling the context so it can drain
 	if c.indexPool != nil {
@@ -686,11 +701,16 @@ func (c *Component) watchEntityStates(ctx context.Context, bucket jetstream.KeyV
 			}
 
 			if entry.Operation() == jetstream.KeyValueDelete {
+				if c.entityCoalescer != nil {
+					c.entityCoalescer.Remove(entry.Key())
+				}
 				c.handleEntityDelete(ctx, entry.Key())
 				continue
 			}
 
-			if c.indexPool != nil {
+			if c.entityCoalescer != nil {
+				c.entityCoalescer.Add(entry.Key())
+			} else if c.indexPool != nil {
 				if err := c.indexPool.SubmitBlocking(ctx, entry); err != nil {
 					c.logger.Warn("failed to submit entity for indexing",
 						slog.String("entity", entry.Key()),
@@ -765,30 +785,37 @@ func (c *Component) processEntityUpdateWorker(ctx context.Context, entry jetstre
 	return nil
 }
 
-// processEntityUpdate indexes an entity's relationships from its triples
+// processEntityUpdate indexes an entity's relationships from its triples.
+// It is a thin wrapper around processEntityUpdateFromData for use with KV watcher entries.
 func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.KeyValueEntry) {
+	c.processEntityUpdateFromData(ctx, entry.Key(), entry.Value())
+}
+
+// processEntityUpdateFromData indexes an entity's relationships from its triples using raw data.
+// It is the core implementation used by both processEntityUpdate and processEntityBatch.
+func (c *Component) processEntityUpdateFromData(ctx context.Context, entityID string, data []byte) {
 	// Report indexing stage (throttled to avoid KV spam)
 	if err := c.lifecycleReporter.ReportStage(ctx, "indexing"); err != nil {
 		c.logger.Debug("failed to report lifecycle stage", slog.String("stage", "indexing"), slog.Any("error", err))
 	}
 
 	var state graph.EntityState
-	if err := json.Unmarshal(entry.Value(), &state); err != nil {
+	if err := json.Unmarshal(data, &state); err != nil {
 		c.logger.Warn("failed to unmarshal entity state",
-			slog.String("entity", entry.Key()),
+			slog.String("entity", entityID),
 			slog.Any("error", err))
 		return
 	}
 
-	// Determine entity ID: use state.ID if set, otherwise entry.Key(), otherwise first triple subject
-	entityID := state.ID
-	if entityID == "" {
-		entityID = entry.Key()
+	// Determine entity ID: use state.ID if set, otherwise entityID arg, otherwise first triple subject
+	resolvedID := state.ID
+	if resolvedID == "" {
+		resolvedID = entityID
 	}
-	if entityID == "" || entityID == "test-key" {
+	if resolvedID == "" || resolvedID == "test-key" {
 		// Fallback to triple subject for test compatibility
 		if len(state.Triples) > 0 {
-			entityID = state.Triples[0].Subject
+			resolvedID = state.Triples[0].Subject
 		}
 	}
 
@@ -825,7 +852,7 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 
 			// Collect incoming entry; will be written in batch after the loop
 			incomingByTarget[targetID] = append(incomingByTarget[targetID], graph.IncomingEntry{
-				FromEntityID: entityID,
+				FromEntityID: resolvedID,
 				Predicate:    triple.Predicate,
 			})
 
@@ -838,10 +865,10 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 		isCoreAlias := triple.Predicate == "core.identity.alias"
 		if isVocabAlias || isCoreAlias {
 			if alias, ok := triple.Object.(string); ok && alias != "" {
-				if err := c.UpdateAliasIndex(ctx, alias, entityID); err != nil {
+				if err := c.UpdateAliasIndex(ctx, alias, resolvedID); err != nil {
 					c.logger.Debug("failed to update alias index",
 						slog.String("alias", alias),
-						slog.String("entity", entityID),
+						slog.String("entity", resolvedID),
 						slog.String("predicate", triple.Predicate),
 						slog.Any("error", err))
 				}
@@ -854,39 +881,39 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 		if err := c.updateIncomingIndexBatch(ctx, targetID, entries); err != nil {
 			c.logger.Debug("failed to update incoming index",
 				slog.String("target", targetID),
-				slog.String("source", entityID),
+				slog.String("source", resolvedID),
 				slog.Any("error", err))
 		}
 	}
 
 	// Write outgoing index with all targets
 	if len(outgoingTargets) > 0 {
-		if err := c.updateOutgoingIndexBatch(ctx, entityID, outgoingTargets); err != nil {
+		if err := c.updateOutgoingIndexBatch(ctx, resolvedID, outgoingTargets); err != nil {
 			c.logger.Debug("failed to update outgoing index",
-				slog.String("entity", entityID),
+				slog.String("entity", resolvedID),
 				slog.Any("error", err))
 		}
 	}
 
 	// Update predicate index for all predicates used by this entity
 	for predicate := range predicatesUsed {
-		if err := c.UpdatePredicateIndex(ctx, entityID, predicate); err != nil {
+		if err := c.UpdatePredicateIndex(ctx, resolvedID, predicate); err != nil {
 			c.logger.Debug("failed to update predicate index",
-				slog.String("entity", entityID),
+				slog.String("entity", resolvedID),
 				slog.String("predicate", predicate),
 				slog.Any("error", err))
 		}
 	}
 
 	// Update context index for triples with provenance (e.g., "inference.hierarchy")
-	if err := c.UpdateContextIndex(ctx, entityID, state.Triples); err != nil {
+	if err := c.UpdateContextIndex(ctx, resolvedID, state.Triples); err != nil {
 		c.logger.Debug("failed to update context index",
-			slog.String("entity", entityID),
+			slog.String("entity", resolvedID),
 			slog.Any("error", err))
 	}
 
 	c.logger.Debug("indexed entity",
-		slog.String("entity", entityID),
+		slog.String("entity", resolvedID),
 		slog.Int("triples", len(state.Triples)),
 		slog.Int("relationships", indexed))
 
@@ -897,6 +924,36 @@ func (c *Component) processEntityUpdate(ctx context.Context, entry jetstream.Key
 	if c.metrics != nil {
 		c.metrics.recordEventProcessed()
 		c.metrics.recordWatchEvent("update")
+	}
+}
+
+// processEntityBatch is the CoalescingSet callback. It re-fetches each entity from KV
+// by ID and routes it through the worker pool (or direct processing if no pool).
+func (c *Component) processEntityBatch(ctx context.Context, entityIDs []string) {
+	c.logger.Debug("processing coalesced entity batch", slog.Int("count", len(entityIDs)))
+
+	for _, entityID := range entityIDs {
+		if ctx.Err() != nil {
+			return
+		}
+
+		entry, err := c.entityStatesBucket.Get(ctx, entityID)
+		if err != nil {
+			c.logger.Debug("entity not found during batch processing",
+				slog.String("entity", entityID),
+				slog.Any("error", err))
+			continue
+		}
+
+		if c.indexPool != nil {
+			if err := c.indexPool.SubmitBlocking(ctx, entry); err != nil {
+				c.logger.Warn("failed to submit coalesced entity for indexing",
+					slog.String("entity", entityID),
+					slog.Any("error", err))
+			}
+		} else {
+			c.processEntityUpdate(ctx, entry)
+		}
 	}
 }
 

@@ -10,6 +10,11 @@
       "description": "Batch size for index updates",
       "category": "advanced"
     },
+    "coalesce_ms": {
+      "type": "number",
+      "description": "Debounce window for entity updates in ms. 0=immediate processing",
+      "category": "advanced"
+    },
     "ports": {
       "type": "string",
       "description": "Port configuration",
