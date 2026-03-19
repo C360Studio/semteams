@@ -47,6 +47,7 @@ type Input struct {
 	// Client mode
 	wsClient          *websocket.Conn
 	clientMu          sync.Mutex
+	writeMu           sync.Mutex // Protects all conn.WriteMessage calls (gorilla requires exclusive write access)
 	reconnectAttempts atomic.Int32
 
 	// Message buffer for backpressure (CircularBuffer with atomic overflow policies)
@@ -1268,7 +1269,9 @@ func (i *Input) sendAck(conn *websocket.Conn, messageID string) {
 		return // Silent failure - don't disrupt message processing
 	}
 
+	i.writeMu.Lock()
 	_ = conn.WriteMessage(websocket.TextMessage, data)
+	i.writeMu.Unlock()
 }
 
 // sendNack sends negative acknowledgment back to the connection
@@ -1295,7 +1298,9 @@ func (i *Input) sendNack(conn *websocket.Conn, messageID, reason, errorMsg strin
 		return // Silent failure
 	}
 
+	i.writeMu.Lock()
 	_ = conn.WriteMessage(websocket.TextMessage, data)
+	i.writeMu.Unlock()
 }
 
 // sendSlowSignal sends backpressure signal when queue is getting full
@@ -1325,8 +1330,10 @@ func (i *Input) sendSlowSignal(conn *websocket.Conn, queueDepth, queueCapacity i
 		return // Silent failure
 	}
 
-	// Send slow signal (best effort, don't block)
+	// Send slow signal (best effort)
+	i.writeMu.Lock()
 	_ = conn.WriteMessage(websocket.TextMessage, data)
+	i.writeMu.Unlock()
 }
 
 // initACMEClient initializes ACME client from security.ACMEConfig
