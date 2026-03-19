@@ -24,7 +24,6 @@ type natsPublisher interface {
 // Services should use HTTP or NATS RPC for inter-service communication.
 type Dependencies struct {
 	NATSClient        *natsclient.Client
-	KVWatchClient     *natsclient.Client // Dedicated client for heavy KV watchers (can be nil)
 	MetricsRegistry   *metric.MetricsRegistry
 	Logger            *slog.Logger
 	Platform          types.PlatformMeta  // Platform identity

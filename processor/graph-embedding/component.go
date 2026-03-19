@@ -187,7 +187,6 @@ type Component struct {
 
 	// Dependencies
 	natsClient    *natsclient.Client
-	kvWatchClient *natsclient.Client // Dedicated client for KV watch (can be nil, falls back to natsClient)
 	logger        *slog.Logger
 	modelRegistry model.RegistryReader
 
@@ -253,7 +252,6 @@ func CreateGraphEmbedding(rawConfig json.RawMessage, deps component.Dependencies
 		name:          "graph-embedding",
 		config:        config,
 		natsClient:    natsClient,
-		kvWatchClient: deps.KVWatchClient,
 		logger:        logger,
 		modelRegistry: deps.ModelRegistry,
 		metrics:       getMetrics(deps.MetricsRegistry),
@@ -691,13 +689,7 @@ func (c *Component) initStorageAndWorker(ctx context.Context, indexBucket, dedup
 
 // waitForDependenciesAndStartWatcher waits for ENTITY_STATES bucket and starts the entity watcher.
 func (c *Component) waitForDependenciesAndStartWatcher(ctx context.Context) error {
-	// Use dedicated watcher connection if available to isolate heavy KV watch
-	// traffic from the primary connection used by agentic-loop and other components.
-	watchClient := c.natsClient
-	if c.kvWatchClient != nil {
-		watchClient = c.kvWatchClient
-	}
-	js, err := watchClient.JetStream()
+	js, err := c.natsClient.JetStream()
 	if err != nil {
 		return errs.Wrap(err, "Component", "waitForDependenciesAndStartWatcher", "JetStream connection")
 	}

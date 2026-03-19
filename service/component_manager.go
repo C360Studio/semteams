@@ -45,7 +45,6 @@ type ComponentManager struct {
 
 	// Config management
 	natsClient    *natsclient.Client
-	kvWatchClient *natsclient.Client // Dedicated client for heavy KV watchers (can be nil)
 	configManager *config.Manager
 	configUpdates <-chan config.Update // Channel for config updates
 
@@ -154,12 +153,9 @@ func NewComponentManager(rawConfig json.RawMessage, deps *Dependencies) (Service
 		configUpdates:    configUpdates,
 	}
 
-	// Store NATS clients if available
+	// Store NATS client if available
 	if deps != nil && deps.NATSClient != nil {
 		cm.natsClient = deps.NATSClient
-	}
-	if deps != nil && deps.KVWatchClient != nil {
-		cm.kvWatchClient = deps.KVWatchClient
 	}
 
 	// Set health check
@@ -1400,7 +1396,6 @@ func (cm *ComponentManager) buildComponentDependencies() component.Dependencies 
 
 	deps := component.Dependencies{
 		NATSClient:      cm.natsClient,
-		KVWatchClient:   cm.kvWatchClient,
 		MetricsRegistry: cm.BaseService.metricsRegistry,
 		Logger:          cm.BaseService.logger,
 		Platform: component.PlatformMeta{

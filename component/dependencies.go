@@ -23,7 +23,6 @@ type Lookup interface {
 // Dependencies provides all external dependencies needed by components.
 type Dependencies struct {
 	NATSClient        *natsclient.Client      // NATS client for messaging
-	KVWatchClient     *natsclient.Client      // Dedicated client for heavy KV watchers (can be nil, falls back to NATSClient)
 	MetricsRegistry   *metric.MetricsRegistry // Metrics registry for Prometheus (can be nil)
 	Logger            *slog.Logger            // Structured logger (can be nil, defaults to slog.Default())
 	Platform          PlatformMeta            // Platform identity (organization and platform)
