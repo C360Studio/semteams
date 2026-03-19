@@ -561,7 +561,7 @@ func (c *Component) Stop(timeout time.Duration) error {
 
 	// Stop the index worker pool before cancelling the context so it can drain
 	if c.indexPool != nil {
-		if err := c.indexPool.Stop(5 * time.Second); err != nil {
+		if err := c.indexPool.Stop(timeout); err != nil {
 			c.logger.Warn("index pool stop error", slog.Any("error", err))
 		}
 	}

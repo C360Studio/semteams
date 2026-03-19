@@ -407,11 +407,9 @@ func (cm *ComponentManager) Stop(timeout time.Duration) error {
 	select {
 	case <-doneChan:
 		close(cm.done)
-	case <-time.After(10 * time.Second):
-		slog.Warn("Component stop timeout, forcing shutdown")
-		return fmt.Errorf("timeout waiting for components to stop")
 	case <-ctx.Done():
-		return fmt.Errorf("component stop cancelled: %w", ctx.Err())
+		slog.Warn("Component stop timeout, forcing shutdown", slog.Duration("timeout", timeout))
+		return fmt.Errorf("timeout waiting for components to stop: %w", ctx.Err())
 	}
 
 	cm.started.Store(false)
