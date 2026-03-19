@@ -39,13 +39,15 @@ func NewServer(port int, path string, registry *MetricsRegistry, securityCfg sec
 	}
 }
 
-// Start starts the metrics HTTP server
+// Start starts the metrics HTTP server. Blocks until the server is stopped.
 func (s *Server) Start() error {
+	// Hold the lock only for setup, NOT during ListenAndServe.
+	// Stop() needs to acquire this lock to call server.Close().
 	s.mu.Lock()
-	defer s.mu.Unlock()
 
 	// Check if server is already running
 	if s.server != nil {
+		s.mu.Unlock()
 		return errs.WrapInvalid(
 			fmt.Errorf("server already running"),
 			"Server", "Start", "cannot start server that is already running")
@@ -53,6 +55,7 @@ func (s *Server) Start() error {
 
 	// Validate that we have a registry
 	if s.registry == nil {
+		s.mu.Unlock()
 		return errs.WrapFatal(
 			fmt.Errorf("nil registry"),
 			"Server", "Start", "metrics registry not provided")
@@ -100,12 +103,17 @@ func (s *Server) Start() error {
 	if s.security.TLS.Server.Enabled {
 		tlsConfig, err := tlsutil.LoadServerTLSConfig(s.security.TLS.Server)
 		if err != nil {
+			s.mu.Unlock()
 			return errs.WrapFatal(err, "Server", "Start", "load TLS config")
 		}
 		s.server.TLSConfig = tlsConfig
 	}
 
-	// Start HTTP or HTTPS server
+	// Release lock BEFORE blocking on ListenAndServe — Stop() needs the lock
+	// to call server.Close() which unblocks ListenAndServe.
+	s.mu.Unlock()
+
+	// Start HTTP or HTTPS server (blocks until Close/Shutdown is called)
 	var err error
 	if s.security.TLS.Server.Enabled {
 		err = s.server.ListenAndServeTLS("", "")
@@ -113,7 +121,7 @@ func (s *Server) Start() error {
 		err = s.server.ListenAndServe()
 	}
 
-	if err != nil {
+	if err != nil && err != http.ErrServerClosed {
 		return errs.WrapFatal(err, "Server", "Start",
 			fmt.Sprintf("failed to start server on port %d", s.port))
 	}
