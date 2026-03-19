@@ -91,6 +91,14 @@ func run() error {
 	}
 	defer natsClient.Close(ctx)
 
+	// 4b. Create dedicated KV watcher connection to isolate heavy entity-state
+	// watchers (graph-index, graph-embedding) from the primary connection.
+	kvWatchClient, err := createNATSClientNamed(cfg, "kv-watcher")
+	if err != nil {
+		return fmt.Errorf("create KV watcher client: %w", err)
+	}
+	defer kvWatchClient.Close(ctx)
+
 	// 5. Ensure JetStream streams exist (LOGS, HEALTH, METRICS, FLOWS)
 	if err := ensureStreamsWithSpinner(ctx, cfg, natsClient); err != nil {
 		return err
@@ -118,7 +126,7 @@ func run() error {
 	}
 
 	// 9. Create service dependencies
-	svcDeps := createServiceDependencies(natsClient, metricsRegistry, logger, platform, configManager, componentRegistry)
+	svcDeps := createServiceDependencies(natsClient, kvWatchClient, metricsRegistry, logger, platform, configManager, componentRegistry)
 
 	// 10. Configure and create services
 	if err := configureAndCreateServices(cfg, manager, svcDeps); err != nil {
@@ -241,6 +249,36 @@ func createNATSClient(cfg *config.Config) (*natsclient.Client, error) {
 	return natsclient.NewClient(natsURLs)
 }
 
+// createNATSClientNamed creates and connects a NATS client with a descriptive name.
+// Used for dedicated connections that isolate traffic from the primary client.
+func createNATSClientNamed(cfg *config.Config, name string) (*natsclient.Client, error) {
+	natsURLs := "nats://localhost:4222"
+
+	if envURL := os.Getenv("SEMSTREAMS_NATS_URLS"); envURL != "" {
+		natsURLs = envURL
+	} else if len(cfg.NATS.URLs) > 0 {
+		natsURLs = strings.Join(cfg.NATS.URLs, ",")
+	}
+
+	client, err := natsclient.NewClient(natsURLs, natsclient.WithName(name))
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := client.Connect(ctx); err != nil {
+		return nil, fmt.Errorf("connect %s: %w", name, err)
+	}
+
+	if err := client.WaitForConnection(ctx); err != nil {
+		return nil, fmt.Errorf("%s connection timeout: %w", name, err)
+	}
+
+	return client, nil
+}
+
 // extractPlatformMeta extracts platform identity from config.
 func extractPlatformMeta(cfg *config.Config) types.PlatformMeta {
 	platformID := cfg.Platform.InstanceID
@@ -314,6 +352,7 @@ func ensureServiceManagerConfig(cfg *config.Config) {
 // createServiceDependencies creates the Dependencies struct for services
 func createServiceDependencies(
 	natsClient *natsclient.Client,
+	kvWatchClient *natsclient.Client,
 	metricsRegistry *metric.MetricsRegistry,
 	logger *slog.Logger,
 	platform types.PlatformMeta,
@@ -322,6 +361,7 @@ func createServiceDependencies(
 ) *service.Dependencies {
 	return &service.Dependencies{
 		NATSClient:        natsClient,
+		KVWatchClient:     kvWatchClient,
 		MetricsRegistry:   metricsRegistry,
 		Logger:            logger,
 		Platform:          platform,

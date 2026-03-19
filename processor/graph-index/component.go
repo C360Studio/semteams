@@ -195,6 +195,7 @@ type Component struct {
 
 	// Dependencies
 	natsClient      *natsclient.Client
+	kvWatchClient   *natsclient.Client // Dedicated client for KV watch (can be nil, falls back to natsClient)
 	logger          *slog.Logger
 	metricsRegistry *metric.MetricsRegistry
 
@@ -266,6 +267,7 @@ func CreateGraphIndex(rawConfig json.RawMessage, deps component.Dependencies) (c
 		name:            "graph-index",
 		config:          config,
 		natsClient:      natsClient,
+		kvWatchClient:   deps.KVWatchClient,
 		logger:          logger,
 		metrics:         getMetrics(deps.MetricsRegistry),
 		metricsRegistry: deps.MetricsRegistry,
@@ -490,8 +492,14 @@ func (c *Component) Start(ctx context.Context) error {
 	// Initialize lifecycle reporter (throttled for high-throughput indexing)
 	c.initLifecycleReporter(ctx)
 
-	// Wait for input KV bucket (ENTITY_STATES) with bounded startup attempts
-	js, err := c.natsClient.JetStream()
+	// Wait for input KV bucket (ENTITY_STATES) with bounded startup attempts.
+	// Use dedicated watcher connection if available to isolate heavy KV watch
+	// traffic from the primary connection used by agentic-loop and other components.
+	watchClient := c.natsClient
+	if c.kvWatchClient != nil {
+		watchClient = c.kvWatchClient
+	}
+	js, err := watchClient.JetStream()
 	if err != nil {
 		cancel()
 		return errs.Wrap(err, "Component", "Start", "JetStream connection")
