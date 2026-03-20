@@ -36,6 +36,7 @@ type SearchOptions struct {
 	TimeRange         *TimeRange     `json:"time_range,omitempty"`
 	Predicates        []string       `json:"predicates,omitempty"`
 	Types             []string       `json:"types,omitempty"`
+	KeyTerms          []string       `json:"key_terms,omitempty"`
 	RequireAllFilters bool           `json:"require_all_filters,omitempty"`
 	UseEmbeddings     bool           `json:"use_embeddings,omitempty"`
 	Strategy          SearchStrategy `json:"strategy,omitempty"`

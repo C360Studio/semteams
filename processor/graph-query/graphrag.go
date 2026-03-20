@@ -11,6 +11,7 @@ import (
 
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/graph/clustering"
+	"github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/errs"
 )
@@ -23,6 +24,11 @@ const (
 	// MaxTotalEntitiesInSearch limits the total number of entities that can be loaded
 	// across all communities in GlobalSearch to prevent unbounded memory usage
 	MaxTotalEntitiesInSearch = 10000
+
+	// MinSemanticRelevance is the minimum similarity score for semantic search results.
+	// Hits below this threshold are filtered out to prevent returning irrelevant entities
+	// that happen to have weak textual overlap with the query.
+	MinSemanticRelevance = 0.3
 
 	// DefaultSummarizeThreshold auto-summarizes globalSearch results when entity
 	// count exceeds this value. Returns community summaries + entity IDs instead
@@ -210,30 +216,25 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 	return json.Marshal(response)
 }
 
-// tryPathIntentSearch attempts to handle a query using PathRAG if path intent is detected.
+// tryPathIntentSearch checks a classification result for path intent and routes to PathRAG.
 // Returns (result, true) if handled, or (nil, false) if should fall through to other tiers.
-func (c *Component) tryPathIntentSearch(ctx context.Context, query string, startTime time.Time, requestSize int) ([]byte, bool) {
-	if c.classifier == nil {
+func (c *Component) tryPathIntentSearch(ctx context.Context, cr *query.ClassificationResult, queryText string, startTime time.Time, requestSize int) ([]byte, bool) {
+	if cr == nil {
 		return nil, false
 	}
-
-	result := c.classifier.ClassifyQuery(ctx, query)
-	if result == nil {
-		return nil, false
-	}
-	pathIntent, _ := result.Options["path_intent"].(bool)
-	pathStartNode, _ := result.Options["path_start_node"].(string)
+	pathIntent, _ := cr.Options["path_intent"].(bool)
+	pathStartNode, _ := cr.Options["path_start_node"].(string)
 	if !pathIntent || pathStartNode == "" {
 		return nil, false
 	}
 
 	var pathPredicates []string
-	if pp, ok := result.Options["path_predicates"].([]string); ok {
+	if pp, ok := cr.Options["path_predicates"].([]string); ok {
 		pathPredicates = pp
 	}
 
 	c.logger.Debug("path intent detected in NL query",
-		"query", query,
+		"query", queryText,
 		"start_node", pathStartNode)
 
 	// Resolve partial entity ID to full ID
@@ -286,6 +287,34 @@ func (c *Component) tryPathIntentSearch(ctx context.Context, query string, start
 	return nil, false
 }
 
+// classifyQuery runs the classifier chain if available, returning nil otherwise.
+func (c *Component) classifyQuery(ctx context.Context, queryText string) *query.ClassificationResult {
+	if c.classifier == nil {
+		return nil
+	}
+	return c.classifier.ClassifyQuery(ctx, queryText)
+}
+
+// extractSearchRefinements pulls query reformulation and type filters from a
+// classification result. Returns the raw query unchanged when no hints are available.
+func (c *Component) extractSearchRefinements(cr *query.ClassificationResult, rawQuery string) (string, []string) {
+	searchQuery := rawQuery
+	var typeFilters []string
+	if cr == nil {
+		return searchQuery, typeFilters
+	}
+	if q, ok := cr.Options["query"].(string); ok && q != "" {
+		searchQuery = q
+		c.logger.Debug("using classifier-refined query",
+			"original", rawQuery,
+			"refined", searchQuery)
+	}
+	if t, ok := cr.Options["types"].([]string); ok && len(t) > 0 {
+		typeFilters = t
+	}
+	return searchQuery, typeFilters
+}
+
 // handleGlobalSearch handles global search requests via NATS request/reply
 // Uses a tiered search approach:
 // - Tier 0: Path intent detection (PathRAG) - works without embeddings
@@ -310,24 +339,37 @@ func (c *Component) handleGlobalSearch(ctx context.Context, data []byte) ([]byte
 		req.MaxCommunities = DefaultMaxCommunities
 	}
 
-	// Tier 0: Use classifier to detect path intent
-	// PathRAG doesn't require embeddings - works at structural tier
-	if result, handled := c.tryPathIntentSearch(ctx, req.Query, startTime, len(data)); handled {
+	// Classify query once — used for path intent (Tier 0) and search refinement (Tier 1+).
+	classResult := c.classifyQuery(ctx, req.Query)
+
+	// Tier 0: Path intent detection → PathRAG (works without embeddings)
+	if result, handled := c.tryPathIntentSearch(ctx, classResult, req.Query, startTime, len(data)); handled {
 		return result, nil
 	}
 
+	// Extract search refinement hints from classifier
+	searchQuery, typeFilters := c.extractSearchRefinements(classResult, req.Query)
+
 	// Tier 1: Try semantic search first (via graph-embedding).
 	// Semantic search works independently of the community cache.
-	semanticHits, err := c.searchEntitiesSemantic(ctx, req.Query, 100)
+	semanticHits, err := c.searchEntitiesSemantic(ctx, searchQuery, 100)
 	if err == nil && len(semanticHits) > 0 {
 		c.logger.Debug("using semantic search results",
-			"query", req.Query,
+			"query", searchQuery,
 			"hits", len(semanticHits))
 
 		// Extract entity IDs from semantic hits
 		entityIDs := make([]string, len(semanticHits))
 		for i, hit := range semanticHits {
 			entityIDs[i] = hit.EntityID
+		}
+
+		// Apply entity type filters from classifier (narrows results to relevant types)
+		if len(typeFilters) > 0 {
+			entityIDs = filterEntityIDsByType(entityIDs, typeFilters)
+			c.logger.Debug("applied type filters",
+				"types", typeFilters,
+				"remaining", len(entityIDs))
 		}
 
 		// Find communities containing these entities (may be empty without cache)
@@ -558,6 +600,28 @@ func (c *Component) loadEntities(ctx context.Context, entityIDs []string) ([]*gt
 // searchEntitiesSemantic calls graph-embedding's semantic search to find entities
 // that are semantically similar to the query text using embeddings.
 // This provides better results than text matching for semantic queries.
+// filterEntityIDsByType filters entity IDs to those whose type segment (5th part of the
+// 6-part ID: org.platform.domain.system.type.instance) matches any of the requested types.
+// Returns all IDs if typeFilters is empty.
+func filterEntityIDsByType(entityIDs []string, typeFilters []string) []string {
+	if len(typeFilters) == 0 {
+		return entityIDs
+	}
+	filterSet := make(map[string]bool, len(typeFilters))
+	for _, t := range typeFilters {
+		filterSet[strings.ToLower(t)] = true
+	}
+
+	filtered := make([]string, 0, len(entityIDs))
+	for _, id := range entityIDs {
+		parts := strings.Split(id, ".")
+		if len(parts) >= 5 && filterSet[strings.ToLower(parts[4])] {
+			filtered = append(filtered, id)
+		}
+	}
+	return filtered
+}
+
 func (c *Component) searchEntitiesSemantic(ctx context.Context, query string, limit int) ([]SemanticHit, error) {
 	req := map[string]any{
 		"query": query,
@@ -587,9 +651,14 @@ func (c *Component) searchEntitiesSemantic(ctx context.Context, query string, li
 		return nil, errs.WrapInvalid(err, "GraphQuery", "searchEntitiesSemantic", "unmarshal search response")
 	}
 
-	hits := make([]SemanticHit, len(result.Results))
-	for i, r := range result.Results {
-		hits[i] = SemanticHit{EntityID: r.EntityID, Score: r.Similarity}
+	// Filter by minimum relevance threshold to avoid returning garbage results.
+	// BM25 and embedding searches return everything ranked, including near-zero
+	// matches that have no meaningful relationship to the query.
+	hits := make([]SemanticHit, 0, len(result.Results))
+	for _, r := range result.Results {
+		if r.Similarity >= MinSemanticRelevance {
+			hits = append(hits, SemanticHit{EntityID: r.EntityID, Score: r.Similarity})
+		}
 	}
 	return hits, nil
 }

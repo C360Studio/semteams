@@ -27,6 +27,7 @@ type llmResponse struct {
 	Query         string    `json:"query"`
 	Predicates    []string  `json:"predicates"`
 	Types         []string  `json:"types"`
+	KeyTerms      []string  `json:"key_terms"`
 	UseEmbeddings bool      `json:"use_embeddings"`
 	TimeRange     *llmRange `json:"time_range"`
 	Limit         int       `json:"limit"`
@@ -112,6 +113,7 @@ func (c *LLMClassifier) buildPrompt(query string) string {
 	b.WriteString(`  "query": "<cleaned or reformulated query text>",` + "\n")
 	b.WriteString(`  "predicates": ["<predicate filter>", ...],` + "\n")
 	b.WriteString(`  "types": ["<entity type filter>", ...],` + "\n")
+	b.WriteString(`  "key_terms": ["<important search terms extracted from the query>"],` + "\n")
 	b.WriteString(`  "use_embeddings": <true|false>,` + "\n")
 	b.WriteString(`  "time_range": {"start": "<RFC3339>", "end": "<RFC3339>"},` + "\n")
 	b.WriteString(`  "limit": <integer result count>` + "\n")
@@ -202,6 +204,7 @@ func parseLLMResponse(raw, originalQuery string) (*SearchOptions, error) {
 		Query:         originalQuery,
 		Predicates:    resp.Predicates,
 		Types:         resp.Types,
+		KeyTerms:      resp.KeyTerms,
 		UseEmbeddings: resp.UseEmbeddings,
 		Limit:         resp.Limit,
 	}
@@ -291,6 +294,9 @@ func llmOptionsToMap(opts *SearchOptions) map[string]any {
 	}
 	if len(opts.Types) > 0 {
 		result["types"] = opts.Types
+	}
+	if len(opts.KeyTerms) > 0 {
+		result["key_terms"] = opts.KeyTerms
 	}
 	if opts.UseEmbeddings {
 		result["use_embeddings"] = opts.UseEmbeddings
