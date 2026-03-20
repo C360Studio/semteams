@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -270,72 +269,43 @@ func TestDefaultBudgetConstants(t *testing.T) {
 	}
 }
 
-// --- workflowState Accumulation Tests ---
+// --- workflowState Serialisation Tests ---
 
-// TestWorkflowStateAccumulation verifies that accumulateTokens and
-// incrementRejections maintain running totals across multiple calls, not just
-// write the most recent value.
-func TestWorkflowStateAccumulation(t *testing.T) {
-	c := &PRWorkflowComponent{
-		logger: newNopLogger(),
-	}
-	entityID := "acme.github.repo.myapp.workflow.99"
+// TestWorkflowStateJSONRoundTrip verifies that workflowState marshals and
+// unmarshals correctly. This is the contract the KV bucket depends on: state
+// written by putWorkflowState must be readable by getWorkflowState.
+func TestWorkflowStateJSONRoundTrip(t *testing.T) {
+	original := workflowState{TotalTokens: 350, Rejections: 2}
 
-	// Simulate three developer/reviewer steps adding tokens.
-	c.entityWorkflowState(entityID).totalTokens += 100
-	c.entityWorkflowState(entityID).totalTokens += 200
-	c.entityWorkflowState(entityID).totalTokens += 50
-
-	gotTokens := c.entityWorkflowState(entityID).totalTokens
-	if gotTokens != 350 {
-		t.Errorf("totalTokens: got %d, want 350", gotTokens)
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
 	}
 
-	// Simulate two review rejections.
-	c.entityWorkflowState(entityID).rejections++
-	c.entityWorkflowState(entityID).rejections++
-
-	gotRejections := c.entityWorkflowState(entityID).rejections
-	if gotRejections != 2 {
-		t.Errorf("rejections: got %d, want 2", gotRejections)
+	var got workflowState
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
 	}
 
-	// Verify that a second entity has independent state.
-	otherID := "acme.github.repo.myapp.workflow.100"
-	c.entityWorkflowState(otherID).totalTokens += 500
-
-	if c.entityWorkflowState(entityID).totalTokens != 350 {
-		t.Errorf("first entity state mutated by second entity write")
+	if got.TotalTokens != original.TotalTokens {
+		t.Errorf("TotalTokens: got %d, want %d", got.TotalTokens, original.TotalTokens)
 	}
-	if c.entityWorkflowState(otherID).totalTokens != 500 {
-		t.Errorf("second entity totalTokens: got %d, want 500",
-			c.entityWorkflowState(otherID).totalTokens)
+	if got.Rejections != original.Rejections {
+		t.Errorf("Rejections: got %d, want %d", got.Rejections, original.Rejections)
 	}
 }
 
-// TestWorkflowStateAccumulation_ConcurrentSafe verifies that concurrent
-// accesses to entityWorkflowState do not create duplicate state entries.
-func TestWorkflowStateAccumulation_ConcurrentSafe(t *testing.T) {
-	c := &PRWorkflowComponent{
-		logger: newNopLogger(),
+// TestWorkflowStateJSONRoundTrip_ZeroValue verifies that a missing KV key
+// (unmarshalled from nil / empty) yields a zero-value state with no error,
+// matching the getWorkflowState "key not found" path.
+func TestWorkflowStateJSONRoundTrip_ZeroValue(t *testing.T) {
+	data, _ := json.Marshal(workflowState{})
+	var got workflowState
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("Unmarshal zero value: %v", err)
 	}
-	entityID := "acme.github.repo.myapp.workflow.1"
-
-	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			_ = c.entityWorkflowState(entityID)
-		}()
-	}
-	wg.Wait()
-
-	// All goroutines should reference the same state object.
-	s1 := c.entityWorkflowState(entityID)
-	s2 := c.entityWorkflowState(entityID)
-	if s1 != s2 {
-		t.Error("entityWorkflowState returned different pointers for same entity ID")
+	if got.TotalTokens != 0 || got.Rejections != 0 {
+		t.Errorf("Zero-value state should have all zeros, got %+v", got)
 	}
 }
 

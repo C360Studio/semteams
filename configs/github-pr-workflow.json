@@ -136,10 +136,10 @@
         "ports": {
           "inputs": [
             {"name": "github_events", "subject": "github.event.issue", "type": "jetstream", "stream": "GITHUB"},
-            {"name": "agent_completions", "subject": "agentic.loop_completed.v1", "type": "jetstream", "stream": "AGENT"}
+            {"name": "agent_completions", "subject": "agent.complete.*", "type": "jetstream", "stream": "AGENT"}
           ],
           "outputs": [
-            {"name": "agent_tasks", "subject": "agent.task", "type": "nats"},
+            {"name": "agent_tasks", "subject": "agent.task", "type": "jetstream", "stream": "AGENT"},
             {"name": "triple_mutations", "subject": "graph.mutation.triple.add", "type": "nats"}
           ]
         }

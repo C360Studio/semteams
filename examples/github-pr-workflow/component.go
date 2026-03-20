@@ -10,12 +10,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/nats-io/nats.go/jetstream"
+
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
-	"github.com/nats-io/nats.go"
 )
 
 const (
@@ -26,12 +27,17 @@ const (
 	componentVersion = "0.1.0"
 )
 
-// workflowState tracks per-entity accumulated counters that this component
-// exclusively owns. Using a local sync.Map avoids a read-modify-write race
-// against the graph KV and keeps the component self-contained.
+// workflowState tracks per-entity accumulated counters. Stored in the GITHUB_ISSUE_PR_STATE
+// KV bucket so the component can resume correctly after a restart.
 type workflowState struct {
-	totalTokens int
-	rejections  int
+	TotalTokens int `json:"total_tokens"`
+	Rejections  int `json:"rejections"`
+}
+
+// consumerInfo tracks a JetStream consumer for clean shutdown.
+type consumerInfo struct {
+	streamName   string
+	consumerName string
 }
 
 // PRWorkflowComponent spawns agent tasks for the GitHub issue-to-PR pipeline.
@@ -47,16 +53,17 @@ type PRWorkflowComponent struct {
 	inputPorts  []component.Port
 	outputPorts []component.Port
 
-	shutdown      chan struct{}
-	done          chan struct{}
-	running       bool
-	mu            sync.RWMutex
-	lifecycleMu   sync.Mutex
-	subscriptions []*natsclient.Subscription
+	shutdown    chan struct{}
+	done        chan struct{}
+	running     bool
+	mu          sync.RWMutex
+	lifecycleMu sync.Mutex
 
-	// entityState tracks per-entity accumulated counters (tokens, rejections).
-	// This component exclusively owns these predicates, so local tracking is correct.
-	entityState sync.Map // map[string]*workflowState
+	// consumerInfos tracks JetStream consumers for clean shutdown.
+	consumerInfos []consumerInfo
+
+	// stateBucket persists per-entity workflow counters across restarts.
+	stateBucket jetstream.KeyValue
 
 	messagesProcessed atomic.Int64
 	errors            atomic.Int64
@@ -128,29 +135,78 @@ func (c *PRWorkflowComponent) Start(ctx context.Context) error {
 
 	c.logger.Info("Starting PR workflow spawner")
 
+	// Ensure the GITHUB stream exists before setting up consumers. The AGENT
+	// stream is owned by agentic-loop and must already exist.
+	js, err := c.natsClient.JetStream()
+	if err != nil {
+		return fmt.Errorf("get JetStream context: %w", err)
+	}
+	if _, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
+		Name:     "GITHUB",
+		Subjects: []string{"github.event.>"},
+		Storage:  jetstream.FileStorage,
+		MaxAge:   72 * time.Hour,
+	}); err != nil {
+		return fmt.Errorf("ensure GITHUB stream: %w", err)
+	}
+
+	// Create the workflow state KV bucket (idempotent).
+	stateBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
+		Bucket:      StateBucket,
+		Description: "GitHub PR workflow state",
+	})
+	if err != nil {
+		return fmt.Errorf("create state bucket: %w", err)
+	}
+	c.stateBucket = stateBucket
+
+	// Set up a JetStream consumer for each inbound port.
 	for _, port := range c.inputPorts {
 		subject := portSubject(port)
 		if subject == "" {
 			continue
 		}
 
-		var handler func(context.Context, *nats.Msg)
+		streamName := portStream(port)
+		if streamName == "" {
+			c.logger.Debug("Skipping input port with no stream", "subject", subject)
+			continue
+		}
+
+		var handler func(context.Context, jetstream.Msg)
 		switch {
 		case strings.HasPrefix(subject, "github.event.issue"):
-			handler = c.handleIssueEvent
-		case strings.HasPrefix(subject, "agentic.loop_completed"):
-			handler = c.handleLoopCompleted
+			handler = c.wrapIssueHandler()
+		case strings.HasPrefix(subject, "agent.complete"):
+			handler = c.wrapLoopCompletedHandler()
 		default:
 			c.logger.Debug("Skipping unrecognized input port", "subject", subject)
 			continue
 		}
 
-		sub, err := c.natsClient.Subscribe(ctx, subject, handler)
-		if err != nil {
-			return fmt.Errorf("subscribe to %s: %w", subject, err)
+		consumerName := fmt.Sprintf("github-pr-%s", port.Name)
+		cfg := natsclient.StreamConsumerConfig{
+			StreamName:    streamName,
+			FilterSubject: subject,
+			ConsumerName:  consumerName,
+			AckWait:       30 * time.Second,
+			MaxDeliver:    3,
+			MaxAckPending: 1,
 		}
-		c.subscriptions = append(c.subscriptions, sub)
-		c.logger.Debug("Subscribed", "subject", subject)
+
+		if err := c.natsClient.ConsumeStreamWithConfig(ctx, cfg, handler); err != nil {
+			return fmt.Errorf("setup consumer for %s: %w", subject, err)
+		}
+
+		c.consumerInfos = append(c.consumerInfos, consumerInfo{
+			streamName:   streamName,
+			consumerName: consumerName,
+		})
+		c.logger.Debug("Subscribed (JetStream)",
+			"subject", subject,
+			"stream", streamName,
+			"consumer", consumerName,
+		)
 	}
 
 	c.mu.Lock()
@@ -174,17 +230,16 @@ func (c *PRWorkflowComponent) Stop(_ time.Duration) error {
 
 	c.logger.Info("Stopping PR workflow spawner")
 
-	// Signal shutdown before unsubscribing so in-flight handlers can detect it.
+	// Signal shutdown before stopping consumers so in-flight handlers can detect it.
 	c.mu.Lock()
 	close(c.shutdown)
 	c.mu.Unlock()
 
-	for _, sub := range c.subscriptions {
-		if err := sub.Unsubscribe(); err != nil {
-			c.logger.Debug("Unsubscribe error", "error", err)
-		}
+	for _, info := range c.consumerInfos {
+		c.natsClient.StopConsumer(info.streamName, info.consumerName)
+		c.logger.Debug("Stopped consumer", "stream", info.streamName, "consumer", info.consumerName)
 	}
-	c.subscriptions = nil
+	c.consumerInfos = nil
 
 	c.mu.Lock()
 	c.running = false
@@ -194,10 +249,30 @@ func (c *PRWorkflowComponent) Stop(_ time.Duration) error {
 	return nil
 }
 
+// wrapIssueHandler returns a JetStream handler that delegates to handleIssueEvent.
+func (c *PRWorkflowComponent) wrapIssueHandler() func(context.Context, jetstream.Msg) {
+	return func(ctx context.Context, msg jetstream.Msg) {
+		c.handleIssueEvent(ctx, msg.Data())
+		if err := msg.Ack(); err != nil {
+			c.logger.Error("Failed to ack issue event message", "error", err)
+		}
+	}
+}
+
+// wrapLoopCompletedHandler returns a JetStream handler that delegates to handleLoopCompleted.
+func (c *PRWorkflowComponent) wrapLoopCompletedHandler() func(context.Context, jetstream.Msg) {
+	return func(ctx context.Context, msg jetstream.Msg) {
+		c.handleLoopCompleted(ctx, msg.Data())
+		if err := msg.Ack(); err != nil {
+			c.logger.Error("Failed to ack loop completed message", "error", err)
+		}
+	}
+}
+
 // handleIssueEvent processes a GitHub issue webhook event.
-func (c *PRWorkflowComponent) handleIssueEvent(ctx context.Context, msg *nats.Msg) {
+func (c *PRWorkflowComponent) handleIssueEvent(ctx context.Context, data []byte) {
 	var event GitHubIssueWebhookEvent
-	if err := json.Unmarshal(msg.Data, &event); err != nil {
+	if err := json.Unmarshal(data, &event); err != nil {
 		c.logger.Debug("Failed to unmarshal issue event", "error", err)
 		c.errors.Add(1)
 		return
@@ -247,10 +322,10 @@ func (c *PRWorkflowComponent) handleIssueEvent(ctx context.Context, msg *nats.Ms
 }
 
 // handleLoopCompleted processes an agentic loop completion event.
-func (c *PRWorkflowComponent) handleLoopCompleted(ctx context.Context, msg *nats.Msg) {
+func (c *PRWorkflowComponent) handleLoopCompleted(ctx context.Context, data []byte) {
 	// Parse the BaseMessage envelope
 	var base message.BaseMessage
-	if err := json.Unmarshal(msg.Data, &base); err != nil {
+	if err := json.Unmarshal(data, &base); err != nil {
 		c.logger.Debug("Failed to unmarshal loop completed envelope", "error", err)
 		c.errors.Add(1)
 		return
@@ -407,7 +482,7 @@ func (c *PRWorkflowComponent) writeTriple(ctx context.Context, entityID, predica
 	return nil
 }
 
-// publishTask publishes a TaskMessage to a NATS subject.
+// publishTask publishes a TaskMessage to a JetStream subject.
 func (c *PRWorkflowComponent) publishTask(ctx context.Context, subject string, task *agentic.TaskMessage) {
 	baseMsg := message.NewBaseMessage(task.Schema(), task, componentName)
 	data, err := json.Marshal(baseMsg)
@@ -418,33 +493,68 @@ func (c *PRWorkflowComponent) publishTask(ctx context.Context, subject string, t
 	}
 
 	if c.natsClient != nil {
-		if err := c.natsClient.Publish(ctx, subject, data); err != nil {
+		if err := c.natsClient.PublishToStream(ctx, subject, data); err != nil {
 			c.logger.Debug("Failed to publish task", "subject", subject, "error", err)
 			c.errors.Add(1)
 		}
 	}
 }
 
-// entityWorkflowState returns (or creates) the mutable state for an entity.
-func (c *PRWorkflowComponent) entityWorkflowState(entityID string) *workflowState {
-	v, _ := c.entityState.LoadOrStore(entityID, &workflowState{})
-	return v.(*workflowState)
+// getWorkflowState retrieves the persisted workflow state for entityID from the KV bucket.
+// Returns a zero-value state if the key does not yet exist.
+func (c *PRWorkflowComponent) getWorkflowState(ctx context.Context, entityID string) (workflowState, error) {
+	entry, err := c.stateBucket.Get(ctx, entityID)
+	if err != nil {
+		if strings.Contains(err.Error(), "key not found") {
+			return workflowState{}, nil
+		}
+		return workflowState{}, fmt.Errorf("get workflow state for %s: %w", entityID, err)
+	}
+	var state workflowState
+	if err := json.Unmarshal(entry.Value(), &state); err != nil {
+		return workflowState{}, fmt.Errorf("unmarshal workflow state for %s: %w", entityID, err)
+	}
+	return state, nil
+}
+
+// putWorkflowState persists the workflow state for entityID into the KV bucket.
+func (c *PRWorkflowComponent) putWorkflowState(ctx context.Context, entityID string, state workflowState) error {
+	data, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("marshal workflow state for %s: %w", entityID, err)
+	}
+	if _, err := c.stateBucket.Put(ctx, entityID, data); err != nil {
+		return fmt.Errorf("put workflow state for %s: %w", entityID, err)
+	}
+	return nil
 }
 
 // accumulateTokens adds the step's token count to the running total for the
 // entity and persists the new total as a triple.
 func (c *PRWorkflowComponent) accumulateTokens(ctx context.Context, entityID string, tokens int) error {
-	state := c.entityWorkflowState(entityID)
-	state.totalTokens += tokens
-	return c.writeTriple(ctx, entityID, "workflow.tokens.total", fmt.Sprintf("%d", state.totalTokens))
+	state, err := c.getWorkflowState(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	state.TotalTokens += tokens
+	if err := c.putWorkflowState(ctx, entityID, state); err != nil {
+		return err
+	}
+	return c.writeTriple(ctx, entityID, "workflow.tokens.total", fmt.Sprintf("%d", state.TotalTokens))
 }
 
 // incrementRejections increments the rejection counter for the entity and
 // persists the new count as a triple.
 func (c *PRWorkflowComponent) incrementRejections(ctx context.Context, entityID string) error {
-	state := c.entityWorkflowState(entityID)
-	state.rejections++
-	return c.writeTriple(ctx, entityID, "workflow.review.rejections", fmt.Sprintf("%d", state.rejections))
+	state, err := c.getWorkflowState(ctx, entityID)
+	if err != nil {
+		return err
+	}
+	state.Rejections++
+	if err := c.putWorkflowState(ctx, entityID, state); err != nil {
+		return err
+	}
+	return c.writeTriple(ctx, entityID, "workflow.review.rejections", fmt.Sprintf("%d", state.Rejections))
 }
 
 // WorkflowEntityID builds the 6-part entity ID for a workflow execution.
@@ -642,6 +752,18 @@ func portSubject(port component.Port) string {
 		if len(cfg.Subjects) > 0 {
 			return cfg.Subjects[0]
 		}
+	}
+	return ""
+}
+
+// portStream extracts the stream name from a JetStream port's config.
+// Returns empty string for plain NATS ports.
+func portStream(port component.Port) string {
+	if port.Config == nil {
+		return ""
+	}
+	if cfg, ok := port.Config.(component.JetStreamPort); ok {
+		return cfg.StreamName
 	}
 	return ""
 }
