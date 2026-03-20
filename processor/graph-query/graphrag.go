@@ -88,7 +88,7 @@ func (r *GlobalSearchRequest) shouldIncludeSummaries() bool {
 
 // GlobalSearchResponse is the response format for global search
 type GlobalSearchResponse struct {
-	Strategy           string                `json:"strategy,omitempty"`   // which strategy handled this query
+	Strategy           string                `json:"strategy,omitempty"` // which strategy handled this query
 	Entities           []*gtypes.EntityState `json:"entities"`
 	EntityIDs          []string              `json:"entity_ids,omitempty"` // IDs only (when summarized)
 	Summarized         bool                  `json:"summarized,omitempty"` // true when auto-summarized
@@ -358,8 +358,8 @@ func (c *Component) resolveStrategy(cr *query.ClassificationResult) string {
 		return "temporal"
 	case hasGeo && !hasTime:
 		return "spatial"
-	// Combined temporal+spatial (both present) intentionally falls through
-	// to graphrag, which handles multi-signal queries via community scoring.
+		// Combined temporal+spatial (both present) intentionally falls through
+		// to graphrag, which handles multi-signal queries via community scoring.
 	}
 
 	return "graphrag"
