@@ -269,43 +269,14 @@ func TestDefaultBudgetConstants(t *testing.T) {
 	}
 }
 
-// --- workflowState Serialisation Tests ---
+// --- workflowState Tests ---
 
-// TestWorkflowStateJSONRoundTrip verifies that workflowState marshals and
-// unmarshals correctly. This is the contract the KV bucket depends on: state
-// written by putWorkflowState must be readable by getWorkflowState.
-func TestWorkflowStateJSONRoundTrip(t *testing.T) {
-	original := workflowState{TotalTokens: 350, Rejections: 2}
-
-	data, err := json.Marshal(original)
-	if err != nil {
-		t.Fatalf("Marshal: %v", err)
-	}
-
-	var got workflowState
-	if err := json.Unmarshal(data, &got); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
-	}
-
-	if got.TotalTokens != original.TotalTokens {
-		t.Errorf("TotalTokens: got %d, want %d", got.TotalTokens, original.TotalTokens)
-	}
-	if got.Rejections != original.Rejections {
-		t.Errorf("Rejections: got %d, want %d", got.Rejections, original.Rejections)
-	}
-}
-
-// TestWorkflowStateJSONRoundTrip_ZeroValue verifies that a missing KV key
-// (unmarshalled from nil / empty) yields a zero-value state with no error,
-// matching the getWorkflowState "key not found" path.
-func TestWorkflowStateJSONRoundTrip_ZeroValue(t *testing.T) {
-	data, _ := json.Marshal(workflowState{})
-	var got workflowState
-	if err := json.Unmarshal(data, &got); err != nil {
-		t.Fatalf("Unmarshal zero value: %v", err)
-	}
-	if got.TotalTokens != 0 || got.Rejections != 0 {
-		t.Errorf("Zero-value state should have all zeros, got %+v", got)
+// TestWorkflowState_ZeroValue verifies that a new workflowState has all zeros,
+// matching the getWorkflowState fallback when the entity has no triples yet.
+func TestWorkflowState_ZeroValue(t *testing.T) {
+	state := &workflowState{}
+	if state.TotalTokens != 0 || state.Rejections != 0 {
+		t.Errorf("Zero-value state should have all zeros, got %+v", state)
 	}
 }
 

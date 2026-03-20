@@ -17,6 +17,7 @@ import (
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
+	"github.com/c360studio/semstreams/pkg/cache"
 )
 
 const (
@@ -27,11 +28,12 @@ const (
 	componentVersion = "0.1.0"
 )
 
-// workflowState tracks per-entity accumulated counters. Stored in the GITHUB_ISSUE_PR_STATE
-// KV bucket so the component can resume correctly after a restart.
+// workflowState tracks per-entity accumulated counters derived from entity triples
+// in ENTITY_STATES. Cached locally via TTL cache for hot-path reads; the graph
+// (via writeTriple) is the durable source of truth.
 type workflowState struct {
-	TotalTokens int `json:"total_tokens"`
-	Rejections  int `json:"rejections"`
+	TotalTokens int
+	Rejections  int
 }
 
 // consumerInfo tracks a JetStream consumer for clean shutdown.
@@ -62,8 +64,9 @@ type PRWorkflowComponent struct {
 	// consumerInfos tracks JetStream consumers for clean shutdown.
 	consumerInfos []consumerInfo
 
-	// stateBucket persists per-entity workflow counters across restarts.
-	stateBucket jetstream.KeyValue
+	// stateCache caches workflow state derived from ENTITY_STATES triples.
+	// Hot-path reads avoid repeated KV lookups; writeTriple is the durable store.
+	stateCache cache.Cache[*workflowState]
 
 	messagesProcessed atomic.Int64
 	errors            atomic.Int64
@@ -150,15 +153,12 @@ func (c *PRWorkflowComponent) Start(ctx context.Context) error {
 		return fmt.Errorf("ensure GITHUB stream: %w", err)
 	}
 
-	// Create the workflow state KV bucket (idempotent).
-	stateBucket, err := c.natsClient.CreateKeyValueBucket(ctx, jetstream.KeyValueConfig{
-		Bucket:      StateBucket,
-		Description: "GitHub PR workflow state",
-	})
+	// Create TTL cache for workflow state (derived from entity triples, not a separate bucket).
+	stateCache, err := cache.NewTTL[*workflowState](ctx, 15*time.Minute, 5*time.Minute)
 	if err != nil {
-		return fmt.Errorf("create state bucket: %w", err)
+		return fmt.Errorf("create state cache: %w", err)
 	}
-	c.stateBucket = stateBucket
+	c.stateCache = stateCache
 
 	// Set up a JetStream consumer for each inbound port.
 	for _, port := range c.inputPorts {
@@ -500,60 +500,79 @@ func (c *PRWorkflowComponent) publishTask(ctx context.Context, subject string, t
 	}
 }
 
-// getWorkflowState retrieves the persisted workflow state for entityID from the KV bucket.
-// Returns a zero-value state if the key does not yet exist.
-func (c *PRWorkflowComponent) getWorkflowState(ctx context.Context, entityID string) (workflowState, error) {
-	entry, err := c.stateBucket.Get(ctx, entityID)
+// getWorkflowState returns cached workflow state, falling back to ENTITY_STATES
+// triples on cache miss. The graph (via writeTriple) is the durable source of truth;
+// the cache avoids repeated KV reads on the hot path.
+func (c *PRWorkflowComponent) getWorkflowState(ctx context.Context, entityID string) (*workflowState, error) {
+	// Check cache first
+	if cached, ok := c.stateCache.Get(entityID); ok {
+		return cached, nil
+	}
+
+	// Cache miss: derive state from entity triples in ENTITY_STATES
+	state := &workflowState{}
+
+	js, err := c.natsClient.JetStream()
 	if err != nil {
-		if strings.Contains(err.Error(), "key not found") {
-			return workflowState{}, nil
+		return state, nil // Return zero state if JetStream unavailable
+	}
+
+	bucket, err := js.KeyValue(ctx, gtypes.BucketEntityStates)
+	if err != nil {
+		return state, nil // Bucket may not exist yet
+	}
+
+	entry, err := bucket.Get(ctx, entityID)
+	if err != nil {
+		// Entity not yet in graph — return zero state
+		return state, nil
+	}
+
+	var entityState gtypes.EntityState
+	if err := json.Unmarshal(entry.Value(), &entityState); err != nil {
+		return state, nil
+	}
+
+	// Extract counters from triples
+	for _, t := range entityState.Triples {
+		switch t.Predicate {
+		case "workflow.tokens.total":
+			if v, ok := t.Object.(string); ok {
+				fmt.Sscanf(v, "%d", &state.TotalTokens)
+			}
+		case "workflow.review.rejections":
+			if v, ok := t.Object.(string); ok {
+				fmt.Sscanf(v, "%d", &state.Rejections)
+			}
 		}
-		return workflowState{}, fmt.Errorf("get workflow state for %s: %w", entityID, err)
 	}
-	var state workflowState
-	if err := json.Unmarshal(entry.Value(), &state); err != nil {
-		return workflowState{}, fmt.Errorf("unmarshal workflow state for %s: %w", entityID, err)
-	}
+
+	// Populate cache
+	_, _ = c.stateCache.Set(entityID, state)
 	return state, nil
 }
 
-// putWorkflowState persists the workflow state for entityID into the KV bucket.
-func (c *PRWorkflowComponent) putWorkflowState(ctx context.Context, entityID string, state workflowState) error {
-	data, err := json.Marshal(state)
-	if err != nil {
-		return fmt.Errorf("marshal workflow state for %s: %w", entityID, err)
-	}
-	if _, err := c.stateBucket.Put(ctx, entityID, data); err != nil {
-		return fmt.Errorf("put workflow state for %s: %w", entityID, err)
-	}
-	return nil
-}
-
 // accumulateTokens adds the step's token count to the running total for the
-// entity and persists the new total as a triple.
+// entity, updates the cache, and persists the new total as a triple.
 func (c *PRWorkflowComponent) accumulateTokens(ctx context.Context, entityID string, tokens int) error {
 	state, err := c.getWorkflowState(ctx, entityID)
 	if err != nil {
 		return err
 	}
 	state.TotalTokens += tokens
-	if err := c.putWorkflowState(ctx, entityID, state); err != nil {
-		return err
-	}
+	_, _ = c.stateCache.Set(entityID, state)
 	return c.writeTriple(ctx, entityID, "workflow.tokens.total", fmt.Sprintf("%d", state.TotalTokens))
 }
 
-// incrementRejections increments the rejection counter for the entity and
-// persists the new count as a triple.
+// incrementRejections increments the rejection counter for the entity,
+// updates the cache, and persists the new count as a triple.
 func (c *PRWorkflowComponent) incrementRejections(ctx context.Context, entityID string) error {
 	state, err := c.getWorkflowState(ctx, entityID)
 	if err != nil {
 		return err
 	}
 	state.Rejections++
-	if err := c.putWorkflowState(ctx, entityID, state); err != nil {
-		return err
-	}
+	_, _ = c.stateCache.Set(entityID, state)
 	return c.writeTriple(ctx, entityID, "workflow.review.rejections", fmt.Sprintf("%d", state.Rejections))
 }
 

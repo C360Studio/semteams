@@ -10,9 +10,6 @@ import (
 
 // Workflow constants.
 const (
-	// StateBucket is the NATS KV bucket that stores workflow execution state.
-	StateBucket = "GITHUB_ISSUE_PR_STATE"
-
 	// MaxReviewCycles is the maximum number of reviewer rejection/retry loops
 	// before the workflow escalates to human intervention.
 	MaxReviewCycles = 3
