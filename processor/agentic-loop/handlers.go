@@ -116,10 +116,12 @@ func (h *MessageHandler) maybeCompact(ctx context.Context, cm *ContextManager, l
 		slog.Int("model_limit", cm.ModelLimit()),
 		slog.Int("headroom", cm.resolveHeadroom()))
 
+	compactStart := time.Now()
 	compactResult, compactErr := h.compactor.Compact(ctx, cm)
 	if compactErr != nil {
 		return
 	}
+	compactDuration := time.Since(compactStart).Milliseconds()
 
 	tokensSaved := compactResult.EvictedTokens - compactResult.NewTokens
 	result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
@@ -130,14 +132,16 @@ func (h *MessageHandler) maybeCompact(ctx context.Context, cm *ContextManager, l
 		Summary:     compactResult.Summary,
 	})
 
-	// Record compaction in trajectory for debugging
+	// Record compaction in trajectory for observability
 	compactionStep := agentic.TrajectoryStep{
-		Timestamp: time.Now(),
-		StepType:  "context_compaction",
-		Response:  compactResult.Summary,
-		TokensIn:  compactResult.EvictedTokens,
-		TokensOut: compactResult.NewTokens,
-		Model:     compactResult.Model,
+		Timestamp:   time.Now(),
+		StepType:    "context_compaction",
+		Response:    compactResult.Summary,
+		TokensIn:    compactResult.EvictedTokens,
+		TokensOut:   compactResult.NewTokens,
+		Model:       compactResult.Model,
+		Utilization: utilization,
+		Duration:    compactDuration,
 	}
 	result.TrajectorySteps = append(result.TrajectorySteps, compactionStep)
 	if _, addErr := h.trajectoryManager.AddStep(loopID, compactionStep); addErr != nil {

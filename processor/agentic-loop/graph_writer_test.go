@@ -569,16 +569,78 @@ func TestBuildTrajectoryStepTriples_EmptySteps(t *testing.T) {
 	}
 }
 
-func TestBuildTrajectoryStepTriples_SkipsContextCompaction(t *testing.T) {
+func TestBuildTrajectoryStepTriples_ContextCompaction(t *testing.T) {
+	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop1"
 	traj := &agentic.Trajectory{
 		LoopID: "loop1",
 		Steps: []agentic.TrajectoryStep{
-			{Timestamp: time.Now(), StepType: "context_compaction", Duration: 100},
+			{
+				Timestamp:   time.Now(),
+				StepType:    "context_compaction",
+				TokensIn:    12000,
+				TokensOut:   800,
+				Model:       "claude-haiku",
+				Utilization: 0.72,
+				Duration:    100,
+			},
 		},
 	}
-	triples := buildTrajectoryStepTriples("acme.ops.agent.agentic-loop.execution.loop1", "acme", "ops", "loop1", traj)
-	if len(triples) != 0 {
-		t.Errorf("expected context_compaction to be skipped, got %d triples", len(triples))
+	triples := buildTrajectoryStepTriples(loopEntityID, "acme", "ops", "loop1", traj)
+
+	stepEntityID := "acme.ops.agent.agentic-loop.step.loop1-0"
+
+	var stepTriples []message.Triple
+	var loopTriples []message.Triple
+	for _, tr := range triples {
+		if tr.Subject == stepEntityID {
+			stepTriples = append(stepTriples, tr)
+		}
+		if tr.Subject == loopEntityID {
+			loopTriples = append(loopTriples, tr)
+		}
+	}
+
+	// Verify compaction-specific predicates
+	preds := predicateSet(stepTriples)
+	required := []string{
+		agvocab.StepType, agvocab.StepIndex, agvocab.StepLoop,
+		agvocab.StepTimestamp, agvocab.StepDuration,
+		agvocab.StepTokensEvicted, agvocab.StepTokensSummarized,
+		agvocab.StepModel, agvocab.StepUtilization,
+	}
+	for _, pred := range required {
+		if !preds[pred] {
+			t.Errorf("missing step predicate: %s", pred)
+		}
+	}
+
+	if got := objectFor(stepTriples, agvocab.StepType); got != "context_compaction" {
+		t.Errorf("StepType: got %v, want context_compaction", got)
+	}
+	if got := objectFor(stepTriples, agvocab.StepTokensEvicted); got != 12000 {
+		t.Errorf("StepTokensEvicted: got %v, want 12000", got)
+	}
+	if got := objectFor(stepTriples, agvocab.StepTokensSummarized); got != 800 {
+		t.Errorf("StepTokensSummarized: got %v, want 800", got)
+	}
+	if got := objectFor(stepTriples, agvocab.StepModel); got != "claude-haiku" {
+		t.Errorf("StepModel: got %v, want claude-haiku", got)
+	}
+	if got := objectFor(stepTriples, agvocab.StepUtilization); got != 0.72 {
+		t.Errorf("StepUtilization: got %v, want 0.72", got)
+	}
+
+	// Should NOT have model_call or tool_call specific predicates
+	if preds[agvocab.StepTokensIn] {
+		t.Error("unexpected StepTokensIn on compaction step")
+	}
+	if preds[agvocab.StepToolName] {
+		t.Error("unexpected StepToolName on compaction step")
+	}
+
+	// Verify LoopHasStep triple
+	if len(loopTriples) != 1 {
+		t.Errorf("expected 1 LoopHasStep triple, got %d", len(loopTriples))
 	}
 }
 
@@ -720,21 +782,22 @@ func TestBuildTrajectoryStepTriples_MixedSteps(t *testing.T) {
 
 	triples := buildTrajectoryStepTriples(loopEntityID, "acme", "ops", "loop3", traj)
 
-	// Count LoopHasStep triples — should be 3 (compaction skipped)
+	// Count LoopHasStep triples — should be 4 (compaction included)
 	var loopHasStepCount int
 	for _, tr := range triples {
 		if tr.Subject == loopEntityID && tr.Predicate == agvocab.LoopHasStep {
 			loopHasStepCount++
 		}
 	}
-	if loopHasStepCount != 3 {
-		t.Errorf("expected 3 LoopHasStep triples, got %d", loopHasStepCount)
+	if loopHasStepCount != 4 {
+		t.Errorf("expected 4 LoopHasStep triples, got %d", loopHasStepCount)
 	}
 
-	// Step indices should be 0, 1, 3 (index 2 is compaction, skipped but index preserved)
+	// Step indices should be 0, 1, 2, 3 (compaction at index 2 now included)
 	expectedStepIDs := []string{
 		"acme.ops.agent.agentic-loop.step.loop3-0",
 		"acme.ops.agent.agentic-loop.step.loop3-1",
+		"acme.ops.agent.agentic-loop.step.loop3-2",
 		"acme.ops.agent.agentic-loop.step.loop3-3",
 	}
 	for _, expectedID := range expectedStepIDs {

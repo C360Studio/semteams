@@ -69,9 +69,22 @@ func (e *TrajectoryStepEntity) Triples() []message.Triple {
 		if e.Step.TokensOut > 0 {
 			triples = append(triples, triple(agvocab.StepTokensOut, e.Step.TokensOut))
 		}
+	case "context_compaction":
+		if e.Step.TokensIn > 0 {
+			triples = append(triples, triple(agvocab.StepTokensEvicted, e.Step.TokensIn))
+		}
+		if e.Step.TokensOut > 0 {
+			triples = append(triples, triple(agvocab.StepTokensSummarized, e.Step.TokensOut))
+		}
+		if e.Step.Model != "" {
+			triples = append(triples, triple(agvocab.StepModel, e.Step.Model))
+		}
+		if e.Step.Utilization > 0 {
+			triples = append(triples, triple(agvocab.StepUtilization, e.Step.Utilization))
+		}
 	}
 
-	// Common optional predicates (apply to both step types)
+	// Common optional predicates (apply to all step types)
 	if e.Step.Capability != "" {
 		triples = append(triples, triple(agvocab.StepCapability, e.Step.Capability))
 	}
@@ -115,6 +128,13 @@ func (e *TrajectoryStepEntity) ContentFields() map[string]string {
 			fields[message.ContentRoleBody] = "response"
 		}
 		return fields
+	case "context_compaction":
+		if e.Step.Response != "" {
+			return map[string]string{
+				message.ContentRoleBody: "summary",
+			}
+		}
+		return nil
 	default:
 		return nil
 	}
@@ -146,6 +166,13 @@ func (e *TrajectoryStepEntity) RawContent() map[string]string {
 			content["response"] = e.Step.Response
 		}
 		return content
+	case "context_compaction":
+		if e.Step.Response != "" {
+			return map[string]string{
+				"summary": e.Step.Response,
+			}
+		}
+		return nil
 	default:
 		return nil
 	}

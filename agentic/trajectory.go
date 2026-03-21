@@ -24,6 +24,7 @@ type TrajectoryStep struct {
 	Provider      string         `json:"provider,omitempty"`    // LLM provider (anthropic, openai, etc.)
 	Capability    string         `json:"capability,omitempty"`  // Role/purpose (coding, planning, reviewing, etc.)
 	RetryCount    int            `json:"retry_count,omitempty"` // Number of retries before success
+	Utilization   float64        `json:"utilization,omitempty"` // Context utilization at compaction trigger (0.0-1.0)
 }
 
 // Validate checks if the TrajectoryStep is valid
@@ -49,11 +50,16 @@ type Trajectory struct {
 	Duration       int64            `json:"duration"` // milliseconds
 }
 
-// AddStep adds a step to the trajectory and updates totals
+// AddStep adds a step to the trajectory and updates totals.
+// Compaction steps are excluded from token totals because their TokensIn/Out
+// represent evicted/summarized tokens, not new LLM API consumption. Including
+// them would double-count tokens already tallied by prior model_call steps.
 func (t *Trajectory) AddStep(step TrajectoryStep) {
 	t.Steps = append(t.Steps, step)
-	t.TotalTokensIn += step.TokensIn
-	t.TotalTokensOut += step.TokensOut
+	if step.StepType != "context_compaction" {
+		t.TotalTokensIn += step.TokensIn
+		t.TotalTokensOut += step.TokensOut
+	}
 	t.Duration += step.Duration
 }
 

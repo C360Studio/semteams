@@ -501,6 +501,52 @@ func TestTrajectory_TokenTotals(t *testing.T) {
 	}
 }
 
+func TestTrajectory_CompactionExcludedFromTokenTotals(t *testing.T) {
+	manager := agenticloop.NewTrajectoryManager()
+
+	loopID := "loop-compact"
+	_, err := manager.StartTrajectory(loopID)
+	if err != nil {
+		t.Fatalf("StartTrajectory() error = %v", err)
+	}
+
+	steps := []agentic.TrajectoryStep{
+		{Timestamp: time.Now(), StepType: "model_call", TokensIn: 5000, TokensOut: 500, Duration: 2000},
+		{Timestamp: time.Now(), StepType: "tool_call", ToolName: "web_search", Duration: 800},
+		{Timestamp: time.Now(), StepType: "context_compaction", TokensIn: 12000, TokensOut: 800, Utilization: 0.72, Duration: 150},
+		{Timestamp: time.Now(), StepType: "model_call", TokensIn: 3000, TokensOut: 400, Duration: 1500},
+	}
+
+	for _, step := range steps {
+		if _, addErr := manager.AddStep(loopID, step); addErr != nil {
+			t.Fatalf("AddStep() error = %v", addErr)
+		}
+	}
+
+	traj, err := manager.GetTrajectory(loopID)
+	if err != nil {
+		t.Fatalf("GetTrajectory() error = %v", err)
+	}
+
+	if len(traj.Steps) != 4 {
+		t.Errorf("Steps = %d, want 4 (compaction step should be present)", len(traj.Steps))
+	}
+
+	// Token totals must exclude compaction's evicted/summarized tokens
+	if traj.TotalTokensIn != 8000 { // 5000 + 3000, NOT + 12000
+		t.Errorf("TotalTokensIn = %d, want 8000 (compaction tokens excluded)", traj.TotalTokensIn)
+	}
+	if traj.TotalTokensOut != 900 { // 500 + 400, NOT + 800
+		t.Errorf("TotalTokensOut = %d, want 900 (compaction tokens excluded)", traj.TotalTokensOut)
+	}
+
+	// Duration includes compaction wall-clock time
+	expectedDuration := int64(2000 + 800 + 150 + 1500)
+	if traj.Duration != expectedDuration {
+		t.Errorf("Duration = %d, want %d (compaction duration included)", traj.Duration, expectedDuration)
+	}
+}
+
 func TestTrajectory_DurationAccumulation(t *testing.T) {
 	manager := agenticloop.NewTrajectoryManager()
 

@@ -377,6 +377,31 @@ func TestTrajectory_AddStep(t *testing.T) {
 			wantTokensOut:   200,
 			wantDurationMin: 1250,
 		},
+		{
+			name: "compaction step excluded from token totals",
+			initialSteps: []agentic.TrajectoryStep{
+				{
+					Timestamp: time.Now(),
+					StepType:  "model_call",
+					RequestID: "req-1",
+					TokensIn:  100,
+					TokensOut: 200,
+					Duration:  1000,
+				},
+			},
+			newStep: agentic.TrajectoryStep{
+				Timestamp:   time.Now().Add(2 * time.Second),
+				StepType:    "context_compaction",
+				TokensIn:    12000, // evicted — not new API consumption
+				TokensOut:   800,   // summary — not new API consumption
+				Utilization: 0.72,
+				Duration:    150,
+			},
+			wantStepCount:   2,
+			wantTokensIn:    100, // unchanged — compaction tokens excluded
+			wantTokensOut:   200, // unchanged — compaction tokens excluded
+			wantDurationMin: 1150,
+		},
 	}
 
 	for _, tt := range tests {

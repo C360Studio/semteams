@@ -205,9 +205,14 @@ func TestTrajectoryStepEntity_EmptyToolResult(t *testing.T) {
 
 func TestTrajectoryStepEntity_ContextCompaction(t *testing.T) {
 	step := agentic.TrajectoryStep{
-		Timestamp: time.Now(),
-		StepType:  "context_compaction",
-		Duration:  200,
+		Timestamp:   time.Date(2026, 3, 21, 10, 0, 0, 0, time.UTC),
+		StepType:    "context_compaction",
+		TokensIn:    12000,
+		TokensOut:   800,
+		Response:    "Summary of prior conversation about deployment...",
+		Model:       "claude-haiku",
+		Utilization: 0.72,
+		Duration:    200,
 	}
 
 	entity := &agentic.TrajectoryStepEntity{
@@ -218,12 +223,63 @@ func TestTrajectoryStepEntity_ContextCompaction(t *testing.T) {
 		StepIndex: 3,
 	}
 
-	t.Run("ContentFields_nil_for_compaction", func(t *testing.T) {
-		assert.Nil(t, entity.ContentFields())
+	t.Run("EntityID", func(t *testing.T) {
+		got := entity.EntityID()
+		assert.Equal(t, "acme.ops.agent.agentic-loop.step.loopGC-3", got)
+		assert.True(t, message.IsValidEntityID(got))
 	})
 
-	t.Run("RawContent_nil_for_compaction", func(t *testing.T) {
-		assert.Nil(t, entity.RawContent())
+	t.Run("Triples_compaction_predicates", func(t *testing.T) {
+		triples := entity.Triples()
+		preds := predicateSet(triples)
+
+		required := []string{
+			agvocab.StepType, agvocab.StepIndex, agvocab.StepLoop,
+			agvocab.StepTimestamp, agvocab.StepDuration,
+			agvocab.StepTokensEvicted, agvocab.StepTokensSummarized,
+			agvocab.StepModel, agvocab.StepUtilization,
+		}
+		for _, pred := range required {
+			assert.True(t, preds[pred], "missing required predicate: %s", pred)
+		}
+
+		// Should NOT have model_call or tool_call specific predicates
+		assert.False(t, preds[agvocab.StepTokensIn])
+		assert.False(t, preds[agvocab.StepTokensOut])
+		assert.False(t, preds[agvocab.StepToolName])
+
+		// Verify values
+		assert.Equal(t, "context_compaction", objectFor(triples, agvocab.StepType))
+		assert.Equal(t, 12000, objectFor(triples, agvocab.StepTokensEvicted))
+		assert.Equal(t, 800, objectFor(triples, agvocab.StepTokensSummarized))
+		assert.Equal(t, "claude-haiku", objectFor(triples, agvocab.StepModel))
+		assert.Equal(t, 0.72, objectFor(triples, agvocab.StepUtilization))
+	})
+
+	t.Run("ContentFields_has_summary", func(t *testing.T) {
+		fields := entity.ContentFields()
+		assert.Equal(t, "summary", fields[message.ContentRoleBody])
+	})
+
+	t.Run("RawContent_has_summary", func(t *testing.T) {
+		content := entity.RawContent()
+		assert.Equal(t, "Summary of prior conversation about deployment...", content["summary"])
+	})
+
+	t.Run("ContentFields_nil_when_no_summary", func(t *testing.T) {
+		empty := &agentic.TrajectoryStepEntity{
+			Step: agentic.TrajectoryStep{
+				Timestamp: time.Now(),
+				StepType:  "context_compaction",
+				Duration:  100,
+			},
+			Org:       "acme",
+			Platform:  "ops",
+			LoopID:    "loopGC2",
+			StepIndex: 0,
+		}
+		assert.Nil(t, empty.ContentFields())
+		assert.Nil(t, empty.RawContent())
 	})
 }
 

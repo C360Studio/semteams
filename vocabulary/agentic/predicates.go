@@ -531,4 +531,22 @@ const (
 	// Example: 2
 	// DataType: int
 	StepRetries = "agent.step.retries"
+
+	// StepTokensEvicted is the number of tokens evicted during context compaction.
+	// Only set on context_compaction steps.
+	// Example: 12000
+	// DataType: int
+	StepTokensEvicted = "agent.step.tokens_evicted"
+
+	// StepTokensSummarized is the number of tokens in the compaction summary.
+	// Only set on context_compaction steps.
+	// Example: 800
+	// DataType: int
+	StepTokensSummarized = "agent.step.tokens_summarized"
+
+	// StepUtilization is the context utilization ratio (0.0-1.0) at compaction trigger.
+	// Only set on context_compaction steps.
+	// Example: 0.72
+	// DataType: float64
+	StepUtilization = "agent.step.utilization"
 )

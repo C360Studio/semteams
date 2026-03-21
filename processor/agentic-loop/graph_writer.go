@@ -148,8 +148,8 @@ func (w *graphWriter) WriteLoopFailure(ctx context.Context, event *agentic.LoopF
 }
 
 // WriteTrajectorySteps stores step content in ObjectStore and emits graph triples
-// for each non-compaction trajectory step, linking them to the parent loop entity
-// via LoopHasStep relationships.
+// for each trajectory step, linking them to the parent loop entity via LoopHasStep
+// relationships.
 func (w *graphWriter) WriteTrajectorySteps(ctx context.Context, loopID string, trajectory *agentic.Trajectory) {
 	if w.natsClient == nil {
 		return
@@ -160,12 +160,9 @@ func (w *graphWriter) WriteTrajectorySteps(ctx context.Context, loopID string, t
 		return
 	}
 
-	// Store content in ObjectStore for each non-compaction step.
+	// Store content in ObjectStore for each step.
 	if w.contentStore != nil && trajectory != nil {
 		for i, step := range trajectory.Steps {
-			if step.StepType == "context_compaction" {
-				continue
-			}
 			entity := &agentic.TrajectoryStepEntity{
 				Step:      step,
 				Org:       w.platform.Org,
@@ -391,7 +388,7 @@ func buildLoopCancellationTriples(loopEntityID string, event *agentic.LoopCancel
 	return triples
 }
 
-// buildTrajectoryStepTriples constructs triples for all non-compaction trajectory steps.
+// buildTrajectoryStepTriples constructs triples for all trajectory steps.
 // Returns triples for both the step entities and LoopHasStep relationship triples
 // on the loop entity. This is a pure function with no side effects.
 func buildTrajectoryStepTriples(
@@ -405,10 +402,6 @@ func buildTrajectoryStepTriples(
 	var allTriples []message.Triple
 
 	for i, step := range trajectory.Steps {
-		if step.StepType == "context_compaction" {
-			continue
-		}
-
 		entity := &agentic.TrajectoryStepEntity{
 			Step:      step,
 			Org:       org,

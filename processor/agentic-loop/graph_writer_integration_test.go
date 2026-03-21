@@ -348,14 +348,14 @@ func TestWriteTrajectorySteps_Integration(t *testing.T) {
 		}
 	}
 
-	// 3 non-compaction steps → 3 LoopHasStep triples.
-	if loopHasStepCount != 3 {
-		t.Errorf("expected 3 LoopHasStep triples, got %d", loopHasStepCount)
+	// 4 steps (including compaction) → 4 LoopHasStep triples.
+	if loopHasStepCount != 4 {
+		t.Errorf("expected 4 LoopHasStep triples, got %d", loopHasStepCount)
 	}
 
-	// 3 step entities created.
-	if len(stepEntityIDs) != 3 {
-		t.Errorf("expected 3 step entities, got %d", len(stepEntityIDs))
+	// 4 step entities created.
+	if len(stepEntityIDs) != 4 {
+		t.Errorf("expected 4 step entities, got %d", len(stepEntityIDs))
 	}
 
 	// Verify all step entity IDs are valid.
