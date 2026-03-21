@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"github.com/c360studio/semstreams/graph/query"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/vocabulary"
+	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 )
 
 // GraphRAG search constants
@@ -90,8 +93,9 @@ func (r *GlobalSearchRequest) shouldIncludeSummaries() bool {
 type GlobalSearchResponse struct {
 	Strategy           string                `json:"strategy,omitempty"` // which strategy handled this query
 	Entities           []*gtypes.EntityState `json:"entities"`
-	EntityIDs          []string              `json:"entity_ids,omitempty"` // IDs only (when summarized)
-	Summarized         bool                  `json:"summarized,omitempty"` // true when auto-summarized
+	EntityIDs          []string              `json:"entity_ids,omitempty"`     // IDs only (when summarized)
+	EntityDigests      []EntityDigest        `json:"entity_digests,omitempty"` // lightweight entity context
+	Summarized         bool                  `json:"summarized,omitempty"`     // true when auto-summarized
 	CommunitySummaries []CommunitySummary    `json:"community_summaries,omitempty"`
 	Relationships      []Relationship        `json:"relationships,omitempty"`
 	Sources            []Source              `json:"sources,omitempty"`
@@ -117,11 +121,42 @@ type Source struct {
 
 // CommunitySummary represents a community's summary used in global search
 type CommunitySummary struct {
-	CommunityID string   `json:"community_id"`
-	Summary     string   `json:"summary"`
-	Keywords    []string `json:"keywords"`
-	Level       int      `json:"level"`
-	Relevance   float64  `json:"relevance"`
+	CommunityID string         `json:"community_id"`
+	Summary     string         `json:"summary"`
+	Keywords    []string       `json:"keywords"`
+	Level       int            `json:"level"`
+	Relevance   float64        `json:"relevance"`
+	MemberCount int            `json:"member_count,omitempty"` // total entities in community
+	Entities    []EntityDigest `json:"entities,omitempty"`     // representative entity digests
+}
+
+// EntityDigest provides lightweight, agent-readable context for an entity
+// without requiring a full EntityState load.
+type EntityDigest struct {
+	ID        string  `json:"id"`
+	Type      string  `json:"type"`                // extracted from 5th segment of entity ID
+	Label     string  `json:"label,omitempty"`     // human-readable name from key predicates
+	Relevance float64 `json:"relevance,omitempty"` // semantic similarity score when available
+}
+
+// extractEntityType returns the type segment (5th part) of a 6-part entity ID.
+// Returns empty string if the ID has fewer than 5 segments.
+func extractEntityType(entityID string) string {
+	parts := strings.Split(entityID, ".")
+	if len(parts) >= 5 {
+		return parts[4]
+	}
+	return ""
+}
+
+// extractEntityInstance returns the instance segment (6th part) of a 6-part entity ID.
+// Used as a fallback label when no predicate-based label is available.
+func extractEntityInstance(entityID string) string {
+	parts := strings.Split(entityID, ".")
+	if len(parts) >= 6 {
+		return parts[5]
+	}
+	return entityID
 }
 
 // setupGraphRAGHandlers registers the GraphRAG NATS request handlers
@@ -463,11 +498,30 @@ func (c *Component) handleStrategyGraphRAG(ctx context.Context, searchQuery stri
 				"hits", len(entityIDs),
 				"threshold", threshold)
 
+			// Build semantic score lookup for digest relevance
+			semanticScores := make(map[string]float64, len(semanticHits))
+			for _, h := range semanticHits {
+				semanticScores[h.EntityID] = h.Score
+			}
+
+			// Enrich community summaries with RepEntity digests (single batch load)
+			enriched := c.enrichCommunitySummaries(ctx, communityMatches)
+
+			// Collect labels from enriched summaries for entity digests
+			labels := make(map[string]string)
+			for _, s := range enriched {
+				for _, e := range s.Entities {
+					labels[e.ID] = e.Label
+				}
+			}
+
 			response := GlobalSearchResponse{
 				Summarized:         true,
 				EntityIDs:          entityIDs,
+				EntityDigests:      buildEntityDigests(entityIDs, semanticScores, labels),
 				Count:              len(entityIDs),
-				CommunitySummaries: communityMatches,
+				CommunitySummaries: enriched,
+				Answer:             synthesizeAnswer(enriched, len(entityIDs)),
 				DurationMs:         time.Since(startTime).Milliseconds(),
 			}
 			c.recordSuccess(requestSize, 0)
@@ -487,7 +541,9 @@ func (c *Component) handleStrategyGraphRAG(ctx context.Context, searchQuery stri
 				DurationMs: time.Since(startTime).Milliseconds(),
 			}
 			if req.shouldIncludeSummaries() {
-				response.CommunitySummaries = communityMatches
+				enriched := c.enrichCommunitySummaries(ctx, communityMatches)
+				response.CommunitySummaries = enriched
+				response.Answer = synthesizeAnswer(enriched, len(entities))
 			}
 			if req.IncludeRelationships {
 				response.Relationships = c.extractRelationships(ctx, entities)
@@ -820,6 +876,7 @@ func (c *Component) globalSearchTextBased(ctx context.Context, req GlobalSearchR
 			Keywords:    comm.Keywords,
 			Level:       comm.Level,
 			Relevance:   relevance,
+			MemberCount: len(comm.Members),
 		}
 	}
 
@@ -832,7 +889,9 @@ func (c *Component) globalSearchTextBased(ctx context.Context, req GlobalSearchR
 
 	// Conditionally include summaries (default: true)
 	if req.shouldIncludeSummaries() {
-		response.CommunitySummaries = summaries
+		enriched := c.enrichCommunitySummaries(ctx, summaries)
+		response.CommunitySummaries = enriched
+		response.Answer = synthesizeAnswer(enriched, len(matchedEntities))
 	}
 
 	// Conditionally extract relationships (opt-in)
@@ -901,8 +960,7 @@ func filterEntityIDsByType(entityIDs []string, typeFilters []string) []string {
 
 	filtered := make([]string, 0, len(entityIDs))
 	for _, id := range entityIDs {
-		parts := strings.Split(id, ".")
-		if len(parts) >= 5 && filterSet[strings.ToLower(parts[4])] {
+		if filterSet[strings.ToLower(extractEntityType(id))] {
 			filtered = append(filtered, id)
 		}
 	}
@@ -994,6 +1052,7 @@ func (c *Component) findCommunitiesForEntities(entityIDs []string) []CommunitySu
 				Keywords:    comm.Keywords,
 				Level:       comm.Level,
 				Relevance:   relevance,
+				MemberCount: len(comm.Members),
 			})
 		}
 	}
@@ -1004,6 +1063,183 @@ func (c *Component) findCommunitiesForEntities(entityIDs []string) []CommunitySu
 	})
 
 	return summaries
+}
+
+// labelPredicates is the priority-ordered list of predicates to try when resolving
+// a human-readable label for an entity. The first non-empty match wins.
+var labelPredicates = []string{
+	vocabulary.DCTermsTitle,
+	agvocab.IdentityDisplayName,
+	agvocab.CapabilityName,
+	agvocab.ModelName,
+}
+
+// resolveEntityLabels loads a subset of entities and extracts human-readable labels.
+// Returns a map from entity ID to label. Entities that fail to load or have no
+// recognizable label predicate are omitted from the map.
+func (c *Component) resolveEntityLabels(ctx context.Context, entityIDs []string) map[string]string {
+	if len(entityIDs) == 0 {
+		return nil
+	}
+
+	entities, err := c.loadEntities(ctx, entityIDs)
+	if err != nil {
+		c.logger.Debug("failed to load entities for label resolution", "error", err)
+		return nil
+	}
+
+	labels := make(map[string]string, len(entities))
+	for _, entity := range entities {
+		label := resolveLabel(entity)
+		if label != "" {
+			labels[entity.ID] = label
+		}
+	}
+	return labels
+}
+
+// resolveLabel extracts a human-readable label from an entity by trying predicates
+// in priority order. Falls back to the first string-valued triple object.
+func resolveLabel(entity *gtypes.EntityState) string {
+	for _, pred := range labelPredicates {
+		if val, ok := entity.GetPropertyValue(pred); ok {
+			if s, ok := val.(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	// Last resort: first string-valued object from any triple
+	for _, t := range entity.Triples {
+		if s, ok := t.Object.(string); ok && s != "" && !message.IsValidEntityID(s) {
+			return s
+		}
+	}
+	return ""
+}
+
+// buildEntityDigests creates lightweight entity context from IDs, semantic scores,
+// and pre-resolved labels.
+func buildEntityDigests(entityIDs []string, semanticScores map[string]float64, labels map[string]string) []EntityDigest {
+	digests := make([]EntityDigest, len(entityIDs))
+	for i, id := range entityIDs {
+		label := labels[id]
+		if label == "" {
+			label = extractEntityInstance(id)
+		}
+		digests[i] = EntityDigest{
+			ID:        id,
+			Type:      extractEntityType(id),
+			Label:     label,
+			Relevance: semanticScores[id],
+		}
+	}
+	return digests
+}
+
+// enrichCommunitySummaries populates MemberCount and representative entity digests
+// on each CommunitySummary by looking up RepEntities from the community cache and
+// resolving their labels via a single batch entity load.
+func (c *Component) enrichCommunitySummaries(ctx context.Context, summaries []CommunitySummary) []CommunitySummary {
+	if c.communityCache == nil || len(summaries) == 0 {
+		return summaries
+	}
+
+	// Collect all RepEntity IDs across matched communities (deduplicated)
+	seen := make(map[string]bool)
+	var repEntityIDs []string
+	commRepEntities := make(map[string][]string) // communityID → repEntity IDs
+	for i := range summaries {
+		comm := c.communityCache.GetCommunity(summaries[i].CommunityID)
+		if comm == nil {
+			continue
+		}
+		summaries[i].MemberCount = len(comm.Members)
+		commRepEntities[summaries[i].CommunityID] = comm.RepEntities
+		for _, id := range comm.RepEntities {
+			if !seen[id] {
+				seen[id] = true
+				repEntityIDs = append(repEntityIDs, id)
+			}
+		}
+	}
+
+	// Single batch label lookup for all representative entities
+	labels := c.resolveEntityLabels(ctx, repEntityIDs)
+
+	// Populate Entities on each summary
+	for i := range summaries {
+		reps := commRepEntities[summaries[i].CommunityID]
+		if len(reps) == 0 {
+			continue
+		}
+		digests := make([]EntityDigest, len(reps))
+		for j, id := range reps {
+			label := labels[id]
+			if label == "" {
+				label = extractEntityInstance(id)
+			}
+			digests[j] = EntityDigest{
+				ID:    id,
+				Type:  extractEntityType(id),
+				Label: label,
+			}
+		}
+		summaries[i].Entities = digests
+	}
+	return summaries
+}
+
+// synthesizeAnswer produces a template-based natural language answer from
+// community summaries. No LLM required — uses the pre-computed community
+// narratives to give agents actionable context.
+func synthesizeAnswer(summaries []CommunitySummary, totalEntities int) string {
+	if len(summaries) == 0 {
+		return ""
+	}
+
+	var b strings.Builder
+	b.WriteString(fmt.Sprintf("Found %d entities across %d knowledge clusters.\n", totalEntities, len(summaries)))
+
+	limit := len(summaries)
+	if limit > 5 {
+		limit = 5
+	}
+
+	for _, s := range summaries[:limit] {
+		b.WriteByte('\n')
+
+		// Community header with member count
+		if s.MemberCount > 0 {
+			b.WriteString(fmt.Sprintf("(%d entities, %.0f%% match) ", s.MemberCount, s.Relevance*100))
+		}
+
+		// Community summary (already a narrative from LLM or statistical)
+		if s.Summary != "" {
+			b.WriteString(s.Summary)
+		}
+
+		// Representative entities
+		if len(s.Entities) > 0 {
+			names := make([]string, len(s.Entities))
+			for i, e := range s.Entities {
+				names[i] = fmt.Sprintf("%s [%s]", e.Label, e.Type)
+			}
+			b.WriteString(fmt.Sprintf(" Representatives: %s.", strings.Join(names, ", ")))
+		}
+
+		// Keywords
+		if len(s.Keywords) > 0 {
+			kwLimit := len(s.Keywords)
+			if kwLimit > 5 {
+				kwLimit = 5
+			}
+			b.WriteString(fmt.Sprintf(" Key themes: %s.", strings.Join(s.Keywords[:kwLimit], ", ")))
+		}
+
+		b.WriteByte('\n')
+	}
+
+	return b.String()
 }
 
 // findCommunityWithFallback looks up an entity's community at the exact requested level.
