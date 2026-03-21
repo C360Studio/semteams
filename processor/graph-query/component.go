@@ -105,6 +105,9 @@ type Component struct {
 	llmClient     llm.Client
 	classifier    *query.ClassifierChain
 
+	// Answer synthesis for globalSearch
+	answerSynthesizer AnswerSynthesizer
+
 	// Community cache for GraphRAG (consumer-owned, KV watch based)
 	communityCache   *CommunityCache
 	communityWatcher *resource.Watcher
@@ -368,6 +371,37 @@ func (c *Component) initLLMClassifier() {
 		slog.String("model", resolved.Model))
 }
 
+// initAnswerSynthesizer wires the LLM answer synthesizer if the model registry
+// has an answer_synthesis capability configured. Falls back to template-based
+// synthesis (no LLM) when unconfigured.
+func (c *Component) initAnswerSynthesizer() {
+	// Template fallback is always the default
+	c.answerSynthesizer = &TemplateAnswerSynthesizer{}
+
+	if c.modelRegistry == nil {
+		return
+	}
+	resolved, err := model.ResolveEndpoint(c.modelRegistry, model.CapabilityAnswerSynthesis)
+	if err != nil {
+		c.logger.Debug("no answer_synthesis endpoint configured, using template fallback")
+		return
+	}
+	client, err := llm.NewOpenAIClient(llm.OpenAIConfig{
+		BaseURL: resolved.URL,
+		Model:   resolved.Model,
+		APIKey:  resolved.APIKey,
+		Logger:  c.logger,
+	})
+	if err != nil {
+		c.logger.Warn("failed to create answer synthesis LLM client, using template fallback",
+			slog.Any("error", err))
+		return
+	}
+	c.answerSynthesizer = NewLLMAnswerSynthesizer(client, resolved.Model)
+	c.logger.Info("LLM answer synthesis enabled",
+		slog.String("model", resolved.Model))
+}
+
 // Start starts the component
 func (c *Component) Start(ctx context.Context) error {
 	// Validate context
@@ -400,6 +434,9 @@ func (c *Component) Start(ctx context.Context) error {
 
 	// Wire LLM classifier if model registry has query_classification capability
 	c.initLLMClassifier()
+
+	// Wire answer synthesizer (LLM if available, template fallback otherwise)
+	c.initAnswerSynthesizer()
 
 	// Initialize lifecycle reporter (throttled for high-throughput queries)
 	c.initLifecycleReporter(componentCtx)

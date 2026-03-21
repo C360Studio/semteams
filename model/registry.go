@@ -19,6 +19,9 @@ const (
 	CapabilityEmbedding = "embedding"
 	// CapabilityQueryClassification is used by graph-query for LLM-based query classification.
 	CapabilityQueryClassification = "query_classification"
+	// CapabilityAnswerSynthesis is used by graph-query to synthesize natural language
+	// answers from community summaries and entity digests in globalSearch responses.
+	CapabilityAnswerSynthesis = "answer_synthesis"
 )
 
 // ResolvedEndpoint holds the resolved connection details for a capability endpoint.

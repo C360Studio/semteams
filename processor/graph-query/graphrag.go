@@ -515,13 +515,15 @@ func (c *Component) handleStrategyGraphRAG(ctx context.Context, searchQuery stri
 				}
 			}
 
+			answer, answerModel := c.synthesizeQueryAnswer(ctx, searchQuery, enriched, len(entityIDs))
 			response := GlobalSearchResponse{
 				Summarized:         true,
 				EntityIDs:          entityIDs,
 				EntityDigests:      buildEntityDigests(entityIDs, semanticScores, labels),
 				Count:              len(entityIDs),
 				CommunitySummaries: enriched,
-				Answer:             synthesizeAnswer(enriched, len(entityIDs)),
+				Answer:             answer,
+				AnswerModel:        answerModel,
 				DurationMs:         time.Since(startTime).Milliseconds(),
 			}
 			c.recordSuccess(requestSize, 0)
@@ -543,7 +545,9 @@ func (c *Component) handleStrategyGraphRAG(ctx context.Context, searchQuery stri
 			if req.shouldIncludeSummaries() {
 				enriched := c.enrichCommunitySummaries(ctx, communityMatches)
 				response.CommunitySummaries = enriched
-				response.Answer = synthesizeAnswer(enriched, len(entities))
+				answer, answerModel := c.synthesizeQueryAnswer(ctx, searchQuery, enriched, len(entities))
+				response.Answer = answer
+				response.AnswerModel = answerModel
 			}
 			if req.IncludeRelationships {
 				response.Relationships = c.extractRelationships(ctx, entities)
@@ -675,13 +679,24 @@ func (c *Component) handleStrategySemantic(ctx context.Context, searchQuery stri
 		return nil, errs.WrapTransient(loadErr, "GraphQuery", "handleStrategySemantic", "load entities")
 	}
 
-	// Pure vector results: no community summaries.
-	c.recordSuccess(requestSize, 0)
-	return json.Marshal(GlobalSearchResponse{
+	response := GlobalSearchResponse{
 		Entities:   entities,
 		Count:      len(entities),
 		DurationMs: time.Since(startTime).Milliseconds(),
-	})
+	}
+
+	// Enrich with community context if available (community cache is shared).
+	communityMatches := c.findCommunitiesForEntities(entityIDs)
+	if len(communityMatches) > 0 {
+		enriched := c.enrichCommunitySummaries(ctx, communityMatches)
+		response.CommunitySummaries = enriched
+		answer, answerModel := c.synthesizeQueryAnswer(ctx, searchQuery, enriched, len(entities))
+		response.Answer = answer
+		response.AnswerModel = answerModel
+	}
+
+	c.recordSuccess(requestSize, 0)
+	return json.Marshal(response)
 }
 
 // handleStrategyTemporal delegates to the graph-temporal component via NATS.
@@ -891,7 +906,9 @@ func (c *Component) globalSearchTextBased(ctx context.Context, req GlobalSearchR
 	if req.shouldIncludeSummaries() {
 		enriched := c.enrichCommunitySummaries(ctx, summaries)
 		response.CommunitySummaries = enriched
-		response.Answer = synthesizeAnswer(enriched, len(matchedEntities))
+		answer, answerModel := c.synthesizeQueryAnswer(ctx, req.Query, enriched, len(matchedEntities))
+		response.Answer = answer
+		response.AnswerModel = answerModel
 	}
 
 	// Conditionally extract relationships (opt-in)
@@ -1192,6 +1209,22 @@ func (c *Component) enrichCommunitySummaries(ctx context.Context, summaries []Co
 // synthesizeAnswer produces a template-based natural language answer from
 // community summaries. No LLM required — uses the pre-computed community
 // narratives to give agents actionable context.
+// synthesizeQueryAnswer delegates to the component's answer synthesizer (LLM or template).
+// Returns the answer text and the model name used (empty for template fallback).
+func (c *Component) synthesizeQueryAnswer(ctx context.Context, query string, summaries []CommunitySummary, totalEntities int) (string, string) {
+	if c.answerSynthesizer == nil {
+		return synthesizeAnswer(summaries, totalEntities), ""
+	}
+	answer, modelName, err := c.answerSynthesizer.Synthesize(ctx, query, summaries, totalEntities)
+	if err != nil {
+		c.logger.Debug("answer synthesis error, using fallback", "error", err)
+	}
+	return answer, modelName
+}
+
+// synthesizeAnswer produces a template-based natural language answer from
+// community summaries. No LLM required — used as fallback when no
+// answer_synthesis endpoint is configured.
 func synthesizeAnswer(summaries []CommunitySummary, totalEntities int) string {
 	if len(summaries) == 0 {
 		return ""
