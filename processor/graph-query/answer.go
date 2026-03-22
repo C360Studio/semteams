@@ -3,6 +3,7 @@ package graphquery
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/c360studio/semstreams/graph/llm"
@@ -14,6 +15,9 @@ type AnswerSynthesizer interface {
 	// Synthesize produces an answer to the query based on community summaries.
 	// Returns the answer text and the model name used (empty for template fallback).
 	Synthesize(ctx context.Context, query string, summaries []CommunitySummary, totalEntities int) (answer string, model string, err error)
+
+	// Close releases any resources held by the synthesizer.
+	Close() error
 }
 
 // answerSynthesisSystemPrompt is the system prompt for LLM-backed answer synthesis.
@@ -28,14 +32,33 @@ Be direct and factual. If the clusters don't contain enough information to fully
 type LLMAnswerSynthesizer struct {
 	client    llm.Client
 	modelName string
+	logger    *slog.Logger
 }
 
 // NewLLMAnswerSynthesizer creates an LLM-backed answer synthesizer.
-func NewLLMAnswerSynthesizer(client llm.Client, modelName string) *LLMAnswerSynthesizer {
-	return &LLMAnswerSynthesizer{client: client, modelName: modelName}
+func NewLLMAnswerSynthesizer(client llm.Client, modelName string, logger *slog.Logger) *LLMAnswerSynthesizer {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &LLMAnswerSynthesizer{client: client, modelName: modelName, logger: logger}
 }
 
+// Close releases the LLM client resources.
+func (s *LLMAnswerSynthesizer) Close() error {
+	if s.client != nil {
+		return s.client.Close()
+	}
+	return nil
+}
+
+// answerSynthesisMaxTokens is the maximum tokens for the LLM answer response.
+const answerSynthesisMaxTokens = 500
+
+// answerSynthesisTemperature controls randomness in answer generation (low = factual).
+var answerSynthesisTemperature = 0.3
+
 // Synthesize produces a query-focused answer by sending community summaries to the LLM.
+// On LLM failure, falls back to template synthesis and logs the error internally.
 func (s *LLMAnswerSynthesizer) Synthesize(ctx context.Context, query string, summaries []CommunitySummary, totalEntities int) (string, string, error) {
 	if len(summaries) == 0 {
 		return "", "", nil
@@ -43,16 +66,17 @@ func (s *LLMAnswerSynthesizer) Synthesize(ctx context.Context, query string, sum
 
 	userPrompt := buildAnswerPrompt(query, summaries, totalEntities)
 
-	temp := 0.3
 	resp, err := s.client.ChatCompletion(ctx, llm.ChatRequest{
 		SystemPrompt: answerSynthesisSystemPrompt,
 		UserPrompt:   userPrompt,
-		MaxTokens:    300,
-		Temperature:  &temp,
+		MaxTokens:    answerSynthesisMaxTokens,
+		Temperature:  &answerSynthesisTemperature,
 	})
 	if err != nil {
-		// Fall back to template on LLM error
-		return synthesizeAnswer(summaries, totalEntities), "", fmt.Errorf("LLM answer synthesis failed, using template fallback: %w", err)
+		s.logger.Warn("LLM answer synthesis failed, using template fallback",
+			slog.String("query", query),
+			slog.Any("error", err))
+		return synthesizeAnswer(summaries, totalEntities), "", nil
 	}
 
 	return resp.Content, s.modelName, nil
@@ -68,6 +92,9 @@ func (s *TemplateAnswerSynthesizer) Synthesize(_ context.Context, _ string, summ
 	return synthesizeAnswer(summaries, totalEntities), "", nil
 }
 
+// Close is a no-op for the template synthesizer.
+func (s *TemplateAnswerSynthesizer) Close() error { return nil }
+
 // buildAnswerPrompt constructs the user prompt for LLM answer synthesis.
 func buildAnswerPrompt(query string, summaries []CommunitySummary, totalEntities int) string {
 	var b strings.Builder
@@ -75,8 +102,8 @@ func buildAnswerPrompt(query string, summaries []CommunitySummary, totalEntities
 	b.WriteString(fmt.Sprintf("The knowledge graph contains %d matching entities across %d clusters.\n\n", totalEntities, len(summaries)))
 
 	limit := len(summaries)
-	if limit > 5 {
-		limit = 5
+	if limit > MaxAnswerClusters {
+		limit = MaxAnswerClusters
 	}
 
 	for i, s := range summaries[:limit] {

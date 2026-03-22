@@ -47,8 +47,17 @@ type graphRAGGlobalResponse struct {
 				Keywords    []string `json:"keywords"`
 				Level       int      `json:"level"`
 				Relevance   float64  `json:"relevance"`
+				MemberCount int      `json:"member_count"`
+				Entities    []struct {
+					ID        string  `json:"id"`
+					Type      string  `json:"type"`
+					Label     string  `json:"label"`
+					Relevance float64 `json:"relevance"`
+				} `json:"entities"`
 			} `json:"communitySummaries"`
-			Count int `json:"count"`
+			Count       int    `json:"count"`
+			Answer      string `json:"answer"`
+			AnswerModel string `json:"answer_model"`
 		} `json:"globalSearch"`
 	} `json:"data"`
 	Errors []struct {
@@ -252,8 +261,10 @@ func (s *TieredScenario) sendGraphRAGGlobalRequest(ctx context.Context, query, g
 		"query": `query($query: String!, $level: Int, $maxCommunities: Int) {
 			globalSearch(query: $query, level: $level, maxCommunities: $maxCommunities) {
 				entities { id type }
-				communitySummaries { communityId summary keywords level relevance }
+				communitySummaries { communityId summary keywords level relevance member_count entities { id type label relevance } }
 				count
+				answer
+				answer_model
 			}}`,
 		"variables": map[string]any{"query": query, "level": 1, "maxCommunities": 5},
 	}
@@ -331,6 +342,8 @@ func (s *TieredScenario) validateGraphRAGGlobalResult(resp *graphRAGGlobalRespon
 		"communities_used": communityCount,
 		"latency_ms":       latency.Milliseconds(),
 		"success":          true,
+		"has_answer":       gs.Answer != "",
+		"answer_model":     gs.AnswerModel,
 		// Additional fields for debugging
 		"entity_ids":  entityIDs,
 		"communities": communityDetails,
@@ -342,10 +355,24 @@ func (s *TieredScenario) validateGraphRAGGlobalResult(resp *graphRAGGlobalRespon
 			fmt.Sprintf("GraphRAG global search returned only %d communities for broad query %q, expected >= 2", communityCount, query))
 	}
 
-	// Phase 2 improvement: Validate each community has a summary
+	// Validate each community has a summary
 	for _, cs := range gs.CommunitySummaries {
 		if cs.Summary == "" {
 			return fmt.Errorf("GraphRAG global search: community %s missing summary", cs.CommunityID)
+		}
+	}
+
+	// Validate answer synthesis — should always be populated when communities exist
+	if gs.Answer == "" && communityCount > 0 {
+		result.Warnings = append(result.Warnings,
+			"GraphRAG global search: answer field empty despite having community summaries")
+	}
+
+	// Validate enriched community summaries have member counts
+	for _, cs := range gs.CommunitySummaries {
+		if cs.MemberCount == 0 {
+			result.Warnings = append(result.Warnings,
+				fmt.Sprintf("GraphRAG global search: community %s missing member_count", cs.CommunityID))
 		}
 	}
 

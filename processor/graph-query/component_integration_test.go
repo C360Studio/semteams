@@ -464,6 +464,134 @@ func TestIntegration_GraphRAGBucketRecovery(t *testing.T) {
 		"GraphRAG should recover after bucket is recreated")
 }
 
+// TestIntegration_AnswerSynthesis verifies that globalSearch produces an answer
+// and enriched community summaries when communities with LLM summaries exist.
+// Tests the full path: community cache → enrichment → answer synthesis.
+func TestIntegration_AnswerSynthesis(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	ctx := context.Background()
+	natsClient, cleanup := setupTestNATS(t)
+	defer cleanup()
+
+	js, err := natsClient.JetStream()
+	require.NoError(t, err)
+
+	// Create COMMUNITY_INDEX bucket with test communities
+	communityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket:      "COMMUNITY_INDEX",
+		Description: "Test community index",
+	})
+	require.NoError(t, err)
+
+	// Write two communities with LLM summaries and RepEntities
+	communities := []struct {
+		id   string
+		data map[string]any
+	}{
+		{
+			id: "comm-0-abc",
+			data: map[string]any{
+				"id":                  "comm-0-abc",
+				"level":               0,
+				"members":             []string{"acme.ops.robotics.gcs.drone.001", "acme.ops.robotics.gcs.drone.002", "acme.ops.robotics.gcs.sensor.temp-001"},
+				"statistical_summary": "Cluster of drone and sensor entities in the GCS system.",
+				"llm_summary":         "This community contains autonomous drones and temperature sensors operating within the ground control station.",
+				"keywords":            []string{"drone", "sensor", "autonomous", "navigation"},
+				"rep_entities":        []string{"acme.ops.robotics.gcs.drone.001"},
+				"summary_status":      "llm-enhanced",
+			},
+		},
+		{
+			id: "comm-0-def",
+			data: map[string]any{
+				"id":                  "comm-0-def",
+				"level":               0,
+				"members":             []string{"acme.ops.logistics.warehouse.worker.w1", "acme.ops.logistics.warehouse.worker.w2"},
+				"statistical_summary": "Warehouse worker entities in logistics.",
+				"llm_summary":         "This community represents warehouse workers assigned to logistics operations.",
+				"keywords":            []string{"warehouse", "logistics", "worker"},
+				"rep_entities":        []string{"acme.ops.logistics.warehouse.worker.w1"},
+				"summary_status":      "llm-enhanced",
+			},
+		},
+	}
+
+	for _, c := range communities {
+		data, err := json.Marshal(c.data)
+		require.NoError(t, err)
+		_, err = communityBucket.Put(ctx, c.id, data)
+		require.NoError(t, err)
+	}
+
+	// Create and start component with template synthesizer (no LLM endpoint needed)
+	config := DefaultConfig()
+	config.StartupAttempts = 3
+	config.StartupInterval = 50 * time.Millisecond
+	config.RecheckInterval = 100 * time.Millisecond
+	configJSON, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	deps := component.Dependencies{
+		NATSClient: natsClient,
+	}
+
+	comp, err := CreateGraphQuery(configJSON, deps)
+	require.NoError(t, err)
+
+	graphQuery := comp.(*Component)
+	require.NoError(t, graphQuery.Initialize())
+	require.NoError(t, graphQuery.Start(ctx))
+	defer graphQuery.Stop(5 * time.Second)
+
+	// Wait for community cache to be ready and populated
+	require.Eventually(t, func() bool {
+		if !graphQuery.communityCache.IsReady() {
+			return false
+		}
+		allComms := graphQuery.communityCache.GetAllCommunities()
+		return len(allComms) >= 2
+	}, 3*time.Second, 50*time.Millisecond,
+		"community cache should have 2 communities")
+
+	// Test findCommunitiesForEntities — the community cache should match
+	// member entity IDs against known communities.
+	matchedEntityIDs := []string{
+		"acme.ops.robotics.gcs.drone.001",
+		"acme.ops.logistics.warehouse.worker.w1",
+	}
+	commSummaries := graphQuery.findCommunitiesForEntities(matchedEntityIDs)
+	assert.Len(t, commSummaries, 2, "should match 2 communities")
+
+	for _, cs := range commSummaries {
+		assert.NotEmpty(t, cs.Summary, "each community should have a summary")
+		assert.Greater(t, cs.MemberCount, 0, "MemberCount should be set at construction")
+	}
+
+	// Test enrichCommunitySummaries — this calls resolveEntityLabels which
+	// requires loadEntities (no graph-ingest running), but enrichment should
+	// still populate MemberCount and gracefully handle label resolution failure.
+	enriched := graphQuery.enrichCommunitySummaries(ctx, commSummaries)
+	assert.Len(t, enriched, 2)
+	for _, cs := range enriched {
+		assert.Greater(t, cs.MemberCount, 0, "MemberCount should be populated after enrichment")
+	}
+
+	// Test synthesizeQueryAnswer — uses the template fallback (no LLM endpoint)
+	answer, answerModel := graphQuery.synthesizeQueryAnswer(ctx, "drone sensor operations", enriched, 5)
+	assert.NotEmpty(t, answer, "Answer should be populated from community summaries")
+	assert.Contains(t, answer, "knowledge cluster", "Answer should contain cluster header")
+	assert.Contains(t, answer, "5 entities", "Answer should mention entity count")
+	assert.Empty(t, answerModel, "AnswerModel should be empty for template fallback")
+
+	// Verify the answer includes community narrative content
+	assert.True(t,
+		assert.ObjectsAreEqual(true, len(answer) > 100),
+		"Answer should be substantial (>100 chars), got %d chars", len(answer))
+}
+
 func TestIntegration_StaticRouting(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")

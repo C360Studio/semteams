@@ -43,6 +43,9 @@ const (
 
 	// ScoreWeightKeyword is the weight for keyword matches in community scoring
 	ScoreWeightKeyword = 1.5
+
+	// MaxAnswerClusters limits the number of communities included in answer synthesis
+	MaxAnswerClusters = 5
 )
 
 // LocalSearchRequest is the request format for local search
@@ -1206,9 +1209,6 @@ func (c *Component) enrichCommunitySummaries(ctx context.Context, summaries []Co
 	return summaries
 }
 
-// synthesizeAnswer produces a template-based natural language answer from
-// community summaries. No LLM required — uses the pre-computed community
-// narratives to give agents actionable context.
 // synthesizeQueryAnswer delegates to the component's answer synthesizer (LLM or template).
 // Returns the answer text and the model name used (empty for template fallback).
 func (c *Component) synthesizeQueryAnswer(ctx context.Context, query string, summaries []CommunitySummary, totalEntities int) (string, string) {
@@ -1234,8 +1234,8 @@ func synthesizeAnswer(summaries []CommunitySummary, totalEntities int) string {
 	b.WriteString(fmt.Sprintf("Found %d entities across %d knowledge clusters.\n", totalEntities, len(summaries)))
 
 	limit := len(summaries)
-	if limit > 5 {
-		limit = 5
+	if limit > MaxAnswerClusters {
+		limit = MaxAnswerClusters
 	}
 
 	for _, s := range summaries[:limit] {

@@ -47,7 +47,7 @@ func TestLLMAnswerSynthesizer_Synthesize(t *testing.T) {
 		client := &mockLLMClient{
 			response: &llm.ChatResponse{Content: "The quests involve dragon slaying and merchant routes."},
 		}
-		s := NewLLMAnswerSynthesizer(client, "gemini-flash")
+		s := NewLLMAnswerSynthesizer(client, "gemini-flash", nil)
 
 		summaries := []CommunitySummary{
 			{Summary: "Quest entities on board1.", MemberCount: 10, Relevance: 0.9},
@@ -79,14 +79,15 @@ func TestLLMAnswerSynthesizer_Synthesize(t *testing.T) {
 		client := &mockLLMClient{
 			err: fmt.Errorf("connection refused"),
 		}
-		s := NewLLMAnswerSynthesizer(client, "gemini-flash")
+		s := NewLLMAnswerSynthesizer(client, "gemini-flash", nil)
 
 		summaries := []CommunitySummary{
 			{Summary: "Quest entities.", MemberCount: 5, Relevance: 0.8},
 		}
 		answer, model, err := s.Synthesize(context.Background(), "test", summaries, 5)
-		if err == nil {
-			t.Fatal("expected error on LLM failure")
+		// Error is logged internally, not returned — fallback is transparent
+		if err != nil {
+			t.Fatalf("expected nil error on fallback, got %v", err)
 		}
 		// Should fall back to template answer
 		if !strings.Contains(answer, "5 entities") {

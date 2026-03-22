@@ -397,7 +397,7 @@ func (c *Component) initAnswerSynthesizer() {
 			slog.Any("error", err))
 		return
 	}
-	c.answerSynthesizer = NewLLMAnswerSynthesizer(client, resolved.Model)
+	c.answerSynthesizer = NewLLMAnswerSynthesizer(client, resolved.Model, c.logger)
 	c.logger.Info("LLM answer synthesis enabled",
 		slog.String("model", resolved.Model))
 }
@@ -537,6 +537,13 @@ func (c *Component) Stop(timeout time.Duration) error {
 	if c.llmClient != nil {
 		if err := c.llmClient.Close(); err != nil {
 			c.logger.Warn("LLM client close error", slog.Any("error", err))
+		}
+	}
+
+	// Close answer synthesizer (releases its LLM client if LLM-backed)
+	if c.answerSynthesizer != nil {
+		if err := c.answerSynthesizer.Close(); err != nil {
+			c.logger.Warn("answer synthesizer close error", slog.Any("error", err))
 		}
 	}
 

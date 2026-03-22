@@ -191,8 +191,10 @@ func (e *Executor) buildGraphQLQuery(queryText string, limit int) map[string]any
 		"query": `query($query: String!, $level: Int, $maxCommunities: Int) {
 			globalSearch(query: $query, level: $level, maxCommunities: $maxCommunities) {
 				entities { id type }
-				communitySummaries { communityId summary relevance }
+				communitySummaries { communityId summary relevance member_count entities { id type label } }
 				count
+				answer
+				answer_model
 			}
 		}`,
 		"variables": map[string]any{
