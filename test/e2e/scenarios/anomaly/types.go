@@ -90,16 +90,11 @@ func (r *ValidationResult) Passed() bool {
 func DefaultExpectation() *Expectation {
 	return &Expectation{
 		// Expected anomalies - these SHOULD be detected
-		// Safety documents are core_isolation anomalies because they represent
-		// governance/policy domain rather than operational data. They don't
-		// reference specific sensors, equipment, or zones that would create
-		// semantic similarity with other entities.
+		// Note: doc-safety-001 was previously expected as core_isolation but
+		// system-affinity clustering (part[3] grouping) correctly groups it
+		// with other document entities. A safety doc among documents is not
+		// anomalous — it's where it belongs.
 		ExpectedGaps: []EntityPair{
-			{
-				EntityA: "doc-safety-001",
-				Type:    "core_isolation",
-				Reason:  "Safety guidelines are generic policy - isolated from operational data",
-			},
 			{
 				EntityA: "doc-emergency-001",
 				Type:    "core_isolation",

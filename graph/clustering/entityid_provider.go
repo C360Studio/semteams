@@ -26,9 +26,12 @@ type EntityIDProvider struct {
 	base Provider
 
 	// Configuration
-	siblingWeight   float64 // Weight for sibling edges (default: 0.7)
-	maxSiblings     int     // Max sibling neighbors per entity (default: 10)
-	includeSiblings bool    // Whether to include sibling edges
+	siblingWeight      float64 // Weight for sibling edges (default: 0.7)
+	maxSiblings        int     // Max sibling neighbors per entity (default: 10)
+	includeSiblings    bool    // Whether to include sibling edges
+	includeSystemPeers bool    // Whether to include system-affinity edges
+	systemPeerWeight   float64 // Weight for system-affinity edges (default: 0.3)
+	maxSystemPeers     int     // Max system peers per entity (default: 15)
 
 	// Logger for debugging and observability
 	logger *slog.Logger
@@ -38,9 +41,11 @@ type EntityIDProvider struct {
 	siblingEdgeSuccess atomic.Int64
 
 	// Cache for type prefix -> entity IDs mapping
-	typePrefixCache   map[string][]string
-	typePrefixCacheMu sync.RWMutex
-	cacheInitialized  atomic.Bool
+	typePrefixCache map[string][]string
+	// Cache for system -> entity IDs mapping (system = part[3] of entity ID)
+	systemCache      map[string][]string
+	cacheMu          sync.RWMutex
+	cacheInitialized atomic.Bool
 }
 
 // EntityIDProviderConfig holds configuration for EntityIDProvider
@@ -58,14 +63,33 @@ type EntityIDProviderConfig struct {
 	// IncludeSiblings enables sibling edge discovery.
 	// Set to false to disable EntityID-based edges entirely.
 	IncludeSiblings bool
+
+	// IncludeSystemPeers enables system-affinity edges between entities
+	// sharing the same system (part[3] of the 6-part entity ID).
+	// This biases LPA toward system-coherent communities when the graph
+	// contains entities from heterogeneous data sources.
+	IncludeSystemPeers bool
+
+	// SystemPeerWeight is the edge weight for system-affinity edges.
+	// Lower than SiblingWeight because system is a weaker signal than
+	// exact type match, but enough to bias LPA toward system-level coherence.
+	// Recommended: 0.3
+	SystemPeerWeight float64
+
+	// MaxSystemPeers limits system-affinity neighbors per entity.
+	// Recommended: 15
+	MaxSystemPeers int
 }
 
 // DefaultEntityIDProviderConfig returns sensible defaults for clustering
 func DefaultEntityIDProviderConfig() EntityIDProviderConfig {
 	return EntityIDProviderConfig{
-		SiblingWeight:   0.7,
-		MaxSiblings:     10,
-		IncludeSiblings: true,
+		SiblingWeight:      0.7,
+		MaxSiblings:        10,
+		IncludeSiblings:    true,
+		IncludeSystemPeers: true,
+		SystemPeerWeight:   0.3,
+		MaxSystemPeers:     15,
 	}
 }
 
@@ -88,14 +112,24 @@ func NewEntityIDProvider(
 	if config.MaxSiblings <= 0 {
 		config.MaxSiblings = 10
 	}
+	if config.SystemPeerWeight <= 0 {
+		config.SystemPeerWeight = 0.3
+	}
+	if config.MaxSystemPeers <= 0 {
+		config.MaxSystemPeers = 15
+	}
 
 	return &EntityIDProvider{
-		base:            base,
-		siblingWeight:   config.SiblingWeight,
-		maxSiblings:     config.MaxSiblings,
-		includeSiblings: config.IncludeSiblings,
-		typePrefixCache: make(map[string][]string),
-		logger:          logger,
+		base:               base,
+		siblingWeight:      config.SiblingWeight,
+		maxSiblings:        config.MaxSiblings,
+		includeSiblings:    config.IncludeSiblings,
+		includeSystemPeers: config.IncludeSystemPeers,
+		systemPeerWeight:   config.SystemPeerWeight,
+		maxSystemPeers:     config.MaxSystemPeers,
+		typePrefixCache:    make(map[string][]string),
+		systemCache:        make(map[string][]string),
+		logger:             logger,
 	}
 }
 
@@ -120,11 +154,6 @@ func (p *EntityIDProvider) GetNeighbors(ctx context.Context, entityID string, di
 		return nil, errs.WrapTransient(err, "EntityIDProvider", "GetNeighbors", "base provider error")
 	}
 
-	// If sibling edges are disabled, return explicit only
-	if !p.includeSiblings {
-		return explicit, nil
-	}
-
 	// Create set of explicit neighbors for deduplication
 	explicitSet := make(map[string]bool, len(explicit))
 	for _, id := range explicit {
@@ -132,7 +161,10 @@ func (p *EntityIDProvider) GetNeighbors(ctx context.Context, entityID string, di
 	}
 
 	// 2. Get sibling neighbors from EntityID hierarchy
-	siblingNeighbors, err := p.findSiblingNeighbors(ctx, entityID, explicitSet)
+	var siblingNeighbors []string
+	if p.includeSiblings {
+		siblingNeighbors, err = p.findSiblingNeighbors(ctx, entityID, explicitSet)
+	}
 	if err != nil {
 		// Log warning but don't fail - explicit edges are sufficient
 		if p.logger != nil {
@@ -141,12 +173,33 @@ func (p *EntityIDProvider) GetNeighbors(ctx context.Context, entityID string, di
 				"explicit_neighbors", len(explicit),
 				"error", err)
 		}
+		err = nil // reset so system peer error check is accurate
 	}
 
-	// 3. Combine and return
-	result := make([]string, 0, len(explicit)+len(siblingNeighbors))
+	// 3. Find system peer neighbors
+	var systemPeerNeighbors []string
+	if p.includeSystemPeers {
+		// Build combined exclusion set (explicit + siblings)
+		combinedSet := make(map[string]bool, len(explicit)+len(siblingNeighbors))
+		for _, id := range explicit {
+			combinedSet[id] = true
+		}
+		for _, id := range siblingNeighbors {
+			combinedSet[id] = true
+		}
+
+		systemPeerNeighbors, err = p.findSystemPeerNeighbors(ctx, entityID, combinedSet)
+		if err != nil && p.logger != nil {
+			p.logger.Warn("system peer lookup failed, continuing without",
+				"entity_id", entityID, "error", err)
+		}
+	}
+
+	// 4. Combine and return
+	result := make([]string, 0, len(explicit)+len(siblingNeighbors)+len(systemPeerNeighbors))
 	result = append(result, explicit...)
 	result = append(result, siblingNeighbors...)
+	result = append(result, systemPeerNeighbors...)
 
 	return result, nil
 }
@@ -163,6 +216,23 @@ func getTypePrefix(entityID string) string {
 	}
 	// Join first 5 parts
 	return strings.Join(parts[:5], ".")
+}
+
+// getSystem extracts the system segment (part[3]) from a 6-part EntityID.
+// EntityID format: org.platform.domain.system.type.instance
+//
+// Using part[3] (system) rather than part[2] (domain) provides more granular
+// affinity: "document" vs "sensor" vs "work" rather than broad categories
+// like "content" or "environmental" where many unrelated entity types share
+// the same domain.
+//
+// Returns empty string if EntityID doesn't have exactly 6 parts.
+func getSystem(entityID string) string {
+	parts := strings.Split(entityID, ".")
+	if len(parts) != 6 {
+		return ""
+	}
+	return parts[3]
 }
 
 // findSiblingNeighbors returns entities with the same type prefix that aren't already explicit neighbors.
@@ -189,9 +259,9 @@ func (p *EntityIDProvider) findSiblingNeighbors(
 	}
 
 	// Get siblings from cache
-	p.typePrefixCacheMu.RLock()
+	p.cacheMu.RLock()
 	siblings := p.typePrefixCache[typePrefix]
-	p.typePrefixCacheMu.RUnlock()
+	p.cacheMu.RUnlock()
 
 	// Filter out self and explicit neighbors, apply limit
 	var result []string
@@ -212,14 +282,61 @@ func (p *EntityIDProvider) findSiblingNeighbors(
 	return result, nil
 }
 
+// findSystemPeerNeighbors returns entities in the same system that aren't already neighbors.
+func (p *EntityIDProvider) findSystemPeerNeighbors(
+	ctx context.Context,
+	entityID string,
+	excludeSet map[string]bool,
+) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	system := getSystem(entityID)
+	if system == "" {
+		return nil, nil
+	}
+
+	if err := p.ensureTypePrefixCache(ctx); err != nil {
+		return nil, err
+	}
+
+	p.cacheMu.RLock()
+	peers := p.systemCache[system]
+	p.cacheMu.RUnlock()
+
+	var result []string
+	for _, peerID := range peers {
+		if peerID == entityID {
+			continue
+		}
+		if excludeSet[peerID] {
+			continue
+		}
+		result = append(result, peerID)
+		if len(result) >= p.maxSystemPeers {
+			break
+		}
+	}
+
+	return result, nil
+}
+
+// areSystemPeers returns true if two entities share the same system (part[3]).
+func areSystemPeers(entityA, entityB string) bool {
+	systemA := getSystem(entityA)
+	systemB := getSystem(entityB)
+	return systemA != "" && systemA == systemB
+}
+
 // ensureTypePrefixCache builds the type prefix -> entity IDs mapping if not already done.
 func (p *EntityIDProvider) ensureTypePrefixCache(ctx context.Context) error {
 	if p.cacheInitialized.Load() {
 		return nil // Already initialized
 	}
 
-	p.typePrefixCacheMu.Lock()
-	defer p.typePrefixCacheMu.Unlock()
+	p.cacheMu.Lock()
+	defer p.cacheMu.Unlock()
 
 	// Double-check after acquiring lock
 	if p.cacheInitialized.Load() {
@@ -232,23 +349,31 @@ func (p *EntityIDProvider) ensureTypePrefixCache(ctx context.Context) error {
 		return errs.WrapTransient(err, "EntityIDProvider", "ensureTypePrefixCache", "get all entity IDs")
 	}
 
-	// Build prefix -> entities mapping
+	// Build prefix -> entities and system -> entities mappings
 	prefixMap := make(map[string][]string)
+	systemMap := make(map[string][]string)
 	for _, entityID := range allEntities {
 		prefix := getTypePrefix(entityID)
 		if prefix == "" {
 			continue // Skip invalid EntityIDs
 		}
 		prefixMap[prefix] = append(prefixMap[prefix], entityID)
+
+		system := getSystem(entityID)
+		if system != "" {
+			systemMap[system] = append(systemMap[system], entityID)
+		}
 	}
 
 	p.typePrefixCache = prefixMap
+	p.systemCache = systemMap
 	p.cacheInitialized.Store(true)
 
 	if p.logger != nil {
-		p.logger.Debug("EntityID type prefix cache initialized",
+		p.logger.Debug("EntityID cache initialized",
 			"total_entities", len(allEntities),
-			"unique_prefixes", len(prefixMap))
+			"unique_prefixes", len(prefixMap),
+			"unique_systems", len(systemMap))
 	}
 
 	return nil
@@ -280,6 +405,11 @@ func (p *EntityIDProvider) GetEdgeWeight(ctx context.Context, fromID, toID strin
 		return p.siblingWeight, nil
 	}
 
+	// 3. Check if entities are system peers (same system segment)
+	if p.includeSystemPeers && areSystemPeers(fromID, toID) {
+		return p.systemPeerWeight, nil
+	}
+
 	// No edge found
 	return 0.0, nil
 }
@@ -294,10 +424,11 @@ func (p *EntityIDProvider) areSiblings(entityA, entityB string) bool {
 // ClearCache clears the type prefix cache and propagates to wrapped providers.
 // Call this when entities are added/removed.
 func (p *EntityIDProvider) ClearCache() {
-	p.typePrefixCacheMu.Lock()
+	p.cacheMu.Lock()
 	p.typePrefixCache = make(map[string][]string)
+	p.systemCache = make(map[string][]string)
 	p.cacheInitialized.Store(false)
-	p.typePrefixCacheMu.Unlock()
+	p.cacheMu.Unlock()
 
 	// Propagate cache clear to wrapped provider
 	if cacheClearer, ok := p.base.(interface{ ClearCache() }); ok {
@@ -307,8 +438,8 @@ func (p *EntityIDProvider) ClearCache() {
 
 // GetCacheStats returns statistics about the type prefix cache for monitoring.
 func (p *EntityIDProvider) GetCacheStats() (prefixes int, entities int) {
-	p.typePrefixCacheMu.RLock()
-	defer p.typePrefixCacheMu.RUnlock()
+	p.cacheMu.RLock()
+	defer p.cacheMu.RUnlock()
 
 	prefixes = len(p.typePrefixCache)
 	for _, entityList := range p.typePrefixCache {

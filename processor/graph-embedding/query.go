@@ -61,9 +61,10 @@ type SearchRequest struct {
 
 // SearchResponse is the response format for text search queries
 type SearchResponse struct {
-	Query    string         `json:"query"`
-	Results  []SearchResult `json:"results"`
-	Duration string         `json:"duration"`
+	Query        string         `json:"query"`
+	Results      []SearchResult `json:"results"`
+	Duration     string         `json:"duration"`
+	EmbedderType string         `json:"embedder_type,omitempty"` // "bm25" or "http"
 }
 
 // SearchResult represents a search result with relevance score
@@ -194,9 +195,10 @@ func (c *Component) handleQuerySearchNATS(_ context.Context, data []byte) ([]byt
 	}
 
 	response := SearchResponse{
-		Query:    req.Query,
-		Results:  searchResults,
-		Duration: time.Since(start).String(),
+		Query:        req.Query,
+		Results:      searchResults,
+		Duration:     time.Since(start).String(),
+		EmbedderType: c.config.EmbedderType,
 	}
 
 	return json.Marshal(response)

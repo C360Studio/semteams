@@ -47,7 +47,8 @@ type Config struct {
 	StartupAttempts      int                   `json:"startup_attempts,omitempty" schema:"type:int,description:Max attempts for startup dependency checks,default:10,min:1,category:advanced"`
 	StartupInterval      time.Duration         `json:"startup_interval,omitempty" schema:"type:duration,description:Interval between startup attempts,default:500ms,category:advanced"`
 	RecheckInterval      time.Duration         `json:"recheck_interval,omitempty" schema:"type:duration,description:Interval for rechecking missing buckets,default:5s,category:advanced"`
-	MinSemanticRelevance float64               `json:"min_semantic_relevance,omitempty" schema:"type:float,description:Minimum semantic similarity score (0.0-1.0),default:0.5,min:0,max:1,category:advanced"`
+	MinSemanticRelevance float64               `json:"min_semantic_relevance,omitempty" schema:"type:float,description:Minimum neural embedding similarity score (0.0-1.0),default:0.5,min:0,max:1,category:advanced"`
+	MinBM25Relevance     float64               `json:"min_bm25_relevance,omitempty" schema:"type:float,description:Minimum BM25 embedding similarity score (0.0-1.0),default:0.4,min:0,max:1,category:advanced"`
 	MinTextRelevance     float64               `json:"min_text_relevance,omitempty" schema:"type:float,description:Minimum text match score (0.0-1.0),default:0.3,min:0,max:1,category:advanced"`
 }
 
@@ -112,6 +113,7 @@ type Component struct {
 
 	// Resolved relevance thresholds (from config or defaults)
 	minSemanticRelevance float64
+	minBM25Relevance     float64
 	minTextRelevance     float64
 
 	// Community cache for GraphRAG (consumer-owned, KV watch based)
@@ -188,12 +190,16 @@ func CreateGraphQuery(rawConfig json.RawMessage, deps component.Dependencies) (c
 		lastMetricsReset:     time.Now(),
 		promMetrics:          getMetrics(deps.MetricsRegistry),
 		minSemanticRelevance: MinSemanticRelevance,
+		minBM25Relevance:     MinBM25Relevance,
 		minTextRelevance:     MinTextRelevance,
 	}
 
 	// Apply config overrides for relevance thresholds
 	if config.MinSemanticRelevance > 0 {
 		comp.minSemanticRelevance = config.MinSemanticRelevance
+	}
+	if config.MinBM25Relevance > 0 {
+		comp.minBM25Relevance = config.MinBM25Relevance
 	}
 	if config.MinTextRelevance > 0 {
 		comp.minTextRelevance = config.MinTextRelevance

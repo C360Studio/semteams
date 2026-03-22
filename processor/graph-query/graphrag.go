@@ -33,6 +33,12 @@ const (
 	// that happen to have weak textual overlap with the query.
 	MinSemanticRelevance = 0.5
 
+	// MinBM25Relevance is the minimum similarity score for BM25 statistical
+	// embedding search results. Lower than MinSemanticRelevance because BM25
+	// feature-hashed vectors produce inherently lower cosine similarity scores
+	// (typical range 0.0-0.73) compared to neural embeddings (0.5-1.0).
+	MinBM25Relevance = 0.4
+
 	// MinTextRelevance is the minimum score for text-based entity matching.
 	// Scored as proportion of query terms that match (0.0-1.0). Entities below
 	// this threshold are excluded. Default 0.3 = at least 30% of terms must match.
@@ -1046,18 +1052,23 @@ func (c *Component) searchEntitiesSemantic(ctx context.Context, query string, li
 			EntityID   string  `json:"entity_id"`
 			Similarity float64 `json:"similarity"`
 		} `json:"results"`
-		Duration string `json:"duration"`
+		Duration     string `json:"duration"`
+		EmbedderType string `json:"embedder_type"`
 	}
 	if err := json.Unmarshal(resp, &result); err != nil {
 		return nil, errs.WrapInvalid(err, "GraphQuery", "searchEntitiesSemantic", "unmarshal search response")
 	}
 
-	// Filter by minimum relevance threshold to avoid returning garbage results.
-	// BM25 and embedding searches return everything ranked, including near-zero
-	// matches that have no meaningful relationship to the query.
+	// Apply embedder-aware threshold: BM25 feature-hashed vectors produce
+	// lower cosine similarity scores (0.0-0.73) than neural embeddings (0.5-1.0).
+	threshold := c.minSemanticRelevance
+	if result.EmbedderType == "bm25" {
+		threshold = c.minBM25Relevance
+	}
+
 	hits := make([]SemanticHit, 0, len(result.Results))
 	for _, r := range result.Results {
-		if r.Similarity >= c.minSemanticRelevance {
+		if r.Similarity >= threshold {
 			hits = append(hits, SemanticHit{EntityID: r.EntityID, Score: r.Similarity})
 		}
 	}
