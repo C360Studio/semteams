@@ -414,6 +414,16 @@ func (w *Worker) fetchTextFromStorage(ref *StorageRef) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read content: %w", err)
 	}
+
+	// Detect likely JSON-wrapped content (StoredContent envelope).
+	// Raw text is expected — if it starts with '{', someone probably used
+	// StoreContent() instead of Put(). Embeddings will include JSON noise.
+	if len(data) > 0 && data[0] == '{' {
+		w.logger.Debug("stored content appears JSON-wrapped, expected raw text",
+			slog.String("key", ref.Key),
+			slog.String("hint", "use Put() for raw body text, not StoreContent()"))
+	}
+
 	return string(data), nil
 }
 
