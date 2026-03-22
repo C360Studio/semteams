@@ -1,7 +1,10 @@
 // Package storage provides pluggable backend interfaces for storage operations.
 package storage
 
-import "context"
+import (
+	"context"
+	"io"
+)
 
 // Store is the pluggable backend interface for storage operations.
 //
@@ -72,6 +75,19 @@ type Store interface {
 	// For immutable stores that maintain versions, this may only mark
 	// the latest version as deleted rather than removing historical versions.
 	Delete(ctx context.Context, key string) error
+}
+
+// StreamableStore extends Store with streaming read support.
+// Implementations that support chunked/streamed reads (NATS ObjectStore,
+// filesystem) implement this for large content without loading everything
+// into memory. Backends without native streaming wrap Get() bytes in
+// an io.NopCloser(bytes.NewReader(data)).
+type StreamableStore interface {
+	Store
+
+	// Open returns a streaming reader for the content at key.
+	// The caller MUST close the reader when done.
+	Open(ctx context.Context, key string) (io.ReadCloser, error)
 }
 
 // KeyGenerator generates storage keys for messages.

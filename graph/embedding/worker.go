@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"sync"
@@ -12,10 +13,14 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 
-	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semstreams/storage/objectstore"
+	"github.com/c360studio/semstreams/storage"
 )
+
+// defaultMaxSourceTextLen is the safety cap for streaming content reads when
+// maxSourceTextLen is 0 (unconfigured). Prevents unbounded memory allocation
+// for very large stored content.
+const defaultMaxSourceTextLen = 8000
 
 // isExpectedShutdownError returns true if the error is expected during component shutdown.
 // These include subscription cleanup errors and consumer not found errors which occur
@@ -60,8 +65,8 @@ type Worker struct {
 	indexBucket jetstream.KeyValue
 	watcher     jetstream.KeyWatcher
 
-	// ContentStorable support (Feature 008)
-	contentStore *objectstore.Store // Optional ObjectStore for fetching content
+	// Content store for fetching body text from ObjectStore via streaming
+	contentStore storage.StreamableStore
 
 	// Callbacks
 	onGenerated GeneratedCallback // Called when embedding is generated
@@ -77,7 +82,8 @@ type Worker struct {
 	wg       sync.WaitGroup
 
 	// Configuration
-	workers int // Number of concurrent workers
+	workers          int // Number of concurrent workers
+	maxSourceTextLen int // Max chars for source text (0 = unlimited)
 
 	// Logger
 	logger *slog.Logger
@@ -109,11 +115,19 @@ func (w *Worker) WithWorkers(n int) *Worker {
 	return w
 }
 
-// WithContentStore sets the ObjectStore for ContentStorable support.
-// When set, the worker can fetch content from ObjectStore for records
+// WithContentStore sets the content store for streaming body text retrieval.
+// When set, the worker can fetch raw content from storage for records
 // that have StorageRef instead of SourceText.
-func (w *Worker) WithContentStore(store *objectstore.Store) *Worker {
+func (w *Worker) WithContentStore(store storage.StreamableStore) *Worker {
 	w.contentStore = store
+	return w
+}
+
+// WithMaxSourceTextLen sets the maximum characters for source text used in
+// embedding generation. Text beyond this limit is truncated at a word boundary.
+// Default: 0 (unlimited). Recommended: 4000 for BM25, 8000 for neural.
+func (w *Worker) WithMaxSourceTextLen(n int) *Worker {
+	w.maxSourceTextLen = n
 	return w
 }
 
@@ -341,67 +355,66 @@ func (w *Worker) saveAndNotify(entityID string, vector []float32) {
 // For legacy records, uses SourceText directly.
 // For ContentStorable records (with StorageRef), fetches from ObjectStore.
 func (w *Worker) getSourceText(record *Record) (string, error) {
+	var text string
+
 	// Legacy path: use SourceText if available
 	if record.SourceText != "" {
-		return record.SourceText, nil
+		text = record.SourceText
+	} else if record.StorageRef != nil {
+		// Streaming path: read raw content from store
+		var err error
+		text, err = w.fetchTextFromStorage(record.StorageRef)
+		if err != nil {
+			return "", err
+		}
 	}
 
-	// ContentStorable path: fetch from ObjectStore
-	if record.StorageRef != nil {
-		return w.fetchTextFromStorage(record.StorageRef, record.ContentFields)
+	// Truncate if configured
+	if w.maxSourceTextLen > 0 && len(text) > w.maxSourceTextLen {
+		text = truncateAtWord(text, w.maxSourceTextLen)
 	}
 
-	return "", nil
+	return text, nil
 }
 
-// fetchTextFromStorage fetches content from ObjectStore and extracts text using ContentFields.
-func (w *Worker) fetchTextFromStorage(ref *StorageRef, contentFields map[string]string) (string, error) {
+// truncateAtWord truncates text at the last word boundary before maxLen.
+func truncateAtWord(text string, maxLen int) string {
+	if len(text) <= maxLen {
+		return text
+	}
+	// Find last space before maxLen
+	truncated := text[:maxLen]
+	lastSpace := strings.LastIndex(truncated, " ")
+	if lastSpace > maxLen/2 { // Only use word boundary if it's not too far back
+		return truncated[:lastSpace]
+	}
+	return truncated
+}
+
+// fetchTextFromStorage streams raw content from the store, reading only up to
+// maxSourceTextLen bytes. ObjectStore holds raw bytes (plain text, not JSON-wrapped).
+// Triples carry metadata (mime type, hash); the store is format-agnostic.
+func (w *Worker) fetchTextFromStorage(ref *StorageRef) (string, error) {
 	if w.contentStore == nil {
 		return "", fmt.Errorf("content store not configured")
 	}
 
-	// Convert to message.StorageReference
-	msgRef := &message.StorageReference{
-		StorageInstance: ref.StorageInstance,
-		Key:             ref.Key,
-	}
-
-	// Fetch stored content
-	stored, err := w.contentStore.FetchContent(w.ctx, msgRef)
+	reader, err := w.contentStore.Open(w.ctx, ref.Key)
 	if err != nil {
-		return "", fmt.Errorf("failed to fetch content: %w", err)
+		return "", fmt.Errorf("failed to open content: %w", err)
 	}
+	defer reader.Close()
 
-	// Extract text using ContentFields (priority: body > abstract > title)
-	return w.extractTextFromContent(stored, contentFields), nil
-}
-
-// extractTextFromContent extracts text from stored content using semantic roles.
-// Priority order: body > abstract > title
-func (w *Worker) extractTextFromContent(stored *objectstore.StoredContent, contentFields map[string]string) string {
-	var parts []string
-
-	// Use ContentFields from record, or fall back to stored ContentFields
-	fields := contentFields
-	if len(fields) == 0 {
-		fields = stored.ContentFields
+	// Read only what we need — no full memory load
+	limit := w.maxSourceTextLen
+	if limit <= 0 {
+		limit = defaultMaxSourceTextLen
 	}
-
-	// Priority order for text extraction
-	roles := []string{message.ContentRoleBody, message.ContentRoleAbstract, message.ContentRoleTitle}
-
-	for _, role := range roles {
-		fieldName, ok := fields[role]
-		if !ok {
-			continue
-		}
-		content, ok := stored.Fields[fieldName]
-		if ok && content != "" {
-			parts = append(parts, content)
-		}
+	data, err := io.ReadAll(io.LimitReader(reader, int64(limit)))
+	if err != nil {
+		return "", fmt.Errorf("failed to read content: %w", err)
 	}
-
-	return strings.Join(parts, " ")
+	return string(data), nil
 }
 
 // markFailed marks an embedding as failed

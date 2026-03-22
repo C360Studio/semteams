@@ -21,6 +21,7 @@ import (
 	"github.com/c360studio/semstreams/pkg/cache"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semstreams/pkg/resource"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -163,6 +164,11 @@ func DefaultConfig() Config {
 					Type:    "kv-watch",
 					Subject: graph.BucketEntityStates,
 				},
+				{
+					Name:   "content_store",
+					Type:   "store-read",
+					Bucket: "MESSAGES",
+				},
 			},
 			Outputs: []component.PortDefinition{
 				{
@@ -196,6 +202,7 @@ type Component struct {
 	embedder           embedding.Embedder
 	storage            *embedding.Storage
 	worker             *embedding.Worker
+	contentStore       *objectstore.Store // ContentStorable access (owned lifecycle)
 	embeddingBucket    jetstream.KeyValue
 	entityCoalescer    *cache.CoalescingSet
 	entityStatesBucket jetstream.KeyValue
@@ -560,6 +567,13 @@ func (c *Component) Stop(timeout time.Duration) error {
 		}
 	}
 
+	// Close content store (releases ObjectStore handle + cache)
+	if c.contentStore != nil {
+		if err := c.contentStore.Close(); err != nil {
+			c.logger.Warn("content store close error", slog.Any("error", err))
+		}
+	}
+
 	// Close embedder
 	if c.embedder != nil {
 		if err := c.embedder.Close(); err != nil {
@@ -687,8 +701,17 @@ func (c *Component) initStorageAndWorker(ctx context.Context, indexBucket, dedup
 			slog.Any("error", err))
 	}
 
+	// Set source text truncation based on embedder type.
+	// BM25 feature hashing gets noisier with very long text; neural models
+	// have context limits. 4000 chars covers most document content.
+	maxTextLen := 8000
+	if c.config.EmbedderType == "bm25" {
+		maxTextLen = 4000
+	}
+
 	c.worker = embedding.NewWorker(c.storage, c.embedder, indexBucket, c.logger).
 		WithWorkers(c.config.BatchSize / 10).
+		WithMaxSourceTextLen(maxTextLen).
 		WithMetrics(newWorkerMetricsAdapter(c.metrics)).
 		WithOnGenerated(func(entityID string, _ []float32) {
 			if c.metrics != nil {
@@ -697,10 +720,51 @@ func (c *Component) initStorageAndWorker(ctx context.Context, indexBucket, dedup
 			c.logger.Debug("embedding generated", "entity_id", entityID)
 		})
 
+	// Wire content store for ContentStorable support (body text retrieval).
+	// Reads bucket name from store-read port config, creates ObjectStore handle.
+	// Store is owned by Component and closed in Stop().
+	c.contentStore = c.createContentStore(ctx)
+	if c.contentStore != nil {
+		c.worker = c.worker.WithContentStore(c.contentStore)
+	}
+
 	if err := c.worker.Start(ctx); err != nil {
 		return errs.Wrap(err, "Component", "initStorageAndWorker", "worker start")
 	}
 	return nil
+}
+
+// createContentStore creates an ObjectStore handle from the store-read port config.
+// Returns nil if no store-read port is configured or if the bucket doesn't exist yet.
+func (c *Component) createContentStore(ctx context.Context) *objectstore.Store {
+	// Find store-read port bucket name
+	bucket := ""
+	for _, port := range c.config.Ports.Inputs {
+		if port.Type == "store-read" {
+			bucket = port.Bucket
+			if bucket == "" {
+				bucket = port.Subject
+			}
+			break
+		}
+	}
+	if bucket == "" {
+		return nil
+	}
+
+	store, err := objectstore.NewStoreWithConfig(ctx, c.natsClient, objectstore.Config{
+		BucketName: bucket,
+	})
+	if err != nil {
+		c.logger.Debug("content store not available, ContentStorable disabled",
+			slog.String("bucket", bucket),
+			slog.Any("error", err))
+		return nil
+	}
+
+	c.logger.Info("content store wired for embedding text extraction",
+		slog.String("bucket", bucket))
+	return store
 }
 
 // waitForDependenciesAndStartWatcher waits for ENTITY_STATES bucket and starts the entity watcher.

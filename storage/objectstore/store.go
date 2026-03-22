@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
@@ -20,7 +21,10 @@ import (
 )
 
 // Verify Store implements storage.Store interface
-var _ storage.Store = (*Store)(nil)
+var (
+	_ storage.Store           = (*Store)(nil)
+	_ storage.StreamableStore = (*Store)(nil)
+)
 
 // Store provides simple ObjectStore wrapper for message storage.
 // Messages are stored as immutable JSON blobs with time-bucketed slash-based keys.
@@ -233,6 +237,24 @@ func (s *Store) Get(ctx context.Context, key string) ([]byte, error) {
 	}
 
 	return data, nil
+}
+
+// Open returns a streaming reader for the content at key.
+// Uses NATS ObjectStore's native chunked streaming — content is read
+// in chunks without loading the entire object into memory.
+// The caller MUST close the returned reader when done.
+func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
+	s.metrics.recordReadOp("open")
+	start := time.Now()
+
+	result, err := s.store.Get(ctx, key)
+	if err != nil {
+		s.metrics.recordError("open")
+		return nil, errs.WrapTransient(err, "Store", "Open", "open object stream")
+	}
+
+	s.metrics.recordReadLatency("open", time.Since(start).Seconds())
+	return result, nil
 }
 
 // Delete removes a message (optional, messages are typically immutable).

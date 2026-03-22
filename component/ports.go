@@ -134,6 +134,23 @@ func BuildPortFromDefinition(def PortDefinition, direction Direction) Port {
 			Bucket:    bucket,
 			Interface: iface,
 		}
+	case "store-read":
+		// Store read ports declare streaming read access to content storage
+		bucket := def.Bucket
+		if bucket == "" {
+			bucket = def.Subject
+		}
+		var iface *InterfaceContract
+		if def.Interface != "" {
+			iface = &InterfaceContract{
+				Type:    def.Interface,
+				Version: "v1",
+			}
+		}
+		port.Config = StoreReadPort{
+			Bucket:    bucket,
+			Interface: iface,
+		}
 	case "http", "grpc", "websocket-server":
 		// HTTP/gRPC/WebSocket server ports are network boundary ports
 		port.Config = NetworkPort{
