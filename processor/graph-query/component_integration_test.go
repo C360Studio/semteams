@@ -592,6 +592,109 @@ func TestIntegration_AnswerSynthesis(t *testing.T) {
 		"Answer should be substantial (>100 chars), got %d chars", len(answer))
 }
 
+// TestIntegration_EnrichGlobalResponse verifies the enrichment pipeline end-to-end:
+// communities in KV → enrichGlobalResponse → Answer + CommunitySummaries populated.
+// Uses a mock NATS responder for graph.ingest.query.entities so loadEntities works.
+func TestIntegration_EnrichGlobalResponse(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	ctx := context.Background()
+	natsClient, cleanup := setupTestNATS(t)
+	defer cleanup()
+
+	js, err := natsClient.JetStream()
+	require.NoError(t, err)
+
+	// Create COMMUNITY_INDEX with test communities
+	communityBucket, err := js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+		Bucket: "COMMUNITY_INDEX",
+	})
+	require.NoError(t, err)
+
+	commData, _ := json.Marshal(map[string]any{
+		"id":             "comm-0-test",
+		"level":          0,
+		"members":        []string{"acme.ops.robotics.gcs.drone.001", "acme.ops.robotics.gcs.drone.002"},
+		"llm_summary":    "Autonomous drones in the ground control station.",
+		"keywords":       []string{"drone", "autonomous"},
+		"rep_entities":   []string{"acme.ops.robotics.gcs.drone.001"},
+		"summary_status": "llm-enhanced",
+	})
+	_, err = communityBucket.Put(ctx, "comm-0-test", commData)
+	require.NoError(t, err)
+
+	// Set up a mock responder for graph.ingest.query.entities
+	// This enables loadEntities() to work in the test
+	_, err = natsClient.SubscribeForRequests(ctx, "graph.ingest.query.batch",
+		func(_ context.Context, _ []byte) ([]byte, error) {
+			resp := map[string]any{
+				"entities": []map[string]any{
+					{
+						"id": "acme.ops.robotics.gcs.drone.001",
+						"triples": []map[string]any{
+							{"subject": "acme.ops.robotics.gcs.drone.001", "predicate": "dc.terms.title", "object": "Alpha Drone"},
+							{"subject": "acme.ops.robotics.gcs.drone.001", "predicate": "drone.status", "object": "active"},
+						},
+					},
+				},
+			}
+			return json.Marshal(resp)
+		})
+	require.NoError(t, err)
+
+	// Create and start component
+	config := DefaultConfig()
+	config.StartupAttempts = 3
+	config.StartupInterval = 50 * time.Millisecond
+	config.RecheckInterval = 100 * time.Millisecond
+	configJSON, _ := json.Marshal(config)
+
+	comp, err := CreateGraphQuery(configJSON, component.Dependencies{NATSClient: natsClient})
+	require.NoError(t, err)
+
+	graphQuery := comp.(*Component)
+	require.NoError(t, graphQuery.Initialize())
+	require.NoError(t, graphQuery.Start(ctx))
+	defer graphQuery.Stop(5 * time.Second)
+
+	// Wait for community cache
+	require.Eventually(t, func() bool {
+		return graphQuery.communityCache.IsReady() && len(graphQuery.communityCache.GetAllCommunities()) >= 1
+	}, 3*time.Second, 50*time.Millisecond)
+
+	// Test enrichGlobalResponse
+	entityIDs := []string{"acme.ops.robotics.gcs.drone.001", "acme.ops.robotics.gcs.drone.002"}
+	response := GlobalSearchResponse{
+		Count: len(entityIDs),
+	}
+	graphQuery.enrichGlobalResponse(ctx, &response, "drone operations", entityIDs)
+
+	assert.NotEmpty(t, response.CommunitySummaries, "CommunitySummaries should be populated")
+	assert.NotEmpty(t, response.Answer, "Answer should be synthesized")
+
+	// Verify community summaries have RepEntity digests with resolved labels
+	if len(response.CommunitySummaries) > 0 {
+		cs := response.CommunitySummaries[0]
+		assert.Greater(t, cs.MemberCount, 0)
+		if len(cs.Entities) > 0 {
+			assert.Equal(t, "drone", cs.Entities[0].Type)
+			assert.Equal(t, "Alpha Drone", cs.Entities[0].Label, "label should be resolved from dc.terms.title")
+		}
+	}
+
+	// Test buildEntityDigestsFromEntities with loaded entities
+	entities, loadErr := graphQuery.loadEntities(ctx, []string{"acme.ops.robotics.gcs.drone.001"})
+	require.NoError(t, loadErr)
+	require.Len(t, entities, 1)
+
+	digests := buildEntityDigestsFromEntities(entities)
+	require.Len(t, digests, 1)
+	assert.Equal(t, "drone", digests[0].Type)
+	assert.Equal(t, "Alpha Drone", digests[0].Label)
+}
+
 func TestIntegration_StaticRouting(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")

@@ -31,7 +31,12 @@ const (
 	// MinSemanticRelevance is the minimum similarity score for semantic search results.
 	// Hits below this threshold are filtered out to prevent returning irrelevant entities
 	// that happen to have weak textual overlap with the query.
-	MinSemanticRelevance = 0.3
+	MinSemanticRelevance = 0.5
+
+	// MinTextRelevance is the minimum score for text-based entity matching.
+	// Scored as proportion of query terms that match (0.0-1.0). Entities below
+	// this threshold are excluded. Default 0.3 = at least 30% of terms must match.
+	MinTextRelevance = 0.3
 
 	// DefaultSummarizeThreshold auto-summarizes globalSearch results when entity
 	// count exceeds this value. Returns community summaries + entity IDs instead
@@ -57,10 +62,16 @@ type LocalSearchRequest struct {
 
 // LocalSearchResponse is the response format for local search
 type LocalSearchResponse struct {
-	Entities    []*gtypes.EntityState `json:"entities"`
-	CommunityID string                `json:"communityId"`
-	Count       int                   `json:"count"`
-	DurationMs  int64                 `json:"durationMs"`
+	Entities         []*gtypes.EntityState `json:"entities"`
+	CommunityID      string                `json:"communityId"`
+	Count            int                   `json:"count"`
+	DurationMs       int64                 `json:"durationMs"`
+	CommunitySummary string                `json:"community_summary,omitempty"`
+	Keywords         []string              `json:"keywords,omitempty"`
+	MemberCount      int                   `json:"member_count,omitempty"`
+	EntityDigests    []EntityDigest        `json:"entity_digests,omitempty"`
+	Answer           string                `json:"answer,omitempty"`
+	AnswerModel      string                `json:"answer_model,omitempty"`
 }
 
 // GlobalSearchRequest is the request format for global search
@@ -214,12 +225,13 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 			}
 			entities, loadErr := c.loadEntities(ctx, entityIDs)
 			if loadErr == nil {
-				matchedEntities := filterEntitiesByQuery(entities, req.Query)
+				matchedEntities := filterEntitiesByQuery(entities, req.Query, c.minTextRelevance)
 				response := LocalSearchResponse{
-					Entities:    matchedEntities,
-					CommunityID: "semantic-fallback",
-					Count:       len(matchedEntities),
-					DurationMs:  time.Since(startTime).Milliseconds(),
+					Entities:      matchedEntities,
+					CommunityID:   "semantic-fallback",
+					Count:         len(matchedEntities),
+					DurationMs:    time.Since(startTime).Milliseconds(),
+					EntityDigests: buildEntityDigestsFromEntities(matchedEntities),
 				}
 				c.recordSuccess(len(data), 0)
 				return json.Marshal(response)
@@ -235,14 +247,35 @@ func (c *Component) handleLocalSearch(ctx context.Context, data []byte) ([]byte,
 	}
 
 	// Filter entities based on query
-	matchedEntities := filterEntitiesByQuery(entities, req.Query)
+	matchedEntities := filterEntitiesByQuery(entities, req.Query, c.minTextRelevance)
+
+	// Resolve community summary (prefer LLM, fallback to statistical)
+	commSummary := community.LLMSummary
+	if commSummary == "" {
+		commSummary = community.StatisticalSummary
+	}
+
+	// Synthesize answer from community context
+	cs := []CommunitySummary{{
+		CommunityID: community.ID,
+		Summary:     commSummary,
+		Keywords:    community.Keywords,
+		MemberCount: len(community.Members),
+	}}
+	answer, answerModel := c.synthesizeQueryAnswer(ctx, req.Query, cs, len(matchedEntities))
 
 	// Build response
 	response := LocalSearchResponse{
-		Entities:    matchedEntities,
-		CommunityID: community.ID,
-		Count:       len(matchedEntities),
-		DurationMs:  time.Since(startTime).Milliseconds(),
+		Entities:         matchedEntities,
+		CommunityID:      community.ID,
+		Count:            len(matchedEntities),
+		DurationMs:       time.Since(startTime).Milliseconds(),
+		CommunitySummary: commSummary,
+		Keywords:         community.Keywords,
+		MemberCount:      len(community.Members),
+		EntityDigests:    buildEntityDigestsFromEntities(matchedEntities),
+		Answer:           answer,
+		AnswerModel:      answerModel,
 	}
 
 	c.recordSuccess(len(data), 0)
@@ -290,11 +323,17 @@ func (c *Component) tryPathIntentSearch(ctx context.Context, cr *query.Classific
 			"error", pathErr)
 
 		if pathErr == nil && pathResult != nil && len(pathResult.Entities) > 0 {
+			// Extract entity IDs for community enrichment
+			pathEntityIDs := make([]string, len(pathResult.Entities))
+			for i, e := range pathResult.Entities {
+				pathEntityIDs[i] = e.ID
+			}
 			response := GlobalSearchResponse{
 				Entities:   pathResult.Entities,
 				Count:      len(pathResult.Entities),
 				DurationMs: time.Since(startTime).Milliseconds(),
 			}
+			c.enrichGlobalResponse(ctx, &response, queryText, pathEntityIDs)
 			c.recordSuccess(requestSize, 0)
 			marshaledResult, _ := json.Marshal(response)
 			return marshaledResult, true
@@ -546,11 +585,7 @@ func (c *Component) handleStrategyGraphRAG(ctx context.Context, searchQuery stri
 				DurationMs: time.Since(startTime).Milliseconds(),
 			}
 			if req.shouldIncludeSummaries() {
-				enriched := c.enrichCommunitySummaries(ctx, communityMatches)
-				response.CommunitySummaries = enriched
-				answer, answerModel := c.synthesizeQueryAnswer(ctx, searchQuery, enriched, len(entities))
-				response.Answer = answer
-				response.AnswerModel = answerModel
+				c.enrichGlobalResponse(ctx, &response, searchQuery, entityIDs)
 			}
 			if req.IncludeRelationships {
 				response.Relationships = c.extractRelationships(ctx, entities)
@@ -634,12 +669,15 @@ func (c *Component) handleStrategyEntityLookup(ctx context.Context, cr *query.Cl
 		})
 	}
 
-	c.recordSuccess(0, 0)
-	return json.Marshal(GlobalSearchResponse{
+	response := GlobalSearchResponse{
 		Entities:   entities,
 		Count:      len(entities),
 		DurationMs: time.Since(startTime).Milliseconds(),
-	})
+	}
+	c.enrichGlobalResponse(ctx, &response, searchQuery, []string{fullID})
+
+	c.recordSuccess(0, 0)
+	return json.Marshal(response)
 }
 
 // handleStrategySemantic executes a pure vector similarity search.
@@ -688,15 +726,7 @@ func (c *Component) handleStrategySemantic(ctx context.Context, searchQuery stri
 		DurationMs: time.Since(startTime).Milliseconds(),
 	}
 
-	// Enrich with community context if available (community cache is shared).
-	communityMatches := c.findCommunitiesForEntities(entityIDs)
-	if len(communityMatches) > 0 {
-		enriched := c.enrichCommunitySummaries(ctx, communityMatches)
-		response.CommunitySummaries = enriched
-		answer, answerModel := c.synthesizeQueryAnswer(ctx, searchQuery, enriched, len(entities))
-		response.Answer = answer
-		response.AnswerModel = answerModel
-	}
+	c.enrichGlobalResponse(ctx, &response, searchQuery, entityIDs)
 
 	c.recordSuccess(requestSize, 0)
 	return json.Marshal(response)
@@ -743,12 +773,15 @@ func (c *Component) handleStrategyTemporal(ctx context.Context, cr *query.Classi
 		return nil, errs.WrapTransient(loadErr, "GraphQuery", "handleStrategyTemporal", "load entities")
 	}
 
-	c.recordSuccess(requestSize, 0)
-	return json.Marshal(GlobalSearchResponse{
+	response := GlobalSearchResponse{
 		Entities:   entities,
 		Count:      len(entities),
 		DurationMs: time.Since(startTime).Milliseconds(),
-	})
+	}
+	c.enrichGlobalResponse(ctx, &response, req.Query, entityIDs)
+
+	c.recordSuccess(requestSize, 0)
+	return json.Marshal(response)
 }
 
 // handleStrategySpatial delegates to the graph-spatial component via NATS.
@@ -794,12 +827,15 @@ func (c *Component) handleStrategySpatial(ctx context.Context, cr *query.Classif
 		return nil, errs.WrapTransient(loadErr, "GraphQuery", "handleStrategySpatial", "load entities")
 	}
 
-	c.recordSuccess(requestSize, 0)
-	return json.Marshal(GlobalSearchResponse{
+	response := GlobalSearchResponse{
 		Entities:   entities,
 		Count:      len(entities),
 		DurationMs: time.Since(startTime).Milliseconds(),
-	})
+	}
+	c.enrichGlobalResponse(ctx, &response, req.Query, entityIDs)
+
+	c.recordSuccess(requestSize, 0)
+	return json.Marshal(response)
 }
 
 // parseEntityIDsFromResults extracts entity_id values from a JSON array of objects.
@@ -874,7 +910,7 @@ func (c *Component) globalSearchTextBased(ctx context.Context, req GlobalSearchR
 	}
 
 	// Filter entities based on query
-	matchedEntities := filterEntitiesByQuery(entities, req.Query)
+	matchedEntities := filterEntitiesByQuery(entities, req.Query, c.minTextRelevance)
 
 	// Build community summaries for response
 	summaries := make([]CommunitySummary, len(topCommunities))
@@ -1021,7 +1057,7 @@ func (c *Component) searchEntitiesSemantic(ctx context.Context, query string, li
 	// matches that have no meaningful relationship to the query.
 	hits := make([]SemanticHit, 0, len(result.Results))
 	for _, r := range result.Results {
-		if r.Similarity >= MinSemanticRelevance {
+		if r.Similarity >= c.minSemanticRelevance {
 			hits = append(hits, SemanticHit{EntityID: r.EntityID, Score: r.Similarity})
 		}
 	}
@@ -1156,6 +1192,24 @@ func buildEntityDigests(entityIDs []string, semanticScores map[string]float64, l
 	return digests
 }
 
+// buildEntityDigestsFromEntities creates entity digests from loaded EntityState objects.
+// Labels are resolved from entity triples rather than a pre-built map.
+func buildEntityDigestsFromEntities(entities []*gtypes.EntityState) []EntityDigest {
+	digests := make([]EntityDigest, len(entities))
+	for i, e := range entities {
+		label := resolveLabel(e)
+		if label == "" {
+			label = extractEntityInstance(e.ID)
+		}
+		digests[i] = EntityDigest{
+			ID:    e.ID,
+			Type:  extractEntityType(e.ID),
+			Label: label,
+		}
+	}
+	return digests
+}
+
 // enrichCommunitySummaries populates MemberCount and representative entity digests
 // on each CommunitySummary by looking up RepEntities from the community cache and
 // resolving their labels via a single batch entity load.
@@ -1220,6 +1274,25 @@ func (c *Component) synthesizeQueryAnswer(ctx context.Context, query string, sum
 		c.logger.Debug("answer synthesis error, using fallback", "error", err)
 	}
 	return answer, modelName
+}
+
+// enrichGlobalResponse adds community context and answer synthesis to a
+// GlobalSearchResponse. Looks up communities for the given entity IDs,
+// enriches them with RepEntity digests, and synthesizes an answer.
+// No-op if no communities match or community cache is unavailable.
+func (c *Component) enrichGlobalResponse(ctx context.Context, resp *GlobalSearchResponse, queryText string, entityIDs []string) {
+	if len(entityIDs) == 0 {
+		return
+	}
+	communityMatches := c.findCommunitiesForEntities(entityIDs)
+	if len(communityMatches) == 0 {
+		return
+	}
+	enriched := c.enrichCommunitySummaries(ctx, communityMatches)
+	resp.CommunitySummaries = enriched
+	answer, answerModel := c.synthesizeQueryAnswer(ctx, queryText, enriched, resp.Count)
+	resp.Answer = answer
+	resp.AnswerModel = answerModel
 }
 
 // synthesizeAnswer produces a template-based natural language answer from
@@ -1373,66 +1446,78 @@ func (c *Component) fetchEntityCommunityFromStorage(ctx context.Context, entityI
 	return nil
 }
 
-// filterEntitiesByQuery filters entities based on simple text matching
-func filterEntitiesByQuery(entities []*gtypes.EntityState, query string) []*gtypes.EntityState {
-	query = strings.ToLower(query)
-	queryTerms := strings.Fields(query)
+// scoredEntity pairs an entity with its relevance score for sorting.
+type scoredEntity struct {
+	entity *gtypes.EntityState
+	score  float64
+}
+
+// filterEntitiesByQuery filters and sorts entities by text relevance score.
+// Entities below minScore are excluded. Results are sorted by score descending.
+func filterEntitiesByQuery(entities []*gtypes.EntityState, query string, minScore float64) []*gtypes.EntityState {
+	queryTerms := strings.Fields(strings.ToLower(query))
 
 	if len(queryTerms) == 0 {
 		return entities // No filtering if query is empty
 	}
 
-	matched := make([]*gtypes.EntityState, 0)
-
+	scored := make([]scoredEntity, 0, len(entities))
 	for _, entity := range entities {
-		if entityMatchesQuery(entity, queryTerms) {
-			matched = append(matched, entity)
+		score := scoreEntityQuery(entity, queryTerms)
+		if score >= minScore {
+			scored = append(scored, scoredEntity{entity: entity, score: score})
 		}
 	}
 
-	return matched
+	// Sort by score descending — most relevant entities first
+	sort.Slice(scored, func(i, j int) bool {
+		return scored[i].score > scored[j].score
+	})
+
+	result := make([]*gtypes.EntityState, len(scored))
+	for i, se := range scored {
+		result[i] = se.entity
+	}
+	return result
 }
 
-// entityMatchesQuery checks if an entity matches the query terms
-func entityMatchesQuery(entity *gtypes.EntityState, queryTerms []string) bool {
-	// Build searchable text from entity
+// scoreEntityQuery scores how well an entity matches the query terms.
+// Returns a value between 0.0 and 1.0 representing the proportion of
+// query terms that match, weighted by match quality:
+//   - +1.0 for entity type match (5th segment of ID)
+//   - +0.5 for each term found in a triple predicate or string value
+//
+// Normalized by the number of query terms.
+func scoreEntityQuery(entity *gtypes.EntityState, queryTerms []string) float64 {
+	if len(queryTerms) == 0 {
+		return 0
+	}
+
+	entityType := strings.ToLower(extractEntityType(entity.ID))
+
+	// Build searchable text from triple predicates and string values
 	var searchText strings.Builder
-
-	// Add entity ID
-	searchText.WriteString(strings.ToLower(entity.ID))
-	searchText.WriteString(" ")
-
-	// Extract type from ID and add it
-	if eid, err := message.ParseEntityID(entity.ID); err == nil {
-		searchText.WriteString(strings.ToLower(eid.Type))
-		searchText.WriteString(" ")
-	}
-
-	// Add properties from triples
 	for _, triple := range entity.Triples {
-		if !triple.IsRelationship() {
-			// Add predicate (property name)
-			searchText.WriteString(strings.ToLower(triple.Predicate))
+		searchText.WriteString(strings.ToLower(triple.Predicate))
+		searchText.WriteString(" ")
+		if strVal, ok := triple.Object.(string); ok {
+			searchText.WriteString(strings.ToLower(strVal))
 			searchText.WriteString(" ")
-
-			// Add object value if it's a string
-			if strVal, ok := triple.Object.(string); ok {
-				searchText.WriteString(strings.ToLower(strVal))
-				searchText.WriteString(" ")
-			}
 		}
 	}
+	searchable := searchText.String()
 
-	searchableText := searchText.String()
-
-	// Check if any query term matches
+	totalScore := 0.0
 	for _, term := range queryTerms {
-		if strings.Contains(searchableText, strings.ToLower(term)) {
-			return true
+		term = strings.ToLower(term)
+		if entityType == term {
+			totalScore += 1.0 // Strong signal: entity type matches query term
+		} else if strings.Contains(searchable, term) {
+			totalScore += 0.5 // Moderate signal: term found in predicates/values
 		}
 	}
 
-	return false
+	return totalScore / float64(len(queryTerms))
 }
 
 // scoreCommunitySummaries scores communities based on query relevance

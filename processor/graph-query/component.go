@@ -41,12 +41,14 @@ type natsRequester interface {
 
 // Config defines the configuration for the graph-query coordinator component
 type Config struct {
-	Ports           *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration,category:basic"`
-	QueryTimeout    time.Duration         `json:"query_timeout,omitempty" schema:"type:duration,description:Timeout for query operations,default:5s,category:basic"`
-	MaxDepth        int                   `json:"max_depth,omitempty" schema:"type:int,description:Maximum traversal depth for path search,default:10,min:1,max:100,category:basic"`
-	StartupAttempts int                   `json:"startup_attempts,omitempty" schema:"type:int,description:Max attempts for startup dependency checks,default:10,min:1,category:advanced"`
-	StartupInterval time.Duration         `json:"startup_interval,omitempty" schema:"type:duration,description:Interval between startup attempts,default:500ms,category:advanced"`
-	RecheckInterval time.Duration         `json:"recheck_interval,omitempty" schema:"type:duration,description:Interval for rechecking missing buckets,default:5s,category:advanced"`
+	Ports                *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration,category:basic"`
+	QueryTimeout         time.Duration         `json:"query_timeout,omitempty" schema:"type:duration,description:Timeout for query operations,default:5s,category:basic"`
+	MaxDepth             int                   `json:"max_depth,omitempty" schema:"type:int,description:Maximum traversal depth for path search,default:10,min:1,max:100,category:basic"`
+	StartupAttempts      int                   `json:"startup_attempts,omitempty" schema:"type:int,description:Max attempts for startup dependency checks,default:10,min:1,category:advanced"`
+	StartupInterval      time.Duration         `json:"startup_interval,omitempty" schema:"type:duration,description:Interval between startup attempts,default:500ms,category:advanced"`
+	RecheckInterval      time.Duration         `json:"recheck_interval,omitempty" schema:"type:duration,description:Interval for rechecking missing buckets,default:5s,category:advanced"`
+	MinSemanticRelevance float64               `json:"min_semantic_relevance,omitempty" schema:"type:float,description:Minimum semantic similarity score (0.0-1.0),default:0.5,min:0,max:1,category:advanced"`
+	MinTextRelevance     float64               `json:"min_text_relevance,omitempty" schema:"type:float,description:Minimum text match score (0.0-1.0),default:0.3,min:0,max:1,category:advanced"`
 }
 
 // Validate validates the configuration
@@ -107,6 +109,10 @@ type Component struct {
 
 	// Answer synthesis for globalSearch
 	answerSynthesizer AnswerSynthesizer
+
+	// Resolved relevance thresholds (from config or defaults)
+	minSemanticRelevance float64
+	minTextRelevance     float64
 
 	// Community cache for GraphRAG (consumer-owned, KV watch based)
 	communityCache   *CommunityCache
@@ -173,14 +179,24 @@ func CreateGraphQuery(rawConfig json.RawMessage, deps component.Dependencies) (c
 
 	// Create component with keyword-only classifier; LLM classifier wired in Start()
 	comp := &Component{
-		config:           config,
-		natsClient:       deps.NATSClient, // Assign to interface field
-		pathSearcher:     NewPathSearcher(deps.NATSClient, config.QueryTimeout, config.MaxDepth, logger),
-		logger:           logger,
-		modelRegistry:    deps.ModelRegistry,
-		classifier:       query.NewClassifierChain(query.NewKeywordClassifier(), nil, nil),
-		lastMetricsReset: time.Now(),
-		promMetrics:      getMetrics(deps.MetricsRegistry),
+		config:               config,
+		natsClient:           deps.NATSClient, // Assign to interface field
+		pathSearcher:         NewPathSearcher(deps.NATSClient, config.QueryTimeout, config.MaxDepth, logger),
+		logger:               logger,
+		modelRegistry:        deps.ModelRegistry,
+		classifier:           query.NewClassifierChain(query.NewKeywordClassifier(), nil, nil),
+		lastMetricsReset:     time.Now(),
+		promMetrics:          getMetrics(deps.MetricsRegistry),
+		minSemanticRelevance: MinSemanticRelevance,
+		minTextRelevance:     MinTextRelevance,
+	}
+
+	// Apply config overrides for relevance thresholds
+	if config.MinSemanticRelevance > 0 {
+		comp.minSemanticRelevance = config.MinSemanticRelevance
+	}
+	if config.MinTextRelevance > 0 {
+		comp.minTextRelevance = config.MinTextRelevance
 	}
 
 	return comp, nil

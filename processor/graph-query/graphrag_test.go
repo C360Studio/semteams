@@ -257,6 +257,122 @@ func TestFilterEntityIDsByType_UsesExtractEntityType(t *testing.T) {
 	}
 }
 
+func TestScoreEntityQuery(t *testing.T) {
+	makeEntity := func(id string, triples ...message.Triple) *gtypes.EntityState {
+		return &gtypes.EntityState{ID: id, Triples: triples}
+	}
+
+	t.Run("type match scores highest", func(t *testing.T) {
+		entity := makeEntity("a.b.c.d.drone.001")
+		score := scoreEntityQuery(entity, []string{"drone"})
+		if score != 1.0 {
+			t.Errorf("type match should score 1.0, got %v", score)
+		}
+	})
+
+	t.Run("triple value match scores moderate", func(t *testing.T) {
+		entity := makeEntity("a.b.c.d.sensor.001",
+			message.Triple{Predicate: "sensor.location", Object: "warehouse"},
+		)
+		score := scoreEntityQuery(entity, []string{"warehouse"})
+		if score != 0.5 {
+			t.Errorf("value match should score 0.5, got %v", score)
+		}
+	})
+
+	t.Run("no match scores zero", func(t *testing.T) {
+		entity := makeEntity("a.b.c.d.drone.001",
+			message.Triple{Predicate: "drone.battery", Object: 85.0},
+		)
+		score := scoreEntityQuery(entity, []string{"warehouse", "logistics"})
+		if score != 0 {
+			t.Errorf("no match should score 0, got %v", score)
+		}
+	})
+
+	t.Run("partial match proportional", func(t *testing.T) {
+		entity := makeEntity("a.b.c.d.drone.001",
+			message.Triple{Predicate: "drone.status", Object: "active"},
+		)
+		// "drone" matches type (1.0), "operations" doesn't match (0)
+		// Total: 1.0 / 2 = 0.5
+		score := scoreEntityQuery(entity, []string{"drone", "operations"})
+		if score != 0.5 {
+			t.Errorf("partial match should score 0.5, got %v", score)
+		}
+	})
+
+	t.Run("multiple matches accumulate", func(t *testing.T) {
+		entity := makeEntity("a.b.c.d.drone.001",
+			message.Triple{Predicate: "drone.mission", Object: "survey"},
+		)
+		// "drone" matches type (1.0), "survey" matches value (0.5)
+		// Total: 1.5 / 2 = 0.75
+		score := scoreEntityQuery(entity, []string{"drone", "survey"})
+		if score != 0.75 {
+			t.Errorf("multi-match should score 0.75, got %v", score)
+		}
+	})
+
+	t.Run("case insensitive", func(t *testing.T) {
+		entity := makeEntity("a.b.c.d.Drone.001",
+			message.Triple{Predicate: "drone.Status", Object: "ACTIVE"},
+		)
+		score := scoreEntityQuery(entity, []string{"drone", "active"})
+		if score < 0.5 {
+			t.Errorf("case-insensitive match should score >= 0.5, got %v", score)
+		}
+	})
+}
+
+func TestFilterEntitiesByQuery_DropsLowScore(t *testing.T) {
+	entities := []*gtypes.EntityState{
+		{ID: "a.b.c.d.drone.001", Triples: []message.Triple{
+			{Predicate: "drone.mission", Object: "survey"},
+		}},
+		{ID: "a.b.c.d.sensor.002", Triples: []message.Triple{
+			{Predicate: "sensor.location", Object: "hangar"},
+		}},
+		{ID: "a.b.c.d.worker.003", Triples: []message.Triple{
+			{Predicate: "worker.role", Object: "logistics"},
+		}},
+	}
+
+	// Query "drone survey" — only the drone entity should match well
+	result := filterEntitiesByQuery(entities, "drone survey", 0.3)
+
+	if len(result) != 1 {
+		t.Errorf("expected 1 entity above threshold, got %d", len(result))
+		for _, e := range result {
+			t.Logf("  matched: %s", e.ID)
+		}
+	}
+	if len(result) > 0 && result[0].ID != "a.b.c.d.drone.001" {
+		t.Errorf("expected drone entity, got %s", result[0].ID)
+	}
+}
+
+func TestFilterEntitiesByQuery_SortsByScore(t *testing.T) {
+	entities := []*gtypes.EntityState{
+		{ID: "a.b.c.d.sensor.001", Triples: []message.Triple{
+			{Predicate: "sensor.type", Object: "temperature"},
+		}},
+		{ID: "a.b.c.d.drone.002", Triples: []message.Triple{
+			{Predicate: "drone.sensor", Object: "temperature"},
+		}},
+	}
+
+	// Query "drone temperature" — drone should rank higher (type match + value match)
+	result := filterEntitiesByQuery(entities, "drone temperature", 0.0)
+
+	if len(result) != 2 {
+		t.Fatalf("expected 2 entities, got %d", len(result))
+	}
+	if result[0].ID != "a.b.c.d.drone.002" {
+		t.Errorf("drone should rank first (type match), got %s first", result[0].ID)
+	}
+}
+
 // containsAll checks that s contains all substrings.
 func containsAll(s string, subs ...string) bool {
 	for _, sub := range subs {
