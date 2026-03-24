@@ -1086,6 +1086,9 @@ components:
                     type: string
                 max_iterations:
                     type: integer
+                metadata:
+                    additionalProperties: {}
+                    type: object
                 outcome:
                     type: string
                 result:
