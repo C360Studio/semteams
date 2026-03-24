@@ -83,6 +83,9 @@ type LoopEntity struct {
 	Error       string    `json:"error,omitempty"`        // Error message on failure
 	CompletedAt time.Time `json:"completed_at,omitempty"` // When the loop completed
 
+	// Domain context propagated from TaskMessage through lifecycle events
+	Metadata map[string]any `json:"metadata,omitempty"`
+
 	// AGNTCY identity (Phase 2 AGNTCY integration)
 	// When set, provides DID-based cryptographic identity for this agent loop.
 	Identity *identity.AgentIdentity `json:"identity,omitempty"`

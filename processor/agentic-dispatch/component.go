@@ -702,6 +702,7 @@ func (c *Component) handleAgentCreated(_ context.Context, data []byte) {
 		WorkflowSlug:     created.WorkflowSlug,
 		WorkflowStep:     created.WorkflowStep,
 		ContextRequestID: created.ContextRequestID,
+		Metadata:         created.Metadata,
 		CreatedAt:        created.CreatedAt,
 	})
 

@@ -10,15 +10,16 @@ import (
 
 // LoopCreatedEvent is published when a new agentic loop is created.
 type LoopCreatedEvent struct {
-	LoopID           string    `json:"loop_id"`
-	TaskID           string    `json:"task_id"`
-	Role             string    `json:"role"`
-	Model            string    `json:"model"`
-	WorkflowSlug     string    `json:"workflow_slug,omitempty"`
-	WorkflowStep     string    `json:"workflow_step,omitempty"`
-	ContextRequestID string    `json:"context_request_id,omitempty"`
-	MaxIterations    int       `json:"max_iterations"`
-	CreatedAt        time.Time `json:"created_at"`
+	LoopID           string         `json:"loop_id"`
+	TaskID           string         `json:"task_id"`
+	Role             string         `json:"role"`
+	Model            string         `json:"model"`
+	WorkflowSlug     string         `json:"workflow_slug,omitempty"`
+	WorkflowStep     string         `json:"workflow_step,omitempty"`
+	ContextRequestID string         `json:"context_request_id,omitempty"`
+	MaxIterations    int            `json:"max_iterations"`
+	CreatedAt        time.Time      `json:"created_at"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
 }
 
 // Validate implements message.Payload
@@ -65,9 +66,10 @@ type LoopCompletedEvent struct {
 	WorkflowStep string    `json:"workflow_step,omitempty"`
 	CompletedAt  time.Time `json:"completed_at"`
 	// User routing info for response delivery
-	ChannelType string `json:"channel_type,omitempty"`
-	ChannelID   string `json:"channel_id,omitempty"`
-	UserID      string `json:"user_id,omitempty"`
+	ChannelType string         `json:"channel_type,omitempty"`
+	ChannelID   string         `json:"channel_id,omitempty"`
+	UserID      string         `json:"user_id,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 // Validate implements message.Payload
@@ -114,9 +116,10 @@ type LoopFailedEvent struct {
 	WorkflowStep string    `json:"workflow_step,omitempty"`
 	FailedAt     time.Time `json:"failed_at"`
 	// User routing info for error notifications
-	ChannelType string `json:"channel_type,omitempty"`
-	ChannelID   string `json:"channel_id,omitempty"`
-	UserID      string `json:"user_id,omitempty"`
+	ChannelType string         `json:"channel_type,omitempty"`
+	ChannelID   string         `json:"channel_id,omitempty"`
+	UserID      string         `json:"user_id,omitempty"`
+	Metadata    map[string]any `json:"metadata,omitempty"`
 }
 
 // Validate implements message.Payload
@@ -149,13 +152,14 @@ func (e *LoopFailedEvent) UnmarshalJSON(data []byte) error {
 
 // LoopCancelledEvent is published when a loop is cancelled by user action.
 type LoopCancelledEvent struct {
-	LoopID       string    `json:"loop_id"`
-	TaskID       string    `json:"task_id"`
-	Outcome      string    `json:"outcome"` // OutcomeCancelled
-	CancelledBy  string    `json:"cancelled_by"`
-	WorkflowSlug string    `json:"workflow_slug,omitempty"`
-	WorkflowStep string    `json:"workflow_step,omitempty"`
-	CancelledAt  time.Time `json:"cancelled_at"`
+	LoopID       string         `json:"loop_id"`
+	TaskID       string         `json:"task_id"`
+	Outcome      string         `json:"outcome"` // OutcomeCancelled
+	CancelledBy  string         `json:"cancelled_by"`
+	WorkflowSlug string         `json:"workflow_slug,omitempty"`
+	WorkflowStep string         `json:"workflow_step,omitempty"`
+	CancelledAt  time.Time      `json:"cancelled_at"`
+	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
 // Validate implements message.Payload

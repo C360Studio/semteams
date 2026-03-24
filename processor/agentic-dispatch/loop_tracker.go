@@ -33,6 +33,9 @@ type LoopInfo struct {
 	// Context assembly reference (links to assembled context)
 	ContextRequestID string `json:"context_request_id,omitempty"`
 
+	// Domain context propagated from TaskMessage
+	Metadata map[string]any `json:"metadata,omitempty"`
+
 	// Completion data (populated when loop completes)
 	Outcome     string    `json:"outcome,omitempty"`      // success, failed, cancelled
 	Result      string    `json:"result,omitempty"`       // LLM response content

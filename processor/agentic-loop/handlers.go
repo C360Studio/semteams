@@ -208,6 +208,15 @@ func (h *MessageHandler) configureLoopMetadata(loopID string, task TaskMessage) 
 		}
 	}
 
+	// Set domain metadata if provided
+	if len(task.Metadata) > 0 {
+		if err := h.loopManager.SetMetadata(loopID, task.Metadata); err != nil {
+			h.logger.Warn("failed to set metadata",
+				slog.String("loop_id", loopID),
+				slog.String("error", err.Error()))
+		}
+	}
+
 	// Set timeout if configured
 	if h.config.Timeout != "" {
 		timeout, parseErr := time.ParseDuration(h.config.Timeout)
@@ -268,6 +277,7 @@ func (h *MessageHandler) buildLoopCreatedData(loopID string, task TaskMessage, e
 		ContextRequestID: task.ContextRequestID,
 		MaxIterations:    entity.MaxIterations,
 		CreatedAt:        time.Now(),
+		Metadata:         task.Metadata,
 	}
 	createdMsg := message.NewBaseMessage(created.Schema(), &created, "agentic-loop")
 	return json.Marshal(createdMsg)
@@ -685,6 +695,7 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 		ChannelType: entity.ChannelType,
 		ChannelID:   entity.ChannelID,
 		UserID:      entity.UserID,
+		Metadata:    entity.Metadata,
 	}
 
 	// Pull token totals from trajectory for cost tracking
@@ -1015,6 +1026,7 @@ func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (*ag
 		ChannelType:  entity.ChannelType,
 		ChannelID:    entity.ChannelID,
 		UserID:       entity.UserID,
+		Metadata:     entity.Metadata,
 	}
 
 	// Pull token totals from trajectory for cost tracking

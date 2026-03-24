@@ -234,11 +234,16 @@ func (m *LoopManager) GetCachedToolChoice(loopID string) *agentic.ToolChoice {
 	return m.cachedToolChoice[loopID]
 }
 
-// CacheMetadata stores domain context metadata for a loop (set once from task, reused for all tool calls)
+// CacheMetadata stores domain context metadata for a loop (set once from task, reused for all tool calls).
+// Makes a defensive copy to isolate from the caller's map.
 func (m *LoopManager) CacheMetadata(loopID string, metadata map[string]any) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.cachedMetadata[loopID] = metadata
+	cp := make(map[string]any, len(metadata))
+	for k, v := range metadata {
+		cp[k] = v
+	}
+	m.cachedMetadata[loopID] = cp
 }
 
 // GetCachedMetadata retrieves the cached metadata for a loop
@@ -596,6 +601,25 @@ func (m *LoopManager) SetUserContext(loopID, channelType, channelID, userID stri
 	entity.ChannelType = channelType
 	entity.ChannelID = channelID
 	entity.UserID = userID
+	return nil
+}
+
+// SetMetadata sets domain context metadata on the loop entity.
+func (m *LoopManager) SetMetadata(loopID string, metadata map[string]any) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	entity, exists := m.loops[loopID]
+	if !exists {
+		return errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "operation", "find loop")
+	}
+
+	// Defensive copy to isolate from caller's map
+	cp := make(map[string]any, len(metadata))
+	for k, v := range metadata {
+		cp[k] = v
+	}
+	entity.Metadata = cp
 	return nil
 }
 

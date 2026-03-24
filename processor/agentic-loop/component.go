@@ -1185,6 +1185,7 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 		WorkflowSlug: entity.WorkflowSlug,
 		WorkflowStep: entity.WorkflowStep,
 		CancelledAt:  entity.CancelledAt,
+		Metadata:     entity.Metadata,
 	}
 
 	completionMsg := message.NewBaseMessage(completion.Schema(), &completion, "agentic-loop")
