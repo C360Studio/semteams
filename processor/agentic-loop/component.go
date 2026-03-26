@@ -410,9 +410,18 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	}
 	c.loopsBucket = loopsBucket
 
-	// Initialize trajectory cache (15m TTL, cleanup every 5m).
-	// Durable trajectory content is stored in ObjectStore + graph entities.
-	trajectoryCache, err := cache.NewTTL[*agentic.Trajectory](ctx, 15*time.Minute, 5*time.Minute)
+	// Initialize trajectory cache. Durable content is in ObjectStore + graph entities.
+	trajCacheTTL := 4 * time.Hour // default
+	if c.config.TrajectoryCacheTTL != "" {
+		if parsed, parseErr := time.ParseDuration(c.config.TrajectoryCacheTTL); parseErr == nil {
+			trajCacheTTL = parsed
+		}
+	}
+	cleanupInterval := trajCacheTTL / 4
+	if cleanupInterval < time.Minute {
+		cleanupInterval = time.Minute
+	}
+	trajectoryCache, err := cache.NewTTL[*agentic.Trajectory](ctx, trajCacheTTL, cleanupInterval)
 	if err != nil {
 		return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create trajectory cache")
 	}

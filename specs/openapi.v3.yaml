@@ -747,6 +747,63 @@ paths:
                                 type: object
                 "400":
                     description: Invalid trace ID format
+    /trajectories:
+        get:
+            summary: List trajectory summaries with optional filters
+            description: Returns paginated trajectory summaries. Filters by outcome, role, workflow, time, and metadata.
+            tags:
+                - Trajectories
+            parameters:
+                - name: limit
+                  in: query
+                  description: Max items (default 20, max 100)
+                  schema: {}
+                - name: offset
+                  in: query
+                  description: Pagination offset
+                  schema: {}
+                - name: outcome
+                  in: query
+                  description: 'Filter: success, failed, cancelled'
+                  schema: {}
+                - name: role
+                  in: query
+                  description: Filter by agent role
+                  schema: {}
+                - name: workflow_slug
+                  in: query
+                  description: Filter by workflow
+                  schema: {}
+                - name: since
+                  in: query
+                  description: 'Filter: RFC3339 timestamp'
+                  schema: {}
+                - name: metadata_key
+                  in: query
+                  description: Filter by metadata key
+                  schema: {}
+                - name: metadata_value
+                  in: query
+                  description: Filter by metadata value (requires metadata_key)
+                  schema: {}
+            responses: {}
+    /trajectories/{loopId}:
+        get:
+            summary: Get full trajectory with steps
+            description: Returns the complete trajectory including all steps for a specific loop.
+            tags:
+                - Trajectories
+            parameters:
+                - name: loopId
+                  in: path
+                  required: true
+                  description: Loop ID
+                  schema: {}
+                - name: limit
+                  in: query
+                  description: Max steps to return
+                  schema: {}
+            responses: {}
     /types:
         get:
             summary: List available component types
@@ -1581,3 +1638,5 @@ tags:
       description: Runtime metrics and observability
     - name: Status
       description: Real-time status updates
+    - name: Trajectories
+      description: Agentic loop trajectory listing and detail

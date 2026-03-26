@@ -117,6 +117,12 @@
       "default": "120s",
       "category": "basic"
     },
+    "trajectory_cache_ttl": {
+      "type": "string",
+      "description": "TTL for trajectory cache (e.g. 4h or 30m). Trajectories older than this are only available via graph queries",
+      "default": "4h",
+      "category": "advanced"
+    },
     "trajectory_detail": {
       "type": "string",
       "description": "Trajectory detail level: summary (default) or full",
