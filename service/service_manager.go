@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -37,6 +38,10 @@ type Manager struct {
 
 	// Track if we're the instance managing HTTP
 	isHTTPManager bool
+
+	// Lifecycle context — used as BaseContext for HTTP server so all
+	// request contexts cancel on shutdown
+	lifecycleCtx context.Context
 
 	// Config management
 	natsClient    *natsclient.Client
@@ -218,6 +223,9 @@ var mandatoryServices = []string{
 
 // StartAll starts all registered service instances and the HTTP server
 func (m *Manager) StartAll(ctx context.Context) error {
+	// Store lifecycle context for HTTP server BaseContext
+	m.lifecycleCtx = ctx
+
 	// Use the injected logger from BaseService if available
 	logger := m.logger
 	if logger == nil {
@@ -864,10 +872,17 @@ func (m *Manager) completeHTTPSetup() error {
 	// Register OpenAPI endpoints
 	m.registerOpenAPIEndpoints()
 
-	// Create HTTP server
+	// Create HTTP server with lifecycle context as BaseContext.
+	// All request contexts (r.Context()) derive from this, so they cancel on shutdown.
 	m.httpServer = &http.Server{
-		Addr:         ":" + strconv.Itoa(m.config.HTTPPort),
-		Handler:      m.httpMux,
+		Addr:    ":" + strconv.Itoa(m.config.HTTPPort),
+		Handler: m.httpMux,
+		BaseContext: func(_ net.Listener) context.Context {
+			if m.lifecycleCtx != nil {
+				return m.lifecycleCtx
+			}
+			return context.Background()
+		},
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -909,10 +924,16 @@ func (m *Manager) startHTTPServer() error {
 	// Register OpenAPI endpoints
 	m.registerOpenAPIEndpoints()
 
-	// Create HTTP server
+	// Create HTTP server with lifecycle context as BaseContext
 	m.httpServer = &http.Server{
-		Addr:         ":" + strconv.Itoa(m.config.HTTPPort),
-		Handler:      m.httpMux,
+		Addr:    ":" + strconv.Itoa(m.config.HTTPPort),
+		Handler: m.httpMux,
+		BaseContext: func(_ net.Listener) context.Context {
+			if m.lifecycleCtx != nil {
+				return m.lifecycleCtx
+			}
+			return context.Background()
+		},
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,
