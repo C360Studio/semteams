@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -185,7 +186,7 @@ func (c *Client) ConsumeStreamWithConfig(
 		if existingConsumer, exists := c.consumers[consumerKey]; exists {
 			existingConsumer.Stop()
 			delete(c.consumers, consumerKey)
-			c.logger.Debugf("Stopped existing consumer for %s before recreation", consumerKey)
+			c.logger.Debug("Stopped existing consumer before recreation", slog.String("consumer_key", consumerKey))
 		}
 	}
 	c.consumersMu.Unlock()
@@ -250,7 +251,7 @@ func (c *Client) ConsumeStreamWithConfig(
 func (c *Client) safeHandleMessage(ctx context.Context, msg jetstream.Msg, handler func(context.Context, jetstream.Msg)) {
 	defer func() {
 		if r := recover(); r != nil {
-			c.logger.Printf("panic in message handler: %v", r)
+			c.logger.Error("panic in message handler", slog.Any("panic", r))
 			// Nak on panic to allow redelivery
 			_ = msg.Nak()
 		}
@@ -397,7 +398,7 @@ func (c *Client) ensureStreamForConsumer(ctx context.Context, js jetstream.JetSt
 			"failed to auto-create stream "+cfg.StreamName)
 	}
 
-	c.logger.Printf("auto-created stream %s with subjects %v", cfg.StreamName, subjects)
+	c.logger.Info("Auto-created stream", slog.String("stream", cfg.StreamName), slog.Any("subjects", subjects))
 	return nil
 }
 

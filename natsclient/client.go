@@ -5,6 +5,7 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,6 +15,7 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 
 	"github.com/c360studio/semstreams/pkg/errs"
+	"github.com/c360studio/semstreams/pkg/resource"
 )
 
 // ConnectionStatus represents the state of the NATS connection
@@ -67,7 +69,7 @@ type Client struct {
 	urls     string       // comma-separated NATS server URLs for clustering support
 	status   atomic.Value // stores ConnectionStatus
 	failures atomic.Int32
-	logger   Logger
+	logger   *slog.Logger
 
 	// NATS connection
 	conn *nats.Conn
@@ -135,7 +137,7 @@ type Client struct {
 func NewClient(urls string, opts ...ClientOption) (*Client, error) {
 	c := &Client{
 		urls:   urls,
-		logger: &defaultLogger{},
+		logger: slog.Default(),
 		// Sensible defaults
 		maxReconnects:    -1, // infinite by default
 		reconnectWait:    2 * time.Second,
@@ -159,7 +161,7 @@ func NewClient(urls string, opts ...ClientOption) (*Client, error) {
 	c.backoff.Store(time.Second)
 	c.lastFailure.Store(time.Time{})
 
-	c.logger.Debugf("Created NATS client for %s", urls)
+	c.logger.Debug("Created NATS client", slog.String("urls", urls))
 
 	return c, nil
 }
@@ -224,7 +226,7 @@ func (m *Client) recordFailure() {
 	// Track circuit breaker failures separately
 	circuitFailures := m.circuitFailures.Add(1)
 
-	m.logger.Debugf("Recorded failure %d (circuit failures: %d)", totalFailures, circuitFailures)
+	m.logger.Debug("Recorded failure", slog.Int64("total_failures", int64(totalFailures)), slog.Int64("circuit_failures", int64(circuitFailures)))
 
 	// Open circuit after threshold failures in this round
 	if circuitFailures >= m.circuitThreshold {
@@ -242,10 +244,9 @@ func (m *Client) recordFailure() {
 				}
 				m.backoff.Store(newBackoff)
 
-				m.logger.Printf(
-					"Circuit breaker opened after %d failures, backing off for %v",
-					circuitFailures,
-					currentBackoff,
+				m.logger.Info("Circuit breaker opened",
+					slog.Int64("circuit_failures", int64(circuitFailures)),
+					slog.Duration("backoff", currentBackoff),
 				)
 
 				// Reset circuit failures for next round
@@ -264,7 +265,7 @@ func (m *Client) recordFailure() {
 			}
 			m.backoff.Store(newBackoff)
 
-			m.logger.Printf("Circuit breaker still open, increased backoff to %v", newBackoff)
+			m.logger.Info("Circuit breaker still open, increased backoff", slog.Duration("backoff", newBackoff))
 
 			// Reset circuit failures for next round
 			m.circuitFailures.Store(0)
@@ -287,12 +288,12 @@ func (m *Client) resetCircuit() {
 
 // testCircuit attempts to close the circuit breaker
 func (m *Client) testCircuit() {
-	m.logger.Debugf("Testing circuit breaker - attempting to close circuit")
+	m.logger.Debug("Testing circuit breaker - attempting to close circuit")
 
 	// This will be implemented when we add actual connection logic
 	// For now, just try to reconnect
 	if m.Status() == StatusCircuitOpen {
-		m.logger.Debugf("Circuit breaker test: moving from open to disconnected")
+		m.logger.Debug("Circuit breaker test: moving from open to disconnected")
 		m.setStatus(StatusDisconnected)
 		// In real implementation, this would trigger reconnection
 	}
@@ -410,12 +411,12 @@ func (m *Client) GetStatus() *Status {
 func (m *Client) Connect(ctx context.Context) error {
 	// Check circuit breaker first
 	if m.Status() == StatusCircuitOpen {
-		m.logger.Debugf("Circuit breaker is open, skipping connection attempt")
+		m.logger.Debug("Circuit breaker is open, skipping connection attempt")
 		return ErrCircuitOpen
 	}
 
 	m.setStatus(StatusConnecting)
-	m.logger.Printf("Connecting to NATS at %s", m.urls)
+	m.logger.Info("Connecting to NATS", slog.String("urls", m.urls))
 
 	// Build connection options
 	opts := m.buildConnectionOptions()
@@ -472,17 +473,17 @@ func (m *Client) Connect(ctx context.Context) error {
 	m.setStatus(StatusConnected)
 	m.resetCircuit()
 
-	m.logger.Printf("Successfully connected to NATS at %s", m.urls)
+	m.logger.Info("Successfully connected to NATS", slog.String("urls", m.urls))
 
 	// Start health monitoring if configured
 	if m.healthInterval > 0 {
-		m.logger.Debugf("Starting health monitoring with interval %v", m.healthInterval)
+		m.logger.Debug("Starting health monitoring", slog.Duration("interval", m.healthInterval))
 		m.startHealthMonitoring()
 	}
 
 	// Start JetStream metrics polling if configured
 	if m.jsMetrics != nil && m.metricsInterval > 0 {
-		m.logger.Debugf("Starting JetStream metrics polling with interval %v", m.metricsInterval)
+		m.logger.Debug("Starting JetStream metrics polling", slog.Duration("interval", m.metricsInterval))
 		m.metricsCancel = m.jsMetrics.startPoller(context.Background(), m.metricsInterval)
 	}
 
@@ -556,7 +557,7 @@ func (m *Client) stopAllConsumers() {
 
 	for name, consumer := range m.consumers {
 		consumer.Stop()
-		m.logger.Debugf("Stopped consumer: %s", name)
+		m.logger.Debug("Stopped consumer", slog.String("consumer", name))
 	}
 	m.consumers = nil
 }
@@ -572,11 +573,11 @@ func (m *Client) unsubscribeAll() []error {
 		if err := sub.Unsubscribe(); err != nil {
 			// ErrBadSubscription means subscription is already gone - not a real error
 			if stderrors.Is(err, nats.ErrBadSubscription) {
-				m.logger.Debugf("Subscription already cleaned up: %v", err)
+				m.logger.Debug("Subscription already cleaned up", slog.Any("error", err))
 				continue
 			}
 			errs = append(errs, err)
-			m.logger.Errorf("Failed to unsubscribe: %v", err)
+			m.logger.Error("Failed to unsubscribe", slog.Any("error", err))
 		}
 	}
 	m.subs = nil
@@ -608,17 +609,17 @@ func (m *Client) drainAndCloseConnection(ctx context.Context) error {
 	case err := <-drainDone:
 		if err != nil {
 			drainErr = errs.Wrap(err, "Client", "Close", "drain connection")
-			m.logger.Errorf("Drain error: %v", err)
+			m.logger.Error("Drain error", slog.Any("error", err))
 		}
 	case <-time.After(drainTimeout):
 		drainErr = errs.WrapTransient(
 			fmt.Errorf("drain timeout after %v", drainTimeout),
 			"Client", "Close", "drain timeout",
 		)
-		m.logger.Errorf("Drain timeout after %v, force closing", drainTimeout)
+		m.logger.Error("Drain timeout, force closing", slog.Duration("drain_timeout", drainTimeout))
 	case <-ctx.Done():
 		drainErr = errs.Wrap(ctx.Err(), "Client", "Close", "context cancelled during drain")
-		m.logger.Errorf("Context cancelled during drain, force closing")
+		m.logger.Error("Context cancelled during drain, force closing")
 	}
 
 	m.conn.Close()
@@ -868,7 +869,7 @@ func (m *Client) ConsumeStream(ctx context.Context, streamName, subject string, 
 	// Stop any existing consumer for this key
 	if existingConsumer, exists := m.consumers[consumerKey]; exists {
 		existingConsumer.Stop()
-		m.logger.Debugf("Replaced existing consumer for %s", consumerKey)
+		m.logger.Debug("Replaced existing consumer", slog.String("consumer_key", consumerKey))
 	}
 
 	m.consumers[consumerKey] = consumeContext
@@ -930,7 +931,7 @@ func (m *Client) CreateKeyValueBucket(ctx context.Context, cfg jetstream.KeyValu
 	bucket, err := js.KeyValue(ctx, cfg.Bucket)
 	if err == nil {
 		// Bucket already exists, use it
-		m.logger.Printf("Using existing KV bucket: %s", cfg.Bucket)
+		m.logger.Info("Using existing KV bucket", slog.String("bucket", cfg.Bucket))
 		m.resetCircuit()
 		return bucket, nil
 	}
@@ -940,9 +941,8 @@ func (m *Client) CreateKeyValueBucket(ctx context.Context, cfg jetstream.KeyValu
 	if err != nil {
 		// Check if error is "already exists" (race condition)
 		if isAlreadyExistsError(err) {
-			m.logger.Printf(
-				"KV bucket %s already exists (race condition), attempting to get existing bucket",
-				cfg.Bucket,
+			m.logger.Info("KV bucket already exists (race condition), attempting to get existing bucket",
+				slog.String("bucket", cfg.Bucket),
 			)
 			// Try to get the existing bucket
 			bucket, err = js.KeyValue(ctx, cfg.Bucket)
@@ -951,7 +951,7 @@ func (m *Client) CreateKeyValueBucket(ctx context.Context, cfg jetstream.KeyValu
 				return nil, errs.Wrap(err, "Client", "CreateKeyValueBucket",
 					fmt.Sprintf("access existing bucket %s", cfg.Bucket))
 			}
-			m.logger.Printf("Successfully accessed existing KV bucket: %s", cfg.Bucket)
+			m.logger.Info("Successfully accessed existing KV bucket", slog.String("bucket", cfg.Bucket))
 			m.resetCircuit()
 			return bucket, nil
 		}
@@ -961,7 +961,7 @@ func (m *Client) CreateKeyValueBucket(ctx context.Context, cfg jetstream.KeyValu
 	}
 
 	// Successfully created new bucket
-	m.logger.Printf("Created new KV bucket: %s", cfg.Bucket)
+	m.logger.Info("Created new KV bucket", slog.String("bucket", cfg.Bucket))
 	m.resetCircuit()
 	return bucket, nil
 }
@@ -991,6 +991,47 @@ func (m *Client) GetKeyValueBucket(ctx context.Context, name string) (jetstream.
 
 	m.resetCircuit()
 	return bucket, nil
+}
+
+// WaitForBucket waits for a KV bucket to become available, retrying until
+// the timeout expires or the context is cancelled. Use this when a component
+// depends on a bucket created by another component with unpredictable startup timing.
+//
+// For more advanced patterns (background recovery, loss detection), use
+// pkg/resource.Watcher directly.
+func (m *Client) WaitForBucket(ctx context.Context, name string, timeout time.Duration) (jetstream.KeyValue, error) {
+	// Try immediately first
+	if bucket, err := m.GetKeyValueBucket(ctx, name); err == nil {
+		return bucket, nil
+	}
+
+	// Calculate retry attempts from timeout
+	interval := 500 * time.Millisecond
+	attempts := int(timeout / interval)
+	if attempts < 1 {
+		attempts = 1
+	}
+
+	// Use resource.Watcher for structured retry with logging
+	var result jetstream.KeyValue
+	watcher := resource.NewWatcher(name, func(checkCtx context.Context) error {
+		bucket, err := m.GetKeyValueBucket(checkCtx, name)
+		if err != nil {
+			return err
+		}
+		result = bucket
+		return nil
+	}, resource.Config{
+		StartupAttempts: attempts,
+		StartupInterval: interval,
+		Logger:          m.logger,
+	})
+
+	if !watcher.WaitForStartup(ctx) {
+		return nil, fmt.Errorf("bucket %q not available after %s", name, timeout)
+	}
+
+	return result, nil
 }
 
 // DeleteKeyValueBucket deletes a KV bucket
@@ -1123,7 +1164,7 @@ func (m *Client) handleClosed(_ *nats.Conn) {
 
 func (m *Client) handleError(_ *nats.Conn, _ *nats.Subscription, err error) {
 	// Log error for debugging
-	m.logger.Errorf("NATS error: %v", err)
+	m.logger.Error("NATS error", slog.Any("error", err))
 	// Don't record failure here as it may be called for non-connection errors
 }
 

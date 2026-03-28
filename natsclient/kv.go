@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -45,7 +46,7 @@ func DefaultKVOptions() KVOptions {
 type KVStore struct {
 	bucket  jetstream.KeyValue
 	options KVOptions
-	logger  Logger // Use existing logger interface
+	logger  *slog.Logger
 }
 
 // NewKVStore creates a new KV store with the given bucket
@@ -101,7 +102,7 @@ func (kv *KVStore) Put(ctx context.Context, key string, value []byte) (uint64, e
 	}
 
 	if kv.logger != nil {
-		kv.logger.Printf("KV Put: key=%s, revision=%d", key, rev)
+		kv.logger.Debug("KV put", slog.String("key", key), slog.Uint64("revision", rev))
 	}
 
 	return rev, nil
@@ -121,7 +122,7 @@ func (kv *KVStore) Create(ctx context.Context, key string, value []byte) (uint64
 	}
 
 	if kv.logger != nil {
-		kv.logger.Printf("KV Create: key=%s, revision=%d", key, rev)
+		kv.logger.Debug("KV create", slog.String("key", key), slog.Uint64("revision", rev))
 	}
 
 	return rev, nil
@@ -141,7 +142,7 @@ func (kv *KVStore) Update(ctx context.Context, key string, value []byte, revisio
 	}
 
 	if kv.logger != nil {
-		kv.logger.Printf("KV Update: key=%s, oldRev=%d, newRev=%d", key, revision, rev)
+		kv.logger.Debug("KV update", slog.String("key", key), slog.Uint64("old_revision", revision), slog.Uint64("new_revision", rev))
 	}
 
 	return rev, nil
@@ -238,8 +239,11 @@ func (kv *KVStore) UpdateWithRetry(ctx context.Context, key string,
 			// Conflict error - WILL be retried (this is the intended retry case)
 			if IsKVConflictError(err) {
 				if kv.logger != nil {
-					kv.logger.Printf("KV Create conflict (retrying): key=%s, attempt=%d/%d",
-						key, attemptNum, retryConfig.MaxAttempts)
+					kv.logger.Debug("KV create conflict, retrying",
+						slog.String("key", key),
+						slog.Int("attempt", attemptNum),
+						slog.Int("max_attempts", retryConfig.MaxAttempts),
+					)
 				}
 				// Return conflict error as-is for retry
 				return err
@@ -257,8 +261,11 @@ func (kv *KVStore) UpdateWithRetry(ctx context.Context, key string,
 		// Conflict error - WILL be retried (this is the intended retry case)
 		if IsKVConflictError(err) {
 			if kv.logger != nil {
-				kv.logger.Printf("KV Update conflict (retrying): key=%s, attempt=%d/%d",
-					key, attemptNum, retryConfig.MaxAttempts)
+				kv.logger.Debug("KV update conflict, retrying",
+					slog.String("key", key),
+					slog.Int("attempt", attemptNum),
+					slog.Int("max_attempts", retryConfig.MaxAttempts),
+				)
 			}
 			// Return conflict error as-is for retry
 			return err
@@ -316,7 +323,7 @@ func (kv *KVStore) Delete(ctx context.Context, key string) error {
 	}
 
 	if kv.logger != nil {
-		kv.logger.Printf("KV Delete: key=%s", key)
+		kv.logger.Debug("KV delete", slog.String("key", key))
 	}
 
 	return nil

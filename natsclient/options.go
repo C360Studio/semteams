@@ -1,33 +1,11 @@
 package natsclient
 
 import (
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/c360studio/semstreams/metric"
 )
-
-// Logger interface for injecting custom loggers
-type Logger interface {
-	Printf(format string, v ...any)
-	Errorf(format string, v ...any)
-	Debugf(format string, v ...any)
-}
-
-// defaultLogger implements Logger using standard log package
-type defaultLogger struct{}
-
-func (l *defaultLogger) Printf(format string, v ...any) {
-	log.Printf("[NATS] "+format, v...)
-}
-
-func (l *defaultLogger) Errorf(format string, v ...any) {
-	log.Printf("[NATS ERROR] "+format, v...)
-}
-
-func (l *defaultLogger) Debugf(_ string, _ ...any) {
-	// Silent by default
-}
 
 // ClientOption is a functional option for configuring the Client
 type ClientOption func(*Client) error
@@ -64,11 +42,12 @@ func WithHealthInterval(d time.Duration) ClientOption {
 	}
 }
 
-// WithLogger sets a custom logger for the client
-func WithLogger(logger Logger) ClientOption {
+// WithLogger sets a structured logger for the client.
+// If nil, defaults to slog.Default().
+func WithLogger(logger *slog.Logger) ClientOption {
 	return func(c *Client) error {
 		if logger == nil {
-			logger = &defaultLogger{}
+			logger = slog.Default()
 		}
 		c.logger = logger
 		return nil
