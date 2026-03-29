@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -282,6 +283,12 @@ func agenticLoopOpenAPISpec() *service.OpenAPISpec {
 				Description: "Agentic loop trajectory listing and detail",
 			},
 		},
+		ResponseTypes: []reflect.Type{
+			reflect.TypeOf(agentic.TrajectoryListResponse{}),
+			reflect.TypeOf(agentic.TrajectoryListItem{}),
+			reflect.TypeOf(agentic.Trajectory{}),
+			reflect.TypeOf(agentic.TrajectoryStep{}),
+		},
 		Paths: map[string]service.PathSpec{
 			"/trajectories": {
 				GET: &service.OperationSpec{
@@ -289,14 +296,23 @@ func agenticLoopOpenAPISpec() *service.OpenAPISpec {
 					Description: "Returns paginated trajectory summaries. Filters by outcome, role, workflow, time, and metadata.",
 					Tags:        []string{"Trajectories"},
 					Parameters: []service.ParameterSpec{
-						{Name: "limit", In: "query", Description: "Max items (default 20, max 100)"},
-						{Name: "offset", In: "query", Description: "Pagination offset"},
-						{Name: "outcome", In: "query", Description: "Filter: success, failed, cancelled"},
-						{Name: "role", In: "query", Description: "Filter by agent role"},
-						{Name: "workflow_slug", In: "query", Description: "Filter by workflow"},
-						{Name: "since", In: "query", Description: "Filter: RFC3339 timestamp"},
-						{Name: "metadata_key", In: "query", Description: "Filter by metadata key"},
-						{Name: "metadata_value", In: "query", Description: "Filter by metadata value (requires metadata_key)"},
+						{Name: "limit", In: "query", Description: "Max items (default 20, max 100)", Schema: service.Schema{Type: "integer"}},
+						{Name: "offset", In: "query", Description: "Pagination offset", Schema: service.Schema{Type: "integer"}},
+						{Name: "outcome", In: "query", Description: "Filter: success, failed, cancelled", Schema: service.Schema{Type: "string"}},
+						{Name: "role", In: "query", Description: "Filter by agent role", Schema: service.Schema{Type: "string"}},
+						{Name: "workflow_slug", In: "query", Description: "Filter by workflow", Schema: service.Schema{Type: "string"}},
+						{Name: "since", In: "query", Description: "Filter: RFC3339 timestamp", Schema: service.Schema{Type: "string", Format: "date-time"}},
+						{Name: "metadata_key", In: "query", Description: "Filter by metadata key", Schema: service.Schema{Type: "string"}},
+						{Name: "metadata_value", In: "query", Description: "Filter by metadata value (requires metadata_key)", Schema: service.Schema{Type: "string"}},
+					},
+					Responses: map[string]service.ResponseSpec{
+						"200": {
+							Description: "Paginated list of trajectory summaries",
+							ContentType: "application/json",
+							SchemaRef:   "#/components/schemas/TrajectoryListResponse",
+						},
+						"400": {Description: "Invalid filter parameters"},
+						"503": {Description: "Loop storage not available"},
 					},
 				},
 			},
@@ -306,8 +322,17 @@ func agenticLoopOpenAPISpec() *service.OpenAPISpec {
 					Description: "Returns the complete trajectory including all steps for a specific loop.",
 					Tags:        []string{"Trajectories"},
 					Parameters: []service.ParameterSpec{
-						{Name: "loopId", In: "path", Required: true, Description: "Loop ID"},
-						{Name: "limit", In: "query", Description: "Max steps to return"},
+						{Name: "loopId", In: "path", Required: true, Description: "Loop ID", Schema: service.Schema{Type: "string"}},
+						{Name: "limit", In: "query", Description: "Max steps to return", Schema: service.Schema{Type: "integer"}},
+					},
+					Responses: map[string]service.ResponseSpec{
+						"200": {
+							Description: "Full trajectory with steps",
+							ContentType: "application/json",
+							SchemaRef:   "#/components/schemas/Trajectory",
+						},
+						"400": {Description: "Missing loopId"},
+						"404": {Description: "Trajectory not found"},
 					},
 				},
 			},
