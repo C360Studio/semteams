@@ -810,6 +810,13 @@ func (c *Component) publishFailureEvents(ctx context.Context, loopID, reason, er
 			c.logger.Error("Failed to publish failure event", "error", pubErr, "loop_id", loopID)
 		}
 	}
+
+	// Persist failure to KV so watchers (rules engine, execution-manager) can detect it.
+	// Without this, loops that fail (max iterations, handler_error) silently disappear
+	// from the KV watch perspective — only the NATS stream gets the failure event.
+	if failure != nil {
+		c.persistFailureState(errorCtx, loopID, failure)
+	}
 }
 
 // recordResponseMetrics records metrics and logs for a successful response.
@@ -1012,6 +1019,58 @@ func (c *Component) persistCompletionState(ctx context.Context, loopID string, c
 		slog.String("loop_id", loopID),
 		slog.String("key", key),
 		slog.String("role", completion.Role))
+}
+
+// persistFailureState persists the failure state to KV.
+// Key pattern: COMPLETE_{loopID} — same as success, so watchers don't need
+// to distinguish between success/failure key patterns. The outcome field
+// in the serialized event tells them what happened.
+func (c *Component) persistFailureState(ctx context.Context, loopID string, failure *agentic.LoopFailedEvent) {
+	if c.loopsBucket == nil || failure == nil {
+		return
+	}
+
+	data, err := json.Marshal(failure)
+	if err != nil {
+		c.logger.Error("Failed to marshal failure state", "error", err, "loop_id", loopID)
+		return
+	}
+
+	key := fmt.Sprintf("COMPLETE_%s", loopID)
+	if _, err := c.loopsBucket.Put(ctx, key, data); err != nil {
+		c.logger.Error("Failed to persist failure state", "error", err, "loop_id", loopID)
+		return
+	}
+
+	c.logger.Debug("Persisted failure state",
+		slog.String("loop_id", loopID),
+		slog.String("key", key),
+		slog.String("reason", failure.Reason))
+}
+
+// persistCancellationState persists the cancellation state to KV.
+// Uses same COMPLETE_{loopID} key pattern so watchers handle all terminal states uniformly.
+func (c *Component) persistCancellationState(ctx context.Context, loopID string, cancelled *agentic.LoopCancelledEvent) {
+	if c.loopsBucket == nil || cancelled == nil {
+		return
+	}
+
+	data, err := json.Marshal(cancelled)
+	if err != nil {
+		c.logger.Error("Failed to marshal cancellation state", "error", err, "loop_id", loopID)
+		return
+	}
+
+	key := fmt.Sprintf("COMPLETE_%s", loopID)
+	if _, err := c.loopsBucket.Put(ctx, key, data); err != nil {
+		c.logger.Error("Failed to persist cancellation state", "error", err, "loop_id", loopID)
+		return
+	}
+
+	c.logger.Debug("Persisted cancellation state",
+		slog.String("loop_id", loopID),
+		slog.String("key", key),
+		slog.String("cancelled_by", cancelled.CancelledBy))
 }
 
 // persistLoopState persists the loop state to KV
@@ -1218,6 +1277,9 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserS
 	if c.graphWriter != nil {
 		c.graphWriter.WriteLoopCancellation(ctx, &completion)
 	}
+
+	// Persist cancellation to KV so watchers detect it
+	c.persistCancellationState(ctx, loopID, &completion)
 
 	// Finalize trajectory and cleanup Boid position
 	c.finalizeTrajectory(ctx, loopID, agentic.LoopStateCancelled)
