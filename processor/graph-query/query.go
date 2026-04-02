@@ -363,17 +363,19 @@ func (c *Component) handleQueryHierarchyStats(ctx context.Context, data []byte) 
 		return nil, errs.WrapTransient(err, "GraphQuery", "handleQueryHierarchyStats", "query prefix")
 	}
 
-	// Parse prefix response (array of entities from graph-ingest)
-	var entities []struct {
-		ID string `json:"id"`
+	// Parse prefix response (entities envelope from graph-ingest)
+	var envelope struct {
+		Entities []struct {
+			ID string `json:"id"`
+		} `json:"entities"`
 	}
-	if err := json.Unmarshal(response, &entities); err != nil {
+	if err := json.Unmarshal(response, &envelope); err != nil {
 		return nil, errs.WrapInvalid(err, "GraphQuery", "handleQueryHierarchyStats", "parse prefix response")
 	}
 
 	// Extract entity IDs and group by next hierarchy level
 	childCounts := make(map[string]int)
-	for _, entity := range entities {
+	for _, entity := range envelope.Entities {
 		nextLevel := extractNextLevel(entity.ID, req.Prefix)
 		if nextLevel != "" {
 			childCounts[nextLevel]++
@@ -386,7 +388,7 @@ func (c *Component) handleQueryHierarchyStats(ctx context.Context, data []byte) 
 	// Build response
 	result := map[string]any{
 		"prefix":        req.Prefix,
-		"totalEntities": len(entities),
+		"totalEntities": len(envelope.Entities),
 		"children":      children,
 	}
 

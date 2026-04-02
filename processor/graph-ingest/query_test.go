@@ -898,16 +898,18 @@ func TestComponent_HandleQueryPrefix_Success(t *testing.T) {
 			responseJSON, err := comp.handleQueryPrefixNATS(ctx, requestJSON)
 			require.NoError(t, err)
 
-			// Parse response - should be array of entities (not entityIds)
-			var entities []graph.EntityState
-			err = json.Unmarshal(responseJSON, &entities)
-			require.NoError(t, err, "response should be valid EntityState array JSON")
+			// Parse response - should be entities envelope
+			var resp struct {
+				Entities []graph.EntityState `json:"entities"`
+			}
+			err = json.Unmarshal(responseJSON, &resp)
+			require.NoError(t, err, "response should be valid entities envelope JSON")
 
-			assert.Equal(t, tt.expectedCount, len(entities), "should return expected count")
+			assert.Equal(t, tt.expectedCount, len(resp.Entities), "should return expected count")
 
 			// Verify expected entities are contained
 			entityIDs := make(map[string]bool)
-			for _, e := range entities {
+			for _, e := range resp.Entities {
 				entityIDs[e.ID] = true
 				// Verify entity has triples (full entity, not just ID)
 				assert.NotEmpty(t, e.Triples, "entity %s should have triples", e.ID)
@@ -959,17 +961,19 @@ func TestComponent_HandleQueryPrefix_ReturnsFullEntities(t *testing.T) {
 	responseJSON, err := comp.handleQueryPrefixNATS(ctx, requestJSON)
 	require.NoError(t, err)
 
-	// Parse response as array of entities
-	var entities []graph.EntityState
-	err = json.Unmarshal(responseJSON, &entities)
-	require.NoError(t, err, "response should be valid EntityState array")
+	// Parse response as entities envelope
+	var resp struct {
+		Entities []graph.EntityState `json:"entities"`
+	}
+	err = json.Unmarshal(responseJSON, &resp)
+	require.NoError(t, err, "response should be valid entities envelope")
 
-	require.Len(t, entities, 1, "should return 1 entity")
+	require.Len(t, resp.Entities, 1, "should return 1 entity")
 
 	// Verify it's a full entity with all data
-	assert.Equal(t, entity.ID, entities[0].ID)
-	assert.Len(t, entities[0].Triples, 2, "should have 2 triples")
-	assert.Equal(t, "robotics.status.armed", entities[0].Triples[0].Predicate)
+	assert.Equal(t, entity.ID, resp.Entities[0].ID)
+	assert.Len(t, resp.Entities[0].Triples, 2, "should have 2 triples")
+	assert.Equal(t, "robotics.status.armed", resp.Entities[0].Triples[0].Predicate)
 }
 
 func TestComponent_HandleQueryPrefix_InvalidRequest(t *testing.T) {
@@ -1005,11 +1009,13 @@ func TestComponent_HandleQueryPrefix_NoMatches(t *testing.T) {
 	responseJSON, err := comp.handleQueryPrefixNATS(ctx, requestJSON)
 	require.NoError(t, err)
 
-	var entities []graph.EntityState
-	err = json.Unmarshal(responseJSON, &entities)
+	var resp struct {
+		Entities []graph.EntityState `json:"entities"`
+	}
+	err = json.Unmarshal(responseJSON, &resp)
 	require.NoError(t, err)
 
-	assert.Empty(t, entities, "should return empty array when no matches")
+	assert.Empty(t, resp.Entities, "should return empty array when no matches")
 }
 
 // ====================================================================================

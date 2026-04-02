@@ -1634,6 +1634,17 @@ func (c *Component) handleNATSResponseWithExtensions(w http.ResponseWriter, subj
 		}
 	}
 
+	// Unwrap entities envelope for collection responses (e.g. graph.query.prefix)
+	// Internal NATS APIs return {"entities": [...]} for consistency; GraphQL expects raw arrays
+	if subject == "graph.query.prefix" {
+		var envelope struct {
+			Entities json.RawMessage `json:"entities"`
+		}
+		if err := json.Unmarshal(resp, &envelope); err == nil && len(envelope.Entities) > 0 {
+			resp = envelope.Entities
+		}
+	}
+
 	c.writeGraphQLSuccessWithExtensions(w, subject, resp, extensions)
 }
 

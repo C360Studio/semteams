@@ -160,8 +160,10 @@ func (c *Component) handleQueryPrefixNATS(ctx context.Context, data []byte) ([]b
 	// Fetch full entities with bounded concurrency and cache
 	entities := c.fetchEntitiesConcurrent(ctx, matched, defaultMaxConcurrent)
 
-	// Return entities array directly (matches GraphQL schema [Entity])
-	return json.Marshal(entities)
+	// Return entities wrapped in envelope for consistency with batch query
+	return json.Marshal(map[string]any{
+		"entities": entities,
+	})
 }
 
 // handleQuerySuffixNATS handles suffix-based entity ID resolution.
