@@ -2,6 +2,7 @@ package agenticmodel
 
 import (
 	"encoding/json"
+	"log/slog"
 	"sort"
 	"strings"
 
@@ -33,6 +34,7 @@ type streamAccumulator struct {
 	completionTokens int
 	lastToolIndex    int             // tracks last assigned index for provider missing-index inference
 	adapter          ProviderAdapter // normalizes stream deltas for the active provider
+	logger           *slog.Logger
 }
 
 // processDelta incorporates a single streaming choice delta.
@@ -168,6 +170,13 @@ func (a *streamAccumulator) toAgentResponse(requestID string) agentic.AgentRespo
 				if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
 					// Malformed arguments — fall back to empty object so the
 					// replay path never serializes "null" for tool_use input.
+					if a.logger != nil {
+						a.logger.Warn("malformed tool call arguments, falling back to empty object",
+							slog.String("tool_name", tc.Function.Name),
+							slog.String("tool_id", tc.ID),
+							slog.String("raw_arguments", tc.Function.Arguments),
+							slog.String("error", err.Error()))
+					}
 					args = make(map[string]any)
 				}
 			}

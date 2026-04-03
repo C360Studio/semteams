@@ -431,7 +431,7 @@ func (c *Client) streamChatCompletion(ctx context.Context, chatReq openai.ChatCo
 	}
 	defer stream.Close()
 
-	acc := &streamAccumulator{adapter: c.getAdapter()}
+	acc := &streamAccumulator{adapter: c.getAdapter(), logger: c.logger}
 	streamStart := time.Now()
 	firstTokenRecorded := false
 
