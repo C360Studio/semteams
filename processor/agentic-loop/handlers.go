@@ -304,6 +304,23 @@ func (h *MessageHandler) buildInitialMessages(task TaskMessage) []agentic.ChatMe
 	return messages
 }
 
+// BuildIterationBudgetMessage creates a system message informing the model of its
+// iteration budget. Tone escalates as the budget is consumed: neutral at ≤50%,
+// a nudge to wrap up at 51-75%, and urgent at >75%.
+func BuildIterationBudgetMessage(iteration, maxIterations int) agentic.ChatMessage {
+	pct := (iteration * 100) / maxIterations
+	var content string
+	switch {
+	case pct > 75:
+		content = fmt.Sprintf("[Iteration Budget] Iteration %d of %d (%d%% used). Budget nearly exhausted — finalize and submit your work now.", iteration, maxIterations, pct)
+	case pct > 50:
+		content = fmt.Sprintf("[Iteration Budget] Iteration %d of %d (%d%% used). Consider wrapping up — focus on completing the current objective.", iteration, maxIterations, pct)
+	default:
+		content = fmt.Sprintf("[Iteration Budget] Iteration %d of %d (%d%% used).", iteration, maxIterations, pct)
+	}
+	return agentic.ChatMessage{Role: "system", Content: content}
+}
+
 // HandleTask processes an incoming task message and creates a new loop
 func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (HandlerResult, error) {
 	// Check for cancellation before starting work
@@ -373,8 +390,10 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 			slog.Int("entity_count", len(task.Context.Entities)))
 	}
 
-	// Build messages for initial request
+	// Build messages for initial request with iteration budget
 	messages := h.buildInitialMessages(task)
+	budgetMsg := BuildIterationBudgetMessage(1, entity.MaxIterations)
+	messages = append([]agentic.ChatMessage{budgetMsg}, messages...)
 
 	// Use per-task tools if provided, otherwise discover from global registry
 	var tools []agentic.ToolDefinition
@@ -943,6 +962,10 @@ func (h *MessageHandler) handleToolsComplete(
 	if !hasUserOrAssistantMessage(messages) {
 		messages = h.recoverEmptyContext(loopID, cm, newIteration, evicted)
 	}
+
+	// Prepend iteration budget so the model sees its budget early in context
+	budgetMsg := BuildIterationBudgetMessage(newIteration, entity.MaxIterations)
+	messages = append([]agentic.ChatMessage{budgetMsg}, messages...)
 
 	// Check for cancellation before building request
 	if err := ctx.Err(); err != nil {

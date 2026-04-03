@@ -969,6 +969,82 @@ func TestHandleModelResponse_TerminalLoop(t *testing.T) {
 	}
 }
 
+func TestBuildIterationBudgetMessage_Tiers(t *testing.T) {
+	tests := []struct {
+		name      string
+		iteration int
+		max       int
+		wantTier  string // substring that identifies the tier
+	}{
+		{"neutral_early", 1, 20, "[Iteration Budget] Iteration 1 of 20 (5% used)."},
+		{"neutral_half", 10, 20, "[Iteration Budget] Iteration 10 of 20 (50% used)."},
+		{"warning", 15, 20, "Consider wrapping up"},
+		{"urgent", 18, 20, "Budget nearly exhausted"},
+		{"urgent_last", 20, 20, "Budget nearly exhausted"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := agenticloop.BuildIterationBudgetMessage(tt.iteration, tt.max)
+			if msg.Role != "system" {
+				t.Errorf("Role = %q, want system", msg.Role)
+			}
+			if !containsIgnoreCase(msg.Content, tt.wantTier) {
+				t.Errorf("Content = %q, want substring %q", msg.Content, tt.wantTier)
+			}
+		})
+	}
+}
+
+func TestHandleTask_IncludesBudgetMessage(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	ctx := context.Background()
+	result, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-budget",
+		Role:   "general",
+		Model:  "qwen-32b",
+		Prompt: "Test budget injection",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	// Find the agent.request and check for budget message
+	for _, msg := range result.PublishedMessages {
+		if !containsIgnoreCase(msg.Subject, "agent.request") {
+			continue
+		}
+
+		var envelope map[string]any
+		if err := json.Unmarshal(msg.Data, &envelope); err != nil {
+			t.Fatalf("Failed to parse envelope: %v", err)
+		}
+		payload, ok := envelope["payload"].(map[string]any)
+		if !ok {
+			t.Fatal("Expected payload in BaseMessage envelope")
+		}
+		messages, ok := payload["messages"].([]any)
+		if !ok || len(messages) == 0 {
+			t.Fatal("Expected messages in request")
+		}
+
+		// First message should be the budget system message
+		first, ok := messages[0].(map[string]any)
+		if !ok {
+			t.Fatal("Expected message object")
+		}
+		content, _ := first["content"].(string)
+		if !containsIgnoreCase(content, "[Iteration Budget]") {
+			t.Errorf("First message should be iteration budget, got: %s", content)
+		}
+		if !containsIgnoreCase(content, "Iteration 1 of") {
+			t.Errorf("Budget should show iteration 1, got: %s", content)
+		}
+		return
+	}
+	t.Error("No agent.request found in published messages")
+}
+
 func TestHandleToolResult_NonExistentLoop(t *testing.T) {
 	handler := agenticloop.NewMessageHandler(createTestConfig())
 
