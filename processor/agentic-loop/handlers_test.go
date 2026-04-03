@@ -219,7 +219,7 @@ func TestHandleModelResponse_ToolCall(t *testing.T) {
 		t.Fatalf("HandleModelResponse() error = %v", err)
 	}
 
-	// Should publish tool.execute for each tool call
+	// Serial dispatch: only the first tool call should be published
 	toolExecuteCount := 0
 	for _, msg := range result.PublishedMessages {
 		if containsIgnoreCase(msg.Subject, "tool.execute") {
@@ -227,13 +227,13 @@ func TestHandleModelResponse_ToolCall(t *testing.T) {
 		}
 	}
 
-	if toolExecuteCount != 2 {
-		t.Errorf("Should publish 2 tool.execute messages, got %d", toolExecuteCount)
+	if toolExecuteCount != 1 {
+		t.Errorf("Should publish 1 tool.execute message (serial dispatch), got %d", toolExecuteCount)
 	}
 
-	// Should track pending tools
-	if len(result.PendingTools) != 2 {
-		t.Errorf("PendingTools count = %d, want 2", len(result.PendingTools))
+	// Only the first tool is pending; second is queued
+	if len(result.PendingTools) != 1 {
+		t.Errorf("PendingTools count = %d, want 1", len(result.PendingTools))
 	}
 
 	// Should record trajectory step
@@ -529,7 +529,7 @@ func TestHandleToolResult_SingleTool(t *testing.T) {
 	}
 }
 
-func TestHandleToolResult_MultipleTool_Partial(t *testing.T) {
+func TestHandleToolResult_MultipleTool_SerialDispatch(t *testing.T) {
 	handler := agenticloop.NewMessageHandler(createTestConfig())
 
 	ctx := context.Background()
@@ -545,7 +545,7 @@ func TestHandleToolResult_MultipleTool_Partial(t *testing.T) {
 
 	loopID := taskResult.LoopID
 
-	// Model response with multiple tool calls
+	// Model response with 3 tool calls — only the first should be dispatched
 	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
@@ -559,12 +559,23 @@ func TestHandleToolResult_MultipleTool_Partial(t *testing.T) {
 		},
 	}
 
-	_, err = handler.HandleModelResponse(ctx, loopID, toolResponse)
+	modelResult, err := handler.HandleModelResponse(ctx, loopID, toolResponse)
 	if err != nil {
 		t.Fatalf("HandleModelResponse() error = %v", err)
 	}
 
-	// First tool result
+	// Only 1 tool.execute should be published (serial dispatch)
+	toolExecCount := 0
+	for _, msg := range modelResult.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute") {
+			toolExecCount++
+		}
+	}
+	if toolExecCount != 1 {
+		t.Errorf("HandleModelResponse should dispatch 1 tool, got %d", toolExecCount)
+	}
+
+	// First tool result → should dispatch tool2
 	result1, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "Result 1",
@@ -573,24 +584,24 @@ func TestHandleToolResult_MultipleTool_Partial(t *testing.T) {
 		t.Fatalf("HandleToolResult() #1 error = %v", err)
 	}
 
-	// Should still have 2 pending
-	if len(result1.PendingTools) != 2 {
-		t.Errorf("After first result, pending = %d, want 2", len(result1.PendingTools))
+	// Should have dispatched tool2 (1 pending)
+	if len(result1.PendingTools) != 1 {
+		t.Errorf("After first result, pending = %d, want 1", len(result1.PendingTools))
 	}
-
-	// Should NOT publish agent.request yet
-	foundRequest := false
+	foundToolExec := false
 	for _, msg := range result1.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute.tool2") {
+			foundToolExec = true
+		}
 		if containsIgnoreCase(msg.Subject, "agent.request") {
-			foundRequest = true
-			break
+			t.Error("Should not publish agent.request until all tools complete")
 		}
 	}
-	if foundRequest {
-		t.Error("Should not publish agent.request until all tools complete")
+	if !foundToolExec {
+		t.Error("Should dispatch tool2 after tool1 completes")
 	}
 
-	// Second tool result
+	// Second tool result → should dispatch tool3
 	result2, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-002",
 		Content: "Result 2",
@@ -599,12 +610,23 @@ func TestHandleToolResult_MultipleTool_Partial(t *testing.T) {
 		t.Fatalf("HandleToolResult() #2 error = %v", err)
 	}
 
-	// Should still have 1 pending
 	if len(result2.PendingTools) != 1 {
 		t.Errorf("After second result, pending = %d, want 1", len(result2.PendingTools))
 	}
+	foundToolExec = false
+	for _, msg := range result2.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute.tool3") {
+			foundToolExec = true
+		}
+		if containsIgnoreCase(msg.Subject, "agent.request") {
+			t.Error("Should not publish agent.request until all tools complete")
+		}
+	}
+	if !foundToolExec {
+		t.Error("Should dispatch tool3 after tool2 completes")
+	}
 
-	// Third tool result (completes all)
+	// Third tool result → queue drained, should publish agent.request
 	result3, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-003",
 		Content: "Result 3",
@@ -613,13 +635,11 @@ func TestHandleToolResult_MultipleTool_Partial(t *testing.T) {
 		t.Fatalf("HandleToolResult() #3 error = %v", err)
 	}
 
-	// Should have no pending
 	if len(result3.PendingTools) != 0 {
 		t.Errorf("After all results, pending = %d, want 0", len(result3.PendingTools))
 	}
 
-	// NOW should publish agent.request
-	foundRequest = false
+	foundRequest := false
 	for _, msg := range result3.PublishedMessages {
 		if containsIgnoreCase(msg.Subject, "agent.request") {
 			foundRequest = true
@@ -801,10 +821,10 @@ func TestHandleToolResult_StopLoop(t *testing.T) {
 	}
 }
 
-// TestHandleToolResult_ParallelStopLoop verifies that when parallel tool calls
-// are dispatched and the StopLoop tool completes first, the trailing non-StopLoop
-// tool result does not publish an agent.request (the loop is already terminal).
-func TestHandleToolResult_ParallelStopLoop(t *testing.T) {
+// TestHandleToolResult_StopLoopClearsQueue verifies that when the model emits
+// multiple tool calls and the first one returns StopLoop, the remaining queued
+// calls are never dispatched.
+func TestHandleToolResult_StopLoopClearsQueue(t *testing.T) {
 	handler := agenticloop.NewMessageHandler(createTestConfig())
 
 	ctx := context.Background()
@@ -812,7 +832,7 @@ func TestHandleToolResult_ParallelStopLoop(t *testing.T) {
 		TaskID:     "task-001",
 		Role:       "general",
 		Model:      "qwen-32b",
-		Prompt:     "Test parallel StopLoop",
+		Prompt:     "Test StopLoop clears queue",
 		ToolChoice: &agentic.ToolChoice{Mode: "required"},
 	})
 	if err != nil {
@@ -821,7 +841,7 @@ func TestHandleToolResult_ParallelStopLoop(t *testing.T) {
 
 	loopID := taskResult.LoopID
 
-	// Model response with two parallel tool calls: submit_work (StopLoop) and bash
+	// Model emits two tool calls: submit_work (first, will StopLoop) and bash (queued)
 	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
@@ -834,12 +854,26 @@ func TestHandleToolResult_ParallelStopLoop(t *testing.T) {
 		},
 	}
 
-	_, err = handler.HandleModelResponse(ctx, loopID, toolResponse)
+	modelResult, err := handler.HandleModelResponse(ctx, loopID, toolResponse)
 	if err != nil {
 		t.Fatalf("HandleModelResponse() error = %v", err)
 	}
 
-	// StopLoop tool completes first
+	// Only submit_work should be dispatched (bash is queued)
+	toolExecCount := 0
+	for _, msg := range modelResult.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "tool.execute") {
+			toolExecCount++
+			if !containsIgnoreCase(msg.Subject, "submit_work") {
+				t.Errorf("Expected tool.execute.submit_work, got %s", msg.Subject)
+			}
+		}
+	}
+	if toolExecCount != 1 {
+		t.Errorf("Should dispatch exactly 1 tool, got %d", toolExecCount)
+	}
+
+	// submit_work returns StopLoop → loop completes, bash never dispatched
 	submitResult, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:   "call-submit",
 		Content:  `{"output": "final answer"}`,
@@ -853,36 +887,21 @@ func TestHandleToolResult_ParallelStopLoop(t *testing.T) {
 		t.Errorf("After StopLoop, state = %q, want %q", submitResult.State, agentic.LoopStateComplete)
 	}
 
-	// Verify agent.complete was published
+	// Verify agent.complete published, no tool.execute for bash
 	foundComplete := false
 	for _, msg := range submitResult.PublishedMessages {
 		if containsIgnoreCase(msg.Subject, "agent.complete") {
 			foundComplete = true
 		}
+		if containsIgnoreCase(msg.Subject, "tool.execute") {
+			t.Fatal("StopLoop must not dispatch queued tools")
+		}
+		if containsIgnoreCase(msg.Subject, "agent.request") {
+			t.Fatal("StopLoop must not publish agent.request")
+		}
 	}
 	if !foundComplete {
 		t.Error("StopLoop tool should publish agent.complete")
-	}
-
-	// Trailing bash result arrives after loop is already complete
-	bashResult, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
-		CallID:  "call-bash",
-		Content: "bash output",
-	})
-	if err != nil {
-		t.Fatalf("HandleToolResult(bash) error = %v", err)
-	}
-
-	// State must still be terminal
-	if bashResult.State != agentic.LoopStateComplete {
-		t.Errorf("After trailing tool, state = %q, want %q", bashResult.State, agentic.LoopStateComplete)
-	}
-
-	// Must NOT publish agent.request — this is the bug fix
-	for _, msg := range bashResult.PublishedMessages {
-		if containsIgnoreCase(msg.Subject, "agent.request") {
-			t.Fatal("Trailing tool result must NOT publish agent.request when loop is already complete")
-		}
 	}
 }
 
@@ -1472,18 +1491,18 @@ func TestToolCallFilter_AllApproved(t *testing.T) {
 		t.Fatalf("HandleModelResponse() error = %v", err)
 	}
 
-	// All calls should be published as tool.execute
+	// Serial dispatch: first call dispatched, second queued
 	toolCount := 0
 	for _, msg := range result.PublishedMessages {
 		if containsIgnoreCase(msg.Subject, "tool.execute") {
 			toolCount++
 		}
 	}
-	if toolCount != 2 {
-		t.Errorf("Expected 2 tool.execute messages, got %d", toolCount)
+	if toolCount != 1 {
+		t.Errorf("Expected 1 tool.execute message (serial dispatch), got %d", toolCount)
 	}
-	if len(result.PendingTools) != 2 {
-		t.Errorf("Expected 2 pending tools, got %d", len(result.PendingTools))
+	if len(result.PendingTools) != 1 {
+		t.Errorf("Expected 1 pending tool (serial dispatch), got %d", len(result.PendingTools))
 	}
 }
 

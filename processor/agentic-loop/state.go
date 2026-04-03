@@ -19,6 +19,7 @@ type LoopManager struct {
 	loops             map[string]*agentic.LoopEntity
 	contextManagers   map[string]*ContextManager          // loopID -> ContextManager
 	pendingTools      map[string]map[string]bool          // loopID -> map[callID]bool
+	queuedToolCalls   map[string][]agentic.ToolCall       // loopID -> remaining calls to dispatch serially
 	cachedTools       map[string][]agentic.ToolDefinition // loopID -> tools (runtime cache, not persisted)
 	cachedToolChoice  map[string]*agentic.ToolChoice      // loopID -> tool choice (runtime cache, not persisted)
 	cachedMetadata    map[string]map[string]any           // loopID -> metadata (domain context, not persisted)
@@ -58,6 +59,7 @@ func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 		loops:             make(map[string]*agentic.LoopEntity),
 		contextManagers:   make(map[string]*ContextManager),
 		pendingTools:      make(map[string]map[string]bool),
+		queuedToolCalls:   make(map[string][]agentic.ToolCall),
 		cachedTools:       make(map[string][]agentic.ToolDefinition),
 		cachedToolChoice:  make(map[string]*agentic.ToolChoice),
 		cachedMetadata:    make(map[string]map[string]any),
@@ -83,6 +85,7 @@ func NewLoopManagerWithConfig(contextConfig ContextConfig, opts ...LoopManagerOp
 		loops:             make(map[string]*agentic.LoopEntity),
 		contextManagers:   make(map[string]*ContextManager),
 		pendingTools:      make(map[string]map[string]bool),
+		queuedToolCalls:   make(map[string][]agentic.ToolCall),
 		cachedTools:       make(map[string][]agentic.ToolDefinition),
 		cachedToolChoice:  make(map[string]*agentic.ToolChoice),
 		cachedMetadata:    make(map[string]map[string]any),
@@ -173,6 +176,7 @@ func (m *LoopManager) DeleteLoop(loopID string) error {
 
 	delete(m.loops, loopID)
 	delete(m.pendingTools, loopID)
+	delete(m.queuedToolCalls, loopID)
 	delete(m.contextManagers, loopID)
 	delete(m.cachedTools, loopID)
 	delete(m.cachedToolChoice, loopID)
@@ -361,6 +365,43 @@ func (m *LoopManager) AllToolsComplete(loopID string) bool {
 
 	pending := m.pendingTools[loopID]
 	return len(pending) == 0
+}
+
+// QueueToolCalls stores tool calls to be dispatched serially after the current call completes.
+func (m *LoopManager) QueueToolCalls(loopID string, calls []agentic.ToolCall) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.queuedToolCalls[loopID] = append(m.queuedToolCalls[loopID], calls...)
+}
+
+// DequeueToolCall removes and returns the next queued tool call for dispatch.
+func (m *LoopManager) DequeueToolCall(loopID string) (agentic.ToolCall, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	queue := m.queuedToolCalls[loopID]
+	if len(queue) == 0 {
+		return agentic.ToolCall{}, false
+	}
+
+	next := queue[0]
+	queue[0] = agentic.ToolCall{} // zero for GC (arguments/metadata maps)
+	m.queuedToolCalls[loopID] = queue[1:]
+	return next, true
+}
+
+// HasQueuedTools returns true if there are tool calls waiting to be dispatched.
+func (m *LoopManager) HasQueuedTools(loopID string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.queuedToolCalls[loopID]) > 0
+}
+
+// ClearQueuedTools discards all queued tool calls (e.g., when StopLoop fires).
+func (m *LoopManager) ClearQueuedTools(loopID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.queuedToolCalls, loopID)
 }
 
 // TrackRequest associates a request ID with a loop ID
@@ -767,6 +808,9 @@ func (m *LoopManager) CancelLoop(loopID, cancelledBy string) (agentic.LoopEntity
 	entity.Outcome = agentic.OutcomeCancelled
 	entity.CompletedAt = now
 	entity.Error = "cancelled by user"
+
+	// Clear queued tool calls so no further tools are dispatched.
+	delete(m.queuedToolCalls, loopID)
 
 	return *entity, nil
 }

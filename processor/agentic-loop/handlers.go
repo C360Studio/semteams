@@ -643,33 +643,50 @@ func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID st
 
 	// Propagate domain metadata to approved tool calls
 	metadata := h.loopManager.GetCachedMetadata(loopID)
-
 	for i := range approved {
-		// Inject metadata if present and call doesn't already have it
 		if len(metadata) > 0 && len(approved[i].Metadata) == 0 {
 			approved[i].Metadata = metadata
 		}
-
-		if err := h.loopManager.AddPendingTool(loopID, approved[i].ID); err != nil {
-			return err
-		}
-		h.loopManager.TrackToolCall(approved[i].ID, loopID)
-		h.loopManager.TrackToolName(approved[i].ID, approved[i].Name)
-		h.loopManager.TrackToolArguments(approved[i].ID, approved[i].Arguments)
-		h.loopManager.TrackToolStart(approved[i].ID)
-
-		tc := approved[i] // local copy for pointer
-		toolMsg := message.NewBaseMessage(tc.Schema(), &tc, "agentic-loop")
-		toolData, err := json.Marshal(toolMsg)
-		if err != nil {
-			return err
-		}
-		result.PublishedMessages = append(result.PublishedMessages, PublishedMessage{
-			Subject: subjectToolExecute + "." + tc.Name,
-			Data:    toolData,
-		})
 	}
+
+	// Serial dispatch: execute one tool at a time. Queue remaining calls
+	// for dispatch after each result arrives in HandleToolResult.
+	// Parallelism is an app-level concern (parallel agents via semspec),
+	// not a per-tool concern within a single agent loop.
+	if len(approved) > 1 {
+		h.loopManager.QueueToolCalls(loopID, approved[1:])
+	}
+
+	if len(approved) > 0 {
+		if err := h.dispatchToolCall(result, loopID, approved[0]); err != nil {
+			return err
+		}
+	}
+
 	result.PendingTools = h.loopManager.GetPendingTools(loopID)
+	return nil
+}
+
+// dispatchToolCall publishes a single tool call for execution and registers
+// all tracking metadata (pending tools, call-to-loop mapping, timing).
+func (h *MessageHandler) dispatchToolCall(result *HandlerResult, loopID string, tc agentic.ToolCall) error {
+	if err := h.loopManager.AddPendingTool(loopID, tc.ID); err != nil {
+		return err
+	}
+	h.loopManager.TrackToolCall(tc.ID, loopID)
+	h.loopManager.TrackToolName(tc.ID, tc.Name)
+	h.loopManager.TrackToolArguments(tc.ID, tc.Arguments)
+	h.loopManager.TrackToolStart(tc.ID)
+
+	toolMsg := message.NewBaseMessage(tc.Schema(), &tc, "agentic-loop")
+	toolData, err := json.Marshal(toolMsg)
+	if err != nil {
+		return err
+	}
+	result.PublishedMessages = append(result.PublishedMessages, PublishedMessage{
+		Subject: subjectToolExecute + "." + tc.Name,
+		Data:    toolData,
+	})
 	return nil
 }
 
@@ -813,9 +830,22 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 	// are needed (e.g., a terminal action like decompose, submit, approve).
 	// Content becomes the LoopCompletedEvent.Result.
 	if toolResult.StopLoop {
+		h.loopManager.ClearQueuedTools(loopID)
 		if err := h.handleCompleteResponse(&result, loopID, entity, toolResult.Content); err != nil {
 			return result, err
 		}
+		return result, nil
+	}
+
+	// Serial dispatch: if there are queued tool calls waiting, dispatch the
+	// next one. Results accumulate in PendingToolResults until the queue is
+	// drained and AllToolsComplete, then handleToolsComplete batches them
+	// into context for the next model request.
+	if next, ok := h.loopManager.DequeueToolCall(loopID); ok {
+		if err := h.dispatchToolCall(&result, loopID, next); err != nil {
+			return result, err
+		}
+		result.PendingTools = h.loopManager.GetPendingTools(loopID)
 		return result, nil
 	}
 
@@ -823,10 +853,8 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 	// there in batch, not individually, to avoid double-adds with filter rejections).
 	cm := h.loopManager.GetContextManager(loopID)
 
-	// Check if all tools are complete
+	// All tools dispatched and complete — proceed to next model request.
 	if h.loopManager.AllToolsComplete(loopID) {
-		// Guard: if a parallel StopLoop tool already transitioned this loop
-		// to a terminal state, don't issue another model request.
 		if entity.State.IsTerminal() {
 			return result, nil
 		}
