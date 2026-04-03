@@ -801,6 +801,155 @@ func TestHandleToolResult_StopLoop(t *testing.T) {
 	}
 }
 
+// TestHandleToolResult_ParallelStopLoop verifies that when parallel tool calls
+// are dispatched and the StopLoop tool completes first, the trailing non-StopLoop
+// tool result does not publish an agent.request (the loop is already terminal).
+func TestHandleToolResult_ParallelStopLoop(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID:     "task-001",
+		Role:       "general",
+		Model:      "qwen-32b",
+		Prompt:     "Test parallel StopLoop",
+		ToolChoice: &agentic.ToolChoice{Mode: "required"},
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	loopID := taskResult.LoopID
+
+	// Model response with two parallel tool calls: submit_work (StopLoop) and bash
+	toolResponse := agentic.AgentResponse{
+		RequestID: "req-001",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role: "assistant",
+			ToolCalls: []agentic.ToolCall{
+				{ID: "call-submit", Name: "submit_work"},
+				{ID: "call-bash", Name: "bash"},
+			},
+		},
+	}
+
+	_, err = handler.HandleModelResponse(ctx, loopID, toolResponse)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	// StopLoop tool completes first
+	submitResult, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
+		CallID:   "call-submit",
+		Content:  `{"output": "final answer"}`,
+		StopLoop: true,
+	})
+	if err != nil {
+		t.Fatalf("HandleToolResult(submit) error = %v", err)
+	}
+
+	if submitResult.State != agentic.LoopStateComplete {
+		t.Errorf("After StopLoop, state = %q, want %q", submitResult.State, agentic.LoopStateComplete)
+	}
+
+	// Verify agent.complete was published
+	foundComplete := false
+	for _, msg := range submitResult.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "agent.complete") {
+			foundComplete = true
+		}
+	}
+	if !foundComplete {
+		t.Error("StopLoop tool should publish agent.complete")
+	}
+
+	// Trailing bash result arrives after loop is already complete
+	bashResult, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
+		CallID:  "call-bash",
+		Content: "bash output",
+	})
+	if err != nil {
+		t.Fatalf("HandleToolResult(bash) error = %v", err)
+	}
+
+	// State must still be terminal
+	if bashResult.State != agentic.LoopStateComplete {
+		t.Errorf("After trailing tool, state = %q, want %q", bashResult.State, agentic.LoopStateComplete)
+	}
+
+	// Must NOT publish agent.request — this is the bug fix
+	for _, msg := range bashResult.PublishedMessages {
+		if containsIgnoreCase(msg.Subject, "agent.request") {
+			t.Fatal("Trailing tool result must NOT publish agent.request when loop is already complete")
+		}
+	}
+}
+
+// TestHandleModelResponse_TerminalLoop verifies that model responses for loops
+// already in terminal state are rejected (defense-in-depth against stale agent.request).
+func TestHandleModelResponse_TerminalLoop(t *testing.T) {
+	handler := agenticloop.NewMessageHandler(createTestConfig())
+
+	ctx := context.Background()
+	taskResult, err := handler.HandleTask(ctx, agenticloop.TaskMessage{
+		TaskID: "task-001",
+		Role:   "general",
+		Model:  "qwen-32b",
+		Prompt: "Test terminal rejection",
+	})
+	if err != nil {
+		t.Fatalf("HandleTask() error = %v", err)
+	}
+
+	loopID := taskResult.LoopID
+
+	// Complete the loop via StopLoop
+	toolResponse := agentic.AgentResponse{
+		RequestID: "req-001",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role:      "assistant",
+			ToolCalls: []agentic.ToolCall{{ID: "call-001", Name: "submit_work"}},
+		},
+	}
+	_, err = handler.HandleModelResponse(ctx, loopID, toolResponse)
+	if err != nil {
+		t.Fatalf("HandleModelResponse() error = %v", err)
+	}
+
+	_, err = handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
+		CallID:   "call-001",
+		Content:  "done",
+		StopLoop: true,
+	})
+	if err != nil {
+		t.Fatalf("HandleToolResult(StopLoop) error = %v", err)
+	}
+
+	// Now send a model response to the terminal loop (simulates stale agent.request)
+	staleResponse := agentic.AgentResponse{
+		RequestID: "req-stale",
+		Status:    "tool_call",
+		Message: agentic.ChatMessage{
+			Role:      "assistant",
+			ToolCalls: []agentic.ToolCall{{ID: "call-stale", Name: "bash"}},
+		},
+	}
+	result, err := handler.HandleModelResponse(ctx, loopID, staleResponse)
+	if err != nil {
+		t.Fatalf("HandleModelResponse(terminal) error = %v", err)
+	}
+
+	// Should return terminal state with no published messages
+	if result.State != agentic.LoopStateComplete {
+		t.Errorf("State = %q, want %q", result.State, agentic.LoopStateComplete)
+	}
+	if len(result.PublishedMessages) != 0 {
+		t.Errorf("Terminal loop should not publish any messages, got %d", len(result.PublishedMessages))
+	}
+}
+
 func TestHandleToolResult_NonExistentLoop(t *testing.T) {
 	handler := agenticloop.NewMessageHandler(createTestConfig())
 

@@ -476,6 +476,16 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 		return HandlerResult{}, err
 	}
 
+	// Reject responses for loops already in terminal state (defense-in-depth:
+	// catches stale agent.request messages published before a parallel StopLoop
+	// transition was visible).
+	if entity.State.IsTerminal() {
+		h.logger.Warn("ignoring model response for terminal loop",
+			slog.String("loop_id", loopID),
+			slog.String("state", entity.State.String()))
+		return HandlerResult{LoopID: loopID, State: entity.State}, nil
+	}
+
 	// Check if max iterations reached
 	if entity.Iterations >= entity.MaxIterations {
 		return HandlerResult{}, errs.WrapFatal(
@@ -815,6 +825,11 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 
 	// Check if all tools are complete
 	if h.loopManager.AllToolsComplete(loopID) {
+		// Guard: if a parallel StopLoop tool already transitioned this loop
+		// to a terminal state, don't issue another model request.
+		if entity.State.IsTerminal() {
+			return result, nil
+		}
 		return h.handleToolsComplete(ctx, loopID, entity, cm, &result)
 	}
 
