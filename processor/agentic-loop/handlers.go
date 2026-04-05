@@ -414,7 +414,12 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		h.loopManager.CacheMetadata(loopID, task.Metadata)
 	}
 
-	// Create initial agent request with structured ID for recovery
+	return h.buildTaskRequest(loopID, task, entity, messages, tools)
+}
+
+// buildTaskRequest creates the initial agent request, trajectory step, and loop-created
+// event, returning the assembled HandlerResult.
+func (h *MessageHandler) buildTaskRequest(loopID string, task TaskMessage, entity agentic.LoopEntity, messages []agentic.ChatMessage, tools []agentic.ToolDefinition) (HandlerResult, error) {
 	request := agentic.AgentRequest{
 		RequestID:  h.loopManager.GenerateRequestID(loopID),
 		LoopID:     loopID,
@@ -425,7 +430,6 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		ToolChoice: task.ToolChoice,
 	}
 
-	// Track request ID to loop ID mapping (cache for fast lookup)
 	h.loopManager.TrackRequest(request.RequestID, loopID)
 	h.loopManager.TrackRequestStart(request.RequestID)
 
@@ -435,16 +439,14 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 		return HandlerResult{}, err
 	}
 
-	// Record trajectory step (duration will be updated when response arrives)
 	step := h.buildTaskTrajectoryStep(request.RequestID, task, messages)
 
-	// Build loop created event
 	createdData, err := h.buildLoopCreatedData(loopID, task, entity)
 	if err != nil {
 		return HandlerResult{}, err
 	}
 
-	result := HandlerResult{
+	return HandlerResult{
 		LoopID: loopID,
 		State:  entity.State,
 		PublishedMessages: []PublishedMessage{
@@ -458,9 +460,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 			},
 		},
 		TrajectorySteps: []agentic.TrajectoryStep{step},
-	}
-
-	return result, nil
+	}, nil
 }
 
 // HandleModelResponse processes a model response

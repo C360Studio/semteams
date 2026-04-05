@@ -781,6 +781,14 @@ func (c *Component) extractAgentResponse(data []byte) (*agentic.AgentResponse, s
 func (c *Component) handleLoopFailure(ctx context.Context, loopID string, entity agentic.LoopEntity, reason string, err error) {
 	c.logger.Error("Loop processing failed", "error", err, "loop_id", loopID, "reason", reason)
 
+	// Transition loop to failed and persist — without this, the loop entity
+	// in AGENT_LOOPS KV stays at state=running and downstream watchers
+	// (execution-manager) never see the terminal state.
+	if transErr := c.handler.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed); transErr == nil {
+		c.handler.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", err.Error())
+		c.persistLoopState(ctx, loopID)
+	}
+
 	if c.metrics != nil && entity.ID != "" {
 		duration := time.Since(entity.StartedAt).Seconds()
 		c.metrics.recordLoopFailed(reason, entity.Iterations, duration)
