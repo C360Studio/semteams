@@ -1,4 +1,13 @@
-// Package graph provides types for NATS mutation API
+// Package graph provides request/response types for the NATS mutation and query APIs.
+//
+// These types are the public contract for graph operations via NATS request/reply.
+// External consumers (semspec, semdragon) and internal components import this
+// package directly to build requests and parse responses.
+//
+// Graph request/reply is intentionally exempt from the BaseMessage payload registry.
+// Request/reply is point-to-point — the subject determines the handler, so
+// type-discriminated dispatch adds no value. See docs/concepts/15-payload-registry.md
+// for the full rationale.
 package graph
 
 import "github.com/c360studio/semstreams/message"

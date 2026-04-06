@@ -1,4 +1,5 @@
-// Package graph provides types for NATS mutation API
+// Package graph provides request/response types for the NATS mutation and query APIs.
+// See mutation_requests.go for the full package documentation.
 package graph
 
 import (

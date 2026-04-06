@@ -435,6 +435,49 @@ func TestTaskMessage_RoundTrip(t *testing.T) {
 }
 ```
 
+## Request/Reply Exemption
+
+The payload registry applies to **stream messages** — messages published to JetStream where multiple consumers may need type-discriminated dispatch to deserialize polymorphic payloads.
+
+**Graph request/reply subjects are intentionally exempt.** These subjects use raw JSON structs without BaseMessage wrapping:
+
+| Subject pattern | Package | Purpose |
+|---|---|---|
+| `graph.mutation.triple.*` | `graph` | Triple add/remove mutations |
+| `graph.mutation.entity.*` | `graph` | Entity CRUD operations |
+| `graph.ingest.query.*` | `graph` | Hierarchy/prefix/batch lookups |
+| `graph.query.*` | `graph` | Entity, relationship, search queries |
+
+### Why request/reply doesn't need the registry
+
+Request/reply is point-to-point: one publisher, one handler. The publisher knows exactly which handler will receive the message and what struct it expects. There is no fan-out, no polymorphic dispatch, and no need for type discovery at the consumer.
+
+BaseMessage wrapping would add envelope overhead and registry coupling without providing any benefit — the consumer never needs to ask "what type is this?" because the subject already determines the handler.
+
+### How callers use graph types
+
+External consumers (semspec, semdragon) and internal components import the `graph` package directly for request/response types:
+
+```go
+import gtypes "github.com/c360studio/semstreams/graph"
+
+req := gtypes.AddTripleRequest{Triple: triple}
+reqData, _ := json.Marshal(req)
+respData, _ := natsClient.Request(ctx, "graph.mutation.triple.add", reqData, 5*time.Second)
+
+var resp gtypes.AddTripleResponse
+json.Unmarshal(respData, &resp)
+```
+
+This is the intended integration pattern. The `graph` package's request and response types are its public API contract for NATS request/reply consumers.
+
+### When to use which pattern
+
+| Pattern | When | Example |
+|---|---|---|
+| **Payload registry + BaseMessage** | Stream pub/sub, fan-out, polymorphic consumers | `agent.task.*`, `agent.complete.*` |
+| **Raw JSON structs** | NATS request/reply, point-to-point, known handler | `graph.mutation.*`, `graph.query.*` |
+
 ## Related Documentation
 
 - [Agentic Components](../advanced/08-agentic-components.md) — Uses payload registry for all message types
