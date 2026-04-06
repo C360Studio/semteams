@@ -537,7 +537,6 @@ func TestBoidHandler_ProcessSteeringSignal_AppliesSteeringToContext(t *testing.T
 	cfg := ContextConfig{
 		Enabled:          true,
 		CompactThreshold: 0.8,
-		ToolResultMaxAge: 3,
 	}
 	cm := NewContextManager("loop-1", "test-model", cfg)
 
@@ -574,7 +573,6 @@ func TestBoidHandler_ProcessSteeringSignal_AllSignalTypes(t *testing.T) {
 	cfg := ContextConfig{
 		Enabled:          true,
 		CompactThreshold: 0.8,
-		ToolResultMaxAge: 3,
 	}
 	cm := NewContextManager("loop-1", "test-model", cfg)
 

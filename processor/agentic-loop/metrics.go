@@ -35,7 +35,6 @@ type loopMetrics struct {
 	contextUtilization           prometheus.Gauge
 	contextCompactionsTotal      prometheus.Counter
 	contextCompactionTokensSaved prometheus.Histogram
-	contextGCEvictionsTotal      prometheus.Counter
 	contextCompactedRegionTokens prometheus.Gauge
 
 	// Boid coordination
@@ -169,13 +168,6 @@ func getMetrics(registry *metric.MetricsRegistry) *loopMetrics {
 				Buckets:   prometheus.ExponentialBuckets(100, 2, 10), // 100 to ~100k
 			}),
 
-			contextGCEvictionsTotal: prometheus.NewCounter(prometheus.CounterOpts{
-				Namespace: "semstreams",
-				Subsystem: "agentic_loop",
-				Name:      "context_gc_evictions_total",
-				Help:      "Total messages evicted by tool result GC",
-			}),
-
 			contextCompactedRegionTokens: prometheus.NewGauge(prometheus.GaugeOpts{
 				Namespace: "semstreams",
 				Subsystem: "agentic_loop",
@@ -210,7 +202,6 @@ func getMetrics(registry *metric.MetricsRegistry) *loopMetrics {
 			_ = registry.RegisterGauge("agentic-loop", "context_utilization", metrics.contextUtilization)
 			_ = registry.RegisterCounter("agentic-loop", "context_compactions_total", metrics.contextCompactionsTotal)
 			_ = registry.RegisterHistogram("agentic-loop", "context_compaction_tokens_saved", metrics.contextCompactionTokensSaved)
-			_ = registry.RegisterCounter("agentic-loop", "context_gc_evictions_total", metrics.contextGCEvictionsTotal)
 			_ = registry.RegisterGauge("agentic-loop", "context_compacted_region_tokens", metrics.contextCompactedRegionTokens)
 		} else {
 			// Fallback to default prometheus registry for testing
@@ -231,7 +222,6 @@ func getMetrics(registry *metric.MetricsRegistry) *loopMetrics {
 			_ = prometheus.DefaultRegisterer.Register(metrics.contextUtilization)
 			_ = prometheus.DefaultRegisterer.Register(metrics.contextCompactionsTotal)
 			_ = prometheus.DefaultRegisterer.Register(metrics.contextCompactionTokensSaved)
-			_ = prometheus.DefaultRegisterer.Register(metrics.contextGCEvictionsTotal)
 			_ = prometheus.DefaultRegisterer.Register(metrics.contextCompactedRegionTokens)
 		}
 	})
@@ -316,11 +306,6 @@ func (m *loopMetrics) recordContextUtilization(utilization float64) {
 func (m *loopMetrics) recordContextCompaction(tokensSaved int) {
 	m.contextCompactionsTotal.Inc()
 	m.contextCompactionTokensSaved.Observe(float64(tokensSaved))
-}
-
-// recordContextGCEvictions adds to the total GC evictions counter.
-func (m *loopMetrics) recordContextGCEvictions(count int) {
-	m.contextGCEvictionsTotal.Add(float64(count))
 }
 
 // recordCompactedRegionTokens updates the compacted region tokens gauge.

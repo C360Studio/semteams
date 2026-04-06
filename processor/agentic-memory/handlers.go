@@ -9,7 +9,7 @@ import (
 
 // ContextEvent matches the structure from agentic-loop/handlers.go
 type ContextEvent struct {
-	Type        string  `json:"type"` // "compaction_starting", "compaction_complete", "gc_complete"
+	Type        string  `json:"type"` // "compaction_starting", "compaction_complete"
 	LoopID      string  `json:"loop_id"`
 	Iteration   int     `json:"iteration"`
 	Utilization float64 `json:"utilization,omitempty"`
@@ -58,8 +58,6 @@ func (c *Component) handleCompactionEvent(ctx context.Context, data []byte) {
 		c.handleCompactionComplete(ctx, event)
 	case "compaction_starting":
 		c.handleCompactionStarting(ctx, event)
-	case "gc_complete":
-		c.handleGCComplete(ctx, event)
 	default:
 		// Unknown event types are logged but not counted as processed
 		c.logger.Debug("Unknown compaction event type", "type", event.Type, "loop_id", event.LoopID)
@@ -156,15 +154,6 @@ func (c *Component) handleCompactionStarting(ctx context.Context, event ContextE
 	c.logger.Debug("Facts extracted and published",
 		"loop_id", event.LoopID,
 		"triple_count", len(triples))
-}
-
-// handleGCComplete processes garbage collection completion events
-func (c *Component) handleGCComplete(_ context.Context, event ContextEvent) {
-	c.logger.Debug("Garbage collection complete",
-		"loop_id", event.LoopID,
-		"iteration", event.Iteration)
-
-	// GC complete events are logged but do not trigger actions
 }
 
 // handleHydrateRequest processes explicit hydration requests

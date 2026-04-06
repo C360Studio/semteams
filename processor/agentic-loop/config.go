@@ -35,7 +35,6 @@ type Config struct {
 type ContextConfig struct {
 	Enabled          bool    `json:"enabled" description:"Deprecated: context management is always enabled (required for Gemini compatibility)"`
 	CompactThreshold float64 `json:"compact_threshold" description:"Utilization threshold (0.01-1.0) that triggers context compaction"`
-	ToolResultMaxAge int     `json:"tool_result_max_age" description:"Maximum age in iterations before tool results are garbage collected"`
 	HeadroomRatio    float64 `json:"headroom_ratio" description:"Fraction of model context to reserve for responses (0.0-0.5). Takes precedence over headroom_tokens when the computed value is larger"`
 	HeadroomTokens   int     `json:"headroom_tokens" description:"Minimum token headroom floor — ratio-based headroom never goes below this value"`
 	// Multi-agent context budget fields
@@ -90,11 +89,6 @@ func (c ContextConfig) Validate() error {
 		return errs.WrapInvalid(fmt.Errorf("compact_threshold must be between 0.01 and 1.0"), "ContextConfig", "Validate", "check compact_threshold")
 	}
 
-	// Validate ToolResultMaxAge: must be > 0
-	if c.ToolResultMaxAge <= 0 {
-		return errs.WrapInvalid(fmt.Errorf("tool_result_max_age must be greater than 0"), "ContextConfig", "Validate", "check tool_result_max_age")
-	}
-
 	// Validate HeadroomRatio: must be 0.0-0.5 (reserving >50% defeats the purpose)
 	if c.HeadroomRatio < 0 || c.HeadroomRatio > 0.5 {
 		return errs.WrapInvalid(fmt.Errorf("headroom_ratio must be between 0.0 and 0.5"), "ContextConfig", "Validate", "check headroom_ratio")
@@ -116,9 +110,6 @@ func (c *ContextConfig) EnsureDefaults() {
 	if c.CompactThreshold == 0 {
 		c.CompactThreshold = defaults.CompactThreshold
 	}
-	if c.ToolResultMaxAge == 0 {
-		c.ToolResultMaxAge = defaults.ToolResultMaxAge
-	}
 	if c.HeadroomRatio == 0 && c.HeadroomTokens == 0 {
 		c.HeadroomRatio = defaults.HeadroomRatio
 		c.HeadroomTokens = defaults.HeadroomTokens
@@ -130,7 +121,6 @@ func DefaultContextConfig() ContextConfig {
 	return ContextConfig{
 		Enabled:          true,
 		CompactThreshold: 0.60,
-		ToolResultMaxAge: 3,
 		HeadroomRatio:    0.05,
 		HeadroomTokens:   4000,
 	}

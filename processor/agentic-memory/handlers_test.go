@@ -15,7 +15,7 @@ import (
 
 // ContextEvent matches the structure from agentic-loop/handlers.go
 type ContextEvent struct {
-	Type        string  `json:"type"` // "compaction_starting", "compaction_complete", "gc_complete"
+	Type        string  `json:"type"` // "compaction_starting", "compaction_complete"
 	LoopID      string  `json:"loop_id"`
 	Iteration   int     `json:"iteration"`
 	Utilization float64 `json:"utilization,omitempty"`
@@ -170,30 +170,6 @@ func TestHandleCompactionEvent_CompactionStarting(t *testing.T) {
 				t.Errorf("Event.Type = %s, want compaction_starting", unmarshaled.Type)
 			}
 		})
-	}
-}
-
-func TestHandleCompactionEvent_GCComplete(t *testing.T) {
-	event := ContextEvent{
-		Type:      "gc_complete",
-		LoopID:    "loop-001",
-		Iteration: 10,
-	}
-
-	eventData, err := json.Marshal(event)
-	if err != nil {
-		t.Fatalf("Failed to marshal event: %v", err)
-	}
-
-	// GC complete events should be processed but may not trigger actions
-	var unmarshaled ContextEvent
-	err = json.Unmarshal(eventData, &unmarshaled)
-	if err != nil {
-		t.Fatalf("Failed to unmarshal event: %v", err)
-	}
-
-	if unmarshaled.Type != "gc_complete" {
-		t.Errorf("Event.Type = %s, want gc_complete", unmarshaled.Type)
 	}
 }
 

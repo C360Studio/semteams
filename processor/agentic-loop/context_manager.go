@@ -236,44 +236,6 @@ func (cm *ContextManager) GetRegionTokens(region RegionType) int {
 	return total
 }
 
-// GCToolResults garbage collects old tool results based on age.
-// Tool results live in RegionRecentHistory (for chronological ordering with
-// assistant messages), so this scans that region for role="tool" messages.
-// After eviction, repairs tool pairs to ensure no orphaned assistant/tool messages.
-func (cm *ContextManager) GCToolResults(currentIteration int) int {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
-	recent := cm.regions[RegionRecentHistory]
-	if len(recent) == 0 {
-		return 0
-	}
-
-	evicted := 0
-	remaining := make([]contextMessage, 0, len(recent))
-
-	for _, m := range recent {
-		if m.Message.Role == "tool" {
-			age := currentIteration - m.Iteration
-			if age > cm.config.ToolResultMaxAge && !m.Message.IsError {
-				evicted++
-				continue
-			}
-		}
-		remaining = append(remaining, m)
-	}
-
-	cm.regions[RegionRecentHistory] = remaining
-
-	// Repair orphaned tool pairs created by the eviction above
-	evicted += cm.repairToolPairsLocked()
-
-	// Update current iteration for future AddMessage calls
-	cm.currentIteration = currentIteration
-
-	return evicted
-}
-
 // repairToolPairsLocked removes orphaned tool pair messages from RegionRecentHistory.
 // An assistant message with ToolCalls is orphaned if any of its tool results are missing.
 // A tool result message is orphaned if its corresponding assistant message is missing.

@@ -931,36 +931,16 @@ func (h *MessageHandler) handleToolsComplete(
 
 	toolMessages := h.buildToolMessages(allResults)
 
-	// Build full conversation for the next model request.
-	// Add tool results first, then run GC. GC must run AFTER tool results are
-	// in context so the repair pass can see complete tool pairs (assistant +
-	// tool results) and avoid orphaning them.
 	for _, tm := range toolMessages {
 		_ = cm.AddMessage(RegionRecentHistory, tm)
 	}
 
-	// Run GC on old tool results now that current results are in context
-	evicted := cm.GCToolResults(newIteration)
-	if evicted > 0 {
-		result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
-			Type:        "gc_complete",
-			LoopID:      loopID,
-			Iteration:   newIteration,
-			TokensSaved: evicted, // repurposed: count of messages evicted
-		})
-
-		h.logger.Debug("context GC complete",
-			slog.String("loop_id", loopID),
-			slog.Int("evicted", evicted),
-			slog.Float64("utilization_after", cm.Utilization()))
-	}
-
 	messages := cm.GetContext()
 
-	// Recovery: if GC/repair left only system messages (no user or assistant),
-	// Gemini rejects the request. Re-inject the task prompt as a user message.
+	// Safety net: if budget slicing emptied the context, re-inject the task prompt
+	// so the model has at least one user message (Gemini rejects system-only contexts).
 	if !hasUserOrAssistantMessage(messages) {
-		messages = h.recoverEmptyContext(loopID, cm, newIteration, evicted)
+		messages = h.recoverEmptyContext(loopID, cm, newIteration, 0)
 	}
 
 	// Prepend iteration budget so the model sees its budget early in context

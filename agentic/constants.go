@@ -42,7 +42,6 @@ const (
 const (
 	ContextEventCompactionStarting = "compaction_starting"
 	ContextEventCompactionComplete = "compaction_complete"
-	ContextEventGCComplete         = "gc_complete"
 )
 
 // Role values for agent loops.

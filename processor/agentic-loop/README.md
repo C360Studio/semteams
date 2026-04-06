@@ -55,7 +55,6 @@ The `agentic-loop` component orchestrates autonomous agent execution by managing
     "context": {
       "enabled": true,
       "compact_threshold": 0.60,
-      "tool_result_max_age": 3,
       "headroom_tokens": 6400,
       "model_limits": {
         "gpt-4o": 128000,
@@ -102,7 +101,6 @@ The `agentic-loop` component orchestrates autonomous agent execution by managing
 |--------|------|---------|-------------|
 | `enabled` | bool | true | Enable context memory management |
 | `compact_threshold` | float | 0.60 | Trigger compaction at this utilization (0.01-1.0) |
-| `tool_result_max_age` | int | 3 | Evict tool results older than N iterations |
 | `headroom_tokens` | int | 6400 | Reserve tokens for new content |
 | `model_limits` | map | (defaults) | Token limits per model name |
 
@@ -229,14 +227,6 @@ Published to `agent.context.compaction.*`:
 }
 ```
 
-```json
-{
-  "type": "gc_complete",
-  "loop_id": "loop_123",
-  "iteration": 6
-}
-```
-
 ## KV Storage
 
 ### AGENT_LOOPS
@@ -354,7 +344,6 @@ The loop publishes context events that agentic-memory consumes:
 
 - `compaction_starting` - agentic-memory extracts facts before compaction
 - `compaction_complete` - agentic-memory injects recovered context
-- `gc_complete` - Logged for observability
 
 ## Troubleshooting
 

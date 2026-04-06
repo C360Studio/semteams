@@ -121,7 +121,6 @@
 //	context := agenticloop.ContextConfig{
 //	    Enabled:            true,
 //	    CompactThreshold:   0.60,  // Trigger compaction at 60% utilization
-//	    ToolResultMaxAge:   3,     // Evict tool results older than 3 iterations
 //	    HeadroomTokens:     6400,  // Reserve tokens for new content
 //	}
 //
@@ -133,7 +132,6 @@
 //
 //   - compaction_starting: Context approaching limit, compaction starting
 //   - compaction_complete: Compaction finished, includes tokens saved
-//   - gc_complete: Tool result garbage collection completed
 //
 // # Component Architecture
 //
@@ -209,7 +207,6 @@
 //	    "context": {
 //	        "enabled": true,
 //	        "compact_threshold": 0.60,
-//	        "tool_result_max_age": 3,
 //	        "headroom_tokens": 6400,
 //	    },
 //	    "ports": {
@@ -322,7 +319,6 @@
 //
 //   - compaction_starting: agentic-memory extracts facts before compaction
 //   - compaction_complete: agentic-memory injects recovered context
-//   - gc_complete: Logged for observability
 //
 // # Quick Start
 //

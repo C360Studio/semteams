@@ -169,13 +169,6 @@
 //	    "summary": "Discussed authentication..."
 //	}
 //
-//	// GC complete - logged for observability
-//	{
-//	    "type": "gc_complete",
-//	    "loop_id": "loop_123",
-//	    "iteration": 6
-//	}
-//
 // # Hydration Requests
 //
 // Explicit hydration can be requested:

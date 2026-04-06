@@ -286,61 +286,6 @@ func TestIntegration_CompactionStarting_ReceivesEvent(t *testing.T) {
 	}, 3*time.Second, 50*time.Millisecond, "Component should remain healthy")
 }
 
-// TestIntegration_GCComplete_ReceivesEvent tests that gc_complete events are received and logged
-func TestIntegration_GCComplete_ReceivesEvent(t *testing.T) {
-	natsClient := getSharedNATSClient(t)
-
-	config := agenticmemory.DefaultConfig()
-	config.StreamName = "AGENT"
-	config.ConsumerNameSuffix = "gc-complete-test"
-	config.Hydration.PostCompaction.Enabled = false
-	config.Hydration.PreTask.Enabled = false
-	config.Extraction.LLMAssisted.Enabled = false
-
-	rawConfig, err := json.Marshal(config)
-	require.NoError(t, err)
-
-	deps := component.Dependencies{
-		NATSClient: natsClient,
-	}
-
-	comp, err := agenticmemory.NewComponent(rawConfig, deps)
-	require.NoError(t, err)
-
-	lc, ok := comp.(component.LifecycleComponent)
-	require.True(t, ok)
-
-	err = lc.Initialize()
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	err = lc.Start(ctx)
-	require.NoError(t, err)
-	defer lc.Stop(5 * time.Second)
-
-	waitForConsumerReady(t, comp)
-
-	// Publish gc_complete event
-	event := agenticmemory.ContextEvent{
-		Type:      "gc_complete",
-		LoopID:    "loop-003",
-		Iteration: 10,
-	}
-
-	eventData, err := json.Marshal(event)
-	require.NoError(t, err)
-
-	err = natsClient.PublishToStream(ctx, "agent.context.compaction.loop-003", eventData)
-	require.NoError(t, err)
-
-	require.Eventually(t, func() bool {
-		health := comp.Health()
-		return health.Healthy
-	}, 3*time.Second, 50*time.Millisecond, "Component should remain healthy")
-}
-
 // TestIntegration_HydrateRequest_PreTask tests pre-task hydration requests
 func TestIntegration_HydrateRequest_PreTask(t *testing.T) {
 	natsClient := getSharedNATSClient(t)

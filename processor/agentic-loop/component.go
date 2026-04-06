@@ -989,8 +989,6 @@ func (c *Component) emitContextMetrics(result HandlerResult) {
 		switch event.Type {
 		case "compaction_complete":
 			c.metrics.recordContextCompaction(event.TokensSaved)
-		case "gc_complete":
-			c.metrics.recordContextGCEvictions(event.TokensSaved)
 		}
 	}
 

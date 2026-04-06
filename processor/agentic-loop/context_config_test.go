@@ -19,7 +19,6 @@ func TestContextConfig_Validate(t *testing.T) {
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: 0.60,
-				ToolResultMaxAge: 3,
 				HeadroomRatio:    0.05,
 				HeadroomTokens:   4000,
 			},
@@ -36,7 +35,6 @@ func TestContextConfig_Validate(t *testing.T) {
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: -0.1,
-				ToolResultMaxAge: 3,
 				HeadroomRatio:    0.05,
 				HeadroomTokens:   4000,
 			},
@@ -48,7 +46,6 @@ func TestContextConfig_Validate(t *testing.T) {
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: 1.5,
-				ToolResultMaxAge: 3,
 				HeadroomRatio:    0.05,
 				HeadroomTokens:   4000,
 			},
@@ -60,7 +57,6 @@ func TestContextConfig_Validate(t *testing.T) {
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: 0,
-				ToolResultMaxAge: 3,
 				HeadroomRatio:    0.05,
 				HeadroomTokens:   4000,
 			},
@@ -68,35 +64,10 @@ func TestContextConfig_Validate(t *testing.T) {
 			errMsg:  "compact_threshold",
 		},
 		{
-			name: "negative tool result max age",
-			config: agenticloop.ContextConfig{
-				Enabled:          true,
-				CompactThreshold: 0.60,
-				ToolResultMaxAge: -1,
-				HeadroomRatio:    0.05,
-				HeadroomTokens:   4000,
-			},
-			wantErr: true,
-			errMsg:  "tool_result_max_age",
-		},
-		{
-			name: "zero tool result max age",
-			config: agenticloop.ContextConfig{
-				Enabled:          true,
-				CompactThreshold: 0.60,
-				ToolResultMaxAge: 0,
-				HeadroomRatio:    0.05,
-				HeadroomTokens:   4000,
-			},
-			wantErr: true,
-			errMsg:  "tool_result_max_age",
-		},
-		{
 			name: "negative headroom tokens",
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: 0.60,
-				ToolResultMaxAge: 3,
 				HeadroomTokens:   -100,
 			},
 			wantErr: true,
@@ -107,7 +78,6 @@ func TestContextConfig_Validate(t *testing.T) {
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: 0.01,
-				ToolResultMaxAge: 3,
 				HeadroomRatio:    0.05,
 				HeadroomTokens:   4000,
 			},
@@ -118,18 +88,6 @@ func TestContextConfig_Validate(t *testing.T) {
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: 1.0,
-				ToolResultMaxAge: 3,
-				HeadroomRatio:    0.05,
-				HeadroomTokens:   4000,
-			},
-			wantErr: false,
-		},
-		{
-			name: "boundary tool result age 1",
-			config: agenticloop.ContextConfig{
-				Enabled:          true,
-				CompactThreshold: 0.60,
-				ToolResultMaxAge: 1,
 				HeadroomRatio:    0.05,
 				HeadroomTokens:   4000,
 			},
@@ -140,7 +98,6 @@ func TestContextConfig_Validate(t *testing.T) {
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: 0.60,
-				ToolResultMaxAge: 3,
 				HeadroomTokens:   0,
 			},
 			wantErr: false,
@@ -176,11 +133,6 @@ func TestContextConfig_DefaultValues(t *testing.T) {
 		t.Errorf("DefaultContextConfig() compact_threshold = %f, want 0.60", cfg.CompactThreshold)
 	}
 
-	// Verify tool result max age
-	if cfg.ToolResultMaxAge != 3 {
-		t.Errorf("DefaultContextConfig() tool_result_max_age = %d, want 3", cfg.ToolResultMaxAge)
-	}
-
 	// Verify headroom ratio
 	if cfg.HeadroomRatio != 0.05 {
 		t.Errorf("DefaultContextConfig() headroom_ratio = %f, want 0.05", cfg.HeadroomRatio)
@@ -207,7 +159,6 @@ func TestContextConfig_JSONSerialization(t *testing.T) {
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: 0.60,
-				ToolResultMaxAge: 3,
 				HeadroomRatio:    0.05,
 				HeadroomTokens:   4000,
 			},
@@ -221,7 +172,6 @@ func TestContextConfig_JSONSerialization(t *testing.T) {
 			config: agenticloop.ContextConfig{
 				Enabled:          true,
 				CompactThreshold: 0.75,
-				ToolResultMaxAge: 5,
 				HeadroomRatio:    0.10,
 				HeadroomTokens:   10000,
 			},
@@ -248,9 +198,6 @@ func TestContextConfig_JSONSerialization(t *testing.T) {
 			}
 			if decoded.CompactThreshold != tt.config.CompactThreshold {
 				t.Errorf("CompactThreshold = %f, want %f", decoded.CompactThreshold, tt.config.CompactThreshold)
-			}
-			if decoded.ToolResultMaxAge != tt.config.ToolResultMaxAge {
-				t.Errorf("ToolResultMaxAge = %d, want %d", decoded.ToolResultMaxAge, tt.config.ToolResultMaxAge)
 			}
 			if decoded.HeadroomTokens != tt.config.HeadroomTokens {
 				t.Errorf("HeadroomTokens = %d, want %d", decoded.HeadroomTokens, tt.config.HeadroomTokens)
