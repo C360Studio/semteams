@@ -1372,3 +1372,271 @@ func TestAction_TriggerWorkflow_ErrorHandling(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "publish workflow trigger to workflow.trigger.notify-technician")
 }
+
+// mockKVWriter implements KVWriter for testing
+type mockKVWriter struct {
+	updates []kvWriteCall
+	puts    []kvWriteCall
+	data    map[string]map[string]map[string]any // bucket -> key -> value
+}
+
+type kvWriteCall struct {
+	Bucket string
+	Key    string
+}
+
+func newMockKVWriter() *mockKVWriter {
+	return &mockKVWriter{
+		data: make(map[string]map[string]map[string]any),
+	}
+}
+
+func (m *mockKVWriter) UpdateJSON(_ context.Context, bucket, key string, updateFn func(current map[string]any) error) error {
+	m.updates = append(m.updates, kvWriteCall{Bucket: bucket, Key: key})
+
+	if m.data[bucket] == nil {
+		m.data[bucket] = make(map[string]map[string]any)
+	}
+	current := m.data[bucket][key]
+	if current == nil {
+		current = make(map[string]any)
+	}
+	if err := updateFn(current); err != nil {
+		return err
+	}
+	m.data[bucket][key] = current
+	return nil
+}
+
+func (m *mockKVWriter) PutJSON(_ context.Context, bucket, key string, value map[string]any) error {
+	m.puts = append(m.puts, kvWriteCall{Bucket: bucket, Key: key})
+
+	if m.data[bucket] == nil {
+		m.data[bucket] = make(map[string]map[string]any)
+	}
+	m.data[bucket][key] = value
+	return nil
+}
+
+func TestAction_UpdateKV_Merge(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	kv := newMockKVWriter()
+	// Seed existing data
+	kv.data["PLAN_STATES"] = map[string]map[string]any{
+		"my-plan": {"status": "created", "owner": "alice"},
+	}
+
+	executor := NewActionExecutorComplete(nil, nil, nil, kv)
+
+	action := Action{
+		Type:   ActionTypeUpdateKV,
+		Bucket: "PLAN_STATES",
+		Key:    "my-plan",
+		Payload: map[string]any{
+			"status":     "drafting",
+			"updated_by": "rule_engine",
+		},
+		Merge: true,
+	}
+
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "plan.001"})
+	require.NoError(t, err)
+
+	// Verify merge: existing "owner" preserved, "status" updated, "updated_by" added
+	result := kv.data["PLAN_STATES"]["my-plan"]
+	assert.Equal(t, "drafting", result["status"])
+	assert.Equal(t, "alice", result["owner"])
+	assert.Equal(t, "rule_engine", result["updated_by"])
+	assert.Len(t, kv.updates, 1)
+	assert.Equal(t, "PLAN_STATES", kv.updates[0].Bucket)
+}
+
+func TestAction_UpdateKV_Overwrite(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	kv := newMockKVWriter()
+	executor := NewActionExecutorComplete(nil, nil, nil, kv)
+
+	action := Action{
+		Type:   ActionTypeUpdateKV,
+		Bucket: "EXECUTION_STATES",
+		Key:    "exec-001",
+		Payload: map[string]any{
+			"stage": "running",
+		},
+		Merge: false,
+	}
+
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "exec.001"})
+	require.NoError(t, err)
+
+	result := kv.data["EXECUTION_STATES"]["exec-001"]
+	assert.Equal(t, "running", result["stage"])
+	assert.Len(t, kv.puts, 1)
+}
+
+func TestAction_UpdateKV_VariableSubstitution(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	kv := newMockKVWriter()
+	executor := NewActionExecutorComplete(nil, nil, nil, kv)
+
+	entity := &gtypes.EntityState{
+		ID: "plan.001",
+		Triples: []message.Triple{
+			{Subject: "plan.001", Predicate: "workflow.plan.slug", Object: "my-plan"},
+		},
+	}
+
+	action := Action{
+		Type:   ActionTypeUpdateKV,
+		Bucket: "PLAN_STATES",
+		Key:    "$entity.triple.workflow.plan.slug",
+		Payload: map[string]any{
+			"status":     "drafting",
+			"updated_at": "$now",
+			"entity_id":  "$entity.id",
+		},
+		Merge: false,
+	}
+
+	ec := &ExecutionContext{
+		EntityID: "plan.001",
+		Entity:   entity,
+	}
+
+	err := executor.Execute(ctx, action, ec)
+	require.NoError(t, err)
+
+	// Key should be substituted
+	assert.Contains(t, kv.data["PLAN_STATES"], "my-plan")
+
+	result := kv.data["PLAN_STATES"]["my-plan"]
+	assert.Equal(t, "drafting", result["status"])
+	assert.Equal(t, "plan.001", result["entity_id"])
+	// $now should be substituted to an RFC3339 timestamp
+	nowStr, ok := result["updated_at"].(string)
+	require.True(t, ok, "updated_at should be a string")
+	_, parseErr := time.Parse(time.RFC3339, nowStr)
+	assert.NoError(t, parseErr, "updated_at should be valid RFC3339: %s", nowStr)
+}
+
+func TestAction_UpdateKV_MissingBucket(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	executor := NewActionExecutorComplete(nil, nil, nil, newMockKVWriter())
+
+	action := Action{
+		Type: ActionTypeUpdateKV,
+		Key:  "some-key",
+		Payload: map[string]any{
+			"status": "drafting",
+		},
+	}
+
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "plan.001"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "bucket is required")
+}
+
+func TestAction_UpdateKV_MissingKey(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	executor := NewActionExecutorComplete(nil, nil, nil, newMockKVWriter())
+
+	action := Action{
+		Type:   ActionTypeUpdateKV,
+		Bucket: "PLAN_STATES",
+		Payload: map[string]any{
+			"status": "drafting",
+		},
+	}
+
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "plan.001"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "key is required")
+}
+
+func TestAction_UpdateKV_NoWriter(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	// No kvWriter — should be a graceful no-op
+	executor := NewActionExecutorFull(nil, nil, nil)
+
+	action := Action{
+		Type:   ActionTypeUpdateKV,
+		Bucket: "PLAN_STATES",
+		Key:    "my-plan",
+		Payload: map[string]any{
+			"status": "drafting",
+		},
+	}
+
+	err := executor.Execute(ctx, action, &ExecutionContext{EntityID: "plan.001"})
+	require.NoError(t, err)
+}
+
+func TestSubstitutePayloadVariables_Nested(t *testing.T) {
+	t.Parallel()
+
+	ec := &ExecutionContext{
+		EntityID:  "plan.001",
+		RelatedID: "req.001",
+	}
+
+	payload := map[string]any{
+		"entity":  "$entity.id",
+		"related": "$related.id",
+		"count":   42,
+		"nested": map[string]any{
+			"inner_entity": "$entity.id",
+			"flag":         true,
+		},
+	}
+
+	result := substitutePayloadVariables(payload, ec)
+
+	assert.Equal(t, "plan.001", result["entity"])
+	assert.Equal(t, "req.001", result["related"])
+	assert.Equal(t, 42, result["count"]) // non-string preserved
+	nested := result["nested"].(map[string]any)
+	assert.Equal(t, "plan.001", nested["inner_entity"])
+	assert.Equal(t, true, nested["flag"]) // non-string preserved
+}
+
+func TestSubstitutePayloadVariables_ArrayValues(t *testing.T) {
+	t.Parallel()
+
+	ec := &ExecutionContext{
+		EntityID:  "plan.001",
+		RelatedID: "req.001",
+	}
+
+	payload := map[string]any{
+		"tags":    []any{"$entity.id", "static", "$related.id"},
+		"numbers": []any{1, 2, 3},
+		"mixed":   []any{"$entity.id", 42, true},
+	}
+
+	result := substitutePayloadVariables(payload, ec)
+
+	tags := result["tags"].([]any)
+	assert.Equal(t, "plan.001", tags[0])
+	assert.Equal(t, "static", tags[1])
+	assert.Equal(t, "req.001", tags[2])
+
+	numbers := result["numbers"].([]any)
+	assert.Equal(t, 1, numbers[0]) // non-string preserved
+
+	mixed := result["mixed"].([]any)
+	assert.Equal(t, "plan.001", mixed[0])
+	assert.Equal(t, 42, mixed[1])
+	assert.Equal(t, true, mixed[2])
+}

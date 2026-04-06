@@ -134,15 +134,21 @@ State is stored in `RULE_STATE` NATS KV bucket.
 
 ```go
 type MatchState struct {
-    RuleID         string    // Rule identifier
-    EntityKey      string    // Entity ID or canonical pair key
-    IsMatching     bool      // Current match state
-    LastTransition string    // ""|"entered"|"exited"
-    TransitionAt   time.Time // When last transition occurred
-    SourceRevision uint64    // Entity version that caused state
-    LastChecked    time.Time // When rule was last evaluated
+    RuleID         string            // Rule identifier
+    EntityKey      string            // Entity ID or canonical pair key
+    IsMatching     bool              // Current match state
+    LastTransition string            // ""|"entered"|"exited"
+    TransitionAt   time.Time         // When last transition occurred
+    SourceRevision uint64            // Entity version that caused state
+    LastChecked    time.Time         // When rule was last evaluated
+    FieldValues    map[string]string // Previous field values (used by transition operator)
 }
 ```
+
+`FieldValues` is populated automatically when a rule uses the `transition` operator. On every
+evaluation the current value of each `transition`-operator field is written back into `FieldValues`
+so the *next* evaluation can compare against it. This is why a `transition` condition always returns
+false on first evaluation — there is no recorded history yet.
 
 ### Key Format
 

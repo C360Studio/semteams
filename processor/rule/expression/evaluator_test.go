@@ -938,6 +938,192 @@ func TestExpressionEvaluator_BetweenOperator(t *testing.T) {
 	}
 }
 
+func TestExpressionEvaluator_TransitionOperator(t *testing.T) {
+	evaluator := NewExpressionEvaluator()
+
+	entity := createTestEntity("plan.001", []message.Triple{
+		{Subject: "plan.001", Predicate: "workflow.plan.status", Object: "drafting", Source: "test", Timestamp: time.Now()},
+	})
+
+	tests := []struct {
+		name        string
+		stateFields StateFields
+		condition   ConditionExpression
+		expected    bool
+		shouldErr   bool
+	}{
+		{
+			name: "matching from/to transition",
+			stateFields: StateFields{
+				"$prev.workflow.plan.status": "created",
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "drafting",
+				From:     []interface{}{"created", "rejected"},
+			},
+			expected: true,
+		},
+		{
+			name: "from as single value",
+			stateFields: StateFields{
+				"$prev.workflow.plan.status": "created",
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "drafting",
+				From:     "created",
+			},
+			expected: true,
+		},
+		{
+			name: "from array with multiple allowed states",
+			stateFields: StateFields{
+				"$prev.workflow.plan.status": "rejected",
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "drafting",
+				From:     []interface{}{"created", "rejected"},
+			},
+			expected: true,
+		},
+		{
+			name: "nil from - any change counts",
+			stateFields: StateFields{
+				"$prev.workflow.plan.status": "created",
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "drafting",
+				From:     nil,
+			},
+			expected: true,
+		},
+		{
+			name: "nil from - same value is not a transition",
+			stateFields: StateFields{
+				"$prev.workflow.plan.status": "drafting",
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "drafting",
+				From:     nil,
+			},
+			expected: false,
+		},
+		{
+			name: "current value does not match target",
+			stateFields: StateFields{
+				"$prev.workflow.plan.status": "created",
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "reviewing", // entity has "drafting", not "reviewing"
+				From:     []interface{}{"created"},
+			},
+			expected: false,
+		},
+		{
+			name: "previous value not in from set",
+			stateFields: StateFields{
+				"$prev.workflow.plan.status": "completed",
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "drafting",
+				From:     []interface{}{"created", "rejected"},
+			},
+			expected: false,
+		},
+		{
+			name:        "first evaluation - no previous value",
+			stateFields: StateFields{
+				// no $prev entry
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "drafting",
+				From:     []interface{}{"created"},
+			},
+			expected: false,
+		},
+		{
+			name: "missing field - not required",
+			stateFields: StateFields{
+				"$prev.nonexistent.field": "old",
+			},
+			condition: ConditionExpression{
+				Field:    "nonexistent.field",
+				Operator: OpTransition,
+				Value:    "new",
+				From:     []interface{}{"old"},
+				Required: false,
+			},
+			expected: false,
+		},
+		{
+			name: "nil entity state - not required",
+			stateFields: StateFields{
+				"$prev.workflow.plan.status": "created",
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "drafting",
+				From:     []interface{}{"created"},
+				Required: false,
+			},
+			expected: false,
+		},
+		{
+			name: "nil entity state - required",
+			stateFields: StateFields{
+				"$prev.workflow.plan.status": "created",
+			},
+			condition: ConditionExpression{
+				Field:    "workflow.plan.status",
+				Operator: OpTransition,
+				Value:    "drafting",
+				From:     []interface{}{"created"},
+				Required: true,
+			},
+			expected:  false,
+			shouldErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testEntity := entity
+			if tt.name == "nil entity state - not required" || tt.name == "nil entity state - required" {
+				testEntity = nil
+			}
+
+			expr := LogicalExpression{
+				Conditions: []ConditionExpression{tt.condition},
+				Logic:      LogicAnd,
+			}
+
+			result, err := evaluator.EvaluateWithStateFields(testEntity, tt.stateFields, expr)
+			if tt.shouldErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result, "condition: %+v", tt.condition)
+		})
+	}
+}
+
 // Helper function to create test entity states
 func createTestEntity(entityID string, triples []message.Triple) *gtypes.EntityState {
 	return &gtypes.EntityState{

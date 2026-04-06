@@ -367,13 +367,14 @@ func (rp *Processor) initializeStateTracker(ctx context.Context) error {
 	var actionExecutor ActionExecutorInterface
 	if rp.natsClient != nil {
 		publisher := newActionPublisher(rp)
+		kvWriter := newNATSKVWriter(rp.natsClient, rp.logger)
 		if rp.config.EnableGraphIntegration {
 			mutator := newTripleMutator(rp.natsClient, rp)
-			actionExecutor = NewActionExecutorFull(rp.logger, mutator, publisher)
-			rp.logger.Info("ActionExecutor initialized with triple mutation and publishing support")
+			actionExecutor = NewActionExecutorComplete(rp.logger, mutator, publisher, kvWriter)
+			rp.logger.Info("ActionExecutor initialized with triple mutation, publishing, and KV write support")
 		} else {
-			actionExecutor = NewActionExecutorFull(rp.logger, nil, publisher)
-			rp.logger.Info("ActionExecutor initialized with publishing support (graph integration disabled)")
+			actionExecutor = NewActionExecutorComplete(rp.logger, nil, publisher, kvWriter)
+			rp.logger.Info("ActionExecutor initialized with publishing and KV write support (graph integration disabled)")
 		}
 	} else {
 		actionExecutor = NewActionExecutor(rp.logger)

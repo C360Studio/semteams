@@ -721,3 +721,187 @@ func TestIntegration_GraphIntegration(t *testing.T) {
 	}
 	receiveMu.Unlock()
 }
+
+// TestIntegration_TransitionOperator_UpdateKV exercises the transition operator and
+// update_kv action end-to-end on real NATS: entity state changes in ENTITY_STATES KV,
+// the transition condition detects a valid from→to change, and the on_enter action
+// writes to a domain KV bucket.
+func TestIntegration_TransitionOperator_UpdateKV(t *testing.T) {
+	natsClient := getTestNATSClient(t)
+	ctx := context.Background()
+
+	js, err := natsClient.JetStream()
+	require.NoError(t, err)
+
+	// Create ENTITY_STATES bucket for rule input
+	entityKV, err := js.KeyValue(ctx, "ENTITY_STATES")
+	if err != nil {
+		entityKV, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+			Bucket: "ENTITY_STATES",
+		})
+		require.NoError(t, err)
+	}
+
+	// Create PLAN_STATES bucket for update_kv output
+	planKV, err := js.KeyValue(ctx, "PLAN_STATES")
+	if err != nil {
+		planKV, err = js.CreateKeyValue(ctx, jetstream.KeyValueConfig{
+			Bucket:  "PLAN_STATES",
+			History: 5,
+		})
+		require.NoError(t, err)
+	}
+
+	// Seed PLAN_STATES with initial data to test merge semantics
+	initialPlan, err := json.Marshal(map[string]any{
+		"status": "created",
+		"owner":  "alice",
+	})
+	require.NoError(t, err)
+	_, err = planKV.Put(ctx, "my-plan", initialPlan)
+	require.NoError(t, err)
+
+	// Define a rule: when workflow.plan.status transitions from "created" to "drafting",
+	// merge {status: "drafting"} into PLAN_STATES/my-plan
+	ruleDef := rule.Definition{
+		ID:   "plan-created-to-drafting",
+		Type: "expression",
+		Name: "Plan Created to Drafting Transition",
+		Conditions: []expression.ConditionExpression{
+			{
+				Field:    "workflow.plan.status",
+				Operator: "transition",
+				Value:    "drafting",
+				From:     []any{"created", "rejected"},
+			},
+		},
+		Logic:   "and",
+		Enabled: true,
+		Entity: rule.EntityConfig{
+			Pattern: "c360.test.workflow.>",
+		},
+		OnEnter: []rule.Action{
+			{
+				Type:   "update_kv",
+				Bucket: "PLAN_STATES",
+				Key:    "my-plan",
+				Payload: map[string]any{
+					"status":     "drafting",
+					"drafted_by": "rule_engine",
+					"entity_ref": "$entity.id",
+					"drafted_at": "$now",
+				},
+				Merge: true,
+			},
+		},
+	}
+
+	// Configure processor
+	config := rule.DefaultConfig()
+	config.Ports = &component.PortConfig{
+		Inputs: []component.PortDefinition{
+			{Name: "entity_events", Type: "nats", Subject: "events.graph.entity.>", Interface: "core.entity.v1", Required: true},
+		},
+		Outputs: []component.PortDefinition{
+			{Name: "rule_events", Type: "nats", Subject: "events.rule.triggered", Interface: "core.rule.v1", Required: true},
+		},
+	}
+	config.InlineRules = []rule.Definition{ruleDef}
+	config.EntityWatchPatterns = []string{"c360.test.workflow.>"}
+	config.EnableGraphIntegration = false
+
+	metricsRegistry := metric.NewMetricsRegistry()
+	processor, err := rule.NewProcessorWithMetrics(natsClient, &config, metricsRegistry)
+	require.NoError(t, err)
+
+	err = processor.Initialize()
+	require.NoError(t, err)
+
+	testCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	err = processor.Start(testCtx)
+	require.NoError(t, err)
+	defer processor.Stop(5 * time.Second)
+
+	time.Sleep(300 * time.Millisecond) // Wait for watchers
+
+	entityID := "c360.test.workflow.plan.plan1"
+
+	// --- Step 1: Put entity with status "created" ---
+	// This seeds the transition tracker's previous value. The transition condition
+	// checks for "from: created → to: drafting", so this should NOT fire (current != target).
+	entityCreated := gtypes.EntityState{
+		ID: entityID,
+		Triples: []message.Triple{
+			{Subject: entityID, Predicate: "workflow.plan.status", Object: "created", Source: "test", Timestamp: time.Now()},
+			{Subject: entityID, Predicate: "workflow.plan.slug", Object: "my-plan", Source: "test", Timestamp: time.Now()},
+		},
+		Version:   1,
+		UpdatedAt: time.Now(),
+	}
+	createdJSON, err := json.Marshal(entityCreated)
+	require.NoError(t, err)
+	_, err = entityKV.Put(ctx, entityID, createdJSON)
+	require.NoError(t, err)
+
+	time.Sleep(500 * time.Millisecond) // Wait for evaluation
+
+	// Verify PLAN_STATES was NOT updated by the rule (status should still be "created")
+	entry, err := planKV.Get(ctx, "my-plan")
+	require.NoError(t, err)
+	var planState map[string]any
+	require.NoError(t, json.Unmarshal(entry.Value(), &planState))
+	assert.Equal(t, "created", planState["status"], "Plan should still be 'created' — first evaluation seeds history but can't detect transition")
+	assert.Equal(t, "alice", planState["owner"], "Owner should be preserved")
+	assert.Nil(t, planState["drafted_by"], "drafted_by should not be set yet")
+
+	// --- Step 2: Update entity to status "drafting" ---
+	// Now the transition condition sees: previous="created" (tracked), current="drafting" (target).
+	// From set includes "created", so this IS a valid transition → rule fires → update_kv merges.
+	entityDrafting := gtypes.EntityState{
+		ID: entityID,
+		Triples: []message.Triple{
+			{Subject: entityID, Predicate: "workflow.plan.status", Object: "drafting", Source: "test", Timestamp: time.Now()},
+			{Subject: entityID, Predicate: "workflow.plan.slug", Object: "my-plan", Source: "test", Timestamp: time.Now()},
+		},
+		Version:   2,
+		UpdatedAt: time.Now(),
+	}
+	draftingJSON, err := json.Marshal(entityDrafting)
+	require.NoError(t, err)
+	_, err = entityKV.Put(ctx, entityID, draftingJSON)
+	require.NoError(t, err)
+
+	// Wait for evaluation + action execution
+	// Poll for the KV update to appear (avoids flaky fixed sleeps)
+	require.Eventually(t, func() bool {
+		entry, err := planKV.Get(ctx, "my-plan")
+		if err != nil {
+			return false
+		}
+		var state map[string]any
+		if err := json.Unmarshal(entry.Value(), &state); err != nil {
+			return false
+		}
+		return state["status"] == "drafting"
+	}, 5*time.Second, 100*time.Millisecond, "PLAN_STATES should be updated to 'drafting' by transition rule")
+
+	// Verify merge semantics: original "owner" preserved, new fields added
+	entry, err = planKV.Get(ctx, "my-plan")
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(entry.Value(), &planState))
+
+	assert.Equal(t, "drafting", planState["status"], "status should be updated")
+	assert.Equal(t, "alice", planState["owner"], "owner should be preserved by merge")
+	assert.Equal(t, "rule_engine", planState["drafted_by"], "drafted_by should be set by action")
+	assert.Equal(t, entityID, planState["entity_ref"], "$entity.id should be substituted")
+
+	// $now should be a valid RFC3339 timestamp
+	if draftedAt, ok := planState["drafted_at"].(string); ok {
+		_, parseErr := time.Parse(time.RFC3339, draftedAt)
+		assert.NoError(t, parseErr, "drafted_at should be valid RFC3339: %s", draftedAt)
+	} else {
+		t.Error("drafted_at should be a string timestamp")
+	}
+}

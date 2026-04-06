@@ -30,6 +30,9 @@ func NewExpressionEvaluator() *Evaluator {
 	evaluator.operators[OpNotIn] = operatorNotIn
 	evaluator.operators[OpBetween] = operatorBetween
 
+	// Note: OpTransition is handled specially in evaluateConditionWithState
+	// because it needs access to $prev.* state fields, not just fieldValue/compareValue.
+
 	// Register string operators
 	evaluator.operators[OpContains] = operatorContains
 	evaluator.operators[OpStartsWith] = operatorStartsWith
@@ -127,6 +130,11 @@ func (e *Evaluator) evaluateConditionWithState(entityState *gtypes.EntityState, 
 		return result, nil
 	}
 
+	// Handle transition operator (needs previous value from state)
+	if condition.Operator == OpTransition {
+		return e.evaluateTransition(entityState, stateFields, condition)
+	}
+
 	// If entityState is nil (message-path rules), non-$state fields are treated as missing
 	if entityState == nil {
 		if condition.Required {
@@ -188,6 +196,79 @@ func (e *Evaluator) evaluateCondition(entityState *gtypes.EntityState, condition
 	}
 
 	return result, nil
+}
+
+// evaluateTransition checks whether a field is transitioning from an allowed previous
+// value to a specified target value. It requires:
+//   - The current field value (from entity triples) equals condition.Value (the "to" state)
+//   - The previous field value (from stateFields["$prev.<field>"]) is in condition.From
+//
+// If no previous value is tracked (first evaluation), returns false — a transition
+// requires history. If condition.From is nil, any change from a different previous value
+// to condition.Value is treated as a valid transition.
+func (e *Evaluator) evaluateTransition(entityState *gtypes.EntityState, stateFields StateFields, condition ConditionExpression) (bool, error) {
+	// Entity state is required for transition checks
+	if entityState == nil {
+		if condition.Required {
+			return false, &EvaluationError{
+				Field:    condition.Field,
+				Operator: OpTransition,
+				Message:  "entity state is nil, transition cannot be evaluated",
+			}
+		}
+		return false, nil
+	}
+
+	// Get current field value from entity triples
+	currentValue, exists, err := e.typeDetector.GetFieldValue(entityState, condition.Field)
+	if err != nil {
+		return false, &EvaluationError{
+			Field:    condition.Field,
+			Operator: OpTransition,
+			Message:  "failed to get current field value",
+			Err:      err,
+		}
+	}
+	if !exists {
+		return false, nil
+	}
+
+	// Check that current value matches the target ("to") value
+	if compareValues(currentValue, condition.Value) != 0 {
+		return false, nil
+	}
+
+	// Look up previous value from state fields
+	prevKey := "$prev." + condition.Field
+	prevValue, hasPrev := stateFields[prevKey]
+	if !hasPrev {
+		// First evaluation — no previous value tracked, can't detect a transition
+		return false, nil
+	}
+
+	// If From is specified, check that previous value is in the allowed set
+	if condition.From != nil {
+		fromSlice := normalizeToSlice(condition.From)
+		for _, allowed := range fromSlice {
+			if compareValues(prevValue, allowed) == 0 {
+				return true, nil
+			}
+		}
+		// Previous value not in allowed From set
+		return false, nil
+	}
+
+	// From is nil — any change to the target value counts as a valid transition
+	// (but the previous value must differ from current to be a real transition)
+	return compareValues(prevValue, currentValue) != 0, nil
+}
+
+// normalizeToSlice converts a value that may be a single item or a slice into []interface{}.
+func normalizeToSlice(v interface{}) []interface{} {
+	if arr, ok := v.([]interface{}); ok {
+		return arr
+	}
+	return []interface{}{v}
 }
 
 // defaultTypeDetector implements TypeDetector using existing triple access functions

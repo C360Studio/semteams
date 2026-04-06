@@ -4,6 +4,7 @@ package rule
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	gtypes "github.com/c360studio/semstreams/graph"
 )
@@ -39,6 +40,9 @@ type ExecutionContext struct {
 // Entity triple values can be accessed via $entity.triple.<predicate> syntax.
 func (ec *ExecutionContext) SubstituteVariables(template string) string {
 	result := template
+
+	// Time substitutions
+	result = strings.ReplaceAll(result, "$now", time.Now().UTC().Format(time.RFC3339))
 
 	// Core ID substitutions
 	result = strings.ReplaceAll(result, "$entity.id", ec.EntityID)

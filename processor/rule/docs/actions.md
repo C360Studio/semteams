@@ -6,11 +6,15 @@ Actions execute when rule conditions match. They can modify the graph, publish m
 
 ```go
 type Action struct {
-    Type      string  // Action type: add_triple, remove_triple, publish
-    Subject   string  // NATS subject for publish actions
-    Predicate string  // Relationship type for triple actions
-    Object    string  // Target entity or value for triple actions
-    TTL       string  // Optional expiration for triples
+    Type      string                 // Action type: add_triple, remove_triple, update_triple, publish, update_kv
+    Subject   string                 // NATS subject for publish actions
+    Predicate string                 // Relationship type for triple actions
+    Object    string                 // Target entity or value for triple actions
+    TTL       string                 // Optional expiration for triples
+    Bucket    string                 // KV bucket name for update_kv actions
+    Key       string                 // KV key for update_kv actions
+    Payload   map[string]interface{} // JSON document for update_kv actions
+    Merge     bool                   // Merge into existing document (update_kv)
 }
 ```
 
@@ -22,6 +26,7 @@ type Action struct {
 | `remove_triple` | Removes relationship | Removes edge, may split communities |
 | `update_triple` | Replaces existing triple value | Updates edge, may affect clustering |
 | `publish` | Sends NATS message | No direct graph impact |
+| `update_kv` | Writes JSON to a NATS KV bucket | No direct graph impact |
 
 ## add_triple
 
@@ -203,6 +208,81 @@ Publishes a message to a NATS subject:
   "subject": "alerts.${entity.type}.critical"
 }
 ```
+
+## update_kv
+
+Writes a JSON document to a named NATS KV bucket. This is the primary way rules participate in the
+**KV Twofer** pattern: a single write simultaneously updates state, emits a change event to all
+watchers, and appends to the revision history.
+
+```json
+{
+  "type": "update_kv",
+  "bucket": "PLAN_STATES",
+  "key": "$entity.triple.workflow.plan.slug",
+  "payload": {
+    "status": "drafting",
+    "updated_at": "$now"
+  },
+  "merge": true
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `bucket` | yes | Name of the NATS KV bucket to write to |
+| `key` | yes | Key within the bucket (supports template variables) |
+| `payload` | yes | JSON document to write (supports template variables) |
+| `merge` | no | `true` = CAS read-modify-write; `false` = overwrite (default: `false`) |
+
+### Merge vs Overwrite
+
+**`merge: true`** performs a compare-and-swap read-modify-write cycle:
+
+1. Read the existing document at `key`.
+2. Merge `payload` fields into the existing document (top-level keys only; nested maps are merged
+   one level deep).
+3. Write back with CAS. On conflict, retry automatically.
+
+Use this when multiple writers may update different fields of the same document.
+
+**`merge: false`** overwrites the entire document unconditionally (last writer wins). Use this when
+the rule owns the document exclusively.
+
+### Template Variables in update_kv
+
+Variable substitution applies to `bucket`, `key`, and all string values in `payload`
+(including nested maps). See [Syntax: Template Variables](02-rule-syntax.md#template-variables)
+for the full variable reference. The `$now` variable is particularly useful here:
+
+```json
+{
+  "type": "update_kv",
+  "bucket": "DEVICE_STATUS",
+  "key": "$entity.id",
+  "payload": {
+    "state": "offline",
+    "since": "$now",
+    "source": "$entity.triple.entity.type"
+  },
+  "merge": true
+}
+```
+
+### KV Twofer: The Write IS the Event
+
+Because NATS KV delivers every write to all active watchers, an `update_kv` action functions as
+both a state update and an event notification — no separate pub/sub step required.
+
+```
+Rule fires update_kv → PLAN_STATES["plan-001"] written
+                     ├─ kv.Get("plan-001")  → current state (any time)
+                     ├─ kv.Watch("plan-*")  → fires to all watchers immediately
+                     └─ Revision history    → full audit trail
+```
+
+Other processors, rules (via `entity_watch_buckets`), or external services watching the bucket
+all receive the update automatically.
 
 ## How Actions Shape Communities
 

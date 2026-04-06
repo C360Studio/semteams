@@ -488,3 +488,142 @@ func (m *mockActionExecutor) Execute(_ context.Context, action Action, _ *Execut
 
 	return nil
 }
+
+// TestStatefulEvaluator_TransitionFieldTracking verifies that FieldValues are
+// persisted across evaluations and used by the transition operator.
+func TestStatefulEvaluator_TransitionFieldTracking(t *testing.T) {
+	ctx := context.Background()
+	bucket := newMockKVBucket()
+	logger := slog.Default()
+	stateTracker := NewStateTracker(bucket, logger)
+	actionExecutor := &mockActionExecutor{}
+	evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
+
+	ruleDef := Definition{
+		ID:   "transition-rule",
+		Type: "expression",
+		Name: "Test Transition Rule",
+		Conditions: []expression.ConditionExpression{
+			{
+				Field:    "workflow.plan.status",
+				Operator: expression.OpTransition,
+				Value:    "drafting",
+				From:     []interface{}{"created", "rejected"},
+			},
+		},
+		OnEnter: []Action{
+			{Type: ActionTypePublish, Subject: "test.entered"},
+		},
+	}
+
+	entityID := "plan.001"
+	entityCreated := &gtypes.EntityState{
+		ID: entityID,
+		Triples: []message.Triple{
+			{Subject: entityID, Predicate: "workflow.plan.status", Object: "created"},
+		},
+		Version:   1,
+		UpdatedAt: time.Now(),
+	}
+	entityDrafting := &gtypes.EntityState{
+		ID: entityID,
+		Triples: []message.Triple{
+			{Subject: entityID, Predicate: "workflow.plan.status", Object: "drafting"},
+		},
+		Version:   2,
+		UpdatedAt: time.Now(),
+	}
+
+	// First evaluation: entity has status "created"
+	// The transition condition checks "is status transitioning to drafting?" — no, it's "created"
+	// This should NOT match, but it should capture "created" in FieldValues
+	transition1, err := evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", false, entityCreated, nil)
+	if err != nil {
+		t.Fatalf("First evaluation error: %v", err)
+	}
+	if transition1 != TransitionNone {
+		t.Errorf("First evaluation: expected TransitionNone, got %v", transition1)
+	}
+
+	// Verify FieldValues were captured
+	state1, err := stateTracker.Get(ctx, ruleDef.ID, entityID)
+	if err != nil {
+		t.Fatalf("Failed to get state after first eval: %v", err)
+	}
+	if state1.FieldValues == nil {
+		t.Fatal("FieldValues should be captured after first evaluation")
+	}
+	if state1.FieldValues["workflow.plan.status"] != "created" {
+		t.Errorf("Expected FieldValues[workflow.plan.status] = 'created', got %q", state1.FieldValues["workflow.plan.status"])
+	}
+
+	// Second evaluation: entity now has status "drafting"
+	// The transition condition checks: current = "drafting" (matches Value),
+	// previous = "created" (in From set) → MATCH
+	transition2, err := evaluator.EvaluateWithState(ctx, ruleDef, entityID, "", true, entityDrafting, nil)
+	if err != nil {
+		t.Fatalf("Second evaluation error: %v", err)
+	}
+	if transition2 != TransitionEntered {
+		t.Errorf("Second evaluation: expected TransitionEntered, got %v", transition2)
+	}
+	if actionExecutor.onEnterCalls != 1 {
+		t.Errorf("Expected 1 OnEnter call, got %d", actionExecutor.onEnterCalls)
+	}
+
+	// Verify FieldValues updated to "drafting"
+	state2, err := stateTracker.Get(ctx, ruleDef.ID, entityID)
+	if err != nil {
+		t.Fatalf("Failed to get state after second eval: %v", err)
+	}
+	if state2.FieldValues["workflow.plan.status"] != "drafting" {
+		t.Errorf("Expected FieldValues[workflow.plan.status] = 'drafting', got %q", state2.FieldValues["workflow.plan.status"])
+	}
+}
+
+// TestStatefulEvaluator_FieldValuesBackwardCompat verifies that existing MatchState
+// without FieldValues still works (backward compatibility with persisted state).
+func TestStatefulEvaluator_FieldValuesBackwardCompat(t *testing.T) {
+	ctx := context.Background()
+	bucket := newMockKVBucket()
+	logger := slog.Default()
+	stateTracker := NewStateTracker(bucket, logger)
+	actionExecutor := &mockActionExecutor{}
+	evaluator := NewStatefulEvaluator(stateTracker, actionExecutor, logger)
+
+	// Simulate old persisted state without FieldValues
+	oldState := MatchState{
+		RuleID:         "test-rule",
+		EntityKey:      "entity-old",
+		IsMatching:     true,
+		LastTransition: "entered",
+		TransitionAt:   time.Now().Add(-1 * time.Minute),
+		LastChecked:    time.Now(),
+		Iteration:      1,
+		// FieldValues intentionally nil (old state format)
+	}
+	if err := stateTracker.Set(ctx, oldState); err != nil {
+		t.Fatalf("Failed to set old state: %v", err)
+	}
+
+	ruleDef := Definition{
+		ID:   "test-rule",
+		Type: "expression",
+		Name: "Backward Compat Rule",
+		WhileTrue: []Action{
+			{Type: ActionTypePublish, Subject: "test.while-true"},
+		},
+	}
+
+	// Evaluate with existing state — should work fine with nil FieldValues
+	transition, err := evaluator.EvaluateWithState(ctx, ruleDef, "entity-old", "", true, nil, nil)
+	if err != nil {
+		t.Fatalf("Evaluation with old state error: %v", err)
+	}
+	if transition != TransitionNone {
+		t.Errorf("Expected TransitionNone (true→true), got %v", transition)
+	}
+	if actionExecutor.whileTrueCalls != 1 {
+		t.Errorf("Expected 1 WhileTrue call, got %d", actionExecutor.whileTrueCalls)
+	}
+}

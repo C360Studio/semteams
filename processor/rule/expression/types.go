@@ -9,10 +9,11 @@ import (
 
 // ConditionExpression represents a single field/operator/value condition
 type ConditionExpression struct {
-	Field    string      `json:"field"`    // Predicate field (e.g., "robotics.battery.level")
-	Operator string      `json:"operator"` // Comparison operator (e.g., "lte", "eq", "contains")
-	Value    interface{} `json:"value"`    // Comparison value (20.0, "active", true)
-	Required bool        `json:"required"` // If false, missing field doesn't fail evaluation
+	Field    string      `json:"field"`          // Predicate field (e.g., "robotics.battery.level")
+	Operator string      `json:"operator"`       // Comparison operator (e.g., "lte", "eq", "contains")
+	Value    interface{} `json:"value"`          // Comparison value (20.0, "active", true)
+	Required bool        `json:"required"`       // If false, missing field doesn't fail evaluation
+	From     interface{} `json:"from,omitempty"` // For transition operator: allowed previous value(s)
 }
 
 // LogicalExpression combines multiple conditions with logic operators
@@ -114,6 +115,9 @@ const (
 	OpLengthGt      = "length_gt"
 	OpLengthLt      = "length_lt"
 	OpArrayContains = "array_contains"
+
+	// State transition operator
+	OpTransition = "transition"
 )
 
 // Logic operators

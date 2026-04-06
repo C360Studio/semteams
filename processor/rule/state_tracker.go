@@ -43,6 +43,12 @@ type MatchState struct {
 	// MaxIterations is the configured limit from the rule Definition.
 	// 0 means no limit. Used with $state.iteration in When clauses for retry budgets.
 	MaxIterations int `json:"max_iterations,omitempty"`
+
+	// FieldValues tracks the last-seen values of fields used in transition conditions.
+	// Keys are field names (e.g., "workflow.plan.status"), values are the string
+	// representation of the last observed value. Used by the transition operator
+	// to detect field-level state changes across evaluations.
+	FieldValues map[string]string `json:"field_values,omitempty"`
 }
 
 // StateTracker manages rule match state persistence in NATS KV.

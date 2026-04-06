@@ -4,6 +4,7 @@ package rule
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"time"
 
@@ -91,6 +92,12 @@ func (e *StatefulEvaluator) EvaluateWithState(
 		wasMatching = prevState.IsMatching
 	}
 
+	// Re-evaluate conditions when rule has transition operators.
+	// EvaluateEntityState runs without $prev.* state fields, so transition conditions
+	// always return false there. We re-evaluate the full condition set here where
+	// previous field values are available from the state tracker.
+	currentlyMatching = e.reEvaluateTransitions(ruleDef, entityID, entity, prevState, currentlyMatching)
+
 	// Detect transition
 	transition := DetectTransition(wasMatching, currentlyMatching)
 
@@ -126,6 +133,11 @@ func (e *StatefulEvaluator) EvaluateWithState(
 		"$state.iteration":       iteration,
 		"$state.max_iterations":  ruleDef.MaxIterations,
 		"$state.last_transition": string(transition),
+	}
+
+	// Inject previous field values for transition operator ($prev.* namespace)
+	for field, prevValue := range prevState.FieldValues {
+		stateFields["$prev."+field] = prevValue
 	}
 
 	// Execute actions based on transition
@@ -193,6 +205,9 @@ func (e *StatefulEvaluator) EvaluateWithState(
 		}
 	}
 
+	// Capture current field values for fields used in transition conditions
+	matchState.FieldValues = captureTransitionFields(ruleDef, entity)
+
 	// Persist new state
 	if err := e.stateTracker.Set(ctx, *matchState); err != nil {
 		e.logger.Warn("Failed to persist rule state",
@@ -203,6 +218,94 @@ func (e *StatefulEvaluator) EvaluateWithState(
 	}
 
 	return transition, nil
+}
+
+// reEvaluateTransitions re-evaluates conditions when the rule has transition operators.
+// EvaluateEntityState runs without $prev.* state fields, so transition conditions
+// always return false there. This method re-evaluates the full condition set with
+// previous field values from the state tracker.
+func (e *StatefulEvaluator) reEvaluateTransitions(
+	ruleDef Definition,
+	entityID string,
+	entity *gtypes.EntityState,
+	prevState MatchState,
+	currentlyMatching bool,
+) bool {
+	if !hasTransitionConditions(ruleDef) || entity == nil {
+		return currentlyMatching
+	}
+
+	prevFields := expression.StateFields{}
+	for field, prevValue := range prevState.FieldValues {
+		prevFields["$prev."+field] = prevValue
+	}
+
+	expr := expression.LogicalExpression{
+		Conditions: ruleDef.Conditions,
+		Logic:      ruleDef.Logic,
+	}
+	if expr.Logic == "" {
+		expr.Logic = expression.LogicAnd
+	}
+	match, err := e.exprEvaluator.EvaluateWithStateFields(entity, prevFields, expr)
+	if err != nil {
+		e.logger.Warn("Failed to re-evaluate transition conditions",
+			"rule_id", ruleDef.ID,
+			"entity_id", entityID,
+			"error", err)
+		return currentlyMatching
+	}
+	return match
+}
+
+// hasTransitionConditions returns true if any condition in the rule uses the transition operator.
+func hasTransitionConditions(ruleDef Definition) bool {
+	for _, cond := range ruleDef.Conditions {
+		if cond.Operator == expression.OpTransition {
+			return true
+		}
+	}
+	return false
+}
+
+// captureTransitionFields scans a rule definition for transition conditions and
+// snapshots the current entity triple values for those fields. This snapshot is
+// stored in MatchState.FieldValues so the next evaluation can detect transitions.
+func captureTransitionFields(ruleDef Definition, entity *gtypes.EntityState) map[string]string {
+	if entity == nil {
+		return nil
+	}
+
+	// Collect field names used in transition conditions
+	fields := make(map[string]struct{})
+	for _, cond := range ruleDef.Conditions {
+		if cond.Operator == expression.OpTransition {
+			fields[cond.Field] = struct{}{}
+		}
+	}
+	// Also check When clauses inside actions
+	for _, actions := range [][]Action{ruleDef.OnEnter, ruleDef.OnExit, ruleDef.WhileTrue} {
+		for _, action := range actions {
+			for _, cond := range action.When {
+				if cond.Operator == expression.OpTransition {
+					fields[cond.Field] = struct{}{}
+				}
+			}
+		}
+	}
+
+	if len(fields) == 0 {
+		return nil
+	}
+
+	// Snapshot current values for tracked fields
+	values := make(map[string]string, len(fields))
+	for _, triple := range entity.Triples {
+		if _, tracked := fields[triple.Predicate]; tracked {
+			values[triple.Predicate] = fmt.Sprintf("%v", triple.Object)
+		}
+	}
+	return values
 }
 
 // evaluateWhen evaluates a When clause (action-level guard conditions).

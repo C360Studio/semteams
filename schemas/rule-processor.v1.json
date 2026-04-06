@@ -58,6 +58,10 @@
                   "type": "string",
                   "description": "field"
                 },
+                "from": {
+                  "type": "string",
+                  "description": "from"
+                },
                 "operator": {
                   "type": "string",
                   "description": "operator"
@@ -136,9 +140,21 @@
                   "type": "number",
                   "description": "boid_strength"
                 },
+                "bucket": {
+                  "type": "string",
+                  "description": "bucket"
+                },
                 "context_data": {
                   "type": "object",
                   "description": "context_data"
+                },
+                "key": {
+                  "type": "string",
+                  "description": "key"
+                },
+                "merge": {
+                  "type": "boolean",
+                  "description": "merge"
                 },
                 "model": {
                   "type": "string",
@@ -147,6 +163,10 @@
                 "object": {
                   "type": "string",
                   "description": "object"
+                },
+                "payload": {
+                  "type": "object",
+                  "description": "payload"
                 },
                 "predicate": {
                   "type": "string",
@@ -185,6 +205,10 @@
                       "field": {
                         "type": "string",
                         "description": "field"
+                      },
+                      "from": {
+                        "type": "string",
+                        "description": "from"
                       },
                       "operator": {
                         "type": "string",
@@ -230,9 +254,21 @@
                   "type": "number",
                   "description": "boid_strength"
                 },
+                "bucket": {
+                  "type": "string",
+                  "description": "bucket"
+                },
                 "context_data": {
                   "type": "object",
                   "description": "context_data"
+                },
+                "key": {
+                  "type": "string",
+                  "description": "key"
+                },
+                "merge": {
+                  "type": "boolean",
+                  "description": "merge"
                 },
                 "model": {
                   "type": "string",
@@ -241,6 +277,10 @@
                 "object": {
                   "type": "string",
                   "description": "object"
+                },
+                "payload": {
+                  "type": "object",
+                  "description": "payload"
                 },
                 "predicate": {
                   "type": "string",
@@ -279,6 +319,10 @@
                       "field": {
                         "type": "string",
                         "description": "field"
+                      },
+                      "from": {
+                        "type": "string",
+                        "description": "from"
                       },
                       "operator": {
                         "type": "string",
@@ -335,9 +379,21 @@
                   "type": "number",
                   "description": "boid_strength"
                 },
+                "bucket": {
+                  "type": "string",
+                  "description": "bucket"
+                },
                 "context_data": {
                   "type": "object",
                   "description": "context_data"
+                },
+                "key": {
+                  "type": "string",
+                  "description": "key"
+                },
+                "merge": {
+                  "type": "boolean",
+                  "description": "merge"
                 },
                 "model": {
                   "type": "string",
@@ -346,6 +402,10 @@
                 "object": {
                   "type": "string",
                   "description": "object"
+                },
+                "payload": {
+                  "type": "object",
+                  "description": "payload"
                 },
                 "predicate": {
                   "type": "string",
@@ -384,6 +444,10 @@
                       "field": {
                         "type": "string",
                         "description": "field"
+                      },
+                      "from": {
+                        "type": "string",
+                        "description": "from"
                       },
                       "operator": {
                         "type": "string",

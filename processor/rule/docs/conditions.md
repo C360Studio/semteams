@@ -33,7 +33,7 @@ The evaluator detects field type automatically:
 | Type | Examples | Applicable Operators |
 |------|----------|---------------------|
 | `float64` | `23.5`, `100`, `-5.2` | eq, ne, lt, lte, gt, gte, between |
-| `string` | `"active"`, `"warehouse-7"` | eq, ne, contains, starts_with, ends_with, regex |
+| `string` | `"active"`, `"warehouse-7"` | eq, ne, contains, starts_with, ends_with, regex, transition |
 | `bool` | `true`, `false` | eq, ne |
 | `array` | `["a", "b"]`, `[1, 2, 3]` | in, not_in, length_eq, length_gt, length_lt, array_contains |
 
@@ -138,6 +138,11 @@ Uses Go regular expression syntax.
 ```
 
 ## Array Operators
+
+> **Note**: The operators in this section (`in`, `not_in`, `between`, `length_eq`, `length_gt`,
+> `length_lt`, `array_contains`) were previously missing from the operator validation list and would
+> be rejected at rule load time despite being fully implemented. This was corrected in Phase 1 of the
+> rules engine KV twofer work.
 
 ### in (Value in Array)
 
@@ -305,6 +310,70 @@ If coercion fails, the condition returns false with an error.
   ]
 }
 ```
+
+## Transition Operator
+
+The `transition` operator validates that a field is moving from a set of allowed previous values to a
+specific target value. It enables state machine rules that only fire on valid state progressions —
+invalid transitions simply don't match.
+
+```json
+{
+  "field": "workflow.plan.status",
+  "operator": "transition",
+  "from": ["created", "rejected"],
+  "value": "drafting"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `field` | yes | Predicate path to evaluate |
+| `operator` | yes | `"transition"` |
+| `value` | yes | The required target value |
+| `from` | no | Allowed previous values (single string or array) |
+
+**Behavior rules:**
+
+- The current field value must equal `value`.
+- If `from` is specified, the previous field value must be one of those values.
+- If `from` is omitted, any change to `value` counts as a valid transition.
+- **First evaluation returns false** — a transition requires a recorded previous value.
+  The very first time a rule sees an entity, there is no history, so the condition never
+  matches on that evaluation.
+
+Previous field values are stored per-rule per-entity in the `RULE_STATE` KV bucket alongside
+the standard match state. See [State Tracking](05-state-tracking.md) for details.
+
+### Example: Workflow Status Gate
+
+Only allow a plan to enter `drafting` from `created` or `rejected`:
+
+```json
+{
+  "field": "workflow.plan.status",
+  "operator": "transition",
+  "from": ["created", "rejected"],
+  "value": "drafting"
+}
+```
+
+If the plan jumps directly from `created` to `approved` (skipping `drafting`), the `drafting`
+transition rule never fires. Invalid progressions are silently skipped.
+
+### Example: Any Change to a Value
+
+Detect whenever an entity's status becomes `offline`, regardless of prior state:
+
+```json
+{
+  "field": "entity.status",
+  "operator": "transition",
+  "value": "offline"
+}
+```
+
+This fires once each time the field transitions *to* `offline` from any other value.
 
 ## Evaluation Errors
 

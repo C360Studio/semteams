@@ -218,6 +218,8 @@ func isValidOperator(op string) bool {
 		"eq", "ne", "lt", "lte", "gt", "gte",
 		"contains", "starts_with", "ends_with", "regex",
 		"in", "not_in", "between",
+		"length_eq", "length_gt", "length_lt", "array_contains",
+		"transition",
 	}
 	for _, valid := range validOps {
 		if op == valid {

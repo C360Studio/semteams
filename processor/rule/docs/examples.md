@@ -653,6 +653,113 @@ nats kv get ENTITY_STATES "acme.prod.robotics.fleet.drone.drone-007" | jq '.trip
 nats sub "alerts.>"
 ```
 
+## State Machine with KV Twofer
+
+### Workflow Plan Status Gating
+
+Uses the `transition` operator to enforce valid state progressions and `update_kv` to publish
+the new state so all watchers receive it immediately — no separate pub/sub step needed.
+
+```json
+{
+  "id": "plan-enter-drafting",
+  "type": "expression",
+  "name": "Plan: Enter Drafting",
+  "description": "Allow drafting only from created or rejected states",
+  "enabled": true,
+
+  "conditions": [
+    {
+      "field": "workflow.plan.status",
+      "operator": "transition",
+      "from": ["created", "rejected"],
+      "value": "drafting"
+    }
+  ],
+
+  "entity": {
+    "pattern": "*.*.workflow.*.plan.*"
+  },
+
+  "on_enter": [
+    {
+      "type": "update_kv",
+      "bucket": "PLAN_STATES",
+      "key": "$entity.triple.workflow.plan.slug",
+      "payload": {
+        "status": "drafting",
+        "updated_at": "$now",
+        "transitioned_by": "rules-engine"
+      },
+      "merge": true
+    },
+    {
+      "type": "add_triple",
+      "predicate": "workflow.plan.state",
+      "object": "drafting"
+    }
+  ]
+}
+```
+
+**Behavior:**
+
+1. Entity arrives with `workflow.plan.status = "created"`. Rule evaluates — first evaluation has no
+   prior history, returns false. State saved.
+2. Entity updates to `workflow.plan.status = "drafting"`. Rule evaluates:
+   - Previous value: `"created"` (from `RULE_STATE.FieldValues`)
+   - `"created"` is in `from` list, current value matches `value` → **transition matches**
+   - `on_enter` fires: `PLAN_STATES["my-plan"]` is updated with `status=drafting` and `updated_at`
+   - All watchers of `PLAN_STATES` receive the change event automatically
+3. If status had jumped from `"created"` to `"approved"` (skipping `"drafting"`), this rule
+   would not fire. The invalid transition is silently ignored.
+
+### Detect Any Transition to Offline
+
+Fires whenever an entity's status becomes `offline`, regardless of prior state:
+
+```json
+{
+  "id": "device-went-offline",
+  "type": "expression",
+  "name": "Device Went Offline",
+  "enabled": true,
+
+  "conditions": [
+    {
+      "field": "entity.status",
+      "operator": "transition",
+      "value": "offline"
+    }
+  ],
+
+  "on_enter": [
+    {
+      "type": "update_kv",
+      "bucket": "DEVICE_EVENTS",
+      "key": "$entity.id",
+      "payload": {
+        "event": "went_offline",
+        "at": "$now"
+      },
+      "merge": false
+    },
+    {
+      "type": "add_triple",
+      "predicate": "ops.connectivity",
+      "object": "offline"
+    }
+  ],
+
+  "on_exit": [
+    {
+      "type": "remove_triple",
+      "predicate": "ops.connectivity"
+    }
+  ]
+}
+```
+
 ## Common Patterns Summary
 
 | Pattern | Key Features |
@@ -663,6 +770,8 @@ nats sub "alerts.>"
 | Monitoring | WhileTrue publishes periodically |
 | Temporary | Uses TTL for auto-expiring triples |
 | Complex | Multiple conditions with AND/OR logic |
+| Transition Gate | `transition` operator enforces valid progressions |
+| KV Twofer | `update_kv` write IS the event — state + watchers + history in one write |
 
 ## Next Steps
 

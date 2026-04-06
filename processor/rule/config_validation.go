@@ -177,17 +177,7 @@ func (rp *Processor) isKnownRuleType(ruleType string) bool {
 
 // isValidOperator checks if an operator is valid
 func (rp *Processor) isValidOperator(operator string) bool {
-	validOps := []string{
-		"eq", "ne", "lt", "lte", "gt", "gte",
-		"contains", "starts_with", "ends_with", "regex",
-	}
-
-	for _, valid := range validOps {
-		if operator == valid {
-			return true
-		}
-	}
-	return false
+	return isValidOperator(operator)
 }
 
 // createRuleFromConfig creates a rule instance from configuration
@@ -212,12 +202,16 @@ func (rp *Processor) createRuleFromConfig(ruleID string, ruleMap map[string]any)
 		def.Conditions = make([]expression.ConditionExpression, len(conditionsSlice))
 		for i, condVal := range conditionsSlice {
 			condMap := condVal.(map[string]any)
-			def.Conditions[i] = expression.ConditionExpression{
+			cond := expression.ConditionExpression{
 				Field:    condMap["field"].(string),
 				Operator: condMap["operator"].(string),
 				Value:    condMap["value"],
 				Required: getBoolWithDefault(condMap, "required", true),
 			}
+			if from, ok := condMap["from"]; ok {
+				cond.From = from
+			}
+			def.Conditions[i] = cond
 		}
 	}
 

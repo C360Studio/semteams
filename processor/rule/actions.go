@@ -31,6 +31,8 @@ const (
 	ActionTypeTriggerWorkflow = "trigger_workflow"
 	// ActionTypePublishBoidSignal publishes a Boid steering signal for agent coordination
 	ActionTypePublishBoidSignal = "publish_boid_signal"
+	// ActionTypeUpdateKV writes JSON to a named KV bucket with optional CAS merge
+	ActionTypeUpdateKV = "update_kv"
 )
 
 // Action represents an action to execute when a rule fires.
@@ -87,6 +89,22 @@ type Action struct {
 	// If present, all conditions must match (AND logic) against the entity's current
 	// state and $state.* fields for the action to execute. Actions without When always execute.
 	When []expression.ConditionExpression `json:"when,omitempty"`
+
+	// Bucket is the KV bucket name for update_kv actions (e.g., "PLAN_STATES").
+	// Supports variable substitution.
+	Bucket string `json:"bucket,omitempty"`
+
+	// Key is the KV key for update_kv actions. Supports variable substitution.
+	Key string `json:"key,omitempty"`
+
+	// Payload is the data to write for update_kv actions.
+	// Supports variable substitution in string values (including nested maps).
+	Payload map[string]any `json:"payload,omitempty"`
+
+	// Merge controls write semantics for update_kv:
+	// true = CAS read-modify-write (merge payload into existing document)
+	// false = overwrite entire document (last writer wins)
+	Merge bool `json:"merge,omitempty"`
 }
 
 // ParseTTL parses the TTL string into a duration.
@@ -129,11 +147,12 @@ type Publisher interface {
 }
 
 // ActionExecutor executes actions for rules.
-// It handles triple mutations, NATS publishing, and other action types.
+// It handles triple mutations, NATS publishing, KV writes, and other action types.
 type ActionExecutor struct {
 	logger        *slog.Logger
 	tripleMutator TripleMutator // Optional: if nil, triple mutations are logged but not persisted
 	publisher     Publisher     // Optional: if nil, publish actions are logged but not sent
+	kvWriter      KVWriter      // Optional: if nil, update_kv actions are logged but not executed
 }
 
 // NewActionExecutor creates a new ActionExecutor with the given logger.
@@ -172,6 +191,19 @@ func NewActionExecutorFull(logger *slog.Logger, mutator TripleMutator, publisher
 	}
 }
 
+// NewActionExecutorComplete creates an ActionExecutor with all capabilities including KV writes.
+func NewActionExecutorComplete(logger *slog.Logger, mutator TripleMutator, publisher Publisher, kvWriter KVWriter) *ActionExecutor {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &ActionExecutor{
+		logger:        logger,
+		tripleMutator: mutator,
+		publisher:     publisher,
+		kvWriter:      kvWriter,
+	}
+}
+
 // Execute runs the given action using the execution context.
 // The ExecutionContext provides the entity ID, related entity ID, full entity state,
 // and match state for rich action execution.
@@ -192,6 +224,8 @@ func (e *ActionExecutor) Execute(ctx context.Context, action Action, ec *Executi
 		return e.executeTriggerWorkflow(ctx, action, ec)
 	case ActionTypePublishBoidSignal:
 		return e.executePublishBoidSignal(ctx, action, ec)
+	case ActionTypeUpdateKV:
+		return e.executeUpdateKV(ctx, action, ec)
 	default:
 		return fmt.Errorf("unknown action type: %s", action.Type)
 	}
@@ -691,4 +725,92 @@ func (e *ActionExecutor) executePublishBoidSignal(ctx context.Context, action Ac
 	}
 
 	return nil
+}
+
+// executeUpdateKV writes JSON to a named KV bucket with optional CAS merge semantics.
+// When Merge is true, the payload is merged into the existing document using CAS
+// (read-modify-write with retry). When false, the payload overwrites the entire document.
+func (e *ActionExecutor) executeUpdateKV(ctx context.Context, action Action, ec *ExecutionContext) error {
+	if action.Bucket == "" {
+		return errors.New("bucket is required for update_kv action")
+	}
+	if action.Key == "" {
+		return errors.New("key is required for update_kv action")
+	}
+
+	bucket := ec.SubstituteVariables(action.Bucket)
+	key := ec.SubstituteVariables(action.Key)
+	payload := substitutePayloadVariables(action.Payload, ec)
+
+	if e.logger != nil {
+		e.logger.Debug("Executing KV write",
+			"bucket", bucket,
+			"key", key,
+			"merge", action.Merge,
+			"entity_id", ec.EntityID)
+	}
+
+	if e.kvWriter != nil {
+		if action.Merge {
+			err := e.kvWriter.UpdateJSON(ctx, bucket, key, func(current map[string]any) error {
+				for k, v := range payload {
+					current[k] = v
+				}
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("kv merge %s/%s: %w", bucket, key, err)
+			}
+		} else {
+			if err := e.kvWriter.PutJSON(ctx, bucket, key, payload); err != nil {
+				return fmt.Errorf("kv put %s/%s: %w", bucket, key, err)
+			}
+		}
+
+		if e.logger != nil {
+			e.logger.Debug("KV write completed",
+				"bucket", bucket,
+				"key", key,
+				"entity_id", ec.EntityID)
+		}
+	} else if e.logger != nil {
+		e.logger.Debug("KV write not executed (no writer configured)",
+			"bucket", bucket,
+			"key", key,
+			"entity_id", ec.EntityID)
+	}
+
+	return nil
+}
+
+// substitutePayloadVariables performs deep variable substitution on string values
+// within a payload map, including nested maps.
+func substitutePayloadVariables(payload map[string]any, ec *ExecutionContext) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	result := make(map[string]any, len(payload))
+	for k, v := range payload {
+		result[k] = substituteValue(v, ec)
+	}
+	return result
+}
+
+// substituteValue recursively substitutes template variables in strings,
+// maps, and slices. Non-string leaf values are passed through unchanged.
+func substituteValue(v any, ec *ExecutionContext) any {
+	switch val := v.(type) {
+	case string:
+		return ec.SubstituteVariables(val)
+	case map[string]any:
+		return substitutePayloadVariables(val, ec)
+	case []any:
+		result := make([]any, len(val))
+		for i, item := range val {
+			result[i] = substituteValue(item, ec)
+		}
+		return result
+	default:
+		return v
+	}
 }

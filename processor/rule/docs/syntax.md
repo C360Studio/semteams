@@ -165,6 +165,7 @@ See [Conditions](03-conditions.md) for complete operator reference.
 | `field` | string | Predicate path to evaluate |
 | `operator` | string | Comparison operator |
 | `value` | any | Value to compare against |
+| `from` | string or array | Allowed previous values (`transition` operator only) |
 | `required` | bool | Fail if field is missing |
 
 ## Action Syntax
@@ -186,7 +187,9 @@ See [Actions](04-actions.md) for complete action reference.
 |------|-------------|-----------------|
 | `add_triple` | Create relationship/property | `predicate`, `object` |
 | `remove_triple` | Remove relationship | `predicate` |
+| `update_triple` | Replace existing triple value | `predicate`, `object` |
 | `publish` | Send NATS message | `subject` |
+| `update_kv` | Write JSON to a NATS KV bucket | `bucket`, `key`, `payload` |
 
 ## Logic Operators
 
@@ -209,7 +212,7 @@ When cooldown is active, the rule won't fire `on_enter` again until the cooldown
 
 ## Template Variables
 
-Object and predicate fields support template variables:
+Object, predicate, and `update_kv` fields support template variables:
 
 ```json
 {
@@ -222,7 +225,24 @@ Object and predicate fields support template variables:
 |----------|-------------|
 | `${entity.field}` | Field from entity triples |
 | `$entity.id` | Primary entity ID |
+| `$entity.triple.<predicate>` | Specific triple value from the entity |
 | `$related.id` | Related entity ID (pair rules) |
+| `$now` | Current UTC timestamp in RFC3339 format |
+
+`$now` is particularly useful in `update_kv` payloads to timestamp state changes:
+
+```json
+{
+  "type": "update_kv",
+  "bucket": "PLAN_STATES",
+  "key": "$entity.triple.workflow.plan.slug",
+  "payload": {
+    "status": "drafting",
+    "updated_at": "$now"
+  },
+  "merge": true
+}
+```
 
 ## Loading Rules
 
