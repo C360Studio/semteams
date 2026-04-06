@@ -442,18 +442,21 @@ func (ml *MessageLogger) handleMessage(ctx context.Context, subject string, data
 
 	ml.stats.sampledMessages.Add(1)
 
-	// Parse message
+	// Parse message — try BaseMessage envelope first, fall back to raw JSON.
+	// Graph request/reply subjects (graph.mutation.*, graph.query.*, etc.) use
+	// raw JSON structs without BaseMessage wrapping. These are still valuable
+	// for observability so we log them with the subject as the type identifier.
+	var msgType, summary string
 	var msg message.BaseMessage
-	if err := json.Unmarshal(data, &msg); err != nil {
-		ml.stats.invalidMessages.Add(1)
-		ml.logger.Debug("Failed to parse message",
-			"subject", subject,
-			"error", err,
-			"data_len", len(data))
-		return
+	if err := json.Unmarshal(data, &msg); err == nil {
+		ml.stats.validMessages.Add(1)
+		msgType = msg.Type().String()
+		summary = ml.generateSummary(&msg)
+	} else {
+		ml.stats.validMessages.Add(1)
+		msgType = "raw"
+		summary = ml.generateRawSummary(subject, data)
 	}
-
-	ml.stats.validMessages.Add(1)
 
 	// Extract trace context from ctx (populated by natsclient.Subscribe)
 	var traceID, spanID string
@@ -470,11 +473,10 @@ func (ml *MessageLogger) handleMessage(ctx context.Context, subject string, data
 		Sequence:    seq,
 		Timestamp:   time.Now(),
 		Subject:     subject,
-		MessageType: msg.Type().String(),
-		MessageID:   "", // core messages don't have IDs
+		MessageType: msgType,
 		TraceID:     traceID,
 		SpanID:      spanID,
-		Summary:     ml.generateSummary(&msg),
+		Summary:     summary,
 		RawData:     json.RawMessage(data),
 	}
 
@@ -520,6 +522,20 @@ func (ml *MessageLogger) generateSummary(msg *message.BaseMessage) string {
 	}
 
 	return summary
+}
+
+// generateRawSummary creates a summary for non-BaseMessage payloads (e.g. graph request/reply).
+func (ml *MessageLogger) generateRawSummary(subject string, data []byte) string {
+	// Extract top-level keys to give a sense of the payload shape
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return fmt.Sprintf("Subject: %s (%d bytes)", subject, len(data))
+	}
+	keys := make([]string, 0, len(obj))
+	for k := range obj {
+		keys = append(keys, k)
+	}
+	return fmt.Sprintf("Subject: %s, Keys: %v", subject, keys)
 }
 
 // storeEntry stores an entry in the circular buffer

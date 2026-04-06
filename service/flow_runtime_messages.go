@@ -179,7 +179,7 @@ func getSubjectPrefix(componentType string) string {
 // filterEntriesBySubjects filters log entries by matching subjects
 func filterEntriesBySubjects(entries []MessageLogEntry, subjects []string) []MessageLogEntry {
 	if len(subjects) == 0 {
-		return entries
+		return nil
 	}
 
 	var filtered []MessageLogEntry

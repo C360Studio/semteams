@@ -179,8 +179,8 @@ func TestFilterEntriesBySubjects(t *testing.T) {
 		{
 			name:          "Empty subject list",
 			subjects:      []string{},
-			expectedCount: 5,
-			expectedSubjs: []string{"input.udp.data", "process.json.transform", "output.nats.publish", "events.system.startup", "input.udp.stats"},
+			expectedCount: 0,
+			expectedSubjs: []string{},
 		},
 	}
 
