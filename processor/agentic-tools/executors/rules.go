@@ -1,6 +1,3 @@
-// RuleExecutor provides tools for agents to manage rules at runtime.
-// Mutations (create, update, delete) are marked RequiresApproval so the
-// agentic loop transitions to awaiting_approval before executing them.
 package executors
 
 import (

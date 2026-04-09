@@ -17,11 +17,16 @@ import (
 type IntentType string
 
 const (
-	IntentNewTask  IntentType = "new_task" // Start a new agentic loop
-	IntentContinue IntentType = "continue" // Continue an existing loop with additional input
-	IntentSignal   IntentType = "signal"   // Send a control signal (approve, reject, etc.)
-	IntentQuestion IntentType = "question" // Ask about loop status or system state
-	IntentMeta     IntentType = "meta"     // Meta-query about the system itself
+	// IntentNewTask starts a new agentic loop.
+	IntentNewTask IntentType = "new_task"
+	// IntentContinue continues an existing loop with additional input.
+	IntentContinue IntentType = "continue"
+	// IntentSignal sends a control signal (approve, reject, etc.).
+	IntentSignal IntentType = "signal"
+	// IntentQuestion asks about loop status or system state.
+	IntentQuestion IntentType = "question"
+	// IntentMeta is a meta-query about the system itself.
+	IntentMeta IntentType = "meta"
 )
 
 // ClassifiedIntent is the result of intent classification.

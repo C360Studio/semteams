@@ -10,12 +10,18 @@ package prompt
 type Category int
 
 const (
-	CategorySystem      Category = 0   // Core identity and behavioral constraints
-	CategoryRole        Category = 100 // Role-specific instructions (architect, editor, reviewer, etc.)
-	CategoryTools       Category = 200 // Tool usage guidance and restrictions
-	CategoryDomain      Category = 300 // Domain context (project knowledge, entity relationships)
-	CategoryConstraints Category = 400 // Guardrails, budget limits, safety rules
-	CategoryContext     Category = 500 // Runtime context (prior conversation, dependencies)
+	// CategorySystem contains core identity and behavioral constraints.
+	CategorySystem Category = 0
+	// CategoryRole contains role-specific instructions (architect, editor, reviewer, etc.).
+	CategoryRole Category = 100
+	// CategoryTools contains tool usage guidance and restrictions.
+	CategoryTools Category = 200
+	// CategoryDomain contains domain context (project knowledge, entity relationships).
+	CategoryDomain Category = 300
+	// CategoryConstraints contains guardrails, budget limits, safety rules.
+	CategoryConstraints Category = 400
+	// CategoryContext contains runtime context (prior conversation, dependencies).
+	CategoryContext Category = 500
 )
 
 // Fragment is an atomic unit of prompt content that can be conditionally included

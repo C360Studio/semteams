@@ -261,7 +261,7 @@ func TestConfigManager_HandleRuleEntry_Put(t *testing.T) {
 	var mu sync.Mutex
 	var notified bool
 	var notifiedOp string
-	_ = rcm.WatchRules(ctx, func(ruleID string, _ Rule, op string) {
+	_ = rcm.WatchRules(ctx, func(_ string, _ Rule, op string) {
 		mu.Lock()
 		notified = true
 		notifiedOp = op

@@ -1,5 +1,3 @@
-// WebSearchExecutor provides web search via the Brave Search API.
-// Ported from semspec/tools/websearch.
 package executors
 
 import (

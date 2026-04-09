@@ -1,7 +1,3 @@
-// HTTPRequestExecutor fetches URLs and returns content as text.
-// Includes SSRF protection (blocks private/loopback IPs) and DNS pinning.
-// Ported from semspec/tools/httptool with graph persistence removed
-// (handled by the graph processor pipeline in semteams).
 package executors
 
 import (

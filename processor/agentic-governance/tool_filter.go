@@ -32,20 +32,20 @@ func NewToolCallFilter(piiFilter *PIIFilter) *ToolCallFilter {
 	return &ToolCallFilter{
 		piiFilter: piiFilter,
 		BlockedCommandPatterns: []string{
-			"metadata.google",  // GCP metadata endpoint
-			"169.254.169.254",  // AWS metadata endpoint
-			"metadata.azure",   // Azure metadata endpoint
-			"rm -rf /",         // Destructive commands
-			":(){ :|:& };:",    // Fork bomb
-			"> /dev/sd",        // Raw device write
-			"mkfs.",            // Format filesystem
+			"metadata.google", // GCP metadata endpoint
+			"169.254.169.254", // AWS metadata endpoint
+			"metadata.azure",  // Azure metadata endpoint
+			"rm -rf /",        // Destructive commands
+			":(){ :|:& };:",   // Fork bomb
+			"> /dev/sd",       // Raw device write
+			"mkfs.",           // Format filesystem
 		},
 		BlockedURLPatterns: []string{
-			"169.254.169.254",  // AWS metadata
-			"metadata.google",  // GCP metadata
-			"metadata.azure",   // Azure metadata
-			"localhost",        // Local services (SSRF also catches this)
-			"127.0.0.1",        // Loopback
+			"169.254.169.254", // AWS metadata
+			"metadata.google", // GCP metadata
+			"metadata.azure",  // Azure metadata
+			"localhost",       // Local services (SSRF also catches this)
+			"127.0.0.1",       // Loopback
 		},
 	}
 }
@@ -101,7 +101,7 @@ func (f *ToolCallFilter) checkBash(ctx context.Context, msg *Message, args map[s
 }
 
 // checkHTTPRequest validates URL arguments.
-func (f *ToolCallFilter) checkHTTPRequest(ctx context.Context, msg *Message, args map[string]any) (*FilterResult, error) {
+func (f *ToolCallFilter) checkHTTPRequest(_ context.Context, msg *Message, args map[string]any) (*FilterResult, error) {
 	urlStr, _ := args["url"].(string)
 	if urlStr == "" {
 		return &FilterResult{Allowed: true}, nil

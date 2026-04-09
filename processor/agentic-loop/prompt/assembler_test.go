@@ -160,7 +160,7 @@ func TestAssemble_ContentFuncOverridesContent(t *testing.T) {
 	assert.NotContains(t, result.SystemMessage, "STATIC")
 }
 
-func TestRegistry_ThreadSafe(t *testing.T) {
+func TestRegistry_ThreadSafe(_ *testing.T) {
 	reg := NewRegistry()
 	done := make(chan struct{})
 
