@@ -17,6 +17,10 @@ type Config struct {
 	ConsumerNameSuffix   string                `json:"consumer_name_suffix,omitempty" schema:"type:string,description:Suffix appended to consumer names for uniqueness,category:advanced"`
 	DeleteConsumerOnStop bool                  `json:"delete_consumer_on_stop,omitempty" schema:"type:bool,description:Delete durable consumers on Stop (use for tests only),category:advanced,default:false"`
 	Ports                *component.PortConfig `json:"ports,omitempty" schema:"type:ports,description:Port configuration for inputs and outputs,category:basic"`
+
+	// Intent classification (optional LLM-assisted routing)
+	EnableIntentClassification bool   `json:"enable_intent_classification" schema:"type:bool,description:Enable LLM-assisted intent classification for ambiguous messages,default:false,category:advanced"`
+	ClassificationModel        string `json:"classification_model,omitempty" schema:"type:string,description:Model endpoint or capability name for intent classification,default:default,category:advanced"`
 }
 
 // PermissionConfig defines permission rules for the router

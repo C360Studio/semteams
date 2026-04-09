@@ -95,6 +95,13 @@ func (rp *Processor) applyRuleChanges(rulesMap map[string]any) error {
 	return nil
 }
 
+// GetCompiledRule returns a compiled Rule by ID, or nil if not found.
+func (rp *Processor) GetCompiledRule(ruleID string) Rule {
+	rp.mu.RLock()
+	defer rp.mu.RUnlock()
+	return rp.rules[ruleID]
+}
+
 // GetRuntimeConfig returns current runtime configuration
 func (rp *Processor) GetRuntimeConfig() map[string]any {
 	rp.mu.RLock()

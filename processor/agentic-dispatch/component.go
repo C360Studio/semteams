@@ -30,6 +30,9 @@ type Component struct {
 	metrics       *routerMetrics
 	modelRegistry model.RegistryReader // Unified model registry for model selection
 
+	// Optional LLM intent classifier (nil when disabled)
+	intentClassifier IntentClassifier
+
 	// Lifecycle state
 	mu        sync.RWMutex
 	started   bool
@@ -107,6 +110,16 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 
 	// Load globally registered commands
 	comp.loadGlobalCommands()
+
+	// Initialize intent classifier if enabled
+	if config.EnableIntentClassification {
+		comp.intentClassifier = NewLLMIntentClassifier(
+			deps.ModelRegistry,
+			config.ClassificationModel,
+			logger,
+		)
+		logger.Info("Intent classification enabled", slog.String("model", config.ClassificationModel))
+	}
 
 	return comp, nil
 }
@@ -408,11 +421,15 @@ func (c *Component) handleUserMessage(ctx context.Context, data []byte) {
 		slog.String("user_id", msg.UserID),
 		slog.String("channel", msg.ChannelType))
 
-	// Check if it's a command
+	// Three-way routing:
+	// 1. Explicit commands (starts with "/") — always command
+	// 2. Intent classification (when enabled) — LLM classifies ambiguous messages
+	// 3. Fallback — treat as task submission
 	if strings.HasPrefix(msg.Content, "/") {
 		c.handleCommand(ctx, msg)
+	} else if c.intentClassifier != nil {
+		c.handleClassifiedMessage(ctx, msg)
 	} else {
-		// It's a task submission
 		c.handleTaskSubmission(ctx, msg)
 	}
 
@@ -496,6 +513,100 @@ func (c *Component) handleCommand(ctx context.Context, msg agentic.UserMessage) 
 	c.logger.Debug("Command executed",
 		slog.String("command", name),
 		slog.String("user_id", msg.UserID))
+}
+
+// handleClassifiedMessage uses the intent classifier to route ambiguous messages.
+func (c *Component) handleClassifiedMessage(ctx context.Context, msg agentic.UserMessage) {
+	activeLoops := c.loopTracker.GetUserLoops(msg.UserID)
+	intent, err := c.intentClassifier.Classify(ctx, msg, activeLoops)
+	if err != nil {
+		c.logger.Error("Intent classification failed, falling back to task submission",
+			slog.Any("error", err))
+		c.handleTaskSubmission(ctx, msg)
+		return
+	}
+
+	c.logger.Debug("Intent classified",
+		slog.String("type", string(intent.Type)),
+		slog.String("loop_id", intent.LoopID),
+		slog.Float64("confidence", intent.Confidence))
+
+	switch intent.Type {
+	case IntentContinue:
+		// Continue an existing loop — treat as task submission to that loop
+		if intent.LoopID != "" {
+			msg.ReplyTo = intent.LoopID
+		}
+		c.handleTaskSubmission(ctx, msg)
+
+	case IntentSignal:
+		// Validate signal type before acting on LLM output
+		if intent.LoopID == "" && c.config.AutoContinue {
+			intent.LoopID = c.loopTracker.GetActiveLoop(msg.UserID, msg.ChannelID)
+		}
+		if intent.LoopID != "" && intent.SignalType != "" && isKnownSignalType(intent.SignalType) {
+			// Route through the command handler to get permission/existence checks
+			handler := c.makeSignalCommand(intent.SignalType)
+			resp, err := handler(ctx, msg, []string{intent.LoopID}, intent.LoopID)
+			if err != nil {
+				c.logger.Error("Signal command failed via classification", slog.Any("error", err))
+				return
+			}
+			c.sendResponse(ctx, resp)
+		} else {
+			// Can't determine loop or signal type — ask user to be explicit
+			c.sendResponse(ctx, agentic.UserResponse{
+				ResponseID:  uuid.New().String(),
+				ChannelType: msg.ChannelType,
+				ChannelID:   msg.ChannelID,
+				UserID:      msg.UserID,
+				Type:        agentic.ResponseTypeStatus,
+				Content:     "I understood that as a control signal but couldn't determine the target loop. Try: /approve, /reject, /pause, or /resume [loop_id]",
+				Timestamp:   time.Now(),
+			})
+		}
+
+	case IntentQuestion:
+		// Route to status — find the relevant loop and show status
+		if intent.LoopID == "" && c.config.AutoContinue {
+			intent.LoopID = c.loopTracker.GetActiveLoop(msg.UserID, msg.ChannelID)
+		}
+		resp, err := c.handleStatusCommand(ctx, msg, []string{intent.LoopID}, intent.LoopID)
+		if err != nil {
+			c.logger.Error("Status command failed via classification", slog.Any("error", err))
+			return
+		}
+		c.sendResponse(ctx, resp)
+
+	case IntentMeta:
+		// Route to help for now
+		resp, err := c.handleHelpCommand(ctx, msg, nil, "")
+		if err != nil {
+			c.logger.Error("Help command failed via classification", slog.Any("error", err))
+			return
+		}
+		c.sendResponse(ctx, resp)
+
+	case IntentNewTask:
+		// New task — standard submission
+		c.handleTaskSubmission(ctx, msg)
+
+	default:
+		// Unknown intent — fall back to task submission
+		c.handleTaskSubmission(ctx, msg)
+	}
+}
+
+// isKnownSignalType checks if a signal type string is one of the known constants.
+// This guards against arbitrary signal types from LLM classification output.
+func isKnownSignalType(st string) bool {
+	switch st {
+	case agentic.SignalCancel, agentic.SignalPause, agentic.SignalResume,
+		agentic.SignalApprove, agentic.SignalReject, agentic.SignalFeedback, agentic.SignalRetry:
+		return true
+	default:
+		return false
+	}
 }
 
 // resolveModel returns the default model from the model registry.

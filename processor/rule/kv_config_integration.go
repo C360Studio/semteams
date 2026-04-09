@@ -15,6 +15,10 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 )
 
+// WatchCallback is invoked when a rule is created, updated, or deleted via KV.
+// operation is "put" or "delete".
+type WatchCallback func(ruleID string, rule Rule, operation string)
+
 // ConfigManager manages rules through NATS KV configuration
 type ConfigManager struct {
 	processor  *Processor
@@ -25,6 +29,16 @@ type ConfigManager struct {
 	cancel     context.CancelFunc
 	logger     *slog.Logger
 	mu         sync.RWMutex
+
+	// Direct KV watcher for rules (config.Manager doesn't watch "rules.*")
+	ruleWatcher jetstream.KeyWatcher
+
+	// WatchRules callbacks
+	watchCallbacks []WatchCallback
+	watchMu        sync.RWMutex
+
+	// Goroutine lifecycle tracking
+	wg sync.WaitGroup
 }
 
 // NewConfigManager creates a new rule configuration manager
@@ -44,21 +58,53 @@ func NewConfigManager(processor *Processor, configMgr *config.Manager, logger *s
 	}
 }
 
-// Start begins watching for rule configuration updates
-func (rcm *ConfigManager) Start(_ context.Context) error {
-	// Subscribe to rules.* pattern for configuration updates
+// Start begins watching for rule configuration updates.
+// It sets up a direct KV watcher on "rules.>" in the config bucket since the
+// central config.Manager does not watch rule keys (they are not part of the
+// platform config schema). It also subscribes via OnChange for any future
+// config.Manager integration.
+func (rcm *ConfigManager) Start(ctx context.Context) error {
+	// Subscribe to config.Manager's notification channel (used when rules are
+	// written through config.Manager's own KV or via PushToKV).
 	rcm.updateChan = rcm.configMgr.OnChange("rules.*")
+	rcm.wg.Add(1)
+	go func() {
+		defer rcm.wg.Done()
+		rcm.processConfigUpdates()
+	}()
 
-	// Start processing updates
-	go rcm.processConfigUpdates()
+	// Set up direct KV watcher for rules written directly to the config bucket.
+	kv := rcm.configMgr.GetKV()
+	if kv != nil {
+		watcher, err := kv.Watch(ctx, "rules.>", jetstream.UpdatesOnly())
+		if err != nil {
+			rcm.logger.Warn("Failed to create direct rule KV watcher, rules will only update via config manager",
+				slog.Any("error", err))
+		} else {
+			rcm.ruleWatcher = watcher
+			rcm.wg.Add(1)
+			go func() {
+				defer rcm.wg.Done()
+				rcm.processRuleWatcher()
+			}()
+		}
+	}
 
-	rcm.logger.Info("Rule configuration manager started", "pattern", "rules.*")
+	rcm.logger.Info("Rule configuration manager started", "pattern", "rules.>")
 	return nil
 }
 
-// Stop stops the configuration manager
+// Stop stops the configuration manager and waits for goroutines to exit.
 func (rcm *ConfigManager) Stop() error {
 	rcm.cancel()
+
+	// Wait for goroutines to exit before stopping the watcher
+	rcm.wg.Wait()
+
+	// Stop our direct KV watcher if running
+	if rcm.ruleWatcher != nil {
+		_ = rcm.ruleWatcher.Stop()
+	}
 
 	// The channel from ConfigManager will be closed when ConfigManager stops
 	// We don't close it here since we don't own it
@@ -73,9 +119,117 @@ func (rcm *ConfigManager) processConfigUpdates() {
 		select {
 		case <-rcm.ctx.Done():
 			return
-		case update := <-rcm.updateChan:
+		case update, ok := <-rcm.updateChan:
+			if !ok {
+				return // channel closed
+			}
 			rcm.handleConfigUpdate(update)
 		}
+	}
+}
+
+// processRuleWatcher handles raw KV entries from the direct rule watcher.
+// This is the primary path for detecting rule changes since config.Manager
+// does not watch "rules.*" keys.
+func (rcm *ConfigManager) processRuleWatcher() {
+	for {
+		select {
+		case <-rcm.ctx.Done():
+			return
+		case entry := <-rcm.ruleWatcher.Updates():
+			if entry == nil {
+				continue
+			}
+			rcm.handleRuleEntry(entry)
+		}
+	}
+}
+
+// handleRuleEntry processes a single KV entry from the rule watcher.
+func (rcm *ConfigManager) handleRuleEntry(entry jetstream.KeyValueEntry) {
+	key := entry.Key()
+
+	// Extract rule ID from key (format: "rules.<ruleID>")
+	parts := strings.SplitN(key, ".", 2)
+	if len(parts) < 2 {
+		rcm.logger.Warn("Invalid rule key format", "key", key)
+		return
+	}
+	ruleID := parts[1]
+
+	op := entry.Operation()
+
+	if op == jetstream.KeyValueDelete || op == jetstream.KeyValuePurge {
+		rcm.logger.Info("Rule deleted via KV", "rule_id", ruleID)
+		// Remove from processor's runtime config
+		changes := map[string]any{
+			"rules": map[string]any{
+				ruleID: nil, // nil signals deletion
+			},
+		}
+		if err := rcm.processor.ApplyConfigUpdate(changes); err != nil {
+			rcm.logger.Error("Failed to apply rule deletion", "rule_id", ruleID, "error", err)
+		}
+		rcm.notifyWatchCallbacks(ruleID, nil, "delete")
+		return
+	}
+
+	rawValue := entry.Value()
+
+	// Parse for validation
+	var ruleDef Definition
+	if err := json.Unmarshal(rawValue, &ruleDef); err != nil {
+		rcm.logger.Error("Failed to unmarshal rule from KV", "key", key, "error", err)
+		return
+	}
+
+	// Ensure ID is set
+	if ruleDef.ID == "" {
+		ruleDef.ID = ruleID
+	}
+
+	// Unmarshal raw bytes directly to map (avoids marshal/unmarshal round-trip)
+	var ruleMap map[string]any
+	if err := json.Unmarshal(rawValue, &ruleMap); err != nil {
+		rcm.logger.Error("Failed to convert rule to map", "rule_id", ruleID, "error", err)
+		return
+	}
+	// Ensure the map has the ID set consistently
+	ruleMap["id"] = ruleID
+
+	changes := map[string]any{
+		"rules": map[string]any{
+			ruleID: ruleMap,
+		},
+	}
+
+	// Validate first
+	if err := rcm.processor.ValidateConfigUpdate(changes); err != nil {
+		rcm.logger.Error("Rule from KV failed validation", "rule_id", ruleID, "error", err)
+		return
+	}
+
+	// Apply
+	if err := rcm.processor.ApplyConfigUpdate(changes); err != nil {
+		rcm.logger.Error("Failed to apply rule from KV", "rule_id", ruleID, "error", err)
+		return
+	}
+
+	rcm.logger.Info("Applied rule from KV", "rule_id", ruleID, "name", ruleDef.Name)
+
+	// Notify watch callbacks — look up the compiled Rule from the processor
+	compiledRule := rcm.processor.GetCompiledRule(ruleID)
+	rcm.notifyWatchCallbacks(ruleID, compiledRule, "put")
+}
+
+// notifyWatchCallbacks invokes all registered WatchRules callbacks.
+func (rcm *ConfigManager) notifyWatchCallbacks(ruleID string, rule Rule, operation string) {
+	rcm.watchMu.RLock()
+	callbacks := rcm.watchCallbacks
+	rcm.watchMu.RUnlock()
+
+	for _, cb := range callbacks {
+		cb(ruleID, rule, operation)
 	}
 }
 
@@ -163,11 +317,25 @@ func (rcm *ConfigManager) SaveRule(ctx context.Context, ruleID string, ruleDef D
 	return rcm.saveViaConfigManager(ctx, key, ruleDef)
 }
 
-// saveViaConfigManager saves through the ConfigManager's KV bucket
-func (rcm *ConfigManager) saveViaConfigManager(_ context.Context, _ string, _ Definition) error {
-	// This would typically be exposed by ConfigManager
-	// For now, we'll return an error indicating this needs implementation
-	return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigManager", "saveViaConfigManager", "direct KV save not implemented")
+// saveViaConfigManager saves through the ConfigManager's KV bucket.
+// This is the fallback path when the rule ConfigManager's own KVStore
+// has not been initialized via InitializeKVStore.
+func (rcm *ConfigManager) saveViaConfigManager(ctx context.Context, key string, ruleDef Definition) error {
+	kv := rcm.configMgr.GetKV()
+	if kv == nil {
+		return errs.WrapInvalid(errs.ErrMissingConfig, "ConfigManager", "saveViaConfigManager", "config manager KV bucket not available")
+	}
+
+	data, err := json.Marshal(ruleDef)
+	if err != nil {
+		return errs.WrapInvalid(err, "ConfigManager", "saveViaConfigManager", "marshal rule definition")
+	}
+
+	if _, err := kv.Put(ctx, key, data); err != nil {
+		return errs.WrapTransient(err, "ConfigManager", "saveViaConfigManager", "put rule to KV")
+	}
+
+	return nil
 }
 
 // DeleteRule removes a rule configuration from NATS KV
@@ -181,9 +349,21 @@ func (rcm *ConfigManager) DeleteRule(ctx context.Context, ruleID string) error {
 	return rcm.deleteViaConfigManager(ctx, key)
 }
 
-// deleteViaConfigManager deletes through the ConfigManager's KV bucket
-func (rcm *ConfigManager) deleteViaConfigManager(_ context.Context, _ string) error {
-	return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigManager", "deleteViaConfigManager", "direct KV delete not implemented")
+// deleteViaConfigManager deletes through the ConfigManager's KV bucket.
+func (rcm *ConfigManager) deleteViaConfigManager(ctx context.Context, key string) error {
+	kv := rcm.configMgr.GetKV()
+	if kv == nil {
+		return errs.WrapInvalid(errs.ErrMissingConfig, "ConfigManager", "deleteViaConfigManager", "config manager KV bucket not available")
+	}
+
+	if err := kv.Delete(ctx, key); err != nil {
+		if err == jetstream.ErrKeyNotFound {
+			return errs.WrapInvalid(errs.ErrKeyNotFound, "ConfigManager", "deleteViaConfigManager", fmt.Sprintf("rule not found: %s", key))
+		}
+		return errs.WrapTransient(err, "ConfigManager", "deleteViaConfigManager", "delete rule from KV")
+	}
+
+	return nil
 }
 
 // GetRule retrieves a rule configuration from NATS KV
@@ -254,15 +434,22 @@ func (rcm *ConfigManager) ListRules(_ context.Context) (map[string]Definition, e
 	return rules, nil
 }
 
-// WatchRules watches for rule changes and returns active rules
-func (rcm *ConfigManager) WatchRules(_ context.Context, _ func(ruleID string, rule Rule, operation string)) error {
-	// This would set up a more sophisticated watcher
-	// For now, we use the existing subscription mechanism
+// WatchRules registers a callback that is invoked whenever a rule is created,
+// updated, or deleted via KV. The callback receives the rule ID, the compiled
+// Rule (nil on delete), and the operation ("put" or "delete").
+// Multiple callbacks can be registered; they are invoked in registration order.
+func (rcm *ConfigManager) WatchRules(_ context.Context, callback func(ruleID string, rule Rule, operation string)) error {
+	if callback == nil {
+		return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigManager", "WatchRules", "callback cannot be nil")
+	}
 
-	// The callback would be invoked from handleConfigUpdate
-	// when rules are added/updated/deleted
+	rcm.watchMu.Lock()
+	rcm.watchCallbacks = append(rcm.watchCallbacks, callback)
+	count := len(rcm.watchCallbacks)
+	rcm.watchMu.Unlock()
 
-	return errs.WrapInvalid(errs.ErrInvalidConfig, "ConfigManager", "WatchRules", "watch rules not implemented")
+	rcm.logger.Debug("Registered rule watch callback", "total_callbacks", count)
+	return nil
 }
 
 // InitializeKVStore initializes the KVStore for direct KV operations

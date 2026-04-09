@@ -46,6 +46,38 @@ func (c *Component) registerBuiltinCommands() {
 		RequireLoop: false,
 		Help:        "/help - Show available commands",
 	}, c.handleHelpCommand)
+
+	// /approve [loop_id] [reason] - Approve pending result
+	c.registry.Register("approve", CommandConfig{
+		Pattern:     `^/approve\s*(\S*)\s*(.*)$`,
+		Permission:  "approve",
+		RequireLoop: false,
+		Help:        "/approve [loop_id] [reason] - Approve pending result",
+	}, c.makeSignalCommand(agentic.SignalApprove))
+
+	// /reject [loop_id] [reason] - Reject pending result
+	c.registry.Register("reject", CommandConfig{
+		Pattern:     `^/reject\s*(\S*)\s*(.*)$`,
+		Permission:  "approve",
+		RequireLoop: false,
+		Help:        "/reject [loop_id] [reason] - Reject pending result with optional reason",
+	}, c.makeSignalCommand(agentic.SignalReject))
+
+	// /pause [loop_id] - Pause loop at next checkpoint
+	c.registry.Register("pause", CommandConfig{
+		Pattern:     `^/pause\s*(\S*)$`,
+		Permission:  "cancel_own",
+		RequireLoop: false,
+		Help:        "/pause [loop_id] - Pause current or specified loop",
+	}, c.makeSignalCommand(agentic.SignalPause))
+
+	// /resume [loop_id] - Resume paused loop
+	c.registry.Register("resume", CommandConfig{
+		Pattern:     `^/resume\s*(\S*)$`,
+		Permission:  "cancel_own",
+		RequireLoop: false,
+		Help:        "/resume [loop_id] - Resume paused loop",
+	}, c.makeSignalCommand(agentic.SignalResume))
 }
 
 // handleCancelCommand handles the /cancel command
@@ -271,6 +303,106 @@ func (c *Component) handleHelpCommand(ctx context.Context, msg agentic.UserMessa
 		Content:     strings.Join(lines, "\n"),
 		Timestamp:   time.Now(),
 	}, nil
+}
+
+// makeSignalCommand creates a command handler that sends a specific signal type.
+// This is a factory to avoid duplicating the same logic for /approve, /reject, /pause, /resume.
+func (c *Component) makeSignalCommand(signalType string) CommandHandler {
+	return func(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
+		// Resolve target loop
+		targetLoopID := loopID
+		if len(args) > 0 && args[0] != "" {
+			targetLoopID = args[0]
+		}
+
+		if targetLoopID == "" {
+			return agentic.UserResponse{
+				ResponseID:  uuid.New().String(),
+				ChannelType: msg.ChannelType,
+				ChannelID:   msg.ChannelID,
+				UserID:      msg.UserID,
+				Type:        agentic.ResponseTypeError,
+				Content:     fmt.Sprintf("No loop to %s. Specify a loop_id or have an active loop.", signalType),
+				Timestamp:   time.Now(),
+			}, nil
+		}
+
+		// Check permission to control this loop
+		if !c.canUserControlLoop(msg.UserID, targetLoopID) {
+			return agentic.UserResponse{
+				ResponseID:  uuid.New().String(),
+				ChannelType: msg.ChannelType,
+				ChannelID:   msg.ChannelID,
+				UserID:      msg.UserID,
+				Type:        agentic.ResponseTypeError,
+				Content:     "Permission denied: cannot control this loop",
+				Timestamp:   time.Now(),
+			}, nil
+		}
+
+		// Verify loop exists
+		loopInfo := c.loopTracker.Get(targetLoopID)
+		if loopInfo == nil {
+			return agentic.UserResponse{
+				ResponseID:  uuid.New().String(),
+				ChannelType: msg.ChannelType,
+				ChannelID:   msg.ChannelID,
+				UserID:      msg.UserID,
+				Type:        agentic.ResponseTypeError,
+				Content:     fmt.Sprintf("Loop %s not found", targetLoopID),
+				Timestamp:   time.Now(),
+			}, nil
+		}
+
+		if isTerminalState(loopInfo.State) {
+			return agentic.UserResponse{
+				ResponseID:  uuid.New().String(),
+				ChannelType: msg.ChannelType,
+				ChannelID:   msg.ChannelID,
+				UserID:      msg.UserID,
+				Type:        agentic.ResponseTypeStatus,
+				Content:     fmt.Sprintf("Loop %s already in terminal state: %s", targetLoopID, loopInfo.State),
+				Timestamp:   time.Now(),
+			}, nil
+		}
+
+		// Build signal with optional reason (args[1] for /approve and /reject)
+		signal := agentic.UserSignal{
+			SignalID:    uuid.New().String(),
+			Type:        signalType,
+			LoopID:      targetLoopID,
+			UserID:      msg.UserID,
+			ChannelType: msg.ChannelType,
+			ChannelID:   msg.ChannelID,
+			Timestamp:   time.Now(),
+		}
+
+		// Attach reason as payload if provided (second capture group)
+		if len(args) > 1 && args[1] != "" {
+			signal.Payload = map[string]string{"reason": strings.TrimSpace(args[1])}
+		}
+
+		signalData, err := json.Marshal(signal)
+		if err != nil {
+			return agentic.UserResponse{}, errs.Wrap(err, "Component", "signalCommand", "marshal signal")
+		}
+
+		subject := fmt.Sprintf("agent.signal.%s", targetLoopID)
+		if err := c.natsClient.Publish(ctx, subject, signalData); err != nil {
+			return agentic.UserResponse{}, errs.WrapTransient(err, "Component", "signalCommand", "publish signal")
+		}
+
+		return agentic.UserResponse{
+			ResponseID:  uuid.New().String(),
+			ChannelType: msg.ChannelType,
+			ChannelID:   msg.ChannelID,
+			UserID:      msg.UserID,
+			InReplyTo:   targetLoopID,
+			Type:        agentic.ResponseTypeStatus,
+			Content:     fmt.Sprintf("Signal '%s' sent to loop %s", signalType, targetLoopID),
+			Timestamp:   time.Now(),
+		}, nil
+	}
 }
 
 // Helper functions

@@ -78,6 +78,13 @@ func (cm *Manager) GetConfig() *SafeConfig {
 	return cm.config
 }
 
+// GetKV returns the underlying NATS KV bucket for direct operations.
+// This is used by subsystems (e.g., rule ConfigManager) that store domain-specific
+// keys in the shared config bucket but manage their own watching.
+func (cm *Manager) GetKV() jetstream.KeyValue {
+	return cm.kv
+}
+
 // OnChange subscribes to configuration changes matching the pattern
 // Returns a channel that receives updates when configuration changes
 // Pattern examples:

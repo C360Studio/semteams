@@ -58,18 +58,38 @@ func (r *ExecutorRegistry) GetTool(name string) ToolExecutor {
 	return r.executors[name]
 }
 
-// ListTools returns all registered tool definitions
-// Returns an empty slice (not nil) when no tools are registered
+// ListTools returns all registered tool definitions.
+// Returns an empty slice (not nil) when no tools are registered.
 func (r *ExecutorRegistry) ListTools() []agentic.ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	// Initialize with empty slice to ensure non-nil return
 	tools := []agentic.ToolDefinition{}
 	for _, executor := range r.executors {
 		tools = append(tools, executor.ListTools()...)
 	}
 
+	return tools
+}
+
+// ListToolsByCategories returns tool definitions filtered to the given categories.
+// Pass nil or empty to get all tools (equivalent to ListTools).
+func (r *ExecutorRegistry) ListToolsByCategories(categories map[ToolCategory]bool) []agentic.ToolDefinition {
+	if len(categories) == 0 {
+		return r.ListTools()
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	tools := []agentic.ToolDefinition{}
+	for _, executor := range r.executors {
+		for _, def := range executor.ListTools() {
+			if categories[GetToolCategory(def.Name)] {
+				tools = append(tools, def)
+			}
+		}
+	}
 	return tools
 }
 
