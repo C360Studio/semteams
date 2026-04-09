@@ -1,0 +1,34 @@
+{
+  "id": "extract-on-completion",
+  "type": "expression",
+  "name": "Extract Facts on Loop Completion",
+  "description": "When an agent loop completes with 3+ iterations, trigger fact extraction to persist knowledge",
+  "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.workflow.*",
+    "watch_buckets": ["ENTITY_STATES"]
+  },
+  "conditions": [
+    {
+      "field": "workflow.outcome",
+      "operator": "eq",
+      "value": "success"
+    },
+    {
+      "field": "workflow.iterations",
+      "operator": "gte",
+      "value": 3
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish",
+      "subject": "memory.extract",
+      "properties": {
+        "trigger": "loop_completion",
+        "min_iterations": 3
+      }
+    }
+  ]
+}

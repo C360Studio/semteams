@@ -1,0 +1,34 @@
+{
+  "id": "escalate-on-timeout",
+  "type": "expression",
+  "name": "Escalate on Loop Timeout",
+  "description": "When an agent loop times out, notify user with partial results",
+  "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.workflow.*",
+    "watch_buckets": ["ENTITY_STATES"]
+  },
+  "conditions": [
+    {
+      "field": "workflow.outcome",
+      "operator": "eq",
+      "value": "timeout"
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish",
+      "subject": "user.notification",
+      "properties": {
+        "type": "timeout",
+        "message": "Agent loop timed out. Partial results may be available."
+      }
+    },
+    {
+      "type": "update_triple",
+      "predicate": "workflow.phase",
+      "object": "timed_out"
+    }
+  ]
+}

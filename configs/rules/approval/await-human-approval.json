@@ -1,0 +1,29 @@
+{
+  "id": "await-human-approval",
+  "type": "expression",
+  "name": "Await Human Approval",
+  "description": "When a loop transitions to awaiting_approval, notify the user for review",
+  "enabled": true,
+  "entity": {
+    "pattern": "*.*.*.*.workflow.*",
+    "watch_buckets": ["ENTITY_STATES"]
+  },
+  "conditions": [
+    {
+      "field": "workflow.state",
+      "operator": "eq",
+      "value": "awaiting_approval"
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish",
+      "subject": "user.notification",
+      "properties": {
+        "type": "approval_needed",
+        "message": "An agent is waiting for your approval. Use /approve or /reject to respond."
+      }
+    }
+  ]
+}

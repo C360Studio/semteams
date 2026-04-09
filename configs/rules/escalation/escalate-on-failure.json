@@ -1,0 +1,39 @@
+{
+  "id": "escalate-on-failure",
+  "type": "expression",
+  "name": "Escalate on Specialist Failure",
+  "description": "When a specialist agent fails, escalate to general agent with broader context. TEMPLATE: customize subject, model, and prompt fields in the publish_agent action before enabling.",
+  "enabled": false,
+  "entity": {
+    "pattern": "*.*.*.*.workflow.*",
+    "watch_buckets": ["ENTITY_STATES"]
+  },
+  "conditions": [
+    {
+      "field": "workflow.outcome",
+      "operator": "eq",
+      "value": "failed"
+    },
+    {
+      "field": "workflow.role",
+      "operator": "ne",
+      "value": "general"
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "role": "general",
+      "properties": {
+        "escalated_from": "{{workflow.role}}",
+        "reason": "specialist_failed"
+      }
+    },
+    {
+      "type": "update_triple",
+      "predicate": "workflow.phase",
+      "object": "escalated"
+    }
+  ]
+}

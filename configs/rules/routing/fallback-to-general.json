@@ -1,0 +1,33 @@
+{
+  "id": "fallback-to-general",
+  "type": "expression",
+  "name": "Fallback to General Agent",
+  "description": "When a task has no specialist matched, route to the general-purpose agent. TEMPLATE: customize subject, model, and prompt fields in the publish_agent action before enabling.",
+  "enabled": false,
+  "entity": {
+    "pattern": "*.*.*.*.task.*",
+    "watch_buckets": ["ENTITY_STATES"]
+  },
+  "conditions": [
+    {
+      "field": "task.role",
+      "operator": "eq",
+      "value": "unassigned"
+    },
+    {
+      "field": "task.status",
+      "operator": "eq",
+      "value": "pending"
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "role": "general",
+      "properties": {
+        "reason": "no_specialist_matched"
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "id": "editor-to-reviewer",
+  "type": "expression",
+  "name": "Editor to Reviewer Handoff",
+  "description": "When editor completes successfully, spawn reviewer agent. TEMPLATE: customize subject, model, and prompt fields in the publish_agent action before enabling.",
+  "enabled": false,
+  "entity": {
+    "pattern": "*.*.*.*.workflow.*",
+    "watch_buckets": ["ENTITY_STATES"]
+  },
+  "conditions": [
+    {
+      "field": "workflow.role",
+      "operator": "eq",
+      "value": "editor"
+    },
+    {
+      "field": "workflow.outcome",
+      "operator": "eq",
+      "value": "success"
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish_agent",
+      "role": "reviewer",
+      "properties": {
+        "parent_role": "editor"
+      }
+    },
+    {
+      "type": "update_triple",
+      "predicate": "workflow.phase",
+      "object": "reviewing"
+    }
+  ]
+}

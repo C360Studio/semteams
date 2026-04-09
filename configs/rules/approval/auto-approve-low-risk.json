@@ -1,0 +1,34 @@
+{
+  "id": "auto-approve-low-risk",
+  "type": "expression",
+  "name": "Auto-Approve Low Risk Operations",
+  "description": "Automatically approve operations tagged as low risk (e.g., read-only rules, status queries)",
+  "enabled": false,
+  "entity": {
+    "pattern": "*.*.*.*.workflow.*",
+    "watch_buckets": ["ENTITY_STATES"]
+  },
+  "conditions": [
+    {
+      "field": "workflow.state",
+      "operator": "eq",
+      "value": "awaiting_approval"
+    },
+    {
+      "field": "workflow.risk_level",
+      "operator": "eq",
+      "value": "low"
+    }
+  ],
+  "logic": "and",
+  "on_enter": [
+    {
+      "type": "publish",
+      "subject": "agent.signal.{{workflow.loop_id}}",
+      "properties": {
+        "type": "approve",
+        "reason": "auto_approved_low_risk"
+      }
+    }
+  ]
+}

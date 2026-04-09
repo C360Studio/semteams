@@ -10,9 +10,10 @@ import (
 
 // ToolDefinition represents the definition of a tool that can be called
 type ToolDefinition struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	Parameters  map[string]any `json:"parameters"`
+	Name             string         `json:"name"`
+	Description      string         `json:"description"`
+	Parameters       map[string]any `json:"parameters"`
+	RequiresApproval bool           `json:"requires_approval,omitempty"` // When true, loop transitions to awaiting_approval before executing
 }
 
 // Validate checks if the ToolDefinition is valid
