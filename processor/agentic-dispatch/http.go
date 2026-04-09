@@ -580,13 +580,14 @@ func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate signal type
+	// Validate signal type against known constants from agentic/user_types.go
 	switch req.Type {
-	case "pause", "resume", "cancel":
+	case agentic.SignalPause, agentic.SignalResume, agentic.SignalCancel,
+		agentic.SignalApprove, agentic.SignalReject, agentic.SignalFeedback, agentic.SignalRetry:
 		// Valid signal types
 	default:
 		c.metrics.recordHTTPRequest("/loops/{id}/signal", "POST", "400")
-		c.writeJSONError(w, http.StatusBadRequest, "invalid signal type: must be pause, resume, or cancel")
+		c.writeJSONError(w, http.StatusBadRequest, "invalid signal type: must be one of pause, resume, cancel, approve, reject, feedback, retry")
 		return
 	}
 

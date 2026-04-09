@@ -247,13 +247,27 @@ chat assistant to use:
 7. RuleDiffCard (self-programming visibility)
 8. TrajectoryViewer (execution replay)
 
+## Trajectory API (already exists)
+
+The agentic-loop component exposes trajectory endpoints:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/agentic-loop/trajectories` | List all trajectories |
+| GET | `/agentic-loop/trajectories/{loopId}` | Get full trajectory for a loop |
+
+Use these for the TrajectoryViewer component.
+
 ## Known Backend Gaps
 
-1. **HTTP signal endpoint needs approve/reject** — `http.go:584` only validates
-   pause/resume/cancel. Either extend validation or use message endpoint as
-   workaround.
-2. **Trajectory API not yet exposed** — Loop trajectory data exists in KV but
-   there's no HTTP endpoint to retrieve it. Needed for TrajectoryViewer.
-3. **Activity SSE events lack tool-level detail** — Currently streams full loop
+1. **Activity SSE events lack tool-level detail** — Currently streams full loop
    state from KV. Tool call start/complete events would need to be added for
-   real-time ToolCallCard updates.
+   real-time ToolCallCard updates. Workaround: poll the trajectory endpoint
+   for tool call details.
+
+## Recently Closed Gaps
+
+- HTTP signal endpoint now accepts all signal types: pause, resume, cancel,
+  approve, reject, feedback, retry
+- RequiresApproval enforcement is wired via ApprovalFilter — tools marked
+  RequiresApproval transition the loop to awaiting_approval before execution

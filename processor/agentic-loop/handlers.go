@@ -643,18 +643,37 @@ func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID st
 			return err
 		}
 
-		// Store immediate error results for rejected calls
+		// Process rejected calls — distinguish approval-required from hard rejections
+		var pendingApproval []agentic.ToolCall
 		for _, rejection := range filterResult.Rejected {
-			h.loopManager.TrackToolName(rejection.Call.ID, rejection.Call.Name)
-			errResult := agentic.ToolResult{
-				CallID: rejection.Call.ID,
-				Name:   rejection.Call.Name,
-				Error:  fmt.Sprintf("tool call rejected: %s", rejection.Reason),
-				LoopID: loopID,
+			if agentictools.IsApprovalRequired(rejection.Reason) {
+				// Tool needs human approval — queue for re-dispatch after approval
+				pendingApproval = append(pendingApproval, rejection.Call)
+				h.logger.Info("Tool requires approval, transitioning to awaiting_approval",
+					slog.String("loop_id", loopID),
+					slog.String("tool", rejection.Call.Name))
+			} else {
+				// Hard rejection — store error result for the LLM
+				h.loopManager.TrackToolName(rejection.Call.ID, rejection.Call.Name)
+				errResult := agentic.ToolResult{
+					CallID: rejection.Call.ID,
+					Name:   rejection.Call.Name,
+					Error:  fmt.Sprintf("tool call rejected: %s", rejection.Reason),
+					LoopID: loopID,
+				}
+				if err := h.loopManager.StoreToolResult(loopID, errResult); err != nil {
+					return err
+				}
 			}
-			if err := h.loopManager.StoreToolResult(loopID, errResult); err != nil {
-				return err
-			}
+		}
+
+		// If any tools need approval, queue them and transition the loop
+		if len(pendingApproval) > 0 {
+			h.loopManager.QueueToolCalls(loopID, pendingApproval)
+			result.State = agentic.LoopStateAwaitingApproval
+			result.PendingTools = h.loopManager.GetPendingTools(loopID)
+			// Don't dispatch any other tools — wait for approval
+			return nil
 		}
 
 		approved = filterResult.Approved
