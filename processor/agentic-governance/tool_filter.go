@@ -77,7 +77,7 @@ func (f *ToolCallFilter) Process(ctx context.Context, msg *Message) (*FilterResu
 }
 
 // checkBash validates bash command arguments.
-func (f *ToolCallFilter) checkBash(_ context.Context, msg *Message, args map[string]any) (*FilterResult, error) {
+func (f *ToolCallFilter) checkBash(ctx context.Context, msg *Message, args map[string]any) (*FilterResult, error) {
 	command, _ := args["command"].(string)
 	if command == "" {
 		return &FilterResult{Allowed: true}, nil
@@ -87,28 +87,21 @@ func (f *ToolCallFilter) checkBash(_ context.Context, msg *Message, args map[str
 	lower := strings.ToLower(command)
 	for _, pattern := range f.BlockedCommandPatterns {
 		if strings.Contains(lower, strings.ToLower(pattern)) {
-			return &FilterResult{
-				Allowed: false,
-				Violation: &Violation{
-					FilterName: f.Name(),
-					Severity:   SeverityHigh,
-					Action:     ViolationActionBlocked,
-					Details: map[string]any{
-						"type":    "blocked_command",
-						"pattern": pattern,
-						"message": fmt.Sprintf("Command contains blocked pattern: %s", pattern),
-					},
-				},
-			}, nil
+			v := NewViolation(f.Name(), SeverityHigh, msg).
+				WithAction(ViolationActionBlocked).
+				WithDetail("type", "blocked_command").
+				WithDetail("pattern", pattern).
+				WithDetail("message", fmt.Sprintf("Command contains blocked pattern: %s", pattern))
+			return &FilterResult{Allowed: false, Violation: v}, nil
 		}
 	}
 
 	// Check for PII in command arguments
-	return f.checkPII(nil, msg, args)
+	return f.checkPII(ctx, msg, args)
 }
 
 // checkHTTPRequest validates URL arguments.
-func (f *ToolCallFilter) checkHTTPRequest(_ context.Context, msg *Message, args map[string]any) (*FilterResult, error) {
+func (f *ToolCallFilter) checkHTTPRequest(ctx context.Context, msg *Message, args map[string]any) (*FilterResult, error) {
 	urlStr, _ := args["url"].(string)
 	if urlStr == "" {
 		return &FilterResult{Allowed: true}, nil
@@ -117,19 +110,12 @@ func (f *ToolCallFilter) checkHTTPRequest(_ context.Context, msg *Message, args 
 	lower := strings.ToLower(urlStr)
 	for _, pattern := range f.BlockedURLPatterns {
 		if strings.Contains(lower, strings.ToLower(pattern)) {
-			return &FilterResult{
-				Allowed: false,
-				Violation: &Violation{
-					FilterName: f.Name(),
-					Severity:   SeverityHigh,
-					Action:     ViolationActionBlocked,
-					Details: map[string]any{
-						"type":    "blocked_url",
-						"pattern": pattern,
-						"message": fmt.Sprintf("URL contains blocked pattern: %s", pattern),
-					},
-				},
-			}, nil
+			v := NewViolation(f.Name(), SeverityHigh, msg).
+				WithAction(ViolationActionBlocked).
+				WithDetail("type", "blocked_url").
+				WithDetail("pattern", pattern).
+				WithDetail("message", fmt.Sprintf("URL contains blocked pattern: %s", pattern))
+			return &FilterResult{Allowed: false, Violation: v}, nil
 		}
 	}
 
@@ -137,7 +123,7 @@ func (f *ToolCallFilter) checkHTTPRequest(_ context.Context, msg *Message, args 
 }
 
 // checkPII examines tool arguments for PII patterns.
-func (f *ToolCallFilter) checkPII(_ context.Context, msg *Message, args map[string]any) (*FilterResult, error) {
+func (f *ToolCallFilter) checkPII(ctx context.Context, msg *Message, args map[string]any) (*FilterResult, error) {
 	if f.piiFilter == nil {
 		return &FilterResult{Allowed: true}, nil
 	}
@@ -159,7 +145,7 @@ func (f *ToolCallFilter) checkPII(_ context.Context, msg *Message, args map[stri
 	piiMsg := msg.Clone()
 	piiMsg.Content.Text = combined
 
-	return f.piiFilter.Process(context.Background(), piiMsg)
+	return f.piiFilter.Process(ctx, piiMsg)
 }
 
 // ToolCallToMessage converts an agentic.ToolCall into a governance Message

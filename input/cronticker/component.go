@@ -169,7 +169,8 @@ func (c *Component) Start(ctx context.Context) error {
 	c.running = true
 	c.startTime = time.Now()
 
-	go c.tickLoop()
+	loopCtx := c.ctx // capture under lock to avoid race
+	go c.tickLoop(loopCtx)
 
 	c.logger.Info("Cron-ticker started",
 		slog.String("interval", c.config.Interval),
@@ -195,35 +196,40 @@ func (c *Component) Stop() error {
 	return nil
 }
 
-// tickLoop runs the periodic tick publisher.
-func (c *Component) tickLoop() {
+// tickLoop runs the periodic tick publisher. ctx is captured at Start() time
+// to avoid an unsynchronized read of c.ctx from the goroutine.
+func (c *Component) tickLoop(ctx context.Context) {
 	ticker := time.NewTicker(c.interval)
 	defer ticker.Stop()
 
-	// Emit an initial tick immediately
-	c.emitTick()
+	c.emitTick(ctx)
 
 	for {
 		select {
-		case <-c.ctx.Done():
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			c.emitTick()
+			c.emitTick(ctx)
 		}
 	}
 }
 
 // emitTick publishes a single clock tick entity.
-func (c *Component) emitTick() {
+func (c *Component) emitTick(ctx context.Context) {
 	now := time.Now().UTC()
-	entityID := fmt.Sprintf("local.semstreams.cron.ticker.%s", c.config.TickerName)
+	entityID := fmt.Sprintf("local.semstreams.cron.ticker.tick.%s", c.config.TickerName) // 6-part entity ID
+
+	// Read tick count under lock for the triple value
+	c.mu.RLock()
+	nextCount := c.tickCount + 1
+	c.mu.RUnlock()
 
 	triples := []message.Triple{
 		{Subject: entityID, Predicate: "cron.type", Object: "tick"},
 		{Subject: entityID, Predicate: "cron.ticker_name", Object: c.config.TickerName},
 		{Subject: entityID, Predicate: "cron.interval", Object: c.config.Interval},
 		{Subject: entityID, Predicate: "cron.timestamp", Object: now.Format(time.RFC3339)},
-		{Subject: entityID, Predicate: "cron.tick_count", Object: fmt.Sprintf("%d", c.tickCount+1)},
+		{Subject: entityID, Predicate: "cron.tick_count", Object: fmt.Sprintf("%d", nextCount)},
 	}
 
 	payload := &tickPayload{EntityID: entityID, Triples: triples}
@@ -234,19 +240,20 @@ func (c *Component) emitTick() {
 		return
 	}
 
-	if err := c.natsClient.Publish(c.ctx, c.config.Subject, data); err != nil {
+	if err := c.natsClient.Publish(ctx, c.config.Subject, data); err != nil {
 		c.logger.Error("Failed to publish tick", slog.Any("error", err))
 		return
 	}
 
 	c.mu.Lock()
 	c.tickCount++
+	count := c.tickCount
 	c.lastTickTime = now
 	c.mu.Unlock()
 
 	c.logger.Debug("Tick emitted",
 		slog.String("entity_id", entityID),
-		slog.Int64("tick_count", c.tickCount))
+		slog.Int64("tick_count", count))
 }
 
 // tickPayload wraps tick triples as a message payload.
