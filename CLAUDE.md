@@ -70,7 +70,7 @@ task test:integration   # Run integration tests (uses testcontainers)
 task test:race          # Run tests with race detector
 task lint               # Run Go linters
 task check              # Go lint + test (fast, no Node required)
-task check:all          # Go + UI lint + type-check + test (requires Node)
+task check:all          # Go + UI lint + type-check + test + build (requires Node)
 
 # UI tasks (frontend) — see ui/Taskfile.yml for the full list
 task ui:dev             # Start Vite dev server

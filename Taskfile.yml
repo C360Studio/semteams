@@ -81,6 +81,7 @@ tasks:
       - task: ui:lint
       - task: ui:check
       - task: ui:test
+      - task: ui:build
 
   # E2E composite tasks
   e2e:tiers:
