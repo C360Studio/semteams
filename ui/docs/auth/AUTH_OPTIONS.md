@@ -1,9 +1,18 @@
-# Authentication Options for SemStreams UI
+# Authentication Options for the SemTeams UI
+
+> **History note (2026-04):** This document was originally written for
+> `semstreams-ui` when it targeted multiple SemStreams-based backends.
+> That framing is stale — `semteams/ui/` is now the dedicated UI for the
+> semteams backend. The architectural analysis still applies: Pattern 1
+> (reverse proxy auth) remains the recommended approach because it keeps
+> auth out of both the UI and the backend. References to "backend-agnostic"
+> below should be read as "decoupled from the backend's auth implementation".
+> The semteams backend does not currently implement auth endpoints.
 
 ## Current State
 
 - **No authentication** - UI is completely open
-- **Backend-agnostic** - Must work with any SemStreams-based backend
+- **Auth-free backend** - semteams does not implement auth endpoints
 - **Container-first** - Deployed via Docker + Caddy
 
 ## Requirements Analysis
@@ -18,7 +27,7 @@
 
 ### Architecture Constraints
 
-- **Backend-agnostic**: Auth solution shouldn't assume specific backend
+- **Decoupled from backend auth**: Auth solution shouldn't require backend changes
 - **Optional deployment**: Some users may not need auth (internal networks)
 - **Multiple deployment models**: Docker, npm, standalone
 - **Reverse proxy setup**: Caddy is already in the stack
@@ -77,7 +86,7 @@ Browser → Caddy (auth) → SvelteKit UI → Backend API
 **Pros:**
 
 - ✅ **Zero UI code changes** - Auth handled at infrastructure level
-- ✅ **Backend-agnostic** - Works with any backend
+- ✅ **Decoupled from backend** - No backend changes required
 - ✅ **Enterprise SSO support** - OIDC integrates with Azure AD, Okta, etc.
 - ✅ **Optional** - Users can deploy without auth (skip Caddy auth)
 - ✅ **Centralized** - One auth point protects entire application
@@ -159,16 +168,15 @@ export async function handle({ event, resolve }) {
 
 **Cons:**
 
-- ⚠️ **Backend-specific** - Each backend must implement auth
+- ⚠️ **Requires backend auth** - semteams would need to implement auth endpoints
 - ⚠️ **UI code changes needed** - Auth logic in SvelteKit
-- ⚠️ **Breaks backend-agnostic design** - UI assumes auth endpoints exist
+- ⚠️ **Couples UI to backend** - UI assumes specific auth endpoints exist
 - ⚠️ **More complex** - Auth distributed across UI + backend
 
 **Best for:**
 
-- Backends with existing auth systems
-- Microservices with per-service auth
-- Custom authentication requirements
+- Deployments where semteams has been extended with auth endpoints
+- Custom authentication requirements that can't be handled at the edge
 
 ---
 
@@ -221,7 +229,7 @@ export const handle = SvelteKitAuth({
 **Cons:**
 
 - ⚠️ **UI code changes** - Auth logic in SvelteKit app
-- ⚠️ **Breaks backend-agnostic design** - Auth becomes UI responsibility
+- ⚠️ **Auth becomes UI responsibility** - Harder to audit/centralize
 - ⚠️ **Backend needs to trust UI tokens** - Requires JWT validation
 - ⚠️ **Harder to configure** - Each deployment needs OAuth credentials
 
@@ -273,11 +281,11 @@ Browser → API Gateway (auth) → SvelteKit UI
 
 ## Recommended Approach
 
-### For semstreams-ui: **Pattern 1 (Reverse Proxy Auth)** + **Optional Backend Validation**
+### For the SemTeams UI: **Pattern 1 (Reverse Proxy Auth)** + **Optional Backend Validation**
 
 **Why:**
 
-1. **Maintains backend-agnostic design** - Auth is infrastructure, not code
+1. **Keeps the UI and semteams backend decoupled from auth** - Auth is infrastructure, not code
 2. **Optional by default** - Users can deploy without auth for internal use
 3. **Enterprise-ready** - OIDC/SSO support via Authelia or OAuth2-Proxy
 4. **No UI code changes** - Keep UI clean and focused
@@ -292,10 +300,10 @@ Browser → API Gateway (auth) → SvelteKit UI
 - Document Caddy forward_auth configuration
 - Provide examples for: Google OAuth, Azure AD, Okta
 
-**Phase 2: Optional - Backend auth headers**
+**Phase 2: Optional - semteams backend auth headers**
 
-- Document how backends can read auth headers
-- Provide optional middleware for user validation
+- Document how the semteams backend can read auth headers forwarded by Caddy
+- Add optional middleware for user validation
 - Examples: `Remote-User`, `Remote-Email`, `Remote-Groups`
 
 **Phase 3: Optional - SvelteKit auth hooks (if needed)**
@@ -363,7 +371,7 @@ authentication_backend:
 access_control:
   default_policy: deny
   rules:
-    - domain: semstreams.example.com
+    - domain: semteams.example.com
       policy: two_factor
 
 session:
@@ -375,11 +383,11 @@ session:
 identity_providers:
   oidc:
     clients:
-      - id: semstreams-ui
-        description: SemStreams Flow Builder
+      - id: semteams-ui
+        description: SemTeams Flow Builder
         secret: ${OIDC_CLIENT_SECRET}
         redirect_uris:
-          - https://semstreams.example.com/oauth2/callback
+          - https://semteams.example.com/oauth2/callback
 ```
 
 **Estimated setup time:** 30 minutes
@@ -474,7 +482,7 @@ services:
 
 | Factor                                | Reverse Proxy                    | Backend-Managed          | SvelteKit Auth.js               |
 | ------------------------------------- | -------------------------------- | ------------------------ | ------------------------------- |
-| **Maintains backend-agnostic design** | ✅ Yes                           | ⚠️ No (assumes auth API) | ⚠️ No (UI owns auth)            |
+| **Decoupled from backend auth**       | ✅ Yes                           | ⚠️ No (assumes auth API) | ⚠️ Partial (UI owns auth)       |
 | **No UI code changes**                | ✅ Yes                           | ❌ No                    | ❌ No                           |
 | **Enterprise SSO**                    | ✅ Easy (Authelia, OAuth2-Proxy) | ✅ Possible              | ✅ Possible (68+ providers)     |
 | **Optional deployment**               | ✅ Yes (skip Caddy auth)         | ⚠️ Harder                | ⚠️ Harder                       |
@@ -526,9 +534,9 @@ services:
 → **Option A**: Authelia + Azure AD / Okta OIDC
 → Setup time: 30 minutes, full 2FA + session management
 
-### Custom Backend with Auth
+### semteams extended with auth endpoints
 
-→ **Pattern 2**: Let backend handle auth
+→ **Pattern 2**: Let the semteams backend handle auth
 → UI calls backend auth endpoints
 
 ### Multi-tenant SaaS
@@ -540,10 +548,10 @@ services:
 
 ## Summary
 
-**For semstreams-ui, Pattern 1 (Reverse Proxy Auth) is recommended** because:
+**For the SemTeams UI, Pattern 1 (Reverse Proxy Auth) is recommended** because:
 
 1. ✅ No code changes needed - infrastructure-level
-2. ✅ Maintains backend-agnostic architecture
+2. ✅ Keeps the UI and semteams backend decoupled from auth logic
 3. ✅ Optional - users choose their auth strategy
 4. ✅ Enterprise-ready - full SSO/OIDC support
 5. ✅ Flexible - works with any auth provider
@@ -556,4 +564,5 @@ services:
 - Phase 3: Create tutorials for common providers
 - Future: Optional SvelteKit Auth.js for users who want it
 
-This approach lets users of semstreams-ui choose their auth strategy without forcing any particular solution into the codebase.
+This approach lets SemTeams UI deployments choose their auth strategy without
+forcing any particular solution into the codebase.

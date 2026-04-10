@@ -174,8 +174,8 @@ To integrate with Azure AD, Okta, or Google Workspace, update `configuration.yml
 identity_providers:
   oidc:
     clients:
-      - id: semstreams-ui
-        description: SemStreams Flow Builder
+      - id: semteams-ui
+        description: SemTeams Flow Builder
         secret: ${OIDC_CLIENT_SECRET}
         redirect_uris:
           - https://your-domain.com/oauth2/callback
@@ -238,11 +238,13 @@ export async function handle({ event, resolve }) {
 ```bash
 # Build UI with auth code
 npm run build
-docker build -t semstreams-ui-auth .
+docker build -t semteams-ui-auth .
 docker compose up
 ```
 
-**Note:** This requires UI code changes and breaks backend-agnostic design.
+**Note:** This requires UI code changes and couples the UI to semteams'
+auth endpoints. Pattern 1 (reverse proxy auth) is preferred if you want to
+keep the UI ignorant of how auth is handled.
 
 ---
 
