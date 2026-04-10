@@ -1,169 +1,121 @@
 # User Journey Specs
 
-This directory contains **user journey specifications** for the semteams
-agentic superpowers surface. Each journey is a single markdown file describing
-a user-facing capability the product claims to support, written as a
-reproducible sequence of user action → expected backend state → expected UI
-state.
+User-facing capability journeys for the semteams agentic superpowers surface.
+Each journey is a **Playwright test file** under `ui/e2e/agentic/` — the test
+IS the spec. No custom schema, no parallel markdown prose, no drift risk.
 
-Journeys are the **source of truth** for what "agentic superpowers" actually
-means in semteams. They drive three things:
+## Where things live
 
-1. **Documentation** — anyone can read a journey file and understand the
-   capability end-to-end without reading code.
-2. **Deterministic fixtures** — each journey points at a fixture under
-   `test/fixtures/journeys/` that pins mock-llm responses, so the same
-   sequence of LLM calls happens every run.
-3. **Cross-layer E2E tests** — both Go observer tests (`test/e2e/scenarios/`)
-   and Playwright browser tests (`ui/e2e/agentic/`) consume the same fixture
-   and assert against the same checklist.
+| Artifact | Location | Purpose |
+|---|---|---|
+| Journey specs (executable) | `ui/e2e/agentic/<slug>.spec.ts` | Playwright `describe`/`test` — readable AND runnable |
+| Shared mock-llm fixtures | `test/fixtures/journeys/<slug>.yaml` | Deterministic LLM responses, loaded by both Playwright and Go observer tests |
+| Go observer tests (optional) | `test/e2e/scenarios/journeys/<slug>/` | Backend-only assertions for journeys that benefit from a non-browser observer |
 
-## Format
+## Why Playwright is the spec
 
-Every journey file is a markdown document with a YAML frontmatter block. The
-frontmatter is machine-checked by `task journeys:validate`; the body is human
-prose.
+The journey "what we claim to support" claim lives in the test file itself:
 
-### Required frontmatter fields
+- `test.describe('Tool approval gate', () => { ... })` — the journey name
+- JSDoc at the top — the goal, preconditions, rationale
+- `test('user proposes high-risk tool', async ({ page, request }) => { ... })` — each step
+- Assertions inside the test — backend state (via `request.get('.../loops/{id}')`) AND UI state (via `expect(page.locator(...))`) in the same function
 
-```yaml
----
-id: tool-approval-gate              # Unique slug, matches filename
-version: 1                           # Schema version of THIS document
-backend_capabilities:                # Components that must be enabled
-  - agentic-dispatch
-  - agentic-loop
-  - agentic-tools
-  - agentic-governance
-fixture: tool-approval-gate.yaml     # File under test/fixtures/journeys/
-ui_components:                       # Paths to Svelte components exercised
-  - ui/src/lib/components/chat/ApprovalPrompt.svelte
-  - ui/src/lib/components/chat/AgentLoopCard.svelte
-endpoints:                           # HTTP/SSE endpoints touched
-  - POST /agentic-dispatch/message
-  - GET /agentic-dispatch/activity
-  - POST /agentic-dispatch/loops/{id}/signal
----
-```
-
-### Required body sections
-
-A journey body must contain these H2 sections, in order:
-
-1. **`## Goal`** — one paragraph stating the user-facing outcome.
-2. **`## Preconditions`** — the minimum stack state required (components
-   enabled, KV seeded, fixture loaded, user session present).
-3. **`## Steps`** — numbered H3 subsections. Each step is one user action
-   and its observable consequences.
-4. **`## Assertions`** — an explicit checklist the tests verify. Split into
-   backend-state and UI-state groups.
-
-### Step format
-
-Each step is an H3 with three bullet sections:
-
-```markdown
-### 1. User sends message triggering tool proposal
-
-- **Action:** `POST /agentic-dispatch/message { text: "..." }`
-- **Expected backend:** agentic-dispatch creates loop, agentic-loop starts
-  executing, SSE emits `loop_update` with `state: executing`.
-- **Expected UI:** `AgentLoopCard` appears in the chat stream showing
-  `state: executing` and the loop ID.
-```
-
-The three bullets are load-bearing — Go observer tests read "Expected
-backend" claims, Playwright tests read "Expected UI" claims, and the fixture
-is what makes "Action" deterministic.
-
-### Assertion checklist format
-
-```markdown
-## Assertions
-
-### Backend state
-
-- [ ] `GET /agentic-dispatch/loops/{id}` returns `state=complete`
-- [ ] NATS KV `AGENT_LOOPS/{id}.state == "complete"`
-- [ ] NATS KV `RULE_ENGINE` contains the proposed rule
-
-### UI state
-
-- [ ] `AgentLoopCard` with matching `loop_id` visible
-- [ ] `ApprovalPrompt` rendered and interactable
-- [ ] Post-approval: `ApprovalPrompt` shows `approved` state
-- [ ] Post-completion: `AgentLoopCard` shows `complete` state
-```
-
-Each checkbox item is a falsifiable claim. If a claim is hard to assert,
-it doesn't belong in the checklist — move it to prose in the step body.
-
-## File naming
-
-- Journey files: `docs/journeys/<id>.md` where `<id>` matches the `id:`
-  frontmatter field (kebab-case).
-- Fixture files: `test/fixtures/journeys/<id>.yaml` — identical stem.
-
-Example: `docs/journeys/tool-approval-gate.md` pairs with
-`test/fixtures/journeys/tool-approval-gate.yaml`.
-
-## Validation
-
-```bash
-task journeys:validate
-```
-
-This target runs on every `task lint` invocation (once Phase C.2 lands and
-there are journeys to validate). It checks:
-
-- Every `*.md` file (except `README.md`) has YAML frontmatter
-- Required frontmatter fields are present
-- The `fixture:` path exists under `test/fixtures/journeys/`
-- The `ui_components:` paths exist under the semteams tree
-- The `id:` matches the filename stem
-
-It does **not** check that the journey actually passes — that's what the
-Playwright and Go observer tests do.
+One source of truth. No "update the markdown, then update the spec" drift.
 
 ## Planned journeys
 
-The initial superpower set the semteams product claims to support, per
-`docs/proposals/agentic-superpowers.md`. This list is aspirational — journeys
-land as the backend + UI capabilities stabilize.
+Mapped from the superpowers in `docs/proposals/agentic-superpowers.md`:
 
-| Journey                         | Superpower                            | Status  |
-| ------------------------------- | ------------------------------------- | ------- |
-| `tool-approval-gate`            | Human-in-the-loop approval gates      | planned |
-| `real-time-activity-stream`     | Real-time agent activity streaming    | planned |
-| `self-programming-rule-creation`| Self-programming agents (rule writes) | planned |
-| `multi-agent-hierarchy`         | Parent/child loop chains              | planned |
-| `graph-backed-memory`           | Semantic memory recall                | planned |
-| `stock-workflow-deep-research`  | Pre-built deep-research flow          | planned |
+| Slug | Superpower | Status |
+|---|---|---|
+| `tool-approval-gate` | Human-in-the-loop approval gates | planned |
+| `real-time-activity-stream` | Real-time agent activity streaming | planned |
+| `self-programming-rule-creation` | Self-programming agents (rule writes) | planned |
+| `multi-agent-hierarchy` | Parent/child loop chains | planned |
+| `graph-backed-memory` | Semantic memory recall | planned |
+| `stock-workflow-deep-research` | Pre-built deep-research flow | planned |
+
+Initial specs land in Phase C.2 (`tool-approval-gate`) and Phase C.3
+(`real-time-activity-stream`) as tracer-bullet journeys. The rest follow
+as each capability stabilizes.
 
 ## Adding a new journey
 
-1. Pick a slug and create `docs/journeys/<slug>.md` with the frontmatter
-   and body sections above.
-2. Create the paired fixture at `test/fixtures/journeys/<slug>.yaml` —
-   start from an existing fixture as a template.
-3. Run `task journeys:validate` to confirm the doc is well-formed.
-4. Add the Go observer test under `test/e2e/scenarios/journeys/<slug>/`
-   (if the journey has meaningful backend-only assertions).
-5. Add the Playwright spec under `ui/e2e/agentic/<slug>.spec.ts`.
-6. Update the "Planned journeys" table above, marking the status.
+1. Write the Playwright spec at `ui/e2e/agentic/<slug>.spec.ts`. Use
+   `test.describe()` for the journey name, `test()` per step. Include a
+   JSDoc block at the top explaining goal / preconditions / rationale.
+2. If the journey needs deterministic LLM responses, drop a YAML fixture at
+   `test/fixtures/journeys/<slug>.yaml` and point the mock-llm container
+   at it via the Playwright fixture helper.
+3. Backend-state assertions go inline in the test via
+   `await request.get('http://localhost:8080/agentic-dispatch/loops/{id}')`
+   — no separate test file needed.
+4. Run it locally: `task ui:test:e2e` (or `cd ui && npm run test:e2e`).
+5. If the journey also benefits from a non-browser Go observer (e.g. heavy
+   backend-only state assertions, or a backend CI tier that doesn't run
+   Playwright), add a sibling scenario under
+   `test/e2e/scenarios/journeys/<slug>/`. Optional — many journeys will
+   only need the Playwright side.
 
-## Rationale
+## How to read a journey spec
 
-This format exists because the original question — *"who owns Playwright
-E2E for the agentic superpowers?"* — turned out to have the wrong shape.
-The right question was *"where does the definition of a superpower live?"*
+A well-structured Playwright journey spec is self-documenting. Example
+skeleton:
 
-Answer: it lives here, in a repo-root doc, co-located with the code that
-implements it and the fixtures that make it reproducible. The journey spec
-is the contract. The Go and Playwright tests are independent assertions
-against that contract. When a capability evolves, the journey file evolves
-in the same commit as the code that changed it, so the contract never drifts
-from reality.
+```typescript
+/**
+ * Journey: Tool approval gate
+ *
+ * Goal: Agent proposes a high-risk tool, user approves, loop resumes.
+ *
+ * Preconditions:
+ *   - semteams stack running with agentic-dispatch, agentic-loop,
+ *     agentic-tools, agentic-governance enabled
+ *   - Mock-llm loaded with test/fixtures/journeys/tool-approval-gate.yaml
+ *   - User has an active chat session
+ *
+ * Validates: Phase 4 HITL gate, ApprovalFilter, RequiresApproval enforcement
+ */
 
-See the plan at `.claude/plans/linked-finding-starlight.md` (local-only) for
-the full history of how this directory came to be.
+import { test, expect } from "@playwright/test";
+
+test.describe("Tool approval gate", () => {
+  test("agent proposes high-risk tool and pauses for approval", async ({
+    page,
+    request,
+  }) => {
+    // Step 1: user sends message that triggers the tool
+    await page.goto("/");
+    // ...assert AgentLoopCard appears with state=executing
+
+    // Step 2: loop transitions to awaiting_approval
+    // ...assert ApprovalPrompt renders
+
+    // Step 3: user clicks approve
+    // ...assert loop resumes
+
+    // Step 4: assert final backend state via direct HTTP
+    const loop = await request
+      .get("http://localhost:8080/agentic-dispatch/loops/...")
+      .then((r) => r.json());
+    expect(loop.state).toBe("complete");
+  });
+});
+```
+
+Anyone reading this file understands the journey without having to read
+any other document.
+
+## Rationale for this structure
+
+The original question that started this directory — *"who owns Playwright
+E2E for the agentic superpowers?"* — initially led to a custom markdown
+schema + bash validator + YAML frontmatter design. That was over-engineered:
+Playwright already has a journey DSL (`describe`/`test`), readable structure
+(JSDoc + nested calls), and a built-in fixture system. Inventing a second
+layer on top meant two sources of truth, a custom validator to maintain,
+and a new format for contributors to learn.
+
+Keeping Playwright as the single source avoids all of that. See the plan
+at `.claude/plans/linked-finding-starlight.md` (local) for the full history.
