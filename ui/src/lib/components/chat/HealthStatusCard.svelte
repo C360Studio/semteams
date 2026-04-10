@@ -25,7 +25,7 @@
 
   {#if attachment.metrics && Object.keys(attachment.metrics).length > 0}
     <dl class="health-metrics">
-      {#each Object.entries(attachment.metrics) as [key, value]}
+      {#each Object.entries(attachment.metrics) as [key, value] (key)}
         <dt>{key}</dt>
         <dd>{value}</dd>
       {/each}

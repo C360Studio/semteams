@@ -45,6 +45,7 @@
 <main>
 	<div class="page-header">
 		<div class="header-row">
+			<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 			<a href="/" class="back-link">← Graph</a>
 			<h1>Flows</h1>
 		</div>

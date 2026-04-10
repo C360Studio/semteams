@@ -16,7 +16,7 @@
 	import { chatStore } from '$lib/stores/chatStore.svelte';
 	import { streamChat } from '$lib/services/chatApi';
 	import type { PageData } from './$types';
-	import type { ComponentInstance, FlowNode, FlowConnection, Flow } from '$lib/types/flow';
+	import type { ComponentInstance, FlowNode, FlowConnection } from '$lib/types/flow';
 	import type { SaveState, RuntimeStateInfo, PropertiesPanelMode, ViewMode } from '$lib/types/ui-state';
 	import type { ValidationResult as PortValidationResult, ValidatedPort } from '$lib/types/port';
 	import type { ComponentType } from '$lib/types/component';

@@ -3,8 +3,14 @@ name: CI
 on:
   push:
     branches: [main, develop]
+    paths-ignore:
+      - "ui/**"
+      - ".github/workflows/ui.yml"
   pull_request:
     branches: [main, develop]
+    paths-ignore:
+      - "ui/**"
+      - ".github/workflows/ui.yml"
 
 env:
   GO_VERSION: "1.25"

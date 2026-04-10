@@ -34,7 +34,7 @@
 
   {#if attachment.warnings && attachment.warnings.length > 0}
     <ul class="flow-warnings">
-      {#each attachment.warnings as warning}
+      {#each attachment.warnings as warning, i (i)}
         <li>{warning}</li>
       {/each}
     </ul>

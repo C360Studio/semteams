@@ -36,6 +36,13 @@ includes:
   e2e:throughput:
     taskfile: ./taskfiles/e2e/throughput.yml
 
+  # Frontend (Svelte 5 + SvelteKit) — see ui/Taskfile.yml for full surface.
+  # Intentionally NOT wired into root `check`/`lint` in Phase A. That wiring
+  # lands in Phase A.5 after the imported tree is verified clean.
+  ui:
+    taskfile: ./ui/Taskfile.yml
+    dir: ./ui
+
 tasks:
   # Default task
   default:
