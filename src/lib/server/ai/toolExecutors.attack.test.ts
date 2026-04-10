@@ -396,10 +396,7 @@ describe("executeGraphSearch.attack — error recovery", () => {
 // ===========================================================================
 
 import { vi, beforeEach, afterEach } from "vitest";
-import {
-  executeComponentHealth,
-  executeFlowStatus,
-} from "./toolExecutors";
+import { executeComponentHealth, executeFlowStatus } from "./toolExecutors";
 
 function makePhase6Context(
   overrides: Partial<ToolExecutorContext> = {},
@@ -583,7 +580,12 @@ describe("ATTACK: executeComponentHealth — very large metrics object", () => {
     for (let i = 0; i < 10000; i++) {
       largeMetrics[`key_${i}`] = i;
     }
-    mockFetchOk({ name: "big", status: "healthy", message: null, metrics: largeMetrics });
+    mockFetchOk({
+      name: "big",
+      status: "healthy",
+      message: null,
+      metrics: largeMetrics,
+    });
     const result = await executeComponentHealth(
       { componentName: "big" },
       makePhase6Context(),
@@ -694,10 +696,7 @@ describe("ATTACK: executeFlowStatus — flowId path traversal", () => {
   it("does not throw when flowId contains query injection", async () => {
     mockFetchThrow("bad request");
     await expect(
-      executeFlowStatus(
-        { flowId: "flow-1?delete=true" },
-        makePhase6Context(),
-      ),
+      executeFlowStatus({ flowId: "flow-1?delete=true" }, makePhase6Context()),
     ).resolves.toBeDefined();
   });
 

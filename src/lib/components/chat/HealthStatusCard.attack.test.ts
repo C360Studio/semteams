@@ -118,7 +118,7 @@ describe("ATTACK: HealthStatusCard — XSS in message", () => {
         props: {
           attachment: makeAttachment({
             status: "degraded",
-            message: '<script>document.cookie</script>',
+            message: "<script>document.cookie</script>",
           }),
         },
       }),
@@ -173,7 +173,7 @@ describe("ATTACK: HealthStatusCard — XSS in metrics keys", () => {
     const { container } = render(HealthStatusCard, {
       props: {
         attachment: makeAttachment({
-          metrics: { '<script>alert(1)</script>': 1 },
+          metrics: { "<script>alert(1)</script>": 1 },
         }),
       },
     });
@@ -280,17 +280,15 @@ describe("ATTACK: HealthStatusCard — large data", () => {
 // ---------------------------------------------------------------------------
 
 describe("ATTACK: HealthStatusCard — status indicator always has data-status", () => {
-  it.each([
-    "healthy",
-    "degraded",
-    "unhealthy",
-    "unknown",
-  ] as const)("status '%s' produces an element with data-status attribute", (status) => {
-    render(HealthStatusCard, {
-      props: { attachment: makeAttachment({ status }) },
-    });
-    const card = screen.getByTestId("health-status-card");
-    const indicator = card.querySelector(`[data-status='${status}']`);
-    expect(indicator).not.toBeNull();
-  });
+  it.each(["healthy", "degraded", "unhealthy", "unknown"] as const)(
+    "status '%s' produces an element with data-status attribute",
+    (status) => {
+      render(HealthStatusCard, {
+        props: { attachment: makeAttachment({ status }) },
+      });
+      const card = screen.getByTestId("health-status-card");
+      const indicator = card.querySelector(`[data-status='${status}']`);
+      expect(indicator).not.toBeNull();
+    },
+  );
 });

@@ -25,26 +25,26 @@ The homepage is a **graph explorer** (DataView) with chat. Users explore the kno
 
 ### Pages
 
-| Route | Purpose |
-|-------|---------|
-| `/` | Graph explorer (DataView) — default homepage, auto-discovers active flow |
-| `/flows` | Flow list — create and manage flows |
-| `/flows/[id]` | Flow editor — visual canvas, chat, runtime monitoring |
+| Route         | Purpose                                                                  |
+| ------------- | ------------------------------------------------------------------------ |
+| `/`           | Graph explorer (DataView) — default homepage, auto-discovers active flow |
+| `/flows`      | Flow list — create and manage flows                                      |
+| `/flows/[id]` | Flow editor — visual canvas, chat, runtime monitoring                    |
 
 ## Key Directories
 
-| Path | Purpose |
-|------|---------|
-| `src/lib/components/` | 51 Svelte components |
-| `src/lib/components/chat/` | Chat system (ChatPanel, SlashCommandMenu, ContextChips, attachment cards) |
-| `src/lib/components/runtime/` | Runtime tabs (Health, Logs, Metrics, Messages, SigmaCanvas) |
-| `src/lib/services/` | API clients (chatApi, graphApi, slashCommands) |
-| `src/lib/server/` | SvelteKit server (AI providers, tool registry, MCP, GraphQL client) |
-| `src/lib/stores/*.svelte.ts` | Runes-based stores (graphStore, chatStore, runtimeStore) |
-| `src/lib/types/` | TypeScript types (chat, graph, flow, slashCommand) |
-| `src/routes/` | SvelteKit pages |
-| `e2e/` | Playwright E2E tests |
-| `docs/agents/svelte-patterns.md` | Test patterns, code standards, review checklists |
+| Path                             | Purpose                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------- |
+| `src/lib/components/`            | 51 Svelte components                                                      |
+| `src/lib/components/chat/`       | Chat system (ChatPanel, SlashCommandMenu, ContextChips, attachment cards) |
+| `src/lib/components/runtime/`    | Runtime tabs (Health, Logs, Metrics, Messages, SigmaCanvas)               |
+| `src/lib/services/`              | API clients (chatApi, graphApi, slashCommands)                            |
+| `src/lib/server/`                | SvelteKit server (AI providers, tool registry, MCP, GraphQL client)       |
+| `src/lib/stores/*.svelte.ts`     | Runes-based stores (graphStore, chatStore, runtimeStore)                  |
+| `src/lib/types/`                 | TypeScript types (chat, graph, flow, slashCommand)                        |
+| `src/routes/`                    | SvelteKit pages                                                           |
+| `e2e/`                           | Playwright E2E tests                                                      |
+| `docs/agents/svelte-patterns.md` | Test patterns, code standards, review checklists                          |
 
 ## Commands
 
@@ -92,8 +92,12 @@ Stores use the runes-based factory function pattern:
 function createMyStore() {
   let value = $state<Type>(initial);
   return {
-    get value() { return value; },
-    setValue(v: Type) { value = v; },
+    get value() {
+      return value;
+    },
+    setValue(v: Type) {
+      value = v;
+    },
   };
 }
 export const myStore = createMyStore();

@@ -114,8 +114,8 @@ describe("ATTACK: FlowStatusCard — XSS in warnings", () => {
       props: {
         attachment: makeAttachment({
           warnings: [
-            '<script>alert(1)</script>',
-            '<img src=x onerror=alert(2)>',
+            "<script>alert(1)</script>",
+            "<img src=x onerror=alert(2)>",
           ],
         }),
       },

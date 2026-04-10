@@ -35,10 +35,7 @@
 //  4. Mock global fetch in these tests (vi.spyOn(global, "fetch"))
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import {
-  executeComponentHealth,
-  executeFlowStatus,
-} from "./toolExecutors";
+import { executeComponentHealth, executeFlowStatus } from "./toolExecutors";
 import type { ToolExecutorContext } from "./toolExecutors";
 import type { ErrorAttachment } from "$lib/types/chat";
 
@@ -46,7 +43,9 @@ import type { ErrorAttachment } from "$lib/types/chat";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeContext(overrides: Partial<ToolExecutorContext> = {}): ToolExecutorContext {
+function makeContext(
+  overrides: Partial<ToolExecutorContext> = {},
+): ToolExecutorContext {
   return {
     graphqlClient: {
       query: vi.fn(),
@@ -114,7 +113,10 @@ describe("executeComponentHealth — returns HealthAttachment", () => {
       { componentName: "kafka-output" },
       makeContext(),
     );
-    const att = result.attachments[0] as { kind: string; componentName: string };
+    const att = result.attachments[0] as {
+      kind: string;
+      componentName: string;
+    };
 
     expect(att.componentName).toBe("kafka-output");
   });
@@ -381,7 +383,10 @@ describe("executeFlowStatus — returns FlowStatusAttachment", () => {
       connections: [{ id: "c1" }],
     });
 
-    const result = await executeFlowStatus({ flowId: "flow-abc" }, makeContext());
+    const result = await executeFlowStatus(
+      { flowId: "flow-abc" },
+      makeContext(),
+    );
 
     expect(result.attachments).toHaveLength(1);
     expect(result.attachments[0].kind).toBe("flow-status");
@@ -396,7 +401,10 @@ describe("executeFlowStatus — returns FlowStatusAttachment", () => {
       connections: [],
     });
 
-    const result = await executeFlowStatus({ flowId: "flow-xyz" }, makeContext());
+    const result = await executeFlowStatus(
+      { flowId: "flow-xyz" },
+      makeContext(),
+    );
     const att = result.attachments[0] as { kind: string; flowId: string };
 
     expect(att.flowId).toBe("flow-xyz");
@@ -490,7 +498,10 @@ describe("executeFlowStatus — returns FlowStatusAttachment", () => {
       state: "running",
       nodes: [{ id: "n1" }],
       connections: [],
-      warnings: ["Component 'n1' has high error rate", "Throughput below threshold"],
+      warnings: [
+        "Component 'n1' has high error rate",
+        "Throughput below threshold",
+      ],
     });
 
     const result = await executeFlowStatus({ flowId: "flow-1" }, makeContext());
@@ -612,10 +623,7 @@ describe("executeFlowStatus — handles backend errors gracefully", () => {
   it("returns ErrorAttachment when fetch throws", async () => {
     mockFetchThrow("ECONNREFUSED");
 
-    const result = await executeFlowStatus(
-      { flowId: "flow-1" },
-      makeContext(),
-    );
+    const result = await executeFlowStatus({ flowId: "flow-1" }, makeContext());
 
     expect(result.attachments[0].kind).toBe("error");
   });
@@ -623,10 +631,7 @@ describe("executeFlowStatus — handles backend errors gracefully", () => {
   it("ErrorAttachment.message contains the fetch error", async () => {
     mockFetchThrow("connection reset");
 
-    const result = await executeFlowStatus(
-      { flowId: "flow-1" },
-      makeContext(),
-    );
+    const result = await executeFlowStatus({ flowId: "flow-1" }, makeContext());
     const att = result.attachments[0] as ErrorAttachment;
 
     expect(att.message).toMatch(/connection reset/i);
@@ -635,10 +640,7 @@ describe("executeFlowStatus — handles backend errors gracefully", () => {
   it("returns ErrorAttachment on 500 response", async () => {
     mockFetchStatus(500, { error: "internal server error" });
 
-    const result = await executeFlowStatus(
-      { flowId: "flow-1" },
-      makeContext(),
-    );
+    const result = await executeFlowStatus({ flowId: "flow-1" }, makeContext());
 
     expect(result.attachments[0].kind).toBe("error");
   });
@@ -654,10 +656,7 @@ describe("executeFlowStatus — handles backend errors gracefully", () => {
   it("textSummary is a non-empty string even on error", async () => {
     mockFetchThrow("backend down");
 
-    const result = await executeFlowStatus(
-      { flowId: "flow-1" },
-      makeContext(),
-    );
+    const result = await executeFlowStatus({ flowId: "flow-1" }, makeContext());
 
     expect(typeof result.textSummary).toBe("string");
     expect(result.textSummary.length).toBeGreaterThan(0);

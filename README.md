@@ -101,10 +101,10 @@ Caddy eliminates CORS by serving everything from a single origin. The UI makes r
 
 ### Pages
 
-| Route | Purpose |
-|-------|---------|
-| `/` | Graph explorer (DataView) — default homepage |
-| `/flows` | Flow list — create and manage flows |
+| Route         | Purpose                                               |
+| ------------- | ----------------------------------------------------- |
+| `/`           | Graph explorer (DataView) — default homepage          |
+| `/flows`      | Flow list — create and manage flows                   |
 | `/flows/[id]` | Flow editor — visual canvas, chat, runtime monitoring |
 
 ### Key Directories
@@ -137,8 +137,12 @@ Stores use the runes-based factory function pattern:
 function createMyStore() {
   let value = $state<Type>(initial);
   return {
-    get value() { return value; },
-    setValue(v: Type) { value = v; },
+    get value() {
+      return value;
+    },
+    setValue(v: Type) {
+      value = v;
+    },
   };
 }
 export const myStore = createMyStore();
@@ -224,19 +228,19 @@ Your SemStreams app must expose:
 
 ## Task Commands
 
-| Command | Description |
-|---------|-------------|
-| `task dev:connect` | Connect to any running backend (no Docker needed) |
-| `task dev:full` | Full stack from source (NATS + backend + Caddy + Vite) |
-| `task dev` | Vite dev server only |
-| `task dev:backend:start` | Start backend infra in background |
-| `task dev:backend:stop` | Stop backend infra |
-| `task test` | Unit tests |
-| `task test:e2e` | E2E tests |
-| `task lint` | ESLint |
-| `task check` | TypeScript checking |
-| `task clean` | Clean Docker volumes |
-| `task generate-types` | Generate TS types from OpenAPI |
+| Command                  | Description                                            |
+| ------------------------ | ------------------------------------------------------ |
+| `task dev:connect`       | Connect to any running backend (no Docker needed)      |
+| `task dev:full`          | Full stack from source (NATS + backend + Caddy + Vite) |
+| `task dev`               | Vite dev server only                                   |
+| `task dev:backend:start` | Start backend infra in background                      |
+| `task dev:backend:stop`  | Stop backend infra                                     |
+| `task test`              | Unit tests                                             |
+| `task test:e2e`          | E2E tests                                              |
+| `task lint`              | ESLint                                                 |
+| `task check`             | TypeScript checking                                    |
+| `task clean`             | Clean Docker volumes                                   |
+| `task generate-types`    | Generate TS types from OpenAPI                         |
 
 ## Documentation
 

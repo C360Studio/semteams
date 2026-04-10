@@ -96,7 +96,11 @@ describe("getToolsForContext — all intent values return arrays", () => {
 
   it("unknown/future intent string returns an array without throwing", () => {
     expect(() =>
-      getToolsForContext(config, "unknown-future-intent" as never, flowBuilderContext),
+      getToolsForContext(
+        config,
+        "unknown-future-intent" as never,
+        flowBuilderContext,
+      ),
     ).not.toThrow();
     const result = getToolsForContext(
       config,

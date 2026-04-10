@@ -21,6 +21,17 @@
 		reverse_proxy backend:8080
 	}
 
+	# Agentic dispatch API routes (SSE needs immediate flushing)
+	handle /agentic-dispatch/* {
+		reverse_proxy backend:8080 {
+			flush_interval -1
+		}
+	}
+
+	handle /agentic-loop/* {
+		reverse_proxy backend:8080
+	}
+
 	# GraphQL gateway (graph-gateway on port 8082)
 	handle /graphql {
 		reverse_proxy backend:8082

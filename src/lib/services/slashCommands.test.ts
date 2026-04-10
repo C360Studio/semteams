@@ -377,9 +377,10 @@ describe("parseSlashCommand — page availability", () => {
 // ---------------------------------------------------------------------------
 
 describe("getCommandsForPage — flow-builder", () => {
-  it("returns all 5 commands for flow-builder", () => {
+  // Updated count: 5 original + 4 agent-control commands (approve, reject, pause, resume) = 9
+  it("returns all 9 commands for flow-builder", () => {
     const commands = getCommandsForPage("flow-builder");
-    expect(commands).toHaveLength(5);
+    expect(commands).toHaveLength(9);
   });
 
   it("includes search on flow-builder", () => {
@@ -416,9 +417,10 @@ describe("getCommandsForPage — flow-builder", () => {
 });
 
 describe("getCommandsForPage — data-view", () => {
-  it("returns 4 commands for data-view (no /flow, no /debug)", () => {
+  // Updated count: 4 original + 4 agent-control commands (approve, reject, pause, resume) = 8
+  it("returns 8 commands for data-view (no /flow, no /debug)", () => {
     const commands = getCommandsForPage("data-view");
-    expect(commands).toHaveLength(4);
+    expect(commands).toHaveLength(8);
   });
 
   it("includes search on data-view", () => {
@@ -530,5 +532,210 @@ describe("filterCommands — matching by alias prefix", () => {
   it("'wh' matches /explain via 'what' alias on flow-builder", () => {
     const filtered = filterCommands("wh", "flow-builder");
     expect(filtered.some((c) => c.name === "explain")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 4 — agent-control slash commands: /approve, /reject, /pause, /resume
+// ---------------------------------------------------------------------------
+
+describe("parseSlashCommand — /approve", () => {
+  it("/approve loop123 returns agent-control intent with loopId", () => {
+    const result = parseSlashCommand("/approve loop123", "flow-builder");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("approve");
+    expect(result!.result.intent).toBe("agent-control");
+    expect(result!.result.params).toMatchObject({
+      action: "approve",
+      loopId: "loop123",
+    });
+  });
+
+  it("/approve with no args has undefined loopId", () => {
+    const result = parseSlashCommand("/approve", "flow-builder");
+    expect(result).not.toBeNull();
+    expect(result!.result.intent).toBe("agent-control");
+    expect(result!.result.params).toMatchObject({
+      action: "approve",
+      loopId: undefined,
+    });
+  });
+
+  it("/yes resolves to approve via alias", () => {
+    const result = parseSlashCommand("/yes loop123", "data-view");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("approve");
+    expect(result!.result.intent).toBe("agent-control");
+    expect(result!.result.params).toMatchObject({
+      action: "approve",
+      loopId: "loop123",
+    });
+  });
+
+  it("/ok resolves to approve via alias", () => {
+    const result = parseSlashCommand("/ok loop456", "flow-builder");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("approve");
+    expect(result!.result.params).toMatchObject({
+      action: "approve",
+      loopId: "loop456",
+    });
+  });
+
+  it("/approve is available on both pages", () => {
+    const fb = parseSlashCommand("/approve loop1", "flow-builder");
+    const dv = parseSlashCommand("/approve loop1", "data-view");
+    expect(fb).not.toBeNull();
+    expect(dv).not.toBeNull();
+  });
+});
+
+describe("parseSlashCommand — /reject", () => {
+  it("/reject loop123 bad idea parses loopId and reason", () => {
+    const result = parseSlashCommand(
+      "/reject loop123 bad idea",
+      "flow-builder",
+    );
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("reject");
+    expect(result!.result.intent).toBe("agent-control");
+    expect(result!.result.params).toMatchObject({
+      action: "reject",
+      loopId: "loop123",
+      reason: "bad idea",
+    });
+  });
+
+  it("/reject loop123 with no reason has undefined reason", () => {
+    const result = parseSlashCommand("/reject loop123", "flow-builder");
+    expect(result).not.toBeNull();
+    expect(result!.result.params).toMatchObject({
+      action: "reject",
+      loopId: "loop123",
+      reason: undefined,
+    });
+  });
+
+  it("/reject with no args has undefined loopId and reason", () => {
+    const result = parseSlashCommand("/reject", "data-view");
+    expect(result).not.toBeNull();
+    expect(result!.result.params).toMatchObject({
+      action: "reject",
+      loopId: undefined,
+      reason: undefined,
+    });
+  });
+
+  it("/no resolves to reject via alias", () => {
+    const result = parseSlashCommand("/no loop123", "data-view");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("reject");
+    expect(result!.result.intent).toBe("agent-control");
+  });
+
+  it("/deny resolves to reject via alias", () => {
+    const result = parseSlashCommand("/deny loop789 not ready", "flow-builder");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("reject");
+    expect(result!.result.params).toMatchObject({
+      action: "reject",
+      loopId: "loop789",
+      reason: "not ready",
+    });
+  });
+
+  it("/reject is available on both pages", () => {
+    const fb = parseSlashCommand("/reject loop1", "flow-builder");
+    const dv = parseSlashCommand("/reject loop1", "data-view");
+    expect(fb).not.toBeNull();
+    expect(dv).not.toBeNull();
+  });
+});
+
+describe("parseSlashCommand — /pause", () => {
+  it("/pause loop123 returns agent-control intent", () => {
+    const result = parseSlashCommand("/pause loop123", "flow-builder");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("pause");
+    expect(result!.result.intent).toBe("agent-control");
+    expect(result!.result.params).toMatchObject({
+      action: "pause",
+      loopId: "loop123",
+    });
+  });
+
+  it("/pause is available on both pages", () => {
+    const fb = parseSlashCommand("/pause loop1", "flow-builder");
+    const dv = parseSlashCommand("/pause loop1", "data-view");
+    expect(fb).not.toBeNull();
+    expect(dv).not.toBeNull();
+  });
+});
+
+describe("parseSlashCommand — /resume", () => {
+  it("/resume loop123 returns agent-control intent", () => {
+    const result = parseSlashCommand("/resume loop123", "flow-builder");
+    expect(result).not.toBeNull();
+    expect(result!.command.name).toBe("resume");
+    expect(result!.result.intent).toBe("agent-control");
+    expect(result!.result.params).toMatchObject({
+      action: "resume",
+      loopId: "loop123",
+    });
+  });
+
+  it("/resume is available on both pages", () => {
+    const fb = parseSlashCommand("/resume loop1", "flow-builder");
+    const dv = parseSlashCommand("/resume loop1", "data-view");
+    expect(fb).not.toBeNull();
+    expect(dv).not.toBeNull();
+  });
+});
+
+describe("getCommandsForPage — includes agent-control commands", () => {
+  it("flow-builder includes approve, reject, pause, resume", () => {
+    const commands = getCommandsForPage("flow-builder");
+    const names = commands.map((c) => c.name);
+    expect(names).toContain("approve");
+    expect(names).toContain("reject");
+    expect(names).toContain("pause");
+    expect(names).toContain("resume");
+  });
+
+  it("data-view includes approve, reject, pause, resume", () => {
+    const commands = getCommandsForPage("data-view");
+    const names = commands.map((c) => c.name);
+    expect(names).toContain("approve");
+    expect(names).toContain("reject");
+    expect(names).toContain("pause");
+    expect(names).toContain("resume");
+  });
+});
+
+describe("filterCommands — agent-control commands", () => {
+  it("'ap' matches /approve on flow-builder", () => {
+    const filtered = filterCommands("ap", "flow-builder");
+    expect(filtered.some((c) => c.name === "approve")).toBe(true);
+  });
+
+  it("'re' matches /reject and /resume on flow-builder", () => {
+    const filtered = filterCommands("re", "flow-builder");
+    expect(filtered.some((c) => c.name === "reject")).toBe(true);
+    expect(filtered.some((c) => c.name === "resume")).toBe(true);
+  });
+
+  it("'pa' matches /pause on data-view", () => {
+    const filtered = filterCommands("pa", "data-view");
+    expect(filtered.some((c) => c.name === "pause")).toBe(true);
+  });
+
+  it("'ye' matches /approve via 'yes' alias", () => {
+    const filtered = filterCommands("ye", "flow-builder");
+    expect(filtered.some((c) => c.name === "approve")).toBe(true);
+  });
+
+  it("'de' matches /reject via 'deny' alias on data-view", () => {
+    const filtered = filterCommands("de", "data-view");
+    expect(filtered.some((c) => c.name === "reject")).toBe(true);
   });
 });

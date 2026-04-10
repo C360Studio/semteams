@@ -35,6 +35,17 @@
 		reverse_proxy {$BACKEND_HOST:backend:8080}
 	}
 
+	# Agentic dispatch API routes (SSE needs immediate flushing)
+	handle /agentic-dispatch/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080} {
+			flush_interval -1
+		}
+	}
+
+	handle /agentic-loop/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080}
+	}
+
 	# GraphQL gateway (may be on a different port)
 	handle /graphql {
 		reverse_proxy {$GRAPHQL_HOST:{$BACKEND_HOST:backend:8080}}

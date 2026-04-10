@@ -5,7 +5,7 @@ import type {
 } from "$lib/types/slashCommand";
 
 // ---------------------------------------------------------------------------
-// Command registry — all 5 slash commands
+// Command registry — 6 core + 4 agent-control slash commands
 // ---------------------------------------------------------------------------
 
 export const COMMANDS: SlashCommand[] = [
@@ -85,6 +85,63 @@ export const COMMANDS: SlashCommand[] = [
       intent: "general",
       content: args,
       params: { query: args },
+    }),
+  },
+  {
+    name: "approve",
+    aliases: ["yes", "ok"],
+    description: "Approve an agent's pending action",
+    usage: "/approve [loop-id]",
+    intent: "agent-control",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "agent-control",
+      content: `/approve ${args}`.trim(),
+      params: { action: "approve", loopId: args.trim() || undefined },
+    }),
+  },
+  {
+    name: "reject",
+    aliases: ["no", "deny"],
+    description: "Reject an agent's pending action",
+    usage: "/reject [loop-id] [reason]",
+    intent: "agent-control",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => {
+      const parts = args.trim().split(/\s+/);
+      const loopId = parts[0] || undefined;
+      const reason = parts.slice(1).join(" ") || undefined;
+      return {
+        intent: "agent-control",
+        content: `/reject ${args}`.trim(),
+        params: { action: "reject", loopId, reason },
+      };
+    },
+  },
+  {
+    name: "pause",
+    aliases: [],
+    description: "Pause an active agent loop",
+    usage: "/pause <loop-id>",
+    intent: "agent-control",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "agent-control",
+      content: `/pause ${args}`.trim(),
+      params: { action: "pause", loopId: args.trim() },
+    }),
+  },
+  {
+    name: "resume",
+    aliases: [],
+    description: "Resume a paused agent loop",
+    usage: "/resume <loop-id>",
+    intent: "agent-control",
+    availableOn: ["flow-builder", "data-view"],
+    parse: (args: string) => ({
+      intent: "agent-control",
+      content: `/resume ${args}`.trim(),
+      params: { action: "resume", loopId: args.trim() },
     }),
   },
 ];

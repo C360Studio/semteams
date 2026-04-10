@@ -40,7 +40,10 @@
 					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 					<a href="/flows/{activeFlow.id}" class="nav-link">Flow: {activeFlow.name}</a>
 				{/if}
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
 				<a href="/flows" class="nav-link">Flows</a>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<a href="/agents" class="nav-link">Agents</a>
 			</nav>
 		</div>
 	</header>

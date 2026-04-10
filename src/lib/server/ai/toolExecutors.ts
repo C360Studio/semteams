@@ -351,15 +351,14 @@ export async function executeFlowStatus(
   try {
     const encodedFlowId = encodeURIComponent(flowId ?? "");
     const baseUrl = context.backendUrl.replace(/\/$/, "");
-    const response = await fetch(`${baseUrl}/flowbuilder/flows/${encodedFlowId}`);
+    const response = await fetch(
+      `${baseUrl}/flowbuilder/flows/${encodedFlowId}`,
+    );
 
     if (response.status === 404) {
       return {
         attachments: [
-          makeErrorAttachment(
-            "FLOW_NOT_FOUND",
-            `Flow '${flowId}' not found`,
-          ),
+          makeErrorAttachment("FLOW_NOT_FOUND", `Flow '${flowId}' not found`),
         ],
         textSummary: `Flow '${flowId}' was not found`,
       };

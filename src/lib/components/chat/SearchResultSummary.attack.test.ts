@@ -153,7 +153,12 @@ describe("SearchResultSummary.attack — missing fields on result objects", () =
       kind: "search-result",
       query: "drones",
       results: [
-        { id: "c360.ops.robotics.gcs.drone.001", label: "001", type: "drone", domain: "" },
+        {
+          id: "c360.ops.robotics.gcs.drone.001",
+          label: "001",
+          type: "drone",
+          domain: "",
+        },
       ],
       totalCount: 1,
     };

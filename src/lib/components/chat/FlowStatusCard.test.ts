@@ -128,7 +128,9 @@ describe("FlowStatusCard — shows flow state", () => {
       props: { attachment: makeAttachment({ state: "running" }) },
     });
 
-    expect(screen.getByTestId("flow-status-card")).toHaveTextContent(/running/i);
+    expect(screen.getByTestId("flow-status-card")).toHaveTextContent(
+      /running/i,
+    );
   });
 
   it("displays 'stopped' state", () => {
@@ -136,7 +138,9 @@ describe("FlowStatusCard — shows flow state", () => {
       props: { attachment: makeAttachment({ state: "stopped" }) },
     });
 
-    expect(screen.getByTestId("flow-status-card")).toHaveTextContent(/stopped/i);
+    expect(screen.getByTestId("flow-status-card")).toHaveTextContent(
+      /stopped/i,
+    );
   });
 
   it("displays 'error' state", () => {
@@ -191,7 +195,9 @@ describe("FlowStatusCard — shows node count and connection count", () => {
 
   it("displays both nodeCount and connectionCount on the same card", () => {
     render(FlowStatusCard, {
-      props: { attachment: makeAttachment({ nodeCount: 3, connectionCount: 2 }) },
+      props: {
+        attachment: makeAttachment({ nodeCount: 3, connectionCount: 2 }),
+      },
     });
 
     const card = screen.getByTestId("flow-status-card");
@@ -239,10 +245,7 @@ describe("FlowStatusCard — shows warnings when present", () => {
     render(FlowStatusCard, {
       props: {
         attachment: makeAttachment({
-          warnings: [
-            "Throughput below threshold",
-            "Latency spike detected",
-          ],
+          warnings: ["Throughput below threshold", "Latency spike detected"],
         }),
       },
     });
