@@ -68,21 +68,23 @@ task build              # Build binary
 task test               # Run unit tests
 task test:integration   # Run integration tests (uses testcontainers)
 task test:race          # Run tests with race detector
-task lint               # Run linters (Go only — ui has its own lint)
-task check              # Run lint + test (Go only)
+task lint               # Run Go linters
+task check              # Go lint + test (fast, no Node required)
+task check:all          # Go + UI lint + type-check + test (requires Node)
 
 # UI tasks (frontend) — see ui/Taskfile.yml for the full list
 task ui:dev             # Start Vite dev server
 task ui:test            # Run Vitest unit/component tests
 task ui:test:e2e        # Run Playwright E2E tests
 task ui:lint            # Run ESLint on ui/
+task ui:check           # Run svelte-check (TypeScript)
 task ui:build           # Production build
 ```
 
-**Note:** `task check`/`task lint` currently run Go-only. UI checks run in their
-own CI workflow (`.github/workflows/ui.yml`) and via `task ui:*` locally. This
-is intentional during the Phase A subtree import; they'll be unified in a
-follow-up once the imported tree is verified clean.
+**Note:** `task check` stays Go-only so backend iteration doesn't require Node.
+`task check:all` runs both and is the pre-push verification target for changes
+touching `ui/`. The two workflows (`.github/workflows/ci.yml` for Go,
+`.github/workflows/ui.yml` for UI) run independently via path filters.
 
 ## E2E Tests (Requires Docker)
 

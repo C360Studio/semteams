@@ -1,15 +1,11 @@
 version: "3"
 
 vars:
-  # Backend configuration - can point to any SemStreams-compatible backend
+  # Backend configuration — the semteams backend
   BACKEND_URL: '{{.BACKEND_URL | default "http://localhost:8080"}}'
 
-  # OpenAPI spec path (must be provided by user)
-  # Examples when developing with specific backends:
-  #   - Semstreams monorepo: ../semstreams/specs/openapi.v3.yaml
-  #   - Semmem monorepo:     ../semmem/specs/openapi.v3.yaml
-  #   - Custom app:          /path/to/your-app/specs/openapi.v3.yaml
-  OPENAPI_SPEC_PATH: "{{.OPENAPI_SPEC_PATH}}"
+  # OpenAPI spec path — defaults to the semteams-generated spec at the repo root
+  OPENAPI_SPEC_PATH: '{{.OPENAPI_SPEC_PATH | default "../specs/openapi.v3.yaml"}}'
 
   # Development ports (configurable to avoid collisions)
   DEV_UI_PORT: '{{.DEV_UI_PORT | default "3001"}}'
@@ -19,39 +15,10 @@ tasks:
   # === Type Generation ===
 
   generate-types:
-    desc: Generate TypeScript types from configured OpenAPI spec
+    desc: Generate TypeScript types from the semteams OpenAPI spec
     cmds:
-      - |
-        if [ -z "{{.OPENAPI_SPEC_PATH}}" ]; then
-          echo "❌ ERROR: OPENAPI_SPEC_PATH not set"
-          echo ""
-          echo "Please provide the path to your backend's OpenAPI spec:"
-          echo "  OPENAPI_SPEC_PATH=/path/to/openapi.yaml task generate-types"
-          echo ""
-          echo "Examples:"
-          echo "  OPENAPI_SPEC_PATH=/path/to/your-backend/specs/openapi.v3.yaml task generate-types"
-          echo ""
-          echo "Or use a monorepo helper task:"
-          echo "  task generate-types:semstreams"
-          echo "  task generate-types:semmem"
-          echo ""
-          echo "Or use: task generate-types:from-url (if backend is running)"
-          exit 1
-        fi
       - npx openapi-typescript {{.OPENAPI_SPEC_PATH}} --output src/lib/types/api.generated.ts
       - echo "✅ TypeScript types generated from {{.OPENAPI_SPEC_PATH}}"
-
-  generate-types:semstreams:
-    desc: Generate types from semstreams backend (monorepo helper)
-    cmds:
-      - npx openapi-typescript ../semstreams/specs/openapi.v3.yaml --output src/lib/types/api.generated.ts
-      - echo "✅ TypeScript types generated from semstreams"
-
-  generate-types:semmem:
-    desc: Generate types from semmem backend (monorepo helper)
-    cmds:
-      - npx openapi-typescript ../semmem/specs/openapi.v3.yaml --output src/lib/types/api.generated.ts
-      - echo "✅ TypeScript types generated from semmem"
 
   generate-types:from-url:
     desc: Generate TypeScript types from running backend
@@ -206,34 +173,6 @@ tasks:
   test:e2e:
     desc: Run E2E tests (auto-manages Docker stack)
     cmds:
-      - npm run test:e2e
-
-  test:e2e:semstreams:
-    desc: Run E2E tests against semstreams backend
-    env:
-      BACKEND_CONTEXT: ../semstreams
-      BACKEND_CONFIG: protocol-flow.json
-    cmds:
-      - npm run test:e2e
-
-  test:e2e:semsource-graph:
-    desc: Run E2E tests with semsource graph integration
-    env:
-      BACKEND_CONTEXT: ../semstreams
-      BACKEND_CONFIG: e2e-with-semsource.json
-      SEMSOURCE_CONTEXT: ../semsource
-      COMPOSE_PROFILES: semsource
-    cmds:
-      - npx playwright test --config playwright.semsource-graph.config.ts
-
-  test:e2e:semmem:
-    desc: Run E2E tests against semmem backend
-    env:
-      BACKEND_CONTEXT: ../semstreams
-      BACKEND_DOCKERFILE: semmem/Dockerfile
-      BACKEND_CONFIG: semmem-flow.json
-    cmds:
-      - echo "⚠️  semmem E2E not yet configured - using semstreams"
       - npm run test:e2e
 
   test:all:

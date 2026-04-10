@@ -5,11 +5,6 @@ const E2E_UI_PORT = process.env.E2E_UI_PORT || "3000";
 export default defineConfig({
   testDir: "e2e",
 
-  // Exclude semsource-graph specs from the default run — they require a live semsource
-  // Docker container and will hang for 30 s per test without it.
-  // Use `task test:e2e:semsource-graph` (playwright.semsource-graph.config.ts) instead.
-  testIgnore: ["**/semsource-graph/**"],
-
   // Run tests in files in parallel
   fullyParallel: true,
 

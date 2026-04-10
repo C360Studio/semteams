@@ -1,12 +1,11 @@
-# SemStreams UI - Generic Flow Builder
+# SemTeams UI - Docker composition
 #
-# This is a backend-agnostic visual flow builder for any SemStreams-based application.
-# It can connect to semstreams, semmem, semops, or any app built with the framework.
+# Dev-mode UI container for the semteams frontend. Expects a running semteams
+# backend on localhost:8080 (or configured via BACKEND_HOST).
 #
 # Prerequisites:
-#   - Backend must be running and exposing the standard SemStreams API
-#   - Backend must serve OpenAPI spec at /openapi.yaml
-#   - Backend must implement /components/types, /flowbuilder/* endpoints
+#   - semteams backend running and exposing /components/types,
+#     /flowbuilder/*, /agentic-dispatch/*, /agentic-loop/*, /health, /graphql
 #
 # Usage:
 #   # Option 1: Backend running natively (go run, binary, etc.)
@@ -23,7 +22,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: semstreams-ui
+    container_name: semteams-ui
     volumes:
       # Mount source for hot reload
       - ./src:/app/src
@@ -48,7 +47,7 @@ services:
   # Caddy Reverse Proxy (Optional - Production-like serving)
   caddy:
     image: caddy:2-alpine
-    container_name: semstreams-ui-caddy
+    container_name: semteams-ui-caddy
     depends_on:
       - ui
     volumes:
