@@ -1,0 +1,148 @@
+# E2E Test Environment for SemStreams UI
+#
+# Two modes:
+#
+#   1. Generic backend (default):
+#      BACKEND_CONTEXT=../semstreams docker compose -f docker-compose.e2e.yml up
+#
+#   2. SemSource as backend (graph integration tests):
+#      COMPOSE_PROFILES=semsource docker compose -f docker-compose.e2e.yml up
+#      No BACKEND_CONTEXT needed — semsource IS the backend.
+#
+# Playwright tests run from the host and connect to http://localhost:3000
+
+services:
+  # NATS Server with JetStream
+  nats:
+    image: nats:2.10-alpine
+    container_name: semstreams-ui-e2e-nats
+    command: ["-js", "-sd", "/data", "-m", "8222", "--name", "ui-e2e-nats"]
+    volumes:
+      - nats-e2e-data:/data
+    networks:
+      - e2e-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Generic backend (configurable via BACKEND_CONTEXT)
+  # Excluded when COMPOSE_PROFILES=semsource — semsource replaces it.
+  # Defaults to ../semstreams (standard sibling directory).
+  backend:
+    profiles: ["generic"]
+    build:
+      context: ${BACKEND_CONTEXT:-../semstreams}
+      dockerfile: ${BACKEND_DOCKERFILE:-Dockerfile}
+      target: production
+    container_name: semstreams-ui-e2e-backend
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - STREAMKIT_NATS_URLS=nats://nats:4222
+      - STREAMKIT_LOG_LEVEL=debug
+    volumes:
+      - ${BACKEND_CONTEXT}/configs/${BACKEND_CONFIG:-protocol-flow.json}:/etc/semstreams/config.json:ro
+      - ${BACKEND_CONTEXT}/testdata:/data/testdata:ro
+    networks:
+      - e2e-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # SemSource as backend (graph integration E2E tests)
+  # Activated via: COMPOSE_PROFILES=semsource
+  #
+  # Semsource IS a full semstreams app — runs graph pipeline, flow-builder
+  # service, component catalog, and health endpoint. No separate backend needed.
+  # Uses network alias "backend" so UI and Caddy config work unchanged.
+  semsource:
+    profiles: ["semsource"]
+    build:
+      context: ${SEMSOURCE_CONTEXT:-../semsource}
+      dockerfile: ${SEMSOURCE_DOCKERFILE:-Dockerfile}
+    container_name: semstreams-ui-e2e-semsource
+    command:
+      [
+        "run",
+        "--config",
+        "/etc/semsource/semsource.json",
+        "--nats-url",
+        "nats://nats:4222",
+      ]
+    depends_on:
+      nats:
+        condition: service_healthy
+    volumes:
+      - ./e2e/fixtures/semsource:/data/fixture:ro
+      - ./e2e/fixtures/semsource/semsource-e2e.json:/etc/semsource/semsource.json:ro
+    environment:
+      - NATS_URL=nats://nats:4222
+    networks:
+      e2e-net:
+        aliases:
+          - backend
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # SemStreams UI
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: semstreams-ui-e2e-ui
+    environment:
+      - NODE_ENV=development
+      - BACKEND_HOST=backend:8080
+    volumes:
+      - ./src:/app/src
+      - ./static:/app/static
+      - ui-e2e-node-modules:/app/node_modules
+    networks:
+      - e2e-net
+
+  # Caddy Reverse Proxy
+  caddy:
+    image: caddy:2-alpine
+    container_name: semstreams-ui-e2e-caddy
+    depends_on:
+      - ui
+    volumes:
+      - ./Caddyfile.e2e:/etc/caddy/Caddyfile:ro
+    environment:
+      - BACKEND_HOST=backend:8080
+      - GRAPHQL_HOST=backend:8082
+    ports:
+      - "${E2E_UI_PORT:-3000}:3000"
+    networks:
+      - e2e-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  e2e-net:
+    driver: bridge
+
+volumes:
+  nats-e2e-data:
+    driver: local
+  ui-e2e-node-modules:
+    driver: local

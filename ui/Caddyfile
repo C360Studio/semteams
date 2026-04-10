@@ -1,0 +1,65 @@
+# Caddyfile for SemStreams UI
+# Reverse proxy: Routes Go backend APIs and SvelteKit Node server
+
+{
+	# Global options
+	auto_https off
+	admin off
+}
+
+:3000 {
+	# Handle Go backend API routes first
+	handle /flowbuilder/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080}
+	}
+
+	handle /components/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080}
+	}
+
+	handle /health {
+		reverse_proxy {$BACKEND_HOST:backend:8080}
+	}
+
+	# Agentic dispatch API routes (SSE needs immediate flushing)
+	handle /agentic-dispatch/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080} {
+			flush_interval -1
+		}
+	}
+
+	handle /agentic-loop/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080}
+	}
+
+	# SvelteKit handles everything else (UI, assets, /api/ai/*)
+	handle {
+		reverse_proxy {$UI_HOST:ui:3000}
+	}
+
+	# Security headers
+	header {
+		# Enable HSTS
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Prevent clickjacking
+		X-Frame-Options "SAMEORIGIN"
+		# Prevent MIME sniffing
+		X-Content-Type-Options "nosniff"
+		# Enable XSS protection
+		X-XSS-Protection "1; mode=block"
+		# Control referrer information
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	# Enable gzip compression
+	encode gzip
+
+	# Logging - stdout is Docker best practice (12-factor app)
+	# Docker captures stdout/stderr and routes to logging systems
+	# For production, use LOG_LEVEL env var to control verbosity
+	log {
+		output stdout
+		format json  # JSON for log aggregators (CloudWatch, Datadog, etc.)
+		level {$LOG_LEVEL:INFO}  # Configurable: DEBUG, INFO, WARN, ERROR
+	}
+}

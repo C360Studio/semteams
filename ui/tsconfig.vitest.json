@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2015", "esnext", "dom", "dom.iterable", "node"]
+  },
+  "include": ["src/**/*.{test,spec}.{js,ts}"]
+}

@@ -1,0 +1,73 @@
+# SemStreams UI - Generic Flow Builder
+#
+# This is a backend-agnostic visual flow builder for any SemStreams-based application.
+# It can connect to semstreams, semmem, semops, or any app built with the framework.
+#
+# Prerequisites:
+#   - Backend must be running and exposing the standard SemStreams API
+#   - Backend must serve OpenAPI spec at /openapi.yaml
+#   - Backend must implement /components/types, /flowbuilder/* endpoints
+#
+# Usage:
+#   # Option 1: Backend running natively (go run, binary, etc.)
+#   BACKEND_URL=http://host.docker.internal:8080 docker compose up
+#
+#   # Option 2: Backend in separate Docker network
+#   docker compose up  # Edit BACKEND_HOST in .env first
+#
+# The UI will be available at: http://localhost:3000
+
+services:
+  # SvelteKit UI (Development Mode)
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: semstreams-ui
+    volumes:
+      # Mount source for hot reload
+      - ./src:/app/src
+      - ./static:/app/static
+      - ./svelte.config.js:/app/svelte.config.js
+      - ./vite.config.ts:/app/vite.config.ts
+      - ./tsconfig.json:/app/tsconfig.json
+      # Use named volume for node_modules to avoid conflicts
+      - ui-node-modules:/app/node_modules
+    ports:
+      - "5173:5173" # Vite dev server (HMR)
+    environment:
+      - NODE_ENV=development
+      # Backend connection (default: host.docker.internal for native backend)
+      - BACKEND_HOST=${BACKEND_HOST:-host.docker.internal:8080}
+      - VITE_API_BASE=${VITE_API_BASE:-http://localhost}
+    extra_hosts:
+      # Allow container to reach host machine (macOS/Windows)
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # Caddy Reverse Proxy (Optional - Production-like serving)
+  caddy:
+    image: caddy:2-alpine
+    container_name: semstreams-ui-caddy
+    depends_on:
+      - ui
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "3000:3000" # UI via Caddy
+    environment:
+      - BACKEND_HOST=${BACKEND_HOST:-host.docker.internal:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    profiles: ["caddy"] # Optional: only start with --profile caddy
+
+volumes:
+  ui-node-modules:
+    driver: local
+  caddy-data:
+    driver: local
+  caddy-config:
+    driver: local

@@ -1,0 +1,278 @@
+version: "3"
+
+vars:
+  # Backend configuration - can point to any SemStreams-compatible backend
+  BACKEND_URL: '{{.BACKEND_URL | default "http://localhost:8080"}}'
+
+  # OpenAPI spec path (must be provided by user)
+  # Examples when developing with specific backends:
+  #   - Semstreams monorepo: ../semstreams/specs/openapi.v3.yaml
+  #   - Semmem monorepo:     ../semmem/specs/openapi.v3.yaml
+  #   - Custom app:          /path/to/your-app/specs/openapi.v3.yaml
+  OPENAPI_SPEC_PATH: "{{.OPENAPI_SPEC_PATH}}"
+
+  # Development ports (configurable to avoid collisions)
+  DEV_UI_PORT: '{{.DEV_UI_PORT | default "3001"}}'
+  DEV_VITE_PORT: '{{.DEV_VITE_PORT | default "5173"}}'
+
+tasks:
+  # === Type Generation ===
+
+  generate-types:
+    desc: Generate TypeScript types from configured OpenAPI spec
+    cmds:
+      - |
+        if [ -z "{{.OPENAPI_SPEC_PATH}}" ]; then
+          echo "❌ ERROR: OPENAPI_SPEC_PATH not set"
+          echo ""
+          echo "Please provide the path to your backend's OpenAPI spec:"
+          echo "  OPENAPI_SPEC_PATH=/path/to/openapi.yaml task generate-types"
+          echo ""
+          echo "Examples:"
+          echo "  OPENAPI_SPEC_PATH=/path/to/your-backend/specs/openapi.v3.yaml task generate-types"
+          echo ""
+          echo "Or use a monorepo helper task:"
+          echo "  task generate-types:semstreams"
+          echo "  task generate-types:semmem"
+          echo ""
+          echo "Or use: task generate-types:from-url (if backend is running)"
+          exit 1
+        fi
+      - npx openapi-typescript {{.OPENAPI_SPEC_PATH}} --output src/lib/types/api.generated.ts
+      - echo "✅ TypeScript types generated from {{.OPENAPI_SPEC_PATH}}"
+
+  generate-types:semstreams:
+    desc: Generate types from semstreams backend (monorepo helper)
+    cmds:
+      - npx openapi-typescript ../semstreams/specs/openapi.v3.yaml --output src/lib/types/api.generated.ts
+      - echo "✅ TypeScript types generated from semstreams"
+
+  generate-types:semmem:
+    desc: Generate types from semmem backend (monorepo helper)
+    cmds:
+      - npx openapi-typescript ../semmem/specs/openapi.v3.yaml --output src/lib/types/api.generated.ts
+      - echo "✅ TypeScript types generated from semmem"
+
+  generate-types:from-url:
+    desc: Generate TypeScript types from running backend
+    cmds:
+      - npx openapi-typescript {{.BACKEND_URL}}/openapi.yaml --output src/lib/types/api.generated.ts
+      - echo "✅ TypeScript types generated from {{.BACKEND_URL}}/openapi.yaml"
+
+  generate-types:check:
+    desc: Check for uncommitted type changes (CI)
+    cmds:
+      - task: generate-types
+      - git diff --exit-code src/lib/types/api.generated.ts || (echo "⚠️  Generated types changed! Run 'task generate-types' and commit."; exit 1)
+
+  # === Development ===
+
+  dev:
+    desc: Start Vite dev server only (no proxy — use dev:connect or dev:full instead)
+    cmds:
+      - echo "Starting UI dev server..."
+      - echo "Expecting backend at {{.BACKEND_URL}}"
+      - npm run dev
+
+  dev:connect:
+    desc: Connect to any running SemStreams app (no Docker backend needed)
+    summary: |
+      Starts Caddy + Vite dev server, proxying API requests to a running
+      SemStreams backend. No NATS, no Docker build — just point and go.
+
+      Examples:
+        task dev:connect                                  # localhost:8080
+        BACKEND_HOST=myapp.local:8080 task dev:connect    # remote host
+        BACKEND_HOST=10.0.1.5:8080 GRAPHQL_HOST=10.0.1.5:8082 task dev:connect
+    vars:
+      BACKEND_HOST: '{{.BACKEND_HOST | default "localhost:8080"}}'
+      GRAPHQL_HOST: '{{.GRAPHQL_HOST | default .BACKEND_HOST | default "localhost:8080"}}'
+    env:
+      BACKEND_HOST: "{{.BACKEND_HOST}}"
+      GRAPHQL_HOST: "{{.GRAPHQL_HOST}}"
+      UI_HOST: "localhost:{{.DEV_VITE_PORT}}"
+      LISTEN_PORT: "{{.DEV_UI_PORT}}"
+    deps:
+      - task: dev:connect:check
+        vars:
+          BACKEND_HOST: "{{.BACKEND_HOST}}"
+    cmds:
+      - defer: { task: dev:connect:stop }
+      - |
+        echo "Connecting to SemStreams backend at {{.BACKEND_HOST}}"
+        echo "GraphQL gateway at {{.GRAPHQL_HOST}}"
+        echo ""
+        echo "UI will be at http://localhost:{{.DEV_UI_PORT}}"
+        echo ""
+      - caddy start --config Caddyfile.dev
+      - npm run dev -- --port {{.DEV_VITE_PORT}} --host
+    preconditions:
+      - sh: command -v caddy
+        msg: "Caddy not found. Install with: brew install caddy"
+
+  dev:connect:check:
+    desc: Check if the backend is reachable
+    internal: true
+    vars:
+      BACKEND_HOST: '{{.BACKEND_HOST | default "localhost:8080"}}'
+    cmds:
+      - |
+        if curl -sf "http://{{.BACKEND_HOST}}/health" > /dev/null 2>&1; then
+          echo "✅ Backend reachable at {{.BACKEND_HOST}}"
+        else
+          echo "⚠️  Backend at {{.BACKEND_HOST}} not responding — Caddy will retry"
+        fi
+
+  dev:connect:stop:
+    desc: Stop the Caddy dev proxy
+    internal: true
+    cmds:
+      - caddy stop 2>/dev/null || true
+
+  # === Full Stack Development ===
+
+  dev:backend:
+    desc: Start backend infrastructure (NATS + backend) in foreground
+    cmds:
+      - echo "Starting backend infrastructure..."
+      - echo "NATS will be at localhost:4222"
+      - echo "Backend API will be at localhost:8080"
+      - docker compose -f docker-compose.dev.yml up
+
+  dev:backend:start:
+    desc: Start backend infrastructure in background
+    env:
+      DEV_UI_PORT: "{{.DEV_UI_PORT}}"
+      DEV_VITE_PORT: "{{.DEV_VITE_PORT}}"
+    cmds:
+      - docker compose -f docker-compose.dev.yml up -d
+      - echo "✅ Backend infrastructure starting..."
+      - echo "   Access UI at http://localhost:{{.DEV_UI_PORT}}"
+      - echo "   Run 'task dev:backend:logs' to see logs"
+      - echo "   Run 'task dev:backend:stop' to stop"
+
+  dev:backend:stop:
+    desc: Stop backend infrastructure
+    cmds:
+      - docker compose -f docker-compose.dev.yml down
+      - echo "✅ Backend infrastructure stopped"
+
+  dev:backend:logs:
+    desc: View backend infrastructure logs
+    cmds:
+      - docker compose -f docker-compose.dev.yml logs -f
+
+  dev:full:
+    desc: Start full development stack (backend + frontend)
+    env:
+      DEV_UI_PORT: "{{.DEV_UI_PORT}}"
+      DEV_VITE_PORT: "{{.DEV_VITE_PORT}}"
+    cmds:
+      - task: dev:backend:start
+      - echo "Waiting for Caddy health check..."
+      - |
+        for i in $(seq 1 30); do
+          if curl -s http://localhost:{{.DEV_UI_PORT}}/health > /dev/null 2>&1; then
+            echo "✅ Backend ready!"
+            break
+          fi
+          echo "   Waiting... ($i/30)"
+          sleep 2
+        done
+      - echo ""
+      - echo "📱 Open http://localhost:{{.DEV_UI_PORT}} in your browser"
+      - echo ""
+      - npm run dev -- --port {{.DEV_VITE_PORT}} --host
+
+  dev:docker:
+    desc: Start UI in Docker (backend at host.docker.internal:8080)
+    cmds:
+      - echo "Starting UI in Docker..."
+      - docker compose up
+
+  dev:with-caddy:
+    desc: Start UI + Caddy in Docker (available at http://localhost:3000)
+    cmds:
+      - echo "Starting UI + Caddy..."
+      - docker compose --profile caddy up
+
+  # === Testing ===
+
+  test:
+    desc: Run unit tests
+    cmds:
+      - npm run test
+
+  test:e2e:
+    desc: Run E2E tests (auto-manages Docker stack)
+    cmds:
+      - npm run test:e2e
+
+  test:e2e:semstreams:
+    desc: Run E2E tests against semstreams backend
+    env:
+      BACKEND_CONTEXT: ../semstreams
+      BACKEND_CONFIG: protocol-flow.json
+    cmds:
+      - npm run test:e2e
+
+  test:e2e:semsource-graph:
+    desc: Run E2E tests with semsource graph integration
+    env:
+      BACKEND_CONTEXT: ../semstreams
+      BACKEND_CONFIG: e2e-with-semsource.json
+      SEMSOURCE_CONTEXT: ../semsource
+      COMPOSE_PROFILES: semsource
+    cmds:
+      - npx playwright test --config playwright.semsource-graph.config.ts
+
+  test:e2e:semmem:
+    desc: Run E2E tests against semmem backend
+    env:
+      BACKEND_CONTEXT: ../semstreams
+      BACKEND_DOCKERFILE: semmem/Dockerfile
+      BACKEND_CONFIG: semmem-flow.json
+    cmds:
+      - echo "⚠️  semmem E2E not yet configured - using semstreams"
+      - npm run test:e2e
+
+  test:all:
+    desc: Run all tests
+    cmds:
+      - npm run test:all
+
+  # === Linting and Formatting ===
+
+  lint:
+    desc: Run ESLint
+    cmds:
+      - npm run lint
+
+  format:
+    desc: Format code with Prettier
+    cmds:
+      - npm run format
+
+  check:
+    desc: Run type checking
+    cmds:
+      - npm run check
+
+  # === CI ===
+
+  ci:
+    desc: Run all CI checks
+    cmds:
+      - task: lint
+      - task: check
+      - task: test
+      - task: generate-types:check
+
+  # === Cleanup ===
+
+  clean:
+    desc: Clean Docker volumes and containers
+    cmds:
+      - docker compose -f docker-compose.yml down -v
+      - docker compose -f docker-compose.e2e.yml down -v
+      - echo "✅ Cleaned up Docker resources"

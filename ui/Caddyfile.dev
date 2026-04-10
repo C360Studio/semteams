@@ -1,0 +1,63 @@
+# Caddyfile for Local Development
+# Routes API to any running SemStreams backend, UI to Vite dev server.
+#
+# Works in two modes:
+#   1. Docker Compose (task dev:full):
+#      BACKEND_HOST defaults to backend:8080 (Docker network)
+#      UI_HOST defaults to host.docker.internal:5173
+#
+#   2. Native (task dev:connect):
+#      BACKEND_HOST=localhost:8080 (or any remote host)
+#      UI_HOST=localhost:5173
+#
+# Environment variables:
+#   BACKEND_HOST  - SemStreams backend host:port (default: backend:8080)
+#   GRAPHQL_HOST  - GraphQL gateway host:port (default: same as BACKEND_HOST)
+#   UI_HOST       - Vite dev server host:port (default: host.docker.internal:5173)
+#   LISTEN_PORT   - Port Caddy listens on (default: 3000)
+
+{
+	auto_https off
+	admin off
+}
+
+:{$LISTEN_PORT:3000} {
+	# Go backend API routes
+	handle /flowbuilder/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080}
+	}
+
+	handle /components/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080}
+	}
+
+	handle /health {
+		reverse_proxy {$BACKEND_HOST:backend:8080}
+	}
+
+	# Agentic dispatch API routes (SSE needs immediate flushing)
+	handle /agentic-dispatch/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080} {
+			flush_interval -1
+		}
+	}
+
+	handle /agentic-loop/* {
+		reverse_proxy {$BACKEND_HOST:backend:8080}
+	}
+
+	# GraphQL gateway (may be on a different port)
+	handle /graphql {
+		reverse_proxy {$GRAPHQL_HOST:{$BACKEND_HOST:backend:8080}}
+	}
+
+	# Vite dev server
+	handle {
+		reverse_proxy {$UI_HOST:host.docker.internal:5173}
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}
