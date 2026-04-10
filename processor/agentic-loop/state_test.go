@@ -1,7 +1,9 @@
 package agenticloop_test
 
 import (
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/c360studio/semstreams/agentic"
 	agenticloop "github.com/c360studio/semstreams/processor/agentic-loop"
@@ -890,5 +892,162 @@ func TestLoopManager_TrackToolStart(t *testing.T) {
 	unknown := manager.GetToolStart("call-unknown")
 	if !unknown.IsZero() {
 		t.Errorf("GetToolStart(unknown) = %v, want zero time", unknown)
+	}
+}
+
+// TestLoopManager_TimeoutDetection verifies that IsTimedOut correctly detects
+// expired loops and that timeout is advisory-only (state is NOT auto-transitioned).
+func TestLoopManager_TimeoutDetection(t *testing.T) {
+	tests := []struct {
+		name      string
+		timeout   time.Duration
+		sleepFor  time.Duration
+		wantTimed bool
+	}{
+		{
+			name:      "not timed out yet",
+			timeout:   5 * time.Second,
+			sleepFor:  0,
+			wantTimed: false,
+		},
+		{
+			name:      "timed out after expiry",
+			timeout:   50 * time.Millisecond,
+			sleepFor:  80 * time.Millisecond,
+			wantTimed: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			manager := agenticloop.NewLoopManager()
+			loopID, err := manager.CreateLoop("task-timeout", "general", "test-model")
+			if err != nil {
+				t.Fatalf("CreateLoop() error = %v", err)
+			}
+
+			if err := manager.SetTimeout(loopID, tt.timeout); err != nil {
+				t.Fatalf("SetTimeout() error = %v", err)
+			}
+
+			if tt.sleepFor > 0 {
+				time.Sleep(tt.sleepFor)
+			}
+
+			got := manager.IsTimedOut(loopID)
+			if got != tt.wantTimed {
+				t.Errorf("IsTimedOut() = %v, want %v", got, tt.wantTimed)
+			}
+
+			// Timeout is advisory — state should NOT be auto-transitioned.
+			// This documents the gap: no background goroutine enforces timeout.
+			entity, err := manager.GetLoop(loopID)
+			if err != nil {
+				t.Fatalf("GetLoop() error = %v", err)
+			}
+			if entity.State != agentic.LoopStateExploring {
+				t.Errorf("State = %s, want exploring (timeout should not auto-transition)", entity.State)
+			}
+		})
+	}
+
+	t.Run("no timeout set returns false", func(t *testing.T) {
+		manager := agenticloop.NewLoopManager()
+		loopID, _ := manager.CreateLoop("task-no-timeout", "general", "test-model")
+		// No SetTimeout call
+		if manager.IsTimedOut(loopID) {
+			t.Error("IsTimedOut() = true, want false when no timeout is set")
+		}
+	})
+
+	t.Run("non-existent loop returns false", func(t *testing.T) {
+		manager := agenticloop.NewLoopManager()
+		if manager.IsTimedOut("loop-does-not-exist") {
+			t.Error("IsTimedOut() = true, want false for non-existent loop")
+		}
+	})
+}
+
+// TestLoopManager_ConcurrentStateTransitions verifies that concurrent state
+// transitions under the LoopManager's mutex are safe (no panics, no races).
+// Run with -race flag to detect data races.
+func TestLoopManager_ConcurrentStateTransitions(t *testing.T) {
+	manager := agenticloop.NewLoopManager()
+	loopID, err := manager.CreateLoop("task-concurrent", "general", "test-model")
+	if err != nil {
+		t.Fatalf("CreateLoop() error = %v", err)
+	}
+
+	const goroutines = 20
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	// Half transition to executing, half to planning
+	for i := range goroutines {
+		go func(idx int) {
+			defer wg.Done()
+			target := agentic.LoopStateExecuting
+			if idx%2 == 0 {
+				target = agentic.LoopStatePlanning
+			}
+			// Transitions are valid from any non-terminal state
+			_ = manager.TransitionLoop(loopID, target)
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify no corruption — state should be one of the two targets
+	entity, err := manager.GetLoop(loopID)
+	if err != nil {
+		t.Fatalf("GetLoop() error = %v", err)
+	}
+
+	if entity.State != agentic.LoopStateExecuting && entity.State != agentic.LoopStatePlanning {
+		t.Errorf("State = %s, want executing or planning after concurrent transitions", entity.State)
+	}
+}
+
+// TestLoopManager_DuplicateToolResultIdempotency verifies that storing a tool result
+// for the same call ID twice is safe (last write wins via map key overwrite).
+func TestLoopManager_DuplicateToolResultIdempotency(t *testing.T) {
+	manager := agenticloop.NewLoopManager()
+	loopID, err := manager.CreateLoop("task-dup-tool", "general", "test-model")
+	if err != nil {
+		t.Fatalf("CreateLoop() error = %v", err)
+	}
+
+	// Register a pending tool call
+	err = manager.AddPendingTool(loopID, "call-001")
+	if err != nil {
+		t.Fatalf("AddPendingTool() error = %v", err)
+	}
+
+	// Store first result
+	err = manager.StoreToolResult(loopID, agentic.ToolResult{
+		CallID:  "call-001",
+		Content: "result_v1",
+	})
+	if err != nil {
+		t.Fatalf("StoreToolResult(v1) error = %v", err)
+	}
+
+	// Store duplicate with different content — last write wins
+	err = manager.StoreToolResult(loopID, agentic.ToolResult{
+		CallID:  "call-001",
+		Content: "result_v2",
+	})
+	if err != nil {
+		t.Fatalf("StoreToolResult(v2) error = %v", err)
+	}
+
+	// Retrieve — should have only one result (the latest)
+	results := manager.GetAndClearToolResults(loopID)
+	if len(results) != 1 {
+		t.Fatalf("len(results) = %d, want 1 (deduplicated by callID)", len(results))
+	}
+
+	if results[0].Content != "result_v2" {
+		t.Errorf("result.Content = %q, want %q (last write wins)", results[0].Content, "result_v2")
 	}
 }
