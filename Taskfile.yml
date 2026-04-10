@@ -36,6 +36,10 @@ includes:
   e2e:throughput:
     taskfile: ./taskfiles/e2e/throughput.yml
 
+  # User journey specs — format in docs/journeys/README.md
+  journeys:
+    taskfile: ./taskfiles/journeys.yml
+
 tasks:
   # Default task
   default:

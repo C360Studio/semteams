@@ -2,8 +2,12 @@ version: '3'
 
 tasks:
   default:
-    desc: Run Go linters (vet, fmt, revive)
+    desc: Run Go linters (vet, fmt, revive) and journey spec validation
     cmds:
       - go vet ./...
       - go fmt ./...
       - revive -config revive.toml -formatter friendly ./...
+      # Cross-taskfile reference via shell (Taskfile v3 `task:` directive
+      # resolves relative to the current namespace, so `task: journeys:validate`
+      # would look for `lint:journeys:validate`).
+      - task journeys:validate
