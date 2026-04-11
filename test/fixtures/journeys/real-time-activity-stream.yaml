@@ -1,0 +1,31 @@
+name: real-time-activity-stream
+description: |
+  Journey: user triggers an agent loop and watches state transitions
+  render in the /agents page in real time via the SSE activity stream,
+  without a page reload. No human interaction — the loop executes a
+  safe read-only tool and completes on its own.
+
+  Paired spec: ui/e2e/agentic/real-time-activity-stream.spec.ts (Phase C.3).
+
+  Response sequence:
+    1. Initial prompt → agent proposes `query_entity` (read-only,
+       NOT approval-gated). The loop transitions through its normal
+       executing states and runs the tool.
+    2. Tool result fed back to LLM → returns a short completion.
+       Loop transitions to `complete`.
+
+  The UI observes the entire flow through the /agentic-dispatch/activity
+  SSE stream subscribed by agentStore. The /agents page re-renders
+  reactively as loop_update events arrive.
+
+responses:
+  - tool_call:
+      name: query_entity
+      arguments_json: |
+        {
+          "entity_id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001"
+        }
+  - completion:
+      content: |
+        Entity lookup complete. The temperature sensor is reporting
+        nominal values within the expected operating range.
