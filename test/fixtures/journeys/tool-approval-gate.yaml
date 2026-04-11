@@ -1,0 +1,38 @@
+name: tool-approval-gate
+description: |
+  Journey: agent proposes a high-risk tool (create_rule), loop transitions
+  to awaiting_approval, user approves, tool executes, loop completes.
+
+  Paired spec: ui/e2e/agentic/tool-approval-gate.spec.ts (Phase C.2).
+
+  Response sequence:
+    1. Initial prompt → agent proposes `create_rule` (marked
+       RequiresApproval: true in the tool registry). The agentic-loop
+       transitions to awaiting_approval and the UI shows ApprovalPrompt.
+    2. After the user approves and the tool runs, the tool result is fed
+       back to the LLM. It responds with a short completion confirming
+       the rule was created. Loop transitions to complete.
+
+responses:
+  - tool_call:
+      name: create_rule
+      arguments_json: |
+        {
+          "name": "high-temperature-alert",
+          "description": "Alert when environmental sensor temperature exceeds 100",
+          "condition": {
+            "predicate": "sensor.temperature.current",
+            "operator": ">",
+            "value": 100
+          },
+          "action": {
+            "type": "alert",
+            "severity": "warning",
+            "message": "Temperature threshold exceeded"
+          }
+        }
+  - completion:
+      content: |
+        Rule "high-temperature-alert" created successfully. I'll now monitor
+        environmental sensors and emit a warning when any temperature reading
+        exceeds 100.

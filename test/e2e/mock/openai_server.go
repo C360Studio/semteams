@@ -129,6 +129,11 @@ type OpenAIServer struct {
 	responseSequence []string // sequence of completion contents
 	sequenceIndex    int      // current position in sequence
 
+	// Fixture-driven responses (takes precedence over the default
+	// tool-call-vs-completion heuristic when set). See fixture.go.
+	fixture      *Fixture
+	fixtureIndex int
+
 	// Tracking for assertions
 	requestCount int
 	lastRequest  *ChatCompletionRequest
@@ -177,6 +182,19 @@ func (s *OpenAIServer) WithResponseSequence(responses []string) *OpenAIServer {
 	defer s.mu.Unlock()
 	s.responseSequence = responses
 	s.sequenceIndex = 0
+	return s
+}
+
+// WithFixture configures the server to return responses from the given
+// fixture. Each chat completion call returns the next response in the
+// fixture's sequence; after exhaustion, the last response is repeated.
+// Fixture responses take precedence over the default
+// tool-call-vs-completion heuristic based on request state.
+func (s *OpenAIServer) WithFixture(f *Fixture) *OpenAIServer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fixture = f
+	s.fixtureIndex = 0
 	return s
 }
 
@@ -291,14 +309,24 @@ func (s *OpenAIServer) handleChatCompletion(w http.ResponseWriter, r *http.Reque
 		time.Sleep(delay)
 	}
 
-	// Determine response based on conversation state
+	// Determine response. When a fixture is loaded it drives the sequence
+	// deterministically; otherwise fall back to the default heuristic
+	// (tool call when request has tools and no tool results yet, otherwise
+	// a completion).
 	var resp ChatCompletionResponse
 
-	if s.hasToolResults(req.Messages) {
+	s.mu.RLock()
+	hasFixture := s.fixture != nil
+	s.mu.RUnlock()
+
+	switch {
+	case hasFixture:
+		resp = s.buildFixtureResponse(req.Model)
+	case s.hasToolResults(req.Messages):
 		resp = s.buildCompletionResponse(req.Model)
-	} else if len(req.Tools) > 0 {
+	case len(req.Tools) > 0:
 		resp = s.buildToolCallResponse(req.Tools[0], req.Model)
-	} else {
+	default:
 		resp = s.buildCompletionResponse(req.Model)
 	}
 
@@ -484,6 +512,65 @@ func (s *OpenAIServer) buildToolCallResponse(tool Tool, model string) ChatComple
 			TotalTokens:      150,
 		},
 	}
+}
+
+// buildFixtureResponse returns the next response from the configured
+// fixture. Advances the fixture index on each call and repeats the last
+// entry once exhausted. Caller must have confirmed s.fixture != nil.
+func (s *OpenAIServer) buildFixtureResponse(model string) ChatCompletionResponse {
+	s.mu.Lock()
+	idx := s.fixtureIndex
+	if idx >= len(s.fixture.Responses) {
+		// Sequence exhausted — repeat the last entry.
+		idx = len(s.fixture.Responses) - 1
+	} else {
+		s.fixtureIndex++
+	}
+	entry := s.fixture.Responses[idx]
+	s.mu.Unlock()
+
+	base := ChatCompletionResponse{
+		ID:      "chatcmpl-mock-" + uuid.New().String()[:8],
+		Object:  "chat.completion",
+		Created: time.Now().Unix(),
+		Model:   model,
+		Usage: Usage{
+			PromptTokens:     100,
+			CompletionTokens: 50,
+			TotalTokens:      150,
+		},
+	}
+
+	if entry.ToolCall != nil {
+		callID := "call_" + uuid.New().String()[:8]
+		base.Choices = []Choice{{
+			Index: 0,
+			Message: ChatMessage{
+				Role: "assistant",
+				ToolCalls: []ToolCall{{
+					ID:   callID,
+					Type: "function",
+					Function: FunctionCall{
+						Name:      entry.ToolCall.Name,
+						Arguments: entry.ToolCall.ArgumentsJSON,
+					},
+				}},
+			},
+			FinishReason: "tool_calls",
+		}}
+		return base
+	}
+
+	// entry.Completion is guaranteed non-nil by Fixture.Validate()
+	base.Choices = []Choice{{
+		Index: 0,
+		Message: ChatMessage{
+			Role:    "assistant",
+			Content: entry.Completion.Content,
+		},
+		FinishReason: "stop",
+	}}
+	return base
 }
 
 func (s *OpenAIServer) buildCompletionResponse(model string) ChatCompletionResponse {
