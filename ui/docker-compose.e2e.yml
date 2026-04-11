@@ -38,7 +38,7 @@ services:
   # SemTeams backend (built from the semteams repo root at ../..)
   backend:
     build:
-      context: ${BACKEND_CONTEXT:-../..}
+      context: ${BACKEND_CONTEXT:-..}
       dockerfile: ${BACKEND_DOCKERFILE:-docker/Dockerfile}
       target: production
     container_name: semteams-ui-e2e-backend
@@ -49,8 +49,8 @@ services:
       - STREAMKIT_NATS_URLS=nats://nats:4222
       - STREAMKIT_LOG_LEVEL=debug
     volumes:
-      - ${BACKEND_CONTEXT:-../..}/configs/${BACKEND_CONFIG:-protocol-flow.json}:/etc/semstreams/config.json:ro
-      - ${BACKEND_CONTEXT:-../..}/testdata:/data/testdata:ro
+      - ${BACKEND_CONTEXT:-..}/configs/${BACKEND_CONFIG:-protocol-flow.json}:/etc/semstreams/config.json:ro
+      - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
     networks:
       - e2e-net
     healthcheck:

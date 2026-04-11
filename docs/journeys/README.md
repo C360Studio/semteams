@@ -29,7 +29,7 @@ Mapped from the superpowers in `docs/proposals/agentic-superpowers.md`:
 
 | Slug | Superpower | Status |
 |---|---|---|
-| `tool-approval-gate` | Human-in-the-loop approval gates | planned |
+| `tool-approval-gate` | Human-in-the-loop approval gates | **landed** (Phase C.2) |
 | `real-time-activity-stream` | Real-time agent activity streaming | planned |
 | `self-programming-rule-creation` | Self-programming agents (rule writes) | planned |
 | `multi-agent-hierarchy` | Parent/child loop chains | planned |
