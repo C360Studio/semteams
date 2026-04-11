@@ -175,6 +175,32 @@ tasks:
     cmds:
       - npm run test:e2e
 
+  test:e2e:agentic:
+    desc: Run agentic journey E2E tests (separate stack with mock-llm + agentic.json backend)
+    summary: |
+      Runs Playwright tests under e2e/agentic/ against the agentic stack
+      defined in docker-compose.agentic-e2e.yml. Each spec specifies the
+      mock-llm fixture it expects via the FIXTURE env var.
+
+      The agentic stack uses host port 3100 (configurable via
+      E2E_AGENTIC_UI_PORT) so it can run alongside the default e2e stack
+      on 3000.
+
+      Pass FIXTURE to load a specific mock-llm script:
+        FIXTURE=tool-approval-gate.yaml task test:e2e:agentic
+    cmds:
+      - npm run test:e2e:agentic
+
+  test:e2e:agentic:tool-approval-gate:
+    desc: Run the tool-approval-gate journey with its paired fixture
+    cmds:
+      - FIXTURE=tool-approval-gate.yaml npx playwright test --config playwright.agentic.config.ts e2e/agentic/tool-approval-gate.spec.ts
+
+  test:e2e:agentic:cleanup:
+    desc: Tear down the agentic E2E Docker stack
+    cmds:
+      - npm run test:e2e:agentic:cleanup
+
   test:all:
     desc: Run all tests
     cmds:

@@ -1,0 +1,161 @@
+# Agentic E2E Test Environment for SemTeams UI
+#
+# Runs a FULL agentic stack for Playwright journey tests:
+#   NATS + semteams backend (agentic config) + mock-llm (fixture-driven)
+#   + UI + Caddy reverse proxy
+#
+# This is distinct from docker-compose.e2e.yml, which uses protocol-flow.json
+# and has no mock-llm service. Journey tests need agentic.json's components
+# (agentic-dispatch, agentic-loop, agentic-tools, agentic-governance) and
+# the mock-llm for deterministic LLM responses.
+#
+# Container names and networks are prefixed `semteams-ui-agentic-*` so this
+# stack can run alongside docker-compose.e2e.yml without collision. Host
+# port defaults to 3100 (vs 3000 for the non-agentic stack).
+#
+# Usage (via Playwright):
+#   npm run test:e2e:agentic      # loads playwright.agentic.config.ts
+#
+# Usage (manual, with a specific fixture):
+#   FIXTURE=tool-approval-gate.yaml \
+#     docker compose -f docker-compose.agentic-e2e.yml up --build
+#
+# Passing FIXTURE env var mounts test/fixtures/journeys/$FIXTURE into the
+# mock-llm container at /fixtures/$FIXTURE and starts the server with
+# --fixture=/fixtures/$FIXTURE so responses are deterministic for that
+# journey. If FIXTURE is unset, mock-llm starts with its built-in defaults.
+
+services:
+  # NATS Server with JetStream
+  nats:
+    image: nats:2.10-alpine
+    container_name: semteams-ui-agentic-nats
+    command: ["-js", "-sd", "/data", "-m", "8222", "--name", "ui-agentic-nats"]
+    volumes:
+      - nats-agentic-data:/data
+    networks:
+      - agentic-net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Mock OpenAI Server (deterministic responses via YAML fixture)
+  #
+  # The command line wraps the binary in sh so we can conditionally append
+  # `--fixture=/fixtures/$FIXTURE` based on whether the FIXTURE env var is
+  # set. Without the wrapper, docker-compose env var interpolation would
+  # produce `--fixture=/fixtures/` (empty suffix) when FIXTURE is unset,
+  # and mock-llm would fail trying to load an empty path.
+  mock-llm:
+    build:
+      context: ${BACKEND_CONTEXT:-..}
+      dockerfile: test/e2e/mock/Dockerfile
+    container_name: semteams-ui-agentic-mock-llm
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -n "$$FIXTURE" ]; then
+          exec /app/mock-openai --port 8080 --agntcy-port 8081 --fixture=/fixtures/$$FIXTURE
+        else
+          exec /app/mock-openai --port 8080 --agntcy-port 8081
+        fi
+    environment:
+      - FIXTURE=${FIXTURE:-}
+    volumes:
+      - ${BACKEND_CONTEXT:-..}/test/fixtures/journeys:/fixtures:ro
+    networks:
+      - agentic-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # SemTeams backend with agentic components enabled.
+  #
+  # Uses configs/agentic.json (which already points at `http://mock-llm:8080/v1`
+  # for the model registry) instead of protocol-flow.json. See configs/agentic.json
+  # for the component wiring.
+  backend:
+    build:
+      context: ${BACKEND_CONTEXT:-..}
+      dockerfile: ${BACKEND_DOCKERFILE:-docker/Dockerfile}
+      target: production
+    container_name: semteams-ui-agentic-backend
+    depends_on:
+      nats:
+        condition: service_healthy
+      mock-llm:
+        condition: service_healthy
+    environment:
+      - STREAMKIT_NATS_URLS=nats://nats:4222
+      - STREAMKIT_LOG_LEVEL=debug
+      - AGENTIC_LLM_URL=http://mock-llm:8080/v1
+    volumes:
+      - ${BACKEND_CONTEXT:-..}/configs/${BACKEND_CONFIG:-agentic.json}:/etc/semstreams/config.json:ro
+      - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
+    networks:
+      - agentic-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # SemTeams UI (same as the non-agentic stack)
+  ui:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: semteams-ui-agentic-ui
+    environment:
+      - NODE_ENV=development
+      - BACKEND_HOST=backend:8080
+    volumes:
+      - ./src:/app/src
+      - ./static:/app/static
+      - ui-agentic-node-modules:/app/node_modules
+    networks:
+      - agentic-net
+
+  # Caddy Reverse Proxy — reuses Caddyfile.e2e (already has
+  # /agentic-dispatch/* and /agentic-loop/* routes with SSE flushing).
+  caddy:
+    image: caddy:2-alpine
+    container_name: semteams-ui-agentic-caddy
+    depends_on:
+      - ui
+    volumes:
+      - ./Caddyfile.e2e:/etc/caddy/Caddyfile:ro
+    environment:
+      - BACKEND_HOST=backend:8080
+      - GRAPHQL_HOST=backend:8082
+    ports:
+      - "${E2E_AGENTIC_UI_PORT:-3100}:3000"
+    networks:
+      - agentic-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  agentic-net:
+    driver: bridge
+
+volumes:
+  nats-agentic-data:
+    driver: local
+  ui-agentic-node-modules:
+    driver: local

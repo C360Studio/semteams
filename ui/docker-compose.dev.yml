@@ -12,7 +12,7 @@
 #   task dev:full            # Start backend + frontend together
 #
 # Configuration:
-#   BACKEND_CONTEXT     - Path to semteams repo root (default: ../.. from ui/)
+#   BACKEND_CONTEXT     - Path to semteams repo root (default: .. from ui/)
 #   BACKEND_DOCKERFILE  - Dockerfile path (default: docker/Dockerfile)
 #   BACKEND_CONFIG      - Config file in configs/ (default: protocol-flow.json)
 #   LOG_LEVEL           - Log level (default: debug)
@@ -46,7 +46,7 @@ services:
   # Internal only - no exposed ports
   backend:
     build:
-      context: ${BACKEND_CONTEXT:-../..}
+      context: ${BACKEND_CONTEXT:-..}
       dockerfile: ${BACKEND_DOCKERFILE:-docker/Dockerfile}
       target: production
     container_name: semteams-ui-dev-backend
@@ -57,7 +57,7 @@ services:
       - SEMSTREAMS_NATS_URLS=nats://nats:4222
       - SEMSTREAMS_LOG_LEVEL=${LOG_LEVEL:-debug}
     volumes:
-      - ${BACKEND_CONTEXT:-../..}/configs/${BACKEND_CONFIG:-protocol-flow.json}:/etc/semstreams/config.json:ro
+      - ${BACKEND_CONTEXT:-..}/configs/${BACKEND_CONFIG:-protocol-flow.json}:/etc/semstreams/config.json:ro
     # NO ports exposed - internal Docker network only
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
