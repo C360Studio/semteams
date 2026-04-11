@@ -30,7 +30,7 @@ Mapped from the superpowers in `docs/proposals/agentic-superpowers.md`:
 | Slug | Superpower | Status |
 |---|---|---|
 | `tool-approval-gate` | Human-in-the-loop approval gates | **landed** (Phase C.2) |
-| `real-time-activity-stream` | Real-time agent activity streaming | planned |
+| `real-time-activity-stream` | Real-time agent activity streaming | **landed** (Phase C.3) |
 | `self-programming-rule-creation` | Self-programming agents (rule writes) | planned |
 | `multi-agent-hierarchy` | Parent/child loop chains | planned |
 | `graph-backed-memory` | Semantic memory recall | planned |

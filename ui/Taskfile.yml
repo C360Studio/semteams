@@ -196,6 +196,11 @@ tasks:
     cmds:
       - FIXTURE=tool-approval-gate.yaml npx playwright test --config playwright.agentic.config.ts e2e/agentic/tool-approval-gate.spec.ts
 
+  test:e2e:agentic:real-time-activity-stream:
+    desc: Run the real-time-activity-stream journey with its paired fixture
+    cmds:
+      - FIXTURE=real-time-activity-stream.yaml npx playwright test --config playwright.agentic.config.ts e2e/agentic/real-time-activity-stream.spec.ts
+
   test:e2e:agentic:cleanup:
     desc: Tear down the agentic E2E Docker stack
     cmds:
