@@ -119,3 +119,90 @@ and a new format for contributors to learn.
 
 Keeping Playwright as the single source avoids all of that. See the plan
 at `.claude/plans/linked-finding-starlight.md` (local) for the full history.
+
+## Running journeys
+
+From the semteams repo root:
+
+```bash
+# Run a single journey (fast; iterate here during development)
+task ui:test:e2e:agentic:tool-approval-gate
+task ui:test:e2e:agentic:real-time-activity-stream
+
+# Run all landed journeys sequentially (slow; for CI or verification)
+task ui:test:e2e:superpowers
+
+# Tear down a hung agentic stack
+task ui:test:e2e:agentic:cleanup
+```
+
+Each journey's convenience target sets the required `FIXTURE` env var
+and runs only its own spec file against `playwright.agentic.config.ts`.
+The meta-runner (`ui:test:e2e:superpowers`) tears down the docker stack
+between journeys so mock-llm reloads the right fixture each time — this
+is what makes it slower than running a single journey.
+
+## Deliberate-break verification
+
+Because journey specs are the contract for what we claim to support,
+it's worth periodically verifying that they actually *fail* when the
+things they assert about regress. A spec that silently tolerates broken
+behavior is worse than no spec at all.
+
+This is a manual procedure — a few minutes per journey — that should
+be run whenever the agentic surface changes meaningfully, and at least
+once after any major dependency bump (Playwright, Svelte, svelte-check,
+mock-llm).
+
+### Procedure
+
+For each journey in the table above with status **landed**:
+
+1. **Baseline**: run the journey against a clean tree and confirm it
+   passes.
+
+   ```bash
+   task ui:test:e2e:agentic:<slug>
+   ```
+
+2. **Introduce a targeted break** — modify exactly one thing in the
+   production code or backend contract that the spec claims to
+   validate. See "Known deliberate breaks" below for the per-journey
+   list.
+
+3. **Re-run the journey**. It **must** fail, and the failure message
+   should point clearly at the broken claim. If the journey passes
+   with the deliberate break in place, the spec is too loose and
+   needs tightening.
+
+4. **Revert the break** (`git checkout <file>`).
+
+5. **Re-run**. Confirm it passes again, proving the failure in step 3
+   was caused by the break and not a flaky test.
+
+### Known deliberate breaks
+
+#### `tool-approval-gate`
+
+| Break | Where | Expected failure |
+|---|---|---|
+| Rename the Approve button's visible text in `ApprovalPrompt.svelte` (e.g. "Approve" → "Confirm") | `ui/src/lib/components/chat/ApprovalPrompt.svelte` | Spec fails at `loopRow.getByRole("button", { name: "Approve" }).click()` — button not found |
+| Remove the `data-testid="approve-button"` attribute | same file | Spec still passes via role-based locator; widen the break or remove role label to detect |
+| Change the backend signal endpoint path in `agentApi.ts` from `/agentic-dispatch/loops/{id}/signal` | `ui/src/lib/services/agentApi.ts` | Click fires, no signal posted, loop stays in `awaiting_approval`, timeout at state transition assertion |
+| Swap the fixture's tool call from `create_rule` to `query_entity` (a non-approval-gated tool) | `test/fixtures/journeys/tool-approval-gate.yaml` | Loop transitions to `complete` without pausing at `awaiting_approval` — spec times out waiting for the approval badge |
+
+#### `real-time-activity-stream`
+
+| Break | Where | Expected failure |
+|---|---|---|
+| Rename the SSE endpoint from `/agentic-dispatch/activity` to `/agentic-dispatch/events` in the Caddyfile | `ui/Caddyfile.e2e` | `connection-status` never flips to connected — spec times out on the `data-connected="true"` assertion |
+| Make `agentStore` ignore `loop_update` events (early return in the event handler) | `ui/src/lib/stores/agentStore.svelte.ts` | Loop row never appears in the table — spec times out at step 6 |
+| Force a full page reload on every SSE event (add `location.reload()` in the store's event handler) | same file | `page.url()` check at step 9 fails — technically the pathname stays `/agents`, but Playwright may detect the reload; also watchable via network traffic if the assertion needs tightening |
+| Change the `state-badge` text format from `complete` to `finished` in `AgentLoopCard.svelte` | `ui/src/lib/components/chat/AgentLoopCard.svelte` (affects the agents page state badge indirectly) | Spec times out at "state badge reaches complete" |
+
+### When a deliberate break doesn't fail
+
+If the spec passes with a deliberate break in place, the spec is too
+loose: it's asserting on something the break didn't touch. Tighten the
+assertion or add a more specific one, then re-run the deliberate break
+to confirm the new assertion catches it.
