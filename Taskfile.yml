@@ -68,10 +68,20 @@ tasks:
 
   # Composite tasks
   check:
-    desc: Run all checks (lint + test)
+    desc: Run Go checks (lint + test). Fast — no Node required.
     cmds:
       - task: lint:default
       - task: test:default
+
+  check:all:
+    desc: Run Go + UI checks (lint, type-check, test, build). Requires Node.
+    cmds:
+      - task: lint:default
+      - task: test:default
+      - task: ui:lint
+      - task: ui:check
+      - task: ui:test
+      - task: ui:build
 
   # E2E composite tasks
   e2e:tiers:

@@ -1,8 +1,29 @@
 # UI Integration Notes: Agentic Superpowers
 
-Implementation notes for the semstreams-ui team. The backend (Phases 1-4) is
-complete in semteams. These notes describe the APIs, data structures, and
-components the UI needs to integrate with.
+Reference for the agentic UI surface that lives at `ui/` in this repo. The
+backend (Phases 1-4) is complete, the UI was subtree-imported from
+`semstreams-ui@c36326d` on 2026-04-10, and Phase A.5 renamed/reframed the tree
+as the dedicated semteams UI.
+
+This doc started life as a handoff spec *to* the semstreams-ui team before the
+fork. It's now a living reference: the APIs, data structures, and components
+it describes are implemented in `ui/`. Use it as a map from backend concept
+→ UI code location.
+
+## Where the code lives
+
+| Concept           | Backend                              | UI (`ui/src/`)                                        |
+| ----------------- | ------------------------------------ | ----------------------------------------------------- |
+| Agent loop state  | `processor/agentic-loop/`            | `lib/stores/agentStore.svelte.ts`                     |
+| Dispatch API      | `processor/agentic-dispatch/`        | `lib/services/agentApi.ts`                            |
+| Activity SSE      | `GET /agentic-dispatch/activity`     | `lib/stores/agentStore.svelte.ts` (EventSource)       |
+| Loop card         | Loop entity in `AGENT_LOOPS` KV      | `lib/components/chat/AgentLoopCard.svelte`            |
+| Approval prompt   | Loop state `awaiting_approval`       | `lib/components/chat/ApprovalPrompt.svelte`           |
+| Tool call card    | Loop trajectory events               | `lib/components/chat/ToolCallCard.svelte`             |
+| Rule diff         | `create_rule`/`update_rule` args     | `lib/components/chat/RuleDiffCard.svelte`             |
+| Monitoring page   | `GET /agentic-dispatch/loops`        | `routes/agents/+page.svelte`                          |
+| Trajectory replay | `GET /agentic-loop/trajectories/{id}`| `lib/components/agents/TrajectoryViewer.svelte`       |
+| Slash commands    | Command registry in dispatch         | `lib/services/slashCommands.ts` (`/approve`, etc.)    |
 
 ## Backend API Reference
 
@@ -236,18 +257,7 @@ chat assistant to use:
 | `list_rules` | List active rules in the engine |
 | `get_rule` | Get full rule definition |
 
-## Priority Order
-
-1. Activity SSE client + agentStore (foundation for everything else)
-2. AgentLoopCard (basic loop visibility)
-3. ApprovalPrompt (human-in-the-loop gate)
-4. Slash commands (/approve, /reject, /pause, /resume)
-5. ToolCallCard (tool execution visibility)
-6. Agent monitoring page (/agents)
-7. RuleDiffCard (self-programming visibility)
-8. TrajectoryViewer (execution replay)
-
-## Trajectory API (already exists)
+## Trajectory API
 
 The agentic-loop component exposes trajectory endpoints:
 
