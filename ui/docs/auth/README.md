@@ -1,6 +1,15 @@
 # Authentication Documentation
 
-This directory contains authentication options and examples for SemStreams UI.
+This directory contains authentication options and examples for the SemTeams UI.
+
+> **History note (2026-04):** These docs were written when this tree targeted
+> "any SemStreams-based backend" as its origin. That framing is stale —
+> `semteams/ui/` is now the dedicated UI for the semteams backend. The
+> architectural analysis (Pattern 1 reverse-proxy auth > Pattern 2
+> backend-managed auth) still applies. References to "backend-agnostic"
+> below should be read as "UI is decoupled from backend auth logic" — the
+> semteams backend doesn't implement auth endpoints, so infrastructure-level
+> auth (Pattern 1) remains the recommended approach.
 
 ## Quick Navigation
 
@@ -33,18 +42,19 @@ This directory contains authentication options and examples for SemStreams UI.
 - Session management
 - See: [QUICK_START.md](./QUICK_START.md#option-3-authelia-full-sso-with-2fa)
 
-### For Custom Backends with Auth
+### If semteams ever implements auth endpoints
 
 → **Backend-managed auth**
 
-- Backend provides auth endpoints
-- UI calls backend for login/session
+- semteams backend would provide auth endpoints
+- UI calls the backend for login/session
 - Requires UI code changes
+- Not currently recommended — semteams does not implement auth
 - See: [AUTH_OPTIONS.md](../AUTH_OPTIONS.md#pattern-2-backend-managed-authentication)
 
 ## Architecture Overview
 
-SemStreams UI supports multiple authentication patterns:
+The SemTeams UI supports multiple authentication patterns:
 
 ```
 Pattern 1: Reverse Proxy Auth (RECOMMENDED)
@@ -61,7 +71,7 @@ Browser → SvelteKit (Auth.js) → Backend
           OAuth Providers
 ```
 
-**Recommendation:** Pattern 1 (Reverse Proxy) maintains backend-agnostic design and requires no code changes.
+**Recommendation:** Pattern 1 (Reverse Proxy) keeps the UI decoupled from auth logic and requires no code changes.
 
 ## Files
 
@@ -87,9 +97,9 @@ docs/auth/
 
 ### No Code Changes Required ✅
 
-- Auth handled at infrastructure level
-- Maintains backend-agnostic design
-- Works with any SemStreams backend
+- Auth handled at infrastructure level (Caddy + auth service)
+- Keeps the UI decoupled from auth concerns
+- Works whether or not the semteams backend gains auth endpoints later
 
 ### Optional by Default ✅
 
@@ -133,10 +143,6 @@ See [AUTH_OPTIONS.md - Security Considerations](../AUTH_OPTIONS.md#security-cons
 
 **A:** Yes! Authelia supports OIDC, so you can integrate with Azure AD, Okta, Google Workspace, Keycloak, etc.
 
-### Q: Does this work with semstreams AND semmem?
-
-**A:** Yes! Auth is backend-agnostic. The same auth setup works with any SemStreams-based backend.
-
 ### Q: Can I customize the login page?
 
 **A:** Yes with Authelia (fully customizable). OAuth2-Proxy uses provider's login page (Google, GitHub, etc.).
@@ -171,4 +177,4 @@ See [CONTRIBUTING.md](../../CONTRIBUTING.md) for how to contribute.
 
 ---
 
-**Summary:** For most users, start with OAuth2-Proxy (15 min setup). Upgrade to Authelia when you need 2FA and enterprise SSO. Both require zero code changes to semstreams-ui.
+**Summary:** For most users, start with OAuth2-Proxy (15 min setup). Upgrade to Authelia when you need 2FA and enterprise SSO. Both require zero code changes to the SemTeams UI.

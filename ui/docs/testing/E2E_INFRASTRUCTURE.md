@@ -2,38 +2,43 @@
 
 ## Overview
 
-The semstreams-ui E2E tests run against a **full Docker stack** including:
+The SemTeams UI E2E tests run against a **full Docker stack** including:
 
 - NATS server (message broker)
-- Backend (semstreams or semmem - configurable)
+- semteams backend (built from the repo root)
 - UI (SvelteKit in dev mode)
 - Caddy (reverse proxy routing)
 
-**IMPORTANT**: Do NOT mock the backend. The E2E environment provides a real backend running in Docker.
+**IMPORTANT**: Do NOT mock the backend. The E2E environment provides a real
+semteams backend running in Docker.
 
 ## Quick Start
 
 ### Option 1: Using Taskfile (RECOMMENDED)
 
+From the semteams repo root:
+
 ```bash
-# Run E2E tests against semstreams backend
-task test:e2e:semstreams
+task ui:test:e2e
 ```
 
-This automatically:
+Or from `semteams/ui/`:
 
-- Sets BACKEND_CONTEXT=../semstreams
-- Sets BACKEND_CONFIG=protocol-flow.json
-- Starts Docker stack via docker-compose.e2e.yml
-- Runs Playwright tests
-- Cleans up Docker stack
+```bash
+task test:e2e
+```
+
+Both automatically:
+
+- Start the Docker stack via `docker-compose.e2e.yml` (builds the semteams
+  backend from `../..` — the semteams repo root)
+- Run Playwright tests
+- Clean up the Docker stack via `playwright.teardown.ts`
 
 ### Option 2: Manual (for debugging)
 
 ```bash
 # Start the E2E stack manually
-BACKEND_CONTEXT=../semstreams \
-BACKEND_CONFIG=protocol-flow.json \
 docker compose -f docker-compose.e2e.yml up --build
 
 # In another terminal, run tests
@@ -73,7 +78,7 @@ npm run test:e2e:cleanup
 | Service     | Purpose                       | Health Check                  | Exposed Port    |
 | ----------- | ----------------------------- | ----------------------------- | --------------- |
 | **nats**    | Message broker with JetStream | http://localhost:8222/healthz | (internal only) |
-| **backend** | SemStreams/semmem backend     | http://localhost:8080/health  | (internal only) |
+| **backend** | semteams backend              | http://localhost:8080/health  | (internal only) |
 | **ui**      | SvelteKit dev server          | N/A                           | (internal only) |
 | **caddy**   | Reverse proxy                 | http://localhost:3000/health  | **3000** (host) |
 
@@ -84,46 +89,35 @@ npm run test:e2e:cleanup
 
 ## Configuration
 
-### Backend Selection
+### Defaults
 
-The E2E stack is **backend-agnostic**. Configure via environment variables:
-
-**For semstreams backend:**
-
-```bash
-export BACKEND_CONTEXT=../semstreams
-export BACKEND_CONFIG=protocol-flow.json
-```
-
-**For semmem backend:**
+The E2E stack builds the semteams backend from `../..` (the semteams repo root
+relative to `ui/`) using `docker/Dockerfile`. No configuration is needed for
+the default case:
 
 ```bash
-export BACKEND_CONTEXT=../semstreams  # Still semstreams repo
-export BACKEND_DOCKERFILE=semmem/Dockerfile
-export BACKEND_CONFIG=semmem-flow.json
+task ui:test:e2e   # from semteams/ repo root
 ```
 
-**For custom backend:**
+### Overrides (for debugging or alternate configs)
+
+You can override the build context and config via environment variables:
 
 ```bash
-export BACKEND_CONTEXT=/path/to/your-backend
-export BACKEND_CONFIG=your-config.json
+# Different config file
+BACKEND_CONFIG=hello-world.json docker compose -f docker-compose.e2e.yml up
+
+# Different backend path (e.g., a sibling checkout of semteams)
+BACKEND_CONTEXT=/path/to/alt/semteams docker compose -f docker-compose.e2e.yml up
 ```
 
-### Required Backend Structure
+### Environment variable defaults
 
-Your backend must provide:
-
-```
-your-backend/
-├── Dockerfile (or custom via BACKEND_DOCKERFILE)
-│   └── Must have 'production' target
-├── configs/
-│   └── ${BACKEND_CONFIG} (referenced in STREAMKIT_CONFIG)
-└── Must expose:
-    ├── GET /health (for healthcheck)
-    └── GET /flowbuilder/* (API endpoints)
-```
+| Variable             | Default          | Purpose                                      |
+| -------------------- | ---------------- | -------------------------------------------- |
+| `BACKEND_CONTEXT`    | `../..`          | Docker build context (semteams repo root)    |
+| `BACKEND_DOCKERFILE` | `docker/Dockerfile` | Dockerfile path relative to BACKEND_CONTEXT |
+| `BACKEND_CONFIG`     | `protocol-flow.json` | Config file under `configs/`              |
 
 ## Playwright Configuration
 
@@ -216,33 +210,29 @@ test("should stream logs via SSE", async ({ page }) => {
 
 ## Environment Variables
 
-### Required (via Taskfile or manual)
+All environment variables have sensible defaults for the semteams stack — no
+configuration required for the standard case. See the Configuration section
+above for available overrides.
 
-| Variable          | Purpose                         | Example              |
-| ----------------- | ------------------------------- | -------------------- |
-| `BACKEND_CONTEXT` | Path to backend directory       | `../semstreams`      |
-| `BACKEND_CONFIG`  | Config file in backend/configs/ | `protocol-flow.json` |
-
-### Optional
-
-| Variable             | Purpose                   | Default      |
-| -------------------- | ------------------------- | ------------ |
-| `BACKEND_DOCKERFILE` | Custom Dockerfile path    | `Dockerfile` |
-| `CI`                 | Running in CI environment | (unset)      |
+| Variable             | Default              | Purpose                         |
+| -------------------- | -------------------- | ------------------------------- |
+| `BACKEND_CONTEXT`    | `../..`              | semteams repo root              |
+| `BACKEND_DOCKERFILE` | `docker/Dockerfile`  | Dockerfile under BACKEND_CONTEXT |
+| `BACKEND_CONFIG`     | `protocol-flow.json` | Config file under `configs/`    |
+| `E2E_UI_PORT`        | `3000`               | Host port for Caddy             |
+| `CI`                 | (unset)              | Running in CI environment       |
 
 ## Troubleshooting
 
-### "BACKEND_CONTEXT must be set" Error
+### Docker build fails for the backend
 
 ```bash
-# ❌ WRONG: Missing BACKEND_CONTEXT
-npm run test:e2e
+# Check Docker logs
+docker compose -f docker-compose.e2e.yml logs backend
 
-# ✅ CORRECT: Use Taskfile
-task test:e2e:semstreams
-
-# ✅ CORRECT: Set manually
-BACKEND_CONTEXT=../semstreams npm run test:e2e
+# Common issues:
+# - Backend Dockerfile path wrong (verify docker/Dockerfile exists at repo root)
+# - Config file not found at BACKEND_CONTEXT/configs/BACKEND_CONFIG
 ```
 
 ### Tests Timeout Waiting for Services
@@ -283,15 +273,15 @@ docker compose -f docker-compose.e2e.yml down -v
 
 ```yaml
 - name: Run E2E Tests
-  env:
-    BACKEND_CONTEXT: ${{ github.workspace }}/semstreams
-    BACKEND_CONFIG: protocol-flow.json
+  working-directory: ui
   run: |
-    npm install
-    task test:e2e:semstreams
+    npm ci
+    npm run test:e2e
 ```
 
-**Important**: CI always rebuilds the stack (reuseExistingServer: false).
+**Important**: CI always rebuilds the stack (reuseExistingServer: false). The
+semteams backend is built from the repo root as part of the docker-compose
+stack — no separate backend checkout required.
 
 ## Common Patterns
 
@@ -345,12 +335,12 @@ test.afterEach(async ({ page }) => {
 
 ### Key Points
 
-1. **Backend is REAL** - Don't mock `/flowbuilder/*` endpoints
-2. **Use Taskfile** - `task test:e2e:semstreams` handles all setup
+1. **Backend is REAL** - Don't mock `/flowbuilder/*`, `/agentic-dispatch/*`, or other semteams endpoints
+2. **Use Taskfile** - `task ui:test:e2e` (from repo root) or `task test:e2e` (from `ui/`) handles all setup
 3. **Services start automatically** - Playwright manages docker-compose
-4. **BACKEND_CONTEXT required** - Points to backend directory
+4. **No env vars required** - Defaults build semteams from `../..` automatically
 5. **Port 3000** - All tests hit http://localhost:3000 (Caddy)
-6. **Cleanup automatic** - playwright.teardown.ts runs `docker compose down`
+6. **Cleanup automatic** - `playwright.teardown.ts` runs `docker compose down`
 
 ### Test Writing Guidelines
 
@@ -374,14 +364,14 @@ test('should poll metrics', async ({ page }) => {
 
 ## Summary
 
-**The semstreams-ui E2E infrastructure provides a COMPLETE, REAL backend environment via Docker.**
+**The SemTeams UI E2E infrastructure provides a COMPLETE, REAL semteams
+backend environment via Docker.**
 
-- ✅ Use `task test:e2e:semstreams` to run tests
-- ✅ Test against real backend endpoints
+- ✅ Use `task ui:test:e2e` (from repo root) or `task test:e2e` (from `ui/`)
+- ✅ Test against real semteams endpoints
 - ✅ Let Playwright manage Docker lifecycle
 - ❌ Don't mock backend API calls
 - ❌ Don't start Docker manually (Playwright does it)
-- ❌ Don't forget BACKEND_CONTEXT environment variable
 
 For questions, see:
 
