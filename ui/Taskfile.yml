@@ -201,6 +201,26 @@ tasks:
     cmds:
       - FIXTURE=real-time-activity-stream.yaml npx playwright test --config playwright.agentic.config.ts e2e/agentic/real-time-activity-stream.spec.ts
 
+  test:e2e:superpowers:
+    desc: Run all agentic journey specs (each with its own fixture and fresh stack)
+    summary: |
+      Runs every agentic journey spec under e2e/agentic/ with its paired
+      mock-llm fixture, tearing down the docker stack between runs so
+      mock-llm reloads the right fixture for each journey.
+
+      Slow (each journey re-builds and re-boots the stack — roughly
+      2-3 minutes per journey on first run) but deterministic. Prefer
+      the individual convenience targets (task test:e2e:agentic:<slug>)
+      for iterative development.
+
+      The trailing `defer` ensures the docker stack is torn down even
+      if a journey fails mid-run.
+    cmds:
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:tool-approval-gate
+      - task: test:e2e:agentic:cleanup
+      - task: test:e2e:agentic:real-time-activity-stream
+
   test:e2e:agentic:cleanup:
     desc: Tear down the agentic E2E Docker stack
     cmds:
