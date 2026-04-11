@@ -16,6 +16,7 @@ import (
 func main() {
 	port := flag.Int("port", 8080, "Port for OpenAI mock server")
 	agntcyPort := flag.Int("agntcy-port", 8081, "Port for AGNTCY mock server")
+	fixturePath := flag.String("fixture", "", "Path to a YAML fixture file for deterministic journey responses (optional; takes precedence over the default heuristic)")
 	flag.Parse()
 
 	// Start OpenAI mock server
@@ -24,6 +25,17 @@ func main() {
 		WithToolArgs("query_entity", `{"entity_id": "c360.logistics.environmental.sensor.temperature.temp-sensor-001"}`).
 		// Return JSON format for workflow condition evaluation
 		WithCompletionContent(`{"valid": true, "summary": "Analysis complete. Temperature sensor reading exceeds threshold. Recommend monitoring HVAC system."}`)
+
+	// Load fixture if provided. When set, the fixture drives responses
+	// deterministically regardless of request state (see WithFixture).
+	if *fixturePath != "" {
+		fixture, err := mock.LoadFixture(*fixturePath)
+		if err != nil {
+			log.Fatalf("Failed to load fixture %q: %v", *fixturePath, err)
+		}
+		openaiServer = openaiServer.WithFixture(fixture)
+		log.Printf("Loaded fixture: %s (%d responses) from %s", fixture.Name, len(fixture.Responses), *fixturePath)
+	}
 
 	if err := openaiServer.Start(openaiAddr); err != nil {
 		log.Fatalf("Failed to start OpenAI mock server: %v", err)
