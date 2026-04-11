@@ -1,0 +1,58 @@
+# Caddyfile for E2E Testing
+# Reverse proxy: Routes Go backend APIs and Vite dev server
+
+{
+	# Global options
+	auto_https off
+	admin off
+}
+
+:3000 {
+	# Handle Go backend API routes first
+	handle /flowbuilder/* {
+		reverse_proxy backend:8080
+	}
+
+	handle /components/* {
+		reverse_proxy backend:8080
+	}
+
+	handle /health {
+		reverse_proxy backend:8080
+	}
+
+	# Agentic dispatch API routes (SSE needs immediate flushing)
+	handle /agentic-dispatch/* {
+		reverse_proxy backend:8080 {
+			flush_interval -1
+		}
+	}
+
+	handle /agentic-loop/* {
+		reverse_proxy backend:8080
+	}
+
+	# GraphQL gateway (graph-gateway on port 8082)
+	handle /graphql {
+		reverse_proxy backend:8082
+	}
+
+	# Vite dev server handles everything else (UI, HMR, /api/ai/*)
+	handle {
+		reverse_proxy ui:5173
+	}
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		X-XSS-Protection "1; mode=block"
+		Referrer-Policy "strict-origin-when-cross-origin"
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -1,0 +1,409 @@
+# Runtime Visualization Panel - Visual Mockups
+
+## Current State (Before)
+
+```
+┌─────────────┬────────────────────────────────────────────────────┬──────────────┐
+│             │  ← Flows    Flow-2024-11-15    [💾 Saved]           │              │
+│  Component  ├────────────────────────────────────────────────────┤              │
+│  Palette    │                                                     │   Config     │
+│             │   ┌──────┐         ┌────────────┐      ┌────────┐  │   Panel      │
+│  □ UDP      │   │ UDP  │────────▶│ Processor  │─────▶│ NATS   │  │              │
+│  □ HTTP     │   │Source│         │            │      │ Sink   │  │  Name: UDP   │
+│  □ NATS     │   └──────┘         └────────────┘      └────────┘  │  Port: 8080  │
+│  □ File     │                                                     │              │
+│  □ Websock  │                                                     │  [Save]      │
+│             │                                                     │              │
+│             │                                                     │              │
+│             ├────────────────────────────────────────────────────┤              │
+│             │ Runtime: running ▶️  Cannot edit │  [Stop]         │              │
+└─────────────┴────────────────────────────────────────────────────┴──────────────┘
+```
+
+---
+
+## Option 1: Bottom Panel (Closed)
+
+```
+┌─────────────┬────────────────────────────────────────────────────┬──────────────┐
+│             │  ← Flows    Flow-2024-11-15    [💾 Saved]           │              │
+│  Component  ├────────────────────────────────────────────────────┤              │
+│  Palette    │                                                     │   Config     │
+│             │   ┌──────┐         ┌────────────┐      ┌────────┐  │   Panel      │
+│  □ UDP      │   │ UDP  │────────▶│ Processor  │─────▶│ NATS   │  │              │
+│  □ HTTP     │   │Source│         │            │      │ Sink   │  │  Name: UDP   │
+│  □ NATS     │   └──────┘         └────────────┘      └────────┘  │  Port: 8080  │
+│  □ File     │                                                     │              │
+│  □ Websock  │                                                     │  [Save]      │
+│             │                                                     │              │
+│             │                                                     │              │
+│             ├────────────────────────────────────────────────────┤              │
+│             │ Runtime: running ▶️  │  [Stop]  [▲ Debug]          │              │
+└─────────────┴────────────────────────────────────────────────────┴──────────────┘
+                                                        ↑
+                                                New toggle button
+```
+
+---
+
+## Option 1: Bottom Panel (Open - Logs Tab)
+
+```
+┌─────────────┬────────────────────────────────────────────────────┬──────────────┐
+│             │  ← Flows    Flow-2024-11-15    [💾 Saved]           │              │
+│  Component  ├────────────────────────────────────────────────────┤              │
+│  Palette    │                                                     │   Config     │
+│             │   ┌──────┐         ┌────────────┐      ┌────────┐  │   Panel      │
+│  □ UDP      │   │ UDP  │────────▶│ Processor  │─────▶│ NATS   │  │              │
+│  □ HTTP     │   │Source│         │            │      │ Sink   │  │  Name: UDP   │
+│  □ NATS     │   └──────┘         └────────────┘      └────────┘  │  Port: 8080  │
+│  □ File     │                                                     │              │
+│             ├────────────────────────────────────────────────────┤  [Save]      │
+│             │ Runtime: running ▶️  │  [Stop]  [▼ Debug]          │              │
+│             ├────────────────────────────────────────────────────┴──────────────┘
+│             │ ═══ Runtime Debugging ══════════════════════════════════════ ✕    │
+│             │ [Logs] Metrics  Health    [Filter] [▼ Level] [Clear] [⬇ Auto]   │
+│             ├──────────────────────────────────────────────────────────────────┤
+│             │ 14:23:01 INFO  [udp-source]    Listening on :8080                │
+│             │ 14:23:02 DEBUG [processor]     Received message (128 bytes)      │
+│             │ 14:23:02 INFO  [processor]     Processing batch (count=1)        │
+│             │ 14:23:03 ERROR [processor]     Failed to parse JSON              │
+│             │    at processor.go:45                                           │
+│             │    invalid character 'x' looking for beginning of value         │
+│             │ 14:23:04 INFO  [nats-sink]     Published to subject: data.out   │
+└─────────────┴──────────────────────────────────────────────────────────────────┘
+                ↑                                                           ↑
+         Resize handle (drag up/down)                              Close button
+```
+
+**Key Features:**
+
+- Panel slides up from status bar
+- Canvas height reduces proportionally
+- Tabs for different views (Logs, Metrics, Health)
+- Filter controls in panel header
+- Resizable via drag handle
+- Auto-scroll toggle
+- Close button (or press Esc)
+
+---
+
+## Option 1: Bottom Panel (Open - Metrics Tab)
+
+```
+┌─────────────┬────────────────────────────────────────────────────┬──────────────┐
+│             │  ← Flows    Flow-2024-11-15    [💾 Saved]           │              │
+│  Component  ├────────────────────────────────────────────────────┤              │
+│  Palette    │                                                     │   Config     │
+│             │   ┌──────┐         ┌────────────┐      ┌────────┐  │   Panel      │
+│  □ UDP      │   │ UDP  │────────▶│ Processor  │─────▶│ NATS   │  │              │
+│  □ HTTP     │   │Source│         │            │      │ Sink   │  │  Name: UDP   │
+│  □ NATS     │   └──────┘         └────────────┘      └────────┘  │  Port: 8080  │
+│             │                                                     │              │
+│             ├────────────────────────────────────────────────────┤  [Save]      │
+│             │ Runtime: running ▶️  │  [Stop]  [▼ Debug]          │              │
+│             ├────────────────────────────────────────────────────┴──────────────┘
+│             │ ═══ Runtime Debugging ══════════════════════════════════════ ✕    │
+│             │ Logs [Metrics] Health    [Refresh: 1s ▼]                         │
+│             ├──────────────────────────────────────────────────────────────────┤
+│             │ Component           Msg/sec    Errors/sec   CPU    Memory    ●   │
+│             ├──────────────────────────────────────────────────────────────────┤
+│             │ udp-source          1,234      0            5%     12 MB     🟢  │
+│             │ json-processor      1,230      4            12%    28 MB     🟡  │
+│             │ nats-sink           1,226      0            3%     8 MB      🟢  │
+│             ├──────────────────────────────────────────────────────────────────┤
+│             │ Total               3,690      4            20%    48 MB         │
+└─────────────┴──────────────────────────────────────────────────────────────────┘
+```
+
+**Key Features:**
+
+- Real-time metrics table
+- Throughput (messages per second)
+- Error rates
+- Resource usage (if available from backend)
+- Status indicators (🟢 healthy, 🟡 degraded, 🔴 error)
+- Refresh rate selector
+
+---
+
+## Option 1: Bottom Panel (Open - Health Tab)
+
+```
+┌─────────────┬────────────────────────────────────────────────────┬──────────────┐
+│             │  ← Flows    Flow-2024-11-15    [💾 Saved]           │              │
+│  Component  ├────────────────────────────────────────────────────┤              │
+│  Palette    │                                                     │   Config     │
+│             │   ┌──────┐         ┌────────────┐      ┌────────┐  │   Panel      │
+│  □ UDP      │   │ UDP  │────────▶│ Processor  │─────▶│ NATS   │  │              │
+│  □ HTTP     │   │Source│         │            │      │ Sink   │  │  Name: UDP   │
+│  □ NATS     │   └──────┘         └────────────┘      └────────┘  │  Port: 8080  │
+│             │                                                     │              │
+│             ├────────────────────────────────────────────────────┤  [Save]      │
+│             │ Runtime: running ▶️  │  [Stop]  [▼ Debug]          │              │
+│             ├────────────────────────────────────────────────────┴──────────────┘
+│             │ ═══ Runtime Debugging ══════════════════════════════════════ ✕    │
+│             │ Logs  Metrics [Health]    [Refresh: 5s ▼]                        │
+│             ├──────────────────────────────────────────────────────────────────┤
+│             │ Component           Status      Uptime       Last Activity       │
+│             ├──────────────────────────────────────────────────────────────────┤
+│             │ ● udp-source        Running     00:15:32     2 seconds ago      │
+│             │ ● json-processor    Running     00:15:31     1 second ago       │
+│             │ ⚠ nats-sink         Degraded    00:15:30     3 seconds ago      │
+│             │   └─ Slow acks (>100ms avg)                                     │
+│             ├──────────────────────────────────────────────────────────────────┤
+│             │ Connections: 2/2 active  │  Overall: 🟡 Degraded                │
+└─────────────┴──────────────────────────────────────────────────────────────────┘
+```
+
+**Key Features:**
+
+- Component health status
+- Uptime counters
+- Last activity timestamps
+- Warning/error details
+- Connection health summary
+- Overall system health indicator
+
+---
+
+## Option 2: Right Panel Tab (Collapsed)
+
+```
+┌─────────────┬────────────────────────────────────────────────────┬──────────────┐
+│             │  ← Flows    Flow-2024-11-15    [💾 Saved]           │              │
+│  Component  ├────────────────────────────────────────────────────┤ [Config│Dbg] │ ← Tabs
+│  Palette    │                                                     ├──────────────┤
+│             │   ┌──────┐         ┌────────────┐      ┌────────┐  │              │
+│  □ UDP      │   │ UDP  │────────▶│ Processor  │─────▶│ NATS   │  │  Name: UDP   │
+│  □ HTTP     │   │Source│         │            │      │ Sink   │  │  Port: 8080  │
+│  □ NATS     │   └──────┘         └────────────┘      └────────┘  │              │
+│  □ File     │                                                     │              │
+│  □ Websock  │                                                     │  [Save]      │
+│             │                                                     │              │
+│             │                                                     │              │
+│             ├────────────────────────────────────────────────────┤              │
+│             │ Runtime: running ▶️  Cannot edit │  [Stop]         │              │
+└─────────────┴────────────────────────────────────────────────────┴──────────────┘
+```
+
+---
+
+## Option 2: Right Panel Tab (Debug Active)
+
+```
+┌─────────────┬────────────────────────────┬───────────────────────────────────┐
+│             │  ← Flows   Flow-2024-11-15 │ Config [Debug] ✕  [◀ ═ ▶]        │ ← Resize
+│  Component  ├────────────────────────────┼───────────────────────────────────┤
+│  Palette    │                            │ [Logs] Metrics  Health            │
+│             │   ┌──────┐      ┌────────┐ │                                   │
+│  □ UDP      │   │ UDP  │─────▶│Process │ │ 14:23:01 INFO  [udp-source]      │
+│  □ HTTP     │   │Source│      │er      │ │   Listening on :8080             │
+│  □ NATS     │   └──────┘      └────────┘ │ 14:23:02 DEBUG [processor]       │
+│  □ File     │                            │   Received message               │
+│  □ Websock  │                            │ 14:23:03 ERROR [processor]       │
+│             │                            │   Failed to parse JSON           │
+│             │                            │     at processor.go:45           │
+│             │                            │     invalid character 'x'        │
+│             ├────────────────────────────┤ 14:23:04 INFO  [nats-sink]       │
+│             │ Runtime: running ▶️  [Stop]│   Published to subject           │
+└─────────────┴────────────────────────────┴───────────────────────────────────┘
+                                           ↑
+                                  Canvas narrower, panel wider
+```
+
+**Key Features:**
+
+- Tabs in right panel (Config | Debug)
+- Canvas width reduces when panel is wide
+- Resizable panel (drag left/right edge)
+- Same content as bottom panel option
+- Must switch tabs to see config vs debug
+
+**Issues:**
+
+- ⚠️ Less horizontal space for logs
+- ⚠️ Config not visible while debugging
+- ⚠️ Canvas gets narrower (worse for wide flows)
+
+---
+
+## Animation Sequence (Bottom Panel)
+
+### 1. Initial State - Panel Closed
+
+```
+┌────────────────────────────────────────────┐
+│                                            │
+│           Canvas (full height)             │
+│                                            │
+│                                            │
+├────────────────────────────────────────────┤
+│ Runtime: running ▶️  │ [Stop] [▲ Debug]   │ ← Status bar
+└────────────────────────────────────────────┘
+```
+
+### 2. User Clicks "Debug" Button
+
+```
+┌────────────────────────────────────────────┐
+│                                            │
+│           Canvas (shrinking)               │
+│                                            │ ↑ Height reduces
+├────────────────────────────────────────────┤
+│ Runtime: running ▶️  │ [Stop] [▼ Debug]   │
+├════════════════════════════════════════════┤ ← Panel slides up
+│ Runtime Debugging                      ✕   │
+│ [Logs] Metrics Health                      │
+│ ┌──────────────────────────────────────┐   │
+│ │ Loading...                           │   │
+│ └──────────────────────────────────────┘   │
+└────────────────────────────────────────────┘
+```
+
+### 3. Panel Fully Open (300ms animation)
+
+```
+┌────────────────────────────────────────────┐
+│           Canvas (reduced)                 │ Canvas now smaller
+├────────────────────────────────────────────┤
+│ Runtime: running ▶️  │ [Stop] [▼ Debug]   │
+├════════════════════════════════════════════┤ Resize handle
+│ Runtime Debugging                      ✕   │
+│ [Logs] Metrics Health                      │
+├────────────────────────────────────────────┤
+│ 14:23:01 INFO  [udp-source]  Listening... │ Content loaded
+│ 14:23:02 DEBUG [processor]   Received...  │
+│ 14:23:03 ERROR [processor]   Parse error  │
+└────────────────────────────────────────────┘
+```
+
+### 4. User Drags Resize Handle Up
+
+```
+┌────────────────────────────────────────────┐
+│           Canvas (smaller)                 │ ← Even smaller
+├────────────────────────────────────────────┤
+│ Runtime: running ▶️  │ [Stop] [▼ Debug]   │
+├════════════════════════════════════════════┤ ← Dragging up
+│ Runtime Debugging                      ✕   │
+│ [Logs] Metrics Health                      │
+├────────────────────────────────────────────┤
+│ 14:23:01 INFO  [udp-source]  Listening... │
+│ 14:23:02 DEBUG [processor]   Received...  │
+│ 14:23:03 ERROR [processor]   Parse error  │
+│ 14:23:04 INFO  [nats-sink]   Published... │
+│ 14:23:05 DEBUG [processor]   Processing.. │ ← More logs visible
+└────────────────────────────────────────────┘
+```
+
+---
+
+## Mobile/Responsive Behavior
+
+### Desktop (> 1024px)
+
+- Bottom panel: 300px default, 150px min, 60vh max
+- Right config panel: 400px default
+- Both visible simultaneously
+
+### Tablet (768px - 1024px)
+
+- Bottom panel: 250px default, min 150px
+- Right config panel: Overlay mode (covers canvas)
+- One panel visible at a time
+
+### Mobile (< 768px)
+
+- Bottom panel: Full screen overlay
+- No simultaneous panels
+- Tap status bar "Debug" → full screen debug view
+- Back button returns to canvas
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut       | Action               |
+| -------------- | -------------------- |
+| `Ctrl+``       | Toggle runtime panel |
+| `Esc`          | Close runtime panel  |
+| `Ctrl+L`       | Focus logs tab       |
+| `Ctrl+M`       | Focus metrics tab    |
+| `Ctrl+H`       | Focus health tab     |
+| `Ctrl+Shift+C` | Clear logs           |
+
+---
+
+## Status Bar Evolution
+
+### Before (Current)
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Runtime: running ▶️  │ Cannot edit │ [Stop]         │
+└─────────────────────────────────────────────────────┘
+```
+
+### After (With Debug Button)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ Runtime: running ▶️  │ [Stop] [▲ Debug] Ctrl+`          │
+└──────────────────────────────────────────────────────────┘
+         ↑                         ↑          ↑
+    Shows state              Opens panel   Shortcut hint
+```
+
+### After (Panel Open)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ Runtime: running ▶️  │ [Stop] [▼ Debug]                  │
+├══════════════════════════════════════════════════════════┤
+│ Runtime Debugging ══════════════════════════════════ ✕   │
+│ [Logs] Metrics Health  [Filter] [Clear] [⬇ Auto]        │
+```
+
+---
+
+## Summary - Why Bottom Panel Wins
+
+**Visual Advantages:**
+
+```
+Bottom Panel:                Right Panel:
++----------------------+     +----------------+----------+
+|                      |     |                |          |
+|   Canvas (wide)      |     |  Canvas        | Debug    |
+|                      |     |  (narrow)      | (narrow) |
++----------------------+     |                |          |
+| Debug (wide logs)    |     +----------------+----------+
++----------------------+
+
+✅ Better for logs           ⚠️ Cramped logs
+✅ Canvas stays wide         ⚠️ Canvas narrower
+✅ Both panels visible       ⚠️ Tab switching needed
+```
+
+**User Flow:**
+
+```
+1. User runs flow
+2. Notices error in status bar
+3. Clicks "Debug" → panel slides up
+4. Sees error logs immediately
+5. Edits component config in right panel
+6. Watches logs while testing
+7. Problem solved → closes debug panel
+```
+
+**Next Steps:**
+
+1. ✅ Confirm bottom panel approach
+2. Create RuntimePanel.svelte component
+3. Add toggle to StatusBar
+4. Implement resize logic
+5. Add Logs tab (MVP)
+6. Add Metrics + Health tabs
+7. Polish animations + shortcuts

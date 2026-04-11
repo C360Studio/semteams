@@ -1,0 +1,101 @@
+# Development Backend Infrastructure
+#
+# Starts NATS + semstreams backend + Caddy reverse proxy for local development.
+# Use with native `npm run dev` for the frontend.
+#
+# Access the app at: http://localhost:${DEV_UI_PORT:-3001}
+#
+# Usage:
+#   task dev:backend:start   # Start in background
+#   task dev:backend:stop    # Stop
+#   task dev:backend:logs    # View logs
+#   task dev:full            # Start backend + frontend together
+#
+# Or manually:
+#   docker compose -f docker-compose.dev.yml up -d
+#   npm run dev
+#   docker compose -f docker-compose.dev.yml down
+#
+# Configuration:
+#   BACKEND_CONTEXT     - Path to backend repo (default: ../semstreams)
+#   BACKEND_DOCKERFILE  - Dockerfile path (default: docker/Dockerfile)
+#   BACKEND_CONFIG      - Config file in configs/ (default: protocol-flow.json)
+#   LOG_LEVEL           - Log level (default: debug)
+#   DEV_UI_PORT         - External port for Caddy (default: 3001)
+#   DEV_VITE_PORT       - Vite dev server port on host (default: 5173)
+
+services:
+  # NATS Server with JetStream (internal only - no exposed ports)
+  nats:
+    image: nats:2.10-alpine
+    container_name: semstreams-ui-dev-nats
+    command: ["-js", "-m", "8222", "--name", "ui-dev-nats"]
+    # NO ports exposed - internal Docker network only
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:8222/healthz",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - dev-net
+
+  # Backend (semstreams by default, configurable via BACKEND_CONTEXT)
+  # Internal only - no exposed ports
+  backend:
+    build:
+      context: ${BACKEND_CONTEXT:-../semstreams}
+      dockerfile: ${BACKEND_DOCKERFILE:-docker/Dockerfile}
+      target: production
+    container_name: semstreams-ui-dev-backend
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - SEMSTREAMS_NATS_URLS=nats://nats:4222
+      - SEMSTREAMS_LOG_LEVEL=${LOG_LEVEL:-debug}
+    volumes:
+      - ${BACKEND_CONTEXT:-../semstreams}/configs/${BACKEND_CONFIG:-protocol-flow.json}:/etc/semstreams/config.json:ro
+    # NO ports exposed - internal Docker network only
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks:
+      - dev-net
+
+  # Caddy reverse proxy - ONLY exposed port
+  caddy:
+    image: caddy:2-alpine
+    container_name: semstreams-ui-dev-caddy
+    depends_on:
+      - backend
+    volumes:
+      - ./Caddyfile.dev:/etc/caddy/Caddyfile:ro
+    ports:
+      - "${DEV_UI_PORT:-3001}:3000"
+    environment:
+      - BACKEND_HOST=${BACKEND_HOST:-backend:8080}
+      - GRAPHQL_HOST=${GRAPHQL_HOST:-backend:8080}
+      - UI_HOST=host.docker.internal:${DEV_VITE_PORT:-5173}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - dev-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+networks:
+  dev-net:
+    driver: bridge

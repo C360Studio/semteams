@@ -1,0 +1,87 @@
+# Example: Full SSO with Authelia + Caddy
+#
+# This setup provides enterprise-grade authentication with:
+# - OAuth 2.0 / OpenID Connect
+# - Two-factor authentication (TOTP, WebAuthn)
+# - Support for Azure AD, Google, Okta, etc.
+# - Session management
+#
+# Usage:
+#   1. Copy this file to your project
+#   2. Create authelia/ directory with configuration
+#   3. Set environment variables (see .env.authelia.example)
+#   4. Run: docker compose -f authelia-docker-compose.yml up
+
+version: "3.8"
+
+services:
+  # NATS message broker
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data"]
+    volumes:
+      - nats-data:/data
+    networks:
+      - semstreams-net
+
+  # Your SemStreams backend
+  backend:
+    image: your-backend:latest # Replace with your backend image
+    depends_on:
+      - nats
+    environment:
+      - NATS_URL=nats://nats:4222
+    networks:
+      - semstreams-net
+
+  # SemStreams UI
+  ui:
+    image: semstreams/ui:latest
+    environment:
+      - BACKEND_HOST=backend:8080
+    networks:
+      - semstreams-net
+
+  # Authelia - Authentication service
+  authelia:
+    image: authelia/authelia:latest
+    container_name: authelia
+    volumes:
+      - ./authelia:/config
+    environment:
+      - TZ=America/Chicago
+      - AUTHELIA_JWT_SECRET=${AUTHELIA_JWT_SECRET}
+      - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
+    networks:
+      - semstreams-net
+    expose:
+      - 9091
+    restart: unless-stopped
+
+  # Caddy - Reverse proxy with auth
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy-auth
+    depends_on:
+      - authelia
+      - ui
+      - backend
+    volumes:
+      - ./Caddyfile.authelia:/etc/caddy/Caddyfile
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "3000:3000"
+    networks:
+      - semstreams-net
+    restart: unless-stopped
+
+volumes:
+  nats-data:
+  caddy-data:
+  caddy-config:
+
+networks:
+  semstreams-net:
+    driver: bridge

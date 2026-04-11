@@ -1,0 +1,107 @@
+# Example: Simple OAuth with OAuth2-Proxy + Google
+#
+# This setup provides basic OAuth authentication:
+# - Sign in with Google (or GitHub, Azure, etc.)
+# - Email domain restrictions
+# - Quick setup (15 minutes)
+#
+# Prerequisites:
+#   1. Create Google OAuth app: https://console.cloud.google.com/apis/credentials
+#   2. Set redirect URI: http://localhost:4180/oauth2/callback
+#   3. Get client ID and secret
+#   4. Set environment variables in .env.oauth
+#
+# Usage:
+#   docker compose -f oauth2-proxy-docker-compose.yml up
+
+version: "3.8"
+
+services:
+  # NATS message broker
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js", "-sd", "/data"]
+    volumes:
+      - nats-data:/data
+    networks:
+      - semstreams-net
+
+  # Your SemStreams backend
+  backend:
+    image: your-backend:latest # Replace with your backend image
+    depends_on:
+      - nats
+    environment:
+      - NATS_URL=nats://nats:4222
+    networks:
+      - semstreams-net
+
+  # SemStreams UI
+  ui:
+    image: semstreams/ui:latest
+    environment:
+      - BACKEND_HOST=backend:8080
+    networks:
+      - semstreams-net
+
+  # Caddy (no auth here, OAuth2-Proxy handles it)
+  caddy:
+    image: caddy:2-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      - ui
+      - backend
+    expose:
+      - 3000
+    networks:
+      - semstreams-net
+
+  # OAuth2-Proxy - Simple OAuth authentication
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    container_name: oauth2-proxy
+    command:
+      # Provider configuration
+      - --provider=google
+      - --email-domain=example.com # CHANGE: Your organization's domain
+
+      # Upstream (what OAuth2-Proxy protects)
+      - --upstream=http://caddy:3000
+      - --http-address=0.0.0.0:4180
+
+      # OAuth credentials (from Google Cloud Console)
+      - --client-id=${GOOGLE_CLIENT_ID}
+      - --client-secret=${GOOGLE_CLIENT_SECRET}
+      - --cookie-secret=${OAUTH2_PROXY_COOKIE_SECRET} # Generate: openssl rand -base64 32
+
+      # Redirect configuration
+      - --redirect-url=http://localhost:4180/oauth2/callback
+
+      # Cookie settings
+      - --cookie-secure=false # Set to true with HTTPS
+      - --cookie-httponly=true
+      - --cookie-name=_oauth2_proxy
+
+      # Session settings
+      - --session-store-type=cookie
+      - --cookie-expire=168h # 7 days
+
+      # Pass user info to upstream
+      - --set-xauthrequest=true
+      - --pass-access-token=true
+      - --pass-user-headers=true
+    ports:
+      - "4180:4180"
+    depends_on:
+      - caddy
+    networks:
+      - semstreams-net
+    restart: unless-stopped
+
+volumes:
+  nats-data:
+
+networks:
+  semstreams-net:
+    driver: bridge

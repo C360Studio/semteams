@@ -1,0 +1,21 @@
+{
+  "namespace": "e2e",
+  "sources": [
+    {
+      "type": "ast",
+      "path": "/data/fixture",
+      "language": "go",
+      "watch": false
+    },
+    {
+      "type": "docs",
+      "paths": ["/data/fixture"],
+      "watch": false
+    },
+    {
+      "type": "config",
+      "paths": ["/data/fixture"],
+      "watch": false
+    }
+  ]
+}

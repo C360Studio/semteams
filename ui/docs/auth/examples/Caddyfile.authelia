@@ -1,0 +1,36 @@
+# Caddyfile with Authelia forward authentication
+#
+# This configuration:
+# - Protects the entire site with Authelia
+# - Passes user identity to backend via headers
+# - Supports SSO, 2FA, and session management
+
+:3000 {
+    # Forward authentication to Authelia
+    forward_auth authelia:9091 {
+        uri /api/verify?rd=https://auth.example.com/
+        copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
+    }
+
+    # API routes → backend (with auth headers)
+    reverse_proxy /flowbuilder/* backend:8080
+    reverse_proxy /components/* backend:8080
+    reverse_proxy /health backend:8080
+
+    # UI routes → SvelteKit
+    reverse_proxy * ui:5173 {
+        # Pass auth headers to UI (optional)
+        header_up X-Remote-User {http.request.header.Remote-User}
+        header_up X-Remote-Email {http.request.header.Remote-Email}
+    }
+
+    # Enable access logs
+    log {
+        output file /var/log/caddy/access.log
+    }
+}
+
+# Optional: Separate auth domain
+# auth.example.com {
+#     reverse_proxy authelia:9091
+# }

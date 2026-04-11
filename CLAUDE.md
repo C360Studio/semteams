@@ -7,6 +7,8 @@ A stream processor that builds semantic knowledge graphs from event data using N
 - Go 1.25 + NATS JetStream (KV, ObjectStore)
 - Prometheus (metrics), slog (logging)
 - Task (task runner) — run `task --list` for all commands
+- `ui/` — Svelte 5 + SvelteKit 2 + TypeScript frontend (subtree-imported from
+  semstreams-ui on 2026-04-10, see `ui/.claude/CLAUDE.md` for UI conventions)
 
 ## Architecture
 
@@ -40,6 +42,7 @@ Flow-based component architecture:
 | `processor/agentic-dispatch/` | User message routing, commands |
 | `processor/agentic-memory/` | Graph-backed persistent memory |
 | `processor/agentic-governance/` | PII filtering, rate limiting, content governance |
+| `ui/` | Svelte 5 + SvelteKit 2 frontend (graph explorer, flow builder, agentic UI) |
 
 ## Core Interface
 
@@ -65,9 +68,21 @@ task build              # Build binary
 task test               # Run unit tests
 task test:integration   # Run integration tests (uses testcontainers)
 task test:race          # Run tests with race detector
-task lint               # Run linters
-task check              # Run lint + test
+task lint               # Run linters (Go only — ui has its own lint)
+task check              # Run lint + test (Go only)
+
+# UI tasks (frontend) — see ui/Taskfile.yml for the full list
+task ui:dev             # Start Vite dev server
+task ui:test            # Run Vitest unit/component tests
+task ui:test:e2e        # Run Playwright E2E tests
+task ui:lint            # Run ESLint on ui/
+task ui:build           # Production build
 ```
+
+**Note:** `task check`/`task lint` currently run Go-only. UI checks run in their
+own CI workflow (`.github/workflows/ui.yml`) and via `task ui:*` locally. This
+is intentional during the Phase A subtree import; they'll be unified in a
+follow-up once the imported tree is verified clean.
 
 ## E2E Tests (Requires Docker)
 
@@ -96,12 +111,19 @@ task e2e:all            # Run all tiers sequentially
 
 ## CI Requirements (IMPORTANT)
 
-**All CI checks must pass before pushing.** The CI workflow (`.github/workflows/ci.yml`) runs:
+**All CI checks must pass before pushing.** Two workflows run:
 
+**`.github/workflows/ci.yml`** (Go backend):
 1. **Lint** — `go vet`, `go fmt` (must be clean), `revive` (warnings = failure)
 2. **Test** — Unit tests with `-race`, integration tests with `-race`
 3. **Build** — Cross-compile Linux binary
 4. **Schema Validation** — `task schema:generate`, check for uncommitted changes
+
+**`.github/workflows/ui.yml`** (Svelte frontend, path-filtered to `ui/**`):
+1. **Lint** — `npm run lint` (ESLint)
+2. **Type Check** — `npm run check` (svelte-check)
+3. **Unit Tests** — `npm run test:unit`
+4. **Build** — `npm run build`
 
 Before pushing, run these locally:
 
