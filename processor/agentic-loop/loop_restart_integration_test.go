@@ -63,7 +63,19 @@ func newLoopTestConfig(suffix string) agenticloop.Config {
 }
 
 // startLoopComponent creates, initializes, and starts a loop component.
-func startLoopComponent(t *testing.T, config agenticloop.Config) component.LifecycleComponent {
+//
+// The caller must pass a context that outlives the test body. The component
+// stores the context on internal consumer subscriptions (see
+// component.go:setupConsumer → ConsumeStreamWithConfig), so if the caller
+// passes a ctx that gets canceled before the test finishes, the JetStream
+// consumer shuts down and the component silently stops processing tasks.
+//
+// This was a real bug in this helper prior to 2026-04-11: the helper created
+// its own `ctx, cancel := context.WithTimeout(...)` with a deferred cancel,
+// which fired the moment the helper returned — before the test body published
+// any tasks. Both restart tests failed their "Should receive model request"
+// assertion because the consumer had already been torn down.
+func startLoopComponent(t *testing.T, ctx context.Context, config agenticloop.Config) component.LifecycleComponent {
 	t.Helper()
 
 	natsClient := getSharedNATSClient(t)
@@ -78,9 +90,6 @@ func startLoopComponent(t *testing.T, config agenticloop.Config) component.Lifec
 
 	err = lc.Initialize()
 	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
 
 	err = lc.Start(ctx)
 	require.NoError(t, err)
@@ -118,17 +127,21 @@ func readLoopFromKV(t *testing.T, loopID string) (*agentic.LoopEntity, bool) {
 // AGENT_LOOPS KV survives a component restart. It also documents the current gap:
 // after restart, the new component's LoopManager does NOT reload from KV.
 func TestIntegration_LoopKVStateSurvivesRestart(t *testing.T) {
+	// ctx must live for the whole test body — the loop component's JetStream
+	// consumer uses this context for its subscription lifetime.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	natsClient := getSharedNATSClient(t)
 
 	config := newLoopTestConfig("restart-kv-test")
-	lc := startLoopComponent(t, config)
+	lc := startLoopComponent(t, ctx, config)
 
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to model requests so we know the loop is active
 	var requestMu sync.Mutex
 	receivedRequests := make([]agentic.AgentRequest, 0)
-	ctx := context.Background()
 
 	_, err := natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
@@ -179,8 +192,9 @@ func TestIntegration_LoopKVStateSurvivesRestart(t *testing.T) {
 	assert.Equal(t, entity.Iterations, entityAfterStop.Iterations, "Iterations should be preserved")
 	assert.False(t, entityAfterStop.StartedAt.IsZero(), "StartedAt should be preserved")
 
-	// Start a NEW component instance — simulating a restart
-	lc2 := startLoopComponent(t, newLoopTestConfig("restart-kv-test-2"))
+	// Start a NEW component instance — simulating a restart. Uses the same
+	// ctx as the first instance since we're still in the same test body.
+	lc2 := startLoopComponent(t, ctx, newLoopTestConfig("restart-kv-test-2"))
 	defer lc2.Stop(5 * time.Second)
 
 	// The KV entry should still exist
@@ -196,17 +210,20 @@ func TestIntegration_LoopKVStateSurvivesRestart(t *testing.T) {
 // TestIntegration_TerminalStateSurvivesRestart proves that a completed loop's
 // terminal state in KV survives a component restart.
 func TestIntegration_TerminalStateSurvivesRestart(t *testing.T) {
+	// ctx must live for the whole test body — see startLoopComponent doc for why.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	natsClient := getSharedNATSClient(t)
 
 	config := newLoopTestConfig("terminal-restart-test")
-	lc := startLoopComponent(t, config)
+	lc := startLoopComponent(t, ctx, config)
 
 	time.Sleep(200 * time.Millisecond)
 
 	// Collect model requests
 	var requestMu sync.Mutex
 	receivedRequests := make([]agentic.AgentRequest, 0)
-	ctx := context.Background()
 
 	_, err := natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
