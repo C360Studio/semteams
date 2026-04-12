@@ -142,11 +142,14 @@ func TestServiceLifecycleRobustness(t *testing.T) {
 			}
 			assert.Equal(t, 1, successCount, "Exactly one Start should succeed")
 
-			// Now try multiple stops
+			// Now try multiple stops. Use 5s timeout (not 1s) because
+			// Docker Desktop on macOS can be slow to release ports, and
+			// the tight 1s timeout caused this stress test to flake locally
+			// when the system was under load from other testcontainers.
 			stopErrors := make(chan error, 5)
 			for j := 0; j < 5; j++ {
 				go func() {
-					stopErrors <- metrics.Stop(1 * time.Second)
+					stopErrors <- metrics.Stop(5 * time.Second)
 				}()
 			}
 
