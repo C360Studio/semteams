@@ -1,3 +1,2 @@
-// Homepage: Graph explorer (DataView)
-// Disable SSR — Sigma.js requires browser APIs
-export const ssr = false;
+// Board homepage — the kanban view of agent tasks.
+// SSR is fine here (no browser-only APIs like Sigma.js).

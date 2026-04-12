@@ -1,109 +1,110 @@
 <script lang="ts">
-	import DataView from '$lib/components/DataView.svelte';
-	import { onMount } from 'svelte';
-	import type { Flow } from '$lib/types/flow';
-
-	// Auto-discover active flow from the backend config.
-	// If the backend has flows (from a loaded config), we pick the running one
-	// (or the first one) and pass its ID to DataView for context.
-	// If no backend or no flows, DataView still works — just no flow context.
-	let activeFlow = $state<Flow | null>(null);
-
-	onMount(async () => {
-		try {
-			const response = await fetch('/flowbuilder/flows');
-			if (response.ok) {
-				const data = await response.json();
-				const flows: Flow[] = data.flows || [];
-				if (flows.length > 0) {
-					// Prefer a running flow, otherwise take the first
-					activeFlow = flows.find(f => f.runtime_state === 'running')
-						?? flows[0];
-				}
-			}
-		} catch {
-			// Backend not available — DataView works standalone via GraphQL
-		}
-	});
+	import { taskStore } from '$lib/stores/taskStore.svelte';
+	import { agentStore } from '$lib/stores/agentStore.svelte';
+	import KanbanBoard from '$lib/components/board/KanbanBoard.svelte';
+	import TaskDetailPanel from '$lib/components/board/TaskDetailPanel.svelte';
 </script>
 
 <svelte:head>
-	<title>SemStreams</title>
+	<title>Board - SemTeams</title>
 </svelte:head>
 
-<div class="app-layout">
-	<header class="app-header">
-		<div class="header-content">
-			<h1 class="app-title">SemStreams</h1>
-			<nav class="header-nav">
-				{#if activeFlow}
-					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-					<a href="/flows/{activeFlow.id}" class="nav-link">Flow: {activeFlow.name}</a>
-				{/if}
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-				<a href="/flows" class="nav-link">Flows</a>
-				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
-				<a href="/agents" class="nav-link">Agents</a>
-			</nav>
-		</div>
-	</header>
+<div class="board-page" data-testid="board-page">
+	<h1 class="sr-only">Task Board</h1>
+	<div class="board-status">
+		<span
+			class="connection-indicator"
+			data-testid="connection-status"
+			data-connected={agentStore.connected}
+		>
+			{agentStore.connected ? 'Connected' : 'Connecting...'}
+		</span>
+		<span class="task-count">{taskStore.tasks.length} tasks</span>
+		{#if taskStore.needsAttentionCount > 0}
+			<span class="attention-badge" data-testid="attention-badge">
+				{taskStore.needsAttentionCount} needs you
+			</span>
+		{/if}
+	</div>
 
-	<div class="app-content">
-		<DataView flowId={activeFlow?.id} />
+	<div class="board-content">
+		<KanbanBoard />
+		{#if taskStore.selectedTask}
+			<TaskDetailPanel
+				task={taskStore.selectedTask}
+				onClose={() => taskStore.deselectTask()}
+			/>
+		{/if}
 	</div>
 </div>
 
 <style>
-	.app-layout {
+	.board-page {
 		display: flex;
 		flex-direction: column;
-		height: 100vh;
+		width: 100%;
+		height: 100%;
 		overflow: hidden;
 	}
 
-	.app-header {
+	.board-status {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
 		padding: 0.5rem 1rem;
-		border-bottom: 1px solid var(--ui-border-subtle);
-		background: var(--ui-surface-primary);
+		font-size: 0.8125rem;
+		color: var(--ui-text-secondary, #6b7280);
+		border-bottom: 1px solid var(--ui-border-subtle, #e5e7eb);
 		flex-shrink: 0;
 	}
 
-	.header-content {
+	.connection-indicator {
 		display: flex;
 		align-items: center;
-		gap: 1.5rem;
+		gap: 0.375rem;
 	}
 
-	.app-title {
-		margin: 0;
-		font-size: 1.125rem;
-		color: var(--ui-text-primary);
+	.connection-indicator::before {
+		content: '';
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--status-error, #ef4444);
+	}
+
+	.connection-indicator[data-connected='true']::before {
+		background: var(--status-success, #22c55e);
+	}
+
+	.task-count {
+		font-variant-numeric: tabular-nums;
+	}
+
+	.attention-badge {
+		background: var(--col-needs-you, #f97316);
+		color: white;
+		padding: 0.125rem 0.5rem;
+		border-radius: 9999px;
+		font-size: 0.75rem;
 		font-weight: 600;
 	}
 
-	.header-nav {
-		display: flex;
-		gap: 1rem;
-		align-items: center;
-	}
-
-	.nav-link {
-		color: var(--ui-text-secondary);
-		text-decoration: none;
-		font-size: 0.875rem;
-		font-weight: 500;
-		padding: 0.25rem 0.5rem;
-		border-radius: 4px;
-		transition: all 0.15s;
-	}
-
-	.nav-link:hover {
-		color: var(--ui-text-primary);
-		background: var(--ui-surface-secondary);
-	}
-
-	.app-content {
+	.board-content {
 		flex: 1;
 		overflow: hidden;
+		padding: 1rem;
+		display: flex;
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border-width: 0;
 	}
 </style>
