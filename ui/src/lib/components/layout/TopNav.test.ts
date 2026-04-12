@@ -3,15 +3,10 @@ import { render, screen } from "@testing-library/svelte";
 import TopNav from "./TopNav.svelte";
 
 // Mock $app/stores for page URL
-vi.mock("$app/stores", () => {
-  const { readable } = require("svelte/store");
-  let currentPath = "/";
+vi.mock("$app/stores", async () => {
+  const { readable } = await import("svelte/store");
   return {
-    page: readable({ url: new URL(`http://localhost${currentPath}`) }),
-    // Allow tests to override the path by re-mocking
-    __setPath: (path: string) => {
-      currentPath = path;
-    },
+    page: readable({ url: new URL("http://localhost/") }),
   };
 });
 

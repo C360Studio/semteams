@@ -26,7 +26,6 @@ vi.mock("$lib/stores/taskStore.svelte", () => ({
 }));
 
 import { agentApi } from "$lib/services/agentApi";
-import { taskStore } from "$lib/stores/taskStore.svelte";
 
 // ---------------------------------------------------------------------------
 // Helpers
