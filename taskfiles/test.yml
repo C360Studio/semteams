@@ -21,7 +21,14 @@ tasks:
       TESTCONTAINERS_RYUK_DISABLED: "true"
     cmds:
       - echo "[INTEGRATION] Running integration tests with real NATS (via testcontainers)..."
-      - go test -race -tags=integration ./...
+      # -p 1 forces sequential package execution so multiple testcontainers
+      # don't compete for Docker Desktop resources. macOS Docker is 2-5x
+      # slower than native Linux Docker on CI runners; running packages in
+      # parallel can saturate Docker Desktop and cause timeout-sensitive
+      # tests (CAS retries, service lifecycle stress) to fail under load.
+      # CI uses its own invocation from .github/workflows/ci.yml (without
+      # -p 1) because Ubuntu runners handle the parallelism fine.
+      - go test -race -tags=integration -p 1 ./...
       - echo "[OK] Integration tests complete"
 
   integration:iot:
