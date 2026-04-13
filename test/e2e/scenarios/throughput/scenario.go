@@ -13,9 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/c360studio/semstreams/test/e2e/client"
-	"github.com/c360studio/semstreams/test/e2e/config"
-	"github.com/c360studio/semstreams/test/e2e/scenarios"
+	"github.com/c360studio/semteams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/config"
+	"github.com/c360studio/semteams/test/e2e/scenarios"
 )
 
 // Scenario sends high volumes of messages for performance profiling.

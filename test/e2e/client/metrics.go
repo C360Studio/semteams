@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360studio/semstreams/test/e2e/config"
+	"github.com/c360studio/semteams/test/e2e/config"
 )
 
 // MetricsClient fetches and parses Prometheus metrics from SemStreams

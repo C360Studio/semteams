@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360studio/semstreams/test/e2e/client"
-	"github.com/c360studio/semstreams/test/e2e/scenarios"
+	"github.com/c360studio/semteams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/scenarios"
 )
 
 // TestRun represents a complete E2E test run

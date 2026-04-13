@@ -8,11 +8,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/test/e2e/client"
-	"github.com/c360studio/semstreams/test/e2e/scenarios"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
+	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semteams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/scenarios"
 )
 
 // Scenario validates the agentic components (loop, model, tools) work together.
@@ -249,7 +249,7 @@ func (s *Scenario) captureBaseline(ctx context.Context, result *scenarios.Result
 // injectTask publishes a direct agent task for testing
 func (s *Scenario) injectTask(ctx context.Context, result *scenarios.Result) error {
 	// Inject a direct task to test agentic loop
-	task := agentic.TaskMessage{
+	task := teams.TaskMessage{
 		LoopID: fmt.Sprintf("e2e-loop-%d", time.Now().UnixNano()),
 		TaskID: fmt.Sprintf("e2e-agentic-%d", time.Now().UnixNano()),
 		Role:   "general",
@@ -381,7 +381,7 @@ func (s *Scenario) verifyGraphTriples(ctx context.Context, result *scenarios.Res
 	// --- Verify loop execution entity ---
 	// Graph writes happen after the completion metric is incremented, so the entity
 	// may not be in ENTITY_STATES yet. Poll briefly to allow graph-ingest to process.
-	loopEntityID := agentic.LoopExecutionEntityID(org, platform, loopID)
+	loopEntityID := teams.LoopExecutionEntityID(org, platform, loopID)
 
 	var loopEntity *client.EntityState
 	deadline := time.Now().Add(10 * time.Second)
@@ -432,7 +432,7 @@ func (s *Scenario) verifyGraphTriples(ctx context.Context, result *scenarios.Res
 
 	// --- Verify model endpoint entity ---
 	// The injected task uses model "mock", which is configured in the agentic config.
-	modelEntityID := agentic.ModelEndpointEntityID(org, platform, "mock")
+	modelEntityID := teams.ModelEndpointEntityID(org, platform, "mock")
 	modelEntity, err := s.nats.GetEntity(ctx, modelEntityID)
 	if err != nil {
 		// Model endpoint triples are written at startup; if graph-ingest wasn't ready

@@ -11,12 +11,6 @@
       "default": true,
       "category": "basic"
     },
-    "classification_model": {
-      "type": "string",
-      "description": "Model endpoint or capability name for intent classification",
-      "default": "default",
-      "category": "advanced"
-    },
     "consumer_name_suffix": {
       "type": "string",
       "description": "Suffix appended to consumer names for uniqueness",
@@ -31,12 +25,6 @@
     "delete_consumer_on_stop": {
       "type": "boolean",
       "description": "Delete durable consumers on Stop (use for tests only)",
-      "default": false,
-      "category": "advanced"
-    },
-    "enable_intent_classification": {
-      "type": "boolean",
-      "description": "Enable LLM-assisted intent classification for ambiguous messages",
       "default": false,
       "category": "advanced"
     },

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360studio/semstreams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/client"
 )
 
 // Entity validation functions for tiered E2E tests

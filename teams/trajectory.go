@@ -1,0 +1,107 @@
+package teams
+
+import (
+	"fmt"
+	"time"
+)
+
+// TrajectoryStep represents a single step in an agentic trajectory
+type TrajectoryStep struct {
+	Timestamp     time.Time      `json:"timestamp"`
+	StepType      string         `json:"step_type"`
+	RequestID     string         `json:"request_id,omitempty"`
+	Prompt        string         `json:"prompt,omitempty"`
+	Response      string         `json:"response,omitempty"`
+	TokensIn      int            `json:"tokens_in,omitempty"`
+	TokensOut     int            `json:"tokens_out,omitempty"`
+	ToolName      string         `json:"tool_name,omitempty"`
+	ToolArguments map[string]any `json:"tool_arguments,omitempty"`
+	ToolResult    string         `json:"tool_result,omitempty"`
+	Duration      int64          `json:"duration"`              // milliseconds
+	Messages      []ChatMessage  `json:"messages,omitempty"`    // Full request messages (detail=full)
+	ToolCalls     []ToolCall     `json:"tool_calls,omitempty"`  // Assistant tool calls (detail=full)
+	Model         string         `json:"model,omitempty"`       // Model used
+	Provider      string         `json:"provider,omitempty"`    // LLM provider (anthropic, openai, etc.)
+	Capability    string         `json:"capability,omitempty"`  // Role/purpose (coding, planning, reviewing, etc.)
+	RetryCount    int            `json:"retry_count,omitempty"` // Number of retries before success
+	Utilization   float64        `json:"utilization,omitempty"` // Context utilization at compaction trigger (0.0-1.0)
+}
+
+// Validate checks if the TrajectoryStep is valid
+func (s TrajectoryStep) Validate() error {
+	if s.StepType != "model_call" && s.StepType != "tool_call" && s.StepType != "context_compaction" {
+		return fmt.Errorf("step_type must be one of: model_call, tool_call, context_compaction")
+	}
+	if s.Timestamp.IsZero() {
+		return fmt.Errorf("timestamp required")
+	}
+	return nil
+}
+
+// Trajectory represents the complete execution path of an agentic loop
+type Trajectory struct {
+	LoopID         string           `json:"loop_id"`
+	StartTime      time.Time        `json:"start_time"`
+	EndTime        *time.Time       `json:"end_time,omitempty"`
+	Steps          []TrajectoryStep `json:"steps"`
+	Outcome        string           `json:"outcome,omitempty"`
+	TotalTokensIn  int              `json:"total_tokens_in"`
+	TotalTokensOut int              `json:"total_tokens_out"`
+	Duration       int64            `json:"duration"` // milliseconds
+}
+
+// AddStep adds a step to the trajectory and updates totals.
+// Compaction steps are excluded from token totals because their TokensIn/Out
+// represent evicted/summarized tokens, not new LLM API consumption. Including
+// them would double-count tokens already tallied by prior model_call steps.
+func (t *Trajectory) AddStep(step TrajectoryStep) {
+	t.Steps = append(t.Steps, step)
+	if step.StepType != "context_compaction" {
+		t.TotalTokensIn += step.TokensIn
+		t.TotalTokensOut += step.TokensOut
+	}
+	t.Duration += step.Duration
+}
+
+// Complete marks the trajectory as complete and calculates final duration
+func (t *Trajectory) Complete(outcome string) {
+	t.Outcome = outcome
+	now := time.Now()
+	t.EndTime = &now
+	// Calculate actual elapsed time in milliseconds
+	t.Duration = now.Sub(t.StartTime).Milliseconds()
+}
+
+// TrajectoryListItem is a summary of a trajectory for list responses.
+// Contains loop metadata and aggregate metrics but no individual steps.
+type TrajectoryListItem struct {
+	LoopID         string         `json:"loop_id"`
+	TaskID         string         `json:"task_id"`
+	Outcome        string         `json:"outcome,omitempty"`
+	Role           string         `json:"role"`
+	Model          string         `json:"model"`
+	WorkflowSlug   string         `json:"workflow_slug,omitempty"`
+	WorkflowStep   string         `json:"workflow_step,omitempty"`
+	Iterations     int            `json:"iterations"`
+	TotalTokensIn  int            `json:"total_tokens_in"`
+	TotalTokensOut int            `json:"total_tokens_out"`
+	Duration       int64          `json:"duration"`
+	StartTime      time.Time      `json:"start_time"`
+	EndTime        *time.Time     `json:"end_time,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+}
+
+// TrajectoryListResponse is the response format for trajectory list queries.
+type TrajectoryListResponse struct {
+	Trajectories []TrajectoryListItem `json:"trajectories"`
+	Total        int                  `json:"total"`
+}
+
+// NewTrajectory creates a new Trajectory with initialized values
+func NewTrajectory(loopID string) Trajectory {
+	return Trajectory{
+		LoopID:    loopID,
+		StartTime: time.Now(),
+		Steps:     []TrajectoryStep{},
+	}
+}

@@ -8,7 +8,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/c360studio/semstreams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/client"
 	"github.com/gorilla/websocket"
 )
 
