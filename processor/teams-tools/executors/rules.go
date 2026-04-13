@@ -36,8 +36,8 @@ func NewRuleExecutor(manager RuleManager) *RuleExecutor {
 func (e *RuleExecutor) ListTools() []teams.ToolDefinition {
 	return []teams.ToolDefinition{
 		{
-			Name:             "create_rule",
-			Description:      "Create a new rule in the rules engine. The rule becomes active immediately after approval. Provide the full rule definition as JSON.",
+			Name:        "create_rule",
+			Description: "Create a new rule in the rules engine. The rule becomes active immediately after approval. Provide the full rule definition as JSON.",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -54,8 +54,8 @@ func (e *RuleExecutor) ListTools() []teams.ToolDefinition {
 			},
 		},
 		{
-			Name:             "update_rule",
-			Description:      "Update an existing rule. Replaces the entire rule definition.",
+			Name:        "update_rule",
+			Description: "Update an existing rule. Replaces the entire rule definition.",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -72,8 +72,8 @@ func (e *RuleExecutor) ListTools() []teams.ToolDefinition {
 			},
 		},
 		{
-			Name:             "delete_rule",
-			Description:      "Delete a rule from the rules engine.",
+			Name:        "delete_rule",
+			Description: "Delete a rule from the rules engine.",
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{

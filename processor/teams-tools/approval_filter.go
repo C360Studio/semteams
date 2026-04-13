@@ -20,26 +20,35 @@ func IsApprovalRequired(reason string) bool {
 }
 
 // ApprovalFilter implements teams.ToolCallFilter. It checks each tool call
-// against the tool registry — if the tool's definition has RequiresApproval: true,
-// the call is rejected with an ApprovalRequiredPrefix reason so the loop can
-// transition to awaiting_approval.
+// against a configured list of tool names that require human approval. If a
+// tool is in the list, the call is rejected with an ApprovalRequiredPrefix
+// reason so the loop can transition to awaiting_approval.
+//
+// The approval list comes from the config (Config.ApprovalRequired), not from
+// the tool struct. This keeps the policy configurable — operators can change
+// which tools need approval without recompiling.
 type ApprovalFilter struct {
-	registry *ExecutorRegistry
+	approvalSet map[string]bool
 }
 
-// NewApprovalFilter creates a filter that enforces RequiresApproval gates.
-func NewApprovalFilter(registry *ExecutorRegistry) *ApprovalFilter {
-	return &ApprovalFilter{registry: registry}
+// NewApprovalFilter creates a filter from the configured list of tool names
+// that require approval.
+func NewApprovalFilter(approvalRequired []string) *ApprovalFilter {
+	set := make(map[string]bool, len(approvalRequired))
+	for _, name := range approvalRequired {
+		set[name] = true
+	}
+	return &ApprovalFilter{approvalSet: set}
 }
 
 var _ teams.ToolCallFilter = (*ApprovalFilter)(nil)
 
-// FilterToolCalls checks each call against the registry for RequiresApproval.
+// FilterToolCalls checks each call against the configured approval list.
 func (f *ApprovalFilter) FilterToolCalls(_ string, calls []agentic.ToolCall) (teams.ToolCallFilterResult, error) {
 	var result teams.ToolCallFilterResult
 
 	for _, call := range calls {
-		if f.requiresApproval(call.Name) {
+		if f.approvalSet[call.Name] {
 			result.Rejected = append(result.Rejected, teams.ToolCallRejection{
 				Call:   call,
 				Reason: fmt.Sprintf("%sTool '%s' requires human approval before execution", ApprovalRequiredPrefix, call.Name),
@@ -50,15 +59,4 @@ func (f *ApprovalFilter) FilterToolCalls(_ string, calls []agentic.ToolCall) (te
 	}
 
 	return result, nil
-}
-
-// requiresApproval checks if the named tool requires approval.
-//
-// TODO(migration): ToolDefinition.RequiresApproval field was removed
-// during the fork-to-import migration. This needs to be restored via
-// either (a) upstreaming RequiresApproval to semstreams, or (b) using
-// a config-based lookup (map[string]bool from tool config). For now,
-// approval is disabled — all tools pass through without gating.
-func (f *ApprovalFilter) requiresApproval(_ string) bool {
-	return false
 }

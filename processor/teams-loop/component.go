@@ -22,6 +22,7 @@ import (
 	"github.com/c360studio/semstreams/pkg/workflow"
 	"github.com/c360studio/semstreams/processor/rule/boid"
 	"github.com/c360studio/semstreams/storage/objectstore"
+	teamtools "github.com/c360studio/semteams/processor/teams-tools"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -135,6 +136,13 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 	handler := NewMessageHandler(config, loopOpts...)
 	handler.modelRegistry = deps.ModelRegistry
+
+	// Wire config-based approval filter if any tools require approval.
+	// The approval list is configurable — operators can change which tools
+	// need human approval without recompiling.
+	if len(config.ApprovalRequired) > 0 {
+		handler.SetToolCallFilter(teamtools.NewApprovalFilter(config.ApprovalRequired))
+	}
 
 	// Wire LLM-backed summarizer for context compaction if model registry is available
 	if deps.ModelRegistry != nil && config.Context.Enabled {

@@ -42,20 +42,22 @@ func (m *mockRuleManager) ListRules(_ context.Context) (map[string]rule.Definiti
 }
 
 func TestRuleExecutor_ListTools(t *testing.T) {
-	t.Skip("RequiresApproval assertions removed during fork-to-import migration. Restore after upstreaming to semstreams.")
 	e := NewRuleExecutor(newMockRuleManager())
 	tools := e.ListTools()
 	assert.Len(t, tools, 5)
 
-	// Verify mutation tools require approval
+	// Verify expected tool names are present
+	names := make(map[string]bool)
 	for _, tool := range tools {
-		switch tool.Name {
-		case "create_rule", "update_rule", "delete_rule":
-			assert.True(t, false, "%s should require approval", tool.Name)
-		case "list_rules", "get_rule":
-			assert.False(t, false, "%s should NOT require approval", tool.Name)
-		}
+		names[tool.Name] = true
 	}
+	assert.True(t, names["create_rule"], "should have create_rule")
+	assert.True(t, names["update_rule"], "should have update_rule")
+	assert.True(t, names["delete_rule"], "should have delete_rule")
+	assert.True(t, names["list_rules"], "should have list_rules")
+	assert.True(t, names["get_rule"], "should have get_rule")
+	// NOTE: approval policy is config-driven (Config.ApprovalRequired),
+	// not a property of the tool definition. See approval_filter_test.go.
 }
 
 func TestRuleExecutor_CreateRule(t *testing.T) {
