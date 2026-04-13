@@ -49,7 +49,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
       -X main.commit=${COMMIT_SHA} \
       -X main.buildDate=${BUILD_DATE}" \
     -o /build/semstreams-bin \
-    ./cmd/semstreams
+    ./cmd/semteams
 
 # Build e2e-semstreams binary (for e2e tests with reactive workflows)
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \

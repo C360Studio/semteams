@@ -57,7 +57,7 @@ jobs:
           go build \
             -ldflags="-w -s -X main.version=${VERSION} -X main.commit=${GITHUB_SHA} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             -o "${OUTPUT_NAME}" \
-            ./cmd/semstreams
+            ./cmd/semteams
 
           if [ "${{ matrix.goos }}" != "windows" ]; then
             tar -czf "${OUTPUT_NAME}.tar.gz" "${OUTPUT_NAME}"
@@ -152,12 +152,12 @@ jobs:
 
             ```bash
             # Linux amd64
-            tar -xzf semstreams-linux-amd64.tar.gz
-            sudo mv semstreams-linux-amd64 /usr/local/bin/semstreams
+            tar -xzf semteams-linux-amd64.tar.gz
+            sudo mv semteams-linux-amd64 /usr/local/bin/semteams
 
             # macOS (Apple Silicon)
             tar -xzf semstreams-darwin-arm64.tar.gz
-            sudo mv semstreams-darwin-arm64 /usr/local/bin/semstreams
+            sudo mv semstreams-darwin-arm64 /usr/local/bin/semteams
             ```
 
             ## Documentation
