@@ -4,11 +4,11 @@ import (
 	"context"
 	"log/slog"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/types"
-	"github.com/c360studio/semteams/teams"
 )
 
 // GraphWriterForTest exposes graphWriter for integration testing.
@@ -36,15 +36,15 @@ func (g *GraphWriterForTest) SetContentStore(store *objectstore.Store) {
 }
 
 func (g *GraphWriterForTest) WriteModelEndpoints(ctx context.Context) { g.w.WriteModelEndpoints(ctx) }
-func (g *GraphWriterForTest) WriteLoopCompletion(ctx context.Context, e *teams.LoopCompletedEvent) {
+func (g *GraphWriterForTest) WriteLoopCompletion(ctx context.Context, e *agentic.LoopCompletedEvent) {
 	g.w.WriteLoopCompletion(ctx, e)
 }
-func (g *GraphWriterForTest) WriteLoopFailure(ctx context.Context, e *teams.LoopFailedEvent) {
+func (g *GraphWriterForTest) WriteLoopFailure(ctx context.Context, e *agentic.LoopFailedEvent) {
 	g.w.WriteLoopFailure(ctx, e)
 }
-func (g *GraphWriterForTest) WriteLoopCancellation(ctx context.Context, e *teams.LoopCancelledEvent) {
+func (g *GraphWriterForTest) WriteLoopCancellation(ctx context.Context, e *agentic.LoopCancelledEvent) {
 	g.w.WriteLoopCancellation(ctx, e)
 }
-func (g *GraphWriterForTest) WriteTrajectorySteps(ctx context.Context, loopID string, trajectory *teams.Trajectory) {
+func (g *GraphWriterForTest) WriteTrajectorySteps(ctx context.Context, loopID string, trajectory *agentic.Trajectory) {
 	g.w.WriteTrajectorySteps(ctx, loopID, trajectory)
 }

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	teamsmodel "github.com/c360studio/semteams/processor/teams-model"
 	"github.com/c360studio/semteams/teams"
@@ -99,9 +100,9 @@ func TestChatCompletion_SimpleSuccess(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-123",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "Hello"},
 		},
 		Model: "gpt-4",
@@ -179,9 +180,9 @@ func TestChatCompletion_WithToolCalls(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-456",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "What's the weather in London?"},
 		},
 		Model: "gpt-4",
@@ -240,9 +241,9 @@ func TestChatCompletion_HTTPError(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-error",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "Test"},
 		},
 		Model: "gpt-4",
@@ -281,9 +282,9 @@ func TestChatCompletion_Timeout(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-timeout",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "Test"},
 		},
 		Model: "gpt-4",
@@ -353,9 +354,9 @@ func TestChatCompletion_RetryBehavior(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-retry",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "Test retry"},
 		},
 		Model: "gpt-4",
@@ -426,9 +427,9 @@ func TestChatCompletion_RequestMapping(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-mapping",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "system", Content: "You are helpful"},
 			{Role: "user", Content: "Hello"},
 		},
@@ -565,9 +566,9 @@ func TestChatCompletion_ResponseMapping(t *testing.T) {
 				t.Fatalf("NewClient() failed: %v", err)
 			}
 
-			req := teams.AgentRequest{
+			req := agentic.AgentRequest{
 				RequestID: "req-test",
-				Messages: []teams.ChatMessage{
+				Messages: []agentic.ChatMessage{
 					{Role: "user", Content: "Test"},
 				},
 				Model: "gpt-4",
@@ -622,9 +623,9 @@ func TestChatCompletion_ChatTemplateKwargs(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-kwargs",
-		Messages:  []teams.ChatMessage{{Role: "user", Content: "Think about this"}},
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Think about this"}},
 		Model:     "qwen3",
 	}
 
@@ -680,9 +681,9 @@ func TestChatCompletion_ReasoningEffort(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-effort",
-		Messages:  []teams.ChatMessage{{Role: "user", Content: "Think hard"}},
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Think hard"}},
 		Model:     "o3-mini",
 	}
 
@@ -731,9 +732,9 @@ func TestChatCompletion_ReasoningEffortOmitted(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-noeffort",
-		Messages:  []teams.ChatMessage{{Role: "user", Content: "Hello"}},
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Hello"}},
 		Model:     "gpt-4",
 	}
 
@@ -782,9 +783,9 @@ func TestChatCompletion_ReasoningContent(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-reasoning",
-		Messages:  []teams.ChatMessage{{Role: "user", Content: "What is the meaning of life?"}},
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "What is the meaning of life?"}},
 		Model:     "qwen3",
 	}
 
@@ -838,9 +839,9 @@ func TestBuildChatRequest_ReasoningContentStripped(t *testing.T) {
 	}
 
 	// Simulate turn 2: history includes an assistant message with reasoning from turn 1
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-strip",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "Explain quantum tunneling."},
 			{Role: "assistant", Content: "Quantum tunneling is...", ReasoningContent: "Let me think about this carefully..."},
 			{Role: "user", Content: "Can you elaborate?"},
@@ -902,14 +903,14 @@ func TestBuildChatRequest_ToolCallEmptyContentPreserved(t *testing.T) {
 	}
 
 	// Request with an assistant message that has tool_calls but empty content
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-content",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "What's the weather?"},
 			{
 				Role:    "assistant",
 				Content: "", // Empty content with tool calls
-				ToolCalls: []teams.ToolCall{
+				ToolCalls: []agentic.ToolCall{
 					{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"location": "London"}},
 				},
 			},
@@ -964,14 +965,14 @@ func TestBuildChatRequest_NilToolCallArguments(t *testing.T) {
 	// Simulate a replayed conversation where tool_call Arguments are nil
 	// (e.g. due to a prior malformed JSON parse). Without the fix the
 	// marshal produces "null" which Anthropic rejects as not-a-dictionary.
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-nil-args",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "Hello"},
 			{
 				Role:    "assistant",
 				Content: " ",
-				ToolCalls: []teams.ToolCall{
+				ToolCalls: []agentic.ToolCall{
 					{ID: "call_1", Name: "some_tool", Arguments: nil},
 				},
 			},
@@ -1040,9 +1041,9 @@ func TestConvertResponse_MalformedToolCallArguments(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-malformed",
-		Messages:  []teams.ChatMessage{{Role: "user", Content: "Hello"}},
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Hello"}},
 		Model:     "gpt-4",
 	}
 
@@ -1114,10 +1115,10 @@ func apiErrorResponse(msg, errType, code string) map[string]any {
 }
 
 // simpleAgentRequest returns a minimal AgentRequest for use in table-driven tests.
-func simpleAgentRequest(id string) teams.AgentRequest {
-	return teams.AgentRequest{
+func simpleAgentRequest(id string) agentic.AgentRequest {
+	return agentic.AgentRequest{
 		RequestID: id,
-		Messages:  []teams.ChatMessage{{Role: "user", Content: "Hello"}},
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Hello"}},
 		Model:     "gpt-4",
 	}
 }
@@ -1543,13 +1544,13 @@ func TestBuildChatRequest_ToolResultNameField(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-name",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "What's the weather?"},
 			{
 				Role: "assistant",
-				ToolCalls: []teams.ToolCall{
+				ToolCalls: []agentic.ToolCall{
 					{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"location": "London"}},
 				},
 			},
@@ -1607,13 +1608,13 @@ func TestBuildChatRequest_ToolResultEmptyNameFallback(t *testing.T) {
 		t.Fatalf("NewClient() failed: %v", err)
 	}
 
-	req := teams.AgentRequest{
+	req := agentic.AgentRequest{
 		RequestID: "req-empty-name",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "What's the weather?"},
 			{
 				Role: "assistant",
-				ToolCalls: []teams.ToolCall{
+				ToolCalls: []agentic.ToolCall{
 					{ID: "call_1", Name: "get_weather", Arguments: map[string]any{"location": "London"}},
 				},
 			},
@@ -1663,9 +1664,9 @@ func TestBuildChatRequest_ToolChoiceNil(t *testing.T) {
 	defer server.Close()
 
 	client, _ := teamsmodel.NewClient(&model.EndpointConfig{URL: server.URL, Model: "test"})
-	_, _ = client.ChatCompletion(context.Background(), teams.AgentRequest{
+	_, _ = client.ChatCompletion(context.Background(), agentic.AgentRequest{
 		RequestID: "req-tc-nil",
-		Messages:  []teams.ChatMessage{{Role: "user", Content: "hi"}},
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "hi"}},
 		Model:     "test",
 		// ToolChoice deliberately nil
 	})
@@ -1694,11 +1695,11 @@ func TestBuildChatRequest_ToolChoiceRequired(t *testing.T) {
 	defer server.Close()
 
 	client, _ := teamsmodel.NewClient(&model.EndpointConfig{URL: server.URL, Model: "test"})
-	_, _ = client.ChatCompletion(context.Background(), teams.AgentRequest{
+	_, _ = client.ChatCompletion(context.Background(), agentic.AgentRequest{
 		RequestID:  "req-tc-required",
-		Messages:   []teams.ChatMessage{{Role: "user", Content: "hi"}},
+		Messages:   []agentic.ChatMessage{{Role: "user", Content: "hi"}},
 		Model:      "test",
-		ToolChoice: &teams.ToolChoice{Mode: "required"},
+		ToolChoice: &agentic.ToolChoice{Mode: "required"},
 	})
 
 	tc, ok := capturedRequest["tool_choice"]
@@ -1729,11 +1730,11 @@ func TestBuildChatRequest_ToolChoiceFunction(t *testing.T) {
 	defer server.Close()
 
 	client, _ := teamsmodel.NewClient(&model.EndpointConfig{URL: server.URL, Model: "test"})
-	_, _ = client.ChatCompletion(context.Background(), teams.AgentRequest{
+	_, _ = client.ChatCompletion(context.Background(), agentic.AgentRequest{
 		RequestID:  "req-tc-func",
-		Messages:   []teams.ChatMessage{{Role: "user", Content: "hi"}},
+		Messages:   []agentic.ChatMessage{{Role: "user", Content: "hi"}},
 		Model:      "test",
-		ToolChoice: &teams.ToolChoice{Mode: "function", FunctionName: "read_file"},
+		ToolChoice: &agentic.ToolChoice{Mode: "function", FunctionName: "read_file"},
 	})
 
 	tc, ok := capturedRequest["tool_choice"]

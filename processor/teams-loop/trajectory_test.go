@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 func TestTrajectoryManager_StartTrajectory(t *testing.T) {
@@ -57,7 +57,7 @@ func TestTrajectoryManager_AddStep(t *testing.T) {
 		t.Fatalf("StartTrajectory() error = %v", err)
 	}
 
-	step := teams.TrajectoryStep{
+	step := agentic.TrajectoryStep{
 		Timestamp: time.Now(),
 		StepType:  "model_call",
 		RequestID: "req-001",
@@ -104,7 +104,7 @@ func TestTrajectoryManager_AddStep_Multiple(t *testing.T) {
 		t.Fatalf("StartTrajectory() error = %v", err)
 	}
 
-	steps := []teams.TrajectoryStep{
+	steps := []agentic.TrajectoryStep{
 		{
 			Timestamp: time.Now(),
 			StepType:  "model_call",
@@ -131,7 +131,7 @@ func TestTrajectoryManager_AddStep_Multiple(t *testing.T) {
 		},
 	}
 
-	var finalTraj teams.Trajectory
+	var finalTraj agentic.Trajectory
 	for _, step := range steps {
 		finalTraj, err = manager.AddStep(loopID, step)
 		if err != nil {
@@ -169,7 +169,7 @@ func TestTrajectoryManager_CompleteTrajectory(t *testing.T) {
 	}
 
 	// Add some steps
-	_, err = manager.AddStep(loopID, teams.TrajectoryStep{
+	_, err = manager.AddStep(loopID, agentic.TrajectoryStep{
 		Timestamp: time.Now(),
 		StepType:  "model_call",
 		TokensIn:  100,
@@ -249,7 +249,7 @@ func TestTrajectoryManager_SaveTrajectory(t *testing.T) {
 	}
 
 	// Add steps
-	_, err = manager.AddStep(loopID, teams.TrajectoryStep{
+	_, err = manager.AddStep(loopID, agentic.TrajectoryStep{
 		Timestamp: time.Now(),
 		StepType:  "model_call",
 		TokensIn:  100,
@@ -311,7 +311,7 @@ func TestTrajectoryManager_MultipleLoops(t *testing.T) {
 
 	// Add steps to each
 	for i, loopID := range loops {
-		_, err := manager.AddStep(loopID, teams.TrajectoryStep{
+		_, err := manager.AddStep(loopID, agentic.TrajectoryStep{
 			Timestamp: time.Now(),
 			StepType:  "model_call",
 			TokensIn:  (i + 1) * 100,
@@ -340,7 +340,7 @@ func TestTrajectoryManager_MultipleLoops(t *testing.T) {
 func TestTrajectoryManager_AddStep_NonExistentLoop(t *testing.T) {
 	manager := teamsloop.NewTrajectoryManager()
 
-	step := teams.TrajectoryStep{
+	step := agentic.TrajectoryStep{
 		Timestamp: time.Now(),
 		StepType:  "model_call",
 		TokensIn:  100,
@@ -376,7 +376,7 @@ func TestTrajectoryManager_ConcurrentAccess(t *testing.T) {
 	done := make(chan bool)
 	for i := 0; i < 10; i++ {
 		go func(n int) {
-			step := teams.TrajectoryStep{
+			step := agentic.TrajectoryStep{
 				Timestamp: time.Now(),
 				StepType:  "model_call",
 				RequestID: "req-" + string(rune('0'+n)),
@@ -406,7 +406,7 @@ func TestTrajectoryManager_ConcurrentAccess(t *testing.T) {
 }
 
 func TestTrajectoryStep_ModelCall(t *testing.T) {
-	step := teams.TrajectoryStep{
+	step := agentic.TrajectoryStep{
 		Timestamp: time.Now(),
 		StepType:  "model_call",
 		RequestID: "req-001",
@@ -423,7 +423,7 @@ func TestTrajectoryStep_ModelCall(t *testing.T) {
 }
 
 func TestTrajectoryStep_ToolCall(t *testing.T) {
-	step := teams.TrajectoryStep{
+	step := agentic.TrajectoryStep{
 		Timestamp: time.Now(),
 		StepType:  "tool_call",
 		ToolName:  "graph_query",
@@ -440,7 +440,7 @@ func TestTrajectoryStep_ToolCall(t *testing.T) {
 }
 
 func TestTrajectoryStep_InvalidType(t *testing.T) {
-	step := teams.TrajectoryStep{
+	step := agentic.TrajectoryStep{
 		Timestamp: time.Now(),
 		StepType:  "invalid_type",
 		Duration:  1000,
@@ -473,7 +473,7 @@ func TestTrajectory_TokenTotals(t *testing.T) {
 	}
 
 	for _, s := range steps {
-		_, err = manager.AddStep(loopID, teams.TrajectoryStep{
+		_, err = manager.AddStep(loopID, agentic.TrajectoryStep{
 			Timestamp: time.Now(),
 			StepType:  "model_call",
 			TokensIn:  s.tokensIn,
@@ -510,7 +510,7 @@ func TestTrajectory_CompactionExcludedFromTokenTotals(t *testing.T) {
 		t.Fatalf("StartTrajectory() error = %v", err)
 	}
 
-	steps := []teams.TrajectoryStep{
+	steps := []agentic.TrajectoryStep{
 		{Timestamp: time.Now(), StepType: "model_call", TokensIn: 5000, TokensOut: 500, Duration: 2000},
 		{Timestamp: time.Now(), StepType: "tool_call", ToolName: "web_search", Duration: 800},
 		{Timestamp: time.Now(), StepType: "context_compaction", TokensIn: 12000, TokensOut: 800, Utilization: 0.72, Duration: 150},
@@ -560,7 +560,7 @@ func TestTrajectory_DurationAccumulation(t *testing.T) {
 	durations := []int64{1000, 500, 2000, 750, 1500}
 
 	for _, d := range durations {
-		_, err = manager.AddStep(loopID, teams.TrajectoryStep{
+		_, err = manager.AddStep(loopID, agentic.TrajectoryStep{
 			Timestamp: time.Now(),
 			StepType:  "model_call",
 			Duration:  d,

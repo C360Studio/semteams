@@ -11,9 +11,9 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/graph/clustering"
 	"github.com/c360studio/semstreams/natsclient"
-	"github.com/c360studio/semteams/teams"
 )
 
 // EntityState represents an entity stored in NATS KV
@@ -186,7 +186,7 @@ func (c *NATSValidationClient) GetEntity(ctx context.Context, entityID string) (
 
 // GetTrajectory retrieves a trajectory via the teams.query.trajectory NATS request/reply handler.
 // The trajectory is served from the agentic-loop's in-memory cache.
-func (c *NATSValidationClient) GetTrajectory(ctx context.Context, loopID string) (*teams.Trajectory, error) {
+func (c *NATSValidationClient) GetTrajectory(ctx context.Context, loopID string) (*agentic.Trajectory, error) {
 	req, err := json.Marshal(map[string]string{"loopId": loopID})
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal trajectory request: %w", err)
@@ -197,7 +197,7 @@ func (c *NATSValidationClient) GetTrajectory(ctx context.Context, loopID string)
 		return nil, fmt.Errorf("trajectory query failed for loop %s: %w", loopID, err)
 	}
 
-	var traj teams.Trajectory
+	var traj agentic.Trajectory
 	if err := json.Unmarshal(resp, &traj); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal trajectory: %w", err)
 	}

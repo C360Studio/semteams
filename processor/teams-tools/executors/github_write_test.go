@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // --- ListTools ---
@@ -47,7 +47,7 @@ func TestGitHubWriteExecutor_ListTools(t *testing.T) {
 
 func TestGitHubWriteExecutor_UnknownTool(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "w0",
 		Name:      "github_does_not_exist",
 		Arguments: map[string]any{},
@@ -79,7 +79,7 @@ func TestGitHubWriteExecutor_CreateBranch_Success(t *testing.T) {
 	}
 
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w1",
 		Name: "github_create_branch",
 		Arguments: map[string]any{
@@ -113,7 +113,7 @@ func TestGitHubWriteExecutor_CreateBranch_Success(t *testing.T) {
 
 func TestGitHubWriteExecutor_CreateBranch_MissingBranch(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w2",
 		Name: "github_create_branch",
 		Arguments: map[string]any{
@@ -132,7 +132,7 @@ func TestGitHubWriteExecutor_CreateBranch_MissingBranch(t *testing.T) {
 
 func TestGitHubWriteExecutor_CreateBranch_MissingBaseSHA(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w3",
 		Name: "github_create_branch",
 		Arguments: map[string]any{
@@ -156,7 +156,7 @@ func TestGitHubWriteExecutor_CreateBranch_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w4",
 		Name: "github_create_branch",
 		Arguments: map[string]any{
@@ -199,7 +199,7 @@ func TestGitHubWriteExecutor_CommitFile_Success(t *testing.T) {
 	}
 
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w5",
 		Name: "github_commit_file",
 		Arguments: map[string]any{
@@ -229,7 +229,7 @@ func TestGitHubWriteExecutor_CommitFile_Success(t *testing.T) {
 
 func TestGitHubWriteExecutor_CommitFile_MissingPath(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w6",
 		Name: "github_commit_file",
 		Arguments: map[string]any{
@@ -250,7 +250,7 @@ func TestGitHubWriteExecutor_CommitFile_MissingPath(t *testing.T) {
 
 func TestGitHubWriteExecutor_CommitFile_MissingMessage(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w7",
 		Name: "github_commit_file",
 		Arguments: map[string]any{
@@ -276,7 +276,7 @@ func TestGitHubWriteExecutor_CommitFile_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w8",
 		Name: "github_commit_file",
 		Arguments: map[string]any{
@@ -313,7 +313,7 @@ func TestGitHubWriteExecutor_CreatePR_Success(t *testing.T) {
 	}
 
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w9",
 		Name: "github_create_pr",
 		Arguments: map[string]any{
@@ -343,7 +343,7 @@ func TestGitHubWriteExecutor_CreatePR_Success(t *testing.T) {
 
 func TestGitHubWriteExecutor_CreatePR_MissingTitle(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w10",
 		Name: "github_create_pr",
 		Arguments: map[string]any{
@@ -364,7 +364,7 @@ func TestGitHubWriteExecutor_CreatePR_MissingTitle(t *testing.T) {
 
 func TestGitHubWriteExecutor_CreatePR_MissingHead(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w11",
 		Name: "github_create_pr",
 		Arguments: map[string]any{
@@ -390,7 +390,7 @@ func TestGitHubWriteExecutor_CreatePR_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w12",
 		Name: "github_create_pr",
 		Arguments: map[string]any{
@@ -429,7 +429,7 @@ func TestGitHubWriteExecutor_AddComment_Success(t *testing.T) {
 	}
 
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w13",
 		Name: "github_add_comment",
 		Arguments: map[string]any{
@@ -457,7 +457,7 @@ func TestGitHubWriteExecutor_AddComment_Success(t *testing.T) {
 
 func TestGitHubWriteExecutor_AddComment_MissingNumber(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w14",
 		Name: "github_add_comment",
 		Arguments: map[string]any{
@@ -476,7 +476,7 @@ func TestGitHubWriteExecutor_AddComment_MissingNumber(t *testing.T) {
 
 func TestGitHubWriteExecutor_AddComment_MissingBody(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w15",
 		Name: "github_add_comment",
 		Arguments: map[string]any{
@@ -500,7 +500,7 @@ func TestGitHubWriteExecutor_AddComment_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w16",
 		Name: "github_add_comment",
 		Arguments: map[string]any{
@@ -537,7 +537,7 @@ func TestGitHubWriteExecutor_AddLabel_Success(t *testing.T) {
 	}
 
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w17",
 		Name: "github_add_label",
 		Arguments: map[string]any{
@@ -565,7 +565,7 @@ func TestGitHubWriteExecutor_AddLabel_Success(t *testing.T) {
 
 func TestGitHubWriteExecutor_AddLabel_MissingLabels(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w18",
 		Name: "github_add_label",
 		Arguments: map[string]any{
@@ -584,7 +584,7 @@ func TestGitHubWriteExecutor_AddLabel_MissingLabels(t *testing.T) {
 
 func TestGitHubWriteExecutor_AddLabel_EmptyLabels(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w19",
 		Name: "github_add_label",
 		Arguments: map[string]any{
@@ -604,7 +604,7 @@ func TestGitHubWriteExecutor_AddLabel_EmptyLabels(t *testing.T) {
 
 func TestGitHubWriteExecutor_AddLabel_MissingNumber(t *testing.T) {
 	e := NewGitHubWriteExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w20",
 		Name: "github_add_label",
 		Arguments: map[string]any{
@@ -628,7 +628,7 @@ func TestGitHubWriteExecutor_AddLabel_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubWriteExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "w21",
 		Name: "github_add_label",
 		Arguments: map[string]any{

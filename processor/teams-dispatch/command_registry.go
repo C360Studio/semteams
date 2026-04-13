@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"sync"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semteams/teams"
 )
 
 // CommandConfig defines a command's configuration
@@ -23,7 +23,7 @@ type CommandConfig struct {
 }
 
 // CommandHandler is a function that handles a command
-type CommandHandler func(ctx context.Context, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error)
+type CommandHandler func(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error)
 
 // CommandContext provides services to command executors
 type CommandContext struct {
@@ -35,7 +35,7 @@ type CommandContext struct {
 
 // CommandExecutor is the interface for command implementations
 type CommandExecutor interface {
-	Execute(ctx context.Context, cmdCtx *CommandContext, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error)
+	Execute(ctx context.Context, cmdCtx *CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error)
 	Config() CommandConfig
 }
 

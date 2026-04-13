@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/graph/llm"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 // mockSummarizer is a test double for teamsloop.Summarizer.
@@ -20,12 +20,12 @@ type mockSummarizer struct {
 	// calls records how many times Summarize was invoked.
 	calls int
 	// lastMessages captures the messages passed to the most recent call.
-	lastMessages []teams.ChatMessage
+	lastMessages []agentic.ChatMessage
 	// lastMaxTokens captures the budget from the most recent call.
 	lastMaxTokens int
 }
 
-func (m *mockSummarizer) Summarize(_ context.Context, messages []teams.ChatMessage, maxTokens int) (string, error) {
+func (m *mockSummarizer) Summarize(_ context.Context, messages []agentic.ChatMessage, maxTokens int) (string, error) {
 	m.calls++
 	m.lastMessages = messages
 	m.lastMaxTokens = maxTokens
@@ -47,7 +47,7 @@ func TestCompactor_Compact_WithLLMSummarizer(t *testing.T) {
 	compactor := teamsloop.NewCompactor(config, teamsloop.WithSummarizer(mock))
 	cm := teamsloop.NewContextManager("loop-llm", "gpt-4o", config)
 
-	messages := []teams.ChatMessage{
+	messages := []agentic.ChatMessage{
 		{Role: "user", Content: "What is the weather like?"},
 		{Role: "assistant", Content: "It is sunny and 22°C."},
 		{Role: "user", Content: "Should I bring an umbrella?"},
@@ -81,7 +81,7 @@ func TestCompactor_Compact_SummarizerError_FallsBack(t *testing.T) {
 	compactor := teamsloop.NewCompactor(config, teamsloop.WithSummarizer(mock))
 	cm := teamsloop.NewContextManager("loop-fallback", "gpt-4o", config)
 
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "A question that will fail summarization",
 	})
 
@@ -140,7 +140,7 @@ func TestCompactor_Compact_SummaryBudgetClamping(t *testing.T) {
 			cm := teamsloop.NewContextManager("loop-clamp", "gpt-4o", config)
 
 			content := strings.Repeat("x", tt.contentLen)
-			_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+			_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 				Role: "user", Content: content,
 			})
 
@@ -163,7 +163,7 @@ func TestCompactor_Compact_NilSummarizer_UsesStub(t *testing.T) {
 	compactor := teamsloop.NewCompactor(config)
 	cm := teamsloop.NewContextManager("loop-stub", "gpt-4o", config)
 
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "A message for stub compaction",
 	})
 
@@ -192,7 +192,7 @@ func TestCompactor_Compact_ModelFieldSet_WithLLMSummarizer(t *testing.T) {
 	compactor := teamsloop.NewCompactor(config, teamsloop.WithSummarizer(mock), teamsloop.WithModelName("fast"))
 	cm := teamsloop.NewContextManager("loop-model-field", "gpt-4o", config)
 
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "Message for model field test",
 	})
 

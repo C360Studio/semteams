@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -225,7 +225,7 @@ func TestAttack_CommandContext_NilFields(t *testing.T) {
 	executor := newMockExecutor(`^/test$`, "", false)
 
 	ctx := context.Background()
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-1",
 		ChannelType: "cli",
 		ChannelID:   "test",
@@ -287,7 +287,7 @@ func TestAttack_CancelledContext_InExecutor(t *testing.T) {
 		LoopTracker: NewLoopTracker(),
 	}
 
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-1",
 		ChannelType: "cli",
 		ChannelID:   "test",

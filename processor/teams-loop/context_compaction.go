@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // CompactionResult contains the results of a compaction operation.
@@ -102,7 +102,7 @@ func (c *Compactor) Compact(ctx context.Context, cm *ContextManager) (Compaction
 	}
 
 	// Extract ChatMessages for summarization
-	chatMessages := make([]teams.ChatMessage, len(recentHistory))
+	chatMessages := make([]agentic.ChatMessage, len(recentHistory))
 	for i, m := range recentHistory {
 		chatMessages[i] = m.Message
 	}
@@ -134,7 +134,7 @@ func (c *Compactor) Compact(ctx context.Context, cm *ContextManager) (Compaction
 
 	// Update regions
 	cm.regions[RegionCompactedHistory] = append(cm.regions[RegionCompactedHistory], contextMessage{
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "system",
 			Content: summary,
 		},
@@ -187,7 +187,7 @@ func (c *Compactor) recompact(ctx context.Context, cm *ContextManager) {
 	}
 
 	// Extract messages for summarization
-	chatMessages := make([]teams.ChatMessage, len(compacted))
+	chatMessages := make([]agentic.ChatMessage, len(compacted))
 	for i, m := range compacted {
 		chatMessages[i] = m.Message
 	}
@@ -212,7 +212,7 @@ func (c *Compactor) recompact(ctx context.Context, cm *ContextManager) {
 	tokensAfter := estimateTokens(summary)
 
 	cm.regions[RegionCompactedHistory] = []contextMessage{{
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "system",
 			Content: summary,
 		},

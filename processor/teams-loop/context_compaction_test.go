@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 func TestCompactor_ShouldCompact(t *testing.T) {
@@ -94,7 +94,7 @@ func TestCompactor_Compact_GeneratesSummary(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// Add history messages to compact
-	messages := []teams.ChatMessage{
+	messages := []agentic.ChatMessage{
 		{Role: "user", Content: "What is the capital of France?"},
 		{Role: "assistant", Content: "The capital of France is Paris."},
 		{Role: "user", Content: "What about Germany?"},
@@ -148,7 +148,7 @@ func TestCompactor_Compact_RespectsContext(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// Add messages
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "Test message",
 	})
 
@@ -175,7 +175,7 @@ func TestCompactor_Compact_Timeout(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// Add messages
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "Test message",
 	})
 
@@ -236,16 +236,16 @@ func TestCompactor_Compact_PreservesSystemPrompt(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// Add system prompt
-	systemMsg := teams.ChatMessage{
+	systemMsg := agentic.ChatMessage{
 		Role: "system", Content: "You are a helpful assistant specialized in geography.",
 	}
 	_ = cm.AddMessage(teamsloop.RegionSystemPrompt, systemMsg)
 
 	// Add history to compact
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "What is the capital of France?",
 	})
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "assistant", Content: "Paris.",
 	})
 
@@ -287,7 +287,7 @@ func TestCompactor_Compact_UpdatesCompactedRegion(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// Add history to compact
-	messages := []teams.ChatMessage{
+	messages := []agentic.ChatMessage{
 		{Role: "user", Content: "Tell me about machine learning"},
 		{Role: "assistant", Content: "Machine learning is a subset of artificial intelligence..."},
 		{Role: "user", Content: "What are neural networks?"},
@@ -331,10 +331,10 @@ func TestCompactor_Compact_ReducesRecentHistory(t *testing.T) {
 
 	// Add many messages to recent history
 	for i := 0; i < 10; i++ {
-		_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+		_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 			Role: "user", Content: "Question number " + string(rune('0'+i)),
 		})
-		_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+		_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 			Role: "assistant", Content: "Answer to question " + string(rune('0'+i)),
 		})
 	}
@@ -415,7 +415,7 @@ func TestCompactor_Compact_MultipleCompactions(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// First batch of messages
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "First batch of conversation",
 	})
 
@@ -428,7 +428,7 @@ func TestCompactor_Compact_MultipleCompactions(t *testing.T) {
 	}
 
 	// Add more messages
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "Second batch of conversation",
 	})
 
@@ -463,7 +463,7 @@ func TestCompactor_RecompactionCapsCompactedHistory(t *testing.T) {
 
 	// Perform 5 compactions to exceed maxCompactedMessages (3)
 	for i := range 5 {
-		_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+		_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 			Role:    "user",
 			Content: fmt.Sprintf("Conversation batch %d with enough content to matter", i),
 		})
@@ -508,7 +508,7 @@ func TestCompactor_RecompactionWithLLMSummarizer(t *testing.T) {
 
 	// Perform enough compactions to trigger recompaction
 	for i := range 5 {
-		_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+		_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 			Role:    "user",
 			Content: fmt.Sprintf("Batch %d", i),
 		})
@@ -534,7 +534,7 @@ func TestCompactor_RecompactionReducesTokens(t *testing.T) {
 
 	// Compact 3 times (right at the limit, no recompaction yet)
 	for i := range 3 {
-		_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+		_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 			Role:    "user",
 			Content: fmt.Sprintf("A reasonably sized conversation batch number %d with varied content", i),
 		})
@@ -546,7 +546,7 @@ func TestCompactor_RecompactionReducesTokens(t *testing.T) {
 	tokensBefore := cm.GetRegionTokens(teamsloop.RegionCompactedHistory)
 
 	// 4th compaction should trigger recompaction (exceeds maxCompactedMessages=3)
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role:    "user",
 		Content: "Final batch that triggers recompaction",
 	})
@@ -576,22 +576,22 @@ func TestCompactor_RetainsPendingToolCalls(t *testing.T) {
 	ctx := context.Background()
 
 	// Build a conversation: completed tool pair, then a pending tool_call
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "Search the graph for drones",
 	})
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "assistant",
-		ToolCalls: []teams.ToolCall{
+		ToolCalls: []agentic.ToolCall{
 			{ID: "done-1", Name: "graph_search"},
 		},
 	})
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "tool", ToolCallID: "done-1", Content: "found 3 entities",
 	})
 	// This assistant message has pending tool_calls — results not yet in context
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "assistant",
-		ToolCalls: []teams.ToolCall{
+		ToolCalls: []agentic.ToolCall{
 			{ID: "pending-1", Name: "read_file"},
 			{ID: "pending-2", Name: "run_command"},
 		},
@@ -634,10 +634,10 @@ func TestCompactor_CompactsCompletedToolCalls(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-full", "gpt-4o", config)
 	ctx := context.Background()
 
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "Hello",
 	})
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "assistant", Content: "I'll help you with that.",
 	})
 

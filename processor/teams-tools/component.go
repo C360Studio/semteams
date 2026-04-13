@@ -13,11 +13,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semteams/teams"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -316,7 +316,7 @@ func (c *Component) handleToolCall(ctx context.Context, data []byte) {
 	}
 
 	// Extract ToolCall from payload
-	callPtr, ok := baseMsg.Payload().(*teams.ToolCall)
+	callPtr, ok := baseMsg.Payload().(*agentic.ToolCall)
 	if !ok {
 		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
 		c.incrementErrors()
@@ -336,7 +336,7 @@ func (c *Component) handleToolCall(ctx context.Context, data []byte) {
 			c.metrics.recordToolFiltered(call.Name, "not_allowed")
 		}
 
-		result := teams.ToolResult{
+		result := agentic.ToolResult{
 			CallID:  call.ID,
 			Error:   fmt.Sprintf("tool %q is not allowed", call.Name),
 			LoopID:  call.LoopID,
@@ -421,7 +421,7 @@ func (c *Component) isToolAllowed(toolName string) bool {
 
 // executeWithTimeout executes a tool call with the configured timeout.
 // It first checks the component's local registry, then falls back to the global registry.
-func (c *Component) executeWithTimeout(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (c *Component) executeWithTimeout(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	timeout := 60 * time.Second
 	if c.config.Timeout != "" {
 		if d, err := time.ParseDuration(c.config.Timeout); err == nil {
@@ -442,7 +442,7 @@ func (c *Component) executeWithTimeout(ctx context.Context, call teams.ToolCall)
 }
 
 // publishResult publishes a tool result to JetStream
-func (c *Component) publishResult(ctx context.Context, result teams.ToolResult) error {
+func (c *Component) publishResult(ctx context.Context, result agentic.ToolResult) error {
 	resultMsg := message.NewBaseMessage(result.Schema(), &result, "agentic-tools")
 	data, err := json.Marshal(resultMsg)
 	if err != nil {
@@ -550,10 +550,10 @@ func (c *Component) ListTools() []ToolDefinition {
 }
 
 // Execute executes a tool call (for testing and direct invocation)
-func (c *Component) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (c *Component) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	// Check if tool is allowed
 	if !c.isToolAllowed(call.Name) {
-		result := teams.ToolResult{
+		result := agentic.ToolResult{
 			CallID:  call.ID,
 			Error:   fmt.Sprintf("tool %q is not allowed", call.Name),
 			LoopID:  call.LoopID,

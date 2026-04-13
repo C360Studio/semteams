@@ -83,7 +83,7 @@
 //
 // The loop accepts control signals via the agent.signal.* input port:
 //
-//	signal := teams.UserSignal{
+//	signal := agentic.UserSignal{
 //	    SignalID:    "sig_abc123",
 //	    Type:        "cancel",  // cancel, pause, resume, approve, reject, feedback, retry
 //	    LoopID:      "loop_456",
@@ -145,7 +145,7 @@
 //	loopID, err := manager.CreateLoop("task_123", "general", "gpt-4", 20)
 //
 //	// State transitions
-//	err = manager.TransitionLoop(loopID, teams.LoopStateExecuting)
+//	err = manager.TransitionLoop(loopID, agentic.LoopStateExecuting)
 //
 //	// Iteration tracking
 //	err = manager.IncrementIteration(loopID)
@@ -166,7 +166,7 @@
 //	trajectory, err := trajManager.StartTrajectory(loopID)
 //
 //	// Add steps (model calls, tool calls)
-//	trajManager.AddStep(loopID, teams.TrajectoryStep{
+//	trajManager.AddStep(loopID, agentic.TrajectoryStep{
 //	    Timestamp: time.Now(),
 //	    StepType:  "model_call",
 //	    TokensIn:  150,

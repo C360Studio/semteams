@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 // newLoopTestConfig returns a Config for restart integration tests.
@@ -98,7 +98,7 @@ func startLoopComponent(t *testing.T, ctx context.Context, config teamsloop.Conf
 }
 
 // readLoopFromKV reads a LoopEntity directly from the AGENT_LOOPS KV bucket.
-func readLoopFromKV(t *testing.T, loopID string) (*teams.LoopEntity, bool) {
+func readLoopFromKV(t *testing.T, loopID string) (*agentic.LoopEntity, bool) {
 	t.Helper()
 
 	natsClient := getSharedNATSClient(t)
@@ -116,7 +116,7 @@ func readLoopFromKV(t *testing.T, loopID string) (*teams.LoopEntity, bool) {
 		return nil, false
 	}
 
-	var entity teams.LoopEntity
+	var entity agentic.LoopEntity
 	err = json.Unmarshal(entry.Value(), &entity)
 	require.NoError(t, err)
 
@@ -141,12 +141,12 @@ func TestIntegration_LoopKVStateSurvivesRestart(t *testing.T) {
 
 	// Subscribe to model requests so we know the loop is active
 	var requestMu sync.Mutex
-	receivedRequests := make([]teams.AgentRequest, 0)
+	receivedRequests := make([]agentic.AgentRequest, 0)
 
 	_, err := natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if req, ok := baseMsg.Payload().(*teams.AgentRequest); ok {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
 				requestMu.Lock()
 				receivedRequests = append(receivedRequests, *req)
 				requestMu.Unlock()
@@ -158,7 +158,7 @@ func TestIntegration_LoopKVStateSurvivesRestart(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Inject a task to create a loop
-	task := &teams.TaskMessage{
+	task := &agentic.TaskMessage{
 		LoopID: "restart-test-001",
 		TaskID: "task-restart-001",
 		Role:   "general",
@@ -223,12 +223,12 @@ func TestIntegration_TerminalStateSurvivesRestart(t *testing.T) {
 
 	// Collect model requests
 	var requestMu sync.Mutex
-	receivedRequests := make([]teams.AgentRequest, 0)
+	receivedRequests := make([]agentic.AgentRequest, 0)
 
 	_, err := natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if req, ok := baseMsg.Payload().(*teams.AgentRequest); ok {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
 				requestMu.Lock()
 				receivedRequests = append(receivedRequests, *req)
 				requestMu.Unlock()
@@ -240,7 +240,7 @@ func TestIntegration_TerminalStateSurvivesRestart(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Inject a task
-	task := &teams.TaskMessage{
+	task := &agentic.TaskMessage{
 		LoopID: "terminal-test-001",
 		TaskID: "task-terminal-001",
 		Role:   "general",
@@ -261,14 +261,14 @@ func TestIntegration_TerminalStateSurvivesRestart(t *testing.T) {
 	requestID := receivedRequests[0].RequestID
 	requestMu.Unlock()
 
-	response := &teams.AgentResponse{
+	response := &agentic.AgentResponse{
 		RequestID: requestID,
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "Task completed successfully",
 		},
-		TokenUsage: teams.TokenUsage{
+		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
 		},
@@ -283,7 +283,7 @@ func TestIntegration_TerminalStateSurvivesRestart(t *testing.T) {
 
 	// Verify terminal state details
 	entity, _ := readLoopFromKV(t, "terminal-test-001")
-	assert.Equal(t, teams.LoopStateComplete, entity.State)
+	assert.Equal(t, agentic.LoopStateComplete, entity.State)
 	assert.False(t, entity.CompletedAt.IsZero(), "CompletedAt should be set")
 
 	// Stop and restart
@@ -293,7 +293,7 @@ func TestIntegration_TerminalStateSurvivesRestart(t *testing.T) {
 	// Terminal state should survive restart
 	entityAfterRestart, found := readLoopFromKV(t, "terminal-test-001")
 	require.True(t, found, "Terminal state should survive restart")
-	assert.Equal(t, teams.LoopStateComplete, entityAfterRestart.State, "Terminal state should be preserved")
+	assert.Equal(t, agentic.LoopStateComplete, entityAfterRestart.State, "Terminal state should be preserved")
 	assert.Equal(t, entity.CompletedAt.Unix(), entityAfterRestart.CompletedAt.Unix(), "CompletedAt should be preserved")
 }
 
@@ -311,7 +311,7 @@ func TestIntegration_DuplicateLoopIDOverwritesState(t *testing.T) {
 	assert.Equal(t, "dup-test-001", loopID)
 
 	// Advance loop state: transition + increment iterations
-	err = manager.TransitionLoop("dup-test-001", teams.LoopStateExecuting)
+	err = manager.TransitionLoop("dup-test-001", agentic.LoopStateExecuting)
 	require.NoError(t, err)
 	err = manager.IncrementIteration("dup-test-001")
 	require.NoError(t, err)
@@ -323,7 +323,7 @@ func TestIntegration_DuplicateLoopIDOverwritesState(t *testing.T) {
 	// Verify advanced state
 	entity, err := manager.GetLoop("dup-test-001")
 	require.NoError(t, err)
-	assert.Equal(t, teams.LoopStateExecuting, entity.State)
+	assert.Equal(t, agentic.LoopStateExecuting, entity.State)
 	assert.Equal(t, 3, entity.Iterations)
 
 	// DUPLICATE: Create loop with the same ID — this should overwrite
@@ -336,7 +336,7 @@ func TestIntegration_DuplicateLoopIDOverwritesState(t *testing.T) {
 
 	// DOCUMENTS THE GAP: No dedup guard exists.
 	// The loop is reset to initial state, losing all progress.
-	assert.Equal(t, teams.LoopStateExploring, overwritten.State, "State should be reset to exploring (overwritten)")
+	assert.Equal(t, agentic.LoopStateExploring, overwritten.State, "State should be reset to exploring (overwritten)")
 	assert.Equal(t, 0, overwritten.Iterations, "Iterations should be reset to 0 (overwritten)")
 	assert.Equal(t, "task-002", overwritten.TaskID, "TaskID should reflect the duplicate task")
 	assert.Equal(t, "editor", overwritten.Role, "Role should reflect the duplicate task")

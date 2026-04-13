@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	teamtools "github.com/c360studio/semteams/processor/teams-tools"
 	"github.com/c360studio/semteams/teams"
 )
@@ -23,12 +24,12 @@ type mockToolExecutor struct {
 	listToolsFunc func() []teams.ToolDefinition
 }
 
-func (m *mockToolExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (m *mockToolExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	if m.delay > 0 {
 		select {
 		case <-time.After(m.delay):
 		case <-ctx.Done():
-			return teams.ToolResult{
+			return agentic.ToolResult{
 				CallID: call.ID,
 				Error:  "context cancelled",
 			}, ctx.Err()
@@ -36,7 +37,7 @@ func (m *mockToolExecutor) Execute(ctx context.Context, call teams.ToolCall) (te
 	}
 
 	if m.shouldError {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  "mock error",
 		}, errors.New("mock error")
@@ -47,7 +48,7 @@ func (m *mockToolExecutor) Execute(ctx context.Context, call teams.ToolCall) (te
 		content = "mock result"
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 	}, nil
@@ -230,7 +231,7 @@ func TestExecutorRegistry_Execute_KnownTool(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call-123",
 		Name: "graph_query",
 		Arguments: map[string]any{
@@ -258,7 +259,7 @@ func TestExecutorRegistry_Execute_UnknownTool(t *testing.T) {
 	registry := teamtools.NewExecutorRegistry()
 
 	ctx := context.Background()
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call-123",
 		Name: "unknown_tool",
 		Arguments: map[string]any{
@@ -298,7 +299,7 @@ func TestExecutorRegistry_Execute_ExecutorReturnsError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call-123",
 		Name: "graph_query",
 		Arguments: map[string]any{
@@ -338,7 +339,7 @@ func TestExecutorRegistry_Execute_ContextTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call-123",
 		Name: "slow_tool",
 		Arguments: map[string]any{
@@ -379,7 +380,7 @@ func TestExecutorRegistry_Execute_ContextCancellation(t *testing.T) {
 	// Cancel context immediately
 	cancel()
 
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call-123",
 		Name: "slow_tool",
 		Arguments: map[string]any{
@@ -423,7 +424,7 @@ func TestExecutorRegistry_EmptyRegistry(t *testing.T) {
 
 	// Execute on empty registry
 	ctx := context.Background()
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call-123",
 		Name: "any_tool",
 	}
@@ -478,7 +479,7 @@ func TestExecutorRegistry_ConcurrentExecution(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func(n int) {
 			ctx := context.Background()
-			call := teams.ToolCall{
+			call := agentic.ToolCall{
 				ID:   "call-" + string(rune('0'+n)),
 				Name: "graph_query",
 			}
@@ -507,7 +508,7 @@ func TestExecutorRegistry_Execute_PropagatesTraceFields(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:      "call-123",
 		Name:    "graph_query",
 		LoopID:  "loop-456",
@@ -533,7 +534,7 @@ func TestExecutorRegistry_Execute_PropagatesTraceFieldsOnError(t *testing.T) {
 
 	// Test with unknown tool (error case)
 	ctx := context.Background()
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:      "call-123",
 		Name:    "unknown_tool",
 		LoopID:  "loop-456",

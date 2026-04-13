@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +16,7 @@ type mockIntentClassifier struct {
 	err    error
 }
 
-func (m *mockIntentClassifier) Classify(_ context.Context, msg teams.UserMessage, _ []*LoopInfo) (*ClassifiedIntent, error) {
+func (m *mockIntentClassifier) Classify(_ context.Context, msg agentic.UserMessage, _ []*LoopInfo) (*ClassifiedIntent, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -84,7 +84,7 @@ func TestMockIntentClassifier_NewTask(t *testing.T) {
 		},
 	}
 
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-1",
 		UserID:      "user-1",
 		Content:     "Build a REST API for user authentication",
@@ -116,7 +116,7 @@ func TestMockIntentClassifier_ContinueWithLoop(t *testing.T) {
 		},
 	}
 
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-2",
 		UserID:      "user-1",
 		Content:     "actually make it use JWT tokens instead",
@@ -134,12 +134,12 @@ func TestMockIntentClassifier_Signal(t *testing.T) {
 		result: &ClassifiedIntent{
 			Type:       IntentSignal,
 			LoopID:     "loop_xyz",
-			SignalType: teams.SignalApprove,
+			SignalType: agentic.SignalApprove,
 			Confidence: 0.95,
 		},
 	}
 
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-3",
 		UserID:      "user-1",
 		Content:     "looks good, approve it",
@@ -149,7 +149,7 @@ func TestMockIntentClassifier_Signal(t *testing.T) {
 	intent, err := classifier.Classify(context.Background(), msg, nil)
 	require.NoError(t, err)
 	assert.Equal(t, IntentSignal, intent.Type)
-	assert.Equal(t, teams.SignalApprove, intent.SignalType)
+	assert.Equal(t, agentic.SignalApprove, intent.SignalType)
 	assert.Equal(t, "loop_xyz", intent.LoopID)
 }
 
@@ -158,7 +158,7 @@ func TestMockIntentClassifier_FallbackOnError(t *testing.T) {
 		err: assert.AnError,
 	}
 
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID: "msg-4",
 		UserID:    "user-1",
 		Content:   "some message",

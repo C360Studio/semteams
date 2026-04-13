@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
@@ -23,9 +24,9 @@ const (
 	subjectAgentComplete = "agent.complete"
 )
 
-// TaskMessage is an alias for teams.TaskMessage for backward compatibility.
+// TaskMessage is an alias for agentic.TaskMessage for backward compatibility.
 // This allows existing code to use teamsloop.TaskMessage without modification.
-type TaskMessage = teams.TaskMessage
+type TaskMessage = agentic.TaskMessage
 
 // PublishedMessage represents a message published to NATS
 type PublishedMessage struct {
@@ -36,20 +37,20 @@ type PublishedMessage struct {
 // HandlerResult contains the results of a handler operation
 type HandlerResult struct {
 	LoopID               string
-	State                teams.LoopState
+	State                agentic.LoopState
 	PublishedMessages    []PublishedMessage
 	PendingTools         []string
-	TrajectorySteps      []teams.TrajectoryStep
-	ContextEvents        []teams.ContextEvent
+	TrajectorySteps      []agentic.TrajectoryStep
+	ContextEvents        []agentic.ContextEvent
 	RetryScheduled       bool
 	MaxIterationsReached bool
 	// CompletionState contains enriched completion data for KV persistence.
 	// This is populated when a loop completes and is used by component.go
 	// to write to the loops bucket with key pattern COMPLETE_{loopID}.
-	CompletionState *teams.LoopCompletedEvent
+	CompletionState *agentic.LoopCompletedEvent
 	// FailureState contains enriched failure data for graph emission.
 	// Populated when a loop fails, mirrors CompletionState for the failure path.
-	FailureState *teams.LoopFailedEvent
+	FailureState *agentic.LoopFailedEvent
 }
 
 // MessageHandler handles incoming messages and coordinates loop execution
@@ -102,7 +103,7 @@ func (h *MessageHandler) maybeCompact(ctx context.Context, cm *ContextManager, l
 	}
 
 	utilization := cm.Utilization()
-	result.ContextEvents = append(result.ContextEvents, teams.ContextEvent{
+	result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
 		Type:        "compaction_starting",
 		LoopID:      loopID,
 		Iteration:   iteration,
@@ -124,7 +125,7 @@ func (h *MessageHandler) maybeCompact(ctx context.Context, cm *ContextManager, l
 	compactDuration := time.Since(compactStart).Milliseconds()
 
 	tokensSaved := compactResult.EvictedTokens - compactResult.NewTokens
-	result.ContextEvents = append(result.ContextEvents, teams.ContextEvent{
+	result.ContextEvents = append(result.ContextEvents, agentic.ContextEvent{
 		Type:        "compaction_complete",
 		LoopID:      loopID,
 		Iteration:   iteration,
@@ -133,7 +134,7 @@ func (h *MessageHandler) maybeCompact(ctx context.Context, cm *ContextManager, l
 	})
 
 	// Record compaction in trajectory for observability
-	compactionStep := teams.TrajectoryStep{
+	compactionStep := agentic.TrajectoryStep{
 		Timestamp:   time.Now(),
 		StepType:    "context_compaction",
 		Response:    compactResult.Summary,
@@ -251,8 +252,8 @@ func (h *MessageHandler) computeToolDuration(callID string) int64 {
 }
 
 // buildTaskTrajectoryStep creates the trajectory step for a HandleTask invocation.
-func (h *MessageHandler) buildTaskTrajectoryStep(requestID string, task TaskMessage, messages []teams.ChatMessage) teams.TrajectoryStep {
-	step := teams.TrajectoryStep{
+func (h *MessageHandler) buildTaskTrajectoryStep(requestID string, task TaskMessage, messages []agentic.ChatMessage) agentic.TrajectoryStep {
+	step := agentic.TrajectoryStep{
 		Timestamp: time.Now(),
 		StepType:  "model_call",
 		RequestID: requestID,
@@ -266,8 +267,8 @@ func (h *MessageHandler) buildTaskTrajectoryStep(requestID string, task TaskMess
 }
 
 // buildLoopCreatedData marshals a LoopCreatedEvent for publishing.
-func (h *MessageHandler) buildLoopCreatedData(loopID string, task TaskMessage, entity teams.LoopEntity) ([]byte, error) {
-	created := teams.LoopCreatedEvent{
+func (h *MessageHandler) buildLoopCreatedData(loopID string, task TaskMessage, entity agentic.LoopEntity) ([]byte, error) {
+	created := agentic.LoopCreatedEvent{
 		LoopID:           loopID,
 		TaskID:           task.TaskID,
 		Role:             task.Role,
@@ -284,19 +285,19 @@ func (h *MessageHandler) buildLoopCreatedData(loopID string, task TaskMessage, e
 }
 
 // buildInitialMessages constructs the initial message list for an agent request.
-func (h *MessageHandler) buildInitialMessages(task TaskMessage) []teams.ChatMessage {
-	var messages []teams.ChatMessage
+func (h *MessageHandler) buildInitialMessages(task TaskMessage) []agentic.ChatMessage {
+	var messages []agentic.ChatMessage
 
 	// If embedded context exists, include it as system message first
 	if task.Context != nil && task.Context.Content != "" {
-		messages = append(messages, teams.ChatMessage{
+		messages = append(messages, agentic.ChatMessage{
 			Role:    "system",
 			Content: fmt.Sprintf("[Context]\n%s", task.Context.Content),
 		})
 	}
 
 	// Add user prompt
-	messages = append(messages, teams.ChatMessage{
+	messages = append(messages, agentic.ChatMessage{
 		Role:    "user",
 		Content: task.Prompt,
 	})
@@ -307,7 +308,7 @@ func (h *MessageHandler) buildInitialMessages(task TaskMessage) []teams.ChatMess
 // BuildIterationBudgetMessage creates a system message informing the model of its
 // iteration budget. Tone escalates as the budget is consumed: neutral at ≤50%,
 // a nudge to wrap up at 51-75%, and urgent at >75%.
-func BuildIterationBudgetMessage(iteration, maxIterations int) teams.ChatMessage {
+func BuildIterationBudgetMessage(iteration, maxIterations int) agentic.ChatMessage {
 	pct := (iteration * 100) / maxIterations
 	var content string
 	switch {
@@ -318,7 +319,7 @@ func BuildIterationBudgetMessage(iteration, maxIterations int) teams.ChatMessage
 	default:
 		content = fmt.Sprintf("[Iteration Budget] Iteration %d of %d (%d%% used).", iteration, maxIterations, pct)
 	}
-	return teams.ChatMessage{Role: "system", Content: content}
+	return agentic.ChatMessage{Role: "system", Content: content}
 }
 
 // HandleTask processes an incoming task message and creates a new loop
@@ -372,7 +373,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	// Add user prompt to context manager and cache for recovery.
 	// If GC/repair later empties the context, we re-inject this prompt.
 	cm := h.loopManager.GetContextManager(loopID)
-	_ = cm.AddMessage(RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(RegionRecentHistory, agentic.ChatMessage{
 		Role:    "user",
 		Content: task.Prompt,
 	})
@@ -380,7 +381,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 
 	// If embedded context is present, add it directly (skips hydration)
 	if task.Context != nil && task.Context.Content != "" {
-		_ = cm.AddMessage(RegionGraphEntities, teams.ChatMessage{
+		_ = cm.AddMessage(RegionGraphEntities, agentic.ChatMessage{
 			Role:    "system",
 			Content: task.Context.Content,
 		})
@@ -393,7 +394,7 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 	// Build messages for initial request with iteration budget
 	messages := h.buildInitialMessages(task)
 	budgetMsg := BuildIterationBudgetMessage(1, entity.MaxIterations)
-	messages = append([]teams.ChatMessage{budgetMsg}, messages...)
+	messages = append([]agentic.ChatMessage{budgetMsg}, messages...)
 
 	// Use per-task tools if provided, otherwise discover from global registry
 	var tools []teams.ToolDefinition
@@ -419,8 +420,8 @@ func (h *MessageHandler) HandleTask(ctx context.Context, task TaskMessage) (Hand
 
 // buildTaskRequest creates the initial agent request, trajectory step, and loop-created
 // event, returning the assembled HandlerResult.
-func (h *MessageHandler) buildTaskRequest(loopID string, task TaskMessage, entity teams.LoopEntity, messages []teams.ChatMessage, tools []teams.ToolDefinition) (HandlerResult, error) {
-	request := teams.AgentRequest{
+func (h *MessageHandler) buildTaskRequest(loopID string, task TaskMessage, entity agentic.LoopEntity, messages []agentic.ChatMessage, tools []teams.ToolDefinition) (HandlerResult, error) {
+	request := agentic.AgentRequest{
 		RequestID:  h.loopManager.GenerateRequestID(loopID),
 		LoopID:     loopID,
 		Role:       task.Role,
@@ -459,12 +460,12 @@ func (h *MessageHandler) buildTaskRequest(loopID string, task TaskMessage, entit
 				Data:    createdData,
 			},
 		},
-		TrajectorySteps: []teams.TrajectoryStep{step},
+		TrajectorySteps: []agentic.TrajectoryStep{step},
 	}, nil
 }
 
 // HandleModelResponse processes a model response
-func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string, response teams.AgentResponse) (HandlerResult, error) {
+func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string, response agentic.AgentResponse) (HandlerResult, error) {
 	// Check for cancellation before starting work
 	if err := ctx.Err(); err != nil {
 		return HandlerResult{}, err
@@ -472,15 +473,15 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 
 	// Check for timeout before processing
 	if h.loopManager.IsTimedOut(loopID) {
-		_ = h.loopManager.TransitionLoop(loopID, teams.LoopStateFailed)
-		if err := h.loopManager.UpdateCompletion(loopID, teams.OutcomeFailed, "", "loop timeout exceeded"); err != nil {
+		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
+		if err := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", "loop timeout exceeded"); err != nil {
 			h.logger.Warn("failed to update completion for timed out loop",
 				slog.String("loop_id", loopID),
 				slog.String("error", err.Error()))
 		}
 		result := HandlerResult{
 			LoopID: loopID,
-			State:  teams.LoopStateFailed,
+			State:  agentic.LoopStateFailed,
 		}
 		// Publish failure events for reactive workflows to observe
 		if failure, failMsgs, fErr := h.BuildFailureMessages(loopID, "timeout", "loop timeout exceeded"); fErr == nil {
@@ -519,12 +520,12 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 		LoopID:            loopID,
 		State:             entity.State,
 		PublishedMessages: []PublishedMessage{},
-		TrajectorySteps:   []teams.TrajectoryStep{},
-		ContextEvents:     []teams.ContextEvent{},
+		TrajectorySteps:   []agentic.TrajectoryStep{},
+		ContextEvents:     []agentic.ContextEvent{},
 	}
 
 	// Record trajectory step
-	step := teams.TrajectoryStep{
+	step := agentic.TrajectoryStep{
 		Timestamp:  time.Now(),
 		StepType:   "model_call",
 		RequestID:  response.RequestID,
@@ -583,13 +584,13 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 		}
 
 	case "error":
-		if err := h.loopManager.TransitionLoop(loopID, teams.LoopStateFailed); err != nil {
+		if err := h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed); err != nil {
 			return result, err
 		}
-		result.State = teams.LoopStateFailed
+		result.State = agentic.LoopStateFailed
 
 		// Update entity with completion data for KV persistence (enables SSE delivery)
-		if err := h.loopManager.UpdateCompletion(loopID, teams.OutcomeFailed, "", response.Error); err != nil {
+		if err := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", response.Error); err != nil {
 			h.logger.Warn("failed to update completion for model error",
 				slog.String("loop_id", loopID),
 				slog.String("error", err.Error()))
@@ -609,17 +610,17 @@ func (h *MessageHandler) HandleModelResponse(ctx context.Context, loopID string,
 // When a ToolCallFilter is set, calls are filtered before dispatch.
 // Rejected calls receive immediate error results; approved calls are published.
 // Domain metadata from the task is propagated to each approved tool call.
-func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID string, toolCalls []teams.ToolCall) error {
+func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID string, toolCalls []agentic.ToolCall) error {
 	// Reject tool calls with empty names — Gemini sometimes emits these as
 	// acknowledgment non-responses. Store error results so the model gets a
 	// nudge to call a real tool or respond with text.
-	var valid []teams.ToolCall
+	var valid []agentic.ToolCall
 	for _, tc := range toolCalls {
 		if tc.Name == "" {
 			h.logger.Warn("dropping tool call with empty name",
 				slog.String("loop_id", loopID),
 				slog.String("call_id", tc.ID))
-			errResult := teams.ToolResult{
+			errResult := agentic.ToolResult{
 				CallID: tc.ID,
 				Name:   "invalid_tool_call",
 				Error:  "tool call had empty function name — call a specific tool by name or respond with text",
@@ -644,7 +645,7 @@ func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID st
 		}
 
 		// Process rejected calls — distinguish approval-required from hard rejections
-		var pendingApproval []teams.ToolCall
+		var pendingApproval []agentic.ToolCall
 		for _, rejection := range filterResult.Rejected {
 			if teamtools.IsApprovalRequired(rejection.Reason) {
 				// Tool needs human approval — queue for re-dispatch after approval
@@ -655,7 +656,7 @@ func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID st
 			} else {
 				// Hard rejection — store error result for the LLM
 				h.loopManager.TrackToolName(rejection.Call.ID, rejection.Call.Name)
-				errResult := teams.ToolResult{
+				errResult := agentic.ToolResult{
 					CallID: rejection.Call.ID,
 					Name:   rejection.Call.Name,
 					Error:  fmt.Sprintf("tool call rejected: %s", rejection.Reason),
@@ -670,7 +671,7 @@ func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID st
 		// If any tools need approval, queue them and transition the loop
 		if len(pendingApproval) > 0 {
 			h.loopManager.QueueToolCalls(loopID, pendingApproval)
-			result.State = teams.LoopStateAwaitingApproval
+			result.State = agentic.LoopStateAwaitingApproval
 			result.PendingTools = h.loopManager.GetPendingTools(loopID)
 			// Don't dispatch any other tools — wait for approval
 			return nil
@@ -707,7 +708,7 @@ func (h *MessageHandler) handleToolCallResponse(result *HandlerResult, loopID st
 
 // dispatchToolCall publishes a single tool call for execution and registers
 // all tracking metadata (pending tools, call-to-loop mapping, timing).
-func (h *MessageHandler) dispatchToolCall(result *HandlerResult, loopID string, tc teams.ToolCall) error {
+func (h *MessageHandler) dispatchToolCall(result *HandlerResult, loopID string, tc agentic.ToolCall) error {
 	if err := h.loopManager.AddPendingTool(loopID, tc.ID); err != nil {
 		return err
 	}
@@ -730,24 +731,24 @@ func (h *MessageHandler) dispatchToolCall(result *HandlerResult, loopID string, 
 
 // handleCompleteResponse processes completion responses.
 // It enriches the completion event with full context for rules-based orchestration.
-func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID string, entity teams.LoopEntity, responseContent string) error {
-	if err := h.loopManager.TransitionLoop(loopID, teams.LoopStateComplete); err != nil {
+func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID string, entity agentic.LoopEntity, responseContent string) error {
+	if err := h.loopManager.TransitionLoop(loopID, agentic.LoopStateComplete); err != nil {
 		return err
 	}
-	result.State = teams.LoopStateComplete
+	result.State = agentic.LoopStateComplete
 
 	// Update entity with completion data for KV persistence (enables SSE delivery)
-	if err := h.loopManager.UpdateCompletion(loopID, teams.OutcomeSuccess, responseContent, ""); err != nil {
+	if err := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeSuccess, responseContent, ""); err != nil {
 		return err
 	}
 
 	// Enriched completion event for rules-based orchestration.
 	// Rules engine watches COMPLETE_* keys in KV and can trigger
 	// follow-up actions (e.g., spawn editor when architect completes).
-	completion := teams.LoopCompletedEvent{
+	completion := agentic.LoopCompletedEvent{
 		LoopID:       loopID,
 		TaskID:       entity.TaskID,
-		Outcome:      teams.OutcomeSuccess,
+		Outcome:      agentic.OutcomeSuccess,
 		Role:         entity.Role,
 		Result:       responseContent,
 		Model:        entity.Model,
@@ -791,7 +792,7 @@ func (h *MessageHandler) handleCompleteResponse(result *HandlerResult, loopID st
 }
 
 // HandleToolResult processes a tool execution result
-func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, toolResult teams.ToolResult) (HandlerResult, error) {
+func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, toolResult agentic.ToolResult) (HandlerResult, error) {
 	// Check for cancellation before processing
 	if err := ctx.Err(); err != nil {
 		return HandlerResult{}, err
@@ -799,15 +800,15 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 
 	// Check for timeout before processing
 	if h.loopManager.IsTimedOut(loopID) {
-		_ = h.loopManager.TransitionLoop(loopID, teams.LoopStateFailed)
-		if err := h.loopManager.UpdateCompletion(loopID, teams.OutcomeFailed, "", "loop timeout exceeded"); err != nil {
+		_ = h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed)
+		if err := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", "loop timeout exceeded"); err != nil {
 			h.logger.Warn("failed to update completion for timed out loop",
 				slog.String("loop_id", loopID),
 				slog.String("error", err.Error()))
 		}
 		result := HandlerResult{
 			LoopID: loopID,
-			State:  teams.LoopStateFailed,
+			State:  agentic.LoopStateFailed,
 		}
 		// Publish failure events for reactive workflows to observe
 		if failure, failMsgs, fErr := h.BuildFailureMessages(loopID, "timeout", "loop timeout exceeded"); fErr == nil {
@@ -839,12 +840,12 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 		State:             entity.State,
 		PendingTools:      h.loopManager.GetPendingTools(loopID),
 		PublishedMessages: []PublishedMessage{},
-		TrajectorySteps:   []teams.TrajectoryStep{},
-		ContextEvents:     []teams.ContextEvent{},
+		TrajectorySteps:   []agentic.TrajectoryStep{},
+		ContextEvents:     []agentic.ContextEvent{},
 	}
 
 	// Record trajectory step
-	step := teams.TrajectoryStep{
+	step := agentic.TrajectoryStep{
 		Timestamp:     time.Now(),
 		StepType:      "tool_call",
 		ToolName:      h.loopManager.GetToolName(toolResult.CallID),
@@ -906,7 +907,7 @@ func (h *MessageHandler) HandleToolResult(ctx context.Context, loopID string, to
 func (h *MessageHandler) handleToolsComplete(
 	ctx context.Context,
 	loopID string,
-	entity teams.LoopEntity,
+	entity agentic.LoopEntity,
 	cm *ContextManager,
 	result *HandlerResult,
 ) (HandlerResult, error) {
@@ -919,15 +920,15 @@ func (h *MessageHandler) handleToolsComplete(
 	err := h.loopManager.IncrementIteration(loopID)
 	if err != nil {
 		// Max iterations reached - mark as failed
-		if transitionErr := h.loopManager.TransitionLoop(loopID, teams.LoopStateFailed); transitionErr != nil {
+		if transitionErr := h.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed); transitionErr != nil {
 			return *result, errs.Wrap(transitionErr, "agentic-loop", "handleToolsComplete", fmt.Sprintf("transition loop to failed state (original error: %v)", err))
 		}
-		result.State = teams.LoopStateFailed
+		result.State = agentic.LoopStateFailed
 		result.MaxIterationsReached = true
 
 		// Update entity with completion data for KV persistence (enables SSE delivery)
 		errorMsg := fmt.Sprintf("max iterations (%d) reached", entity.MaxIterations)
-		if updateErr := h.loopManager.UpdateCompletion(loopID, teams.OutcomeFailed, "", errorMsg); updateErr != nil {
+		if updateErr := h.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", errorMsg); updateErr != nil {
 			h.logger.Warn("failed to update completion for max iterations",
 				slog.String("loop_id", loopID),
 				slog.String("error", updateErr.Error()))
@@ -964,7 +965,7 @@ func (h *MessageHandler) handleToolsComplete(
 
 	// Prepend iteration budget so the model sees its budget early in context
 	budgetMsg := BuildIterationBudgetMessage(newIteration, entity.MaxIterations)
-	messages = append([]teams.ChatMessage{budgetMsg}, messages...)
+	messages = append([]agentic.ChatMessage{budgetMsg}, messages...)
 
 	// Check for cancellation before building request
 	if err := ctx.Err(); err != nil {
@@ -976,7 +977,7 @@ func (h *MessageHandler) handleToolsComplete(
 	toolChoice := h.loopManager.GetCachedToolChoice(loopID)
 
 	// All tools complete - send next agent request with full conversation
-	request := teams.AgentRequest{
+	request := agentic.AgentRequest{
 		RequestID:  h.loopManager.GenerateRequestID(loopID),
 		LoopID:     loopID,
 		Role:       entity.Role,
@@ -1007,7 +1008,7 @@ func (h *MessageHandler) handleToolsComplete(
 // hasUserOrAssistantMessage returns true if the messages contain at least one
 // user or assistant message. System-only messages are insufficient for Gemini
 // which requires conversation content in the contents array.
-func hasUserOrAssistantMessage(messages []teams.ChatMessage) bool {
+func hasUserOrAssistantMessage(messages []agentic.ChatMessage) bool {
 	for _, m := range messages {
 		if m.Role == "user" || m.Role == "assistant" {
 			return true
@@ -1019,8 +1020,8 @@ func hasUserOrAssistantMessage(messages []teams.ChatMessage) bool {
 // buildToolMessages converts tool results into ChatMessages for the conversation context.
 // Falls back to Error when Content is empty — Gemini rejects tool result messages
 // with no content (400 INVALID_ARGUMENT).
-func (h *MessageHandler) buildToolMessages(results []teams.ToolResult) []teams.ChatMessage {
-	messages := make([]teams.ChatMessage, len(results))
+func (h *MessageHandler) buildToolMessages(results []agentic.ToolResult) []agentic.ChatMessage {
+	messages := make([]agentic.ChatMessage, len(results))
 	for i, r := range results {
 		content := r.Content
 		isError := r.Error != ""
@@ -1034,7 +1035,7 @@ func (h *MessageHandler) buildToolMessages(results []teams.ToolResult) []teams.C
 		if name == "" {
 			name = h.loopManager.GetToolName(r.CallID)
 		}
-		messages[i] = teams.ChatMessage{
+		messages[i] = agentic.ChatMessage{
 			Role:       "tool",
 			ToolCallID: r.CallID,
 			Name:       name,
@@ -1048,7 +1049,7 @@ func (h *MessageHandler) buildToolMessages(results []teams.ToolResult) []teams.C
 // recoverEmptyContext handles the case where GC/repair has removed all conversation
 // content. Instead of failing the loop, it re-injects the original task prompt as a
 // synthetic user message so the agent can continue. Returns the recovered messages.
-func (h *MessageHandler) recoverEmptyContext(loopID string, cm *ContextManager, iteration, evicted int) []teams.ChatMessage {
+func (h *MessageHandler) recoverEmptyContext(loopID string, cm *ContextManager, iteration, evicted int) []agentic.ChatMessage {
 	prompt := h.loopManager.GetTaskPrompt(loopID)
 	if prompt == "" {
 		prompt = "Continue with the task."
@@ -1059,7 +1060,7 @@ func (h *MessageHandler) recoverEmptyContext(loopID string, cm *ContextManager, 
 		slog.Int("iteration", iteration),
 		slog.Int("evicted", evicted))
 
-	synthetic := teams.ChatMessage{
+	synthetic := agentic.ChatMessage{
 		Role:    "user",
 		Content: fmt.Sprintf("[Context recovered after tool pair cleanup]\n\nOriginal task: %s\n\nPrevious tool calls encountered errors. Please continue or try a different approach.", prompt),
 	}
@@ -1070,16 +1071,16 @@ func (h *MessageHandler) recoverEmptyContext(loopID string, cm *ContextManager, 
 // buildFailureEvent constructs an enriched LoopFailedEvent with token counts from trajectory.
 // This is the single source of truth for failure event construction — all failure paths
 // (publishing, graph emission) derive from this.
-func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (*teams.LoopFailedEvent, error) {
+func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (*agentic.LoopFailedEvent, error) {
 	entity, err := h.loopManager.GetLoop(loopID)
 	if err != nil {
 		return nil, err
 	}
 
-	failure := &teams.LoopFailedEvent{
+	failure := &agentic.LoopFailedEvent{
 		LoopID:       loopID,
 		TaskID:       entity.TaskID,
-		Outcome:      teams.OutcomeFailed,
+		Outcome:      agentic.OutcomeFailed,
 		Reason:       reason,
 		Error:        errorMsg,
 		Role:         entity.Role,
@@ -1108,13 +1109,13 @@ func (h *MessageHandler) buildFailureEvent(loopID, reason, errorMsg string) (*te
 }
 
 // BuildFailureEvent creates a failure event (public wrapper for component.go).
-func (h *MessageHandler) BuildFailureEvent(loopID, reason, errorMsg string) (*teams.LoopFailedEvent, error) {
+func (h *MessageHandler) BuildFailureEvent(loopID, reason, errorMsg string) (*agentic.LoopFailedEvent, error) {
 	return h.buildFailureEvent(loopID, reason, errorMsg)
 }
 
 // BuildFailureMessages creates a failure event and serializes it for NATS publishing.
 // Returns the event (for graph emission) and published messages (for reactive workflows).
-func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) (*teams.LoopFailedEvent, []PublishedMessage, error) {
+func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) (*agentic.LoopFailedEvent, []PublishedMessage, error) {
 	failure, err := h.buildFailureEvent(loopID, reason, errorMsg)
 	if err != nil {
 		return nil, nil, err
@@ -1133,22 +1134,22 @@ func (h *MessageHandler) BuildFailureMessages(loopID, reason, errorMsg string) (
 }
 
 // GetLoop retrieves a loop entity (for testing)
-func (h *MessageHandler) GetLoop(loopID string) (teams.LoopEntity, error) {
+func (h *MessageHandler) GetLoop(loopID string) (agentic.LoopEntity, error) {
 	return h.loopManager.GetLoop(loopID)
 }
 
 // UpdateLoop updates a loop entity
-func (h *MessageHandler) UpdateLoop(entity teams.LoopEntity) error {
+func (h *MessageHandler) UpdateLoop(entity agentic.LoopEntity) error {
 	return h.loopManager.UpdateLoop(entity)
 }
 
 // CancelLoop atomically cancels a loop and populates completion data.
-func (h *MessageHandler) CancelLoop(loopID, cancelledBy string) (teams.LoopEntity, error) {
+func (h *MessageHandler) CancelLoop(loopID, cancelledBy string) (agentic.LoopEntity, error) {
 	return h.loopManager.CancelLoop(loopID, cancelledBy)
 }
 
 // GetTrajectory retrieves a trajectory snapshot for a given loop ID.
-func (h *MessageHandler) GetTrajectory(loopID string) (teams.Trajectory, error) {
+func (h *MessageHandler) GetTrajectory(loopID string) (agentic.Trajectory, error) {
 	return h.trajectoryManager.GetTrajectory(loopID)
 }
 

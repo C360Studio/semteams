@@ -10,7 +10,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +23,7 @@ type mockCommandExecutor struct {
 	mu      sync.Mutex
 }
 
-func (m *mockCommandExecutor) Execute(ctx context.Context, cmdCtx *CommandContext, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error) {
+func (m *mockCommandExecutor) Execute(ctx context.Context, cmdCtx *CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -40,10 +40,10 @@ func (m *mockCommandExecutor) Execute(ctx context.Context, cmdCtx *CommandContex
 	m.called = true
 
 	if m.execErr != nil {
-		return teams.UserResponse{}, m.execErr
+		return agentic.UserResponse{}, m.execErr
 	}
 
-	return teams.UserResponse{
+	return agentic.UserResponse{
 		Content:     "mock response",
 		ChannelType: msg.ChannelType,
 		ChannelID:   msg.ChannelID,
@@ -353,7 +353,7 @@ func TestCommandExecutor_ExecuteCalledWithCorrectContext(t *testing.T) {
 		},
 	}
 
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-1",
 		ChannelType: "cli",
 		ChannelID:   "test-session",
@@ -380,7 +380,7 @@ func TestCommandExecutor_ExecuteWithNilContext(t *testing.T) {
 		LoopTracker: NewLoopTracker(),
 	}
 
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-1",
 		ChannelType: "cli",
 		ChannelID:   "test",
@@ -397,7 +397,7 @@ func TestCommandExecutor_ExecuteWithNilCommandContext(t *testing.T) {
 	executor := newMockExecutor(`^/test$`, "", false)
 
 	ctx := context.Background()
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-1",
 		ChannelType: "cli",
 		ChannelID:   "test",
@@ -419,7 +419,7 @@ func TestCommandExecutor_ExecuteReturnsError(t *testing.T) {
 		LoopTracker: NewLoopTracker(),
 	}
 
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-1",
 		ChannelType: "cli",
 		ChannelID:   "test",
@@ -552,7 +552,7 @@ func TestCommandContext_RespectsContext(t *testing.T) {
 		LoopTracker: NewLoopTracker(),
 	}
 
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   "msg-1",
 		ChannelType: "cli",
 		ChannelID:   "test",

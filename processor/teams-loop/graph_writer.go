@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/model"
@@ -14,7 +15,6 @@ import (
 	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/types"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
-	"github.com/c360studio/semteams/teams"
 )
 
 const (
@@ -78,7 +78,7 @@ func (w *graphWriter) WriteModelEndpoints(ctx context.Context) {
 		if ep == nil {
 			continue
 		}
-		entityID := teams.ModelEndpointEntityID(w.platform.Org, w.platform.Platform, name)
+		entityID := agentic.ModelEndpointEntityID(w.platform.Org, w.platform.Platform, name)
 		triples := buildModelEndpointTriples(entityID, *ep)
 		for _, t := range triples {
 			if err := w.writeTriple(ctx, t); err != nil {
@@ -90,7 +90,7 @@ func (w *graphWriter) WriteModelEndpoints(ctx context.Context) {
 }
 
 // WriteLoopCompletion emits triples for a successfully completed loop execution.
-func (w *graphWriter) WriteLoopCompletion(ctx context.Context, event *teams.LoopCompletedEvent) {
+func (w *graphWriter) WriteLoopCompletion(ctx context.Context, event *agentic.LoopCompletedEvent) {
 	if w.natsClient == nil {
 		return
 	}
@@ -100,11 +100,11 @@ func (w *graphWriter) WriteLoopCompletion(ctx context.Context, event *teams.Loop
 		return
 	}
 
-	loopEntityID := teams.LoopExecutionEntityID(w.platform.Org, w.platform.Platform, event.LoopID)
+	loopEntityID := agentic.LoopExecutionEntityID(w.platform.Org, w.platform.Platform, event.LoopID)
 
 	var modelEntityID string
 	if event.Model != "" {
-		modelEntityID = teams.ModelEndpointEntityID(w.platform.Org, w.platform.Platform, event.Model)
+		modelEntityID = agentic.ModelEndpointEntityID(w.platform.Org, w.platform.Platform, event.Model)
 	}
 
 	cost := computeCost(w.modelRegistry, event.Model, event.TokensIn, event.TokensOut)
@@ -119,7 +119,7 @@ func (w *graphWriter) WriteLoopCompletion(ctx context.Context, event *teams.Loop
 }
 
 // WriteLoopFailure emits triples for a loop that terminated with an error.
-func (w *graphWriter) WriteLoopFailure(ctx context.Context, event *teams.LoopFailedEvent) {
+func (w *graphWriter) WriteLoopFailure(ctx context.Context, event *agentic.LoopFailedEvent) {
 	if w.natsClient == nil {
 		return
 	}
@@ -129,11 +129,11 @@ func (w *graphWriter) WriteLoopFailure(ctx context.Context, event *teams.LoopFai
 		return
 	}
 
-	loopEntityID := teams.LoopExecutionEntityID(w.platform.Org, w.platform.Platform, event.LoopID)
+	loopEntityID := agentic.LoopExecutionEntityID(w.platform.Org, w.platform.Platform, event.LoopID)
 
 	var modelEntityID string
 	if event.Model != "" {
-		modelEntityID = teams.ModelEndpointEntityID(w.platform.Org, w.platform.Platform, event.Model)
+		modelEntityID = agentic.ModelEndpointEntityID(w.platform.Org, w.platform.Platform, event.Model)
 	}
 
 	cost := computeCost(w.modelRegistry, event.Model, event.TokensIn, event.TokensOut)
@@ -150,7 +150,7 @@ func (w *graphWriter) WriteLoopFailure(ctx context.Context, event *teams.LoopFai
 // WriteTrajectorySteps stores step content in ObjectStore and emits graph triples
 // for each trajectory step, linking them to the parent loop entity via LoopHasStep
 // relationships.
-func (w *graphWriter) WriteTrajectorySteps(ctx context.Context, loopID string, trajectory *teams.Trajectory) {
+func (w *graphWriter) WriteTrajectorySteps(ctx context.Context, loopID string, trajectory *agentic.Trajectory) {
 	if w.natsClient == nil {
 		return
 	}
@@ -163,7 +163,7 @@ func (w *graphWriter) WriteTrajectorySteps(ctx context.Context, loopID string, t
 	// Store content in ObjectStore for each step.
 	if w.contentStore != nil && trajectory != nil {
 		for i, step := range trajectory.Steps {
-			entity := &teams.TrajectoryStepEntity{
+			entity := &agentic.TrajectoryStepEntity{
 				Step:      step,
 				Org:       w.platform.Org,
 				Platform:  w.platform.Platform,
@@ -180,7 +180,7 @@ func (w *graphWriter) WriteTrajectorySteps(ctx context.Context, loopID string, t
 		}
 	}
 
-	loopEntityID := teams.LoopExecutionEntityID(w.platform.Org, w.platform.Platform, loopID)
+	loopEntityID := agentic.LoopExecutionEntityID(w.platform.Org, w.platform.Platform, loopID)
 	triples := buildTrajectoryStepTriples(loopEntityID, w.platform.Org, w.platform.Platform, loopID, trajectory)
 	for _, t := range triples {
 		if err := w.writeTriple(ctx, t); err != nil {
@@ -191,7 +191,7 @@ func (w *graphWriter) WriteTrajectorySteps(ctx context.Context, loopID string, t
 }
 
 // WriteLoopCancellation emits triples for a loop that was cancelled.
-func (w *graphWriter) WriteLoopCancellation(ctx context.Context, event *teams.LoopCancelledEvent) {
+func (w *graphWriter) WriteLoopCancellation(ctx context.Context, event *agentic.LoopCancelledEvent) {
 	if w.natsClient == nil {
 		return
 	}
@@ -201,7 +201,7 @@ func (w *graphWriter) WriteLoopCancellation(ctx context.Context, event *teams.Lo
 		return
 	}
 
-	loopEntityID := teams.LoopExecutionEntityID(w.platform.Org, w.platform.Platform, event.LoopID)
+	loopEntityID := agentic.LoopExecutionEntityID(w.platform.Org, w.platform.Platform, event.LoopID)
 	triples := buildLoopCancellationTriples(loopEntityID, event)
 	for _, t := range triples {
 		if err := w.writeTriple(ctx, t); err != nil {
@@ -258,7 +258,7 @@ func buildModelEndpointTriples(entityID string, ep model.EndpointConfig) []messa
 // org and platform are passed through for constructing parent loop entity IDs.
 func buildLoopCompletionTriples(
 	loopEntityID string,
-	event *teams.LoopCompletedEvent,
+	event *agentic.LoopCompletedEvent,
 	modelEntityID string,
 	cost float64,
 	org, platform string,
@@ -292,7 +292,7 @@ func buildLoopCompletionTriples(
 		triples = append(triples, triple(agvocab.LoopCostUSD, cost))
 	}
 	if event.ParentLoopID != "" {
-		parentEntityID := teams.LoopExecutionEntityID(org, platform, event.ParentLoopID)
+		parentEntityID := agentic.LoopExecutionEntityID(org, platform, event.ParentLoopID)
 		triples = append(triples, triple(agvocab.LoopParent, parentEntityID))
 	}
 	if event.WorkflowSlug != "" {
@@ -312,7 +312,7 @@ func buildLoopCompletionTriples(
 // cost should be pre-computed via computeCost; pass 0.0 to omit the cost triple.
 func buildLoopFailureTriples(
 	loopEntityID string,
-	event *teams.LoopFailedEvent,
+	event *agentic.LoopFailedEvent,
 	modelEntityID string,
 	cost float64,
 ) []message.Triple {
@@ -359,7 +359,7 @@ func buildLoopFailureTriples(
 
 // buildLoopCancellationTriples constructs the minimal set of triples for a cancelled loop.
 // Cancellation events carry less data than completion/failure — no model, no token counts.
-func buildLoopCancellationTriples(loopEntityID string, event *teams.LoopCancelledEvent) []message.Triple {
+func buildLoopCancellationTriples(loopEntityID string, event *agentic.LoopCancelledEvent) []message.Triple {
 	now := time.Now()
 	triple := func(predicate string, object any) message.Triple {
 		return message.Triple{
@@ -393,7 +393,7 @@ func buildLoopCancellationTriples(loopEntityID string, event *teams.LoopCancelle
 // on the loop entity. This is a pure function with no side effects.
 func buildTrajectoryStepTriples(
 	loopEntityID, org, platform, loopID string,
-	trajectory *teams.Trajectory,
+	trajectory *agentic.Trajectory,
 ) []message.Triple {
 	if trajectory == nil || len(trajectory.Steps) == 0 {
 		return nil
@@ -402,7 +402,7 @@ func buildTrajectoryStepTriples(
 	var allTriples []message.Triple
 
 	for i, step := range trajectory.Steps {
-		entity := &teams.TrajectoryStepEntity{
+		entity := &agentic.TrajectoryStepEntity{
 			Step:      step,
 			Org:       org,
 			Platform:  platform,

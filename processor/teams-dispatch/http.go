@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/service"
-	"github.com/c360studio/semteams/teams"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -131,7 +131,7 @@ func (c *Component) handleHTTPMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build UserMessage
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		MessageID:   uuid.New().String(),
 		ChannelType: req.ChannelType,
 		ChannelID:   req.ChannelID,
@@ -176,7 +176,7 @@ func (c *Component) handleHTTPMessage(w http.ResponseWriter, r *http.Request) {
 
 // processMessageSync processes a message and returns the response synchronously.
 // This is used by the HTTP handler to avoid the pub/sub response path.
-func (c *Component) processMessageSync(ctx context.Context, msg teams.UserMessage) teams.UserResponse {
+func (c *Component) processMessageSync(ctx context.Context, msg agentic.UserMessage) agentic.UserResponse {
 	// Check if it's a command
 	if strings.HasPrefix(msg.Content, "/") {
 		return c.processCommandSync(ctx, msg)
@@ -187,15 +187,15 @@ func (c *Component) processMessageSync(ctx context.Context, msg teams.UserMessag
 }
 
 // processCommandSync processes a command and returns the response synchronously.
-func (c *Component) processCommandSync(ctx context.Context, msg teams.UserMessage) teams.UserResponse {
+func (c *Component) processCommandSync(ctx context.Context, msg agentic.UserMessage) agentic.UserResponse {
 	name, cmd, args, found := c.registry.Match(msg.Content)
 	if !found {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "Unknown command. Type /help for available commands.",
 			Timestamp:   time.Now(),
 		}
@@ -203,12 +203,12 @@ func (c *Component) processCommandSync(ctx context.Context, msg teams.UserMessag
 
 	// Check permission
 	if cmd.Config.Permission != "" && !c.hasPermission(msg.UserID, cmd.Config.Permission) {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     fmt.Sprintf("Permission denied: requires '%s'", cmd.Config.Permission),
 			Timestamp:   time.Now(),
 		}
@@ -224,12 +224,12 @@ func (c *Component) processCommandSync(ctx context.Context, msg teams.UserMessag
 
 	// Check if loop is required
 	if cmd.Config.RequireLoop && loopID == "" {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "No active loop. Specify a loop_id or start a task first.",
 			Timestamp:   time.Now(),
 		}
@@ -238,12 +238,12 @@ func (c *Component) processCommandSync(ctx context.Context, msg teams.UserMessag
 	// Execute handler
 	resp, err := cmd.Handler(ctx, msg, args, loopID)
 	if err != nil {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     fmt.Sprintf("Command failed: %s", err.Error()),
 			Timestamp:   time.Now(),
 		}
@@ -264,15 +264,15 @@ func (c *Component) processCommandSync(ctx context.Context, msg teams.UserMessag
 
 // processTaskSubmissionSync processes a task submission and returns acknowledgment.
 // The actual task execution happens asynchronously via NATS.
-func (c *Component) processTaskSubmissionSync(ctx context.Context, msg teams.UserMessage) teams.UserResponse {
+func (c *Component) processTaskSubmissionSync(ctx context.Context, msg agentic.UserMessage) agentic.UserResponse {
 	// Check submit permission
 	if !c.hasPermission(msg.UserID, "submit_task") {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "Permission denied: cannot submit tasks",
 			Timestamp:   time.Now(),
 		}
@@ -294,7 +294,7 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg teams.Use
 	taskID := uuid.New().String()
 
 	// Create task message
-	task := teams.TaskMessage{
+	task := agentic.TaskMessage{
 		LoopID:           loopID,
 		TaskID:           taskID,
 		Role:             c.config.DefaultRole,
@@ -324,12 +324,12 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg teams.Use
 	taskData, err := json.Marshal(baseMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal task", slog.String("error", err.Error()))
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "Failed to create task. Please try again.",
 			Timestamp:   time.Now(),
 		}
@@ -338,12 +338,12 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg teams.Use
 	subject := fmt.Sprintf("agent.task.%s", taskID)
 	if err := c.natsClient.PublishToStream(ctx, subject, taskData); err != nil {
 		c.logger.Error("Failed to publish task", slog.String("error", err.Error()))
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "Failed to submit task. Please try again.",
 			Timestamp:   time.Now(),
 		}
@@ -358,13 +358,13 @@ func (c *Component) processTaskSubmissionSync(ctx context.Context, msg teams.Use
 		slog.String("user_id", msg.UserID))
 
 	// Create acknowledgment response
-	resp := teams.UserResponse{
+	resp := agentic.UserResponse{
 		ResponseID:  uuid.New().String(),
 		ChannelType: msg.ChannelType,
 		ChannelID:   msg.ChannelID,
 		UserID:      msg.UserID,
 		InReplyTo:   loopID,
-		Type:        teams.ResponseTypeStatus,
+		Type:        agentic.ResponseTypeStatus,
 		Content:     fmt.Sprintf("Task submitted. Loop: %s", loopID),
 		Timestamp:   time.Now(),
 	}
@@ -582,8 +582,8 @@ func (c *Component) handleLoopSignal(w http.ResponseWriter, r *http.Request) {
 
 	// Validate signal type against known constants from agentic/user_types.go
 	switch req.Type {
-	case teams.SignalPause, teams.SignalResume, teams.SignalCancel,
-		teams.SignalApprove, teams.SignalReject, teams.SignalFeedback, teams.SignalRetry:
+	case agentic.SignalPause, agentic.SignalResume, agentic.SignalCancel,
+		agentic.SignalApprove, agentic.SignalReject, agentic.SignalFeedback, agentic.SignalRetry:
 		// Valid signal types
 	default:
 		c.metrics.recordHTTPRequest("/loops/{id}/signal", "POST", "400")

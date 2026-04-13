@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
@@ -61,7 +62,7 @@ func getSharedNATSClient(t *testing.T) *natsclient.Client {
 }
 
 // publishToolCallMessage publishes a ToolCall wrapped in a BaseMessage envelope
-func publishToolCallMessage(t *testing.T, natsClient *natsclient.Client, subject string, call *teams.ToolCall) {
+func publishToolCallMessage(t *testing.T, natsClient *natsclient.Client, subject string, call *agentic.ToolCall) {
 	t.Helper()
 	baseMsg := message.NewBaseMessage(call.Schema(), call, "integration-test")
 	msgData, err := json.Marshal(baseMsg)
@@ -77,19 +78,19 @@ type integrationMockExecutor struct {
 	delay         time.Duration
 }
 
-func (m *integrationMockExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (m *integrationMockExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	if m.delay > 0 {
 		select {
 		case <-time.After(m.delay):
 		case <-ctx.Done():
-			return teams.ToolResult{
+			return agentic.ToolResult{
 				CallID: call.ID,
 				Error:  "execution cancelled",
 			}, ctx.Err()
 		}
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: m.resultContent,
 	}, nil
@@ -177,13 +178,13 @@ func TestIntegration_ToolExecution(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to tool results
-	receivedResults := make([]teams.ToolResult, 0)
+	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if result, ok := baseMsg.Payload().(*teams.ToolResult); ok {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
 				receiveMu.Lock()
 				receivedResults = append(receivedResults, *result)
 				receiveMu.Unlock()
@@ -195,7 +196,7 @@ func TestIntegration_ToolExecution(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish tool call (wrapped in BaseMessage)
-	toolCall := &teams.ToolCall{
+	toolCall := &agentic.ToolCall{
 		ID:   "call_123",
 		Name: "echo",
 		Arguments: map[string]any{
@@ -292,13 +293,13 @@ func TestIntegration_ToolAllowedList(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to tool results
-	receivedResults := make([]teams.ToolResult, 0)
+	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if result, ok := baseMsg.Payload().(*teams.ToolResult); ok {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
 				receiveMu.Lock()
 				receivedResults = append(receivedResults, *result)
 				receiveMu.Unlock()
@@ -310,7 +311,7 @@ func TestIntegration_ToolAllowedList(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Try to execute blocked tool (wrapped in BaseMessage)
-	blockedCall := &teams.ToolCall{
+	blockedCall := &agentic.ToolCall{
 		ID:   "call_blocked",
 		Name: "blocked_tool",
 		Arguments: map[string]any{
@@ -400,13 +401,13 @@ func TestIntegration_ToolTimeout(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to tool results
-	receivedResults := make([]teams.ToolResult, 0)
+	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if result, ok := baseMsg.Payload().(*teams.ToolResult); ok {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
 				receiveMu.Lock()
 				receivedResults = append(receivedResults, *result)
 				receiveMu.Unlock()
@@ -418,7 +419,7 @@ func TestIntegration_ToolTimeout(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Execute slow tool (wrapped in BaseMessage)
-	slowCall := &teams.ToolCall{
+	slowCall := &agentic.ToolCall{
 		ID:   "call_slow",
 		Name: "slow_tool",
 		Arguments: map[string]any{
@@ -523,13 +524,13 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to tool results
-	receivedResults := make([]teams.ToolResult, 0)
+	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if result, ok := baseMsg.Payload().(*teams.ToolResult); ok {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
 				receiveMu.Lock()
 				receivedResults = append(receivedResults, *result)
 				receiveMu.Unlock()
@@ -543,7 +544,7 @@ func TestIntegration_ToolConcurrentExecution(t *testing.T) {
 	// Execute all tools concurrently
 	startTime := time.Now()
 
-	calls := []*teams.ToolCall{
+	calls := []*agentic.ToolCall{
 		{ID: "call_1", Name: "tool1", Arguments: map[string]any{"input": "1"}},
 		{ID: "call_2", Name: "tool2", Arguments: map[string]any{"input": "2"}},
 		{ID: "call_3", Name: "tool3", Arguments: map[string]any{"input": "3"}},
@@ -826,13 +827,13 @@ func TestIntegration_GlobalRegistryExecution(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to tool results
-	receivedResults := make([]teams.ToolResult, 0)
+	receivedResults := make([]agentic.ToolResult, 0)
 	var receiveMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.result.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if result, ok := baseMsg.Payload().(*teams.ToolResult); ok {
+			if result, ok := baseMsg.Payload().(*agentic.ToolResult); ok {
 				receiveMu.Lock()
 				receivedResults = append(receivedResults, *result)
 				receiveMu.Unlock()
@@ -844,7 +845,7 @@ func TestIntegration_GlobalRegistryExecution(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Execute the globally registered tool (wrapped in BaseMessage)
-	toolCall := &teams.ToolCall{
+	toolCall := &agentic.ToolCall{
 		ID:   "call_global_exec",
 		Name: "global_exec_tool",
 		Arguments: map[string]any{

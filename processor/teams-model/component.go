@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semteams/teams"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -366,15 +366,15 @@ func (c *Component) handleRequest(ctx context.Context, data []byte) {
 }
 
 // parseAgentRequest extracts an AgentRequest from raw message data
-func (c *Component) parseAgentRequest(data []byte) (teams.AgentRequest, error) {
+func (c *Component) parseAgentRequest(data []byte) (agentic.AgentRequest, error) {
 	var baseMsg message.BaseMessage
 	if err := json.Unmarshal(data, &baseMsg); err != nil {
-		return teams.AgentRequest{}, errs.WrapInvalid(err, "Component", "parseAgentRequest", "unmarshal BaseMessage")
+		return agentic.AgentRequest{}, errs.WrapInvalid(err, "Component", "parseAgentRequest", "unmarshal BaseMessage")
 	}
 
-	reqPtr, ok := baseMsg.Payload().(*teams.AgentRequest)
+	reqPtr, ok := baseMsg.Payload().(*agentic.AgentRequest)
 	if !ok {
-		return teams.AgentRequest{}, errs.WrapInvalid(fmt.Errorf("unexpected payload type: %T", baseMsg.Payload()), "Component", "parseAgentRequest", "check payload type")
+		return agentic.AgentRequest{}, errs.WrapInvalid(fmt.Errorf("unexpected payload type: %T", baseMsg.Payload()), "Component", "parseAgentRequest", "check payload type")
 	}
 
 	return *reqPtr, nil
@@ -382,7 +382,7 @@ func (c *Component) parseAgentRequest(data []byte) (teams.AgentRequest, error) {
 
 // handleModelError processes and publishes error responses with metrics.
 // It preserves any partial token usage from the response for cost tracking.
-func (c *Component) handleModelError(ctx context.Context, req teams.AgentRequest, resp teams.AgentResponse, err error, duration float64) {
+func (c *Component) handleModelError(ctx context.Context, req agentic.AgentRequest, resp agentic.AgentResponse, err error, duration float64) {
 	errorMsg := resp.Error
 	if err != nil {
 		errorMsg = err.Error()
@@ -420,7 +420,7 @@ func classifyError(ctx context.Context, errorMsg string) string {
 }
 
 // handleModelSuccess processes successful responses with metrics and publishing
-func (c *Component) handleModelSuccess(ctx context.Context, req teams.AgentRequest, resp teams.AgentResponse, duration float64) {
+func (c *Component) handleModelSuccess(ctx context.Context, req agentic.AgentRequest, resp agentic.AgentResponse, duration float64) {
 	toolCallCount := len(resp.Message.ToolCalls)
 
 	if c.metrics != nil {
@@ -459,7 +459,7 @@ func (c *Component) handleModelSuccess(ctx context.Context, req teams.AgentReque
 //
 // This allows callers to set req.Model to either a capability name (e.g. "fast")
 // or a concrete endpoint name (e.g. "ollama-qwen32b") and get the right client.
-func (c *Component) getClientForRequest(req teams.AgentRequest) (*Client, error) {
+func (c *Component) getClientForRequest(req agentic.AgentRequest) (*Client, error) {
 	var ep *model.EndpointConfig
 
 	// 1. Try capability-based resolution
@@ -549,7 +549,7 @@ func (c *Component) makeChunkHandler() ChunkHandler {
 }
 
 // executeRequest executes the chat completion with timeout
-func (c *Component) executeRequest(ctx context.Context, client *Client, req teams.AgentRequest) (teams.AgentResponse, error) {
+func (c *Component) executeRequest(ctx context.Context, client *Client, req agentic.AgentRequest) (agentic.AgentResponse, error) {
 	timeout := 120 * time.Second
 	if c.config.Timeout != "" {
 		if d, err := time.ParseDuration(c.config.Timeout); err == nil {
@@ -571,7 +571,7 @@ func (c *Component) incrementErrors() {
 }
 
 // publishResponse publishes an agent response to JetStream
-func (c *Component) publishResponse(ctx context.Context, resp teams.AgentResponse) error {
+func (c *Component) publishResponse(ctx context.Context, resp agentic.AgentResponse) error {
 	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "agentic-model")
 	data, err := json.Marshal(respMsg)
 	if err != nil {
@@ -602,12 +602,12 @@ func (c *Component) publishResponse(ctx context.Context, resp teams.AgentRespons
 // publishErrorResponse publishes an error response with zero token usage.
 // Used for errors where no model call occurred (e.g., endpoint not found).
 func (c *Component) publishErrorResponse(ctx context.Context, requestID string, errMsg string) {
-	c.publishErrorResponseWithTokens(ctx, requestID, errMsg, teams.TokenUsage{})
+	c.publishErrorResponseWithTokens(ctx, requestID, errMsg, agentic.TokenUsage{})
 }
 
 // publishErrorResponseWithTokens publishes an error response preserving partial token usage.
-func (c *Component) publishErrorResponseWithTokens(ctx context.Context, requestID string, errMsg string, tokens teams.TokenUsage) {
-	resp := teams.AgentResponse{
+func (c *Component) publishErrorResponseWithTokens(ctx context.Context, requestID string, errMsg string, tokens agentic.TokenUsage) {
+	resp := agentic.AgentResponse{
 		RequestID:  requestID,
 		Status:     "error",
 		Error:      errMsg,

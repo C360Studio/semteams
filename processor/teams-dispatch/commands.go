@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semteams/teams"
 	"github.com/google/uuid"
 )
 
@@ -53,7 +53,7 @@ func (c *Component) registerBuiltinCommands() {
 		Permission:  "approve",
 		RequireLoop: false,
 		Help:        "/approve [loop_id] [reason] - Approve pending result",
-	}, c.makeSignalCommand(teams.SignalApprove))
+	}, c.makeSignalCommand(agentic.SignalApprove))
 
 	// /reject [loop_id] [reason] - Reject pending result
 	c.registry.Register("reject", CommandConfig{
@@ -61,7 +61,7 @@ func (c *Component) registerBuiltinCommands() {
 		Permission:  "approve",
 		RequireLoop: false,
 		Help:        "/reject [loop_id] [reason] - Reject pending result with optional reason",
-	}, c.makeSignalCommand(teams.SignalReject))
+	}, c.makeSignalCommand(agentic.SignalReject))
 
 	// /pause [loop_id] - Pause loop at next checkpoint
 	c.registry.Register("pause", CommandConfig{
@@ -69,7 +69,7 @@ func (c *Component) registerBuiltinCommands() {
 		Permission:  "cancel_own",
 		RequireLoop: false,
 		Help:        "/pause [loop_id] - Pause current or specified loop",
-	}, c.makeSignalCommand(teams.SignalPause))
+	}, c.makeSignalCommand(agentic.SignalPause))
 
 	// /resume [loop_id] - Resume paused loop
 	c.registry.Register("resume", CommandConfig{
@@ -77,11 +77,11 @@ func (c *Component) registerBuiltinCommands() {
 		Permission:  "cancel_own",
 		RequireLoop: false,
 		Help:        "/resume [loop_id] - Resume paused loop",
-	}, c.makeSignalCommand(teams.SignalResume))
+	}, c.makeSignalCommand(agentic.SignalResume))
 }
 
 // handleCancelCommand handles the /cancel command
-func (c *Component) handleCancelCommand(ctx context.Context, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error) {
+func (c *Component) handleCancelCommand(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
 	// Use provided loop ID or active loop
 	targetLoopID := loopID
 	if len(args) > 0 && args[0] != "" {
@@ -89,12 +89,12 @@ func (c *Component) handleCancelCommand(ctx context.Context, msg teams.UserMessa
 	}
 
 	if targetLoopID == "" {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "No loop to cancel. Specify a loop_id or have an active loop.",
 			Timestamp:   time.Now(),
 		}, nil
@@ -102,12 +102,12 @@ func (c *Component) handleCancelCommand(ctx context.Context, msg teams.UserMessa
 
 	// Check permission to control this loop
 	if !c.canUserControlLoop(msg.UserID, targetLoopID) {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "Permission denied: cannot cancel this loop",
 			Timestamp:   time.Now(),
 		}, nil
@@ -116,33 +116,33 @@ func (c *Component) handleCancelCommand(ctx context.Context, msg teams.UserMessa
 	// Check if loop exists and is not already terminal
 	loopInfo := c.loopTracker.Get(targetLoopID)
 	if loopInfo == nil {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     fmt.Sprintf("Loop %s not found", targetLoopID),
 			Timestamp:   time.Now(),
 		}, nil
 	}
 
 	if isTerminalState(loopInfo.State) {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeStatus,
+			Type:        agentic.ResponseTypeStatus,
 			Content:     fmt.Sprintf("Loop %s already in terminal state: %s", targetLoopID, loopInfo.State),
 			Timestamp:   time.Now(),
 		}, nil
 	}
 
 	// Send cancel signal
-	signal := teams.UserSignal{
+	signal := agentic.UserSignal{
 		SignalID:    uuid.New().String(),
-		Type:        teams.SignalCancel,
+		Type:        agentic.SignalCancel,
 		LoopID:      targetLoopID,
 		UserID:      msg.UserID,
 		ChannelType: msg.ChannelType,
@@ -152,28 +152,28 @@ func (c *Component) handleCancelCommand(ctx context.Context, msg teams.UserMessa
 
 	signalData, err := json.Marshal(signal)
 	if err != nil {
-		return teams.UserResponse{}, errs.Wrap(err, "Component", "handleCancelCommand", "marshal signal")
+		return agentic.UserResponse{}, errs.Wrap(err, "Component", "handleCancelCommand", "marshal signal")
 	}
 
 	subject := fmt.Sprintf("agent.signal.%s", targetLoopID)
 	if err := c.natsClient.Publish(ctx, subject, signalData); err != nil {
-		return teams.UserResponse{}, errs.WrapTransient(err, "Component", "handleCancelCommand", "publish signal")
+		return agentic.UserResponse{}, errs.WrapTransient(err, "Component", "handleCancelCommand", "publish signal")
 	}
 
-	return teams.UserResponse{
+	return agentic.UserResponse{
 		ResponseID:  uuid.New().String(),
 		ChannelType: msg.ChannelType,
 		ChannelID:   msg.ChannelID,
 		UserID:      msg.UserID,
 		InReplyTo:   targetLoopID,
-		Type:        teams.ResponseTypeStatus,
+		Type:        agentic.ResponseTypeStatus,
 		Content:     fmt.Sprintf("Cancel signal sent to loop %s", targetLoopID),
 		Timestamp:   time.Now(),
 	}, nil
 }
 
 // handleStatusCommand handles the /status command
-func (c *Component) handleStatusCommand(ctx context.Context, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error) {
+func (c *Component) handleStatusCommand(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
 	// Use provided loop ID or active loop
 	targetLoopID := loopID
 	if len(args) > 0 && args[0] != "" {
@@ -185,12 +185,12 @@ func (c *Component) handleStatusCommand(ctx context.Context, msg teams.UserMessa
 		slog.String("user_id", msg.UserID))
 
 	if targetLoopID == "" {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeStatus,
+			Type:        agentic.ResponseTypeStatus,
 			Content:     "No active loop. Start a task or specify a loop_id.",
 			Timestamp:   time.Now(),
 		}, nil
@@ -198,12 +198,12 @@ func (c *Component) handleStatusCommand(ctx context.Context, msg teams.UserMessa
 
 	loopInfo := c.loopTracker.Get(targetLoopID)
 	if loopInfo == nil {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     fmt.Sprintf("Loop %s not found", targetLoopID),
 			Timestamp:   time.Now(),
 		}, nil
@@ -218,20 +218,20 @@ func (c *Component) handleStatusCommand(ctx context.Context, msg teams.UserMessa
 		age,
 		loopInfo.UserID)
 
-	return teams.UserResponse{
+	return agentic.UserResponse{
 		ResponseID:  uuid.New().String(),
 		ChannelType: msg.ChannelType,
 		ChannelID:   msg.ChannelID,
 		UserID:      msg.UserID,
 		InReplyTo:   targetLoopID,
-		Type:        teams.ResponseTypeStatus,
+		Type:        agentic.ResponseTypeStatus,
 		Content:     content,
 		Timestamp:   time.Now(),
 	}, nil
 }
 
 // handleLoopsCommand handles the /loops command
-func (c *Component) handleLoopsCommand(ctx context.Context, msg teams.UserMessage, _ []string, _ string) (teams.UserResponse, error) {
+func (c *Component) handleLoopsCommand(ctx context.Context, msg agentic.UserMessage, _ []string, _ string) (agentic.UserResponse, error) {
 	loops := c.loopTracker.GetUserLoops(msg.UserID)
 
 	c.logger.DebugContext(ctx, "Loops command executed",
@@ -239,12 +239,12 @@ func (c *Component) handleLoopsCommand(ctx context.Context, msg teams.UserMessag
 		slog.Int("loop_count", len(loops)))
 
 	if len(loops) == 0 {
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeStatus,
+			Type:        agentic.ResponseTypeStatus,
 			Content:     "No active loops.",
 			Timestamp:   time.Now(),
 		}, nil
@@ -262,19 +262,19 @@ func (c *Component) handleLoopsCommand(ctx context.Context, msg teams.UserMessag
 			formatAge(age)))
 	}
 
-	return teams.UserResponse{
+	return agentic.UserResponse{
 		ResponseID:  uuid.New().String(),
 		ChannelType: msg.ChannelType,
 		ChannelID:   msg.ChannelID,
 		UserID:      msg.UserID,
-		Type:        teams.ResponseTypeText,
+		Type:        agentic.ResponseTypeText,
 		Content:     strings.Join(lines, "\n"),
 		Timestamp:   time.Now(),
 	}, nil
 }
 
 // handleHelpCommand handles the /help command
-func (c *Component) handleHelpCommand(ctx context.Context, msg teams.UserMessage, _ []string, _ string) (teams.UserResponse, error) {
+func (c *Component) handleHelpCommand(ctx context.Context, msg agentic.UserMessage, _ []string, _ string) (agentic.UserResponse, error) {
 	commands := c.registry.All()
 
 	c.logger.DebugContext(ctx, "Help command executed",
@@ -294,12 +294,12 @@ func (c *Component) handleHelpCommand(ctx context.Context, msg teams.UserMessage
 	lines = append(lines, "")
 	lines = append(lines, "Type any other text to submit a task.")
 
-	return teams.UserResponse{
+	return agentic.UserResponse{
 		ResponseID:  uuid.New().String(),
 		ChannelType: msg.ChannelType,
 		ChannelID:   msg.ChannelID,
 		UserID:      msg.UserID,
-		Type:        teams.ResponseTypeText,
+		Type:        agentic.ResponseTypeText,
 		Content:     strings.Join(lines, "\n"),
 		Timestamp:   time.Now(),
 	}, nil
@@ -308,7 +308,7 @@ func (c *Component) handleHelpCommand(ctx context.Context, msg teams.UserMessage
 // makeSignalCommand creates a command handler that sends a specific signal type.
 // This is a factory to avoid duplicating the same logic for /approve, /reject, /pause, /resume.
 func (c *Component) makeSignalCommand(signalType string) CommandHandler {
-	return func(ctx context.Context, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error) {
+	return func(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
 		// Resolve target loop
 		targetLoopID := loopID
 		if len(args) > 0 && args[0] != "" {
@@ -316,12 +316,12 @@ func (c *Component) makeSignalCommand(signalType string) CommandHandler {
 		}
 
 		if targetLoopID == "" {
-			return teams.UserResponse{
+			return agentic.UserResponse{
 				ResponseID:  uuid.New().String(),
 				ChannelType: msg.ChannelType,
 				ChannelID:   msg.ChannelID,
 				UserID:      msg.UserID,
-				Type:        teams.ResponseTypeError,
+				Type:        agentic.ResponseTypeError,
 				Content:     fmt.Sprintf("No loop to %s. Specify a loop_id or have an active loop.", signalType),
 				Timestamp:   time.Now(),
 			}, nil
@@ -329,12 +329,12 @@ func (c *Component) makeSignalCommand(signalType string) CommandHandler {
 
 		// Check permission to control this loop
 		if !c.canUserControlLoop(msg.UserID, targetLoopID) {
-			return teams.UserResponse{
+			return agentic.UserResponse{
 				ResponseID:  uuid.New().String(),
 				ChannelType: msg.ChannelType,
 				ChannelID:   msg.ChannelID,
 				UserID:      msg.UserID,
-				Type:        teams.ResponseTypeError,
+				Type:        agentic.ResponseTypeError,
 				Content:     "Permission denied: cannot control this loop",
 				Timestamp:   time.Now(),
 			}, nil
@@ -343,31 +343,31 @@ func (c *Component) makeSignalCommand(signalType string) CommandHandler {
 		// Verify loop exists
 		loopInfo := c.loopTracker.Get(targetLoopID)
 		if loopInfo == nil {
-			return teams.UserResponse{
+			return agentic.UserResponse{
 				ResponseID:  uuid.New().String(),
 				ChannelType: msg.ChannelType,
 				ChannelID:   msg.ChannelID,
 				UserID:      msg.UserID,
-				Type:        teams.ResponseTypeError,
+				Type:        agentic.ResponseTypeError,
 				Content:     fmt.Sprintf("Loop %s not found", targetLoopID),
 				Timestamp:   time.Now(),
 			}, nil
 		}
 
 		if isTerminalState(loopInfo.State) {
-			return teams.UserResponse{
+			return agentic.UserResponse{
 				ResponseID:  uuid.New().String(),
 				ChannelType: msg.ChannelType,
 				ChannelID:   msg.ChannelID,
 				UserID:      msg.UserID,
-				Type:        teams.ResponseTypeStatus,
+				Type:        agentic.ResponseTypeStatus,
 				Content:     fmt.Sprintf("Loop %s already in terminal state: %s", targetLoopID, loopInfo.State),
 				Timestamp:   time.Now(),
 			}, nil
 		}
 
 		// Build signal with optional reason (args[1] for /approve and /reject)
-		signal := teams.UserSignal{
+		signal := agentic.UserSignal{
 			SignalID:    uuid.New().String(),
 			Type:        signalType,
 			LoopID:      targetLoopID,
@@ -384,21 +384,21 @@ func (c *Component) makeSignalCommand(signalType string) CommandHandler {
 
 		signalData, err := json.Marshal(signal)
 		if err != nil {
-			return teams.UserResponse{}, errs.Wrap(err, "Component", "signalCommand", "marshal signal")
+			return agentic.UserResponse{}, errs.Wrap(err, "Component", "signalCommand", "marshal signal")
 		}
 
 		subject := fmt.Sprintf("agent.signal.%s", targetLoopID)
 		if err := c.natsClient.Publish(ctx, subject, signalData); err != nil {
-			return teams.UserResponse{}, errs.WrapTransient(err, "Component", "signalCommand", "publish signal")
+			return agentic.UserResponse{}, errs.WrapTransient(err, "Component", "signalCommand", "publish signal")
 		}
 
-		return teams.UserResponse{
+		return agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
 			InReplyTo:   targetLoopID,
-			Type:        teams.ResponseTypeStatus,
+			Type:        agentic.ResponseTypeStatus,
 			Content:     fmt.Sprintf("Signal '%s' sent to loop %s", signalType, targetLoopID),
 			Timestamp:   time.Now(),
 		}, nil

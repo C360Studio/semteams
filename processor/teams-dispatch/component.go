@@ -9,12 +9,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semteams/teams"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go/jetstream"
 )
@@ -406,7 +406,7 @@ func (c *Component) handleUserMessage(ctx context.Context, data []byte) {
 		return
 	}
 
-	userMsg, ok := baseMsg.Payload().(*teams.UserMessage)
+	userMsg, ok := baseMsg.Payload().(*agentic.UserMessage)
 	if !ok {
 		c.logger.Error("Unexpected payload type", slog.String("type", fmt.Sprintf("%T", baseMsg.Payload())))
 		return
@@ -439,15 +439,15 @@ func (c *Component) handleUserMessage(ctx context.Context, data []byte) {
 }
 
 // handleCommand processes command messages
-func (c *Component) handleCommand(ctx context.Context, msg teams.UserMessage) {
+func (c *Component) handleCommand(ctx context.Context, msg agentic.UserMessage) {
 	name, cmd, args, found := c.registry.Match(msg.Content)
 	if !found {
-		c.sendResponse(ctx, teams.UserResponse{
+		c.sendResponse(ctx, agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "Unknown command. Type /help for available commands.",
 			Timestamp:   time.Now(),
 		})
@@ -456,12 +456,12 @@ func (c *Component) handleCommand(ctx context.Context, msg teams.UserMessage) {
 
 	// Check permission
 	if cmd.Config.Permission != "" && !c.hasPermission(msg.UserID, cmd.Config.Permission) {
-		c.sendResponse(ctx, teams.UserResponse{
+		c.sendResponse(ctx, agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     fmt.Sprintf("Permission denied: requires '%s'", cmd.Config.Permission),
 			Timestamp:   time.Now(),
 		})
@@ -478,12 +478,12 @@ func (c *Component) handleCommand(ctx context.Context, msg teams.UserMessage) {
 
 	// Check if loop is required
 	if cmd.Config.RequireLoop && loopID == "" {
-		c.sendResponse(ctx, teams.UserResponse{
+		c.sendResponse(ctx, agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "No active loop. Specify a loop_id or start a task first.",
 			Timestamp:   time.Now(),
 		})
@@ -493,12 +493,12 @@ func (c *Component) handleCommand(ctx context.Context, msg teams.UserMessage) {
 	// Execute handler
 	resp, err := cmd.Handler(ctx, msg, args, loopID)
 	if err != nil {
-		c.sendResponse(ctx, teams.UserResponse{
+		c.sendResponse(ctx, agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     fmt.Sprintf("Command failed: %s", err.Error()),
 			Timestamp:   time.Now(),
 		})
@@ -516,7 +516,7 @@ func (c *Component) handleCommand(ctx context.Context, msg teams.UserMessage) {
 }
 
 // handleClassifiedMessage uses the intent classifier to route ambiguous messages.
-func (c *Component) handleClassifiedMessage(ctx context.Context, msg teams.UserMessage) {
+func (c *Component) handleClassifiedMessage(ctx context.Context, msg agentic.UserMessage) {
 	activeLoops := c.loopTracker.GetUserLoops(msg.UserID)
 	intent, err := c.intentClassifier.Classify(ctx, msg, activeLoops)
 	if err != nil {
@@ -555,12 +555,12 @@ func (c *Component) handleClassifiedMessage(ctx context.Context, msg teams.UserM
 			c.sendResponse(ctx, resp)
 		} else {
 			// Can't determine loop or signal type — ask user to be explicit
-			c.sendResponse(ctx, teams.UserResponse{
+			c.sendResponse(ctx, agentic.UserResponse{
 				ResponseID:  uuid.New().String(),
 				ChannelType: msg.ChannelType,
 				ChannelID:   msg.ChannelID,
 				UserID:      msg.UserID,
-				Type:        teams.ResponseTypeStatus,
+				Type:        agentic.ResponseTypeStatus,
 				Content:     "I understood that as a control signal but couldn't determine the target loop. Try: /approve, /reject, /pause, or /resume [loop_id]",
 				Timestamp:   time.Now(),
 			})
@@ -601,8 +601,8 @@ func (c *Component) handleClassifiedMessage(ctx context.Context, msg teams.UserM
 // This guards against arbitrary signal types from LLM classification output.
 func isKnownSignalType(st string) bool {
 	switch st {
-	case teams.SignalCancel, teams.SignalPause, teams.SignalResume,
-		teams.SignalApprove, teams.SignalReject, teams.SignalFeedback, teams.SignalRetry:
+	case agentic.SignalCancel, agentic.SignalPause, agentic.SignalResume,
+		agentic.SignalApprove, agentic.SignalReject, agentic.SignalFeedback, agentic.SignalRetry:
 		return true
 	default:
 		return false
@@ -615,15 +615,15 @@ func (c *Component) resolveModel() string {
 }
 
 // handleTaskSubmission creates a new agent task
-func (c *Component) handleTaskSubmission(ctx context.Context, msg teams.UserMessage) {
+func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMessage) {
 	// Check submit permission
 	if !c.hasPermission(msg.UserID, "submit_task") {
-		c.sendResponse(ctx, teams.UserResponse{
+		c.sendResponse(ctx, agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "Permission denied: cannot submit tasks",
 			Timestamp:   time.Now(),
 		})
@@ -646,7 +646,7 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg teams.UserMess
 	taskID := uuid.New().String()
 
 	// Create task message
-	task := teams.TaskMessage{
+	task := agentic.TaskMessage{
 		LoopID:           loopID,
 		TaskID:           taskID,
 		Role:             c.config.DefaultRole,
@@ -682,12 +682,12 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg teams.UserMess
 	subject := fmt.Sprintf("agent.task.%s", taskID)
 	if err := c.natsClient.PublishToStream(ctx, subject, taskData); err != nil {
 		c.logger.Error("Failed to publish task", slog.String("error", err.Error()))
-		c.sendResponse(ctx, teams.UserResponse{
+		c.sendResponse(ctx, agentic.UserResponse{
 			ResponseID:  uuid.New().String(),
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
 			UserID:      msg.UserID,
-			Type:        teams.ResponseTypeError,
+			Type:        agentic.ResponseTypeError,
 			Content:     "Failed to submit task. Please try again.",
 			Timestamp:   time.Now(),
 		})
@@ -698,13 +698,13 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg teams.UserMess
 	c.metrics.recordTaskSubmitted()
 
 	// Send acknowledgment
-	c.sendResponse(ctx, teams.UserResponse{
+	c.sendResponse(ctx, agentic.UserResponse{
 		ResponseID:  uuid.New().String(),
 		ChannelType: msg.ChannelType,
 		ChannelID:   msg.ChannelID,
 		UserID:      msg.UserID,
 		InReplyTo:   loopID,
-		Type:        teams.ResponseTypeStatus,
+		Type:        agentic.ResponseTypeStatus,
 		Content:     fmt.Sprintf("Task submitted. Loop: %s", loopID),
 		Timestamp:   time.Now(),
 	})
@@ -725,7 +725,7 @@ func (c *Component) handleAgentComplete(ctx context.Context, data []byte) {
 	}
 
 	// Extract LoopCompletedEvent from payload
-	completionPtr, ok := baseMsg.Payload().(*teams.LoopCompletedEvent)
+	completionPtr, ok := baseMsg.Payload().(*agentic.LoopCompletedEvent)
 	if !ok {
 		c.logger.Error("Unexpected payload type", slog.String("type", fmt.Sprintf("%T", baseMsg.Payload())))
 		return
@@ -753,20 +753,20 @@ func (c *Component) handleAgentComplete(ctx context.Context, data []byte) {
 	var respType string
 	switch completion.Outcome {
 	case "complete":
-		respType = teams.ResponseTypeResult
+		respType = agentic.ResponseTypeResult
 		content = fmt.Sprintf("Loop %s completed.", completion.LoopID)
 		if completion.Result != "" {
 			content = completion.Result
 		}
 	case "cancelled":
-		respType = teams.ResponseTypeStatus
+		respType = agentic.ResponseTypeStatus
 		content = fmt.Sprintf("Loop %s cancelled.", completion.LoopID)
 	case "failed":
 		// Note: Failed loops are handled by handleAgentFailed, but handle gracefully
-		respType = teams.ResponseTypeError
+		respType = agentic.ResponseTypeError
 		content = fmt.Sprintf("Loop %s failed", completion.LoopID)
 	default:
-		respType = teams.ResponseTypeStatus
+		respType = agentic.ResponseTypeStatus
 		content = fmt.Sprintf("Loop %s: %s", completion.LoopID, completion.Outcome)
 	}
 
@@ -788,7 +788,7 @@ func (c *Component) handleAgentCreated(_ context.Context, data []byte) {
 	}
 
 	// Extract LoopCreatedEvent from payload
-	createdPtr, ok := baseMsg.Payload().(*teams.LoopCreatedEvent)
+	createdPtr, ok := baseMsg.Payload().(*agentic.LoopCreatedEvent)
 	if !ok {
 		c.logger.Error("Unexpected payload type", slog.String("type", fmt.Sprintf("%T", baseMsg.Payload())))
 		return
@@ -836,7 +836,7 @@ func (c *Component) handleAgentFailed(ctx context.Context, data []byte) {
 	}
 
 	// Extract LoopFailedEvent from payload
-	failurePtr, ok := baseMsg.Payload().(*teams.LoopFailedEvent)
+	failurePtr, ok := baseMsg.Payload().(*agentic.LoopFailedEvent)
 	if !ok {
 		c.logger.Error("Unexpected payload type", slog.String("type", fmt.Sprintf("%T", baseMsg.Payload())))
 		return
@@ -859,7 +859,7 @@ func (c *Component) handleAgentFailed(ctx context.Context, data []byte) {
 
 	// Send error response to user (skipped for workflow-initiated loops without user routing)
 	errorContent := fmt.Sprintf("Loop %s failed: %s", failure.LoopID, failure.Error)
-	c.sendUserResponseForLoop(ctx, loopInfo, teams.ResponseTypeError, errorContent)
+	c.sendUserResponseForLoop(ctx, loopInfo, agentic.ResponseTypeError, errorContent)
 
 	c.logger.Info("Loop failed",
 		slog.String("loop_id", failure.LoopID),
@@ -868,7 +868,7 @@ func (c *Component) handleAgentFailed(ctx context.Context, data []byte) {
 }
 
 // sendResponse publishes a response to the user's channel
-func (c *Component) sendResponse(ctx context.Context, resp teams.UserResponse) {
+func (c *Component) sendResponse(ctx context.Context, resp agentic.UserResponse) {
 	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "agentic-dispatch")
 	data, err := json.Marshal(respMsg)
 	if err != nil {
@@ -895,7 +895,7 @@ func (c *Component) sendUserResponseForLoop(ctx context.Context, loopInfo *LoopI
 		return
 	}
 
-	c.sendResponse(ctx, teams.UserResponse{
+	c.sendResponse(ctx, agentic.UserResponse{
 		ResponseID:  uuid.New().String(),
 		ChannelType: loopInfo.ChannelType,
 		ChannelID:   loopInfo.ChannelID,
@@ -975,7 +975,7 @@ func (c *Component) loadGlobalCommands() {
 
 		// Wrap executor in handler function
 		handler := func(exec CommandExecutor) CommandHandler {
-			return func(ctx context.Context, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error) {
+			return func(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
 				return exec.Execute(ctx, cmdCtx, msg, args, loopID)
 			}
 		}(executor)

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semteams/teams"
 )
 
@@ -73,14 +74,14 @@ func (e *HTTPRequestExecutor) ListTools() []teams.ToolDefinition {
 }
 
 // Execute handles an http_request tool call.
-func (e *HTTPRequestExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *HTTPRequestExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	rawURL, ok := call.Arguments["url"].(string)
 	if !ok || rawURL == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "url is required"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "url is required"}, nil
 	}
 
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  "url must start with http:// or https://",
 		}, nil
@@ -90,7 +91,7 @@ func (e *HTTPRequestExecutor) Execute(ctx context.Context, call teams.ToolCall) 
 	// This eliminates the TOCTOU window between SSRF check and HTTP dial.
 	pinnedIP, err := httpResolveAndValidate(rawURL)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: err.Error()}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: err.Error()}, nil
 	}
 
 	method := "GET"
@@ -98,7 +99,7 @@ func (e *HTTPRequestExecutor) Execute(ctx context.Context, call teams.ToolCall) 
 		method = strings.ToUpper(m)
 	}
 	if method != "GET" && method != "POST" {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  "method must be GET or POST",
 		}, nil
@@ -109,7 +110,7 @@ func (e *HTTPRequestExecutor) Execute(ctx context.Context, call teams.ToolCall) 
 
 	req, err := http.NewRequestWithContext(reqCtx, method, rawURL, nil)
 	if err != nil {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("create request: %v", err),
 		}, nil
@@ -120,7 +121,7 @@ func (e *HTTPRequestExecutor) Execute(ctx context.Context, call teams.ToolCall) 
 	client := httpBuildPinnedClientFromIP(rawURL, pinnedIP, e.effectiveTimeout())
 	resp, err := client.Do(req)
 	if err != nil {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("request failed: %v", err),
 		}, nil
@@ -129,14 +130,14 @@ func (e *HTTPRequestExecutor) Execute(ctx context.Context, call teams.ToolCall) 
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, httpMaxResponseSize+1))
 	if err != nil {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("read response: %v", err),
 		}, nil
 	}
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 400 {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("HTTP %d: %s", resp.StatusCode, httpTruncate(string(body), 500)),
 		}, nil
@@ -147,7 +148,7 @@ func (e *HTTPRequestExecutor) Execute(ctx context.Context, call teams.ToolCall) 
 		content = content[:httpMaxTextSize] + "\n[content truncated]"
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: fmt.Sprintf("HTTP %d\n\n%s", resp.StatusCode, content),
 	}, nil

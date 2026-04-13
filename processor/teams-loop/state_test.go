@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 func TestLoopManager_CreateLoop(t *testing.T) {
@@ -79,7 +79,7 @@ func TestLoopManager_CreateLoop(t *testing.T) {
 			if entity.Model != tt.model {
 				t.Errorf("Entity.Model = %s, want %s", entity.Model, tt.model)
 			}
-			if entity.State != teams.LoopStateExploring {
+			if entity.State != agentic.LoopStateExploring {
 				t.Errorf("Entity.State = %s, want exploring", entity.State)
 			}
 			if entity.Iterations != 0 {
@@ -162,7 +162,7 @@ func TestLoopManager_UpdateLoop(t *testing.T) {
 	}
 
 	// Modify the entity
-	entity.State = teams.LoopStatePlanning
+	entity.State = agentic.LoopStatePlanning
 	entity.Iterations = 5
 
 	// Update
@@ -177,7 +177,7 @@ func TestLoopManager_UpdateLoop(t *testing.T) {
 		t.Fatalf("GetLoop() after update error = %v", err)
 	}
 
-	if updated.State != teams.LoopStatePlanning {
+	if updated.State != agentic.LoopStatePlanning {
 		t.Errorf("Updated.State = %s, want planning", updated.State)
 	}
 	if updated.Iterations != 5 {
@@ -188,7 +188,7 @@ func TestLoopManager_UpdateLoop(t *testing.T) {
 func TestLoopManager_UpdateLoop_NonExistent(t *testing.T) {
 	manager := teamsloop.NewLoopManager()
 
-	entity := teams.NewLoopEntity("loop-does-not-exist", "task-001", "general", "qwen-32b")
+	entity := agentic.NewLoopEntity("loop-does-not-exist", "task-001", "general", "qwen-32b")
 
 	err := manager.UpdateLoop(entity)
 	if err == nil {
@@ -248,62 +248,62 @@ func TestLoopManager_StateTransition(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		fromState teams.LoopState
-		toState   teams.LoopState
+		fromState agentic.LoopState
+		toState   agentic.LoopState
 		wantErr   bool
 	}{
 		{
 			name:      "exploring to planning",
-			fromState: teams.LoopStateExploring,
-			toState:   teams.LoopStatePlanning,
+			fromState: agentic.LoopStateExploring,
+			toState:   agentic.LoopStatePlanning,
 			wantErr:   false,
 		},
 		{
 			name:      "planning to architecting",
-			fromState: teams.LoopStatePlanning,
-			toState:   teams.LoopStateArchitecting,
+			fromState: agentic.LoopStatePlanning,
+			toState:   agentic.LoopStateArchitecting,
 			wantErr:   false,
 		},
 		{
 			name:      "architecting to executing",
-			fromState: teams.LoopStateArchitecting,
-			toState:   teams.LoopStateExecuting,
+			fromState: agentic.LoopStateArchitecting,
+			toState:   agentic.LoopStateExecuting,
 			wantErr:   false,
 		},
 		{
 			name:      "executing to reviewing",
-			fromState: teams.LoopStateExecuting,
-			toState:   teams.LoopStateReviewing,
+			fromState: agentic.LoopStateExecuting,
+			toState:   agentic.LoopStateReviewing,
 			wantErr:   false,
 		},
 		{
 			name:      "reviewing to complete",
-			fromState: teams.LoopStateReviewing,
-			toState:   teams.LoopStateComplete,
+			fromState: agentic.LoopStateReviewing,
+			toState:   agentic.LoopStateComplete,
 			wantErr:   false,
 		},
 		{
 			name:      "backward transition (executing to exploring)",
-			fromState: teams.LoopStateExecuting,
-			toState:   teams.LoopStateExploring,
+			fromState: agentic.LoopStateExecuting,
+			toState:   agentic.LoopStateExploring,
 			wantErr:   false, // Fluid transitions allow backward movement
 		},
 		{
 			name:      "same state transition",
-			fromState: teams.LoopStatePlanning,
-			toState:   teams.LoopStatePlanning,
+			fromState: agentic.LoopStatePlanning,
+			toState:   agentic.LoopStatePlanning,
 			wantErr:   false, // Same state is allowed (no-op)
 		},
 		{
 			name:      "transition from terminal state (complete)",
-			fromState: teams.LoopStateComplete,
-			toState:   teams.LoopStateExecuting,
+			fromState: agentic.LoopStateComplete,
+			toState:   agentic.LoopStateExecuting,
 			wantErr:   true, // Cannot transition from terminal state
 		},
 		{
 			name:      "transition from terminal state (failed)",
-			fromState: teams.LoopStateFailed,
-			toState:   teams.LoopStateExploring,
+			fromState: agentic.LoopStateFailed,
+			toState:   agentic.LoopStateExploring,
 			wantErr:   true, // Cannot transition from terminal state
 		},
 	}
@@ -614,7 +614,7 @@ func TestLoopManager_UpdateCompletion(t *testing.T) {
 		{
 			name:    "success completion",
 			loopID:  loopID,
-			outcome: teams.OutcomeSuccess,
+			outcome: agentic.OutcomeSuccess,
 			result:  "Task completed successfully",
 			errMsg:  "",
 			wantErr: false,
@@ -622,7 +622,7 @@ func TestLoopManager_UpdateCompletion(t *testing.T) {
 		{
 			name:    "failed completion",
 			loopID:  loopID,
-			outcome: teams.OutcomeFailed,
+			outcome: agentic.OutcomeFailed,
 			result:  "",
 			errMsg:  "max iterations reached",
 			wantErr: false,
@@ -630,7 +630,7 @@ func TestLoopManager_UpdateCompletion(t *testing.T) {
 		{
 			name:    "cancelled completion",
 			loopID:  loopID,
-			outcome: teams.OutcomeCancelled,
+			outcome: agentic.OutcomeCancelled,
 			result:  "",
 			errMsg:  "cancelled by user",
 			wantErr: false,
@@ -647,7 +647,7 @@ func TestLoopManager_UpdateCompletion(t *testing.T) {
 		{
 			name:      "non-existent loop",
 			loopID:    "non-existent",
-			outcome:   teams.OutcomeSuccess,
+			outcome:   agentic.OutcomeSuccess,
 			result:    "test",
 			errMsg:    "",
 			wantErr:   true,
@@ -692,33 +692,33 @@ func TestLoopManager_UpdateCompletion(t *testing.T) {
 func TestLoopManager_CancelLoop(t *testing.T) {
 	tests := []struct {
 		name        string
-		setupState  teams.LoopState
+		setupState  agentic.LoopState
 		cancelledBy string
 		wantErr     bool
 		errSubstr   string
 	}{
 		{
 			name:        "cancel exploring loop",
-			setupState:  teams.LoopStateExploring,
+			setupState:  agentic.LoopStateExploring,
 			cancelledBy: "user-123",
 			wantErr:     false,
 		},
 		{
 			name:        "cancel executing loop",
-			setupState:  teams.LoopStateExecuting,
+			setupState:  agentic.LoopStateExecuting,
 			cancelledBy: "user-456",
 			wantErr:     false,
 		},
 		{
 			name:        "cannot cancel completed loop",
-			setupState:  teams.LoopStateComplete,
+			setupState:  agentic.LoopStateComplete,
 			cancelledBy: "user-789",
 			wantErr:     true,
 			errSubstr:   "cannot cancel terminal",
 		},
 		{
 			name:        "cannot cancel failed loop",
-			setupState:  teams.LoopStateFailed,
+			setupState:  agentic.LoopStateFailed,
 			cancelledBy: "user-abc",
 			wantErr:     true,
 			errSubstr:   "cannot cancel terminal",
@@ -731,7 +731,7 @@ func TestLoopManager_CancelLoop(t *testing.T) {
 			loopID, _ := manager.CreateLoop("task-001", "general", "qwen-32b", 10)
 
 			// Set up the loop state
-			if tt.setupState != teams.LoopStateExploring {
+			if tt.setupState != agentic.LoopStateExploring {
 				_ = manager.TransitionLoop(loopID, tt.setupState)
 			}
 
@@ -750,8 +750,8 @@ func TestLoopManager_CancelLoop(t *testing.T) {
 			}
 
 			// Verify the entity was updated atomically
-			if entity.State != teams.LoopStateCancelled {
-				t.Errorf("State = %v, want %v", entity.State, teams.LoopStateCancelled)
+			if entity.State != agentic.LoopStateCancelled {
+				t.Errorf("State = %v, want %v", entity.State, agentic.LoopStateCancelled)
 			}
 			if entity.CancelledBy != tt.cancelledBy {
 				t.Errorf("CancelledBy = %v, want %v", entity.CancelledBy, tt.cancelledBy)
@@ -759,8 +759,8 @@ func TestLoopManager_CancelLoop(t *testing.T) {
 			if entity.CancelledAt.IsZero() {
 				t.Error("CancelledAt should be set")
 			}
-			if entity.Outcome != teams.OutcomeCancelled {
-				t.Errorf("Outcome = %v, want %v", entity.Outcome, teams.OutcomeCancelled)
+			if entity.Outcome != agentic.OutcomeCancelled {
+				t.Errorf("Outcome = %v, want %v", entity.Outcome, agentic.OutcomeCancelled)
 			}
 			if entity.CompletedAt.IsZero() {
 				t.Error("CompletedAt should be set")
@@ -945,7 +945,7 @@ func TestLoopManager_TimeoutDetection(t *testing.T) {
 			if err != nil {
 				t.Fatalf("GetLoop() error = %v", err)
 			}
-			if entity.State != teams.LoopStateExploring {
+			if entity.State != agentic.LoopStateExploring {
 				t.Errorf("State = %s, want exploring (timeout should not auto-transition)", entity.State)
 			}
 		})
@@ -986,9 +986,9 @@ func TestLoopManager_ConcurrentStateTransitions(t *testing.T) {
 	for i := range goroutines {
 		go func(idx int) {
 			defer wg.Done()
-			target := teams.LoopStateExecuting
+			target := agentic.LoopStateExecuting
 			if idx%2 == 0 {
-				target = teams.LoopStatePlanning
+				target = agentic.LoopStatePlanning
 			}
 			// Transitions are valid from any non-terminal state
 			_ = manager.TransitionLoop(loopID, target)
@@ -1003,7 +1003,7 @@ func TestLoopManager_ConcurrentStateTransitions(t *testing.T) {
 		t.Fatalf("GetLoop() error = %v", err)
 	}
 
-	if entity.State != teams.LoopStateExecuting && entity.State != teams.LoopStatePlanning {
+	if entity.State != agentic.LoopStateExecuting && entity.State != agentic.LoopStatePlanning {
 		t.Errorf("State = %s, want executing or planning after concurrent transitions", entity.State)
 	}
 }
@@ -1024,7 +1024,7 @@ func TestLoopManager_DuplicateToolResultIdempotency(t *testing.T) {
 	}
 
 	// Store first result
-	err = manager.StoreToolResult(loopID, teams.ToolResult{
+	err = manager.StoreToolResult(loopID, agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "result_v1",
 	})
@@ -1033,7 +1033,7 @@ func TestLoopManager_DuplicateToolResultIdempotency(t *testing.T) {
 	}
 
 	// Store duplicate with different content — last write wins
-	err = manager.StoreToolResult(loopID, teams.ToolResult{
+	err = manager.StoreToolResult(loopID, agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "result_v2",
 	})

@@ -3,30 +3,30 @@ package teamsloop_test
 import (
 	"testing"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 func TestContextManager_Utilization(t *testing.T) {
 	tests := []struct {
 		name        string
 		model       string
-		addMessages map[teamsloop.RegionType][]teams.ChatMessage
+		addMessages map[teamsloop.RegionType][]agentic.ChatMessage
 		wantUtilMin float64
 		wantUtilMax float64
 	}{
 		{
 			name:        "empty context",
 			model:       "gpt-4o",
-			addMessages: map[teamsloop.RegionType][]teams.ChatMessage{},
+			addMessages: map[teamsloop.RegionType][]agentic.ChatMessage{},
 			wantUtilMin: 0.0,
 			wantUtilMax: 0.0,
 		},
 		{
 			name:  "system prompt only",
 			model: "gpt-4o",
-			addMessages: map[teamsloop.RegionType][]teams.ChatMessage{
+			addMessages: map[teamsloop.RegionType][]agentic.ChatMessage{
 				teamsloop.RegionSystemPrompt: {
 					{Role: "system", Content: "You are a helpful assistant."},
 				},
@@ -37,7 +37,7 @@ func TestContextManager_Utilization(t *testing.T) {
 		{
 			name:  "mixed regions",
 			model: "gpt-4o",
-			addMessages: map[teamsloop.RegionType][]teams.ChatMessage{
+			addMessages: map[teamsloop.RegionType][]agentic.ChatMessage{
 				teamsloop.RegionSystemPrompt: {
 					{Role: "system", Content: "You are a helpful assistant."},
 				},
@@ -55,7 +55,7 @@ func TestContextManager_Utilization(t *testing.T) {
 		{
 			name:  "claude model with higher limit",
 			model: "claude-sonnet",
-			addMessages: map[teamsloop.RegionType][]teams.ChatMessage{
+			addMessages: map[teamsloop.RegionType][]agentic.ChatMessage{
 				teamsloop.RegionSystemPrompt: {
 					{Role: "system", Content: "You are a helpful assistant."},
 				},
@@ -164,19 +164,19 @@ func TestContextManager_GetContext_RegionOrdering(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// Add messages to different regions in random order
-	_ = cm.AddMessage(teamsloop.RegionToolResults, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionToolResults, agentic.ChatMessage{
 		Role: "tool", Content: "Tool result", ToolCallID: "call-1",
 	})
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "Recent user message",
 	})
-	_ = cm.AddMessage(teamsloop.RegionSystemPrompt, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionSystemPrompt, agentic.ChatMessage{
 		Role: "system", Content: "System prompt",
 	})
-	_ = cm.AddMessage(teamsloop.RegionCompactedHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionCompactedHistory, agentic.ChatMessage{
 		Role: "user", Content: "Compacted summary",
 	})
-	_ = cm.AddMessage(teamsloop.RegionHydratedContext, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionHydratedContext, agentic.ChatMessage{
 		Role: "user", Content: "Hydrated context",
 	})
 
@@ -208,14 +208,14 @@ func TestContextManager_AddMessage(t *testing.T) {
 	tests := []struct {
 		name    string
 		region  teamsloop.RegionType
-		message teams.ChatMessage
+		message agentic.ChatMessage
 		wantErr bool
 		errMsg  string
 	}{
 		{
 			name:   "add to system prompt",
 			region: teamsloop.RegionSystemPrompt,
-			message: teams.ChatMessage{
+			message: agentic.ChatMessage{
 				Role: "system", Content: "System message",
 			},
 			wantErr: false,
@@ -223,7 +223,7 @@ func TestContextManager_AddMessage(t *testing.T) {
 		{
 			name:   "add to recent history",
 			region: teamsloop.RegionRecentHistory,
-			message: teams.ChatMessage{
+			message: agentic.ChatMessage{
 				Role: "user", Content: "User message",
 			},
 			wantErr: false,
@@ -231,7 +231,7 @@ func TestContextManager_AddMessage(t *testing.T) {
 		{
 			name:   "add to tool results",
 			region: teamsloop.RegionToolResults,
-			message: teams.ChatMessage{
+			message: agentic.ChatMessage{
 				Role: "tool", Content: "Tool output", ToolCallID: "call-1",
 			},
 			wantErr: false,
@@ -239,7 +239,7 @@ func TestContextManager_AddMessage(t *testing.T) {
 		{
 			name:   "add to compacted history",
 			region: teamsloop.RegionCompactedHistory,
-			message: teams.ChatMessage{
+			message: agentic.ChatMessage{
 				Role: "user", Content: "Summary",
 			},
 			wantErr: false,
@@ -247,7 +247,7 @@ func TestContextManager_AddMessage(t *testing.T) {
 		{
 			name:   "add to hydrated context",
 			region: teamsloop.RegionHydratedContext,
-			message: teams.ChatMessage{
+			message: agentic.ChatMessage{
 				Role: "user", Content: "Hydrated data",
 			},
 			wantErr: false,
@@ -255,7 +255,7 @@ func TestContextManager_AddMessage(t *testing.T) {
 		{
 			name:   "invalid region type",
 			region: teamsloop.RegionType("unknown"),
-			message: teams.ChatMessage{
+			message: agentic.ChatMessage{
 				Role: "user", Content: "Message",
 			},
 			wantErr: true,
@@ -304,10 +304,10 @@ func TestContextManager_GetRegionTokens(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// Add messages to specific regions
-	_ = cm.AddMessage(teamsloop.RegionSystemPrompt, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionSystemPrompt, agentic.ChatMessage{
 		Role: "system", Content: "System prompt with some content",
 	})
-	_ = cm.AddMessage(teamsloop.RegionRecentHistory, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionRecentHistory, agentic.ChatMessage{
 		Role: "user", Content: "User message",
 	})
 
@@ -453,7 +453,7 @@ func TestContextManager_MultipleMessagesPerRegion(t *testing.T) {
 	cm := teamsloop.NewContextManager("loop-1", "gpt-4o", config)
 
 	// Add multiple messages to recent history
-	messages := []teams.ChatMessage{
+	messages := []agentic.ChatMessage{
 		{Role: "user", Content: "Message 1"},
 		{Role: "assistant", Content: "Response 1"},
 		{Role: "user", Content: "Message 2"},
@@ -557,7 +557,7 @@ func TestContextManager_TotalTokens(t *testing.T) {
 		t.Errorf("TotalTokens() = %d for empty context, want 0", cm.TotalTokens())
 	}
 
-	_ = cm.AddMessage(teamsloop.RegionSystemPrompt, teams.ChatMessage{
+	_ = cm.AddMessage(teamsloop.RegionSystemPrompt, agentic.ChatMessage{
 		Role: "system", Content: "Hello world",
 	})
 
@@ -590,7 +590,7 @@ func fillContextToTokens(t *testing.T, cm *teamsloop.ContextManager, targetToken
 	}
 
 	// Add as single message to recent history
-	msg := teams.ChatMessage{
+	msg := agentic.ChatMessage{
 		Role:    "user",
 		Content: string(content),
 	}

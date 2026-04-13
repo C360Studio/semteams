@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semteams/teams"
 )
 
@@ -62,9 +63,9 @@ func (e *WebSearchExecutor) ListTools() []teams.ToolDefinition {
 }
 
 // Execute dispatches tool calls.
-func (e *WebSearchExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *WebSearchExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	if call.Name != "web_search" {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("unknown tool: %s", call.Name),
 		}, fmt.Errorf("unknown tool: %s", call.Name)
@@ -72,7 +73,7 @@ func (e *WebSearchExecutor) Execute(ctx context.Context, call teams.ToolCall) (t
 
 	query, ok := call.Arguments["query"].(string)
 	if !ok || query == "" {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  "query argument is required",
 		}, nil
@@ -88,14 +89,14 @@ func (e *WebSearchExecutor) Execute(ctx context.Context, call teams.ToolCall) (t
 
 	results, err := e.search(ctx, query, maxResults)
 	if err != nil {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("search failed: %v", err),
 		}, nil
 	}
 
 	if len(results) == 0 {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID:  call.ID,
 			Content: "No results found.",
 		}, nil
@@ -113,7 +114,7 @@ func (e *WebSearchExecutor) Execute(ctx context.Context, call teams.ToolCall) (t
 		}
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: sb.String(),
 	}, nil

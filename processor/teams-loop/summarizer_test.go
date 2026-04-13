@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/graph/llm"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 // mockLLMClient implements llm.Client for testing.
@@ -31,7 +31,7 @@ func (m *mockLLMClient) Model() string { return "mock-model" }
 func (m *mockLLMClient) Close() error  { return nil }
 
 func TestLLMSummarizer_Summarize(t *testing.T) {
-	messages := []teams.ChatMessage{
+	messages := []agentic.ChatMessage{
 		{Role: "user", Content: "What is the capital of France?"},
 		{Role: "assistant", Content: "The capital of France is Paris."},
 	}
@@ -75,7 +75,7 @@ func TestLLMSummarizer_Summarize_Error(t *testing.T) {
 	}
 	summarizer := teamsloop.NewLLMSummarizer(client, nil)
 
-	messages := []teams.ChatMessage{
+	messages := []agentic.ChatMessage{
 		{Role: "user", Content: "Some message"},
 	}
 
@@ -99,7 +99,7 @@ func TestFormatMessagesForSummary_Roles(t *testing.T) {
 	}
 	summarizer := teamsloop.NewLLMSummarizer(client, nil)
 
-	messages := []teams.ChatMessage{
+	messages := []agentic.ChatMessage{
 		{Role: "user", Content: "Hello"},
 		{Role: "assistant", Content: "Hi there"},
 		{Role: "tool", Content: "tool output", ToolCallID: "call-1"},
@@ -127,11 +127,11 @@ func TestFormatMessagesForSummary_ToolCalls(t *testing.T) {
 	}
 	summarizer := teamsloop.NewLLMSummarizer(client, nil)
 
-	messages := []teams.ChatMessage{
+	messages := []agentic.ChatMessage{
 		{
 			Role:    "assistant",
 			Content: "",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-1", Name: "search_graph", Arguments: map[string]any{"query": "France"}},
 			},
 		},

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/service"
-	"github.com/c360studio/semteams/teams"
 )
 
 func init() {
@@ -77,7 +77,7 @@ func parseTrajectoryFilter(r *http.Request) (trajectoryFilter, error) {
 }
 
 // matches returns true if the entity passes all filter criteria.
-func (f *trajectoryFilter) matches(entity *teams.LoopEntity) bool {
+func (f *trajectoryFilter) matches(entity *agentic.LoopEntity) bool {
 	if f.Outcome != "" && entity.Outcome != f.Outcome {
 		return false
 	}
@@ -105,8 +105,8 @@ func (f *trajectoryFilter) matches(entity *teams.LoopEntity) bool {
 }
 
 // entityToListItem converts a LoopEntity to a TrajectoryListItem.
-func (c *Component) entityToListItem(entity *teams.LoopEntity) teams.TrajectoryListItem {
-	item := teams.TrajectoryListItem{
+func (c *Component) entityToListItem(entity *agentic.LoopEntity) agentic.TrajectoryListItem {
+	item := agentic.TrajectoryListItem{
 		LoopID:       entity.ID,
 		TaskID:       entity.TaskID,
 		Outcome:      entity.Outcome,
@@ -169,7 +169,7 @@ func (c *Component) handleListTrajectories(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	var items []teams.TrajectoryListItem
+	var items []agentic.TrajectoryListItem
 	for _, key := range keys {
 		if strings.HasPrefix(key, "COMPLETE_") {
 			continue
@@ -178,7 +178,7 @@ func (c *Component) handleListTrajectories(w http.ResponseWriter, r *http.Reques
 		if err != nil {
 			continue
 		}
-		var entity teams.LoopEntity
+		var entity agentic.LoopEntity
 		if err := json.Unmarshal(entry.Value(), &entity); err != nil {
 			continue
 		}
@@ -202,10 +202,10 @@ func (c *Component) handleListTrajectories(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	if items == nil {
-		items = []teams.TrajectoryListItem{}
+		items = []agentic.TrajectoryListItem{}
 	}
 
-	writeJSON(w, http.StatusOK, teams.TrajectoryListResponse{
+	writeJSON(w, http.StatusOK, agentic.TrajectoryListResponse{
 		Trajectories: items,
 		Total:        total,
 	})
@@ -228,7 +228,7 @@ func (c *Component) handleGetTrajectory(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Try cache first (finalized trajectories)
-	var traj *teams.Trajectory
+	var traj *agentic.Trajectory
 	if c.trajectoryCache != nil {
 		traj, _ = c.trajectoryCache.Get(loopID)
 	}
@@ -284,10 +284,10 @@ func agenticLoopOpenAPISpec() *service.OpenAPISpec {
 			},
 		},
 		ResponseTypes: []reflect.Type{
-			reflect.TypeOf(teams.TrajectoryListResponse{}),
-			reflect.TypeOf(teams.TrajectoryListItem{}),
-			reflect.TypeOf(teams.Trajectory{}),
-			reflect.TypeOf(teams.TrajectoryStep{}),
+			reflect.TypeOf(agentic.TrajectoryListResponse{}),
+			reflect.TypeOf(agentic.TrajectoryListItem{}),
+			reflect.TypeOf(agentic.Trajectory{}),
+			reflect.TypeOf(agentic.TrajectoryStep{}),
 		},
 		Paths: map[string]service.PathSpec{
 			"/trajectories": {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +20,7 @@ func TestBashExecutor_ListTools(t *testing.T) {
 func TestBashExecutor_LocalExec(t *testing.T) {
 	e := NewBashExecutor("/tmp", "")
 
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "call-1",
 		Name:      "bash",
 		Arguments: map[string]any{"command": "echo hello"},
@@ -34,7 +34,7 @@ func TestBashExecutor_LocalExec(t *testing.T) {
 func TestBashExecutor_MissingCommand(t *testing.T) {
 	e := NewBashExecutor("/tmp", "")
 
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "call-2",
 		Name:      "bash",
 		Arguments: map[string]any{},
@@ -46,7 +46,7 @@ func TestBashExecutor_MissingCommand(t *testing.T) {
 func TestBashExecutor_NonZeroExit(t *testing.T) {
 	e := NewBashExecutor("/tmp", "")
 
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "call-3",
 		Name:      "bash",
 		Arguments: map[string]any{"command": "exit 42"},
@@ -58,7 +58,7 @@ func TestBashExecutor_NonZeroExit(t *testing.T) {
 func TestBashExecutor_StderrCaptured(t *testing.T) {
 	e := NewBashExecutor("/tmp", "")
 
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "call-4",
 		Name:      "bash",
 		Arguments: map[string]any{"command": "echo stdout-text && echo stderr-text >&2"},

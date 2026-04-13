@@ -27,7 +27,7 @@
 // Tools are implemented by satisfying the ToolExecutor interface:
 //
 //	type ToolExecutor interface {
-//	    Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error)
+//	    Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error)
 //	    ListTools() []teams.ToolDefinition
 //	}
 //
@@ -35,25 +35,25 @@
 //
 //	type FileReader struct{}
 //
-//	func (f *FileReader) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+//	func (f *FileReader) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 //	    path, _ := call.Arguments["path"].(string)
 //
 //	    // Respect context cancellation
 //	    select {
 //	    case <-ctx.Done():
-//	        return teams.ToolResult{CallID: call.ID, Error: "cancelled"}, ctx.Err()
+//	        return agentic.ToolResult{CallID: call.ID, Error: "cancelled"}, ctx.Err()
 //	    default:
 //	    }
 //
 //	    content, err := os.ReadFile(path)
 //	    if err != nil {
-//	        return teams.ToolResult{
+//	        return agentic.ToolResult{
 //	            CallID: call.ID,
 //	            Error:  err.Error(),
 //	        }, nil
 //	    }
 //
-//	    return teams.ToolResult{
+//	    return agentic.ToolResult{
 //	        CallID:  call.ID,
 //	        Content: string(content),
 //	    }, nil
@@ -138,7 +138,7 @@
 //
 // Example blocked response:
 //
-//	result := teams.ToolResult{
+//	result := agentic.ToolResult{
 //	    CallID: "call_001",
 //	    Error:  "tool 'delete_file' is not allowed",
 //	}
@@ -155,10 +155,10 @@
 // The timeout is enforced via context cancellation. Tool implementations
 // should respect ctx.Done() for proper cancellation:
 //
-//	func (t *SlowTool) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+//	func (t *SlowTool) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 //	    select {
 //	    case <-ctx.Done():
-//	        return teams.ToolResult{CallID: call.ID, Error: "execution cancelled"}, ctx.Err()
+//	        return agentic.ToolResult{CallID: call.ID, Error: "execution cancelled"}, ctx.Err()
 //	    case result := <-t.doWork(call):
 //	        return result, nil
 //	    }
@@ -297,10 +297,10 @@
 // For testing, use mock executors and unique consumer names:
 //
 //	type MockExecutor struct {
-//	    result teams.ToolResult
+//	    result agentic.ToolResult
 //	}
 //
-//	func (m *MockExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+//	func (m *MockExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 //	    m.result.CallID = call.ID
 //	    return m.result, nil
 //	}

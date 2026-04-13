@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,13 +14,13 @@ func TestInMemoryToolCallStore_Store(t *testing.T) {
 	store := NewInMemoryToolCallStore()
 
 	record := ToolCallRecord{
-		Call: teams.ToolCall{
+		Call: agentic.ToolCall{
 			ID:      "call-1",
 			Name:    "test_tool",
 			LoopID:  "loop-123",
 			TraceID: "trace-abc",
 		},
-		Result: teams.ToolResult{
+		Result: agentic.ToolResult{
 			CallID:  "call-1",
 			Content: "result",
 		},
@@ -56,7 +56,7 @@ func TestInMemoryToolCallStore_Reset(t *testing.T) {
 
 	// Add a record
 	err := store.Store(context.Background(), ToolCallRecord{
-		Call: teams.ToolCall{ID: "call-1"},
+		Call: agentic.ToolCall{ID: "call-1"},
 	})
 	require.NoError(t, err)
 	require.Len(t, store.Records(), 1)
@@ -69,7 +69,7 @@ func TestInMemoryToolCallStore_Reset(t *testing.T) {
 
 	// Should be able to store again
 	err = store.Store(context.Background(), ToolCallRecord{
-		Call: teams.ToolCall{ID: "call-2"},
+		Call: agentic.ToolCall{ID: "call-2"},
 	})
 	require.NoError(t, err)
 

@@ -9,8 +9,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/c360studio/semstreams/agentic"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 func TestArchitectCompletion_ProducesEnrichedCompletionState(t *testing.T) {
@@ -32,10 +32,10 @@ func TestArchitectCompletion_ProducesEnrichedCompletionState(t *testing.T) {
 
 	// Architect completes
 	architectOutput := "Architecture design: Use Redis cluster with consistent hashing..."
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: architectOutput,
 		},
@@ -47,7 +47,7 @@ func TestArchitectCompletion_ProducesEnrichedCompletionState(t *testing.T) {
 	}
 
 	// Should mark architect loop as complete
-	if result.State != teams.LoopStateComplete {
+	if result.State != agentic.LoopStateComplete {
 		t.Errorf("Architect state = %s, want complete", result.State)
 	}
 
@@ -60,8 +60,8 @@ func TestArchitectCompletion_ProducesEnrichedCompletionState(t *testing.T) {
 	if result.CompletionState.Role != "architect" {
 		t.Errorf("CompletionState.Role = %v, want architect", result.CompletionState.Role)
 	}
-	if result.CompletionState.Outcome != teams.OutcomeSuccess {
-		t.Errorf("CompletionState.Outcome = %v, want %s", result.CompletionState.Outcome, teams.OutcomeSuccess)
+	if result.CompletionState.Outcome != agentic.OutcomeSuccess {
+		t.Errorf("CompletionState.Outcome = %v, want %s", result.CompletionState.Outcome, agentic.OutcomeSuccess)
 	}
 	if result.CompletionState.TaskID != "task-001" {
 		t.Errorf("CompletionState.TaskID = %v, want task-001", result.CompletionState.TaskID)
@@ -97,10 +97,10 @@ func TestArchitectCompletion_PublishesAgentComplete(t *testing.T) {
 
 	architectOutput := "Architecture: Microservices with event sourcing..."
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: architectOutput,
 		},
@@ -165,10 +165,10 @@ func TestEditorCompletion_DoesNotChain(t *testing.T) {
 
 	editorLoopID := taskResult.LoopID
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "Implementation done",
 		},
@@ -180,7 +180,7 @@ func TestEditorCompletion_DoesNotChain(t *testing.T) {
 	}
 
 	// Editor should complete normally
-	if result.State != teams.LoopStateComplete {
+	if result.State != agentic.LoopStateComplete {
 		t.Errorf("Editor state = %s, want complete", result.State)
 	}
 
@@ -221,10 +221,10 @@ func TestGeneralRoleCompletion_ProducesCompletionState(t *testing.T) {
 
 	generalLoopID := taskResult.LoopID
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "Here is the answer",
 		},
@@ -236,7 +236,7 @@ func TestGeneralRoleCompletion_ProducesCompletionState(t *testing.T) {
 	}
 
 	// Should mark as complete
-	if result.State != teams.LoopStateComplete {
+	if result.State != agentic.LoopStateComplete {
 		t.Errorf("General loop state = %s, want complete", result.State)
 	}
 
@@ -266,12 +266,12 @@ func TestArchitectWithToolCalls_CompletionAfterTools(t *testing.T) {
 	architectLoopID := taskResult.LoopID
 
 	// Architect makes tool calls (should work normally)
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{
 					ID:   "call-001",
 					Name: "graph_query",
@@ -294,7 +294,7 @@ func TestArchitectWithToolCalls_CompletionAfterTools(t *testing.T) {
 	}
 
 	// Complete tool execution
-	_, err = handler.HandleToolResult(ctx, architectLoopID, teams.ToolResult{
+	_, err = handler.HandleToolResult(ctx, architectLoopID, agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "Found patterns: ...",
 	})
@@ -303,10 +303,10 @@ func TestArchitectWithToolCalls_CompletionAfterTools(t *testing.T) {
 	}
 
 	// Now architect completes
-	completeResponse := teams.AgentResponse{
+	completeResponse := agentic.AgentResponse{
 		RequestID: "req-002",
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "Architecture design complete",
 		},
@@ -324,8 +324,8 @@ func TestArchitectWithToolCalls_CompletionAfterTools(t *testing.T) {
 	if completeResult.CompletionState.Role != "architect" {
 		t.Errorf("CompletionState.Role = %v, want architect", completeResult.CompletionState.Role)
 	}
-	if completeResult.CompletionState.Outcome != teams.OutcomeSuccess {
-		t.Errorf("CompletionState.Outcome = %v, want %s", completeResult.CompletionState.Outcome, teams.OutcomeSuccess)
+	if completeResult.CompletionState.Outcome != agentic.OutcomeSuccess {
+		t.Errorf("CompletionState.Outcome = %v, want %s", completeResult.CompletionState.Outcome, agentic.OutcomeSuccess)
 	}
 }
 
@@ -344,7 +344,7 @@ func TestArchitectFailure_NoCompletionState(t *testing.T) {
 	}
 
 	// Architect fails
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "error",
 		Error:     "Model timeout",
@@ -362,7 +362,7 @@ func TestArchitectFailure_NoCompletionState(t *testing.T) {
 	}
 
 	// Architect should be marked as failed
-	if result.State != teams.LoopStateFailed {
+	if result.State != agentic.LoopStateFailed {
 		t.Errorf("Architect state = %s, want failed", result.State)
 	}
 }
@@ -384,19 +384,19 @@ func TestCompletionState_IncludesIterations(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Do one iteration with tool call
-	_, err = handler.HandleModelResponse(ctx, loopID, teams.AgentResponse{
+	_, err = handler.HandleModelResponse(ctx, loopID, agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:      "assistant",
-			ToolCalls: []teams.ToolCall{{ID: "call-001", Name: "tool1"}},
+			ToolCalls: []agentic.ToolCall{{ID: "call-001", Name: "tool1"}},
 		},
 	})
 	if err != nil {
 		t.Fatalf("HandleModelResponse() error = %v", err)
 	}
 
-	_, err = handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	_, err = handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "Result 1",
 	})
@@ -405,10 +405,10 @@ func TestCompletionState_IncludesIterations(t *testing.T) {
 	}
 
 	// Complete
-	result, err := handler.HandleModelResponse(ctx, loopID, teams.AgentResponse{
+	result, err := handler.HandleModelResponse(ctx, loopID, agentic.AgentResponse{
 		RequestID: "req-002",
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "Done",
 		},

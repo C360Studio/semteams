@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -130,15 +130,15 @@ func (a *streamAccumulator) setUsage(usage *openai.Usage) {
 }
 
 // toAgentResponse builds the complete response from accumulated deltas.
-func (a *streamAccumulator) toAgentResponse(requestID string) teams.AgentResponse {
-	resp := teams.AgentResponse{
+func (a *streamAccumulator) toAgentResponse(requestID string) agentic.AgentResponse {
+	resp := agentic.AgentResponse{
 		RequestID: requestID,
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:             a.role,
 			Content:          a.content.String(),
 			ReasoningContent: a.reasoning.String(),
 		},
-		TokenUsage: teams.TokenUsage{
+		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     a.promptTokens,
 			CompletionTokens: a.completionTokens,
 		},
@@ -162,7 +162,7 @@ func (a *streamAccumulator) toAgentResponse(requestID string) teams.AgentRespons
 		}
 		sort.Ints(indices)
 
-		toolCalls := make([]teams.ToolCall, 0, len(indices))
+		toolCalls := make([]agentic.ToolCall, 0, len(indices))
 		for _, idx := range indices {
 			tc := a.toolCalls[idx]
 			args := make(map[string]any)
@@ -180,7 +180,7 @@ func (a *streamAccumulator) toAgentResponse(requestID string) teams.AgentRespons
 					args = make(map[string]any)
 				}
 			}
-			toolCalls = append(toolCalls, teams.ToolCall{
+			toolCalls = append(toolCalls, agentic.ToolCall{
 				ID:        tc.ID,
 				Name:      tc.Function.Name,
 				Arguments: args,

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semteams/teams"
 )
@@ -145,7 +146,7 @@ func (e *GitHubReadExecutor) ListTools() []teams.ToolDefinition {
 }
 
 // Execute dispatches the tool call to the appropriate handler.
-func (e *GitHubReadExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubReadExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	switch call.Name {
 	case "github_get_issue":
 		return e.getIssue(ctx, call)
@@ -158,35 +159,35 @@ func (e *GitHubReadExecutor) Execute(ctx context.Context, call teams.ToolCall) (
 	case "github_get_file":
 		return e.getFile(ctx, call)
 	default:
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("unknown tool: %s", call.Name),
 		}, errs.WrapInvalid(fmt.Errorf("unknown tool: %s", call.Name), "GitHubReadExecutor", "Execute", "find tool")
 	}
 }
 
-func (e *GitHubReadExecutor) getIssue(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubReadExecutor) getIssue(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	owner, repo, ok := extractOwnerRepo(call)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
 	}
 
 	number, ok := extractInt(call.Arguments, "number")
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "number is required and must be an integer"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "number is required and must be an integer"}, nil
 	}
 
 	issue, err := e.client.GetIssue(ctx, owner, repo, number)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_get_issue failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_get_issue failed: %v", err)}, nil
 	}
 
 	content, err := marshalPretty(issue)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{
@@ -197,10 +198,10 @@ func (e *GitHubReadExecutor) getIssue(ctx context.Context, call teams.ToolCall) 
 	}, nil
 }
 
-func (e *GitHubReadExecutor) listIssues(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubReadExecutor) listIssues(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	owner, repo, ok := extractOwnerRepo(call)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
 	}
 
 	opts := ListIssuesOpts{
@@ -219,15 +220,15 @@ func (e *GitHubReadExecutor) listIssues(ctx context.Context, call teams.ToolCall
 
 	issues, err := e.client.ListIssues(ctx, owner, repo, opts)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_list_issues failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_list_issues failed: %v", err)}, nil
 	}
 
 	content, err := marshalPretty(issues)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{
@@ -237,23 +238,23 @@ func (e *GitHubReadExecutor) listIssues(ctx context.Context, call teams.ToolCall
 	}, nil
 }
 
-func (e *GitHubReadExecutor) searchIssues(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubReadExecutor) searchIssues(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	query, ok := call.Arguments["query"].(string)
 	if !ok || query == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "query is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "query is required and must be a non-empty string"}, nil
 	}
 
 	issues, err := e.client.SearchIssues(ctx, query)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_search_issues failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_search_issues failed: %v", err)}, nil
 	}
 
 	content, err := marshalPretty(issues)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{
@@ -263,28 +264,28 @@ func (e *GitHubReadExecutor) searchIssues(ctx context.Context, call teams.ToolCa
 	}, nil
 }
 
-func (e *GitHubReadExecutor) getPR(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubReadExecutor) getPR(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	owner, repo, ok := extractOwnerRepo(call)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
 	}
 
 	number, ok := extractInt(call.Arguments, "number")
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "number is required and must be an integer"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "number is required and must be an integer"}, nil
 	}
 
 	pr, err := e.client.GetPullRequest(ctx, owner, repo, number)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_get_pr failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_get_pr failed: %v", err)}, nil
 	}
 
 	content, err := marshalPretty(pr)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{
@@ -295,15 +296,15 @@ func (e *GitHubReadExecutor) getPR(ctx context.Context, call teams.ToolCall) (te
 	}, nil
 }
 
-func (e *GitHubReadExecutor) getFile(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubReadExecutor) getFile(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	owner, repo, ok := extractOwnerRepo(call)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
 	}
 
 	filePath, ok := call.Arguments["path"].(string)
 	if !ok || filePath == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "path is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "path is required and must be a non-empty string"}, nil
 	}
 
 	ref := "main"
@@ -313,10 +314,10 @@ func (e *GitHubReadExecutor) getFile(ctx context.Context, call teams.ToolCall) (
 
 	content, err := e.client.GetFileContent(ctx, owner, repo, filePath, ref)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_get_file failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_get_file failed: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{
@@ -329,7 +330,7 @@ func (e *GitHubReadExecutor) getFile(ctx context.Context, call teams.ToolCall) (
 // --- shared argument helpers ---
 
 // extractOwnerRepo pulls owner and repo strings from a tool call's arguments.
-func extractOwnerRepo(call teams.ToolCall) (owner, repo string, ok bool) {
+func extractOwnerRepo(call agentic.ToolCall) (owner, repo string, ok bool) {
 	owner, ownerOK := call.Arguments["owner"].(string)
 	repo, repoOK := call.Arguments["repo"].(string)
 	return owner, repo, ownerOK && owner != "" && repoOK && repo != ""

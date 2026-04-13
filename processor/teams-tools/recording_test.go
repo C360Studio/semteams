@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semteams/teams"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,8 +15,8 @@ import (
 // mockExecutor is a test executor that tracks calls
 type mockExecutor struct {
 	tools   []teams.ToolDefinition
-	calls   []teams.ToolCall
-	results map[string]teams.ToolResult
+	calls   []agentic.ToolCall
+	results map[string]agentic.ToolResult
 	mu      sync.Mutex
 }
 
@@ -24,11 +25,11 @@ func newMockExecutor() *mockExecutor {
 		tools: []teams.ToolDefinition{
 			{Name: "test_tool", Description: "A test tool"},
 		},
-		results: make(map[string]teams.ToolResult),
+		results: make(map[string]agentic.ToolResult),
 	}
 }
 
-func (m *mockExecutor) Execute(_ context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (m *mockExecutor) Execute(_ context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -38,7 +39,7 @@ func (m *mockExecutor) Execute(_ context.Context, call teams.ToolCall) (teams.To
 		return result, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: "mock result",
 		LoopID:  call.LoopID,
@@ -50,10 +51,10 @@ func (m *mockExecutor) ListTools() []teams.ToolDefinition {
 	return m.tools
 }
 
-func (m *mockExecutor) GetCalls() []teams.ToolCall {
+func (m *mockExecutor) GetCalls() []agentic.ToolCall {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return append([]teams.ToolCall{}, m.calls...)
+	return append([]agentic.ToolCall{}, m.calls...)
 }
 
 func TestRecordingExecutor_ExecuteAndRecord(t *testing.T) {
@@ -61,7 +62,7 @@ func TestRecordingExecutor_ExecuteAndRecord(t *testing.T) {
 	executor := newMockExecutor()
 	recorder := NewRecordingExecutor(executor, store, nil)
 
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:      "call-1",
 		Name:    "test_tool",
 		LoopID:  "loop-123",
@@ -105,7 +106,7 @@ func TestRecordingExecutor_GracefulShutdown(t *testing.T) {
 
 	// Execute multiple calls
 	for i := 0; i < 10; i++ {
-		call := teams.ToolCall{
+		call := agentic.ToolCall{
 			ID:   "call-" + string(rune('0'+i)),
 			Name: "test_tool",
 		}
@@ -134,7 +135,7 @@ func TestRecordingExecutor_BufferFull(t *testing.T) {
 
 	// Fill the buffer (100 calls) plus extras
 	for i := 0; i < 150; i++ {
-		call := teams.ToolCall{
+		call := agentic.ToolCall{
 			ID:   "call-" + string(rune(i)),
 			Name: "test_tool",
 		}

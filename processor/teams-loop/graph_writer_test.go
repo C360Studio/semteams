@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/model"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
-	"github.com/c360studio/semteams/teams"
 )
 
 // predicateSet collects the predicates from a slice of triples for easy membership testing.
@@ -147,7 +147,7 @@ func TestBuildLoopCompletionTriples_RequiredFields(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop123"
 	modelEntityID := "acme.ops.agent.model-registry.endpoint.claude"
 
-	event := &teams.LoopCompletedEvent{
+	event := &agentic.LoopCompletedEvent{
 		LoopID:      "loop123",
 		TaskID:      "task-abc",
 		Outcome:     "success",
@@ -205,7 +205,7 @@ func TestBuildLoopCompletionTriples_CostCalculation(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop456"
 	modelEntityID := "acme.ops.agent.model-registry.endpoint.claude"
 
-	event := &teams.LoopCompletedEvent{
+	event := &agentic.LoopCompletedEvent{
 		LoopID:      "loop456",
 		TaskID:      "task-def",
 		Outcome:     "success",
@@ -241,7 +241,7 @@ func TestBuildLoopCompletionTriples_ZeroCostOmitted(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop789"
 	modelEntityID := "acme.ops.agent.model-registry.endpoint.local"
 
-	event := &teams.LoopCompletedEvent{
+	event := &agentic.LoopCompletedEvent{
 		LoopID:      "loop789",
 		TaskID:      "task-ghi",
 		Outcome:     "success",
@@ -263,7 +263,7 @@ func TestBuildLoopCompletionTriples_OptionalFieldsOmittedWhenEmpty(t *testing.T)
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loopA"
 	modelEntityID := "acme.ops.agent.model-registry.endpoint.claude"
 
-	event := &teams.LoopCompletedEvent{
+	event := &agentic.LoopCompletedEvent{
 		LoopID:      "loopA",
 		TaskID:      "task-jkl",
 		Outcome:     "success",
@@ -294,7 +294,7 @@ func TestBuildLoopCompletionTriples_OptionalFieldsPresentWhenSet(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loopB"
 	modelEntityID := "acme.ops.agent.model-registry.endpoint.claude"
 
-	event := &teams.LoopCompletedEvent{
+	event := &agentic.LoopCompletedEvent{
 		LoopID:       "loopB",
 		TaskID:       "task-mno",
 		Outcome:      "success",
@@ -346,7 +346,7 @@ func TestBuildLoopFailureTriples_RequiredFields(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loopFail"
 	modelEntityID := "acme.ops.agent.model-registry.endpoint.claude"
 
-	event := &teams.LoopFailedEvent{
+	event := &agentic.LoopFailedEvent{
 		LoopID:     "loopFail",
 		TaskID:     "task-fail",
 		Outcome:    "failed",
@@ -390,7 +390,7 @@ func TestBuildLoopFailureTriples_OptionalFieldsOmittedWhenEmpty(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loopFail2"
 	modelEntityID := "acme.ops.agent.model-registry.endpoint.claude"
 
-	event := &teams.LoopFailedEvent{
+	event := &agentic.LoopFailedEvent{
 		LoopID:     "loopFail2",
 		TaskID:     "task-fail2",
 		Outcome:    "failed",
@@ -415,7 +415,7 @@ func TestBuildLoopFailureTriples_OptionalFieldsPresentWhenSet(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loopFail3"
 	modelEntityID := "acme.ops.agent.model-registry.endpoint.claude"
 
-	event := &teams.LoopFailedEvent{
+	event := &agentic.LoopFailedEvent{
 		LoopID:       "loopFail3",
 		TaskID:       "task-fail3",
 		Outcome:      "failed",
@@ -464,7 +464,7 @@ func TestBuildLoopFailureTriples_OptionalFieldsPresentWhenSet(t *testing.T) {
 func TestBuildLoopFailureTriples_EmptyModelOmitsModelUsed(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loopFail4"
 
-	event := &teams.LoopFailedEvent{
+	event := &agentic.LoopFailedEvent{
 		LoopID:     "loopFail4",
 		TaskID:     "task-fail4",
 		Outcome:    "failed",
@@ -484,7 +484,7 @@ func TestBuildLoopFailureTriples_EmptyModelOmitsModelUsed(t *testing.T) {
 func TestBuildLoopCompletionTriples_EmptyModelOmitsModelUsed(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loopNoModel"
 
-	event := &teams.LoopCompletedEvent{
+	event := &agentic.LoopCompletedEvent{
 		LoopID:      "loopNoModel",
 		TaskID:      "task-nomodel",
 		Outcome:     "success",
@@ -506,7 +506,7 @@ func TestBuildLoopCompletionTriples_EmptyModelOmitsModelUsed(t *testing.T) {
 func TestBuildLoopCancellationTriples_RequiredFields(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loopCancel"
 
-	event := &teams.LoopCancelledEvent{
+	event := &agentic.LoopCancelledEvent{
 		LoopID:      "loopCancel",
 		TaskID:      "task-cancel",
 		Outcome:     "cancelled",
@@ -532,7 +532,7 @@ func TestBuildLoopCancellationTriples_RequiredFields(t *testing.T) {
 func TestBuildLoopCancellationTriples_OptionalWorkflowFields(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loopCancel2"
 
-	event := &teams.LoopCancelledEvent{
+	event := &agentic.LoopCancelledEvent{
 		LoopID:       "loopCancel2",
 		TaskID:       "task-cancel2",
 		Outcome:      "cancelled",
@@ -562,7 +562,7 @@ func TestBuildTrajectoryStepTriples_NilTrajectory(t *testing.T) {
 }
 
 func TestBuildTrajectoryStepTriples_EmptySteps(t *testing.T) {
-	traj := &teams.Trajectory{LoopID: "loop1", Steps: []teams.TrajectoryStep{}}
+	traj := &agentic.Trajectory{LoopID: "loop1", Steps: []agentic.TrajectoryStep{}}
 	triples := buildTrajectoryStepTriples("acme.ops.agent.agentic-loop.execution.loop1", "acme", "ops", "loop1", traj)
 	if len(triples) != 0 {
 		t.Errorf("expected no triples for empty steps, got %d", len(triples))
@@ -571,9 +571,9 @@ func TestBuildTrajectoryStepTriples_EmptySteps(t *testing.T) {
 
 func TestBuildTrajectoryStepTriples_ContextCompaction(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop1"
-	traj := &teams.Trajectory{
+	traj := &agentic.Trajectory{
 		LoopID: "loop1",
-		Steps: []teams.TrajectoryStep{
+		Steps: []agentic.TrajectoryStep{
 			{
 				Timestamp:   time.Now(),
 				StepType:    "context_compaction",
@@ -646,9 +646,9 @@ func TestBuildTrajectoryStepTriples_ContextCompaction(t *testing.T) {
 
 func TestBuildTrajectoryStepTriples_ToolCallStep(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop1"
-	traj := &teams.Trajectory{
+	traj := &agentic.Trajectory{
 		LoopID: "loop1",
-		Steps: []teams.TrajectoryStep{
+		Steps: []agentic.TrajectoryStep{
 			{
 				Timestamp:     time.Date(2026, 3, 17, 14, 0, 0, 0, time.UTC),
 				StepType:      "tool_call",
@@ -716,9 +716,9 @@ func TestBuildTrajectoryStepTriples_ToolCallStep(t *testing.T) {
 
 func TestBuildTrajectoryStepTriples_ModelCallStep(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop2"
-	traj := &teams.Trajectory{
+	traj := &agentic.Trajectory{
 		LoopID: "loop2",
-		Steps: []teams.TrajectoryStep{
+		Steps: []agentic.TrajectoryStep{
 			{
 				Timestamp: time.Date(2026, 3, 17, 14, 0, 0, 0, time.UTC),
 				StepType:  "model_call",
@@ -770,9 +770,9 @@ func TestBuildTrajectoryStepTriples_ModelCallStep(t *testing.T) {
 
 func TestBuildTrajectoryStepTriples_MixedSteps(t *testing.T) {
 	loopEntityID := "acme.ops.agent.agentic-loop.execution.loop3"
-	traj := &teams.Trajectory{
+	traj := &agentic.Trajectory{
 		LoopID: "loop3",
-		Steps: []teams.TrajectoryStep{
+		Steps: []agentic.TrajectoryStep{
 			{Timestamp: time.Now(), StepType: "model_call", Model: "claude", TokensIn: 100, TokensOut: 50, Duration: 1000},
 			{Timestamp: time.Now(), StepType: "tool_call", ToolName: "graph_query", ToolResult: "data", Duration: 200},
 			{Timestamp: time.Now(), StepType: "context_compaction", Duration: 50},

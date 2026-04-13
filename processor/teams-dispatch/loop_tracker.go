@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semteams/teams"
 )
 
 // LoopInfo contains information about an active loop
@@ -209,7 +209,7 @@ func (t *LoopTracker) UpdateCompletion(loopID, outcome, result, errMsg string) e
 // isValidOutcome checks if the outcome is one of the valid constants.
 func isValidOutcome(outcome string) bool {
 	switch outcome {
-	case teams.OutcomeSuccess, teams.OutcomeFailed, teams.OutcomeCancelled:
+	case agentic.OutcomeSuccess, agentic.OutcomeFailed, agentic.OutcomeCancelled:
 		return true
 	default:
 		return false
@@ -219,11 +219,11 @@ func isValidOutcome(outcome string) bool {
 // outcomeToState maps an outcome to its corresponding terminal state.
 func outcomeToState(outcome string) string {
 	switch outcome {
-	case teams.OutcomeSuccess:
+	case agentic.OutcomeSuccess:
 		return "complete"
-	case teams.OutcomeFailed:
+	case agentic.OutcomeFailed:
 		return "failed"
-	case teams.OutcomeCancelled:
+	case agentic.OutcomeCancelled:
 		return "cancelled"
 	default:
 		return "failed"
@@ -376,7 +376,7 @@ func (s *SignalMessage) Validate() error {
 
 // Schema implements message.Payload
 func (s *SignalMessage) Schema() message.Type {
-	return message.Type{Domain: teams.Domain, Category: teams.CategorySignalMessage, Version: teams.SchemaVersion}
+	return message.Type{Domain: agentic.Domain, Category: agentic.CategorySignalMessage, Version: agentic.SchemaVersion}
 }
 
 // MarshalJSON implements json.Marshaler

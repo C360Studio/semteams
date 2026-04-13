@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semteams/teams"
 	"github.com/c360studio/semteams/test/e2e/client"
 	"github.com/c360studio/semteams/test/e2e/scenarios"
 )
@@ -248,7 +248,7 @@ func (s *Scenario) runTask(ctx context.Context, runID string, _ bool) (*RunResul
 	preSignals, _ := s.metrics.SumMetricsByName(ctx, "semstreams_agentic_loop_boid_signals_received_total")
 
 	// Inject a task
-	task := teams.TaskMessage{
+	task := agentic.TaskMessage{
 		TaskID: fmt.Sprintf("e2e-boids-%s-%d", runID, time.Now().UnixNano()),
 		Role:   "general",
 		Model:  "mock",

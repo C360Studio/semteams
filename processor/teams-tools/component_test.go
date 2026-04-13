@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	teamtools "github.com/c360studio/semteams/processor/teams-tools"
 	"github.com/c360studio/semteams/teams"
@@ -421,7 +422,7 @@ func TestComponent_ToolExecutionWithAllowedList(t *testing.T) {
 	}
 
 	executor, ok := comp.(interface {
-		Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error)
+		Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error)
 	})
 	if !ok {
 		t.Fatal("Component should implement Execute method")
@@ -448,7 +449,7 @@ func TestComponent_ToolExecutionWithAllowedList(t *testing.T) {
 	ctx := context.Background()
 
 	// Execute allowed tool - should succeed
-	allowedCall := teams.ToolCall{
+	allowedCall := agentic.ToolCall{
 		ID:   "call-1",
 		Name: "graph_query",
 	}
@@ -461,7 +462,7 @@ func TestComponent_ToolExecutionWithAllowedList(t *testing.T) {
 	}
 
 	// Execute disallowed tool - should fail
-	disallowedCall := teams.ToolCall{
+	disallowedCall := agentic.ToolCall{
 		ID:   "call-2",
 		Name: "file_delete",
 	}
@@ -500,7 +501,7 @@ func TestComponent_EmptyAllowedList_AllowsAll(t *testing.T) {
 	}
 
 	executor, ok := comp.(interface {
-		Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error)
+		Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error)
 	})
 	if !ok {
 		t.Fatal("Component should implement Execute method")
@@ -516,7 +517,7 @@ func TestComponent_EmptyAllowedList_AllowsAll(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call-1",
 		Name: "any_tool",
 	}

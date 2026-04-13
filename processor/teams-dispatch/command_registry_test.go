@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,13 +12,13 @@ import (
 // stubHandler creates a test handler that returns a fixed response.
 // It validates that context is not nil and captures call metadata for test assertions.
 func stubHandler(response string) CommandHandler {
-	return func(ctx context.Context, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error) {
+	return func(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
 		// Validate context is passed correctly
 		if ctx == nil {
 			panic("context should not be nil")
 		}
 		// Use all parameters to satisfy linter and enable future test assertions
-		resp := teams.UserResponse{
+		resp := agentic.UserResponse{
 			Content:     response,
 			ChannelType: msg.ChannelType,
 			ChannelID:   msg.ChannelID,
@@ -36,13 +36,13 @@ func stubHandler(response string) CommandHandler {
 
 // emptyHandler creates a minimal test handler for registration tests.
 func emptyHandler() CommandHandler {
-	return func(ctx context.Context, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error) {
+	return func(ctx context.Context, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error) {
 		// Ensure parameters are used to satisfy linter
 		_ = ctx.Done()
 		_ = msg.UserID
 		_ = len(args)
 		_ = loopID
-		return teams.UserResponse{}, nil
+		return agentic.UserResponse{}, nil
 	}
 }
 
@@ -244,7 +244,7 @@ func TestCommandRegistry_HandlerExecution(t *testing.T) {
 
 	// Execute the handler and verify it uses all parameters
 	ctx := context.Background()
-	msg := teams.UserMessage{
+	msg := agentic.UserMessage{
 		ChannelType: "cli",
 		ChannelID:   "test-session",
 		UserID:      "test-user",

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,9 +25,9 @@ func TestHandleSignalMessage_Cancel(t *testing.T) {
 	assert.False(t, entity.State.IsTerminal())
 
 	// Create cancel signal
-	signal := teams.UserSignal{
+	signal := agentic.UserSignal{
 		SignalID:    "sig-123",
-		Type:        teams.SignalCancel,
+		Type:        agentic.SignalCancel,
 		LoopID:      loopID,
 		UserID:      "user-1",
 		ChannelType: "cli",
@@ -37,7 +37,7 @@ func TestHandleSignalMessage_Cancel(t *testing.T) {
 
 	// Process the signal through the handler directly
 	// Update loop state to cancelled
-	entity.State = teams.LoopStateCancelled
+	entity.State = agentic.LoopStateCancelled
 	entity.CancelledBy = signal.UserID
 	entity.CancelledAt = time.Now()
 
@@ -47,7 +47,7 @@ func TestHandleSignalMessage_Cancel(t *testing.T) {
 	// Verify loop is now cancelled
 	entity, err = handler.GetLoop(loopID)
 	require.NoError(t, err)
-	assert.Equal(t, teams.LoopStateCancelled, entity.State)
+	assert.Equal(t, agentic.LoopStateCancelled, entity.State)
 	assert.Equal(t, "user-1", entity.CancelledBy)
 	assert.True(t, entity.State.IsTerminal())
 }
@@ -64,7 +64,7 @@ func TestHandleSignalMessage_Pause(t *testing.T) {
 	// Get entity and set to executing
 	entity, err := handler.GetLoop(loopID)
 	require.NoError(t, err)
-	entity.State = teams.LoopStateExecuting
+	entity.State = agentic.LoopStateExecuting
 	err = handler.UpdateLoop(entity)
 	require.NoError(t, err)
 
@@ -93,7 +93,7 @@ func TestHandleSignalMessage_Resume(t *testing.T) {
 	// Set loop to paused state
 	entity, err := handler.GetLoop(loopID)
 	require.NoError(t, err)
-	entity.State = teams.LoopStatePaused
+	entity.State = agentic.LoopStatePaused
 	entity.PauseRequested = true
 	err = handler.UpdateLoop(entity)
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestHandleSignalMessage_Resume(t *testing.T) {
 	// Resume
 	entity, err = handler.GetLoop(loopID)
 	require.NoError(t, err)
-	entity.State = teams.LoopStateExecuting
+	entity.State = agentic.LoopStateExecuting
 	entity.PauseRequested = false
 	err = handler.UpdateLoop(entity)
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestHandleSignalMessage_Resume(t *testing.T) {
 	// Verify resumed
 	entity, err = handler.GetLoop(loopID)
 	require.NoError(t, err)
-	assert.Equal(t, teams.LoopStateExecuting, entity.State)
+	assert.Equal(t, agentic.LoopStateExecuting, entity.State)
 	assert.False(t, entity.PauseRequested)
 }
 
@@ -123,7 +123,7 @@ func TestCannotCancelTerminalLoop(t *testing.T) {
 
 	entity, err := handler.GetLoop(loopID)
 	require.NoError(t, err)
-	entity.State = teams.LoopStateComplete
+	entity.State = agentic.LoopStateComplete
 	err = handler.UpdateLoop(entity)
 	require.NoError(t, err)
 
@@ -146,22 +146,22 @@ func TestCannotResumeNonPausedLoop(t *testing.T) {
 
 	entity, err := handler.GetLoop(loopID)
 	require.NoError(t, err)
-	entity.State = teams.LoopStateExecuting
+	entity.State = agentic.LoopStateExecuting
 	err = handler.UpdateLoop(entity)
 	require.NoError(t, err)
 
 	// Verify state is not paused
 	entity, err = handler.GetLoop(loopID)
 	require.NoError(t, err)
-	assert.NotEqual(t, teams.LoopStatePaused, entity.State)
+	assert.NotEqual(t, agentic.LoopStatePaused, entity.State)
 
 	// Resume check would fail
 }
 
 func TestSignalJSON(t *testing.T) {
-	signal := teams.UserSignal{
+	signal := agentic.UserSignal{
 		SignalID:    "sig-123",
-		Type:        teams.SignalCancel,
+		Type:        agentic.SignalCancel,
 		LoopID:      "loop-456",
 		UserID:      "user-1",
 		ChannelType: "cli",
@@ -173,7 +173,7 @@ func TestSignalJSON(t *testing.T) {
 	data, err := json.Marshal(signal)
 	require.NoError(t, err)
 
-	var decoded teams.UserSignal
+	var decoded agentic.UserSignal
 	err = json.Unmarshal(data, &decoded)
 	require.NoError(t, err)
 
@@ -186,16 +186,16 @@ func TestSignalJSON(t *testing.T) {
 func TestNewLoopStates(t *testing.T) {
 	// Verify new states work correctly
 	tests := []struct {
-		state      teams.LoopState
+		state      agentic.LoopState
 		isTerminal bool
 	}{
-		{teams.LoopStatePaused, false},
-		{teams.LoopStateCancelled, true},
-		{teams.LoopStateAwaitingApproval, false},
-		{teams.LoopStateExploring, false},
-		{teams.LoopStateExecuting, false},
-		{teams.LoopStateComplete, true},
-		{teams.LoopStateFailed, true},
+		{agentic.LoopStatePaused, false},
+		{agentic.LoopStateCancelled, true},
+		{agentic.LoopStateAwaitingApproval, false},
+		{agentic.LoopStateExploring, false},
+		{agentic.LoopStateExecuting, false},
+		{agentic.LoopStateComplete, true},
+		{agentic.LoopStateFailed, true},
 	}
 
 	for _, tt := range tests {

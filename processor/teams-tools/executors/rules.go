@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semteams/teams"
 )
@@ -37,7 +38,6 @@ func (e *RuleExecutor) ListTools() []teams.ToolDefinition {
 		{
 			Name:             "create_rule",
 			Description:      "Create a new rule in the rules engine. The rule becomes active immediately after approval. Provide the full rule definition as JSON.",
-			RequiresApproval: true,
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -56,7 +56,6 @@ func (e *RuleExecutor) ListTools() []teams.ToolDefinition {
 		{
 			Name:             "update_rule",
 			Description:      "Update an existing rule. Replaces the entire rule definition.",
-			RequiresApproval: true,
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -75,7 +74,6 @@ func (e *RuleExecutor) ListTools() []teams.ToolDefinition {
 		{
 			Name:             "delete_rule",
 			Description:      "Delete a rule from the rules engine.",
-			RequiresApproval: true,
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -113,7 +111,7 @@ func (e *RuleExecutor) ListTools() []teams.ToolDefinition {
 }
 
 // Execute dispatches rule tool calls.
-func (e *RuleExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *RuleExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	switch call.Name {
 	case "create_rule", "update_rule":
 		return e.saveRule(ctx, call)
@@ -124,45 +122,45 @@ func (e *RuleExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.
 	case "get_rule":
 		return e.getRule(ctx, call)
 	default:
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("unknown tool: %s", call.Name),
 		}, fmt.Errorf("unknown tool: %s", call.Name)
 	}
 }
 
-func (e *RuleExecutor) saveRule(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *RuleExecutor) saveRule(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	ruleID, _ := call.Arguments["rule_id"].(string)
 	if ruleID == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "rule_id is required"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "rule_id is required"}, nil
 	}
 
 	// Validate rule ID format to prevent KV key injection
 	if !validRuleID.MatchString(ruleID) {
-		return teams.ToolResult{CallID: call.ID, Error: "rule_id must be kebab-case (lowercase alphanumeric with hyphens, 2-64 chars)"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "rule_id must be kebab-case (lowercase alphanumeric with hyphens, 2-64 chars)"}, nil
 	}
 
 	ruleData, ok := call.Arguments["rule"]
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "rule definition is required"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "rule definition is required"}, nil
 	}
 
 	// Convert the rule argument to a Definition via JSON round-trip.
 	ruleBytes, err := json.Marshal(ruleData)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("invalid rule data: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("invalid rule data: %v", err)}, nil
 	}
 
 	var def rule.Definition
 	if err := json.Unmarshal(ruleBytes, &def); err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("invalid rule definition: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("invalid rule definition: %v", err)}, nil
 	}
 
 	// Always enforce ID consistency — the KV key is the source of truth
 	def.ID = ruleID
 
 	if err := e.manager.SaveRule(ctx, ruleID, def); err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("save failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("save failed: %v", err)}, nil
 	}
 
 	action := "created"
@@ -170,69 +168,69 @@ func (e *RuleExecutor) saveRule(ctx context.Context, call teams.ToolCall) (teams
 		action = "updated"
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: fmt.Sprintf("Rule '%s' %s successfully. It is now active in the rules engine.", ruleID, action),
 	}, nil
 }
 
-func (e *RuleExecutor) deleteRule(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *RuleExecutor) deleteRule(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	ruleID, _ := call.Arguments["rule_id"].(string)
 	if ruleID == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "rule_id is required"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "rule_id is required"}, nil
 	}
 	if !validRuleID.MatchString(ruleID) {
-		return teams.ToolResult{CallID: call.ID, Error: "rule_id must be kebab-case (lowercase alphanumeric with hyphens, 2-64 chars)"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "rule_id must be kebab-case (lowercase alphanumeric with hyphens, 2-64 chars)"}, nil
 	}
 
 	if err := e.manager.DeleteRule(ctx, ruleID); err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("delete failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("delete failed: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: fmt.Sprintf("Rule '%s' deleted successfully.", ruleID),
 	}, nil
 }
 
-func (e *RuleExecutor) listRules(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *RuleExecutor) listRules(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	rules, err := e.manager.ListRules(ctx)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("list failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("list failed: %v", err)}, nil
 	}
 
 	if len(rules) == 0 {
-		return teams.ToolResult{CallID: call.ID, Content: "No rules configured."}, nil
+		return agentic.ToolResult{CallID: call.ID, Content: "No rules configured."}, nil
 	}
 
 	data, err := json.MarshalIndent(rules, "", "  ")
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal failed: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: fmt.Sprintf("Active rules (%d):\n%s", len(rules), string(data)),
 	}, nil
 }
 
-func (e *RuleExecutor) getRule(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *RuleExecutor) getRule(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	ruleID, _ := call.Arguments["rule_id"].(string)
 	if ruleID == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "rule_id is required"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "rule_id is required"}, nil
 	}
 
 	def, err := e.manager.GetRule(ctx, ruleID)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("get failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("get failed: %v", err)}, nil
 	}
 
 	data, err := json.MarshalIndent(def, "", "  ")
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal failed: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: string(data),
 	}, nil

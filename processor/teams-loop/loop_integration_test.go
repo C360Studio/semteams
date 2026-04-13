@@ -13,11 +13,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/natsclient"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 var (
@@ -63,7 +63,7 @@ func getSharedNATSClient(t *testing.T) *natsclient.Client {
 }
 
 // publishTaskMessage publishes a TaskMessage wrapped in a BaseMessage envelope
-func publishTaskMessage(t *testing.T, natsClient *natsclient.Client, subject string, task *teams.TaskMessage) {
+func publishTaskMessage(t *testing.T, natsClient *natsclient.Client, subject string, task *agentic.TaskMessage) {
 	t.Helper()
 	baseMsg := message.NewBaseMessage(task.Schema(), task, "integration-test")
 	msgData, err := json.Marshal(baseMsg)
@@ -73,7 +73,7 @@ func publishTaskMessage(t *testing.T, natsClient *natsclient.Client, subject str
 }
 
 // publishResponseMessage publishes an AgentResponse wrapped in a BaseMessage envelope
-func publishResponseMessage(t *testing.T, natsClient *natsclient.Client, subject string, response *teams.AgentResponse) {
+func publishResponseMessage(t *testing.T, natsClient *natsclient.Client, subject string, response *agentic.AgentResponse) {
 	t.Helper()
 	baseMsg := message.NewBaseMessage(response.Schema(), response, "integration-test")
 	msgData, err := json.Marshal(baseMsg)
@@ -83,7 +83,7 @@ func publishResponseMessage(t *testing.T, natsClient *natsclient.Client, subject
 }
 
 // publishToolResultMessage publishes a ToolResult wrapped in a BaseMessage envelope
-func publishToolResultMessage(t *testing.T, natsClient *natsclient.Client, subject string, result *teams.ToolResult) {
+func publishToolResultMessage(t *testing.T, natsClient *natsclient.Client, subject string, result *agentic.ToolResult) {
 	t.Helper()
 	baseMsg := message.NewBaseMessage(result.Schema(), result, "integration-test")
 	msgData, err := json.Marshal(baseMsg)
@@ -161,13 +161,13 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to model requests (extract from BaseMessage envelope)
-	receivedRequests := make([]teams.AgentRequest, 0)
+	receivedRequests := make([]agentic.AgentRequest, 0)
 	var requestMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if req, ok := baseMsg.Payload().(*teams.AgentRequest); ok {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
 				requestMu.Lock()
 				receivedRequests = append(receivedRequests, *req)
 				requestMu.Unlock()
@@ -193,7 +193,7 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish a task
-	task := &teams.TaskMessage{
+	task := &agentic.TaskMessage{
 		LoopID: "loop_001",
 		TaskID: "task_001",
 		Role:   "general",
@@ -215,14 +215,14 @@ func TestIntegration_LoopFullCycle(t *testing.T) {
 	requestMu.Unlock()
 
 	// Simulate model response (complete)
-	response := &teams.AgentResponse{
+	response := &agentic.AgentResponse{
 		RequestID: receivedRequests[0].RequestID,
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "Task completed",
 		},
-		TokenUsage: teams.TokenUsage{
+		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
 		},
@@ -325,7 +325,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if req, ok := baseMsg.Payload().(*teams.AgentRequest); ok {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
 				requestMu.Lock()
 				currentRequestID = req.RequestID
 				requestMu.Unlock()
@@ -335,13 +335,13 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	require.NoError(t, err)
 
 	// Track tool calls (extract from BaseMessage envelope)
-	receivedToolCalls := make([]teams.ToolCall, 0)
+	receivedToolCalls := make([]agentic.ToolCall, 0)
 	var toolMu sync.Mutex
 
 	_, err = natsClient.Subscribe(ctx, "tool.execute.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if call, ok := baseMsg.Payload().(*teams.ToolCall); ok {
+			if call, ok := baseMsg.Payload().(*agentic.ToolCall); ok {
 				toolMu.Lock()
 				receivedToolCalls = append(receivedToolCalls, *call)
 				toolMu.Unlock()
@@ -353,7 +353,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish task
-	task := &teams.TaskMessage{
+	task := &agentic.TaskMessage{
 		LoopID: "loop_tool_001",
 		TaskID: "task_tool_001",
 		Role:   "general",
@@ -370,13 +370,13 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	requestMu.Unlock()
 
 	// Simulate model response with tool calls
-	response := &teams.AgentResponse{
+	response := &agentic.AgentResponse{
 		RequestID: reqID,
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{
 					ID:   "call_001",
 					Name: "read_file",
@@ -403,7 +403,7 @@ func TestIntegration_LoopWithToolCalls(t *testing.T) {
 	toolMu.Unlock()
 
 	// Simulate tool result
-	toolResult := &teams.ToolResult{
+	toolResult := &agentic.ToolResult{
 		CallID:  callID,
 		Content: "file contents",
 	}
@@ -495,7 +495,7 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if req, ok := baseMsg.Payload().(*teams.AgentRequest); ok {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
 				requestMu.Lock()
 				requestCount++
 				lastRequestID = req.RequestID
@@ -522,7 +522,7 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish task
-	task := &teams.TaskMessage{
+	task := &agentic.TaskMessage{
 		LoopID: "loop_max_iter",
 		TaskID: "task_max_iter",
 		Role:   "general",
@@ -544,13 +544,13 @@ func TestIntegration_LoopMaxIterations(t *testing.T) {
 		}
 
 		// Always respond with tool call to keep iterating
-		response := &teams.AgentResponse{
+		response := &agentic.AgentResponse{
 			RequestID: reqID,
 			Status:    "tool_call",
-			Message: teams.ChatMessage{
+			Message: agentic.ChatMessage{
 				Role:    "assistant",
 				Content: "",
-				ToolCalls: []teams.ToolCall{
+				ToolCalls: []agentic.ToolCall{
 					{
 						ID:   "call_" + string(rune(i)),
 						Name: "dummy_tool",
@@ -635,7 +635,7 @@ func TestIntegration_LoopStatePersistence(t *testing.T) {
 
 	// Publish task
 	loopID := "loop_persist_" + time.Now().Format("150405")
-	task := &teams.TaskMessage{
+	task := &agentic.TaskMessage{
 		LoopID: loopID,
 		TaskID: "task_persist",
 		Role:   "general",
@@ -656,7 +656,7 @@ func TestIntegration_LoopStatePersistence(t *testing.T) {
 	entry, err := kv.Get(ctx, loopID)
 	require.NoError(t, err, "Loop entity should be persisted in KV")
 
-	var entity teams.LoopEntity
+	var entity agentic.LoopEntity
 	err = json.Unmarshal(entry.Value(), &entity)
 	require.NoError(t, err)
 
@@ -745,7 +745,7 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 	_, err = natsClient.Subscribe(ctx, "agent.request.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if req, ok := baseMsg.Payload().(*teams.AgentRequest); ok {
+			if req, ok := baseMsg.Payload().(*agentic.AgentRequest); ok {
 				requestMu.Lock()
 				requestID = req.RequestID
 				requestMu.Unlock()
@@ -758,7 +758,7 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 
 	// Publish task
 	loopID := "loop_traj_" + time.Now().Format("150405")
-	task := &teams.TaskMessage{
+	task := &agentic.TaskMessage{
 		LoopID: loopID,
 		TaskID: "task_trajectory",
 		Role:   "general",
@@ -775,14 +775,14 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 	requestMu.Unlock()
 
 	// Simulate complete response
-	response := &teams.AgentResponse{
+	response := &agentic.AgentResponse{
 		RequestID: reqID,
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "Task completed",
 		},
-		TokenUsage: teams.TokenUsage{
+		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     200,
 			CompletionTokens: 100,
 		},
@@ -798,7 +798,7 @@ func TestIntegration_LoopTrajectoryCapture(t *testing.T) {
 	trajResp, err := natsClient.Request(ctx, "teams.query.trajectory", trajReq, 5*time.Second)
 	require.NoError(t, err, "Trajectory should be available via query handler")
 
-	var trajectory teams.Trajectory
+	var trajectory agentic.Trajectory
 	err = json.Unmarshal(trajResp, &trajectory)
 	require.NoError(t, err)
 

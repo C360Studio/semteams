@@ -6,9 +6,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semteams/teams"
 )
 
 // RegionType defines the type of context region
@@ -36,7 +36,7 @@ var regionPriorities = map[RegionType]int{
 }
 
 type contextMessage struct {
-	Message   teams.ChatMessage
+	Message   agentic.ChatMessage
 	Tokens    int
 	Iteration int // For GC - which iteration this was added
 }
@@ -172,11 +172,11 @@ func (cm *ContextManager) ShouldCompact() bool {
 }
 
 // GetContext returns all messages in region priority order
-func (cm *ContextManager) GetContext() []teams.ChatMessage {
+func (cm *ContextManager) GetContext() []agentic.ChatMessage {
 	cm.mu.RLock()
 	defer cm.mu.RUnlock()
 
-	var messages []teams.ChatMessage
+	var messages []agentic.ChatMessage
 
 	// Order by region priority: System -> Compacted -> Graph Entities -> Hydrated -> Recent -> Tools
 	order := []RegionType{
@@ -198,7 +198,7 @@ func (cm *ContextManager) GetContext() []teams.ChatMessage {
 }
 
 // AddMessage adds a message to a specific region
-func (cm *ContextManager) AddMessage(region RegionType, msg teams.ChatMessage) error {
+func (cm *ContextManager) AddMessage(region RegionType, msg agentic.ChatMessage) error {
 	if _, valid := regionPriorities[region]; !valid {
 		return errs.WrapInvalid(fmt.Errorf("invalid region type: %s", region), "ContextManager", "AddMessage", "validate region type")
 	}
@@ -545,7 +545,7 @@ func (cm *ContextManager) shouldPreserve(msg contextMessage, preserveEntities []
 
 // AddGraphEntityContext adds context from graph entities to the dedicated region
 func (cm *ContextManager) AddGraphEntityContext(entityID string, content string) error {
-	msg := teams.ChatMessage{
+	msg := agentic.ChatMessage{
 		Role:    "system",
 		Content: fmt.Sprintf("[Entity: %s]\n%s", entityID, content),
 	}

@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semteams/teams"
 )
 
 // ToolExecutor defines the interface for tool executors
 type ToolExecutor interface {
-	Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error)
+	Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error)
 	ListTools() []teams.ToolDefinition
 }
 
@@ -95,13 +96,13 @@ func (r *ExecutorRegistry) ListToolsByCategories(categories map[ToolCategory]boo
 
 // Execute executes a tool call using the registered executor
 // Returns an error result if the tool is not found or execution fails
-func (r *ExecutorRegistry) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (r *ExecutorRegistry) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	r.mu.RLock()
 	executor, exists := r.executors[call.Name]
 	r.mu.RUnlock()
 
 	if !exists {
-		result := teams.ToolResult{
+		result := agentic.ToolResult{
 			CallID:  call.ID,
 			Error:   fmt.Sprintf("tool %q not found", call.Name),
 			LoopID:  call.LoopID,

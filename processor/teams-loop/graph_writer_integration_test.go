@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	gtypes "github.com/c360studio/semstreams/graph"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/model"
@@ -17,7 +18,6 @@ import (
 	"github.com/c360studio/semstreams/types"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
-	"github.com/c360studio/semteams/teams"
 )
 
 // tripleCollector subscribes to graph.mutation.triple.add and collects all triples received.
@@ -151,7 +151,7 @@ func TestWriteLoopCompletion_Integration(t *testing.T) {
 
 	w := teamsloop.NewGraphWriterForTest(tc.Client, reg, types.PlatformMeta{Org: "acme", Platform: "ops"})
 
-	event := &teams.LoopCompletedEvent{
+	event := &agentic.LoopCompletedEvent{
 		LoopID:       "loop-123",
 		TaskID:       "task-abc",
 		Outcome:      "success",
@@ -205,7 +205,7 @@ func TestWriteLoopFailure_Integration(t *testing.T) {
 
 	w := teamsloop.NewGraphWriterForTest(tc.Client, nil, types.PlatformMeta{Org: "acme", Platform: "ops"})
 
-	event := &teams.LoopFailedEvent{
+	event := &agentic.LoopFailedEvent{
 		LoopID:     "loop-fail",
 		TaskID:     "task-fail",
 		Outcome:    "failed",
@@ -248,7 +248,7 @@ func TestWriteLoopCancellation_Integration(t *testing.T) {
 
 	w := teamsloop.NewGraphWriterForTest(tc.Client, nil, types.PlatformMeta{Org: "acme", Platform: "ops"})
 
-	event := &teams.LoopCancelledEvent{
+	event := &agentic.LoopCancelledEvent{
 		LoopID:      "loop-cancel",
 		TaskID:      "task-cancel",
 		Outcome:     "cancelled",
@@ -293,10 +293,10 @@ func TestWriteTrajectorySteps_Integration(t *testing.T) {
 	w := teamsloop.NewGraphWriterForTest(tc.Client, nil, types.PlatformMeta{Org: "acme", Platform: "ops"})
 	w.SetContentStore(store)
 
-	trajectory := &teams.Trajectory{
+	trajectory := &agentic.Trajectory{
 		LoopID:    "loop-traj",
 		StartTime: time.Now().Add(-10 * time.Second),
-		Steps: []teams.TrajectoryStep{
+		Steps: []agentic.TrajectoryStep{
 			{
 				Timestamp: time.Now().Add(-8 * time.Second),
 				StepType:  "model_call",
@@ -378,7 +378,7 @@ func TestWriteTrajectorySteps_Integration(t *testing.T) {
 
 	// Verify content was stored in ObjectStore.
 	// The tool_call step (index 1) should have its content stored.
-	toolStepEntity := &teams.TrajectoryStepEntity{
+	toolStepEntity := &agentic.TrajectoryStepEntity{
 		Step:      trajectory.Steps[1],
 		Org:       "acme",
 		Platform:  "ops",
@@ -419,9 +419,9 @@ func TestWriteTrajectorySteps_NoContentStore_StillWritesTriples(t *testing.T) {
 	// No content store set — triples should still be written.
 	w := teamsloop.NewGraphWriterForTest(tc.Client, nil, types.PlatformMeta{Org: "acme", Platform: "ops"})
 
-	trajectory := &teams.Trajectory{
+	trajectory := &agentic.Trajectory{
 		LoopID: "loop-no-store",
-		Steps: []teams.TrajectoryStep{
+		Steps: []agentic.TrajectoryStep{
 			{
 				Timestamp:  time.Now(),
 				StepType:   "tool_call",
@@ -451,7 +451,7 @@ func TestWriteTrajectorySteps_NoContentStore_StillWritesTriples(t *testing.T) {
 func TestWriteLoopCompletion_NilClient_NoOp(t *testing.T) {
 	w := teamsloop.NewGraphWriterForTest(nil, nil, types.PlatformMeta{Org: "acme", Platform: "ops"})
 
-	event := &teams.LoopCompletedEvent{
+	event := &agentic.LoopCompletedEvent{
 		LoopID:      "loop-noop",
 		TaskID:      "task-noop",
 		Outcome:     "success",

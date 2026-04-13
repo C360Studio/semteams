@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -492,7 +492,7 @@ func TestLoopTracker_UpdateCompletion(t *testing.T) {
 	}{
 		{
 			name:      "success completion",
-			outcome:   teams.OutcomeSuccess,
+			outcome:   agentic.OutcomeSuccess,
 			result:    "Task completed successfully",
 			errMsg:    "",
 			wantErr:   false,
@@ -500,7 +500,7 @@ func TestLoopTracker_UpdateCompletion(t *testing.T) {
 		},
 		{
 			name:      "failed completion",
-			outcome:   teams.OutcomeFailed,
+			outcome:   agentic.OutcomeFailed,
 			result:    "",
 			errMsg:    "max iterations reached",
 			wantErr:   false,
@@ -508,7 +508,7 @@ func TestLoopTracker_UpdateCompletion(t *testing.T) {
 		},
 		{
 			name:      "cancelled completion",
-			outcome:   teams.OutcomeCancelled,
+			outcome:   agentic.OutcomeCancelled,
 			result:    "",
 			errMsg:    "cancelled by user",
 			wantErr:   false,
@@ -563,7 +563,7 @@ func TestLoopTracker_UpdateCompletion(t *testing.T) {
 func TestLoopTracker_UpdateCompletion_NotFound(t *testing.T) {
 	tracker := NewLoopTracker()
 
-	err := tracker.UpdateCompletion("non-existent", teams.OutcomeSuccess, "result", "")
+	err := tracker.UpdateCompletion("non-existent", agentic.OutcomeSuccess, "result", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }

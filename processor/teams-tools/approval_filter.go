@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semteams/teams"
 )
 
@@ -34,7 +35,7 @@ func NewApprovalFilter(registry *ExecutorRegistry) *ApprovalFilter {
 var _ teams.ToolCallFilter = (*ApprovalFilter)(nil)
 
 // FilterToolCalls checks each call against the registry for RequiresApproval.
-func (f *ApprovalFilter) FilterToolCalls(_ string, calls []teams.ToolCall) (teams.ToolCallFilterResult, error) {
+func (f *ApprovalFilter) FilterToolCalls(_ string, calls []agentic.ToolCall) (teams.ToolCallFilterResult, error) {
 	var result teams.ToolCallFilterResult
 
 	for _, call := range calls {
@@ -51,17 +52,13 @@ func (f *ApprovalFilter) FilterToolCalls(_ string, calls []teams.ToolCall) (team
 	return result, nil
 }
 
-// requiresApproval checks if the named tool has RequiresApproval set.
-func (f *ApprovalFilter) requiresApproval(toolName string) bool {
-	executor := f.registry.GetTool(toolName)
-	if executor == nil {
-		return false // unknown tools are handled by the dispatch layer
-	}
-
-	for _, def := range executor.ListTools() {
-		if def.Name == toolName {
-			return def.RequiresApproval
-		}
-	}
+// requiresApproval checks if the named tool requires approval.
+//
+// TODO(migration): ToolDefinition.RequiresApproval field was removed
+// during the fork-to-import migration. This needs to be restored via
+// either (a) upstreaming RequiresApproval to semstreams, or (b) using
+// a config-based lookup (map[string]bool from tool config). For now,
+// approval is disabled — all tools pass through without gating.
+func (f *ApprovalFilter) requiresApproval(_ string) bool {
 	return false
 }

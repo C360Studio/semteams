@@ -8,9 +8,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	teamsmodel "github.com/c360studio/semteams/processor/teams-model"
-	"github.com/c360studio/semteams/teams"
 )
 
 // sseServer creates an httptest.Server that serves SSE chunks then [DONE].
@@ -51,10 +51,10 @@ func newStreamingClient(t *testing.T, url string) *teamsmodel.Client {
 	return client
 }
 
-func simpleRequest(requestID string) teams.AgentRequest {
-	return teams.AgentRequest{
+func simpleRequest(requestID string) agentic.AgentRequest {
+	return agentic.AgentRequest{
 		RequestID: requestID,
-		Messages:  []teams.ChatMessage{{Role: "user", Content: "Hello"}},
+		Messages:  []agentic.ChatMessage{{Role: "user", Content: "Hello"}},
 		Model:     "test-model",
 	}
 }

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	teamsmodel "github.com/c360studio/semteams/processor/teams-model"
-	"github.com/c360studio/semteams/teams"
 )
 
 // IntentType represents the classified intent of a user message.
@@ -40,7 +40,7 @@ type ClassifiedIntent struct {
 
 // IntentClassifier classifies user messages into structured intents.
 type IntentClassifier interface {
-	Classify(ctx context.Context, msg teams.UserMessage, activeLoops []*LoopInfo) (*ClassifiedIntent, error)
+	Classify(ctx context.Context, msg agentic.UserMessage, activeLoops []*LoopInfo) (*ClassifiedIntent, error)
 }
 
 // LLMIntentClassifier uses an LLM to classify ambiguous user messages.
@@ -64,7 +64,7 @@ func NewLLMIntentClassifier(registry model.RegistryReader, modelName string, log
 }
 
 // Classify sends the user message to an LLM for intent classification.
-func (c *LLMIntentClassifier) Classify(ctx context.Context, msg teams.UserMessage, activeLoops []*LoopInfo) (*ClassifiedIntent, error) {
+func (c *LLMIntentClassifier) Classify(ctx context.Context, msg agentic.UserMessage, activeLoops []*LoopInfo) (*ClassifiedIntent, error) {
 	// Build context about active loops
 	loopContext := "No active loops."
 	if len(activeLoops) > 0 {
@@ -107,11 +107,11 @@ Respond with JSON: {"type": "<intent_type>", "loop_id": "<if applicable>", "sign
 	reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	resp, err := client.ChatCompletion(reqCtx, teams.AgentRequest{
+	resp, err := client.ChatCompletion(reqCtx, agentic.AgentRequest{
 		RequestID: fmt.Sprintf("classify_%d", time.Now().UnixNano()),
 		Role:      "classifier",
 		Model:     c.modelName,
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: msg.Content},
 		},

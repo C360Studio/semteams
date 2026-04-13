@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // mockKVGetter implements KVGetter for testing
@@ -100,7 +100,7 @@ func TestGraphQueryExecutor_QueryEntity_Success(t *testing.T) {
 	kv.Put("c360.logistics.environmental.sensor.temperature.temp-sensor-001", entityJSON)
 
 	// Execute query
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call_123",
 		Name: "query_entity",
 		Arguments: map[string]any{
@@ -149,7 +149,7 @@ func TestGraphQueryExecutor_QueryEntity_NotFound(t *testing.T) {
 	kv := newMockKVGetter()
 	executor := NewGraphQueryExecutor(kv)
 
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call_456",
 		Name: "query_entity",
 		Arguments: map[string]any{
@@ -179,7 +179,7 @@ func TestGraphQueryExecutor_QueryEntity_MissingEntityID(t *testing.T) {
 	kv := newMockKVGetter()
 	executor := NewGraphQueryExecutor(kv)
 
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:        "call_789",
 		Name:      "query_entity",
 		Arguments: map[string]any{},
@@ -199,7 +199,7 @@ func TestGraphQueryExecutor_QueryEntity_EmptyEntityID(t *testing.T) {
 	kv := newMockKVGetter()
 	executor := NewGraphQueryExecutor(kv)
 
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call_abc",
 		Name: "query_entity",
 		Arguments: map[string]any{
@@ -221,7 +221,7 @@ func TestGraphQueryExecutor_UnknownTool(t *testing.T) {
 	kv := newMockKVGetter()
 	executor := NewGraphQueryExecutor(kv)
 
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call_xyz",
 		Name: "unknown_tool",
 		Arguments: map[string]any{
@@ -246,7 +246,7 @@ func TestGraphQueryExecutor_NonJSONContent(t *testing.T) {
 	// Store non-JSON content
 	kv.Put("plain-text-entity", []byte("This is plain text, not JSON"))
 
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:   "call_plain",
 		Name: "query_entity",
 		Arguments: map[string]any{

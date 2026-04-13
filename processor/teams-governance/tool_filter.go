@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 const (
@@ -148,9 +148,9 @@ func (f *ToolCallFilter) checkPII(ctx context.Context, msg *Message, args map[st
 	return f.piiFilter.Process(ctx, piiMsg)
 }
 
-// ToolCallToMessage converts an teams.ToolCall into a governance Message
+// ToolCallToMessage converts an agentic.ToolCall into a governance Message
 // for processing through the filter chain.
-func ToolCallToMessage(call teams.ToolCall, userID, channelID string) *Message {
+func ToolCallToMessage(call agentic.ToolCall, userID, channelID string) *Message {
 	return &Message{
 		ID:        call.ID,
 		Type:      MessageTypeToolCall,

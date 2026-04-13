@@ -6,15 +6,15 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/graph/llm"
-	"github.com/c360studio/semteams/teams"
 )
 
 // Summarizer abstracts the LLM call for context compaction.
 type Summarizer interface {
 	// Summarize generates a concise summary of the given conversation messages.
 	// maxTokens limits the response length.
-	Summarize(ctx context.Context, messages []teams.ChatMessage, maxTokens int) (string, error)
+	Summarize(ctx context.Context, messages []agentic.ChatMessage, maxTokens int) (string, error)
 }
 
 // LLMSummarizer implements Summarizer using a graph/llm.Client.
@@ -37,7 +37,7 @@ Be concise but preserve important details like entity IDs, file paths, specific 
 Focus on what happened and what was learned, not the conversation flow itself.`
 
 // Summarize calls the LLM to generate a summary of the conversation messages.
-func (s *LLMSummarizer) Summarize(ctx context.Context, messages []teams.ChatMessage, maxTokens int) (string, error) {
+func (s *LLMSummarizer) Summarize(ctx context.Context, messages []agentic.ChatMessage, maxTokens int) (string, error) {
 	userPrompt := formatMessagesForSummary(messages)
 
 	temp := 0.3
@@ -56,7 +56,7 @@ func (s *LLMSummarizer) Summarize(ctx context.Context, messages []teams.ChatMess
 
 // formatMessagesForSummary converts chat messages into a structured text block
 // suitable for the summarization prompt.
-func formatMessagesForSummary(messages []teams.ChatMessage) string {
+func formatMessagesForSummary(messages []agentic.ChatMessage) string {
 	var b strings.Builder
 	b.WriteString("Conversation to summarize:\n\n")
 	for _, msg := range messages {

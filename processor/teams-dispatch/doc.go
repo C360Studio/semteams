@@ -47,7 +47,7 @@
 // External commands implement the CommandExecutor interface:
 //
 //	type CommandExecutor interface {
-//	    Execute(ctx context.Context, cmdCtx *CommandContext, msg teams.UserMessage, args []string, loopID string) (teams.UserResponse, error)
+//	    Execute(ctx context.Context, cmdCtx *CommandContext, msg agentic.UserMessage, args []string, loopID string) (agentic.UserResponse, error)
 //	    Config() CommandConfig
 //	}
 //

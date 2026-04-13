@@ -12,6 +12,7 @@ import (
 
 	"os"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/graph/llm"
 	"github.com/c360studio/semstreams/message"
@@ -21,7 +22,6 @@ import (
 	"github.com/c360studio/semstreams/pkg/workflow"
 	"github.com/c360studio/semstreams/processor/rule/boid"
 	"github.com/c360studio/semstreams/storage/objectstore"
-	"github.com/c360studio/semteams/teams"
 	"github.com/nats-io/nats.go/jetstream"
 )
 
@@ -53,7 +53,7 @@ type Component struct {
 	positionsBucket jetstream.KeyValue
 
 	// Trajectory cache (replaces KV bucket — durable content in ObjectStore + graph)
-	trajectoryCache cache.Cache[*teams.Trajectory]
+	trajectoryCache cache.Cache[*agentic.Trajectory]
 
 	// Boid coordination handler
 	boidHandler *BoidHandler
@@ -421,7 +421,7 @@ func (c *Component) initializeKVBuckets(ctx context.Context) error {
 	if cleanupInterval < time.Minute {
 		cleanupInterval = time.Minute
 	}
-	trajectoryCache, err := cache.NewTTL[*teams.Trajectory](ctx, trajCacheTTL, cleanupInterval)
+	trajectoryCache, err := cache.NewTTL[*agentic.Trajectory](ctx, trajCacheTTL, cleanupInterval)
 	if err != nil {
 		return errs.Wrap(err, "agentic-loop", "initializeKVBuckets", "create trajectory cache")
 	}
@@ -692,7 +692,7 @@ func (c *Component) handleTaskMessage(ctx context.Context, data []byte) {
 		return
 	}
 
-	task, ok := baseMsg.Payload().(*teams.TaskMessage)
+	task, ok := baseMsg.Payload().(*agentic.TaskMessage)
 	if !ok {
 		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
 		return
@@ -750,14 +750,14 @@ func (c *Component) handleResponseMessage(ctx context.Context, data []byte) {
 
 // extractAgentResponse parses an agent response message and finds its loop.
 // Returns the response, loop ID, and success flag.
-func (c *Component) extractAgentResponse(data []byte) (*teams.AgentResponse, string, bool) {
+func (c *Component) extractAgentResponse(data []byte) (*agentic.AgentResponse, string, bool) {
 	var baseMsg message.BaseMessage
 	if err := json.Unmarshal(data, &baseMsg); err != nil {
 		c.logger.Error("Failed to unmarshal BaseMessage", "error", err)
 		return nil, "", false
 	}
 
-	responsePtr, ok := baseMsg.Payload().(*teams.AgentResponse)
+	responsePtr, ok := baseMsg.Payload().(*agentic.AgentResponse)
 	if !ok {
 		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
 		return nil, "", false
@@ -778,14 +778,14 @@ func (c *Component) extractAgentResponse(data []byte) (*teams.AgentResponse, str
 }
 
 // handleLoopFailure records failure metrics and publishes failure events.
-func (c *Component) handleLoopFailure(ctx context.Context, loopID string, entity teams.LoopEntity, reason string, err error) {
+func (c *Component) handleLoopFailure(ctx context.Context, loopID string, entity agentic.LoopEntity, reason string, err error) {
 	c.logger.Error("Loop processing failed", "error", err, "loop_id", loopID, "reason", reason)
 
 	// Transition loop to failed and persist — without this, the loop entity
 	// in AGENT_LOOPS KV stays at state=running and downstream watchers
 	// (execution-manager) never see the terminal state.
-	if transErr := c.handler.loopManager.TransitionLoop(loopID, teams.LoopStateFailed); transErr == nil {
-		c.handler.loopManager.UpdateCompletion(loopID, teams.OutcomeFailed, "", err.Error())
+	if transErr := c.handler.loopManager.TransitionLoop(loopID, agentic.LoopStateFailed); transErr == nil {
+		c.handler.loopManager.UpdateCompletion(loopID, agentic.OutcomeFailed, "", err.Error())
 		c.persistLoopState(ctx, loopID)
 	}
 
@@ -828,7 +828,7 @@ func (c *Component) publishFailureEvents(ctx context.Context, loopID, reason, er
 }
 
 // recordResponseMetrics records metrics and logs for a successful response.
-func (c *Component) recordResponseMetrics(response *teams.AgentResponse, result HandlerResult, entity teams.LoopEntity) {
+func (c *Component) recordResponseMetrics(response *agentic.AgentResponse, result HandlerResult, entity agentic.LoopEntity) {
 	if c.metrics == nil {
 		return
 	}
@@ -850,12 +850,12 @@ func (c *Component) recordResponseMetrics(response *teams.AgentResponse, result 
 	duration := time.Since(entity.StartedAt).Seconds()
 
 	switch result.State {
-	case teams.LoopStateComplete:
+	case agentic.LoopStateComplete:
 		c.metrics.recordLoopCompleted(entity.Iterations, duration)
 		c.logger.Info("Loop completed",
 			slog.String("loop_id", result.LoopID),
 			slog.Int("iterations", entity.Iterations))
-	case teams.LoopStateFailed:
+	case agentic.LoopStateFailed:
 		reason := "model_error"
 		if response.Status != "error" {
 			reason = "unknown"
@@ -873,7 +873,7 @@ func (c *Component) persistHandlerResult(ctx context.Context, result HandlerResu
 	c.persistLoopState(ctx, result.LoopID)
 
 	// Finalize terminal states
-	if result.State == teams.LoopStateComplete || result.State == teams.LoopStateFailed {
+	if result.State == agentic.LoopStateComplete || result.State == agentic.LoopStateFailed {
 		c.finalizeTrajectory(ctx, result.LoopID, result.State)
 		c.cleanupBoidPosition(ctx, result.LoopID)
 		if result.CompletionState != nil {
@@ -897,7 +897,7 @@ func (c *Component) handleToolResultMessage(ctx context.Context, data []byte) {
 		return
 	}
 
-	toolResultPtr, ok := baseMsg.Payload().(*teams.ToolResult)
+	toolResultPtr, ok := baseMsg.Payload().(*agentic.ToolResult)
 	if !ok {
 		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
 		return
@@ -965,7 +965,7 @@ func (c *Component) publishResults(ctx context.Context, result HandlerResult) {
 }
 
 // publishContextEvent publishes a context management event
-func (c *Component) publishContextEvent(ctx context.Context, event teams.ContextEvent) {
+func (c *Component) publishContextEvent(ctx context.Context, event agentic.ContextEvent) {
 	eventMsg := message.NewBaseMessage(event.Schema(), &event, "agentic-loop")
 	data, err := json.Marshal(eventMsg)
 	if err != nil {
@@ -1003,7 +1003,7 @@ func (c *Component) emitContextMetrics(result HandlerResult) {
 // persistCompletionState persists the enriched completion state to KV.
 // Key pattern: COMPLETE_{loopID} for rules engine to watch.
 // The rules engine can then trigger follow-up actions based on completion data.
-func (c *Component) persistCompletionState(ctx context.Context, loopID string, completion *teams.LoopCompletedEvent) {
+func (c *Component) persistCompletionState(ctx context.Context, loopID string, completion *agentic.LoopCompletedEvent) {
 	if c.loopsBucket == nil || completion == nil {
 		return
 	}
@@ -1031,7 +1031,7 @@ func (c *Component) persistCompletionState(ctx context.Context, loopID string, c
 // Key pattern: COMPLETE_{loopID} — same as success, so watchers don't need
 // to distinguish between success/failure key patterns. The outcome field
 // in the serialized event tells them what happened.
-func (c *Component) persistFailureState(ctx context.Context, loopID string, failure *teams.LoopFailedEvent) {
+func (c *Component) persistFailureState(ctx context.Context, loopID string, failure *agentic.LoopFailedEvent) {
 	if c.loopsBucket == nil || failure == nil {
 		return
 	}
@@ -1056,7 +1056,7 @@ func (c *Component) persistFailureState(ctx context.Context, loopID string, fail
 
 // persistCancellationState persists the cancellation state to KV.
 // Uses same COMPLETE_{loopID} key pattern so watchers handle all terminal states uniformly.
-func (c *Component) persistCancellationState(ctx context.Context, loopID string, cancelled *teams.LoopCancelledEvent) {
+func (c *Component) persistCancellationState(ctx context.Context, loopID string, cancelled *agentic.LoopCancelledEvent) {
 	if c.loopsBucket == nil || cancelled == nil {
 		return
 	}
@@ -1119,13 +1119,13 @@ func (c *Component) writeTrajectoryToGraph(ctx context.Context, loopID string) {
 
 // finalizeTrajectory reads the trajectory from the in-memory TrajectoryManager,
 // marks it complete, and caches it for post-completion queries.
-func (c *Component) finalizeTrajectory(_ context.Context, loopID string, state teams.LoopState) {
+func (c *Component) finalizeTrajectory(_ context.Context, loopID string, state agentic.LoopState) {
 	traj, err := c.handler.trajectoryManager.GetTrajectory(loopID)
 	if err != nil {
 		c.logger.Debug("finalizeTrajectory: trajectory not found", "loop_id", loopID)
 		return
 	}
-	if state == teams.LoopStateComplete {
+	if state == agentic.LoopStateComplete {
 		traj.Complete("complete")
 	} else {
 		traj.Complete("failed")
@@ -1150,7 +1150,7 @@ func (c *Component) handleTrajectoryQuery(_ context.Context, data []byte) ([]byt
 	}
 
 	// Try cache first (finalized trajectories).
-	var traj *teams.Trajectory
+	var traj *agentic.Trajectory
 	if c.trajectoryCache != nil {
 		traj, _ = c.trajectoryCache.Get(req.LoopID)
 	}
@@ -1200,7 +1200,7 @@ func (c *Component) handleSignalMessage(ctx context.Context, data []byte) {
 		return
 	}
 
-	signalPtr, ok := baseMsg.Payload().(*teams.UserSignal)
+	signalPtr, ok := baseMsg.Payload().(*agentic.UserSignal)
 	if !ok {
 		c.logger.Error("Unexpected payload type", "type", fmt.Sprintf("%T", baseMsg.Payload()))
 		return
@@ -1215,11 +1215,11 @@ func (c *Component) handleSignalMessage(ctx context.Context, data []byte) {
 
 	// Handle based on signal type
 	switch signal.Type {
-	case teams.SignalCancel:
+	case agentic.SignalCancel:
 		c.handleCancelSignal(ctx, signal)
-	case teams.SignalPause:
+	case agentic.SignalPause:
 		c.handlePauseSignal(ctx, signal)
-	case teams.SignalResume:
+	case agentic.SignalResume:
 		c.handleResumeSignal(ctx, signal)
 	default:
 		c.logger.Warn("Unsupported signal type",
@@ -1229,7 +1229,7 @@ func (c *Component) handleSignalMessage(ctx context.Context, data []byte) {
 }
 
 // handleCancelSignal handles a cancel signal for a loop
-func (c *Component) handleCancelSignal(ctx context.Context, signal teams.UserSignal) {
+func (c *Component) handleCancelSignal(ctx context.Context, signal agentic.UserSignal) {
 	loopID := signal.LoopID
 
 	// Atomically cancel the loop and get the updated entity
@@ -1251,10 +1251,10 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal teams.UserSig
 	}
 
 	// Publish completion event with workflow context for reactive workflows
-	completion := teams.LoopCancelledEvent{
+	completion := agentic.LoopCancelledEvent{
 		LoopID:       loopID,
 		TaskID:       entity.TaskID,
-		Outcome:      teams.OutcomeCancelled,
+		Outcome:      agentic.OutcomeCancelled,
 		CancelledBy:  signal.UserID,
 		WorkflowSlug: entity.WorkflowSlug,
 		WorkflowStep: entity.WorkflowStep,
@@ -1288,7 +1288,7 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal teams.UserSig
 	c.persistCancellationState(ctx, loopID, &completion)
 
 	// Finalize trajectory and cleanup Boid position
-	c.finalizeTrajectory(ctx, loopID, teams.LoopStateCancelled)
+	c.finalizeTrajectory(ctx, loopID, agentic.LoopStateCancelled)
 	c.writeTrajectoryToGraph(ctx, loopID)
 	c.cleanupBoidPosition(ctx, loopID)
 
@@ -1298,7 +1298,7 @@ func (c *Component) handleCancelSignal(ctx context.Context, signal teams.UserSig
 }
 
 // handlePauseSignal handles a pause signal for a loop
-func (c *Component) handlePauseSignal(ctx context.Context, signal teams.UserSignal) {
+func (c *Component) handlePauseSignal(ctx context.Context, signal agentic.UserSignal) {
 	loopID := signal.LoopID
 
 	// Get current loop state
@@ -1311,7 +1311,7 @@ func (c *Component) handlePauseSignal(ctx context.Context, signal teams.UserSign
 	}
 
 	// Check if loop can be paused
-	if entity.State.IsTerminal() || entity.State == teams.LoopStatePaused {
+	if entity.State.IsTerminal() || entity.State == agentic.LoopStatePaused {
 		c.logger.Warn("Cannot pause loop",
 			slog.String("loop_id", loopID),
 			slog.String("state", string(entity.State)))
@@ -1338,7 +1338,7 @@ func (c *Component) handlePauseSignal(ctx context.Context, signal teams.UserSign
 }
 
 // handleResumeSignal handles a resume signal for a paused loop
-func (c *Component) handleResumeSignal(ctx context.Context, signal teams.UserSignal) {
+func (c *Component) handleResumeSignal(ctx context.Context, signal agentic.UserSignal) {
 	loopID := signal.LoopID
 
 	// Get current loop state
@@ -1351,7 +1351,7 @@ func (c *Component) handleResumeSignal(ctx context.Context, signal teams.UserSig
 	}
 
 	// Check if loop can be resumed
-	if entity.State != teams.LoopStatePaused {
+	if entity.State != agentic.LoopStatePaused {
 		c.logger.Warn("Cannot resume non-paused loop",
 			slog.String("loop_id", loopID),
 			slog.String("state", string(entity.State)))
@@ -1359,7 +1359,7 @@ func (c *Component) handleResumeSignal(ctx context.Context, signal teams.UserSig
 	}
 
 	// Clear pause state and restore to executing
-	entity.State = teams.LoopStateExecuting
+	entity.State = agentic.LoopStateExecuting
 	entity.PauseRequested = false
 
 	// Update in handler
@@ -1403,7 +1403,7 @@ func (c *Component) getContextManagerForLoop(loopID string) *ContextManager {
 
 // updateBoidPositionFromToolResult updates the agent's position in the Boid coordination system
 // based on entities accessed in tool results.
-func (c *Component) updateBoidPositionFromToolResult(ctx context.Context, loopID string, toolResult teams.ToolResult) {
+func (c *Component) updateBoidPositionFromToolResult(ctx context.Context, loopID string, toolResult agentic.ToolResult) {
 	// Skip if Boid coordination is not enabled
 	if c.boidHandler == nil {
 		return
@@ -1459,7 +1459,7 @@ func (c *Component) updateBoidPositionFromToolResult(ctx context.Context, loopID
 
 // writeInitialBoidPosition writes an initial position at task arrival.
 // This enables Boid rules to fire before the first tool result arrives.
-func (c *Component) writeInitialBoidPosition(ctx context.Context, loopID string, task *teams.TaskMessage) {
+func (c *Component) writeInitialBoidPosition(ctx context.Context, loopID string, task *agentic.TaskMessage) {
 	if c.boidHandler == nil {
 		return
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semteams/teams"
 )
@@ -173,7 +174,7 @@ func (e *GitHubWriteExecutor) ListTools() []teams.ToolDefinition {
 }
 
 // Execute dispatches the tool call to the appropriate handler.
-func (e *GitHubWriteExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubWriteExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	switch call.Name {
 	case "github_create_branch":
 		return e.createBranch(ctx, call)
@@ -186,31 +187,31 @@ func (e *GitHubWriteExecutor) Execute(ctx context.Context, call teams.ToolCall) 
 	case "github_add_label":
 		return e.addLabel(ctx, call)
 	default:
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  fmt.Sprintf("unknown tool: %s", call.Name),
 		}, errs.WrapInvalid(fmt.Errorf("unknown tool: %s", call.Name), "GitHubWriteExecutor", "Execute", "find tool")
 	}
 }
 
-func (e *GitHubWriteExecutor) createBranch(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubWriteExecutor) createBranch(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	owner, repo, ok := extractOwnerRepo(call)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
 	}
 
 	branch, ok := call.Arguments["branch"].(string)
 	if !ok || branch == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "branch is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "branch is required and must be a non-empty string"}, nil
 	}
 
 	baseSHA, ok := call.Arguments["base_sha"].(string)
 	if !ok || baseSHA == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "base_sha is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "base_sha is required and must be a non-empty string"}, nil
 	}
 
 	if err := e.client.CreateBranch(ctx, owner, repo, branch, baseSHA); err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_create_branch failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_create_branch failed: %v", err)}, nil
 	}
 
 	content, err := marshalPretty(map[string]any{
@@ -219,10 +220,10 @@ func (e *GitHubWriteExecutor) createBranch(ctx context.Context, call teams.ToolC
 		"status": "created",
 	})
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{
@@ -232,34 +233,34 @@ func (e *GitHubWriteExecutor) createBranch(ctx context.Context, call teams.ToolC
 	}, nil
 }
 
-func (e *GitHubWriteExecutor) commitFile(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubWriteExecutor) commitFile(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	owner, repo, ok := extractOwnerRepo(call)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
 	}
 
 	branch, ok := call.Arguments["branch"].(string)
 	if !ok || branch == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "branch is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "branch is required and must be a non-empty string"}, nil
 	}
 
 	filePath, ok := call.Arguments["path"].(string)
 	if !ok || filePath == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "path is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "path is required and must be a non-empty string"}, nil
 	}
 
 	fileContent, ok := call.Arguments["content"].(string)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "content is required and must be a string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "content is required and must be a string"}, nil
 	}
 
 	message, ok := call.Arguments["message"].(string)
 	if !ok || message == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "message is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "message is required and must be a non-empty string"}, nil
 	}
 
 	if err := e.client.CommitFile(ctx, owner, repo, branch, filePath, fileContent, message); err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_commit_file failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_commit_file failed: %v", err)}, nil
 	}
 
 	content, err := marshalPretty(map[string]any{
@@ -269,10 +270,10 @@ func (e *GitHubWriteExecutor) commitFile(ctx context.Context, call teams.ToolCal
 		"status":  "committed",
 	})
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{
@@ -282,44 +283,44 @@ func (e *GitHubWriteExecutor) commitFile(ctx context.Context, call teams.ToolCal
 	}, nil
 }
 
-func (e *GitHubWriteExecutor) createPR(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubWriteExecutor) createPR(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	owner, repo, ok := extractOwnerRepo(call)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
 	}
 
 	title, ok := call.Arguments["title"].(string)
 	if !ok || title == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "title is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "title is required and must be a non-empty string"}, nil
 	}
 
 	// body is required per the spec; an empty body is allowed (PR with no description)
 	body, ok := call.Arguments["body"].(string)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "body is required and must be a string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "body is required and must be a string"}, nil
 	}
 
 	head, ok := call.Arguments["head"].(string)
 	if !ok || head == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "head is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "head is required and must be a non-empty string"}, nil
 	}
 
 	base, ok := call.Arguments["base"].(string)
 	if !ok || base == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "base is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "base is required and must be a non-empty string"}, nil
 	}
 
 	pr, err := e.client.CreatePullRequest(ctx, owner, repo, title, body, head, base)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_create_pr failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_create_pr failed: %v", err)}, nil
 	}
 
 	content, err := marshalPretty(pr)
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{
@@ -329,24 +330,24 @@ func (e *GitHubWriteExecutor) createPR(ctx context.Context, call teams.ToolCall)
 	}, nil
 }
 
-func (e *GitHubWriteExecutor) addComment(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubWriteExecutor) addComment(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	owner, repo, ok := extractOwnerRepo(call)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
 	}
 
 	number, ok := extractInt(call.Arguments, "number")
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "number is required and must be an integer"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "number is required and must be an integer"}, nil
 	}
 
 	body, ok := call.Arguments["body"].(string)
 	if !ok || body == "" {
-		return teams.ToolResult{CallID: call.ID, Error: "body is required and must be a non-empty string"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "body is required and must be a non-empty string"}, nil
 	}
 
 	if err := e.client.AddComment(ctx, owner, repo, number, body); err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_add_comment failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_add_comment failed: %v", err)}, nil
 	}
 
 	content, err := marshalPretty(map[string]any{
@@ -354,10 +355,10 @@ func (e *GitHubWriteExecutor) addComment(ctx context.Context, call teams.ToolCal
 		"status": "commented",
 	})
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{
@@ -366,28 +367,28 @@ func (e *GitHubWriteExecutor) addComment(ctx context.Context, call teams.ToolCal
 	}, nil
 }
 
-func (e *GitHubWriteExecutor) addLabel(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *GitHubWriteExecutor) addLabel(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	owner, repo, ok := extractOwnerRepo(call)
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "owner and repo are required string parameters"}, nil
 	}
 
 	number, ok := extractInt(call.Arguments, "number")
 	if !ok {
-		return teams.ToolResult{CallID: call.ID, Error: "number is required and must be an integer"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "number is required and must be an integer"}, nil
 	}
 
 	labelsRaw, exists := call.Arguments["labels"]
 	if !exists {
-		return teams.ToolResult{CallID: call.ID, Error: "labels is required"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "labels is required"}, nil
 	}
 	labels := toStringSlice(labelsRaw)
 	if len(labels) == 0 {
-		return teams.ToolResult{CallID: call.ID, Error: "labels must be a non-empty array of strings"}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: "labels must be a non-empty array of strings"}, nil
 	}
 
 	if err := e.client.AddLabels(ctx, owner, repo, number, labels); err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_add_label failed: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("github_add_label failed: %v", err)}, nil
 	}
 
 	content, err := marshalPretty(map[string]any{
@@ -396,10 +397,10 @@ func (e *GitHubWriteExecutor) addLabel(ctx context.Context, call teams.ToolCall)
 		"status": "labeled",
 	})
 	if err != nil {
-		return teams.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
+		return agentic.ToolResult{CallID: call.ID, Error: fmt.Sprintf("marshal result: %v", err)}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  call.ID,
 		Content: content,
 		Metadata: map[string]any{

@@ -11,9 +11,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
-	"github.com/c360studio/semteams/teams"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -114,7 +114,7 @@ func (c *Client) getAdapter() ProviderAdapter {
 }
 
 // buildChatRequest converts an AgentRequest into an OpenAI ChatCompletionRequest.
-func (c *Client) buildChatRequest(req teams.AgentRequest) openai.ChatCompletionRequest {
+func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletionRequest {
 	if len(req.Messages) == 0 {
 		// Return a minimal request — ChatCompletion will get an API error rather
 		// than a panic or cryptic "contents is not specified" from Gemini.
@@ -234,7 +234,7 @@ func (c *Client) buildChatRequest(req teams.AgentRequest) openai.ChatCompletionR
 //   - Rate limits (429): exponential from RateLimitDelay, up to MaxRateLimitRetries
 //
 // Both curves cap at MaxDelay and respect ctx cancellation at every wait point.
-func (c *Client) ChatCompletion(ctx context.Context, req teams.AgentRequest) (teams.AgentResponse, error) {
+func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (agentic.AgentResponse, error) {
 	chatReq := c.buildChatRequest(req)
 
 	// Log full request payload at debug level for wire-level diagnostics
@@ -350,14 +350,14 @@ func (c *Client) logWarn(msg, requestID, model string, attrs ...slog.Attr) {
 }
 
 // withRetryCount sets the retry count on a response if retries occurred.
-func (c *Client) withRetryCount(resp teams.AgentResponse, count int) teams.AgentResponse {
+func (c *Client) withRetryCount(resp agentic.AgentResponse, count int) agentic.AgentResponse {
 	resp.RetryCount = count
 	return resp
 }
 
 // errorResponse builds an AgentResponse with status "error".
-func errorResponse(requestID, errMsg string) teams.AgentResponse {
-	return teams.AgentResponse{
+func errorResponse(requestID, errMsg string) agentic.AgentResponse {
+	return agentic.AgentResponse{
 		RequestID: requestID,
 		Status:    "error",
 		Error:     errMsg,
@@ -366,7 +366,7 @@ func errorResponse(requestID, errMsg string) teams.AgentResponse {
 
 // doSingleAttempt executes one request attempt (streaming or non-streaming).
 // Returns (response, nil) on success, or (zero, error) on failure.
-func (c *Client) doSingleAttempt(ctx context.Context, chatReq openai.ChatCompletionRequest, requestID string) (teams.AgentResponse, error) {
+func (c *Client) doSingleAttempt(ctx context.Context, chatReq openai.ChatCompletionRequest, requestID string) (agentic.AgentResponse, error) {
 	if c.endpoint.Stream {
 		resp, err := c.streamChatCompletion(ctx, chatReq, requestID)
 		if err != nil {
@@ -376,7 +376,7 @@ func (c *Client) doSingleAttempt(ctx context.Context, chatReq openai.ChatComplet
 					slog.String("model", chatReq.Model),
 					slog.String("error", err.Error()))
 			}
-			return teams.AgentResponse{}, err
+			return agentic.AgentResponse{}, err
 		}
 		// Mid-stream errors are returned as AgentResponse{Status:"error"} — not retried.
 		return resp, nil
@@ -390,7 +390,7 @@ func (c *Client) doSingleAttempt(ctx context.Context, chatReq openai.ChatComplet
 				slog.String("model", chatReq.Model),
 				slog.String("error", err.Error()))
 		}
-		return teams.AgentResponse{}, err
+		return agentic.AgentResponse{}, err
 	}
 
 	return c.convertResponse(resp, requestID), nil
@@ -421,13 +421,13 @@ func addJitter(d time.Duration) time.Duration {
 // streamChatCompletion handles the streaming path. Connection errors return
 // a Go error (retryable). Mid-stream errors return AgentResponse{Status: "error"}
 // (not retryable — partial state can't be replayed).
-func (c *Client) streamChatCompletion(ctx context.Context, chatReq openai.ChatCompletionRequest, requestID string) (teams.AgentResponse, error) {
+func (c *Client) streamChatCompletion(ctx context.Context, chatReq openai.ChatCompletionRequest, requestID string) (agentic.AgentResponse, error) {
 	chatReq.Stream = true
 	chatReq.StreamOptions = &openai.StreamOptions{IncludeUsage: true}
 
 	stream, err := c.client.CreateChatCompletionStream(ctx, chatReq)
 	if err != nil {
-		return teams.AgentResponse{}, err // retryable connection error
+		return agentic.AgentResponse{}, err // retryable connection error
 	}
 	defer stream.Close()
 
@@ -490,10 +490,10 @@ func (c *Client) streamChatCompletion(ctx context.Context, chatReq openai.ChatCo
 // convertResponse converts OpenAI response to AgentResponse.
 // NormalizeResponse is called before conversion so provider adapters can
 // adjust the raw response (e.g., strip provider-specific fields).
-func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID string) teams.AgentResponse {
+func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID string) agentic.AgentResponse {
 	c.getAdapter().NormalizeResponse(&resp)
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: requestID,
 	}
 
@@ -516,7 +516,7 @@ func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID s
 	}
 
 	// Convert message
-	response.Message = teams.ChatMessage{
+	response.Message = agentic.ChatMessage{
 		Role:             choice.Message.Role,
 		Content:          choice.Message.Content,
 		ReasoningContent: choice.Message.ReasoningContent,
@@ -525,7 +525,7 @@ func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID s
 	// Convert tool calls if present
 	if len(choice.Message.ToolCalls) > 0 {
 		response.Status = "tool_call"
-		toolCalls := make([]teams.ToolCall, len(choice.Message.ToolCalls))
+		toolCalls := make([]agentic.ToolCall, len(choice.Message.ToolCalls))
 		for i, tc := range choice.Message.ToolCalls {
 			// Parse arguments JSON — must never be nil or the replay
 			// path will marshal it as "null" (a string), which the
@@ -541,7 +541,7 @@ func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID s
 				}
 			}
 
-			toolCalls[i] = teams.ToolCall{
+			toolCalls[i] = agentic.ToolCall{
 				ID:        tc.ID,
 				Name:      tc.Function.Name,
 				Arguments: args,
@@ -551,7 +551,7 @@ func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID s
 	}
 
 	// Convert token usage
-	response.TokenUsage = teams.TokenUsage{
+	response.TokenUsage = agentic.TokenUsage{
 		PromptTokens:     resp.Usage.PromptTokens,
 		CompletionTokens: resp.Usage.CompletionTokens,
 	}

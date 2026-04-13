@@ -68,9 +68,9 @@
 //
 // Incoming request with tools:
 //
-//	request := teams.AgentRequest{
+//	request := agentic.AgentRequest{
 //	    Model: "gpt-4",
-//	    Messages: []teams.ChatMessage{
+//	    Messages: []agentic.ChatMessage{
 //	        {Role: "user", Content: "Read the config file"},
 //	    },
 //	    Tools: []teams.ToolDefinition{
@@ -89,11 +89,11 @@
 //
 // Response with tool calls:
 //
-//	response := teams.AgentResponse{
+//	response := agentic.AgentResponse{
 //	    Status: "tool_call",
-//	    Message: teams.ChatMessage{
+//	    Message: agentic.ChatMessage{
 //	        Role: "assistant",
-//	        ToolCalls: []teams.ToolCall{
+//	        ToolCalls: []agentic.ToolCall{
 //	            {ID: "call_001", Name: "read_file", Arguments: map[string]any{"path": "config.yaml"}},
 //	        },
 //	    },
@@ -214,7 +214,7 @@
 //
 // Errors are returned as AgentResponse with status="error":
 //
-//	response := teams.AgentResponse{
+//	response := agentic.AgentResponse{
 //	    RequestID: "req_123",
 //	    Status:    "error",
 //	    Error:     "endpoint not found: unknown-model",

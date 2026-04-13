@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semteams/processor/teams-tools/sandbox"
 	"github.com/c360studio/semteams/teams"
 )
@@ -90,10 +91,10 @@ func (e *BashExecutor) ListTools() []teams.ToolDefinition {
 }
 
 // Execute runs a shell command and returns the output.
-func (e *BashExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (e *BashExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	command, ok := call.Arguments["command"].(string)
 	if !ok || command == "" {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: call.ID,
 			Error:  "command argument is required",
 		}, nil
@@ -114,10 +115,10 @@ func (e *BashExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.
 }
 
 // execSandbox routes the command to the sandbox container.
-func (e *BashExecutor) execSandbox(ctx context.Context, callID, command, taskID string) (teams.ToolResult, error) {
+func (e *BashExecutor) execSandbox(ctx context.Context, callID, command, taskID string) (agentic.ToolResult, error) {
 	result, err := e.sandbox.Exec(ctx, taskID, command, int(e.effectiveTimeout().Milliseconds()))
 	if err != nil {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: callID,
 			Error:  fmt.Sprintf("sandbox exec failed: %v", err),
 		}, nil
@@ -140,13 +141,13 @@ func (e *BashExecutor) execSandbox(ctx context.Context, callID, command, taskID 
 	}
 
 	if result.ExitCode != 0 {
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: callID,
 			Error:  fmt.Sprintf("exit code %d\n%s", result.ExitCode, output),
 		}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  callID,
 		Content: output,
 	}, nil
@@ -233,7 +234,7 @@ func (b *limitedBuffer) Write(p []byte) (int, error) {
 }
 
 // execLocal runs the command locally via os/exec with sensitive env vars stripped.
-func (e *BashExecutor) execLocal(ctx context.Context, callID, command string) (teams.ToolResult, error) {
+func (e *BashExecutor) execLocal(ctx context.Context, callID, command string) (agentic.ToolResult, error) {
 	ctx, cancel := context.WithTimeout(ctx, e.effectiveTimeout())
 	defer cancel()
 
@@ -269,13 +270,13 @@ func (e *BashExecutor) execLocal(ctx context.Context, callID, command string) (t
 		if ctx.Err() == context.DeadlineExceeded {
 			output += "\n[command timed out]"
 		}
-		return teams.ToolResult{
+		return agentic.ToolResult{
 			CallID: callID,
 			Error:  fmt.Sprintf("exit code %d\n%s", exitCode, output),
 		}, nil
 	}
 
-	return teams.ToolResult{
+	return agentic.ToolResult{
 		CallID:  callID,
 		Content: output,
 	}, nil

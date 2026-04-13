@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,7 +12,7 @@ import (
 func TestToolCallFilter_BlocksBashMetadataEndpoint(t *testing.T) {
 	f := NewToolCallFilter(nil)
 
-	msg := ToolCallToMessage(teams.ToolCall{
+	msg := ToolCallToMessage(agentic.ToolCall{
 		ID:        "call-1",
 		Name:      "bash",
 		Arguments: map[string]any{"command": "curl http://169.254.169.254/latest/meta-data/"},
@@ -27,7 +27,7 @@ func TestToolCallFilter_BlocksBashMetadataEndpoint(t *testing.T) {
 func TestToolCallFilter_AllowsSafeBash(t *testing.T) {
 	f := NewToolCallFilter(nil)
 
-	msg := ToolCallToMessage(teams.ToolCall{
+	msg := ToolCallToMessage(agentic.ToolCall{
 		ID:        "call-2",
 		Name:      "bash",
 		Arguments: map[string]any{"command": "go test ./..."},
@@ -41,7 +41,7 @@ func TestToolCallFilter_AllowsSafeBash(t *testing.T) {
 func TestToolCallFilter_BlocksHTTPMetadataURL(t *testing.T) {
 	f := NewToolCallFilter(nil)
 
-	msg := ToolCallToMessage(teams.ToolCall{
+	msg := ToolCallToMessage(agentic.ToolCall{
 		ID:        "call-3",
 		Name:      "http_request",
 		Arguments: map[string]any{"url": "http://169.254.169.254/latest/meta-data/"},
@@ -55,7 +55,7 @@ func TestToolCallFilter_BlocksHTTPMetadataURL(t *testing.T) {
 func TestToolCallFilter_AllowsSafeHTTP(t *testing.T) {
 	f := NewToolCallFilter(nil)
 
-	msg := ToolCallToMessage(teams.ToolCall{
+	msg := ToolCallToMessage(agentic.ToolCall{
 		ID:        "call-4",
 		Name:      "http_request",
 		Arguments: map[string]any{"url": "https://pkg.go.dev/net/http"},
@@ -82,7 +82,7 @@ func TestToolCallFilter_SkipsNonToolCallMessages(t *testing.T) {
 func TestToolCallFilter_BlocksForkBomb(t *testing.T) {
 	f := NewToolCallFilter(nil)
 
-	msg := ToolCallToMessage(teams.ToolCall{
+	msg := ToolCallToMessage(agentic.ToolCall{
 		ID:        "call-5",
 		Name:      "bash",
 		Arguments: map[string]any{"command": ":(){ :|:& };:"},
@@ -94,7 +94,7 @@ func TestToolCallFilter_BlocksForkBomb(t *testing.T) {
 }
 
 func TestToolCallToMessage(t *testing.T) {
-	call := teams.ToolCall{
+	call := agentic.ToolCall{
 		ID:        "call-x",
 		Name:      "bash",
 		Arguments: map[string]any{"command": "echo hi"},

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/c360studio/semteams/teams"
+	"github.com/c360studio/semstreams/agentic"
 )
 
 // --- ListTools ---
@@ -47,7 +47,7 @@ func TestGitHubReadExecutor_ListTools(t *testing.T) {
 
 func TestGitHubReadExecutor_UnknownTool(t *testing.T) {
 	e := NewGitHubReadExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "c1",
 		Name:      "does_not_exist",
 		Arguments: map[string]any{},
@@ -74,7 +74,7 @@ func TestGitHubReadExecutor_GetIssue_Success(t *testing.T) {
 	}
 
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c1",
 		Name: "github_get_issue",
 		Arguments: map[string]any{
@@ -108,7 +108,7 @@ func TestGitHubReadExecutor_GetIssue_Success(t *testing.T) {
 
 func TestGitHubReadExecutor_GetIssue_MissingOwner(t *testing.T) {
 	e := NewGitHubReadExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c2",
 		Name: "github_get_issue",
 		Arguments: map[string]any{
@@ -126,7 +126,7 @@ func TestGitHubReadExecutor_GetIssue_MissingOwner(t *testing.T) {
 
 func TestGitHubReadExecutor_GetIssue_MissingNumber(t *testing.T) {
 	e := NewGitHubReadExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c3",
 		Name: "github_get_issue",
 		Arguments: map[string]any{
@@ -149,7 +149,7 @@ func TestGitHubReadExecutor_GetIssue_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c4",
 		Name: "github_get_issue",
 		Arguments: map[string]any{
@@ -182,7 +182,7 @@ func TestGitHubReadExecutor_ListIssues_Success(t *testing.T) {
 	}
 
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c5",
 		Name: "github_list_issues",
 		Arguments: map[string]any{
@@ -218,7 +218,7 @@ func TestGitHubReadExecutor_ListIssues_DefaultState(t *testing.T) {
 	}
 
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c6",
 		Name: "github_list_issues",
 		Arguments: map[string]any{
@@ -245,7 +245,7 @@ func TestGitHubReadExecutor_ListIssues_WithLabels(t *testing.T) {
 	}
 
 	e := NewGitHubReadExecutor(mock)
-	_, err := e.Execute(context.Background(), teams.ToolCall{
+	_, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c7",
 		Name: "github_list_issues",
 		Arguments: map[string]any{
@@ -261,7 +261,7 @@ func TestGitHubReadExecutor_ListIssues_WithLabels(t *testing.T) {
 
 func TestGitHubReadExecutor_ListIssues_MissingRepo(t *testing.T) {
 	e := NewGitHubReadExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "c8",
 		Name:      "github_list_issues",
 		Arguments: map[string]any{"owner": "acme"},
@@ -281,7 +281,7 @@ func TestGitHubReadExecutor_ListIssues_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c9",
 		Name: "github_list_issues",
 		Arguments: map[string]any{
@@ -310,7 +310,7 @@ func TestGitHubReadExecutor_SearchIssues_Success(t *testing.T) {
 	}
 
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c10",
 		Name: "github_search_issues",
 		Arguments: map[string]any{
@@ -330,7 +330,7 @@ func TestGitHubReadExecutor_SearchIssues_Success(t *testing.T) {
 
 func TestGitHubReadExecutor_SearchIssues_MissingQuery(t *testing.T) {
 	e := NewGitHubReadExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "c11",
 		Name:      "github_search_issues",
 		Arguments: map[string]any{},
@@ -350,7 +350,7 @@ func TestGitHubReadExecutor_SearchIssues_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:        "c12",
 		Name:      "github_search_issues",
 		Arguments: map[string]any{"query": "foo"},
@@ -377,7 +377,7 @@ func TestGitHubReadExecutor_GetPR_Success(t *testing.T) {
 	}
 
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c13",
 		Name: "github_get_pr",
 		Arguments: map[string]any{
@@ -407,7 +407,7 @@ func TestGitHubReadExecutor_GetPR_Success(t *testing.T) {
 
 func TestGitHubReadExecutor_GetPR_MissingNumber(t *testing.T) {
 	e := NewGitHubReadExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c14",
 		Name: "github_get_pr",
 		Arguments: map[string]any{
@@ -430,7 +430,7 @@ func TestGitHubReadExecutor_GetPR_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c15",
 		Name: "github_get_pr",
 		Arguments: map[string]any{
@@ -467,7 +467,7 @@ func TestGitHubReadExecutor_GetFile_Success(t *testing.T) {
 	}
 
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c16",
 		Name: "github_get_file",
 		Arguments: map[string]any{
@@ -505,7 +505,7 @@ func TestGitHubReadExecutor_GetFile_DefaultRef(t *testing.T) {
 	}
 
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c17",
 		Name: "github_get_file",
 		Arguments: map[string]any{
@@ -524,7 +524,7 @@ func TestGitHubReadExecutor_GetFile_DefaultRef(t *testing.T) {
 
 func TestGitHubReadExecutor_GetFile_MissingPath(t *testing.T) {
 	e := NewGitHubReadExecutor(&mockGitHubClient{})
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c18",
 		Name: "github_get_file",
 		Arguments: map[string]any{
@@ -547,7 +547,7 @@ func TestGitHubReadExecutor_GetFile_ClientError(t *testing.T) {
 		},
 	}
 	e := NewGitHubReadExecutor(mock)
-	result, err := e.Execute(context.Background(), teams.ToolCall{
+	result, err := e.Execute(context.Background(), agentic.ToolCall{
 		ID:   "c19",
 		Name: "github_get_file",
 		Arguments: map[string]any{

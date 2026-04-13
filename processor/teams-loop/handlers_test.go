@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/c360studio/semstreams/agentic"
 	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
 	teamtools "github.com/c360studio/semteams/processor/teams-tools"
 	"github.com/c360studio/semteams/teams"
@@ -16,8 +17,8 @@ type testToolExecutor struct {
 	tools []teams.ToolDefinition
 }
 
-func (e *testToolExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
-	return teams.ToolResult{CallID: call.ID, Content: "test result"}, nil
+func (e *testToolExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
+	return agentic.ToolResult{CallID: call.ID, Content: "test result"}, nil
 }
 
 func (e *testToolExecutor) ListTools() []teams.ToolDefinition {
@@ -64,7 +65,7 @@ func TestHandleTask_CreatesLoop(t *testing.T) {
 	}
 
 	// Verify loop was created with correct initial state
-	if result.State != teams.LoopStateExploring {
+	if result.State != agentic.LoopStateExploring {
 		t.Errorf("Initial state = %s, want exploring", result.State)
 	}
 
@@ -161,7 +162,7 @@ func TestHandleTask_MultipleRoles(t *testing.T) {
 			}
 
 			// Each role should create a valid loop
-			if result.State != teams.LoopStateExploring {
+			if result.State != agentic.LoopStateExploring {
 				t.Errorf("Initial state = %s, want exploring", result.State)
 			}
 		})
@@ -186,12 +187,12 @@ func TestHandleModelResponse_ToolCall(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model response with tool calls
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{
 					ID:   "call-001",
 					Name: "graph_query",
@@ -208,7 +209,7 @@ func TestHandleModelResponse_ToolCall(t *testing.T) {
 				},
 			},
 		},
-		TokenUsage: teams.TokenUsage{
+		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
 		},
@@ -260,14 +261,14 @@ func TestHandleModelResponse_Complete_General(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model response with completion
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "Task completed successfully",
 		},
-		TokenUsage: teams.TokenUsage{
+		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     100,
 			CompletionTokens: 50,
 		},
@@ -279,7 +280,7 @@ func TestHandleModelResponse_Complete_General(t *testing.T) {
 	}
 
 	// Should mark loop as complete
-	if result.State != teams.LoopStateComplete {
+	if result.State != agentic.LoopStateComplete {
 		t.Errorf("State = %s, want complete", result.State)
 	}
 
@@ -328,14 +329,14 @@ func TestHandleModelResponse_Complete_Architect(t *testing.T) {
 	architectOutput := "Architecture design complete"
 
 	// Architect completion response
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: architectOutput,
 		},
-		TokenUsage: teams.TokenUsage{
+		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     200,
 			CompletionTokens: 100,
 		},
@@ -347,7 +348,7 @@ func TestHandleModelResponse_Complete_Architect(t *testing.T) {
 	}
 
 	// Should mark architect loop as complete
-	if result.State != teams.LoopStateComplete {
+	if result.State != agentic.LoopStateComplete {
 		t.Errorf("Architect state = %s, want complete", result.State)
 	}
 
@@ -359,8 +360,8 @@ func TestHandleModelResponse_Complete_Architect(t *testing.T) {
 	if result.CompletionState.Role != "architect" {
 		t.Errorf("CompletionState.Role = %v, want architect", result.CompletionState.Role)
 	}
-	if result.CompletionState.Outcome != teams.OutcomeSuccess {
-		t.Errorf("CompletionState.Outcome = %v, want %s", result.CompletionState.Outcome, teams.OutcomeSuccess)
+	if result.CompletionState.Outcome != agentic.OutcomeSuccess {
+		t.Errorf("CompletionState.Outcome = %v, want %s", result.CompletionState.Outcome, agentic.OutcomeSuccess)
 	}
 	if result.CompletionState.Result != architectOutput {
 		t.Errorf("CompletionState.Result = %v, want %s", result.CompletionState.Result, architectOutput)
@@ -402,11 +403,11 @@ func TestHandleModelResponse_Error(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model error response
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "error",
 		Error:     "Model timeout",
-		TokenUsage: teams.TokenUsage{
+		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     50,
 			CompletionTokens: 0,
 		},
@@ -418,7 +419,7 @@ func TestHandleModelResponse_Error(t *testing.T) {
 	}
 
 	// Should mark loop as failed or retry
-	if result.State != teams.LoopStateFailed && result.RetryScheduled == false {
+	if result.State != agentic.LoopStateFailed && result.RetryScheduled == false {
 		t.Error("Error response should mark loop as failed or schedule retry")
 	}
 
@@ -446,12 +447,12 @@ func TestHandleToolResult_SingleTool(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model response with single tool call
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{
 					ID:   "call-001",
 					Name: "graph_query",
@@ -466,7 +467,7 @@ func TestHandleToolResult_SingleTool(t *testing.T) {
 	}
 
 	// Tool result
-	toolResult := teams.ToolResult{
+	toolResult := agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "Query result data",
 	}
@@ -546,12 +547,12 @@ func TestHandleToolResult_MultipleTool_SerialDispatch(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model response with 3 tool calls — only the first should be dispatched
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-001", Name: "tool1"},
 				{ID: "call-002", Name: "tool2"},
 				{ID: "call-003", Name: "tool3"},
@@ -576,7 +577,7 @@ func TestHandleToolResult_MultipleTool_SerialDispatch(t *testing.T) {
 	}
 
 	// First tool result → should dispatch tool2
-	result1, err := handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	result1, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "Result 1",
 	})
@@ -602,7 +603,7 @@ func TestHandleToolResult_MultipleTool_SerialDispatch(t *testing.T) {
 	}
 
 	// Second tool result → should dispatch tool3
-	result2, err := handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	result2, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-002",
 		Content: "Result 2",
 	})
@@ -627,7 +628,7 @@ func TestHandleToolResult_MultipleTool_SerialDispatch(t *testing.T) {
 	}
 
 	// Third tool result → queue drained, should publish agent.request
-	result3, err := handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	result3, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-003",
 		Content: "Result 3",
 	})
@@ -668,12 +669,12 @@ func TestHandleToolResult_WithError(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Trigger tool call
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-001", Name: "graph_query"},
 			},
 		},
@@ -685,7 +686,7 @@ func TestHandleToolResult_WithError(t *testing.T) {
 	}
 
 	// Tool result with error
-	toolResult := teams.ToolResult{
+	toolResult := agentic.ToolResult{
 		CallID: "call-001",
 		Error:  "Query execution failed",
 	}
@@ -730,12 +731,12 @@ func TestHandleToolResult_StopLoop(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Trigger tool call
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-001", Name: "decompose_quest"},
 			},
 		},
@@ -747,7 +748,7 @@ func TestHandleToolResult_StopLoop(t *testing.T) {
 	}
 
 	// Tool result with StopLoop
-	toolResult := teams.ToolResult{
+	toolResult := agentic.ToolResult{
 		CallID:   "call-001",
 		Content:  `{"dag": "quest-decomposition-result"}`,
 		StopLoop: true,
@@ -759,8 +760,8 @@ func TestHandleToolResult_StopLoop(t *testing.T) {
 	}
 
 	// Should be in complete state
-	if result.State != teams.LoopStateComplete {
-		t.Errorf("State = %q, want %q", result.State, teams.LoopStateComplete)
+	if result.State != agentic.LoopStateComplete {
+		t.Errorf("State = %q, want %q", result.State, agentic.LoopStateComplete)
 	}
 
 	// Should publish agent.complete (not agent.request)
@@ -833,7 +834,7 @@ func TestHandleToolResult_StopLoopClearsQueue(t *testing.T) {
 		Role:       "general",
 		Model:      "qwen-32b",
 		Prompt:     "Test StopLoop clears queue",
-		ToolChoice: &teams.ToolChoice{Mode: "required"},
+		ToolChoice: &agentic.ToolChoice{Mode: "required"},
 	})
 	if err != nil {
 		t.Fatalf("HandleTask() error = %v", err)
@@ -842,12 +843,12 @@ func TestHandleToolResult_StopLoopClearsQueue(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model emits two tool calls: submit_work (first, will StopLoop) and bash (queued)
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-submit", Name: "submit_work"},
 				{ID: "call-bash", Name: "bash"},
 			},
@@ -874,7 +875,7 @@ func TestHandleToolResult_StopLoopClearsQueue(t *testing.T) {
 	}
 
 	// submit_work returns StopLoop → loop completes, bash never dispatched
-	submitResult, err := handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	submitResult, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:   "call-submit",
 		Content:  `{"output": "final answer"}`,
 		StopLoop: true,
@@ -883,8 +884,8 @@ func TestHandleToolResult_StopLoopClearsQueue(t *testing.T) {
 		t.Fatalf("HandleToolResult(submit) error = %v", err)
 	}
 
-	if submitResult.State != teams.LoopStateComplete {
-		t.Errorf("After StopLoop, state = %q, want %q", submitResult.State, teams.LoopStateComplete)
+	if submitResult.State != agentic.LoopStateComplete {
+		t.Errorf("After StopLoop, state = %q, want %q", submitResult.State, agentic.LoopStateComplete)
 	}
 
 	// Verify agent.complete published, no tool.execute for bash
@@ -924,12 +925,12 @@ func TestHandleModelResponse_TerminalLoop(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Complete the loop via StopLoop
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:      "assistant",
-			ToolCalls: []teams.ToolCall{{ID: "call-001", Name: "submit_work"}},
+			ToolCalls: []agentic.ToolCall{{ID: "call-001", Name: "submit_work"}},
 		},
 	}
 	_, err = handler.HandleModelResponse(ctx, loopID, toolResponse)
@@ -937,7 +938,7 @@ func TestHandleModelResponse_TerminalLoop(t *testing.T) {
 		t.Fatalf("HandleModelResponse() error = %v", err)
 	}
 
-	_, err = handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	_, err = handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:   "call-001",
 		Content:  "done",
 		StopLoop: true,
@@ -947,12 +948,12 @@ func TestHandleModelResponse_TerminalLoop(t *testing.T) {
 	}
 
 	// Now send a model response to the terminal loop (simulates stale agent.request)
-	staleResponse := teams.AgentResponse{
+	staleResponse := agentic.AgentResponse{
 		RequestID: "req-stale",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:      "assistant",
-			ToolCalls: []teams.ToolCall{{ID: "call-stale", Name: "bash"}},
+			ToolCalls: []agentic.ToolCall{{ID: "call-stale", Name: "bash"}},
 		},
 	}
 	result, err := handler.HandleModelResponse(ctx, loopID, staleResponse)
@@ -961,8 +962,8 @@ func TestHandleModelResponse_TerminalLoop(t *testing.T) {
 	}
 
 	// Should return terminal state with no published messages
-	if result.State != teams.LoopStateComplete {
-		t.Errorf("State = %q, want %q", result.State, teams.LoopStateComplete)
+	if result.State != agentic.LoopStateComplete {
+		t.Errorf("State = %q, want %q", result.State, agentic.LoopStateComplete)
 	}
 	if len(result.PublishedMessages) != 0 {
 		t.Errorf("Terminal loop should not publish any messages, got %d", len(result.PublishedMessages))
@@ -1049,7 +1050,7 @@ func TestHandleToolResult_NonExistentLoop(t *testing.T) {
 	handler := teamsloop.NewMessageHandler(createTestConfig())
 
 	ctx := context.Background()
-	toolResult := teams.ToolResult{
+	toolResult := agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "Result",
 	}
@@ -1081,19 +1082,19 @@ func TestMessageHandler_MaxIterationsGuard(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Iteration 1: tool call and result
-	_, err = handler.HandleModelResponse(ctx, loopID, teams.AgentResponse{
+	_, err = handler.HandleModelResponse(ctx, loopID, agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:      "assistant",
-			ToolCalls: []teams.ToolCall{{ID: "call-001", Name: "tool1"}},
+			ToolCalls: []agentic.ToolCall{{ID: "call-001", Name: "tool1"}},
 		},
 	})
 	if err != nil {
 		t.Fatalf("HandleModelResponse() iteration 1 error = %v", err)
 	}
 
-	_, err = handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	_, err = handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "Result 1",
 	})
@@ -1102,19 +1103,19 @@ func TestMessageHandler_MaxIterationsGuard(t *testing.T) {
 	}
 
 	// Iteration 2: tool call and result
-	_, err = handler.HandleModelResponse(ctx, loopID, teams.AgentResponse{
+	_, err = handler.HandleModelResponse(ctx, loopID, agentic.AgentResponse{
 		RequestID: "req-002",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:      "assistant",
-			ToolCalls: []teams.ToolCall{{ID: "call-002", Name: "tool2"}},
+			ToolCalls: []agentic.ToolCall{{ID: "call-002", Name: "tool2"}},
 		},
 	})
 	if err != nil {
 		t.Fatalf("HandleModelResponse() iteration 2 error = %v", err)
 	}
 
-	result, err := handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	result, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-002",
 		Content: "Result 2",
 	})
@@ -1124,16 +1125,16 @@ func TestMessageHandler_MaxIterationsGuard(t *testing.T) {
 
 	// After 2 iterations, should reach max and mark as failed or complete
 	// Depends on implementation, but should not allow iteration 3
-	if result.State == teams.LoopStateFailed || result.MaxIterationsReached {
+	if result.State == agentic.LoopStateFailed || result.MaxIterationsReached {
 		// Expected behavior - max iterations enforced
 	} else {
 		// Attempt iteration 3 should fail
-		_, err = handler.HandleModelResponse(ctx, loopID, teams.AgentResponse{
+		_, err = handler.HandleModelResponse(ctx, loopID, agentic.AgentResponse{
 			RequestID: "req-003",
 			Status:    "tool_call",
-			Message: teams.ChatMessage{
+			Message: agentic.ChatMessage{
 				Role:      "assistant",
-				ToolCalls: []teams.ToolCall{{ID: "call-003", Name: "tool3"}},
+				ToolCalls: []agentic.ToolCall{{ID: "call-003", Name: "tool3"}},
 			},
 		})
 
@@ -1160,10 +1161,10 @@ type PublishedMessage struct {
 
 type HandlerResult struct {
 	LoopID               string
-	State                teams.LoopState
+	State                agentic.LoopState
 	PublishedMessages    []PublishedMessage
 	PendingTools         []string
-	TrajectorySteps      []teams.TrajectoryStep
+	TrajectorySteps      []agentic.TrajectoryStep
 	RetryScheduled       bool
 	MaxIterationsReached bool
 	CompletionState      map[string]any
@@ -1249,12 +1250,12 @@ func TestHandleToolResult_NextRequestHasTools(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Trigger a tool call
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-001", Name: "test_tool"},
 			},
 		},
@@ -1266,7 +1267,7 @@ func TestHandleToolResult_NextRequestHasTools(t *testing.T) {
 	}
 
 	// Complete the tool
-	toolResult := teams.ToolResult{
+	toolResult := agentic.ToolResult{
 		CallID:  "call-001",
 		Content: "Tool result",
 	}
@@ -1335,14 +1336,14 @@ func TestHandleModelResponse_Complete_PopulatesTokenFields(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model response with token usage
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-tokens",
 		Status:    "complete",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "Done",
 		},
-		TokenUsage: teams.TokenUsage{
+		TokenUsage: agentic.TokenUsage{
 			PromptTokens:     1500,
 			CompletionTokens: 750,
 		},
@@ -1455,12 +1456,12 @@ func TestHandleTask_MetadataCachedAndPropagated(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Trigger a tool call — metadata should flow to published tool calls
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-meta",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-meta-001", Name: "graph_query"},
 			},
 		},
@@ -1508,7 +1509,7 @@ type mockFilter struct {
 	rejectByName map[string]string // name -> reason
 }
 
-func (f *mockFilter) FilterToolCalls(loopID string, calls []teams.ToolCall) (teams.ToolCallFilterResult, error) {
+func (f *mockFilter) FilterToolCalls(loopID string, calls []agentic.ToolCall) (teams.ToolCallFilterResult, error) {
 	if f.approveAll {
 		return teams.ToolCallFilterResult{Approved: calls}, nil
 	}
@@ -1550,12 +1551,12 @@ func TestToolCallFilter_AllApproved(t *testing.T) {
 	}
 	loopID := taskResult.LoopID
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-filter-ok",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-fa-1", Name: "tool_a"},
 				{ID: "call-fa-2", Name: "tool_b"},
 			},
@@ -1602,12 +1603,12 @@ func TestToolCallFilter_PartialRejection(t *testing.T) {
 	}
 	loopID := taskResult.LoopID
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-filter-partial",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-fp-1", Name: "safe_tool"},
 				{ID: "call-fp-2", Name: "dangerous_tool"},
 			},
@@ -1651,12 +1652,12 @@ func TestToolCallFilter_AllRejected(t *testing.T) {
 	}
 	loopID := taskResult.LoopID
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-filter-reject",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-fr-1", Name: "tool_x"},
 				{ID: "call-fr-2", Name: "tool_y"},
 			},
@@ -1707,12 +1708,12 @@ func TestToolCallFilter_Nil_NoFiltering(t *testing.T) {
 	}
 	loopID := taskResult.LoopID
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-no-filter",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-nf-1", Name: "tool_a"},
 			},
 		},
@@ -1755,12 +1756,12 @@ func TestEmptyNameToolCalls_Rejected(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model response with one valid and one empty-name tool call
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-empty-name",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-en-1", Name: "real_tool"},
 				{ID: "call-en-2", Name: ""},
 			},
@@ -1807,12 +1808,12 @@ func TestEmptyNameToolCalls_AllEmpty(t *testing.T) {
 	}
 	loopID := taskResult.LoopID
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-all-empty",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-ae-1", Name: ""},
 				{ID: "call-ae-2", Name: ""},
 			},
@@ -1866,12 +1867,12 @@ func TestToolCallFilter_RejectedCallsPreserveToolName(t *testing.T) {
 	}
 	loopID := taskResult.LoopID
 
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-reject-name",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-rn-1", Name: "forbidden_tool"},
 				{ID: "call-rn-2", Name: "blocked_tool"},
 			},
@@ -1944,13 +1945,13 @@ func TestHandleToolsComplete_FullConversationHistory(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model response with tool calls (empty content — typical for tool_call responses)
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-ctx-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role:    "assistant",
 			Content: "", // Empty content — this is the common case
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-ctx-1", Name: "get_weather"},
 			},
 		},
@@ -1962,7 +1963,7 @@ func TestHandleToolsComplete_FullConversationHistory(t *testing.T) {
 	}
 
 	// Tool result
-	result, err := handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	result, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-ctx-1",
 		Content: `{"temp": 20}`,
 	})
@@ -2060,12 +2061,12 @@ func TestHandleToolResult_PopulatesToolNameAndArguments(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model response with a tool call that has arguments
-	toolResponse := teams.AgentResponse{
+	toolResponse := agentic.AgentResponse{
 		RequestID: "req-args-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{
 					ID:        "call-args-001",
 					Name:      "graph_query",
@@ -2081,7 +2082,7 @@ func TestHandleToolResult_PopulatesToolNameAndArguments(t *testing.T) {
 	}
 
 	// Tool result
-	result, err := handler.HandleToolResult(ctx, loopID, teams.ToolResult{
+	result, err := handler.HandleToolResult(ctx, loopID, agentic.ToolResult{
 		CallID:  "call-args-001",
 		Content: "42 results",
 	})
@@ -2189,16 +2190,16 @@ func TestHandleModelResponse_TrajectoryDetail_Full(t *testing.T) {
 	loopID := taskResult.LoopID
 
 	// Model response with tool calls
-	response := teams.AgentResponse{
+	response := agentic.AgentResponse{
 		RequestID: "req-detail-001",
 		Status:    "tool_call",
-		Message: teams.ChatMessage{
+		Message: agentic.ChatMessage{
 			Role: "assistant",
-			ToolCalls: []teams.ToolCall{
+			ToolCalls: []agentic.ToolCall{
 				{ID: "call-detail-1", Name: "test_tool"},
 			},
 		},
-		TokenUsage: teams.TokenUsage{PromptTokens: 100, CompletionTokens: 50},
+		TokenUsage: agentic.TokenUsage{PromptTokens: 100, CompletionTokens: 50},
 	}
 
 	result, err := handler.HandleModelResponse(ctx, loopID, response)

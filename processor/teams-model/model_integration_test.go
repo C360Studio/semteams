@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/component"
 	"github.com/c360studio/semstreams/message"
 	"github.com/c360studio/semstreams/model"
@@ -68,7 +69,7 @@ func getSharedNATSClient(t *testing.T) *natsclient.Client {
 }
 
 // publishAgentRequestMessage publishes an AgentRequest wrapped in a BaseMessage envelope
-func publishAgentRequestMessage(t *testing.T, natsClient *natsclient.Client, subject string, req *teams.AgentRequest) {
+func publishAgentRequestMessage(t *testing.T, natsClient *natsclient.Client, subject string, req *agentic.AgentRequest) {
 	t.Helper()
 	baseMsg := message.NewBaseMessage(req.Schema(), req, "integration-test")
 	msgData, err := json.Marshal(baseMsg)
@@ -167,13 +168,13 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to responses
-	receivedResponses := make([]teams.AgentResponse, 0)
+	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
 	sub, err := natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if resp, ok := baseMsg.Payload().(*teams.AgentResponse); ok {
+			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
 				receiveMu.Lock()
 				receivedResponses = append(receivedResponses, *resp)
 				receiveMu.Unlock()
@@ -186,12 +187,12 @@ func TestIntegration_ModelCompleteResponse(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish agent request (wrapped in BaseMessage)
-	request := &teams.AgentRequest{
+	request := &agentic.AgentRequest{
 		RequestID: "req_123",
 		LoopID:    "loop_456",
 		Role:      "general",
 		Model:     "test-model",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{
 				Role:    "user",
 				Content: "Test message",
@@ -318,13 +319,13 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to responses
-	receivedResponses := make([]teams.AgentResponse, 0)
+	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
 	sub, err := natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if resp, ok := baseMsg.Payload().(*teams.AgentResponse); ok {
+			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
 				receiveMu.Lock()
 				receivedResponses = append(receivedResponses, *resp)
 				receiveMu.Unlock()
@@ -337,12 +338,12 @@ func TestIntegration_ModelToolCallResponse(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Publish agent request with tools (wrapped in BaseMessage)
-	request := &teams.AgentRequest{
+	request := &agentic.AgentRequest{
 		RequestID: "req_tool_001",
 		LoopID:    "loop_tool",
 		Role:      "general",
 		Model:     "tool-model",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{
 				Role:    "user",
 				Content: "Read the test file",
@@ -503,13 +504,13 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Subscribe to responses
-	receivedResponses := make([]teams.AgentResponse, 0)
+	receivedResponses := make([]agentic.AgentResponse, 0)
 	var receiveMu sync.Mutex
 
 	sub, err := natsClient.Subscribe(ctx, "agent.response.>", func(_ context.Context, msg *nats.Msg) {
 		var baseMsg message.BaseMessage
 		if err := json.Unmarshal(msg.Data, &baseMsg); err == nil {
-			if resp, ok := baseMsg.Payload().(*teams.AgentResponse); ok {
+			if resp, ok := baseMsg.Payload().(*agentic.AgentResponse); ok {
 				receiveMu.Lock()
 				receivedResponses = append(receivedResponses, *resp)
 				receiveMu.Unlock()
@@ -522,12 +523,12 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Send request to model-a (wrapped in BaseMessage)
-	request1 := &teams.AgentRequest{
+	request1 := &agentic.AgentRequest{
 		RequestID: "req_a",
 		LoopID:    "loop_a",
 		Role:      "general",
 		Model:     "model-a",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "Test A"},
 		},
 	}
@@ -536,12 +537,12 @@ func TestIntegration_ModelEndpointResolution(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Send request to model-b (wrapped in BaseMessage)
-	request2 := &teams.AgentRequest{
+	request2 := &agentic.AgentRequest{
 		RequestID: "req_b",
 		LoopID:    "loop_b",
 		Role:      "general",
 		Model:     "model-b",
-		Messages: []teams.ChatMessage{
+		Messages: []agentic.ChatMessage{
 			{Role: "user", Content: "Test B"},
 		},
 	}

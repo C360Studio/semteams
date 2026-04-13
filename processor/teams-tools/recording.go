@@ -7,16 +7,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semteams/teams"
 )
 
 // ToolCallRecord captures a tool call and its result for auditing
 type ToolCallRecord struct {
-	Call      teams.ToolCall   `json:"call"`
-	Result    teams.ToolResult `json:"result"`
-	StartTime time.Time        `json:"start_time"`
-	EndTime   time.Time        `json:"end_time"`
-	Duration  time.Duration    `json:"duration"`
+	Call      agentic.ToolCall   `json:"call"`
+	Result    agentic.ToolResult `json:"result"`
+	StartTime time.Time          `json:"start_time"`
+	EndTime   time.Time          `json:"end_time"`
+	Duration  time.Duration      `json:"duration"`
 }
 
 // ToolCallStore interface for persisting tool call records
@@ -94,7 +95,7 @@ func (r *RecordingExecutor) drainRecords() {
 }
 
 // Execute executes the wrapped tool and records the call
-func (r *RecordingExecutor) Execute(ctx context.Context, call teams.ToolCall) (teams.ToolResult, error) {
+func (r *RecordingExecutor) Execute(ctx context.Context, call agentic.ToolCall) (agentic.ToolResult, error) {
 	startTime := time.Now()
 	result, err := r.wrapped.Execute(ctx, call)
 	endTime := time.Now()

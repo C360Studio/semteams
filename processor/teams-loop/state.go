@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/model"
 	"github.com/c360studio/semstreams/pkg/errs"
 	"github.com/c360studio/semteams/teams"
@@ -16,12 +17,12 @@ import (
 
 // LoopManager manages loop entity lifecycle and state
 type LoopManager struct {
-	loops             map[string]*teams.LoopEntity
+	loops             map[string]*agentic.LoopEntity
 	contextManagers   map[string]*ContextManager        // loopID -> ContextManager
 	pendingTools      map[string]map[string]bool        // loopID -> map[callID]bool
-	queuedToolCalls   map[string][]teams.ToolCall       // loopID -> remaining calls to dispatch serially
+	queuedToolCalls   map[string][]agentic.ToolCall     // loopID -> remaining calls to dispatch serially
 	cachedTools       map[string][]teams.ToolDefinition // loopID -> tools (runtime cache, not persisted)
-	cachedToolChoice  map[string]*teams.ToolChoice      // loopID -> tool choice (runtime cache, not persisted)
+	cachedToolChoice  map[string]*agentic.ToolChoice    // loopID -> tool choice (runtime cache, not persisted)
 	cachedMetadata    map[string]map[string]any         // loopID -> metadata (domain context, not persisted)
 	taskPrompts       map[string]string                 // loopID -> original task prompt (for context recovery)
 	requestToLoop     map[string]string                 // requestID -> loopID
@@ -56,12 +57,12 @@ func WithLoopManagerModelRegistry(reg model.RegistryReader) LoopManagerOption {
 // NewLoopManager creates a new LoopManager
 func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 	lm := &LoopManager{
-		loops:             make(map[string]*teams.LoopEntity),
+		loops:             make(map[string]*agentic.LoopEntity),
 		contextManagers:   make(map[string]*ContextManager),
 		pendingTools:      make(map[string]map[string]bool),
-		queuedToolCalls:   make(map[string][]teams.ToolCall),
+		queuedToolCalls:   make(map[string][]agentic.ToolCall),
 		cachedTools:       make(map[string][]teams.ToolDefinition),
-		cachedToolChoice:  make(map[string]*teams.ToolChoice),
+		cachedToolChoice:  make(map[string]*agentic.ToolChoice),
 		cachedMetadata:    make(map[string]map[string]any),
 		taskPrompts:       make(map[string]string),
 		requestToLoop:     make(map[string]string),
@@ -82,12 +83,12 @@ func NewLoopManager(opts ...LoopManagerOption) *LoopManager {
 // NewLoopManagerWithConfig creates a new LoopManager with custom context config
 func NewLoopManagerWithConfig(contextConfig ContextConfig, opts ...LoopManagerOption) *LoopManager {
 	lm := &LoopManager{
-		loops:             make(map[string]*teams.LoopEntity),
+		loops:             make(map[string]*agentic.LoopEntity),
 		contextManagers:   make(map[string]*ContextManager),
 		pendingTools:      make(map[string]map[string]bool),
-		queuedToolCalls:   make(map[string][]teams.ToolCall),
+		queuedToolCalls:   make(map[string][]agentic.ToolCall),
 		cachedTools:       make(map[string][]teams.ToolDefinition),
-		cachedToolChoice:  make(map[string]*teams.ToolChoice),
+		cachedToolChoice:  make(map[string]*agentic.ToolChoice),
 		cachedMetadata:    make(map[string]map[string]any),
 		taskPrompts:       make(map[string]string),
 		requestToLoop:     make(map[string]string),
@@ -122,7 +123,7 @@ func (m *LoopManager) CreateLoopWithID(loopID, taskID, role, model string, maxIt
 		maxIter = maxIterations[0]
 	}
 
-	entity := teams.NewLoopEntity(loopID, taskID, role, model, maxIter)
+	entity := agentic.NewLoopEntity(loopID, taskID, role, model, maxIter)
 
 	m.loops[loopID] = &entity
 	m.pendingTools[loopID] = make(map[string]bool)
@@ -140,24 +141,24 @@ func (m *LoopManager) CreateLoopWithID(loopID, taskID, role, model string, maxIt
 }
 
 // GetLoop retrieves a loop entity by ID
-func (m *LoopManager) GetLoop(loopID string) (teams.LoopEntity, error) {
+func (m *LoopManager) GetLoop(loopID string) (agentic.LoopEntity, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if loopID == "" {
-		return teams.LoopEntity{}, errs.WrapInvalid(fmt.Errorf("loop ID cannot be empty"), "LoopManager", "GetLoop", "validate loop ID")
+		return agentic.LoopEntity{}, errs.WrapInvalid(fmt.Errorf("loop ID cannot be empty"), "LoopManager", "GetLoop", "validate loop ID")
 	}
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return teams.LoopEntity{}, errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "GetLoop", "find loop")
+		return agentic.LoopEntity{}, errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "GetLoop", "find loop")
 	}
 
 	return *entity, nil
 }
 
 // UpdateLoop updates an existing loop entity
-func (m *LoopManager) UpdateLoop(entity teams.LoopEntity) error {
+func (m *LoopManager) UpdateLoop(entity agentic.LoopEntity) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -225,14 +226,14 @@ func (m *LoopManager) GetCachedTools(loopID string) []teams.ToolDefinition {
 }
 
 // CacheToolChoice stores the tool choice strategy for a loop (set once from task, reused for all requests)
-func (m *LoopManager) CacheToolChoice(loopID string, tc *teams.ToolChoice) {
+func (m *LoopManager) CacheToolChoice(loopID string, tc *agentic.ToolChoice) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cachedToolChoice[loopID] = tc
 }
 
 // GetCachedToolChoice retrieves the cached tool choice for a loop
-func (m *LoopManager) GetCachedToolChoice(loopID string) *teams.ToolChoice {
+func (m *LoopManager) GetCachedToolChoice(loopID string) *agentic.ToolChoice {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.cachedToolChoice[loopID]
@@ -286,7 +287,7 @@ func (m *LoopManager) GetCurrentIteration(loopID string) int {
 }
 
 // TransitionLoop transitions a loop to a new state
-func (m *LoopManager) TransitionLoop(loopID string, newState teams.LoopState) error {
+func (m *LoopManager) TransitionLoop(loopID string, newState agentic.LoopState) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -368,24 +369,24 @@ func (m *LoopManager) AllToolsComplete(loopID string) bool {
 }
 
 // QueueToolCalls stores tool calls to be dispatched serially after the current call completes.
-func (m *LoopManager) QueueToolCalls(loopID string, calls []teams.ToolCall) {
+func (m *LoopManager) QueueToolCalls(loopID string, calls []agentic.ToolCall) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.queuedToolCalls[loopID] = append(m.queuedToolCalls[loopID], calls...)
 }
 
 // DequeueToolCall removes and returns the next queued tool call for dispatch.
-func (m *LoopManager) DequeueToolCall(loopID string) (teams.ToolCall, bool) {
+func (m *LoopManager) DequeueToolCall(loopID string) (agentic.ToolCall, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	queue := m.queuedToolCalls[loopID]
 	if len(queue) == 0 {
-		return teams.ToolCall{}, false
+		return agentic.ToolCall{}, false
 	}
 
 	next := queue[0]
-	queue[0] = teams.ToolCall{} // zero for GC (arguments/metadata maps)
+	queue[0] = agentic.ToolCall{} // zero for GC (arguments/metadata maps)
 	m.queuedToolCalls[loopID] = queue[1:]
 	return next, true
 }
@@ -499,7 +500,7 @@ func (m *LoopManager) GetLoopForToolCall(callID string) (string, bool) {
 }
 
 // StoreToolResult stores a tool result in the loop entity for later retrieval
-func (m *LoopManager) StoreToolResult(loopID string, result teams.ToolResult) error {
+func (m *LoopManager) StoreToolResult(loopID string, result agentic.ToolResult) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -509,14 +510,14 @@ func (m *LoopManager) StoreToolResult(loopID string, result teams.ToolResult) er
 	}
 
 	if entity.PendingToolResults == nil {
-		entity.PendingToolResults = make(map[string]teams.ToolResult)
+		entity.PendingToolResults = make(map[string]agentic.ToolResult)
 	}
 	entity.PendingToolResults[result.CallID] = result
 	return nil
 }
 
 // GetAndClearToolResults retrieves all accumulated tool results and clears them
-func (m *LoopManager) GetAndClearToolResults(loopID string) []teams.ToolResult {
+func (m *LoopManager) GetAndClearToolResults(loopID string) []agentic.ToolResult {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -525,7 +526,7 @@ func (m *LoopManager) GetAndClearToolResults(loopID string) []teams.ToolResult {
 		return nil
 	}
 
-	results := make([]teams.ToolResult, 0, len(entity.PendingToolResults))
+	results := make([]agentic.ToolResult, 0, len(entity.PendingToolResults))
 	for _, r := range entity.PendingToolResults {
 		results = append(results, r)
 	}
@@ -773,7 +774,7 @@ func (m *LoopManager) UpdateCompletion(loopID, outcome, result, errMsg string) e
 // isValidOutcome checks if the outcome is one of the valid constants.
 func isValidOutcome(outcome string) bool {
 	switch outcome {
-	case teams.OutcomeSuccess, teams.OutcomeFailed, teams.OutcomeCancelled:
+	case agentic.OutcomeSuccess, agentic.OutcomeFailed, agentic.OutcomeCancelled:
 		return true
 	default:
 		return false
@@ -783,17 +784,17 @@ func isValidOutcome(outcome string) bool {
 // CancelLoop atomically cancels a loop and populates completion data.
 // Returns the updated entity for further processing, or an error if the loop
 // cannot be cancelled (not found or already terminal).
-func (m *LoopManager) CancelLoop(loopID, cancelledBy string) (teams.LoopEntity, error) {
+func (m *LoopManager) CancelLoop(loopID, cancelledBy string) (agentic.LoopEntity, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	entity, exists := m.loops[loopID]
 	if !exists {
-		return teams.LoopEntity{}, errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "CancelLoop", "find loop")
+		return agentic.LoopEntity{}, errs.Wrap(fmt.Errorf("loop %s not found", loopID), "LoopManager", "CancelLoop", "find loop")
 	}
 
 	if entity.State.IsTerminal() {
-		return teams.LoopEntity{}, errs.WrapInvalid(
+		return agentic.LoopEntity{}, errs.WrapInvalid(
 			fmt.Errorf("cannot cancel terminal loop %s in state %s", loopID, entity.State),
 			"LoopManager",
 			"CancelLoop",
@@ -802,10 +803,10 @@ func (m *LoopManager) CancelLoop(loopID, cancelledBy string) (teams.LoopEntity, 
 	}
 
 	now := time.Now()
-	entity.State = teams.LoopStateCancelled
+	entity.State = agentic.LoopStateCancelled
 	entity.CancelledBy = cancelledBy
 	entity.CancelledAt = now
-	entity.Outcome = teams.OutcomeCancelled
+	entity.Outcome = agentic.OutcomeCancelled
 	entity.CompletedAt = now
 	entity.Error = "cancelled by user"
 
