@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/c360studio/semstreams/test/e2e/scenarios/search"
-	"github.com/c360studio/semstreams/test/e2e/scenarios/stages"
+	"github.com/c360studio/semteams/test/e2e/scenarios/search"
+	"github.com/c360studio/semteams/test/e2e/scenarios/stages"
 )
 
 // TieredResults contains structured results from a tiered e2e test run.

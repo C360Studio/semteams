@@ -184,7 +184,7 @@ func (c *NATSValidationClient) GetEntity(ctx context.Context, entityID string) (
 	return &entity, nil
 }
 
-// GetTrajectory retrieves a trajectory via the agentic.query.trajectory NATS request/reply handler.
+// GetTrajectory retrieves a trajectory via the teams.query.trajectory NATS request/reply handler.
 // The trajectory is served from the agentic-loop's in-memory cache.
 func (c *NATSValidationClient) GetTrajectory(ctx context.Context, loopID string) (*agentic.Trajectory, error) {
 	req, err := json.Marshal(map[string]string{"loopId": loopID})
@@ -192,7 +192,7 @@ func (c *NATSValidationClient) GetTrajectory(ctx context.Context, loopID string)
 		return nil, fmt.Errorf("failed to marshal trajectory request: %w", err)
 	}
 
-	resp, err := c.client.Request(ctx, "agentic.query.trajectory", req, 5*time.Second)
+	resp, err := c.client.Request(ctx, "teams.query.trajectory", req, 5*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("trajectory query failed for loop %s: %w", loopID, err)
 	}

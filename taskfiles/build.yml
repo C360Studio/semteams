@@ -4,8 +4,8 @@ tasks:
   default:
     desc: Build SemStreams binary
     cmds:
-      - go build -o bin/semstreams ./cmd/semstreams
-      - echo "Built bin/semstreams"
+      - go build -o bin/semteams ./cmd/semteams
+      - echo "Built bin/semteams"
 
   e2e:
     desc: Build E2E test binary

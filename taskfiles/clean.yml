@@ -5,7 +5,7 @@ tasks:
     desc: Remove local binaries
     cmds:
       - echo "[CLEAN] Removing local binaries..."
-      - rm -f bin/semstreams
+      - rm -f bin/semteams
       - rm -f cmd/e2e/e2e
       - echo "[OK] Local binaries removed"
 

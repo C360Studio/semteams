@@ -86,12 +86,12 @@ jobs:
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
             -ldflags="-w -s -X main.version=${{ github.sha }}" \
-            -o semstreams-linux-amd64 \
-            ./cmd/semstreams
+            -o semteams-linux-amd64 \
+            ./cmd/semteams
 
       - name: Test binary execution
         run: |
-          ./semstreams-linux-amd64 --version || true
+          ./semteams-linux-amd64 --version || true
           echo "Build successful"
 
   schema-validation:

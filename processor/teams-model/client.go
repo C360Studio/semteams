@@ -1,0 +1,622 @@
+package teamsmodel
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
+	"math/rand"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/c360studio/semstreams/agentic"
+	"github.com/c360studio/semstreams/model"
+	"github.com/c360studio/semstreams/pkg/errs"
+	openai "github.com/sashabaranov/go-openai"
+)
+
+// Client wraps OpenAI SDK for agentic model requests
+type Client struct {
+	client       *openai.Client
+	endpoint     *model.EndpointConfig
+	chunkHandler ChunkHandler
+	metrics      *modelMetrics
+	logger       *slog.Logger
+	throttle     *EndpointThrottle
+	retryCfg     RetryConfig
+	adapter      ProviderAdapter
+}
+
+// defaultClientRetryConfig is the retry configuration used when the component
+// does not supply one. The short initial delay keeps unit tests fast.
+var defaultClientRetryConfig = RetryConfig{
+	MaxAttempts:         3,
+	MaxRateLimitRetries: 5,
+	Backoff:             "exponential",
+	InitialDelay:        "100ms",
+	MaxDelay:            "60s",
+	RateLimitDelay:      "15s",
+}
+
+// NewClient creates a new client for the given endpoint configuration.
+// The default retry config is suitable for unit tests (3 attempts, 100ms initial delay).
+// Call SetRetryConfig before ChatCompletion to apply production settings.
+func NewClient(endpoint *model.EndpointConfig) (*Client, error) {
+	if endpoint == nil {
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Client", "NewClient", "endpoint is nil")
+	}
+	if endpoint.Model == "" {
+		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Client", "NewClient", "check model")
+	}
+
+	// Get API key from environment if specified
+	apiKey := ""
+	if endpoint.APIKeyEnv != "" {
+		apiKey = os.Getenv(endpoint.APIKeyEnv)
+	}
+
+	// Create OpenAI client config
+	config := openai.DefaultConfig(apiKey)
+	if endpoint.URL != "" {
+		config.BaseURL = endpoint.URL
+	}
+
+	client := openai.NewClientWithConfig(config)
+
+	return &Client{
+		client:   client,
+		endpoint: endpoint,
+		retryCfg: defaultClientRetryConfig,
+	}, nil
+}
+
+// SetChunkHandler sets the callback for receiving streaming deltas.
+func (c *Client) SetChunkHandler(handler ChunkHandler) {
+	c.chunkHandler = handler
+}
+
+// SetMetrics sets the metrics instance for recording streaming metrics.
+func (c *Client) SetMetrics(m *modelMetrics) {
+	c.metrics = m
+}
+
+// SetLogger sets the logger for debug-level request/response logging.
+func (c *Client) SetLogger(l *slog.Logger) {
+	c.logger = l
+}
+
+// SetThrottle attaches a rate/concurrency limiter to this client.
+func (c *Client) SetThrottle(t *EndpointThrottle) {
+	c.throttle = t
+}
+
+// SetRetryConfig replaces the default retry configuration.
+// Call this after NewClient to apply production settings.
+func (c *Client) SetRetryConfig(cfg RetryConfig) {
+	c.retryCfg = cfg
+}
+
+// SetAdapter sets the provider-specific adapter for normalizing requests and responses.
+// When not set, buildChatRequest falls back to GenericAdapter.
+func (c *Client) SetAdapter(a ProviderAdapter) {
+	c.adapter = a
+}
+
+// getAdapter returns the configured adapter, defaulting to the package-level
+// GenericAdapter singleton to avoid repeated allocation of stateless structs.
+func (c *Client) getAdapter() ProviderAdapter {
+	if c.adapter != nil {
+		return c.adapter
+	}
+	return defaultAdapter
+}
+
+// buildChatRequest converts an AgentRequest into an OpenAI ChatCompletionRequest.
+func (c *Client) buildChatRequest(req agentic.AgentRequest) openai.ChatCompletionRequest {
+	if len(req.Messages) == 0 {
+		// Return a minimal request — ChatCompletion will get an API error rather
+		// than a panic or cryptic "contents is not specified" from Gemini.
+		if c.logger != nil {
+			c.logger.Warn("buildChatRequest called with empty messages",
+				slog.String("request_id", req.RequestID),
+				slog.String("loop_id", req.LoopID))
+		}
+		return openai.ChatCompletionRequest{Model: c.endpoint.Model}
+	}
+
+	messages := make([]openai.ChatCompletionMessage, len(req.Messages))
+	for i, msg := range req.Messages {
+		messages[i] = openai.ChatCompletionMessage{
+			Role:    msg.Role,
+			Content: msg.Content,
+			// ReasoningContent is intentionally omitted from outgoing requests.
+			// Providers return it in responses but reject it in request messages
+			// (e.g., Gemini returns 400 INVALID_ARGUMENT).
+		}
+
+		// Handle tool results - include tool_call_id (required by OpenAI API)
+		if msg.Role == "tool" && msg.ToolCallID != "" {
+			messages[i].ToolCallID = msg.ToolCallID
+		}
+
+		// Copy tool result name; provider-specific normalization (e.g., empty name
+		// fallback for Gemini) is applied below by the adapter.
+		if msg.Role == "tool" {
+			messages[i].Name = msg.Name
+		}
+
+		// Convert tool calls if present
+		if len(msg.ToolCalls) > 0 {
+			toolCalls := make([]openai.ToolCall, len(msg.ToolCalls))
+			for j, tc := range msg.ToolCalls {
+				args := tc.Arguments
+				if args == nil {
+					args = make(map[string]any)
+				}
+				argsJSON, _ := json.Marshal(args)
+				toolCalls[j] = openai.ToolCall{
+					ID:   tc.ID,
+					Type: openai.ToolTypeFunction,
+					Function: openai.FunctionCall{
+						Name:      tc.Name,
+						Arguments: string(argsJSON),
+					},
+				}
+			}
+			messages[i].ToolCalls = toolCalls
+		}
+	}
+
+	// Apply provider-specific message normalization (e.g., Gemini requires a
+	// non-empty name on tool results and non-empty content on assistant tool_call messages).
+	adapter := c.getAdapter()
+	messages = adapter.NormalizeMessages(messages)
+
+	chatReq := openai.ChatCompletionRequest{
+		Model:    c.endpoint.Model,
+		Messages: messages,
+	}
+
+	if req.MaxTokens > 0 {
+		chatReq.MaxTokens = req.MaxTokens
+	}
+	if req.Temperature > 0 {
+		chatReq.Temperature = float32(req.Temperature)
+	}
+	if len(c.endpoint.Options) > 0 {
+		chatReq.ChatTemplateKwargs = c.endpoint.Options
+	}
+	if c.endpoint.ReasoningEffort != "" {
+		chatReq.ReasoningEffort = c.endpoint.ReasoningEffort
+	}
+
+	// Apply provider-specific request normalization.
+	adapter.NormalizeRequest(&chatReq)
+
+	// Convert tools if present
+	if len(req.Tools) > 0 {
+		tools := make([]openai.Tool, len(req.Tools))
+		for i, tool := range req.Tools {
+			tools[i] = openai.Tool{
+				Type: openai.ToolTypeFunction,
+				Function: &openai.FunctionDefinition{
+					Name:        tool.Name,
+					Description: tool.Description,
+					Parameters:  tool.Parameters,
+				},
+			}
+		}
+		chatReq.Tools = tools
+	}
+
+	// Convert tool choice if present
+	if req.ToolChoice != nil {
+		switch req.ToolChoice.Mode {
+		case "auto", "required", "none":
+			chatReq.ToolChoice = req.ToolChoice.Mode
+		case "function":
+			chatReq.ToolChoice = openai.ToolChoice{
+				Type:     openai.ToolTypeFunction,
+				Function: openai.ToolFunction{Name: req.ToolChoice.FunctionName},
+			}
+		}
+	}
+
+	return chatReq
+}
+
+// ChatCompletion sends a chat completion request with retry and throttling.
+//
+// Retry strategy uses two independent backoff curves:
+//   - Transient errors (5xx, network): exponential from InitialDelay, up to MaxAttempts
+//   - Rate limits (429): exponential from RateLimitDelay, up to MaxRateLimitRetries
+//
+// Both curves cap at MaxDelay and respect ctx cancellation at every wait point.
+func (c *Client) ChatCompletion(ctx context.Context, req agentic.AgentRequest) (agentic.AgentResponse, error) {
+	chatReq := c.buildChatRequest(req)
+
+	// Log full request payload at debug level for wire-level diagnostics
+	if c.logger != nil && c.logger.Enabled(context.Background(), slog.LevelDebug) {
+		if payload, err := json.Marshal(chatReq); err == nil {
+			c.logger.Debug("OpenAI API request payload",
+				slog.String("request_id", req.RequestID),
+				slog.String("model", chatReq.Model),
+				slog.Int("message_count", len(chatReq.Messages)),
+				slog.String("payload", string(payload)))
+		}
+	}
+
+	// Acquire throttle slot before any network attempt.
+	if c.throttle != nil {
+		if err := c.throttle.Acquire(ctx); err != nil {
+			return errorResponse(req.RequestID, err.Error()), nil
+		}
+		defer c.throttle.Release()
+	}
+
+	// Resolve retry parameters
+	maxAttempts := c.retryCfg.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 3
+	}
+	maxRLRetries := c.retryCfg.maxRateLimitRetriesOrDefault(5)
+	genericDelay := c.retryCfg.initialDelayDuration(100 * time.Millisecond)
+	rlDelay := c.retryCfg.rateLimitDelayDuration(15 * time.Second)
+	maxDelay := c.retryCfg.maxDelayDuration(60 * time.Second)
+
+	genericAttempt := 0
+	rlAttempt := 0
+
+	for {
+		// Check context before each attempt
+		if ctx.Err() != nil {
+			return errorResponse(req.RequestID, ctx.Err().Error()), nil
+		}
+
+		resp, err := c.doSingleAttempt(ctx, chatReq, req.RequestID)
+		if err == nil {
+			return c.withRetryCount(resp, genericAttempt+rlAttempt), nil
+		}
+
+		// Rate-limited (429) — separate backoff curve
+		if isRateLimited(err) {
+			rlAttempt++
+			if c.metrics != nil {
+				c.metrics.recordRateLimitHit(chatReq.Model)
+			}
+			if rlAttempt >= maxRLRetries {
+				c.logWarn("rate limit retries exhausted", req.RequestID, chatReq.Model,
+					slog.Int("attempts", rlAttempt), slog.Int("max_attempts", maxRLRetries))
+				return errorResponse(req.RequestID, err.Error()), nil
+			}
+
+			wait := addJitter(rlDelay)
+			c.logWarn("rate limited by provider, backing off", req.RequestID, chatReq.Model,
+				slog.Int("attempt", rlAttempt), slog.Int("max_attempts", maxRLRetries),
+				slog.Duration("wait", wait))
+			if c.metrics != nil {
+				c.metrics.recordRateLimitRetry(chatReq.Model)
+			}
+			if !sleepWithContext(ctx, wait) {
+				return errorResponse(req.RequestID, ctx.Err().Error()), nil
+			}
+			rlDelay = min(time.Duration(float64(rlDelay)*2), maxDelay)
+			continue
+		}
+
+		// Non-retryable error — fail immediately
+		if !isRetryable(err) {
+			return errorResponse(req.RequestID, err.Error()), nil
+		}
+
+		// Transient error (5xx, network) — generic backoff curve
+		genericAttempt++
+		if genericAttempt >= maxAttempts {
+			c.logWarn("transient error retries exhausted", req.RequestID, chatReq.Model,
+				slog.Int("attempts", genericAttempt), slog.Int("max_attempts", maxAttempts),
+				slog.String("last_error", err.Error()))
+			return errorResponse(req.RequestID, err.Error()), nil
+		}
+
+		wait := addJitter(genericDelay)
+		if c.logger != nil {
+			c.logger.Debug("transient error, retrying",
+				slog.String("request_id", req.RequestID), slog.String("model", chatReq.Model),
+				slog.Int("attempt", genericAttempt), slog.Int("max_attempts", maxAttempts),
+				slog.Duration("wait", wait), slog.String("error", err.Error()))
+		}
+		if !sleepWithContext(ctx, wait) {
+			return errorResponse(req.RequestID, ctx.Err().Error()), nil
+		}
+		genericDelay = min(time.Duration(float64(genericDelay)*2), maxDelay)
+	}
+}
+
+// logWarn logs a warning if a logger is set. Reduces boilerplate in ChatCompletion.
+func (c *Client) logWarn(msg, requestID, model string, attrs ...slog.Attr) {
+	if c.logger != nil {
+		allAttrs := append([]slog.Attr{
+			slog.String("request_id", requestID),
+			slog.String("model", model),
+		}, attrs...)
+		args := make([]any, len(allAttrs))
+		for i, a := range allAttrs {
+			args[i] = a
+		}
+		c.logger.Warn(msg, args...)
+	}
+}
+
+// withRetryCount sets the retry count on a response if retries occurred.
+func (c *Client) withRetryCount(resp agentic.AgentResponse, count int) agentic.AgentResponse {
+	resp.RetryCount = count
+	return resp
+}
+
+// errorResponse builds an AgentResponse with status "error".
+func errorResponse(requestID, errMsg string) agentic.AgentResponse {
+	return agentic.AgentResponse{
+		RequestID: requestID,
+		Status:    "error",
+		Error:     errMsg,
+	}
+}
+
+// doSingleAttempt executes one request attempt (streaming or non-streaming).
+// Returns (response, nil) on success, or (zero, error) on failure.
+func (c *Client) doSingleAttempt(ctx context.Context, chatReq openai.ChatCompletionRequest, requestID string) (agentic.AgentResponse, error) {
+	if c.endpoint.Stream {
+		resp, err := c.streamChatCompletion(ctx, chatReq, requestID)
+		if err != nil {
+			if c.logger != nil {
+				c.logger.Debug("stream connection failed",
+					slog.String("request_id", requestID),
+					slog.String("model", chatReq.Model),
+					slog.String("error", err.Error()))
+			}
+			return agentic.AgentResponse{}, err
+		}
+		// Mid-stream errors are returned as AgentResponse{Status:"error"} — not retried.
+		return resp, nil
+	}
+
+	resp, err := c.client.CreateChatCompletion(ctx, chatReq)
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Debug("API request failed",
+				slog.String("request_id", requestID),
+				slog.String("model", chatReq.Model),
+				slog.String("error", err.Error()))
+		}
+		return agentic.AgentResponse{}, err
+	}
+
+	return c.convertResponse(resp, requestID), nil
+}
+
+// sleepWithContext waits for the given duration or until ctx is cancelled.
+// Returns true if the sleep completed, false if ctx was cancelled.
+func sleepWithContext(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	select {
+	case <-ctx.Done():
+		timer.Stop()
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+// addJitter adds up to 25% jitter to a duration to prevent thundering herd.
+func addJitter(d time.Duration) time.Duration {
+	if d <= 0 {
+		return d
+	}
+	jitter := time.Duration(rand.Int63n(int64(d / 4)))
+	return d + jitter
+}
+
+// streamChatCompletion handles the streaming path. Connection errors return
+// a Go error (retryable). Mid-stream errors return AgentResponse{Status: "error"}
+// (not retryable — partial state can't be replayed).
+func (c *Client) streamChatCompletion(ctx context.Context, chatReq openai.ChatCompletionRequest, requestID string) (agentic.AgentResponse, error) {
+	chatReq.Stream = true
+	chatReq.StreamOptions = &openai.StreamOptions{IncludeUsage: true}
+
+	stream, err := c.client.CreateChatCompletionStream(ctx, chatReq)
+	if err != nil {
+		return agentic.AgentResponse{}, err // retryable connection error
+	}
+	defer stream.Close()
+
+	acc := &streamAccumulator{adapter: c.getAdapter(), logger: c.logger}
+	streamStart := time.Now()
+	firstTokenRecorded := false
+
+	for {
+		chunk, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			// Mid-stream error — not retryable. Preserve any partial tokens
+			// the accumulator received before the connection died.
+			resp := acc.toAgentResponse(requestID)
+			resp.Status = "error"
+			resp.Error = err.Error()
+			return resp, nil
+		}
+
+		// Record usage from the final chunk (has empty choices)
+		if chunk.Usage != nil {
+			acc.setUsage(chunk.Usage)
+		}
+
+		// Process choice deltas
+		for _, choice := range chunk.Choices {
+			acc.processDelta(choice)
+
+			// Build chunk for handler
+			if c.chunkHandler != nil {
+				sc := StreamChunk{
+					RequestID:      requestID,
+					ContentDelta:   choice.Delta.Content,
+					ReasoningDelta: choice.Delta.ReasoningContent,
+				}
+				c.chunkHandler(sc)
+			}
+
+			// Record streaming metrics
+			if c.metrics != nil {
+				c.metrics.recordStreamChunk(chatReq.Model)
+				if !firstTokenRecorded && (choice.Delta.Content != "" || choice.Delta.ReasoningContent != "") {
+					c.metrics.recordStreamTTFT(chatReq.Model, time.Since(streamStart).Seconds())
+					firstTokenRecorded = true
+				}
+			}
+		}
+	}
+
+	// Send done signal to handler
+	if c.chunkHandler != nil {
+		c.chunkHandler(StreamChunk{RequestID: requestID, Done: true})
+	}
+
+	return acc.toAgentResponse(requestID), nil
+}
+
+// convertResponse converts OpenAI response to AgentResponse.
+// NormalizeResponse is called before conversion so provider adapters can
+// adjust the raw response (e.g., strip provider-specific fields).
+func (c *Client) convertResponse(resp openai.ChatCompletionResponse, requestID string) agentic.AgentResponse {
+	c.getAdapter().NormalizeResponse(&resp)
+
+	response := agentic.AgentResponse{
+		RequestID: requestID,
+	}
+
+	if len(resp.Choices) == 0 {
+		response.Status = "error"
+		response.Error = "no choices in response"
+		return response
+	}
+
+	choice := resp.Choices[0]
+
+	// Map finish reason to status
+	switch choice.FinishReason {
+	case "stop", "length":
+		response.Status = "complete"
+	case "tool_calls":
+		response.Status = "tool_call"
+	default:
+		response.Status = "complete"
+	}
+
+	// Convert message
+	response.Message = agentic.ChatMessage{
+		Role:             choice.Message.Role,
+		Content:          choice.Message.Content,
+		ReasoningContent: choice.Message.ReasoningContent,
+	}
+
+	// Convert tool calls if present
+	if len(choice.Message.ToolCalls) > 0 {
+		response.Status = "tool_call"
+		toolCalls := make([]agentic.ToolCall, len(choice.Message.ToolCalls))
+		for i, tc := range choice.Message.ToolCalls {
+			// Parse arguments JSON — must never be nil or the replay
+			// path will marshal it as "null" (a string), which the
+			// Anthropic API rejects ("Input should be a valid dictionary").
+			args := make(map[string]any)
+			if tc.Function.Arguments != "" {
+				if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+					if c.logger != nil {
+						c.logger.Warn("malformed tool_call arguments, using empty object",
+							"tool", tc.Function.Name, "error", err)
+					}
+					args = make(map[string]any)
+				}
+			}
+
+			toolCalls[i] = agentic.ToolCall{
+				ID:        tc.ID,
+				Name:      tc.Function.Name,
+				Arguments: args,
+			}
+		}
+		response.Message.ToolCalls = toolCalls
+	}
+
+	// Convert token usage
+	response.TokenUsage = agentic.TokenUsage{
+		PromptTokens:     resp.Usage.PromptTokens,
+		CompletionTokens: resp.Usage.CompletionTokens,
+	}
+
+	return response
+}
+
+// Close releases resources held by the client
+func (c *Client) Close() error {
+	// OpenAI SDK client doesn't require explicit cleanup
+	// HTTP connections are managed by http.Client's connection pooling
+	return nil
+}
+
+// isRetryable checks if an error should trigger a retry.
+// Context errors and unrecoverable 4xx responses are never retried.
+func isRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+
+	var apiErr *openai.APIError
+	if errors.As(err, &apiErr) {
+		return isRetryableStatusCode(apiErr.HTTPStatusCode)
+	}
+	var reqErr *openai.RequestError
+	if errors.As(err, &reqErr) {
+		return isRetryableStatusCode(reqErr.HTTPStatusCode)
+	}
+
+	// Network-level errors (no HTTP status) are retryable.
+	return true
+}
+
+// isRetryableStatusCode returns true for HTTP status codes that are worth retrying.
+func isRetryableStatusCode(code int) bool {
+	if code == 0 {
+		// No status code — treat as network error, retryable.
+		return true
+	}
+	switch code {
+	case http.StatusTooManyRequests, // 429
+		http.StatusInternalServerError, // 500
+		http.StatusBadGateway,          // 502
+		http.StatusServiceUnavailable,  // 503
+		http.StatusGatewayTimeout:      // 504
+		return true
+	default:
+		// All other 4xx errors (400, 401, 403, 404) are client errors — not retryable.
+		return false
+	}
+}
+
+// isRateLimited reports whether the error is an HTTP 429 Too Many Requests.
+func isRateLimited(err error) bool {
+	var apiErr *openai.APIError
+	if errors.As(err, &apiErr) && apiErr.HTTPStatusCode == http.StatusTooManyRequests {
+		return true
+	}
+	var reqErr *openai.RequestError
+	if errors.As(err, &reqErr) && reqErr.HTTPStatusCode == http.StatusTooManyRequests {
+		return true
+	}
+	return false
+}

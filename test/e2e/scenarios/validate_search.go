@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/c360studio/semstreams/test/e2e/scenarios/search"
+	"github.com/c360studio/semteams/test/e2e/scenarios/search"
 )
 
 // Search validation functions for tiered E2E tests

@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/graph/clustering"
-	"github.com/c360studio/semstreams/test/e2e/client"
-	"github.com/c360studio/semstreams/test/e2e/scenarios/anomaly"
+	"github.com/c360studio/semteams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/scenarios/anomaly"
 )
 
 // Semantic tier validation functions (community comparison, LLM enhancement)

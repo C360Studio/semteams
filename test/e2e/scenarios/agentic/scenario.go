@@ -10,9 +10,9 @@ import (
 
 	"github.com/c360studio/semstreams/agentic"
 	"github.com/c360studio/semstreams/message"
-	"github.com/c360studio/semstreams/test/e2e/client"
-	"github.com/c360studio/semstreams/test/e2e/scenarios"
 	agvocab "github.com/c360studio/semstreams/vocabulary/agentic"
+	"github.com/c360studio/semteams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/scenarios"
 )
 
 // Scenario validates the agentic components (loop, model, tools) work together.

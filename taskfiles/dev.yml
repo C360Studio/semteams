@@ -53,7 +53,7 @@ tasks:
     deps:
       - nats:start
     cmds:
-      - go build -o bin/semstreams ./cmd/semstreams
+      - go build -o bin/semteams ./cmd/semteams
       - |
         echo ""
         echo "[DEV] Starting SemStreams with hello-world config..."
@@ -81,7 +81,7 @@ tasks:
         echo "  Press Ctrl+C to stop"
         echo "============================================"
         echo ""
-      - ./bin/semstreams --config configs/hello-world.json
+      - ./bin/semteams --config configs/hello-world.json
 
   stop:
     desc: Stop SemStreams and NATS
@@ -89,7 +89,7 @@ tasks:
       - |
         echo "[DEV] Stopping SemStreams..."
         pkill -f 'semstreams.*hello-world' 2>/dev/null || true
-        pkill -f 'bin/semstreams' 2>/dev/null || true
+        pkill -f 'bin/semteams' 2>/dev/null || true
       - task: nats:stop
       - echo "[OK] All stopped"
 

@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/c360studio/semstreams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/client"
 )
 
 // ComponentVerifier handles component verification stages

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/c360studio/semstreams/test/e2e/client"
-	"github.com/c360studio/semstreams/test/e2e/scenarios"
 	agentic "github.com/c360studio/semstreams/vocabulary/agentic"
+	"github.com/c360studio/semteams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/scenarios"
 )
 
 // AGNTCYConfig holds configuration for AGNTCY E2E tests.

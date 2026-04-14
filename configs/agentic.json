@@ -315,6 +315,7 @@
       "config": {
         "max_iterations": 5,
         "timeout": "30s",
+        "approval_required": ["create_rule", "update_rule", "delete_rule"],
         "stream_name": "AGENT",
         "loops_bucket": "AGENT_LOOPS",
         "ports": {

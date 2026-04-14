@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/c360studio/semstreams/test/e2e/client"
+	"github.com/c360studio/semteams/test/e2e/client"
 )
 
 // Validator validates anomalies against ground truth expectations.

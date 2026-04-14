@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/graph/clustering"
-	"github.com/c360studio/semstreams/test/e2e/scenarios/community"
+	"github.com/c360studio/semteams/test/e2e/scenarios/community"
 )
 
 // Statistical variant validation functions (GraphRAG, community validation)
