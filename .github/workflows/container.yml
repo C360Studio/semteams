@@ -12,7 +12,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: c360studio/semstreams
+  IMAGE_NAME: c360studio/semteams
 
 jobs:
   build:
@@ -59,8 +59,8 @@ jobs:
             # Tag with branch name and SHA for main branch
             type=raw,value=main-${{ github.event.workflow_run.head_sha || github.sha }},enable=${{ github.event_name == 'workflow_run' }}
           labels: |
-            org.opencontainers.image.title=SemStreams
-            org.opencontainers.image.description=Semantic stream processing framework for edge deployments
+            org.opencontainers.image.title=SemTeams
+            org.opencontainers.image.description=Agentic coordination platform
             org.opencontainers.image.vendor=C360
             org.opencontainers.image.licenses=MIT
 
