@@ -294,10 +294,10 @@ func extractPlatformMeta(cfg *config.Config) types.PlatformMeta {
 // because that registers semstreams' own agentic components which would
 // shadow semteams' product components (same factory names, fatal duplicate
 // error). Instead, we register:
-//   1. semteams' product processors (teams-dispatch, teams-loop, etc.)
-//   2. semstreams' framework processors (graph-*, json-*, rule, etc.)
-//   3. semstreams' I/O and gateway components
-//   4. Tool executors (bash, web_search, http_request)
+//  1. semteams' product processors (teams-dispatch, teams-loop, etc.)
+//  2. semstreams' framework processors (graph-*, json-*, rule, etc.)
+//  3. semstreams' I/O and gateway components
+//  4. Tool executors (bash, web_search, http_request)
 func setupRegistriesAndManager(cfg *config.Config) (*component.Registry, *service.Manager, error) {
 	componentRegistry := component.NewRegistry()
 
