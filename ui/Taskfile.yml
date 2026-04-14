@@ -201,6 +201,11 @@ tasks:
     cmds:
       - FIXTURE=real-time-activity-stream.yaml npx playwright test --config playwright.agentic.config.ts e2e/agentic/real-time-activity-stream.spec.ts
 
+  test:e2e:agentic:deep-research:
+    desc: Run the deep-research journey with researcher config + paired fixture
+    cmds:
+      - FIXTURE=deep-research.yaml AGENTIC_CONFIG=deep-research.json npx playwright test --config playwright.agentic.config.ts e2e/agentic/deep-research.spec.ts
+
   test:e2e:superpowers:
     desc: Run all agentic journey specs (each with its own fixture and fresh stack)
     summary: |
@@ -220,6 +225,8 @@ tasks:
       - task: test:e2e:agentic:tool-approval-gate
       - task: test:e2e:agentic:cleanup
       - task: test:e2e:agentic:real-time-activity-stream
+      - task: test:e2e:agentic:cleanup
+      - task: test:e2e:agentic:deep-research
 
   test:e2e:agentic:cleanup:
     desc: Tear down the agentic E2E Docker stack

@@ -18,14 +18,48 @@ import (
 	"time"
 
 	"github.com/c360studio/semstreams/component"
-	"github.com/c360studio/semstreams/componentregistry"
 	"github.com/c360studio/semstreams/config"
 	"github.com/c360studio/semstreams/examples/processors/document"
 	iotsensor "github.com/c360studio/semstreams/examples/processors/iot_sensor"
+	graphgateway "github.com/c360studio/semstreams/gateway/graph-gateway"
+	gatewayhttp "github.com/c360studio/semstreams/gateway/http"
+	a2ainput "github.com/c360studio/semstreams/input/a2a"
+	fileinput "github.com/c360studio/semstreams/input/file"
+	githubwebhook "github.com/c360studio/semstreams/input/github-webhook"
+	slimbridgeinput "github.com/c360studio/semstreams/input/slim"
+	"github.com/c360studio/semstreams/input/udp"
+	websocketinput "github.com/c360studio/semstreams/input/websocket"
 	"github.com/c360studio/semstreams/metric"
 	"github.com/c360studio/semstreams/natsclient"
+	directorybridge "github.com/c360studio/semstreams/output/directory-bridge"
+	fileoutput "github.com/c360studio/semstreams/output/file"
+	"github.com/c360studio/semstreams/output/httppost"
+	otelexporter "github.com/c360studio/semstreams/output/otel"
+	websocketoutput "github.com/c360studio/semstreams/output/websocket"
+	graphclustering "github.com/c360studio/semstreams/processor/graph-clustering"
+	graphembedding "github.com/c360studio/semstreams/processor/graph-embedding"
+	graphindex "github.com/c360studio/semstreams/processor/graph-index"
+	graphindexspatial "github.com/c360studio/semstreams/processor/graph-index-spatial"
+	graphindextemporal "github.com/c360studio/semstreams/processor/graph-index-temporal"
+	graphingest "github.com/c360studio/semstreams/processor/graph-ingest"
+	graphquery "github.com/c360studio/semstreams/processor/graph-query"
+	jsonfilter "github.com/c360studio/semstreams/processor/json_filter"
+	jsongeneric "github.com/c360studio/semstreams/processor/json_generic"
+	jsonmap "github.com/c360studio/semstreams/processor/json_map"
+	oasfgenerator "github.com/c360studio/semstreams/processor/oasf-generator"
+	"github.com/c360studio/semstreams/processor/rule"
 	"github.com/c360studio/semstreams/service"
+	"github.com/c360studio/semstreams/storage/objectstore"
 	"github.com/c360studio/semstreams/types"
+
+	// semteams product components — these REPLACE semstreams' agentic components
+	teamsdispatch "github.com/c360studio/semteams/processor/teams-dispatch"
+	teamsgovernance "github.com/c360studio/semteams/processor/teams-governance"
+	teamsloop "github.com/c360studio/semteams/processor/teams-loop"
+	teamsmemory "github.com/c360studio/semteams/processor/teams-memory"
+	teamsmodel "github.com/c360studio/semteams/processor/teams-model"
+	teamstools "github.com/c360studio/semteams/processor/teams-tools"
+	"github.com/c360studio/semteams/processor/teams-tools/executors"
 )
 
 // Build information constants
@@ -254,22 +288,147 @@ func extractPlatformMeta(cfg *config.Config) types.PlatformMeta {
 	}
 }
 
-// setupRegistriesAndManager creates registries and service manager
+// setupRegistriesAndManager creates registries and service manager.
+//
+// IMPORTANT: This does NOT call componentregistry.Register() from semstreams,
+// because that registers semstreams' own agentic components which would
+// shadow semteams' product components (same factory names, fatal duplicate
+// error). Instead, we register:
+//   1. semteams' product processors (teams-dispatch, teams-loop, etc.)
+//   2. semstreams' framework processors (graph-*, json-*, rule, etc.)
+//   3. semstreams' I/O and gateway components
+//   4. Tool executors (bash, web_search, http_request)
 func setupRegistriesAndManager(cfg *config.Config) (*component.Registry, *service.Manager, error) {
 	componentRegistry := component.NewRegistry()
-	slog.Debug("Registering core component factories (UDP, WebSocket, parsers)")
-	if err := componentregistry.Register(componentRegistry); err != nil {
-		return nil, nil, fmt.Errorf("register components: %w", err)
+
+	// ── semteams product components (MUST be registered first) ──────
+	// These replace semstreams' agentic-* components with semteams'
+	// extended versions that include: researcher prompt, config-based
+	// approval filter, tool executors, memory, governance.
+	slog.Debug("Registering semteams product components")
+	if err := teamsdispatch.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-dispatch: %w", err)
+	}
+	if err := teamsloop.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-loop: %w", err)
+	}
+	if err := teamsmodel.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-model: %w", err)
+	}
+	if err := teamstools.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-tools: %w", err)
+	}
+	if err := teamsgovernance.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-governance: %w", err)
+	}
+	if err := teamsmemory.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register teams-memory: %w", err)
 	}
 
-	// Register bundled example/domain components (not in core registry to avoid
-	// pulling example deps into downstream consumers like semdragons/semspec)
+	// Register tool executors (bash, web_search, http_request, github, rules)
+	executors.RegisterAll(slog.Default())
+
+	// ── semstreams framework components (no conflict) ──────────────
+	slog.Debug("Registering semstreams framework components")
+
+	// Input components
+	if err := udp.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register udp: %w", err)
+	}
+	if err := websocketinput.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register websocket-input: %w", err)
+	}
+	if err := githubwebhook.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register github-webhook: %w", err)
+	}
+	if err := fileinput.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register file-input: %w", err)
+	}
+	if err := slimbridgeinput.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register slim-bridge: %w", err)
+	}
+	if err := a2ainput.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register a2a-input: %w", err)
+	}
+
+	// Processor components
+	if err := jsongeneric.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register json-generic: %w", err)
+	}
+	if err := jsonfilter.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register json-filter: %w", err)
+	}
+	if err := jsonmap.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register json-map: %w", err)
+	}
+	if err := graphingest.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register graph-ingest: %w", err)
+	}
+	if err := graphindex.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register graph-index: %w", err)
+	}
+	if err := graphindexspatial.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register graph-index-spatial: %w", err)
+	}
+	if err := graphindextemporal.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register graph-index-temporal: %w", err)
+	}
+	if err := graphquery.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register graph-query: %w", err)
+	}
+	if err := graphembedding.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register graph-embedding: %w", err)
+	}
+	if err := graphclustering.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register graph-clustering: %w", err)
+	}
+	if err := rule.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register rule: %w", err)
+	}
+	if err := oasfgenerator.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register oasf-generator: %w", err)
+	}
+
+	// Output components
+	if err := fileoutput.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register file-output: %w", err)
+	}
+	if err := httppost.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register httppost: %w", err)
+	}
+	if err := websocketoutput.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register websocket-output: %w", err)
+	}
+	if err := directorybridge.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register directory-bridge: %w", err)
+	}
+	if err := otelexporter.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register otel-exporter: %w", err)
+	}
+
+	// Storage components
+	if err := objectstore.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register objectstore: %w", err)
+	}
+
+	// Gateway components
+	if err := gatewayhttp.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register gateway-http: %w", err)
+	}
+	if err := graphgateway.Register(componentRegistry); err != nil {
+		return nil, nil, fmt.Errorf("register graph-gateway: %w", err)
+	}
+
+	// Register bundled example/domain components
 	if err := registerExampleComponents(componentRegistry); err != nil {
 		return nil, nil, fmt.Errorf("register example components: %w", err)
 	}
 
 	factories := componentRegistry.ListFactories()
-	slog.Info("Core component factories registered", "count", len(factories), "factories", factories)
+	slog.Info("Component factories registered",
+		"count", len(factories),
+		"semteams", []string{"agentic-dispatch", "agentic-loop", "agentic-model", "agentic-tools", "agentic-governance", "agentic-memory"},
+		"framework", len(factories)-6)
 
 	serviceRegistry := service.NewServiceRegistry()
 	if err := service.RegisterAll(serviceRegistry); err != nil {
