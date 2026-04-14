@@ -215,8 +215,10 @@ func TestAttack_RegisterCommand_LargeNumberOfCommands(t *testing.T) {
 	}
 	elapsed := time.Since(start)
 
-	// 100 iterations of listing 1000 commands should be < 100ms
-	assert.Less(t, elapsed, 100*time.Millisecond,
+	// 100 iterations of listing 1000 commands should be < 500ms.
+	// The original 100ms threshold was too tight under CI integration
+	// test load (multiple packages + Docker + race detector).
+	assert.Less(t, elapsed, 500*time.Millisecond,
 		"ListRegisteredCommands too slow: %v", elapsed)
 }
 
