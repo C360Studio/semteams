@@ -172,3 +172,49 @@ tasks:
         PATTERN=${PATTERN:-*}
         echo "=== KV Bucket: $BUCKET (pattern: $PATTERN) ==="
         curl -s "http://localhost:8080/message-logger/kv/$BUCKET?pattern=$PATTERN&limit=20" | jq '.entries[] | {key: .key, revision: .revision}' 2>/dev/null || echo "SemStreams not running"
+
+  research:
+    desc: Start semteams with Deep Research workflow (real LLM — requires .env with API keys)
+    summary: |
+      Boots the full stack for Deep Research: NATS + semteams backend
+      (configs/deep-research.json) + UI. The backend uses claude-haiku
+      by default (configurable in the config). API keys are loaded from
+      .env via the Taskfile dotenv directive.
+
+      The researcher role instructs the agent to:
+      1. Break the question into sub-questions
+      2. Search the knowledge graph (graph query tools)
+      3. Search the web (web_search, http_request)
+      4. Synthesize findings into a structured report
+
+      Usage:
+        task dev:research
+        # Open http://localhost:3001
+        # Type a research question in the chat bar
+    deps: [nats:start]
+    cmds:
+      - task: build:default
+      - defer: { task: stop }
+      - |
+        echo ""
+        echo "Starting semteams Deep Research workflow..."
+        echo "Config: configs/deep-research.json"
+        echo "Default model: claude-haiku"
+        echo ""
+        ./bin/semteams --config configs/deep-research.json &
+        SEMTEAMS_PID=$!
+        echo "Backend PID: $SEMTEAMS_PID (kill with: task dev:stop)"
+        echo ""
+        echo "Waiting for backend health..."
+        for i in $(seq 1 30); do
+          if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+            echo "Backend ready!"
+            break
+          fi
+          sleep 1
+        done
+        echo ""
+        echo "Starting UI (Caddy + Vite)..."
+        echo "Open http://localhost:3001 in your browser"
+        echo ""
+        cd ui && task dev:connect
