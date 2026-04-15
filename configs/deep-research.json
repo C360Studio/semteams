@@ -664,6 +664,19 @@
               "description": "Task messages to agent loops"
             }
           ]
+        },
+        "permissions": {
+          "view": [
+            "*"
+          ],
+          "submit_task": [
+            "*"
+          ],
+          "cancel_own": true,
+          "cancel_any": [],
+          "approve": [
+            "*"
+          ]
         }
       }
     }

@@ -65,13 +65,28 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 		return nil, errs.WrapInvalid(errs.ErrMissingConfig, "Component", "NewComponent", "deps.ModelRegistry is required")
 	}
 
-	// Apply defaults for empty values
+	// Apply defaults for all empty values. The component manager's schema
+	// filtering may strip nested objects (like permissions) from the raw
+	// config JSON — so we must apply defaults for any field that was not
+	// parsed, not just top-level strings.
+	defaults := DefaultConfig()
 	if config.DefaultRole == "" {
-		config.DefaultRole = DefaultConfig().DefaultRole
+		config.DefaultRole = defaults.DefaultRole
 	}
 	if config.StreamName == "" {
-		config.StreamName = DefaultConfig().StreamName
+		config.StreamName = defaults.StreamName
 	}
+	// Apply default permissions if the schema filter stripped them
+	// from the raw config (nested objects may not survive the
+	// component manager's schema validation pass).
+	if config.Permissions.SubmitTask == nil {
+		config.Permissions = defaults.Permissions
+	}
+
+	slog.Info("teams-dispatch initialized",
+		"default_role", config.DefaultRole,
+		"submit_task", config.Permissions.SubmitTask,
+		"auto_continue", config.AutoContinue)
 
 	// Validate configuration
 	if err := config.Validate(); err != nil {
