@@ -16,7 +16,7 @@ func Register(registry *component.Registry) error {
 	}
 
 	registration := &component.Registration{
-		Name:        "agentic-dispatch",
+		Name:        "teams-dispatch",
 		Type:        "processor",
 		Protocol:    "jetstream",
 		Domain:      "agentic",
@@ -26,7 +26,7 @@ func Register(registry *component.Registry) error {
 		Factory:     NewComponent,
 	}
 
-	return registry.RegisterFactory("agentic-dispatch", registration)
+	return registry.RegisterFactory("teams-dispatch", registration)
 }
 
 // buildDefaultInputPorts returns the default input ports

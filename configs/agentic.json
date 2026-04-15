@@ -308,9 +308,9 @@
         }
       }
     },
-    "agentic-loop": {
+    "teams-loop": {
       "type": "processor",
-      "name": "agentic-loop",
+      "name": "teams-loop",
       "enabled": true,
       "config": {
         "max_iterations": 5,
@@ -385,9 +385,9 @@
         }
       }
     },
-    "agentic-model": {
+    "teams-model": {
       "type": "processor",
-      "name": "agentic-model",
+      "name": "teams-model",
       "enabled": true,
       "config": {
         "stream_name": "AGENT",
@@ -426,9 +426,9 @@
         }
       }
     },
-    "agentic-tools": {
+    "teams-tools": {
       "type": "processor",
-      "name": "agentic-tools",
+      "name": "teams-tools",
       "enabled": true,
       "config": {
         "stream_name": "AGENT",

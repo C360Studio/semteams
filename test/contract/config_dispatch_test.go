@@ -33,7 +33,7 @@ func TestConfigDispatchPermissions(t *testing.T) {
 			}
 			require.NoError(t, json.Unmarshal(data, &config))
 
-			dispatch, hasDispatch := config.Components["agentic-dispatch"]
+			dispatch, hasDispatch := config.Components["teams-dispatch"]
 			if !hasDispatch {
 				t.Skipf("%s has no explicit agentic-dispatch component (uses defaults — OK)", name)
 				return

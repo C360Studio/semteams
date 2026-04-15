@@ -404,7 +404,7 @@ func (t *LoopTracker) SendSignal(ctx context.Context, nc *natsclient.Client, loo
 		Timestamp: time.Now(),
 	}
 
-	signalMsg := message.NewBaseMessage(signal.Schema(), &signal, "agentic-dispatch")
+	signalMsg := message.NewBaseMessage(signal.Schema(), &signal, "teams-dispatch")
 	data, err := json.Marshal(signalMsg)
 	if err != nil {
 		return errs.Wrap(err, "LoopTracker", "SendSignal", fmt.Sprintf("marshal signal for loop %s", loopID))

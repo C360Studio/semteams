@@ -29,7 +29,7 @@ func TestRegister_SuccessfulRegistration(t *testing.T) {
 	// Look for our component
 	found := false
 	for _, typeName := range types {
-		if typeName == "agentic-tools" {
+		if typeName == "teams-tools" {
 			found = true
 			break
 		}
@@ -50,13 +50,13 @@ func TestRegister_FactoryMetadata(t *testing.T) {
 
 	// Get factory metadata
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-tools"]
+	factoryReg, ok := factories["teams-tools"]
 	if !ok {
 		t.Fatal("Factory 'agentic-tools' not found in ListFactories()")
 	}
 
 	// Verify metadata
-	if factoryReg.Name != "agentic-tools" {
+	if factoryReg.Name != "teams-tools" {
 		t.Errorf("Factory.Name = %s, want agentic-tools", factoryReg.Name)
 	}
 	if factoryReg.Type != "processor" {
@@ -90,7 +90,7 @@ func TestRegister_ConfigSchema(t *testing.T) {
 	}
 
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-tools"]
+	factoryReg, ok := factories["teams-tools"]
 	if !ok {
 		t.Fatal("Factory 'agentic-tools' not found")
 	}
@@ -185,7 +185,7 @@ func TestRegister_FactoryFunctionality(t *testing.T) {
 
 	// Verify factory can create components
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-tools"]
+	factoryReg, ok := factories["teams-tools"]
 	if !ok {
 		t.Fatal("Factory 'agentic-tools' not found")
 	}
@@ -209,7 +209,7 @@ func TestRegister_SchemaValidation(t *testing.T) {
 	}
 
 	factories := registry.ListFactories()
-	factoryReg, ok := factories["agentic-tools"]
+	factoryReg, ok := factories["teams-tools"]
 	if !ok {
 		t.Fatal("Factory 'agentic-tools' not found")
 	}

@@ -687,7 +687,7 @@ func (c *Component) handleTaskSubmission(ctx context.Context, msg agentic.UserMe
 	c.metrics.recordLoopStarted()
 
 	// Wrap task in BaseMessage envelope (required by agentic-loop)
-	baseMsg := message.NewBaseMessage(task.Schema(), &task, "agentic-dispatch")
+	baseMsg := message.NewBaseMessage(task.Schema(), &task, "teams-dispatch")
 	taskData, err := json.Marshal(baseMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal task", slog.String("error", err.Error()))
@@ -884,7 +884,7 @@ func (c *Component) handleAgentFailed(ctx context.Context, data []byte) {
 
 // sendResponse publishes a response to the user's channel
 func (c *Component) sendResponse(ctx context.Context, resp agentic.UserResponse) {
-	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "agentic-dispatch")
+	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "teams-dispatch")
 	data, err := json.Marshal(respMsg)
 	if err != nil {
 		c.logger.Error("Failed to marshal response", slog.String("error", err.Error()))

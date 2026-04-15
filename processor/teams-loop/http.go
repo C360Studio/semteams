@@ -16,7 +16,7 @@ import (
 )
 
 func init() {
-	service.RegisterOpenAPISpec("agentic-loop", agenticLoopOpenAPISpec())
+	service.RegisterOpenAPISpec("teams-loop", agenticLoopOpenAPISpec())
 }
 
 // Compile-time check that Component implements the HTTP handler interface

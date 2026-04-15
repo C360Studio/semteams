@@ -76,9 +76,9 @@
         }
       }
     },
-    "agentic-loop": {
+    "teams-loop": {
       "type": "processor",
-      "name": "agentic-loop",
+      "name": "teams-loop",
       "enabled": true,
       "config": {
         "max_iterations": 25,
@@ -95,9 +95,9 @@
         }
       }
     },
-    "agentic-model": {
+    "teams-model": {
       "type": "processor",
-      "name": "agentic-model",
+      "name": "teams-model",
       "enabled": true,
       "config": {
         "ports": {
@@ -110,9 +110,9 @@
         }
       }
     },
-    "agentic-tools": {
+    "teams-tools": {
       "type": "processor",
-      "name": "agentic-tools",
+      "name": "teams-tools",
       "enabled": true,
       "config": {
         "ports": {

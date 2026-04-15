@@ -18,7 +18,7 @@ import (
 )
 
 func init() {
-	service.RegisterOpenAPISpec("agentic-dispatch", agenticDispatchOpenAPISpec())
+	service.RegisterOpenAPISpec("teams-dispatch", agenticDispatchOpenAPISpec())
 }
 
 // Compile-time check that Component implements the HTTP handler interface

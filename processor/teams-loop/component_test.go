@@ -15,7 +15,7 @@ func TestComponent_Meta(t *testing.T) {
 
 	meta := comp.Meta()
 
-	if meta.Name != "agentic-loop" {
+	if meta.Name != "teams-loop" {
 		t.Errorf("Meta().Name = %s, want agentic-loop", meta.Name)
 	}
 	if meta.Type != "processor" {

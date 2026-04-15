@@ -12,7 +12,7 @@ type RegistryInterface interface {
 // Register registers the agentic-governance processor component with the given registry
 func Register(registry RegistryInterface) error {
 	return registry.RegisterWithConfig(component.RegistrationConfig{
-		Name:        "agentic-governance",
+		Name:        "teams-governance",
 		Factory:     NewComponent,
 		Schema:      agenticGovernanceSchema,
 		Type:        "processor",

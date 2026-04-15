@@ -105,14 +105,14 @@ func getMetrics(registry *metric.MetricsRegistry) *governanceMetrics {
 
 		// Register metrics with the metrics registry if available
 		if registry != nil {
-			_ = registry.RegisterCounterVec("agentic-governance", "filter_total", metrics.filterTotal)
-			_ = registry.RegisterHistogramVec("agentic-governance", "filter_latency_seconds", metrics.filterLatency)
-			_ = registry.RegisterCounterVec("agentic-governance", "violation_total", metrics.violationTotal)
-			_ = registry.RegisterCounterVec("agentic-governance", "pii_detected_total", metrics.piiDetected)
-			_ = registry.RegisterCounterVec("agentic-governance", "injection_blocked_total", metrics.injectionBlocked)
-			_ = registry.RegisterCounterVec("agentic-governance", "content_moderated_total", metrics.contentModerated)
-			_ = registry.RegisterCounterVec("agentic-governance", "rate_limit_exceeded_total", metrics.rateLimitExceeded)
-			_ = registry.RegisterCounterVec("agentic-governance", "messages_processed_total", metrics.messagesProcessed)
+			_ = registry.RegisterCounterVec("teams-governance", "filter_total", metrics.filterTotal)
+			_ = registry.RegisterHistogramVec("teams-governance", "filter_latency_seconds", metrics.filterLatency)
+			_ = registry.RegisterCounterVec("teams-governance", "violation_total", metrics.violationTotal)
+			_ = registry.RegisterCounterVec("teams-governance", "pii_detected_total", metrics.piiDetected)
+			_ = registry.RegisterCounterVec("teams-governance", "injection_blocked_total", metrics.injectionBlocked)
+			_ = registry.RegisterCounterVec("teams-governance", "content_moderated_total", metrics.contentModerated)
+			_ = registry.RegisterCounterVec("teams-governance", "rate_limit_exceeded_total", metrics.rateLimitExceeded)
+			_ = registry.RegisterCounterVec("teams-governance", "messages_processed_total", metrics.messagesProcessed)
 		} else {
 			// Fallback to default prometheus registry for testing
 			_ = prometheus.DefaultRegisterer.Register(metrics.filterTotal)

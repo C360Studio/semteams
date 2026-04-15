@@ -23,7 +23,7 @@ func TestRegister_Success(t *testing.T) {
 	names := registry.ListComponentTypes()
 	found := false
 	for _, name := range names {
-		if name == "agentic-model" {
+		if name == "teams-model" {
 			found = true
 			break
 		}
@@ -44,7 +44,7 @@ func TestRegister_WithMockRegistry(t *testing.T) {
 		t.Fatalf("Register() with mock registry failed: %v", err)
 	}
 
-	if !mockRegistry.registered["agentic-model"] {
+	if !mockRegistry.registered["teams-model"] {
 		t.Error("Component should be registered with name 'agentic-model'")
 	}
 

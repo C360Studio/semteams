@@ -93,7 +93,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	violationHandler := NewViolationHandler(config.Violations, deps.NATSClient, logger, metrics)
 
 	return &Component{
-		name:       "agentic-governance",
+		name:       "teams-governance",
 		config:     config,
 		natsClient: deps.NATSClient,
 		logger:     logger,
@@ -395,7 +395,7 @@ func (c *Component) Stop(_ time.Duration) error {
 // Meta returns component metadata
 func (c *Component) Meta() component.Metadata {
 	return component.Metadata{
-		Name:        "agentic-governance",
+		Name:        "teams-governance",
 		Type:        "processor",
 		Description: "Content governance layer for agentic systems with PII redaction, injection detection, and rate limiting",
 		Version:     "0.1.0",

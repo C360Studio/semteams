@@ -17,7 +17,7 @@ func TestComponent_Meta(t *testing.T) {
 
 	meta := comp.Meta()
 
-	if meta.Name != "agentic-memory" {
+	if meta.Name != "teams-memory" {
 		t.Errorf("Meta().Name = %s, want agentic-memory", meta.Name)
 	}
 	if meta.Type != "processor" {

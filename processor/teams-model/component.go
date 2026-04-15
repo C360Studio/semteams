@@ -97,7 +97,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	return &Component{
-		name:           "agentic-model",
+		name:           "teams-model",
 		config:         config,
 		modelRegistry:  deps.ModelRegistry,
 		clientCache:    make(map[string]*Client),
@@ -572,7 +572,7 @@ func (c *Component) incrementErrors() {
 
 // publishResponse publishes an agent response to JetStream
 func (c *Component) publishResponse(ctx context.Context, resp agentic.AgentResponse) error {
-	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "agentic-model")
+	respMsg := message.NewBaseMessage(resp.Schema(), &resp, "teams-model")
 	data, err := json.Marshal(respMsg)
 	if err != nil {
 		return errs.WrapInvalid(err, "Component", "publishResponse", "marshal response")
@@ -624,7 +624,7 @@ func (c *Component) publishErrorResponseWithTokens(ctx context.Context, requestI
 // Meta returns component metadata
 func (c *Component) Meta() component.Metadata {
 	return component.Metadata{
-		Name:        "agentic-model",
+		Name:        "teams-model",
 		Type:        "processor",
 		Description: "OpenAI-compatible agentic model processor with tool calling support",
 		Version:     "0.1.0",

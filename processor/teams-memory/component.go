@@ -77,7 +77,7 @@ func NewComponent(rawConfig json.RawMessage, deps component.Dependencies) (compo
 	}
 
 	return &Component{
-		name:       "agentic-memory",
+		name:       "teams-memory",
 		config:     config,
 		natsClient: deps.NATSClient,
 		logger:     deps.GetLogger(),
@@ -276,7 +276,7 @@ func (c *Component) Stop(_ time.Duration) error {
 // Meta returns component metadata
 func (c *Component) Meta() component.Metadata {
 	return component.Metadata{
-		Name:        "agentic-memory",
+		Name:        "teams-memory",
 		Type:        "processor",
 		Description: "Graph-backed agent memory with context hydration and fact extraction",
 		Version:     "0.1.0",
