@@ -102,7 +102,7 @@ services:
       - STREAMKIT_LOG_LEVEL=debug
       - AGENTIC_LLM_URL=http://mock-llm:8080/v1
     volumes:
-      - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-agentic.json}:/etc/semstreams/config.json:ro
+      - ${BACKEND_CONTEXT:-..}/configs/${AGENTIC_CONFIG:-e2e-agentic.json}:/etc/semstreams/config.json:ro
       - ${BACKEND_CONTEXT:-..}/testdata:/data/testdata:ro
     networks:
       - agentic-net

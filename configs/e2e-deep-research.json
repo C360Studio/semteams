@@ -2,56 +2,32 @@
   "version": "1.1.0",
   "platform": {
     "org": "c360",
-    "id": "semteams-agentic",
-    "type": "agentic",
+    "id": "semteams-e2e-deep-research",
+    "type": "deep-research",
     "region": "local",
     "instance_id": "agentic-001",
-    "environment": "development"
+    "environment": "test"
   },
   "tier": "agentic",
   "nats": {
-    "urls": ["nats://localhost:4222"]
+    "urls": [
+      "nats://nats:4222"
+    ]
   },
   "model_registry": {
     "endpoints": {
-      "claude-haiku": {
-        "provider": "anthropic",
-        "url": "https://api.anthropic.com/v1",
-        "model": "claude-haiku-4-5-20251001",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "max_tokens": 200000,
-        "supports_tools": true,
-        "stream": true,
-        "max_concurrent": 10,
-        "requests_per_minute": 200
-      },
-      "claude-sonnet": {
-        "provider": "anthropic",
-        "url": "https://api.anthropic.com/v1",
-        "model": "claude-sonnet-4-6",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "max_tokens": 200000,
-        "supports_tools": true,
-        "stream": true,
-        "reasoning_effort": "low",
-        "max_concurrent": 10,
-        "requests_per_minute": 100
-      },
-      "gemini-flash": {
+      "mock": {
         "provider": "openai",
-        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "model": "gemini-2.5-flash",
-        "api_key_env": "GEMINI_API_KEY",
-        "max_tokens": 1048576,
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 4096,
         "supports_tools": true,
         "tool_format": "openai",
-        "stream": true,
-        "max_concurrent": 10,
-        "requests_per_minute": 200
+        "stream": true
       }
     },
     "defaults": {
-      "model": "claude-haiku"
+      "model": "mock"
     }
   },
   "services": {
@@ -62,8 +38,8 @@
         "http_port": 8080,
         "swagger_ui": true,
         "server_info": {
-          "title": "SemTeams Agentic Tier",
-          "description": "Agentic components with real LLM providers",
+          "title": "SemStreams Agentic Tier - Agent Loop Testing",
+          "description": "Deep Research workflow with mock LLM for E2E testing",
           "version": "0.7.0"
         }
       }
@@ -87,7 +63,10 @@
       "enabled": true,
       "config": {
         "buffer_size": 10000,
-        "monitor_subjects": ["agent.*", "tool.*"],
+        "monitor_subjects": [
+          "agent.*",
+          "tool.*"
+        ],
         "enable_kv_query": true,
         "log_level": "INFO"
       }
@@ -190,7 +169,9 @@
       "name": "rule-processor",
       "enabled": true,
       "config": {
-        "entity_watch_patterns": ["c360.>"],
+        "entity_watch_patterns": [
+          "c360.>"
+        ],
         "ports": {
           "inputs": [
             {
@@ -245,7 +226,7 @@
                 "type": "publish_agent",
                 "subject": "agent.task.temp_anomaly",
                 "role": "general",
-                "model": "claude-haiku",
+                "model": "mock",
                 "prompt": "Temperature anomaly detected. Sensor: {{.EntityID}}, Reading: {{.Properties.sensor.measurement.fahrenheit}}F. Use query_entity tool to get full sensor details, then provide assessment and recommendations."
               },
               {
@@ -339,9 +320,9 @@
       "name": "teams-loop",
       "enabled": true,
       "config": {
-        "max_iterations": 5,
-        "timeout": "30s",
-        "approval_required": ["create_rule", "update_rule", "delete_rule"],
+        "max_iterations": 25,
+        "timeout": "300s",
+        "approval_required": [],
         "stream_name": "AGENT",
         "loops_bucket": "AGENT_LOOPS",
         "ports": {
@@ -418,6 +399,17 @@
       "config": {
         "stream_name": "AGENT",
         "timeout": "30s",
+        "endpoints": {
+          "mock": {
+            "provider": "openai",
+            "url": "http://mock-llm:8080/v1",
+            "model": "mock-model",
+            "max_tokens": 4096,
+            "supports_tools": true,
+            "tool_format": "openai",
+            "stream": true
+          }
+        },
         "retry": {
           "max_attempts": 3,
           "backoff": "exponential"
@@ -453,7 +445,7 @@
       "config": {
         "stream_name": "AGENT",
         "timeout": "10s",
-        "allowed_tools": ["query_entity"],
+        "allowed_tools": null,
         "ports": {
           "inputs": [
             {
@@ -496,7 +488,9 @@
         "watch_pattern": ">",
         "generation_debounce": "500ms",
         "default_agent_version": "1.0.0",
-        "default_authors": ["SemStreams"],
+        "default_authors": [
+          "SemStreams"
+        ],
         "include_extensions": true,
         "ports": {
           "inputs": [
@@ -532,9 +526,9 @@
     "directory-bridge": {
       "type": "output",
       "name": "directory-bridge",
-      "enabled": false,
+      "enabled": true,
       "config": {
-        "directory_url": "http://localhost:8081",
+        "directory_url": "http://mock-llm:8081",
         "heartbeat_interval": "30s",
         "registration_ttl": "5m",
         "identity_provider": "local",
@@ -594,9 +588,9 @@
     "otel-exporter": {
       "type": "output",
       "name": "otel-exporter",
-      "enabled": false,
+      "enabled": true,
       "config": {
-        "endpoint": "http://localhost:4318",
+        "endpoint": "http://mock-llm:8081",
         "protocol": "http",
         "service_name": "semstreams-agentic",
         "service_version": "1.0.0",
@@ -619,6 +613,49 @@
             }
           ],
           "outputs": []
+        }
+      }
+    },
+    "teams-dispatch": {
+      "type": "processor",
+      "name": "teams-dispatch",
+      "enabled": true,
+      "config": {
+        "default_role": "researcher",
+        "auto_continue": true,
+        "stream_name": "AGENT",
+        "ports": {
+          "inputs": [
+            {
+              "name": "user_messages",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "description": "User messages to dispatch"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "tasks",
+              "type": "jetstream",
+              "subject": "agent.task.*",
+              "stream_name": "AGENT",
+              "description": "Task messages to agent loops"
+            }
+          ]
+        },
+        "permissions": {
+          "view": [
+            "*"
+          ],
+          "submit_task": [
+            "*"
+          ],
+          "cancel_own": true,
+          "cancel_any": [],
+          "approve": [
+            "*"
+          ]
         }
       }
     }

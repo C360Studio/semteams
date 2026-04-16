@@ -425,12 +425,6 @@
       "config": {
         "stream_name": "AGENT",
         "timeout": "30s",
-        "endpoints": {
-          "mock": {
-            "url": "http://mock-llm:8080/v1",
-            "model": "mock-model"
-          }
-        },
         "retry": {
           "max_attempts": 3,
           "backoff": "exponential"
@@ -549,7 +543,7 @@
       "name": "directory-bridge",
       "enabled": true,
       "config": {
-        "directory_url": "http://mock-llm:8081",
+        "directory_url": "http://localhost:8081",
         "heartbeat_interval": "30s",
         "registration_ttl": "5m",
         "identity_provider": "local",
@@ -611,7 +605,7 @@
       "name": "otel-exporter",
       "enabled": true,
       "config": {
-        "endpoint": "http://mock-llm:8081",
+        "endpoint": "http://localhost:4318",
         "protocol": "http",
         "service_name": "semstreams-agentic",
         "service_version": "1.0.0",

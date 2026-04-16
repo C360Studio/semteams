@@ -193,18 +193,62 @@ tasks:
 
   test:e2e:agentic:tool-approval-gate:
     desc: Run the tool-approval-gate journey with its paired fixture
+    env:
+      FIXTURE: tool-approval-gate.yaml
+      AGENTIC_CONFIG: e2e-agentic.json
     cmds:
-      - FIXTURE=tool-approval-gate.yaml npx playwright test --config playwright.agentic.config.ts e2e/agentic/tool-approval-gate.spec.ts
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+      - npx playwright test --config playwright.agentic.config.ts e2e/agentic/tool-approval-gate.spec.ts
 
   test:e2e:agentic:real-time-activity-stream:
     desc: Run the real-time-activity-stream journey with its paired fixture
+    env:
+      FIXTURE: real-time-activity-stream.yaml
+      AGENTIC_CONFIG: e2e-agentic.json
     cmds:
-      - FIXTURE=real-time-activity-stream.yaml npx playwright test --config playwright.agentic.config.ts e2e/agentic/real-time-activity-stream.spec.ts
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+      - npx playwright test --config playwright.agentic.config.ts e2e/agentic/real-time-activity-stream.spec.ts
 
   test:e2e:agentic:deep-research:
     desc: Run the deep-research journey with researcher config + paired fixture
+    env:
+      FIXTURE: deep-research.yaml
+      AGENTIC_CONFIG: e2e-deep-research.json
     cmds:
-      - FIXTURE=deep-research.yaml AGENTIC_CONFIG=deep-research.json npx playwright test --config playwright.agentic.config.ts e2e/agentic/deep-research.spec.ts
+      - defer: { task: test:e2e:agentic:cleanup }
+      - task: test:e2e:agentic:stack:up
+      - npx playwright test --config playwright.agentic.config.ts e2e/agentic/deep-research.spec.ts
+
+  test:e2e:agentic:stack:up:
+    desc: Start the agentic E2E Docker stack and wait for health
+    internal: true
+    env:
+      E2E_AGENTIC_UI_PORT: '{{.E2E_AGENTIC_UI_PORT | default "3100"}}'
+    cmds:
+      - docker compose -f docker-compose.agentic-e2e.yml up --build -d
+      - |
+        PORT="${E2E_AGENTIC_UI_PORT:-3100}"
+        echo "Waiting for stack at http://localhost:${PORT} ..."
+        for i in $(seq 1 60); do
+          if curl -sf "http://localhost:${PORT}/health" > /dev/null 2>&1; then
+            echo "  Health OK after ${i}s, checking dispatch..."
+            # Wait for component HTTP handlers (register slightly after health)
+            for j in $(seq 1 10); do
+              if curl -sf "http://localhost:${PORT}/teams-dispatch/commands" > /dev/null 2>&1; then
+                echo "✅ Stack ready (health + dispatch) after ~$((i + j))s"
+                exit 0
+              fi
+              sleep 1
+            done
+            echo "⚠️  Health OK but dispatch not responding"
+          fi
+          sleep 3
+        done
+        echo "❌ Stack failed to become ready after 180s"
+        docker compose -f docker-compose.agentic-e2e.yml logs backend --tail 20
+        exit 1
 
   test:e2e:superpowers:
     desc: Run all agentic journey specs (each with its own fixture and fresh stack)
@@ -221,11 +265,8 @@ tasks:
       The trailing `defer` ensures the docker stack is torn down even
       if a journey fails mid-run.
     cmds:
-      - defer: { task: test:e2e:agentic:cleanup }
       - task: test:e2e:agentic:tool-approval-gate
-      - task: test:e2e:agentic:cleanup
       - task: test:e2e:agentic:real-time-activity-stream
-      - task: test:e2e:agentic:cleanup
       - task: test:e2e:agentic:deep-research
 
   test:e2e:agentic:cleanup:

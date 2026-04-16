@@ -2,11 +2,11 @@
   "version": "1.1.0",
   "platform": {
     "org": "c360",
-    "id": "semteams-agentic",
-    "type": "agentic",
+    "id": "semstreams-agentic",
+    "type": "agentic-e2e",
     "region": "local",
     "instance_id": "agentic-001",
-    "environment": "development"
+    "environment": "test"
   },
   "tier": "agentic",
   "nats": {
@@ -14,44 +14,18 @@
   },
   "model_registry": {
     "endpoints": {
-      "claude-haiku": {
-        "provider": "anthropic",
-        "url": "https://api.anthropic.com/v1",
-        "model": "claude-haiku-4-5-20251001",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "max_tokens": 200000,
-        "supports_tools": true,
-        "stream": true,
-        "max_concurrent": 10,
-        "requests_per_minute": 200
-      },
-      "claude-sonnet": {
-        "provider": "anthropic",
-        "url": "https://api.anthropic.com/v1",
-        "model": "claude-sonnet-4-6",
-        "api_key_env": "ANTHROPIC_API_KEY",
-        "max_tokens": 200000,
-        "supports_tools": true,
-        "stream": true,
-        "reasoning_effort": "low",
-        "max_concurrent": 10,
-        "requests_per_minute": 100
-      },
-      "gemini-flash": {
+      "mock": {
         "provider": "openai",
-        "url": "https://generativelanguage.googleapis.com/v1beta/openai",
-        "model": "gemini-2.5-flash",
-        "api_key_env": "GEMINI_API_KEY",
-        "max_tokens": 1048576,
+        "url": "http://mock-llm:8080/v1",
+        "model": "mock-model",
+        "max_tokens": 4096,
         "supports_tools": true,
         "tool_format": "openai",
-        "stream": true,
-        "max_concurrent": 10,
-        "requests_per_minute": 200
+        "stream": true
       }
     },
     "defaults": {
-      "model": "claude-haiku"
+      "model": "mock"
     }
   },
   "services": {
@@ -62,8 +36,8 @@
         "http_port": 8080,
         "swagger_ui": true,
         "server_info": {
-          "title": "SemTeams Agentic Tier",
-          "description": "Agentic components with real LLM providers",
+          "title": "SemStreams Agentic Tier - Agent Loop Testing",
+          "description": "Agentic components with mock LLM for E2E testing",
           "version": "0.7.0"
         }
       }
@@ -245,7 +219,7 @@
                 "type": "publish_agent",
                 "subject": "agent.task.temp_anomaly",
                 "role": "general",
-                "model": "claude-haiku",
+                "model": "mock",
                 "prompt": "Temperature anomaly detected. Sensor: {{.EntityID}}, Reading: {{.Properties.sensor.measurement.fahrenheit}}F. Use query_entity tool to get full sensor details, then provide assessment and recommendations."
               },
               {
@@ -418,6 +392,12 @@
       "config": {
         "stream_name": "AGENT",
         "timeout": "30s",
+        "endpoints": {
+          "mock": {
+            "url": "http://mock-llm:8080/v1",
+            "model": "mock-model"
+          }
+        },
         "retry": {
           "max_attempts": 3,
           "backoff": "exponential"
@@ -532,9 +512,9 @@
     "directory-bridge": {
       "type": "output",
       "name": "directory-bridge",
-      "enabled": false,
+      "enabled": true,
       "config": {
-        "directory_url": "http://localhost:8081",
+        "directory_url": "http://mock-llm:8081",
         "heartbeat_interval": "30s",
         "registration_ttl": "5m",
         "identity_provider": "local",
@@ -594,9 +574,9 @@
     "otel-exporter": {
       "type": "output",
       "name": "otel-exporter",
-      "enabled": false,
+      "enabled": true,
       "config": {
-        "endpoint": "http://localhost:4318",
+        "endpoint": "http://mock-llm:8081",
         "protocol": "http",
         "service_name": "semstreams-agentic",
         "service_version": "1.0.0",
