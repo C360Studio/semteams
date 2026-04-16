@@ -335,7 +335,7 @@ test.afterEach(async ({ page }) => {
 
 ### Key Points
 
-1. **Backend is REAL** - Don't mock `/flowbuilder/*`, `/agentic-dispatch/*`, or other semteams endpoints
+1. **Backend is REAL** - Don't mock `/flowbuilder/*`, `/teams-dispatch/*`, or other semteams endpoints
 2. **Use Taskfile** - `task ui:test:e2e` (from repo root) or `task test:e2e` (from `ui/`) handles all setup
 3. **Services start automatically** - Playwright manages docker-compose
 4. **No env vars required** - Defaults build semteams from `../..` automatically

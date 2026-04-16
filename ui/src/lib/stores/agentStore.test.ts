@@ -113,7 +113,7 @@ describe("agentStore", () => {
 
       expect(MockEventSource.instances).toHaveLength(1);
       expect(MockEventSource.instances[0].url).toBe(
-        "/agentic-dispatch/activity",
+        "/teams-dispatch/activity",
       );
     });
 
@@ -265,7 +265,7 @@ describe("agentStore", () => {
       // Now a second EventSource should have been created
       expect(MockEventSource.instances).toHaveLength(2);
       expect(MockEventSource.instances[1].url).toBe(
-        "/agentic-dispatch/activity",
+        "/teams-dispatch/activity",
       );
     });
 

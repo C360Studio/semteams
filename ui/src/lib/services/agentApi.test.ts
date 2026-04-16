@@ -49,7 +49,7 @@ describe("agentApi", () => {
   // =========================================================================
 
   describe("sendMessage", () => {
-    it("should POST to /agentic-dispatch/message with JSON body", async () => {
+    it("should POST to /teams-dispatch/message with JSON body", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ content: "Hello from agent" }),
@@ -57,7 +57,7 @@ describe("agentApi", () => {
 
       const result = await agentApi.sendMessage("Hello");
 
-      expect(mockFetch).toHaveBeenCalledWith("/agentic-dispatch/message", {
+      expect(mockFetch).toHaveBeenCalledWith("/teams-dispatch/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: "Hello" }),
@@ -106,7 +106,7 @@ describe("agentApi", () => {
   // =========================================================================
 
   describe("listLoops", () => {
-    it("should GET /agentic-dispatch/loops", async () => {
+    it("should GET /teams-dispatch/loops", async () => {
       const loops = [createMockLoop(), createMockLoop({ loop_id: "loop-2" })];
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -115,7 +115,7 @@ describe("agentApi", () => {
 
       const result = await agentApi.listLoops();
 
-      expect(mockFetch).toHaveBeenCalledWith("/agentic-dispatch/loops");
+      expect(mockFetch).toHaveBeenCalledWith("/teams-dispatch/loops");
       expect(result).toEqual(loops);
     });
 
@@ -154,7 +154,7 @@ describe("agentApi", () => {
   // =========================================================================
 
   describe("getLoop", () => {
-    it("should GET /agentic-dispatch/loops/:id", async () => {
+    it("should GET /teams-dispatch/loops/:id", async () => {
       const loop = createMockLoop();
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -163,7 +163,7 @@ describe("agentApi", () => {
 
       const result = await agentApi.getLoop("loop-1");
 
-      expect(mockFetch).toHaveBeenCalledWith("/agentic-dispatch/loops/loop-1");
+      expect(mockFetch).toHaveBeenCalledWith("/teams-dispatch/loops/loop-1");
       expect(result).toEqual(loop);
     });
 
@@ -202,7 +202,7 @@ describe("agentApi", () => {
       const result = await agentApi.sendSignal("loop-1", "pause");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "/agentic-dispatch/loops/loop-1/signal",
+        "/teams-dispatch/loops/loop-1/signal",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -233,7 +233,7 @@ describe("agentApi", () => {
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "/agentic-dispatch/loops/loop-1/signal",
+        "/teams-dispatch/loops/loop-1/signal",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -291,7 +291,7 @@ describe("agentApi", () => {
   // =========================================================================
 
   describe("getTrajectories", () => {
-    it("should GET /agentic-loop/trajectories", async () => {
+    it("should GET /teams-loop/trajectories", async () => {
       const trajectories = [
         createMockTrajectory(),
         createMockTrajectory({ loop_id: "loop-2" }),
@@ -303,7 +303,7 @@ describe("agentApi", () => {
 
       const result = await agentApi.getTrajectories();
 
-      expect(mockFetch).toHaveBeenCalledWith("/agentic-loop/trajectories");
+      expect(mockFetch).toHaveBeenCalledWith("/teams-loop/trajectories");
       expect(result).toEqual(trajectories);
     });
 
@@ -332,7 +332,7 @@ describe("agentApi", () => {
   // =========================================================================
 
   describe("getTrajectory", () => {
-    it("should GET /agentic-loop/trajectories/:loopId", async () => {
+    it("should GET /teams-loop/trajectories/:loopId", async () => {
       const trajectory = createMockTrajectory();
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -342,7 +342,7 @@ describe("agentApi", () => {
       const result = await agentApi.getTrajectory("loop-1");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "/agentic-loop/trajectories/loop-1",
+        "/teams-loop/trajectories/loop-1",
       );
       expect(result).toEqual(trajectory);
     });

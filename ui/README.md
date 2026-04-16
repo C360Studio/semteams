@@ -85,8 +85,8 @@ cd ui && task dev:full
 ### Request Flow
 
 ```
-Browser --> Caddy (:3001) --+--> /agentic-dispatch/* --> semteams (:8080)
-                            +--> /agentic-loop/*     --> semteams (:8080)
+Browser --> Caddy (:3001) --+--> /teams-dispatch/* --> semteams (:8080)
+                            +--> /teams-loop/*     --> semteams (:8080)
                             +--> /flowbuilder/*      --> semteams (:8080)
                             +--> /components/*       --> semteams (:8080)
                             +--> /health             --> semteams (:8080)
@@ -177,12 +177,12 @@ points:
 
 | UI element           | Backend source                                  |
 | -------------------- | ----------------------------------------------- |
-| `AgentLoopCard`      | SSE `GET /agentic-dispatch/activity`            |
+| `AgentLoopCard`      | SSE `GET /teams-dispatch/activity`            |
 | `ApprovalPrompt`     | Loop state `awaiting_approval`; signals via POST |
 | `ToolCallCard`       | Loop trajectory events                          |
 | `RuleDiffCard`       | `create_rule` / `update_rule` tool args         |
-| `/agents` page       | `GET /agentic-dispatch/loops` + activity SSE    |
-| `TrajectoryViewer`   | `GET /agentic-loop/trajectories/{loopId}`       |
+| `/agents` page       | `GET /teams-dispatch/loops` + activity SSE    |
+| `TrajectoryViewer`   | `GET /teams-loop/trajectories/{loopId}`       |
 
 See `docs/ui-integration-notes.md` at the semteams repo root for the full
 backend API reference, signal types, and attachment shape definitions.
@@ -278,7 +278,7 @@ curl -X POST http://localhost:8080/graphql -H 'Content-Type: application/json' \
   -d '{"query":"{ entitiesByPrefix(prefix: \"\", limit: 5) { id } }"}' | jq
 
 # Check agentic activity stream
-curl -N http://localhost:8080/agentic-dispatch/activity
+curl -N http://localhost:8080/teams-dispatch/activity
 
 # Docker cleanup (clears NATS KV stale data)
 docker compose -f docker-compose.dev.yml down -v

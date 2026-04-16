@@ -44,10 +44,10 @@ test.describe("Deep Research", () => {
     );
 
     // Verify dispatch endpoint exists and responds
-    const commands = await request.get("/agentic-dispatch/commands");
+    const commands = await request.get("/teams-dispatch/commands");
     expect(
       commands.ok(),
-      "Dispatch /commands not responding — is agentic-dispatch configured?",
+      "Dispatch /commands not responding — is teams-dispatch configured?",
     ).toBe(true);
   });
 
@@ -71,7 +71,7 @@ test.describe("Deep Research", () => {
 
     // -----------------------------------------------------------------
     // Step 2 — type a research question in the chat bar
-    // This calls agentApi.sendMessage() → POST /agentic-dispatch/message
+    // This calls agentApi.sendMessage() → POST /teams-dispatch/message
     // The dispatch must accept the message (permissions must allow it)
     // -----------------------------------------------------------------
     const chatInput = page.getByTestId("chat-input");
@@ -94,7 +94,7 @@ test.describe("Deep Research", () => {
     // Step 3 — verify a new task card appears on the kanban board
     // -----------------------------------------------------------------
     const loopId = await pollUntil(async () => {
-      const resp = await request.get("/agentic-dispatch/loops");
+      const resp = await request.get("/teams-dispatch/loops");
       if (!resp.ok()) return null;
       const loops = (await resp.json()) as Array<{
         loop_id: string;
@@ -126,7 +126,7 @@ test.describe("Deep Research", () => {
     // Step 5 — verify backend state
     // -----------------------------------------------------------------
     const finalLoop = await request
-      .get(`/agentic-dispatch/loops/${loopId}`)
+      .get(`/teams-dispatch/loops/${loopId}`)
       .then((r) => r.json());
     expect(finalLoop.state).toBe("complete");
 

@@ -3,8 +3,8 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * Playwright config for agentic journey tests.
  *
- * These tests exercise the full semteams agentic surface (agentic-dispatch,
- * agentic-loop, agentic-tools, agentic-governance) against a mock-llm server
+ * These tests exercise the full semteams agentic surface (teams-dispatch,
+ * teams-loop, teams-tools, teams-governance) against a mock-llm server
  * configured via a YAML fixture. The stack is different from the default
  * Playwright stack (docker-compose.e2e.yml) — see docker-compose.agentic-e2e.yml
  * for the service list.

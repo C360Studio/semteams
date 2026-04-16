@@ -10,7 +10,7 @@ import { test, expect } from "@playwright/test";
  *
  * Validates:
  *   - ChatBar → agentApi.sendMessage() creates a new task
- *   - agentStore SSE subscription to /agentic-dispatch/activity
+ *   - agentStore SSE subscription to /teams-dispatch/activity
  *   - Kanban board renders new task card without reload
  *   - State badge transitions live on the card via SSE loop_update events
  *   - Board stays on the same URL throughout (no accidental navigation)
@@ -67,7 +67,7 @@ test.describe("Real-Time Activity Stream", () => {
     // correlate with the card that appears on the board.
     // -----------------------------------------------------------------
     const loopId = await pollUntil(async () => {
-      const resp = await request.get("/agentic-dispatch/loops");
+      const resp = await request.get("/teams-dispatch/loops");
       if (!resp.ok()) return null;
       const loops = (await resp.json()) as Array<{ loop_id: string }>;
       if (loops.length === 0) return null;
@@ -106,7 +106,7 @@ test.describe("Real-Time Activity Stream", () => {
     // Step 7 — backend-state assertion.
     // -----------------------------------------------------------------
     const finalLoop = await request
-      .get(`/agentic-dispatch/loops/${loopId}`)
+      .get(`/teams-dispatch/loops/${loopId}`)
       .then((r) => r.json());
     expect(finalLoop.state).toBe("complete");
   });

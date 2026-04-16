@@ -35,14 +35,14 @@
 		reverse_proxy {$BACKEND_HOST:backend:8080}
 	}
 
-	# Agentic dispatch API routes (SSE needs immediate flushing)
-	handle /agentic-dispatch/* {
+	# Teams dispatch API routes (SSE needs immediate flushing)
+	handle /teams-dispatch/* {
 		reverse_proxy {$BACKEND_HOST:backend:8080} {
 			flush_interval -1
 		}
 	}
 
-	handle /agentic-loop/* {
+	handle /teams-loop/* {
 		reverse_proxy {$BACKEND_HOST:backend:8080}
 	}
 

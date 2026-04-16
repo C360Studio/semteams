@@ -1,11 +1,11 @@
 // Agent store — SSE-driven reactive state for agentic loops
-// Connects to /agentic-dispatch/activity for real-time loop updates
+// Connects to /teams-dispatch/activity for real-time loop updates
 
 import { SvelteMap } from "svelte/reactivity";
 import type { AgentLoop } from "$lib/types/agent";
 import { isActiveState } from "$lib/types/agent";
 
-const SSE_URL = "/agentic-dispatch/activity";
+const SSE_URL = "/teams-dispatch/activity";
 const MAX_RECONNECT_ATTEMPTS = 5;
 const BASE_RECONNECT_DELAY = 1000;
 
